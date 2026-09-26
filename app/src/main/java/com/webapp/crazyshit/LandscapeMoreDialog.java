@@ -27,6 +27,19 @@ final class LandscapeMoreDialog {
     private LandscapeMoreDialog() {
     }
 
+    static void attachSoon(NativeMainActivity activity) {
+        if (activity == null || activity.isFinishing()) return;
+        activity.getWindow().getDecorView().postDelayed(() -> {
+            if (activity.isFinishing()) return;
+            View more = findLandscapeMore(activity.findViewById(android.R.id.content));
+            if (more == null) return;
+            more.setOnClickListener(v -> {
+                v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
+                show(activity, v);
+            });
+        }, 120L);
+    }
+
     static void show(NativeMainActivity activity) {
         show(activity, null);
     }
@@ -342,6 +355,21 @@ final class LandscapeMoreDialog {
         return visible.top
                 + ZeroChillUi.dimension(activity, R.dimen.zc_top_bar_height)
                 + dp(activity, 4);
+    }
+
+    private static View findLandscapeMore(View view) {
+        if (view == null) return null;
+        if (view instanceof TextView) {
+            CharSequence description = view.getContentDescription();
+            if (description != null && "More".contentEquals(description)) return view;
+        }
+        if (!(view instanceof ViewGroup)) return null;
+        ViewGroup group = (ViewGroup) view;
+        for (int i = 0; i < group.getChildCount(); i++) {
+            View found = findLandscapeMore(group.getChildAt(i));
+            if (found != null) return found;
+        }
+        return null;
     }
 
     private static List<Action> actions(Action... values) {
