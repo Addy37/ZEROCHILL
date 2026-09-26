@@ -185,6 +185,12 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
             }
 
             @Override
+            public void onOpenItemWithPlaybackIdent(NativeContentItem item) {
+                haptic(primaryPager);
+                openNativeItem(item, true);
+            }
+
+            @Override
             public void onLongPressItem(NativeContentItem item, View anchor) {
                 haptic(anchor);
                 showItemMenu(item, anchor);
@@ -832,6 +838,10 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     }
 
     private void openNativeItem(NativeContentItem item) {
+        openNativeItem(item, false);
+    }
+
+    private void openNativeItem(NativeContentItem item, boolean playbackIdent) {
         if (item == null || item.url.isEmpty()) return;
         progress.setVisibility(View.VISIBLE);
         final int requestGeneration = generation;
@@ -846,7 +856,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
                 if (requestGeneration != generation) return;
                 progress.setVisibility(View.GONE);
                 if (resolved != null && resolved.mediaUrl != null && !resolved.mediaUrl.isEmpty()) {
-                    openVideoDetail(resolved, item);
+                    openVideoDetail(resolved, item, playbackIdent);
                 } else {
                     openFallback(item.url);
                 }
@@ -854,11 +864,18 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         });
     }
 
-    private void openVideoDetail(CrazyShitRepository.StreamInfo stream, NativeContentItem item) {
+    private void openVideoDetail(
+            CrazyShitRepository.StreamInfo stream,
+            NativeContentItem item,
+            boolean playbackIdent
+    ) {
         Intent intent = new Intent(this, VideoDetailActivity.class);
         intent.putExtra(PlayerActivity.EXTRA_MEDIA_URL, stream.mediaUrl);
         intent.putExtra(PlayerActivity.EXTRA_PAGE_URL, stream.pageUrl);
         intent.putExtra(VideoDetailActivity.EXTRA_MEDIA_REFERER, stream.requestReferer);
+        if (playbackIdent) {
+            intent.putExtra(VideoDetailActivity.EXTRA_PLAYBACK_IDENT, true);
+        }
         intent.putExtra(VideoDetailActivity.EXTRA_SOURCE, EfuktRepository.isEfuktUrl(stream.pageUrl)
                 ? "efukt" : FapelloRepository.isFapelloUrl(stream.pageUrl) ? "bunkr" : "crazyshit");
         intent.putExtra(PlayerActivity.EXTRA_TITLE,

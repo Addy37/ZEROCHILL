@@ -63,7 +63,8 @@ public final class PlaybackHistoryStore {
         String safeTitle = title == null || title.trim().isEmpty() ? "Video" : title.trim();
         String safePoster = posterUrl == null ? "" : posterUrl.trim();
         if (safePoster.isEmpty() && previous != null) safePoster = previous.posterUrl;
-        boolean showsRelated = fromShows || (previous != null && previous.fromShows);
+        boolean showsRelated = fromShows ||
+                (previous != null && previous.fromShows && !isKnownNonShowsSource(cleanPageUrl));
 
         items.add(0, new Item(
                 safeTitle,
@@ -123,7 +124,10 @@ public final class PlaybackHistoryStore {
     public static List<Item> continueWatchingShows(Context context) {
         ArrayList<Item> out = new ArrayList<>();
         for (Item item : load(context)) {
-            if (!item.fromShows || !isShowsContinueCandidate(item)) continue;
+            if (!item.fromShows || isKnownNonShowsSource(item.pageUrl) ||
+                    !isShowsContinueCandidate(item)) {
+                continue;
+            }
             out.add(item);
         }
         return out;
@@ -142,6 +146,12 @@ public final class PlaybackHistoryStore {
                 .edit()
                 .remove(KEY_ITEMS)
                 .apply();
+    }
+
+    private static boolean isKnownNonShowsSource(String pageUrl) {
+        return FapelloRepository.isFapelloUrl(pageUrl) ||
+                OnlyHavenRepository.isOnlyHavenUrl(pageUrl) ||
+                BunkrRepository.isBunkrUrl(pageUrl);
     }
 
     private static boolean isContinueCandidate(Item item) {

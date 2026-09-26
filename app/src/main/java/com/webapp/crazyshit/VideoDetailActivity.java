@@ -80,6 +80,7 @@ public class VideoDetailActivity extends Activity {
     public static final String EXTRA_MEDIA_REFERER = "media_referer";
     public static final String EXTRA_POSTER_URL = "poster_url";
     public static final String EXTRA_SHOWS_ORIGIN = "shows_origin";
+    public static final String EXTRA_PLAYBACK_IDENT = "playback_ident";
     public static final String EXTRA_SHOWS_CONTINUE_RESUME = "shows_continue_resume";
 
     private static final String SITE = "https://crazyshit.com/";
@@ -142,6 +143,7 @@ public class VideoDetailActivity extends Activity {
     private String mediaReferer;
     private String posterUrl;
     private boolean showsOrigin;
+    private boolean playbackIdent;
     private final PlaybackRecovery playbackRecovery = new PlaybackRecovery();
     private boolean recoveryResumed;
     private long requestedStartPosition;
@@ -250,6 +252,7 @@ public class VideoDetailActivity extends Activity {
         mediaReferer = clean(getIntent().getStringExtra(EXTRA_MEDIA_REFERER));
         posterUrl = clean(getIntent().getStringExtra(EXTRA_POSTER_URL));
         showsOrigin = getIntent().getBooleanExtra(EXTRA_SHOWS_ORIGIN, false);
+        playbackIdent = showsOrigin || getIntent().getBooleanExtra(EXTRA_PLAYBACK_IDENT, false);
         requestedStartPosition = getIntent().getLongExtra(PlayerActivity.EXTRA_START_POSITION, -1L);
 
         if (mediaUrl == null || mediaUrl.trim().isEmpty()) {
@@ -496,7 +499,7 @@ public class VideoDetailActivity extends Activity {
         lp.gravity = Gravity.CENTER;
         root.addView(loading, lp);
 
-        if (showsOrigin) installShowsLaunchCurtain();
+        if (playbackIdent) installShowsLaunchCurtain();
 
         updateMetadataUi();
         setContentView(root);
@@ -556,7 +559,7 @@ public class VideoDetailActivity extends Activity {
 
     private void showStartupPoster() {
         if (startupPoster == null) return;
-        if (showsOrigin) {
+        if (playbackIdent) {
             startupPosterDismissed = true;
             hideStartupPosterNow();
             return;
@@ -848,7 +851,7 @@ public class VideoDetailActivity extends Activity {
 
             @Override
             public void onRenderedFirstFrame() {
-                if (showsOrigin) {
+                if (playbackIdent) {
                     showsFirstFrameRendered = true;
                     hideStartupPosterNow();
                     maybeDismissShowsLaunchCurtain();
@@ -1815,12 +1818,14 @@ public class VideoDetailActivity extends Activity {
     }
 
     private void maybeDismissShowsLaunchCurtain() {
-        if (!showsOrigin || showsLaunchCurtain == null ||
+        if (!playbackIdent || showsLaunchCurtain == null ||
                 showsLaunchCurtain.getVisibility() != View.VISIBLE ||
                 showsCurtainDismissScheduled ||
-                !showsFirstFrameRendered ||
-                !showsOrientationSettled ||
-                showsTargetOrientation == Configuration.ORIENTATION_UNDEFINED) {
+                !showsFirstFrameRendered) {
+            return;
+        }
+        if (showsOrigin && (!showsOrientationSettled ||
+                showsTargetOrientation == Configuration.ORIENTATION_UNDEFINED)) {
             return;
         }
 
@@ -1831,11 +1836,13 @@ public class VideoDetailActivity extends Activity {
         showsLaunchCurtain.postDelayed(() -> {
             showsCurtainDismissScheduled = false;
             if (isFinishing() || showsLaunchCurtain == null ||
-                    !showsFirstFrameRendered ||
-                    !orientationMatches(
-                            getResources().getConfiguration().orientation,
-                            showsTargetOrientation
-                    )) {
+                    !showsFirstFrameRendered) {
+                return;
+            }
+            if (showsOrigin && !orientationMatches(
+                    getResources().getConfiguration().orientation,
+                    showsTargetOrientation
+            )) {
                 return;
             }
             dismissShowsLaunchCurtain(false);

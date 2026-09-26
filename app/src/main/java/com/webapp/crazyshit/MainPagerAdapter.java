@@ -47,6 +47,11 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
 
     public interface Host {
         void onOpenItem(NativeContentItem item);
+
+        default void onOpenItemWithPlaybackIdent(NativeContentItem item) {
+            onOpenItem(item);
+        }
+
         void onLongPressItem(NativeContentItem item, View anchor);
         void onOpenComments(NativeContentItem item);
 
@@ -109,7 +114,9 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         libraryView = new LibraryHubView(activity, new LibraryHubView.Listener() {
             @Override
             public void onOpenItem(NativeContentItem item) {
-                host.onOpenItem(item);
+                // Library keeps its normal playback semantics while opting into the
+                // same face-only launch curtain used by Shows.
+                host.onOpenItemWithPlaybackIdent(item);
             }
 
             @Override
