@@ -91,6 +91,23 @@ public class OnlyFapHeroPolicyTest {
         assertEquals("https://img.example/6.jpg", artwork.get(5).url);
     }
 
+    @Test public void croppedPreviewsDoNotBlockBoundedOriginalResolution() {
+        List<NativeContentItem> media = new ArrayList<>();
+        for (int index = 0; index < 12; index++) {
+            media.add(media(NativeContentItem.KIND_IMAGE,
+                    "https://img.example/post-" + index,
+                    "https://img.example/square-preview-" + index + ".jpg"));
+        }
+        List<NativeContentItem> selected =
+                OnlyFapHeroPolicy.originalResolutionCandidates(media, 4);
+
+        assertEquals(4, selected.size());
+        assertEquals(media.get(0), selected.get(0));
+        assertEquals(media.get(4), selected.get(1));
+        assertEquals(media.get(7), selected.get(2));
+        assertEquals(media.get(11), selected.get(3));
+    }
+
     @Test public void rejectedBatchAdvancesToUntestedCreators() {
         List<NativeContentItem> candidates = Arrays.asList(
                 creator("One"),
