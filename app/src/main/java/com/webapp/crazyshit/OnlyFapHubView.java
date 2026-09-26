@@ -92,6 +92,7 @@ final class OnlyFapHubView extends FrameLayout {
 
     private final Handler heroHandler = new Handler(Looper.getMainLooper());
     private final ExecutorService heroIo = Executors.newFixedThreadPool(3);
+    private final ExecutorService heroDiscoveryIo = Executors.newSingleThreadExecutor();
     private final Set<String> requestedHeroCreators = new HashSet<>();
     private final Set<String> rejectedHeroUrls = new HashSet<>();
     private final List<HeroCandidate> heroItems = new ArrayList<>();
@@ -461,6 +462,7 @@ final class OnlyFapHubView extends FrameLayout {
     void finishLoading() {
         shelvesFinished = true;
         refreshHeroCandidates();
+        if (heroItems.size() < HERO_MAX_ITEMS) requestMoreHeroDiscovery();
         loadingLabel.setVisibility(itemCount() == 0 ? View.VISIBLE : View.GONE);
         if (itemCount() == 0) {
             loadingLabel.setText("OnlyFap creators could not load right now.");
@@ -501,6 +503,7 @@ final class OnlyFapHubView extends FrameLayout {
         active = false;
         heroHandler.removeCallbacksAndMessages(null);
         heroIo.shutdownNow();
+        heroDiscoveryIo.shutdownNow();
         Glide.with(heroImage).clear(heroImage);
         trendingShelf.adapter.close();
         newShelf.adapter.close();
@@ -647,7 +650,7 @@ final class OnlyFapHubView extends FrameLayout {
         final int generation = heroGeneration;
         final int page = heroDiscoveryNextPage++;
         heroDiscoveryLoading = true;
-        heroIo.execute(() -> {
+        heroDiscoveryIo.execute(() -> {
             List<NativeContentItem> discovered = Collections.emptyList();
             boolean failed = false;
             try {
