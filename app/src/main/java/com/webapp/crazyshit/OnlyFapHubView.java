@@ -489,6 +489,10 @@ final class OnlyFapHubView extends FrameLayout {
         scheduleHeroRotation();
     }
 
+    void setNavigationScrollListener(View.OnScrollChangeListener listener) {
+        scroll.setOnScrollChangeListener(listener);
+    }
+
     void saveState(Bundle out) {
         if (out == null) return;
         out.putInt("scroll_y", scroll.getScrollY());
