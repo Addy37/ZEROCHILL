@@ -44,6 +44,23 @@ final class OnlyFapHeroPolicy {
         return new ArrayList<>(selected.values());
     }
 
+    static List<NativeContentItem> nextUnrequested(
+            List<NativeContentItem> candidates,
+            Set<String> requested,
+            int limit
+    ) {
+        ArrayList<NativeContentItem> result = new ArrayList<>();
+        if (candidates == null || limit <= 0) return result;
+        for (NativeContentItem item : candidates) {
+            if (result.size() >= limit) break;
+            if (item == null || !item.isCreator()) continue;
+            String key = CreatorFavoriteStore.key(item);
+            if (key.isEmpty() || (requested != null && requested.contains(key))) continue;
+            result.add(item);
+        }
+        return result;
+    }
+
     private static void addKeys(Set<String> keys, List<NativeContentItem> items) {
         if (items == null) return;
         for (NativeContentItem item : items) {
