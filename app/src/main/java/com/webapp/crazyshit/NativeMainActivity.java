@@ -196,8 +196,8 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
             }
 
             @Override
-            public void onOpenMore() {
-                showMoreSheet();
+            public void onOpenMore(View anchor) {
+                showMoreSheet(anchor);
             }
 
             @Override
@@ -421,15 +421,9 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
 
         ImageView search = new ImageView(this);
         search.setImageResource(R.drawable.ic_nav_search);
-        search.setPadding(dp(12), dp(12), dp(12), dp(12));
+        search.setPadding(dp(10), dp(10), dp(10), dp(10));
         search.setContentDescription("Search");
-        search.setColorFilter(ZeroChillUi.color(this, R.color.zc_cyan));
-        search.setBackground(ZeroChillUi.rounded(
-                this,
-                ZeroChillUi.color(this, R.color.zc_cyan_container),
-                Color.TRANSPARENT,
-                R.dimen.zc_radius_pill
-        ));
+        search.setColorFilter(Color.WHITE);
         search.setClickable(true);
         search.setFocusable(true);
         ZeroChillMotion.installPressFeedback(search);
@@ -437,23 +431,23 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
             haptic(v);
             openContextualSearch();
         });
-        bar.addView(search, new LinearLayout.LayoutParams(dp(48), dp(48)));
+        bar.addView(search, new LinearLayout.LayoutParams(dp(44), dp(48)));
 
         ImageView more = new ImageView(this);
-        more.setImageResource(R.drawable.ic_nav_more);
-        more.setPadding(dp(11), dp(11), dp(11), dp(11));
+        more.setImageResource(R.drawable.ic_more_overflow);
+        more.setPadding(dp(10), dp(10), dp(10), dp(10));
         more.setContentDescription("More");
-        more.setColorFilter(ZeroChillUi.color(this, R.color.zc_text_secondary));
+        more.setColorFilter(Color.WHITE);
         more.setClickable(true);
         more.setFocusable(true);
         ZeroChillMotion.installPressFeedback(more);
         more.setOnClickListener(v -> {
             haptic(v);
-            showMoreSheet();
+            showMoreSheet(v);
         });
         LinearLayout.LayoutParams moreParams =
                 new LinearLayout.LayoutParams(dp(44), dp(48));
-        moreParams.setMarginStart(dp(3));
+        moreParams.setMarginStart(dp(2));
         bar.addView(more, moreParams);
         return bar;
     }
@@ -1082,7 +1076,11 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     }
 
     private void showMoreSheet() {
-        LandscapeMoreDialog.show(this);
+        LandscapeMoreDialog.show(this, null);
+    }
+
+    private void showMoreSheet(View anchor) {
+        LandscapeMoreDialog.show(this, anchor);
     }
 
     private void dispatchLauncherShortcut() {
