@@ -650,23 +650,47 @@ final class OnlyFapHubView extends FrameLayout {
 
             ArrayList<OnlyFapHeroPolicy.Artwork> portraitArtwork = new ArrayList<>();
 
-            // Fapello is the primary source for New Creators. Resolve actual gallery files,
-            // validate their decoded proportions, and keep only portrait-oriented images.
-            if (FapelloRepository.isModelUrl(creator.url)) {
-                try {
-                    FapelloRepository fapello = new FapelloRepository();
+            // Prefer Fapello for portrait discovery. Learned/backfill creators may not carry a
+            // Fapello URL, so search by creator name instead of skipping the source entirely.
+            try {
+                FapelloRepository fapello = new FapelloRepository();
+                FapelloRepository.Model model = null;
+                if (FapelloRepository.isModelUrl(creator.url)) {
+                    model = new FapelloRepository.Model(
+                            creator.title,
+                            creator.url,
+                            creator.imageUrl
+                    );
+                } else {
+                    String query = clean(creator.searchQuery).isEmpty()
+                            ? creator.title
+                            : creator.searchQuery;
+                    model = chooseFapelloMatch(
+                            query,
+                            fapello.searchConfirmedModels(
+                                    getContext().getApplicationContext(),
+                                    query,
+                                    6
+                            )
+                    );
+                }
+
+                if (model != null) {
                     List<NativeContentItem> media = fapello.fetchModelMedia(
                             getContext().getApplicationContext(),
-                            new FapelloRepository.Model(creator.title, creator.url, creator.imageUrl),
-                            1);
+                            model,
+                            1
+                    );
                     int checked = 0;
                     for (NativeContentItem item : media) {
-                        if (checked >= 6 || portraitArtwork.size() >= 2) break;
+                        if (checked >= 10 || portraitArtwork.size() >= 2) break;
                         if (item == null || !item.isImage()) continue;
                         checked++;
                         try {
                             CrazyShitRepository.StreamInfo full = fapello.resolvePlayable(
-                                    getContext().getApplicationContext(), item.url);
+                                    getContext().getApplicationContext(),
+                                    item.url
+                            );
                             OnlyFapHeroPolicy.Artwork choice =
                                     new OnlyFapHeroPolicy.Artwork(
                                             full.mediaUrl,
@@ -678,10 +702,10 @@ final class OnlyFapHubView extends FrameLayout {
                             }
                         } catch (IOException ignored) { }
                     }
-                } catch (IOException ignored) { }
-            }
+                }
+            } catch (IOException ignored) { }
 
-            // If Fapello did not provide a usable portrait, try OnlyHaven creator media.
+            // If Fapello did not provide enough usable portrait media, try OnlyHaven.
             if (portraitArtwork.size() < 2) {
                 try {
                     OnlyHavenRepository repository = new OnlyHavenRepository();
@@ -757,6 +781,24 @@ final class OnlyFapHubView extends FrameLayout {
         } finally {
             if (target != null) target.cancel(true);
         }
+    }
+
+    private FapelloRepository.Model chooseFapelloMatch(
+            String query,
+            List<FapelloRepository.Model> matches
+    ) {
+        if (matches == null || matches.isEmpty()) return null;
+        FapelloRepository.Model best = null;
+        int bestRank = Integer.MAX_VALUE;
+        for (FapelloRepository.Model candidate : matches) {
+            if (candidate == null) continue;
+            int rank = CreatorNameMatcher.rank(candidate.name, query);
+            if (rank < bestRank) {
+                best = candidate;
+                bestRank = rank;
+            }
+        }
+        return bestRank == Integer.MAX_VALUE ? null : best;
     }
 
     private OnlyHavenRepository.Creator chooseOnlyHavenMatch(
