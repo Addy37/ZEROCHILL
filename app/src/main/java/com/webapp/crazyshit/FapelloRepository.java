@@ -1242,6 +1242,18 @@ final class FapelloRepository {
                 .replace(".th.", ".");
     }
 
+    static String originalUrlFromPreview(String previewUrl) {
+        if (previewUrl == null || !isFapelloUrl(previewUrl)) return "";
+        String clean = previewUrl.trim();
+        if (!clean.matches("(?i)^https://[^?#]+\\.(?:jpg|jpeg|png|webp|avif)(?:[?#].*)?$")) {
+            return "";
+        }
+        String original = clean.replace("_300px", "")
+                .replace(".md.", ".")
+                .replace(".th.", ".");
+        return original.equals(clean) ? "" : original;
+    }
+
     private boolean isDirectMedia(String value) {
         return value != null && DIRECT_MEDIA.matcher(value).find();
     }

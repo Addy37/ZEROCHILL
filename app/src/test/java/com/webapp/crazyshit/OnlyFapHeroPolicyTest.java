@@ -34,21 +34,108 @@ public class OnlyFapHeroPolicyTest {
         assertEquals("Backup One", selected.get(2).title);
     }
 
-    @Test public void artworkUsesHeaderThenFullImagesThenPreviewThenAvatar() {
+    @Test public void artworkUsesFullImageThenHeaderThenPreviewThenAvatar() {
         List<OnlyFapHeroPolicy.Artwork> choices = new ArrayList<>();
-        choices.add(new OnlyFapHeroPolicy.Artwork("https://img.example/header.webp", "profile", false));
         NativeContentItem image = media(NativeContentItem.KIND_IMAGE,
                 "https://img.example/full.jpg", "https://img.example/thumb.jpg");
         NativeContentItem video = media(NativeContentItem.KIND_MEDIA,
                 "https://img.example/video.mp4", "https://img.example/poster.webp");
-        OnlyFapHeroPolicy.addMedia(choices, Arrays.asList(video, image), "gallery");
-        choices.add(new OnlyFapHeroPolicy.Artwork("https://img.example/avatar.webp", "profile", true));
+        List<NativeContentItem> media = Arrays.asList(video, image);
+        OnlyFapHeroPolicy.addDirectImages(choices, media, "gallery");
+        choices.add(new OnlyFapHeroPolicy.Artwork(
+                "https://img.example/header.webp", "profile", false));
+        OnlyFapHeroPolicy.addPreviews(choices, media, "gallery");
+        choices.add(new OnlyFapHeroPolicy.Artwork(
+                "https://img.example/avatar.webp", "profile", true));
         List<OnlyFapHeroPolicy.Artwork> unique = OnlyFapHeroPolicy.distinctArtwork(choices);
-        assertEquals("https://img.example/header.webp", unique.get(0).url);
-        assertEquals("https://img.example/full.jpg", unique.get(1).url);
+        assertEquals("https://img.example/full.jpg", unique.get(0).url);
+        assertEquals("https://img.example/header.webp", unique.get(1).url);
         assertEquals("https://img.example/poster.webp", unique.get(2).url);
         assertTrue(unique.get(unique.size() - 1).avatar);
-        assertFalse(unique.get(1).avatar);
+        assertFalse(unique.get(0).avatar);
+    }
+
+    @Test public void deeperDiscoveryAddsOnlyNewCreators() {
+        List<NativeContentItem> destination = new ArrayList<>(
+                Arrays.asList(creator("One"), creator("Two"))
+        );
+        OnlyFapHeroPolicy.appendUniqueCreators(
+                destination,
+                Arrays.asList(
+                        creator("Two"),
+                        creator("Three"),
+                        creator("Three"),
+                        creator("Four")
+                )
+        );
+
+        assertEquals(4, destination.size());
+        assertEquals("One", destination.get(0).title);
+        assertEquals("Two", destination.get(1).title);
+        assertEquals("Three", destination.get(2).title);
+        assertEquals("Four", destination.get(3).title);
+    }
+
+    @Test public void portraitScanCanLookPastFirstThreeGalleryImages() {
+        List<NativeContentItem> media = Arrays.asList(
+                media(NativeContentItem.KIND_IMAGE, "https://img.example/1.jpg", ""),
+                media(NativeContentItem.KIND_IMAGE, "https://img.example/2.jpg", ""),
+                media(NativeContentItem.KIND_IMAGE, "https://img.example/3.jpg", ""),
+                media(NativeContentItem.KIND_IMAGE, "https://img.example/4.jpg", ""),
+                media(NativeContentItem.KIND_IMAGE, "https://img.example/5.jpg", ""),
+                media(NativeContentItem.KIND_IMAGE, "https://img.example/6.jpg", "")
+        );
+        List<OnlyFapHeroPolicy.Artwork> artwork = new ArrayList<>();
+        OnlyFapHeroPolicy.addDirectImages(artwork, media, "gallery");
+        assertEquals(6, artwork.size());
+        assertEquals("https://img.example/6.jpg", artwork.get(5).url);
+    }
+
+    @Test public void croppedPreviewsDoNotBlockBoundedOriginalResolution() {
+        List<NativeContentItem> media = new ArrayList<>();
+        for (int index = 0; index < 12; index++) {
+            media.add(media(NativeContentItem.KIND_IMAGE,
+                    "https://img.example/post-" + index,
+                    "https://img.example/square-preview-" + index + ".jpg"));
+        }
+        List<NativeContentItem> selected =
+                OnlyFapHeroPolicy.originalResolutionCandidates(media, 4);
+
+        assertEquals(4, selected.size());
+        assertEquals(media.get(0), selected.get(0));
+        assertEquals(media.get(4), selected.get(1));
+        assertEquals(media.get(7), selected.get(2));
+        assertEquals(media.get(11), selected.get(3));
+    }
+
+    @Test public void rejectedBatchAdvancesToUntestedCreators() {
+        List<NativeContentItem> candidates = Arrays.asList(
+                creator("One"),
+                creator("Two"),
+                creator("Three"),
+                creator("Four"),
+                creator("Five")
+        );
+        HashSet<String> requested = new HashSet<>();
+        requested.add(CreatorFavoriteStore.key(candidates.get(0)));
+        requested.add(CreatorFavoriteStore.key(candidates.get(1)));
+        requested.add(CreatorFavoriteStore.key(candidates.get(2)));
+
+        List<NativeContentItem> next =
+                OnlyFapHeroPolicy.nextUnrequested(candidates, requested, 2);
+
+        assertEquals(2, next.size());
+        assertEquals("Four", next.get(0).title);
+        assertEquals("Five", next.get(1).title);
+    }
+
+    @Test public void portraitHeroRequiresClearlyVerticalDimensions() {
+        assertTrue(OnlyFapHeroPolicy.isGoodPortraitDimensions(1080, 1920));
+        assertTrue(OnlyFapHeroPolicy.isGoodPortraitDimensions(1200, 1500));
+        assertFalse(OnlyFapHeroPolicy.isGoodPortraitDimensions(1000, 1100));
+        assertFalse(OnlyFapHeroPolicy.isGoodPortraitDimensions(1200, 1200));
+        assertFalse(OnlyFapHeroPolicy.isGoodPortraitDimensions(1920, 1080));
+        assertFalse(OnlyFapHeroPolicy.isGoodPortraitDimensions(0, 1920));
     }
 
     @Test public void missingHeaderStillPicksPortraitMediaBeforeAvatar() {

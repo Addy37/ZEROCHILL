@@ -70,6 +70,21 @@ public final class FapelloRepositoryTest {
         assertEquals("https://cdn.fapello.com/content/sample/photo.jpg", stream.mediaUrl);
     }
 
+    @Test public void galleryThumbnailCanPointDirectlyToOriginalWithoutPostPage() {
+        assertEquals(
+                "https://fapello.com/content/s/a/sample-creator/100000/sample-creator_1815.jpg",
+                FapelloRepository.originalUrlFromPreview(
+                        "https://fapello.com/content/s/a/sample-creator/100000/sample-creator_1815_300px.jpg")
+        );
+        assertEquals(
+                "https://cdn.fapello.com/content/sample/photo.webp",
+                FapelloRepository.originalUrlFromPreview(
+                        "https://cdn.fapello.com/content/sample/photo_300px.webp")
+        );
+        assertEquals("", FapelloRepository.originalUrlFromPreview(
+                "https://cdn.fapello.com/content/sample/photo.webp"));
+    }
+
     @Test public void videoResolutionUsesPlayableSourceInsteadOfPoster() throws Exception {
         CrazyShitRepository.StreamInfo stream = repository.parsePlayable(
                 document("post-video.html", "https://fapello.com/video/new/1002/"),

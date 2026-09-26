@@ -44,6 +44,65 @@ final class OnlyFapHeroPolicy {
         return new ArrayList<>(selected.values());
     }
 
+    static void appendUniqueCreators(
+            List<NativeContentItem> destination,
+            List<NativeContentItem> source
+    ) {
+        if (destination == null || source == null || source.isEmpty()) return;
+        HashSet<String> keys = new HashSet<>();
+        for (NativeContentItem item : destination) {
+            String key = CreatorFavoriteStore.key(item);
+            if (!key.isEmpty()) keys.add(key);
+        }
+        for (NativeContentItem item : source) {
+            if (item == null || !item.isCreator()) continue;
+            String key = CreatorFavoriteStore.key(item);
+            if (key.isEmpty() || !keys.add(key)) continue;
+            destination.add(item);
+        }
+    }
+
+    static List<NativeContentItem> nextUnrequested(
+            List<NativeContentItem> candidates,
+            Set<String> requested,
+            int limit
+    ) {
+        ArrayList<NativeContentItem> result = new ArrayList<>();
+        if (candidates == null || limit <= 0) return result;
+        for (NativeContentItem item : candidates) {
+            if (result.size() >= limit) break;
+            if (item == null || !item.isCreator()) continue;
+            String key = CreatorFavoriteStore.key(item);
+            if (key.isEmpty() || (requested != null && requested.contains(key))) continue;
+            result.add(item);
+        }
+        return result;
+    }
+
+    static List<NativeContentItem> originalResolutionCandidates(
+            List<NativeContentItem> media, int limit
+    ) {
+        ArrayList<NativeContentItem> images = new ArrayList<>();
+        if (media == null || limit <= 0) return images;
+        for (NativeContentItem item : media) {
+            if (images.size() >= 36) break;
+            if (item != null && item.isImage() && !item.url.trim().isEmpty()) {
+                images.add(item);
+            }
+        }
+        if (images.size() <= limit) return images;
+        ArrayList<NativeContentItem> sample = new ArrayList<>(limit);
+        if (limit == 1) {
+            sample.add(images.get(0));
+            return sample;
+        }
+        for (int index = 0; index < limit; index++) {
+            int position = Math.round(index * (images.size() - 1f) / (limit - 1));
+            sample.add(images.get(position));
+        }
+        return sample;
+    }
+
     private static void addKeys(Set<String> keys, List<NativeContentItem> items) {
         if (items == null) return;
         for (NativeContentItem item : items) {
@@ -65,19 +124,36 @@ final class OnlyFapHeroPolicy {
 
     static void addMedia(List<Artwork> artwork, List<NativeContentItem> media,
             String referer) {
-        if (media == null) return;
-        // Actual image files precede video posters and thumbnails. Portrait images
-        // remain eligible because the full-bleed ImageView can crop them cleanly.
+        addDirectImages(artwork, media, referer);
+        addPreviews(artwork, media, referer);
+    }
+
+    static void addDirectImages(List<Artwork> artwork, List<NativeContentItem> media,
+            String referer) {
+        if (artwork == null || media == null) return;
+        // Keep a wider sample for portrait qualification. The resolver still admits only
+        // a couple of final hero images, so this broadens discovery without bloating the hero.
         for (NativeContentItem item : media) {
             if (item == null || !item.isImage() || !directImage(item.url)) continue;
             artwork.add(new Artwork(item.url, referer, false));
-            if (artwork.size() >= 3) return;
+            if (artwork.size() >= 12) return;
         }
+    }
+
+    static void addPreviews(List<Artwork> artwork, List<NativeContentItem> media,
+            String referer) {
+        if (artwork == null || media == null) return;
+        // Posters and thumbnails are useful fallbacks, but should come after a wide banner.
         for (NativeContentItem item : media) {
             if (item == null || !directImage(item.imageUrl)) continue;
             artwork.add(new Artwork(item.imageUrl, referer, false));
             if (artwork.size() >= 3) return;
         }
+    }
+
+    static boolean isGoodPortraitDimensions(int width, int height) {
+        if (width <= 0 || height <= 0) return false;
+        return height >= Math.round(width * 1.18f);
     }
 
     static List<Artwork> distinctArtwork(List<Artwork> input) {
