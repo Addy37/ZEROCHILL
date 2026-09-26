@@ -50,7 +50,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         void onLongPressItem(NativeContentItem item, View anchor);
         void onOpenComments(NativeContentItem item);
 
-        default void onOpenMore() {
+        default void onOpenMore(View anchor) {
         }
 
         default void onChaosClearDisplayChanged(boolean clear) {
@@ -711,8 +711,8 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                         }
 
                         @Override
-                        public void onMore() {
-                            host.onOpenMore();
+                        public void onMore(View anchor) {
+                            host.onOpenMore(anchor);
                         }
 
                         @Override
