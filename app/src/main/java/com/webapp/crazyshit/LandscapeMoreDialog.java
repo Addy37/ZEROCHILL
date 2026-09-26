@@ -122,7 +122,11 @@ final class LandscapeMoreDialog {
             panelParams.height = ViewGroup.LayoutParams.WRAP_CONTENT;
             panel.setLayoutParams(panelParams);
         }
-        scroll.getLayoutParams().height = maxHeight - dp(activity, 66);
+        int actionContentHeight = actions.size() * 54 + Math.max(0, actions.size() - 1);
+        scroll.getLayoutParams().height = Math.min(
+                maxHeight - dp(activity, 66),
+                dp(activity, actionContentHeight)
+        );
 
         WindowManager.LayoutParams attrs = window.getAttributes();
         attrs.width = panelWidth;
