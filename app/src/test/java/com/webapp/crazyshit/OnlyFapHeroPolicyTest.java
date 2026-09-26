@@ -55,6 +55,21 @@ public class OnlyFapHeroPolicyTest {
         assertFalse(unique.get(0).avatar);
     }
 
+    @Test public void portraitScanCanLookPastFirstThreeGalleryImages() {
+        List<NativeContentItem> media = Arrays.asList(
+                media(NativeContentItem.KIND_IMAGE, "https://img.example/1.jpg", ""),
+                media(NativeContentItem.KIND_IMAGE, "https://img.example/2.jpg", ""),
+                media(NativeContentItem.KIND_IMAGE, "https://img.example/3.jpg", ""),
+                media(NativeContentItem.KIND_IMAGE, "https://img.example/4.jpg", ""),
+                media(NativeContentItem.KIND_IMAGE, "https://img.example/5.jpg", ""),
+                media(NativeContentItem.KIND_IMAGE, "https://img.example/6.jpg", "")
+        );
+        List<OnlyFapHeroPolicy.Artwork> artwork = new ArrayList<>();
+        OnlyFapHeroPolicy.addDirectImages(artwork, media, "gallery");
+        assertEquals(6, artwork.size());
+        assertEquals("https://img.example/6.jpg", artwork.get(5).url);
+    }
+
     @Test public void rejectedBatchAdvancesToUntestedCreators() {
         List<NativeContentItem> candidates = Arrays.asList(
                 creator("One"),
