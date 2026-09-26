@@ -59,7 +59,14 @@ final class OnlyFapHubView extends FrameLayout {
     interface Listener {
         void onOpenCreator(NativeContentItem creator);
         void onSearch();
-        void onMore(View anchor);
+
+        default void onMore() {
+        }
+
+        default void onMore(View anchor) {
+            onMore();
+        }
+
         void onViewAllFavorites();
     }
 
