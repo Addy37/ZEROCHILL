@@ -138,10 +138,10 @@ final class LandscapeMoreDialog {
         int x = dp(activity, 12);
         if (anchor != null && anchor.isAttachedToWindow()) {
             int[] location = new int[2];
-            anchor.getLocationOnScreen(location);
+            anchor.getLocationInWindow(location);
             int anchorRight = location[0] + anchor.getWidth();
             x = Math.max(dp(activity, 8), screenWidth - anchorRight);
-            y = location[1] + anchor.getHeight() + dp(activity, 4);
+            y = location[1] + anchor.getHeight() + dp(activity, 1);
         }
         attrs.x = x;
         attrs.y = y;
