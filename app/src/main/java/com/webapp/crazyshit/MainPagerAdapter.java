@@ -109,7 +109,9 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         libraryView = new LibraryHubView(activity, new LibraryHubView.Listener() {
             @Override
             public void onOpenItem(NativeContentItem item) {
-                host.onOpenItem(item);
+                // Keep Library playback visually consistent with Shows by reusing the
+                // same resolver and face-only launch curtain before the first frame.
+                openShowsVideo(item);
             }
 
             @Override
