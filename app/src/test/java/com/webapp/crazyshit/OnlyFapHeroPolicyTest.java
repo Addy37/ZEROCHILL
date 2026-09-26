@@ -55,6 +55,27 @@ public class OnlyFapHeroPolicyTest {
         assertFalse(unique.get(0).avatar);
     }
 
+    @Test public void rejectedBatchAdvancesToUntestedCreators() {
+        List<NativeContentItem> candidates = Arrays.asList(
+                creator("One"),
+                creator("Two"),
+                creator("Three"),
+                creator("Four"),
+                creator("Five")
+        );
+        HashSet<String> requested = new HashSet<>();
+        requested.add(CreatorFavoriteStore.key(candidates.get(0)));
+        requested.add(CreatorFavoriteStore.key(candidates.get(1)));
+        requested.add(CreatorFavoriteStore.key(candidates.get(2)));
+
+        List<NativeContentItem> next =
+                OnlyFapHeroPolicy.nextUnrequested(candidates, requested, 2);
+
+        assertEquals(2, next.size());
+        assertEquals("Four", next.get(0).title);
+        assertEquals("Five", next.get(1).title);
+    }
+
     @Test public void portraitHeroRequiresClearlyVerticalDimensions() {
         assertTrue(OnlyFapHeroPolicy.isGoodPortraitDimensions(1080, 1920));
         assertTrue(OnlyFapHeroPolicy.isGoodPortraitDimensions(1200, 1500));
