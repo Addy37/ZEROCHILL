@@ -55,6 +55,27 @@ public class OnlyFapHeroPolicyTest {
         assertFalse(unique.get(0).avatar);
     }
 
+    @Test public void deeperDiscoveryAddsOnlyNewCreators() {
+        List<NativeContentItem> destination = new ArrayList<>(
+                Arrays.asList(creator("One"), creator("Two"))
+        );
+        OnlyFapHeroPolicy.appendUniqueCreators(
+                destination,
+                Arrays.asList(
+                        creator("Two"),
+                        creator("Three"),
+                        creator("Three"),
+                        creator("Four")
+                )
+        );
+
+        assertEquals(4, destination.size());
+        assertEquals("One", destination.get(0).title);
+        assertEquals("Two", destination.get(1).title);
+        assertEquals("Three", destination.get(2).title);
+        assertEquals("Four", destination.get(3).title);
+    }
+
     @Test public void portraitScanCanLookPastFirstThreeGalleryImages() {
         List<NativeContentItem> media = Arrays.asList(
                 media(NativeContentItem.KIND_IMAGE, "https://img.example/1.jpg", ""),
