@@ -35,7 +35,7 @@ public class OnlyFapHeroDesignTest {
                 (HorizontalSwipeFrameLayout) content.getChildAt(0);
         MaterialCardView hero = (MaterialCardView) heroSwipe.getChildAt(0);
 
-        int expectedHeight = Math.round(540f * activity.getResources()
+        int expectedHeight = Math.round(640f * activity.getResources()
                 .getDisplayMetrics().density);
         assertEquals(expectedHeight, heroSwipe.getLayoutParams().height);
         assertEquals(0f, hero.getRadius(), 0.01f);
