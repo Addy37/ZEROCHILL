@@ -752,31 +752,47 @@ final class OnlyFapHubView extends FrameLayout {
                 }
 
                 if (model != null) {
-                    List<NativeContentItem> media = fapello.fetchModelMedia(
-                            getContext().getApplicationContext(),
-                            model,
-                            1
-                    );
-                    int checked = 0;
-                    for (NativeContentItem item : media) {
-                        if (checked >= 10 || portraitArtwork.size() >= 2) break;
-                        if (item == null || !item.isImage()) continue;
-                        checked++;
-                        try {
-                            CrazyShitRepository.StreamInfo full = fapello.resolvePlayable(
-                                    getContext().getApplicationContext(),
-                                    item.url
-                            );
-                            OnlyFapHeroPolicy.Artwork choice =
+                    for (int mediaPage = 1;
+                            mediaPage <= 2 && portraitArtwork.size() < 2;
+                            mediaPage++) {
+                        List<NativeContentItem> media = fapello.fetchModelMedia(
+                                getContext().getApplicationContext(),
+                                model,
+                                mediaPage
+                        );
+                        int scanned = 0;
+                        for (NativeContentItem item : media) {
+                            if (scanned >= 36 || portraitArtwork.size() >= 2) break;
+                            if (item == null || !item.isImage()) continue;
+                            scanned++;
+
+                            String previewUrl = clean(item.imageUrl);
+                            OnlyFapHeroPolicy.Artwork preview =
                                     new OnlyFapHeroPolicy.Artwork(
-                                            full.mediaUrl,
-                                            full.requestReferer,
+                                            previewUrl,
+                                            model.url,
                                             false
                                     );
-                            if (isGoodPortraitArtwork(choice)) {
-                                portraitArtwork.add(choice);
+                            if (!previewUrl.isEmpty() && !isGoodPortraitArtwork(preview)) {
+                                continue;
                             }
-                        } catch (IOException ignored) { }
+
+                            try {
+                                CrazyShitRepository.StreamInfo full = fapello.resolvePlayable(
+                                        getContext().getApplicationContext(),
+                                        item.url
+                                );
+                                OnlyFapHeroPolicy.Artwork choice =
+                                        new OnlyFapHeroPolicy.Artwork(
+                                                full.mediaUrl,
+                                                full.requestReferer,
+                                                false
+                                        );
+                                if (isGoodPortraitArtwork(choice)) {
+                                    portraitArtwork.add(choice);
+                                }
+                            } catch (IOException ignored) { }
+                        }
                     }
                 }
             } catch (IOException ignored) { }
