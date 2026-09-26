@@ -65,7 +65,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         default void onChaosClearDisplayChanged(boolean clear) {
         }
 
-        default void onNavigationScroll(int dy, boolean atTop) {
+        default void onNavigationScroll(int sourcePage, int dy, boolean atTop, boolean userDriven) {
         }
     }
 
@@ -114,8 +114,8 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
             }
 
             @Override
-            public void onVerticalPageChanged(int direction, boolean atTop) {
-                host.onNavigationScroll(direction * dp(24), atTop);
+            public void onVerticalPageChanged(int direction, boolean atTop, boolean userDriven) {
+                host.onNavigationScroll(PAGE_CHAOS, direction * dp(24), atTop, userDriven);
             }
         });
         chaosView.setActive(false);
@@ -146,7 +146,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
             }
         });
         libraryView.setOnScrollChangeListener((v, scrollX, scrollY, oldScrollX, oldScrollY) ->
-                host.onNavigationScroll(scrollY - oldScrollY, scrollY <= dp(4)));
+                host.onNavigationScroll(PAGE_LIBRARY, scrollY - oldScrollY, scrollY <= dp(4), true));
 
     }
 
@@ -471,9 +471,11 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                 if (!(manager instanceof LinearLayoutManager)) return;
                 LinearLayoutManager positionManager = (LinearLayoutManager) manager;
                 host.onNavigationScroll(
+                        page.index,
                         dy,
                         positionManager.findFirstCompletelyVisibleItemPosition() <= 0 &&
-                                !view.canScrollVertically(-1)
+                                !view.canScrollVertically(-1),
+                        true
                 );
                 LinearLayoutManager lm = (LinearLayoutManager) manager;
                 int first = lm.findFirstVisibleItemPosition();
@@ -697,8 +699,10 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
             page.showsHub.setNavigationScrollListener(
                     (v, scrollX, scrollY, oldScrollX, oldScrollY) ->
                             host.onNavigationScroll(
+                                    PAGE_SERIES,
                                     scrollY - oldScrollY,
-                                    scrollY <= dp(4)
+                                    scrollY <= dp(4),
+                                    true
                             )
             );
             page.root.addView(page.showsHub, new FrameLayout.LayoutParams(-1, -1));
@@ -761,8 +765,10 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
             page.onlyFapHub.setNavigationScrollListener(
                     (v, scrollX, scrollY, oldScrollX, oldScrollY) ->
                             host.onNavigationScroll(
+                                    PAGE_ONLYFAP,
                                     scrollY - oldScrollY,
-                                    scrollY <= dp(4)
+                                    scrollY <= dp(4),
+                                    true
                             )
             );
             page.root.addView(page.onlyFapHub, new FrameLayout.LayoutParams(-1, -1));

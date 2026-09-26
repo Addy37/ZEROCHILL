@@ -3,7 +3,13 @@ package com.webapp.crazyshit;
 import android.app.Application;
 import android.content.Intent;
 import android.os.Bundle;
+import android.graphics.Bitmap;
+import android.graphics.Canvas;
+import android.graphics.Rect;
+import android.graphics.RectF;
 import android.view.View;
+import android.view.ViewGroup;
+import android.widget.ImageView;
 
 import androidx.viewpager2.widget.ViewPager2;
 
@@ -294,7 +300,107 @@ public class NavigationIaTest {
                 MainPagerAdapter.pageForPagerPosition(pager.getCurrentItem())
         );
         assertEquals(2f, nav.pagerPositionForTest(), 0.01f);
+
+        nav.setCollapsed(true, false);
+        shadowOf(android.os.Looper.getMainLooper()).idle();
+        View library = nav.findViewById(6);
+        onlyFap.getDrawingRect(onlyFapRect);
+        library.getDrawingRect(chaosRect);
+        nav.offsetDescendantRectToMyCoords(onlyFap, onlyFapRect);
+        nav.offsetDescendantRectToMyCoords(library, chaosRect);
+        downX = onlyFapRect.exactCenterX();
+        downY = onlyFapRect.exactCenterY();
+        targetX = chaosRect.exactCenterX();
+        downTime = android.os.SystemClock.uptimeMillis();
+        nav.dispatchTouchEvent(android.view.MotionEvent.obtain(
+                downTime, downTime, android.view.MotionEvent.ACTION_DOWN, downX, downY, 0));
+        nav.dispatchTouchEvent(android.view.MotionEvent.obtain(
+                downTime, downTime + 16L, android.view.MotionEvent.ACTION_MOVE,
+                downX + ((targetX - downX) * 0.65f), downY, 0));
+        nav.dispatchTouchEvent(android.view.MotionEvent.obtain(
+                downTime, downTime + 32L, android.view.MotionEvent.ACTION_UP,
+                targetX, downY, 0));
+        shadowOf(android.os.Looper.getMainLooper()).idle();
+        assertEquals(MainPagerAdapter.PAGE_LIBRARY,
+                MainPagerAdapter.pageForPagerPosition(pager.getCurrentItem()));
+        assertTrue(nav.isCollapsedForTest());
         controller.pause().stop().destroy();
+    }
+
+    @Test public void compactNavIconsAndSelectedCapsuleFitAtEveryProgress() {
+        android.content.Context context = org.robolectric.RuntimeEnvironment.getApplication();
+        context.getSharedPreferences("app_prefs", 0).edit()
+                .putBoolean("access_notice_2_8_3_accepted", true).apply();
+        ActivityController<NativeMainActivity> controller =
+                Robolectric.buildActivity(NativeMainActivity.class)
+                        .create().start().resume().visible();
+        shadowOf(android.os.Looper.getMainLooper()).idle();
+        ZeroChillBottomNavigationView nav = ReflectionHelpers.getField(controller.get(),
+                "bottomNavigation");
+        for (float progress : new float[]{0f, 0.25f, 0.5f, 0.75f, 1f}) {
+            nav.setCollapseProgressForTest(progress);
+            int width = Math.round(360 * context.getResources().getDisplayMetrics().density)
+                    - ((ViewGroup.MarginLayoutParams) nav.getLayoutParams()).leftMargin * 2;
+            int height = ((ViewGroup.MarginLayoutParams) nav.getLayoutParams()).height;
+            nav.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
+                    View.MeasureSpec.makeMeasureSpec(height, View.MeasureSpec.EXACTLY));
+            nav.layout(0, 0, width, height);
+            for (int id : new int[]{2, 4, 3, 6}) {
+                View item = nav.findViewById(id);
+                View container = item.findViewById(
+                        com.google.android.material.R.id.navigation_bar_item_icon_container);
+                assertNotNull(container);
+                ImageView icon = findIcon(container);
+                assertNotNull(icon);
+                Rect iconBounds = new Rect(0, 0, icon.getWidth(), icon.getHeight());
+                nav.offsetDescendantRectToMyCoords(icon, iconBounds);
+                iconBounds.offset(0, Math.round(container.getTranslationY()));
+                assertTrue("icon top at " + progress, iconBounds.top >= 0);
+                assertTrue("icon bottom at " + progress, iconBounds.bottom <= height);
+                assertEquals(0f, icon.getTranslationY(), 0.01f);
+            }
+            nav.draw(new Canvas(Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)));
+            RectF capsule = nav.selectedCapsuleBoundsForTest();
+            assertTrue("capsule top at " + progress, capsule.top >= 0);
+            assertTrue("capsule bottom at " + progress, capsule.bottom <= height);
+            assertEquals(
+                    com.google.android.material.navigation.NavigationBarView.LABEL_VISIBILITY_LABELED,
+                    nav.getLabelVisibilityMode());
+        }
+        controller.pause().stop().destroy();
+    }
+
+    @Test public void collapseAnimationReversesFromItsCurrentProgressWithoutRestartingSameTarget() {
+        android.content.Context context = org.robolectric.RuntimeEnvironment.getApplication();
+        context.getSharedPreferences("app_prefs", 0).edit()
+                .putBoolean("access_notice_2_8_3_accepted", true).apply();
+        ActivityController<NativeMainActivity> controller =
+                Robolectric.buildActivity(NativeMainActivity.class)
+                        .create().start().resume().visible();
+        ZeroChillBottomNavigationView nav = ReflectionHelpers.getField(controller.get(),
+                "bottomNavigation");
+        nav.setCollapseProgressForTest(0.45f);
+        nav.setCollapsed(false, true);
+        assertEquals(0.45f, nav.collapseProgressForTest(), 0.01f);
+        nav.setCollapsed(false, true);
+        assertEquals(0.45f, nav.collapseProgressForTest(), 0.01f);
+        nav.setCollapseProgressForTest(0.55f);
+        nav.setCollapsed(true, true);
+        assertEquals(0.55f, nav.collapseProgressForTest(), 0.01f);
+        nav.setCollapsed(true, true);
+        assertEquals(0.55f, nav.collapseProgressForTest(), 0.01f);
+        controller.pause().stop().destroy();
+    }
+
+    private static ImageView findIcon(View root) {
+        if (root instanceof ImageView) return (ImageView) root;
+        if (!(root instanceof ViewGroup)) return null;
+        ViewGroup group = (ViewGroup) root;
+        for (int i = 0; i < group.getChildCount(); i++) {
+            ImageView result = findIcon(group.getChildAt(i));
+            if (result != null) return result;
+        }
+        return null;
     }
 
     @Test public void dormantHomeRestoreFallsBackToShitTokAndLibraryIsPrimaryTab() {

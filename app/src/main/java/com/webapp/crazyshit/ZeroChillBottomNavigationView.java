@@ -76,7 +76,13 @@ final class ZeroChillBottomNavigationView extends BottomNavigationView {
         selectedGlass = drawable == null ? null : drawable.mutate();
         swipeTouchSlop = ViewConfiguration.get(context).getScaledTouchSlop();
         setWillNotDraw(false);
-        addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> updateItemColors());
+        // The theme's 64dp minimum would otherwise keep Material's menu at full height
+        // inside a 50dp parent, cutting its icon container during the transition.
+        setMinimumHeight(0);
+        addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> {
+            updateItemColors();
+            setItemCollapseVisuals(clamp(collapseProgress, 0f, 1f));
+        });
     }
 
     void setPagerPosition(float position) {
@@ -125,6 +131,26 @@ final class ZeroChillBottomNavigationView extends BottomNavigationView {
 
     boolean isCollapsedForTest() {
         return collapsedTarget;
+    }
+
+    float collapseProgressForTest() {
+        return collapseProgress;
+    }
+
+    void setCollapseProgressForTest(float progress) {
+        if (collapseAnimator != null) collapseAnimator.cancel();
+        collapseAnimator = null;
+        collapseProgress = clamp(progress, 0f, 1f);
+        collapsedTarget = collapseProgress >= 1f;
+        applyCollapseProgress(collapseProgress);
+    }
+
+    RectF selectedCapsuleBoundsForTest() {
+        return new RectF(indicatorRect);
+    }
+
+    boolean collapseAnimatorRunningForTest() {
+        return collapseAnimator != null && collapseAnimator.isRunning();
     }
 
     float pagerPositionForTest() {
@@ -293,8 +319,9 @@ final class ZeroChillBottomNavigationView extends BottomNavigationView {
         float center = lerp(firstCenter, secondCenter, fraction);
         // Match the approved zc_nav_item_background inset bounds exactly.
         float width = lerp(firstRect.width(), secondRect.width(), fraction) - dp(8);
-        float top = lerp(firstRect.top, secondRect.top, fraction) + dp(4);
-        float bottom = lerp(firstRect.bottom, secondRect.bottom, fraction) + dp(10);
+        float top = Math.max(dp(3), lerp(firstRect.top, secondRect.top, fraction) + dp(4));
+        float bottom = Math.min(getHeight() - dp(3),
+                lerp(firstRect.bottom, secondRect.bottom, fraction) + dp(10));
         if (bottom <= top) return;
 
         float midY = (top + bottom) / 2f;
@@ -398,38 +425,37 @@ final class ZeroChillBottomNavigationView extends BottomNavigationView {
             setLayoutParams(params);
         }
 
-        float labelAlpha = clamp(1f - (p * 1.45f), 0f, 1f);
-        float iconShift = dp(5) * p;
-        setItemCollapseVisuals(labelAlpha, iconShift);
+        setItemCollapseVisuals(p);
         invalidate();
     }
 
-    private void setItemCollapseVisuals(float labelAlpha, float iconShift) {
+    private void setItemCollapseVisuals(float progress) {
+        float labelAlpha = clamp(1f - progress * 1.45f, 0f, 1f);
         for (int id : PAGE_NAV_IDS) {
             View item = findViewById(id);
-            if (item != null) applyItemCollapseVisuals(item, labelAlpha, iconShift);
+            if (item == null) continue;
+            item.setMinimumHeight(0);
+            applyLabelAlpha(item, labelAlpha);
+            View iconContainer = item.findViewById(
+                    com.google.android.material.R.id.navigation_bar_item_icon_container);
+            if (iconContainer != null && iconContainer.getHeight() > 0) {
+                descendantRect(iconContainer, firstRect);
+                float desiredCenter = lerp(firstRect.exactCenterY(), getHeight() / 2f, progress);
+                // Move the whole container, not the 24dp ImageView inside its clipped frame.
+                iconContainer.setTranslationY(desiredCenter - firstRect.exactCenterY());
+            }
         }
     }
 
-    private static void applyItemCollapseVisuals(
-            View view,
-            float labelAlpha,
-            float iconShift
-    ) {
+    private static void applyLabelAlpha(View view, float labelAlpha) {
         if (view instanceof TextView) {
             view.setAlpha(labelAlpha);
-            view.setTranslationY((1f - labelAlpha) *
-                    view.getResources().getDisplayMetrics().density * 2f);
-            return;
-        }
-        if (view instanceof ImageView) {
-            view.setTranslationY(iconShift);
             return;
         }
         if (!(view instanceof ViewGroup)) return;
         ViewGroup group = (ViewGroup) view;
         for (int i = 0; i < group.getChildCount(); i++) {
-            applyItemCollapseVisuals(group.getChildAt(i), labelAlpha, iconShift);
+            applyLabelAlpha(group.getChildAt(i), labelAlpha);
         }
     }
 

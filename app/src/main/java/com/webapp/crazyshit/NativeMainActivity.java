@@ -5,6 +5,7 @@ import android.app.AlertDialog;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.graphics.Color;
+import android.graphics.Rect;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -15,7 +16,9 @@ import android.text.style.ForegroundColorSpan;
 import android.view.Gravity;
 import android.view.HapticFeedbackConstants;
 import android.view.Menu;
+import android.view.MotionEvent;
 import android.view.View;
+import android.view.ViewConfiguration;
 import android.view.WindowInsets;
 import android.webkit.CookieManager;
 import android.webkit.WebSettings;
@@ -85,7 +88,10 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     private MainPagerAdapter primaryPagerAdapter;
     private AppUpdater appUpdater;
     private boolean chaosClearDisplay;
-    private int navigationScrollAccumulator;
+    private NavigationMotionController navigationMotion;
+    private float contentDownX;
+    private float contentDownY;
+    private boolean contentTouchCandidate;
 
     private Screen screen = Screen.CHAOS;
     private final Runnable ratingPromptCheck = () -> {
@@ -214,8 +220,10 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
             }
 
             @Override
-            public void onNavigationScroll(int dy, boolean atTop) {
-                updateNavigationCollapse(dy, atTop);
+            public void onNavigationScroll(int sourcePage, int dy, boolean atTop, boolean userDriven) {
+                if (navigationMotion != null) {
+                    navigationMotion.onScroll(sourcePage, dy, atTop, userDriven);
+                }
             }
         });
 
@@ -309,7 +317,8 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
             @Override
             public void onScrolled(RecyclerView view, int dx, int dy) {
                 if (!isFeedScreen()) return;
-                updateNavigationCollapse(dy, !view.canScrollVertically(-1));
+                if (navigationMotion != null) navigationMotion.onScroll(
+                        MainPagerAdapter.PAGE_HOME, dy, !view.canScrollVertically(-1), true);
                 RecyclerView.LayoutManager lm = view.getLayoutManager();
                 if (!(lm instanceof LinearLayoutManager)) return;
                 int first = ((LinearLayoutManager) lm).findFirstVisibleItemPosition();
@@ -323,6 +332,9 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         });
 
         bottomNavigation = new ZeroChillBottomNavigationView(this);
+        navigationMotion = new NavigationMotionController(
+                compact -> bottomNavigation.setCollapsed(compact, true),
+                dp(10), MainPagerAdapter.PAGE_CHAOS);
         bottomNavigation.setBackground(ZeroChillUi.navigationGlass(this));
         bottomNavigation.setElevation(ZeroChillUi.dimension(this, R.dimen.zc_elevation_navigation));
         bottomNavigation.setLabelVisibilityMode(NavigationBarView.LABEL_VISIBILITY_LABELED);
@@ -513,7 +525,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     private void showPagerChrome(int position) {
         // Preserve the current compact/expanded nav state across tab switches.
         // Vertical content movement, not primary-tab selection, owns this animation.
-        navigationScrollAccumulator = 0;
+        if (navigationMotion != null) navigationMotion.setActivePage(position);
         if (legacyContent != null) {
             legacyContent.setVisibility(View.GONE);
             LinearLayout.LayoutParams old = (LinearLayout.LayoutParams) legacyContent.getLayoutParams();
@@ -1297,29 +1309,35 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         super.onDestroy();
     }
 
-    private void updateNavigationCollapse(int dy, boolean atTop) {
-        if (bottomNavigation == null) return;
-        if (atTop) {
-            navigationScrollAccumulator = 0;
-            bottomNavigation.setCollapsed(false, true);
-            return;
+    @Override
+    public boolean dispatchTouchEvent(MotionEvent event) {
+        boolean finishGesture = false;
+        if (navigationMotion != null && event != null) {
+            int action = event.getActionMasked();
+            if (action == MotionEvent.ACTION_DOWN) {
+                Rect contentBounds = new Rect();
+                contentTouchCandidate = primaryPager != null &&
+                        primaryPager.getVisibility() == View.VISIBLE &&
+                        primaryPager.getGlobalVisibleRect(contentBounds) &&
+                        contentBounds.contains((int) event.getRawX(), (int) event.getRawY());
+                contentDownX = event.getRawX();
+                contentDownY = event.getRawY();
+                navigationMotion.endGesture();
+            } else if (action == MotionEvent.ACTION_MOVE && contentTouchCandidate) {
+                float dx = event.getRawX() - contentDownX;
+                float dy = event.getRawY() - contentDownY;
+                int slop = ViewConfiguration.get(this).getScaledTouchSlop();
+                if (Math.abs(dy) > slop && Math.abs(dy) > Math.abs(dx) * 1.25f) {
+                    navigationMotion.beginGesture(currentPrimaryPage());
+                }
+            } else if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) {
+                contentTouchCandidate = false;
+                finishGesture = true;
+            }
         }
-        if (dy == 0) return;
-
-        if ((dy > 0 && navigationScrollAccumulator < 0) ||
-                (dy < 0 && navigationScrollAccumulator > 0)) {
-            navigationScrollAccumulator = 0;
-        }
-        navigationScrollAccumulator += dy;
-
-        int threshold = dp(10);
-        if (navigationScrollAccumulator >= threshold) {
-            navigationScrollAccumulator = 0;
-            bottomNavigation.setCollapsed(true, true);
-        } else if (navigationScrollAccumulator <= -threshold) {
-            navigationScrollAccumulator = 0;
-            bottomNavigation.setCollapsed(false, true);
-        }
+        boolean handled = super.dispatchTouchEvent(event);
+        if (finishGesture) navigationMotion.endGesture();
+        return handled;
     }
 
     private void haptic(View view) {
