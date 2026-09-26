@@ -132,6 +132,10 @@ final class OnlyFapHubView extends FrameLayout {
     private final AtomicInteger originalAttempts = new AtomicInteger();
     private final AtomicInteger originalFailures = new AtomicInteger();
     private final AtomicInteger originalPostUrls = new AtomicInteger();
+    private final AtomicInteger derivedOriginalChecks = new AtomicInteger();
+    private final AtomicInteger derivedOriginalPassed = new AtomicInteger();
+    private final AtomicInteger blockedPostsSkipped = new AtomicInteger();
+    private volatile boolean fapelloPostsBlocked;
     private volatile String originalFailureReason = "none";
     private final AtomicInteger resolutionFinished = new AtomicInteger();
     private int discoveryRaw;
@@ -461,6 +465,10 @@ final class OnlyFapHubView extends FrameLayout {
         originalAttempts.set(0);
         originalFailures.set(0);
         originalPostUrls.set(0);
+        derivedOriginalChecks.set(0);
+        derivedOriginalPassed.set(0);
+        blockedPostsSkipped.set(0);
+        fapelloPostsBlocked = false;
         originalFailureReason = "none";
         resolutionFinished.set(0);
         discoveryRaw = discoveryUnique = addRejected = shelfRemoved = artworkRemoved = 0;
@@ -716,6 +724,9 @@ final class OnlyFapHubView extends FrameLayout {
                 + "\nOriginal candidates/tries/fail " + originalCandidates.get()
                 + "/" + originalAttempts.get() + "/" + originalFailures.get()
                 + "  post URLs " + originalPostUrls.get()
+                + "\nCDN original checks/pass " + derivedOriginalChecks.get() + "/"
+                + derivedOriginalPassed.get() + "  blocked posts skipped "
+                + blockedPostsSkipped.get()
                 + "\nLast resolution error " + originalFailureReason
                 + "\nNo portrait " + emptyPortraitCount + "  accepted " + acceptedCount
                 + "  add rejects " + addRejected
@@ -921,6 +932,24 @@ final class OnlyFapHubView extends FrameLayout {
                         originalCandidates.addAndGet(originals.size());
                         for (NativeContentItem item : originals) {
                             if (portraitArtwork.size() >= 2) break;
+                            String directOriginal =
+                                    FapelloRepository.originalUrlFromPreview(item.imageUrl);
+                            if (!directOriginal.isEmpty()) {
+                                derivedOriginalChecks.incrementAndGet();
+                                OnlyFapHeroPolicy.Artwork directChoice =
+                                        new OnlyFapHeroPolicy.Artwork(
+                                                directOriginal, model.url, false);
+                                if (isGoodPortraitArtwork(directChoice)) {
+                                    portraitArtwork.add(directChoice);
+                                    portraitPassed.incrementAndGet();
+                                    derivedOriginalPassed.incrementAndGet();
+                                    continue;
+                                }
+                            }
+                            if (fapelloPostsBlocked) {
+                                blockedPostsSkipped.incrementAndGet();
+                                continue;
+                            }
                             originalAttempts.incrementAndGet();
                             if (FapelloRepository.isPostUrl(item.url)) {
                                 originalPostUrls.incrementAndGet();
@@ -942,6 +971,11 @@ final class OnlyFapHubView extends FrameLayout {
                                     portraitPassed.incrementAndGet();
                                 }
                             } catch (IOException error) {
+                                if (error instanceof FapelloSourceException &&
+                                        ((FapelloSourceException) error).reason ==
+                                                FapelloSourceException.Reason.BLOCKED) {
+                                    fapelloPostsBlocked = true;
+                                }
                                 int count = originalFailures.incrementAndGet();
                                 originalFailureReason = error instanceof FapelloSourceException
                                         ? "Fapello " + ((FapelloSourceException) error).reason
