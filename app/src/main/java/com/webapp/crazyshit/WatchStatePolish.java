@@ -132,11 +132,11 @@ final class WatchStatePolish {
         badge.setTextSize(9.5f);
         badge.setTextColor(Color.WHITE);
         badge.setPadding(dp(badge, 7), dp(badge, 3), dp(badge, 7), dp(badge, 3));
-        badge.setBackground(rounded(
-                Color.argb(220, 5, 42, 61),
-                Color.argb(210, 8, 146, 208),
-                dp(badge, 1),
-                dp(badge, 11)
+        badge.setBackground(ZeroChillUi.rounded(
+                badge.getContext(),
+                ZeroChillUi.color(badge.getContext(), R.color.zc_cyan_container),
+                ZeroChillUi.color(badge.getContext(), R.color.zc_cyan_dim),
+                R.dimen.zc_radius_pill
         ));
         styleMediaFrame(badge, true);
     }
@@ -182,19 +182,6 @@ final class WatchStatePolish {
     private static GradientDrawable rounded(int color, int radiusPx) {
         GradientDrawable drawable = new GradientDrawable();
         drawable.setColor(color);
-        drawable.setCornerRadius(radiusPx);
-        return drawable;
-    }
-
-    private static GradientDrawable rounded(
-            int fillColor,
-            int strokeColor,
-            int strokeWidthPx,
-            int radiusPx
-    ) {
-        GradientDrawable drawable = new GradientDrawable();
-        drawable.setColor(fillColor);
-        drawable.setStroke(strokeWidthPx, strokeColor);
         drawable.setCornerRadius(radiusPx);
         return drawable;
     }
