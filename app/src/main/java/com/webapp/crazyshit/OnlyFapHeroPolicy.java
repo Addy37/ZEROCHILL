@@ -44,6 +44,24 @@ final class OnlyFapHeroPolicy {
         return new ArrayList<>(selected.values());
     }
 
+    static void appendUniqueCreators(
+            List<NativeContentItem> destination,
+            List<NativeContentItem> source
+    ) {
+        if (destination == null || source == null || source.isEmpty()) return;
+        HashSet<String> keys = new HashSet<>();
+        for (NativeContentItem item : destination) {
+            String key = CreatorFavoriteStore.key(item);
+            if (!key.isEmpty()) keys.add(key);
+        }
+        for (NativeContentItem item : source) {
+            if (item == null || !item.isCreator()) continue;
+            String key = CreatorFavoriteStore.key(item);
+            if (key.isEmpty() || !keys.add(key)) continue;
+            destination.add(item);
+        }
+    }
+
     static List<NativeContentItem> nextUnrequested(
             List<NativeContentItem> candidates,
             Set<String> requested,
