@@ -621,8 +621,10 @@ final class ShowsHubView extends FrameLayout {
         heading.setOrientation(LinearLayout.VERTICAL);
         heading.setPadding(dp(3), 0, dp(3), dp(9));
 
-        TextView titleView = text("Continue Watching", 22f, Color.WHITE);
+        TextView titleView = text("Continue Watching", 19f, Color.WHITE);
         titleView.setTypeface(null, android.graphics.Typeface.BOLD);
+        titleView.setBackground(null);
+        titleView.setPadding(0, 0, 0, 0);
         heading.addView(titleView, new LinearLayout.LayoutParams(-2, -2));
         block.addView(heading);
 
