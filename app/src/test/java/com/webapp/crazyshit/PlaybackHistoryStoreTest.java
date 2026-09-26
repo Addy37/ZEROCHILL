@@ -64,6 +64,39 @@ public class PlaybackHistoryStoreTest {
     }
 
     @Test
+    public void onlyFapHistoryNeverAppearsInShowsContinueWatching() {
+        String pageUrl = "https://fapello.com/example/video/12345/";
+
+        PlaybackHistoryStore.record(
+                context,
+                "OnlyFap video",
+                pageUrl,
+                "",
+                45_000L,
+                120_000L,
+                false,
+                true
+        );
+
+        assertTrue(PlaybackHistoryStore.continueWatchingShows(context).isEmpty());
+
+        PlaybackHistoryStore.record(
+                context,
+                "OnlyFap video",
+                pageUrl,
+                "",
+                60_000L,
+                120_000L,
+                false,
+                false
+        );
+
+        PlaybackHistoryStore.Item item = PlaybackHistoryStore.load(context).get(0);
+        assertFalse(item.fromShows);
+        assertTrue(PlaybackHistoryStore.continueWatchingShows(context).isEmpty());
+    }
+
+    @Test
     public void showsContinueWatchingIncludesStartedVideosBeforeThirtySeconds() {
         PlaybackHistoryStore.record(
                 context,
