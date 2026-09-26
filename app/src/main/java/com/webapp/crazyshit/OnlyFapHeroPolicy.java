@@ -89,11 +89,12 @@ final class OnlyFapHeroPolicy {
     static void addDirectImages(List<Artwork> artwork, List<NativeContentItem> media,
             String referer) {
         if (artwork == null || media == null) return;
-        // Full image files are the preferred cinematic hero source.
+        // Keep a wider sample for portrait qualification. The resolver still admits only
+        // a couple of final hero images, so this broadens discovery without bloating the hero.
         for (NativeContentItem item : media) {
             if (item == null || !item.isImage() || !directImage(item.url)) continue;
             artwork.add(new Artwork(item.url, referer, false));
-            if (artwork.size() >= 3) return;
+            if (artwork.size() >= 12) return;
         }
     }
 
