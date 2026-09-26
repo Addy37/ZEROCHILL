@@ -511,8 +511,9 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     }
 
     private void showPagerChrome(int position) {
+        // Preserve the current compact/expanded nav state across tab switches.
+        // Vertical content movement, not primary-tab selection, owns this animation.
         navigationScrollAccumulator = 0;
-        if (bottomNavigation != null) bottomNavigation.setCollapsed(false, true);
         if (legacyContent != null) {
             legacyContent.setVisibility(View.GONE);
             LinearLayout.LayoutParams old = (LinearLayout.LayoutParams) legacyContent.getLayoutParams();
