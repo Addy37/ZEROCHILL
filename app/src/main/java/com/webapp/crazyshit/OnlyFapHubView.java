@@ -73,6 +73,7 @@ final class OnlyFapHubView extends FrameLayout {
     private static final int HERO_SEARCH_LIMIT = 180;
     private static final int HERO_DISCOVERY_FIRST_PAGE = 2;
     private static final int HERO_DISCOVERY_LAST_PAGE = 8;
+    private static final int HERO_ORIGINAL_CHECKS_PER_PAGE = 4;
     private static final String HERO_DIAG_TAG = "OnlyFapHeroDiag";
 
     private final Listener listener;
@@ -889,23 +890,12 @@ final class OnlyFapHubView extends FrameLayout {
                                 mediaPage
                         );
                         fapelloGalleryMedia.addAndGet(media.size());
-                        int scanned = 0;
-                        for (NativeContentItem item : media) {
-                            if (scanned >= 36 || portraitArtwork.size() >= 2) break;
-                            if (item == null || !item.isImage()) continue;
-                            scanned++;
-
-                            String previewUrl = clean(item.imageUrl);
-                            OnlyFapHeroPolicy.Artwork preview =
-                                    new OnlyFapHeroPolicy.Artwork(
-                                            previewUrl,
-                                            model.url,
-                                            false
-                                    );
-                            if (!previewUrl.isEmpty() && !isGoodPortraitArtwork(preview)) {
-                                continue;
-                            }
-
+                        // Gallery previews are cropped to a different aspect ratio on the
+                        // device. Qualify the original, never the thumbnail. Bound post-page
+                        // requests to preserve the fast shelf and gallery loading path.
+                        for (NativeContentItem item : OnlyFapHeroPolicy.originalResolutionCandidates(
+                                media, HERO_ORIGINAL_CHECKS_PER_PAGE)) {
+                            if (portraitArtwork.size() >= 2) break;
                             try {
                                 CrazyShitRepository.StreamInfo full = fapello.resolvePlayable(
                                         getContext().getApplicationContext(),
