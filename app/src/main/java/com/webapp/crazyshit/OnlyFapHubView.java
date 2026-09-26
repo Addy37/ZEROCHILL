@@ -68,7 +68,9 @@ final class OnlyFapHubView extends FrameLayout {
                     "(KHTML, like Gecko) Chrome/139.0 Mobile Safari/537.36";
     private static final long HERO_ROTATION_MS = 13_000L;
     private static final int HERO_MAX_ITEMS = 8;
-    private static final int HERO_SEARCH_LIMIT = 120;
+    private static final int HERO_SEARCH_LIMIT = 180;
+    private static final int HERO_DISCOVERY_FIRST_PAGE = 2;
+    private static final int HERO_DISCOVERY_LAST_PAGE = 8;
 
     private final Listener listener;
     private final ScrollView scroll;
@@ -93,6 +95,7 @@ final class OnlyFapHubView extends FrameLayout {
     private final Set<String> requestedHeroCreators = new HashSet<>();
     private final Set<String> rejectedHeroUrls = new HashSet<>();
     private final List<HeroCandidate> heroItems = new ArrayList<>();
+    private final List<NativeContentItem> heroDiscoveryItems = new ArrayList<>();
 
     private List<NativeContentItem> trendingItems = Collections.emptyList();
     private List<NativeContentItem> newItems = Collections.emptyList();
@@ -102,6 +105,9 @@ final class OnlyFapHubView extends FrameLayout {
     private HeroCandidate heroItem;
     private int heroIndex = -1;
     private int heroResolveInFlight;
+    private int heroDiscoveryNextPage = HERO_DISCOVERY_FIRST_PAGE;
+    private boolean heroDiscoveryLoading;
+    private boolean heroDiscoveryExhausted;
     private boolean active;
     private boolean closed;
     private volatile int heroGeneration;
@@ -387,7 +393,11 @@ final class OnlyFapHubView extends FrameLayout {
         Glide.with(heroImage).clear(heroImage);
         heroImage.setImageDrawable(new ColorDrawable(Color.rgb(13, 16, 19)));
         heroItems.clear();
+        heroDiscoveryItems.clear();
         heroResolveInFlight = 0;
+        heroDiscoveryNextPage = HERO_DISCOVERY_FIRST_PAGE;
+        heroDiscoveryLoading = false;
+        heroDiscoveryExhausted = false;
         requestedHeroCreators.clear();
         rejectedHeroUrls.clear();
         heroItem = null;
@@ -596,8 +606,11 @@ final class OnlyFapHubView extends FrameLayout {
         int availableSlots = HERO_MAX_ITEMS - heroItems.size() - heroResolveInFlight;
         if (availableSlots <= 0) return;
 
+        ArrayList<NativeContentItem> discoveryFirst = new ArrayList<>(newItems);
+        discoveryFirst.addAll(heroDiscoveryItems);
+
         List<NativeContentItem> candidates = OnlyFapHeroPolicy.select(
-                newItems,
+                discoveryFirst,
                 shelvesFinished ? CreatorCatalog.all(getContext()) : Collections.emptyList(),
                 CreatorFavoriteStore.names(getContext()),
                 trendingItems, hotItems, popularItems,
@@ -614,6 +627,66 @@ final class OnlyFapHubView extends FrameLayout {
             heroResolveInFlight++;
             resolveHeroAsync(creator);
         }
+
+        if (shelvesFinished &&
+                heroItems.size() + heroResolveInFlight < HERO_MAX_ITEMS &&
+                replacements.size() < availableSlots) {
+            requestMoreHeroDiscovery();
+        }
+    }
+
+    private void requestMoreHeroDiscovery() {
+        if (closed || heroDiscoveryLoading || heroDiscoveryExhausted ||
+                heroDiscoveryNextPage > HERO_DISCOVERY_LAST_PAGE) {
+            if (heroDiscoveryNextPage > HERO_DISCOVERY_LAST_PAGE) {
+                heroDiscoveryExhausted = true;
+            }
+            return;
+        }
+
+        final int generation = heroGeneration;
+        final int page = heroDiscoveryNextPage++;
+        heroDiscoveryLoading = true;
+        heroIo.execute(() -> {
+            List<NativeContentItem> discovered = Collections.emptyList();
+            boolean failed = false;
+            try {
+                FapelloRepository repository = new FapelloRepository();
+                List<FapelloRepository.Model> models = repository.fetchModelListing(
+                        getContext().getApplicationContext(),
+                        FapelloRepository.LIST_NEW,
+                        page
+                );
+                ArrayList<NativeContentItem> items = new ArrayList<>();
+                if (models != null) {
+                    for (FapelloRepository.Model model : models) {
+                        if (model != null && FapelloRepository.isModelUrl(model.url)) {
+                            items.add(CreatorCatalog.fromModel(model));
+                        }
+                    }
+                }
+                discovered = items;
+            } catch (IOException ignored) {
+                failed = true;
+            }
+
+            final List<NativeContentItem> result = discovered;
+            final boolean pageFailed = failed;
+            post(() -> {
+                if (closed || generation != heroGeneration) return;
+                heroDiscoveryLoading = false;
+                if (pageFailed) {
+                    heroDiscoveryExhausted = true;
+                    return;
+                }
+
+                OnlyFapHeroPolicy.appendUniqueCreators(heroDiscoveryItems, result);
+                if (result.isEmpty() || heroDiscoveryNextPage > HERO_DISCOVERY_LAST_PAGE) {
+                    heroDiscoveryExhausted = result.isEmpty();
+                }
+                requestHeroCandidates();
+            });
+        });
     }
 
     private void refreshHeroCandidates() {
