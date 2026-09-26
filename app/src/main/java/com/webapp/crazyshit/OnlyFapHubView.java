@@ -121,12 +121,18 @@ final class OnlyFapHubView extends FrameLayout {
     private final AtomicInteger portraitStarted = new AtomicInteger();
     private final AtomicInteger fapelloMatched = new AtomicInteger();
     private final AtomicInteger fapelloGalleryMedia = new AtomicInteger();
+    private final AtomicInteger fapelloGalleryImages = new AtomicInteger();
     private final AtomicInteger onlyHavenMatched = new AtomicInteger();
     private final AtomicInteger onlyHavenGalleryMedia = new AtomicInteger();
     private final AtomicInteger portraitPassed = new AtomicInteger();
     private final AtomicInteger portraitChecked = new AtomicInteger();
     private final AtomicInteger portraitErrors = new AtomicInteger();
     private final AtomicInteger fapelloResolved = new AtomicInteger();
+    private final AtomicInteger originalCandidates = new AtomicInteger();
+    private final AtomicInteger originalAttempts = new AtomicInteger();
+    private final AtomicInteger originalFailures = new AtomicInteger();
+    private final AtomicInteger originalPostUrls = new AtomicInteger();
+    private volatile String originalFailureReason = "none";
     private final AtomicInteger resolutionFinished = new AtomicInteger();
     private int discoveryRaw;
     private int discoveryUnique;
@@ -444,12 +450,18 @@ final class OnlyFapHubView extends FrameLayout {
         portraitStarted.set(0);
         fapelloMatched.set(0);
         fapelloGalleryMedia.set(0);
+        fapelloGalleryImages.set(0);
         onlyHavenMatched.set(0);
         onlyHavenGalleryMedia.set(0);
         portraitPassed.set(0);
         portraitChecked.set(0);
         portraitErrors.set(0);
         fapelloResolved.set(0);
+        originalCandidates.set(0);
+        originalAttempts.set(0);
+        originalFailures.set(0);
+        originalPostUrls.set(0);
+        originalFailureReason = "none";
         resolutionFinished.set(0);
         discoveryRaw = discoveryUnique = addRejected = shelfRemoved = artworkRemoved = 0;
         excludedCount = eligibleCount = emptyPortraitCount = acceptedCount = 0;
@@ -697,9 +709,14 @@ final class OnlyFapHubView extends FrameLayout {
                 + "\nFapello match/media " + fapelloMatched.get() + "/"
                 + fapelloGalleryMedia.get() + "  Haven " + onlyHavenMatched.get() + "/"
                 + onlyHavenGalleryMedia.get()
+                + "\nFapello image cards " + fapelloGalleryImages.get()
                 + "\nImage checks/pass/errors " + portraitChecked.get() + "/"
                 + portraitPassed.get() + "/" + portraitErrors.get()
                 + "  full resolved " + fapelloResolved.get()
+                + "\nOriginal candidates/tries/fail " + originalCandidates.get()
+                + "/" + originalAttempts.get() + "/" + originalFailures.get()
+                + "  post URLs " + originalPostUrls.get()
+                + "\nLast resolution error " + originalFailureReason
                 + "\nNo portrait " + emptyPortraitCount + "  accepted " + acceptedCount
                 + "  add rejects " + addRejected
                 + "\nShelf/art removed " + shelfRemoved + "/" + artworkRemoved
@@ -890,12 +907,24 @@ final class OnlyFapHubView extends FrameLayout {
                                 mediaPage
                         );
                         fapelloGalleryMedia.addAndGet(media.size());
+                        for (NativeContentItem item : media) {
+                            if (item != null && item.isImage()) {
+                                fapelloGalleryImages.incrementAndGet();
+                            }
+                        }
                         // Gallery previews are cropped to a different aspect ratio on the
                         // device. Qualify the original, never the thumbnail. Bound post-page
                         // requests to preserve the fast shelf and gallery loading path.
-                        for (NativeContentItem item : OnlyFapHeroPolicy.originalResolutionCandidates(
-                                media, HERO_ORIGINAL_CHECKS_PER_PAGE)) {
+                        List<NativeContentItem> originals =
+                                OnlyFapHeroPolicy.originalResolutionCandidates(
+                                        media, HERO_ORIGINAL_CHECKS_PER_PAGE);
+                        originalCandidates.addAndGet(originals.size());
+                        for (NativeContentItem item : originals) {
                             if (portraitArtwork.size() >= 2) break;
+                            originalAttempts.incrementAndGet();
+                            if (FapelloRepository.isPostUrl(item.url)) {
+                                originalPostUrls.incrementAndGet();
+                            }
                             try {
                                 CrazyShitRepository.StreamInfo full = fapello.resolvePlayable(
                                         getContext().getApplicationContext(),
@@ -912,7 +941,17 @@ final class OnlyFapHubView extends FrameLayout {
                                     portraitArtwork.add(choice);
                                     portraitPassed.incrementAndGet();
                                 }
-                            } catch (IOException ignored) { }
+                            } catch (IOException error) {
+                                int count = originalFailures.incrementAndGet();
+                                originalFailureReason = error instanceof FapelloSourceException
+                                        ? "Fapello " + ((FapelloSourceException) error).reason
+                                        : error.getClass().getSimpleName();
+                                if (count <= 3) {
+                                    Log.i(HERO_DIAG_TAG, "original failed "
+                                            + originalFailureReason + " post="
+                                            + FapelloRepository.isPostUrl(item.url));
+                                }
+                            }
                         }
                     }
                 }
