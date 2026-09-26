@@ -185,6 +185,50 @@ public class NavigationIaTest {
         controller.pause().stop().destroy();
     }
 
+    @Test public void bottomNavigationCanCollapseWithoutChangingTabGeometryContract() {
+        android.content.Context context = org.robolectric.RuntimeEnvironment.getApplication();
+        context.getSharedPreferences("app_prefs", 0).edit()
+                .putBoolean("access_notice_2_8_3_accepted", true).apply();
+
+        ActivityController<NativeMainActivity> controller =
+                Robolectric.buildActivity(NativeMainActivity.class)
+                        .create().start().resume().visible();
+        shadowOf(android.os.Looper.getMainLooper()).idle();
+
+        NativeMainActivity activity = controller.get();
+        ZeroChillBottomNavigationView nav =
+                ReflectionHelpers.getField(activity, "bottomNavigation");
+
+        nav.setCollapsed(true, false);
+        android.view.ViewGroup.MarginLayoutParams collapsed =
+                (android.view.ViewGroup.MarginLayoutParams) nav.getLayoutParams();
+        int densityMargin = Math.round(18 * activity.getResources().getDisplayMetrics().density);
+        assertTrue(nav.isCollapsedForTest());
+        assertEquals(Math.round(50 * activity.getResources().getDisplayMetrics().density),
+                collapsed.height);
+        assertEquals(densityMargin, collapsed.leftMargin);
+        assertEquals(densityMargin, collapsed.rightMargin);
+        assertEquals(
+                com.google.android.material.navigation.NavigationBarView.LABEL_VISIBILITY_UNLABELED,
+                nav.getLabelVisibilityMode()
+        );
+
+        nav.setCollapsed(false, false);
+        android.view.ViewGroup.MarginLayoutParams expanded =
+                (android.view.ViewGroup.MarginLayoutParams) nav.getLayoutParams();
+        assertFalse(nav.isCollapsedForTest());
+        assertEquals(activity.getResources().getDimensionPixelSize(R.dimen.zc_bottom_nav_height),
+                expanded.height);
+        assertEquals(0, expanded.leftMargin);
+        assertEquals(0, expanded.rightMargin);
+        assertEquals(
+                com.google.android.material.navigation.NavigationBarView.LABEL_VISIBILITY_LABELED,
+                nav.getLabelVisibilityMode()
+        );
+
+        controller.pause().stop().destroy();
+    }
+
     @Test public void primaryTabsDragFromSelectedBottomCapsule() {
         android.content.Context context = org.robolectric.RuntimeEnvironment.getApplication();
         context.getSharedPreferences("app_prefs", 0).edit()
