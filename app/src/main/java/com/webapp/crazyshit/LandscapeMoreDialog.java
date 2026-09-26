@@ -66,39 +66,12 @@ final class LandscapeMoreDialog {
         LinearLayout content = new LinearLayout(activity);
         content.setOrientation(LinearLayout.VERTICAL);
 
-        int unread = UpdateInboxStore.unreadCount(activity);
         List<Action> actions = actions(
-                new Action(
-                        R.drawable.ic_more_update,
-                        "Updates",
-                        unread == 0
-                                ? "Favorite creator activity"
-                                : unread + (unread == 1 ? " unread update" : " unread updates"),
-                        unread,
-                        () -> activity.startActivity(new Intent(activity, UpdateInboxActivity.class))
-                ),
-                new Action(
-                        R.drawable.ic_more_account,
-                        "Favorite creators",
-                        "Your starred creators",
-                        () -> activity.startActivity(new Intent(activity, CreatorsActivity.class))
-                ),
                 new Action(
                         R.drawable.ic_action_download,
                         "Downloads",
                         "Saved videos and active downloads",
                         () -> activity.startActivity(new Intent(activity, DownloadedActivity.class))
-                ),
-                new Action(
-                        R.drawable.ic_nav_trending,
-                        "Trending",
-                        "Browse trending videos",
-                        () -> activity.startActivity(NativeFeedBrowserActivity.create(
-                                activity,
-                                "Trending",
-                                CrazyShitRepository.TRENDING,
-                                false
-                        ))
                 ),
                 new Action(
                         R.drawable.ic_more_settings,
