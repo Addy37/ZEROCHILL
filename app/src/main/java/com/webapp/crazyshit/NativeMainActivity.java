@@ -85,6 +85,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     private MainPagerAdapter primaryPagerAdapter;
     private AppUpdater appUpdater;
     private boolean chaosClearDisplay;
+    private int navigationScrollAccumulator;
 
     private Screen screen = Screen.CHAOS;
     private final Runnable ratingPromptCheck = () -> {
@@ -211,6 +212,11 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
             public void onChaosClearDisplayChanged(boolean clear) {
                 setChaosClearDisplay(clear);
             }
+
+            @Override
+            public void onNavigationScroll(int dy, boolean atTop) {
+                updateNavigationCollapse(dy, atTop);
+            }
         });
 
         primaryPager = new ViewPager2(this);
@@ -303,6 +309,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
             @Override
             public void onScrolled(RecyclerView view, int dx, int dy) {
                 if (!isFeedScreen()) return;
+                updateNavigationCollapse(dy, !view.canScrollVertically(-1));
                 RecyclerView.LayoutManager lm = view.getLayoutManager();
                 if (!(lm instanceof LinearLayoutManager)) return;
                 int first = ((LinearLayoutManager) lm).findFirstVisibleItemPosition();
@@ -504,6 +511,8 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     }
 
     private void showPagerChrome(int position) {
+        navigationScrollAccumulator = 0;
+        if (bottomNavigation != null) bottomNavigation.setCollapsed(false, true);
         if (legacyContent != null) {
             legacyContent.setVisibility(View.GONE);
             LinearLayout.LayoutParams old = (LinearLayout.LayoutParams) legacyContent.getLayoutParams();
@@ -1285,6 +1294,31 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         if (appUpdater != null) appUpdater.close();
         io.shutdownNow();
         super.onDestroy();
+    }
+
+    private void updateNavigationCollapse(int dy, boolean atTop) {
+        if (bottomNavigation == null) return;
+        if (atTop) {
+            navigationScrollAccumulator = 0;
+            bottomNavigation.setCollapsed(false, true);
+            return;
+        }
+        if (dy == 0) return;
+
+        if ((dy > 0 && navigationScrollAccumulator < 0) ||
+                (dy < 0 && navigationScrollAccumulator > 0)) {
+            navigationScrollAccumulator = 0;
+        }
+        navigationScrollAccumulator += dy;
+
+        int threshold = dp(10);
+        if (navigationScrollAccumulator >= threshold) {
+            navigationScrollAccumulator = 0;
+            bottomNavigation.setCollapsed(true, true);
+        } else if (navigationScrollAccumulator <= -threshold) {
+            navigationScrollAccumulator = 0;
+            bottomNavigation.setCollapsed(false, true);
+        }
     }
 
     private void haptic(View view) {
