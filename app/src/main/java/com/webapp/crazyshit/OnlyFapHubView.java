@@ -59,7 +59,7 @@ final class OnlyFapHubView extends FrameLayout {
     interface Listener {
         void onOpenCreator(NativeContentItem creator);
         void onSearch();
-        void onMore();
+        void onMore(View anchor);
         void onViewAllFavorites();
     }
 
@@ -178,32 +178,27 @@ final class OnlyFapHubView extends FrameLayout {
 
         ImageView heroSearch = new ImageView(context);
         heroSearch.setImageResource(R.drawable.ic_nav_search);
-        heroSearch.setPadding(dp(12), dp(12), dp(12), dp(12));
-        heroSearch.setColorFilter(ZeroChillUi.color(context, R.color.zc_cyan));
-        heroSearch.setBackground(BrowseUi.rounded(
-                context,
-                Color.argb(165, 7, 10, 13),
-                24
-        ));
+        heroSearch.setPadding(dp(10), dp(10), dp(10), dp(10));
+        heroSearch.setColorFilter(Color.WHITE);
         heroSearch.setClickable(true);
         heroSearch.setFocusable(true);
         heroSearch.setContentDescription("Search OnlyFap creators");
         heroSearch.setOnClickListener(v -> listener.onSearch());
         ZeroChillMotion.installPressFeedback(heroSearch);
-        heroBar.addView(heroSearch, new LinearLayout.LayoutParams(dp(48), dp(48)));
+        heroBar.addView(heroSearch, new LinearLayout.LayoutParams(dp(44), dp(48)));
 
         ImageView heroMore = new ImageView(context);
-        heroMore.setImageResource(R.drawable.ic_nav_more);
-        heroMore.setPadding(dp(11), dp(11), dp(11), dp(11));
+        heroMore.setImageResource(R.drawable.ic_more_overflow);
+        heroMore.setPadding(dp(10), dp(10), dp(10), dp(10));
         heroMore.setColorFilter(Color.WHITE);
         heroMore.setClickable(true);
         heroMore.setFocusable(true);
         heroMore.setContentDescription("OnlyFap More");
-        heroMore.setOnClickListener(v -> listener.onMore());
+        heroMore.setOnClickListener(v -> listener.onMore(v));
         ZeroChillMotion.installPressFeedback(heroMore);
         LinearLayout.LayoutParams heroMoreParams =
                 new LinearLayout.LayoutParams(dp(44), dp(48));
-        heroMoreParams.setMarginStart(dp(4));
+        heroMoreParams.setMarginStart(dp(2));
         heroBar.addView(heroMore, heroMoreParams);
 
         heroFrame.addView(heroBar, new FrameLayout.LayoutParams(
