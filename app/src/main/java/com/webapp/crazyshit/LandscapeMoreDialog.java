@@ -141,7 +141,14 @@ final class LandscapeMoreDialog {
             anchor.getLocationInWindow(location);
             int anchorRight = location[0] + anchor.getWidth();
             x = Math.max(dp(activity, 8), screenWidth - anchorRight);
-            y = location[1] + anchor.getHeight() + dp(activity, 1);
+            // Portrait More lives inside the fixed top bar, so anchor the popup to the
+            // bar edge instead of reapplying the activity/window inset through the
+            // button's absolute Y coordinate. Landscape rail More keeps its own Y.
+            if (anchor instanceof ImageView) {
+                y = fallbackTopOffset(activity);
+            } else {
+                y = location[1] + anchor.getHeight() + dp(activity, 1);
+            }
         }
         attrs.x = x;
         attrs.y = y;
@@ -331,7 +338,7 @@ final class LandscapeMoreDialog {
         activity.getWindow().getDecorView().getWindowVisibleDisplayFrame(visible);
         return visible.top
                 + ZeroChillUi.dimension(activity, R.dimen.zc_top_bar_height)
-                + dp(activity, 4);
+                + dp(activity, 1);
     }
 
     private static View findLandscapeMore(View view) {
