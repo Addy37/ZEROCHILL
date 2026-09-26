@@ -23,7 +23,6 @@ import androidx.annotation.RequiresApi;
 import androidx.core.content.ContextCompat;
 
 import com.google.android.material.bottomnavigation.BottomNavigationView;
-import com.google.android.material.navigation.NavigationBarView;
 
 /**
  * Bottom navigation with a selected glass capsule that tracks ViewPager swipes.
@@ -42,7 +41,7 @@ final class ZeroChillBottomNavigationView extends BottomNavigationView {
     private static final long REFLECTION_SETTLE_MS = 180L;
     private static final long COLLAPSE_DURATION_MS = 210L;
     private static final int COLLAPSED_HEIGHT_DP = 50;
-    private static final int COLLAPSED_SIDE_MARGIN_DP = 18;
+    private static final int COLLAPSED_SIDE_MARGIN_DP = 60;
     private static final float HORIZONTAL_DOMINANCE = 1.25f;
 
     private final Drawable selectedGlass;
@@ -62,7 +61,6 @@ final class ZeroChillBottomNavigationView extends BottomNavigationView {
     private Api33Reflection shaderReflection;
     private float collapseProgress;
     private boolean collapsedTarget;
-    private boolean labelsSuppressed;
     private final int swipeTouchSlop;
     private float dragDownX;
     private float dragDownY;
@@ -97,36 +95,21 @@ final class ZeroChillBottomNavigationView extends BottomNavigationView {
     }
 
     void setCollapsed(boolean collapsed, boolean animated) {
+        float target = collapsed ? 1f : 0f;
+        if (collapsedTarget == collapsed) {
+            if (collapseAnimator != null && collapseAnimator.isRunning()) return;
+            if (Math.abs(collapseProgress - target) < 0.001f) return;
+        }
+
         collapsedTarget = collapsed;
         if (collapseAnimator != null) {
             collapseAnimator.cancel();
             collapseAnimator = null;
         }
 
-        if (!collapsed && labelsSuppressed) {
-            setLabelVisibilityMode(NavigationBarView.LABEL_VISIBILITY_LABELED);
-            labelsSuppressed = false;
-            setLabelAlpha(Math.max(0f, 1f - collapseProgress));
-        }
-
-        float target = collapsed ? 1f : 0f;
         if (!animated || !ZeroChillMotion.animationsEnabled(getContext())) {
             collapseProgress = target;
-            if (collapsed) {
-                setLabelAlpha(0f);
-                setLabelVisibilityMode(NavigationBarView.LABEL_VISIBILITY_UNLABELED);
-                labelsSuppressed = true;
-            } else {
-                setLabelVisibilityMode(NavigationBarView.LABEL_VISIBILITY_LABELED);
-                labelsSuppressed = false;
-                setLabelAlpha(1f);
-            }
             applyCollapseProgress(collapseProgress);
-            return;
-        }
-
-        if (Math.abs(collapseProgress - target) < 0.001f) {
-            applyCollapseProgress(target);
             return;
         }
 
@@ -135,11 +118,6 @@ final class ZeroChillBottomNavigationView extends BottomNavigationView {
         collapseAnimator.setInterpolator(new DecelerateInterpolator());
         collapseAnimator.addUpdateListener(animation -> {
             collapseProgress = (float) animation.getAnimatedValue();
-            if (collapsedTarget && collapseProgress >= 0.72f && !labelsSuppressed) {
-                setLabelAlpha(0f);
-                setLabelVisibilityMode(NavigationBarView.LABEL_VISIBILITY_UNLABELED);
-                labelsSuppressed = true;
-            }
             applyCollapseProgress(collapseProgress);
         });
         collapseAnimator.start();
@@ -420,30 +398,38 @@ final class ZeroChillBottomNavigationView extends BottomNavigationView {
             setLayoutParams(params);
         }
 
-        if (!labelsSuppressed) {
-            float labelAlpha = clamp(1f - (p * 1.55f), 0f, 1f);
-            setLabelAlpha(labelAlpha);
-        }
+        float labelAlpha = clamp(1f - (p * 1.45f), 0f, 1f);
+        float iconShift = dp(5) * p;
+        setItemCollapseVisuals(labelAlpha, iconShift);
         invalidate();
     }
 
-    private void setLabelAlpha(float alpha) {
+    private void setItemCollapseVisuals(float labelAlpha, float iconShift) {
         for (int id : PAGE_NAV_IDS) {
             View item = findViewById(id);
-            if (item != null) setTextAlpha(item, alpha);
+            if (item != null) applyItemCollapseVisuals(item, labelAlpha, iconShift);
         }
     }
 
-    private static void setTextAlpha(View view, float alpha) {
+    private static void applyItemCollapseVisuals(
+            View view,
+            float labelAlpha,
+            float iconShift
+    ) {
         if (view instanceof TextView) {
-            view.setAlpha(alpha);
-            view.setTranslationY((1f - alpha) * view.getResources().getDisplayMetrics().density * 2f);
+            view.setAlpha(labelAlpha);
+            view.setTranslationY((1f - labelAlpha) *
+                    view.getResources().getDisplayMetrics().density * 2f);
+            return;
+        }
+        if (view instanceof ImageView) {
+            view.setTranslationY(iconShift);
             return;
         }
         if (!(view instanceof ViewGroup)) return;
         ViewGroup group = (ViewGroup) view;
         for (int i = 0; i < group.getChildCount(); i++) {
-            setTextAlpha(group.getChildAt(i), alpha);
+            applyItemCollapseVisuals(group.getChildAt(i), labelAlpha, iconShift);
         }
     }
 
