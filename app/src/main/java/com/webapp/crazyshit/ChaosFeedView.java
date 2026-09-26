@@ -78,6 +78,9 @@ public final class ChaosFeedView extends FrameLayout {
 
         default void onClearDisplayChanged(boolean clear) {
         }
+
+        default void onVerticalPageChanged(int direction, boolean atTop) {
+        }
     }
 
     private static final String PREFS = "chaos_feed";
@@ -181,12 +184,19 @@ public final class ChaosFeedView extends FrameLayout {
         pager.registerOnPageChangeCallback(new ViewPager2.OnPageChangeCallback() {
             @Override
             public void onPageSelected(int position) {
+                int previousPosition = selectedPosition;
                 if (autoAdvancePending && position != autoAdvanceFrom) {
                     autoAdvancePending = false;
                     autoAdvanceFrom = -1;
                 }
                 if (manualFullscreen && position != selectedPosition) exitManualFullscreen();
                 selectedPosition = position;
+                if (position != previousPosition) {
+                    host.onVerticalPageChanged(
+                            position > previousPosition ? 1 : -1,
+                            position == 0
+                    );
+                }
                 markSeen(position);
                 pauseNonSelected(position);
                 releaseDistantPlayers(position);
