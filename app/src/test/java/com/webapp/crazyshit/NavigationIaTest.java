@@ -202,16 +202,20 @@ public class NavigationIaTest {
         nav.setCollapsed(true, false);
         android.view.ViewGroup.MarginLayoutParams collapsed =
                 (android.view.ViewGroup.MarginLayoutParams) nav.getLayoutParams();
-        int densityMargin = Math.round(18 * activity.getResources().getDisplayMetrics().density);
+        int densityMargin = Math.round(60 * activity.getResources().getDisplayMetrics().density);
         assertTrue(nav.isCollapsedForTest());
         assertEquals(Math.round(50 * activity.getResources().getDisplayMetrics().density),
                 collapsed.height);
         assertEquals(densityMargin, collapsed.leftMargin);
         assertEquals(densityMargin, collapsed.rightMargin);
         assertEquals(
-                com.google.android.material.navigation.NavigationBarView.LABEL_VISIBILITY_UNLABELED,
+                com.google.android.material.navigation.NavigationBarView.LABEL_VISIBILITY_LABELED,
                 nav.getLabelVisibilityMode()
         );
+
+        nav.setSelectedItemId(6);
+        shadowOf(android.os.Looper.getMainLooper()).idle();
+        assertTrue(nav.isCollapsedForTest());
 
         nav.setCollapsed(false, false);
         android.view.ViewGroup.MarginLayoutParams expanded =
