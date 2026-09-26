@@ -66,39 +66,12 @@ final class LandscapeMoreDialog {
         LinearLayout content = new LinearLayout(activity);
         content.setOrientation(LinearLayout.VERTICAL);
 
-        int unread = UpdateInboxStore.unreadCount(activity);
         List<Action> actions = actions(
-                new Action(
-                        R.drawable.ic_more_update,
-                        "Updates",
-                        unread == 0
-                                ? "Favorite creator activity"
-                                : unread + (unread == 1 ? " unread update" : " unread updates"),
-                        unread,
-                        () -> activity.startActivity(new Intent(activity, UpdateInboxActivity.class))
-                ),
-                new Action(
-                        R.drawable.ic_more_account,
-                        "Favorite creators",
-                        "Your starred creators",
-                        () -> activity.startActivity(new Intent(activity, CreatorsActivity.class))
-                ),
                 new Action(
                         R.drawable.ic_action_download,
                         "Downloads",
                         "Saved videos and active downloads",
                         () -> activity.startActivity(new Intent(activity, DownloadedActivity.class))
-                ),
-                new Action(
-                        R.drawable.ic_nav_trending,
-                        "Trending",
-                        "Browse trending videos",
-                        () -> activity.startActivity(NativeFeedBrowserActivity.create(
-                                activity,
-                                "Trending",
-                                CrazyShitRepository.TRENDING,
-                                false
-                        ))
                 ),
                 new Action(
                         R.drawable.ic_more_settings,
@@ -149,7 +122,11 @@ final class LandscapeMoreDialog {
             panelParams.height = ViewGroup.LayoutParams.WRAP_CONTENT;
             panel.setLayoutParams(panelParams);
         }
-        scroll.getLayoutParams().height = maxHeight - dp(activity, 66);
+        int actionContentHeight = actions.size() * 54 + Math.max(0, actions.size() - 1);
+        scroll.getLayoutParams().height = Math.min(
+                maxHeight - dp(activity, 66),
+                dp(activity, actionContentHeight)
+        );
 
         WindowManager.LayoutParams attrs = window.getAttributes();
         attrs.width = panelWidth;
@@ -161,10 +138,17 @@ final class LandscapeMoreDialog {
         int x = dp(activity, 12);
         if (anchor != null && anchor.isAttachedToWindow()) {
             int[] location = new int[2];
-            anchor.getLocationOnScreen(location);
+            anchor.getLocationInWindow(location);
             int anchorRight = location[0] + anchor.getWidth();
             x = Math.max(dp(activity, 8), screenWidth - anchorRight);
-            y = location[1] + anchor.getHeight() + dp(activity, 4);
+            // Portrait More lives inside the fixed top bar, so anchor the popup to the
+            // bar edge instead of reapplying the activity/window inset through the
+            // button's absolute Y coordinate. Landscape rail More keeps its own Y.
+            if (anchor instanceof ImageView) {
+                y = fallbackTopOffset(activity);
+            } else {
+                y = location[1] + anchor.getHeight() + dp(activity, 1);
+            }
         }
         attrs.x = x;
         attrs.y = y;
@@ -354,7 +338,7 @@ final class LandscapeMoreDialog {
         activity.getWindow().getDecorView().getWindowVisibleDisplayFrame(visible);
         return visible.top
                 + ZeroChillUi.dimension(activity, R.dimen.zc_top_bar_height)
-                + dp(activity, 4);
+                + dp(activity, 1);
     }
 
     private static View findLandscapeMore(View view) {
