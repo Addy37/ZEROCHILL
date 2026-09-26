@@ -113,9 +113,9 @@ final class WatchStatePolish {
             TextView text = (TextView) view;
             CharSequence value = text.getText();
             String label = value == null ? "" : value.toString().trim();
-            if (label.startsWith("Continue")) {
+            if (isWatchStateBadge(text) && label.startsWith("Continue")) {
                 styleContinue(text, label);
-            } else if ("✓ Watched".equals(label)) {
+            } else if (isWatchStateBadge(text) && "✓ Watched".equals(label)) {
                 styleWatched(text);
             }
         }
@@ -130,8 +130,14 @@ final class WatchStatePolish {
         String time = currentLabel.substring("Continue".length()).replace("·", "").trim();
         badge.setText(time.isEmpty() ? "Continue" : "Continue · " + time);
         badge.setTextSize(9.5f);
+        badge.setTextColor(Color.WHITE);
         badge.setPadding(dp(badge, 7), dp(badge, 3), dp(badge, 7), dp(badge, 3));
-        badge.setBackground(rounded(Color.argb(205, 77, 75, 6), dp(badge, 11)));
+        badge.setBackground(ZeroChillUi.rounded(
+                badge.getContext(),
+                ZeroChillUi.color(badge.getContext(), R.color.zc_cyan_container),
+                ZeroChillUi.color(badge.getContext(), R.color.zc_cyan_dim),
+                R.dimen.zc_radius_pill
+        ));
         styleMediaFrame(badge, true);
     }
 
@@ -162,6 +168,15 @@ final class WatchStatePolish {
             if (params.height <= 0 || params.height > dp(child, 5)) continue;
             child.setBackgroundColor(Color.argb(105, 16, 16, 20));
         }
+    }
+
+    static boolean isWatchStateBadge(TextView text) {
+        if (text == null || !(text.getParent() instanceof FrameLayout)) return false;
+        ViewGroup.LayoutParams raw = text.getLayoutParams();
+        if (!(raw instanceof FrameLayout.LayoutParams)) return false;
+        FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) raw;
+        return (params.gravity & Gravity.TOP) == Gravity.TOP &&
+                (params.gravity & Gravity.START) == Gravity.START;
     }
 
     private static GradientDrawable rounded(int color, int radiusPx) {
