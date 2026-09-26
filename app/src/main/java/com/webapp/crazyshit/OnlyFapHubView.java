@@ -68,7 +68,7 @@ final class OnlyFapHubView extends FrameLayout {
                     "(KHTML, like Gecko) Chrome/139.0 Mobile Safari/537.36";
     private static final long HERO_ROTATION_MS = 13_000L;
     private static final int HERO_MAX_ITEMS = 8;
-    private static final int HERO_RESOLVE_LIMIT = 16;
+    private static final int HERO_SEARCH_LIMIT = 120;
 
     private final Listener listener;
     private final ScrollView scroll;
@@ -101,6 +101,7 @@ final class OnlyFapHubView extends FrameLayout {
     private boolean shelvesFinished;
     private HeroCandidate heroItem;
     private int heroIndex = -1;
+    private int heroResolveInFlight;
     private boolean active;
     private boolean closed;
     private volatile int heroGeneration;
@@ -386,6 +387,7 @@ final class OnlyFapHubView extends FrameLayout {
         Glide.with(heroImage).clear(heroImage);
         heroImage.setImageDrawable(new ColorDrawable(Color.rgb(13, 16, 19)));
         heroItems.clear();
+        heroResolveInFlight = 0;
         requestedHeroCreators.clear();
         rejectedHeroUrls.clear();
         heroItem = null;
@@ -589,19 +591,28 @@ final class OnlyFapHubView extends FrameLayout {
     }
 
     private void requestHeroCandidates() {
-        if (closed) return;
+        if (closed || heroItems.size() >= HERO_MAX_ITEMS) return;
+
+        int availableSlots = HERO_MAX_ITEMS - heroItems.size() - heroResolveInFlight;
+        if (availableSlots <= 0) return;
+
         List<NativeContentItem> candidates = OnlyFapHeroPolicy.select(
                 newItems,
                 shelvesFinished ? CreatorCatalog.all(getContext()) : Collections.emptyList(),
                 CreatorFavoriteStore.names(getContext()),
                 trendingItems, hotItems, popularItems,
-                HERO_RESOLVE_LIMIT
+                HERO_SEARCH_LIMIT
         );
-        for (NativeContentItem creator : candidates) {
+        List<NativeContentItem> replacements = OnlyFapHeroPolicy.nextUnrequested(
+                candidates,
+                requestedHeroCreators,
+                availableSlots
+        );
+        for (NativeContentItem creator : replacements) {
             String key = CreatorFavoriteStore.key(creator);
-            if (requestedHeroCreators.add(key)) {
-                resolveHeroAsync(creator);
-            }
+            if (!requestedHeroCreators.add(key)) continue;
+            heroResolveInFlight++;
+            resolveHeroAsync(creator);
         }
     }
 
@@ -705,15 +716,24 @@ final class OnlyFapHubView extends FrameLayout {
 
             List<OnlyFapHeroPolicy.Artwork> choices =
                     OnlyFapHeroPolicy.distinctArtwork(portraitArtwork);
-            // No portrait image means no hero slot for this creator.
-            if (choices.isEmpty()) return;
-
-            post(() -> {
-                if (generation == heroGeneration) {
-                    addHeroCandidate(new HeroCandidate(creator, choices));
-                }
-            });
+            post(() -> finishHeroResolution(generation, creator, choices));
         });
+    }
+
+    private void finishHeroResolution(
+            int generation,
+            NativeContentItem creator,
+            List<OnlyFapHeroPolicy.Artwork> choices
+    ) {
+        if (closed || generation != heroGeneration) return;
+        heroResolveInFlight = Math.max(0, heroResolveInFlight - 1);
+
+        // A rejected portrait candidate does not consume a hero slot. Keep searching deeper
+        // into the discovery pool until all eight slots are filled or candidates are exhausted.
+        if (choices != null && !choices.isEmpty() && heroItems.size() < HERO_MAX_ITEMS) {
+            addHeroCandidate(new HeroCandidate(creator, choices));
+        }
+        requestHeroCandidates();
     }
 
     private boolean isGoodPortraitArtwork(OnlyFapHeroPolicy.Artwork choice) {
