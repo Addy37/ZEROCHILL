@@ -79,6 +79,30 @@ final class OnlyFapHeroPolicy {
         return result;
     }
 
+    static List<NativeContentItem> originalResolutionCandidates(
+            List<NativeContentItem> media, int limit
+    ) {
+        ArrayList<NativeContentItem> images = new ArrayList<>();
+        if (media == null || limit <= 0) return images;
+        for (NativeContentItem item : media) {
+            if (images.size() >= 36) break;
+            if (item != null && item.isImage() && !item.url.trim().isEmpty()) {
+                images.add(item);
+            }
+        }
+        if (images.size() <= limit) return images;
+        ArrayList<NativeContentItem> sample = new ArrayList<>(limit);
+        if (limit == 1) {
+            sample.add(images.get(0));
+            return sample;
+        }
+        for (int index = 0; index < limit; index++) {
+            int position = Math.round(index * (images.size() - 1f) / (limit - 1));
+            sample.add(images.get(position));
+        }
+        return sample;
+    }
+
     private static void addKeys(Set<String> keys, List<NativeContentItem> items) {
         if (items == null) return;
         for (NativeContentItem item : items) {
