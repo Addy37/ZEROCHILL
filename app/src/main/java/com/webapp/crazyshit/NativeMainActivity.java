@@ -35,6 +35,7 @@ import androidx.recyclerview.widget.RecyclerView;
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
 import androidx.viewpager2.widget.ViewPager2;
 
+import com.google.android.material.badge.BadgeDrawable;
 import com.google.android.material.bottomnavigation.BottomNavigationView;
 import com.google.android.material.navigation.NavigationBarView;
 
@@ -388,6 +389,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
                 ZeroChillUi.dimension(this, R.dimen.zc_bottom_nav_height)
         ));
         bottomNavigation.post(() -> {
+            refreshLibraryUpdateIndicator();
             View chaosItem = bottomNavigation.findViewById(NAV_CHAOS);
             if (chaosItem != null) {
                 chaosItem.setContentDescription("ShitTok featured tab");
@@ -537,6 +539,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
             feedBaseUrl = CrazyShitRepository.HOME;
             feedTitle = "Library";
             selectNavSilently(NAV_LIBRARY);
+            markLibraryUpdatesSeen();
         } else {
             screen = Screen.HOME;
             feedBaseUrl = CrazyShitRepository.HOME;
@@ -1165,6 +1168,26 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         if (item != null) item.setChecked(true);
     }
 
+    private void refreshLibraryUpdateIndicator() {
+        if (bottomNavigation == null) return;
+        int unread = UpdateInboxStore.unreadCount(this);
+        if (unread <= 0) {
+            bottomNavigation.removeBadge(NAV_LIBRARY);
+            return;
+        }
+
+        BadgeDrawable badge = bottomNavigation.getOrCreateBadge(NAV_LIBRARY);
+        badge.clearNumber();
+        badge.setBadgeGravity(BadgeDrawable.TOP_END);
+        badge.setBackgroundColor(UiPalette.PRIMARY);
+        badge.setVisible(true);
+    }
+
+    private void markLibraryUpdatesSeen() {
+        UpdateInboxStore.markAllRead(this);
+        refreshLibraryUpdateIndicator();
+    }
+
     @Override
     public void onConfigurationChanged(android.content.res.Configuration newConfig) {
         super.onConfigurationChanged(newConfig);
@@ -1244,6 +1267,11 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         if (primaryPagerAdapter != null) primaryPagerAdapter.onHostResume();
         if (appUpdater != null) {
             appUpdater.onHostResume();
+        }
+        if (currentPrimaryPage() == MainPagerAdapter.PAGE_LIBRARY) {
+            markLibraryUpdatesSeen();
+        } else {
+            refreshLibraryUpdateIndicator();
         }
         applyChaosFullscreenChrome();
         scheduleRatingPromptCheck();
