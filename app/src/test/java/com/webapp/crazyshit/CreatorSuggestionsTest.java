@@ -119,6 +119,32 @@ public class CreatorSuggestionsTest {
         await(() -> items().size() == 1 && items().get(0).title.equals("Zoe"));
     }
 
+    @Test public void knownAliasesCollapseInTheLiveSuggestionPanel() throws Exception {
+        activity = Robolectric.buildActivity(Activity.class).setup();
+        input = new EditText(activity.get());
+        panel = new LinearLayout(activity.get());
+        controller = new CreatorSuggestionsController(
+                activity.get(),
+                input,
+                panel,
+                item -> { },
+                (context, query) -> Collections.emptyList(),
+                (context, query) -> java.util.Arrays.asList(
+                        new NativeContentItem(NativeContentItem.KIND_CREATOR,
+                                "Sasha Foxx", "", "", "", "", "", "", "Sasha Foxx"),
+                        new NativeContentItem(NativeContentItem.KIND_CREATOR,
+                                "Sasha Foxxx", "", "", "", "", "", "", "Sasha Foxxx"),
+                        new NativeContentItem(NativeContentItem.KIND_CREATOR,
+                                "Sasha Foxxy", "", "", "", "", "", "", "Sasha Foxxy")));
+
+        input.setText("sasha foxx");
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(70));
+        await(() -> items().size() == 2);
+
+        assertEquals("Sasha Foxx", items().get(0).title);
+        assertEquals("Sasha Foxxy", items().get(1).title);
+    }
+
     @Test public void aSlowOldReplyCannotReplaceTheNewerQuery() throws Exception {
         create(); startOldRequest();
         input.setText("zo");
