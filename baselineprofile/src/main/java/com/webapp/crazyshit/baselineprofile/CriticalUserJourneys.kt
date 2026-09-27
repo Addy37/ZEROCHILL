@@ -205,8 +205,17 @@ internal fun MacrobenchmarkScope.openCreatorProfileAndGallery() {
         checkNotNull(creator) {
             val hierarchy = ByteArrayOutputStream().also { device.dumpWindowHierarchy(it) }
                 .toString("UTF-8").replace(Regex("\\s+"), " ")
+            val appNodes = Regex("<node[^>]*package=\"$TARGET_PACKAGE\"[^>]*>")
+                .findAll(hierarchy)
+                .map { node ->
+                    Regex("(?:text|content-desc)=\"[^\"]+\"")
+                        .findAll(node.value)
+                        .joinToString(" ") { it.value }
+                }
+                .filter { it.isNotBlank() }
+                .joinToString(" | ")
             "OnlyFap clickable creator gallery entry did not become available. " +
-                "Visible UI: ${hierarchy.take(12_000)}"
+                "Foreground: ${device.currentPackageName}. App nodes: ${appNodes.take(9_000)}"
         }
 
         try {
