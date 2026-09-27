@@ -149,16 +149,15 @@ final class ZeroChillBottomNavigationView extends BottomNavigationView {
         return new RectF(indicatorRect);
     }
 
-    boolean collapseAnimatorRunningForTest() {
-        return collapseAnimator != null && collapseAnimator.isRunning();
-    }
-
     float pagerPositionForTest() {
         return pagerPosition;
     }
 
     @Override
     protected void dispatchDraw(Canvas canvas) {
+        // Material updates its checked item's label/icon layout during quick tab changes.
+        // Reapply the current visual progress before children draw, including mid-transition.
+        setItemCollapseVisuals(collapseProgress);
         drawSelectedGlass(canvas);
         super.dispatchDraw(canvas);
     }

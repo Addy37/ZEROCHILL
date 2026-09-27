@@ -92,6 +92,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     private float contentDownX;
     private float contentDownY;
     private boolean contentTouchCandidate;
+    private int contentTouchPage;
 
     private Screen screen = Screen.CHAOS;
     private final Runnable ratingPromptCheck = () -> {
@@ -765,6 +766,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
 
     private void showLegacyContent() {
         exitChaosFullscreenChrome();
+        if (navigationMotion != null) navigationMotion.setActivePage(MainPagerAdapter.PAGE_HOME);
         if (primaryPager != null) {
             primaryPager.setVisibility(View.GONE);
             LinearLayout.LayoutParams pp = (LinearLayout.LayoutParams) primaryPager.getLayoutParams();
@@ -1316,10 +1318,14 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
             int action = event.getActionMasked();
             if (action == MotionEvent.ACTION_DOWN) {
                 Rect contentBounds = new Rect();
-                contentTouchCandidate = primaryPager != null &&
-                        primaryPager.getVisibility() == View.VISIBLE &&
-                        primaryPager.getGlobalVisibleRect(contentBounds) &&
+                View activeContent = primaryPager != null &&
+                        primaryPager.getVisibility() == View.VISIBLE ? primaryPager : legacyContent;
+                contentTouchCandidate = activeContent != null &&
+                        activeContent.getVisibility() == View.VISIBLE &&
+                        activeContent.getGlobalVisibleRect(contentBounds) &&
                         contentBounds.contains((int) event.getRawX(), (int) event.getRawY());
+                contentTouchPage = activeContent == primaryPager
+                        ? currentPrimaryPage() : MainPagerAdapter.PAGE_HOME;
                 contentDownX = event.getRawX();
                 contentDownY = event.getRawY();
                 navigationMotion.endGesture();
@@ -1328,7 +1334,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
                 float dy = event.getRawY() - contentDownY;
                 int slop = ViewConfiguration.get(this).getScaledTouchSlop();
                 if (Math.abs(dy) > slop && Math.abs(dy) > Math.abs(dx) * 1.25f) {
-                    navigationMotion.beginGesture(currentPrimaryPage());
+                    navigationMotion.beginGesture(contentTouchPage);
                 }
             } else if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) {
                 contentTouchCandidate = false;
