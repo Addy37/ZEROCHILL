@@ -624,6 +624,12 @@ public final class NativeFeedBrowserActivity extends Activity {
 
     @Override
     public boolean dispatchTouchEvent(MotionEvent event) {
+        if (event != null
+                && event.getActionMasked() == MotionEvent.ACTION_POINTER_DOWN
+                && shitTokReturnTracking) {
+            cancelShitTokReturnGesture();
+            return true;
+        }
         if (!canUseShitTokReturnGesture(event)) {
             return super.dispatchTouchEvent(event);
         }
