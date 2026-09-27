@@ -10,11 +10,23 @@ internal const val TARGET_PACKAGE = "com.addy37.crazyshitunofficial"
 internal fun MacrobenchmarkScope.launchApp() {
     pressHome()
     startActivityAndWait()
-    device.wait(
-        Until.findObject(By.text(Pattern.compile("(?i)i\\s+understand"))),
-        5_000
-    )?.click()
-    checkNotNull(device.wait(Until.findObject(By.desc("ShitTok tab")), 12_000)) {
+
+    val noticePattern = Pattern.compile("(?i).*before\\s+you\\s+continue.*")
+    val acceptPattern = Pattern.compile("(?i).*understand.*")
+    val notice = device.wait(Until.findObject(By.text(noticePattern)), 8_000)
+    if (notice != null) {
+        val accept = checkNotNull(
+            device.wait(Until.findObject(By.text(acceptPattern)), 5_000)
+        ) {
+            "Access notice appeared but its accept action was not reachable"
+        }
+        accept.click()
+        check(device.wait(Until.gone(By.text(noticePattern)), 5_000)) {
+            "Access notice did not close after acceptance"
+        }
+    }
+
+    checkNotNull(device.wait(Until.findObject(By.desc("ShitTok tab")), 15_000)) {
         "Main navigation shell did not become ready"
     }
     device.waitForIdle()
