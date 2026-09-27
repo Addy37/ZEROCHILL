@@ -13,6 +13,7 @@ import android.text.InputType;
 import android.text.SpannableString;
 import android.text.Spanned;
 import android.text.style.ForegroundColorSpan;
+import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.HapticFeedbackConstants;
 import android.view.Menu;
@@ -32,6 +33,7 @@ import android.widget.Toast;
 import android.window.OnBackInvokedDispatcher;
 
 import androidx.media3.common.util.UnstableApi;
+import androidx.core.widget.TextViewCompat;
 import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
@@ -437,6 +439,8 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         ZeroChillUi.styleTitle(headerTitle);
         headerTitle.setTextSize(28f);
         headerTitle.setSingleLine(true);
+        TextViewCompat.setAutoSizeTextTypeUniformWithConfiguration(
+                headerTitle, 24, 28, 1, TypedValue.COMPLEX_UNIT_SP);
         labels.addView(headerTitle);
 
         headerSubtitle = new TextView(this);
@@ -577,6 +581,10 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
                 setZeroChillWordmark();
             } else if (position == MainPagerAdapter.PAGE_SERIES) {
                 setShowsWordmark();
+            } else if (position == MainPagerAdapter.PAGE_CHAOS) {
+                headerTitle.setText(ZeroChillUi.sectionTitle(this, "ShitTok", 4, 7));
+            } else if (position == MainPagerAdapter.PAGE_LIBRARY) {
+                headerTitle.setText(ZeroChillUi.sectionTitle(this, "Library", 3, 7));
             } else {
                 headerTitle.setText(feedTitle);
                 headerTitle.setTextColor(ZeroChillUi.color(this, R.color.zc_text_primary));
@@ -605,28 +613,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     }
 
     private void setShowsWordmark() {
-        SpannableString wordmark = new SpannableString("ZEROCHILL Shows");
-        int primary = ZeroChillUi.color(this, R.color.zc_text_primary);
-        int accent = ZeroChillUi.color(this, R.color.zc_cyan);
-        wordmark.setSpan(
-                new ForegroundColorSpan(primary),
-                0,
-                4,
-                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
-        );
-        wordmark.setSpan(
-                new ForegroundColorSpan(accent),
-                4,
-                9,
-                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
-        );
-        wordmark.setSpan(
-                new ForegroundColorSpan(primary),
-                9,
-                wordmark.length(),
-                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
-        );
-        headerTitle.setText(wordmark);
+        headerTitle.setText(ZeroChillUi.sectionTitle(this, "ZEROCHILL Shows", 4, 9));
     }
 
     private void scheduleRatingPromptCheck() {

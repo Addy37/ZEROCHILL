@@ -2044,8 +2044,7 @@ public class VideoDetailActivity extends Activity {
     }
 
     private boolean rememberPositionEnabled() {
-        return getSharedPreferences("app_prefs", MODE_PRIVATE)
-                .getBoolean("remember_video_position", true);
+        return true;
     }
 
     private String positionKey() {

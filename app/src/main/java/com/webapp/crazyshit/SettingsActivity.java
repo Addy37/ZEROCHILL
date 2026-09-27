@@ -155,27 +155,6 @@ public class SettingsActivity extends Activity {
         );
 
         LinearLayout playback = addGroup(root, "Playback");
-        addSwitch(
-                playback,
-                "Native video player",
-                "Play supported videos directly in ZeroChill.",
-                "native_player_enabled",
-                true
-        );
-        addSwitch(
-                playback,
-                "Picture-in-Picture",
-                "",
-                "player_auto_pip",
-                true
-        );
-        addSwitch(
-                playback,
-                "Remember playback",
-                "Resume unfinished videos where you left off.",
-                "remember_video_position",
-                true
-        );
         addAction(
                 playback,
                 "ShitTok preloading",
@@ -185,27 +164,6 @@ public class SettingsActivity extends Activity {
         );
 
         LinearLayout appearance = addGroup(root, "Appearance");
-        addSwitch(
-                appearance,
-                "OLED black",
-                "",
-                "oled_black_enabled",
-                true
-        );
-        addSwitch(
-                appearance,
-                "Cyan edge glow",
-                "",
-                "ambient_feed_glow",
-                true
-        );
-        addSwitch(
-                appearance,
-                "Motion effects",
-                "",
-                "immersive_motion_enabled",
-                true
-        );
         addSwitch(
                 appearance,
                 "Haptic feedback",
@@ -245,13 +203,6 @@ public class SettingsActivity extends Activity {
         );
 
         LinearLayout privacy = addGroup(root, "Privacy");
-        addSwitch(
-                privacy,
-                "Block ads & pop-ups",
-                "Block known ad hosts, popunders and redirect hijacks.",
-                "ad_blocking_enabled",
-                true
-        );
         addAction(
                 privacy,
                 "Clear site data",
@@ -411,10 +362,6 @@ public class SettingsActivity extends Activity {
         toggle.setOnCheckedChangeListener((button, checked) -> {
             prefs.edit().putBoolean(key, checked).apply();
             haptic(button);
-
-            if ("oled_black_enabled".equals(key)) {
-                button.postDelayed(this::recreate, 90L);
-            }
 
             if (NotificationCoordinator.isNotificationPreference(key)) {
                 NotificationCoordinator.onPreferencesChanged(this);

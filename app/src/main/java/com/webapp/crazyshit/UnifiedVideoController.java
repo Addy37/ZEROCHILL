@@ -1282,8 +1282,7 @@ final class UnifiedVideoController {
     }
 
     private boolean rememberPositionEnabled() {
-        return activity.getSharedPreferences("app_prefs", Activity.MODE_PRIVATE)
-                .getBoolean("remember_video_position", true);
+        return true;
     }
 
     private String positionKey() {
