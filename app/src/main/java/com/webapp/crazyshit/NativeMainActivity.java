@@ -1239,15 +1239,26 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         if (requestCode == FAVORITES_REQUEST && resultCode == RESULT_OK && data != null) {
             String selected = data.getStringExtra(FavoritesActivity.EXTRA_SELECTED_URL);
             if (selected != null && !selected.isEmpty()) {
-                openNativeItem(new NativeContentItem(
+                NativeContentItem item = new NativeContentItem(
                         NativeContentItem.KIND_MEDIA,
-                        "Saved video",
+                        data.getStringExtra(FavoritesActivity.EXTRA_SELECTED_TITLE) == null
+                                ? "Saved video"
+                                : data.getStringExtra(FavoritesActivity.EXTRA_SELECTED_TITLE),
                         selected,
                         "",
                         "",
                         "",
                         ""
-                ));
+                );
+                if (primaryPagerAdapter != null && data.getIntExtra(
+                        FavoritesActivity.EXTRA_SELECTED_TAB, -1)
+                        == FavoritesActivity.START_WATCH_LATER) {
+                    primaryPagerAdapter.openLibraryVideo(item);
+                } else if (primaryPagerAdapter != null) {
+                    primaryPagerAdapter.openLibraryHistory(item);
+                } else {
+                    openNativeItem(item);
+                }
             }
         }
     }

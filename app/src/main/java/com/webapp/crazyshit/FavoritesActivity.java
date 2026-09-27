@@ -53,6 +53,8 @@ import java.util.Set;
  */
 public class FavoritesActivity extends Activity {
     public static final String EXTRA_SELECTED_URL = "selected_url";
+    public static final String EXTRA_SELECTED_TITLE = "selected_title";
+    public static final String EXTRA_SELECTED_TAB = "selected_tab";
     public static final String EXTRA_START_TAB = "start_tab";
     public static final int START_CONTINUE = 0;
     public static final int START_HISTORY = 1;
@@ -374,7 +376,7 @@ public class FavoritesActivity extends Activity {
         wrapper.setClickable(true);
         wrapper.setFocusable(true);
         wrapper.setContentDescription("Watch Later " + item.title);
-        wrapper.setOnClickListener(v -> select(item.url));
+        wrapper.setOnClickListener(v -> select(item.url, item.title));
         ZeroChillMotion.installPressFeedback(wrapper);
 
         MaterialCardView card = new MaterialCardView(this);
@@ -609,9 +611,15 @@ public class FavoritesActivity extends Activity {
     }
 
     private void select(String url) {
+        select(url, "");
+    }
+
+    private void select(String url, String title) {
         haptic(pager == null ? clearAction : pager);
         Intent data = new Intent();
         data.putExtra(EXTRA_SELECTED_URL, url);
+        data.putExtra(EXTRA_SELECTED_TITLE, title);
+        data.putExtra(EXTRA_SELECTED_TAB, tab);
         setResult(RESULT_OK, data);
         finish();
     }
