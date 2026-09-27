@@ -99,6 +99,7 @@ final class OnlyFapHubView extends FrameLayout {
     private final CreatorShelf popularShelf;
 
     private final Handler heroHandler = new Handler(Looper.getMainLooper());
+    private final Handler heroRefreshHandler = new Handler(Looper.getMainLooper());
     private final ExecutorService heroIo = Executors.newFixedThreadPool(3);
     private final ExecutorService heroDiscoveryIo = Executors.newSingleThreadExecutor();
     private final Set<String> requestedHeroCreators = new HashSet<>();
@@ -416,6 +417,7 @@ final class OnlyFapHubView extends FrameLayout {
         loadingLabel.setText("Loading creators…");
         loadingLabel.setVisibility(View.VISIBLE);
         refreshFavorites();
+        if (active) scheduleHeroSetRefresh();
     }
 
     void setTrending(List<NativeContentItem> items) {
@@ -485,9 +487,11 @@ final class OnlyFapHubView extends FrameLayout {
         this.active = active;
         if (!active) {
             heroHandler.removeCallbacksAndMessages(null);
+            heroRefreshHandler.removeCallbacksAndMessages(null);
             return;
         }
         scheduleHeroRotation();
+        scheduleHeroSetRefresh();
     }
 
     void setNavigationScrollListener(View.OnScrollChangeListener listener) {
@@ -512,6 +516,7 @@ final class OnlyFapHubView extends FrameLayout {
         closed = true;
         active = false;
         heroHandler.removeCallbacksAndMessages(null);
+        heroRefreshHandler.removeCallbacksAndMessages(null);
         heroIo.shutdownNow();
         heroDiscoveryIo.shutdownNow();
         Glide.with(heroImage).clear(heroImage);
@@ -627,6 +632,7 @@ final class OnlyFapHubView extends FrameLayout {
                 shelvesFinished ? CreatorCatalog.all(getContext()) : Collections.emptyList(),
                 CreatorFavoriteStore.names(getContext()),
                 trendingItems, hotItems, popularItems,
+                OnlyFapHeroHistory.recent(getContext()),
                 HERO_SEARCH_LIMIT
         );
         List<NativeContentItem> replacements = OnlyFapHeroPolicy.nextUnrequested(
@@ -937,6 +943,7 @@ final class OnlyFapHubView extends FrameLayout {
                 OnlyFapHeroPolicy.excluded(CreatorFavoriteStore.names(getContext()),
                         trendingItems, hotItems, popularItems).contains(key)) return;
         heroItems.add(candidate);
+        OnlyFapHeroHistory.remember(getContext(), candidate.creator);
         if (heroItem == null) {
             showHero(0, false);
         } else {
@@ -1088,6 +1095,46 @@ final class OnlyFapHubView extends FrameLayout {
         }
         heroDots.setText(dots.toString());
         heroDots.setVisibility(View.VISIBLE);
+    }
+
+    private void refreshHeroSet() {
+        if (!active || closed) return;
+
+        heroGeneration++;
+        heroHandler.removeCallbacksAndMessages(null);
+        Glide.with(heroImage).clear(heroImage);
+        heroImage.setImageDrawable(new ColorDrawable(Color.rgb(13, 16, 19)));
+
+        heroItems.clear();
+        heroDiscoveryItems.clear();
+        heroResolveInFlight = 0;
+        heroDiscoveryNextPage = HERO_DISCOVERY_FIRST_PAGE;
+        heroDiscoveryLoading = false;
+        heroDiscoveryExhausted = false;
+        requestedHeroCreators.clear();
+        rejectedHeroUrls.clear();
+        heroItem = null;
+        heroIndex = -1;
+
+        heroDots.setVisibility(View.GONE);
+        heroAction.setVisibility(View.GONE);
+        heroTitle.setText("Discover creators");
+        heroHint.setText("Refreshing featured creators…");
+
+        requestHeroCandidates();
+        if (shelvesFinished && heroItems.size() < HERO_MAX_ITEMS) {
+            requestMoreHeroDiscovery();
+        }
+        scheduleHeroSetRefresh();
+    }
+
+    private void scheduleHeroSetRefresh() {
+        heroRefreshHandler.removeCallbacksAndMessages(null);
+        if (!active || closed) return;
+        heroRefreshHandler.postDelayed(
+                this::refreshHeroSet,
+                OnlyFapRefreshPolicy.REFRESH_AFTER_MS
+        );
     }
 
     private void scheduleHeroRotation() {
