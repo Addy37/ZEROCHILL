@@ -15,8 +15,10 @@ internal fun MacrobenchmarkScope.launchApp() {
 }
 
 internal fun MacrobenchmarkScope.scrollHome() {
-    device.wait(Until.hasObject(By.text("Home")), 8_000)
-    device.findObject(By.text("Home"))?.click()
+    val home = checkNotNull(device.wait(Until.findObject(By.text("Home")), 8_000)) {
+        "Home tab was not reachable"
+    }
+    home.click()
     device.waitForIdle()
     repeat(3) {
         swipeUp()
@@ -25,10 +27,14 @@ internal fun MacrobenchmarkScope.scrollHome() {
 }
 
 internal fun MacrobenchmarkScope.openAndScrollChaos() {
-    device.wait(Until.hasObject(By.text("ShitTok")), 8_000)
-    device.findObject(By.text("ShitTok"))?.click()
+    val shitTok = checkNotNull(device.wait(Until.findObject(By.text("ShitTok")), 8_000)) {
+        "ShitTok tab was not reachable"
+    }
+    shitTok.click()
     device.waitForIdle()
-    device.wait(Until.hasObject(By.desc("Play or pause video")), 12_000)
+    checkNotNull(device.wait(Until.findObject(By.desc("Play or pause video")), 12_000)) {
+        "ShitTok player did not become ready"
+    }
     repeat(5) {
         swipeUp()
         device.waitForIdle(350)
@@ -36,12 +42,21 @@ internal fun MacrobenchmarkScope.openAndScrollChaos() {
 }
 
 internal fun MacrobenchmarkScope.search() {
-    device.findObject(By.desc("Search"))?.click()
-    val field = device.wait(Until.findObject(By.desc("Search creators, albums and videos")), 5_000)
-    field?.click()
-    field?.text = "mia"
+    val search = checkNotNull(device.wait(Until.findObject(By.desc("Search")), 5_000)) {
+        "Search action was not reachable"
+    }
+    search.click()
+    val field = checkNotNull(
+        device.wait(Until.findObject(By.desc("Search creators, albums and videos")), 5_000)
+    ) {
+        "Search field did not open"
+    }
+    field.click()
+    field.text = "mia"
     device.pressEnter()
-    device.wait(Until.hasObject(By.textContains("Search complete")), 15_000)
+    checkNotNull(device.wait(Until.findObject(By.textContains("Search complete")), 15_000)) {
+        "Search did not complete"
+    }
     swipeUp()
     device.waitForIdle()
 }
@@ -59,18 +74,36 @@ private fun MacrobenchmarkScope.swipeUp() {
 }
 
 internal fun MacrobenchmarkScope.openCreatorProfileAndGallery() {
-    device.wait(Until.hasObject(By.text("Collections")), 5_000)
-    device.findObject(By.text("Collections"))?.click()
-    device.wait(Until.hasObject(By.desc("Show OnlyFap collections")), 5_000)
-    device.findObject(By.desc("Show OnlyFap collections"))?.click()
-    val creator = device.wait(
-        Until.findObject(By.descContains("Open pictures and videos")),
-        30_000
-    )
-    creator?.click()
-    device.wait(Until.hasObject(By.textStartsWith("All")), 20_000)
-    device.findObject(By.textStartsWith("Videos"))?.click()
-    val video = device.wait(Until.findObject(By.descStartsWith("Video,")), 20_000)
-    video?.click()
-    device.wait(Until.hasObject(By.desc("Play or pause video")), 15_000)
+    val onlyFap = checkNotNull(device.wait(Until.findObject(By.text("OnlyFap")), 8_000)) {
+        "OnlyFap tab was not reachable"
+    }
+    onlyFap.click()
+    device.waitForIdle()
+
+    val creator = checkNotNull(
+        device.wait(Until.findObject(By.descContains("gallery")), 30_000)
+    ) {
+        "OnlyFap creator gallery entry did not become available"
+    }
+    creator.click()
+
+    checkNotNull(device.wait(Until.findObject(By.textStartsWith("All")), 20_000)) {
+        "Creator gallery did not open"
+    }
+    val videos = checkNotNull(
+        device.wait(Until.findObject(By.textStartsWith("Videos")), 10_000)
+    ) {
+        "Creator gallery Videos tab was not reachable"
+    }
+    videos.click()
+
+    val video = checkNotNull(
+        device.wait(Until.findObject(By.descStartsWith("Video,")), 20_000)
+    ) {
+        "Creator gallery did not expose a video"
+    }
+    video.click()
+    checkNotNull(device.wait(Until.findObject(By.desc("Play or pause video")), 15_000)) {
+        "Creator video player did not become ready"
+    }
 }
