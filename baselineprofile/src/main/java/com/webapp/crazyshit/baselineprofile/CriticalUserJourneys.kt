@@ -168,24 +168,41 @@ internal fun MacrobenchmarkScope.openCreatorProfileAndGallery() {
     onlyFap.click()
     device.waitForIdle()
 
-    val galleryDeadline = SystemClock.uptimeMillis() + 35_000L
-    while (device.findObject(By.textStartsWith("All")) == null &&
-        SystemClock.uptimeMillis() < galleryDeadline
-    ) {
-        val creator = device.findObject(By.descContains("gallery"))
-        if (creator != null) {
-            try {
-                val bounds = creator.visibleBounds
-                device.click(bounds.centerX(), bounds.centerY())
-                device.waitForIdle(250)
-            } catch (_: androidx.test.uiautomator.StaleObjectException) {
-                // OnlyFap shelves can rebind while artwork and warm-gallery data arrive.
+    val creatorPattern = Pattern.compile("(?i)^Open .+ gallery$")
+    var galleryOpened = false
+    repeat(3) {
+        if (galleryOpened) return@repeat
+
+        val creatorDeadline = SystemClock.uptimeMillis() + 15_000L
+        var creator: androidx.test.uiautomator.UiObject2? = null
+        while (creator == null && SystemClock.uptimeMillis() < creatorDeadline) {
+            creator = device.findObjects(By.desc(creatorPattern))
+                .firstOrNull { it.isClickable }
+            if (creator == null) SystemClock.sleep(200L)
+        }
+        checkNotNull(creator) {
+            "OnlyFap clickable creator gallery entry did not become available"
+        }
+
+        try {
+            creator.click()
+        } catch (_: androidx.test.uiautomator.StaleObjectException) {
+            return@repeat
+        }
+
+        galleryOpened =
+            device.wait(Until.findObject(By.textStartsWith("All")), 12_000) != null
+        if (!galleryOpened &&
+            findPrimaryTab("OnlyFap tab", "OnlyFap") == null
+        ) {
+            device.pressBack()
+            checkNotNull(awaitPrimaryTab("OnlyFap tab", "OnlyFap", 8_000L)) {
+                "Could not return to OnlyFap after creator gallery handoff"
             }
         }
-        SystemClock.sleep(200L)
     }
 
-    checkNotNull(device.findObject(By.textStartsWith("All"))) {
+    check(galleryOpened) {
         "Creator gallery did not open"
     }
     val videos = checkNotNull(
