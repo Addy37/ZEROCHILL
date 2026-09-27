@@ -152,17 +152,7 @@ public final class ChaosFeedView extends FrameLayout {
     private boolean userPaging;
     private int creatorWarmAheadPosition = -1;
     private final Runnable saveRecentRunnable = this::saveRecentNow;
-    private final Runnable creatorWarmAheadRunnable = () -> {
-        int position = creatorWarmAheadPosition;
-        creatorWarmAheadPosition = -1;
-        if (closed || !active || !hostResumed || selectedPosition != position) return;
-        for (int next = position + 1; next < Math.min(items.size(), position + 8); next++) {
-            NativeContentItem candidate = items.get(next);
-            if (!ShitTokCreatorMetadata.hasCreator(candidate)) continue;
-            ShitTokCreatorGalleryPreloader.warm(activity, candidate);
-            break;
-        }
-    };
+    private final Runnable creatorWarmAheadRunnable = this::warmNextCreatorGallery;
 
     public ChaosFeedView(Activity activity, Host host) {
         super(activity);
@@ -694,6 +684,18 @@ public final class ChaosFeedView extends FrameLayout {
     private void cancelCreatorWarmAhead() {
         removeCallbacks(creatorWarmAheadRunnable);
         creatorWarmAheadPosition = -1;
+    }
+
+    private void warmNextCreatorGallery() {
+        int position = creatorWarmAheadPosition;
+        creatorWarmAheadPosition = -1;
+        if (closed || !active || !hostResumed || selectedPosition != position) return;
+        for (int next = position + 1; next < Math.min(items.size(), position + 8); next++) {
+            NativeContentItem candidate = items.get(next);
+            if (!ShitTokCreatorMetadata.hasCreator(candidate)) continue;
+            ShitTokCreatorGalleryPreloader.warm(activity, candidate);
+            break;
+        }
     }
 
     private void resolveAhead(int position) {
