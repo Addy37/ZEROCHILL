@@ -19,9 +19,7 @@ private fun MacrobenchmarkScope.awaitMainNavigation() {
     val noticePattern = Pattern.compile("(?i).*before\\s+you\\s+continue.*")
     val acceptPattern = Pattern.compile("(?i).*understand.*")
     val notNowPattern = Pattern.compile("(?i).*not\\s+now.*")
-    val deadline = SystemClock.uptimeMillis() + 25_000L
-    var recoveryAttempts = 0
-    var nextRecoveryAt = SystemClock.uptimeMillis() + 4_000L
+    val deadline = SystemClock.uptimeMillis() + 20_000L
 
     while (SystemClock.uptimeMillis() < deadline) {
         val notice = device.findObject(By.text(noticePattern))
@@ -48,20 +46,7 @@ private fun MacrobenchmarkScope.awaitMainNavigation() {
             continue
         }
 
-        if (mainNavigationShellVisible()) return
-
-        val now = SystemClock.uptimeMillis()
-        if (now >= nextRecoveryAt && recoveryAttempts < 4) {
-            // Warm macrobenchmark iterations can leave Search, a creator gallery, or a
-            // fullscreen player on top of the task. Back out to the existing main shell
-            // instead of treating that child screen as a failed app launch.
-            device.pressBack()
-            device.waitForIdle(250)
-            recoveryAttempts++
-            nextRecoveryAt = now + 2_500L
-            continue
-        }
-
+        if (findPrimaryTab("ShitTok tab", "ShitTok") != null) return
         SystemClock.sleep(100L)
     }
 
@@ -73,14 +58,6 @@ private fun MacrobenchmarkScope.awaitMainNavigation() {
     }
     error("Main navigation shell did not become ready")
 }
-
-private fun MacrobenchmarkScope.mainNavigationShellVisible(): Boolean =
-    device.findObject(By.desc("Primary top bar")) != null ||
-        device.findObject(By.desc("Shows tab")) != null ||
-        device.findObject(By.desc("ShitTok featured tab")) != null ||
-        device.findObject(By.desc("ShitTok tab")) != null ||
-        device.findObject(By.desc("OnlyFap tab")) != null ||
-        device.findObject(By.desc("Library tab")) != null
 
 private fun MacrobenchmarkScope.findPrimaryTab(description: String, label: String) =
     device.findObject(By.desc(description)) ?: device.findObject(By.text(label))
@@ -127,18 +104,30 @@ internal fun MacrobenchmarkScope.openAndScrollChaos() {
 }
 
 internal fun MacrobenchmarkScope.search() {
-    // ShitTok can intentionally hide its chrome. Route through Shows so this benchmark
-    // always starts from a screen where the global search action is visible.
+    // Route through Shows so ShitTok's optional clear-display chrome cannot hide search.
     val shows = checkNotNull(awaitPrimaryTab("Shows tab", "Shows", 8_000L)) {
         "Shows tab was not reachable before search"
     }
     shows.click()
     device.waitForIdle()
 
-    val search = checkNotNull(device.wait(Until.findObject(By.desc("Search")), 10_000)) {
-        "Search action was not reachable"
+    val search = device.wait(Until.findObject(By.desc("Search")), 1_500)
+    if (search != null) {
+        search.click()
+    } else {
+        // The top bar itself is an accessibility node, which can hide its programmatic
+        // ImageView children from UIAutomator. Use the stable top-bar geometry as fallback.
+        val topBar = checkNotNull(
+            device.wait(Until.findObject(By.desc("Primary top bar")), 5_000)
+        ) {
+            "Primary top bar was not reachable before search"
+        }
+        val bounds = topBar.visibleBounds
+        val density = bounds.height().coerceAtLeast(1) / 56f
+        val searchX = (bounds.right - (80f * density)).toInt()
+            .coerceIn(bounds.left + 1, bounds.right - 1)
+        device.click(searchX, bounds.centerY())
     }
-    search.click()
     val field = checkNotNull(
         device.wait(Until.findObject(By.desc("Search creators, albums and videos")), 5_000)
     ) {
@@ -196,7 +185,21 @@ internal fun MacrobenchmarkScope.openCreatorProfileAndGallery() {
         "Creator gallery did not expose a video"
     }
     video.click()
-    checkNotNull(device.wait(Until.findObject(By.desc("Play or pause video")), 15_000)) {
-        "Creator video player did not become ready"
+
+    // The grid tap opens BunkrGalleryActivity at the selected video. Playback starts only
+    // after tapping that fullscreen page, and this viewer does not use ShitTok's
+    // "Play or pause video" accessibility description.
+    val fullscreenVideo = checkNotNull(
+        device.wait(Until.findObject(By.descStartsWith("Video,")), 12_000)
+    ) {
+        "Creator video viewer did not open"
+    }
+    checkNotNull(device.wait(Until.findObject(By.desc("Download video")), 8_000)) {
+        "Creator video viewer chrome did not become ready"
+    }
+    fullscreenVideo.click()
+
+    check(device.wait(Until.gone(By.desc("Download video")), 20_000)) {
+        "Creator video playback did not start"
     }
 }
