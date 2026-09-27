@@ -1,6 +1,7 @@
 package com.webapp.crazyshit;
 
 import android.app.Activity;
+import android.app.DownloadManager;
 import android.content.Intent;
 import android.content.res.Configuration;
 import android.graphics.Color;
@@ -8,8 +9,10 @@ import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Environment;
 import android.text.TextUtils;
 import android.view.Gravity;
+import android.view.HapticFeedbackConstants;
 import android.view.Menu;
 import android.view.View;
 import android.view.WindowInsets;
@@ -187,6 +190,14 @@ public final class BunkrGalleryActivity extends Activity {
                     @Override
                     public void onMediaTap(int position, NativeContentItem item) {
                         BunkrGalleryActivity.this.onMediaTap(position, item);
+                    }
+
+                    @Override
+                    public void onMediaLongPress(int position, NativeContentItem item) {
+                        if (pager != null) {
+                            pager.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
+                        }
+                        downloadGalleryItem(position, item);
                     }
 
                     @Override
@@ -968,13 +979,191 @@ public final class BunkrGalleryActivity extends Activity {
         menu.show();
     }
 
+    private void downloadGalleryItem(int position, NativeContentItem item) {
+        if (item == null) return;
+        if (item.isVideo()) {
+            downloadVideoItem(position, item);
+            return;
+        }
+        if (!item.isImage()) return;
+
+        String mediaUrl = adapter.resolvedUrl(position);
+        String referer = imageDownloadReferer(item);
+        if (mediaUrl.isEmpty() && isOnlyHavenDirectImage(item)) {
+            mediaUrl = item.url;
+        }
+        if (!mediaUrl.isEmpty()) {
+            enqueueImageDownload(item, mediaUrl, referer);
+            return;
+        }
+
+        Toast.makeText(this, "Preparing image download…", Toast.LENGTH_SHORT).show();
+        int requestGeneration = generation;
+        mediaIo.execute(() -> {
+            try {
+                CrazyShitRepository.StreamInfo resolved =
+                        PlayableSourceRouter.resolve(this, item.url);
+                runOnUiThread(() -> {
+                    if (requestGeneration != generation || isFinishing()) return;
+                    adapter.setResolvedUrl(position, resolved.mediaUrl);
+                    BunkrGallerySessionStore.setResolvedUrl(
+                            sessionId,
+                            item.url,
+                            resolved.mediaUrl
+                    );
+                    enqueueImageDownload(
+                            item,
+                            resolved.mediaUrl,
+                            value(resolved.requestReferer).isEmpty()
+                                    ? referer
+                                    : resolved.requestReferer
+                    );
+                });
+            } catch (Exception error) {
+                runOnUiThread(() -> {
+                    if (requestGeneration == generation && !isFinishing()) {
+                        Toast.makeText(
+                                this,
+                                "Couldn't prepare this image for download.",
+                                Toast.LENGTH_SHORT
+                        ).show();
+                    }
+                });
+            }
+        });
+    }
+
+    private void downloadVideoItem(int position, NativeContentItem item) {
+        String mediaUrl = adapter.resolvedUrl(position);
+        if (mediaUrl.isEmpty() && isOnlyHavenDirectVideo(item)) {
+            mediaUrl = item.url;
+        }
+        if (mediaUrl.isEmpty()) {
+            VideoDownloadStore.downloadPage(this, item);
+            return;
+        }
+
+        String referer = videoReferers.getOrDefault(item.url, item.url);
+        String cookies = "";
+        try {
+            cookies = CookieManager.getInstance().getCookie(mediaUrl);
+            if ((cookies == null || cookies.isEmpty()) && !referer.isEmpty()) {
+                cookies = CookieManager.getInstance().getCookie(referer);
+            }
+        } catch (Exception ignored) {
+        }
+        VideoDownloadStore.downloadKnown(
+                this,
+                item.title,
+                item.url,
+                item.imageUrl,
+                mediaUrl,
+                USER_AGENT,
+                cookies,
+                referer
+        );
+    }
+
+    private void enqueueImageDownload(
+            NativeContentItem item,
+            String mediaUrl,
+            String requestReferer
+    ) {
+        if (mediaUrl == null ||
+                (!mediaUrl.startsWith("https://") && !mediaUrl.startsWith("http://"))) {
+            Toast.makeText(this, "This image can't be downloaded.", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        DownloadManager manager = (DownloadManager) getSystemService(DOWNLOAD_SERVICE);
+        if (manager == null) {
+            Toast.makeText(this, "Android's download service isn't available.", Toast.LENGTH_SHORT)
+                    .show();
+            return;
+        }
+
+        String referer = value(requestReferer);
+        String cookies = "";
+        try {
+            cookies = CookieManager.getInstance().getCookie(mediaUrl);
+            if ((cookies == null || cookies.isEmpty()) && !referer.isEmpty()) {
+                cookies = CookieManager.getInstance().getCookie(referer);
+            }
+        } catch (Exception ignored) {
+        }
+
+        String mime = imageMimeType(mediaUrl);
+        String fileName = imageFileName(item, mediaUrl, mime);
+        try {
+            DownloadManager.Request request = new DownloadManager.Request(Uri.parse(mediaUrl));
+            request.setTitle(value(item.title).isEmpty() ? "ZeroChill image" : item.title);
+            request.setDescription("ZeroChill image");
+            request.setMimeType(mime);
+            request.setAllowedOverMetered(true);
+            request.setAllowedOverRoaming(false);
+            request.setNotificationVisibility(
+                    DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED
+            );
+            request.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, fileName);
+            request.addRequestHeader("User-Agent", USER_AGENT);
+            if (!referer.isEmpty()) request.addRequestHeader("Referer", referer);
+            if (cookies != null && !cookies.isEmpty()) request.addRequestHeader("Cookie", cookies);
+            manager.enqueue(request);
+            Toast.makeText(this, "Download started in Downloads.", Toast.LENGTH_SHORT).show();
+        } catch (Exception error) {
+            Toast.makeText(this, "Couldn't start the image download.", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    private String imageDownloadReferer(NativeContentItem item) {
+        if (item == null) return "";
+        if (WikiFeetRepository.isWikiFeetUrl(item.url)
+                && WikiFeetRepository.isWikiFeetUrl(item.uploader)) {
+            return value(item.uploader);
+        }
+        if (!FapelloRepository.isPostUrl(item.url)
+                && FapelloRepository.isModelUrl(item.uploader)) {
+            return value(item.uploader);
+        }
+        if (isOnlyHavenDirectImage(item) && !value(item.uploader).isEmpty()) {
+            return value(item.uploader);
+        }
+        return value(item.url);
+    }
+
+    private String imageMimeType(String url) {
+        String lower = value(url).toLowerCase(java.util.Locale.US);
+        int query = lower.indexOf('?');
+        if (query >= 0) lower = lower.substring(0, query);
+        if (lower.endsWith(".png")) return "image/png";
+        if (lower.endsWith(".webp")) return "image/webp";
+        if (lower.endsWith(".gif")) return "image/gif";
+        if (lower.endsWith(".avif")) return "image/avif";
+        return "image/jpeg";
+    }
+
+    private String imageFileName(NativeContentItem item, String mediaUrl, String mime) {
+        String title = value(item == null ? "" : item.title)
+                .replaceAll("[^A-Za-z0-9._ -]+", "")
+                .replaceAll("\\s+", " ")
+                .trim();
+        if (title.isEmpty()) title = "ZeroChill image";
+        if (title.length() > 70) title = title.substring(0, 70).trim();
+        String extension = "image/png".equals(mime) ? ".png"
+                : "image/webp".equals(mime) ? ".webp"
+                : "image/gif".equals(mime) ? ".gif"
+                : "image/avif".equals(mime) ? ".avif"
+                : ".jpg";
+        return title + "-" + Integer.toHexString(value(mediaUrl).hashCode()) + extension;
+    }
+
     private void downloadCurrentVideo() {
-        NativeContentItem item = adapter.itemAt(pager.getCurrentItem());
+        int position = pager.getCurrentItem();
+        NativeContentItem item = adapter.itemAt(position);
         if (item == null || !item.isVideo()) {
             Toast.makeText(this, "This item is not a video.", Toast.LENGTH_SHORT).show();
             return;
         }
-        VideoDownloadStore.downloadPage(this, item);
+        downloadVideoItem(position, item);
     }
 
     private void shareCurrent() {

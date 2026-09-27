@@ -42,6 +42,14 @@ public final class ShitTokCreatorMetadataTest {
     }
 
     @Test
+    public void creatorGallerySwipe_requiresStrongLeftHorizontalGesture() {
+        assertTrue(ChaosFeedView.shouldOpenCreatorGallerySwipe(-120f, 20f, 72f));
+        assertFalse(ChaosFeedView.shouldOpenCreatorGallerySwipe(-55f, 5f, 72f));
+        assertFalse(ChaosFeedView.shouldOpenCreatorGallerySwipe(-120f, 115f, 72f));
+        assertFalse(ChaosFeedView.shouldOpenCreatorGallerySwipe(120f, 5f, 72f));
+    }
+
+    @Test
     public void regularShitTokClip_doesNotBecomeCreatorLink() {
         NativeContentItem item = new NativeContentItem(
                 NativeContentItem.KIND_MEDIA,

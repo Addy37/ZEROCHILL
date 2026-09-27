@@ -364,6 +364,12 @@ public final class ChaosFeedView extends FrameLayout {
         return position >= selectedPosition && position <= selectedPosition + 2;
     }
 
+    static boolean shouldOpenCreatorGallerySwipe(float dx, float dy, float threshold) {
+        return threshold > 0f
+                && dx <= -threshold
+                && Math.abs(dx) > Math.abs(dy) * 1.20f;
+    }
+
     private static boolean isMedia(NativeContentItem item) {
         return item != null
                 && NativeContentItem.KIND_MEDIA.equals(item.kind)
@@ -1106,6 +1112,9 @@ public final class ChaosFeedView extends FrameLayout {
         boolean horizontalVideo;
         float videoAspectRatio;
         float restoreSpeed = 1f;
+        float creatorSwipeDownX;
+        float creatorSwipeDownY;
+        boolean creatorSwipeTracking;
 
         private final Runnable hideControlsRunnable = this::hideControlsNow;
         private final Runnable hideSeekBarRunnable = this::hideSeekBarNow;
@@ -1226,7 +1235,7 @@ public final class ChaosFeedView extends FrameLayout {
             actionRail.addView(share, actionParams());
 
             TextView more = textIconActionButton(
-                    R.drawable.ic_nav_more,
+                    R.drawable.ic_more_overflow,
                     "More video actions",
                     "shittok_more"
             );
@@ -1365,14 +1374,85 @@ public final class ChaosFeedView extends FrameLayout {
                 int action = event.getActionMasked();
                 boolean multiTouch = event.getPointerCount() > 1 || clearDisplayGesture.isInProgress();
 
+                if (action == MotionEvent.ACTION_DOWN) {
+                    creatorSwipeDownX = event.getX();
+                    creatorSwipeDownY = event.getY();
+                    creatorSwipeTracking = false;
+                }
+
                 if (action == MotionEvent.ACTION_POINTER_DOWN) {
                     v.cancelLongPress();
                     restorePlaybackSpeed();
+                    creatorSwipeTracking = false;
+                    root.animate().cancel();
+                    root.setTranslationX(0f);
+                    root.setAlpha(1f);
                     pager.setUserInputEnabled(false);
                     ViewParentCompat.disallow(v, true);
                     return true;
                 }
+
+                if (action == MotionEvent.ACTION_MOVE && !multiTouch && !speedBoosting
+                        && !manualFullscreen) {
+                    String creator = ShitTokCreatorMetadata.creatorName(item);
+                    float dx = event.getX() - creatorSwipeDownX;
+                    float dy = event.getY() - creatorSwipeDownY;
+                    if (!creator.isEmpty() && dx < -dp(18)
+                            && Math.abs(dx) > Math.abs(dy) * 1.25f) {
+                        creatorSwipeTracking = true;
+                        v.cancelLongPress();
+                        pager.setUserInputEnabled(false);
+                        ViewParentCompat.disallow(v, true);
+                    }
+                    if (creatorSwipeTracking) {
+                        float width = Math.max(1f, root.getWidth());
+                        float translation = Math.max(-width * 0.42f, dx * 0.42f);
+                        root.setTranslationX(translation);
+                        root.setAlpha(Math.max(0.78f, 1f - Math.abs(translation) / width * 0.30f));
+                        return true;
+                    }
+                }
+
                 if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) {
+                    if (creatorSwipeTracking) {
+                        float dx = event.getX() - creatorSwipeDownX;
+                        float dy = event.getY() - creatorSwipeDownY;
+                        float threshold = Math.max(dp(72), root.getWidth() * 0.16f);
+                        boolean openCreator = action == MotionEvent.ACTION_UP
+                                && shouldOpenCreatorGallerySwipe(dx, dy, threshold);
+                        creatorSwipeTracking = false;
+                        pager.setUserInputEnabled(true);
+                        ViewParentCompat.disallow(v, false);
+                        root.animate().cancel();
+                        if (openCreator) {
+                            haptic(v);
+                            pauseAndRecord();
+                            if (ZeroChillMotion.animationsEnabled(activity)) {
+                                root.animate()
+                                        .translationX(-Math.max(1, root.getWidth()))
+                                        .alpha(0.72f)
+                                        .setDuration(ZeroChillMotion.STANDARD_MS)
+                                        .withEndAction(() -> {
+                                            openCreatorGallery();
+                                            root.setTranslationX(0f);
+                                            root.setAlpha(1f);
+                                        })
+                                        .start();
+                            } else {
+                                root.setTranslationX(0f);
+                                root.setAlpha(1f);
+                                openCreatorGallery();
+                            }
+                        } else {
+                            root.animate()
+                                    .translationX(0f)
+                                    .alpha(1f)
+                                    .setDuration(ZeroChillMotion.QUICK_MS)
+                                    .start();
+                        }
+                        return true;
+                    }
+
                     pager.setUserInputEnabled(true);
                     ViewParentCompat.disallow(v, false);
                     boolean consumedPinch = pinchConsumed[0];
@@ -1394,17 +1474,9 @@ public final class ChaosFeedView extends FrameLayout {
             title.setOnLongClickListener(menuLongPress);
             meta.setOnLongClickListener(menuLongPress);
             title.setOnClickListener(v -> {
-                String creator = ShitTokCreatorMetadata.creatorName(item);
-                if (creator.isEmpty()) return;
+                if (ShitTokCreatorMetadata.creatorName(item).isEmpty()) return;
                 haptic(v);
-                pauseAndRecord();
-                activity.startActivity(NativeFeedBrowserActivity.createCreatorGallery(
-                        activity,
-                        creator,
-                        creator,
-                        "",
-                        ShitTokCreatorGalleryPreloader.sessionId(activity, creator)
-                ));
+                openCreatorGallery();
             });
 
             mute.setOnClickListener(v -> {
@@ -1832,12 +1904,26 @@ public final class ChaosFeedView extends FrameLayout {
             headers.put(name, value);
         }
 
+        private void openCreatorGallery() {
+            if (item == null) return;
+            String creator = ShitTokCreatorMetadata.creatorName(item);
+            if (creator.isEmpty()) return;
+            pauseAndRecord();
+            activity.startActivity(NativeFeedBrowserActivity.createCreatorGallery(
+                    activity,
+                    creator,
+                    creator,
+                    "",
+                    ShitTokCreatorGalleryPreloader.sessionId(activity, creator)
+            ));
+        }
+
         private void showMoreMenu() {
             if (item == null) return;
             String savedLabel = FavoriteStore.contains(activity, item.url)
                     ? "Remove from Watch Later"
                     : "Watch Later";
-            VideoActionSheet.show(
+            VideoActionSheet.showCompact(
                     activity,
                     item.title,
                     VideoActionSheet.section(
