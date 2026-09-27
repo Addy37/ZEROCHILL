@@ -59,6 +59,7 @@ import java.util.Collections;
 import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -124,6 +125,8 @@ public final class ChaosFeedView extends FrameLayout {
     private final Set<String> resolving = new HashSet<>();
     private final Set<String> unplayable = new HashSet<>();
     private final Set<String> resolveRetried = new HashSet<>();
+    private final Set<ChaosHolder> playerHolders =
+            Collections.newSetFromMap(new IdentityHashMap<>());
     private final Random random = new Random();
     private final ChaosSourceMixer sourceMixer = new ChaosSourceMixer(repository, random);
 
@@ -234,7 +237,7 @@ public final class ChaosFeedView extends FrameLayout {
             syncVisibleChrome();
         } else {
             pauseAll();
-            releaseVisiblePlayers();
+            releaseAllPlayers();
         }
         if (!active) {
             resetCreatorSwipePreview();
@@ -260,7 +263,7 @@ public final class ChaosFeedView extends FrameLayout {
         hostResumed = false;
         if (!creatorGalleryHandoff) resetCreatorSwipePreview();
         pauseAll();
-        if (!creatorGalleryHandoff) releaseVisiblePlayers();
+        if (!creatorGalleryHandoff) releaseAllPlayers();
         flushRecent();
     }
 
@@ -302,7 +305,7 @@ public final class ChaosFeedView extends FrameLayout {
         exitManualFullscreen();
         if (commentsDialog != null && commentsDialog.isShowing()) commentsDialog.dismiss();
         pauseAll();
-        releaseVisiblePlayers();
+        releaseAllPlayers();
         flushRecent();
         removeCallbacks(saveRecentRunnable);
         if (creatorSwipePreview != null && creatorSwipePreview.getParent() instanceof ViewGroup) {
@@ -831,15 +834,25 @@ public final class ChaosFeedView extends FrameLayout {
     }
 
     private void pauseAll() {
+        for (ChaosHolder holder : new ArrayList<>(playerHolders)) {
+            holder.pauseAndRecord();
+        }
+
         RecyclerView rv = pagerRecycler();
         if (rv == null) return;
         for (int i = 0; i < rv.getChildCount(); i++) {
             RecyclerView.ViewHolder raw = rv.getChildViewHolder(rv.getChildAt(i));
-            if (raw instanceof ChaosHolder) ((ChaosHolder) raw).pauseAndRecord();
+            if (raw instanceof ChaosHolder && !playerHolders.contains(raw)) {
+                ((ChaosHolder) raw).pauseAndRecord();
+            }
         }
     }
 
-    private void releaseVisiblePlayers() {
+    private void releaseAllPlayers() {
+        for (ChaosHolder holder : new ArrayList<>(playerHolders)) {
+            holder.releasePlayer();
+        }
+
         RecyclerView rv = pagerRecycler();
         if (rv == null) return;
         for (int i = 0; i < rv.getChildCount(); i++) {
@@ -2138,6 +2151,7 @@ public final class ChaosFeedView extends FrameLayout {
                 );
             }
             player = playerBuilder.build();
+            playerHolders.add(this);
             ExoPlayer createdPlayer = player;
             player.setRepeatMode(Player.REPEAT_MODE_OFF);
             player.setVolume(chaosMuted ? 0f : 1f);
@@ -2674,6 +2688,7 @@ public final class ChaosFeedView extends FrameLayout {
                 }
                 player = null;
             }
+            playerHolders.remove(this);
             stream = null;
         }
     }
