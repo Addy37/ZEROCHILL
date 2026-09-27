@@ -67,7 +67,7 @@ private fun MacrobenchmarkScope.awaitMainNavigation() {
 
 private fun MacrobenchmarkScope.findPrimaryTab(description: String, label: String) =
     device.findObject(By.desc(description))
-        ?: if (label == "ShitTok") device.findObject(By.desc("ShitTok featured tab")) else null
+        ?: (if (label == "ShitTok") device.findObject(By.desc("ShitTok featured tab")) else null)
         ?: device.findObject(By.text(label))
 
 private fun MacrobenchmarkScope.awaitPrimaryTab(
@@ -179,11 +179,26 @@ internal fun MacrobenchmarkScope.openCreatorProfileAndGallery() {
     repeat(3) {
         if (galleryOpened) return@repeat
 
-        val creatorDeadline = SystemClock.uptimeMillis() + 15_000L
+        // The hub resolves its live creator shelves in the background. Wait for an
+        // actionable entry or the hub's explicit terminal error, not a fixed delay.
+        val creatorDeadline = SystemClock.uptimeMillis() + 90_000L
         var creator: androidx.test.uiautomator.UiObject2? = null
+        var shelfExposed = false
         while (creator == null && SystemClock.uptimeMillis() < creatorDeadline) {
             creator = device.findObjects(By.desc(creatorPattern))
                 .firstOrNull { it.isClickable }
+            if (creator == null && device.findObject(
+                    By.text("OnlyFap creators could not load right now.")
+                ) != null) {
+                error("OnlyFap creator shelves finished without a creator")
+            }
+            if (creator == null && !shelfExposed &&
+                device.findObject(By.text("Loading creators…")) == null) {
+                // Shelves start below the 640dp hero. If the hero has no resolved
+                // artwork yet, expose a loaded shelf instead of waiting on its image.
+                swipeUp()
+                shelfExposed = true
+            }
             if (creator == null) SystemClock.sleep(200L)
         }
         checkNotNull(creator) {
