@@ -22,7 +22,15 @@ final class BundledCreatorIndex {
         for (Entry entry : entries) {
             String canonical = entry.searchable.get(0);
             byName.put(canonical, entry);
-            for (String alias : entry.searchable) canonicalByAlias.put(alias, canonical);
+            canonicalByAlias.put(canonical, canonical);
+        }
+        // Explicit aliases are reviewed identity links and take priority over a separately
+        // discovered row with the same spelling.
+        for (Entry entry : entries) {
+            String canonical = entry.searchable.get(0);
+            for (int i = 1; i < entry.searchable.size(); i++) {
+                canonicalByAlias.put(entry.searchable.get(i), canonical);
+            }
         }
     }
 
