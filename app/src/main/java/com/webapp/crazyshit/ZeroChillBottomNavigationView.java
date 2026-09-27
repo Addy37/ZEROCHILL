@@ -321,7 +321,7 @@ final class ZeroChillBottomNavigationView extends BottomNavigationView {
         float firstCenter = firstRect.exactCenterX();
         float secondCenter = secondRect.exactCenterX();
         float center = lerp(firstCenter, secondCenter, fraction);
-        // Match the approved zc_nav_item_background inset bounds exactly.
+        // Keep the approved selected capsule insets while it follows pager movement.
         float width = lerp(firstRect.width(), secondRect.width(), fraction) - dp(8);
         float top = Math.max(dp(3), lerp(firstRect.top, secondRect.top, fraction) + dp(4));
         float bottom = Math.min(getHeight() - dp(3),
