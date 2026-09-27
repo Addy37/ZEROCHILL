@@ -60,7 +60,9 @@ private fun MacrobenchmarkScope.awaitMainNavigation() {
 }
 
 private fun MacrobenchmarkScope.findPrimaryTab(description: String, label: String) =
-    device.findObject(By.desc(description)) ?: device.findObject(By.text(label))
+    device.findObject(By.desc(description))
+        ?: if (label == "ShitTok") device.findObject(By.desc("ShitTok featured tab")) else null
+        ?: device.findObject(By.text(label))
 
 private fun MacrobenchmarkScope.awaitPrimaryTab(
     description: String,
