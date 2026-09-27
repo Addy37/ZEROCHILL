@@ -18,6 +18,7 @@ internal fun MacrobenchmarkScope.launchApp() {
 private fun MacrobenchmarkScope.awaitMainNavigation() {
     val noticePattern = Pattern.compile("(?i).*before\\s+you\\s+continue.*")
     val acceptPattern = Pattern.compile("(?i).*understand.*")
+    val notNowPattern = Pattern.compile("(?i).*not\\s+now.*")
     val deadline = SystemClock.uptimeMillis() + 20_000L
 
     while (SystemClock.uptimeMillis() < deadline) {
@@ -35,7 +36,7 @@ private fun MacrobenchmarkScope.awaitMainNavigation() {
 
         val notificationEducation = device.findObject(By.text("ZEROCHILL APP ALERTS"))
         if (notificationEducation != null) {
-            val notNow = device.findObject(By.text("Not now"))
+            val notNow = device.findObject(By.text(notNowPattern))
             if (notNow != null) {
                 notNow.click()
                 device.waitForIdle(250)
