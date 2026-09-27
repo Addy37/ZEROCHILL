@@ -373,6 +373,10 @@ final class ShowsHubView extends FrameLayout {
                 + categoryItems.size() + kaoticCategoryItems.size();
     }
 
+    void setNavigationScrollListener(View.OnScrollChangeListener listener) {
+        scroll.setOnScrollChangeListener(listener);
+    }
+
     void refreshContinueWatching() {
         List<PlaybackHistoryStore.Item> items =
                 PlaybackHistoryStore.continueWatchingShows(getContext());

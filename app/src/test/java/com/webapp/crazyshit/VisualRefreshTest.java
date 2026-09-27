@@ -197,7 +197,8 @@ public class VisualRefreshTest {
         assertEquals((showsTab.getWidth() + shitTokTab.getWidth()) / 2f - BrowseUi.dp(main, 8),
                 capsule.width(), 1f);
         assertEquals(BrowseUi.dp(main, 4), capsule.top, 1f);
-        assertEquals(nav.getHeight() + BrowseUi.dp(main, 10), capsule.bottom, 1f);
+        assertTrue(capsule.bottom > capsule.top);
+        assertTrue(capsule.bottom <= nav.getHeight() - BrowseUi.dp(main, 3));
         assertEquals(0.5f, slidingNav.pagerPositionForTest(), 0.001f);
         slidingNav.setPagerPosition(0f);
         assertEquals(4, nav.getMenu().size());

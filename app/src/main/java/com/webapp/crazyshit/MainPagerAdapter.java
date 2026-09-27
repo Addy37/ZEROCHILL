@@ -64,6 +64,9 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
 
         default void onChaosClearDisplayChanged(boolean clear) {
         }
+
+        default void onNavigationScroll(int sourcePage, int dy, boolean atTop, boolean userDriven) {
+        }
     }
 
     private enum PageKind {
@@ -109,6 +112,11 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
             public void onClearDisplayChanged(boolean clear) {
                 host.onChaosClearDisplayChanged(clear);
             }
+
+            @Override
+            public void onVerticalPageChanged(int direction, boolean atTop, boolean userDriven) {
+                host.onNavigationScroll(PAGE_CHAOS, direction * dp(24), atTop, userDriven);
+            }
         });
         chaosView.setActive(false);
         libraryView = new LibraryHubView(activity, new LibraryHubView.Listener() {
@@ -137,6 +145,8 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                 ));
             }
         });
+        libraryView.setOnScrollChangeListener((v, scrollX, scrollY, oldScrollX, oldScrollY) ->
+                host.onNavigationScroll(PAGE_LIBRARY, scrollY - oldScrollY, scrollY <= dp(4), true));
 
     }
 
@@ -459,6 +469,14 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
             public void onScrolled(@NonNull RecyclerView view, int dx, int dy) {
                 RecyclerView.LayoutManager manager = view.getLayoutManager();
                 if (!(manager instanceof LinearLayoutManager)) return;
+                LinearLayoutManager positionManager = (LinearLayoutManager) manager;
+                host.onNavigationScroll(
+                        page.index,
+                        dy,
+                        positionManager.findFirstCompletelyVisibleItemPosition() <= 0 &&
+                                !view.canScrollVertically(-1),
+                        true
+                );
                 LinearLayoutManager lm = (LinearLayoutManager) manager;
                 int first = lm.findFirstVisibleItemPosition();
                 int last = lm.findLastVisibleItemPosition();
@@ -678,6 +696,15 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                     item -> ShowsCollectionWarmCache.request(activity, item),
                     this::openShowsVideo
             );
+            page.showsHub.setNavigationScrollListener(
+                    (v, scrollX, scrollY, oldScrollX, oldScrollY) ->
+                            host.onNavigationScroll(
+                                    PAGE_SERIES,
+                                    scrollY - oldScrollY,
+                                    scrollY <= dp(4),
+                                    true
+                            )
+            );
             page.root.addView(page.showsHub, new FrameLayout.LayoutParams(-1, -1));
             // Shows is now a single combined hub. Keep the legacy source preference
             // pinned to the hub so upgrades from older installs cannot reopen a hidden
@@ -734,6 +761,15 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                             ));
                         }
                     }
+            );
+            page.onlyFapHub.setNavigationScrollListener(
+                    (v, scrollX, scrollY, oldScrollX, oldScrollY) ->
+                            host.onNavigationScroll(
+                                    PAGE_ONLYFAP,
+                                    scrollY - oldScrollY,
+                                    scrollY <= dp(4),
+                                    true
+                            )
             );
             page.root.addView(page.onlyFapHub, new FrameLayout.LayoutParams(-1, -1));
             page.refresh.setVisibility(View.GONE);

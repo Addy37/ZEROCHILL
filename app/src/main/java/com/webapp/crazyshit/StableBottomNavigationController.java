@@ -250,6 +250,13 @@ final class StableBottomNavigationController {
             if (activity.getResources().getConfiguration().orientation ==
                     Configuration.ORIENTATION_LANDSCAPE) return;
 
+            if (nav instanceof ZeroChillBottomNavigationView) {
+                // Tab and lifecycle passes may restyle the bar, but vertical motion owns its
+                // height and margins. Never reset a compact or intermediate animation frame.
+                ((ZeroChillBottomNavigationView) nav).reapplyCurrentGeometry();
+                return;
+            }
+
             ViewGroup.LayoutParams raw = nav.getLayoutParams();
             boolean changed = false;
             int wantedHeight = ZeroChillUi.dimension(activity, R.dimen.zc_bottom_nav_height);

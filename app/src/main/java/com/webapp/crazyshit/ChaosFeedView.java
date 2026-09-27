@@ -78,6 +78,9 @@ public final class ChaosFeedView extends FrameLayout {
 
         default void onClearDisplayChanged(boolean clear) {
         }
+
+        default void onVerticalPageChanged(int direction, boolean atTop, boolean userDriven) {
+        }
     }
 
     private static final String PREFS = "chaos_feed";
@@ -138,6 +141,7 @@ public final class ChaosFeedView extends FrameLayout {
     private int autoAdvanceFrom = -1;
     private int consecutiveDryLoads;
     private int selectedPosition;
+    private boolean userPaging;
     private final Runnable saveRecentRunnable = this::saveRecentNow;
 
     public ChaosFeedView(Activity activity, Host host) {
@@ -180,13 +184,27 @@ public final class ChaosFeedView extends FrameLayout {
 
         pager.registerOnPageChangeCallback(new ViewPager2.OnPageChangeCallback() {
             @Override
+            public void onPageScrollStateChanged(int state) {
+                if (state == ViewPager2.SCROLL_STATE_DRAGGING) userPaging = true;
+                else if (state == ViewPager2.SCROLL_STATE_IDLE) userPaging = false;
+            }
+
+            @Override
             public void onPageSelected(int position) {
+                int previousPosition = selectedPosition;
                 if (autoAdvancePending && position != autoAdvanceFrom) {
                     autoAdvancePending = false;
                     autoAdvanceFrom = -1;
                 }
                 if (manualFullscreen && position != selectedPosition) exitManualFullscreen();
                 selectedPosition = position;
+                if (position != previousPosition) {
+                    host.onVerticalPageChanged(
+                            position > previousPosition ? 1 : -1,
+                            position == 0,
+                            active && userPaging
+                    );
+                }
                 markSeen(position);
                 pauseNonSelected(position);
                 releaseDistantPlayers(position);

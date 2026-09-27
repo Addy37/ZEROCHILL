@@ -39,6 +39,9 @@ final class ZeroChillBottomNavigationView extends BottomNavigationView {
 
     private static final int[] PAGE_NAV_IDS = {2, 4, 3, 6};
     private static final long REFLECTION_SETTLE_MS = 180L;
+    private static final long COLLAPSE_DURATION_MS = 210L;
+    private static final int COLLAPSED_HEIGHT_DP = 50;
+    private static final int COLLAPSED_SIDE_MARGIN_DP = 60;
     private static final float HORIZONTAL_DOMINANCE = 1.25f;
 
     private final Drawable selectedGlass;
@@ -54,7 +57,10 @@ final class ZeroChillBottomNavigationView extends BottomNavigationView {
     private boolean touchReflectionActive;
     private boolean gpuReflectionDisabled;
     private ValueAnimator reflectionAnimator;
+    private ValueAnimator collapseAnimator;
     private Api33Reflection shaderReflection;
+    private float collapseProgress;
+    private boolean collapsedTarget;
     private final int swipeTouchSlop;
     private float dragDownX;
     private float dragDownY;
@@ -70,7 +76,13 @@ final class ZeroChillBottomNavigationView extends BottomNavigationView {
         selectedGlass = drawable == null ? null : drawable.mutate();
         swipeTouchSlop = ViewConfiguration.get(context).getScaledTouchSlop();
         setWillNotDraw(false);
-        addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> updateItemColors());
+        // The theme's 64dp minimum would otherwise keep Material's menu at full height
+        // inside a 50dp parent, cutting its icon container during the transition.
+        setMinimumHeight(0);
+        addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> {
+            updateItemColors();
+            setItemCollapseVisuals(clamp(collapseProgress, 0f, 1f));
+        });
     }
 
     void setPagerPosition(float position) {
@@ -88,12 +100,69 @@ final class ZeroChillBottomNavigationView extends BottomNavigationView {
         navigationDragListener = listener;
     }
 
+    void setCollapsed(boolean collapsed, boolean animated) {
+        float target = collapsed ? 1f : 0f;
+        if (collapsedTarget == collapsed) {
+            if (collapseAnimator != null && collapseAnimator.isRunning()) return;
+            if (Math.abs(collapseProgress - target) < 0.001f) return;
+        }
+
+        collapsedTarget = collapsed;
+        if (collapseAnimator != null) {
+            collapseAnimator.cancel();
+            collapseAnimator = null;
+        }
+
+        if (!animated || !ZeroChillMotion.animationsEnabled(getContext())) {
+            collapseProgress = target;
+            applyCollapseProgress(collapseProgress);
+            return;
+        }
+
+        collapseAnimator = ValueAnimator.ofFloat(collapseProgress, target);
+        collapseAnimator.setDuration(COLLAPSE_DURATION_MS);
+        collapseAnimator.setInterpolator(new DecelerateInterpolator());
+        collapseAnimator.addUpdateListener(animation -> {
+            collapseProgress = (float) animation.getAnimatedValue();
+            applyCollapseProgress(collapseProgress);
+        });
+        collapseAnimator.start();
+    }
+
+    boolean isCollapsedForTest() {
+        return collapsedTarget;
+    }
+
+    /** Restore this view's own geometry after a portrait chrome/lifecycle pass. */
+    void reapplyCurrentGeometry() {
+        applyCollapseProgress(collapseProgress);
+    }
+
+    float collapseProgressForTest() {
+        return collapseProgress;
+    }
+
+    void setCollapseProgressForTest(float progress) {
+        if (collapseAnimator != null) collapseAnimator.cancel();
+        collapseAnimator = null;
+        collapseProgress = clamp(progress, 0f, 1f);
+        collapsedTarget = collapseProgress >= 1f;
+        applyCollapseProgress(collapseProgress);
+    }
+
+    RectF selectedCapsuleBoundsForTest() {
+        return new RectF(indicatorRect);
+    }
+
     float pagerPositionForTest() {
         return pagerPosition;
     }
 
     @Override
     protected void dispatchDraw(Canvas canvas) {
+        // Material updates its checked item's label/icon layout during quick tab changes.
+        // Reapply the current visual progress before children draw, including mid-transition.
+        setItemCollapseVisuals(collapseProgress);
         drawSelectedGlass(canvas);
         super.dispatchDraw(canvas);
     }
@@ -225,7 +294,9 @@ final class ZeroChillBottomNavigationView extends BottomNavigationView {
         removeCallbacks(settleReflectionRunnable);
         if (reflectionAnimator != null) reflectionAnimator.cancel();
         if (pressAnimator != null) pressAnimator.cancel();
+        if (collapseAnimator != null) collapseAnimator.cancel();
         reflectionAnimator = null;
+        collapseAnimator = null;
         navigationDragListener = null;
         super.onDetachedFromWindow();
     }
@@ -252,8 +323,9 @@ final class ZeroChillBottomNavigationView extends BottomNavigationView {
         float center = lerp(firstCenter, secondCenter, fraction);
         // Match the approved zc_nav_item_background inset bounds exactly.
         float width = lerp(firstRect.width(), secondRect.width(), fraction) - dp(8);
-        float top = lerp(firstRect.top, secondRect.top, fraction) + dp(4);
-        float bottom = lerp(firstRect.bottom, secondRect.bottom, fraction) + dp(10);
+        float top = Math.max(dp(3), lerp(firstRect.top, secondRect.top, fraction) + dp(4));
+        float bottom = Math.min(getHeight() - dp(3),
+                lerp(firstRect.bottom, secondRect.bottom, fraction) + dp(10));
         if (bottom <= top) return;
 
         float midY = (top + bottom) / 2f;
@@ -340,6 +412,65 @@ final class ZeroChillBottomNavigationView extends BottomNavigationView {
             invalidate();
         });
         pressAnimator.start();
+    }
+
+    private void applyCollapseProgress(float progress) {
+        float p = clamp(progress, 0f, 1f);
+        int expandedHeight = getResources().getDimensionPixelSize(R.dimen.zc_bottom_nav_height);
+        int collapsedHeight = dp(COLLAPSED_HEIGHT_DP);
+        int sideMargin = Math.round(lerp(dp(10), dp(COLLAPSED_SIDE_MARGIN_DP), p));
+
+        ViewGroup.LayoutParams raw = getLayoutParams();
+        if (raw instanceof ViewGroup.MarginLayoutParams) {
+            ViewGroup.MarginLayoutParams params = (ViewGroup.MarginLayoutParams) raw;
+            int height = Math.round(lerp(expandedHeight, collapsedHeight, p));
+            // The bar overlays content. Keep its bottom edge fixed while its height changes.
+            int topMargin = -height - dp(6);
+            int bottomMargin = dp(6);
+            if (params.height != height || params.leftMargin != sideMargin ||
+                    params.rightMargin != sideMargin || params.topMargin != topMargin ||
+                    params.bottomMargin != bottomMargin) {
+                params.height = height;
+                params.setMargins(sideMargin, topMargin, sideMargin, bottomMargin);
+                setLayoutParams(params);
+            }
+        }
+
+        setItemCollapseVisuals(p);
+        invalidate();
+    }
+
+    private void setItemCollapseVisuals(float progress) {
+        float labelAlpha = clamp(1f - progress * 1.45f, 0f, 1f);
+        for (int id : PAGE_NAV_IDS) {
+            View item = findViewById(id);
+            if (item == null) continue;
+            if (item.getMinimumHeight() != 0) item.setMinimumHeight(0);
+            applyLabelAlpha(item, labelAlpha);
+            View iconContainer = item.findViewById(
+                    com.google.android.material.R.id.navigation_bar_item_icon_container);
+            if (iconContainer != null && iconContainer.getHeight() > 0) {
+                descendantRect(iconContainer, firstRect);
+                float desiredCenter = lerp(firstRect.exactCenterY(), getHeight() / 2f, progress);
+                // Move the whole container, not the 24dp ImageView inside its clipped frame.
+                float shift = desiredCenter - firstRect.exactCenterY();
+                if (Math.abs(iconContainer.getTranslationY() - shift) > 0.01f) {
+                    iconContainer.setTranslationY(shift);
+                }
+            }
+        }
+    }
+
+    private static void applyLabelAlpha(View view, float labelAlpha) {
+        if (view instanceof TextView) {
+            if (Math.abs(view.getAlpha() - labelAlpha) > 0.001f) view.setAlpha(labelAlpha);
+            return;
+        }
+        if (!(view instanceof ViewGroup)) return;
+        ViewGroup group = (ViewGroup) view;
+        for (int i = 0; i < group.getChildCount(); i++) {
+            applyLabelAlpha(group.getChildAt(i), labelAlpha);
+        }
     }
 
     private void updateItemColors() {

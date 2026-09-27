@@ -5,6 +5,7 @@ import android.app.AlertDialog;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.graphics.Color;
+import android.graphics.Rect;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -15,7 +16,9 @@ import android.text.style.ForegroundColorSpan;
 import android.view.Gravity;
 import android.view.HapticFeedbackConstants;
 import android.view.Menu;
+import android.view.MotionEvent;
 import android.view.View;
+import android.view.ViewConfiguration;
 import android.view.WindowInsets;
 import android.webkit.CookieManager;
 import android.webkit.WebSettings;
@@ -85,6 +88,11 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     private MainPagerAdapter primaryPagerAdapter;
     private AppUpdater appUpdater;
     private boolean chaosClearDisplay;
+    private NavigationMotionController navigationMotion;
+    private float contentDownX;
+    private float contentDownY;
+    private boolean contentTouchCandidate;
+    private int contentTouchPage;
 
     private Screen screen = Screen.CHAOS;
     private final Runnable ratingPromptCheck = () -> {
@@ -211,6 +219,13 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
             public void onChaosClearDisplayChanged(boolean clear) {
                 setChaosClearDisplay(clear);
             }
+
+            @Override
+            public void onNavigationScroll(int sourcePage, int dy, boolean atTop, boolean userDriven) {
+                if (navigationMotion != null) {
+                    navigationMotion.onScroll(sourcePage, dy, atTop, userDriven);
+                }
+            }
         });
 
         primaryPager = new ViewPager2(this);
@@ -303,6 +318,8 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
             @Override
             public void onScrolled(RecyclerView view, int dx, int dy) {
                 if (!isFeedScreen()) return;
+                if (navigationMotion != null) navigationMotion.onScroll(
+                        MainPagerAdapter.PAGE_HOME, dy, !view.canScrollVertically(-1), true);
                 RecyclerView.LayoutManager lm = view.getLayoutManager();
                 if (!(lm instanceof LinearLayoutManager)) return;
                 int first = ((LinearLayoutManager) lm).findFirstVisibleItemPosition();
@@ -316,6 +333,9 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         });
 
         bottomNavigation = new ZeroChillBottomNavigationView(this);
+        navigationMotion = new NavigationMotionController(
+                compact -> bottomNavigation.setCollapsed(compact, true),
+                dp(10), MainPagerAdapter.PAGE_CHAOS);
         bottomNavigation.setBackground(ZeroChillUi.navigationGlass(this));
         bottomNavigation.setElevation(ZeroChillUi.dimension(this, R.dimen.zc_elevation_navigation));
         bottomNavigation.setLabelVisibilityMode(NavigationBarView.LABEL_VISIBILITY_LABELED);
@@ -504,6 +524,9 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     }
 
     private void showPagerChrome(int position) {
+        // Preserve the current compact/expanded nav state across tab switches.
+        // Vertical content movement, not primary-tab selection, owns this animation.
+        if (navigationMotion != null) navigationMotion.setActivePage(position);
         if (legacyContent != null) {
             legacyContent.setVisibility(View.GONE);
             LinearLayout.LayoutParams old = (LinearLayout.LayoutParams) legacyContent.getLayoutParams();
@@ -743,6 +766,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
 
     private void showLegacyContent() {
         exitChaosFullscreenChrome();
+        if (navigationMotion != null) navigationMotion.setActivePage(MainPagerAdapter.PAGE_HOME);
         if (primaryPager != null) {
             primaryPager.setVisibility(View.GONE);
             LinearLayout.LayoutParams pp = (LinearLayout.LayoutParams) primaryPager.getLayoutParams();
@@ -1285,6 +1309,41 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         if (appUpdater != null) appUpdater.close();
         io.shutdownNow();
         super.onDestroy();
+    }
+
+    @Override
+    public boolean dispatchTouchEvent(MotionEvent event) {
+        boolean finishGesture = false;
+        if (navigationMotion != null && event != null) {
+            int action = event.getActionMasked();
+            if (action == MotionEvent.ACTION_DOWN) {
+                Rect contentBounds = new Rect();
+                View activeContent = primaryPager != null &&
+                        primaryPager.getVisibility() == View.VISIBLE ? primaryPager : legacyContent;
+                contentTouchCandidate = activeContent != null &&
+                        activeContent.getVisibility() == View.VISIBLE &&
+                        activeContent.getGlobalVisibleRect(contentBounds) &&
+                        contentBounds.contains((int) event.getRawX(), (int) event.getRawY());
+                contentTouchPage = activeContent == primaryPager
+                        ? currentPrimaryPage() : MainPagerAdapter.PAGE_HOME;
+                contentDownX = event.getRawX();
+                contentDownY = event.getRawY();
+                navigationMotion.endGesture();
+            } else if (action == MotionEvent.ACTION_MOVE && contentTouchCandidate) {
+                float dx = event.getRawX() - contentDownX;
+                float dy = event.getRawY() - contentDownY;
+                int slop = ViewConfiguration.get(this).getScaledTouchSlop();
+                if (Math.abs(dy) > slop && Math.abs(dy) > Math.abs(dx) * 1.25f) {
+                    navigationMotion.beginGesture(contentTouchPage);
+                }
+            } else if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) {
+                contentTouchCandidate = false;
+                finishGesture = true;
+            }
+        }
+        boolean handled = super.dispatchTouchEvent(event);
+        if (finishGesture) navigationMotion.endGesture();
+        return handled;
     }
 
     private void haptic(View view) {

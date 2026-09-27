@@ -3,7 +3,13 @@ package com.webapp.crazyshit;
 import android.app.Application;
 import android.content.Intent;
 import android.os.Bundle;
+import android.graphics.Bitmap;
+import android.graphics.Canvas;
+import android.graphics.Rect;
+import android.graphics.RectF;
 import android.view.View;
+import android.view.ViewGroup;
+import android.widget.ImageView;
 
 import androidx.viewpager2.widget.ViewPager2;
 
@@ -185,6 +191,106 @@ public class NavigationIaTest {
         controller.pause().stop().destroy();
     }
 
+    @Test public void bottomNavigationCanCollapseWithoutChangingTabGeometryContract() {
+        android.content.Context context = org.robolectric.RuntimeEnvironment.getApplication();
+        context.getSharedPreferences("app_prefs", 0).edit()
+                .putBoolean("access_notice_2_8_3_accepted", true).apply();
+
+        ActivityController<NativeMainActivity> controller =
+                Robolectric.buildActivity(NativeMainActivity.class)
+                        .create().start().resume().visible();
+        shadowOf(android.os.Looper.getMainLooper()).idle();
+
+        NativeMainActivity activity = controller.get();
+        ZeroChillBottomNavigationView nav =
+                ReflectionHelpers.getField(activity, "bottomNavigation");
+
+        nav.setCollapsed(true, false);
+        android.view.ViewGroup.MarginLayoutParams collapsed =
+                (android.view.ViewGroup.MarginLayoutParams) nav.getLayoutParams();
+        int densityMargin = Math.round(60 * activity.getResources().getDisplayMetrics().density);
+        assertTrue(nav.isCollapsedForTest());
+        assertEquals(Math.round(50 * activity.getResources().getDisplayMetrics().density),
+                collapsed.height);
+        assertEquals(densityMargin, collapsed.leftMargin);
+        assertEquals(densityMargin, collapsed.rightMargin);
+        assertEquals(
+                com.google.android.material.navigation.NavigationBarView.LABEL_VISIBILITY_LABELED,
+                nav.getLabelVisibilityMode()
+        );
+
+        nav.setSelectedItemId(6);
+        shadowOf(android.os.Looper.getMainLooper()).idle();
+        assertTrue(nav.isCollapsedForTest());
+
+        nav.setCollapsed(false, false);
+        android.view.ViewGroup.MarginLayoutParams expanded =
+                (android.view.ViewGroup.MarginLayoutParams) nav.getLayoutParams();
+        assertFalse(nav.isCollapsedForTest());
+        assertEquals(activity.getResources().getDimensionPixelSize(R.dimen.zc_bottom_nav_height),
+                expanded.height);
+        assertEquals(Math.round(10 * activity.getResources().getDisplayMetrics().density),
+                expanded.leftMargin);
+        assertEquals(expanded.leftMargin, expanded.rightMargin);
+        assertEquals(
+                com.google.android.material.navigation.NavigationBarView.LABEL_VISIBILITY_LABELED,
+                nav.getLabelVisibilityMode()
+        );
+
+        controller.pause().stop().destroy();
+    }
+
+    @Test public void portraitChromePassesCannotResetCompactOrIntermediateNavGeometry() {
+        android.content.Context context = org.robolectric.RuntimeEnvironment.getApplication();
+        context.getSharedPreferences("app_prefs", 0).edit()
+                .putBoolean("access_notice_2_8_3_accepted", true).apply();
+        ActivityController<NativeMainActivity> controller =
+                Robolectric.buildActivity(NativeMainActivity.class)
+                        .create().start().resume().visible();
+        NativeMainActivity activity = controller.get();
+        ZeroChillBottomNavigationView nav = ReflectionHelpers.getField(activity, "bottomNavigation");
+        StableBottomNavigationController.attach(activity);
+        shadowOf(android.os.Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(1000));
+
+        nav.setCollapsed(true, false);
+        nav.setSelectedItemId(6);
+        shadowOf(android.os.Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(650));
+        assertNavGeometry(nav, activity, 1f);
+        assertTrue(nav.isCollapsedForTest());
+
+        nav.setCollapseProgressForTest(0.45f);
+        StableBottomNavigationController.applyOrientation(activity);
+        shadowOf(android.os.Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(650));
+        assertEquals(0.45f, nav.collapseProgressForTest(), 0.01f);
+        assertNavGeometry(nav, activity, 0.45f);
+
+        nav.setCollapsed(false, false);
+        nav.setSelectedItemId(2);
+        shadowOf(android.os.Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(650));
+        assertNavGeometry(nav, activity, 0f);
+        assertFalse(nav.isCollapsedForTest());
+
+        StableBottomNavigationController.detach(activity);
+        controller.pause().stop().destroy();
+    }
+
+    private static void assertNavGeometry(
+            ZeroChillBottomNavigationView nav, NativeMainActivity activity, float progress) {
+        android.widget.LinearLayout.LayoutParams params =
+                (android.widget.LinearLayout.LayoutParams) nav.getLayoutParams();
+        float density = activity.getResources().getDisplayMetrics().density;
+        int expanded = activity.getResources().getDimensionPixelSize(R.dimen.zc_bottom_nav_height);
+        int compact = Math.round(50 * density);
+        int height = Math.round(expanded + (compact - expanded) * progress);
+        assertEquals(height, params.height);
+        assertEquals(Math.round(Math.round(10 * density) +
+                (Math.round(60 * density) - Math.round(10 * density)) * progress),
+                params.leftMargin);
+        assertEquals(params.leftMargin, params.rightMargin);
+        assertEquals(-height - Math.round(6 * density), params.topMargin);
+        assertEquals(Math.round(6 * density), params.bottomMargin);
+    }
+
     @Test public void primaryTabsDragFromSelectedBottomCapsule() {
         android.content.Context context = org.robolectric.RuntimeEnvironment.getApplication();
         context.getSharedPreferences("app_prefs", 0).edit()
@@ -246,7 +352,107 @@ public class NavigationIaTest {
                 MainPagerAdapter.pageForPagerPosition(pager.getCurrentItem())
         );
         assertEquals(2f, nav.pagerPositionForTest(), 0.01f);
+
+        nav.setCollapsed(true, false);
+        shadowOf(android.os.Looper.getMainLooper()).idle();
+        View library = nav.findViewById(6);
+        onlyFap.getDrawingRect(onlyFapRect);
+        library.getDrawingRect(chaosRect);
+        nav.offsetDescendantRectToMyCoords(onlyFap, onlyFapRect);
+        nav.offsetDescendantRectToMyCoords(library, chaosRect);
+        downX = onlyFapRect.exactCenterX();
+        downY = onlyFapRect.exactCenterY();
+        targetX = chaosRect.exactCenterX();
+        downTime = android.os.SystemClock.uptimeMillis();
+        nav.dispatchTouchEvent(android.view.MotionEvent.obtain(
+                downTime, downTime, android.view.MotionEvent.ACTION_DOWN, downX, downY, 0));
+        nav.dispatchTouchEvent(android.view.MotionEvent.obtain(
+                downTime, downTime + 16L, android.view.MotionEvent.ACTION_MOVE,
+                downX + ((targetX - downX) * 0.65f), downY, 0));
+        nav.dispatchTouchEvent(android.view.MotionEvent.obtain(
+                downTime, downTime + 32L, android.view.MotionEvent.ACTION_UP,
+                targetX, downY, 0));
+        shadowOf(android.os.Looper.getMainLooper()).idle();
+        assertEquals(MainPagerAdapter.PAGE_LIBRARY,
+                MainPagerAdapter.pageForPagerPosition(pager.getCurrentItem()));
+        assertTrue(nav.isCollapsedForTest());
         controller.pause().stop().destroy();
+    }
+
+    @Test public void compactNavIconsAndSelectedCapsuleFitAtEveryProgress() {
+        android.content.Context context = org.robolectric.RuntimeEnvironment.getApplication();
+        context.getSharedPreferences("app_prefs", 0).edit()
+                .putBoolean("access_notice_2_8_3_accepted", true).apply();
+        ActivityController<NativeMainActivity> controller =
+                Robolectric.buildActivity(NativeMainActivity.class)
+                        .create().start().resume().visible();
+        shadowOf(android.os.Looper.getMainLooper()).idle();
+        ZeroChillBottomNavigationView nav = ReflectionHelpers.getField(controller.get(),
+                "bottomNavigation");
+        for (float progress : new float[]{0f, 0.25f, 0.5f, 0.75f, 1f}) {
+            nav.setCollapseProgressForTest(progress);
+            int width = Math.round(360 * context.getResources().getDisplayMetrics().density)
+                    - ((ViewGroup.MarginLayoutParams) nav.getLayoutParams()).leftMargin * 2;
+            int height = ((ViewGroup.MarginLayoutParams) nav.getLayoutParams()).height;
+            nav.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
+                    View.MeasureSpec.makeMeasureSpec(height, View.MeasureSpec.EXACTLY));
+            nav.layout(0, 0, width, height);
+            for (int id : new int[]{2, 4, 3, 6}) {
+                View item = nav.findViewById(id);
+                View container = item.findViewById(
+                        com.google.android.material.R.id.navigation_bar_item_icon_container);
+                assertNotNull(container);
+                ImageView icon = findIcon(container);
+                assertNotNull(icon);
+                Rect iconBounds = new Rect(0, 0, icon.getWidth(), icon.getHeight());
+                nav.offsetDescendantRectToMyCoords(icon, iconBounds);
+                iconBounds.offset(0, Math.round(container.getTranslationY()));
+                assertTrue("icon top at " + progress, iconBounds.top >= 0);
+                assertTrue("icon bottom at " + progress, iconBounds.bottom <= height);
+                assertEquals(0f, icon.getTranslationY(), 0.01f);
+            }
+            nav.draw(new Canvas(Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)));
+            RectF capsule = nav.selectedCapsuleBoundsForTest();
+            assertTrue("capsule top at " + progress, capsule.top >= 0);
+            assertTrue("capsule bottom at " + progress, capsule.bottom <= height);
+            assertEquals(
+                    com.google.android.material.navigation.NavigationBarView.LABEL_VISIBILITY_LABELED,
+                    nav.getLabelVisibilityMode());
+        }
+        controller.pause().stop().destroy();
+    }
+
+    @Test public void collapseAnimationReversesFromItsCurrentProgressWithoutRestartingSameTarget() {
+        android.content.Context context = org.robolectric.RuntimeEnvironment.getApplication();
+        context.getSharedPreferences("app_prefs", 0).edit()
+                .putBoolean("access_notice_2_8_3_accepted", true).apply();
+        ActivityController<NativeMainActivity> controller =
+                Robolectric.buildActivity(NativeMainActivity.class)
+                        .create().start().resume().visible();
+        ZeroChillBottomNavigationView nav = ReflectionHelpers.getField(controller.get(),
+                "bottomNavigation");
+        nav.setCollapseProgressForTest(0.45f);
+        nav.setCollapsed(false, true);
+        assertEquals(0.45f, nav.collapseProgressForTest(), 0.01f);
+        nav.setCollapsed(false, true);
+        assertEquals(0.45f, nav.collapseProgressForTest(), 0.01f);
+        nav.setCollapseProgressForTest(0.55f);
+        nav.setCollapsed(true, true);
+        assertEquals(0.55f, nav.collapseProgressForTest(), 0.01f);
+        nav.setCollapsed(true, true);
+        assertEquals(0.55f, nav.collapseProgressForTest(), 0.01f);
+        controller.pause().stop().destroy();
+    }
+
+    private static ImageView findIcon(View root) {
+        if (root instanceof ImageView) return (ImageView) root;
+        if (!(root instanceof ViewGroup)) return null;
+        ViewGroup group = (ViewGroup) root;
+        for (int i = 0; i < group.getChildCount(); i++) {
+            ImageView result = findIcon(group.getChildAt(i));
+            if (result != null) return result;
+        }
+        return null;
     }
 
     @Test public void dormantHomeRestoreFallsBackToShitTokAndLibraryIsPrimaryTab() {
