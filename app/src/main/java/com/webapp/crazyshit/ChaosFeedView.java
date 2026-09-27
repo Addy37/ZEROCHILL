@@ -129,6 +129,7 @@ public final class ChaosFeedView extends FrameLayout {
     private ChaosAdapter adapter;
     private TextView empty;
     private ProgressBar initialProgress;
+    private ShitTokCreatorSwipePreview creatorSwipePreview;
     private InlineCommentsDialog commentsDialog;
     private boolean active;
     private boolean hostResumed = true;
@@ -182,6 +183,10 @@ public final class ChaosFeedView extends FrameLayout {
         empty.setVisibility(View.GONE);
         addView(empty, new FrameLayout.LayoutParams(-1, -1));
 
+        creatorSwipePreview = new ShitTokCreatorSwipePreview(activity);
+        creatorSwipePreview.setVisibility(View.GONE);
+        addView(creatorSwipePreview, new FrameLayout.LayoutParams(-1, -1));
+
         pager.registerOnPageChangeCallback(new ViewPager2.OnPageChangeCallback() {
             @Override
             public void onPageScrollStateChanged(int state) {
@@ -191,6 +196,7 @@ public final class ChaosFeedView extends FrameLayout {
 
             @Override
             public void onPageSelected(int position) {
+                resetCreatorSwipePreview();
                 int previousPosition = selectedPosition;
                 if (autoAdvancePending && position != autoAdvanceFrom) {
                     autoAdvancePending = false;
@@ -231,6 +237,7 @@ public final class ChaosFeedView extends FrameLayout {
             releaseVisiblePlayers();
         }
         if (!active) {
+            resetCreatorSwipePreview();
             if (clearDisplay) setClearDisplay(false);
             exitManualFullscreen();
         }
@@ -247,17 +254,20 @@ public final class ChaosFeedView extends FrameLayout {
 
     public void onHostPause() {
         hostResumed = false;
+        resetCreatorSwipePreview();
         pauseAll();
         releaseVisiblePlayers();
         flushRecent();
     }
 
     public void onConfigurationChanged() {
+        resetCreatorSwipePreview();
         if (commentsDialog != null && commentsDialog.isShowing()) commentsDialog.dismiss();
         syncVisibleChrome();
     }
 
     public void refresh() {
+    resetCreatorSwipePreview();
     pauseAll();
     consecutiveDryLoads = 0;
     sourceMixer.resetDeck();
@@ -280,6 +290,7 @@ public final class ChaosFeedView extends FrameLayout {
 }
 
     public void close() {
+        resetCreatorSwipePreview();
         closed = true;
         poolLoading = false;
         active = false;
@@ -368,6 +379,110 @@ public final class ChaosFeedView extends FrameLayout {
         return threshold > 0f
                 && dx <= -threshold
                 && Math.abs(dx) > Math.abs(dy) * 1.20f;
+    }
+
+    static float creatorSwipeContentTranslation(float dx, float width) {
+        if (width <= 0f) return 0f;
+        return Math.max(-width, Math.min(0f, dx));
+    }
+
+    static float creatorSwipePreviewTranslation(float dx, float width) {
+        if (width <= 0f) return 0f;
+        return width + creatorSwipeContentTranslation(dx, width);
+    }
+
+    private void beginCreatorSwipePreview(String creator) {
+        if (creatorSwipePreview == null || creator == null || creator.trim().isEmpty()) return;
+        String sessionId = ShitTokCreatorGalleryPreloader.sessionId(activity, creator);
+        creatorSwipePreview.showCreator(creator, sessionId);
+        creatorSwipePreview.setTranslationX(Math.max(1, getWidth()));
+        creatorSwipePreview.bringToFront();
+    }
+
+    private void updateCreatorSwipePreview(float dx, View content) {
+        if (creatorSwipePreview == null || content == null) return;
+        float width = Math.max(1f, content.getWidth());
+        float contentTranslation = creatorSwipeContentTranslation(dx, width);
+        content.setTranslationX(contentTranslation);
+        content.setAlpha(1f);
+        creatorSwipePreview.setTranslationX(
+                creatorSwipePreviewTranslation(dx, width)
+        );
+    }
+
+    private void cancelCreatorSwipePreview(View content) {
+        if (content != null) {
+            content.animate().cancel();
+            content.animate()
+                    .translationX(0f)
+                    .alpha(1f)
+                    .setDuration(ZeroChillMotion.QUICK_MS)
+                    .start();
+        }
+        if (creatorSwipePreview == null || creatorSwipePreview.getVisibility() != View.VISIBLE) {
+            return;
+        }
+        creatorSwipePreview.animate().cancel();
+        creatorSwipePreview.animate()
+                .translationX(Math.max(1, getWidth()))
+                .setDuration(ZeroChillMotion.QUICK_MS)
+                .withEndAction(() -> creatorSwipePreview.setVisibility(View.GONE))
+                .start();
+    }
+
+    private void commitCreatorSwipePreview(
+            View content,
+            String creator,
+            Runnable openGallery
+    ) {
+        if (content == null || creatorSwipePreview == null || openGallery == null) {
+            openGallery.run();
+            return;
+        }
+        float width = Math.max(1f, content.getWidth());
+        creatorSwipePreview.refreshCreator(
+                creator,
+                ShitTokCreatorGalleryPreloader.sessionId(activity, creator)
+        );
+        content.animate().cancel();
+        creatorSwipePreview.animate().cancel();
+
+        if (!ZeroChillMotion.animationsEnabled(activity)) {
+            content.setTranslationX(-width);
+            creatorSwipePreview.setTranslationX(0f);
+            openGallery.run();
+            postDelayed(() -> {
+                content.setTranslationX(0f);
+                content.setAlpha(1f);
+                resetCreatorSwipePreview();
+            }, 250L);
+            return;
+        }
+
+        content.animate()
+                .translationX(-width)
+                .alpha(1f)
+                .setDuration(ZeroChillMotion.STANDARD_MS)
+                .start();
+        creatorSwipePreview.animate()
+                .translationX(0f)
+                .setDuration(ZeroChillMotion.STANDARD_MS)
+                .withEndAction(() -> {
+                    openGallery.run();
+                    postDelayed(() -> {
+                        content.setTranslationX(0f);
+                        content.setAlpha(1f);
+                        resetCreatorSwipePreview();
+                    }, 250L);
+                })
+                .start();
+    }
+
+    private void resetCreatorSwipePreview() {
+        if (creatorSwipePreview == null) return;
+        creatorSwipePreview.animate().cancel();
+        creatorSwipePreview.setVisibility(View.GONE);
+        creatorSwipePreview.setTranslationX(Math.max(1, getWidth()));
     }
 
     private static boolean isMedia(NativeContentItem item) {
@@ -1384,9 +1499,7 @@ public final class ChaosFeedView extends FrameLayout {
                     v.cancelLongPress();
                     restorePlaybackSpeed();
                     creatorSwipeTracking = false;
-                    root.animate().cancel();
-                    root.setTranslationX(0f);
-                    root.setAlpha(1f);
+                    cancelCreatorSwipePreview(root);
                     pager.setUserInputEnabled(false);
                     ViewParentCompat.disallow(v, true);
                     return true;
@@ -1397,18 +1510,18 @@ public final class ChaosFeedView extends FrameLayout {
                     String creator = ShitTokCreatorMetadata.creatorName(item);
                     float dx = event.getX() - creatorSwipeDownX;
                     float dy = event.getY() - creatorSwipeDownY;
-                    if (!creator.isEmpty() && dx < -dp(18)
-                            && Math.abs(dx) > Math.abs(dy) * 1.25f) {
-                        creatorSwipeTracking = true;
+                    if (!creator.isEmpty() && dx < -dp(14)
+                            && Math.abs(dx) > Math.abs(dy) * 1.20f) {
+                        if (!creatorSwipeTracking) {
+                            creatorSwipeTracking = true;
+                            beginCreatorSwipePreview(creator);
+                        }
                         v.cancelLongPress();
                         pager.setUserInputEnabled(false);
                         ViewParentCompat.disallow(v, true);
                     }
                     if (creatorSwipeTracking) {
-                        float width = Math.max(1f, root.getWidth());
-                        float translation = Math.max(-width * 0.42f, dx * 0.42f);
-                        root.setTranslationX(translation);
-                        root.setAlpha(Math.max(0.78f, 1f - Math.abs(translation) / width * 0.30f));
+                        updateCreatorSwipePreview(dx, root);
                         return true;
                     }
                 }
@@ -1417,38 +1530,23 @@ public final class ChaosFeedView extends FrameLayout {
                     if (creatorSwipeTracking) {
                         float dx = event.getX() - creatorSwipeDownX;
                         float dy = event.getY() - creatorSwipeDownY;
-                        float threshold = Math.max(dp(72), root.getWidth() * 0.16f);
+                        float threshold = Math.max(dp(72), root.getWidth() * 0.18f);
                         boolean openCreator = action == MotionEvent.ACTION_UP
                                 && shouldOpenCreatorGallerySwipe(dx, dy, threshold);
                         creatorSwipeTracking = false;
                         pager.setUserInputEnabled(true);
                         ViewParentCompat.disallow(v, false);
-                        root.animate().cancel();
                         if (openCreator) {
+                            String creator = ShitTokCreatorMetadata.creatorName(item);
                             haptic(v);
                             pauseAndRecord();
-                            if (ZeroChillMotion.animationsEnabled(activity)) {
-                                root.animate()
-                                        .translationX(-Math.max(1, root.getWidth()))
-                                        .alpha(0.72f)
-                                        .setDuration(ZeroChillMotion.STANDARD_MS)
-                                        .withEndAction(() -> {
-                                            openCreatorGallery();
-                                            root.setTranslationX(0f);
-                                            root.setAlpha(1f);
-                                        })
-                                        .start();
-                            } else {
-                                root.setTranslationX(0f);
-                                root.setAlpha(1f);
-                                openCreatorGallery();
-                            }
+                            commitCreatorSwipePreview(
+                                    root,
+                                    creator,
+                                    () -> openCreatorGallery(true)
+                            );
                         } else {
-                            root.animate()
-                                    .translationX(0f)
-                                    .alpha(1f)
-                                    .setDuration(ZeroChillMotion.QUICK_MS)
-                                    .start();
+                            cancelCreatorSwipePreview(root);
                         }
                         return true;
                     }
@@ -1476,7 +1574,7 @@ public final class ChaosFeedView extends FrameLayout {
             title.setOnClickListener(v -> {
                 if (ShitTokCreatorMetadata.creatorName(item).isEmpty()) return;
                 haptic(v);
-                openCreatorGallery();
+                openCreatorGallery(false);
             });
 
             mute.setOnClickListener(v -> {
@@ -1904,7 +2002,7 @@ public final class ChaosFeedView extends FrameLayout {
             headers.put(name, value);
         }
 
-        private void openCreatorGallery() {
+        private void openCreatorGallery(boolean seamless) {
             if (item == null) return;
             String creator = ShitTokCreatorMetadata.creatorName(item);
             if (creator.isEmpty()) return;
@@ -1916,6 +2014,7 @@ public final class ChaosFeedView extends FrameLayout {
                     "",
                     ShitTokCreatorGalleryPreloader.sessionId(activity, creator)
             ));
+            if (seamless) activity.overridePendingTransition(0, 0);
         }
 
         private void showMoreMenu() {

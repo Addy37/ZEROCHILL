@@ -50,6 +50,16 @@ public final class ShitTokCreatorMetadataTest {
     }
 
     @Test
+    public void creatorGallerySwipe_tracksFingerAcrossFullWidth() {
+        assertEquals(-120f, ChaosFeedView.creatorSwipeContentTranslation(-120f, 1080f), 0.001f);
+        assertEquals(960f, ChaosFeedView.creatorSwipePreviewTranslation(-120f, 1080f), 0.001f);
+        assertEquals(-1080f, ChaosFeedView.creatorSwipeContentTranslation(-1400f, 1080f), 0.001f);
+        assertEquals(0f, ChaosFeedView.creatorSwipePreviewTranslation(-1400f, 1080f), 0.001f);
+        assertEquals(0f, ChaosFeedView.creatorSwipeContentTranslation(80f, 1080f), 0.001f);
+        assertEquals(1080f, ChaosFeedView.creatorSwipePreviewTranslation(80f, 1080f), 0.001f);
+    }
+
+    @Test
     public void regularShitTokClip_doesNotBecomeCreatorLink() {
         NativeContentItem item = new NativeContentItem(
                 NativeContentItem.KIND_MEDIA,
