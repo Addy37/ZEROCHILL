@@ -297,7 +297,10 @@ final class LandscapeUiController {
             topBar.setElevation(0f);
         }
 
-        setVisibility(topBar, chaosFullscreen ? View.GONE : View.VISIBLE);
+        // OnlyFap owns its title and actions inside the hero. A landscape/portrait pass after
+        // video fullscreen must not reveal the duplicate main header over that page.
+        setVisibility(topBar,
+                chaosFullscreen || activity.isOnlyFapSearchContext() ? View.GONE : View.VISIBLE);
         ViewGroup.LayoutParams raw = topBar.getLayoutParams();
         if (raw != null) {
             int wanted = dp(activity, landscape ? LANDSCAPE_TOP_BAR_DP : PORTRAIT_TOP_BAR_DP);

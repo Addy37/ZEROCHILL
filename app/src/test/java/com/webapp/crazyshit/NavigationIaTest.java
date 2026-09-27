@@ -55,6 +55,35 @@ public class NavigationIaTest {
         controller.pause().stop().destroy();
     }
 
+    @Test public void fullscreenReturnDoesNotRevealDuplicateOnlyFapHeader() {
+        android.content.Context context = org.robolectric.RuntimeEnvironment.getApplication();
+        context.getSharedPreferences("app_prefs", 0).edit()
+                .putBoolean("access_notice_2_8_3_accepted", true).apply();
+        ActivityController<NativeMainActivity> controller =
+                Robolectric.buildActivity(NativeMainActivity.class)
+                        .create().start().resume().visible();
+        shadowOf(android.os.Looper.getMainLooper()).idle();
+        NativeMainActivity activity = controller.get();
+        BottomNavigationView nav = ReflectionHelpers.getField(activity, "bottomNavigation");
+        View topBar = ReflectionHelpers.getField(activity, "topBar");
+
+        nav.setSelectedItemId(3); // Stable OnlyFap slot.
+        shadowOf(android.os.Looper.getMainLooper()).idle();
+        assertEquals(View.GONE, topBar.getVisibility());
+
+        // This restoration pass previously forced the main bar visible over the hero title.
+        LandscapeUiController.attach(activity);
+        LandscapeUiController.apply(activity);
+        assertEquals(View.GONE, topBar.getVisibility());
+
+        nav.setSelectedItemId(6); // Library uses the main header.
+        shadowOf(android.os.Looper.getMainLooper()).idle();
+        LandscapeUiController.apply(activity);
+        assertEquals(View.VISIBLE, topBar.getVisibility());
+
+        controller.pause().stop().destroy();
+    }
+
     @Test public void showsDetailsIntentCarriesRealCollectionPresentationData() {
         android.content.Context context = org.robolectric.RuntimeEnvironment.getApplication();
         context.getSharedPreferences("app_prefs", 0).edit()
