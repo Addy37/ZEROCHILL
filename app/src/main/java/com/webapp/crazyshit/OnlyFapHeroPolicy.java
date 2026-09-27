@@ -1,6 +1,7 @@
 package com.webapp.crazyshit;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -37,7 +38,24 @@ final class OnlyFapHeroPolicy {
             List<NativeContentItem> backfill, Set<String> favorites,
             List<NativeContentItem> trending, List<NativeContentItem> hot,
             List<NativeContentItem> popular, int limit) {
+        return select(
+                newCreators,
+                backfill,
+                favorites,
+                trending,
+                hot,
+                popular,
+                Collections.emptySet(),
+                limit
+        );
+    }
+
+    static List<NativeContentItem> select(List<NativeContentItem> newCreators,
+            List<NativeContentItem> backfill, Set<String> favorites,
+            List<NativeContentItem> trending, List<NativeContentItem> hot,
+            List<NativeContentItem> popular, Set<String> recentlyFeatured, int limit) {
         Set<String> excluded = excluded(favorites, trending, hot, popular);
+        if (recentlyFeatured != null) excluded.addAll(recentlyFeatured);
         LinkedHashMap<String, NativeContentItem> selected = new LinkedHashMap<>();
         append(selected, newCreators, excluded, limit);
         append(selected, backfill, excluded, limit);
