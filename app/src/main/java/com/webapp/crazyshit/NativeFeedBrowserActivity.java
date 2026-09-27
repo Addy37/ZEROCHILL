@@ -572,7 +572,21 @@ public final class NativeFeedBrowserActivity extends Activity {
 
                     @Override
                     public void onLongPress(NativeContentItem item, View anchor) {
-                        showItemMenu(item, anchor);
+                        if (isCreatorGallery()) {
+                            anchor.performHapticFeedback(
+                                    android.view.HapticFeedbackConstants.LONG_PRESS
+                            );
+                            GalleryMediaDownloader.download(
+                                    NativeFeedBrowserActivity.this,
+                                    io,
+                                    item,
+                                    "",
+                                    "",
+                                    null
+                            );
+                        } else {
+                            showItemMenu(item, anchor);
+                        }
                     }
                 },
                 adaptiveAspectRatios
