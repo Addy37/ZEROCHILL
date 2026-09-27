@@ -19,14 +19,17 @@ import androidx.appcompat.app.AppCompatActivity;
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.card.MaterialCardView;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /** Aggregate-only product analytics. No per-install activity history is exposed here. */
 public final class AnalyticsActivity extends AppCompatActivity {
     private final ExecutorService network = Executors.newSingleThreadExecutor();
+    private final Map<String, Boolean> collapsedCards = new HashMap<>();
     private LinearLayout content;
     private TextView status;
     private ProgressBar progress;
@@ -160,7 +163,7 @@ public final class AnalyticsActivity extends AppCompatActivity {
             body.addView(text(emptyText, 13, color(R.color.app_on_surface_variant)));
         } else {
             int limit = Math.min(rows.size(), creator ? 12 : 8);
-            long max = Math.max(1L, rows.get(0).uniqueUsers);
+            long max = maxUniqueUsers(rows, limit);
             for (int index = 0; index < limit; index++) {
                 AdminRepository.AnalyticsRow row = rows.get(index);
                 LinearLayout block = vertical(0);
@@ -299,6 +302,14 @@ public final class AnalyticsActivity extends AppCompatActivity {
         return block;
     }
 
+    private long maxUniqueUsers(List<AdminRepository.AnalyticsRow> rows, int limit) {
+        long max = 1L;
+        for (int index = 0; index < Math.min(limit, rows.size()); index++) {
+            max = Math.max(max, rows.get(index).uniqueUsers);
+        }
+        return max;
+    }
+
     private MaterialCardView card(String title, String subtitle, LinearLayout body) {
         MaterialCardView card = new MaterialCardView(this);
         card.setCardBackgroundColor(color(R.color.app_surface));
@@ -308,12 +319,42 @@ public final class AnalyticsActivity extends AppCompatActivity {
         card.setCardElevation(0);
 
         LinearLayout wrapper = vertical(16);
+
+        LinearLayout header = new LinearLayout(this);
+        header.setOrientation(LinearLayout.HORIZONTAL);
+        header.setGravity(Gravity.CENTER_VERTICAL);
+        header.setClickable(true);
+        header.setFocusable(true);
+        header.setMinimumHeight(dp(44));
+
+        LinearLayout copy = vertical(0);
         TextView heading = label(title);
-        wrapper.addView(heading);
+        copy.addView(heading);
         TextView detail = text(subtitle, 13, color(R.color.app_on_surface_variant));
-        detail.setPadding(0, dp(2), 0, dp(12));
-        wrapper.addView(detail);
-        wrapper.addView(body);
+        detail.setPadding(0, dp(2), dp(8), 0);
+        copy.addView(detail);
+        header.addView(copy, new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+
+        TextView chevron = text("▾", 20, color(R.color.app_on_surface_variant));
+        chevron.setGravity(Gravity.CENTER);
+        chevron.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        header.addView(chevron, new LinearLayout.LayoutParams(dp(32), dp(44)));
+        wrapper.addView(header);
+
+        LinearLayout.LayoutParams bodyParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        bodyParams.topMargin = dp(12);
+        wrapper.addView(body, bodyParams);
+
+        boolean collapsed = Boolean.TRUE.equals(collapsedCards.get(title));
+        applyCollapsedState(title, header, body, chevron, collapsed);
+        header.setOnClickListener(v -> {
+            boolean nextCollapsed = body.getVisibility() == View.VISIBLE;
+            collapsedCards.put(title, nextCollapsed);
+            applyCollapsedState(title, header, body, chevron, nextCollapsed);
+        });
+
         card.addView(wrapper);
 
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
@@ -321,6 +362,18 @@ public final class AnalyticsActivity extends AppCompatActivity {
         params.setMargins(0, dp(8), 0, dp(8));
         card.setLayoutParams(params);
         return card;
+    }
+
+    private void applyCollapsedState(
+            String title,
+            View header,
+            View body,
+            TextView chevron,
+            boolean collapsed
+    ) {
+        body.setVisibility(collapsed ? View.GONE : View.VISIBLE);
+        chevron.setText(collapsed ? "▸" : "▾");
+        header.setContentDescription((collapsed ? "Expand " : "Collapse ") + title);
     }
 
     private LinearLayout bottomNav() {
