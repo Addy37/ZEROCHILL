@@ -69,6 +69,7 @@ private fun MacrobenchmarkScope.awaitMainNavigation() {
 private fun MacrobenchmarkScope.findPrimaryTab(description: String, label: String) =
     device.findObject(By.desc(description))
         ?: (if (label == "ShitTok") device.findObject(By.desc("ShitTok featured tab")) else null)
+        ?: device.findObject(By.desc(label))
         ?: device.findObject(By.text(label))
 
 private fun MacrobenchmarkScope.awaitPrimaryTab(
@@ -169,11 +170,7 @@ private fun MacrobenchmarkScope.swipeUp() {
 }
 
 internal fun MacrobenchmarkScope.openCreatorProfileAndGallery() {
-    val onlyFap = checkNotNull(awaitPrimaryTab("OnlyFap tab", "OnlyFap", 8_000L)) {
-        "OnlyFap tab was not reachable"
-    }
-    onlyFap.click()
-    device.waitForIdle()
+    openOnlyFapHub()
 
     val creatorPattern = Pattern.compile("(?i)^Open .+ gallery$")
     val attemptedCreators = mutableSetOf<String>()
@@ -231,9 +228,7 @@ internal fun MacrobenchmarkScope.openCreatorProfileAndGallery() {
 
         if (device.wait(Until.findObject(By.textStartsWith("All")), 12_000) == null) {
             if (findPrimaryTab("OnlyFap tab", "OnlyFap") == null) device.pressBack()
-            checkNotNull(awaitPrimaryTab("OnlyFap tab", "OnlyFap", 8_000L)) {
-                "Could not return to OnlyFap after failed gallery handoff"
-            }
+            openOnlyFapHub()
             swipeUp()
             shelfExposed = true
             continue
@@ -262,9 +257,7 @@ internal fun MacrobenchmarkScope.openCreatorProfileAndGallery() {
             break
         }
         device.pressBack()
-        checkNotNull(awaitPrimaryTab("OnlyFap tab", "OnlyFap", 8_000L)) {
-            "Could not return to OnlyFap after a creator without videos"
-        }
+        openOnlyFapHub()
         // The 640dp hero can cover the other creator shelves.
         swipeUp()
         shelfExposed = true
@@ -293,4 +286,23 @@ internal fun MacrobenchmarkScope.openCreatorProfileAndGallery() {
     check(device.wait(Until.gone(By.desc("Download video")), 20_000)) {
         "Creator video playback did not start"
     }
+}
+
+private fun MacrobenchmarkScope.openOnlyFapHub() {
+    repeat(2) {
+        val tab = checkNotNull(awaitPrimaryTab("OnlyFap tab", "OnlyFap", 8_000L)) {
+            "OnlyFap navigation item was not reachable"
+        }
+        tab.click()
+        if (device.wait(Until.findObject(By.desc("Search OnlyFap creators")), 4_000) != null) {
+            return
+        }
+        // A returned hub may retain a scroll position below its hero search control.
+        device.swipe(device.displayWidth / 2, (device.displayHeight * 0.25f).toInt(),
+            device.displayWidth / 2, (device.displayHeight * 0.8f).toInt(), 18)
+        if (device.wait(Until.findObject(By.desc("Search OnlyFap creators")), 3_000) != null) {
+            return
+        }
+    }
+    error("OnlyFap hub did not open after selecting its navigation item")
 }
