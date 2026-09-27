@@ -237,7 +237,7 @@ public final class ChaosFeedView extends FrameLayout {
             syncVisibleChrome();
         } else {
             pauseAll();
-            releaseVisiblePlayers();
+            releaseAllPlayers();
         }
         if (!active) {
             resetCreatorSwipePreview();
@@ -263,7 +263,7 @@ public final class ChaosFeedView extends FrameLayout {
         hostResumed = false;
         if (!creatorGalleryHandoff) resetCreatorSwipePreview();
         pauseAll();
-        if (!creatorGalleryHandoff) releaseVisiblePlayers();
+        if (!creatorGalleryHandoff) releaseAllPlayers();
         flushRecent();
     }
 
@@ -305,7 +305,7 @@ public final class ChaosFeedView extends FrameLayout {
         exitManualFullscreen();
         if (commentsDialog != null && commentsDialog.isShowing()) commentsDialog.dismiss();
         pauseAll();
-        releaseVisiblePlayers();
+        releaseAllPlayers();
         flushRecent();
         removeCallbacks(saveRecentRunnable);
         if (creatorSwipePreview != null && creatorSwipePreview.getParent() instanceof ViewGroup) {
