@@ -34,6 +34,33 @@ public class OnlyFapHeroPolicyTest {
         assertEquals("Backup One", selected.get(2).title);
     }
 
+    @Test public void recentlyFeaturedCreatorsAreSkippedForFreshHeroSet() {
+        NativeContentItem recentOne = creator("Recent One");
+        NativeContentItem recentTwo = creator("Recent Two");
+        NativeContentItem freshOne = creator("Fresh One");
+        NativeContentItem freshTwo = creator("Fresh Two");
+
+        HashSet<String> recent = new HashSet<>();
+        recent.add(CreatorFavoriteStore.key(recentOne));
+        recent.add(CreatorFavoriteStore.key(recentTwo));
+
+        List<NativeContentItem> selected = OnlyFapHeroPolicy.select(
+                Arrays.asList(recentOne, freshOne, recentTwo, freshTwo),
+                Collections.singletonList(creator("Backfill Fresh")),
+                Collections.emptySet(),
+                Collections.emptyList(),
+                Collections.emptyList(),
+                Collections.emptyList(),
+                recent,
+                8
+        );
+
+        assertEquals(3, selected.size());
+        assertEquals("Fresh One", selected.get(0).title);
+        assertEquals("Fresh Two", selected.get(1).title);
+        assertEquals("Backfill Fresh", selected.get(2).title);
+    }
+
     @Test public void artworkUsesFullImageThenHeaderThenPreviewThenAvatar() {
         List<OnlyFapHeroPolicy.Artwork> choices = new ArrayList<>();
         NativeContentItem image = media(NativeContentItem.KIND_IMAGE,
