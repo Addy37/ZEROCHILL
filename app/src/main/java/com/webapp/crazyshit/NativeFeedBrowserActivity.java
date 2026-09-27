@@ -6,6 +6,7 @@ import android.content.Intent;
 import android.content.res.Configuration;
 import android.graphics.Bitmap;
 import android.graphics.Color;
+import android.graphics.drawable.ColorDrawable;
 import android.os.Bundle;
 import android.view.Gravity;
 import android.view.Menu;
@@ -13,6 +14,7 @@ import android.view.MotionEvent;
 import android.view.ScaleGestureDetector;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewTreeObserver;
 import android.webkit.CookieManager;
 import android.webkit.WebSettings;
 import android.widget.FrameLayout;
@@ -124,6 +126,7 @@ public final class NativeFeedBrowserActivity extends Activity {
     private FrameLayout shitTokTransitionHost;
     private View shitTokTransitionContent;
     private ImageView shitTokReturnSnapshot;
+    private ImageView creatorHandoffPreview;
     private float shitTokReturnDownX;
     private float shitTokReturnDownY;
     private boolean shitTokReturnTracking;
@@ -594,6 +597,58 @@ public final class NativeFeedBrowserActivity extends Activity {
         );
         setContentView(shitTokTransitionHost);
         refreshShitTokReturnSnapshot(0);
+        Bitmap galleryFrame = ShitTokTransitionSnapshotStore.galleryPreview(shitTokReturnTransition);
+        if (galleryFrame != null && !galleryFrame.isRecycled()) {
+            creatorHandoffPreview = new ImageView(this);
+            creatorHandoffPreview.setScaleType(ImageView.ScaleType.FIT_XY);
+            creatorHandoffPreview.setImageBitmap(galleryFrame);
+            creatorHandoffPreview.setImportantForAccessibility(
+                    View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+            shitTokTransitionHost.addView(creatorHandoffPreview,
+                    new FrameLayout.LayoutParams(-1, -1));
+            // A failed thumbnail request must not leave a frozen preview over an
+            // otherwise usable gallery. The normal path removes it on the first ready draw.
+            shitTokTransitionHost.postDelayed(() -> {
+                if (creatorHandoffPreview != null) clearCreatorHandoffPreview();
+            }, 2000L);
+            shitTokTransitionHost.getViewTreeObserver().addOnPreDrawListener(
+                    new ViewTreeObserver.OnPreDrawListener() {
+                        @Override public boolean onPreDraw() {
+                            if (creatorHandoffPreview == null) {
+                                shitTokTransitionHost.getViewTreeObserver()
+                                        .removeOnPreDrawListener(this);
+                                return true;
+                            }
+                            if (creatorGalleryFirstFrameReady()) {
+                                shitTokTransitionHost.getViewTreeObserver()
+                                        .removeOnPreDrawListener(this);
+                                clearCreatorHandoffPreview();
+                                return false;
+                            }
+                            return true;
+                        }
+                    });
+        }
+    }
+
+    private void clearCreatorHandoffPreview() {
+        if (creatorHandoffPreview == null) return;
+        shitTokTransitionHost.removeView(creatorHandoffPreview);
+        creatorHandoffPreview = null;
+    }
+
+    private boolean creatorGalleryFirstFrameReady() {
+        RecyclerView first = creatorTabRecyclers[CREATOR_TAB_ALL];
+        BunkrGalleryAdapter galleryAdapter = creatorTabAdapters[CREATOR_TAB_ALL];
+        if (first == null || galleryAdapter == null || first.getWidth() == 0) return false;
+        if (galleryAdapter.size() == 0) return !loading;
+        if (first.getChildCount() == 0) return false;
+        View tile = first.getChildAt(0);
+        if (!(tile instanceof ViewGroup)) return true;
+        View image = ((ViewGroup) tile).getChildAt(0);
+        return image instanceof ImageView
+                && ((ImageView) image).getDrawable() != null
+                && !(((ImageView) image).getDrawable() instanceof ColorDrawable);
     }
 
     private void refreshShitTokReturnSnapshot(int attempt) {
@@ -624,6 +679,10 @@ public final class NativeFeedBrowserActivity extends Activity {
 
     @Override
     public boolean dispatchTouchEvent(MotionEvent event) {
+        if (event != null && event.getActionMasked() == MotionEvent.ACTION_DOWN
+                && creatorHandoffPreview != null) {
+            clearCreatorHandoffPreview();
+        }
         if (event != null
                 && event.getActionMasked() == MotionEvent.ACTION_POINTER_DOWN
                 && shitTokReturnTracking) {

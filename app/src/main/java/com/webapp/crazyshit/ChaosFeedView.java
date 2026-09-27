@@ -130,6 +130,7 @@ public final class ChaosFeedView extends FrameLayout {
     private TextView empty;
     private ProgressBar initialProgress;
     private ShitTokCreatorSwipePreview creatorSwipePreview;
+    private boolean creatorGalleryHandoff;
     private InlineCommentsDialog commentsDialog;
     private boolean active;
     private boolean hostResumed = true;
@@ -241,6 +242,10 @@ public final class ChaosFeedView extends FrameLayout {
 
     public void onHostResume() {
         hostResumed = true;
+        if (creatorGalleryHandoff) {
+            creatorGalleryHandoff = false;
+            resetCreatorSwipePreview();
+        }
         if (active) {
             resolveAhead(selectedPosition);
             playSelected();
@@ -250,9 +255,9 @@ public final class ChaosFeedView extends FrameLayout {
 
     public void onHostPause() {
         hostResumed = false;
-        resetCreatorSwipePreview();
+        if (!creatorGalleryHandoff) resetCreatorSwipePreview();
         pauseAll();
-        releaseVisiblePlayers();
+        if (!creatorGalleryHandoff) releaseVisiblePlayers();
         flushRecent();
     }
 
@@ -472,6 +477,7 @@ public final class ChaosFeedView extends FrameLayout {
     private void commitCreatorSwipePreview(
             View ignoredContent,
             String creator,
+            String transitionToken,
             Runnable openGallery
     ) {
         if (openGallery == null) return;
@@ -491,12 +497,10 @@ public final class ChaosFeedView extends FrameLayout {
         if (!ZeroChillMotion.animationsEnabled(activity)) {
             content.setTranslationX(-width);
             creatorSwipePreview.setTranslationX(0f);
+            ShitTokTransitionSnapshotStore.captureGalleryPreview(
+                    transitionToken, creatorSwipePreview);
+            creatorGalleryHandoff = true;
             openGallery.run();
-            postDelayed(() -> {
-                content.setTranslationX(0f);
-                content.setAlpha(1f);
-                resetCreatorSwipePreview();
-            }, 250L);
             return;
         }
 
@@ -514,12 +518,10 @@ public final class ChaosFeedView extends FrameLayout {
                 .translationX(0f)
                 .setDuration(duration)
                 .withEndAction(() -> {
+                    ShitTokTransitionSnapshotStore.captureGalleryPreview(
+                            transitionToken, creatorSwipePreview);
+                    creatorGalleryHandoff = true;
                     openGallery.run();
-                    postDelayed(() -> {
-                        content.setTranslationX(0f);
-                        content.setAlpha(1f);
-                        resetCreatorSwipePreview();
-                    }, 220L);
                 })
                 .start();
     }
@@ -1608,6 +1610,7 @@ public final class ChaosFeedView extends FrameLayout {
                             commitCreatorSwipePreview(
                                     root,
                                     creator,
+                                    transitionToken,
                                     () -> openCreatorGallery(true, transitionToken)
                             );
                         } else {
