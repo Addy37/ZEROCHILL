@@ -204,7 +204,7 @@ internal fun MacrobenchmarkScope.openCreatorProfileAndGallery() {
         }
         checkNotNull(creator) {
             val hierarchy = ByteArrayOutputStream().also { device.dumpWindowHierarchy(it) }
-                .toString("UTF-8")
+                .toString("UTF-8").replace(Regex("\\s+"), " ")
             "OnlyFap clickable creator gallery entry did not become available. " +
                 "Visible UI: ${hierarchy.take(12_000)}"
         }
