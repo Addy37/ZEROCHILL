@@ -166,14 +166,24 @@ internal fun MacrobenchmarkScope.openCreatorProfileAndGallery() {
     onlyFap.click()
     device.waitForIdle()
 
-    val creator = checkNotNull(
-        device.wait(Until.findObject(By.descContains("gallery")), 30_000)
+    val galleryDeadline = SystemClock.uptimeMillis() + 35_000L
+    while (device.findObject(By.textStartsWith("All")) == null &&
+        SystemClock.uptimeMillis() < galleryDeadline
     ) {
-        "OnlyFap creator gallery entry did not become available"
+        val creator = device.findObject(By.descContains("gallery"))
+        if (creator != null) {
+            try {
+                val bounds = creator.visibleBounds
+                device.click(bounds.centerX(), bounds.centerY())
+                device.waitForIdle(250)
+            } catch (_: androidx.test.uiautomator.StaleObjectException) {
+                // OnlyFap shelves can rebind while artwork and warm-gallery data arrive.
+            }
+        }
+        SystemClock.sleep(200L)
     }
-    creator.click()
 
-    checkNotNull(device.wait(Until.findObject(By.textStartsWith("All")), 20_000)) {
+    checkNotNull(device.findObject(By.textStartsWith("All"))) {
         "Creator gallery did not open"
     }
     val videos = checkNotNull(
