@@ -434,6 +434,8 @@ public final class ChaosFeedView extends FrameLayout {
         ensureCreatorSwipePreview();
         if (creatorSwipePreview == null || creator == null || creator.trim().isEmpty()) return;
         String sessionId = ShitTokCreatorGalleryPreloader.sessionId(activity, creator);
+        creatorSwipePreview.animate().withEndAction(null);
+        creatorSwipePreview.animate().cancel();
         creatorSwipePreview.showCreator(creator, sessionId);
         FrameLayout hostView = creatorSwipeHost();
         float width = hostView == null ? Math.max(1, getWidth()) : Math.max(1, hostView.getWidth());
@@ -468,6 +470,7 @@ public final class ChaosFeedView extends FrameLayout {
         ImageView frozen = creatorSwipeSourceSnapshot;
         creatorSwipeSourceSnapshot = null;
         if (frozen != null) {
+            frozen.animate().withEndAction(null);
             frozen.animate().cancel();
             if (frozen.getParent() instanceof ViewGroup) {
                 ((ViewGroup) frozen.getParent()).removeView(frozen);
