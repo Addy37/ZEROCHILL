@@ -48,6 +48,7 @@ import androidx.media3.common.Player;
 import androidx.media3.common.VideoSize;
 import androidx.media3.common.util.UnstableApi;
 import androidx.media3.datasource.DefaultHttpDataSource;
+import androidx.media3.datasource.DefaultDataSource;
 import androidx.media3.exoplayer.ExoPlayer;
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory;
 import androidx.media3.ui.AspectRatioFrameLayout;
@@ -810,8 +811,11 @@ public class VideoDetailActivity extends Activity {
         if (!cookies.isEmpty()) headers.put("Cookie", cookies);
         if (!headers.isEmpty()) httpFactory.setDefaultRequestProperties(headers);
 
-        DefaultMediaSourceFactory sourceFactory =
-                new DefaultMediaSourceFactory(this).setDataSourceFactory(httpFactory);
+        String scheme = Uri.parse(mediaUrl).getScheme();
+        DefaultMediaSourceFactory sourceFactory = new DefaultMediaSourceFactory(this)
+                .setDataSourceFactory("content".equalsIgnoreCase(scheme)
+                        || "file".equalsIgnoreCase(scheme)
+                        ? new DefaultDataSource.Factory(this, httpFactory) : httpFactory);
         player = new ExoPlayer.Builder(this)
                 .setMediaSourceFactory(sourceFactory)
                 .setSeekBackIncrementMs(10_000L)
@@ -2044,8 +2048,7 @@ public class VideoDetailActivity extends Activity {
     }
 
     private boolean rememberPositionEnabled() {
-        return getSharedPreferences("app_prefs", MODE_PRIVATE)
-                .getBoolean("remember_video_position", true);
+        return true;
     }
 
     private String positionKey() {

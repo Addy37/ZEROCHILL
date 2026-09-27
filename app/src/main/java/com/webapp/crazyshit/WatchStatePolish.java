@@ -1,6 +1,5 @@
 package com.webapp.crazyshit;
 
-import android.content.Context;
 import android.content.Intent;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
@@ -59,9 +58,6 @@ final class WatchStatePolish {
 
     static void showResumeToast(VideoDetailActivity activity) {
         if (activity == null || activity.isFinishing() || activity.isShowsOrigin()) return;
-        if (!activity.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
-                .getBoolean("remember_video_position", true)) return;
-
         Intent intent = activity.getIntent();
         if (intent == null) return;
         String pageUrl = clean(intent.getStringExtra(PlayerActivity.EXTRA_PAGE_URL));

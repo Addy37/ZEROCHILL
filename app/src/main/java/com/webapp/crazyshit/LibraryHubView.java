@@ -35,7 +35,7 @@ import java.util.Map;
  */
 final class LibraryHubView extends ScrollView {
     interface Listener {
-        void onOpenItem(NativeContentItem item);
+        void onOpenWatchLater(NativeContentItem item);
         void onOpenHistory(PlaybackHistoryStore.Item item);
         void onOpenCreator(NativeContentItem creator);
     }
@@ -418,7 +418,11 @@ final class LibraryHubView extends ScrollView {
         frame.addView(titleView, titleParams);
 
         card.setContentDescription(title);
-        card.setOnClickListener(v -> openVideo(title, pageUrl, posterUrl));
+        card.setOnClickListener(v -> {
+            if (listener != null && !clean(pageUrl).isEmpty()) {
+                listener.onOpenWatchLater(videoItem(title, pageUrl, posterUrl));
+            }
+        });
         return card;
     }
 
@@ -646,17 +650,12 @@ final class LibraryHubView extends ScrollView {
     }
 
     private void openHistoryItem(PlaybackHistoryStore.Item item) {
-        if (item == null || clean(item.pageUrl).isEmpty()) return;
-        if (listener != null && item.fromShows) {
-            listener.onOpenHistory(item);
-            return;
-        }
-        openVideo(item.title, item.pageUrl, item.posterUrl);
+        if (item == null || clean(item.pageUrl).isEmpty() || listener == null) return;
+        listener.onOpenHistory(item);
     }
 
-    private void openVideo(String title, String pageUrl, String posterUrl) {
-        if (listener == null || clean(pageUrl).isEmpty()) return;
-        listener.onOpenItem(new NativeContentItem(
+    private NativeContentItem videoItem(String title, String pageUrl, String posterUrl) {
+        return new NativeContentItem(
                 NativeContentItem.KIND_MEDIA,
                 clean(title).isEmpty() ? "Saved video" : title,
                 pageUrl,
@@ -664,7 +663,7 @@ final class LibraryHubView extends ScrollView {
                 "",
                 "",
                 ""
-        ));
+        );
     }
 
     private void openSavedVideos(int startTab) {

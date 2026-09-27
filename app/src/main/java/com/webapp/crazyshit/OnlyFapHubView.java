@@ -178,6 +178,7 @@ final class OnlyFapHubView extends FrameLayout {
         heroBar.setPadding(dp(20), dp(5), dp(12), 0);
 
         TextView heroBrand = text("OnlyFap", 28f, Color.WHITE);
+        heroBrand.setText(ZeroChillUi.sectionTitle(context, "OnlyFap", 4, 7));
         heroBrand.setTypeface(null, android.graphics.Typeface.BOLD);
         heroBrand.setSingleLine(true);
         heroBrand.setShadowLayer(dp(8), 0f, dp(2), Color.argb(150, 0, 0, 0));

@@ -7,6 +7,9 @@ import android.graphics.Color;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Build;
+import android.text.SpannableString;
+import android.text.Spanned;
+import android.text.style.ForegroundColorSpan;
 import android.view.View;
 import android.view.Window;
 import android.widget.ProgressBar;
@@ -97,6 +100,15 @@ final class ZeroChillUi {
         view.setTextColor(color(view.getContext(), R.color.zc_text_primary));
         view.setTextSize(22f);
         view.setTypeface(null, android.graphics.Typeface.BOLD);
+    }
+
+    static SpannableString sectionTitle(Context context, String title, int accentStart, int accentEnd) {
+        SpannableString styled = new SpannableString(title);
+        styled.setSpan(new ForegroundColorSpan(color(context, R.color.zc_text_primary)),
+                0, title.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        styled.setSpan(new ForegroundColorSpan(color(context, R.color.zc_cyan)),
+                accentStart, accentEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        return styled;
     }
 
     static void styleSecondary(TextView view) {

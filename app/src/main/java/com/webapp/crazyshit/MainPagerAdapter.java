@@ -121,10 +121,8 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         chaosView.setActive(false);
         libraryView = new LibraryHubView(activity, new LibraryHubView.Listener() {
             @Override
-            public void onOpenItem(NativeContentItem item) {
-                // Library keeps its normal playback semantics while opting into the
-                // same face-only launch curtain used by Shows.
-                host.onOpenItemWithPlaybackIdent(item);
+            public void onOpenWatchLater(NativeContentItem item) {
+                openLibraryVideo(item);
             }
 
             @Override
@@ -534,6 +532,21 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         ));
     }
 
+    void openLibraryVideo(NativeContentItem item) {
+        openShowsVideo(item);
+    }
+
+    void openLibraryHistory(NativeContentItem item) {
+        if (item == null) return;
+        for (PlaybackHistoryStore.Item history : PlaybackHistoryStore.load(activity)) {
+            if (history.pageUrl.equals(item.url)) {
+                openShowsResume(history);
+                return;
+            }
+        }
+        openShowsVideo(item);
+    }
+
     private void openShowsVideo(NativeContentItem item) {
         if (item == null || !item.isVideo() || item.url == null || item.url.trim().isEmpty()) {
             return;
@@ -647,7 +660,8 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                 // the source page. This updates the same Continue Watching entry on exit.
                 intent.putExtra(PlayerActivity.EXTRA_PAGE_URL, history.pageUrl);
                 intent.putExtra(PlayerActivity.EXTRA_TITLE, history.title);
-                intent.putExtra(PlayerActivity.EXTRA_START_POSITION, history.positionMs);
+                intent.putExtra(PlayerActivity.EXTRA_START_POSITION,
+                        history.complete ? 0L : history.positionMs);
                 intent.putExtra(VideoDetailActivity.EXTRA_SOURCE, source);
                 intent.putExtra(VideoDetailActivity.EXTRA_SHOWS_ORIGIN, true);
                 intent.putExtra(VideoDetailActivity.EXTRA_SHOWS_CONTINUE_RESUME, true);
