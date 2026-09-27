@@ -403,7 +403,7 @@ public final class SearchActivity extends Activity {
             List<NativeContentItem> bundled = index.matching(requestedQuery, 60);
             List<NativeContentItem> learned = CreatorCatalog.matching(
                     getApplicationContext(), requestedQuery, false, 60);
-            List<NativeContentItem> local = OnlyFapCreatorResults.merge(bundled, learned, 60);
+            List<NativeContentItem> local = OnlyFapCreatorResults.merge(bundled, learned, 60, index);
             local.sort(java.util.Comparator.comparingInt(
                     (NativeContentItem item) -> index.rank(item, requestedQuery))
                     .thenComparing(item -> CreatorNameMatcher.normalized(item.title)));
@@ -428,7 +428,7 @@ public final class SearchActivity extends Activity {
                                 if (destroyed || isFinishing() || token != generation) return;
                                 status.setVisibility(View.GONE);
                                 List<NativeContentItem> combined = OnlyFapCreatorResults.merge(
-                                        onlyFapLocal, visible, 80);
+                                        onlyFapLocal, visible, 80, index);
                                 if (onlyFapAdapter != null) onlyFapAdapter.replace(combined);
                                 if (!combined.isEmpty()) progress.finish();
                                 searchState.setText(combined.size() + " creators · Checking sources…");
@@ -457,7 +457,7 @@ public final class SearchActivity extends Activity {
                 }
 
                 List<NativeContentItem> combined = OnlyFapCreatorResults.merge(
-                        onlyFapLocal, creators, 80);
+                        onlyFapLocal, creators, 80, index);
                 if (onlyFapAdapter != null) onlyFapAdapter.replace(combined);
                 searchState.setText(combined.size() == 1
                         ? "1 creator"
