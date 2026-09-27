@@ -185,8 +185,13 @@ internal fun MacrobenchmarkScope.openCreatorProfileAndGallery() {
         val creatorDeadline = SystemClock.uptimeMillis() + if (attempt == 0) 90_000L else 15_000L
         var creator: androidx.test.uiautomator.UiObject2? = null
         while (creator == null && SystemClock.uptimeMillis() < creatorDeadline) {
-            creator = device.findObjects(By.desc(creatorPattern))
-                .firstOrNull { it.isClickable && it.contentDescription !in attemptedCreators }
+            val candidates = device.findObjects(By.desc(creatorPattern))
+                .filter { it.isClickable && it.contentDescription !in attemptedCreators }
+            // Shelf cards keep their creator identity while the featured hero rotates.
+            creator = candidates.firstOrNull {
+                it.visibleBounds.width() < device.displayWidth * 0.7f &&
+                    it.contentDescription != "Open featured creator gallery"
+            } ?: candidates.firstOrNull()
             if (creator == null && device.findObject(
                     By.text("OnlyFap creators could not load right now.")
                 ) != null) {
@@ -224,8 +229,14 @@ internal fun MacrobenchmarkScope.openCreatorProfileAndGallery() {
             continue
         }
 
-        checkNotNull(device.wait(Until.findObject(By.textStartsWith("All")), 12_000)) {
-            "Creator gallery did not open for ${creator.contentDescription}"
+        if (device.wait(Until.findObject(By.textStartsWith("All")), 12_000) == null) {
+            if (findPrimaryTab("OnlyFap tab", "OnlyFap") == null) device.pressBack()
+            checkNotNull(awaitPrimaryTab("OnlyFap tab", "OnlyFap", 8_000L)) {
+                "Could not return to OnlyFap after failed gallery handoff"
+            }
+            swipeUp()
+            shelfExposed = true
+            continue
         }
         val videos = checkNotNull(
             device.wait(Until.findObject(By.textStartsWith("Videos")), 10_000)
