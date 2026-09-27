@@ -133,6 +133,11 @@ final class ZeroChillBottomNavigationView extends BottomNavigationView {
         return collapsedTarget;
     }
 
+    /** Restore this view's own geometry after a portrait chrome/lifecycle pass. */
+    void reapplyCurrentGeometry() {
+        applyCollapseProgress(collapseProgress);
+    }
+
     float collapseProgressForTest() {
         return collapseProgress;
     }
@@ -413,15 +418,22 @@ final class ZeroChillBottomNavigationView extends BottomNavigationView {
         float p = clamp(progress, 0f, 1f);
         int expandedHeight = getResources().getDimensionPixelSize(R.dimen.zc_bottom_nav_height);
         int collapsedHeight = dp(COLLAPSED_HEIGHT_DP);
-        int sideMargin = Math.round(dp(COLLAPSED_SIDE_MARGIN_DP) * p);
+        int sideMargin = Math.round(lerp(dp(10), dp(COLLAPSED_SIDE_MARGIN_DP), p));
 
         ViewGroup.LayoutParams raw = getLayoutParams();
         if (raw instanceof ViewGroup.MarginLayoutParams) {
             ViewGroup.MarginLayoutParams params = (ViewGroup.MarginLayoutParams) raw;
-            params.height = Math.round(lerp(expandedHeight, collapsedHeight, p));
-            params.leftMargin = sideMargin;
-            params.rightMargin = sideMargin;
-            setLayoutParams(params);
+            int height = Math.round(lerp(expandedHeight, collapsedHeight, p));
+            // The bar overlays content. Keep its bottom edge fixed while its height changes.
+            int topMargin = -height - dp(6);
+            int bottomMargin = dp(6);
+            if (params.height != height || params.leftMargin != sideMargin ||
+                    params.rightMargin != sideMargin || params.topMargin != topMargin ||
+                    params.bottomMargin != bottomMargin) {
+                params.height = height;
+                params.setMargins(sideMargin, topMargin, sideMargin, bottomMargin);
+                setLayoutParams(params);
+            }
         }
 
         setItemCollapseVisuals(p);

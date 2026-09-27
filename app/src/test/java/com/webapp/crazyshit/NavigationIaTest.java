@@ -229,14 +229,66 @@ public class NavigationIaTest {
         assertFalse(nav.isCollapsedForTest());
         assertEquals(activity.getResources().getDimensionPixelSize(R.dimen.zc_bottom_nav_height),
                 expanded.height);
-        assertEquals(0, expanded.leftMargin);
-        assertEquals(0, expanded.rightMargin);
+        assertEquals(Math.round(10 * activity.getResources().getDisplayMetrics().density),
+                expanded.leftMargin);
+        assertEquals(expanded.leftMargin, expanded.rightMargin);
         assertEquals(
                 com.google.android.material.navigation.NavigationBarView.LABEL_VISIBILITY_LABELED,
                 nav.getLabelVisibilityMode()
         );
 
         controller.pause().stop().destroy();
+    }
+
+    @Test public void portraitChromePassesCannotResetCompactOrIntermediateNavGeometry() {
+        android.content.Context context = org.robolectric.RuntimeEnvironment.getApplication();
+        context.getSharedPreferences("app_prefs", 0).edit()
+                .putBoolean("access_notice_2_8_3_accepted", true).apply();
+        ActivityController<NativeMainActivity> controller =
+                Robolectric.buildActivity(NativeMainActivity.class)
+                        .create().start().resume().visible();
+        NativeMainActivity activity = controller.get();
+        ZeroChillBottomNavigationView nav = ReflectionHelpers.getField(activity, "bottomNavigation");
+        StableBottomNavigationController.attach(activity);
+        shadowOf(android.os.Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(1000));
+
+        nav.setCollapsed(true, false);
+        nav.setSelectedItemId(6);
+        shadowOf(android.os.Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(650));
+        assertNavGeometry(nav, activity, 1f);
+        assertTrue(nav.isCollapsedForTest());
+
+        nav.setCollapseProgressForTest(0.45f);
+        StableBottomNavigationController.applyOrientation(activity);
+        shadowOf(android.os.Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(650));
+        assertEquals(0.45f, nav.collapseProgressForTest(), 0.01f);
+        assertNavGeometry(nav, activity, 0.45f);
+
+        nav.setCollapsed(false, false);
+        nav.setSelectedItemId(2);
+        shadowOf(android.os.Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(650));
+        assertNavGeometry(nav, activity, 0f);
+        assertFalse(nav.isCollapsedForTest());
+
+        StableBottomNavigationController.detach(activity);
+        controller.pause().stop().destroy();
+    }
+
+    private static void assertNavGeometry(
+            ZeroChillBottomNavigationView nav, NativeMainActivity activity, float progress) {
+        android.widget.LinearLayout.LayoutParams params =
+                (android.widget.LinearLayout.LayoutParams) nav.getLayoutParams();
+        float density = activity.getResources().getDisplayMetrics().density;
+        int expanded = activity.getResources().getDimensionPixelSize(R.dimen.zc_bottom_nav_height);
+        int compact = Math.round(50 * density);
+        int height = Math.round(expanded + (compact - expanded) * progress);
+        assertEquals(height, params.height);
+        assertEquals(Math.round(Math.round(10 * density) +
+                (Math.round(60 * density) - Math.round(10 * density)) * progress),
+                params.leftMargin);
+        assertEquals(params.leftMargin, params.rightMargin);
+        assertEquals(-height - Math.round(6 * density), params.topMargin);
+        assertEquals(Math.round(6 * density), params.bottomMargin);
     }
 
     @Test public void primaryTabsDragFromSelectedBottomCapsule() {
