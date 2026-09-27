@@ -135,8 +135,8 @@ final class VideoActionSheet {
         panel.setBackground(compactPanelBackground(activity));
         panel.setClipToOutline(true);
         panel.setContentDescription(TextUtils.isEmpty(videoTitle)
-                ? "ShitTok video actions"
-                : "ShitTok video actions for " + videoTitle);
+                ? "Video actions"
+                : "Video actions for " + videoTitle);
 
         if (!sidePanel) addDragHandle(activity, panel);
         addCompactHeader(activity, dialog, panel);
