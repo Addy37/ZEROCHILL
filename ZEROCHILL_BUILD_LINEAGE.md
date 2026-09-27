@@ -4,11 +4,13 @@ This file identifies the current approved ZEROCHILL product baseline for test AP
 
 - Source-of-truth branch: `rebrand/zerochill`
 - Integration branch: `integration/zerochill-current`
-- Approved product baseline commit: `afd270e0e4442811d16aabbf85a3b39342df96b5`
-- Latest production release source commit: `afd270e0e4442811d16aabbf85a3b39342df96b5`
-- Device-tested APK source commit: `ff47eb7be8f91554439f15ff4e773f4382bea3e2`
-- Latest release PR: #148
-- Approval date: 2026-09-25
+- Approved product baseline commit: `eb30d10fbf2841a701eeb38847017f46d56c9169`
+- Latest production release source commit: `eb30d10fbf2841a701eeb38847017f46d56c9169`
+- Device-tested APK source commit: `fd18ddc8b8c98988bbab4e4572bc0d215316e876`
+- Latest release PR: #183
+- Approval date: 2026-09-26
+
+ZeroChill v4.0.0 was published from `eb30d10` after release PR #183. This major release promotes Library to primary navigation, keeps ShitTok as the main landing tab, rebuilds Shows and OnlyFap as cinematic media hubs, adds the collapsing glass bottom navigation, refreshes Library search and playback, simplifies More and Settings, standardizes section branding, and includes the accumulated device-approved playback, loading, thumbnail, and navigation polish through PR #182. The production workflow built and signed `ZeroChill.apk`, verified the package and signing certificate, confirmed a higher Android version code and upgrade compatibility from v3.1.6, and published tag `v4.0.0`. The v3.1.6 rollback baseline is preserved at `checkpoint/zerochill-approved-afd270e`.
 
 The approved baseline contains the complete current ZEROCHILL stack, including Home/Collections glass UI, OnlyFap and OnlyHaven work, ShitTok all-source/fullscreen and preload work, creator search and bundled catalog, release orientation and action-sheet cleanup, Account Coming Soon, Memes removal from the release UI, product-level notification consolidation, aggregate device and Android adoption analytics, and the approved OnlyFap creator-gallery optimizations from PR #115.
 
