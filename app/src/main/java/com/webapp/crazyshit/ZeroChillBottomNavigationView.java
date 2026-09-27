@@ -433,7 +433,7 @@ final class ZeroChillBottomNavigationView extends BottomNavigationView {
         for (int id : PAGE_NAV_IDS) {
             View item = findViewById(id);
             if (item == null) continue;
-            item.setMinimumHeight(0);
+            if (item.getMinimumHeight() != 0) item.setMinimumHeight(0);
             applyLabelAlpha(item, labelAlpha);
             View iconContainer = item.findViewById(
                     com.google.android.material.R.id.navigation_bar_item_icon_container);
@@ -441,14 +441,17 @@ final class ZeroChillBottomNavigationView extends BottomNavigationView {
                 descendantRect(iconContainer, firstRect);
                 float desiredCenter = lerp(firstRect.exactCenterY(), getHeight() / 2f, progress);
                 // Move the whole container, not the 24dp ImageView inside its clipped frame.
-                iconContainer.setTranslationY(desiredCenter - firstRect.exactCenterY());
+                float shift = desiredCenter - firstRect.exactCenterY();
+                if (Math.abs(iconContainer.getTranslationY() - shift) > 0.01f) {
+                    iconContainer.setTranslationY(shift);
+                }
             }
         }
     }
 
     private static void applyLabelAlpha(View view, float labelAlpha) {
         if (view instanceof TextView) {
-            view.setAlpha(labelAlpha);
+            if (Math.abs(view.getAlpha() - labelAlpha) > 0.001f) view.setAlpha(labelAlpha);
             return;
         }
         if (!(view instanceof ViewGroup)) return;
