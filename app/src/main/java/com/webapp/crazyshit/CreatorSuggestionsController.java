@@ -142,8 +142,9 @@ final class CreatorSuggestionsController {
             List<NativeContentItem> local = localLookup.find(
                     activity.getApplicationContext(), requestedQuery);
             if (Thread.currentThread().isInterrupted()) return;
-            List<NativeContentItem> visible = local == null
-                    ? new ArrayList<>() : new ArrayList<>(local);
+            BundledCreatorIndex aliases = BundledCreatorIndex.get(activity.getApplicationContext());
+            List<NativeContentItem> visible = OnlyFapCreatorResults.merge(
+                    local, null, 8, aliases);
             main.post(() -> {
                 if (closed || !active || token != generation || activity.isFinishing()
                         || activity.isDestroyed()
