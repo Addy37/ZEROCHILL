@@ -11,6 +11,7 @@ import android.content.res.Configuration;
 import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
+import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
 import android.view.Gravity;
 import android.view.HapticFeedbackConstants;
@@ -1330,6 +1331,9 @@ public final class ChaosFeedView extends FrameLayout {
         final TextView failure;
         final LinearLayout lower;
         final LinearLayout actionRail;
+        final FrameLayout creatorAvatarControl;
+        final ImageView creatorAvatar;
+        final TextView creatorFavoriteBadge;
         final LinearLayout playbackRail;
         final TextView title;
         final TextView meta;
@@ -1341,6 +1345,7 @@ public final class ChaosFeedView extends FrameLayout {
         final SeekBar seekBar;
         ExoPlayer player;
         NativeContentItem item;
+        NativeContentItem creatorIdentity;
         CrazyShitRepository.StreamInfo stream;
         CrazyShitRepository.StreamInfo lastAttemptedStream;
         PlaybackException lastPlaybackError;
@@ -1456,6 +1461,49 @@ public final class ChaosFeedView extends FrameLayout {
             actionRail.setBackground(activity.getDrawable(R.drawable.zc_shittok_control_rail));
             actionRail.setTag("shittok_action_rail");
             lower.addView(actionRail, new LinearLayout.LayoutParams(dp(58), -2));
+
+            creatorAvatarControl = new FrameLayout(activity);
+            creatorAvatarControl.setTag("shittok_creator_avatar");
+            creatorAvatarControl.setVisibility(View.GONE);
+            creatorAvatarControl.setClickable(true);
+            creatorAvatarControl.setFocusable(true);
+
+            FrameLayout avatarRing = new FrameLayout(activity);
+            avatarRing.setBackground(circleDrawable(Color.BLACK, UiPalette.PRIMARY, 2));
+            avatarRing.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+            FrameLayout.LayoutParams ringParams =
+                    new FrameLayout.LayoutParams(dp(48), dp(48), Gravity.TOP | Gravity.CENTER_HORIZONTAL);
+            ringParams.topMargin = dp(2);
+            creatorAvatarControl.addView(avatarRing, ringParams);
+
+            creatorAvatar = new ImageView(activity);
+            creatorAvatar.setScaleType(ImageView.ScaleType.CENTER_CROP);
+            creatorAvatar.setImageResource(R.drawable.ic_more_account);
+            creatorAvatar.setBackground(circleDrawable(Color.rgb(18, 20, 24), Color.TRANSPARENT, 0));
+            creatorAvatar.setClipToOutline(true);
+            creatorAvatar.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+            FrameLayout.LayoutParams avatarParams =
+                    new FrameLayout.LayoutParams(dp(42), dp(42), Gravity.CENTER);
+            avatarRing.addView(creatorAvatar, avatarParams);
+
+            creatorFavoriteBadge = new TextView(activity);
+            creatorFavoriteBadge.setText("+");
+            creatorFavoriteBadge.setTextColor(Color.WHITE);
+            creatorFavoriteBadge.setTextSize(16);
+            creatorFavoriteBadge.setTypeface(null, android.graphics.Typeface.BOLD);
+            creatorFavoriteBadge.setGravity(Gravity.CENTER);
+            creatorFavoriteBadge.setBackground(circleDrawable(UiPalette.PRIMARY, Color.BLACK, 2));
+            creatorFavoriteBadge.setTag("shittok_creator_favorite");
+            creatorFavoriteBadge.setClickable(true);
+            creatorFavoriteBadge.setFocusable(true);
+            FrameLayout.LayoutParams badgeParams =
+                    new FrameLayout.LayoutParams(dp(22), dp(22), Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
+            creatorAvatarControl.addView(creatorFavoriteBadge, badgeParams);
+
+            LinearLayout.LayoutParams creatorParams =
+                    new LinearLayout.LayoutParams(dp(52), dp(60));
+            creatorParams.setMargins(0, 0, 0, dp(2));
+            actionRail.addView(creatorAvatarControl, creatorParams);
 
             save = textIconActionButton(
                     R.drawable.ic_action_save_outline,
@@ -1719,6 +1767,24 @@ public final class ChaosFeedView extends FrameLayout {
                 haptic(v);
                 openCreatorGallery(false, "");
             });
+            creatorAvatarControl.setOnClickListener(v -> {
+                if (creatorIdentity == null) return;
+                haptic(v);
+                openCreatorGallery(false, "");
+            });
+            creatorFavoriteBadge.setOnClickListener(v -> {
+                if (creatorIdentity == null
+                        || CreatorFavoriteStore.contains(activity, creatorIdentity)) return;
+                haptic(v);
+                CreatorFavoriteStore.toggle(activity, creatorIdentity);
+                refreshCreatorFavoriteBadge();
+                Toast.makeText(
+                        activity,
+                        "Added " + creatorIdentity.title + " to Favorite Creators.",
+                        Toast.LENGTH_SHORT
+                ).show();
+                showControlsTemporarily();
+            });
 
             mute.setOnClickListener(v -> {
                 haptic(v);
@@ -1812,6 +1878,68 @@ public final class ChaosFeedView extends FrameLayout {
             return params;
         }
 
+        private GradientDrawable circleDrawable(int fillColor, int strokeColor, int strokeWidthDp) {
+            GradientDrawable drawable = new GradientDrawable();
+            drawable.setShape(GradientDrawable.OVAL);
+            drawable.setColor(fillColor);
+            if (strokeWidthDp > 0 && Color.alpha(strokeColor) > 0) {
+                drawable.setStroke(dp(strokeWidthDp), strokeColor);
+            }
+            return drawable;
+        }
+
+        private void bindCreatorAvatar(NativeContentItem media, boolean creatorClip) {
+            Glide.with(creatorAvatar).clear(creatorAvatar);
+            creatorAvatar.setImageResource(R.drawable.ic_more_account);
+            creatorIdentity = creatorClip
+                    ? ShitTokCreatorMetadata.creatorIdentity(activity, media)
+                    : null;
+            if (creatorIdentity == null) {
+                creatorAvatarControl.setVisibility(View.GONE);
+                creatorAvatarControl.setContentDescription(null);
+                creatorFavoriteBadge.setContentDescription(null);
+                return;
+            }
+
+            creatorAvatarControl.setVisibility(View.VISIBLE);
+            creatorAvatarControl.setContentDescription(
+                    "Open " + creatorIdentity.title + " creator gallery"
+            );
+            String imageUrl = creatorIdentity.imageUrl == null
+                    ? ""
+                    : creatorIdentity.imageUrl.trim();
+            if (!imageUrl.isEmpty()) {
+                String referer = creatorIdentity.uploader == null
+                        || creatorIdentity.uploader.trim().isEmpty()
+                        ? creatorIdentity.url
+                        : creatorIdentity.uploader;
+                Glide.with(creatorAvatar)
+                        .load(imageWithHeaders(imageUrl, referer))
+                        .circleCrop()
+                        .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
+                        .dontAnimate()
+                        .placeholder(R.drawable.ic_more_account)
+                        .error(R.drawable.ic_more_account)
+                        .into(creatorAvatar);
+            }
+            refreshCreatorFavoriteBadge();
+        }
+
+        private void refreshCreatorFavoriteBadge() {
+            if (creatorIdentity == null) return;
+            boolean favorite = CreatorFavoriteStore.contains(activity, creatorIdentity);
+            creatorFavoriteBadge.setText(favorite ? "✓" : "+");
+            creatorFavoriteBadge.setTextSize(favorite ? 13 : 16);
+            creatorFavoriteBadge.setClickable(!favorite);
+            creatorFavoriteBadge.setFocusable(!favorite);
+            creatorFavoriteBadge.setAlpha(favorite ? 0.92f : 1f);
+            creatorFavoriteBadge.setContentDescription(
+                    favorite
+                            ? creatorIdentity.title + " is in Favorite Creators"
+                            : "Add " + creatorIdentity.title + " to Favorite Creators"
+            );
+        }
+
         void bind(NativeContentItem next, int position) {
             pauseAndRecord();
             releasePlayer();
@@ -1847,6 +1975,7 @@ public final class ChaosFeedView extends FrameLayout {
             applyMuteState();
             String creator = ShitTokCreatorMetadata.creatorName(next);
             boolean creatorClip = !creator.isEmpty();
+            bindCreatorAvatar(next, creatorClip);
             String displayTitle = creatorClip
                     ? creator
                     : (next.title == null || next.title.isEmpty() ? "Random video" : next.title);
