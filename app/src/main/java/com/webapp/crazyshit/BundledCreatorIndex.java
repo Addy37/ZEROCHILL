@@ -79,8 +79,57 @@ final class BundledCreatorIndex {
     String canonicalKey(String name) {
         String normalized = CreatorNameMatcher.normalized(name);
         if (normalized.isEmpty()) return "";
-        String canonical = canonicalByAlias.get(normalized);
-        return canonical == null ? normalized : canonical;
+        String exact = canonicalByAlias.get(normalized);
+        if (exact != null) return exact;
+
+        String compact = compact(normalized);
+        if (compact.length() < 8) return normalized;
+
+        String resolved = null;
+        for (Entry entry : entries) {
+            String canonical = entry.searchable.get(0);
+            if (!safeVariant(compact, compact(canonical))) continue;
+            if (resolved != null && !resolved.equals(canonical)) return normalized;
+            resolved = canonical;
+        }
+        return resolved == null ? normalized : resolved;
+    }
+
+    String canonicalName(String name) {
+        String key = canonicalKey(name);
+        Entry entry = byName.get(key);
+        return entry == null ? (name == null ? "" : name.trim()) : entry.name;
+    }
+
+    boolean isCanonicalSpelling(String name) {
+        String normalized = CreatorNameMatcher.normalized(name);
+        return !normalized.isEmpty() && normalized.equals(canonicalKey(name));
+    }
+
+    private static boolean safeVariant(String candidate, String canonical) {
+        if (candidate.equals(canonical)) return true;
+        int missing = canonical.length() - candidate.length();
+        if (candidate.length() >= 8 && missing >= 1 && missing <= 5
+                && canonical.startsWith(candidate)) return true;
+        return repeatedLetterSlip(candidate, canonical);
+    }
+
+    private static boolean repeatedLetterSlip(String first, String second) {
+        if (Math.min(first.length(), second.length()) < 8
+                || Math.abs(first.length() - second.length()) != 1) return false;
+        String longer = first.length() > second.length() ? first : second;
+        String shorter = first.length() > second.length() ? second : first;
+        for (int i = 0; i < longer.length(); i++) {
+            if (!longer.substring(0, i).concat(longer.substring(i + 1)).equals(shorter)) continue;
+            char extra = longer.charAt(i);
+            if ((i > 0 && longer.charAt(i - 1) == extra)
+                    || (i + 1 < longer.length() && longer.charAt(i + 1) == extra)) return true;
+        }
+        return false;
+    }
+
+    private static String compact(String value) {
+        return value == null ? "" : value.replace(" ", "");
     }
 
     int rank(NativeContentItem item, String query) {
