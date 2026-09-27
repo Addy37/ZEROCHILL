@@ -74,6 +74,14 @@ private fun MacrobenchmarkScope.awaitMainNavigation() {
     error("Main navigation shell did not become ready")
 }
 
+private fun MacrobenchmarkScope.mainNavigationShellVisible(): Boolean =
+    device.findObject(By.desc("Primary top bar")) != null ||
+        device.findObject(By.desc("Shows tab")) != null ||
+        device.findObject(By.desc("ShitTok featured tab")) != null ||
+        device.findObject(By.desc("ShitTok tab")) != null ||
+        device.findObject(By.desc("OnlyFap tab")) != null ||
+        device.findObject(By.desc("Library tab")) != null
+
 private fun MacrobenchmarkScope.findPrimaryTab(description: String, label: String) =
     device.findObject(By.desc(description)) ?: device.findObject(By.text(label))
 
