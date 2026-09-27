@@ -136,8 +136,12 @@ internal fun MacrobenchmarkScope.search() {
     field.click()
     field.text = "mia"
     device.pressEnter()
-    checkNotNull(device.wait(Until.findObject(By.textContains("Search complete")), 15_000)) {
-        "Search did not complete"
+    val terminalSearchState = Pattern.compile("(?i)(Search complete|Unavailable:.*)")
+    checkNotNull(
+        device.wait(Until.findObject(By.text(terminalSearchState)), 15_000)
+            ?: device.wait(Until.findObject(By.desc(terminalSearchState)), 1_000)
+    ) {
+        "Search did not reach a terminal state"
     }
     swipeUp()
     device.waitForIdle()
@@ -189,7 +193,7 @@ internal fun MacrobenchmarkScope.openCreatorProfileAndGallery() {
     // The grid tap opens BunkrGalleryActivity at the selected video. Playback starts only
     // after tapping that fullscreen page, and this viewer does not use ShitTok's
     // "Play or pause video" accessibility description.
-    val fullscreenVideo = checkNotNull(
+    checkNotNull(
         device.wait(Until.findObject(By.descStartsWith("Video,")), 12_000)
     ) {
         "Creator video viewer did not open"
@@ -197,7 +201,10 @@ internal fun MacrobenchmarkScope.openCreatorProfileAndGallery() {
     checkNotNull(device.wait(Until.findObject(By.desc("Download video")), 8_000)) {
         "Creator video viewer chrome did not become ready"
     }
-    fullscreenVideo.click()
+
+    // The pager can rebind its page while preloading adjacent media, which invalidates
+    // previously returned UiObject2 instances. Tap the stable fullscreen surface directly.
+    device.click(device.displayWidth / 2, device.displayHeight / 2)
 
     check(device.wait(Until.gone(By.desc("Download video")), 20_000)) {
         "Creator video playback did not start"
