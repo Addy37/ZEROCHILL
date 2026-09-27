@@ -15,10 +15,15 @@ final class BundledCreatorIndex {
     private static volatile BundledCreatorIndex cached;
     private final List<Entry> entries;
     private final Map<String, Entry> byName = new HashMap<>();
+    private final Map<String, String> canonicalByAlias = new HashMap<>();
 
     private BundledCreatorIndex(List<Entry> entries) {
         this.entries = entries;
-        for (Entry entry : entries) byName.put(entry.searchable.get(0), entry);
+        for (Entry entry : entries) {
+            String canonical = entry.searchable.get(0);
+            byName.put(canonical, entry);
+            for (String alias : entry.searchable) canonicalByAlias.put(alias, canonical);
+        }
     }
 
     static BundledCreatorIndex get(Context context) {
@@ -62,6 +67,13 @@ final class BundledCreatorIndex {
     }
 
     int size() { return entries.size(); }
+
+    String canonicalKey(String name) {
+        String normalized = CreatorNameMatcher.normalized(name);
+        if (normalized.isEmpty()) return "";
+        String canonical = canonicalByAlias.get(normalized);
+        return canonical == null ? normalized : canonical;
+    }
 
     int rank(NativeContentItem item, String query) {
         Entry entry = byName.get(CreatorNameMatcher.normalized(item.title));
