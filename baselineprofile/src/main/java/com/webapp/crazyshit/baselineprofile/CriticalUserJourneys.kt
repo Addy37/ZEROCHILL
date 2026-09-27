@@ -3,14 +3,18 @@ package com.webapp.crazyshit.baselineprofile
 import androidx.benchmark.macro.MacrobenchmarkScope
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.Until
+import java.util.regex.Pattern
 
 internal const val TARGET_PACKAGE = "com.addy37.crazyshitunofficial"
 
 internal fun MacrobenchmarkScope.launchApp() {
     pressHome()
     startActivityAndWait()
-    device.wait(Until.findObject(By.text("I understand")), 3_000)?.click()
-    checkNotNull(device.wait(Until.findObject(By.desc("Primary top bar")), 10_000)) {
+    device.wait(
+        Until.findObject(By.text(Pattern.compile("(?i)i\\s+understand"))),
+        5_000
+    )?.click()
+    checkNotNull(device.wait(Until.findObject(By.desc("ShitTok tab")), 12_000)) {
         "Main navigation shell did not become ready"
     }
     device.waitForIdle()
@@ -44,7 +48,7 @@ internal fun MacrobenchmarkScope.openAndScrollChaos() {
 }
 
 internal fun MacrobenchmarkScope.search() {
-    val search = checkNotNull(device.wait(Until.findObject(By.desc("Search")), 5_000)) {
+    val search = checkNotNull(device.wait(Until.findObject(By.desc("Search")), 10_000)) {
         "Search action was not reachable"
     }
     search.click()
