@@ -1,41 +1,35 @@
 package com.webapp.crazyshit;
 
 import android.app.Activity;
+import android.content.res.Configuration;
 import android.graphics.Color;
-import android.graphics.drawable.ColorDrawable;
-import android.graphics.drawable.GradientDrawable;
 import android.view.Gravity;
 import android.view.View;
-import android.webkit.CookieManager;
-import android.webkit.WebSettings;
 import android.widget.FrameLayout;
-import android.widget.GridLayout;
-import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
-import com.bumptech.glide.Glide;
-import com.bumptech.glide.load.engine.DiskCacheStrategy;
-import com.bumptech.glide.load.model.GlideUrl;
-import com.bumptech.glide.load.model.LazyHeaders;
+import androidx.recyclerview.widget.RecyclerView;
+import androidx.recyclerview.widget.StaggeredGridLayoutManager;
+
+import com.google.android.material.tabs.TabLayout;
 
 import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Lightweight OnlyFap surface revealed under ShitTok during an interactive creator swipe.
+ * Real creator-gallery components revealed under ShitTok during the interactive forward swipe.
  *
- * It paints from the already-prewarmed creator session so the user's finger reveals real gallery
- * media immediately. The actual creator activity takes over after the drag settles.
+ * Using the shared profile header and gallery adapter keeps the drag surface visually aligned with
+ * the destination activity, so the final handoff does not jump between two different layouts.
  */
 final class ShitTokCreatorSwipePreview extends FrameLayout {
-    private static final int GRID_COLUMNS = 3;
-    private static final int GRID_ITEMS = 9;
-
     private final Activity activity;
-    private final TextView creatorName;
-    private final TextView creatorMeta;
-    private final GridLayout grid;
+    private final LinearLayout shell;
+    private final FrameLayout profileSlot;
+    private final TabLayout tabs;
+    private final RecyclerView gallery;
+    private final BunkrGalleryAdapter adapter;
     private String currentCreator = "";
     private String currentSessionId = "";
     private int refreshGeneration;
@@ -48,7 +42,7 @@ final class ShitTokCreatorSwipePreview extends FrameLayout {
         setFocusable(false);
         setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);
 
-        LinearLayout shell = new LinearLayout(activity);
+        shell = new LinearLayout(activity);
         shell.setOrientation(LinearLayout.VERTICAL);
         shell.setBackgroundColor(Color.BLACK);
         addView(shell, new FrameLayout.LayoutParams(-1, -1));
@@ -59,93 +53,109 @@ final class ShitTokCreatorSwipePreview extends FrameLayout {
         top.setPadding(dp(8), dp(6), dp(8), dp(6));
         top.setBackgroundColor(Color.BLACK);
 
-        TextView back = text("‹", 34, Color.WHITE, false);
+        TextView back = text("‹", 34, Color.WHITE);
         back.setGravity(Gravity.CENTER);
         top.addView(back, new LinearLayout.LayoutParams(dp(48), dp(52)));
 
-        TextView heading = text("OnlyFap", 20, Color.WHITE, true);
+        TextView heading = text("OnlyFap", 20, Color.WHITE);
+        heading.setTypeface(null, android.graphics.Typeface.BOLD);
         top.addView(heading, new LinearLayout.LayoutParams(0, -2, 1f));
 
-        TextView more = text("⋮", 28, Color.rgb(220, 220, 226), false);
+        TextView more = text("⋮", 28, Color.rgb(220, 220, 226));
         more.setGravity(Gravity.CENTER);
         top.addView(more, new LinearLayout.LayoutParams(dp(48), dp(52)));
         shell.addView(top, new LinearLayout.LayoutParams(-1, dp(64)));
 
-        LinearLayout profile = new LinearLayout(activity);
-        profile.setOrientation(LinearLayout.VERTICAL);
-        profile.setGravity(Gravity.BOTTOM);
-        profile.setPadding(dp(18), dp(18), dp(18), dp(18));
-        profile.setBackground(profileBackground());
+        profileSlot = new FrameLayout(activity);
+        shell.addView(profileSlot, new LinearLayout.LayoutParams(-1, dp(184)));
 
-        creatorName = text("", 25, Color.WHITE, true);
-        creatorName.setMaxLines(1);
-        creatorName.setEllipsize(android.text.TextUtils.TruncateAt.END);
-        profile.addView(creatorName, new LinearLayout.LayoutParams(-1, -2));
-
-        creatorMeta = text("Creator gallery", 12, Color.rgb(184, 184, 194), false);
-        LinearLayout.LayoutParams metaParams = new LinearLayout.LayoutParams(-1, -2);
-        metaParams.topMargin = dp(4);
-        profile.addView(creatorMeta, metaParams);
-        shell.addView(profile, new LinearLayout.LayoutParams(-1, dp(138)));
-
-        LinearLayout tabs = new LinearLayout(activity);
-        tabs.setOrientation(LinearLayout.HORIZONTAL);
-        tabs.setGravity(Gravity.CENTER);
+        tabs = new TabLayout(activity);
         tabs.setBackgroundColor(Color.BLACK);
-        String[] labels = {"ALL", "PICTURES", "VIDEOS"};
-        for (int i = 0; i < labels.length; i++) {
-            TextView tab = text(
-                    labels[i],
-                    11,
-                    i == 0 ? UiPalette.PRIMARY : Color.rgb(174, 174, 182),
-                    i == 0
-            );
-            tab.setGravity(Gravity.CENTER);
-            tabs.addView(tab, new LinearLayout.LayoutParams(0, dp(48), 1f));
-        }
+        tabs.setSelectedTabIndicatorColor(UiPalette.PRIMARY);
+        tabs.setTabTextColors(Color.rgb(174, 174, 182), UiPalette.PRIMARY);
+        tabs.setTabMode(TabLayout.MODE_FIXED);
+        tabs.setTabGravity(TabLayout.GRAVITY_FILL);
         shell.addView(tabs, new LinearLayout.LayoutParams(-1, dp(48)));
 
-        grid = new GridLayout(activity);
-        grid.setColumnCount(GRID_COLUMNS);
-        grid.setRowCount(GRID_ITEMS / GRID_COLUMNS);
-        grid.setBackgroundColor(Color.BLACK);
-        grid.setPadding(dp(2), dp(2), dp(2), dp(2));
-        shell.addView(grid, new LinearLayout.LayoutParams(-1, 0, 1f));
+        tabs.addTab(tabs.newTab().setText("All"));
+        tabs.addTab(tabs.newTab().setText("Pictures"));
+        tabs.addTab(tabs.newTab().setText("Videos"));
 
-        showSkeleton();
+        adapter = new BunkrGalleryAdapter(
+                activity,
+                new BunkrGalleryAdapter.Listener() {
+                    @Override
+                    public void onOpen(int position, NativeContentItem item) {
+                    }
+
+                    @Override
+                    public void onLongPress(NativeContentItem item, View anchor) {
+                    }
+                },
+                true
+        );
+
+        gallery = new RecyclerView(activity);
+        gallery.setBackgroundColor(Color.BLACK);
+        gallery.setClipToPadding(false);
+        gallery.setPadding(0, dp(5), 0, dp(18));
+        gallery.setItemAnimator(null);
+        gallery.setAdapter(adapter);
+        gallery.setLayoutManager(new StaggeredGridLayoutManager(
+                creatorColumns(),
+                StaggeredGridLayoutManager.VERTICAL
+        ));
+        gallery.setNestedScrollingEnabled(false);
+        shell.addView(gallery, new LinearLayout.LayoutParams(-1, 0, 1f));
     }
 
     void showCreator(String creator, String sessionId) {
-        currentCreator = clean(creator);
+        String cleanCreator = clean(creator);
+        if (!cleanCreator.equals(currentCreator)) {
+            currentCreator = cleanCreator;
+            rebuildProfile();
+        }
         currentSessionId = clean(sessionId);
-        creatorName.setText(currentCreator);
         setVisibility(View.VISIBLE);
         refreshCreator(currentCreator, currentSessionId);
     }
 
     void refreshCreator(String creator, String sessionId) {
         String cleanCreator = clean(creator);
-        if (!cleanCreator.isEmpty()) currentCreator = cleanCreator;
+        if (!cleanCreator.isEmpty() && !cleanCreator.equals(currentCreator)) {
+            currentCreator = cleanCreator;
+            rebuildProfile();
+        }
         String cleanSession = clean(sessionId);
         if (!cleanSession.isEmpty()) currentSessionId = cleanSession;
-        creatorName.setText(currentCreator);
 
         BunkrGallerySessionStore.Snapshot snapshot =
                 BunkrGallerySessionStore.snapshot(currentSessionId);
         if (snapshot != null && !snapshot.items.isEmpty()) {
             bindItems(snapshot.items);
-            creatorMeta.setText(snapshot.items.size() + " items ready");
             return;
         }
 
-        showSkeleton();
-        creatorMeta.setText("Loading gallery…");
+        adapter.replace(new ArrayList<>(), false);
+        updateTabs(new ArrayList<>());
         int generation = ++refreshGeneration;
         scheduleRefresh(generation, 0);
     }
 
+    private void rebuildProfile() {
+        profileSlot.removeAllViews();
+        if (currentCreator.isEmpty()) return;
+        CreatorProfileHeader profile = new CreatorProfileHeader(
+                activity,
+                currentCreator,
+                currentCreator,
+                BunkrRepository.searchUrl(currentCreator)
+        );
+        profileSlot.addView(profile, new FrameLayout.LayoutParams(-1, -1));
+    }
+
     private void scheduleRefresh(int generation, int attempt) {
-        if (attempt >= 5) return;
+        if (attempt >= 6) return;
         postDelayed(() -> {
             if (generation != refreshGeneration || getVisibility() != View.VISIBLE) return;
             String newest = ShitTokCreatorGalleryPreloader.sessionId(activity, currentCreator);
@@ -154,152 +164,66 @@ final class ShitTokCreatorSwipePreview extends FrameLayout {
                     BunkrGallerySessionStore.snapshot(currentSessionId);
             if (later != null && !later.items.isEmpty()) {
                 bindItems(later.items);
-                creatorMeta.setText(later.items.size() + " items ready");
                 return;
             }
             scheduleRefresh(generation, attempt + 1);
-        }, attempt == 0 ? 90L : 120L);
+        }, attempt == 0 ? 60L : 100L);
     }
 
     private void bindItems(List<NativeContentItem> items) {
-        grid.removeAllViews();
-        ArrayList<NativeContentItem> visible = new ArrayList<>();
-        for (NativeContentItem item : items) {
-            if (item == null || item.imageUrl == null || item.imageUrl.trim().isEmpty()) continue;
-            visible.add(item);
-            if (visible.size() >= GRID_ITEMS) break;
-        }
-        if (visible.isEmpty()) {
-            showSkeleton();
-            return;
-        }
-
-        for (int i = 0; i < GRID_ITEMS; i++) {
-            if (i < visible.size()) addMediaCell(visible.get(i));
-            else addSkeletonCell();
+        adapter.replace(items, false);
+        updateTabs(items);
+        if (gallery.getLayoutManager() instanceof StaggeredGridLayoutManager) {
+            ((StaggeredGridLayoutManager) gallery.getLayoutManager())
+                    .scrollToPositionWithOffset(0, 0);
         }
     }
 
-    private void addMediaCell(NativeContentItem item) {
-        FrameLayout cell = cell();
-        ImageView image = new ImageView(activity);
-        image.setScaleType(ImageView.ScaleType.CENTER_CROP);
-        image.setBackgroundColor(Color.rgb(18, 18, 21));
-        cell.addView(image, new FrameLayout.LayoutParams(-1, -1));
-
-        Glide.with(activity)
-                .load(withHeaders(item.imageUrl, imageReferer(item)))
-                .diskCacheStrategy(DiskCacheStrategy.ALL)
-                .dontAnimate()
-                .placeholder(new ColorDrawable(Color.rgb(18, 18, 21)))
-                .error(new ColorDrawable(Color.rgb(18, 18, 21)))
-                .into(image);
-
-        if (item.isVideo()) {
-            TextView play = text("▶", 13, Color.WHITE, true);
-            play.setGravity(Gravity.CENTER);
-            play.setBackground(playBadge());
-            FrameLayout.LayoutParams playParams =
-                    new FrameLayout.LayoutParams(dp(30), dp(30));
-            playParams.gravity = Gravity.BOTTOM | Gravity.END;
-            playParams.setMargins(0, 0, dp(7), dp(7));
-            cell.addView(play, playParams);
-        }
-        grid.addView(cell, cellParams());
-    }
-
-    private void showSkeleton() {
-        grid.removeAllViews();
-        for (int i = 0; i < GRID_ITEMS; i++) addSkeletonCell();
-    }
-
-    private void addSkeletonCell() {
-        View cell = new View(activity);
-        cell.setBackgroundColor(iCellColor(grid.getChildCount()));
-        grid.addView(cell, cellParams());
-    }
-
-    private FrameLayout cell() {
-        FrameLayout cell = new FrameLayout(activity);
-        cell.setBackgroundColor(Color.rgb(18, 18, 21));
-        return cell;
-    }
-
-    private GridLayout.LayoutParams cellParams() {
-        GridLayout.LayoutParams params = new GridLayout.LayoutParams();
-        params.width = 0;
-        params.height = 0;
-        params.columnSpec = GridLayout.spec(GridLayout.UNDEFINED, 1f);
-        params.rowSpec = GridLayout.spec(GridLayout.UNDEFINED, 1f);
-        params.setMargins(dp(1), dp(1), dp(1), dp(1));
-        return params;
-    }
-
-    private int iCellColor(int index) {
-        int base = 18 + (index % 3) * 3;
-        return Color.rgb(base, base, base + 2);
-    }
-
-    private GradientDrawable profileBackground() {
-        GradientDrawable background = new GradientDrawable(
-                GradientDrawable.Orientation.TOP_BOTTOM,
-                new int[]{Color.rgb(5, 5, 7), Color.rgb(11, 11, 14)}
-        );
-        background.setStroke(dp(1), Color.rgb(25, 25, 30));
-        return background;
-    }
-
-    private GradientDrawable playBadge() {
-        GradientDrawable background = new GradientDrawable();
-        background.setShape(GradientDrawable.OVAL);
-        background.setColor(Color.argb(185, 0, 0, 0));
-        background.setStroke(dp(1), Color.argb(120, 255, 255, 255));
-        return background;
-    }
-
-    private GlideUrl withHeaders(String imageUrl, String referer) {
-        LazyHeaders.Builder headers = new LazyHeaders.Builder()
-                .addHeader("Referer", clean(referer).isEmpty()
-                        ? BunkrRepository.DEFAULT_PAGE_ORIGIN + "/"
-                        : referer)
-                .addHeader("Accept", "image/avif,image/webp,image/apng,image/*,*/*;q=0.8");
-        try {
-            headers.addHeader("User-Agent", WebSettings.getDefaultUserAgent(activity));
-        } catch (Exception ignored) {
-        }
-        try {
-            String cookies = CookieManager.getInstance().getCookie(imageUrl);
-            if ((cookies == null || cookies.isEmpty()) && referer != null) {
-                cookies = CookieManager.getInstance().getCookie(referer);
+    private void updateTabs(List<NativeContentItem> items) {
+        int all = 0;
+        int pictures = 0;
+        int videos = 0;
+        if (items != null) {
+            for (NativeContentItem item : items) {
+                if (item == null) continue;
+                all++;
+                if (item.isImage()) pictures++;
+                if (item.isVideo()) videos++;
             }
-            if (cookies != null && !cookies.isEmpty()) headers.addHeader("Cookie", cookies);
-        } catch (Exception ignored) {
         }
-        return new GlideUrl(imageUrl, headers.build());
+        setTab(0, "All", all);
+        setTab(1, "Pictures", pictures);
+        setTab(2, "Videos", videos);
     }
 
-    private String imageReferer(NativeContentItem item) {
-        if (item == null) return "";
-        if (WikiFeetRepository.isWikiFeetUrl(item.url)
-                && WikiFeetRepository.isWikiFeetUrl(item.uploader)) {
-            return item.uploader;
-        }
-        if (!FapelloRepository.isPostUrl(item.url)
-                && FapelloRepository.isModelUrl(item.uploader)) {
-            return item.uploader;
-        }
-        if (OnlyHavenRepository.isOnlyHavenUrl(item.uploader)) {
-            return item.uploader;
-        }
-        return item.url;
+    private void setTab(int index, String label, int count) {
+        TabLayout.Tab tab = tabs.getTabAt(index);
+        if (tab != null) tab.setText(count > 0 ? label + "  " + count : label);
     }
 
-    private TextView text(String value, int size, int color, boolean bold) {
+    private int creatorColumns() {
+        Configuration config = getResources().getConfiguration();
+        String size = config.screenWidthDp >= 600 ? "tablet" : "phone";
+        String orientation = config.orientation == Configuration.ORIENTATION_LANDSCAPE
+                ? "wide"
+                : "tall";
+        int fallback = config.orientation == Configuration.ORIENTATION_LANDSCAPE
+                ? (config.screenWidthDp >= 900 ? 7 : 5)
+                : (config.screenWidthDp >= 600 ? 4 : 2);
+        int minimum = config.screenWidthDp >= 600 ? 3 : 2;
+        int maximum = config.screenWidthDp >= 900 ? 8
+                : config.screenWidthDp >= 600 ? 7
+                : config.orientation == Configuration.ORIENTATION_LANDSCAPE ? 7 : 5;
+        int saved = activity.getSharedPreferences("app_prefs", Activity.MODE_PRIVATE)
+                .getInt("creator_gallery_columns_" + size + "_" + orientation, fallback);
+        return Math.max(minimum, Math.min(maximum, saved));
+    }
+
+    private TextView text(String value, int size, int color) {
         TextView view = new TextView(activity);
         view.setText(value);
         view.setTextSize(size);
         view.setTextColor(color);
-        if (bold) view.setTypeface(null, android.graphics.Typeface.BOLD);
         return view;
     }
 

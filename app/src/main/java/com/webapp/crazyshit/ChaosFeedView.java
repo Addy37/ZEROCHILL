@@ -1231,6 +1231,7 @@ public final class ChaosFeedView extends FrameLayout {
         float creatorSwipeDownX;
         float creatorSwipeDownY;
         boolean creatorSwipeTracking;
+        String creatorSwipeTransitionToken = "";
 
         private final Runnable hideControlsRunnable = this::hideControlsNow;
         private final Runnable hideSeekBarRunnable = this::hideSeekBarNow;
@@ -1501,6 +1502,8 @@ public final class ChaosFeedView extends FrameLayout {
                     restorePlaybackSpeed();
                     creatorSwipeTracking = false;
                     cancelCreatorSwipePreview(root);
+                    ShitTokTransitionSnapshotStore.remove(creatorSwipeTransitionToken);
+                    creatorSwipeTransitionToken = "";
                     pager.setUserInputEnabled(false);
                     ViewParentCompat.disallow(v, true);
                     return true;
@@ -1515,6 +1518,8 @@ public final class ChaosFeedView extends FrameLayout {
                             && Math.abs(dx) > Math.abs(dy) * 1.20f) {
                         if (!creatorSwipeTracking) {
                             creatorSwipeTracking = true;
+                            creatorSwipeTransitionToken =
+                                    ShitTokTransitionSnapshotStore.beginCapture(activity, root);
                             beginCreatorSwipePreview(creator);
                         }
                         v.cancelLongPress();
@@ -1541,13 +1546,17 @@ public final class ChaosFeedView extends FrameLayout {
                             String creator = ShitTokCreatorMetadata.creatorName(item);
                             haptic(v);
                             pauseAndRecord();
+                            String transitionToken = creatorSwipeTransitionToken;
+                            creatorSwipeTransitionToken = "";
                             commitCreatorSwipePreview(
                                     root,
                                     creator,
-                                    () -> openCreatorGallery(true)
+                                    () -> openCreatorGallery(true, transitionToken)
                             );
                         } else {
                             cancelCreatorSwipePreview(root);
+                            ShitTokTransitionSnapshotStore.remove(creatorSwipeTransitionToken);
+                            creatorSwipeTransitionToken = "";
                         }
                         return true;
                     }
@@ -1575,7 +1584,7 @@ public final class ChaosFeedView extends FrameLayout {
             title.setOnClickListener(v -> {
                 if (ShitTokCreatorMetadata.creatorName(item).isEmpty()) return;
                 haptic(v);
-                openCreatorGallery(false);
+                openCreatorGallery(false, "");
             });
 
             mute.setOnClickListener(v -> {
@@ -2003,18 +2012,29 @@ public final class ChaosFeedView extends FrameLayout {
             headers.put(name, value);
         }
 
-        private void openCreatorGallery(boolean seamless) {
+        private void openCreatorGallery(boolean seamless, String transitionToken) {
             if (item == null) return;
             String creator = ShitTokCreatorMetadata.creatorName(item);
             if (creator.isEmpty()) return;
+            String returnToken = transitionToken == null ? "" : transitionToken.trim();
+            if (returnToken.isEmpty()) {
+                returnToken = ShitTokTransitionSnapshotStore.beginCapture(activity, root);
+            }
             pauseAndRecord();
-            activity.startActivity(NativeFeedBrowserActivity.createCreatorGallery(
+            Intent intent = NativeFeedBrowserActivity.createCreatorGallery(
                     activity,
                     creator,
                     creator,
                     "",
                     ShitTokCreatorGalleryPreloader.sessionId(activity, creator)
-            ));
+            );
+            if (!returnToken.isEmpty()) {
+                intent.putExtra(
+                        NativeFeedBrowserActivity.EXTRA_SHITTOK_RETURN_TRANSITION,
+                        returnToken
+                );
+            }
+            activity.startActivity(intent);
             if (seamless) activity.overridePendingTransition(0, 0);
         }
 

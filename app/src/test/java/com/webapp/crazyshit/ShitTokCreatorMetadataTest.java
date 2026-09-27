@@ -60,6 +60,16 @@ public final class ShitTokCreatorMetadataTest {
     }
 
     @Test
+    public void creatorGalleryReturn_tracksRightDragAndRequiresHorizontalIntent() {
+        assertEquals(180f, NativeFeedBrowserActivity.shitTokReturnTranslation(180f, 1080f), 0.001f);
+        assertEquals(0f, NativeFeedBrowserActivity.shitTokReturnTranslation(-40f, 1080f), 0.001f);
+        assertEquals(1080f, NativeFeedBrowserActivity.shitTokReturnTranslation(1400f, 1080f), 0.001f);
+        assertTrue(NativeFeedBrowserActivity.shouldCommitShitTokReturn(220f, 30f, 180f));
+        assertFalse(NativeFeedBrowserActivity.shouldCommitShitTokReturn(120f, 20f, 180f));
+        assertFalse(NativeFeedBrowserActivity.shouldCommitShitTokReturn(220f, 210f, 180f));
+    }
+
+    @Test
     public void regularShitTokClip_doesNotBecomeCreatorLink() {
         NativeContentItem item = new NativeContentItem(
                 NativeContentItem.KIND_MEDIA,
