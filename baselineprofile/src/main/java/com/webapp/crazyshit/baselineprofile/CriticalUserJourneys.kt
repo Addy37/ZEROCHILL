@@ -176,25 +176,24 @@ internal fun MacrobenchmarkScope.openCreatorProfileAndGallery() {
     device.waitForIdle()
 
     val creatorPattern = Pattern.compile("(?i)^Open .+ gallery$")
-    var galleryOpened = false
-    repeat(3) {
-        if (galleryOpened) return@repeat
-
+    val attemptedCreators = mutableSetOf<String>()
+    var videoOpened = false
+    var shelfExposed = false
+    for (attempt in 0 until 5) {
         // The hub resolves its live creator shelves in the background. Wait for an
         // actionable entry or the hub's explicit terminal error, not a fixed delay.
-        val creatorDeadline = SystemClock.uptimeMillis() + 90_000L
+        val creatorDeadline = SystemClock.uptimeMillis() + if (attempt == 0) 90_000L else 15_000L
         var creator: androidx.test.uiautomator.UiObject2? = null
-        var shelfExposed = false
         while (creator == null && SystemClock.uptimeMillis() < creatorDeadline) {
             creator = device.findObjects(By.desc(creatorPattern))
-                .firstOrNull { it.isClickable }
+                .firstOrNull { it.isClickable && it.contentDescription !in attemptedCreators }
             if (creator == null && device.findObject(
                     By.text("OnlyFap creators could not load right now.")
                 ) != null) {
                 error("OnlyFap creator shelves finished without a creator")
             }
-            if (creator == null && !shelfExposed &&
-                device.findObject(By.text("Loading creators…")) == null) {
+            if (creator == null && device.findObject(By.text("Loading creators…")) == null &&
+                !shelfExposed) {
                 // Shelves start below the 640dp hero. If the hero has no resolved
                 // artwork yet, expose a loaded shelf instead of waiting on its image.
                 swipeUp()
@@ -217,41 +216,52 @@ internal fun MacrobenchmarkScope.openCreatorProfileAndGallery() {
             "OnlyFap clickable creator gallery entry did not become available. " +
                 "Foreground: ${device.currentPackageName}. App nodes: ${appNodes.take(9_000)}"
         }
+        attemptedCreators.add(creator.contentDescription ?: "")
 
         try {
             creator.click()
         } catch (_: androidx.test.uiautomator.StaleObjectException) {
-            return@repeat
+            continue
         }
 
-        galleryOpened =
-            device.wait(Until.findObject(By.textStartsWith("All")), 12_000) != null
-        if (!galleryOpened &&
-            findPrimaryTab("OnlyFap tab", "OnlyFap") == null
+        checkNotNull(device.wait(Until.findObject(By.textStartsWith("All")), 12_000)) {
+            "Creator gallery did not open for ${creator.contentDescription}"
+        }
+        val videos = checkNotNull(
+            device.wait(Until.findObject(By.textStartsWith("Videos")), 10_000)
         ) {
-            device.pressBack()
-            checkNotNull(awaitPrimaryTab("OnlyFap tab", "OnlyFap", 8_000L)) {
-                "Could not return to OnlyFap after creator gallery handoff"
-            }
+            "Creator gallery Videos tab was not reachable"
         }
-    }
+        videos.click()
 
-    check(galleryOpened) {
-        "Creator gallery did not open"
+        // A live featured creator can have pictures only. Try another real creator
+        // when this gallery reaches its explicit empty video state.
+        val videoDeadline = SystemClock.uptimeMillis() + 40_000L
+        var video: androidx.test.uiautomator.UiObject2? = null
+        while (video == null && SystemClock.uptimeMillis() < videoDeadline) {
+            video = device.findObject(By.descStartsWith("Video,"))
+            if (video == null && device.findObject(
+                    By.text("No videos were found for this creator.")
+                ) != null) break
+            if (video == null) SystemClock.sleep(250L)
+        }
+        if (video != null) {
+            video.click()
+            videoOpened = true
+            break
+        }
+        device.pressBack()
+        checkNotNull(awaitPrimaryTab("OnlyFap tab", "OnlyFap", 8_000L)) {
+            "Could not return to OnlyFap after a creator without videos"
+        }
+        // The 640dp hero can cover the other creator shelves.
+        swipeUp()
+        shelfExposed = true
     }
-    val videos = checkNotNull(
-        device.wait(Until.findObject(By.textStartsWith("Videos")), 10_000)
-    ) {
-        "Creator gallery Videos tab was not reachable"
+    check(videoOpened) {
+        "No playable creator video was exposed after ${attemptedCreators.size} galleries: " +
+            attemptedCreators.joinToString()
     }
-    videos.click()
-
-    val video = checkNotNull(
-        device.wait(Until.findObject(By.descStartsWith("Video,")), 20_000)
-    ) {
-        "Creator gallery did not expose a video"
-    }
-    video.click()
 
     // The grid tap opens BunkrGalleryActivity at the selected video. Playback starts only
     // after tapping that fullscreen page, and this viewer does not use ShitTok's
