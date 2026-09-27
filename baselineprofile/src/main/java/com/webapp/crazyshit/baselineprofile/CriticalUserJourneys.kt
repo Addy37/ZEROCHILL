@@ -19,7 +19,7 @@ private fun MacrobenchmarkScope.awaitMainNavigation() {
     val noticePattern = Pattern.compile("(?i).*before\\s+you\\s+continue.*")
     val acceptPattern = Pattern.compile("(?i).*understand.*")
     val notNowPattern = Pattern.compile("(?i).*not\\s+now.*")
-    val deadline = SystemClock.uptimeMillis() + 20_000L
+    val deadline = SystemClock.uptimeMillis() + 30_000L
 
     while (SystemClock.uptimeMillis() < deadline) {
         val notice = device.findObject(By.text(noticePattern))
@@ -46,7 +46,13 @@ private fun MacrobenchmarkScope.awaitMainNavigation() {
             continue
         }
 
-        if (findPrimaryTab("ShitTok tab", "ShitTok") != null) return
+        if (
+            findPrimaryTab("ShitTok tab", "ShitTok") != null ||
+            findPrimaryTab("Shows tab", "Shows") != null ||
+            findPrimaryTab("OnlyFap tab", "OnlyFap") != null ||
+            findPrimaryTab("Library tab", "Library") != null ||
+            device.findObject(By.desc("Primary top bar")) != null
+        ) return
         SystemClock.sleep(100L)
     }
 
