@@ -4,6 +4,7 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 
 import android.app.Activity;
+import android.app.Application;
 import android.graphics.Canvas;
 import android.view.View;
 
@@ -11,8 +12,10 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.Robolectric;
 import org.robolectric.RobolectricTestRunner;
+import org.robolectric.annotation.Config;
 
 @RunWith(RobolectricTestRunner.class)
+@Config(application = Application.class, sdk = 35)
 public final class ShitTokTransitionSnapshotStoreTest {
     @Test
     public void failedChildDraw_keepsReturnAndGalleryHandoffFrames() {
