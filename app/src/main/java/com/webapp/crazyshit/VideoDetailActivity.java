@@ -1653,7 +1653,7 @@ public class VideoDetailActivity extends Activity {
             ));
         }
 
-        VideoActionSheet.show(
+        VideoActionSheet.showCompact(
                 this,
                 title,
                 VideoActionSheet.section(
