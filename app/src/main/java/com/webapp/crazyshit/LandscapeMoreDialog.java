@@ -7,6 +7,7 @@ import android.graphics.Color;
 import android.graphics.Rect;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
+import android.graphics.drawable.GradientDrawable;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.HapticFeedbackConstants;
@@ -52,8 +53,8 @@ final class LandscapeMoreDialog {
 
         LinearLayout panel = new LinearLayout(activity);
         panel.setOrientation(LinearLayout.VERTICAL);
-        panel.setPadding(dp(activity, 10), dp(activity, 10), dp(activity, 10), dp(activity, 10));
-        panel.setBackground(ZeroChillUi.sheetGlass(activity));
+        panel.setPadding(dp(activity, 10), dp(activity, 8), dp(activity, 10), dp(activity, 8));
+        panel.setBackground(compactPanelBackground(activity));
         panel.setClipToOutline(true);
 
         addHeader(activity, dialog, panel);
@@ -113,8 +114,8 @@ final class LandscapeMoreDialog {
 
         int screenWidth = activity.getResources().getDisplayMetrics().widthPixels;
         int screenHeight = activity.getResources().getDisplayMetrics().heightPixels;
-        int panelWidth = Math.min(dp(activity, 340), screenWidth - dp(activity, 24));
-        int maxHeight = Math.min(dp(activity, 510), (int) (screenHeight * 0.72f));
+        int panelWidth = Math.min(dp(activity, 286), screenWidth - dp(activity, 20));
+        int maxHeight = Math.min(dp(activity, 430), (int) (screenHeight * 0.66f));
 
         ViewGroup.LayoutParams panelParams = panel.getLayoutParams();
         if (panelParams != null) {
@@ -122,9 +123,9 @@ final class LandscapeMoreDialog {
             panelParams.height = ViewGroup.LayoutParams.WRAP_CONTENT;
             panel.setLayoutParams(panelParams);
         }
-        int actionContentHeight = actions.size() * 54 + Math.max(0, actions.size() - 1);
+        int actionContentHeight = actions.size() * 48 + Math.max(0, actions.size() - 1);
         scroll.getLayoutParams().height = Math.min(
-                maxHeight - dp(activity, 66),
+                maxHeight - dp(activity, 58),
                 dp(activity, actionContentHeight)
         );
 
@@ -135,20 +136,18 @@ final class LandscapeMoreDialog {
         attrs.dimAmount = 0.22f;
 
         int y = fallbackTopOffset(activity);
-        int x = dp(activity, 12);
+        int x = dp(activity, 8);
         if (anchor != null && anchor.isAttachedToWindow()) {
             int[] location = new int[2];
-            anchor.getLocationInWindow(location);
+            anchor.getLocationOnScreen(location);
+            Rect visible = new Rect();
+            activity.getWindow().getDecorView().getWindowVisibleDisplayFrame(visible);
             int anchorRight = location[0] + anchor.getWidth();
-            x = Math.max(dp(activity, 8), screenWidth - anchorRight);
-            // Portrait More lives inside the fixed top bar, so anchor the popup to the
-            // bar edge instead of reapplying the activity/window inset through the
-            // button's absolute Y coordinate. Landscape rail More keeps its own Y.
-            if (anchor instanceof ImageView) {
-                y = fallbackTopOffset(activity);
-            } else {
-                y = location[1] + anchor.getHeight() + dp(activity, 1);
-            }
+            x = Math.max(dp(activity, 6), screenWidth - anchorRight);
+            y = Math.max(
+                    dp(activity, 2),
+                    location[1] + anchor.getHeight() - visible.top - dp(activity, 4)
+            );
         }
         attrs.x = x;
         attrs.y = y;
@@ -175,7 +174,7 @@ final class LandscapeMoreDialog {
         LinearLayout header = new LinearLayout(activity);
         header.setOrientation(LinearLayout.HORIZONTAL);
         header.setGravity(Gravity.CENTER_VERTICAL);
-        header.setPadding(dp(activity, 8), dp(activity, 2), dp(activity, 2), dp(activity, 8));
+        header.setPadding(dp(activity, 4), 0, 0, dp(activity, 4));
 
         LinearLayout labels = new LinearLayout(activity);
         labels.setOrientation(LinearLayout.VERTICAL);
@@ -184,19 +183,19 @@ final class LandscapeMoreDialog {
         TextView subtitle = text(
                 activity,
                 "ZeroChill " + BuildConfig.VERSION_NAME,
-                10,
-                ZeroChillUi.color(activity, R.color.zc_text_secondary),
+                9,
+                Color.rgb(136, 136, 146),
                 false
         );
         labels.addView(title);
         labels.addView(subtitle);
         header.addView(labels, new LinearLayout.LayoutParams(0, -2, 1f));
 
-        ImageView close = iconView(activity, R.drawable.ic_more_close, 36, 9);
+        ImageView close = iconView(activity, R.drawable.ic_more_close, 34, 8);
         close.setContentDescription("Close More");
         close.setOnClickListener(v -> dialog.dismiss());
         ZeroChillMotion.installPressFeedback(close);
-        header.addView(close, new LinearLayout.LayoutParams(dp(activity, 36), dp(activity, 36)));
+        header.addView(close, new LinearLayout.LayoutParams(dp(activity, 34), dp(activity, 34)));
 
         panel.addView(header, new LinearLayout.LayoutParams(-1, -2));
     }
@@ -210,28 +209,30 @@ final class LandscapeMoreDialog {
         LinearLayout row = new LinearLayout(activity);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setPadding(dp(activity, 8), dp(activity, 4), dp(activity, 4), dp(activity, 4));
+        row.setPadding(dp(activity, 7), dp(activity, 3), dp(activity, 5), dp(activity, 3));
         row.setClickable(true);
         row.setFocusable(true);
         row.setContentDescription(action.title + ". " + action.subtitle);
         applySelectableForeground(activity, row);
 
-        ImageView icon = iconView(activity, action.iconRes, 38, 8);
-        row.addView(icon, new LinearLayout.LayoutParams(dp(activity, 38), dp(activity, 48)));
+        ImageView icon = iconView(activity, action.iconRes, 32, 7);
+        icon.setImageTintList(ColorStateList.valueOf(Color.WHITE));
+        icon.setBackground(circle(Color.rgb(29, 29, 34)));
+        row.addView(icon, new LinearLayout.LayoutParams(dp(activity, 32), dp(activity, 40)));
 
         LinearLayout labels = new LinearLayout(activity);
         labels.setOrientation(LinearLayout.VERTICAL);
-        labels.setPadding(dp(activity, 8), 0, dp(activity, 6), 0);
+        labels.setPadding(dp(activity, 9), 0, dp(activity, 4), 0);
 
-        TextView title = text(activity, action.title, 14, Color.WHITE, true);
+        TextView title = text(activity, action.title, 13, Color.WHITE, true);
         title.setMaxLines(1);
         labels.addView(title, new LinearLayout.LayoutParams(-1, -2));
 
         TextView subtitle = text(
                 activity,
                 action.subtitle,
-                10,
-                ZeroChillUi.color(activity, R.color.zc_text_secondary),
+                9,
+                Color.rgb(136, 136, 146),
                 false
         );
         subtitle.setMaxLines(1);
@@ -260,11 +261,11 @@ final class LandscapeMoreDialog {
             row.addView(badge, badgeParams);
         }
 
-        ImageView chevron = iconView(activity, R.drawable.ic_more_chevron, 26, 6);
+        ImageView chevron = iconView(activity, R.drawable.ic_more_chevron, 22, 5);
         chevron.setImageTintList(ColorStateList.valueOf(
                 ZeroChillUi.color(activity, R.color.zc_text_muted)
         ));
-        row.addView(chevron, new LinearLayout.LayoutParams(dp(activity, 26), dp(activity, 44)));
+        row.addView(chevron, new LinearLayout.LayoutParams(dp(activity, 22), dp(activity, 40)));
 
         ZeroChillMotion.installPressFeedback(row);
         row.setOnClickListener(v -> {
@@ -273,15 +274,31 @@ final class LandscapeMoreDialog {
             action.run.run();
         });
 
-        parent.addView(row, new LinearLayout.LayoutParams(-1, dp(activity, 54)));
+        parent.addView(row, new LinearLayout.LayoutParams(-1, dp(activity, 48)));
     }
 
     private static void addDivider(NativeMainActivity activity, LinearLayout parent) {
         View divider = new View(activity);
         divider.setBackgroundColor(ZeroChillUi.color(activity, R.color.zc_divider));
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, dp(activity, 1));
-        params.setMargins(dp(activity, 54), 0, dp(activity, 8), 0);
+        params.setMargins(dp(activity, 44), 0, dp(activity, 6), 0);
         parent.addView(divider, params);
+    }
+
+    private static GradientDrawable compactPanelBackground(NativeMainActivity activity) {
+        GradientDrawable background = new GradientDrawable();
+        background.setShape(GradientDrawable.RECTANGLE);
+        background.setColor(Color.rgb(8, 8, 10));
+        background.setCornerRadius(dp(activity, 20));
+        background.setStroke(dp(activity, 1), Color.rgb(43, 43, 50));
+        return background;
+    }
+
+    private static GradientDrawable circle(int color) {
+        GradientDrawable background = new GradientDrawable();
+        background.setShape(GradientDrawable.OVAL);
+        background.setColor(color);
+        return background;
     }
 
     private static ImageView iconView(
