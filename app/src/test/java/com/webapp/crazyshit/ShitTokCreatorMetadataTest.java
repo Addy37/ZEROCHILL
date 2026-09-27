@@ -42,6 +42,43 @@ public final class ShitTokCreatorMetadataTest {
     }
 
     @Test
+    public void creatorIdentity_usesCreatorNameAndClipArtworkAsFallback() {
+        NativeContentItem media = new NativeContentItem(
+                NativeContentItem.KIND_MEDIA,
+                "Jane Doe",
+                "https://img.cum.st/post/video.mp4",
+                "https://img.cum.st/post/preview.webp",
+                "OnlyHaven",
+                "OnlyHaven",
+                "",
+                "onlyfans · OnlyHaven"
+        );
+
+        NativeContentItem creator = ShitTokCreatorMetadata.creatorIdentity(null, media);
+
+        assertEquals(NativeContentItem.KIND_CREATOR, creator.kind);
+        assertEquals("Jane Doe", creator.title);
+        assertEquals("Jane Doe", creator.searchQuery);
+        assertEquals("https://img.cum.st/post/preview.webp", creator.imageUrl);
+    }
+
+    @Test
+    public void creatorIdentity_regularShitTokClipHasNoCreator() {
+        NativeContentItem media = new NativeContentItem(
+                NativeContentItem.KIND_MEDIA,
+                "Normal video title",
+                "https://crazyshit.com/cnt/medias/123",
+                "https://crazyshit.com/thumb.jpg",
+                "",
+                "Uploader",
+                "",
+                ""
+        );
+
+        assertEquals(null, ShitTokCreatorMetadata.creatorIdentity(null, media));
+    }
+
+    @Test
     public void creatorGallerySwipe_requiresStrongLeftHorizontalGesture() {
         assertTrue(ChaosFeedView.shouldOpenCreatorGallerySwipe(-120f, 20f, 72f));
         assertFalse(ChaosFeedView.shouldOpenCreatorGallerySwipe(-55f, 5f, 72f));
