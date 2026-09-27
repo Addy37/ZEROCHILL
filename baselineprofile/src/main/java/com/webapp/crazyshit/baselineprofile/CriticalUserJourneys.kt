@@ -46,7 +46,7 @@ private fun MacrobenchmarkScope.awaitMainNavigation() {
             continue
         }
 
-        if (device.findObject(By.desc("ShitTok tab")) != null) return
+        if (findPrimaryTab("ShitTok tab", "ShitTok") != null) return
         SystemClock.sleep(100L)
     }
 
@@ -59,8 +59,25 @@ private fun MacrobenchmarkScope.awaitMainNavigation() {
     error("Main navigation shell did not become ready")
 }
 
+private fun MacrobenchmarkScope.findPrimaryTab(description: String, label: String) =
+    device.findObject(By.desc(description)) ?: device.findObject(By.text(label))
+
+private fun MacrobenchmarkScope.awaitPrimaryTab(
+    description: String,
+    label: String,
+    timeoutMs: Long
+): androidx.test.uiautomator.UiObject2? {
+    val deadline = SystemClock.uptimeMillis() + timeoutMs
+    while (SystemClock.uptimeMillis() < deadline) {
+        val tab = findPrimaryTab(description, label)
+        if (tab != null) return tab
+        SystemClock.sleep(100L)
+    }
+    return null
+}
+
 internal fun MacrobenchmarkScope.scrollShows() {
-    val shows = checkNotNull(device.wait(Until.findObject(By.desc("Shows tab")), 8_000)) {
+    val shows = checkNotNull(awaitPrimaryTab("Shows tab", "Shows", 8_000L)) {
         "Shows tab was not reachable"
     }
     shows.click()
@@ -72,7 +89,7 @@ internal fun MacrobenchmarkScope.scrollShows() {
 }
 
 internal fun MacrobenchmarkScope.openAndScrollChaos() {
-    val shitTok = checkNotNull(device.wait(Until.findObject(By.desc("ShitTok tab")), 8_000)) {
+    val shitTok = checkNotNull(awaitPrimaryTab("ShitTok tab", "ShitTok", 8_000L)) {
         "ShitTok tab was not reachable"
     }
     shitTok.click()
@@ -119,7 +136,7 @@ private fun MacrobenchmarkScope.swipeUp() {
 }
 
 internal fun MacrobenchmarkScope.openCreatorProfileAndGallery() {
-    val onlyFap = checkNotNull(device.wait(Until.findObject(By.desc("OnlyFap tab")), 8_000)) {
+    val onlyFap = checkNotNull(awaitPrimaryTab("OnlyFap tab", "OnlyFap", 8_000L)) {
         "OnlyFap tab was not reachable"
     }
     onlyFap.click()
