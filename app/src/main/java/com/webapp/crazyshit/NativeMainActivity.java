@@ -412,14 +412,20 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         ));
         bottomNavigation.post(() -> {
             refreshLibraryUpdateIndicator();
-            View chaosItem = bottomNavigation.findViewById(NAV_CHAOS);
-            if (chaosItem != null) {
-                chaosItem.setContentDescription("ShitTok featured tab");
-            }
+            setNavigationContentDescription(NAV_SERIES, "Shows tab");
+            setNavigationContentDescription(NAV_CHAOS, "ShitTok tab");
+            setNavigationContentDescription(NAV_ONLYFAP, "OnlyFap tab");
+            setNavigationContentDescription(NAV_LIBRARY, "Library tab");
         });
 
         miniPlayer = new NativeMiniPlayer(this, overlayRoot, this);
         setContentView(overlayRoot);
+    }
+
+    private void setNavigationContentDescription(int itemId, String description) {
+        if (bottomNavigation == null) return;
+        View item = bottomNavigation.findViewById(itemId);
+        if (item != null) item.setContentDescription(description);
     }
 
     private View buildTopBar() {
