@@ -14,16 +14,23 @@ final class OnlyFapCreatorResults {
 
     static List<NativeContentItem> merge(List<NativeContentItem> local,
                                           List<NativeContentItem> live, int limit) {
+        return merge(local, live, limit, null);
+    }
+
+    static List<NativeContentItem> merge(List<NativeContentItem> local,
+                                          List<NativeContentItem> live, int limit,
+                                          BundledCreatorIndex aliases) {
         LinkedHashMap<String, NativeContentItem> map = new LinkedHashMap<>();
-        if (local != null) for (NativeContentItem item : local) add(map, item);
-        if (live != null) for (NativeContentItem item : live) add(map, item);
+        if (local != null) for (NativeContentItem item : local) add(map, item, aliases);
+        if (live != null) for (NativeContentItem item : live) add(map, item, aliases);
         ArrayList<NativeContentItem> result = new ArrayList<>(map.values());
         return result.size() > limit ? new ArrayList<>(result.subList(0, limit)) : result;
     }
 
-    private static void add(LinkedHashMap<String, NativeContentItem> map, NativeContentItem item) {
+    private static void add(LinkedHashMap<String, NativeContentItem> map, NativeContentItem item,
+                            BundledCreatorIndex aliases) {
         if (item == null || !item.isCreator()) return;
-        String key = key(item);
+        String key = aliases == null ? key(item) : aliases.canonicalKey(item.title);
         if (key.isEmpty()) return;
         NativeContentItem previous = map.get(key);
         if (previous == null) { map.put(key, item); return; }
