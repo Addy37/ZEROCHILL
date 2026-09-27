@@ -19,7 +19,9 @@ private fun MacrobenchmarkScope.awaitMainNavigation() {
     val noticePattern = Pattern.compile("(?i).*before\\s+you\\s+continue.*")
     val acceptPattern = Pattern.compile("(?i).*understand.*")
     val notNowPattern = Pattern.compile("(?i).*not\\s+now.*")
-    val deadline = SystemClock.uptimeMillis() + 20_000L
+    val deadline = SystemClock.uptimeMillis() + 25_000L
+    var recoveryAttempts = 0
+    var nextRecoveryAt = SystemClock.uptimeMillis() + 4_000L
 
     while (SystemClock.uptimeMillis() < deadline) {
         val notice = device.findObject(By.text(noticePattern))
@@ -46,7 +48,20 @@ private fun MacrobenchmarkScope.awaitMainNavigation() {
             continue
         }
 
-        if (findPrimaryTab("ShitTok tab", "ShitTok") != null) return
+        if (mainNavigationShellVisible()) return
+
+        val now = SystemClock.uptimeMillis()
+        if (now >= nextRecoveryAt && recoveryAttempts < 4) {
+            // Warm macrobenchmark iterations can leave Search, a creator gallery, or a
+            // fullscreen player on top of the task. Back out to the existing main shell
+            // instead of treating that child screen as a failed app launch.
+            device.pressBack()
+            device.waitForIdle(250)
+            recoveryAttempts++
+            nextRecoveryAt = now + 2_500L
+            continue
+        }
+
         SystemClock.sleep(100L)
     }
 
@@ -104,6 +119,14 @@ internal fun MacrobenchmarkScope.openAndScrollChaos() {
 }
 
 internal fun MacrobenchmarkScope.search() {
+    // ShitTok can intentionally hide its chrome. Route through Shows so this benchmark
+    // always starts from a screen where the global search action is visible.
+    val shows = checkNotNull(awaitPrimaryTab("Shows tab", "Shows", 8_000L)) {
+        "Shows tab was not reachable before search"
+    }
+    shows.click()
+    device.waitForIdle()
+
     val search = checkNotNull(device.wait(Until.findObject(By.desc("Search")), 10_000)) {
         "Search action was not reachable"
     }
