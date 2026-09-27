@@ -422,7 +422,7 @@ public class PlayerActivity extends Activity {
         String saveTitle = FavoriteStore.contains(this, pageUrl)
                 ? "Remove from Watch Later"
                 : "Watch Later";
-        VideoActionSheet.show(
+        VideoActionSheet.showCompact(
                 this,
                 title,
                 VideoActionSheet.section(
