@@ -150,7 +150,9 @@ public final class ChaosFeedView extends FrameLayout {
     private int consecutiveDryLoads;
     private int selectedPosition;
     private boolean userPaging;
+    private int creatorWarmAheadPosition = -1;
     private final Runnable saveRecentRunnable = this::saveRecentNow;
+    private final Runnable creatorWarmAheadRunnable = this::warmNextCreatorGallery;
 
     public ChaosFeedView(Activity activity, Host host) {
         super(activity);
@@ -261,6 +263,7 @@ public final class ChaosFeedView extends FrameLayout {
 
     public void onHostPause() {
         hostResumed = false;
+        cancelCreatorWarmAhead();
         if (!creatorGalleryHandoff) resetCreatorSwipePreview();
         pauseAll();
         if (!creatorGalleryHandoff) releaseAllPlayers();
@@ -274,6 +277,7 @@ public final class ChaosFeedView extends FrameLayout {
     }
 
     public void refresh() {
+    cancelCreatorWarmAhead();
     resetCreatorSwipePreview();
     pauseAll();
     consecutiveDryLoads = 0;
@@ -304,6 +308,7 @@ public final class ChaosFeedView extends FrameLayout {
         hostResumed = false;
         exitManualFullscreen();
         if (commentsDialog != null && commentsDialog.isShowing()) commentsDialog.dismiss();
+        cancelCreatorWarmAhead();
         pauseAll();
         releaseAllPlayers();
         flushRecent();
@@ -671,15 +676,26 @@ public final class ChaosFeedView extends FrameLayout {
         if (closed || !active || !hostResumed || position < 0 || position >= items.size()) return;
         ShitTokCreatorGalleryPreloader.warm(activity, items.get(position));
 
-        postDelayed(() -> {
-            if (closed || selectedPosition != position) return;
-            for (int next = position + 1; next < Math.min(items.size(), position + 8); next++) {
-                NativeContentItem candidate = items.get(next);
-                if (!ShitTokCreatorMetadata.hasCreator(candidate)) continue;
-                ShitTokCreatorGalleryPreloader.warm(activity, candidate);
-                break;
-            }
-        }, 700L);
+        cancelCreatorWarmAhead();
+        creatorWarmAheadPosition = position;
+        postDelayed(creatorWarmAheadRunnable, 700L);
+    }
+
+    private void cancelCreatorWarmAhead() {
+        removeCallbacks(creatorWarmAheadRunnable);
+        creatorWarmAheadPosition = -1;
+    }
+
+    private void warmNextCreatorGallery() {
+        int position = creatorWarmAheadPosition;
+        creatorWarmAheadPosition = -1;
+        if (closed || !active || !hostResumed || selectedPosition != position) return;
+        for (int next = position + 1; next < Math.min(items.size(), position + 8); next++) {
+            NativeContentItem candidate = items.get(next);
+            if (!ShitTokCreatorMetadata.hasCreator(candidate)) continue;
+            ShitTokCreatorGalleryPreloader.warm(activity, candidate);
+            break;
+        }
     }
 
     private void resolveAhead(int position) {
@@ -820,11 +836,21 @@ public final class ChaosFeedView extends FrameLayout {
     }
 
     private void releaseDistantPlayers(int selected) {
+        // Apply the preload window to every live player, including holders retained by
+        // RecyclerView but no longer attached. This keeps long ShitTok sessions bounded.
+        for (ChaosHolder holder : new ArrayList<>(playerHolders)) {
+            int position = holder.boundPosition;
+            if (position < 0 || !shouldPreparePlayer(position, selected)) {
+                holder.releasePlayer();
+            }
+        }
+
+        // Defensive coverage for attached holders that have not registered a player yet.
         RecyclerView rv = pagerRecycler();
         if (rv == null) return;
         for (int i = 0; i < rv.getChildCount(); i++) {
             RecyclerView.ViewHolder raw = rv.getChildViewHolder(rv.getChildAt(i));
-            if (!(raw instanceof ChaosHolder)) continue;
+            if (!(raw instanceof ChaosHolder) || playerHolders.contains(raw)) continue;
             ChaosHolder holder = (ChaosHolder) raw;
             int position = holder.getBindingAdapterPosition();
             if (position != RecyclerView.NO_POSITION && !shouldPreparePlayer(position, selected)) {

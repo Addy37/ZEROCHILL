@@ -54,6 +54,8 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
     private final Context context;
     private final Listener listener;
     private final boolean adaptiveAspectRatios;
+    private final PreloadRequestTracker imagePreloads =
+            new PreloadRequestTracker(320);
 
     BunkrGalleryAdapter(Context context, Listener listener) {
         this(context, listener, false);
@@ -336,8 +338,13 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         for (int i = start; i < end; i++) {
             NativeContentItem item = items.get(i);
             if (item.imageUrl == null || item.imageUrl.isEmpty()) continue;
+            String imageUrl = item.imageUrl.trim();
+            if (imageUrl.isEmpty()) continue;
+            String referer = imageReferer(item);
+            String preloadKey = imageUrl + "\n" + (referer == null ? "" : referer.trim());
+            if (!imagePreloads.markIfNew(preloadKey)) continue;
             RequestBuilder<Drawable> request = Glide.with(context)
-                    .load(withHeaders(item.imageUrl, imageReferer(item)))
+                    .load(withHeaders(imageUrl, referer))
                     .diskCacheStrategy(DiskCacheStrategy.ALL);
             if (adaptiveAspectRatios) request = request.dontTransform();
             else request = request.centerCrop();

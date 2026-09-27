@@ -67,6 +67,8 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
     }
 
     private final Context context;
+    private final PreloadRequestTracker directThumbnailPreloads =
+            new PreloadRequestTracker(256);
     private final List<NativeContentItem> items = new ArrayList<>();
     private final Set<String> itemUrls = new HashSet<>();
     private final Listener listener;
@@ -840,9 +842,13 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
 
     private void preloadDirectThumbnail(NativeContentItem item) {
         if (item == null || item.isSection() || item.imageUrl == null || item.imageUrl.isEmpty()) return;
-        Object source = item.imageUrl.startsWith("file://")
-                ? item.imageUrl
-                : withSiteHeaders(item.imageUrl, item.url);
+        String imageUrl = item.imageUrl.trim();
+        if (imageUrl.isEmpty()) return;
+        String preloadKey = imageUrl + "\n" + (item.url == null ? "" : item.url.trim());
+        if (!directThumbnailPreloads.markIfNew(preloadKey)) return;
+        Object source = imageUrl.startsWith("file://")
+                ? imageUrl
+                : withSiteHeaders(imageUrl, item.url);
         Glide.with(context)
                 .load(source)
                 .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)

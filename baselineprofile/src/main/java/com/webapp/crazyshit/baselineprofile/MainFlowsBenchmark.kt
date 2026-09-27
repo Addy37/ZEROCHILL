@@ -31,7 +31,7 @@ class MainFlowsBenchmark {
     }
 
     @Test
-    fun homeScroll() = benchmarkRule.measureRepeated(
+    fun showsScroll() = benchmarkRule.measureRepeated(
         packageName = TARGET_PACKAGE,
         metrics = listOf(FrameTimingMetric(), MemoryUsageMetric(MemoryUsageMetric.Mode.Last)),
         compilationMode = CompilationMode.None(),
@@ -39,7 +39,7 @@ class MainFlowsBenchmark {
         iterations = 3,
         setupBlock = { launchApp() }
     ) {
-        scrollHome()
+        scrollShows()
     }
 
     @Test
