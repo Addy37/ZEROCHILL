@@ -23,21 +23,25 @@ private fun MacrobenchmarkScope.awaitMainNavigation() {
     while (SystemClock.uptimeMillis() < deadline) {
         val notice = device.findObject(By.text(noticePattern))
         if (notice != null) {
-            val accept = checkNotNull(device.findObject(By.text(acceptPattern))) {
-                "Access notice appeared but its accept action was not reachable"
+            val accept = device.findObject(By.text(acceptPattern))
+            if (accept != null) {
+                accept.click()
+                device.waitForIdle(250)
+            } else {
+                SystemClock.sleep(100L)
             }
-            accept.click()
-            device.waitForIdle(250)
             continue
         }
 
         val notificationEducation = device.findObject(By.text("ZEROCHILL APP ALERTS"))
         if (notificationEducation != null) {
-            val notNow = checkNotNull(device.findObject(By.text("Not now"))) {
-                "Notification education appeared but Not now was not reachable"
+            val notNow = device.findObject(By.text("Not now"))
+            if (notNow != null) {
+                notNow.click()
+                device.waitForIdle(250)
+            } else {
+                SystemClock.sleep(100L)
             }
-            notNow.click()
-            device.waitForIdle(250)
             continue
         }
 
@@ -45,6 +49,12 @@ private fun MacrobenchmarkScope.awaitMainNavigation() {
         SystemClock.sleep(100L)
     }
 
+    if (device.findObject(By.text(noticePattern)) != null) {
+        error("Access notice did not clear")
+    }
+    if (device.findObject(By.text("ZEROCHILL APP ALERTS")) != null) {
+        error("Notification education did not clear")
+    }
     error("Main navigation shell did not become ready")
 }
 
