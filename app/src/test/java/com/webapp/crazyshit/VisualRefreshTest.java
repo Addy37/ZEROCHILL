@@ -402,6 +402,13 @@ public class VisualRefreshTest {
         input.setText("Alex");
         CreatorSuggestionsController suggestions = ReflectionHelpers.getField(screen.get(), "suggestions");
         suggestions.refreshLocal();
+        CreatorListAdapter adapter = ReflectionHelpers.getField(suggestions, "adapter");
+        long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(3);
+        while (adapter.getItemCount() == 0 && System.nanoTime() < deadline) {
+            shadowOf(Looper.getMainLooper()).idle();
+            Thread.sleep(10);
+        }
+        assertEquals(1, adapter.getItemCount());
         View root = ((android.view.ViewGroup) screen.get().findViewById(android.R.id.content)).getChildAt(0);
         capture(root, "creator-search", 411, 891);
         capture(root, "creator-search-keyboard-space", 360, 380);
@@ -409,7 +416,6 @@ public class VisualRefreshTest {
         assertEquals(View.VISIBLE, action.getVisibility());
         assertTrue(action.getHeight() >= BrowseUi.dp(screen.get(), 48));
         assertEquals(View.GONE, ((View) ReflectionHelpers.getField(screen.get(), "filterBar")).getVisibility());
-        CreatorListAdapter adapter = ReflectionHelpers.getField(suggestions, "adapter");
         CreatorListAdapter.Holder row = adapter.onCreateViewHolder(new RecyclerView(screen.get()), 0);
         adapter.onBindViewHolder(row, 0); row.itemView.performClick();
         assertEquals(NativeFeedBrowserActivity.class.getName(), shadowOf(screen.get()).getNextStartedActivity().getComponent().getClassName());
