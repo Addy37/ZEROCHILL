@@ -4,6 +4,7 @@ import android.os.SystemClock
 import androidx.benchmark.macro.MacrobenchmarkScope
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.Until
+import java.io.ByteArrayOutputStream
 import java.util.regex.Pattern
 
 internal const val TARGET_PACKAGE = "com.addy37.crazyshitunofficial"
@@ -202,7 +203,10 @@ internal fun MacrobenchmarkScope.openCreatorProfileAndGallery() {
             if (creator == null) SystemClock.sleep(200L)
         }
         checkNotNull(creator) {
-            "OnlyFap clickable creator gallery entry did not become available"
+            val hierarchy = ByteArrayOutputStream().also { device.dumpWindowHierarchy(it) }
+                .toString("UTF-8")
+            "OnlyFap clickable creator gallery entry did not become available. " +
+                "Visible UI: ${hierarchy.take(12_000)}"
         }
 
         try {
