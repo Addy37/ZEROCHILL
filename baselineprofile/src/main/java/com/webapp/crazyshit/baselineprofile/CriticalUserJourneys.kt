@@ -9,16 +9,18 @@ internal const val TARGET_PACKAGE = "com.addy37.crazyshitunofficial"
 internal fun MacrobenchmarkScope.launchApp() {
     pressHome()
     startActivityAndWait()
-    device.wait(Until.hasObject(By.text("I understand")), 2_000)
-    device.findObject(By.text("I understand"))?.click()
+    device.wait(Until.findObject(By.text("I understand")), 3_000)?.click()
+    checkNotNull(device.wait(Until.findObject(By.desc("Primary top bar")), 10_000)) {
+        "Main navigation shell did not become ready"
+    }
     device.waitForIdle()
 }
 
-internal fun MacrobenchmarkScope.scrollHome() {
-    val home = checkNotNull(device.wait(Until.findObject(By.text("Home")), 8_000)) {
-        "Home tab was not reachable"
+internal fun MacrobenchmarkScope.scrollShows() {
+    val shows = checkNotNull(device.wait(Until.findObject(By.desc("Shows tab")), 8_000)) {
+        "Shows tab was not reachable"
     }
-    home.click()
+    shows.click()
     device.waitForIdle()
     repeat(3) {
         swipeUp()
@@ -27,7 +29,7 @@ internal fun MacrobenchmarkScope.scrollHome() {
 }
 
 internal fun MacrobenchmarkScope.openAndScrollChaos() {
-    val shitTok = checkNotNull(device.wait(Until.findObject(By.text("ShitTok")), 8_000)) {
+    val shitTok = checkNotNull(device.wait(Until.findObject(By.desc("ShitTok tab")), 8_000)) {
         "ShitTok tab was not reachable"
     }
     shitTok.click()
@@ -74,7 +76,7 @@ private fun MacrobenchmarkScope.swipeUp() {
 }
 
 internal fun MacrobenchmarkScope.openCreatorProfileAndGallery() {
-    val onlyFap = checkNotNull(device.wait(Until.findObject(By.text("OnlyFap")), 8_000)) {
+    val onlyFap = checkNotNull(device.wait(Until.findObject(By.desc("OnlyFap tab")), 8_000)) {
         "OnlyFap tab was not reachable"
     }
     onlyFap.click()
