@@ -7,6 +7,7 @@ import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Rect;
 import android.graphics.RectF;
+import android.graphics.drawable.ColorDrawable;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ImageView;
@@ -34,6 +35,55 @@ import static org.robolectric.Shadows.shadowOf;
 @RunWith(RobolectricTestRunner.class)
 @Config(application = Application.class, sdk = 35)
 public class NavigationIaTest {
+    @Test public void portraitRestoreDoesNotDrawOldBlueHeaderBorder() {
+        android.content.Context context = org.robolectric.RuntimeEnvironment.getApplication();
+        context.getSharedPreferences("app_prefs", 0).edit()
+                .putBoolean("access_notice_2_8_3_accepted", true).apply();
+        ActivityController<NativeMainActivity> controller =
+                Robolectric.buildActivity(NativeMainActivity.class)
+                        .create().start().resume().visible();
+        NativeMainActivity activity = controller.get();
+        View topBar = ReflectionHelpers.getField(activity, "topBar");
+
+        // The landscape controller runs a portrait pass after returning from fullscreen.
+        LandscapeUiController.attach(activity);
+        LandscapeUiController.apply(activity);
+        assertTrue(topBar.getBackground() instanceof ColorDrawable);
+        assertEquals(ZeroChillUi.background(activity),
+                ((ColorDrawable) topBar.getBackground()).getColor());
+
+        controller.pause().stop().destroy();
+    }
+
+    @Test public void fullscreenReturnDoesNotRevealDuplicateOnlyFapHeader() {
+        android.content.Context context = org.robolectric.RuntimeEnvironment.getApplication();
+        context.getSharedPreferences("app_prefs", 0).edit()
+                .putBoolean("access_notice_2_8_3_accepted", true).apply();
+        ActivityController<NativeMainActivity> controller =
+                Robolectric.buildActivity(NativeMainActivity.class)
+                        .create().start().resume().visible();
+        shadowOf(android.os.Looper.getMainLooper()).idle();
+        NativeMainActivity activity = controller.get();
+        BottomNavigationView nav = ReflectionHelpers.getField(activity, "bottomNavigation");
+        View topBar = ReflectionHelpers.getField(activity, "topBar");
+
+        nav.setSelectedItemId(3); // Stable OnlyFap slot.
+        shadowOf(android.os.Looper.getMainLooper()).idle();
+        assertEquals(View.GONE, topBar.getVisibility());
+
+        // This restoration pass previously forced the main bar visible over the hero title.
+        LandscapeUiController.attach(activity);
+        LandscapeUiController.apply(activity);
+        assertEquals(View.GONE, topBar.getVisibility());
+
+        nav.setSelectedItemId(6); // Library uses the main header.
+        shadowOf(android.os.Looper.getMainLooper()).idle();
+        LandscapeUiController.apply(activity);
+        assertEquals(View.VISIBLE, topBar.getVisibility());
+
+        controller.pause().stop().destroy();
+    }
+
     @Test public void showsDetailsIntentCarriesRealCollectionPresentationData() {
         android.content.Context context = org.robolectric.RuntimeEnvironment.getApplication();
         context.getSharedPreferences("app_prefs", 0).edit()

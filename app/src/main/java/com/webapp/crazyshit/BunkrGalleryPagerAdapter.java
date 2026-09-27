@@ -45,6 +45,8 @@ final class BunkrGalleryPagerAdapter
     interface Listener {
         void onMediaTap(int position, NativeContentItem item);
 
+        void onMediaLongPress(int position, NativeContentItem item);
+
         void onResolvedImageFailed(int position, NativeContentItem item);
     }
 
@@ -313,17 +315,26 @@ final class BunkrGalleryPagerAdapter
         }
 
         holder.itemView.setContentDescription(
-                (item.isVideo() ? "Video, " : "Photo, ") + item.title
+                (item.isVideo() ? "Video, " : "Photo, ") + item.title +
+                        ". Long press to download."
         );
         View.OnClickListener openItem = v -> {
             int current = holder.getBindingAdapterPosition();
             if (current == RecyclerView.NO_POSITION || current >= items.size()) return;
             listener.onMediaTap(current, items.get(current));
         };
+        View.OnLongClickListener downloadItem = v -> {
+            int current = holder.getBindingAdapterPosition();
+            if (current == RecyclerView.NO_POSITION || current >= items.size()) return false;
+            listener.onMediaLongPress(current, items.get(current));
+            return true;
+        };
         holder.itemView.setOnClickListener(openItem);
-        // The preview sits above the page root, so give it the same action for videos too.
-        // Leaving a recycled preview clickable with a cleared listener swallows the play tap.
+        holder.itemView.setOnLongClickListener(downloadItem);
+        // The preview sits above the page root, so give it the same actions for videos too.
         holder.image.setOnClickListener(openItem);
+        holder.image.setOnLongClickListener(downloadItem);
+        holder.playerView.setOnLongClickListener(downloadItem);
         holder.play.setOnClickListener(openItem);
         holder.failure.setOnClickListener(openItem);
     }
@@ -331,7 +342,10 @@ final class BunkrGalleryPagerAdapter
     @Override
     public void onViewRecycled(@NonNull Holder holder) {
         holder.playerView.setPlayer(null);
+        holder.itemView.setOnLongClickListener(null);
         holder.image.setOnClickListener(null);
+        holder.image.setOnLongClickListener(null);
+        holder.playerView.setOnLongClickListener(null);
         holder.play.setOnClickListener(null);
         holder.failure.setOnClickListener(null);
         holder.image.resetZoom();

@@ -4,7 +4,9 @@ import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.Intent;
 import android.content.res.Configuration;
+import android.graphics.Bitmap;
 import android.graphics.Color;
+import android.graphics.drawable.ColorDrawable;
 import android.os.Bundle;
 import android.view.Gravity;
 import android.view.Menu;
@@ -12,9 +14,11 @@ import android.view.MotionEvent;
 import android.view.ScaleGestureDetector;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewTreeObserver;
 import android.webkit.CookieManager;
 import android.webkit.WebSettings;
 import android.widget.FrameLayout;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.PopupMenu;
 import android.widget.ProgressBar;
@@ -55,6 +59,7 @@ public final class NativeFeedBrowserActivity extends Activity {
     public static final String EXTRA_BUNKR_CREATOR_QUERY = "browser_bunkr_creator_query";
     public static final String EXTRA_FAPELLO_PROFILE_URL = "browser_fapello_profile_url";
     public static final String EXTRA_CREATOR_GALLERY_SESSION = "browser_creator_gallery_session";
+    static final String EXTRA_SHITTOK_RETURN_TRANSITION = "browser_shittok_return_transition";
     public static final String EXTRA_NOTIFICATION_FRESH_URLS =
             "browser_notification_fresh_urls";
     public static final String EXTRA_SHOW_DETAILS = "browser_show_details";
@@ -117,6 +122,15 @@ public final class NativeFeedBrowserActivity extends Activity {
     private final ArrayList<String> notificationFreshUrls = new ArrayList<>();
     private final Set<String> notificationFreshUrlSet = new LinkedHashSet<>();
     private boolean notificationFreshPendingFocus;
+    private String shitTokReturnTransition = "";
+    private FrameLayout shitTokTransitionHost;
+    private View shitTokTransitionContent;
+    private ImageView shitTokReturnSnapshot;
+    private ImageView creatorHandoffPreview;
+    private float shitTokReturnDownX;
+    private float shitTokReturnDownY;
+    private boolean shitTokReturnTracking;
+    private boolean shitTokReturnFinishing;
 
     public static Intent create(Activity activity, String title, String baseUrl, boolean memeMode) {
         return create(activity, title, baseUrl, memeMode, SOURCE_CRAZYSHIT);
@@ -210,6 +224,10 @@ public final class NativeFeedBrowserActivity extends Activity {
         source = value(getIntent().getStringExtra(EXTRA_SOURCE), SOURCE_CRAZYSHIT);
         creatorQuery = value(getIntent().getStringExtra(EXTRA_BUNKR_CREATOR_QUERY), "");
         fapelloProfileUrl = value(getIntent().getStringExtra(EXTRA_FAPELLO_PROFILE_URL), "");
+        shitTokReturnTransition = value(
+                getIntent().getStringExtra(EXTRA_SHITTOK_RETURN_TRANSITION),
+                ""
+        );
         showDetailsMode = getIntent().getBooleanExtra(EXTRA_SHOW_DETAILS, false);
         showImageUrl = value(getIntent().getStringExtra(EXTRA_SHOW_IMAGE_URL), "");
         showDescription = value(getIntent().getStringExtra(EXTRA_SHOW_DESCRIPTION), "");
@@ -315,7 +333,7 @@ public final class NativeFeedBrowserActivity extends Activity {
         TextView back = text("‹", 34, Color.WHITE);
         back.setGravity(Gravity.CENTER);
         back.setContentDescription("Back");
-        back.setOnClickListener(v -> finish());
+        back.setOnClickListener(v -> finishToShitTok());
         top.addView(back, new LinearLayout.LayoutParams(dp(48), dp(52)));
 
         TextView heading = text(isCreatorGallery() ? "OnlyFap" : showDetailsMode ? "Shows" : title, 20, Color.WHITE);
@@ -549,7 +567,244 @@ public final class NativeFeedBrowserActivity extends Activity {
         });
         body.addView(empty, new FrameLayout.LayoutParams(-1, -1));
 
-        setContentView(shell);
+        if (isCreatorGallery() && !shitTokReturnTransition.isEmpty()) {
+            installShitTokReturnSurface(shell);
+        } else {
+            setContentView(shell);
+        }
+    }
+
+    private void installShitTokReturnSurface(View content) {
+        shitTokTransitionHost = new FrameLayout(this);
+        shitTokTransitionHost.setBackgroundColor(Color.BLACK);
+
+        shitTokReturnSnapshot = new ImageView(this);
+        shitTokReturnSnapshot.setScaleType(ImageView.ScaleType.FIT_XY);
+        shitTokReturnSnapshot.setBackgroundColor(Color.BLACK);
+        shitTokReturnSnapshot.setImportantForAccessibility(
+                View.IMPORTANT_FOR_ACCESSIBILITY_NO
+        );
+        shitTokTransitionHost.addView(
+                shitTokReturnSnapshot,
+                new FrameLayout.LayoutParams(-1, -1)
+        );
+
+        shitTokTransitionContent = content;
+        shitTokTransitionContent.setElevation(dp(10));
+        shitTokTransitionHost.addView(
+                shitTokTransitionContent,
+                new FrameLayout.LayoutParams(-1, -1)
+        );
+        setContentView(shitTokTransitionHost);
+        refreshShitTokReturnSnapshot(0);
+        Bitmap galleryFrame = ShitTokTransitionSnapshotStore.galleryPreview(shitTokReturnTransition);
+        if (galleryFrame != null && !galleryFrame.isRecycled()) {
+            creatorHandoffPreview = new ImageView(this);
+            creatorHandoffPreview.setScaleType(ImageView.ScaleType.FIT_XY);
+            creatorHandoffPreview.setImageBitmap(galleryFrame);
+            creatorHandoffPreview.setImportantForAccessibility(
+                    View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+            shitTokTransitionHost.addView(creatorHandoffPreview,
+                    new FrameLayout.LayoutParams(-1, -1));
+            // A failed thumbnail request must not leave a frozen preview over an
+            // otherwise usable gallery. The normal path removes it on the first ready draw.
+            shitTokTransitionHost.postDelayed(() -> {
+                if (creatorHandoffPreview != null) clearCreatorHandoffPreview();
+            }, 2000L);
+            shitTokTransitionHost.getViewTreeObserver().addOnPreDrawListener(
+                    new ViewTreeObserver.OnPreDrawListener() {
+                        @Override public boolean onPreDraw() {
+                            if (creatorHandoffPreview == null) {
+                                shitTokTransitionHost.getViewTreeObserver()
+                                        .removeOnPreDrawListener(this);
+                                return true;
+                            }
+                            if (creatorGalleryFirstFrameReady()) {
+                                shitTokTransitionHost.getViewTreeObserver()
+                                        .removeOnPreDrawListener(this);
+                                clearCreatorHandoffPreview();
+                                return false;
+                            }
+                            return true;
+                        }
+                    });
+        }
+    }
+
+    private void clearCreatorHandoffPreview() {
+        if (creatorHandoffPreview == null) return;
+        shitTokTransitionHost.removeView(creatorHandoffPreview);
+        creatorHandoffPreview = null;
+    }
+
+    private boolean creatorGalleryFirstFrameReady() {
+        RecyclerView first = creatorTabRecyclers[CREATOR_TAB_ALL];
+        BunkrGalleryAdapter galleryAdapter = creatorTabAdapters[CREATOR_TAB_ALL];
+        if (first == null || galleryAdapter == null || first.getWidth() == 0) return false;
+        if (galleryAdapter.size() == 0) return !loading;
+        if (first.getChildCount() == 0) return false;
+        View tile = first.getChildAt(0);
+        if (!(tile instanceof ViewGroup)) return true;
+        View image = ((ViewGroup) tile).getChildAt(0);
+        return image instanceof ImageView
+                && ((ImageView) image).getDrawable() != null
+                && !(((ImageView) image).getDrawable() instanceof ColorDrawable);
+    }
+
+    private void refreshShitTokReturnSnapshot(int attempt) {
+        if (shitTokReturnSnapshot == null || shitTokReturnTransition.isEmpty()) return;
+        Bitmap snapshot = ShitTokTransitionSnapshotStore.snapshot(shitTokReturnTransition);
+        if (snapshot != null && !snapshot.isRecycled()) {
+            shitTokReturnSnapshot.setImageBitmap(snapshot);
+            return;
+        }
+        if (attempt < 8) {
+            shitTokReturnSnapshot.postDelayed(
+                    () -> refreshShitTokReturnSnapshot(attempt + 1),
+                    40L
+            );
+        }
+    }
+
+    static float shitTokReturnTranslation(float dx, float width) {
+        if (width <= 0f) return 0f;
+        return Math.max(0f, Math.min(width, dx));
+    }
+
+    static boolean shouldCommitShitTokReturn(float dx, float dy, float threshold) {
+        return threshold > 0f
+                && dx >= threshold
+                && Math.abs(dx) > Math.abs(dy) * 1.15f;
+    }
+
+    @Override
+    public boolean dispatchTouchEvent(MotionEvent event) {
+        if (event != null && event.getActionMasked() == MotionEvent.ACTION_DOWN
+                && creatorHandoffPreview != null) {
+            clearCreatorHandoffPreview();
+        }
+        if (event != null
+                && event.getActionMasked() == MotionEvent.ACTION_POINTER_DOWN
+                && shitTokReturnTracking) {
+            cancelShitTokReturnGesture();
+            return true;
+        }
+        if (!canUseShitTokReturnGesture(event)) {
+            return super.dispatchTouchEvent(event);
+        }
+
+        int action = event.getActionMasked();
+        if (action == MotionEvent.ACTION_DOWN) {
+            shitTokReturnDownX = event.getX();
+            shitTokReturnDownY = event.getY();
+            shitTokReturnTracking = false;
+            return super.dispatchTouchEvent(event);
+        }
+
+        if (action == MotionEvent.ACTION_POINTER_DOWN) {
+            if (shitTokReturnTracking) cancelShitTokReturnGesture();
+            return super.dispatchTouchEvent(event);
+        }
+
+        float dx = event.getX() - shitTokReturnDownX;
+        float dy = event.getY() - shitTokReturnDownY;
+
+        if (action == MotionEvent.ACTION_MOVE && !shitTokReturnTracking) {
+            if (dx > dp(12) && Math.abs(dx) > Math.abs(dy) * 1.15f) {
+                shitTokReturnTracking = true;
+                MotionEvent cancel = MotionEvent.obtain(event);
+                cancel.setAction(MotionEvent.ACTION_CANCEL);
+                super.dispatchTouchEvent(cancel);
+                cancel.recycle();
+                if (creatorTabsPager != null) creatorTabsPager.setUserInputEnabled(false);
+                if (refresh != null) refresh.setEnabled(false);
+            } else {
+                return super.dispatchTouchEvent(event);
+            }
+        }
+
+        if (shitTokReturnTracking && action == MotionEvent.ACTION_MOVE) {
+            shitTokTransitionContent.animate().cancel();
+            shitTokTransitionContent.setTranslationX(
+                    shitTokReturnTranslation(dx, shitTokTransitionContent.getWidth())
+            );
+            return true;
+        }
+
+        if (shitTokReturnTracking &&
+                (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL)) {
+            float width = Math.max(1f, shitTokTransitionContent.getWidth());
+            float threshold = Math.max(dp(72), width * 0.18f);
+            boolean finish = action == MotionEvent.ACTION_UP
+                    && shouldCommitShitTokReturn(dx, dy, threshold);
+            shitTokReturnTracking = false;
+            if (finish) {
+                finishShitTokReturnGesture(width);
+            } else {
+                cancelShitTokReturnGesture();
+            }
+            return true;
+        }
+
+        return shitTokReturnTracking || super.dispatchTouchEvent(event);
+    }
+
+    private boolean canUseShitTokReturnGesture(MotionEvent event) {
+        if (!isCreatorGallery()
+                || shitTokReturnTransition.isEmpty()
+                || shitTokTransitionContent == null
+                || shitTokReturnFinishing
+                || event == null) {
+            return false;
+        }
+        if (event.getPointerCount() > 1) return false;
+        return activeCreatorTab() == CREATOR_TAB_ALL;
+    }
+
+    private void cancelShitTokReturnGesture() {
+        if (shitTokTransitionContent == null) return;
+        shitTokReturnTracking = false;
+        shitTokTransitionContent.animate().cancel();
+        shitTokTransitionContent.animate()
+                .translationX(0f)
+                .setDuration(ZeroChillMotion.QUICK_MS)
+                .withEndAction(this::restoreShitTokReturnInput)
+                .start();
+    }
+
+    private void finishShitTokReturnGesture(float width) {
+        if (shitTokTransitionContent == null) {
+            finishToShitTok();
+            return;
+        }
+        shitTokReturnFinishing = true;
+        float progress = Math.max(
+                0f,
+                Math.min(1f, shitTokTransitionContent.getTranslationX() / width)
+        );
+        long duration = Math.max(80L, Math.min(170L, Math.round((1f - progress) * 170f)));
+        shitTokTransitionContent.animate().cancel();
+        shitTokTransitionContent.animate()
+                .translationX(width)
+                .setDuration(duration)
+                .withEndAction(this::finishToShitTok)
+                .start();
+    }
+
+    private void restoreShitTokReturnInput() {
+        if (creatorTabsPager != null) creatorTabsPager.setUserInputEnabled(true);
+        if (refresh != null) refresh.setEnabled(true);
+    }
+
+    private void finishToShitTok() {
+        if (isFinishing()) return;
+        finish();
+        if (!shitTokReturnTransition.isEmpty()) overridePendingTransition(0, 0);
+    }
+
+    @Override
+    public void onBackPressed() {
+        finishToShitTok();
     }
 
     private RecyclerView createRecycler() {
@@ -572,7 +827,21 @@ public final class NativeFeedBrowserActivity extends Activity {
 
                     @Override
                     public void onLongPress(NativeContentItem item, View anchor) {
-                        showItemMenu(item, anchor);
+                        if (isCreatorGallery()) {
+                            anchor.performHapticFeedback(
+                                    android.view.HapticFeedbackConstants.LONG_PRESS
+                            );
+                            GalleryMediaDownloader.download(
+                                    NativeFeedBrowserActivity.this,
+                                    io,
+                                    item,
+                                    "",
+                                    "",
+                                    null
+                            );
+                        } else {
+                            showItemMenu(item, anchor);
+                        }
                     }
                 },
                 adaptiveAspectRatios
@@ -1763,6 +2032,9 @@ public final class NativeFeedBrowserActivity extends Activity {
     @Override
     protected void onDestroy() {
         generation++;
+        if (isFinishing() && !shitTokReturnTransition.isEmpty()) {
+            ShitTokTransitionSnapshotStore.remove(shitTokReturnTransition);
+        }
         if (adapter != null) adapter.close();
         if (creatorTabsMediator != null) creatorTabsMediator.detach();
         io.shutdownNow();

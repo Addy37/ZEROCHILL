@@ -96,7 +96,7 @@ final class LandscapeUiController {
         boolean chaosFullscreen = landscape && selected == NAV_CHAOS;
 
         ensureRail(activity, state);
-        adaptTopBar(activity, state, landscape, chaosFullscreen);
+        adaptTopBar(activity, state, landscape, chaosFullscreen, selected);
         adaptNavigation(activity, state, landscape, chaosFullscreen, selected);
         adaptFeedLayouts(activity, state, landscape, chaosFullscreen);
         installAdaptiveInsets(activity, state);
@@ -284,13 +284,24 @@ final class LandscapeUiController {
             NativeMainActivity activity,
             State state,
             boolean landscape,
-            boolean chaosFullscreen
+            boolean chaosFullscreen,
+            int selected
     ) {
         View topBar = state.topBar;
         if (topBar == null) return;
-        ZeroChillUi.styleTopBar(topBar);
+        // The portrait restoration pass must not briefly draw the old blue-edged glass
+        // rectangle over the main header before the portrait navigation owner runs.
+        if (landscape) {
+            ZeroChillUi.styleTopBar(topBar);
+        } else {
+            topBar.setBackgroundColor(ZeroChillUi.background(activity));
+            topBar.setElevation(0f);
+        }
 
-        setVisibility(topBar, chaosFullscreen ? View.GONE : View.VISIBLE);
+        // OnlyFap owns its title and actions inside the hero. A landscape/portrait pass after
+        // video fullscreen must not reveal the duplicate main header over that page.
+        setVisibility(topBar,
+                chaosFullscreen || selected == NAV_CATEGORIES ? View.GONE : View.VISIBLE);
         ViewGroup.LayoutParams raw = topBar.getLayoutParams();
         if (raw != null) {
             int wanted = dp(activity, landscape ? LANDSCAPE_TOP_BAR_DP : PORTRAIT_TOP_BAR_DP);

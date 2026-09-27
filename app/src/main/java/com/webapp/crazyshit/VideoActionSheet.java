@@ -110,6 +110,169 @@ final class VideoActionSheet {
         }
     }
 
+
+    static void showCompact(Activity activity, String videoTitle, Section... sections) {
+        if (activity == null || activity.isFinishing() || activity.isDestroyed()) return;
+        boolean sidePanel = activity.getResources().getConfiguration().orientation ==
+                Configuration.ORIENTATION_LANDSCAPE;
+        Dialog dialog = sidePanel ? new Dialog(activity) : new BottomSheetDialog(activity);
+        dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
+        if (dialog instanceof BottomSheetDialog) {
+            ((BottomSheetDialog) dialog).setDismissWithAnimation(true);
+        }
+
+        int screenWidth = activity.getResources().getDisplayMetrics().widthPixels;
+        int screenHeight = activity.getResources().getDisplayMetrics().heightPixels;
+        int desiredHeight = dp(activity, 56 + sections.length * 20 + countActions(sections) * 48);
+        int panelHeight = sidePanel
+                ? Math.min((int) (screenHeight * 0.78f), dp(activity, 520))
+                : Math.min((int) (screenHeight * 0.70f), desiredHeight);
+
+        LinearLayout panel = new LinearLayout(activity);
+        panel.setOrientation(LinearLayout.VERTICAL);
+        panel.setPadding(dp(activity, 12), sidePanel ? dp(activity, 10) : dp(activity, 6),
+                dp(activity, 12), dp(activity, 10));
+        panel.setBackground(compactPanelBackground(activity));
+        panel.setClipToOutline(true);
+        panel.setContentDescription(TextUtils.isEmpty(videoTitle)
+                ? "ShitTok video actions"
+                : "ShitTok video actions for " + videoTitle);
+
+        if (!sidePanel) addDragHandle(activity, panel);
+        addCompactHeader(activity, dialog, panel);
+
+        ScrollView scroll = new ScrollView(activity);
+        scroll.setFillViewport(false);
+        scroll.setClipToPadding(false);
+        scroll.setOverScrollMode(View.OVER_SCROLL_IF_CONTENT_SCROLLS);
+        LinearLayout content = new LinearLayout(activity);
+        content.setOrientation(LinearLayout.VERTICAL);
+        for (Section section : sections) addCompactSection(activity, dialog, content, section);
+        scroll.addView(content, new ScrollView.LayoutParams(-1, -2));
+        panel.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1f));
+
+        dialog.setContentView(panel, new ViewGroup.LayoutParams(-1, panelHeight));
+        dialog.setCanceledOnTouchOutside(true);
+        dialog.show();
+
+        Window window = dialog.getWindow();
+        if (window == null) return;
+        window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+        window.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
+        WindowManager.LayoutParams attrs = window.getAttributes();
+        attrs.dimAmount = 0.44f;
+        if (sidePanel) {
+            attrs.width = Math.min((int) (screenWidth * 0.58f), dp(activity, 360));
+            attrs.height = panelHeight;
+            attrs.gravity = Gravity.END | Gravity.CENTER_VERTICAL;
+        } else {
+            attrs.width = WindowManager.LayoutParams.MATCH_PARENT;
+            attrs.height = WindowManager.LayoutParams.WRAP_CONTENT;
+            attrs.gravity = Gravity.BOTTOM;
+        }
+        window.setAttributes(attrs);
+
+        if (dialog instanceof BottomSheetDialog) {
+            BottomSheetDialog sheet = (BottomSheetDialog) dialog;
+            sheet.getBehavior().setSkipCollapsed(true);
+            sheet.getBehavior().setState(BottomSheetBehavior.STATE_EXPANDED);
+            View bottom = dialog.findViewById(com.google.android.material.R.id.design_bottom_sheet);
+            if (bottom != null) bottom.setBackgroundColor(Color.TRANSPARENT);
+        } else {
+            ZeroChillMotion.enterFromEnd(panel, dp(activity, 18));
+        }
+    }
+
+    private static void addCompactHeader(
+            Activity activity,
+            Dialog dialog,
+            LinearLayout panel
+    ) {
+        LinearLayout header = new LinearLayout(activity);
+        header.setOrientation(LinearLayout.HORIZONTAL);
+        header.setGravity(Gravity.CENTER_VERTICAL);
+        header.setPadding(dp(activity, 4), 0, 0, dp(activity, 4));
+
+        TextView title = text(activity, "More", 18, Color.WHITE, true);
+        header.addView(title, new LinearLayout.LayoutParams(0, -2, 1f));
+
+        ImageView close = icon(activity, R.drawable.ic_more_close, 34, 8);
+        close.setImageTintList(ColorStateList.valueOf(Color.rgb(210, 210, 218)));
+        close.setBackground(circle(Color.rgb(29, 29, 34)));
+        close.setContentDescription("Close video actions");
+        close.setOnClickListener(v -> dialog.dismiss());
+        header.addView(close, new LinearLayout.LayoutParams(dp(activity, 34), dp(activity, 34)));
+        panel.addView(header, new LinearLayout.LayoutParams(-1, -2));
+    }
+
+    private static void addCompactSection(
+            Activity activity,
+            Dialog dialog,
+            LinearLayout parent,
+            Section section
+    ) {
+        if (section == null || section.actions.isEmpty()) return;
+        TextView label = text(activity, section.label, 9, Color.rgb(136, 136, 146), true);
+        label.setLetterSpacing(0.08f);
+        label.setPadding(dp(activity, 5), dp(activity, 6), dp(activity, 5), dp(activity, 3));
+        parent.addView(label, new LinearLayout.LayoutParams(-1, -2));
+
+        LinearLayout group = new LinearLayout(activity);
+        group.setOrientation(LinearLayout.VERTICAL);
+        group.setPadding(dp(activity, 2), dp(activity, 1), dp(activity, 2), dp(activity, 1));
+        group.setBackground(rounded(Color.rgb(15, 15, 18), dp(activity, 15)));
+
+        for (int i = 0; i < section.actions.size(); i++) {
+            addCompactRow(activity, dialog, group, section.actions.get(i));
+            if (i < section.actions.size() - 1) {
+                View divider = new View(activity);
+                divider.setBackgroundColor(Color.rgb(38, 38, 44));
+                LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, dp(activity, 1));
+                params.setMargins(dp(activity, 45), 0, dp(activity, 7), 0);
+                group.addView(divider, params);
+            }
+        }
+        LinearLayout.LayoutParams groupParams = new LinearLayout.LayoutParams(-1, -2);
+        groupParams.setMargins(0, 0, 0, dp(activity, 1));
+        parent.addView(group, groupParams);
+    }
+
+    private static void addCompactRow(
+            Activity activity,
+            Dialog dialog,
+            LinearLayout group,
+            Action action
+    ) {
+        LinearLayout row = new LinearLayout(activity);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(dp(activity, 7), dp(activity, 4), dp(activity, 7), dp(activity, 4));
+        row.setClickable(true);
+        row.setFocusable(true);
+        row.setContentDescription(action.title + ". " + action.subtitle);
+        selectableForeground(activity, row);
+
+        ImageView icon = icon(activity, action.iconRes, 32, 7);
+        icon.setImageTintList(ColorStateList.valueOf(Color.WHITE));
+        icon.setBackground(circle(Color.rgb(29, 29, 34)));
+        row.addView(icon, new LinearLayout.LayoutParams(dp(activity, 32), dp(activity, 32)));
+
+        TextView title = text(activity, action.title, 14, Color.WHITE, true);
+        title.setSingleLine(true);
+        title.setEllipsize(TextUtils.TruncateAt.END);
+        LinearLayout.LayoutParams titleParams = new LinearLayout.LayoutParams(0, -2, 1f);
+        titleParams.setMargins(dp(activity, 10), 0, dp(activity, 5), 0);
+        row.addView(title, titleParams);
+
+        ZeroChillMotion.installPressFeedback(row);
+        row.setOnClickListener(v -> {
+            v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
+            dialog.dismiss();
+            action.run.run();
+        });
+        group.addView(row, new LinearLayout.LayoutParams(-1, dp(activity, 48)));
+    }
+
     private static void addDragHandle(Activity activity, LinearLayout panel) {
         View handle = new View(activity);
         handle.setBackground(rounded(Color.rgb(91, 91, 101), dp(activity, 2)));
@@ -270,6 +433,12 @@ final class VideoActionSheet {
 
     private static android.graphics.drawable.Drawable panelBackground(Activity activity) {
         return ZeroChillUi.sheetGlass(activity);
+    }
+
+    private static android.graphics.drawable.Drawable compactPanelBackground(Activity activity) {
+        GradientDrawable background = rounded(Color.rgb(8, 8, 10), dp(activity, 22));
+        background.setStroke(dp(activity, 1), Color.rgb(43, 43, 50));
+        return background;
     }
 
     private static int countActions(Section[] sections) {

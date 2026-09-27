@@ -10,6 +10,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.text.TextUtils;
 import android.view.Gravity;
+import android.view.HapticFeedbackConstants;
 import android.view.Menu;
 import android.view.View;
 import android.view.WindowInsets;
@@ -187,6 +188,14 @@ public final class BunkrGalleryActivity extends Activity {
                     @Override
                     public void onMediaTap(int position, NativeContentItem item) {
                         BunkrGalleryActivity.this.onMediaTap(position, item);
+                    }
+
+                    @Override
+                    public void onMediaLongPress(int position, NativeContentItem item) {
+                        if (pager != null) {
+                            pager.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
+                        }
+                        downloadGalleryItem(position, item);
                     }
 
                     @Override
@@ -968,13 +977,42 @@ public final class BunkrGalleryActivity extends Activity {
         menu.show();
     }
 
+    private void downloadGalleryItem(int position, NativeContentItem item) {
+        if (item == null) return;
+        String resolvedUrl = adapter.resolvedUrl(position);
+        String referer = item.isVideo()
+                ? videoReferers.getOrDefault(item.url, item.url)
+                : "";
+        GalleryMediaDownloader.download(
+                this,
+                mediaIo,
+                item,
+                resolvedUrl,
+                referer,
+                (mediaUrl, requestReferer) -> {
+                    if (!item.isImage()) return;
+                    adapter.setResolvedUrl(position, mediaUrl);
+                    BunkrGallerySessionStore.setResolvedUrl(
+                            sessionId,
+                            item.url,
+                            mediaUrl
+                    );
+                }
+        );
+    }
+
+    private void downloadVideoItem(int position, NativeContentItem item) {
+        downloadGalleryItem(position, item);
+    }
+
     private void downloadCurrentVideo() {
-        NativeContentItem item = adapter.itemAt(pager.getCurrentItem());
+        int position = pager.getCurrentItem();
+        NativeContentItem item = adapter.itemAt(position);
         if (item == null || !item.isVideo()) {
             Toast.makeText(this, "This item is not a video.", Toast.LENGTH_SHORT).show();
             return;
         }
-        VideoDownloadStore.downloadPage(this, item);
+        downloadVideoItem(position, item);
     }
 
     private void shareCurrent() {

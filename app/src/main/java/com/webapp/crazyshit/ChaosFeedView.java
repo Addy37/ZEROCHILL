@@ -129,6 +129,8 @@ public final class ChaosFeedView extends FrameLayout {
     private ChaosAdapter adapter;
     private TextView empty;
     private ProgressBar initialProgress;
+    private ShitTokCreatorSwipePreview creatorSwipePreview;
+    private boolean creatorGalleryHandoff;
     private InlineCommentsDialog commentsDialog;
     private boolean active;
     private boolean hostResumed = true;
@@ -191,6 +193,7 @@ public final class ChaosFeedView extends FrameLayout {
 
             @Override
             public void onPageSelected(int position) {
+                resetCreatorSwipePreview();
                 int previousPosition = selectedPosition;
                 if (autoAdvancePending && position != autoAdvanceFrom) {
                     autoAdvancePending = false;
@@ -231,6 +234,7 @@ public final class ChaosFeedView extends FrameLayout {
             releaseVisiblePlayers();
         }
         if (!active) {
+            resetCreatorSwipePreview();
             if (clearDisplay) setClearDisplay(false);
             exitManualFullscreen();
         }
@@ -238,6 +242,10 @@ public final class ChaosFeedView extends FrameLayout {
 
     public void onHostResume() {
         hostResumed = true;
+        if (creatorGalleryHandoff) {
+            creatorGalleryHandoff = false;
+            resetCreatorSwipePreview();
+        }
         if (active) {
             resolveAhead(selectedPosition);
             playSelected();
@@ -247,17 +255,20 @@ public final class ChaosFeedView extends FrameLayout {
 
     public void onHostPause() {
         hostResumed = false;
+        if (!creatorGalleryHandoff) resetCreatorSwipePreview();
         pauseAll();
-        releaseVisiblePlayers();
+        if (!creatorGalleryHandoff) releaseVisiblePlayers();
         flushRecent();
     }
 
     public void onConfigurationChanged() {
+        resetCreatorSwipePreview();
         if (commentsDialog != null && commentsDialog.isShowing()) commentsDialog.dismiss();
         syncVisibleChrome();
     }
 
     public void refresh() {
+    resetCreatorSwipePreview();
     pauseAll();
     consecutiveDryLoads = 0;
     sourceMixer.resetDeck();
@@ -280,6 +291,7 @@ public final class ChaosFeedView extends FrameLayout {
 }
 
     public void close() {
+        resetCreatorSwipePreview();
         closed = true;
         poolLoading = false;
         active = false;
@@ -290,6 +302,9 @@ public final class ChaosFeedView extends FrameLayout {
         releaseVisiblePlayers();
         flushRecent();
         removeCallbacks(saveRecentRunnable);
+        if (creatorSwipePreview != null && creatorSwipePreview.getParent() instanceof ViewGroup) {
+            ((ViewGroup) creatorSwipePreview.getParent()).removeView(creatorSwipePreview);
+        }
         io.shutdownNow();
     }
 
@@ -362,6 +377,168 @@ public final class ChaosFeedView extends FrameLayout {
 
     static boolean shouldPreparePlayer(int position, int selectedPosition) {
         return position >= selectedPosition && position <= selectedPosition + 2;
+    }
+
+    static boolean shouldOpenCreatorGallerySwipe(float dx, float dy, float threshold) {
+        return threshold > 0f
+                && dx <= -threshold
+                && Math.abs(dx) > Math.abs(dy) * 1.20f;
+    }
+
+    static float creatorSwipeContentTranslation(float dx, float width) {
+        if (width <= 0f) return 0f;
+        return Math.max(-width, Math.min(0f, dx));
+    }
+
+    static float creatorSwipePreviewTranslation(float dx, float width) {
+        if (width <= 0f) return 0f;
+        return width + creatorSwipeContentTranslation(dx, width);
+    }
+
+    private FrameLayout creatorSwipeHost() {
+        View content = activity.findViewById(android.R.id.content);
+        return content instanceof FrameLayout ? (FrameLayout) content : null;
+    }
+
+    private View creatorSwipeSourceView() {
+        FrameLayout hostView = creatorSwipeHost();
+        if (hostView == null || hostView.getChildCount() == 0) return null;
+        for (int index = 0; index < hostView.getChildCount(); index++) {
+            View child = hostView.getChildAt(index);
+            if (child != creatorSwipePreview) return child;
+        }
+        return null;
+    }
+
+    private void ensureCreatorSwipePreview() {
+        FrameLayout hostView = creatorSwipeHost();
+        if (hostView == null) return;
+        if (creatorSwipePreview == null) {
+            creatorSwipePreview = new ShitTokCreatorSwipePreview(activity);
+            creatorSwipePreview.setVisibility(View.GONE);
+        }
+        if (creatorSwipePreview.getParent() != hostView) {
+            if (creatorSwipePreview.getParent() instanceof ViewGroup) {
+                ((ViewGroup) creatorSwipePreview.getParent()).removeView(creatorSwipePreview);
+            }
+            hostView.addView(
+                    creatorSwipePreview,
+                    new FrameLayout.LayoutParams(-1, -1)
+            );
+        }
+    }
+
+    private void beginCreatorSwipePreview(String creator) {
+        ensureCreatorSwipePreview();
+        if (creatorSwipePreview == null || creator == null || creator.trim().isEmpty()) return;
+        String sessionId = ShitTokCreatorGalleryPreloader.sessionId(activity, creator);
+        creatorSwipePreview.showCreator(creator, sessionId);
+        FrameLayout hostView = creatorSwipeHost();
+        float width = hostView == null ? Math.max(1, getWidth()) : Math.max(1, hostView.getWidth());
+        creatorSwipePreview.setTranslationX(width);
+        creatorSwipePreview.bringToFront();
+    }
+
+    private void updateCreatorSwipePreview(float dx, View ignoredContent) {
+        View content = creatorSwipeSourceView();
+        if (creatorSwipePreview == null || content == null) return;
+        float width = Math.max(1f, content.getWidth());
+        float contentTranslation = creatorSwipeContentTranslation(dx, width);
+        content.setTranslationX(contentTranslation);
+        content.setAlpha(1f);
+        creatorSwipePreview.setTranslationX(
+                creatorSwipePreviewTranslation(dx, width)
+        );
+    }
+
+    private void cancelCreatorSwipePreview(View ignoredContent) {
+        View content = creatorSwipeSourceView();
+        if (content != null) {
+            content.animate().cancel();
+            content.animate()
+                    .translationX(0f)
+                    .alpha(1f)
+                    .setDuration(ZeroChillMotion.QUICK_MS)
+                    .start();
+        }
+        if (creatorSwipePreview == null || creatorSwipePreview.getVisibility() != View.VISIBLE) {
+            return;
+        }
+        creatorSwipePreview.animate().cancel();
+        FrameLayout hostView = creatorSwipeHost();
+        float width = hostView == null ? Math.max(1, getWidth()) : Math.max(1, hostView.getWidth());
+        creatorSwipePreview.animate()
+                .translationX(width)
+                .setDuration(ZeroChillMotion.QUICK_MS)
+                .withEndAction(() -> creatorSwipePreview.setVisibility(View.GONE))
+                .start();
+    }
+
+    private void commitCreatorSwipePreview(
+            View ignoredContent,
+            String creator,
+            String transitionToken,
+            Runnable openGallery
+    ) {
+        if (openGallery == null) return;
+        View content = creatorSwipeSourceView();
+        if (content == null || creatorSwipePreview == null) {
+            openGallery.run();
+            return;
+        }
+        float width = Math.max(1f, content.getWidth());
+        creatorSwipePreview.refreshCreator(
+                creator,
+                ShitTokCreatorGalleryPreloader.sessionId(activity, creator)
+        );
+        content.animate().cancel();
+        creatorSwipePreview.animate().cancel();
+
+        if (!ZeroChillMotion.animationsEnabled(activity)) {
+            content.setTranslationX(-width);
+            creatorSwipePreview.setTranslationX(0f);
+            ShitTokTransitionSnapshotStore.captureGalleryPreview(
+                    transitionToken, creatorSwipePreview);
+            creatorGalleryHandoff = true;
+            openGallery.run();
+            return;
+        }
+
+        float progress = Math.max(
+                0f,
+                Math.min(1f, Math.abs(content.getTranslationX()) / width)
+        );
+        long duration = Math.max(80L, Math.min(170L, Math.round((1f - progress) * 170f)));
+        content.animate()
+                .translationX(-width)
+                .alpha(1f)
+                .setDuration(duration)
+                .start();
+        creatorSwipePreview.animate()
+                .translationX(0f)
+                .setDuration(duration)
+                .withEndAction(() -> {
+                    ShitTokTransitionSnapshotStore.captureGalleryPreview(
+                            transitionToken, creatorSwipePreview);
+                    creatorGalleryHandoff = true;
+                    openGallery.run();
+                })
+                .start();
+    }
+
+    private void resetCreatorSwipePreview() {
+        View content = creatorSwipeSourceView();
+        if (content != null) {
+            content.animate().cancel();
+            content.setTranslationX(0f);
+            content.setAlpha(1f);
+        }
+        if (creatorSwipePreview == null) return;
+        creatorSwipePreview.animate().cancel();
+        creatorSwipePreview.setVisibility(View.GONE);
+        FrameLayout hostView = creatorSwipeHost();
+        float width = hostView == null ? Math.max(1, getWidth()) : Math.max(1, hostView.getWidth());
+        creatorSwipePreview.setTranslationX(width);
     }
 
     private static boolean isMedia(NativeContentItem item) {
@@ -1106,6 +1283,10 @@ public final class ChaosFeedView extends FrameLayout {
         boolean horizontalVideo;
         float videoAspectRatio;
         float restoreSpeed = 1f;
+        float creatorSwipeDownX;
+        float creatorSwipeDownY;
+        boolean creatorSwipeTracking;
+        String creatorSwipeTransitionToken = "";
 
         private final Runnable hideControlsRunnable = this::hideControlsNow;
         private final Runnable hideSeekBarRunnable = this::hideSeekBarNow;
@@ -1226,7 +1407,7 @@ public final class ChaosFeedView extends FrameLayout {
             actionRail.addView(share, actionParams());
 
             TextView more = textIconActionButton(
-                    R.drawable.ic_nav_more,
+                    R.drawable.ic_more_overflow,
                     "More video actions",
                     "shittok_more"
             );
@@ -1365,14 +1546,82 @@ public final class ChaosFeedView extends FrameLayout {
                 int action = event.getActionMasked();
                 boolean multiTouch = event.getPointerCount() > 1 || clearDisplayGesture.isInProgress();
 
+                if (action == MotionEvent.ACTION_DOWN) {
+                    creatorSwipeDownX = event.getX();
+                    creatorSwipeDownY = event.getY();
+                    creatorSwipeTracking = false;
+                }
+
                 if (action == MotionEvent.ACTION_POINTER_DOWN) {
                     v.cancelLongPress();
                     restorePlaybackSpeed();
+                    creatorSwipeTracking = false;
+                    cancelCreatorSwipePreview(root);
+                    ShitTokTransitionSnapshotStore.remove(creatorSwipeTransitionToken);
+                    creatorSwipeTransitionToken = "";
                     pager.setUserInputEnabled(false);
                     ViewParentCompat.disallow(v, true);
                     return true;
                 }
+
+                if (action == MotionEvent.ACTION_MOVE && !multiTouch && !speedBoosting
+                        && !manualFullscreen) {
+                    String creator = ShitTokCreatorMetadata.creatorName(item);
+                    float dx = event.getX() - creatorSwipeDownX;
+                    float dy = event.getY() - creatorSwipeDownY;
+                    if (!creator.isEmpty() && dx < -dp(14)
+                            && Math.abs(dx) > Math.abs(dy) * 1.20f) {
+                        if (!creatorSwipeTracking) {
+                            creatorSwipeTracking = true;
+                            View sourceSurface = creatorSwipeSourceView();
+                            creatorSwipeTransitionToken =
+                                    ShitTokTransitionSnapshotStore.beginCapture(
+                                            activity,
+                                            sourceSurface == null ? root : sourceSurface,
+                                            playerView.getVideoSurfaceView()
+                                    );
+                            beginCreatorSwipePreview(creator);
+                        }
+                        v.cancelLongPress();
+                        pager.setUserInputEnabled(false);
+                        ViewParentCompat.disallow(v, true);
+                    }
+                    if (creatorSwipeTracking) {
+                        updateCreatorSwipePreview(dx, root);
+                        return true;
+                    }
+                }
+
                 if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) {
+                    if (creatorSwipeTracking) {
+                        float dx = event.getX() - creatorSwipeDownX;
+                        float dy = event.getY() - creatorSwipeDownY;
+                        float threshold = Math.max(dp(72), root.getWidth() * 0.18f);
+                        boolean openCreator = action == MotionEvent.ACTION_UP
+                                && shouldOpenCreatorGallerySwipe(dx, dy, threshold);
+                        creatorSwipeTracking = false;
+                        pager.setUserInputEnabled(true);
+                        ViewParentCompat.disallow(v, false);
+                        if (openCreator) {
+                            String creator = ShitTokCreatorMetadata.creatorName(item);
+                            haptic(v);
+                            pauseAndRecord();
+                            String transitionToken = creatorSwipeTransitionToken;
+                            creatorSwipeTransitionToken = "";
+                            commitCreatorSwipePreview(
+                                    root,
+                                    creator,
+                                    transitionToken,
+                                    () -> openCreatorGallery(true, transitionToken)
+                            );
+                        } else {
+                            cancelCreatorSwipePreview(root);
+                            ShitTokTransitionSnapshotStore.remove(creatorSwipeTransitionToken);
+                            creatorSwipeTransitionToken = "";
+                        }
+                        return true;
+                    }
+
                     pager.setUserInputEnabled(true);
                     ViewParentCompat.disallow(v, false);
                     boolean consumedPinch = pinchConsumed[0];
@@ -1394,17 +1643,9 @@ public final class ChaosFeedView extends FrameLayout {
             title.setOnLongClickListener(menuLongPress);
             meta.setOnLongClickListener(menuLongPress);
             title.setOnClickListener(v -> {
-                String creator = ShitTokCreatorMetadata.creatorName(item);
-                if (creator.isEmpty()) return;
+                if (ShitTokCreatorMetadata.creatorName(item).isEmpty()) return;
                 haptic(v);
-                pauseAndRecord();
-                activity.startActivity(NativeFeedBrowserActivity.createCreatorGallery(
-                        activity,
-                        creator,
-                        creator,
-                        "",
-                        ShitTokCreatorGalleryPreloader.sessionId(activity, creator)
-                ));
+                openCreatorGallery(false, "");
             });
 
             mute.setOnClickListener(v -> {
@@ -1832,12 +2073,43 @@ public final class ChaosFeedView extends FrameLayout {
             headers.put(name, value);
         }
 
+        private void openCreatorGallery(boolean seamless, String transitionToken) {
+            if (item == null) return;
+            String creator = ShitTokCreatorMetadata.creatorName(item);
+            if (creator.isEmpty()) return;
+            String returnToken = transitionToken == null ? "" : transitionToken.trim();
+            if (returnToken.isEmpty()) {
+                View sourceSurface = creatorSwipeSourceView();
+                returnToken = ShitTokTransitionSnapshotStore.beginCapture(
+                        activity,
+                        sourceSurface == null ? root : sourceSurface,
+                        playerView.getVideoSurfaceView()
+                );
+            }
+            pauseAndRecord();
+            Intent intent = NativeFeedBrowserActivity.createCreatorGallery(
+                    activity,
+                    creator,
+                    creator,
+                    "",
+                    ShitTokCreatorGalleryPreloader.sessionId(activity, creator)
+            );
+            if (!returnToken.isEmpty()) {
+                intent.putExtra(
+                        NativeFeedBrowserActivity.EXTRA_SHITTOK_RETURN_TRANSITION,
+                        returnToken
+                );
+            }
+            activity.startActivity(intent);
+            if (seamless) activity.overridePendingTransition(0, 0);
+        }
+
         private void showMoreMenu() {
             if (item == null) return;
             String savedLabel = FavoriteStore.contains(activity, item.url)
                     ? "Remove from Watch Later"
                     : "Watch Later";
-            VideoActionSheet.show(
+            VideoActionSheet.showCompact(
                     activity,
                     item.title,
                     VideoActionSheet.section(
