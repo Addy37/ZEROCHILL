@@ -46,6 +46,36 @@ public class BundledCreatorIndexTest {
         assertNotEquals(index.canonicalKey("Sasha Foxx"), index.canonicalKey("Sasha Foxxy"));
     }
 
+    @Test public void safeVariantsCollapseToCanonicalCreatorWithoutBroadFuzzyMatching() throws Exception {
+        BundledCreatorIndex index = index("Belle Delphine\nBelle Rose\nSasha Foxx\nSasha Foxxy\n");
+        NativeContentItem truncated = creator("Belle Del", "https://fapello.com/belle-del/", "truncated");
+        NativeContentItem canonical = creator("Belle Delphine",
+                "https://fapello.com/belle-delphine/", "canonical");
+        NativeContentItem shortVariant = creator("Belle Delph",
+                "https://fapello.com/belle-delph/", "short");
+        NativeContentItem doubledLetter = creator("belledelphiine",
+                "https://fapello.com/belledelphiine/", "typo");
+
+        List<NativeContentItem> result = OnlyFapCreatorResults.merge(
+                Arrays.asList(truncated, canonical, shortVariant, doubledLetter),
+                null,
+                10,
+                index);
+
+        assertEquals(1, result.size());
+        assertEquals("Belle Delphine", result.get(0).title);
+        assertEquals(canonical.url, result.get(0).url);
+        assertEquals(index.canonicalKey("Belle Delphine"), index.canonicalKey("Belle Del"));
+        assertEquals(index.canonicalKey("Belle Delphine"), index.canonicalKey("Belle Delph"));
+        assertEquals(index.canonicalKey("Belle Delphine"), index.canonicalKey("belledelphiine"));
+        assertNotEquals(index.canonicalKey("Sasha Foxx"), index.canonicalKey("Sasha Foxxy"));
+    }
+
+    @Test public void ambiguousTruncationDoesNotMergeDifferentCanonicalCreators() throws Exception {
+        BundledCreatorIndex index = index("Belle Delphine\nBelle Delia\n");
+        assertEquals("belle del", index.canonicalKey("Belle Del"));
+    }
+
     @Test public void largeIndexLimitsResultsAndRepeatedQueries() throws Exception {
         StringBuilder rows = new StringBuilder();
         for (int i = 0; i < 5000; i++) rows.append("Creator ").append(i).append('\n');
