@@ -12,6 +12,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.BooleanSupplier;
 import org.junit.After;
 import org.junit.Test;
@@ -79,6 +80,43 @@ public class CreatorSuggestionsTest {
             Thread.sleep(10);
         } while (System.nanoTime() < deadline);
         fail("Suggestion callback did not finish");
+    }
+
+    @Test public void localMatchingIsDebouncedAndRunsOffTheMainThread() throws Exception {
+        activity = Robolectric.buildActivity(Activity.class).setup();
+        input = new EditText(activity.get());
+        panel = new LinearLayout(activity.get());
+        CountDownLatch localStarted = new CountDownLatch(1);
+        CountDownLatch localRelease = new CountDownLatch(1);
+        AtomicBoolean localRanOnMain = new AtomicBoolean(true);
+        controller = new CreatorSuggestionsController(
+                activity.get(),
+                input,
+                panel,
+                item -> { },
+                (context, query) -> Collections.emptyList(),
+                (context, query) -> {
+                    localRanOnMain.set(Looper.myLooper() == Looper.getMainLooper());
+                    localStarted.countDown();
+                    try {
+                        localRelease.await(3, TimeUnit.SECONDS);
+                    } catch (InterruptedException interrupted) {
+                        Thread.currentThread().interrupt();
+                        return Collections.emptyList();
+                    }
+                    return Collections.singletonList(CreatorCatalog.fromModel(
+                            new FapelloRepository.Model("Zoe", "https://fapello.com/zoe/", "")));
+                });
+
+        input.setText("zo");
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(69));
+        assertEquals(1L, localStarted.getCount());
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(1));
+        assertTrue(localStarted.await(3, TimeUnit.SECONDS));
+        assertFalse(localRanOnMain.get());
+
+        localRelease.countDown();
+        await(() -> items().size() == 1 && items().get(0).title.equals("Zoe"));
     }
 
     @Test public void aSlowOldReplyCannotReplaceTheNewerQuery() throws Exception {
