@@ -8,6 +8,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.res.ColorStateList;
 import android.content.res.Configuration;
+import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
 import android.net.Uri;
@@ -130,6 +131,7 @@ public final class ChaosFeedView extends FrameLayout {
     private TextView empty;
     private ProgressBar initialProgress;
     private ShitTokCreatorSwipePreview creatorSwipePreview;
+    private ImageView creatorSwipeSourceSnapshot;
     private boolean creatorGalleryHandoff;
     private InlineCommentsDialog commentsDialog;
     private boolean active;
@@ -405,7 +407,7 @@ public final class ChaosFeedView extends FrameLayout {
         if (hostView == null || hostView.getChildCount() == 0) return null;
         for (int index = 0; index < hostView.getChildCount(); index++) {
             View child = hostView.getChildAt(index);
-            if (child != creatorSwipePreview) return child;
+            if (child != creatorSwipePreview && child != creatorSwipeSourceSnapshot) return child;
         }
         return null;
     }
@@ -428,15 +430,61 @@ public final class ChaosFeedView extends FrameLayout {
         }
     }
 
-    private void beginCreatorSwipePreview(String creator) {
+    private void beginCreatorSwipePreview(String creator, String transitionToken) {
         ensureCreatorSwipePreview();
         if (creatorSwipePreview == null || creator == null || creator.trim().isEmpty()) return;
         String sessionId = ShitTokCreatorGalleryPreloader.sessionId(activity, creator);
+        creatorSwipePreview.animate().withEndAction(null);
+        creatorSwipePreview.animate().cancel();
         creatorSwipePreview.showCreator(creator, sessionId);
         FrameLayout hostView = creatorSwipeHost();
         float width = hostView == null ? Math.max(1, getWidth()) : Math.max(1, hostView.getWidth());
         creatorSwipePreview.setTranslationX(width);
+        installCreatorSwipeSourceSnapshot(transitionToken);
         creatorSwipePreview.bringToFront();
+    }
+
+    private void installCreatorSwipeSourceSnapshot(String transitionToken) {
+        FrameLayout hostView = creatorSwipeHost();
+        View content = creatorSwipeSourceView();
+        Bitmap snapshot = ShitTokTransitionSnapshotStore.snapshot(transitionToken);
+        if (hostView == null || content == null || snapshot == null || snapshot.isRecycled()) return;
+
+        clearCreatorSwipeSourceSnapshot(false);
+        ImageView frozen = new ImageView(activity);
+        frozen.setScaleType(ImageView.ScaleType.FIT_XY);
+        frozen.setBackgroundColor(Color.BLACK);
+        frozen.setImageBitmap(snapshot);
+        frozen.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        frozen.setTranslationX(0f);
+        creatorSwipeSourceSnapshot = frozen;
+        hostView.addView(frozen, new FrameLayout.LayoutParams(-1, -1));
+
+        content.animate().cancel();
+        content.setTranslationX(0f);
+        content.setAlpha(0f);
+        if (creatorSwipePreview != null) creatorSwipePreview.bringToFront();
+    }
+
+    private void clearCreatorSwipeSourceSnapshot(boolean restoreContent) {
+        ImageView frozen = creatorSwipeSourceSnapshot;
+        creatorSwipeSourceSnapshot = null;
+        if (frozen != null) {
+            frozen.animate().withEndAction(null);
+            frozen.animate().cancel();
+            if (frozen.getParent() instanceof ViewGroup) {
+                ((ViewGroup) frozen.getParent()).removeView(frozen);
+            }
+            frozen.setImageDrawable(null);
+        }
+        if (restoreContent) {
+            View content = creatorSwipeSourceView();
+            if (content != null) {
+                content.animate().cancel();
+                content.setTranslationX(0f);
+                content.setAlpha(1f);
+            }
+        }
     }
 
     private void updateCreatorSwipePreview(float dx, View ignoredContent) {
@@ -444,8 +492,15 @@ public final class ChaosFeedView extends FrameLayout {
         if (creatorSwipePreview == null || content == null) return;
         float width = Math.max(1f, content.getWidth());
         float contentTranslation = creatorSwipeContentTranslation(dx, width);
-        content.setTranslationX(contentTranslation);
-        content.setAlpha(1f);
+        if (creatorSwipeSourceSnapshot != null) {
+            creatorSwipeSourceSnapshot.animate().cancel();
+            creatorSwipeSourceSnapshot.setTranslationX(contentTranslation);
+            content.setTranslationX(0f);
+            content.setAlpha(0f);
+        } else {
+            content.setTranslationX(contentTranslation);
+            content.setAlpha(1f);
+        }
         creatorSwipePreview.setTranslationX(
                 creatorSwipePreviewTranslation(dx, width)
         );
@@ -453,7 +508,20 @@ public final class ChaosFeedView extends FrameLayout {
 
     private void cancelCreatorSwipePreview(View ignoredContent) {
         View content = creatorSwipeSourceView();
-        if (content != null) {
+        ImageView frozen = creatorSwipeSourceSnapshot;
+        if (frozen != null) {
+            frozen.animate().cancel();
+            if (!ZeroChillMotion.animationsEnabled(activity)) {
+                frozen.setTranslationX(0f);
+                clearCreatorSwipeSourceSnapshot(true);
+            } else {
+                frozen.animate()
+                        .translationX(0f)
+                        .setDuration(ZeroChillMotion.QUICK_MS)
+                        .withEndAction(() -> clearCreatorSwipeSourceSnapshot(true))
+                        .start();
+            }
+        } else if (content != null) {
             content.animate().cancel();
             content.animate()
                     .translationX(0f)
@@ -492,10 +560,14 @@ public final class ChaosFeedView extends FrameLayout {
                 ShitTokCreatorGalleryPreloader.sessionId(activity, creator)
         );
         content.animate().cancel();
+        if (creatorSwipeSourceSnapshot != null) creatorSwipeSourceSnapshot.animate().cancel();
         creatorSwipePreview.animate().cancel();
 
+        View movingSource = creatorSwipeSourceSnapshot != null
+                ? creatorSwipeSourceSnapshot
+                : content;
         if (!ZeroChillMotion.animationsEnabled(activity)) {
-            content.setTranslationX(-width);
+            movingSource.setTranslationX(-width);
             creatorSwipePreview.setTranslationX(0f);
             ShitTokTransitionSnapshotStore.captureGalleryPreview(
                     transitionToken, creatorSwipePreview);
@@ -506,12 +578,11 @@ public final class ChaosFeedView extends FrameLayout {
 
         float progress = Math.max(
                 0f,
-                Math.min(1f, Math.abs(content.getTranslationX()) / width)
+                Math.min(1f, Math.abs(movingSource.getTranslationX()) / width)
         );
         long duration = Math.max(80L, Math.min(170L, Math.round((1f - progress) * 170f)));
-        content.animate()
+        movingSource.animate()
                 .translationX(-width)
-                .alpha(1f)
                 .setDuration(duration)
                 .start();
         creatorSwipePreview.animate()
@@ -527,6 +598,7 @@ public final class ChaosFeedView extends FrameLayout {
     }
 
     private void resetCreatorSwipePreview() {
+        clearCreatorSwipeSourceSnapshot(true);
         View content = creatorSwipeSourceView();
         if (content != null) {
             content.animate().cancel();
@@ -1580,7 +1652,7 @@ public final class ChaosFeedView extends FrameLayout {
                                             sourceSurface == null ? root : sourceSurface,
                                             playerView.getVideoSurfaceView()
                                     );
-                            beginCreatorSwipePreview(creator);
+                            beginCreatorSwipePreview(creator, creatorSwipeTransitionToken);
                         }
                         v.cancelLongPress();
                         pager.setUserInputEnabled(false);

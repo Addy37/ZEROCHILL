@@ -126,6 +126,7 @@ public final class NativeFeedBrowserActivity extends Activity {
     private FrameLayout shitTokTransitionHost;
     private View shitTokTransitionContent;
     private ImageView shitTokReturnSnapshot;
+    private View shitTokReturnHeaderMask;
     private ImageView creatorHandoffPreview;
     private float shitTokReturnDownX;
     private float shitTokReturnDownY;
@@ -588,6 +589,7 @@ public final class NativeFeedBrowserActivity extends Activity {
                 shitTokReturnSnapshot,
                 new FrameLayout.LayoutParams(-1, -1)
         );
+        installShitTokReturnHeaderMask();
 
         shitTokTransitionContent = content;
         shitTokTransitionContent.setElevation(dp(10));
@@ -629,6 +631,51 @@ public final class NativeFeedBrowserActivity extends Activity {
                         }
                     });
         }
+    }
+
+    private void installShitTokReturnHeaderMask() {
+        if (shitTokTransitionHost == null || shitTokReturnHeaderMask != null) return;
+
+        LinearLayout bar = new LinearLayout(this);
+        bar.setOrientation(LinearLayout.HORIZONTAL);
+        bar.setGravity(Gravity.CENTER_VERTICAL);
+        bar.setPadding(dp(18), 0, dp(12), 0);
+        bar.setBackgroundColor(ZeroChillUi.background(this));
+        bar.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        bar.setClickable(false);
+        bar.setFocusable(false);
+
+        TextView titleView = new TextView(this);
+        ZeroChillUi.styleTitle(titleView);
+        titleView.setTextSize(28f);
+        titleView.setSingleLine(true);
+        titleView.setText(ZeroChillUi.sectionTitle(this, "ShitTok", 4, 7));
+        bar.addView(titleView, new LinearLayout.LayoutParams(0, -2, 1f));
+
+        ImageView search = new ImageView(this);
+        search.setImageResource(R.drawable.ic_nav_search);
+        search.setPadding(dp(10), dp(10), dp(10), dp(10));
+        search.setColorFilter(Color.WHITE);
+        search.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        bar.addView(search, new LinearLayout.LayoutParams(dp(44), dp(48)));
+
+        ImageView more = new ImageView(this);
+        more.setImageResource(R.drawable.ic_more_overflow);
+        more.setPadding(dp(10), dp(10), dp(10), dp(10));
+        more.setColorFilter(Color.WHITE);
+        more.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        LinearLayout.LayoutParams moreParams =
+                new LinearLayout.LayoutParams(dp(44), dp(48));
+        moreParams.setMarginStart(dp(2));
+        bar.addView(more, moreParams);
+
+        shitTokReturnHeaderMask = bar;
+        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
+                -1,
+                ZeroChillUi.dimension(this, R.dimen.zc_top_bar_height),
+                Gravity.TOP
+        );
+        shitTokTransitionHost.addView(bar, params);
     }
 
     private void clearCreatorHandoffPreview() {
