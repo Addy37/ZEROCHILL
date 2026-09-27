@@ -26,6 +26,26 @@ public class BundledCreatorIndexTest {
         assertEquals("Mía Rose", index.matching("mia rose", 4).get(0).title);
     }
 
+    @Test public void knownAliasCollapsesDuplicateCreatorCardsWithoutFuzzyMerging() throws Exception {
+        BundledCreatorIndex index = index("Sasha Foxx\tSasha Foxxx\nSasha Foxxy\n");
+        NativeContentItem canonical = creator("Sasha Foxx", "", "");
+        NativeContentItem alias = creator("Sasha Foxxx", "https://example.org/sasha", "https://example.org/avatar");
+        NativeContentItem nearby = creator("Sasha Foxxy", "", "");
+
+        List<NativeContentItem> result = OnlyFapCreatorResults.merge(
+                Arrays.asList(canonical, nearby),
+                Collections.singletonList(alias),
+                10,
+                index);
+
+        assertEquals(2, result.size());
+        assertEquals("Sasha Foxx", result.get(0).title);
+        assertEquals(alias.imageUrl, result.get(0).imageUrl);
+        assertEquals("Sasha Foxxy", result.get(1).title);
+        assertEquals(index.canonicalKey("Sasha Foxx"), index.canonicalKey("Sasha Foxxx"));
+        assertNotEquals(index.canonicalKey("Sasha Foxx"), index.canonicalKey("Sasha Foxxy"));
+    }
+
     @Test public void largeIndexLimitsResultsAndRepeatedQueries() throws Exception {
         StringBuilder rows = new StringBuilder();
         for (int i = 0; i < 5000; i++) rows.append("Creator ").append(i).append('\n');
