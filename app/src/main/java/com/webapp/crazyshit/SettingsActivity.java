@@ -87,16 +87,16 @@ public class SettingsActivity extends Activity {
 
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(dp(16), 0, dp(16), dp(36));
+        root.setPadding(dp(12), 0, dp(12), dp(24));
         root.setBackgroundColor(background);
         scroll.addView(root, new ScrollView.LayoutParams(-1, -2));
 
         LinearLayout header = new LinearLayout(this);
         header.setOrientation(LinearLayout.HORIZONTAL);
         header.setGravity(Gravity.CENTER_VERTICAL);
-        header.setPadding(0, dp(2), 0, dp(8));
+        header.setPadding(0, 0, 0, dp(4));
 
-        TextView back = text("‹", 34f, Color.WHITE);
+        TextView back = text("‹", 31f, Color.WHITE);
         back.setGravity(Gravity.CENTER);
         back.setContentDescription("Back");
         back.setClickable(true);
@@ -106,12 +106,12 @@ public class SettingsActivity extends Activity {
             finish();
         });
         ZeroChillMotion.installPressFeedback(back);
-        header.addView(back, new LinearLayout.LayoutParams(dp(44), dp(52)));
+        header.addView(back, new LinearLayout.LayoutParams(dp(42), dp(48)));
 
-        TextView title = text("Settings", 28f, Color.WHITE);
+        TextView title = text("Settings", 25f, Color.WHITE);
         title.setTypeface(null, android.graphics.Typeface.BOLD);
         LinearLayout.LayoutParams titleParams = new LinearLayout.LayoutParams(0, -2, 1f);
-        titleParams.leftMargin = dp(8);
+        titleParams.leftMargin = dp(6);
         header.addView(title, titleParams);
         root.addView(header);
 
@@ -241,7 +241,7 @@ public class SettingsActivity extends Activity {
                 ZeroChillUi.color(this, R.color.zc_text_muted)
         );
         footer.setGravity(Gravity.CENTER);
-        footer.setPadding(dp(8), dp(28), dp(8), 0);
+        footer.setPadding(dp(8), dp(20), dp(8), 0);
         root.addView(footer);
 
         FrameLayout shell = new FrameLayout(this);
@@ -311,29 +311,23 @@ public class SettingsActivity extends Activity {
         );
         label.setTypeface(null, android.graphics.Typeface.BOLD);
         label.setLetterSpacing(0.06f);
-        label.setPadding(dp(6), dp(20), dp(6), dp(8));
+        label.setPadding(dp(4), dp(14), dp(4), dp(6));
         root.addView(label);
 
         MaterialCardView card = new MaterialCardView(this);
-        card.setCardBackgroundColor(
-                ZeroChillUi.color(this, R.color.zc_surface_glass)
-        );
-        card.setRadius(dp(18));
+        card.setCardBackgroundColor(Color.rgb(8, 8, 10));
+        card.setRadius(dp(16));
         card.setCardElevation(0f);
         card.setStrokeWidth(dp(1));
-        card.setStrokeColor(
-                ZeroChillUi.color(this, R.color.zc_divider)
-        );
-        card.setRippleColor(ColorStateList.valueOf(
-                ZeroChillUi.color(this, R.color.zc_cyan_container)
-        ));
+        card.setStrokeColor(Color.rgb(43, 43, 50));
+        card.setRippleColor(ColorStateList.valueOf(Color.rgb(28, 28, 34)));
 
         LinearLayout content = new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL);
         card.addView(content, new MaterialCardView.LayoutParams(-1, -2));
 
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, -2);
-        params.bottomMargin = dp(2);
+        params.bottomMargin = dp(1);
         root.addView(card, params);
         return content;
     }
@@ -354,8 +348,8 @@ public class SettingsActivity extends Activity {
         MaterialSwitch toggle = new MaterialSwitch(this);
         toggle.setChecked(prefs.getBoolean(key, defaultValue));
         toggle.setContentDescription(title);
-        toggle.setMinWidth(dp(52));
-        toggle.setMinimumWidth(dp(52));
+        toggle.setMinWidth(dp(48));
+        toggle.setMinimumWidth(dp(48));
         toggle.setMinHeight(dp(48));
         toggle.setMinimumHeight(dp(48));
 
@@ -402,27 +396,27 @@ public class SettingsActivity extends Activity {
         if (trailing != null && !trailing.trim().isEmpty()) {
             TextView value = text(
                     trailing.trim(),
-                    13f,
+                    11.5f,
                     ZeroChillUi.color(this, R.color.zc_cyan)
             );
             value.setSingleLine(true);
             value.setEllipsize(TextUtils.TruncateAt.END);
             value.setGravity(Gravity.END | Gravity.CENTER_VERTICAL);
-            value.setMaxWidth(dp(138));
+            value.setMaxWidth(dp(118));
             LinearLayout.LayoutParams valueParams =
-                    new LinearLayout.LayoutParams(-2, dp(42));
-            valueParams.leftMargin = dp(10);
+                    new LinearLayout.LayoutParams(-2, dp(38));
+            valueParams.leftMargin = dp(8);
             row.addView(value, valueParams);
         }
 
         TextView chevron = text(
                 "›",
-                27f,
+                24f,
                 ZeroChillUi.color(this, R.color.zc_text_muted)
         );
         chevron.setGravity(Gravity.CENTER);
         chevron.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
-        row.addView(chevron, new LinearLayout.LayoutParams(dp(26), dp(44)));
+        row.addView(chevron, new LinearLayout.LayoutParams(dp(22), dp(40)));
 
         group.addView(row);
 
@@ -436,8 +430,8 @@ public class SettingsActivity extends Activity {
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setPadding(dp(16), dp(10), dp(10), dp(10));
-        row.setMinimumHeight(dp(62));
+        row.setPadding(dp(12), dp(6), dp(8), dp(6));
+        row.setMinimumHeight(dp(52));
         return row;
     }
 
@@ -448,7 +442,7 @@ public class SettingsActivity extends Activity {
 
         TextView titleView = text(
                 title,
-                15.5f,
+                14f,
                 ZeroChillUi.color(this, R.color.zc_text_primary)
         );
         titleView.setTypeface(null, android.graphics.Typeface.BOLD);
@@ -457,11 +451,11 @@ public class SettingsActivity extends Activity {
         if (subtitle != null && !subtitle.trim().isEmpty()) {
             TextView sub = text(
                     subtitle.trim(),
-                    12f,
-                    ZeroChillUi.color(this, R.color.zc_text_secondary)
+                    10.5f,
+                    Color.rgb(148, 148, 158)
             );
-            sub.setLineSpacing(0f, 1.06f);
-            sub.setPadding(0, dp(2), dp(6), 0);
+            sub.setLineSpacing(0f, 1.02f);
+            sub.setPadding(0, dp(1), dp(4), 0);
             sub.setMaxLines(2);
             sub.setEllipsize(TextUtils.TruncateAt.END);
             copy.addView(sub, new LinearLayout.LayoutParams(-1, -2));
@@ -477,8 +471,8 @@ public class SettingsActivity extends Activity {
         );
         LinearLayout.LayoutParams params =
                 new LinearLayout.LayoutParams(-1, dp(1));
-        params.leftMargin = dp(16);
-        params.rightMargin = dp(16);
+        params.leftMargin = dp(12);
+        params.rightMargin = dp(12);
         group.addView(divider, params);
     }
 
