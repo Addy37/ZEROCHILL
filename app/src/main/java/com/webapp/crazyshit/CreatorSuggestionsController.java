@@ -18,6 +18,8 @@ import java.util.function.Consumer;
 
 /** Debounced live lookups with immediate local matches and stale-response rejection. */
 final class CreatorSuggestionsController {
+    private static final long LOCAL_DEBOUNCE_MS = 70L;
+
     private final Activity activity;
     private final EditText input;
     private final LinearLayout panel;
@@ -29,22 +31,34 @@ final class CreatorSuggestionsController {
     private final Handler main = new Handler(Looper.getMainLooper());
     private final ExecutorService io = Executors.newFixedThreadPool(2);
     private Future<?> request;
+    private Future<?> localRequest;
     private int generation;
     private boolean closed;
     private boolean active = true;
     private Runnable debounce;
+    private Runnable localDebounce;
     interface Lookup { List<NativeContentItem> find(android.content.Context context, String query) throws Exception; }
+    interface LocalLookup { List<NativeContentItem> find(android.content.Context context, String query); }
     private final Lookup lookup;
+    private final LocalLookup localLookup;
 
     CreatorSuggestionsController(Activity activity, EditText input, LinearLayout panel,
                                  Consumer<NativeContentItem> open) {
         this(activity, input, panel, open,
-                (context, query) -> new FapzoneCreatorSearchRepository().search(context, query, 8));
+                (context, query) -> new FapzoneCreatorSearchRepository().search(context, query, 8),
+                (context, query) -> CreatorCatalog.matching(context, query, false, 8));
     }
 
     CreatorSuggestionsController(Activity activity, EditText input, LinearLayout panel,
                                  Consumer<NativeContentItem> open, Lookup lookup) {
-        this.activity = activity; this.input = input; this.panel = panel; this.lookup = lookup;
+        this(activity, input, panel, open, lookup,
+                (context, query) -> CreatorCatalog.matching(context, query, false, 8));
+    }
+
+    CreatorSuggestionsController(Activity activity, EditText input, LinearLayout panel,
+                                 Consumer<NativeContentItem> open, Lookup lookup, LocalLookup localLookup) {
+        this.activity = activity; this.input = input; this.panel = panel;
+        this.lookup = lookup; this.localLookup = localLookup;
         panel.setOrientation(LinearLayout.VERTICAL);
         panel.setBackgroundColor(android.graphics.Color.BLACK);
         hint = BrowseUi.text(activity, "Type at least 2 characters to find creators", 13, BrowseUi.MUTED);
@@ -86,7 +100,7 @@ final class CreatorSuggestionsController {
             hint.setText("Type at least 2 characters to find creators");
             return;
         }
-        refreshLocal();
+        scheduleLocal(query, token, LOCAL_DEBOUNCE_MS, null);
         hint.setText("Creators · Checking for matches…");
         debounce = () -> request = io.submit(() -> {
             String error = null;
@@ -98,11 +112,10 @@ final class CreatorSuggestionsController {
             main.post(() -> {
                 if (closed || !active || token != generation || activity.isFinishing()
                         || activity.isDestroyed() || !query.equals(input.getText().toString().trim())) return;
-                refreshLocal();
-                hint.setText(finalError != null
-                        ? finalError + (adapter.getItemCount() > 0 ? " · Saved matches shown" : " · You can still tap Search")
-                        : adapter.getItemCount() > 0 ? "Creators · Tap to open a gallery"
-                        : "No creator suggestions · Tap Search to search by name");
+                scheduleLocal(query, token, 0L, count -> hint.setText(finalError != null
+                        ? finalError + (count > 0 ? " · Saved matches shown" : " · You can still tap Search")
+                        : count > 0 ? "Creators · Tap to open a gallery"
+                        : "No creator suggestions · Tap Search to search by name"));
             });
         });
         main.postDelayed(debounce, 280L);
@@ -110,9 +123,40 @@ final class CreatorSuggestionsController {
 
     void refreshLocal() {
         if (closed || !active) return;
-        String query = input.getText().toString().trim();
-        adapter.replace(query.length() < 2 ? new ArrayList<>()
-                : CreatorCatalog.matching(activity, query, false, 8));
+        scheduleLocal(input.getText().toString().trim(), generation, 0L, null);
+    }
+
+    private void scheduleLocal(String query, int token, long delayMs,
+                               java.util.function.Consumer<Integer> afterApplied) {
+        if (closed || !active || token != generation) return;
+        String requestedQuery = query == null ? "" : query.trim();
+        if (localDebounce != null) main.removeCallbacks(localDebounce);
+        if (localRequest != null) localRequest.cancel(true);
+        if (requestedQuery.length() < 2) {
+            adapter.replace(new ArrayList<>(), () -> {
+                if (afterApplied != null && token == generation) afterApplied.accept(0);
+            });
+            return;
+        }
+        localDebounce = () -> localRequest = io.submit(() -> {
+            List<NativeContentItem> local = localLookup.find(
+                    activity.getApplicationContext(), requestedQuery);
+            if (Thread.currentThread().isInterrupted()) return;
+            List<NativeContentItem> visible = local == null
+                    ? new ArrayList<>() : new ArrayList<>(local);
+            main.post(() -> {
+                if (closed || !active || token != generation || activity.isFinishing()
+                        || activity.isDestroyed()
+                        || !requestedQuery.equals(input.getText().toString().trim())) return;
+                adapter.replace(visible, () -> {
+                    if (closed || !active || token != generation
+                            || !requestedQuery.equals(input.getText().toString().trim())) return;
+                    if (afterApplied != null) afterApplied.accept(adapter.getItemCount());
+                });
+            });
+        });
+        if (delayMs <= 0L) main.post(localDebounce);
+        else main.postDelayed(localDebounce, delayMs);
     }
 
     void setSearchAction(Runnable action) { searchAction = action; }
@@ -128,7 +172,9 @@ final class CreatorSuggestionsController {
     private void cancel() {
         generation++;
         if (debounce != null) main.removeCallbacks(debounce);
+        if (localDebounce != null) main.removeCallbacks(localDebounce);
         if (request != null) request.cancel(true);
+        if (localRequest != null) localRequest.cancel(true);
     }
 
     void close() { closed = true; cancel(); main.removeCallbacksAndMessages(null); io.shutdownNow(); }

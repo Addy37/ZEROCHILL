@@ -3,6 +3,8 @@ package com.webapp.crazyshit;
 import android.content.Context;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
+import android.os.Handler;
+import android.os.Looper;
 import android.text.TextUtils;
 import android.view.Gravity;
 import android.view.ViewGroup;
@@ -15,16 +17,23 @@ import com.bumptech.glide.Glide;
 import com.bumptech.glide.load.model.GlideUrl;
 import com.bumptech.glide.load.model.LazyHeaders;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.function.Consumer;
 
 final class CreatorListAdapter extends RecyclerView.Adapter<CreatorListAdapter.Holder> {
+    private static final ExecutorService DIFFS = Executors.newSingleThreadExecutor();
+
     private final Context context;
     private final Consumer<NativeContentItem> open;
     private final Runnable favoriteChanged;
+    private final Handler main = new Handler(Looper.getMainLooper());
     private List<NativeContentItem> items = new ArrayList<>();
     private Set<String> favorites;
+    private int replaceGeneration;
 
     CreatorListAdapter(Context context, Consumer<NativeContentItem> open, Runnable favoriteChanged) {
         this.context = context;
@@ -34,25 +43,38 @@ final class CreatorListAdapter extends RecyclerView.Adapter<CreatorListAdapter.H
     }
 
     void replace(List<NativeContentItem> next) {
-        List<NativeContentItem> old = items;
-        Set<String> oldFavorites = favorites;
-        Set<String> nextFavorites = CreatorFavoriteStore.names(context);
-        DiffUtil.DiffResult diff = DiffUtil.calculateDiff(new DiffUtil.Callback() {
-            public int getOldListSize() { return old.size(); }
-            public int getNewListSize() { return next.size(); }
-            public boolean areItemsTheSame(int a, int b) {
-                return CreatorCatalog.key(old.get(a)).equals(CreatorCatalog.key(next.get(b)));
-            }
-            public boolean areContentsTheSame(int a, int b) {
-                NativeContentItem x = old.get(a), y = next.get(b);
-                return x.title.equals(y.title) && x.imageUrl.equals(y.imageUrl)
-                        && oldFavorites.contains(CreatorFavoriteStore.key(x))
-                        == nextFavorites.contains(CreatorFavoriteStore.key(y));
-            }
+        replace(next, null);
+    }
+
+    void replace(List<NativeContentItem> next, Runnable committed) {
+        final int token = ++replaceGeneration;
+        final List<NativeContentItem> old = new ArrayList<>(items);
+        final List<NativeContentItem> incoming = next == null
+                ? new ArrayList<>() : new ArrayList<>(next);
+        final Set<String> oldFavorites = new HashSet<>(favorites);
+        DIFFS.execute(() -> {
+            Set<String> nextFavorites = CreatorFavoriteStore.names(context);
+            DiffUtil.DiffResult diff = DiffUtil.calculateDiff(new DiffUtil.Callback() {
+                public int getOldListSize() { return old.size(); }
+                public int getNewListSize() { return incoming.size(); }
+                public boolean areItemsTheSame(int a, int b) {
+                    return CreatorCatalog.key(old.get(a)).equals(CreatorCatalog.key(incoming.get(b)));
+                }
+                public boolean areContentsTheSame(int a, int b) {
+                    NativeContentItem x = old.get(a), y = incoming.get(b);
+                    return x.title.equals(y.title) && x.imageUrl.equals(y.imageUrl)
+                            && oldFavorites.contains(CreatorFavoriteStore.key(x))
+                            == nextFavorites.contains(CreatorFavoriteStore.key(y));
+                }
+            });
+            main.post(() -> {
+                if (token != replaceGeneration) return;
+                items = incoming;
+                favorites = nextFavorites;
+                diff.dispatchUpdatesTo(this);
+                if (committed != null) committed.run();
+            });
         });
-        items = new ArrayList<>(next);
-        favorites = nextFavorites;
-        diff.dispatchUpdatesTo(this);
     }
 
     @Override public int getItemCount() { return items.size(); }
