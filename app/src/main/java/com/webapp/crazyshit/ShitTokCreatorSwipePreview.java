@@ -1,7 +1,6 @@
 package com.webapp.crazyshit;
 
 import android.app.Activity;
-import android.content.res.ColorStateList;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.GradientDrawable;
@@ -108,6 +107,7 @@ final class ShitTokCreatorSwipePreview extends FrameLayout {
 
         grid = new GridLayout(activity);
         grid.setColumnCount(GRID_COLUMNS);
+        grid.setRowCount(GRID_ITEMS / GRID_COLUMNS);
         grid.setBackgroundColor(Color.BLACK);
         grid.setPadding(dp(2), dp(2), dp(2), dp(2));
         shell.addView(grid, new LinearLayout.LayoutParams(-1, 0, 1f));
@@ -141,6 +141,11 @@ final class ShitTokCreatorSwipePreview extends FrameLayout {
         showSkeleton();
         creatorMeta.setText("Loading gallery…");
         int generation = ++refreshGeneration;
+        scheduleRefresh(generation, 0);
+    }
+
+    private void scheduleRefresh(int generation, int attempt) {
+        if (attempt >= 5) return;
         postDelayed(() -> {
             if (generation != refreshGeneration || getVisibility() != View.VISIBLE) return;
             String newest = ShitTokCreatorGalleryPreloader.sessionId(activity, currentCreator);
@@ -150,8 +155,10 @@ final class ShitTokCreatorSwipePreview extends FrameLayout {
             if (later != null && !later.items.isEmpty()) {
                 bindItems(later.items);
                 creatorMeta.setText(later.items.size() + " items ready");
+                return;
             }
-        }, 120L);
+            scheduleRefresh(generation, attempt + 1);
+        }, attempt == 0 ? 90L : 120L);
     }
 
     private void bindItems(List<NativeContentItem> items) {

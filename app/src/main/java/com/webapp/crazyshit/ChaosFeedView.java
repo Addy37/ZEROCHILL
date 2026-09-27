@@ -435,7 +435,8 @@ public final class ChaosFeedView extends FrameLayout {
             String creator,
             Runnable openGallery
     ) {
-        if (content == null || creatorSwipePreview == null || openGallery == null) {
+        if (openGallery == null) return;
+        if (content == null || creatorSwipePreview == null) {
             openGallery.run();
             return;
         }
