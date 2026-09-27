@@ -27,7 +27,7 @@ public class BundledCreatorIndexTest {
     }
 
     @Test public void knownAliasCollapsesDuplicateCreatorCardsWithoutFuzzyMerging() throws Exception {
-        BundledCreatorIndex index = index("Sasha Foxx\tSasha Foxxx\nSasha Foxxy\n");
+        BundledCreatorIndex index = index("Sasha Foxx\tSasha Foxxx\nSasha Foxxx\nSasha Foxxy\n");
         NativeContentItem canonical = creator("Sasha Foxx", "", "");
         NativeContentItem alias = creator("Sasha Foxxx", "https://example.org/sasha", "https://example.org/avatar");
         NativeContentItem nearby = creator("Sasha Foxxy", "", "");
