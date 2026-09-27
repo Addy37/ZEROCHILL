@@ -1577,7 +1577,8 @@ public final class ChaosFeedView extends FrameLayout {
                             creatorSwipeTransitionToken =
                                     ShitTokTransitionSnapshotStore.beginCapture(
                                             activity,
-                                            sourceSurface == null ? root : sourceSurface
+                                            sourceSurface == null ? root : sourceSurface,
+                                            playerView.getVideoSurfaceView()
                                     );
                             beginCreatorSwipePreview(creator);
                         }
@@ -2081,7 +2082,8 @@ public final class ChaosFeedView extends FrameLayout {
                 View sourceSurface = creatorSwipeSourceView();
                 returnToken = ShitTokTransitionSnapshotStore.beginCapture(
                         activity,
-                        sourceSurface == null ? root : sourceSurface
+                        sourceSurface == null ? root : sourceSurface,
+                        playerView.getVideoSurfaceView()
                 );
             }
             pauseAndRecord();

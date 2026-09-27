@@ -24,7 +24,7 @@ final class ShitTokTransitionSnapshotStore {
     private ShitTokTransitionSnapshotStore() {
     }
 
-    static String beginCapture(Activity activity, View view) {
+    static String beginCapture(Activity activity, View view, View videoSurface) {
         if (activity == null || view == null || view.getWidth() <= 0 || view.getHeight() <= 0) {
             return "";
         }
@@ -45,7 +45,7 @@ final class ShitTokTransitionSnapshotStore {
             return "";
         }
 
-        captureFrame(token, view, target);
+        captureFrame(token, view, videoSurface, target);
         return token;
     }
 
@@ -91,64 +91,62 @@ final class ShitTokTransitionSnapshotStore {
         }
     }
 
-    private static void captureFrame(String token, View view, Bitmap target) {
+    private static void captureFrame(String token, View view, View videoSurface, Bitmap target) {
+        Canvas canvas = new Canvas(target);
         try {
-            Canvas canvas = new Canvas(target);
             view.draw(canvas);
-            // ShitTok inflates a TextureView player. Read its current frame before the
-            // gesture translates the window; PixelCopy's queued window read can instead
-            // capture a later, partially translated frame at the old source rectangle.
-            drawTextures(view, view, canvas);
-            setBitmap(token, target);
-        } catch (Throwable error) {
-            remove(token);
+        } catch (RuntimeException ignored) {
+            // Keep the frame and the transition token even if a child cannot draw.
         }
+        // The gesture belongs to one visible PlayerView. Capturing every texture in the
+        // preloaded ViewPager also draws offscreen pages over the selected video.
+        if (videoSurface instanceof TextureView) {
+            try {
+                drawTexture(view, (TextureView) videoSurface, canvas);
+            } catch (RuntimeException ignored) {
+                // The drawn view/poster remains a usable return frame.
+            }
+        }
+        setBitmap(token, target);
     }
 
-    private static void drawTextures(View root, View current, Canvas canvas) {
-        if (current instanceof TextureView && current.getVisibility() == View.VISIBLE) {
-            TextureView texture = (TextureView) current;
-            if (texture.isAvailable() && texture.getWidth() > 0 && texture.getHeight() > 0) {
-                int[] origin = new int[2];
-                int[] position = new int[2];
-                root.getLocationInWindow(origin);
-                texture.getLocationInWindow(position);
-                float x = position[0] - origin[0];
-                float y = position[1] - origin[1];
-                if (x < root.getWidth() && x + texture.getWidth() > 0
-                        && y < root.getHeight() && y + texture.getHeight() > 0) {
-                    Bitmap frame = texture.getBitmap();
-                    if (frame == null) return;
-                    int save = canvas.save();
-                    canvas.clipRect(x, y, x + texture.getWidth(), y + texture.getHeight());
-                    canvas.drawBitmap(frame, x, y, null);
-                    canvas.restoreToCount(save);
-                    frame.recycle();
-                    redrawViewsAbove(root, texture, canvas);
-                }
-            }
-        }
-        if (current instanceof ViewGroup) {
-            ViewGroup group = (ViewGroup) current;
-            for (int i = 0; i < group.getChildCount(); i++) {
-                drawTextures(root, group.getChildAt(i), canvas);
-            }
-        }
+    private static void drawTexture(View root, TextureView texture, Canvas canvas) {
+        if (!texture.isAvailable() || !texture.isShown()
+                || texture.getWidth() <= 0 || texture.getHeight() <= 0) return;
+        int[] origin = new int[2];
+        int[] position = new int[2];
+        root.getLocationInWindow(origin);
+        texture.getLocationInWindow(position);
+        float x = position[0] - origin[0];
+        float y = position[1] - origin[1];
+        if (x >= root.getWidth() || x + texture.getWidth() <= 0
+                || y >= root.getHeight() || y + texture.getHeight() <= 0) return;
+        Bitmap frame = texture.getBitmap();
+        if (frame == null) return;
+        int save = canvas.save();
+        canvas.clipRect(x, y, x + texture.getWidth(), y + texture.getHeight());
+        canvas.drawBitmap(frame, x, y, null);
+        canvas.restoreToCount(save);
+        frame.recycle();
+        redrawViewsAbove(root, texture, canvas);
     }
 
     private static void redrawViewsAbove(View root, View texture, Canvas canvas) {
         int[] origin = new int[2];
-        root.getLocationInWindow(origin);
+        root.getLocationOnScreen(origin);
         View child = texture;
         while (child != root && child.getParent() instanceof ViewGroup) {
             ViewGroup parent = (ViewGroup) child.getParent();
             int index = parent.indexOfChild(child);
             for (int i = index + 1; i < parent.getChildCount(); i++) {
                 View sibling = parent.getChildAt(i);
-                if (sibling.getVisibility() != View.VISIBLE) continue;
+                android.graphics.Rect visible = new android.graphics.Rect();
+                if (!sibling.isShown() || !sibling.getGlobalVisibleRect(visible)) continue;
                 int[] position = new int[2];
-                sibling.getLocationInWindow(position);
+                sibling.getLocationOnScreen(position);
                 int save = canvas.save();
+                canvas.clipRect(visible.left - origin[0], visible.top - origin[1],
+                        visible.right - origin[0], visible.bottom - origin[1]);
                 canvas.translate(position[0] - origin[0], position[1] - origin[1]);
                 sibling.draw(canvas);
                 canvas.restoreToCount(save);

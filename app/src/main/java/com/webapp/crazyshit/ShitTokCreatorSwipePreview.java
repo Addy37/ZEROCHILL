@@ -29,6 +29,8 @@ final class ShitTokCreatorSwipePreview extends FrameLayout {
     private final FrameLayout profileSlot;
     private final TabLayout tabs;
     private final RecyclerView gallery;
+    private final CreatorGallerySkeleton gallerySkeleton;
+    private final ZeroChillLoadingView galleryLoading;
     private final BunkrGalleryAdapter adapter;
     private String currentCreator = "";
     private String currentSessionId = "";
@@ -106,7 +108,16 @@ final class ShitTokCreatorSwipePreview extends FrameLayout {
                 StaggeredGridLayoutManager.VERTICAL
         ));
         gallery.setNestedScrollingEnabled(false);
-        shell.addView(gallery, new LinearLayout.LayoutParams(-1, 0, 1f));
+        FrameLayout galleryHost = new FrameLayout(activity);
+        galleryHost.addView(gallery, new FrameLayout.LayoutParams(-1, -1));
+        gallerySkeleton = new CreatorGallerySkeleton(activity);
+        galleryHost.addView(gallerySkeleton, new FrameLayout.LayoutParams(-1, -1));
+        galleryLoading = new ZeroChillLoadingView(activity, "Loading gallery...", true);
+        FrameLayout.LayoutParams loadingParams = new FrameLayout.LayoutParams(dp(160), dp(132));
+        loadingParams.gravity = Gravity.CENTER;
+        galleryHost.addView(galleryLoading, loadingParams);
+        galleryLoading.setVisibility(View.GONE);
+        shell.addView(galleryHost, new LinearLayout.LayoutParams(-1, 0, 1f));
     }
 
     void showCreator(String creator, String sessionId) {
@@ -138,6 +149,8 @@ final class ShitTokCreatorSwipePreview extends FrameLayout {
 
         adapter.replace(new ArrayList<>(), false);
         updateTabs(new ArrayList<>());
+        gallerySkeleton.setVisibility(View.VISIBLE);
+        galleryLoading.setVisibility(View.VISIBLE);
         int generation = ++refreshGeneration;
         scheduleRefresh(generation, 0);
     }
@@ -171,9 +184,19 @@ final class ShitTokCreatorSwipePreview extends FrameLayout {
     }
 
     private void bindItems(List<NativeContentItem> items) {
-        adapter.replace(items, false);
+        List<NativeContentItem> visible = adapter.snapshot();
+        boolean same = visible.size() == items.size();
+        for (int i = 0; same && i < items.size(); i++) {
+            NativeContentItem old = visible.get(i);
+            NativeContentItem next = items.get(i);
+            same = old != null && next != null && old.url != null
+                    && old.url.equals(next.url);
+        }
+        if (!same) adapter.replace(items, false);
+        gallerySkeleton.setVisibility(View.GONE);
+        galleryLoading.setVisibility(View.GONE);
         updateTabs(items);
-        if (gallery.getLayoutManager() instanceof StaggeredGridLayoutManager) {
+        if (!same && gallery.getLayoutManager() instanceof StaggeredGridLayoutManager) {
             ((StaggeredGridLayoutManager) gallery.getLayoutManager())
                     .scrollToPositionWithOffset(0, 0);
         }
