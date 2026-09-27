@@ -100,8 +100,6 @@ jobs:
             app/src/main/java/com/webapp/crazyshit/StableBottomNavigationController.java \
             app/src/main/java/com/webapp/crazyshit/UiPolishController.java \
             app/src/main/java/com/webapp/crazyshit/LandscapeUiController.java \
-            app/src/main/java/com/webapp/crazyshit/FlashUiController.java \
-            app/src/main/java/com/webapp/crazyshit/ImmersiveUiController.java \
             app/src/main/res/color/nav_icon_tint.xml \
             app/src/main/res/color/nav_text_tint.xml \
             app/src/main/res/color/nav_ripple.xml; then

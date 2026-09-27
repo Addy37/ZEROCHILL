@@ -288,7 +288,14 @@ final class LandscapeUiController {
     ) {
         View topBar = state.topBar;
         if (topBar == null) return;
-        ZeroChillUi.styleTopBar(topBar);
+        // The portrait restoration pass must not briefly draw the old blue-edged glass
+        // rectangle over the main header before the portrait navigation owner runs.
+        if (landscape) {
+            ZeroChillUi.styleTopBar(topBar);
+        } else {
+            topBar.setBackgroundColor(ZeroChillUi.background(activity));
+            topBar.setElevation(0f);
+        }
 
         setVisibility(topBar, chaosFullscreen ? View.GONE : View.VISIBLE);
         ViewGroup.LayoutParams raw = topBar.getLayoutParams();

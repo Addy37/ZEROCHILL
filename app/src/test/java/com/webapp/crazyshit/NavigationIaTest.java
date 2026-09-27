@@ -7,6 +7,7 @@ import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Rect;
 import android.graphics.RectF;
+import android.graphics.drawable.ColorDrawable;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ImageView;
@@ -34,6 +35,26 @@ import static org.robolectric.Shadows.shadowOf;
 @RunWith(RobolectricTestRunner.class)
 @Config(application = Application.class, sdk = 35)
 public class NavigationIaTest {
+    @Test public void portraitRestoreDoesNotDrawOldBlueHeaderBorder() {
+        android.content.Context context = org.robolectric.RuntimeEnvironment.getApplication();
+        context.getSharedPreferences("app_prefs", 0).edit()
+                .putBoolean("access_notice_2_8_3_accepted", true).apply();
+        ActivityController<NativeMainActivity> controller =
+                Robolectric.buildActivity(NativeMainActivity.class)
+                        .create().start().resume().visible();
+        NativeMainActivity activity = controller.get();
+        View topBar = ReflectionHelpers.getField(activity, "topBar");
+
+        // The landscape controller runs a portrait pass after returning from fullscreen.
+        LandscapeUiController.attach(activity);
+        LandscapeUiController.apply(activity);
+        assertTrue(topBar.getBackground() instanceof ColorDrawable);
+        assertEquals(ZeroChillUi.background(activity),
+                ((ColorDrawable) topBar.getBackground()).getColor());
+
+        controller.pause().stop().destroy();
+    }
+
     @Test public void showsDetailsIntentCarriesRealCollectionPresentationData() {
         android.content.Context context = org.robolectric.RuntimeEnvironment.getApplication();
         context.getSharedPreferences("app_prefs", 0).edit()
