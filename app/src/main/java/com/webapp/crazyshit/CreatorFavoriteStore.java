@@ -16,31 +16,34 @@ final class CreatorFavoriteStore {
     }
 
     static boolean contains(Context context, NativeContentItem creator) {
-        String key = key(creator);
-        if (key.isEmpty()) return false;
-        return context.getApplicationContext()
-                .getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-                .getStringSet(KEY_CREATORS, new HashSet<>())
-                .contains(key);
+        String logical = logicalKey(context, creator);
+        if (logical.isEmpty()) return false;
+        for (String favorite : names(context)) {
+            if (logical.equals(logicalKey(context, favorite))) return true;
+        }
+        return false;
     }
 
     static synchronized boolean toggle(Context context, NativeContentItem creator) {
-        String key = key(creator);
-        if (key.isEmpty()) return false;
+        String rawKey = key(creator);
+        String logical = logicalKey(context, creator);
+        if (rawKey.isEmpty() || logical.isEmpty()) return false;
 
         SharedPreferences preferences = context.getApplicationContext()
                 .getSharedPreferences(PREFS, Context.MODE_PRIVATE);
         Set<String> favorites = new HashSet<>(
                 preferences.getStringSet(KEY_CREATORS, new HashSet<>())
         );
-        boolean favorite;
-        if (favorites.contains(key)) {
-            favorites.remove(key);
+
+        boolean favorite = true;
+        boolean removed = favorites.removeIf(
+                stored -> logical.equals(logicalKey(context, stored)));
+        if (removed) {
             favorite = false;
         } else {
-            favorites.add(key);
-            favorite = true;
+            favorites.add(rawKey);
         }
+
         preferences.edit().putStringSet(KEY_CREATORS, favorites).apply();
         CreatorCatalog.remember(context, java.util.Collections.singletonList(creator));
         return favorite;
@@ -57,6 +60,19 @@ final class CreatorFavoriteStore {
         String value = clean(creator.searchQuery);
         if (value.isEmpty()) value = clean(creator.title);
         return value.toLowerCase(Locale.US).replaceAll("\\s+", " ");
+    }
+
+    static String logicalKey(Context context, NativeContentItem creator) {
+        return logicalKey(context, key(creator));
+    }
+
+    static String logicalKey(Context context, String value) {
+        String raw = clean(value);
+        if (raw.isEmpty()) return "";
+        String canonical = BundledCreatorIndex.get(context.getApplicationContext())
+                .canonicalKey(raw);
+        String logical = CreatorNameMatcher.identity(canonical);
+        return logical.isEmpty() ? CreatorNameMatcher.identity(raw) : logical;
     }
 
     private static String clean(String value) {
