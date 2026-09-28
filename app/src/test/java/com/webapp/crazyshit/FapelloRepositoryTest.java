@@ -27,6 +27,16 @@ public final class FapelloRepositoryTest {
         assertEquals("https://fapello.com/second-sample/", models.get(1).url);
     }
 
+    @Test public void searchParsingDecodesCreatorHtmlEntities() throws Exception {
+        List<FapelloRepository.Model> models = repository.parseSearchResponse(
+                "{\"results\":[{\"name\":\"Taliya &Amp; Gustavo\","
+                        + "\"url\":\"https://fapello.com/taliyaandgustavo/\"}]}"
+        );
+        assertEquals(1, models.size());
+        assertEquals("Taliya & Gustavo", models.get(0).name);
+        assertEquals("https://fapello.com/taliyaandgustavo/", models.get(0).url);
+    }
+
     @Test public void creatorParsingExtractsImagesVideosLazyUrlsAndPagination() throws Exception {
         FapelloRepository.Model model = model();
         String endpoint = FapelloRepository.modelProfilePageUrl(model.url, 1);
