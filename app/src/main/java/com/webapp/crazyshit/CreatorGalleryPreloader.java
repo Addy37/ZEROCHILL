@@ -273,7 +273,7 @@ final class CreatorGalleryPreloader {
                 composeMemberSnapshots(
                         safeContext,
                         sessionId,
-                        finalSeedNames
+                        mergedMemberQueries(finalQuery, finalSeedNames)
                 );
                 BunkrGallerySessionStore.Snapshot composed =
                         BunkrGallerySessionStore.snapshot(sessionId);
@@ -328,7 +328,8 @@ final class CreatorGalleryPreloader {
         String warm = sessionId(context, spec.cacheKey);
         if (!warm.isEmpty()) return warm;
 
-        ArrayList<NativeContentItem> preview = recentMemberItems(spec.seedNames);
+        ArrayList<NativeContentItem> preview =
+                recentMemberItems(mergedMemberQueries(spec.query, spec.seedNames));
         if (preview.isEmpty()) return "";
 
         String sessionId = BunkrGallerySessionStore.createCreator(
@@ -344,6 +345,27 @@ final class CreatorGalleryPreloader {
     static void cancelQueued(CreatorGallerySpec spec) {
         if (spec == null) return;
         cancelQueuedKey(spec.grouped ? spec.cacheKey : spec.query);
+    }
+
+    private static ArrayList<String> mergedMemberQueries(
+            String primaryQuery,
+            List<String> memberQueries
+    ) {
+        ArrayList<String> result = new ArrayList<>();
+        java.util.HashSet<String> seen = new java.util.HashSet<>();
+        String primary = clean(primaryQuery);
+        if (!primary.isEmpty()) {
+            result.add(primary);
+            seen.add(key(primary));
+        }
+        if (memberQueries != null) {
+            for (String query : memberQueries) {
+                String cleanQuery = clean(query);
+                if (cleanQuery.isEmpty() || !seen.add(key(cleanQuery))) continue;
+                result.add(cleanQuery);
+            }
+        }
+        return result;
     }
 
     private static void composeMemberSnapshots(
