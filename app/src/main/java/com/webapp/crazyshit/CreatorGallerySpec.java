@@ -69,7 +69,7 @@ final class CreatorGallerySpec {
                 String name = clean(member.searchQuery);
                 if (name.isEmpty()) name = clean(member.title);
                 String normalizedName = CreatorNameMatcher.normalized(name);
-                if (normalizedName.isEmpty() || !seenNames.add(normalizedName)) continue;
+                boolean newName = !normalizedName.isEmpty() && seenNames.add(normalizedName);
 
                 String url = clean(member.url);
                 if (knownGallerySource(url)) {
@@ -78,6 +78,7 @@ final class CreatorGallerySpec {
                 } else {
                     url = "";
                 }
+                if (!newName && url.isEmpty()) continue;
                 names.add(name);
                 urls.add(url);
                 images.add(clean(member.imageUrl));
