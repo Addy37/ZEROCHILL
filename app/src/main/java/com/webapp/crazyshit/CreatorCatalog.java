@@ -40,30 +40,41 @@ final class CreatorCatalog {
     static List<NativeContentItem> matching(Context context, String query, boolean favoritesOnly, int limit) {
         Set<String> favorites = CreatorFavoriteStore.names(context);
         ArrayList<NativeContentItem> result = new ArrayList<>();
-        // Group only confirmed aliases. This runs during a catalog query, never during card bind.
-        LinkedHashMap<String, NativeContentItem> logicalFavorites = favoritesOnly
-                ? new LinkedHashMap<>() : null;
-        for (NativeContentItem item : all(context)) {
-            if (favoritesOnly && !favorites.contains(CreatorFavoriteStore.key(item))
-                    && !CreatorIdentity.hasStoredAlias(favorites, item.title)) continue;
-            if (CreatorNameMatcher.rank(item.title, query) == Integer.MAX_VALUE
-                    && CreatorNameMatcher.rank(item.searchQuery, query) == Integer.MAX_VALUE
-                    && CreatorNameMatcher.rank(CreatorIdentity.display(item.title), query) == Integer.MAX_VALUE) continue;
-            if (favoritesOnly) {
-                String identity = CreatorIdentity.reviewed(item.title)
-                        ? CreatorIdentity.key(item.title) : "raw:" + CreatorFavoriteStore.key(item);
-                NativeContentItem previous = logicalFavorites.get(identity);
-                if (previous == null || (previous.imageUrl.isEmpty() && !item.imageUrl.isEmpty())
-                        || (previous.imageUrl.isEmpty() == item.imageUrl.isEmpty()
-                        && previous.url.isEmpty() && !item.url.isEmpty())) {
-                    String display = CreatorIdentity.display(item.title);
-                    logicalFavorites.put(identity, new NativeContentItem(item.kind, display,
-                            item.url, item.imageUrl, item.views, item.uploader, item.comments,
-                            item.description, item.searchQuery, item.publishedAtMillis));
+        if (favoritesOnly && favorites.isEmpty()) return result;
+        List<NativeContentItem> catalog = all(context);
+        if (favoritesOnly) {
+            Map<String, NativeContentItem> byStoredKey = new java.util.HashMap<>();
+            for (NativeContentItem item : catalog) byStoredKey.put(key(item), item);
+            LinkedHashMap<String, NativeContentItem> logical = new LinkedHashMap<>();
+            for (String raw : favorites) {
+                String identity = CreatorIdentity.reviewed(raw)
+                        ? CreatorIdentity.key(raw) : "raw:" + raw;
+                NativeContentItem best = byStoredKey.get(raw);
+                List<String> aliases = CreatorIdentity.storedKeys(raw);
+                if (aliases != null) for (String alias : aliases) {
+                    NativeContentItem candidate = byStoredKey.get(alias);
+                    if (candidate != null && (best == null || best.imageUrl.isEmpty()
+                            && !candidate.imageUrl.isEmpty() || best.imageUrl.isEmpty()
+                            == candidate.imageUrl.isEmpty() && best.url.isEmpty()
+                            && !candidate.url.isEmpty())) best = candidate;
                 }
-            } else result.add(item);
+                if (best == null) continue;
+                NativeContentItem previous = logical.get(identity);
+                if (previous != null && (!previous.imageUrl.isEmpty() || best.imageUrl.isEmpty())) continue;
+                String display = CreatorIdentity.display(best.title);
+                logical.put(identity, new NativeContentItem(best.kind, display,
+                        best.url, best.imageUrl, best.views, best.uploader, best.comments,
+                        best.description, best.searchQuery, best.publishedAtMillis));
+            }
+            for (NativeContentItem item : logical.values()) {
+                if (CreatorNameMatcher.rank(item.title, query) != Integer.MAX_VALUE
+                        || CreatorNameMatcher.rank(item.searchQuery, query) != Integer.MAX_VALUE)
+                    result.add(item);
+            }
+        } else for (NativeContentItem item : catalog) {
+            if (CreatorNameMatcher.rank(item.title, query) != Integer.MAX_VALUE
+                    || CreatorNameMatcher.rank(item.searchQuery, query) != Integer.MAX_VALUE) result.add(item);
         }
-        if (favoritesOnly) result.addAll(logicalFavorites.values());
         Comparator<NativeContentItem> names = Comparator.comparing(
                 item -> CreatorNameMatcher.normalized(item.title));
         if (favoritesOnly || query.trim().isEmpty()) result.sort(names);
