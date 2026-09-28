@@ -8,6 +8,7 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -33,6 +34,8 @@ final class BunkrCreatorGalleryRepository {
     private static final int ONLYHAVEN_CREATORS_PER_BATCH = 2;
     private static final int ONLYHAVEN_CREATOR_LIMIT = 4;
     private static final int ONLYHAVEN_PAGE_SIZE = 36;
+    private static final int MAX_MERGED_DISCOVERY_QUERIES = 8;
+    private static final int MERGED_SOURCE_LIMIT = 2;
     private static final int MAX_FAPELLO_PAGES = 250;
     private static final int BATCH_TARGET = 48;
     private static final int MAX_MEDIA_ITEMS = 10_000;
@@ -67,11 +70,29 @@ final class BunkrCreatorGalleryRepository {
     }
 
     void reset(String sessionId, String query, String sourceProfileUrl, String creatorName) {
+        reset(sessionId, query, sourceProfileUrl, creatorName, null, null, null);
+    }
+
+    void reset(
+            String sessionId,
+            String query,
+            String sourceProfileUrl,
+            String creatorName,
+            List<String> seedNames,
+            List<String> seedUrls,
+            List<String> seedImages
+    ) {
         if (sessionId == null || sessionId.trim().isEmpty()) return;
         synchronized (STATES) {
             State state = new State(query);
-            seedFapelloProfile(state, sourceProfileUrl, creatorName);
-            seedOnlyHavenProfile(state, sourceProfileUrl, creatorName);
+            seedKnownProfiles(
+                    state,
+                    sourceProfileUrl,
+                    creatorName,
+                    seedNames,
+                    seedUrls,
+                    seedImages
+            );
             STATES.put(sessionId, state);
             trimLocked();
         }
@@ -88,7 +109,40 @@ final class BunkrCreatorGalleryRepository {
 
     Batch fetchNext(Context context, String sessionId, String query,
             String sourceProfileUrl, String creatorName, ProgressListener listener) throws IOException {
-        State state = state(context, sessionId, query, sourceProfileUrl, creatorName);
+        return fetchNext(
+                context,
+                sessionId,
+                query,
+                sourceProfileUrl,
+                creatorName,
+                null,
+                null,
+                null,
+                listener
+        );
+    }
+
+    Batch fetchNext(
+            Context context,
+            String sessionId,
+            String query,
+            String sourceProfileUrl,
+            String creatorName,
+            List<String> seedNames,
+            List<String> seedUrls,
+            List<String> seedImages,
+            ProgressListener listener
+    ) throws IOException {
+        State state = state(
+                context,
+                sessionId,
+                query,
+                sourceProfileUrl,
+                creatorName,
+                seedNames,
+                seedUrls,
+                seedImages
+        );
         synchronized (state) {
             Batch batch = fetchNextLocked(context, state, listener);
             saveCursor(context, sessionId, state, batch);
@@ -625,6 +679,19 @@ final class BunkrCreatorGalleryRepository {
 
     private void loadAlbumsIfNeeded(Context context, State state) throws IOException {
         BunkrRepository repository = new BunkrRepository();
+        if (!state.mergedBunkrCatalogLoaded && state.discoveryQueries.size() > 1) {
+            boolean first = true;
+            for (String query : state.discoveryQueries) {
+                if (first) {
+                    first = false;
+                    continue;
+                }
+                List<NativeContentItem> aliases = repository.searchAlbums(context, query, 1);
+                addBunkrAlbums(state, aliases);
+            }
+            state.mergedBunkrCatalogLoaded = true;
+        }
+
         int searchAttempts = 0;
         while (state.pending.isEmpty() && !state.searchFinished && searchAttempts < 2) {
             int page = state.nextSearchPage;
@@ -635,30 +702,39 @@ final class BunkrCreatorGalleryRepository {
                 state.searchFinished = true;
                 break;
             }
-            int added = 0;
-            for (NativeContentItem album : albums) {
-                if (album == null || !BunkrRepository.isAlbumUrl(album.url) ||
-                        !state.albumUrls.add(album.url)) continue;
-                state.pending.addLast(new AlbumCursor(album.url));
-                added++;
-            }
+            int added = addBunkrAlbums(state, albums);
             if (page >= MAX_SEARCH_PAGES) state.searchFinished = true;
             if (added == 0 && page >= MAX_SEARCH_PAGES) break;
         }
     }
 
+    private int addBunkrAlbums(State state, List<NativeContentItem> albums) {
+        int added = 0;
+        if (albums == null) return 0;
+        for (NativeContentItem album : albums) {
+            if (album == null || !BunkrRepository.isAlbumUrl(album.url) ||
+                    !state.albumUrls.add(album.url)) continue;
+            state.pending.addLast(new AlbumCursor(album.url));
+            added++;
+        }
+        return added;
+    }
+
     private void loadFapelloModelsIfNeeded(Context context, State state) throws IOException {
         if (state.fapelloCatalogLoaded) return;
-        List<FapelloRepository.Model> models = new FapelloRepository().searchModels(
-                context,
-                state.query,
-                FAPELLO_MODEL_LIMIT
-        );
-        if (models != null) {
+        FapelloRepository repository = new FapelloRepository();
+        int index = 0;
+        for (String query : state.discoveryQueries) {
+            int limit = index++ == 0 ? FAPELLO_MODEL_LIMIT : MERGED_SOURCE_LIMIT;
+            List<FapelloRepository.Model> models = repository.searchModels(context, query, limit);
+            if (models == null) continue;
+            int accepted = 0;
             for (FapelloRepository.Model model : models) {
-                if (model == null || !FapelloRepository.isModelUrl(model.url) ||
-                        !state.fapelloModelUrls.add(model.url)) continue;
+                if (model == null || !FapelloRepository.isModelUrl(model.url)
+                        || CreatorNameMatcher.rank(model.name, query) == Integer.MAX_VALUE
+                        || !state.fapelloModelUrls.add(model.url)) continue;
                 state.fapelloPending.addLast(new FapelloCursor(model));
+                if (++accepted >= limit) break;
             }
         }
         state.fapelloCatalogLoaded = true;
@@ -667,14 +743,20 @@ final class BunkrCreatorGalleryRepository {
     private IOException loadOnlyHavenCatalog(Context context, State state) {
         if (state.onlyHavenCatalogLoaded) return null;
         try {
-            List<OnlyHavenRepository.Creator> creators =
-                    new OnlyHavenRepository().searchCreators(
-                            context, state.query, ONLYHAVEN_CREATOR_LIMIT);
-            if (creators != null) {
+            OnlyHavenRepository repository = new OnlyHavenRepository();
+            int index = 0;
+            for (String query : state.discoveryQueries) {
+                int limit = index++ == 0 ? ONLYHAVEN_CREATOR_LIMIT : MERGED_SOURCE_LIMIT;
+                List<OnlyHavenRepository.Creator> creators =
+                        repository.searchCreators(context, query, limit);
+                if (creators == null) continue;
+                int accepted = 0;
                 for (OnlyHavenRepository.Creator creator : creators) {
-                    if (creator == null || !OnlyHavenRepository.isOnlyHavenUrl(creator.url) ||
-                            !state.onlyHavenProfileUrls.add(creator.url)) continue;
+                    if (creator == null || !OnlyHavenRepository.isOnlyHavenUrl(creator.url)
+                            || CreatorNameMatcher.rank(creator.name, query) == Integer.MAX_VALUE
+                            || !state.onlyHavenProfileUrls.add(creator.url)) continue;
                     state.onlyHavenPending.addLast(new OnlyHavenCursor(creator));
+                    if (++accepted >= limit) break;
                 }
             }
             state.onlyHavenCatalogLoaded = true;
@@ -687,47 +769,74 @@ final class BunkrCreatorGalleryRepository {
     }
 
     private IOException loadWikiFeetCatalog(Context context, State state) {
-        LinkedHashMap<WikiFeetRepository.Site, Future<List<WikiFeetRepository.Creator>>> requests =
+        LinkedHashMap<Future<List<WikiFeetRepository.Creator>>, WikiFeetRepository.Site> requests =
                 new LinkedHashMap<>();
-        if (!state.wikiFeetCatalogLoaded) requests.put(
-                WikiFeetRepository.Site.WIKIFEET,
-                ALBUM_IO.submit(() -> new WikiFeetRepository().searchCreators(
-                        context, WikiFeetRepository.Site.WIKIFEET,
-                        state.query, WIKIFEET_CREATOR_LIMIT)));
-        if (!state.wikiFeetXCatalogLoaded) requests.put(
-                WikiFeetRepository.Site.WIKIFEET_X,
-                ALBUM_IO.submit(() -> new WikiFeetRepository().searchCreators(
-                        context, WikiFeetRepository.Site.WIKIFEET_X,
-                        state.query, WIKIFEET_CREATOR_LIMIT)));
+        int index = 0;
+        for (String query : state.discoveryQueries) {
+            int limit = index++ == 0 ? WIKIFEET_CREATOR_LIMIT : MERGED_SOURCE_LIMIT;
+            if (!state.wikiFeetCatalogLoaded) {
+                requests.put(
+                        ALBUM_IO.submit(() -> new WikiFeetRepository().searchCreators(
+                                context,
+                                WikiFeetRepository.Site.WIKIFEET,
+                                query,
+                                limit
+                        )),
+                        WikiFeetRepository.Site.WIKIFEET
+                );
+            }
+            if (!state.wikiFeetXCatalogLoaded) {
+                requests.put(
+                        ALBUM_IO.submit(() -> new WikiFeetRepository().searchCreators(
+                                context,
+                                WikiFeetRepository.Site.WIKIFEET_X,
+                                query,
+                                limit
+                        )),
+                        WikiFeetRepository.Site.WIKIFEET_X
+                );
+            }
+        }
+
         IOException firstError = null;
+        boolean wikiFeetFailed = false;
+        boolean wikiFeetXFailed = false;
         long deadline = SystemClock.elapsedRealtime() + 8_000L;
-        for (Map.Entry<WikiFeetRepository.Site, Future<List<WikiFeetRepository.Creator>>> request :
+        for (Map.Entry<Future<List<WikiFeetRepository.Creator>>, WikiFeetRepository.Site> request :
                 requests.entrySet()) {
-            WikiFeetRepository.Site site = request.getKey();
+            Future<List<WikiFeetRepository.Creator>> future = request.getKey();
+            WikiFeetRepository.Site site = request.getValue();
             try {
                 long remaining = deadline - SystemClock.elapsedRealtime();
                 if (remaining <= 0L) throw new IOException(site.label + " search timed out");
-                List<WikiFeetRepository.Creator> creators = request.getValue().get(
-                        remaining, java.util.concurrent.TimeUnit.MILLISECONDS);
+                List<WikiFeetRepository.Creator> creators =
+                        future.get(remaining, java.util.concurrent.TimeUnit.MILLISECONDS);
                 addWikiFeetCreators(state, site, creators);
-                if (site == WikiFeetRepository.Site.WIKIFEET) {
-                    state.wikiFeetCatalogLoaded = true;
-                    state.wikiFeetSearchFailures = 0;
-                } else {
-                    state.wikiFeetXCatalogLoaded = true;
-                    state.wikiFeetXSearchFailures = 0;
-                }
             } catch (Exception error) {
-                request.getValue().cancel(true);
+                future.cancel(true);
                 IOException failure = error instanceof IOException
                         ? (IOException) error
                         : new IOException(site.label + " search failed", error);
                 if (firstError == null) firstError = failure;
-                if (site == WikiFeetRepository.Site.WIKIFEET) {
-                    if (++state.wikiFeetSearchFailures >= 2) state.wikiFeetCatalogLoaded = true;
-                } else if (++state.wikiFeetXSearchFailures >= 2) {
-                    state.wikiFeetXCatalogLoaded = true;
-                }
+                if (site == WikiFeetRepository.Site.WIKIFEET) wikiFeetFailed = true;
+                else wikiFeetXFailed = true;
+            }
+        }
+
+        if (!state.wikiFeetCatalogLoaded) {
+            if (!wikiFeetFailed) {
+                state.wikiFeetCatalogLoaded = true;
+                state.wikiFeetSearchFailures = 0;
+            } else if (++state.wikiFeetSearchFailures >= 2) {
+                state.wikiFeetCatalogLoaded = true;
+            }
+        }
+        if (!state.wikiFeetXCatalogLoaded) {
+            if (!wikiFeetXFailed) {
+                state.wikiFeetXCatalogLoaded = true;
+                state.wikiFeetXSearchFailures = 0;
+            } else if (++state.wikiFeetXSearchFailures >= 2) {
+                state.wikiFeetXCatalogLoaded = true;
             }
         }
         return firstError;
@@ -951,8 +1060,16 @@ final class BunkrCreatorGalleryRepository {
         if (source != null && index < source.size()) output.add(source.get(index));
     }
 
-    private State state(Context context, String sessionId, String query,
-            String sourceProfileUrl, String creatorName) throws IOException {
+    private State state(
+            Context context,
+            String sessionId,
+            String query,
+            String sourceProfileUrl,
+            String creatorName,
+            List<String> seedNames,
+            List<String> seedUrls,
+            List<String> seedImages
+    ) throws IOException {
         if (sessionId == null || sessionId.trim().isEmpty()) {
             throw new IOException("Creator gallery session was missing");
         }
@@ -962,13 +1079,96 @@ final class BunkrCreatorGalleryRepository {
             State current = STATES.get(sessionId);
             if (current == null || !cleanQuery.equalsIgnoreCase(current.query)) {
                 current = restoreCursor(context, sessionId, cleanQuery);
-                seedFapelloProfile(current, sourceProfileUrl, creatorName);
-                seedOnlyHavenProfile(current, sourceProfileUrl, creatorName);
                 STATES.put(sessionId, current);
                 trimLocked();
             }
+            seedKnownProfiles(
+                    current,
+                    sourceProfileUrl,
+                    creatorName,
+                    seedNames,
+                    seedUrls,
+                    seedImages
+            );
             return current;
         }
+    }
+
+    private void seedKnownProfiles(
+            State state,
+            String sourceProfileUrl,
+            String creatorName,
+            List<String> seedNames,
+            List<String> seedUrls,
+            List<String> seedImages
+    ) {
+        addDiscoveryQuery(state, creatorName);
+        if (seedNames != null) {
+            int nameLimit = Math.min(MAX_MERGED_DISCOVERY_QUERIES, seedNames.size());
+            for (int i = 0; i < nameLimit; i++) addDiscoveryQuery(state, seedNames.get(i));
+        }
+
+        seedKnownProfile(state, sourceProfileUrl, creatorName, "");
+        if (seedUrls == null || seedUrls.isEmpty()) return;
+        int limit = Math.min(MAX_MERGED_DISCOVERY_QUERIES, seedUrls.size());
+        for (int i = 0; i < limit; i++) {
+            String url = seedUrls.get(i);
+            String name = seedNames != null && i < seedNames.size()
+                    ? seedNames.get(i)
+                    : creatorName;
+            String image = seedImages != null && i < seedImages.size()
+                    ? seedImages.get(i)
+                    : "";
+            seedKnownProfile(state, url, name, image);
+        }
+    }
+
+    private void addDiscoveryQuery(State state, String value) {
+        if (state == null || value == null) return;
+        String query = value.trim();
+        if (query.length() < 2 || state.discoveryQueries.size() >= MAX_MERGED_DISCOVERY_QUERIES) {
+            return;
+        }
+        String normalized = CreatorNameMatcher.normalized(query);
+        for (String existing : state.discoveryQueries) {
+            if (CreatorNameMatcher.normalized(existing).equals(normalized)) return;
+        }
+        state.discoveryQueries.add(query);
+    }
+
+    private void seedKnownProfile(
+            State state,
+            String profileUrl,
+            String creatorName,
+            String imageUrl
+    ) {
+        if (state == null || profileUrl == null || profileUrl.trim().isEmpty()) return;
+        String url = profileUrl.trim();
+        if (FapelloRepository.isModelUrl(url)) {
+            seedFapelloProfile(state, url, creatorName);
+            return;
+        }
+        if (OnlyHavenRepository.isOnlyHavenUrl(url)) {
+            seedOnlyHavenProfile(state, url, creatorName);
+            return;
+        }
+        if (BunkrRepository.isAlbumUrl(url)) {
+            if (state.albumUrls.add(url)) state.pending.addFirst(new AlbumCursor(url));
+            return;
+        }
+        WikiFeetRepository.Site site = null;
+        if (WikiFeetRepository.isProfileUrl(url, WikiFeetRepository.Site.WIKIFEET)) {
+            site = WikiFeetRepository.Site.WIKIFEET;
+        } else if (WikiFeetRepository.isProfileUrl(url, WikiFeetRepository.Site.WIKIFEET_X)) {
+            site = WikiFeetRepository.Site.WIKIFEET_X;
+        }
+        if (site == null || !state.wikiFeetProfileUrls.add(url)) return;
+        String name = creatorName == null || creatorName.trim().isEmpty()
+                ? state.query
+                : creatorName.trim();
+        state.wikiFeetPending.addFirst(new WikiFeetCursor(
+                new WikiFeetRepository.Creator(site, name, url, imageUrl, 0)
+        ));
     }
 
     private void seedFapelloProfile(State state, String profileUrl, String creatorName) {
@@ -979,15 +1179,18 @@ final class BunkrCreatorGalleryRepository {
                 : creatorName.trim();
         state.fapelloPending.addFirst(new FapelloCursor(
                 new FapelloRepository.Model(name, profileUrl, "")));
-        state.fapelloCatalogLoaded = true;
+        if (state.discoveryQueries.size() <= 1) state.fapelloCatalogLoaded = true;
     }
 
     private void seedOnlyHavenProfile(State state, String profileUrl, String creatorName) {
         if (state == null || !OnlyHavenRepository.isOnlyHavenUrl(profileUrl) ||
                 !state.onlyHavenProfileUrls.add(profileUrl)) return;
         try {
-            android.net.Uri parsed = android.net.Uri.parse(profileUrl);
-            List<String> parts = parsed.getPathSegments();
+            java.net.URI parsed = new java.net.URI(profileUrl);
+            String path = parsed.getPath();
+            String[] raw = path == null ? new String[0] : path.split("/");
+            ArrayList<String> parts = new ArrayList<>();
+            for (String part : raw) if (part != null && !part.trim().isEmpty()) parts.add(part.trim());
             int marker = parts.indexOf("creators");
             if (marker < 0 || marker + 2 >= parts.size()) {
                 state.onlyHavenProfileUrls.remove(profileUrl);
@@ -995,8 +1198,7 @@ final class BunkrCreatorGalleryRepository {
             }
             String service = parts.get(marker + 1);
             String id = parts.get(marker + 2);
-            if (service == null || service.trim().isEmpty() ||
-                    id == null || id.trim().isEmpty()) {
+            if (service.isEmpty() || id.isEmpty()) {
                 state.onlyHavenProfileUrls.remove(profileUrl);
                 return;
             }
@@ -1006,7 +1208,7 @@ final class BunkrCreatorGalleryRepository {
             state.onlyHavenPending.addFirst(new OnlyHavenCursor(
                     new OnlyHavenRepository.Creator(
                             service, id, name, profileUrl, "")));
-            state.onlyHavenCatalogLoaded = true;
+            if (state.discoveryQueries.size() <= 1) state.onlyHavenCatalogLoaded = true;
         } catch (Exception ignored) {
             state.onlyHavenProfileUrls.remove(profileUrl);
         }
@@ -1016,6 +1218,8 @@ final class BunkrCreatorGalleryRepository {
         try {
             org.json.JSONObject json = new org.json.JSONObject().put("query", state.query)
                     .put("next", state.nextSearchPage).put("searchFinished", state.searchFinished)
+                    .put("mergedBunkrLoaded", state.mergedBunkrCatalogLoaded)
+                    .put("discoveryQueries", new org.json.JSONArray(state.discoveryQueries))
                     .put("fapelloLoaded", state.fapelloCatalogLoaded)
                     .put("wikiFeetLoaded", state.wikiFeetCatalogLoaded)
                     .put("wikiFeetXLoaded", state.wikiFeetXCatalogLoaded)
@@ -1065,6 +1269,13 @@ final class BunkrCreatorGalleryRepository {
         if (json == null || !query.equalsIgnoreCase(json.optString("query"))) return state;
         state.nextSearchPage = Math.max(1, json.optInt("next", 1));
         state.searchFinished = json.optBoolean("searchFinished");
+        state.mergedBunkrCatalogLoaded = json.optBoolean("mergedBunkrLoaded");
+        org.json.JSONArray discovery = json.optJSONArray("discoveryQueries");
+        if (discovery != null) {
+            for (int i = 0; i < Math.min(MAX_MERGED_DISCOVERY_QUERIES, discovery.length()); i++) {
+                addDiscoveryQuery(state, discovery.optString(i));
+            }
+        }
         state.fapelloCatalogLoaded = json.optBoolean("fapelloLoaded");
         state.wikiFeetCatalogLoaded = json.optBoolean("wikiFeetLoaded");
         state.wikiFeetXCatalogLoaded = json.optBoolean("wikiFeetXLoaded");
@@ -1202,6 +1413,7 @@ final class BunkrCreatorGalleryRepository {
 
     private static final class State {
         final String query;
+        final LinkedHashSet<String> discoveryQueries = new LinkedHashSet<>();
         final ArrayDeque<AlbumCursor> pending = new ArrayDeque<>();
         final ArrayDeque<FapelloCursor> fapelloPending = new ArrayDeque<>();
         final ArrayDeque<WikiFeetCursor> wikiFeetPending = new ArrayDeque<>();
@@ -1218,6 +1430,7 @@ final class BunkrCreatorGalleryRepository {
         int wikiFeetXSearchFailures;
         int onlyHavenSearchFailures;
         boolean searchFinished;
+        boolean mergedBunkrCatalogLoaded;
         boolean fapelloCatalogLoaded;
         boolean wikiFeetCatalogLoaded;
         boolean wikiFeetXCatalogLoaded;
@@ -1226,10 +1439,12 @@ final class BunkrCreatorGalleryRepository {
 
         State(String query) {
             this.query = query == null ? "" : query.trim();
+            if (this.query.length() >= 2) discoveryQueries.add(this.query);
         }
 
         boolean finished() {
-            return searchFinished && pending.isEmpty() &&
+            boolean mergedBunkrReady = discoveryQueries.size() <= 1 || mergedBunkrCatalogLoaded;
+            return mergedBunkrReady && searchFinished && pending.isEmpty() &&
                     fapelloCatalogLoaded && fapelloPending.isEmpty() &&
                     wikiFeetCatalogLoaded && wikiFeetXCatalogLoaded &&
                     wikiFeetPending.isEmpty() &&

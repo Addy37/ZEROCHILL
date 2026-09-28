@@ -33,6 +33,8 @@ import java.util.Map;
 
 /** All starred creators, including favorites saved before the creator catalog existed. */
 public final class CreatorsActivity extends Activity {
+    private static final int REQUEST_PICK_AVATAR = 4106;
+
     private EditText input;
     private TextView empty, count;
     private RecyclerView recycler;
@@ -40,6 +42,7 @@ public final class CreatorsActivity extends Activity {
     private Parcelable pendingScroll;
     private ItemTouchHelper dragHelper;
     private CreatorGridAdapter.Holder dragged, hovered;
+    private ArrayList<String> pendingAvatarKeys;
 
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
@@ -136,6 +139,7 @@ public final class CreatorsActivity extends Activity {
         if (state != null) {
             input.setText(state.getString("query", ""));
             pendingScroll = state.getParcelable("scroll");
+            pendingAvatarKeys = state.getStringArrayList("pending_avatar_keys");
         }
         getWindow().setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN
                 | android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
@@ -158,14 +162,23 @@ public final class CreatorsActivity extends Activity {
         }
     }
 
-    private void openCreator(NativeContentItem item) {
+    private void openCreator(CreatorCatalog.FavoriteGroup group) {
+        if (group == null || group.item == null) return;
         BrowseUi.hideKeyboard(this, input);
+        CreatorGallerySpec spec = CreatorGallerySpec.from(group);
+        String sessionId = spec.grouped
+                ? ""
+                : CreatorGalleryPreloader.sessionId(this, spec.item);
         startActivity(NativeFeedBrowserActivity.createCreatorGallery(
                 this,
-                item.title,
-                item.searchQuery.isEmpty() ? item.title : item.searchQuery,
-                NativeFeedBrowserActivity.creatorProfileHint(item),
-                CreatorGalleryPreloader.sessionId(this, item)
+                spec.item.title,
+                spec.query,
+                spec.profileHint,
+                sessionId,
+                spec.cacheKey,
+                spec.seedNames,
+                spec.seedUrls,
+                spec.seedImages
         ));
     }
 
@@ -213,10 +226,42 @@ public final class CreatorsActivity extends Activity {
                 return true;
             });
         }
+        menu.getMenu().add("Change avatar").setOnMenuItemClickListener(item -> {
+            pickAvatar(group);
+            return true;
+        });
+        if (CreatorAvatarOverrideStore.has(this, group.relationshipKeys)) {
+            menu.getMenu().add("Use default avatar").setOnMenuItemClickListener(item -> {
+                if (CreatorAvatarOverrideStore.clear(this, group.relationshipKeys)) render();
+                return true;
+            });
+        }
         menu.getMenu().add("Remove from favorites").setOnMenuItemClickListener(item -> {
             removeGroup(group); return true;
         });
         menu.show();
+    }
+
+    private void pickAvatar(CreatorCatalog.FavoriteGroup group) {
+        if (group == null || group.item == null || group.relationshipKeys.isEmpty()) return;
+        BrowseUi.hideKeyboard(this, input);
+        pendingAvatarKeys = new ArrayList<>(group.relationshipKeys);
+        CreatorGallerySpec spec = CreatorGallerySpec.from(group);
+        String sessionId = spec.grouped
+                ? ""
+                : CreatorGalleryPreloader.sessionId(this, spec.item);
+        Intent intent = NativeFeedBrowserActivity.createCreatorAvatarPicker(
+                this,
+                spec.item.title,
+                spec.query,
+                spec.profileHint,
+                sessionId,
+                spec.cacheKey,
+                spec.seedNames,
+                spec.seedUrls,
+                spec.seedImages
+        );
+        startActivityForResult(intent, REQUEST_PICK_AVATAR);
     }
 
     private void removeGroup(CreatorCatalog.FavoriteGroup group) {
@@ -310,7 +355,7 @@ public final class CreatorsActivity extends Activity {
             holder.itemView.setContentDescription("Open " + item.title);
             holder.favorite.setContentDescription("Remove " + item.title + " from favorite creators");
 
-            holder.itemView.setOnClickListener(v -> openCreator(item));
+            holder.itemView.setOnClickListener(v -> openCreator(group));
             View.OnClickListener remove = v -> {
                 removeGroup(group);
             };
@@ -334,14 +379,25 @@ public final class CreatorsActivity extends Activity {
                                 )
                                 .build()
                 );
-                Glide.with(holder.avatar)
-                        .load(url)
-                        .onlyRetrieveFromCache(true)
-                        .circleCrop()
-                        .dontAnimate()
-                        .placeholder(new ColorDrawable(Color.rgb(19, 23, 27)))
-                        .error(R.drawable.ic_more_account)
-                        .into(holder.avatar);
+                com.bumptech.glide.RequestBuilder<android.graphics.drawable.Drawable> network =
+                        Glide.with(holder.avatar)
+                                .load(url)
+                                .circleCrop()
+                                .dontAnimate()
+                                .placeholder(new ColorDrawable(Color.rgb(19, 23, 27)))
+                                .error(R.drawable.ic_more_account);
+                if (group.customAvatar) {
+                    network.into(holder.avatar);
+                } else {
+                    Glide.with(holder.avatar)
+                            .load(url)
+                            .onlyRetrieveFromCache(true)
+                            .circleCrop()
+                            .dontAnimate()
+                            .placeholder(new ColorDrawable(Color.rgb(19, 23, 27)))
+                            .error(network)
+                            .into(holder.avatar);
+                }
             } else {
                 holder.avatar.setImageResource(R.drawable.ic_more_account);
             }
@@ -371,10 +427,34 @@ public final class CreatorsActivity extends Activity {
         }
     }
 
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode != REQUEST_PICK_AVATAR) return;
+        ArrayList<String> keys = pendingAvatarKeys;
+        pendingAvatarKeys = null;
+        if (resultCode != RESULT_OK || data == null || keys == null || keys.isEmpty()) return;
+        String imageUrl = data.getStringExtra(NativeFeedBrowserActivity.EXTRA_PICKED_AVATAR_URL);
+        String referer = data.getStringExtra(NativeFeedBrowserActivity.EXTRA_PICKED_AVATAR_REFERER);
+        if (CreatorAvatarOverrideStore.save(
+                this,
+                new java.util.LinkedHashSet<>(keys),
+                imageUrl,
+                referer
+        )) {
+            render();
+            android.widget.Toast.makeText(this, "Avatar updated.", android.widget.Toast.LENGTH_SHORT)
+                    .show();
+        }
+    }
+
     @Override protected void onResume() { super.onResume(); render(); }
     @Override protected void onSaveInstanceState(Bundle state) {
         state.putString("query", input.getText().toString());
         state.putParcelable("scroll", recycler.getLayoutManager().onSaveInstanceState());
+        if (pendingAvatarKeys != null) {
+            state.putStringArrayList("pending_avatar_keys", pendingAvatarKeys);
+        }
         super.onSaveInstanceState(state);
     }
     private int dp(int value) { return BrowseUi.dp(this, value); }

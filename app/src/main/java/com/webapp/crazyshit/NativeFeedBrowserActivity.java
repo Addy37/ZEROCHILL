@@ -59,6 +59,13 @@ public final class NativeFeedBrowserActivity extends Activity {
     public static final String EXTRA_BUNKR_CREATOR_QUERY = "browser_bunkr_creator_query";
     public static final String EXTRA_FAPELLO_PROFILE_URL = "browser_fapello_profile_url";
     public static final String EXTRA_CREATOR_GALLERY_SESSION = "browser_creator_gallery_session";
+    public static final String EXTRA_CREATOR_GALLERY_CACHE_KEY = "browser_creator_gallery_cache_key";
+    public static final String EXTRA_CREATOR_SEED_NAMES = "browser_creator_seed_names";
+    public static final String EXTRA_CREATOR_SEED_URLS = "browser_creator_seed_urls";
+    public static final String EXTRA_CREATOR_SEED_IMAGES = "browser_creator_seed_images";
+    public static final String EXTRA_CREATOR_AVATAR_PICKER = "browser_creator_avatar_picker";
+    public static final String EXTRA_PICKED_AVATAR_URL = "browser_picked_avatar_url";
+    public static final String EXTRA_PICKED_AVATAR_REFERER = "browser_picked_avatar_referer";
     static final String EXTRA_SHITTOK_RETURN_TRANSITION = "browser_shittok_return_transition";
     public static final String EXTRA_NOTIFICATION_FRESH_URLS =
             "browser_notification_fresh_urls";
@@ -108,11 +115,16 @@ public final class NativeFeedBrowserActivity extends Activity {
     private String source;
     private String creatorQuery;
     private String fapelloProfileUrl;
+    private String creatorGalleryCacheKey;
+    private ArrayList<String> creatorSeedNames = new ArrayList<>();
+    private ArrayList<String> creatorSeedUrls = new ArrayList<>();
+    private ArrayList<String> creatorSeedImages = new ArrayList<>();
     private String showImageUrl;
     private String showDescription;
     private String showKind;
     private boolean showDetailsMode;
     private boolean memeMode;
+    private boolean creatorAvatarPickerMode;
     private boolean loading;
     private boolean endReached;
     private boolean fapelloFailureShown;
@@ -186,6 +198,30 @@ public final class NativeFeedBrowserActivity extends Activity {
             String fapelloProfileUrl,
             String gallerySessionId
     ) {
+        return createCreatorGallery(
+                activity,
+                title,
+                query,
+                fapelloProfileUrl,
+                gallerySessionId,
+                query,
+                null,
+                null,
+                null
+        );
+    }
+
+    static Intent createCreatorGallery(
+            Activity activity,
+            String title,
+            String query,
+            String fapelloProfileUrl,
+            String gallerySessionId,
+            String galleryCacheKey,
+            ArrayList<String> seedNames,
+            ArrayList<String> seedUrls,
+            ArrayList<String> seedImages
+    ) {
         String cleanQuery = query == null ? "" : query.trim();
         Intent intent = create(
                 activity,
@@ -201,9 +237,70 @@ public final class NativeFeedBrowserActivity extends Activity {
             // profile from either fast source so the gallery can skip redundant discovery.
             intent.putExtra(EXTRA_FAPELLO_PROFILE_URL, fapelloProfileUrl);
         }
+        String cleanCacheKey = galleryCacheKey == null || galleryCacheKey.trim().isEmpty()
+                ? cleanQuery
+                : galleryCacheKey.trim();
+        if (!cleanCacheKey.isEmpty()) {
+            intent.putExtra(EXTRA_CREATOR_GALLERY_CACHE_KEY, cleanCacheKey);
+        }
+        if (seedNames != null && !seedNames.isEmpty()) {
+            intent.putStringArrayListExtra(EXTRA_CREATOR_SEED_NAMES, seedNames);
+        }
+        if (seedUrls != null && !seedUrls.isEmpty()) {
+            intent.putStringArrayListExtra(EXTRA_CREATOR_SEED_URLS, seedUrls);
+        }
+        if (seedImages != null && !seedImages.isEmpty()) {
+            intent.putStringArrayListExtra(EXTRA_CREATOR_SEED_IMAGES, seedImages);
+        }
         if (gallerySessionId != null && !gallerySessionId.trim().isEmpty()) {
             intent.putExtra(EXTRA_CREATOR_GALLERY_SESSION, gallerySessionId.trim());
         }
+        return intent;
+    }
+
+    public static Intent createCreatorAvatarPicker(
+            Activity activity,
+            String title,
+            String query,
+            String fapelloProfileUrl,
+            String gallerySessionId
+    ) {
+        return createCreatorAvatarPicker(
+                activity,
+                title,
+                query,
+                fapelloProfileUrl,
+                gallerySessionId,
+                query,
+                null,
+                null,
+                null
+        );
+    }
+
+    static Intent createCreatorAvatarPicker(
+            Activity activity,
+            String title,
+            String query,
+            String fapelloProfileUrl,
+            String gallerySessionId,
+            String galleryCacheKey,
+            ArrayList<String> seedNames,
+            ArrayList<String> seedUrls,
+            ArrayList<String> seedImages
+    ) {
+        Intent intent = createCreatorGallery(
+                activity,
+                title,
+                query,
+                fapelloProfileUrl,
+                gallerySessionId,
+                galleryCacheKey,
+                seedNames,
+                seedUrls,
+                seedImages
+        );
+        intent.putExtra(EXTRA_CREATOR_AVATAR_PICKER, true);
         return intent;
     }
 
@@ -222,9 +319,21 @@ public final class NativeFeedBrowserActivity extends Activity {
         title = value(getIntent().getStringExtra(EXTRA_TITLE), "Browse");
         baseUrl = value(getIntent().getStringExtra(EXTRA_BASE_URL), CrazyShitRepository.HOME);
         memeMode = getIntent().getBooleanExtra(EXTRA_MEME_MODE, false);
+        creatorAvatarPickerMode =
+                getIntent().getBooleanExtra(EXTRA_CREATOR_AVATAR_PICKER, false);
         source = value(getIntent().getStringExtra(EXTRA_SOURCE), SOURCE_CRAZYSHIT);
         creatorQuery = value(getIntent().getStringExtra(EXTRA_BUNKR_CREATOR_QUERY), "");
         fapelloProfileUrl = value(getIntent().getStringExtra(EXTRA_FAPELLO_PROFILE_URL), "");
+        creatorGalleryCacheKey = value(
+                getIntent().getStringExtra(EXTRA_CREATOR_GALLERY_CACHE_KEY),
+                creatorQuery
+        );
+        ArrayList<String> names = getIntent().getStringArrayListExtra(EXTRA_CREATOR_SEED_NAMES);
+        ArrayList<String> urls = getIntent().getStringArrayListExtra(EXTRA_CREATOR_SEED_URLS);
+        ArrayList<String> images = getIntent().getStringArrayListExtra(EXTRA_CREATOR_SEED_IMAGES);
+        if (names != null) creatorSeedNames = new ArrayList<>(names);
+        if (urls != null) creatorSeedUrls = new ArrayList<>(urls);
+        if (images != null) creatorSeedImages = new ArrayList<>(images);
         shitTokReturnTransition = value(
                 getIntent().getStringExtra(EXTRA_SHITTOK_RETURN_TRANSITION),
                 ""
@@ -284,7 +393,7 @@ public final class NativeFeedBrowserActivity extends Activity {
                         if (isFinishing() || isDestroyed()) return;
                         loading = false;
                         if (restored != null && !restored.items.isEmpty()
-                                && creatorQuery.equalsIgnoreCase(restored.creatorQuery)) {
+                                && creatorGalleryCacheKey.equalsIgnoreCase(restored.creatorQuery)) {
                             showHotCreatorSnapshot(restored);
                         } else {
                             load(false);
@@ -493,12 +602,23 @@ public final class NativeFeedBrowserActivity extends Activity {
         if (isBunkr()) {
             if (bunkrGallerySessionId == null || bunkrGallerySessionId.isEmpty()) {
                 String warmId = isCreatorGallery()
-                        ? BunkrGallerySessionStore.recentCreator(creatorQuery) : null;
+                        ? BunkrGallerySessionStore.recentCreator(creatorGalleryCacheKey) : null;
                 bunkrGallerySessionId = warmId != null ? warmId : isCreatorGallery()
-                        ? BunkrGallerySessionStore.createCreator(title, baseUrl, creatorQuery)
+                        ? BunkrGallerySessionStore.createCreator(
+                                title,
+                                baseUrl,
+                                creatorGalleryCacheKey
+                        )
                         : BunkrGallerySessionStore.create(title, baseUrl);
                 if (isCreatorGallery() && warmId == null) creatorGalleryRepository.reset(
-                        bunkrGallerySessionId, creatorQuery, fapelloProfileUrl, title);
+                        bunkrGallerySessionId,
+                        creatorQuery,
+                        fapelloProfileUrl,
+                        title,
+                        creatorSeedNames,
+                        creatorSeedUrls,
+                        creatorSeedImages
+                );
             }
             if (isCreatorGallery()) buildCreatorTabs();
             else {
@@ -869,11 +989,16 @@ public final class NativeFeedBrowserActivity extends Activity {
                 new BunkrGalleryAdapter.Listener() {
                     @Override
                     public void onOpen(int position, NativeContentItem item) {
+                        if (creatorAvatarPickerMode) {
+                            pickCreatorAvatar(item);
+                            return;
+                        }
                         openBunkrGallery(position, item);
                     }
 
                     @Override
                     public void onLongPress(NativeContentItem item, View anchor) {
+                        if (creatorAvatarPickerMode) return;
                         if (isCreatorGallery()) {
                             anchor.performHapticFeedback(
                                     android.view.HapticFeedbackConstants.LONG_PRESS
@@ -924,6 +1049,9 @@ public final class NativeFeedBrowserActivity extends Activity {
                         : position == CREATOR_TAB_VIDEOS ? "Videos" : "All")
         );
         creatorTabsMediator.attach();
+        if (creatorAvatarPickerMode) {
+            creatorTabsPager.setCurrentItem(CREATOR_TAB_PICTURES, false);
+        }
         updateCreatorTabLabels();
         creatorTabsPager.registerOnPageChangeCallback(new ViewPager2.OnPageChangeCallback() {
             @Override
@@ -1025,11 +1153,22 @@ public final class NativeFeedBrowserActivity extends Activity {
         if (isBunkr()) {
             replaceBunkrItems(new ArrayList<>());
             bunkrGallerySessionId = isCreatorGallery()
-                    ? BunkrGallerySessionStore.createCreator(title, baseUrl, creatorQuery)
+                    ? BunkrGallerySessionStore.createCreator(
+                            title,
+                            baseUrl,
+                            creatorGalleryCacheKey
+                    )
                     : BunkrGallerySessionStore.create(title, baseUrl);
             if (isCreatorGallery()) {
                 creatorGalleryRepository.reset(
-                        bunkrGallerySessionId, creatorQuery, fapelloProfileUrl, title);
+                        bunkrGallerySessionId,
+                        creatorQuery,
+                        fapelloProfileUrl,
+                        title,
+                        creatorSeedNames,
+                        creatorSeedUrls,
+                        creatorSeedImages
+                );
             }
         } else {
             adapter.replace(new ArrayList<>());
@@ -1067,6 +1206,9 @@ public final class NativeFeedBrowserActivity extends Activity {
                             creatorQuery,
                             fapelloProfileUrl,
                             title,
+                            creatorSeedNames,
+                            creatorSeedUrls,
+                            creatorSeedImages,
                             items -> {
                                 BunkrGallerySessionStore.appendPreview(requestSession, items);
                                 runOnUiThread(() -> {
@@ -1450,6 +1592,51 @@ public final class NativeFeedBrowserActivity extends Activity {
         intent.putExtra(MemeViewerActivity.EXTRA_PAGE_URL, item.url);
         intent.putExtra(MemeViewerActivity.EXTRA_IMAGE_URL, item.imageUrl);
         startActivity(intent);
+    }
+
+    private void pickCreatorAvatar(NativeContentItem item) {
+        if (item == null || !item.isImage()) {
+            if (creatorTabsPager != null) {
+                creatorTabsPager.setCurrentItem(CREATOR_TAB_PICTURES, true);
+            }
+            Toast.makeText(this, "Choose a picture for the avatar.", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        String imageUrl = value(item.imageUrl, "");
+        if (imageUrl.isEmpty()) imageUrl = value(item.url, "");
+        if (!isRemoteUrl(imageUrl)) {
+            Toast.makeText(this, "That picture cannot be used as an avatar.", Toast.LENGTH_SHORT)
+                    .show();
+            return;
+        }
+        String referer = creatorAvatarReferer(item);
+        Intent result = new Intent();
+        result.putExtra(EXTRA_PICKED_AVATAR_URL, imageUrl);
+        result.putExtra(EXTRA_PICKED_AVATAR_REFERER, referer);
+        setResult(Activity.RESULT_OK, result);
+        finish();
+    }
+
+    private String creatorAvatarReferer(NativeContentItem item) {
+        if (item == null) return "";
+        if (WikiFeetRepository.isWikiFeetUrl(item.url)
+                && WikiFeetRepository.isWikiFeetUrl(item.uploader)) {
+            return value(item.uploader, "");
+        }
+        if (!FapelloRepository.isPostUrl(item.url)
+                && FapelloRepository.isModelUrl(item.uploader)) {
+            return value(item.uploader, "");
+        }
+        if (OnlyHavenRepository.isOnlyHavenUrl(item.uploader)) {
+            return value(item.uploader, "");
+        }
+        return value(item.url, "");
+    }
+
+    private boolean isRemoteUrl(String url) {
+        if (url == null) return false;
+        String clean = url.trim().toLowerCase(java.util.Locale.US);
+        return clean.startsWith("https://") || clean.startsWith("http://");
     }
 
     private void openBunkrGallery(int position, NativeContentItem item) {
@@ -1997,10 +2184,21 @@ public final class NativeFeedBrowserActivity extends Activity {
                 } else {
                     if (isBunkr()) {
                         bunkrGallerySessionId = isCreatorGallery()
-                                ? BunkrGallerySessionStore.createCreator(title, baseUrl, creatorQuery)
+                                ? BunkrGallerySessionStore.createCreator(
+                                        title,
+                                        baseUrl,
+                                        creatorGalleryCacheKey
+                                )
                                 : BunkrGallerySessionStore.create(title, baseUrl);
                         if (isCreatorGallery()) creatorGalleryRepository.reset(
-                                bunkrGallerySessionId, creatorQuery, fapelloProfileUrl, title);
+                                bunkrGallerySessionId,
+                                creatorQuery,
+                                fapelloProfileUrl,
+                                title,
+                                creatorSeedNames,
+                                creatorSeedUrls,
+                                creatorSeedImages
+                        );
                     }
                     load(false); return;
                 }
