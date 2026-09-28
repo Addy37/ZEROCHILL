@@ -25,7 +25,12 @@ import com.bumptech.glide.load.model.LazyHeaders;
 import com.google.android.material.card.MaterialCardView;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 /** All starred creators, including favorites saved before the creator catalog existed. */
 public final class CreatorsActivity extends Activity {
@@ -34,6 +39,8 @@ public final class CreatorsActivity extends Activity {
     private RecyclerView recycler;
     private CreatorGridAdapter adapter;
     private Parcelable pendingScroll;
+    private final ExecutorService avatarIo = Executors.newFixedThreadPool(2);
+    private final Set<String> avatarAttempts = Collections.synchronizedSet(new HashSet<>());
 
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
@@ -95,6 +102,38 @@ public final class CreatorsActivity extends Activity {
             recycler.getLayoutManager().onRestoreInstanceState(pendingScroll);
             pendingScroll = null;
         }
+    }
+
+    private void requestMissingAvatar(NativeContentItem item) {
+        if (item == null || !item.isCreator() || !item.imageUrl.isEmpty()) return;
+        String logical = CreatorFavoriteStore.logicalKey(this, item);
+        if (logical.isEmpty() || !avatarAttempts.add(logical)) return;
+
+        String query = item.searchQuery == null || item.searchQuery.trim().isEmpty()
+                ? item.title : item.searchQuery;
+        avatarIo.execute(() -> {
+            try {
+                List<NativeContentItem> results =
+                        new FapzoneCreatorSearchRepository().search(
+                                getApplicationContext(), query, 8);
+                if (results == null || results.isEmpty()) return;
+
+                ArrayList<NativeContentItem> matching = new ArrayList<>();
+                for (NativeContentItem candidate : results) {
+                    if (candidate == null || !candidate.isCreator()) continue;
+                    if (logical.equals(CreatorFavoriteStore.logicalKey(
+                            getApplicationContext(), candidate))) {
+                        matching.add(candidate);
+                    }
+                }
+                if (matching.isEmpty()) return;
+                CreatorCatalog.remember(getApplicationContext(), matching);
+                runOnUiThread(() -> {
+                    if (!isFinishing() && !isDestroyed()) render();
+                });
+            } catch (Exception ignored) {
+            }
+        });
     }
 
     private void openCreator(NativeContentItem item) {
@@ -230,6 +269,7 @@ public final class CreatorsActivity extends Activity {
                         .into(holder.avatar);
             } else {
                 holder.avatar.setImageResource(R.drawable.ic_more_account);
+                requestMissingAvatar(item);
             }
         }
 
@@ -257,6 +297,11 @@ public final class CreatorsActivity extends Activity {
     }
 
     @Override protected void onResume() { super.onResume(); render(); }
+    @Override protected void onDestroy() {
+        avatarIo.shutdownNow();
+        super.onDestroy();
+    }
+
     @Override protected void onSaveInstanceState(Bundle state) {
         state.putString("query", input.getText().toString());
         state.putParcelable("scroll", recycler.getLayoutManager().onSaveInstanceState());
