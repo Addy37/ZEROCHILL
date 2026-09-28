@@ -769,47 +769,74 @@ final class BunkrCreatorGalleryRepository {
     }
 
     private IOException loadWikiFeetCatalog(Context context, State state) {
-        LinkedHashMap<WikiFeetRepository.Site, Future<List<WikiFeetRepository.Creator>>> requests =
+        LinkedHashMap<Future<List<WikiFeetRepository.Creator>>, WikiFeetRepository.Site> requests =
                 new LinkedHashMap<>();
-        if (!state.wikiFeetCatalogLoaded) requests.put(
-                WikiFeetRepository.Site.WIKIFEET,
-                ALBUM_IO.submit(() -> new WikiFeetRepository().searchCreators(
-                        context, WikiFeetRepository.Site.WIKIFEET,
-                        state.query, WIKIFEET_CREATOR_LIMIT)));
-        if (!state.wikiFeetXCatalogLoaded) requests.put(
-                WikiFeetRepository.Site.WIKIFEET_X,
-                ALBUM_IO.submit(() -> new WikiFeetRepository().searchCreators(
-                        context, WikiFeetRepository.Site.WIKIFEET_X,
-                        state.query, WIKIFEET_CREATOR_LIMIT)));
+        int index = 0;
+        for (String query : state.discoveryQueries) {
+            int limit = index++ == 0 ? WIKIFEET_CREATOR_LIMIT : MERGED_SOURCE_LIMIT;
+            if (!state.wikiFeetCatalogLoaded) {
+                requests.put(
+                        ALBUM_IO.submit(() -> new WikiFeetRepository().searchCreators(
+                                context,
+                                WikiFeetRepository.Site.WIKIFEET,
+                                query,
+                                limit
+                        )),
+                        WikiFeetRepository.Site.WIKIFEET
+                );
+            }
+            if (!state.wikiFeetXCatalogLoaded) {
+                requests.put(
+                        ALBUM_IO.submit(() -> new WikiFeetRepository().searchCreators(
+                                context,
+                                WikiFeetRepository.Site.WIKIFEET_X,
+                                query,
+                                limit
+                        )),
+                        WikiFeetRepository.Site.WIKIFEET_X
+                );
+            }
+        }
+
         IOException firstError = null;
+        boolean wikiFeetFailed = false;
+        boolean wikiFeetXFailed = false;
         long deadline = SystemClock.elapsedRealtime() + 8_000L;
-        for (Map.Entry<WikiFeetRepository.Site, Future<List<WikiFeetRepository.Creator>>> request :
+        for (Map.Entry<Future<List<WikiFeetRepository.Creator>>, WikiFeetRepository.Site> request :
                 requests.entrySet()) {
-            WikiFeetRepository.Site site = request.getKey();
+            Future<List<WikiFeetRepository.Creator>> future = request.getKey();
+            WikiFeetRepository.Site site = request.getValue();
             try {
                 long remaining = deadline - SystemClock.elapsedRealtime();
                 if (remaining <= 0L) throw new IOException(site.label + " search timed out");
-                List<WikiFeetRepository.Creator> creators = request.getValue().get(
-                        remaining, java.util.concurrent.TimeUnit.MILLISECONDS);
+                List<WikiFeetRepository.Creator> creators =
+                        future.get(remaining, java.util.concurrent.TimeUnit.MILLISECONDS);
                 addWikiFeetCreators(state, site, creators);
-                if (site == WikiFeetRepository.Site.WIKIFEET) {
-                    state.wikiFeetCatalogLoaded = true;
-                    state.wikiFeetSearchFailures = 0;
-                } else {
-                    state.wikiFeetXCatalogLoaded = true;
-                    state.wikiFeetXSearchFailures = 0;
-                }
             } catch (Exception error) {
-                request.getValue().cancel(true);
+                future.cancel(true);
                 IOException failure = error instanceof IOException
                         ? (IOException) error
                         : new IOException(site.label + " search failed", error);
                 if (firstError == null) firstError = failure;
-                if (site == WikiFeetRepository.Site.WIKIFEET) {
-                    if (++state.wikiFeetSearchFailures >= 2) state.wikiFeetCatalogLoaded = true;
-                } else if (++state.wikiFeetXSearchFailures >= 2) {
-                    state.wikiFeetXCatalogLoaded = true;
-                }
+                if (site == WikiFeetRepository.Site.WIKIFEET) wikiFeetFailed = true;
+                else wikiFeetXFailed = true;
+            }
+        }
+
+        if (!state.wikiFeetCatalogLoaded) {
+            if (!wikiFeetFailed) {
+                state.wikiFeetCatalogLoaded = true;
+                state.wikiFeetSearchFailures = 0;
+            } else if (++state.wikiFeetSearchFailures >= 2) {
+                state.wikiFeetCatalogLoaded = true;
+            }
+        }
+        if (!state.wikiFeetXCatalogLoaded) {
+            if (!wikiFeetXFailed) {
+                state.wikiFeetXCatalogLoaded = true;
+                state.wikiFeetXSearchFailures = 0;
+            } else if (++state.wikiFeetXSearchFailures >= 2) {
+                state.wikiFeetXCatalogLoaded = true;
             }
         }
         return firstError;
@@ -1191,6 +1218,8 @@ final class BunkrCreatorGalleryRepository {
         try {
             org.json.JSONObject json = new org.json.JSONObject().put("query", state.query)
                     .put("next", state.nextSearchPage).put("searchFinished", state.searchFinished)
+                    .put("mergedBunkrLoaded", state.mergedBunkrCatalogLoaded)
+                    .put("discoveryQueries", new org.json.JSONArray(state.discoveryQueries))
                     .put("fapelloLoaded", state.fapelloCatalogLoaded)
                     .put("wikiFeetLoaded", state.wikiFeetCatalogLoaded)
                     .put("wikiFeetXLoaded", state.wikiFeetXCatalogLoaded)
@@ -1240,6 +1269,13 @@ final class BunkrCreatorGalleryRepository {
         if (json == null || !query.equalsIgnoreCase(json.optString("query"))) return state;
         state.nextSearchPage = Math.max(1, json.optInt("next", 1));
         state.searchFinished = json.optBoolean("searchFinished");
+        state.mergedBunkrCatalogLoaded = json.optBoolean("mergedBunkrLoaded");
+        org.json.JSONArray discovery = json.optJSONArray("discoveryQueries");
+        if (discovery != null) {
+            for (int i = 0; i < Math.min(MAX_MERGED_DISCOVERY_QUERIES, discovery.length()); i++) {
+                addDiscoveryQuery(state, discovery.optString(i));
+            }
+        }
         state.fapelloCatalogLoaded = json.optBoolean("fapelloLoaded");
         state.wikiFeetCatalogLoaded = json.optBoolean("wikiFeetLoaded");
         state.wikiFeetXCatalogLoaded = json.optBoolean("wikiFeetXLoaded");
@@ -1407,7 +1443,8 @@ final class BunkrCreatorGalleryRepository {
         }
 
         boolean finished() {
-            return searchFinished && pending.isEmpty() &&
+            boolean mergedBunkrReady = discoveryQueries.size() <= 1 || mergedBunkrCatalogLoaded;
+            return mergedBunkrReady && searchFinished && pending.isEmpty() &&
                     fapelloCatalogLoaded && fapelloPending.isEmpty() &&
                     wikiFeetCatalogLoaded && wikiFeetXCatalogLoaded &&
                     wikiFeetPending.isEmpty() &&
