@@ -54,7 +54,7 @@ final class CreatorCatalog {
             }
             candidates = OnlyFapCreatorResults.merge(
                     seeds,
-                    all(context),
+                    new ArrayList<>(read(context).values()),
                     5000,
                     BundledCreatorIndex.get(context.getApplicationContext()));
         } else {
