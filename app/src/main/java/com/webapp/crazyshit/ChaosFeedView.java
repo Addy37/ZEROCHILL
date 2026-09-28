@@ -651,13 +651,16 @@ public final class ChaosFeedView extends FrameLayout {
         if (candidates == null) return;
         for (NativeContentItem item : candidates) {
             if (!hasReservoirRoom(items.size(), selectedPosition)) break;
-            if (!isMedia(item)) continue;
-            if (hiddenUrls.contains(item.url)) continue;
-            if (!sessionUrls.add(item.url)) continue;
+            if (!acceptUnique(item, hiddenUrls, sessionUrls)) continue;
             items.add(item);
             CrazyShitRepository.StreamInfo preloaded = ChaosStartupPreloader.takeResolved(item.url);
             if (preloaded != null) streamCache.put(item.url, preloaded);
         }
+    }
+
+    static boolean acceptUnique(NativeContentItem item, Set<String> hidden,
+                                Set<String> session) {
+        return isMedia(item) && !hidden.contains(item.url) && session.add(item.url);
     }
 
     private void requestAutoAdvance(int fromPosition) {
