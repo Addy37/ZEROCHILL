@@ -4,6 +4,7 @@ import android.content.Context;
 import org.json.JSONArray;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -39,6 +40,11 @@ final class CreatorCatalog {
 
     static List<NativeContentItem> matching(Context context, String query, boolean favoritesOnly, int limit) {
         Set<String> favorites = CreatorFavoriteStore.names(context);
+        Set<String> logicalFavorites = new HashSet<>();
+        for (String favorite : favorites) {
+            String logical = CreatorFavoriteStore.logicalKey(context, favorite);
+            if (!logical.isEmpty()) logicalFavorites.add(logical);
+        }
         List<NativeContentItem> candidates;
         if (favoritesOnly) {
             ArrayList<NativeContentItem> seeds = new ArrayList<>();
@@ -57,7 +63,8 @@ final class CreatorCatalog {
 
         ArrayList<NativeContentItem> result = new ArrayList<>();
         for (NativeContentItem item : candidates) {
-            if (favoritesOnly && !CreatorFavoriteStore.contains(context, item)) continue;
+            if (favoritesOnly && !logicalFavorites.contains(
+                    CreatorFavoriteStore.logicalKey(context, item))) continue;
             if (CreatorNameMatcher.rank(item.title, query) != Integer.MAX_VALUE
                     || CreatorNameMatcher.rank(item.searchQuery, query) != Integer.MAX_VALUE) result.add(item);
         }
@@ -67,7 +74,8 @@ final class CreatorCatalog {
         else result.sort(Comparator.<NativeContentItem>comparingInt(
                         item -> Math.min(CreatorNameMatcher.rank(item.title, query),
                                 CreatorNameMatcher.rank(item.searchQuery, query)))
-                .thenComparingInt(item -> CreatorFavoriteStore.contains(context, item) ? 0 : 1)
+                .thenComparingInt(item -> logicalFavorites.contains(
+                        CreatorFavoriteStore.logicalKey(context, item)) ? 0 : 1)
                 .thenComparing(names));
         return result.size() > limit ? new ArrayList<>(result.subList(0, limit)) : result;
     }
