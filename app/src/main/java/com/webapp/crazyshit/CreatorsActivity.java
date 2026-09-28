@@ -363,10 +363,10 @@ public final class CreatorsActivity extends Activity {
                                 )
                                 .build()
                 );
-                Glide.with(holder.avatar)
-                        .load(url)
-                        .onlyRetrieveFromCache(true)
-                        .circleCrop()
+                com.bumptech.glide.RequestBuilder<android.graphics.drawable.Drawable> request =
+                        Glide.with(holder.avatar).load(url);
+                if (!group.customAvatar) request = request.onlyRetrieveFromCache(true);
+                request.circleCrop()
                         .dontAnimate()
                         .placeholder(new ColorDrawable(Color.rgb(19, 23, 27)))
                         .error(R.drawable.ic_more_account)
