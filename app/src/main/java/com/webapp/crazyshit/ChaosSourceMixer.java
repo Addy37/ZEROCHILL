@@ -176,19 +176,46 @@ final class ChaosSourceMixer {
         for (NativeContentItem item : regularItems) {
             if (item != null && item.url != null) regularUrls.add(item.url);
         }
-        for (NativeContentItem item : shitShow.takeReadyBatch(SHIT_SHOW_PER_BATCH)) {
+        for (NativeContentItem item : shitShow.takeReadyBatch(
+                kaoticItems.size() < 6 ? SHIT_SHOW_PER_BATCH : 7)) {
             if (item == null || item.url == null || item.url.isEmpty()) continue;
             if (regularUrls.contains(item.url)) continue;
             shitShowItems.add(item);
         }
         Collections.shuffle(shitShowItems, random);
 
-        List<NativeContentItem> regularAndEfukt = weaveEfukt(regularItems, efuktItems);
-        List<NativeContentItem> homeSources = weaveEfukt(regularAndEfukt, kaoticItems);
-        List<NativeContentItem> fapzoneItems = weaveEfukt(bunkrItems, fapelloItems);
-        fapzoneItems = weaveEfukt(fapzoneItems, onlyHavenItems);
-        List<NativeContentItem> mixedExternal = weaveEfukt(homeSources, fapzoneItems);
-        return weaveShitShow(mixedExternal, shitShowItems);
+        return mixAvailable(kaoticItems, shitShowItems, bunkrItems, fapelloItems,
+                onlyHavenItems, regularItems, efuktItems);
+    }
+
+    static List<NativeContentItem> mixAvailable(
+            List<NativeContentItem> kaotic, List<NativeContentItem> shitShow,
+            List<NativeContentItem> bunkr, List<NativeContentItem> fapello,
+            List<NativeContentItem> onlyHaven, List<NativeContentItem> crazyShit,
+            List<NativeContentItem> efukt
+    ) {
+        ArrayList<NativeContentItem> preferred = new ArrayList<>();
+        boolean kaoticReady = kaotic != null && kaotic.size() >= 6;
+        addUpTo(preferred, kaotic, Integer.MAX_VALUE);
+        // Kaotic leads a healthy batch. If it is short, keep the other feeds uncapped.
+        addUpTo(preferred, shitShow, kaoticReady ? 7 : Integer.MAX_VALUE);
+        addUpTo(preferred, bunkr, Integer.MAX_VALUE);
+        addUpTo(preferred, fapello, Integer.MAX_VALUE);
+        addUpTo(preferred, onlyHaven, Integer.MAX_VALUE);
+        addUpTo(preferred, crazyShit, kaoticReady ? 6 : Integer.MAX_VALUE);
+
+        int efuktLimit = preferred.size() < 10 ? Integer.MAX_VALUE
+                : Math.max(1, (preferred.size() + 12) / 13);
+        ArrayList<NativeContentItem> result = new ArrayList<>(preferred);
+        addUpTo(result, efukt, efuktLimit);
+        // FeedView applies its portrait and source-weighted shuffle to this complete pool.
+        return result;
+    }
+
+    private static void addUpTo(List<NativeContentItem> result,
+                                List<NativeContentItem> source, int limit) {
+        if (source == null) return;
+        for (int i = 0; i < source.size() && i < limit; i++) result.add(source.get(i));
     }
 
     private List<NativeContentItem> loadRegularBatch(Context context) {
@@ -455,72 +482,6 @@ final class ChaosSourceMixer {
         bunkrAlbumDeck.addAll(shuffled);
     }
 
-    private List<NativeContentItem> weaveEfukt(
-            List<NativeContentItem> regularItems,
-            List<NativeContentItem> efuktItems
-    ) {
-        if (efuktItems == null || efuktItems.isEmpty()) {
-            return regularItems == null ? new ArrayList<>() : new ArrayList<>(regularItems);
-        }
-        if (regularItems == null || regularItems.isEmpty()) return new ArrayList<>(efuktItems);
-
-        ArrayList<NativeContentItem> regular = new ArrayList<>(regularItems);
-        ArrayList<NativeContentItem> efuktClips = new ArrayList<>(efuktItems);
-        ArrayList<NativeContentItem> result =
-                new ArrayList<>(regular.size() + efuktClips.size());
-
-        int regularIndex = 0;
-        int efuktIndex = 0;
-        int openingRegular = random.nextInt(3);
-        while (regularIndex < regular.size() && openingRegular-- > 0) {
-            result.add(regular.get(regularIndex++));
-        }
-
-        while (regularIndex < regular.size() && efuktIndex < efuktClips.size()) {
-            result.add(efuktClips.get(efuktIndex++));
-            for (int i = 0; i < 2 && regularIndex < regular.size(); i++) {
-                result.add(regular.get(regularIndex++));
-            }
-        }
-
-        while (regularIndex < regular.size()) result.add(regular.get(regularIndex++));
-        while (efuktIndex < efuktClips.size()) result.add(efuktClips.get(efuktIndex++));
-        return result;
-    }
-
-    private List<NativeContentItem> weaveShitShow(
-            List<NativeContentItem> regularItems,
-            List<NativeContentItem> shitShowItems
-    ) {
-        if (shitShowItems == null || shitShowItems.isEmpty()) {
-            return regularItems == null ? new ArrayList<>() : new ArrayList<>(regularItems);
-        }
-
-        ArrayList<NativeContentItem> regular = regularItems == null
-                ? new ArrayList<>()
-                : new ArrayList<>(regularItems);
-        ArrayList<NativeContentItem> shit = new ArrayList<>(shitShowItems);
-        ArrayList<NativeContentItem> result = new ArrayList<>(regular.size() + shit.size());
-
-        int regularIndex = 0;
-        int shitIndex = 0;
-        boolean shitNext = random.nextBoolean();
-
-        // Alternate sources while both are available. Randomizing which side starts keeps refreshes
-        // from feeling scripted while still making Shit Show appear roughly every other swipe.
-        while (regularIndex < regular.size() && shitIndex < shit.size()) {
-            if (shitNext) {
-                result.add(shit.get(shitIndex++));
-            } else {
-                result.add(regular.get(regularIndex++));
-            }
-            shitNext = !shitNext;
-        }
-
-        while (shitIndex < shit.size()) result.add(shit.get(shitIndex++));
-        while (regularIndex < regular.size()) result.add(regular.get(regularIndex++));
-        return result;
-    }
 
     private void ensureCatalog(Context context) {
         synchronized (catalogLock) {

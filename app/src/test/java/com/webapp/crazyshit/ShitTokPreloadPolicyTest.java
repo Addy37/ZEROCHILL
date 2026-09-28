@@ -35,4 +35,14 @@ public final class ShitTokPreloadPolicyTest {
     public void mediaCache_isCappedAtTwoHundredMiB() {
         assertEquals(200L * 1024L * 1024L, ShitTokMediaCache.MAX_CACHE_BYTES);
     }
+
+    @Test
+    public void offTabRefill_onlyWhenAppIsForegroundAndReservoirRunsLow() {
+        assertTrue(ChaosFeedView.shouldWarmOffTab(true, 5));
+        assertFalse(ChaosFeedView.shouldWarmOffTab(true, 10));
+        assertFalse(ChaosFeedView.shouldWarmOffTab(false, 2));
+        assertTrue(ChaosFeedView.hasReservoirRoom(23, 0));
+        assertFalse(ChaosFeedView.hasReservoirRoom(24, 0));
+        assertTrue(ChaosFeedView.hasReservoirRoom(30, 10));
+    }
 }

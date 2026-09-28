@@ -48,7 +48,7 @@ final class ShitTokAspectPriority {
         ArrayList<RankedItem> ranked = new ArrayList<>(candidates.size());
         for (NativeContentItem item : candidates) {
             if (item == null) continue;
-            double weight = weightFor(item);
+            double weight = weightFor(item) * sourceWeight(item);
             double draw = Math.max(1.0e-9d, rng.nextDouble());
             ranked.add(new RankedItem(item, -Math.log(draw) / Math.max(WIDE_WEIGHT, weight)));
         }
@@ -66,6 +66,18 @@ final class ShitTokAspectPriority {
         Stats stats = groupStats.get(key);
         if (stats == null || stats.samples < MIN_LEARNED_SAMPLES) return UNKNOWN_WEIGHT;
         return Math.max(WIDE_WEIGHT, Math.min(VERTICAL_WEIGHT, stats.weightTotal / stats.samples));
+    }
+
+    static double sourceWeight(NativeContentItem item) {
+        if (item == null) return 1.0d;
+        String source = item.uploader == null ? "" : item.uploader.trim().toLowerCase(Locale.US);
+        if (source.equals("kaotic")) return 4.0d;
+        if (source.equals("shit show")) return 3.5d;
+        if (source.equals("bunkr") || source.equals("onlyhaven") ||
+                "Fapello".equalsIgnoreCase(item.description) ||
+                "OnlyFap".equalsIgnoreCase(item.description)) return 2.5d;
+        if (source.equals("efukt")) return 0.6d;
+        return 1.0d;
     }
 
     static int bucket(float aspectRatio) {

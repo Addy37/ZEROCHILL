@@ -39,27 +39,30 @@ final class ChaosStarterSources {
 
     static List<NativeContentItem> first(Loader loader, Random random, long budgetMillis)
             throws InterruptedException {
-        CompletionService<List<NativeContentItem>> completions = new ExecutorCompletionService<>(IO);
+        CompletionService<StarterBatch> completions = new ExecutorCompletionService<>(IO);
         ArrayList<Future<?>> requests = new ArrayList<>();
         for (int source : new int[]{CRAZYSHIT, KAOTIC, EFUKT}) {
             final int selected = source;
-            requests.add(completions.submit(() -> loader.load(selected)));
+            requests.add(completions.submit(() -> new StarterBatch(selected, loader.load(selected))));
         }
         long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(budgetMillis);
         LinkedHashMap<String, NativeContentItem> playable = new LinkedHashMap<>();
+        LinkedHashMap<String, NativeContentItem> efuktFallback = new LinkedHashMap<>();
         try {
             for (int pending = requests.size(); pending > 0; pending--) {
                 long remaining = deadline - System.nanoTime();
                 if (remaining <= 0) break;
-                Future<List<NativeContentItem>> done = completions.poll(remaining, TimeUnit.NANOSECONDS);
+                Future<StarterBatch> done = completions.poll(remaining, TimeUnit.NANOSECONDS);
                 if (done == null) break;
                 try {
-                    List<NativeContentItem> results = done.get();
-                    if (results == null) continue;
-                    for (NativeContentItem item : results) {
+                    StarterBatch batch = done.get();
+                    if (batch.items == null) continue;
+                    LinkedHashMap<String, NativeContentItem> target =
+                            batch.source == EFUKT ? efuktFallback : playable;
+                    for (NativeContentItem item : batch.items) {
                         if (item != null && NativeContentItem.KIND_MEDIA.equals(item.kind)
                                 && item.url != null && !item.url.isEmpty()) {
-                            playable.putIfAbsent(item.url, item);
+                            target.putIfAbsent(item.url, item);
                         }
                     }
                     if (playable.size() >= ChaosStartupPreloader.STARTER_ITEMS) break;
@@ -67,12 +70,26 @@ final class ChaosStarterSources {
                     // The other two feeds may still be usable.
                 }
             }
+            for (NativeContentItem item : efuktFallback.values()) {
+                if (playable.size() >= ChaosStartupPreloader.STARTER_ITEMS) break;
+                playable.putIfAbsent(item.url, item);
+            }
             ArrayList<NativeContentItem> queue = new ArrayList<>(playable.values());
             Collections.shuffle(queue, random);
             return new ArrayList<>(queue.subList(0,
                     Math.min(ChaosStartupPreloader.STARTER_ITEMS, queue.size())));
         } finally {
             for (Future<?> request : requests) request.cancel(true);
+        }
+    }
+
+    private static final class StarterBatch {
+        final int source;
+        final List<NativeContentItem> items;
+
+        StarterBatch(int source, List<NativeContentItem> items) {
+            this.source = source;
+            this.items = items;
         }
     }
 }
