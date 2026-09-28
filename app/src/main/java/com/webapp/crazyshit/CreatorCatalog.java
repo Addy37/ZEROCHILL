@@ -138,6 +138,33 @@ final class CreatorCatalog {
             groups.removeAll(matched);
             groups.add(new FavoriteGroup(display, members, relation.keys, true));
         }
+        List<CreatorAvatarOverrideStore.Override> avatarOverrides =
+                CreatorAvatarOverrideStore.load(context);
+        for (int i = 0; i < groups.size(); i++) {
+            FavoriteGroup group = groups.get(i);
+            CreatorAvatarOverrideStore.Override avatar =
+                    CreatorAvatarOverrideStore.find(avatarOverrides, group.relationshipKeys);
+            if (avatar == null) continue;
+            NativeContentItem item = group.item;
+            NativeContentItem display = new NativeContentItem(
+                    item.kind,
+                    item.title,
+                    item.url,
+                    avatar.imageUrl,
+                    item.views,
+                    avatar.referer,
+                    item.comments,
+                    item.description,
+                    item.searchQuery,
+                    item.publishedAtMillis
+            );
+            groups.set(i, new FavoriteGroup(
+                    display,
+                    group.members,
+                    group.relationshipKeys,
+                    group.manual
+            ));
+        }
         groups.sort(Comparator.comparing(group -> CreatorNameMatcher.normalized(group.item.title)));
         return groups;
     }
