@@ -34,6 +34,7 @@ final class ShitTokSwipeDiagnostics {
 
     private Window.OnFrameMetricsAvailableListener frameListener;
     private volatile Sample activeCriticalSample;
+    private volatile Sample activeMaintenanceSample;
     private long nextId;
     private boolean frameMetricsAvailable;
 
@@ -109,7 +110,7 @@ final class ShitTokSwipeDiagnostics {
     }
 
     void recordPlayerRelease(long durationNs) {
-        Sample sample = activeCriticalSample;
+        Sample sample = activeCriticalSample != null ? activeCriticalSample : activeMaintenanceSample;
         if (sample == null) return;
         synchronized (lock) {
             sample.playerReleaseNs += Math.max(0L, durationNs);
@@ -118,7 +119,7 @@ final class ShitTokSwipeDiagnostics {
     }
 
     void recordPlayerPrepare(long durationNs) {
-        Sample sample = activeCriticalSample;
+        Sample sample = activeCriticalSample != null ? activeCriticalSample : activeMaintenanceSample;
         if (sample == null) return;
         synchronized (lock) {
             sample.playerPrepareNs += Math.max(0L, durationNs);
@@ -126,15 +127,39 @@ final class ShitTokSwipeDiagnostics {
         }
     }
 
+    void beginMaintenance(Sample sample) {
+        activeMaintenanceSample = sample;
+    }
+
+    void finishPrepareMaintenance(Sample sample, long durationNs) {
+        if (sample != null) {
+            synchronized (lock) {
+                sample.deferredPrepareNs += Math.max(0L, durationNs);
+            }
+        }
+        if (activeMaintenanceSample == sample) activeMaintenanceSample = null;
+    }
+
+    void finishReleaseMaintenance(Sample sample, long durationNs) {
+        if (sample != null) {
+            synchronized (lock) {
+                sample.deferredReleaseNs += Math.max(0L, durationNs);
+            }
+        }
+        if (activeMaintenanceSample == sample) activeMaintenanceSample = null;
+    }
+
     void reset() {
         synchronized (lock) {
             samples.clear();
         }
         activeCriticalSample = null;
+        activeMaintenanceSample = null;
     }
 
     void close() {
         activeCriticalSample = null;
+        activeMaintenanceSample = null;
         if (frameListener != null) {
             try {
                 activity.getWindow().removeOnFrameMetricsAvailableListener(frameListener);
@@ -183,6 +208,8 @@ final class ShitTokSwipeDiagnostics {
         ArrayList<Long> play = new ArrayList<>();
         ArrayList<Long> playerPrepare = new ArrayList<>();
         ArrayList<Long> warm = new ArrayList<>();
+        ArrayList<Long> deferredPrepare = new ArrayList<>();
+        ArrayList<Long> deferredRelease = new ArrayList<>();
         ArrayList<Long> worstFrames = new ArrayList<>();
 
         Sample worst = snapshot.get(0);
@@ -198,6 +225,8 @@ final class ShitTokSwipeDiagnostics {
             play.add(sample.playSelectedNs);
             playerPrepare.add(sample.playerPrepareNs);
             warm.add(sample.warmCreatorsNs);
+            deferredPrepare.add(sample.deferredPrepareNs);
+            deferredRelease.add(sample.deferredReleaseNs);
             worstFrames.add(sample.maxFrameNs);
             totalFrames += sample.frameCount;
             overBudget += sample.overBudgetFrames;
@@ -221,6 +250,8 @@ final class ShitTokSwipeDiagnostics {
         appendStats(out, "play selected", play);
         appendStats(out, "player build/prepare", playerPrepare);
         appendStats(out, "creator warm", warm);
+        appendStats(out, "deferred prepare job", deferredPrepare);
+        appendStats(out, "deferred release job", deferredRelease);
         appendStats(out, "worst frame per swipe", worstFrames);
 
         out.append(String.format(Locale.US,
@@ -238,7 +269,7 @@ final class ShitTokSwipeDiagnostics {
                 "callback %.2f ms | max frame %.2f ms | frames %d | over budget %d\n",
                 ms(worst.callbackNs), ms(worst.maxFrameNs), worst.frameCount, worst.overBudgetFrames));
         out.append(String.format(Locale.US,
-                "steps: reset %.2f | pause %.2f | history %.2f (%d) | release-window %.2f | player-release %.2f (%d) | resolve %.2f | play %.2f | player-prepare %.2f (%d) | warm %.2f ms\n",
+                "steps: reset %.2f | pause %.2f | history %.2f (%d) | release-window %.2f | player-release %.2f (%d) | resolve %.2f | play %.2f | player-prepare %.2f (%d) | warm %.2f | deferred-prep %.2f | deferred-release %.2f ms\n",
                 ms(worst.resetNs),
                 ms(worst.pauseNs),
                 ms(worst.historyNs), worst.historyCalls,
@@ -247,7 +278,9 @@ final class ShitTokSwipeDiagnostics {
                 ms(worst.resolveAheadNs),
                 ms(worst.playSelectedNs),
                 ms(worst.playerPrepareNs), worst.playerPrepareCalls,
-                ms(worst.warmCreatorsNs)));
+                ms(worst.warmCreatorsNs),
+                ms(worst.deferredPrepareNs),
+                ms(worst.deferredReleaseNs)));
         if (worst.maxFrameNs > 0L) {
             out.append(String.format(Locale.US,
                     "worst-frame breakdown: input %.2f | animation %.2f | layout %.2f | draw %.2f | sync %.2f | command %.2f | swap %.2f | unknown %.2f ms\n",
@@ -370,6 +403,8 @@ final class ShitTokSwipeDiagnostics {
         long playerPrepareNs;
         int playerPrepareCalls;
         long warmCreatorsNs;
+        long deferredPrepareNs;
+        long deferredReleaseNs;
 
         long frameCount;
         long overBudgetFrames;
