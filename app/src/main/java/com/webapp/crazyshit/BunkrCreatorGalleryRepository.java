@@ -679,6 +679,19 @@ final class BunkrCreatorGalleryRepository {
 
     private void loadAlbumsIfNeeded(Context context, State state) throws IOException {
         BunkrRepository repository = new BunkrRepository();
+        if (!state.mergedBunkrCatalogLoaded && state.discoveryQueries.size() > 1) {
+            boolean first = true;
+            for (String query : state.discoveryQueries) {
+                if (first) {
+                    first = false;
+                    continue;
+                }
+                List<NativeContentItem> aliases = repository.searchAlbums(context, query, 1);
+                addBunkrAlbums(state, aliases);
+            }
+            state.mergedBunkrCatalogLoaded = true;
+        }
+
         int searchAttempts = 0;
         while (state.pending.isEmpty() && !state.searchFinished && searchAttempts < 2) {
             int page = state.nextSearchPage;
@@ -689,30 +702,39 @@ final class BunkrCreatorGalleryRepository {
                 state.searchFinished = true;
                 break;
             }
-            int added = 0;
-            for (NativeContentItem album : albums) {
-                if (album == null || !BunkrRepository.isAlbumUrl(album.url) ||
-                        !state.albumUrls.add(album.url)) continue;
-                state.pending.addLast(new AlbumCursor(album.url));
-                added++;
-            }
+            int added = addBunkrAlbums(state, albums);
             if (page >= MAX_SEARCH_PAGES) state.searchFinished = true;
             if (added == 0 && page >= MAX_SEARCH_PAGES) break;
         }
     }
 
+    private int addBunkrAlbums(State state, List<NativeContentItem> albums) {
+        int added = 0;
+        if (albums == null) return 0;
+        for (NativeContentItem album : albums) {
+            if (album == null || !BunkrRepository.isAlbumUrl(album.url) ||
+                    !state.albumUrls.add(album.url)) continue;
+            state.pending.addLast(new AlbumCursor(album.url));
+            added++;
+        }
+        return added;
+    }
+
     private void loadFapelloModelsIfNeeded(Context context, State state) throws IOException {
         if (state.fapelloCatalogLoaded) return;
-        List<FapelloRepository.Model> models = new FapelloRepository().searchModels(
-                context,
-                state.query,
-                FAPELLO_MODEL_LIMIT
-        );
-        if (models != null) {
+        FapelloRepository repository = new FapelloRepository();
+        int index = 0;
+        for (String query : state.discoveryQueries) {
+            int limit = index++ == 0 ? FAPELLO_MODEL_LIMIT : MERGED_SOURCE_LIMIT;
+            List<FapelloRepository.Model> models = repository.searchModels(context, query, limit);
+            if (models == null) continue;
+            int accepted = 0;
             for (FapelloRepository.Model model : models) {
-                if (model == null || !FapelloRepository.isModelUrl(model.url) ||
-                        !state.fapelloModelUrls.add(model.url)) continue;
+                if (model == null || !FapelloRepository.isModelUrl(model.url)
+                        || CreatorNameMatcher.rank(model.name, query) == Integer.MAX_VALUE
+                        || !state.fapelloModelUrls.add(model.url)) continue;
                 state.fapelloPending.addLast(new FapelloCursor(model));
+                if (++accepted >= limit) break;
             }
         }
         state.fapelloCatalogLoaded = true;
@@ -721,14 +743,20 @@ final class BunkrCreatorGalleryRepository {
     private IOException loadOnlyHavenCatalog(Context context, State state) {
         if (state.onlyHavenCatalogLoaded) return null;
         try {
-            List<OnlyHavenRepository.Creator> creators =
-                    new OnlyHavenRepository().searchCreators(
-                            context, state.query, ONLYHAVEN_CREATOR_LIMIT);
-            if (creators != null) {
+            OnlyHavenRepository repository = new OnlyHavenRepository();
+            int index = 0;
+            for (String query : state.discoveryQueries) {
+                int limit = index++ == 0 ? ONLYHAVEN_CREATOR_LIMIT : MERGED_SOURCE_LIMIT;
+                List<OnlyHavenRepository.Creator> creators =
+                        repository.searchCreators(context, query, limit);
+                if (creators == null) continue;
+                int accepted = 0;
                 for (OnlyHavenRepository.Creator creator : creators) {
-                    if (creator == null || !OnlyHavenRepository.isOnlyHavenUrl(creator.url) ||
-                            !state.onlyHavenProfileUrls.add(creator.url)) continue;
+                    if (creator == null || !OnlyHavenRepository.isOnlyHavenUrl(creator.url)
+                            || CreatorNameMatcher.rank(creator.name, query) == Integer.MAX_VALUE
+                            || !state.onlyHavenProfileUrls.add(creator.url)) continue;
                     state.onlyHavenPending.addLast(new OnlyHavenCursor(creator));
+                    if (++accepted >= limit) break;
                 }
             }
             state.onlyHavenCatalogLoaded = true;
