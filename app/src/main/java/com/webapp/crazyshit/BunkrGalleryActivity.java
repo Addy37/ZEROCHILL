@@ -125,6 +125,7 @@ public final class BunkrGalleryActivity extends Activity {
         albumTitle = value(getIntent().getStringExtra(EXTRA_TITLE));
         albumUrl = value(getIntent().getStringExtra(EXTRA_ALBUM_URL));
         creatorQuery = value(getIntent().getStringExtra(EXTRA_CREATOR_QUERY));
+        if (!creatorQuery.isEmpty()) CoomerFansDiagnostics.select(creatorQuery);
         fapelloProfileUrl = value(getIntent().getStringExtra(EXTRA_FAPELLO_PROFILE_URL));
         mediaFilter = value(getIntent().getStringExtra(EXTRA_MEDIA_FILTER));
         if (!FILTER_PICTURES.equals(mediaFilter) && !FILTER_VIDEOS.equals(mediaFilter)) {
@@ -346,6 +347,11 @@ public final class BunkrGalleryActivity extends Activity {
     }
 
     private void showSnapshot(BunkrGallerySessionStore.Snapshot snapshot) {
+        if (isCreatorGallery() && snapshot != null) {
+            CoomerFansDiagnostics.put(creatorQuery, "Gallery session",
+                    snapshot.items.size() + " cached items; end " + snapshot.endReached
+                            + "; cursor " + !snapshot.cursor.isEmpty());
+        }
         boolean finishInitialLoader = initialLoading.getVisibility() == View.VISIBLE
                 && snapshot != null && !snapshot.items.isEmpty();
         adapter.replace(filterMedia(snapshot.items), snapshot.resolvedUrls);
@@ -395,6 +401,8 @@ public final class BunkrGalleryActivity extends Activity {
                         : creatorBatch.fapelloFailure;
                 runOnUiThread(() -> {
                     if (requestGeneration != generation || isFinishing()) return;
+                    if (isCreatorGallery()) CoomerFansDiagnostics.put(creatorQuery,
+                            "Gallery published", result.size() + " batch items; end " + completed);
                     initialLoading.setVisibility(View.GONE);
                     currentPage = result.isEmpty() ? 0 : 1;
                     endReached = completed;
@@ -459,6 +467,8 @@ public final class BunkrGalleryActivity extends Activity {
                 runOnUiThread(() -> {
                     if (requestGeneration != generation || isFinishing()) return;
                     loadingMore = false;
+                    if (isCreatorGallery()) CoomerFansDiagnostics.put(creatorQuery,
+                            "Gallery published", result.size() + " batch items; end " + completed);
                     boolean finishingInitialLoad = initialLoading.getVisibility() == View.VISIBLE
                             && adapter.getItemCount() == 0;
                     loadMoreLoading.setVisibility(View.GONE);

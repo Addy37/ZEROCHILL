@@ -21,6 +21,11 @@ import java.util.Map;
 /** Low-priority, images-only creator fallback backed by CoomerFans. */
 final class CoomerFansRepository {
     static final String BASE = "https://coomerfans.com/";
+    private final String diagnosticQuery;
+
+    CoomerFansRepository() { this(""); }
+
+    CoomerFansRepository(String diagnosticQuery) { this.diagnosticQuery = diagnosticQuery; }
 
     static final class Creator {
         final String service;
@@ -58,13 +63,20 @@ final class CoomerFansRepository {
 
     List<Creator> searchCreators(Context context, String query, int limit) throws IOException {
         SourceConfig.CoomerFans config = config();
-        if (!config.enabled) throw new IOException("CoomerFans is temporarily unavailable");
+        if (!config.enabled) {
+            CoomerFansDiagnostics.put(diagnosticQuery, "Source", "disabled by config");
+            throw new IOException("CoomerFans is temporarily unavailable");
+        }
         String value = cleanStatic(query);
         if (value.length() < 2) return new ArrayList<>();
         String encoded = URLEncoder.encode(value, "UTF-8").replace("+", "%20");
         String route = config.creatorSearchRoute.replace("{query}", encoded);
+        CoomerFansDiagnostics.put(diagnosticQuery, "Search URL", config.baseUrl + route);
         Document document = fetchConfigured(context, config, config.baseUrl + route);
-        return parseCreators(document, config, value, Math.max(1, Math.min(4, limit)));
+        List<Creator> creators = parseCreators(document, config, value, Math.max(1, Math.min(4, limit)));
+        CoomerFansDiagnostics.put(diagnosticQuery, "Search", creators.size() + " creators; /u/ links "
+                + document.select("a[href^=/u/]").size());
+        return creators;
     }
 
     ProfilePage fetchCreatorPosts(
@@ -89,6 +101,7 @@ final class CoomerFansRepository {
         String pageUrl = safePage == 1 && isCoomerFansUrl(creator.url)
                 ? creator.url
                 : config.baseUrl + route;
+        CoomerFansDiagnostics.put(diagnosticQuery, "Profile URL", pageUrl);
         Document document = fetchConfigured(context, config, pageUrl);
         ArrayList<String> posts = parseProfilePostUrls(
                 document, Math.max(1, postLimit));
@@ -98,6 +111,15 @@ final class CoomerFansRepository {
                 creator,
                 Math.max(1, mediaLimit)
         );
+        int images = 0;
+        int videos = 0;
+        for (NativeContentItem item : items) {
+            if (item.isImage()) images++;
+            else if (item.isVideo()) videos++;
+        }
+        CoomerFansDiagnostics.put(diagnosticQuery, "Profile parse", "cards "
+                + document.select("div.post").size() + "; posts " + posts.size()
+                + "; images " + images + "; videos " + videos);
         return new ProfilePage(posts, items, !posts.isEmpty());
     }
 
@@ -111,13 +133,15 @@ final class CoomerFansRepository {
         SourceConfig.CoomerFans config = config();
         if (!config.enabled) throw new IOException("CoomerFans is temporarily unavailable");
         Document document = fetchConfigured(context, config, postUrl);
-        return parseCreatorMedia(
+        ArrayList<NativeContentItem> items = parseCreatorMedia(
                 document,
                 config,
                 creator,
                 postUrl,
                 Math.max(1, limit)
         );
+        CoomerFansDiagnostics.put(diagnosticQuery, "Post parse", items.size() + " items (last post)");
+        return items;
     }
 
     ArrayList<String> parseProfilePostUrls(Document document, int limit) {
@@ -312,16 +336,22 @@ final class CoomerFansRepository {
     ) {
         String url = absolute(base, raw);
         if (url.isEmpty()) return;
+        CoomerFansDiagnostics.increment(diagnosticQuery, "Media candidates");
         String lower = url.toLowerCase(Locale.US);
         if (lower.contains("/istorage/") || lower.contains("/avatar") ||
                 lower.contains("/profile") || lower.contains("/logo") ||
                 lower.contains("/icon")) {
+            CoomerFansDiagnostics.increment(diagnosticQuery, "Rejected UI assets");
             return;
         }
 
         boolean video = isContentVideoUrl(config, url);
         boolean image = isContentImageUrl(config, url);
-        if (!video && !image) return;
+        if (!video && !image) {
+            CoomerFansDiagnostics.increment(diagnosticQuery,
+                    trustedMediaHost(config, host(url)) ? "Rejected media type" : "Rejected host");
+            return;
+        }
 
         String title = creator.name.isEmpty() ? creator.username : creator.name;
         String pageReferer = isPostUrl(postUrl) ? postUrl : creator.url;
@@ -468,9 +498,25 @@ final class CoomerFansRepository {
                         }
                     } catch (Exception ignored) {
                     }
-                    return connection.get();
+                    Connection.Response response = connection.execute();
+                    Document document = response.parse();
+                    String stage = candidate.contains("/p/") ? "Post HTTP"
+                            : candidate.contains("/u/") ? "Profile HTTP" : "Search HTTP";
+                    CoomerFansDiagnostics.put(diagnosticQuery, stage,
+                            response.statusCode() + "; " + response.contentType()
+                                    + "; HTML " + response.bodyAsBytes().length + " bytes"
+                                    + "; final " + response.url().getHost() + response.url().getPath()
+                                    + "; title " + document.title().substring(0, Math.min(60, document.title().length()))
+                                    + "; cookies sent " + (connection.request().hasHeader("Cookie") ? "yes" : "no")
+                                    + "; set-cookie " + (response.hasHeader("Set-Cookie") ? "yes" : "no"));
+                    return document;
                 } catch (IOException error) {
                     failure = error;
+                    CoomerFansDiagnostics.put(diagnosticQuery, "HTTP error",
+                            error.getClass().getSimpleName() + "; "
+                                    + (error instanceof org.jsoup.HttpStatusException
+                                    ? ((org.jsoup.HttpStatusException) error).getStatusCode() : "no status")
+                                    + "; attempt " + (attempt + 1));
                 }
             }
         }

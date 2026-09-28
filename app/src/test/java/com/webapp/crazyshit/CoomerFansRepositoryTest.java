@@ -90,6 +90,35 @@ public final class CoomerFansRepositoryTest {
         );
     }
 
+    @Test public void exactMysticSirenIdentitySurvivesResolutionAndAcceptsMedia() {
+        Document search = Jsoup.parse(
+                "<section><h2>Names of Models - MysticSiren444</h2>"
+                        + "<div class='thumb'><a href='/u/onlyfans/344107/mystic.siren444'>"
+                        + "Mystic.Siren444</a></div></section>",
+                "https://coomerfans.com/?q=MysticSiren444"
+        );
+        CoomerFansRepository.Creator creator = repository.parseCreators(
+                search, config, "MysticSiren444", 2).get(0);
+        assertEquals("onlyfans", creator.service);
+        assertEquals("344107", creator.id);
+        assertEquals("mystic.siren444", creator.username);
+        assertEquals("https://coomerfans.com/u/onlyfans/344107/mystic.siren444", creator.url);
+
+        Document profile = Jsoup.parse(
+                "<div class='post'><a href='/p/101/344107/onlyfans'>Post</a>"
+                        + "<a href='https://storage.coomerfans.com/data/one.jpg'>"
+                        + "<img data-src='https://img5.coomerfans.com/thumbnail/one.jpg'></a>"
+                        + "<video poster='https://img5.coomerfans.com/poster/one.jpg'>"
+                        + "<source src='https://storage.coomerfans.com/data/two.mp4'></video></div>",
+                creator.url
+        );
+        ArrayList<NativeContentItem> items = repository.parseProfileMedia(
+                profile, config, creator, 12);
+        assertEquals(2, items.size());
+        assertEquals("https://storage.coomerfans.com/data/one.jpg", items.get(0).url);
+        assertEquals("https://storage.coomerfans.com/data/two.mp4", items.get(1).url);
+    }
+
     @Test public void profileCardsExposeMediaWithoutOpeningEveryPost() {
         CoomerFansRepository.Creator creator = new CoomerFansRepository.Creator(
                 "onlyfans",

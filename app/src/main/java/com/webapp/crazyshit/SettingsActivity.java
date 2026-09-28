@@ -603,6 +603,10 @@ public class SettingsActivity extends Activity {
                 + onOff(config.wikiFeet.enabled)
                 + "\nWikiFeet X: "
                 + onOff(config.wikiFeetX.enabled)
+                + "\nCoomerFans: "
+                + onOff(config.coomerFans.enabled)
+                + "\n\nTemporary CoomerFans trace:\n"
+                + CoomerFansDiagnostics.summary()
                 + "\n\nStatus: "
                 + RemoteSourceConfigManager.statusSummary(this);
     }

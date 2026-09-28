@@ -789,30 +789,43 @@ final class BunkrCreatorGalleryRepository {
             State state
     ) {
         ArrayList<NativeContentItem> result = new ArrayList<>();
-        if (state == null || state.loadedMediaUrls.size() >= COOMERFANS_FILL_LIMIT ||
+        if (state == null) return result;
+        SourceConfig active = RemoteSourceConfigManager.snapshotOrNull();
+        CoomerFansDiagnostics.put(state.query, "Config", active == null ? "unavailable"
+                : "v" + active.configVersion + "; enabled " + active.coomerFans.enabled);
+        CoomerFansDiagnostics.put(state.query, "Gate", "loaded " + state.loadedMediaUrls.size()
+                + "/" + COOMERFANS_FILL_LIMIT + "; primary done " + state.primaryFinished()
+                + "; fallback done " + state.coomerFansDone);
+        if (state.loadedMediaUrls.size() >= COOMERFANS_FILL_LIMIT ||
                 state.coomerFansDone) return result;
 
         boolean primaryDone = state.primaryFinished();
         if (!state.coomerFansAttempted &&
                 state.loadedMediaUrls.size() >= COOMERFANS_IMMEDIATE_THRESHOLD &&
                 !primaryDone) {
+            CoomerFansDiagnostics.put(state.query, "Gate", "deferred until primary sources finish");
             return result;
         }
 
-        CoomerFansRepository repository = new CoomerFansRepository();
+        CoomerFansRepository repository = new CoomerFansRepository(state.query);
         try {
             if (!state.coomerFansAttempted) {
                 state.coomerFansAttempted = true;
                 int searches = 0;
                 for (String query : state.discoveryQueries) {
                     if (searches++ >= 2) break;
+                    CoomerFansDiagnostics.put(state.query, "Search query", query);
                     List<CoomerFansRepository.Creator> creators =
                             repository.searchCreators(context, query, 2);
                     if (creators == null || creators.isEmpty()) continue;
                     state.coomerFansCreator = creators.get(0);
+                    CoomerFansDiagnostics.put(state.query, "Creator",
+                            state.coomerFansCreator.service + "/" + state.coomerFansCreator.id
+                                    + "/" + state.coomerFansCreator.username);
                     break;
                 }
                 if (state.coomerFansCreator == null) {
+                    CoomerFansDiagnostics.put(state.query, "Result", "no creator resolved");
                     state.coomerFansDone = true;
                     return result;
                 }
@@ -840,6 +853,8 @@ final class BunkrCreatorGalleryRepository {
                     if (state.loadedMediaUrls.size() >= COOMERFANS_FILL_LIMIT) break;
                 }
             }
+            CoomerFansDiagnostics.put(state.query, "Accepted", result.size()
+                    + " profile media; total loaded " + state.loadedMediaUrls.size());
 
             if (state.loadedMediaUrls.size() >= COOMERFANS_FILL_LIMIT) {
                 state.coomerFansDone = true;
@@ -919,6 +934,8 @@ final class BunkrCreatorGalleryRepository {
             for (Future<List<NativeContentItem>> request : requests) {
                 if (!request.isDone()) request.cancel(true);
             }
+            CoomerFansDiagnostics.put(state.query, "Detail", finished + "/"
+                    + requests.size() + " posts completed; accepted " + result.size());
 
             boolean unprocessedOnPage = false;
             for (String postUrl : profile.postUrls) {
@@ -937,11 +954,15 @@ final class BunkrCreatorGalleryRepository {
                     state.coomerFansPage++;
                 }
             }
-        } catch (IOException ignored) {
+        } catch (IOException error) {
+            CoomerFansDiagnostics.put(state.query, "Result", "source error: "
+                    + error.getClass().getSimpleName());
             state.coomerFansDone = true;
         } catch (InterruptedException interrupted) {
+            CoomerFansDiagnostics.put(state.query, "Result", "interrupted");
             Thread.currentThread().interrupt();
         }
+        CoomerFansDiagnostics.put(state.query, "Repository", result.size() + " new items");
         return result;
     }
 
