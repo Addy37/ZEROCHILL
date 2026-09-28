@@ -249,6 +249,11 @@ final class CoomerFansRepository {
         for (Element media : scope.select(config.profileImagesSelector)) {
             for (String attr : new String[]{"src", "data-src", "href", "srcset"}) {
                 if (!media.hasAttr(attr)) continue;
+                if (("src".equals(attr) || "data-src".equals(attr) || "srcset".equals(attr)) &&
+                        "img".equalsIgnoreCase(media.tagName()) &&
+                        hasLinkedFullMedia(media, base, config)) {
+                    continue;
+                }
                 String raw = media.attr(attr);
                 if ("srcset".equals(attr)) {
                     for (String part : raw.split(",")) {
@@ -275,6 +280,20 @@ final class CoomerFansRepository {
                     result, rawMedia.group(), base, config, creator, postUrl, poster
             );
         }
+    }
+
+    private boolean hasLinkedFullMedia(
+            Element image,
+            String base,
+            SourceConfig.CoomerFans config
+    ) {
+        Element parent = image == null ? null : image.parent();
+        for (int depth = 0; depth < 4 && parent != null; depth++, parent = parent.parent()) {
+            if (!"a".equalsIgnoreCase(parent.tagName()) || !parent.hasAttr("href")) continue;
+            String linked = absolute(base, parent.attr("href"));
+            return isContentImageUrl(config, linked) || isContentVideoUrl(config, linked);
+        }
+        return false;
     }
 
     private void addMediaCandidate(
