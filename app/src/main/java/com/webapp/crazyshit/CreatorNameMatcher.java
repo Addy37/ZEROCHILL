@@ -16,6 +16,16 @@ final class CreatorNameMatcher {
                 .replaceAll("\\s+", " ");
     }
 
+    static String identity(String value) {
+        if (value == null) return "";
+        String decoded = value
+                .replaceAll("(?i)&amp;", "&")
+                .replaceAll("(?i)&#x0*26;", "&")
+                .replaceAll("&#0*38;", "&")
+                .replace("&", " and ");
+        return normalized(decoded).replace(" ", "");
+    }
+
     static int rank(String name, String query) {
         String candidate = normalized(name);
         String needle = normalized(query);
