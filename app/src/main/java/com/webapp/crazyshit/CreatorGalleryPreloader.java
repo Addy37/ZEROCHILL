@@ -36,6 +36,8 @@ final class CreatorGalleryPreloader {
     private static final int MAX_RESERVED = 8;
     private static final int IMAGE_WARM_LIMIT = 8;
     private static final int IMAGE_CACHE_KEYS = 160;
+    private static final int MERGED_MEMBER_ITEM_LIMIT = 24;
+    private static final int MERGED_PREVIEW_LIMIT = 64;
     static final int PRIORITY_NORMAL = 0;
     static final int PRIORITY_HIGH = 10;
 
@@ -189,18 +191,226 @@ final class CreatorGalleryPreloader {
         IO.execute(task);
     }
 
-    static void cancelQueued(NativeContentItem creator) {
-        if (creator == null || !creator.isCreator()) return;
-        String query = creator.searchQuery == null || creator.searchQuery.trim().isEmpty()
-                ? creator.title
-                : creator.searchQuery.trim();
-        String key = key(query);
+
+    static void warm(Context context, CreatorGallerySpec spec, int priority) {
+        if (spec == null || spec.item == null) return;
+        if (!spec.grouped) {
+            warm(context, spec.item, priority);
+            return;
+        }
+        if (context == null) return;
+
+        String cleanName = clean(spec.item.title);
+        String cleanQuery = clean(spec.query);
+        String cleanCacheKey = clean(spec.cacheKey);
+        if (cleanQuery.isEmpty() || cleanCacheKey.isEmpty()) return;
+
+        String taskKey = key(cleanCacheKey);
+        String recent = BunkrGallerySessionStore.recentCreator(cleanCacheKey);
+        if (recent != null) {
+            BunkrGallerySessionStore.Snapshot snapshot =
+                    BunkrGallerySessionStore.snapshot(recent);
+            if (snapshot != null) warmImages(context, snapshot.items);
+            return;
+        }
+        String active = SESSIONS.get(taskKey);
+        if (active != null && BunkrGallerySessionStore.snapshot(active) == null) {
+            SESSIONS.remove(taskKey, active);
+        }
+        if (SESSIONS.containsKey(taskKey) || WARMING.contains(taskKey)) return;
+        if (!reserve()) return;
+        if (!WARMING.add(taskKey)) {
+            RESERVED.decrementAndGet();
+            return;
+        }
+
+        Context app = context.getApplicationContext();
+        Context safeContext = app == null ? context : app;
+        String finalName = cleanName.isEmpty() ? cleanQuery : cleanName;
+        String finalQuery = cleanQuery;
+        String finalCacheKey = cleanCacheKey;
+        String finalProfileHint = clean(spec.profileHint);
+        ArrayList<String> finalSeedNames = new ArrayList<>(spec.seedNames);
+        ArrayList<String> finalSeedUrls = new ArrayList<>(spec.seedUrls);
+        ArrayList<String> finalSeedImages = new ArrayList<>(spec.seedImages);
+
+        WarmTask task = new WarmTask(
+                taskKey,
+                priority,
+                SEQUENCE.getAndIncrement(),
+                () -> {
+            String sessionId = "";
+            try {
+                String nowRecent = BunkrGallerySessionStore.recentCreator(finalCacheKey);
+                if (nowRecent != null) {
+                    SESSIONS.put(taskKey, nowRecent);
+                    BunkrGallerySessionStore.Snapshot snapshot =
+                            BunkrGallerySessionStore.snapshot(nowRecent);
+                    if (snapshot != null) warmImages(safeContext, snapshot.items);
+                    return;
+                }
+
+                String persistedId =
+                        BunkrGallerySessionStore.recentCreatorId(safeContext, finalCacheKey);
+                if (persistedId != null) {
+                    BunkrGallerySessionStore.Snapshot persisted =
+                            BunkrGallerySessionStore.restoreRecentCreator(
+                                    safeContext, finalCacheKey);
+                    if (persisted != null) {
+                        SESSIONS.put(taskKey, persistedId);
+                        warmImages(safeContext, persisted.items);
+                        return;
+                    }
+                }
+
+                sessionId = BunkrGallerySessionStore.createCreator(
+                        finalName,
+                        BunkrRepository.searchUrl(finalQuery),
+                        finalCacheKey
+                );
+                SESSIONS.put(taskKey, sessionId);
+
+                composeMemberSnapshots(
+                        safeContext,
+                        sessionId,
+                        finalSeedNames
+                );
+                BunkrGallerySessionStore.Snapshot composed =
+                        BunkrGallerySessionStore.snapshot(sessionId);
+                if (composed != null) warmImages(safeContext, composed.items);
+
+                BunkrCreatorGalleryRepository repository =
+                        new BunkrCreatorGalleryRepository();
+                repository.reset(
+                        sessionId,
+                        finalQuery,
+                        finalProfileHint,
+                        finalName,
+                        finalSeedNames,
+                        finalSeedUrls,
+                        finalSeedImages
+                );
+                String activeSession = sessionId;
+                repository.fetchNext(
+                        safeContext,
+                        activeSession,
+                        finalQuery,
+                        finalProfileHint,
+                        finalName,
+                        finalSeedNames,
+                        finalSeedUrls,
+                        finalSeedImages,
+                        items -> {
+                            if (items == null || items.isEmpty()) return;
+                            BunkrGallerySessionStore.appendPreview(activeSession, items);
+                            warmImages(safeContext, items);
+                        }
+                );
+
+                BunkrGallerySessionStore.Snapshot snapshot =
+                        BunkrGallerySessionStore.snapshot(activeSession);
+                if (snapshot != null) warmImages(safeContext, snapshot.items);
+            } catch (Exception ignored) {
+            } finally {
+                WARMING.remove(taskKey);
+                RESERVED.decrementAndGet();
+                if (!sessionId.isEmpty()) {
+                    SESSIONS.remove(taskKey, sessionId);
+                }
+            }
+        });
+        PENDING.put(taskKey, task);
+        IO.execute(task);
+    }
+
+    static String composeInMemoryMergedSession(Context context, CreatorGallerySpec spec) {
+        if (context == null || spec == null || !spec.grouped || spec.item == null) return "";
+        String warm = sessionId(context, spec.cacheKey);
+        if (!warm.isEmpty()) return warm;
+
+        ArrayList<NativeContentItem> preview = recentMemberItems(spec.seedNames);
+        if (preview.isEmpty()) return "";
+
+        String sessionId = BunkrGallerySessionStore.createCreator(
+                spec.item.title,
+                BunkrRepository.searchUrl(spec.query),
+                spec.cacheKey
+        );
+        BunkrGallerySessionStore.appendPreview(sessionId, preview);
+        warmImages(context, preview);
+        return sessionId;
+    }
+
+    static void cancelQueued(CreatorGallerySpec spec) {
+        if (spec == null) return;
+        cancelQueuedKey(spec.grouped ? spec.cacheKey : spec.query);
+    }
+
+    private static void composeMemberSnapshots(
+            Context context,
+            String sessionId,
+            List<String> memberQueries
+    ) {
+        if (context == null || sessionId == null || sessionId.isEmpty()
+                || memberQueries == null || memberQueries.isEmpty()) return;
+        ArrayList<NativeContentItem> preview = new ArrayList<>();
+        java.util.HashSet<String> seen = new java.util.HashSet<>();
+        for (String query : memberQueries) {
+            if (preview.size() >= MERGED_PREVIEW_LIMIT) break;
+            BunkrGallerySessionStore.Snapshot snapshot =
+                    BunkrGallerySessionStore.restoreRecentCreator(context, clean(query));
+            if (snapshot == null || snapshot.items.isEmpty()) continue;
+            int accepted = 0;
+            for (NativeContentItem item : snapshot.items) {
+                if (item == null || item.url.isEmpty() || !seen.add(item.url)) continue;
+                preview.add(item);
+                if (++accepted >= MERGED_MEMBER_ITEM_LIMIT
+                        || preview.size() >= MERGED_PREVIEW_LIMIT) break;
+            }
+        }
+        if (!preview.isEmpty()) BunkrGallerySessionStore.appendPreview(sessionId, preview);
+    }
+
+    private static ArrayList<NativeContentItem> recentMemberItems(List<String> memberQueries) {
+        ArrayList<NativeContentItem> preview = new ArrayList<>();
+        if (memberQueries == null || memberQueries.isEmpty()) return preview;
+        java.util.HashSet<String> seen = new java.util.HashSet<>();
+        for (String query : memberQueries) {
+            if (preview.size() >= MERGED_PREVIEW_LIMIT) break;
+            String id = BunkrGallerySessionStore.recentCreator(clean(query));
+            if (id == null) continue;
+            BunkrGallerySessionStore.Snapshot snapshot =
+                    BunkrGallerySessionStore.snapshot(id);
+            if (snapshot == null || snapshot.items.isEmpty()) continue;
+            int accepted = 0;
+            for (NativeContentItem item : snapshot.items) {
+                if (item == null || item.url.isEmpty() || !seen.add(item.url)) continue;
+                preview.add(item);
+                if (++accepted >= MERGED_MEMBER_ITEM_LIMIT
+                        || preview.size() >= MERGED_PREVIEW_LIMIT) break;
+            }
+        }
+        return preview;
+    }
+
+    private static void cancelQueuedKey(String query) {
+        String cleanQuery = clean(query);
+        if (cleanQuery.isEmpty()) return;
+        String key = key(cleanQuery);
         WarmTask task = PENDING.get(key);
         if (task == null || task.priority >= PRIORITY_HIGH || !IO.remove(task)) return;
         if (PENDING.remove(key, task)) {
             WARMING.remove(key);
             RESERVED.decrementAndGet();
         }
+    }
+
+    static void cancelQueued(NativeContentItem creator) {
+        if (creator == null || !creator.isCreator()) return;
+        String query = creator.searchQuery == null || creator.searchQuery.trim().isEmpty()
+                ? creator.title
+                : creator.searchQuery.trim();
+        cancelQueuedKey(query);
     }
 
     static String sessionId(NativeContentItem creator) {
