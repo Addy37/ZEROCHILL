@@ -116,7 +116,7 @@ final class CreatorGallerySpec {
         StringBuilder identity = new StringBuilder(query);
         for (String key : keys) identity.append('\n').append(key == null ? "" : key);
         String digest = digest(identity.toString());
-        return "merged:" + digest;
+        return "merged:v2:" + digest;
     }
 
     private static String digest(String value) {
