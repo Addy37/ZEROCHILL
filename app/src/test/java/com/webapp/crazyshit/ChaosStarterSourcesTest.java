@@ -41,4 +41,19 @@ public class ChaosStarterSourcesTest {
         }, new Random(2), 800);
         assertEquals("https://efukt.com/one", queue.get(0).url);
     }
+
+    @Test public void earlyEfuktBatchWaitsForPreferredHealthySource() throws Exception {
+        List<NativeContentItem> queue = ChaosStarterSources.first(source -> {
+            if (source == ChaosStarterSources.EFUKT) return Arrays.asList(
+                    media("https://efukt.com/one"), media("https://efukt.com/two"));
+            if (source == ChaosStarterSources.KAOTIC) {
+                Thread.sleep(80);
+                return Arrays.asList(media("https://kaotic.com/one"),
+                        media("https://kaotic.com/two"));
+            }
+            return Collections.emptyList();
+        }, new Random(3), 800);
+        assertEquals(4, queue.size());
+        assertTrue(queue.stream().anyMatch(item -> item.url.contains("kaotic.com")));
+    }
 }

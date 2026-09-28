@@ -93,6 +93,7 @@ public final class ChaosFeedView extends FrameLayout {
     private static final int MAX_RECENT = 500;
     private static final int MAX_HIDDEN = 600;
     private static final int LOAD_AHEAD_AT = 5;
+    private static final int MAX_QUEUED_AHEAD = 24;
     private static final int MAX_STREAM_CACHE = 32;
     private static final long RECENT_SAVE_DELAY_MS = 750L;
     private static final long STREAM_RETRY_DELAY_MS = 450L;
@@ -130,6 +131,7 @@ public final class ChaosFeedView extends FrameLayout {
     private final Random random = new Random();
     private final ChaosSourceMixer sourceMixer = new ChaosSourceMixer(repository, random);
     private final ShitTokAspectPriority aspectPriority = new ShitTokAspectPriority();
+    private final ShitTokSessionResume sessionResume = new ShitTokSessionResume();
 
     private ViewPager2 pager;
     private ChaosAdapter adapter;
@@ -211,6 +213,7 @@ public final class ChaosFeedView extends FrameLayout {
                 if (manualFullscreen && position != selectedPosition) exitManualFullscreen();
                 selectedPosition = position;
                 if (position != previousPosition) {
+                    sessionResume.clear();
                     host.onVerticalPageChanged(
                             position > previousPosition ? 1 : -1,
                             position == 0,
@@ -240,9 +243,11 @@ public final class ChaosFeedView extends FrameLayout {
             syncVisibleChrome();
         } else {
             pauseAll();
+            rememberSelectedPosition();
             releaseAllPlayers();
         }
         if (!active) {
+            if (shouldWarmOffTab(hostResumed, items.size() - selectedPosition)) loadMorePool();
             resetCreatorSwipePreview();
             if (clearDisplay) setClearDisplay(false);
             exitManualFullscreen();
@@ -267,6 +272,7 @@ public final class ChaosFeedView extends FrameLayout {
         cancelCreatorWarmAhead();
         if (!creatorGalleryHandoff) resetCreatorSwipePreview();
         pauseAll();
+        rememberSelectedPosition();
         if (!creatorGalleryHandoff) releaseAllPlayers();
         flushRecent();
     }
@@ -281,6 +287,7 @@ public final class ChaosFeedView extends FrameLayout {
     cancelCreatorWarmAhead();
     resetCreatorSwipePreview();
     pauseAll();
+    sessionResume.clear();
     consecutiveDryLoads = 0;
     sourceMixer.resetDeck();
     poolLoading = false;
@@ -311,6 +318,7 @@ public final class ChaosFeedView extends FrameLayout {
         if (commentsDialog != null && commentsDialog.isShowing()) commentsDialog.dismiss();
         cancelCreatorWarmAhead();
         pauseAll();
+        sessionResume.clear();
         releaseAllPlayers();
         flushRecent();
         removeCallbacks(saveRecentRunnable);
@@ -390,6 +398,14 @@ public final class ChaosFeedView extends FrameLayout {
 
     static boolean shouldPreparePlayer(int position, int selectedPosition) {
         return position >= selectedPosition && position <= selectedPosition + 2;
+    }
+
+    static boolean shouldWarmOffTab(boolean hostResumed, int remainingItems) {
+        return hostResumed && remainingItems <= LOAD_AHEAD_AT;
+    }
+
+    static boolean hasReservoirRoom(int itemCount, int selectedPosition) {
+        return itemCount - selectedPosition < MAX_QUEUED_AHEAD;
     }
 
     static boolean shouldOpenCreatorGallerySwipe(float dx, float dy, float threshold) {
@@ -634,13 +650,17 @@ public final class ChaosFeedView extends FrameLayout {
     private void appendUnique(List<NativeContentItem> candidates) {
         if (candidates == null) return;
         for (NativeContentItem item : candidates) {
-            if (!isMedia(item)) continue;
-            if (hiddenUrls.contains(item.url)) continue;
-            if (!sessionUrls.add(item.url)) continue;
+            if (!hasReservoirRoom(items.size(), selectedPosition)) break;
+            if (!acceptUnique(item, hiddenUrls, sessionUrls)) continue;
             items.add(item);
             CrazyShitRepository.StreamInfo preloaded = ChaosStartupPreloader.takeResolved(item.url);
             if (preloaded != null) streamCache.put(item.url, preloaded);
         }
+    }
+
+    static boolean acceptUnique(NativeContentItem item, Set<String> hidden,
+                                Set<String> session) {
+        return isMedia(item) && !hidden.contains(item.url) && session.add(item.url);
     }
 
     private void requestAutoAdvance(int fromPosition) {
@@ -701,7 +721,9 @@ public final class ChaosFeedView extends FrameLayout {
     }
 
     private void resolveAhead(int position) {
+        if (!hostResumed) return;
         int ahead = ChaosPreloadPolicy.aheadCount(activity);
+        if (!active) ahead = Math.min(ahead, 2);
         for (int offset = 0; offset <= ahead; offset++) {
             resolveAt(position + offset);
         }
@@ -876,6 +898,20 @@ public final class ChaosFeedView extends FrameLayout {
         }
     }
 
+    private void rememberSelectedPosition() {
+        for (ChaosHolder holder : playerHolders) {
+            if (holder.boundPosition != selectedPosition || holder.item == null ||
+                    holder.player == null || selectedPosition >= items.size() ||
+                    !holder.item.url.equals(items.get(selectedPosition).url)) continue;
+            try {
+                sessionResume.remember(holder.item.url, holder.player.getCurrentPosition(),
+                        holder.player.getDuration());
+            } catch (Exception ignored) {
+            }
+            return;
+        }
+    }
+
     private void releaseAllPlayers() {
         for (ChaosHolder holder : new ArrayList<>(playerHolders)) {
             holder.releasePlayer();
@@ -1001,6 +1037,7 @@ public final class ChaosFeedView extends FrameLayout {
         if (index < 0) return;
         ChaosHolder holder = holderAt(index);
         if (holder != null) holder.releasePlayer();
+        if (index == selectedPosition) sessionResume.clear();
         streamCache.remove(item.url);
         unplayable.remove(item.url);
         resolving.remove(item.url);
@@ -2200,6 +2237,10 @@ public final class ChaosFeedView extends FrameLayout {
             else if (lowerUrl.contains(".mpd")) media.setMimeType(MimeTypes.APPLICATION_MPD);
             else if (lowerUrl.contains(".mp4") || lowerUrl.contains(".m4v")) media.setMimeType(MimeTypes.VIDEO_MP4);
             player.setMediaItem(media.build());
+            if (autoplay && boundPosition == selectedPosition) {
+                long resumePosition = sessionResume.positionFor(item.url);
+                if (resumePosition > 0L) player.seekTo(resumePosition);
+            }
             player.setPlayWhenReady(autoplay);
             if (autoplay) everStarted = true;
             player.addListener(new Player.Listener() {
@@ -2232,6 +2273,7 @@ public final class ChaosFeedView extends FrameLayout {
                         maybeCompleteStartupHandoff();
                         preloadReadyComments(item, boundPosition);
                     } else if (state == Player.STATE_ENDED) {
+                        if (boundPosition == selectedPosition) sessionResume.clear();
                         loading.setVisibility(View.GONE);
                         stopProgressUpdates();
                         seekBar.setProgress(1000);
