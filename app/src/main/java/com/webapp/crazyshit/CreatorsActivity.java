@@ -162,14 +162,23 @@ public final class CreatorsActivity extends Activity {
         }
     }
 
-    private void openCreator(NativeContentItem item) {
+    private void openCreator(CreatorCatalog.FavoriteGroup group) {
+        if (group == null || group.item == null) return;
         BrowseUi.hideKeyboard(this, input);
+        CreatorGallerySpec spec = CreatorGallerySpec.from(group);
+        String sessionId = spec.grouped
+                ? ""
+                : CreatorGalleryPreloader.sessionId(this, spec.item);
         startActivity(NativeFeedBrowserActivity.createCreatorGallery(
                 this,
-                item.title,
-                item.searchQuery.isEmpty() ? item.title : item.searchQuery,
-                NativeFeedBrowserActivity.creatorProfileHint(item),
-                CreatorGalleryPreloader.sessionId(this, item)
+                spec.item.title,
+                spec.query,
+                spec.profileHint,
+                sessionId,
+                spec.cacheKey,
+                spec.seedNames,
+                spec.seedUrls,
+                spec.seedImages
         ));
     }
 
@@ -237,13 +246,20 @@ public final class CreatorsActivity extends Activity {
         if (group == null || group.item == null || group.relationshipKeys.isEmpty()) return;
         BrowseUi.hideKeyboard(this, input);
         pendingAvatarKeys = new ArrayList<>(group.relationshipKeys);
-        NativeContentItem item = group.item;
+        CreatorGallerySpec spec = CreatorGallerySpec.from(group);
+        String sessionId = spec.grouped
+                ? ""
+                : CreatorGalleryPreloader.sessionId(this, spec.item);
         Intent intent = NativeFeedBrowserActivity.createCreatorAvatarPicker(
                 this,
-                item.title,
-                item.searchQuery.isEmpty() ? item.title : item.searchQuery,
-                NativeFeedBrowserActivity.creatorProfileHint(item),
-                CreatorGalleryPreloader.sessionId(this, item)
+                spec.item.title,
+                spec.query,
+                spec.profileHint,
+                sessionId,
+                spec.cacheKey,
+                spec.seedNames,
+                spec.seedUrls,
+                spec.seedImages
         );
         startActivityForResult(intent, REQUEST_PICK_AVATAR);
     }
@@ -339,7 +355,7 @@ public final class CreatorsActivity extends Activity {
             holder.itemView.setContentDescription("Open " + item.title);
             holder.favorite.setContentDescription("Remove " + item.title + " from favorite creators");
 
-            holder.itemView.setOnClickListener(v -> openCreator(item));
+            holder.itemView.setOnClickListener(v -> openCreator(group));
             View.OnClickListener remove = v -> {
                 removeGroup(group);
             };
