@@ -76,6 +76,42 @@ public class BundledCreatorIndexTest {
         assertEquals("belle del", index.canonicalKey("Belle Del"));
     }
 
+    @Test public void savedHandleAndReadableAmpersandNameCollapseWithoutLosingFavoriteKey()
+            throws Exception {
+        BundledCreatorIndex index = index("Taliyah Brooks\n");
+        NativeContentItem saved = creator("Taliyaandgustavo", "", "");
+        NativeContentItem live = creator("Taliya & Gustavo",
+                "https://fapello.com/taliyaandgustavo/", "https://example.org/taliya.jpg");
+        NativeContentItem other = creator("Taliyah Brooks",
+                "https://example.org/taliyah-brooks", "");
+
+        List<NativeContentItem> result = OnlyFapCreatorResults.merge(
+                Arrays.asList(saved, other), Collections.singletonList(live), 10, index);
+
+        assertEquals(2, result.size());
+        assertEquals("Taliya & Gustavo", result.get(0).title);
+        assertEquals(live.url, result.get(0).url);
+        assertEquals(live.imageUrl, result.get(0).imageUrl);
+        assertEquals("Taliyaandgustavo", result.get(0).searchQuery);
+        assertEquals("Taliyah Brooks", result.get(1).title);
+    }
+
+    @Test public void exactFapelloProfileIdentityCollapsesRenamedCreatorCards() throws Exception {
+        BundledCreatorIndex index = index("");
+        NativeContentItem old = creator("Old Handle",
+                "https://fapello.com/same-profile/", "");
+        NativeContentItem renamed = creator("New Display Name",
+                "https://fapello.com/same-profile/", "https://example.org/avatar.jpg");
+
+        List<NativeContentItem> result = OnlyFapCreatorResults.merge(
+                Collections.singletonList(old), Collections.singletonList(renamed), 10, index);
+
+        assertEquals(1, result.size());
+        assertEquals("New Display Name", result.get(0).title);
+        assertEquals("Old Handle", result.get(0).searchQuery);
+        assertEquals(renamed.imageUrl, result.get(0).imageUrl);
+    }
+
     @Test public void largeIndexLimitsResultsAndRepeatedQueries() throws Exception {
         StringBuilder rows = new StringBuilder();
         for (int i = 0; i < 5000; i++) rows.append("Creator ").append(i).append('\n');
