@@ -166,9 +166,10 @@ public final class CreatorsActivity extends Activity {
         if (group == null || group.item == null) return;
         BrowseUi.hideKeyboard(this, input);
         CreatorGallerySpec spec = CreatorGallerySpec.from(group);
-        String sessionId = spec.grouped
-                ? ""
-                : CreatorGalleryPreloader.sessionId(this, spec.item);
+        String sessionId = CreatorGalleryPreloader.sessionId(this, spec.cacheKey);
+        if (sessionId.isEmpty() && spec.grouped) {
+            sessionId = CreatorGalleryPreloader.composeInMemoryMergedSession(this, spec);
+        }
         startActivity(NativeFeedBrowserActivity.createCreatorGallery(
                 this,
                 spec.item.title,
@@ -247,9 +248,10 @@ public final class CreatorsActivity extends Activity {
         BrowseUi.hideKeyboard(this, input);
         pendingAvatarKeys = new ArrayList<>(group.relationshipKeys);
         CreatorGallerySpec spec = CreatorGallerySpec.from(group);
-        String sessionId = spec.grouped
-                ? ""
-                : CreatorGalleryPreloader.sessionId(this, spec.item);
+        String sessionId = CreatorGalleryPreloader.sessionId(this, spec.cacheKey);
+        if (sessionId.isEmpty() && spec.grouped) {
+            sessionId = CreatorGalleryPreloader.composeInMemoryMergedSession(this, spec);
+        }
         Intent intent = NativeFeedBrowserActivity.createCreatorAvatarPicker(
                 this,
                 spec.item.title,
@@ -401,6 +403,27 @@ public final class CreatorsActivity extends Activity {
             } else {
                 holder.avatar.setImageResource(R.drawable.ic_more_account);
             }
+        }
+
+        @Override
+        public void onViewAttachedToWindow(Holder holder) {
+            super.onViewAttachedToWindow(holder);
+            CreatorCatalog.FavoriteGroup group = holder.bound;
+            if (group == null || group.members.size() < 2) return;
+            CreatorGalleryPreloader.warm(
+                    CreatorsActivity.this,
+                    CreatorGallerySpec.from(group),
+                    CreatorGalleryPreloader.PRIORITY_NORMAL
+            );
+        }
+
+        @Override
+        public void onViewDetachedFromWindow(Holder holder) {
+            CreatorCatalog.FavoriteGroup group = holder.bound;
+            if (group != null && group.members.size() > 1) {
+                CreatorGalleryPreloader.cancelQueued(CreatorGallerySpec.from(group));
+            }
+            super.onViewDetachedFromWindow(holder);
         }
 
         @Override
