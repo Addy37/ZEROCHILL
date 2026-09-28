@@ -263,21 +263,21 @@ final class CreatorGalleryPreloader {
                     }
                 }
 
+                ArrayList<NativeContentItem> cachedPreview =
+                        restoredMemberItems(
+                                safeContext,
+                                mergedMemberQueries(finalQuery, finalSeedNames)
+                        );
                 sessionId = BunkrGallerySessionStore.createCreator(
                         finalName,
                         BunkrRepository.searchUrl(finalQuery),
                         finalCacheKey
                 );
                 SESSIONS.put(taskKey, sessionId);
-
-                composeMemberSnapshots(
-                        safeContext,
-                        sessionId,
-                        mergedMemberQueries(finalQuery, finalSeedNames)
-                );
-                BunkrGallerySessionStore.Snapshot composed =
-                        BunkrGallerySessionStore.snapshot(sessionId);
-                if (composed != null) warmImages(safeContext, composed.items);
+                if (!cachedPreview.isEmpty()) {
+                    BunkrGallerySessionStore.appendPreview(sessionId, cachedPreview);
+                    warmImages(safeContext, cachedPreview);
+                }
 
                 BunkrCreatorGalleryRepository repository =
                         new BunkrCreatorGalleryRepository();
@@ -368,14 +368,12 @@ final class CreatorGalleryPreloader {
         return result;
     }
 
-    private static void composeMemberSnapshots(
+    private static ArrayList<NativeContentItem> restoredMemberItems(
             Context context,
-            String sessionId,
             List<String> memberQueries
     ) {
-        if (context == null || sessionId == null || sessionId.isEmpty()
-                || memberQueries == null || memberQueries.isEmpty()) return;
         ArrayList<NativeContentItem> preview = new ArrayList<>();
+        if (context == null || memberQueries == null || memberQueries.isEmpty()) return preview;
         java.util.HashSet<String> seen = new java.util.HashSet<>();
         for (String query : memberQueries) {
             if (preview.size() >= MERGED_PREVIEW_LIMIT) break;
@@ -390,7 +388,7 @@ final class CreatorGalleryPreloader {
                         || preview.size() >= MERGED_PREVIEW_LIMIT) break;
             }
         }
-        if (!preview.isEmpty()) BunkrGallerySessionStore.appendPreview(sessionId, preview);
+        return preview;
     }
 
     private static ArrayList<NativeContentItem> recentMemberItems(List<String> memberQueries) {
