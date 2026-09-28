@@ -299,10 +299,12 @@ public final class CreatorsActivity extends Activity {
     private final class CreatorGridAdapter
             extends RecyclerView.Adapter<CreatorGridAdapter.Holder> {
         private final List<CreatorCatalog.FavoriteGroup> items = new ArrayList<>();
+        private List<CreatorAvatarOverrideStore.Override> avatarOverrides = new ArrayList<>();
 
         void replace(List<CreatorCatalog.FavoriteGroup> next) {
             items.clear();
             items.addAll(next);
+            avatarOverrides = CreatorAvatarOverrideStore.load(CreatorsActivity.this);
             notifyDataSetChanged();
         }
 
@@ -333,10 +335,10 @@ public final class CreatorsActivity extends Activity {
             avatarCard.setCardElevation(0f);
             avatarCard.setStrokeWidth(0);
             avatarCard.setCardBackgroundColor(Color.rgb(19, 23, 27));
+            avatarCard.setClipToOutline(true);
             avatarFrame.addView(avatarCard, new FrameLayout.LayoutParams(-1, -1));
 
-            ImageView avatar = new ImageView(CreatorsActivity.this);
-            avatar.setScaleType(ImageView.ScaleType.CENTER_CROP);
+            CreatorAvatarImageView avatar = new CreatorAvatarImageView(CreatorsActivity.this);
             avatar.setBackgroundColor(Color.rgb(19, 23, 27));
             avatarCard.addView(avatar, new MaterialCardView.LayoutParams(-1, -1));
 
@@ -404,6 +406,18 @@ public final class CreatorsActivity extends Activity {
             holder.more.setOnClickListener(v -> showMenu(v, group));
 
             Glide.with(holder.avatar).clear(holder.avatar);
+            CreatorAvatarOverrideStore.Override avatarOverride = group.customAvatar
+                    ? CreatorAvatarOverrideStore.find(avatarOverrides, group.relationshipKeys)
+                    : null;
+            if (avatarOverride != null) {
+                holder.avatar.setAvatarCrop(
+                        avatarOverride.focusX,
+                        avatarOverride.focusY,
+                        avatarOverride.zoom
+                );
+            } else {
+                holder.avatar.clearAvatarCrop();
+            }
             holder.avatar.setImageDrawable(new ColorDrawable(Color.rgb(19, 23, 27)));
             if (!item.imageUrl.isEmpty()) {
                 GlideUrl url = new GlideUrl(
@@ -419,16 +433,21 @@ public final class CreatorsActivity extends Activity {
                                 )
                                 .build()
                 );
-                com.bumptech.glide.RequestBuilder<android.graphics.drawable.Drawable> network =
-                        Glide.with(holder.avatar)
-                                .load(url)
-                                .circleCrop()
-                                .dontAnimate()
-                                .placeholder(new ColorDrawable(Color.rgb(19, 23, 27)))
-                                .error(R.drawable.ic_more_account);
-                if (group.customAvatar) {
-                    network.into(holder.avatar);
+                if (avatarOverride != null) {
+                    Glide.with(holder.avatar)
+                            .load(url)
+                            .dontAnimate()
+                            .placeholder(new ColorDrawable(Color.rgb(19, 23, 27)))
+                            .error(R.drawable.ic_more_account)
+                            .into(holder.avatar);
                 } else {
+                    com.bumptech.glide.RequestBuilder<android.graphics.drawable.Drawable> network =
+                            Glide.with(holder.avatar)
+                                    .load(url)
+                                    .circleCrop()
+                                    .dontAnimate()
+                                    .placeholder(new ColorDrawable(Color.rgb(19, 23, 27)))
+                                    .error(R.drawable.ic_more_account);
                     Glide.with(holder.avatar)
                             .load(url)
                             .onlyRetrieveFromCache(true)
@@ -472,13 +491,13 @@ public final class CreatorsActivity extends Activity {
         }
 
         final class Holder extends RecyclerView.ViewHolder {
-            final ImageView avatar;
+            final CreatorAvatarImageView avatar;
             final TextView name;
             final TextView updateBadge;
             final TextView more;
             CreatorCatalog.FavoriteGroup bound;
 
-            Holder(View itemView, ImageView avatar, TextView name, TextView updateBadge, TextView more) {
+            Holder(View itemView, CreatorAvatarImageView avatar, TextView name, TextView updateBadge, TextView more) {
                 super(itemView);
                 this.avatar = avatar;
                 this.name = name;
@@ -497,11 +516,26 @@ public final class CreatorsActivity extends Activity {
         if (resultCode != RESULT_OK || data == null || keys == null || keys.isEmpty()) return;
         String imageUrl = data.getStringExtra(NativeFeedBrowserActivity.EXTRA_PICKED_AVATAR_URL);
         String referer = data.getStringExtra(NativeFeedBrowserActivity.EXTRA_PICKED_AVATAR_REFERER);
+        float focusX = data.getFloatExtra(
+                NativeFeedBrowserActivity.EXTRA_PICKED_AVATAR_FOCUS_X,
+                CreatorAvatarOverrideStore.DEFAULT_FOCUS
+        );
+        float focusY = data.getFloatExtra(
+                NativeFeedBrowserActivity.EXTRA_PICKED_AVATAR_FOCUS_Y,
+                CreatorAvatarOverrideStore.DEFAULT_FOCUS
+        );
+        float zoom = data.getFloatExtra(
+                NativeFeedBrowserActivity.EXTRA_PICKED_AVATAR_ZOOM,
+                CreatorAvatarOverrideStore.DEFAULT_ZOOM
+        );
         if (CreatorAvatarOverrideStore.save(
                 this,
                 new java.util.LinkedHashSet<>(keys),
                 imageUrl,
-                referer
+                referer,
+                focusX,
+                focusY,
+                zoom
         )) {
             render();
             android.widget.Toast.makeText(this, "Avatar updated.", android.widget.Toast.LENGTH_SHORT)
