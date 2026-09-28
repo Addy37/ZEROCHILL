@@ -44,6 +44,18 @@ final class OnlyFapCreatorResults {
             return;
         }
 
+        // Preserve the original name-based merge behavior for callers that do not opt into the
+        // bundled identity index.
+        if (aliases == null) {
+            NativeContentItem updated = incoming.merge(previous.item);
+            String url = FapelloRepository.isModelUrl(previous.item.url)
+                    && !FapelloRepository.isModelUrl(incoming.url) ? previous.item.url : updated.url;
+            map.put(key, new Candidate(new NativeContentItem(updated.kind, previous.item.title, url,
+                    updated.imageUrl, updated.views, updated.uploader, updated.comments,
+                    updated.description, updated.searchQuery, updated.publishedAtMillis), true));
+            return;
+        }
+
         // Once an exact canonical spelling arrives, keep its identity and profile URL while still
         // filling any missing metadata from truncated or typo variants. Until then, newer source
         // metadata keeps the same precedence as before.
