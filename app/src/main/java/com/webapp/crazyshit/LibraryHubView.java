@@ -587,6 +587,7 @@ final class LibraryHubView extends ScrollView {
         try {
             Glide.with(image)
                     .load(remoteImage(url, clean(creator.url)))
+                    .onlyRetrieveFromCache(true)
                     .circleCrop()
                     .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
                     .dontAnimate()

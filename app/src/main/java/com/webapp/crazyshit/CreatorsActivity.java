@@ -8,8 +8,10 @@ import android.os.Bundle;
 import android.os.Parcelable;
 import android.text.TextUtils;
 import android.view.Gravity;
+import android.view.HapticFeedbackConstants;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.PopupMenu;
 import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
@@ -17,6 +19,7 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import androidx.recyclerview.widget.GridLayoutManager;
+import androidx.recyclerview.widget.ItemTouchHelper;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.bumptech.glide.Glide;
@@ -26,6 +29,7 @@ import com.google.android.material.card.MaterialCardView;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 /** All starred creators, including favorites saved before the creator catalog existed. */
 public final class CreatorsActivity extends Activity {
@@ -34,6 +38,8 @@ public final class CreatorsActivity extends Activity {
     private RecyclerView recycler;
     private CreatorGridAdapter adapter;
     private Parcelable pendingScroll;
+    private ItemTouchHelper dragHelper;
+    private CreatorGridAdapter.Holder dragged, hovered;
 
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
@@ -73,6 +79,57 @@ public final class CreatorsActivity extends Activity {
         recycler.setPadding(dp(8), dp(2), dp(8), dp(20));
         adapter = new CreatorGridAdapter();
         recycler.setAdapter(adapter);
+        dragHelper = new ItemTouchHelper(new ItemTouchHelper.SimpleCallback(
+                ItemTouchHelper.UP | ItemTouchHelper.DOWN | ItemTouchHelper.LEFT | ItemTouchHelper.RIGHT, 0) {
+            @Override public boolean isLongPressDragEnabled() { return true; }
+            @Override public boolean onMove(RecyclerView list, RecyclerView.ViewHolder source,
+                                            RecyclerView.ViewHolder target) { return false; }
+            @Override public void onSwiped(RecyclerView.ViewHolder holder, int direction) { }
+            @Override public void onSelectedChanged(RecyclerView.ViewHolder selected, int state) {
+                super.onSelectedChanged(selected, state);
+                if (state == ItemTouchHelper.ACTION_STATE_DRAG && selected instanceof CreatorGridAdapter.Holder) {
+                    dragged = (CreatorGridAdapter.Holder) selected;
+                    dragged.itemView.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
+                    dragged.itemView.setScaleX(1.05f); dragged.itemView.setScaleY(1.05f);
+                    dragged.itemView.setElevation(dp(12));
+                }
+            }
+            @Override public void onChildDraw(android.graphics.Canvas canvas, RecyclerView list,
+                                              RecyclerView.ViewHolder selected, float dx, float dy,
+                                              int state, boolean active) {
+                super.onChildDraw(canvas, list, selected, dx, dy, state, active);
+                if (state != ItemTouchHelper.ACTION_STATE_DRAG || !active || dragged == null) return;
+                float x = selected.itemView.getLeft() + dx + selected.itemView.getWidth() / 2f;
+                float y = selected.itemView.getTop() + dy + selected.itemView.getHeight() / 2f;
+                CreatorGridAdapter.Holder next = null;
+                for (int i = 0; i < list.getChildCount(); i++) {
+                    View child = list.getChildAt(i);
+                    if (child == selected.itemView || x < child.getLeft() || x > child.getRight()
+                            || y < child.getTop() || y > child.getBottom()) continue;
+                    RecyclerView.ViewHolder holder = list.getChildViewHolder(child);
+                    if (holder instanceof CreatorGridAdapter.Holder) next = (CreatorGridAdapter.Holder) holder;
+                    break;
+                }
+                if (hovered != next) {
+                    if (hovered != null) hovered.itemView.setBackground(null);
+                    hovered = next;
+                    if (hovered != null) hovered.itemView.setBackground(
+                            BrowseUi.rounded(CreatorsActivity.this, Color.rgb(18, 40, 52), 16));
+                }
+            }
+            @Override public void clearView(RecyclerView list, RecyclerView.ViewHolder selected) {
+                CreatorCatalog.FavoriteGroup from = dragged == null ? null : dragged.bound;
+                CreatorCatalog.FavoriteGroup to = hovered == null ? null : hovered.bound;
+                if (hovered != null) hovered.itemView.setBackground(null);
+                selected.itemView.setScaleX(1f); selected.itemView.setScaleY(1f);
+                selected.itemView.setElevation(0f);
+                dragged = hovered = null;
+                super.clearView(list, selected);
+                if (from != null && to != null && from != to)
+                    list.post(() -> confirmMerge(from, to));
+            }
+        });
+        dragHelper.attachToRecyclerView(recycler);
         root.addView(recycler, new LinearLayout.LayoutParams(-1, 0, 1));
         setContentView(root);
         input.addTextChangedListener(BrowseUi.onText(value -> render()));
@@ -85,7 +142,11 @@ public final class CreatorsActivity extends Activity {
     }
 
     private void render() {
-        List<NativeContentItem> creators = CreatorCatalog.matching(this, input.getText().toString(), true, 5000);
+        List<CreatorCatalog.FavoriteGroup> creators = CreatorCatalog.favoriteGroups(this);
+        String query = input.getText().toString();
+        creators.removeIf(group -> CreatorNameMatcher.rank(group.item.title, query) == Integer.MAX_VALUE
+                && group.members.values().stream().noneMatch(member ->
+                CreatorNameMatcher.rank(member.title, query) != Integer.MAX_VALUE));
         adapter.replace(creators);
         count.setText(creators.size() + (creators.size() == 1 ? " creator · A–Z" : " creators · A–Z"));
         empty.setVisibility(creators.isEmpty() ? View.VISIBLE : View.GONE);
@@ -108,11 +169,67 @@ public final class CreatorsActivity extends Activity {
         ));
     }
 
+    private void confirmMerge(CreatorCatalog.FavoriteGroup source, CreatorCatalog.FavoriteGroup target) {
+        if (isFinishing() || isDestroyed()) return;
+        java.util.LinkedHashMap<String, NativeContentItem> members = new java.util.LinkedHashMap<>(target.members);
+        members.putAll(source.members);
+        String name = target.members.keySet().iterator().next();
+        for (Map.Entry<String, NativeContentItem> entry : target.members.entrySet())
+            if (entry.getValue().title.equals(target.item.title)) { name = entry.getKey(); break; }
+        String avatar = name;
+        if (target.item.imageUrl.isEmpty() || members.get(name).imageUrl.isEmpty()) {
+            for (Map.Entry<String, NativeContentItem> entry : members.entrySet())
+                if (!entry.getValue().imageUrl.isEmpty()) { avatar = entry.getKey(); break; }
+        }
+        CreatorMergeSheet.show(this, "Merge creators", members, name, avatar, "Merge", (chosenName, chosenAvatar) -> {
+            if (ManualCreatorMergeStore.merge(this, source.relationshipKeys, target.relationshipKeys,
+                    chosenName, chosenAvatar)) render();
+        });
+    }
+
+    private void showMenu(View anchor, CreatorCatalog.FavoriteGroup group) {
+        PopupMenu menu = new PopupMenu(this, anchor);
+        if (group.manual) {
+            menu.getMenu().add("Merged creators").setOnMenuItemClickListener(item -> {
+                CreatorMergeSheet.showMembers(this, group.members);
+                return true;
+            });
+            menu.getMenu().add("Change primary").setOnMenuItemClickListener(item -> {
+                String name = group.members.keySet().iterator().next();
+                String avatar = name;
+                for (ManualCreatorMergeStore.Group relation : ManualCreatorMergeStore.load(this))
+                    if (relation.keys.equals(group.relationshipKeys)) {
+                        name = relation.nameKey; avatar = relation.avatarKey; break;
+                    }
+                CreatorMergeSheet.show(this, "Change primary", group.members, name, avatar,
+                        "Save", (chosenName, chosenAvatar) -> {
+                            if (ManualCreatorMergeStore.changePrimary(this, group.relationshipKeys,
+                                    chosenName, chosenAvatar)) render();
+                        });
+                return true;
+            });
+            menu.getMenu().add("Unmerge").setOnMenuItemClickListener(item -> {
+                if (ManualCreatorMergeStore.unmerge(this, group.relationshipKeys)) render();
+                return true;
+            });
+        }
+        menu.getMenu().add("Remove from favorites").setOnMenuItemClickListener(item -> {
+            removeGroup(group); return true;
+        });
+        menu.show();
+    }
+
+    private void removeGroup(CreatorCatalog.FavoriteGroup group) {
+        // Remove just the displayed primary and its reviewed aliases, never other manual members.
+        CreatorFavoriteStore.toggle(this, group.item);
+        render();
+    }
+
     private final class CreatorGridAdapter
             extends RecyclerView.Adapter<CreatorGridAdapter.Holder> {
-        private final List<NativeContentItem> items = new ArrayList<>();
+        private final List<CreatorCatalog.FavoriteGroup> items = new ArrayList<>();
 
-        void replace(List<NativeContentItem> next) {
+        void replace(List<CreatorCatalog.FavoriteGroup> next) {
             items.clear();
             items.addAll(next);
             notifyDataSetChanged();
@@ -166,6 +283,12 @@ public final class CreatorsActivity extends Activity {
             favoriteParams.setMargins(0, dp(1), dp(1), 0);
             avatarFrame.addView(favorite, favoriteParams);
 
+            TextView more = BrowseUi.text(CreatorsActivity.this, "⋮", 23, Color.WHITE);
+            more.setGravity(Gravity.CENTER);
+            more.setBackground(BrowseUi.rounded(CreatorsActivity.this, Color.argb(190, 0, 0, 0), 14));
+            FrameLayout.LayoutParams moreParams = new FrameLayout.LayoutParams(dp(30), dp(30), Gravity.TOP | Gravity.START);
+            avatarFrame.addView(more, moreParams);
+
             TextView name = BrowseUi.text(CreatorsActivity.this, "", 13, Color.WHITE);
             name.setGravity(Gravity.CENTER);
             name.setMaxLines(2);
@@ -175,35 +298,25 @@ public final class CreatorsActivity extends Activity {
             nameParams.setMargins(dp(2), dp(7), dp(2), 0);
             wrapper.addView(name, nameParams);
 
-            return new Holder(wrapper, avatar, name, favorite);
+            return new Holder(wrapper, avatar, name, favorite, more);
         }
 
         @Override
         public void onBindViewHolder(Holder holder, int position) {
-            NativeContentItem item = items.get(position);
-            holder.bound = item;
+            CreatorCatalog.FavoriteGroup group = items.get(position);
+            NativeContentItem item = group.item;
+            holder.bound = group;
             holder.name.setText(item.title);
             holder.itemView.setContentDescription("Open " + item.title);
             holder.favorite.setContentDescription("Remove " + item.title + " from favorite creators");
 
             holder.itemView.setOnClickListener(v -> openCreator(item));
             View.OnClickListener remove = v -> {
-                CreatorFavoriteStore.toggle(CreatorsActivity.this, item);
-                render();
+                removeGroup(group);
             };
             holder.favorite.setOnClickListener(remove);
-            holder.itemView.setOnLongClickListener(v -> {
-                remove.onClick(v);
-                return true;
-            });
-
-            CreatorGalleryPreloader.warm(
-                    CreatorsActivity.this,
-                    item,
-                    position < 6
-                            ? CreatorGalleryPreloader.PRIORITY_HIGH
-                            : CreatorGalleryPreloader.PRIORITY_NORMAL
-            );
+            holder.more.setContentDescription("Creator options for " + item.title);
+            holder.more.setOnClickListener(v -> showMenu(v, group));
 
             Glide.with(holder.avatar).clear(holder.avatar);
             holder.avatar.setImageDrawable(new ColorDrawable(Color.rgb(19, 23, 27)));
@@ -223,6 +336,7 @@ public final class CreatorsActivity extends Activity {
                 );
                 Glide.with(holder.avatar)
                         .load(url)
+                        .onlyRetrieveFromCache(true)
                         .circleCrop()
                         .dontAnimate()
                         .placeholder(new ColorDrawable(Color.rgb(19, 23, 27)))
@@ -235,7 +349,6 @@ public final class CreatorsActivity extends Activity {
 
         @Override
         public void onViewRecycled(Holder holder) {
-            CreatorGalleryPreloader.cancelQueued(holder.bound);
             holder.bound = null;
             Glide.with(holder.avatar).clear(holder.avatar);
             super.onViewRecycled(holder);
@@ -245,13 +358,15 @@ public final class CreatorsActivity extends Activity {
             final ImageView avatar;
             final TextView name;
             final TextView favorite;
-            NativeContentItem bound;
+            final TextView more;
+            CreatorCatalog.FavoriteGroup bound;
 
-            Holder(View itemView, ImageView avatar, TextView name, TextView favorite) {
+            Holder(View itemView, ImageView avatar, TextView name, TextView favorite, TextView more) {
                 super(itemView);
                 this.avatar = avatar;
                 this.name = name;
                 this.favorite = favorite;
+                this.more = more;
             }
         }
     }

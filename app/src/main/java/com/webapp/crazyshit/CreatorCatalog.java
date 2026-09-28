@@ -8,6 +8,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.LinkedHashSet;
 
 /** Creator metadata learned from real listings and search responses, plus existing favorites. */
 final class CreatorCatalog {
@@ -41,37 +42,16 @@ final class CreatorCatalog {
         Set<String> favorites = CreatorFavoriteStore.names(context);
         ArrayList<NativeContentItem> result = new ArrayList<>();
         if (favoritesOnly && favorites.isEmpty()) return result;
-        List<NativeContentItem> catalog = all(context);
         if (favoritesOnly) {
-            Map<String, NativeContentItem> byStoredKey = new java.util.HashMap<>();
-            for (NativeContentItem item : catalog) byStoredKey.put(key(item), item);
-            LinkedHashMap<String, NativeContentItem> logical = new LinkedHashMap<>();
-            for (String raw : favorites) {
-                String identity = CreatorIdentity.reviewed(raw)
-                        ? CreatorIdentity.key(raw) : "raw:" + raw;
-                NativeContentItem best = byStoredKey.get(raw);
-                List<String> aliases = CreatorIdentity.storedKeys(raw);
-                if (aliases != null) for (String alias : aliases) {
-                    NativeContentItem candidate = byStoredKey.get(alias);
-                    if (candidate != null && (best == null || best.imageUrl.isEmpty()
-                            && !candidate.imageUrl.isEmpty() || best.imageUrl.isEmpty()
-                            == candidate.imageUrl.isEmpty() && best.url.isEmpty()
-                            && !candidate.url.isEmpty())) best = candidate;
-                }
-                if (best == null) continue;
-                NativeContentItem previous = logical.get(identity);
-                if (previous != null && (!previous.imageUrl.isEmpty() || best.imageUrl.isEmpty())) continue;
-                String display = CreatorIdentity.display(best.title);
-                logical.put(identity, new NativeContentItem(best.kind, display,
-                        best.url, best.imageUrl, best.views, best.uploader, best.comments,
-                        best.description, best.searchQuery, best.publishedAtMillis));
-            }
-            for (NativeContentItem item : logical.values()) {
+            for (FavoriteGroup group : favoriteGroups(context)) {
+                NativeContentItem item = group.item;
                 if (CreatorNameMatcher.rank(item.title, query) != Integer.MAX_VALUE
-                        || CreatorNameMatcher.rank(item.searchQuery, query) != Integer.MAX_VALUE)
+                        || CreatorNameMatcher.rank(item.searchQuery, query) != Integer.MAX_VALUE
+                        || group.members.values().stream().anyMatch(member ->
+                        CreatorNameMatcher.rank(member.title, query) != Integer.MAX_VALUE))
                     result.add(item);
             }
-        } else for (NativeContentItem item : catalog) {
+        } else for (NativeContentItem item : all(context)) {
             if (CreatorNameMatcher.rank(item.title, query) != Integer.MAX_VALUE
                     || CreatorNameMatcher.rank(item.searchQuery, query) != Integer.MAX_VALUE) result.add(item);
         }
@@ -84,6 +64,88 @@ final class CreatorCatalog {
                 .thenComparingInt(item -> favorites.contains(CreatorFavoriteStore.key(item)) ? 0 : 1)
                 .thenComparing(names));
         return result.size() > limit ? new ArrayList<>(result.subList(0, limit)) : result;
+    }
+
+    static final class FavoriteGroup {
+        final NativeContentItem item;
+        final LinkedHashMap<String, NativeContentItem> members;
+        final Set<String> relationshipKeys;
+        final boolean manual;
+
+        FavoriteGroup(NativeContentItem item, LinkedHashMap<String, NativeContentItem> members,
+                      Set<String> relationshipKeys, boolean manual) {
+            this.item = item;
+            this.members = members;
+            this.relationshipKeys = relationshipKeys;
+            this.manual = manual;
+        }
+    }
+
+    /** One catalog snapshot and one relationship snapshot per refresh, never per card bind. */
+    static List<FavoriteGroup> favoriteGroups(Context context) {
+        Set<String> favorites = CreatorFavoriteStore.names(context);
+        if (favorites.isEmpty()) return new ArrayList<>();
+        Map<String, NativeContentItem> byStoredKey = new java.util.HashMap<>();
+        for (NativeContentItem item : all(context)) byStoredKey.put(key(item), item);
+        LinkedHashMap<String, FavoriteGroup> automatic = new LinkedHashMap<>();
+        for (String raw : favorites) {
+            String identity = CreatorIdentity.reviewed(raw) ? CreatorIdentity.key(raw) : "raw:" + raw;
+            NativeContentItem exact = byStoredKey.get(raw);
+            NativeContentItem best = exact;
+            List<String> aliases = CreatorIdentity.storedKeys(raw);
+            if (aliases != null) for (String alias : aliases) {
+                NativeContentItem candidate = byStoredKey.get(alias);
+                if (candidate != null && (best == null || best.imageUrl.isEmpty()
+                        && !candidate.imageUrl.isEmpty() || best.imageUrl.isEmpty()
+                        == candidate.imageUrl.isEmpty() && best.url.isEmpty()
+                        && !candidate.url.isEmpty())) best = candidate;
+            }
+            if (best == null) continue;
+            FavoriteGroup previous = automatic.get(identity);
+            LinkedHashMap<String, NativeContentItem> members = previous == null
+                    ? new LinkedHashMap<>() : previous.members;
+            members.put(raw, exact == null ? new NativeContentItem(NativeContentItem.KIND_CREATOR,
+                    raw, "", "", "", "", "", "", raw) : exact);
+            NativeContentItem display = previous != null && (!previous.item.imageUrl.isEmpty()
+                    || best.imageUrl.isEmpty()) ? previous.item : best;
+            automatic.put(identity, new FavoriteGroup(titled(display, CreatorIdentity.display(display.title)),
+                    members, new LinkedHashSet<>(members.keySet()), false));
+        }
+        List<FavoriteGroup> groups = new ArrayList<>(automatic.values());
+        for (ManualCreatorMergeStore.Group relation : ManualCreatorMergeStore.load(context)) {
+            List<FavoriteGroup> matched = new ArrayList<>();
+            for (FavoriteGroup group : groups) {
+                if (!java.util.Collections.disjoint(group.members.keySet(), relation.keys)) matched.add(group);
+            }
+            if (matched.size() < 2) continue;
+            LinkedHashMap<String, NativeContentItem> members = new LinkedHashMap<>();
+            for (FavoriteGroup group : matched) members.putAll(group.members);
+            NativeContentItem name = members.get(relation.nameKey);
+            if (name == null) name = matched.get(0).item;
+            NativeContentItem artwork = members.get(relation.avatarKey);
+            if (artwork == null || artwork.imageUrl.isEmpty()) {
+                artwork = null;
+                for (NativeContentItem member : members.values()) if (!member.imageUrl.isEmpty()) {
+                    artwork = member; break;
+                }
+            }
+            NativeContentItem route = members.get(relation.nameKey);
+            if (route == null || route.url.isEmpty()) route = matched.get(0).item;
+            NativeContentItem display = new NativeContentItem(route.kind, CreatorIdentity.display(name.title),
+                    route.url, artwork == null ? "" : artwork.imageUrl, route.views,
+                    artwork == null ? route.uploader : artwork.uploader, route.comments,
+                    route.description, route.searchQuery, route.publishedAtMillis);
+            groups.removeAll(matched);
+            groups.add(new FavoriteGroup(display, members, relation.keys, true));
+        }
+        groups.sort(Comparator.comparing(group -> CreatorNameMatcher.normalized(group.item.title)));
+        return groups;
+    }
+
+    private static NativeContentItem titled(NativeContentItem item, String title) {
+        return new NativeContentItem(item.kind, title, item.url, item.imageUrl, item.views,
+                item.uploader, item.comments, item.description, item.searchQuery,
+                item.publishedAtMillis);
     }
 
     /** Backup keeps each raw favorite key, including aliases hidden in the UI. */
