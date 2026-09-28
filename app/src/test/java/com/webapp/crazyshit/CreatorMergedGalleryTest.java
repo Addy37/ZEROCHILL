@@ -65,6 +65,30 @@ public class CreatorMergedGalleryTest {
         assertNotEquals(spec.query, spec.cacheKey);
     }
 
+
+    @Test
+    public void groupedFavoriteKeepsNameOnlyMemberForDiscovery() {
+        NativeContentItem primary = creator(
+                "Sasha Fox",
+                "https://fapello.com/sasha-fox/",
+                "https://cdn.example.com/a.jpg"
+        );
+        NativeContentItem nameOnly = creator("Sasha Foxx", "", "");
+        LinkedHashMap<String, NativeContentItem> members = new LinkedHashMap<>();
+        members.put("sasha fox", primary);
+        members.put("sasha foxx", nameOnly);
+        LinkedHashSet<String> keys = new LinkedHashSet<>(members.keySet());
+
+        CreatorGallerySpec spec = CreatorGallerySpec.from(
+                new CreatorCatalog.FavoriteGroup(primary, members, keys, true)
+        );
+
+        assertEquals(2, spec.seedNames.size());
+        assertEquals("Sasha Foxx", spec.seedNames.get(1));
+        assertEquals("", spec.seedUrls.get(1));
+        assertTrue(spec.cacheKey.startsWith("merged:v2:"));
+    }
+
     @Test
     public void groupedCacheKeyIsStableAcrossMemberIterationOrder() {
         NativeContentItem first = creator("Anna", "https://fapello.com/anna/", "");
@@ -124,8 +148,11 @@ public class CreatorMergedGalleryTest {
         fapelloField.setAccessible(true);
         Field onlyHavenField = state.getClass().getDeclaredField("onlyHavenPending");
         onlyHavenField.setAccessible(true);
+        Field discoveryField = state.getClass().getDeclaredField("discoveryQueries");
+        discoveryField.setAccessible(true);
 
         assertEquals(2, ((ArrayDeque<?>) fapelloField.get(state)).size());
         assertEquals(1, ((ArrayDeque<?>) onlyHavenField.get(state)).size());
+        assertEquals(3, ((java.util.Set<?>) discoveryField.get(state)).size());
     }
 }
