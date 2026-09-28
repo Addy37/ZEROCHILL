@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "configVersion": 8,
-  "updatedAt": "2026-09-28T13:50:00Z",
+  "configVersion": 9,
+  "updatedAt": "2026-09-28T14:12:00Z",
   "global": {
     "sourceKillSwitchesEnabled": true,
     "fallbacksEnabled": true
@@ -260,14 +260,14 @@
       "enabled": true,
       "baseUrl": "https://coomerfans.com/",
       "fallbackDomains": [],
-      "userAgent": "Mozilla/5.0 (Linux; Android 16) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0 Mobile Safari/537.36",
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
       "requestHeaders": {
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
         "Accept-Language": "en-US,en;q=0.9"
       },
       "refererOverride": "https://coomerfans.com/",
-      "requestTimeoutMs": 6000,
-      "retryCount": 0,
+      "requestTimeoutMs": 15000,
+      "retryCount": 1,
       "routes": {
         "creatorSearch": "?q={query}",
         "creatorPage": "u/{service}/{id}/{username}?page={page}"

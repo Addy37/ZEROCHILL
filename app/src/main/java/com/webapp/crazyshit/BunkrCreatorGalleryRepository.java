@@ -35,12 +35,14 @@ final class BunkrCreatorGalleryRepository {
     private static final int ONLYHAVEN_CREATOR_LIMIT = 4;
     private static final int ONLYHAVEN_PAGE_SIZE = 36;
     private static final int COOMERFANS_PROFILE_POST_LIMIT = 12;
+    private static final int COOMERFANS_PROFILE_MEDIA_LIMIT = 48;
     private static final int COOMERFANS_POSTS_PER_BATCH = 4;
     private static final int COOMERFANS_POST_MEDIA_LIMIT = 12;
+    private static final int COOMERFANS_DETAIL_HYDRATE_THRESHOLD = 8;
     private static final int COOMERFANS_IMMEDIATE_THRESHOLD = 24;
     private static final int COOMERFANS_FILL_LIMIT = 96;
     private static final int COOMERFANS_MAX_PAGES = 4;
-    private static final long COOMERFANS_BATCH_BUDGET_MS = 6_000L;
+    private static final long COOMERFANS_BATCH_BUDGET_MS = 10_000L;
     private static final int MAX_MERGED_DISCOVERY_QUERIES = 8;
     private static final int MERGED_SOURCE_LIMIT = 2;
     private static final int MAX_FAPELLO_PAGES = 250;
@@ -821,9 +823,39 @@ final class BunkrCreatorGalleryRepository {
                             context,
                             state.coomerFansCreator,
                             state.coomerFansPage,
-                            COOMERFANS_PROFILE_POST_LIMIT
+                            COOMERFANS_PROFILE_POST_LIMIT,
+                            COOMERFANS_PROFILE_MEDIA_LIMIT
                     );
-            if (profile == null || profile.postUrls == null || profile.postUrls.isEmpty()) {
+            if (profile == null) {
+                state.coomerFansDone = true;
+                return result;
+            }
+
+            if (profile.items != null) {
+                for (NativeContentItem item : profile.items) {
+                    if (item == null || (!item.isImage() && !item.isVideo()) ||
+                            item.url == null || item.url.isEmpty() ||
+                            !state.loadedMediaUrls.add(item.url)) continue;
+                    result.add(item);
+                    if (state.loadedMediaUrls.size() >= COOMERFANS_FILL_LIMIT) break;
+                }
+            }
+
+            if (state.loadedMediaUrls.size() >= COOMERFANS_FILL_LIMIT) {
+                state.coomerFansDone = true;
+                return result;
+            }
+
+            if (result.size() >= COOMERFANS_DETAIL_HYDRATE_THRESHOLD) {
+                if (state.coomerFansPage >= COOMERFANS_MAX_PAGES || !profile.hasNext) {
+                    state.coomerFansDone = true;
+                } else {
+                    state.coomerFansPage++;
+                }
+                return result;
+            }
+
+            if (profile.postUrls == null || profile.postUrls.isEmpty()) {
                 state.coomerFansDone = true;
                 return result;
             }

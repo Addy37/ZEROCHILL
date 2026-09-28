@@ -69,6 +69,54 @@ public final class CoomerFansRepositoryTest {
         assertEquals("sophieraiin", creators.get(0).username);
     }
 
+    @Test public void searchScopesToActualModelResultsAndKeepsDottedSlug() {
+        Document document = Jsoup.parse(
+                "<a href='/u/onlyfans/999999/unrelated'>Unrelated</a>" +
+                        "<section><h2>Names of Models - mysticsiren444. Total 1</h2>" +
+                        "<div class='thumb'><a href='/u/onlyfans/344107/mystic.siren444'>" +
+                        "<p>Mystic.Siren444</p></a></div></section>",
+                "https://coomerfans.com/?q=mysticsiren444"
+        );
+
+        List<CoomerFansRepository.Creator> creators =
+                repository.parseCreators(document, config, "mysticsiren444", 2);
+
+        assertEquals(1, creators.size());
+        assertEquals("344107", creators.get(0).id);
+        assertEquals("mystic.siren444", creators.get(0).username);
+        assertEquals(
+                "https://coomerfans.com/u/onlyfans/344107/mystic.siren444",
+                creators.get(0).url
+        );
+    }
+
+    @Test public void profileCardsExposeMediaWithoutOpeningEveryPost() {
+        CoomerFansRepository.Creator creator = new CoomerFansRepository.Creator(
+                "onlyfans",
+                "344107",
+                "mystic.siren444",
+                "Mystic.Siren444",
+                "https://coomerfans.com/u/onlyfans/344107/mystic.siren444",
+                ""
+        );
+        Document document = Jsoup.parse(
+                "<div class='post'>" +
+                        "<h3><a href='/p/101/344107/onlyfans'>Post</a></h3>" +
+                        "<a href='/data/a/photo.jpg'><img src='https://img5.coomerfans.com/a/photo.jpg'></a>" +
+                        "<video poster='https://img5.coomerfans.com/a/poster.jpg'>" +
+                        "<source src='https://storage.coomerfans.com/a/clip.mp4'></video>" +
+                        "</div>",
+                creator.url
+        );
+
+        ArrayList<NativeContentItem> items =
+                repository.parseProfileMedia(document, config, creator, 12);
+
+        assertEquals(2, items.size());
+        assertEquals("https://coomerfans.com/p/101/344107/onlyfans", items.get(0).comments);
+        assertEquals("https://coomerfans.com/p/101/344107/onlyfans", items.get(1).comments);
+    }
+
     @Test public void profileParserFindsPostLinksBeforeMediaFetch() {
         Document document = Jsoup.parse(
                 "<a href='/p/111/123/onlyfans'>Post one</a>" +

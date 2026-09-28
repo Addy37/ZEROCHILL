@@ -42,10 +42,16 @@ final class CoomerFansRepository {
 
     static final class ProfilePage {
         final ArrayList<String> postUrls;
+        final ArrayList<NativeContentItem> items;
         final boolean hasNext;
 
-        ProfilePage(ArrayList<String> postUrls, boolean hasNext) {
+        ProfilePage(
+                ArrayList<String> postUrls,
+                ArrayList<NativeContentItem> items,
+                boolean hasNext
+        ) {
             this.postUrls = postUrls;
+            this.items = items;
             this.hasNext = hasNext;
         }
     }
@@ -65,11 +71,12 @@ final class CoomerFansRepository {
             Context context,
             Creator creator,
             int page,
-            int limit
+            int postLimit,
+            int mediaLimit
     ) throws IOException {
         if (creator == null || creator.service.isEmpty() || creator.id.isEmpty() ||
                 creator.username.isEmpty()) {
-            return new ProfilePage(new ArrayList<>(), false);
+            return new ProfilePage(new ArrayList<>(), new ArrayList<>(), false);
         }
         SourceConfig.CoomerFans config = config();
         if (!config.enabled) throw new IOException("CoomerFans is temporarily unavailable");
@@ -81,8 +88,14 @@ final class CoomerFansRepository {
                 .replace("{page}", String.valueOf(safePage));
         Document document = fetchConfigured(context, config, config.baseUrl + route);
         ArrayList<String> posts = parseProfilePostUrls(
-                document, Math.max(1, limit));
-        return new ProfilePage(posts, !posts.isEmpty());
+                document, Math.max(1, postLimit));
+        ArrayList<NativeContentItem> items = parseProfileMedia(
+                document,
+                config,
+                creator,
+                Math.max(1, mediaLimit)
+        );
+        return new ProfilePage(posts, items, !posts.isEmpty());
     }
 
     ArrayList<NativeContentItem> fetchPostMedia(
@@ -125,7 +138,22 @@ final class CoomerFansRepository {
         LinkedHashMap<String, Creator> exact = new LinkedHashMap<>();
         LinkedHashMap<String, Creator> fallback = new LinkedHashMap<>();
         if (document == null || config == null) return new ArrayList<>();
-        for (Element link : document.select(config.creatorLinksSelector)) {
+
+        org.jsoup.select.Elements links = new org.jsoup.select.Elements();
+        for (Element section : document.select("section")) {
+            Element heading = section.selectFirst("h2");
+            if (heading == null || !heading.text().toLowerCase(Locale.US)
+                    .startsWith("names of models")) {
+                continue;
+            }
+            links.addAll(section.select("div.thumb a[href^=/u/]"));
+            if (!links.isEmpty()) break;
+        }
+        if (links.isEmpty()) {
+            links.addAll(document.select(config.creatorLinksSelector));
+        }
+
+        for (Element link : links) {
             String url = absolute(link, "href", document.location());
             Creator parsed = parseCreator(url, link, document.location());
             if (parsed == null) continue;
@@ -149,6 +177,39 @@ final class CoomerFansRepository {
         return values;
     }
 
+    ArrayList<NativeContentItem> parseProfileMedia(
+            Document document,
+            SourceConfig.CoomerFans config,
+            Creator creator,
+            int limit
+    ) {
+        LinkedHashMap<String, NativeContentItem> result = new LinkedHashMap<>();
+        if (document == null || config == null || creator == null) {
+            return new ArrayList<>();
+        }
+
+        for (Element post : document.select("div.post")) {
+            Element link = post.selectFirst(
+                    "h3 a[href^=/p/],a.view-post[href^=/p/],a[href^=/p/]"
+            );
+            String postUrl = link == null
+                    ? ""
+                    : absolute(link, "href", document.location());
+            if (!isPostUrl(postUrl)) continue;
+            collectMediaFromScope(
+                    result,
+                    post,
+                    document.location(),
+                    config,
+                    creator,
+                    postUrl,
+                    limit
+            );
+            if (result.size() >= limit) break;
+        }
+        return new ArrayList<>(result.values());
+    }
+
     ArrayList<NativeContentItem> parseCreatorMedia(
             Document document,
             SourceConfig.CoomerFans config,
@@ -160,32 +221,57 @@ final class CoomerFansRepository {
         if (document == null || config == null || creator == null) {
             return new ArrayList<>();
         }
-        String poster = firstPoster(document, config);
-        for (Element media : document.select(config.profileImagesSelector)) {
-            for (String attr : new String[]{"src", "data-src", "poster", "href", "srcset"}) {
+        collectMediaFromScope(
+                result,
+                document,
+                document.location(),
+                config,
+                creator,
+                postUrl,
+                limit
+        );
+        return new ArrayList<>(result.values());
+    }
+
+    private void collectMediaFromScope(
+            LinkedHashMap<String, NativeContentItem> result,
+            Element scope,
+            String base,
+            SourceConfig.CoomerFans config,
+            Creator creator,
+            String postUrl,
+            int limit
+    ) {
+        String poster = firstPoster(scope, config, base);
+        for (Element media : scope.select(config.profileImagesSelector)) {
+            for (String attr : new String[]{"src", "data-src", "href", "srcset"}) {
                 if (!media.hasAttr(attr)) continue;
-                if ("poster".equals(attr)) continue;
                 String raw = media.attr(attr);
                 if ("srcset".equals(attr)) {
                     for (String part : raw.split(",")) {
                         String candidate = part.trim().split("\\s+")[0];
                         addMediaCandidate(
-                                result, candidate, document.location(), config, creator,
-                                postUrl, poster
+                                result, candidate, base, config, creator, postUrl, poster
                         );
-                        if (result.size() >= limit) break;
+                        if (result.size() >= limit) return;
                     }
                 } else {
                     addMediaCandidate(
-                            result, raw, document.location(), config, creator,
-                            postUrl, poster
+                            result, raw, base, config, creator, postUrl, poster
                     );
                 }
-                if (result.size() >= limit) break;
+                if (result.size() >= limit) return;
             }
-            if (result.size() >= limit) break;
         }
-        return new ArrayList<>(result.values());
+
+        java.util.regex.Matcher rawMedia = java.util.regex.Pattern.compile(
+                "(?i)https?://[^\\s\\\"'<>]+\\.(?:jpg|jpeg|png|webp|gif|mp4|webm|mov|m4v|m3u8|mpd)(?:\\?[^\\s\\\"'<>]*)?"
+        ).matcher(scope.outerHtml());
+        while (rawMedia.find() && result.size() < limit) {
+            addMediaCandidate(
+                    result, rawMedia.group(), base, config, creator, postUrl, poster
+            );
+        }
     }
 
     private void addMediaCandidate(
@@ -225,15 +311,19 @@ final class CoomerFansRepository {
         ));
     }
 
-    private String firstPoster(Document document, SourceConfig.CoomerFans config) {
-        if (document == null || config == null) return "";
-        for (Element element : document.select(
+    private String firstPoster(
+            Element scope,
+            SourceConfig.CoomerFans config,
+            String base
+    ) {
+        if (scope == null || config == null) return "";
+        for (Element element : scope.select(
                 "video[poster],meta[property=og:image][content],img[src],img[data-src]"
         )) {
             String attr = element.hasAttr("poster") ? "poster"
                     : element.hasAttr("content") ? "content"
                     : element.hasAttr("data-src") ? "data-src" : "src";
-            String candidate = absolute(element, attr, document.location());
+            String candidate = absolute(element, attr, base);
             if (isContentImageUrl(config, candidate) &&
                     !candidate.toLowerCase(Locale.US).contains("/istorage/")) {
                 return candidate;
