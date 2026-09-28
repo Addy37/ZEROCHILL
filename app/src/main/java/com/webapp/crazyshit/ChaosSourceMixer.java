@@ -26,12 +26,11 @@ import java.util.concurrent.TimeUnit;
 final class ChaosSourceMixer {
     private static final int MAX_SOURCE_PAGE = 8;
     private static final ExecutorService CRAZY_IO = Executors.newFixedThreadPool(2);
-    private static final ExecutorService SOURCE_IO = Executors.newFixedThreadPool(6);
+    private static final ExecutorService SOURCE_IO = Executors.newFixedThreadPool(5);
     private static final long MIX_BATCH_BUDGET_MS = 2_200L;
     private static final int BATCH_REGULAR = 1;
     private static final int BATCH_EFUKT = 2;
     private static final int BATCH_KAOTIC = 3;
-    private static final int BATCH_BUNKR = 4;
     private static final int BATCH_FAPELLO = 5;
     private static final int BATCH_ONLY_HAVEN = 6;
     private static final int SOURCES_PER_BATCH = 3;
@@ -39,8 +38,6 @@ final class ChaosSourceMixer {
     private static final int SHIT_SHOW_PER_BATCH = 24;
     private static final int EFUKT_ITEMS_PER_BATCH = 12;
     private static final int EFUKT_SERIES_PER_BATCH = 2;
-    private static final int BUNKR_ITEMS_PER_BATCH = 6;
-    private static final int BUNKR_ALBUMS_PER_BATCH = 2;
     private static final int FAPELLO_ITEMS_PER_BATCH = 4;
     private static final int KAOTIC_ITEMS_PER_BATCH = 8;
     private static final int ONLY_HAVEN_ITEMS_PER_BATCH = 6;
@@ -53,14 +50,11 @@ final class ChaosSourceMixer {
     private final Random random;
     private final ShitShowTapSource shitShow = new ShitShowTapSource();
     private final EfuktRepository efukt = new EfuktRepository();
-    private final BunkrRepository bunkr = new BunkrRepository();
     private final FapelloRepository fapello = new FapelloRepository();
     private final WebVideoSourceRepository webVideo = new WebVideoSourceRepository();
     private final OnlyHavenRepository onlyHaven = new OnlyHavenRepository();
     private final ArrayList<NativeContentItem> efuktSeries = new ArrayList<>();
     private final ArrayDeque<NativeContentItem> efuktSeriesDeck = new ArrayDeque<>();
-    private final ArrayList<NativeContentItem> bunkrAlbums = new ArrayList<>();
-    private final ArrayDeque<NativeContentItem> bunkrAlbumDeck = new ArrayDeque<>();
     private final ArrayList<OnlyHavenRepository.Creator> onlyHavenCreators = new ArrayList<>();
     private final ArrayDeque<OnlyHavenRepository.Creator> onlyHavenCreatorDeck = new ArrayDeque<>();
     private final ArrayList<String> catalog = new ArrayList<>();
@@ -70,7 +64,6 @@ final class ChaosSourceMixer {
     private boolean catalogLoaded;
     private boolean catalogLoading;
     private boolean efuktCatalogAttempted;
-    private boolean bunkrCatalogAttempted;
     private boolean onlyHavenCatalogAttempted;
     private boolean starterPending = true;
 
@@ -105,8 +98,6 @@ final class ChaosSourceMixer {
         work.add(completions.submit(() -> new SourceBatch(
                 BATCH_KAOTIC, loadKaoticBatch(context))));
         work.add(completions.submit(() -> new SourceBatch(
-                BATCH_BUNKR, loadBunkrBatch(context))));
-        work.add(completions.submit(() -> new SourceBatch(
                 BATCH_FAPELLO, loadFapelloBatch(context))));
         work.add(completions.submit(() -> new SourceBatch(
                 BATCH_ONLY_HAVEN, loadOnlyHavenBatch(context))));
@@ -114,7 +105,6 @@ final class ChaosSourceMixer {
         ArrayList<NativeContentItem> regularItems = new ArrayList<>();
         ArrayList<NativeContentItem> efuktItems = new ArrayList<>();
         ArrayList<NativeContentItem> kaoticItems = new ArrayList<>();
-        ArrayList<NativeContentItem> bunkrItems = new ArrayList<>();
         ArrayList<NativeContentItem> fapelloItems = new ArrayList<>();
         ArrayList<NativeContentItem> onlyHavenItems = new ArrayList<>();
 
@@ -140,9 +130,6 @@ final class ChaosSourceMixer {
                         case BATCH_KAOTIC:
                             kaoticItems.addAll(batch.items);
                             break;
-                        case BATCH_BUNKR:
-                            bunkrItems.addAll(batch.items);
-                            break;
                         case BATCH_FAPELLO:
                             fapelloItems.addAll(batch.items);
                             break;
@@ -167,7 +154,6 @@ final class ChaosSourceMixer {
         Collections.shuffle(regularItems, random);
         Collections.shuffle(efuktItems, random);
         Collections.shuffle(kaoticItems, random);
-        Collections.shuffle(bunkrItems, random);
         Collections.shuffle(fapelloItems, random);
         Collections.shuffle(onlyHavenItems, random);
 
@@ -184,22 +170,20 @@ final class ChaosSourceMixer {
         }
         Collections.shuffle(shitShowItems, random);
 
-        return mixAvailable(kaoticItems, shitShowItems, bunkrItems, fapelloItems,
+        return mixAvailable(kaoticItems, shitShowItems, fapelloItems,
                 onlyHavenItems, regularItems, efuktItems);
     }
 
     static List<NativeContentItem> mixAvailable(
             List<NativeContentItem> kaotic, List<NativeContentItem> shitShow,
-            List<NativeContentItem> bunkr, List<NativeContentItem> fapello,
-            List<NativeContentItem> onlyHaven, List<NativeContentItem> crazyShit,
-            List<NativeContentItem> efukt
+            List<NativeContentItem> fapello, List<NativeContentItem> onlyHaven,
+            List<NativeContentItem> crazyShit, List<NativeContentItem> efukt
     ) {
         ArrayList<NativeContentItem> preferred = new ArrayList<>();
         boolean kaoticReady = kaotic != null && kaotic.size() >= 6;
         addUpTo(preferred, kaotic, Integer.MAX_VALUE);
         // Kaotic leads a healthy batch. If it is short, keep the other feeds uncapped.
         addUpTo(preferred, shitShow, kaoticReady ? 7 : Integer.MAX_VALUE);
-        addUpTo(preferred, bunkr, Integer.MAX_VALUE);
         addUpTo(preferred, fapello, Integer.MAX_VALUE);
         addUpTo(preferred, onlyHaven, Integer.MAX_VALUE);
         addUpTo(preferred, crazyShit, kaoticReady ? 6 : Integer.MAX_VALUE);
@@ -241,8 +225,6 @@ final class ChaosSourceMixer {
         shitShow.resetDeck();
         efuktSeriesDeck.clear();
         if (efuktSeries.isEmpty()) efuktCatalogAttempted = false;
-        bunkrAlbumDeck.clear();
-        if (bunkrAlbums.isEmpty()) bunkrCatalogAttempted = false;
         onlyHavenCreatorDeck.clear();
         if (onlyHavenCreators.isEmpty()) onlyHavenCatalogAttempted = false;
     }
@@ -313,41 +295,6 @@ final class ChaosSourceMixer {
         ArrayList<NativeContentItem> shuffled = new ArrayList<>(efuktSeries);
         Collections.shuffle(shuffled, random);
         efuktSeriesDeck.addAll(shuffled);
-    }
-
-    private List<NativeContentItem> loadBunkrBatch(Context context) {
-        ensureBunkrCatalog(context);
-        if (bunkrAlbums.isEmpty()) return new ArrayList<>();
-
-        LinkedHashMap<String, NativeContentItem> combined = new LinkedHashMap<>();
-        HashSet<String> usedAlbums = new HashSet<>();
-        int albumTarget = Math.min(BUNKR_ALBUMS_PER_BATCH, bunkrAlbums.size());
-        int attempts = Math.max(4, bunkrAlbums.size() * 2);
-        while (usedAlbums.size() < albumTarget && attempts-- > 0) {
-            if (Thread.currentThread().isInterrupted()) break;
-            if (bunkrAlbumDeck.isEmpty()) refillBunkrDeck();
-            NativeContentItem album = bunkrAlbumDeck.pollFirst();
-            if (album == null || album.url == null || album.url.isEmpty()) continue;
-            if (!usedAlbums.add(album.url)) continue;
-            try {
-                ArrayList<NativeContentItem> candidates = new ArrayList<>(
-                        bunkr.fetchAlbum(context, album.url, 1)
-                );
-                candidates.removeIf(item -> item == null || !item.isVideo());
-                Collections.shuffle(candidates, random);
-                int perAlbum = Math.min(3, candidates.size());
-                for (int i = 0; i < perAlbum; i++) {
-                    NativeContentItem item = candidates.get(i);
-                    if (item == null || item.url == null || item.url.isEmpty()) continue;
-                    combined.putIfAbsent(item.url, item);
-                }
-            } catch (Exception ignored) {
-            }
-        }
-        ArrayList<NativeContentItem> candidates = new ArrayList<>(combined.values());
-        Collections.shuffle(candidates, random);
-        int take = Math.min(BUNKR_ITEMS_PER_BATCH, candidates.size());
-        return new ArrayList<>(candidates.subList(0, take));
     }
 
     private List<NativeContentItem> loadFapelloBatch(Context context) {
@@ -456,32 +403,6 @@ final class ChaosSourceMixer {
         Collections.shuffle(shuffled, random);
         onlyHavenCreatorDeck.addAll(shuffled);
     }
-
-    private void ensureBunkrCatalog(Context context) {
-        if (bunkrCatalogAttempted) return;
-        bunkrCatalogAttempted = true;
-        boolean loaded = false;
-        try {
-            for (NativeContentItem album : bunkr.fetchAlbums(context, 1)) {
-                if (Thread.currentThread().isInterrupted()) break;
-                if (album == null || album.url == null || album.url.isEmpty()) continue;
-                if (!NativeContentItem.KIND_SERIES.equals(album.kind)) continue;
-                bunkrAlbums.add(album);
-            }
-            loaded = !Thread.currentThread().isInterrupted();
-        } catch (Exception ignored) {
-        }
-        if (!loaded && bunkrAlbums.isEmpty()) bunkrCatalogAttempted = false;
-        refillBunkrDeck();
-    }
-
-    private void refillBunkrDeck() {
-        if (bunkrAlbums.isEmpty()) return;
-        ArrayList<NativeContentItem> shuffled = new ArrayList<>(bunkrAlbums);
-        Collections.shuffle(shuffled, random);
-        bunkrAlbumDeck.addAll(shuffled);
-    }
-
 
     private void ensureCatalog(Context context) {
         synchronized (catalogLock) {
