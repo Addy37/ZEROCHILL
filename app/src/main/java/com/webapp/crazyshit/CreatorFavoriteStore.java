@@ -18,10 +18,10 @@ final class CreatorFavoriteStore {
     static boolean contains(Context context, NativeContentItem creator) {
         String key = key(creator);
         if (key.isEmpty()) return false;
-        return context.getApplicationContext()
+        Set<String> stored = context.getApplicationContext()
                 .getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-                .getStringSet(KEY_CREATORS, new HashSet<>())
-                .contains(key);
+                .getStringSet(KEY_CREATORS, java.util.Collections.emptySet());
+        return stored.contains(key) || CreatorIdentity.hasStoredAlias(stored, key);
     }
 
     static synchronized boolean toggle(Context context, NativeContentItem creator) {
@@ -34,8 +34,9 @@ final class CreatorFavoriteStore {
                 preferences.getStringSet(KEY_CREATORS, new HashSet<>())
         );
         boolean favorite;
-        if (favorites.contains(key)) {
-            favorites.remove(key);
+        if (favorites.contains(key) || CreatorIdentity.hasStoredAlias(favorites, key)) {
+            favorites.removeIf(saved -> saved.equals(key)
+                    || CreatorIdentity.sameReviewedIdentity(saved, key));
             favorite = false;
         } else {
             favorites.add(key);

@@ -423,15 +423,14 @@ public final class SearchActivity extends Activity {
                         40,
                         (partial, complete) -> {
                             if (complete || partial == null || partial.isEmpty()) return;
-                            List<NativeContentItem> visible = new ArrayList<>(partial);
+                            List<NativeContentItem> visible = OnlyFapCreatorResults.merge(
+                                    onlyFapLocal, partial, 80);
                             runOnUiThread(() -> {
                                 if (destroyed || isFinishing() || token != generation) return;
                                 status.setVisibility(View.GONE);
-                                List<NativeContentItem> combined = OnlyFapCreatorResults.merge(
-                                        onlyFapLocal, visible, 80);
-                                if (onlyFapAdapter != null) onlyFapAdapter.replace(combined);
-                                if (!combined.isEmpty()) progress.finish();
-                                searchState.setText(combined.size() + " creators · Checking sources…");
+                                if (onlyFapAdapter != null) onlyFapAdapter.replace(visible);
+                                if (!visible.isEmpty()) progress.finish();
+                                searchState.setText(visible.size() + " creators · Checking sources…");
                                 searchState.setContentDescription(searchState.getText());
                             });
                         }
@@ -441,6 +440,8 @@ public final class SearchActivity extends Activity {
 
             List<NativeContentItem> creators = result;
             if (creators != null) CreatorCatalog.remember(getApplicationContext(), creators);
+            List<NativeContentItem> combined = creators == null ? null
+                    : OnlyFapCreatorResults.merge(onlyFapLocal, creators, 80);
             runOnUiThread(() -> {
                 if (destroyed || isFinishing() || token != generation) return;
                 pendingSources = 0;
@@ -456,8 +457,6 @@ public final class SearchActivity extends Activity {
                     return;
                 }
 
-                List<NativeContentItem> combined = OnlyFapCreatorResults.merge(
-                        onlyFapLocal, creators, 80);
                 if (onlyFapAdapter != null) onlyFapAdapter.replace(combined);
                 searchState.setText(combined.size() == 1
                         ? "1 creator"

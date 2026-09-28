@@ -27,6 +27,12 @@ public final class FapelloRepositoryTest {
         assertEquals("https://fapello.com/second-sample/", models.get(1).url);
     }
 
+    @Test public void sourceHtmlEntitiesBecomeReadableCreatorNames() throws Exception {
+        String json = "{\"results\":[{\"name\":\"Taliya &Amp; Gustavo\","
+                + "\"url\":\"https://fapello.com/taliya-gustavo/\"}]}";
+        assertEquals("Taliya & Gustavo", repository.parseSearchResponse(json).get(0).name);
+    }
+
     @Test public void creatorParsingExtractsImagesVideosLazyUrlsAndPagination() throws Exception {
         FapelloRepository.Model model = model();
         String endpoint = FapelloRepository.modelProfilePageUrl(model.url, 1);
