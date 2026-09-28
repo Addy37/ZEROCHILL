@@ -86,7 +86,10 @@ final class CoomerFansRepository {
                 .replace("{id}", urlToken(creator.id))
                 .replace("{username}", urlToken(creator.username))
                 .replace("{page}", String.valueOf(safePage));
-        Document document = fetchConfigured(context, config, config.baseUrl + route);
+        String pageUrl = safePage == 1 && isCoomerFansUrl(creator.url)
+                ? creator.url
+                : config.baseUrl + route;
+        Document document = fetchConfigured(context, config, pageUrl);
         ArrayList<String> posts = parseProfilePostUrls(
                 document, Math.max(1, postLimit));
         ArrayList<NativeContentItem> items = parseProfileMedia(
