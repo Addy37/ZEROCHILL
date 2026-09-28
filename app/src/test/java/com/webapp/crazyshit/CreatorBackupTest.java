@@ -19,8 +19,12 @@ public class CreatorBackupTest {
     private final Context context = RuntimeEnvironment.getApplication();
 
     private NativeContentItem creator(String name) {
+        return creator(name, "");
+    }
+
+    private NativeContentItem creator(String name, String image) {
         return new NativeContentItem(NativeContentItem.KIND_CREATOR, name,
-                "https://fapello.com/" + name.toLowerCase().replace(" ", "-") + "/", "", "", "", "", "", name);
+                "https://fapello.com/" + name.toLowerCase().replace(" ", "-") + "/", image, "", "", "", "", name);
     }
 
     @Test public void legacyFavoritesSurviveAndAreSortedOffline() {
@@ -53,9 +57,47 @@ public class CreatorBackupTest {
         assertEquals(2, CreatorCatalog.matching(context, "mia", false, 8).size());
         List<NativeContentItem> favorites = CreatorCatalog.matching(context, "", true, 8);
         assertEquals(1, favorites.size());
-        assertEquals("mia", favorites.get(0).title);
+        assertEquals("Mía", favorites.get(0).title);
         assertEquals("mia", AppBackupStore.export(context).getJSONArray("creators")
                 .getJSONObject(0).getString("name"));
+    }
+
+    @Test public void favoriteAliasesCollapseAndUseRichAvatarMetadata() {
+        context.getSharedPreferences("creator_favorites", 0).edit()
+                .putStringSet("creators", new HashSet<>(Arrays.asList(
+                        "sasha foxx", "sasha foxxx"))).commit();
+        CreatorCatalog.remember(context, Arrays.asList(
+                creator("Sasha Foxx", "https://example.org/sasha.jpg"),
+                creator("Sasha Foxxx", "https://example.org/alias.jpg")));
+
+        List<NativeContentItem> favorites = CreatorCatalog.matching(context, "", true, 20);
+        assertEquals(1, favorites.size());
+        assertEquals("Sasha Foxx", favorites.get(0).title);
+        assertFalse(favorites.get(0).imageUrl.isEmpty());
+        assertTrue(CreatorFavoriteStore.contains(context, favorites.get(0)));
+
+        CreatorFavoriteStore.toggle(context, favorites.get(0));
+        assertFalse(CreatorFavoriteStore.contains(context, creator("Sasha Foxx")));
+        assertFalse(CreatorFavoriteStore.contains(context, creator("Sasha Foxxx")));
+        assertTrue(CreatorFavoriteStore.names(context).isEmpty());
+    }
+
+    @Test public void savedHandleUsesReadableLiveNameAndAvatarWithoutChangingStoredFavorite() {
+        context.getSharedPreferences("creator_favorites", 0).edit()
+                .putStringSet("creators", new HashSet<>(Arrays.asList("taliyaandgustavo"))).commit();
+        NativeContentItem readable = new NativeContentItem(
+                NativeContentItem.KIND_CREATOR,
+                "Taliya & Gustavo",
+                "https://fapello.com/taliyaandgustavo/",
+                "https://example.org/taliya.jpg",
+                "", "", "", "Fapello", "Taliya & Gustavo");
+        CreatorCatalog.remember(context, Arrays.asList(readable));
+
+        List<NativeContentItem> favorites = CreatorCatalog.matching(context, "", true, 20);
+        assertEquals(1, favorites.size());
+        assertEquals("Taliya & Gustavo", favorites.get(0).title);
+        assertEquals(readable.imageUrl, favorites.get(0).imageUrl);
+        assertTrue(CreatorFavoriteStore.names(context).contains("taliyaandgustavo"));
     }
 
     @Test public void roundTripMergesSavedItemsAndRestoresSettings() throws Exception {
