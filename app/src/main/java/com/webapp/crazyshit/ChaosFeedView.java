@@ -339,14 +339,15 @@ public final class ChaosFeedView extends FrameLayout {
             if (recentSet.contains(item.url)) recentFallback.add(item);
             else fresh.add(item);
         }
-        fresh = new ArrayList<>(aspectPriority.order(fresh, random));
-        recentFallback = new ArrayList<>(aspectPriority.order(recentFallback, random));
+        List<NativeContentItem> prioritizedFresh = aspectPriority.order(fresh, random);
+        List<NativeContentItem> prioritizedRecentFallback =
+                aspectPriority.order(recentFallback, random);
 
         activity.runOnUiThread(() -> {
             if (closed) return;
             poolLoading = false;
             int before = items.size();
-            appendUnique(fresh);
+            appendUnique(prioritizedFresh);
 
             int freshAdded = items.size() - before;
             if (freshAdded == 0) consecutiveDryLoads++;
@@ -355,7 +356,7 @@ public final class ChaosFeedView extends FrameLayout {
             // Previously watched clips stay out of the normal draw. Only recycle them if
             // several broad random batches in a row genuinely cannot produce fresh media.
             if (freshAdded < 4 && consecutiveDryLoads >= 3) {
-                appendUnique(recentFallback);
+                appendUnique(prioritizedRecentFallback);
             }
 
             int added = items.size() - before;
