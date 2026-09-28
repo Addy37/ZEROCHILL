@@ -13,6 +13,7 @@ import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
+import android.os.SystemClock;
 import android.view.Gravity;
 import android.view.HapticFeedbackConstants;
 import android.view.LayoutInflater;
@@ -138,6 +139,7 @@ public final class ChaosFeedView extends FrameLayout {
     private final ChaosSourceMixer sourceMixer = new ChaosSourceMixer(repository, random);
     private final ShitTokAspectPriority aspectPriority = new ShitTokAspectPriority();
     private final ShitTokSessionResume sessionResume = new ShitTokSessionResume();
+    private final ShitTokSwipeDiagnostics swipeDiagnostics;
 
     private ViewPager2 pager;
     private ChaosAdapter adapter;
@@ -162,6 +164,7 @@ public final class ChaosFeedView extends FrameLayout {
     private int creatorWarmAheadPosition = -1;
     private int maintenancePosition = -1;
     private boolean maintenanceResolveIssued;
+    private ShitTokSwipeDiagnostics.Sample maintenanceDiagnostic;
     private final Runnable saveRecentRunnable = this::saveRecentNow;
     private final Runnable creatorWarmAheadRunnable = this::warmNextCreatorGallery;
     private final Runnable playerPrepareMaintenanceRunnable = this::runDeferredPrepareMaintenance;
@@ -171,6 +174,7 @@ public final class ChaosFeedView extends FrameLayout {
         super(activity);
         this.activity = activity;
         this.host = host;
+        this.swipeDiagnostics = new ShitTokSwipeDiagnostics(activity);
         setBackgroundColor(Color.BLACK);
         loadRecent();
         loadHidden();
@@ -222,9 +226,20 @@ public final class ChaosFeedView extends FrameLayout {
                 cancelSwipePlayerMaintenance();
                 int previousPosition = selectedPosition;
                 boolean changed = position != previousPosition;
-                if (changed) maintenancePosition = position;
+                long callbackStartedNs = SystemClock.elapsedRealtimeNanos();
+                ShitTokSwipeDiagnostics.Sample diagnostic = changed
+                        ? swipeDiagnostics.begin(previousPosition, position, active && userPaging)
+                        : null;
+                if (changed) {
+                    maintenancePosition = position;
+                    maintenanceDiagnostic = diagnostic;
+                }
 
+                long stepStartedNs = SystemClock.elapsedRealtimeNanos();
                 resetCreatorSwipePreview();
+                swipeDiagnostics.recordReset(
+                        diagnostic, SystemClock.elapsedRealtimeNanos() - stepStartedNs);
+
                 if (autoAdvancePending && position != autoAdvanceFrom) {
                     autoAdvancePending = false;
                     autoAdvanceFrom = -1;
@@ -240,12 +255,28 @@ public final class ChaosFeedView extends FrameLayout {
                     );
                 }
                 markSeen(position);
+
+                stepStartedNs = SystemClock.elapsedRealtimeNanos();
                 pauseNonSelected(position);
+                swipeDiagnostics.recordPause(
+                        diagnostic, SystemClock.elapsedRealtimeNanos() - stepStartedNs);
+
+                stepStartedNs = SystemClock.elapsedRealtimeNanos();
                 playSelected();
+                swipeDiagnostics.recordPlaySelected(
+                        diagnostic, SystemClock.elapsedRealtimeNanos() - stepStartedNs);
+
+                stepStartedNs = SystemClock.elapsedRealtimeNanos();
                 warmCreatorGalleries(position);
+                swipeDiagnostics.recordWarmCreators(
+                        diagnostic, SystemClock.elapsedRealtimeNanos() - stepStartedNs);
+
                 ChaosHolder holder = holderAt(position);
                 if (holder != null) holder.showControlsTemporarily();
                 if (items.size() - position <= LOAD_AHEAD_AT) loadMorePool();
+
+                swipeDiagnostics.finishCallback(
+                        diagnostic, SystemClock.elapsedRealtimeNanos() - callbackStartedNs);
                 if (changed && pager.getScrollState() == ViewPager2.SCROLL_STATE_IDLE) {
                     scheduleSwipePlayerMaintenance(position);
                 }
@@ -344,6 +375,7 @@ public final class ChaosFeedView extends FrameLayout {
         pauseAll();
         sessionResume.clear();
         releaseAllPlayers();
+        swipeDiagnostics.close();
         flushRecent();
         removeCallbacks(saveRecentRunnable);
         if (creatorSwipePreview != null && creatorSwipePreview.getParent() instanceof ViewGroup) {
@@ -931,10 +963,14 @@ public final class ChaosFeedView extends FrameLayout {
 
     private void runDeferredPrepareMaintenance() {
         int position = maintenancePosition;
+        ShitTokSwipeDiagnostics.Sample diagnostic = maintenanceDiagnostic;
         if (!shouldRunSwipeMaintenance(
                 active, hostResumed, userPaging, position, selectedPosition)) {
             return;
         }
+        long startedNs = SystemClock.elapsedRealtimeNanos();
+        swipeDiagnostics.beginMaintenance(diagnostic);
+        try {
         if (!maintenanceResolveIssued) {
             maintenanceResolveIssued = true;
             resolveAhead(position);
@@ -965,29 +1001,44 @@ public final class ChaosFeedView extends FrameLayout {
                         active, hostResumed, userPaging, position, selectedPosition)) {
             postDelayed(playerPrepareMaintenanceRunnable, SWIPE_PREPARE_STAGGER_MS);
         }
+        } finally {
+            swipeDiagnostics.finishPrepareMaintenance(
+                    diagnostic, SystemClock.elapsedRealtimeNanos() - startedNs);
+        }
     }
 
     private void runDeferredReleaseMaintenance() {
         int position = maintenancePosition;
+        ShitTokSwipeDiagnostics.Sample diagnostic = maintenanceDiagnostic;
         if (!shouldRunSwipeMaintenance(
                 active, hostResumed, userPaging, position, selectedPosition)) {
             return;
         }
 
-        ExoPlayer detached = deferredPlayerReleases.pollFirst();
-        if (detached != null) {
-            try {
-                detached.release();
-            } catch (Exception ignored) {
+        long jobStartedNs = SystemClock.elapsedRealtimeNanos();
+        swipeDiagnostics.beginMaintenance(diagnostic);
+        try {
+            ExoPlayer detached = deferredPlayerReleases.pollFirst();
+            if (detached != null) {
+                long releaseStartedNs = SystemClock.elapsedRealtimeNanos();
+                try {
+                    detached.release();
+                } catch (Exception ignored) {
+                }
+                swipeDiagnostics.recordPlayerRelease(
+                        SystemClock.elapsedRealtimeNanos() - releaseStartedNs);
+            } else {
+                detachOneDistantPlayer(position);
             }
-        } else {
-            detachOneDistantPlayer(position);
-        }
 
-        if ((!deferredPlayerReleases.isEmpty() || hasDistantPlayer(position)) &&
-                shouldRunSwipeMaintenance(
-                        active, hostResumed, userPaging, position, selectedPosition)) {
-            postDelayed(playerReleaseMaintenanceRunnable, SWIPE_RELEASE_STAGGER_MS);
+            if ((!deferredPlayerReleases.isEmpty() || hasDistantPlayer(position)) &&
+                    shouldRunSwipeMaintenance(
+                            active, hostResumed, userPaging, position, selectedPosition)) {
+                postDelayed(playerReleaseMaintenanceRunnable, SWIPE_RELEASE_STAGGER_MS);
+            }
+        } finally {
+            swipeDiagnostics.finishReleaseMaintenance(
+                    diagnostic, SystemClock.elapsedRealtimeNanos() - jobStartedNs);
         }
     }
 
@@ -1351,6 +1402,33 @@ public final class ChaosFeedView extends FrameLayout {
                 .setNeutralButton("Share", (dialog, which) -> sharePlaybackReport(report))
                 .setNegativeButton("Close", null)
                 .show();
+    }
+
+    private void showSwipeDiagnostics() {
+        String report = swipeDiagnostics.report();
+        new AlertDialog.Builder(activity)
+                .setTitle("ShitTok swipe diagnostics")
+                .setMessage(report)
+                .setPositiveButton("Copy", (dialog, which) -> copySwipeDiagnostics(report))
+                .setNeutralButton("Reset", (dialog, which) -> {
+                    swipeDiagnostics.reset();
+                    Toast.makeText(activity, "Swipe diagnostics reset.", Toast.LENGTH_SHORT).show();
+                })
+                .setNegativeButton("Close", null)
+                .show();
+    }
+
+    private void copySwipeDiagnostics(String report) {
+        ClipboardManager clipboard = (ClipboardManager) activity.getSystemService(
+                Context.CLIPBOARD_SERVICE
+        );
+        if (clipboard == null) {
+            Toast.makeText(activity, "Clipboard isn't available.", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        clipboard.setPrimaryClip(
+                ClipData.newPlainText("ZEROCHILL ShitTok swipe diagnostics", report));
+        Toast.makeText(activity, "Swipe diagnostics copied.", Toast.LENGTH_SHORT).show();
     }
 
     private void copyPlaybackReport(String report) {
@@ -2322,6 +2400,7 @@ public final class ChaosFeedView extends FrameLayout {
             }
 
             releasePlayer();
+            long playerPrepareStartedNs = SystemClock.elapsedRealtimeNanos();
             stream = nextStream;
             lastAttemptedStream = nextStream;
             DefaultHttpDataSource.Factory http = new DefaultHttpDataSource.Factory();
@@ -2480,6 +2559,8 @@ public final class ChaosFeedView extends FrameLayout {
                 }
             });
             createdPlayer.prepare();
+            swipeDiagnostics.recordPlayerPrepare(
+                    SystemClock.elapsedRealtimeNanos() - playerPrepareStartedNs);
         }
 
         private void maybeCompleteStartupHandoff() {
@@ -2607,6 +2688,12 @@ public final class ChaosFeedView extends FrameLayout {
                                     "Report problem",
                                     "Tell us what went wrong",
                                     () -> showPlaybackReport(this)
+                            ),
+                            VideoActionSheet.action(
+                                    R.drawable.ic_action_report,
+                                    "Swipe diagnostics",
+                                    "View timing from recent ShitTok swipes",
+                                    ChaosFeedView.this::showSwipeDiagnostics
                             )
                     )
             );
@@ -2893,8 +2980,11 @@ public final class ChaosFeedView extends FrameLayout {
                 long position = Math.max(0L, player.getCurrentPosition());
                 long duration = Math.max(0L, player.getDuration());
                 if (everStarted || position > 1000L) {
+                    long historyStartedNs = SystemClock.elapsedRealtimeNanos();
                     PlaybackHistoryStore.record(
                             activity, item.title, item.url, position, duration, false);
+                    swipeDiagnostics.recordHistory(
+                            SystemClock.elapsedRealtimeNanos() - historyStartedNs);
                 }
                 player.pause();
             } catch (Exception ignored) {
@@ -2914,11 +3004,14 @@ public final class ChaosFeedView extends FrameLayout {
             }
             ExoPlayer detached = player;
             if (detached != null) {
+                long detachStartedNs = SystemClock.elapsedRealtimeNanos();
                 try {
                     detached.pause();
                     playerView.setPlayer(null);
                 } catch (Exception ignored) {
                 }
+                swipeDiagnostics.recordPlayerDetach(
+                        SystemClock.elapsedRealtimeNanos() - detachStartedNs);
                 player = null;
                 enqueueDeferredPlayerRelease(detached);
             }
@@ -2940,9 +3033,15 @@ public final class ChaosFeedView extends FrameLayout {
             if (player != null) {
                 try {
                     playerView.setPlayer(null);
+                } catch (Exception ignored) {
+                }
+                long releaseStartedNs = SystemClock.elapsedRealtimeNanos();
+                try {
                     player.release();
                 } catch (Exception ignored) {
                 }
+                swipeDiagnostics.recordPlayerRelease(
+                        SystemClock.elapsedRealtimeNanos() - releaseStartedNs);
                 player = null;
             }
             playerHolders.remove(this);
