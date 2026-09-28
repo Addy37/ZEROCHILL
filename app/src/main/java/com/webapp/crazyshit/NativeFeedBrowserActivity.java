@@ -237,7 +237,9 @@ public final class NativeFeedBrowserActivity extends Activity {
             // profile from either fast source so the gallery can skip redundant discovery.
             intent.putExtra(EXTRA_FAPELLO_PROFILE_URL, fapelloProfileUrl);
         }
-        String cleanCacheKey = value(galleryCacheKey, cleanQuery);
+        String cleanCacheKey = galleryCacheKey == null || galleryCacheKey.trim().isEmpty()
+                ? cleanQuery
+                : galleryCacheKey.trim();
         if (!cleanCacheKey.isEmpty()) {
             intent.putExtra(EXTRA_CREATOR_GALLERY_CACHE_KEY, cleanCacheKey);
         }
