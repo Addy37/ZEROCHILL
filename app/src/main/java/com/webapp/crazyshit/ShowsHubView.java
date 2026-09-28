@@ -2,7 +2,10 @@ package com.webapp.crazyshit;
 
 import android.content.Context;
 import android.graphics.Color;
+import android.graphics.RenderEffect;
+import android.graphics.Shader;
 import android.graphics.drawable.ColorDrawable;
+import android.os.Build;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
 import android.os.Handler;
@@ -48,7 +51,7 @@ final class ShowsHubView extends FrameLayout {
             "Mozilla/5.0 (Linux; Android 16) AppleWebKit/537.36 " +
                     "(KHTML, like Gecko) Chrome/139.0 Mobile Safari/537.36";
     private static final long HERO_ROTATION_MS = 13_000L;
-    private static final int HERO_MAX_ITEMS = 5;
+    private static final int HERO_MAX_ITEMS = 8;
 
     private final Listener listener;
     private final Listener weeklyListener;
@@ -61,6 +64,7 @@ final class ShowsHubView extends FrameLayout {
     private final LinearLayout content;
     private final LinearLayout body;
     private final MaterialCardView heroCard;
+    private final ImageView heroBackdrop;
     private final ImageView heroImage;
     private final TextView heroSource;
     private final TextView heroTitle;
@@ -133,11 +137,47 @@ final class ShowsHubView extends FrameLayout {
         FrameLayout heroFrame = new FrameLayout(context);
         heroCard.addView(heroFrame, new MaterialCardView.LayoutParams(-1, -1));
 
+        heroBackdrop = new ImageView(context);
+        heroBackdrop.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        heroBackdrop.setBackground(new ColorDrawable(Color.rgb(13, 16, 19)));
+        heroBackdrop.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
+        heroBackdrop.setScaleX(1.08f);
+        heroBackdrop.setScaleY(1.08f);
+        heroBackdrop.setAlpha(0.64f);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            heroBackdrop.setRenderEffect(RenderEffect.createBlurEffect(
+                    dp(18),
+                    dp(18),
+                    Shader.TileMode.CLAMP
+            ));
+        }
+        heroFrame.addView(heroBackdrop, new FrameLayout.LayoutParams(-1, -1));
+
+        View backdropDim = new View(context);
+        backdropDim.setBackgroundColor(Color.argb(92, 0, 0, 0));
+        backdropDim.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
+        heroFrame.addView(backdropDim, new FrameLayout.LayoutParams(-1, -1));
+
+        MaterialCardView heroArtworkCard = new MaterialCardView(context);
+        heroArtworkCard.setRadius(dp(16));
+        heroArtworkCard.setCardElevation(0f);
+        heroArtworkCard.setStrokeWidth(dp(1));
+        heroArtworkCard.setStrokeColor(Color.argb(72, 255, 255, 255));
+        heroArtworkCard.setCardBackgroundColor(Color.rgb(13, 16, 19));
+        heroArtworkCard.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
+        FrameLayout.LayoutParams heroArtworkParams = new FrameLayout.LayoutParams(
+                dp(248),
+                dp(140),
+                Gravity.TOP | Gravity.CENTER_HORIZONTAL
+        );
+        heroArtworkParams.topMargin = dp(66);
+        heroFrame.addView(heroArtworkCard, heroArtworkParams);
+
         heroImage = new ImageView(context);
         heroImage.setScaleType(ImageView.ScaleType.CENTER_CROP);
         heroImage.setBackground(new ColorDrawable(Color.rgb(13, 16, 19)));
         heroImage.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
-        heroFrame.addView(heroImage, new FrameLayout.LayoutParams(-1, -1));
+        heroArtworkCard.addView(heroImage, new MaterialCardView.LayoutParams(-1, -1));
 
         View heroShade = new View(context);
         heroShade.setBackground(new GradientDrawable(
@@ -232,8 +272,26 @@ final class ShowsHubView extends FrameLayout {
         heroDotsParams.gravity = Gravity.CENTER_HORIZONTAL;
         heroCopy.addView(heroDots, heroDotsParams);
 
+        HorizontalSwipeFrameLayout heroSwipe = new HorizontalSwipeFrameLayout(context);
+        heroSwipe.setListener(new HorizontalSwipeFrameLayout.Listener() {
+            @Override public void onSwipeLeft() {
+                if (heroItems.size() > 1) {
+                    showHero(heroIndex + 1, true);
+                    scheduleHeroRotation();
+                }
+            }
+
+            @Override public void onSwipeRight() {
+                if (heroItems.size() > 1) {
+                    showHero(heroIndex - 1, true);
+                    scheduleHeroRotation();
+                }
+            }
+        });
+        heroSwipe.addView(heroCard, new FrameLayout.LayoutParams(-1, -1));
+
         LinearLayout.LayoutParams heroParams = new LinearLayout.LayoutParams(-1, dp(350));
-        content.addView(heroCard, heroParams);
+        content.addView(heroSwipe, heroParams);
 
         body = new LinearLayout(context);
         body.setOrientation(LinearLayout.VERTICAL);
@@ -298,7 +356,9 @@ final class ShowsHubView extends FrameLayout {
         heroTitle.setText("A new way to browse Shows");
         heroHint.setText("CrazyShit, EFukt and Kaotic together in one media hub.");
         heroAction.setVisibility(View.GONE);
+        Glide.with(heroBackdrop).clear(heroBackdrop);
         Glide.with(heroImage).clear(heroImage);
+        heroBackdrop.setImageDrawable(new ColorDrawable(Color.rgb(13, 16, 19)));
         heroImage.setImageDrawable(new ColorDrawable(Color.rgb(13, 16, 19)));
     }
 
@@ -399,8 +459,8 @@ final class ShowsHubView extends FrameLayout {
 
     private void rebuildHeroCandidates() {
         ArrayList<NativeContentItem> next = new ArrayList<>();
-        appendHeroCandidates(next, crazyItems, 3);
-        appendHeroCandidates(next, efuktItems, 2);
+        appendHeroCandidates(next, crazyItems, 5);
+        appendHeroCandidates(next, efuktItems, 3);
 
         String currentUrl = heroItem == null ? "" : heroItem.url;
         heroItems = next;
@@ -448,8 +508,9 @@ final class ShowsHubView extends FrameLayout {
         return -1;
     }
 
-    private void showHero(int index, boolean animate) {
-        if (index < 0 || index >= heroItems.size()) return;
+    private void showHero(int requestedIndex, boolean animate) {
+        if (heroItems.isEmpty()) return;
+        int index = Math.floorMod(requestedIndex, heroItems.size());
         NativeContentItem next = heroItems.get(index);
         Runnable apply = () -> {
             heroIndex = index;
@@ -458,6 +519,7 @@ final class ShowsHubView extends FrameLayout {
             heroTitle.setText(next.title);
             heroHint.setText("Series · Open show");
             heroAction.setVisibility(View.VISIBLE);
+            loadArtwork(heroBackdrop, next, true);
             loadArtwork(heroImage, next, true);
             updateHeroDots();
             loadingLabel.setVisibility(View.GONE);
