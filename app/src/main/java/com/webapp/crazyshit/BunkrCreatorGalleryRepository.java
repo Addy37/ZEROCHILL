@@ -8,6 +8,7 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -33,6 +34,8 @@ final class BunkrCreatorGalleryRepository {
     private static final int ONLYHAVEN_CREATORS_PER_BATCH = 2;
     private static final int ONLYHAVEN_CREATOR_LIMIT = 4;
     private static final int ONLYHAVEN_PAGE_SIZE = 36;
+    private static final int MAX_MERGED_DISCOVERY_QUERIES = 8;
+    private static final int MERGED_SOURCE_LIMIT = 2;
     private static final int MAX_FAPELLO_PAGES = 250;
     private static final int BATCH_TARGET = 48;
     private static final int MAX_MEDIA_ITEMS = 10_000;
@@ -1044,9 +1047,15 @@ final class BunkrCreatorGalleryRepository {
             List<String> seedUrls,
             List<String> seedImages
     ) {
+        addDiscoveryQuery(state, creatorName);
+        if (seedNames != null) {
+            int nameLimit = Math.min(MAX_MERGED_DISCOVERY_QUERIES, seedNames.size());
+            for (int i = 0; i < nameLimit; i++) addDiscoveryQuery(state, seedNames.get(i));
+        }
+
         seedKnownProfile(state, sourceProfileUrl, creatorName, "");
         if (seedUrls == null || seedUrls.isEmpty()) return;
-        int limit = Math.min(32, seedUrls.size());
+        int limit = Math.min(MAX_MERGED_DISCOVERY_QUERIES, seedUrls.size());
         for (int i = 0; i < limit; i++) {
             String url = seedUrls.get(i);
             String name = seedNames != null && i < seedNames.size()
@@ -1057,6 +1066,19 @@ final class BunkrCreatorGalleryRepository {
                     : "";
             seedKnownProfile(state, url, name, image);
         }
+    }
+
+    private void addDiscoveryQuery(State state, String value) {
+        if (state == null || value == null) return;
+        String query = value.trim();
+        if (query.length() < 2 || state.discoveryQueries.size() >= MAX_MERGED_DISCOVERY_QUERIES) {
+            return;
+        }
+        String normalized = CreatorNameMatcher.normalized(query);
+        for (String existing : state.discoveryQueries) {
+            if (CreatorNameMatcher.normalized(existing).equals(normalized)) return;
+        }
+        state.discoveryQueries.add(query);
     }
 
     private void seedKnownProfile(
@@ -1102,7 +1124,7 @@ final class BunkrCreatorGalleryRepository {
                 : creatorName.trim();
         state.fapelloPending.addFirst(new FapelloCursor(
                 new FapelloRepository.Model(name, profileUrl, "")));
-        state.fapelloCatalogLoaded = true;
+        if (state.discoveryQueries.size() <= 1) state.fapelloCatalogLoaded = true;
     }
 
     private void seedOnlyHavenProfile(State state, String profileUrl, String creatorName) {
@@ -1131,7 +1153,7 @@ final class BunkrCreatorGalleryRepository {
             state.onlyHavenPending.addFirst(new OnlyHavenCursor(
                     new OnlyHavenRepository.Creator(
                             service, id, name, profileUrl, "")));
-            state.onlyHavenCatalogLoaded = true;
+            if (state.discoveryQueries.size() <= 1) state.onlyHavenCatalogLoaded = true;
         } catch (Exception ignored) {
             state.onlyHavenProfileUrls.remove(profileUrl);
         }
@@ -1327,6 +1349,7 @@ final class BunkrCreatorGalleryRepository {
 
     private static final class State {
         final String query;
+        final LinkedHashSet<String> discoveryQueries = new LinkedHashSet<>();
         final ArrayDeque<AlbumCursor> pending = new ArrayDeque<>();
         final ArrayDeque<FapelloCursor> fapelloPending = new ArrayDeque<>();
         final ArrayDeque<WikiFeetCursor> wikiFeetPending = new ArrayDeque<>();
@@ -1343,6 +1366,7 @@ final class BunkrCreatorGalleryRepository {
         int wikiFeetXSearchFailures;
         int onlyHavenSearchFailures;
         boolean searchFinished;
+        boolean mergedBunkrCatalogLoaded;
         boolean fapelloCatalogLoaded;
         boolean wikiFeetCatalogLoaded;
         boolean wikiFeetXCatalogLoaded;
@@ -1351,6 +1375,7 @@ final class BunkrCreatorGalleryRepository {
 
         State(String query) {
             this.query = query == null ? "" : query.trim();
+            if (this.query.length() >= 2) discoveryQueries.add(this.query);
         }
 
         boolean finished() {
