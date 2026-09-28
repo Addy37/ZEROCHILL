@@ -159,22 +159,24 @@ final class ShowsHubView extends FrameLayout {
         heroFrame.addView(backdropDim, new FrameLayout.LayoutParams(-1, -1));
 
         MaterialCardView heroArtworkCard = new MaterialCardView(context);
-        heroArtworkCard.setRadius(dp(16));
+        heroArtworkCard.setRadius(0f);
         heroArtworkCard.setCardElevation(0f);
-        heroArtworkCard.setStrokeWidth(dp(1));
-        heroArtworkCard.setStrokeColor(Color.argb(72, 255, 255, 255));
+        heroArtworkCard.setStrokeWidth(0);
         heroArtworkCard.setCardBackgroundColor(Color.rgb(13, 16, 19));
         heroArtworkCard.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
+        int heroArtworkHeight = Math.round(
+                getResources().getDisplayMetrics().widthPixels * 9f / 16f
+        );
         FrameLayout.LayoutParams heroArtworkParams = new FrameLayout.LayoutParams(
-                dp(248),
-                dp(140),
-                Gravity.TOP | Gravity.CENTER_HORIZONTAL
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                heroArtworkHeight,
+                Gravity.TOP
         );
         heroArtworkParams.topMargin = dp(66);
         heroFrame.addView(heroArtworkCard, heroArtworkParams);
 
         heroImage = new ImageView(context);
-        heroImage.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        heroImage.setScaleType(ImageView.ScaleType.FIT_CENTER);
         heroImage.setBackground(new ColorDrawable(Color.rgb(13, 16, 19)));
         heroImage.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
         heroArtworkCard.addView(heroImage, new MaterialCardView.LayoutParams(-1, -1));
@@ -775,17 +777,20 @@ final class ShowsHubView extends FrameLayout {
     }
 
     private void loadArtwork(ImageView view, NativeContentItem item, boolean hero) {
+        boolean fullHeroArtwork = hero && view == heroImage;
         byte[] embedded = EmbeddedBrowseArtwork.get(getContext(), item.url);
         if (embedded != null && embedded.length >= 512) {
-            Glide.with(view)
-                    .load(embedded)
-                    .diskCacheStrategy(DiskCacheStrategy.NONE)
-                    .skipMemoryCache(false)
-                    .centerCrop()
-                    .dontAnimate()
-                    .placeholder(new ColorDrawable(Color.rgb(20, 22, 25)))
-                    .error(new ColorDrawable(Color.rgb(20, 22, 25)))
-                    .into(view);
+            com.bumptech.glide.RequestBuilder<android.graphics.drawable.Drawable> request =
+                    Glide.with(view)
+                            .load(embedded)
+                            .diskCacheStrategy(DiskCacheStrategy.NONE)
+                            .skipMemoryCache(false)
+                            .dontAnimate()
+                            .placeholder(new ColorDrawable(Color.rgb(20, 22, 25)))
+                            .error(new ColorDrawable(Color.rgb(20, 22, 25)));
+            if (fullHeroArtwork) request.fitCenter();
+            else request.centerCrop();
+            request.into(view);
             return;
         }
 
@@ -813,14 +818,18 @@ final class ShowsHubView extends FrameLayout {
             headers.addHeader("Referer", item.url);
         }
 
-        Glide.with(view)
-                .load(new GlideUrl(imageUrl, headers.build()))
-                .diskCacheStrategy(hero ? DiskCacheStrategy.ALL : DiskCacheStrategy.AUTOMATIC)
-                .centerCrop()
-                .dontAnimate()
-                .placeholder(new ColorDrawable(Color.rgb(20, 22, 25)))
-                .error(new ColorDrawable(Color.rgb(20, 22, 25)))
-                .into(view);
+        com.bumptech.glide.RequestBuilder<android.graphics.drawable.Drawable> request =
+                Glide.with(view)
+                        .load(new GlideUrl(imageUrl, headers.build()))
+                        .diskCacheStrategy(
+                                hero ? DiskCacheStrategy.ALL : DiskCacheStrategy.AUTOMATIC
+                        )
+                        .dontAnimate()
+                        .placeholder(new ColorDrawable(Color.rgb(20, 22, 25)))
+                        .error(new ColorDrawable(Color.rgb(20, 22, 25)));
+        if (fullHeroArtwork) request.fitCenter();
+        else request.centerCrop();
+        request.into(view);
     }
 
     private void loadContinueArtwork(
