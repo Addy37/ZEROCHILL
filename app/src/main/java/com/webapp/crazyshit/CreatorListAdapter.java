@@ -63,8 +63,10 @@ final class CreatorListAdapter extends RecyclerView.Adapter<CreatorListAdapter.H
                 public boolean areContentsTheSame(int a, int b) {
                     NativeContentItem x = old.get(a), y = incoming.get(b);
                     return x.title.equals(y.title) && x.imageUrl.equals(y.imageUrl)
-                            && oldFavorites.contains(CreatorFavoriteStore.key(x))
-                            == nextFavorites.contains(CreatorFavoriteStore.key(y));
+                            && (oldFavorites.contains(CreatorFavoriteStore.key(x))
+                            || CreatorIdentity.hasStoredAlias(oldFavorites, x.title))
+                            == (nextFavorites.contains(CreatorFavoriteStore.key(y))
+                            || CreatorIdentity.hasStoredAlias(nextFavorites, y.title));
                 }
             });
             main.post(() -> {
@@ -114,7 +116,8 @@ final class CreatorListAdapter extends RecyclerView.Adapter<CreatorListAdapter.H
     @Override public void onBindViewHolder(Holder holder, int position) {
         NativeContentItem item = items.get(position);
         holder.bound = item;
-        boolean favorite = favorites.contains(CreatorFavoriteStore.key(item));
+        boolean favorite = favorites.contains(CreatorFavoriteStore.key(item))
+                || CreatorIdentity.hasStoredAlias(favorites, item.title);
         holder.name.setText(item.title);
         String source = item.description == null ? "" : item.description.trim();
         holder.subtitle.setText((favorite ? "Favorite" : source).isEmpty()

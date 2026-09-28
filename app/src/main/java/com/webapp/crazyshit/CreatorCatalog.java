@@ -40,8 +40,38 @@ final class CreatorCatalog {
     static List<NativeContentItem> matching(Context context, String query, boolean favoritesOnly, int limit) {
         Set<String> favorites = CreatorFavoriteStore.names(context);
         ArrayList<NativeContentItem> result = new ArrayList<>();
-        for (NativeContentItem item : all(context)) {
-            if (favoritesOnly && !favorites.contains(CreatorFavoriteStore.key(item))) continue;
+        if (favoritesOnly && favorites.isEmpty()) return result;
+        List<NativeContentItem> catalog = all(context);
+        if (favoritesOnly) {
+            Map<String, NativeContentItem> byStoredKey = new java.util.HashMap<>();
+            for (NativeContentItem item : catalog) byStoredKey.put(key(item), item);
+            LinkedHashMap<String, NativeContentItem> logical = new LinkedHashMap<>();
+            for (String raw : favorites) {
+                String identity = CreatorIdentity.reviewed(raw)
+                        ? CreatorIdentity.key(raw) : "raw:" + raw;
+                NativeContentItem best = byStoredKey.get(raw);
+                List<String> aliases = CreatorIdentity.storedKeys(raw);
+                if (aliases != null) for (String alias : aliases) {
+                    NativeContentItem candidate = byStoredKey.get(alias);
+                    if (candidate != null && (best == null || best.imageUrl.isEmpty()
+                            && !candidate.imageUrl.isEmpty() || best.imageUrl.isEmpty()
+                            == candidate.imageUrl.isEmpty() && best.url.isEmpty()
+                            && !candidate.url.isEmpty())) best = candidate;
+                }
+                if (best == null) continue;
+                NativeContentItem previous = logical.get(identity);
+                if (previous != null && (!previous.imageUrl.isEmpty() || best.imageUrl.isEmpty())) continue;
+                String display = CreatorIdentity.display(best.title);
+                logical.put(identity, new NativeContentItem(best.kind, display,
+                        best.url, best.imageUrl, best.views, best.uploader, best.comments,
+                        best.description, best.searchQuery, best.publishedAtMillis));
+            }
+            for (NativeContentItem item : logical.values()) {
+                if (CreatorNameMatcher.rank(item.title, query) != Integer.MAX_VALUE
+                        || CreatorNameMatcher.rank(item.searchQuery, query) != Integer.MAX_VALUE)
+                    result.add(item);
+            }
+        } else for (NativeContentItem item : catalog) {
             if (CreatorNameMatcher.rank(item.title, query) != Integer.MAX_VALUE
                     || CreatorNameMatcher.rank(item.searchQuery, query) != Integer.MAX_VALUE) result.add(item);
         }
@@ -54,6 +84,30 @@ final class CreatorCatalog {
                 .thenComparingInt(item -> favorites.contains(CreatorFavoriteStore.key(item)) ? 0 : 1)
                 .thenComparing(names));
         return result.size() > limit ? new ArrayList<>(result.subList(0, limit)) : result;
+    }
+
+    /** Backup keeps each raw favorite key, including aliases hidden in the UI. */
+    static List<NativeContentItem> rawFavorites(Context context) {
+        Map<String, NativeContentItem> exact = new LinkedHashMap<>();
+        Map<String, NativeContentItem> artwork = new LinkedHashMap<>();
+        for (NativeContentItem item : all(context)) {
+            exact.put(key(item), item);
+            if (!item.imageUrl.isEmpty() && CreatorIdentity.reviewed(item.title))
+                artwork.put(CreatorIdentity.key(item.title), item);
+        }
+        ArrayList<NativeContentItem> result = new ArrayList<>();
+        for (String raw : CreatorFavoriteStore.names(context)) {
+            NativeContentItem item = exact.get(raw);
+            if ((item == null || item.imageUrl.isEmpty()) && CreatorIdentity.reviewed(raw)) {
+                NativeContentItem richer = artwork.get(CreatorIdentity.key(raw));
+                if (richer != null) item = richer;
+            }
+            if (item == null) item = new NativeContentItem(NativeContentItem.KIND_CREATOR,
+                    raw, "", "", "", "", "", "", raw);
+            result.add(new NativeContentItem(item.kind, raw, item.url, item.imageUrl,
+                    item.views, item.uploader, item.comments, item.description, raw));
+        }
+        return result;
     }
 
     static synchronized void remember(Context context, List<NativeContentItem> items) {
