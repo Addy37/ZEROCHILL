@@ -31,7 +31,7 @@ final class ShitTokAspectPriority {
 
     private final Map<String, Stats> groupStats = new HashMap<>();
 
-    void record(NativeContentItem item, float aspectRatio) {
+    synchronized void record(NativeContentItem item, float aspectRatio) {
         int bucket = bucket(aspectRatio);
         if (bucket == BUCKET_UNKNOWN || item == null) return;
         String key = groupKey(item);
@@ -57,7 +57,7 @@ final class ShitTokAspectPriority {
         return copy;
     }
 
-    double weightFor(NativeContentItem item) {
+    synchronized double weightFor(NativeContentItem item) {
         if (item == null) return UNKNOWN_WEIGHT;
         int hinted = bucket(item.aspectRatioHint);
         if (hinted != BUCKET_UNKNOWN) return weightForBucket(hinted);
