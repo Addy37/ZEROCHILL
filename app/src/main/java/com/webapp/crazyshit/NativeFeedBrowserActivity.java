@@ -66,6 +66,9 @@ public final class NativeFeedBrowserActivity extends Activity {
     public static final String EXTRA_CREATOR_AVATAR_PICKER = "browser_creator_avatar_picker";
     public static final String EXTRA_PICKED_AVATAR_URL = "browser_picked_avatar_url";
     public static final String EXTRA_PICKED_AVATAR_REFERER = "browser_picked_avatar_referer";
+    public static final String EXTRA_PICKED_AVATAR_FOCUS_X = "browser_picked_avatar_focus_x";
+    public static final String EXTRA_PICKED_AVATAR_FOCUS_Y = "browser_picked_avatar_focus_y";
+    public static final String EXTRA_PICKED_AVATAR_ZOOM = "browser_picked_avatar_zoom";
     static final String EXTRA_SHITTOK_RETURN_TRANSITION = "browser_shittok_return_transition";
     public static final String EXTRA_NOTIFICATION_FRESH_URLS =
             "browser_notification_fresh_urls";
@@ -77,6 +80,8 @@ public final class NativeFeedBrowserActivity extends Activity {
     public static final String SOURCE_EFUKT = "efukt";
     public static final String SOURCE_KAOTIC = "kaotic";
     public static final String SOURCE_BUNKR = "bunkr";
+
+    private static final int REQUEST_CREATOR_AVATAR_CROP = 4107;
 
     private final ExecutorService io = Executors.newSingleThreadExecutor();
     private final CrazyShitRepository repository = new CrazyShitRepository();
@@ -1610,9 +1615,47 @@ public final class NativeFeedBrowserActivity extends Activity {
             return;
         }
         String referer = creatorAvatarReferer(item);
-        Intent result = new Intent();
-        result.putExtra(EXTRA_PICKED_AVATAR_URL, imageUrl);
-        result.putExtra(EXTRA_PICKED_AVATAR_REFERER, referer);
+        startActivityForResult(
+                CreatorAvatarCropActivity.create(this, imageUrl, referer),
+                REQUEST_CREATOR_AVATAR_CROP
+        );
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode != REQUEST_CREATOR_AVATAR_CROP
+                || resultCode != Activity.RESULT_OK
+                || data == null) return;
+
+        String imageUrl = value(data.getStringExtra(CreatorAvatarCropActivity.EXTRA_IMAGE_URL), "");
+        String referer = value(data.getStringExtra(CreatorAvatarCropActivity.EXTRA_REFERER), "");
+        if (!isRemoteUrl(imageUrl)) return;
+
+        Intent result = new Intent()
+                .putExtra(EXTRA_PICKED_AVATAR_URL, imageUrl)
+                .putExtra(EXTRA_PICKED_AVATAR_REFERER, referer)
+                .putExtra(
+                        EXTRA_PICKED_AVATAR_FOCUS_X,
+                        data.getFloatExtra(
+                                CreatorAvatarCropActivity.EXTRA_FOCUS_X,
+                                CreatorAvatarOverrideStore.DEFAULT_FOCUS
+                        )
+                )
+                .putExtra(
+                        EXTRA_PICKED_AVATAR_FOCUS_Y,
+                        data.getFloatExtra(
+                                CreatorAvatarCropActivity.EXTRA_FOCUS_Y,
+                                CreatorAvatarOverrideStore.DEFAULT_FOCUS
+                        )
+                )
+                .putExtra(
+                        EXTRA_PICKED_AVATAR_ZOOM,
+                        data.getFloatExtra(
+                                CreatorAvatarCropActivity.EXTRA_ZOOM,
+                                CreatorAvatarOverrideStore.DEFAULT_ZOOM
+                        )
+                );
         setResult(Activity.RESULT_OK, result);
         finish();
     }
