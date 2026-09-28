@@ -40,12 +40,12 @@ final class CoomerFansRepository {
         }
     }
 
-    static final class ImagePage {
-        final ArrayList<NativeContentItem> items;
+    static final class ProfilePage {
+        final ArrayList<String> postUrls;
         final boolean hasNext;
 
-        ImagePage(ArrayList<NativeContentItem> items, boolean hasNext) {
-            this.items = items;
+        ProfilePage(ArrayList<String> postUrls, boolean hasNext) {
+            this.postUrls = postUrls;
             this.hasNext = hasNext;
         }
     }
@@ -61,7 +61,7 @@ final class CoomerFansRepository {
         return parseCreators(document, config, value, Math.max(1, Math.min(4, limit)));
     }
 
-    ImagePage fetchCreatorImages(
+    ProfilePage fetchCreatorPosts(
             Context context,
             Creator creator,
             int page,
@@ -69,7 +69,7 @@ final class CoomerFansRepository {
     ) throws IOException {
         if (creator == null || creator.service.isEmpty() || creator.id.isEmpty() ||
                 creator.username.isEmpty()) {
-            return new ImagePage(new ArrayList<>(), false);
+            return new ProfilePage(new ArrayList<>(), false);
         }
         SourceConfig.CoomerFans config = config();
         if (!config.enabled) throw new IOException("CoomerFans is temporarily unavailable");
@@ -80,9 +80,34 @@ final class CoomerFansRepository {
                 .replace("{username}", urlToken(creator.username))
                 .replace("{page}", String.valueOf(safePage));
         Document document = fetchConfigured(context, config, config.baseUrl + route);
-        ArrayList<NativeContentItem> items =
-                parseCreatorImages(document, config, creator, Math.max(1, limit));
-        return new ImagePage(items, hasNextPage(document, safePage));
+        ArrayList<String> posts = parseProfilePostUrls(
+                document, Math.max(1, limit));
+        return new ProfilePage(posts, !posts.isEmpty());
+    }
+
+    ArrayList<NativeContentItem> fetchPostImages(
+            Context context,
+            Creator creator,
+            String postUrl,
+            int limit
+    ) throws IOException {
+        if (creator == null || !isPostUrl(postUrl)) return new ArrayList<>();
+        SourceConfig.CoomerFans config = config();
+        if (!config.enabled) throw new IOException("CoomerFans is temporarily unavailable");
+        Document document = fetchConfigured(context, config, postUrl);
+        return parseCreatorImages(document, config, creator, Math.max(1, limit));
+    }
+
+    ArrayList<String> parseProfilePostUrls(Document document, int limit) {
+        LinkedHashMap<String, String> result = new LinkedHashMap<>();
+        if (document == null) return new ArrayList<>();
+        for (Element link : document.select("a[href^=/p/]")) {
+            String url = absolute(link, "href", document.location());
+            if (!isPostUrl(url)) continue;
+            result.putIfAbsent(url, url);
+            if (result.size() >= limit) break;
+        }
+        return new ArrayList<>(result.values());
     }
 
     List<Creator> parseCreators(
@@ -293,6 +318,16 @@ final class CoomerFansRepository {
             if (sameHost(host, fallback)) return true;
         }
         return false;
+    }
+
+    static boolean isPostUrl(String value) {
+        if (!isCoomerFansUrl(value)) return false;
+        try {
+            String path = new URI(cleanStatic(value)).getPath();
+            return path != null && path.matches("^/p/\\d+(?:/.*)?$");
+        } catch (Exception ignored) {
+            return false;
+        }
     }
 
     static boolean isDirectImageUrl(String value) {

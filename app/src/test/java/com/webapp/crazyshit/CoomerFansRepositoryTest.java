@@ -69,6 +69,21 @@ public final class CoomerFansRepositoryTest {
         assertEquals("sophieraiin", creators.get(0).username);
     }
 
+    @Test public void profileParserFindsPostLinksBeforeMediaFetch() {
+        Document document = Jsoup.parse(
+                "<a href='/p/111/123/onlyfans'>Post one</a>" +
+                        "<a href='/p/222/123/onlyfans'>Post two</a>" +
+                        "<a href='/u/onlyfans/123/sophie_rain'>Profile</a>",
+                "https://coomerfans.com/u/onlyfans/123/sophie_rain"
+        );
+
+        ArrayList<String> posts = repository.parseProfilePostUrls(document, 12);
+
+        assertEquals(2, posts.size());
+        assertEquals("https://coomerfans.com/p/111/123/onlyfans", posts.get(0));
+        assertEquals("https://coomerfans.com/p/222/123/onlyfans", posts.get(1));
+    }
+
     @Test public void profileParserKeepsOnlyCoomerFansImages() {
         CoomerFansRepository.Creator creator = new CoomerFansRepository.Creator(
                 "onlyfans",

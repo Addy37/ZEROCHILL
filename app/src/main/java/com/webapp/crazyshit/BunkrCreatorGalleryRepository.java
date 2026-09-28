@@ -34,10 +34,13 @@ final class BunkrCreatorGalleryRepository {
     private static final int ONLYHAVEN_CREATORS_PER_BATCH = 2;
     private static final int ONLYHAVEN_CREATOR_LIMIT = 4;
     private static final int ONLYHAVEN_PAGE_SIZE = 36;
-    private static final int COOMERFANS_PAGE_SIZE = 24;
+    private static final int COOMERFANS_PROFILE_POST_LIMIT = 12;
+    private static final int COOMERFANS_POSTS_PER_BATCH = 4;
+    private static final int COOMERFANS_POST_IMAGE_LIMIT = 12;
     private static final int COOMERFANS_IMMEDIATE_THRESHOLD = 24;
     private static final int COOMERFANS_FILL_LIMIT = 96;
     private static final int COOMERFANS_MAX_PAGES = 4;
+    private static final long COOMERFANS_BATCH_BUDGET_MS = 6_000L;
     private static final int MAX_MERGED_DISCOVERY_QUERIES = 8;
     private static final int MERGED_SOURCE_LIMIT = 2;
     private static final int MAX_FAPELLO_PAGES = 250;
@@ -794,48 +797,118 @@ final class BunkrCreatorGalleryRepository {
             return result;
         }
 
+        CoomerFansRepository repository = new CoomerFansRepository();
         try {
             if (!state.coomerFansAttempted) {
                 state.coomerFansAttempted = true;
-                List<CoomerFansRepository.Creator> creators =
-                        new CoomerFansRepository().searchCreators(context, state.query, 1);
-                if (creators == null || creators.isEmpty()) {
+                int searches = 0;
+                for (String query : state.discoveryQueries) {
+                    if (searches++ >= 2) break;
+                    List<CoomerFansRepository.Creator> creators =
+                            repository.searchCreators(context, query, 2);
+                    if (creators == null || creators.isEmpty()) continue;
+                    state.coomerFansCreator = creators.get(0);
+                    break;
+                }
+                if (state.coomerFansCreator == null) {
                     state.coomerFansDone = true;
                     return result;
                 }
-                state.coomerFansCreator = creators.get(0);
             }
-            if (state.coomerFansCreator == null) {
+
+            CoomerFansRepository.ProfilePage profile =
+                    repository.fetchCreatorPosts(
+                            context,
+                            state.coomerFansCreator,
+                            state.coomerFansPage,
+                            COOMERFANS_PROFILE_POST_LIMIT
+                    );
+            if (profile == null || profile.postUrls == null || profile.postUrls.isEmpty()) {
                 state.coomerFansDone = true;
                 return result;
             }
 
-            CoomerFansRepository.ImagePage page =
-                    new CoomerFansRepository().fetchCreatorImages(
-                            context,
-                            state.coomerFansCreator,
-                            state.coomerFansPage,
-                            COOMERFANS_PAGE_SIZE
-                    );
-            if (page == null || page.items == null) {
-                state.coomerFansDone = true;
+            ArrayList<String> selectedPosts = new ArrayList<>();
+            for (String postUrl : profile.postUrls) {
+                if (postUrl == null || postUrl.isEmpty() ||
+                        state.coomerFansPostUrls.contains(postUrl)) continue;
+                state.coomerFansPostUrls.add(postUrl);
+                selectedPosts.add(postUrl);
+                if (selectedPosts.size() >= COOMERFANS_POSTS_PER_BATCH) break;
+            }
+            if (selectedPosts.isEmpty()) {
+                if (state.coomerFansPage >= COOMERFANS_MAX_PAGES || !profile.hasNext) {
+                    state.coomerFansDone = true;
+                } else {
+                    state.coomerFansPage++;
+                }
                 return result;
             }
-            for (NativeContentItem item : page.items) {
-                if (item == null || !item.isImage() || item.url == null || item.url.isEmpty() ||
-                        !state.loadedMediaUrls.add(item.url)) continue;
-                result.add(item);
-                if (state.loadedMediaUrls.size() >= COOMERFANS_FILL_LIMIT) break;
+
+            ExecutorCompletionService<List<NativeContentItem>> completed =
+                    new ExecutorCompletionService<>(ALBUM_IO);
+            ArrayList<Future<List<NativeContentItem>>> requests = new ArrayList<>();
+            for (String postUrl : selectedPosts) {
+                requests.add(completed.submit(() ->
+                        new ArrayList<>(repository.fetchPostImages(
+                                context,
+                                state.coomerFansCreator,
+                                postUrl,
+                                COOMERFANS_POST_IMAGE_LIMIT
+                        ))
+                ));
             }
-            if (!page.hasNext || result.isEmpty() ||
-                    state.coomerFansPage >= COOMERFANS_MAX_PAGES ||
-                    state.loadedMediaUrls.size() >= COOMERFANS_FILL_LIMIT) {
+
+            int finished = 0;
+            long deadline = SystemClock.elapsedRealtime() + COOMERFANS_BATCH_BUDGET_MS;
+            while (finished < requests.size() &&
+                    state.loadedMediaUrls.size() < COOMERFANS_FILL_LIMIT) {
+                long remaining = deadline - SystemClock.elapsedRealtime();
+                if (remaining <= 0L) break;
+                Future<List<NativeContentItem>> future = completed.poll(
+                        Math.min(remaining, 250L),
+                        java.util.concurrent.TimeUnit.MILLISECONDS
+                );
+                if (future == null) continue;
+                finished++;
+                try {
+                    List<NativeContentItem> items = future.get();
+                    if (items == null) continue;
+                    for (NativeContentItem item : items) {
+                        if (item == null || !item.isImage() ||
+                                item.url == null || item.url.isEmpty() ||
+                                !state.loadedMediaUrls.add(item.url)) continue;
+                        result.add(item);
+                        if (state.loadedMediaUrls.size() >= COOMERFANS_FILL_LIMIT) break;
+                    }
+                } catch (Exception ignored) {
+                }
+            }
+            for (Future<List<NativeContentItem>> request : requests) {
+                if (!request.isDone()) request.cancel(true);
+            }
+
+            boolean unprocessedOnPage = false;
+            for (String postUrl : profile.postUrls) {
+                if (postUrl != null && !postUrl.isEmpty() &&
+                        !state.coomerFansPostUrls.contains(postUrl)) {
+                    unprocessedOnPage = true;
+                    break;
+                }
+            }
+            if (state.loadedMediaUrls.size() >= COOMERFANS_FILL_LIMIT) {
                 state.coomerFansDone = true;
-            } else {
-                state.coomerFansPage++;
+            } else if (!unprocessedOnPage) {
+                if (state.coomerFansPage >= COOMERFANS_MAX_PAGES || !profile.hasNext) {
+                    state.coomerFansDone = true;
+                } else {
+                    state.coomerFansPage++;
+                }
             }
         } catch (IOException ignored) {
             state.coomerFansDone = true;
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
         }
         return result;
     }
@@ -1499,6 +1572,7 @@ final class BunkrCreatorGalleryRepository {
         final Set<String> fapelloModelUrls = new HashSet<>();
         final Set<String> wikiFeetProfileUrls = new HashSet<>();
         final Set<String> onlyHavenProfileUrls = new HashSet<>();
+        final Set<String> coomerFansPostUrls = new HashSet<>();
         final Set<String> loadedMediaUrls = new HashSet<>();
         int nextSearchPage = 1;
         int bunkrSearchFailures;
