@@ -67,11 +67,29 @@ final class BunkrCreatorGalleryRepository {
     }
 
     void reset(String sessionId, String query, String sourceProfileUrl, String creatorName) {
+        reset(sessionId, query, sourceProfileUrl, creatorName, null, null, null);
+    }
+
+    void reset(
+            String sessionId,
+            String query,
+            String sourceProfileUrl,
+            String creatorName,
+            List<String> seedNames,
+            List<String> seedUrls,
+            List<String> seedImages
+    ) {
         if (sessionId == null || sessionId.trim().isEmpty()) return;
         synchronized (STATES) {
             State state = new State(query);
-            seedFapelloProfile(state, sourceProfileUrl, creatorName);
-            seedOnlyHavenProfile(state, sourceProfileUrl, creatorName);
+            seedKnownProfiles(
+                    state,
+                    sourceProfileUrl,
+                    creatorName,
+                    seedNames,
+                    seedUrls,
+                    seedImages
+            );
             STATES.put(sessionId, state);
             trimLocked();
         }
@@ -88,7 +106,40 @@ final class BunkrCreatorGalleryRepository {
 
     Batch fetchNext(Context context, String sessionId, String query,
             String sourceProfileUrl, String creatorName, ProgressListener listener) throws IOException {
-        State state = state(context, sessionId, query, sourceProfileUrl, creatorName);
+        return fetchNext(
+                context,
+                sessionId,
+                query,
+                sourceProfileUrl,
+                creatorName,
+                null,
+                null,
+                null,
+                listener
+        );
+    }
+
+    Batch fetchNext(
+            Context context,
+            String sessionId,
+            String query,
+            String sourceProfileUrl,
+            String creatorName,
+            List<String> seedNames,
+            List<String> seedUrls,
+            List<String> seedImages,
+            ProgressListener listener
+    ) throws IOException {
+        State state = state(
+                context,
+                sessionId,
+                query,
+                sourceProfileUrl,
+                creatorName,
+                seedNames,
+                seedUrls,
+                seedImages
+        );
         synchronized (state) {
             Batch batch = fetchNextLocked(context, state, listener);
             saveCursor(context, sessionId, state, batch);
@@ -951,8 +1002,16 @@ final class BunkrCreatorGalleryRepository {
         if (source != null && index < source.size()) output.add(source.get(index));
     }
 
-    private State state(Context context, String sessionId, String query,
-            String sourceProfileUrl, String creatorName) throws IOException {
+    private State state(
+            Context context,
+            String sessionId,
+            String query,
+            String sourceProfileUrl,
+            String creatorName,
+            List<String> seedNames,
+            List<String> seedUrls,
+            List<String> seedImages
+    ) throws IOException {
         if (sessionId == null || sessionId.trim().isEmpty()) {
             throw new IOException("Creator gallery session was missing");
         }
@@ -962,13 +1021,77 @@ final class BunkrCreatorGalleryRepository {
             State current = STATES.get(sessionId);
             if (current == null || !cleanQuery.equalsIgnoreCase(current.query)) {
                 current = restoreCursor(context, sessionId, cleanQuery);
-                seedFapelloProfile(current, sourceProfileUrl, creatorName);
-                seedOnlyHavenProfile(current, sourceProfileUrl, creatorName);
                 STATES.put(sessionId, current);
                 trimLocked();
             }
+            seedKnownProfiles(
+                    current,
+                    sourceProfileUrl,
+                    creatorName,
+                    seedNames,
+                    seedUrls,
+                    seedImages
+            );
             return current;
         }
+    }
+
+    private void seedKnownProfiles(
+            State state,
+            String sourceProfileUrl,
+            String creatorName,
+            List<String> seedNames,
+            List<String> seedUrls,
+            List<String> seedImages
+    ) {
+        seedKnownProfile(state, sourceProfileUrl, creatorName, "");
+        if (seedUrls == null || seedUrls.isEmpty()) return;
+        int limit = Math.min(32, seedUrls.size());
+        for (int i = 0; i < limit; i++) {
+            String url = seedUrls.get(i);
+            String name = seedNames != null && i < seedNames.size()
+                    ? seedNames.get(i)
+                    : creatorName;
+            String image = seedImages != null && i < seedImages.size()
+                    ? seedImages.get(i)
+                    : "";
+            seedKnownProfile(state, url, name, image);
+        }
+    }
+
+    private void seedKnownProfile(
+            State state,
+            String profileUrl,
+            String creatorName,
+            String imageUrl
+    ) {
+        if (state == null || profileUrl == null || profileUrl.trim().isEmpty()) return;
+        String url = profileUrl.trim();
+        if (FapelloRepository.isModelUrl(url)) {
+            seedFapelloProfile(state, url, creatorName);
+            return;
+        }
+        if (OnlyHavenRepository.isOnlyHavenUrl(url)) {
+            seedOnlyHavenProfile(state, url, creatorName);
+            return;
+        }
+        if (BunkrRepository.isAlbumUrl(url)) {
+            if (state.albumUrls.add(url)) state.pending.addFirst(new AlbumCursor(url));
+            return;
+        }
+        WikiFeetRepository.Site site = null;
+        if (WikiFeetRepository.isProfileUrl(url, WikiFeetRepository.Site.WIKIFEET)) {
+            site = WikiFeetRepository.Site.WIKIFEET;
+        } else if (WikiFeetRepository.isProfileUrl(url, WikiFeetRepository.Site.WIKIFEET_X)) {
+            site = WikiFeetRepository.Site.WIKIFEET_X;
+        }
+        if (site == null || !state.wikiFeetProfileUrls.add(url)) return;
+        String name = creatorName == null || creatorName.trim().isEmpty()
+                ? state.query
+                : creatorName.trim();
+        state.wikiFeetPending.addFirst(new WikiFeetCursor(
+                new WikiFeetRepository.Creator(site, name, url, imageUrl, 0)
+        ));
     }
 
     private void seedFapelloProfile(State state, String profileUrl, String creatorName) {
