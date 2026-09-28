@@ -185,7 +185,9 @@ final class ShowsHubView extends FrameLayout {
         heroShade.setBackground(new GradientDrawable(
                 GradientDrawable.Orientation.TOP_BOTTOM,
                 new int[] {
-                        Color.argb(6, 0, 0, 0),
+                        Color.BLACK,
+                        Color.argb(218, 0, 0, 0),
+                        Color.argb(92, 0, 0, 0),
                         Color.argb(24, 0, 0, 0),
                         Color.argb(92, 0, 0, 0),
                         Color.argb(218, 0, 0, 0),
