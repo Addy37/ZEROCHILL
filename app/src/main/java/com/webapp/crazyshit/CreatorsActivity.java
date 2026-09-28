@@ -31,6 +31,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
 
 /** All starred creators, including favorites saved before the creator catalog existed. */
 public final class CreatorsActivity extends Activity {
@@ -39,7 +40,7 @@ public final class CreatorsActivity extends Activity {
     private RecyclerView recycler;
     private CreatorGridAdapter adapter;
     private Parcelable pendingScroll;
-    private final ExecutorService avatarIo = Executors.newFixedThreadPool(2);
+    private final ExecutorService avatarIo = Executors.newSingleThreadExecutor();
     private final Set<String> avatarAttempts = Collections.synchronizedSet(new HashSet<>());
 
     @Override protected void onCreate(Bundle state) {
@@ -102,38 +103,58 @@ public final class CreatorsActivity extends Activity {
             recycler.getLayoutManager().onRestoreInstanceState(pendingScroll);
             pendingScroll = null;
         }
+        scheduleMissingAvatars(creators);
     }
 
-    private void requestMissingAvatar(NativeContentItem item) {
-        if (item == null || !item.isCreator() || !item.imageUrl.isEmpty()) return;
-        String logical = CreatorFavoriteStore.logicalKey(this, item);
-        if (logical.isEmpty() || !avatarAttempts.add(logical)) return;
+    private void scheduleMissingAvatars(List<NativeContentItem> creators) {
+        if (creators == null || creators.isEmpty() || isFinishing() || isDestroyed()) return;
+        ArrayList<NativeContentItem> missing = new ArrayList<>();
+        for (NativeContentItem item : creators) {
+            if (item == null || !item.isCreator() || !item.imageUrl.isEmpty()) continue;
+            String logical = CreatorFavoriteStore.logicalKey(this, item);
+            if (!logical.isEmpty() && avatarAttempts.add(logical)) missing.add(item);
+        }
+        if (missing.isEmpty()) return;
 
-        String query = item.searchQuery == null || item.searchQuery.trim().isEmpty()
-                ? item.title : item.searchQuery;
-        avatarIo.execute(() -> {
-            try {
-                List<NativeContentItem> results =
-                        new FapzoneCreatorSearchRepository().search(
-                                getApplicationContext(), query, 8);
-                if (results == null || results.isEmpty()) return;
+        try {
+            avatarIo.execute(() -> {
+                boolean changed = false;
+                for (NativeContentItem item : missing) {
+                    if (Thread.currentThread().isInterrupted()) return;
+                    String logical = CreatorFavoriteStore.logicalKey(
+                            getApplicationContext(), item);
+                    String query = item.searchQuery == null || item.searchQuery.trim().isEmpty()
+                            ? item.title : item.searchQuery;
+                    try {
+                        List<NativeContentItem> results =
+                                new FapzoneCreatorSearchRepository().search(
+                                        getApplicationContext(), query, 8);
+                        if (results == null || results.isEmpty()) continue;
 
-                ArrayList<NativeContentItem> matching = new ArrayList<>();
-                for (NativeContentItem candidate : results) {
-                    if (candidate == null || !candidate.isCreator()) continue;
-                    if (logical.equals(CreatorFavoriteStore.logicalKey(
-                            getApplicationContext(), candidate))) {
-                        matching.add(candidate);
+                        ArrayList<NativeContentItem> matching = new ArrayList<>();
+                        for (NativeContentItem candidate : results) {
+                            if (candidate == null || !candidate.isCreator()
+                                    || candidate.imageUrl.isEmpty()) continue;
+                            if (logical.equals(CreatorFavoriteStore.logicalKey(
+                                    getApplicationContext(), candidate))) {
+                                matching.add(candidate);
+                            }
+                        }
+                        if (matching.isEmpty()) continue;
+                        CreatorCatalog.remember(getApplicationContext(), matching);
+                        changed = true;
+                    } catch (Exception ignored) {
                     }
                 }
-                if (matching.isEmpty()) return;
-                CreatorCatalog.remember(getApplicationContext(), matching);
+                if (!changed) return;
                 runOnUiThread(() -> {
-                    if (!isFinishing() && !isDestroyed()) render();
+                    if (!isFinishing() && !isDestroyed()) {
+                        recycler.post(this::render);
+                    }
                 });
-            } catch (Exception ignored) {
-            }
-        });
+            });
+        } catch (RejectedExecutionException ignored) {
+        }
     }
 
     private void openCreator(NativeContentItem item) {
@@ -269,7 +290,6 @@ public final class CreatorsActivity extends Activity {
                         .into(holder.avatar);
             } else {
                 holder.avatar.setImageResource(R.drawable.ic_more_account);
-                requestMissingAvatar(item);
             }
         }
 
