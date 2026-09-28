@@ -379,14 +379,25 @@ public final class CreatorsActivity extends Activity {
                                 )
                                 .build()
                 );
-                com.bumptech.glide.RequestBuilder<android.graphics.drawable.Drawable> request =
-                        Glide.with(holder.avatar).load(url);
-                if (!group.customAvatar) request = request.onlyRetrieveFromCache(true);
-                request.circleCrop()
-                        .dontAnimate()
-                        .placeholder(new ColorDrawable(Color.rgb(19, 23, 27)))
-                        .error(R.drawable.ic_more_account)
-                        .into(holder.avatar);
+                com.bumptech.glide.RequestBuilder<android.graphics.drawable.Drawable> network =
+                        Glide.with(holder.avatar)
+                                .load(url)
+                                .circleCrop()
+                                .dontAnimate()
+                                .placeholder(new ColorDrawable(Color.rgb(19, 23, 27)))
+                                .error(R.drawable.ic_more_account);
+                if (group.customAvatar) {
+                    network.into(holder.avatar);
+                } else {
+                    Glide.with(holder.avatar)
+                            .load(url)
+                            .onlyRetrieveFromCache(true)
+                            .circleCrop()
+                            .dontAnimate()
+                            .placeholder(new ColorDrawable(Color.rgb(19, 23, 27)))
+                            .error(network)
+                            .into(holder.avatar);
+                }
             } else {
                 holder.avatar.setImageResource(R.drawable.ic_more_account);
             }
