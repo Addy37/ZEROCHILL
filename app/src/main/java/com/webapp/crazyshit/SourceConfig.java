@@ -49,6 +49,7 @@ final class SourceConfig {
     final WebVideo theYnc;
     final WebVideo itemFix;
     final OnlyHaven onlyHaven;
+    final CoomerFans coomerFans;
     private final String serialized;
 
     private SourceConfig(
@@ -65,6 +66,7 @@ final class SourceConfig {
             WebVideo theYnc,
             WebVideo itemFix,
             OnlyHaven onlyHaven,
+            CoomerFans coomerFans,
             String serialized
     ) {
         this.schemaVersion = schemaVersion;
@@ -80,6 +82,7 @@ final class SourceConfig {
         this.theYnc = theYnc;
         this.itemFix = itemFix;
         this.onlyHaven = onlyHaven;
+        this.coomerFans = coomerFans;
         this.serialized = serialized;
     }
 
@@ -112,7 +115,7 @@ final class SourceConfig {
             JSONObject sources = requiredObject(root, "sources");
             rejectUnknown(sources, set(
                     "fapello", "bunkr", "wikifeet", "wikifeetx",
-                    "kaotic", "theync", "itemfix", "onlyhaven"
+                    "kaotic", "theync", "itemfix", "onlyhaven", "coomerfans"
             ), "sources");
             Fapello fapello = parseFapello(requiredObject(sources, "fapello"));
             Bunkr bunkr = parseBunkr(requiredObject(sources, "bunkr"));
@@ -122,11 +125,15 @@ final class SourceConfig {
             WebVideo theYnc = parseWebVideo(requiredObject(sources, "theync"), "theync");
             WebVideo itemFix = parseWebVideo(requiredObject(sources, "itemfix"), "itemfix");
             OnlyHaven onlyHaven = parseOnlyHaven(requiredObject(sources, "onlyhaven"));
+            JSONObject coomerFansValue = sources.optJSONObject("coomerfans");
+            CoomerFans coomerFans = coomerFansValue == null
+                    ? CoomerFans.disabled()
+                    : parseCoomerFans(coomerFansValue);
             String canonical = root.toString();
             return new SourceConfig(schemaVersion, configVersion, updatedAt,
                     sourceKillSwitchesEnabled, fallbacksEnabled,
                     fapello, bunkr, wikiFeet, wikiFeetX,
-                    kaotic, theYnc, itemFix, onlyHaven, canonical);
+                    kaotic, theYnc, itemFix, onlyHaven, coomerFans, canonical);
         } catch (ValidationException error) {
             throw error;
         } catch (JSONException error) {
@@ -306,6 +313,36 @@ final class SourceConfig {
                 selector(selectors, "playableImage"),
                 regex(patterns, "creatorUrl"),
                 regex(patterns, "scriptMediaUrl")
+        );
+    }
+
+    private static CoomerFans parseCoomerFans(JSONObject value)
+            throws ValidationException, JSONException {
+        rejectUnknown(value, set(
+                "enabled", "baseUrl", "fallbackDomains", "userAgent", "requestHeaders",
+                "refererOverride", "requestTimeoutMs", "retryCount", "routes", "selectors",
+                "imageHostSuffix"
+        ), "sources.coomerfans");
+        JSONObject routes = requiredObject(value, "routes");
+        rejectUnknown(routes, set("creatorSearch", "creatorPage"),
+                "sources.coomerfans.routes");
+        JSONObject selectors = requiredObject(value, "selectors");
+        rejectUnknown(selectors, set("creatorLinks", "profileImages"),
+                "sources.coomerfans.selectors");
+        return new CoomerFans(
+                requiredBoolean(value, "enabled"),
+                httpsBase(value, "baseUrl"),
+                httpsList(value, "fallbackDomains"),
+                userAgent(value),
+                headers(value, "requestHeaders"),
+                optionalHttpsUrl(value, "refererOverride"),
+                timeout(value, "requestTimeoutMs"),
+                retryCount(value),
+                route(routes, "creatorSearch", set("query")),
+                route(routes, "creatorPage", set("service", "id", "username", "page")),
+                selector(selectors, "creatorLinks"),
+                selector(selectors, "profileImages"),
+                host(value, "imageHostSuffix")
         );
     }
 
@@ -656,6 +693,63 @@ final class SourceConfig {
             this.mediaLinksSelector = mediaLinksSelector; this.playableVideoSelector = playableVideoSelector;
             this.playableImageSelector = playableImageSelector; this.creatorUrlPattern = creatorUrlPattern;
             this.scriptMediaUrlPattern = scriptMediaUrlPattern;
+        }
+    }
+
+    static final class CoomerFans {
+        final boolean enabled;
+        final String baseUrl, userAgent, refererOverride, creatorSearchRoute,
+                creatorPageRoute, creatorLinksSelector, profileImagesSelector, imageHostSuffix;
+        final List<String> fallbackDomains;
+        final Map<String, String> requestHeaders;
+        final int requestTimeoutMs, retryCount;
+
+        CoomerFans(
+                boolean enabled,
+                String baseUrl,
+                List<String> fallbackDomains,
+                String userAgent,
+                Map<String, String> requestHeaders,
+                String refererOverride,
+                int requestTimeoutMs,
+                int retryCount,
+                String creatorSearchRoute,
+                String creatorPageRoute,
+                String creatorLinksSelector,
+                String profileImagesSelector,
+                String imageHostSuffix
+        ) {
+            this.enabled = enabled;
+            this.baseUrl = baseUrl;
+            this.fallbackDomains = fallbackDomains;
+            this.userAgent = userAgent;
+            this.requestHeaders = requestHeaders;
+            this.refererOverride = refererOverride;
+            this.requestTimeoutMs = requestTimeoutMs;
+            this.retryCount = retryCount;
+            this.creatorSearchRoute = creatorSearchRoute;
+            this.creatorPageRoute = creatorPageRoute;
+            this.creatorLinksSelector = creatorLinksSelector;
+            this.profileImagesSelector = profileImagesSelector;
+            this.imageHostSuffix = imageHostSuffix;
+        }
+
+        static CoomerFans disabled() {
+            return new CoomerFans(
+                    false,
+                    "https://coomerfans.com/",
+                    Collections.emptyList(),
+                    "",
+                    Collections.emptyMap(),
+                    "",
+                    6_000,
+                    0,
+                    "?q={query}",
+                    "u/{service}/{id}/{username}?page={page}",
+                    "a[href^=/u/]",
+                    "div.post img[src]",
+                    "coomerfans.com"
+            );
         }
     }
 

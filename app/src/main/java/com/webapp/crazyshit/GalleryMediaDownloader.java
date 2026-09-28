@@ -40,7 +40,8 @@ final class GalleryMediaDownloader {
         if (!item.isImage()) return;
 
         String mediaUrl = value(resolvedUrl);
-        if (mediaUrl.isEmpty() && isOnlyHavenDirectImage(item)) {
+        if (mediaUrl.isEmpty() &&
+                (isOnlyHavenDirectImage(item) || isCoomerFansDirectImage(item))) {
             mediaUrl = value(item.url);
         }
         String referer = value(requestReferer);
@@ -173,6 +174,9 @@ final class GalleryMediaDownloader {
         if (isOnlyHavenDirectImage(item) && !value(item.uploader).isEmpty()) {
             return value(item.uploader);
         }
+        if (isCoomerFansDirectImage(item) && !value(item.uploader).isEmpty()) {
+            return value(item.uploader);
+        }
         return value(item.url);
     }
 
@@ -181,6 +185,12 @@ final class GalleryMediaDownloader {
                 && item.isImage()
                 && OnlyHavenRepository.isOnlyHavenUrl(item.url)
                 && OnlyHavenRepository.isDirectImageUrl(item.url);
+    }
+
+    private static boolean isCoomerFansDirectImage(NativeContentItem item) {
+        return item != null
+                && item.isImage()
+                && CoomerFansRepository.isDirectImageUrl(item.url);
     }
 
     private static boolean isOnlyHavenDirectVideo(NativeContentItem item) {

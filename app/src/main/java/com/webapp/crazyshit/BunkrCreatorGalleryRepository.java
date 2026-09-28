@@ -34,6 +34,10 @@ final class BunkrCreatorGalleryRepository {
     private static final int ONLYHAVEN_CREATORS_PER_BATCH = 2;
     private static final int ONLYHAVEN_CREATOR_LIMIT = 4;
     private static final int ONLYHAVEN_PAGE_SIZE = 36;
+    private static final int COOMERFANS_PAGE_SIZE = 24;
+    private static final int COOMERFANS_IMMEDIATE_THRESHOLD = 24;
+    private static final int COOMERFANS_FILL_LIMIT = 96;
+    private static final int COOMERFANS_MAX_PAGES = 4;
     private static final int MAX_MERGED_DISCOVERY_QUERIES = 8;
     private static final int MERGED_SOURCE_LIMIT = 2;
     private static final int MAX_FAPELLO_PAGES = 250;
@@ -461,8 +465,15 @@ final class BunkrCreatorGalleryRepository {
             }
         }
 
+        ArrayList<NativeContentItem> coomerFansResult =
+                loadCoomerFansFallback(appContext, state);
+        if (!coomerFansResult.isEmpty()) {
+            publishNew(coomerFansResult, 0, listener, progressiveResult);
+        }
+
         ArrayList<NativeContentItem> result = listener == null
-                ? interleave(bunkrResult, fapelloResult, onlyHavenResult, wikiFeetResult)
+                ? interleave(bunkrResult, fapelloResult, onlyHavenResult, wikiFeetResult,
+                        coomerFansResult)
                 : progressiveResult;
 
         if (state.loadedMediaUrls.size() >= MAX_MEDIA_ITEMS) {
@@ -768,6 +779,67 @@ final class BunkrCreatorGalleryRepository {
         }
     }
 
+    private ArrayList<NativeContentItem> loadCoomerFansFallback(
+            Context context,
+            State state
+    ) {
+        ArrayList<NativeContentItem> result = new ArrayList<>();
+        if (state == null || state.loadedMediaUrls.size() >= COOMERFANS_FILL_LIMIT ||
+                state.coomerFansDone) return result;
+
+        boolean primaryDone = state.primaryFinished();
+        if (!state.coomerFansAttempted &&
+                state.loadedMediaUrls.size() >= COOMERFANS_IMMEDIATE_THRESHOLD &&
+                !primaryDone) {
+            return result;
+        }
+
+        try {
+            if (!state.coomerFansAttempted) {
+                state.coomerFansAttempted = true;
+                List<CoomerFansRepository.Creator> creators =
+                        new CoomerFansRepository().searchCreators(context, state.query, 1);
+                if (creators == null || creators.isEmpty()) {
+                    state.coomerFansDone = true;
+                    return result;
+                }
+                state.coomerFansCreator = creators.get(0);
+            }
+            if (state.coomerFansCreator == null) {
+                state.coomerFansDone = true;
+                return result;
+            }
+
+            CoomerFansRepository.ImagePage page =
+                    new CoomerFansRepository().fetchCreatorImages(
+                            context,
+                            state.coomerFansCreator,
+                            state.coomerFansPage,
+                            COOMERFANS_PAGE_SIZE
+                    );
+            if (page == null || page.items == null) {
+                state.coomerFansDone = true;
+                return result;
+            }
+            for (NativeContentItem item : page.items) {
+                if (item == null || !item.isImage() || item.url == null || item.url.isEmpty() ||
+                        !state.loadedMediaUrls.add(item.url)) continue;
+                result.add(item);
+                if (state.loadedMediaUrls.size() >= COOMERFANS_FILL_LIMIT) break;
+            }
+            if (!page.hasNext || result.isEmpty() ||
+                    state.coomerFansPage >= COOMERFANS_MAX_PAGES ||
+                    state.loadedMediaUrls.size() >= COOMERFANS_FILL_LIMIT) {
+                state.coomerFansDone = true;
+            } else {
+                state.coomerFansPage++;
+            }
+        } catch (IOException ignored) {
+            state.coomerFansDone = true;
+        }
+        return result;
+    }
+
     private IOException loadWikiFeetCatalog(Context context, State state) {
         LinkedHashMap<Future<List<WikiFeetRepository.Creator>>, WikiFeetRepository.Site> requests =
                 new LinkedHashMap<>();
@@ -1034,16 +1106,21 @@ final class BunkrCreatorGalleryRepository {
             List<NativeContentItem> bunkr,
             List<NativeContentItem> fapello,
             List<NativeContentItem> onlyHaven,
-            List<NativeContentItem> wikiFeet
+            List<NativeContentItem> wikiFeet,
+            List<NativeContentItem> coomerFans
     ) {
         ArrayList<NativeContentItem> result = new ArrayList<>();
-        int count = Math.max(Math.max(size(bunkr), size(fapello)),
-                Math.max(size(onlyHaven), size(wikiFeet)));
+        int count = Math.max(
+                Math.max(Math.max(size(bunkr), size(fapello)),
+                        Math.max(size(onlyHaven), size(wikiFeet))),
+                size(coomerFans)
+        );
         for (int i = 0; i < count; i++) {
             addAt(result, bunkr, i);
             addAt(result, fapello, i);
             addAt(result, onlyHaven, i);
             addAt(result, wikiFeet, i);
+            addAt(result, coomerFans, i);
         }
         return result;
     }
@@ -1435,6 +1512,10 @@ final class BunkrCreatorGalleryRepository {
         boolean wikiFeetCatalogLoaded;
         boolean wikiFeetXCatalogLoaded;
         boolean onlyHavenCatalogLoaded;
+        boolean coomerFansAttempted;
+        boolean coomerFansDone;
+        int coomerFansPage = 1;
+        CoomerFansRepository.Creator coomerFansCreator;
         FapelloSourceException lastFapelloFailure;
 
         State(String query) {
@@ -1442,13 +1523,19 @@ final class BunkrCreatorGalleryRepository {
             if (this.query.length() >= 2) discoveryQueries.add(this.query);
         }
 
-        boolean finished() {
+        boolean primaryFinished() {
             boolean mergedBunkrReady = discoveryQueries.size() <= 1 || mergedBunkrCatalogLoaded;
             return mergedBunkrReady && searchFinished && pending.isEmpty() &&
                     fapelloCatalogLoaded && fapelloPending.isEmpty() &&
                     wikiFeetCatalogLoaded && wikiFeetXCatalogLoaded &&
                     wikiFeetPending.isEmpty() &&
                     onlyHavenCatalogLoaded && onlyHavenPending.isEmpty();
+        }
+
+        boolean finished() {
+            boolean coomerFansSatisfied = loadedMediaUrls.size() >= COOMERFANS_FILL_LIMIT ||
+                    coomerFansDone;
+            return primaryFinished() && coomerFansSatisfied;
         }
     }
 
