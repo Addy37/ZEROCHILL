@@ -191,10 +191,7 @@ public final class CreatorsActivity extends Activity {
         PopupMenu menu = new PopupMenu(this, anchor);
         if (group.manual) {
             menu.getMenu().add("Merged creators").setOnMenuItemClickListener(item -> {
-                new android.app.AlertDialog.Builder(this).setTitle("Merged creators")
-                        .setMessage(android.text.TextUtils.join("\n", group.members.values().stream()
-                                .map(member -> member.title).toArray()))
-                        .setPositiveButton("Done", null).show();
+                CreatorMergeSheet.showMembers(this, group.members);
                 return true;
             });
             menu.getMenu().add("Change primary").setOnMenuItemClickListener(item -> {

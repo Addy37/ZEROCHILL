@@ -27,6 +27,17 @@ final class CreatorMergeSheet {
 
     static void show(Activity activity, String title, Map<String, NativeContentItem> members,
                      String defaultName, String defaultAvatar, String action, Selection confirm) {
+        showInternal(activity, title, members, defaultName, defaultAvatar, action, confirm, false);
+    }
+
+    static void showMembers(Activity activity, Map<String, NativeContentItem> members) {
+        if (members.isEmpty()) return;
+        String first = members.keySet().iterator().next();
+        showInternal(activity, "Merged creators", members, first, first, "Done", (name, avatar) -> {}, true);
+    }
+
+    private static void showInternal(Activity activity, String title, Map<String, NativeContentItem> members,
+                     String defaultName, String defaultAvatar, String action, Selection confirm, boolean readOnly) {
         if (activity.isFinishing() || activity.isDestroyed() || members.size() < 2) return;
         String[] name = {members.containsKey(defaultName) ? defaultName : members.keySet().iterator().next()};
         String[] avatar = {members.containsKey(defaultAvatar) ? defaultAvatar : name[0]};
@@ -44,8 +55,9 @@ final class CreatorMergeSheet {
         TextView heading = label(activity, title, 20, Color.WHITE);
         heading.setTypeface(null, android.graphics.Typeface.BOLD);
         panel.addView(heading);
-        TextView hint = label(activity,
-                "Tap a name for the primary identity. Tap an avatar to choose its saved artwork.",
+        TextView hint = label(activity, readOnly
+                ? "These saved identities display as one creator."
+                : "Tap a name for the primary identity. Tap an avatar to choose its saved artwork.",
                 13, Color.rgb(169, 181, 193));
         hint.setPadding(0, dp(activity, 6), 0, dp(activity, 14));
         panel.addView(hint);
@@ -64,7 +76,7 @@ final class CreatorMergeSheet {
                 row.setGravity(Gravity.CENTER_VERTICAL);
                 row.setPadding(dp(activity, 10), dp(activity, 8), dp(activity, 10), dp(activity, 8));
                 row.setBackground(background(activity, Color.rgb(23, 28, 34), 16,
-                        key.equals(name[0]) ? dp(activity, 1) : 0));
+                        !readOnly && key.equals(name[0]) ? dp(activity, 1) : 0));
                 ImageView picture = new ImageView(activity);
                 picture.setScaleType(ImageView.ScaleType.CENTER_CROP);
                 picture.setBackgroundColor(Color.rgb(28, 33, 39));
@@ -78,15 +90,15 @@ final class CreatorMergeSheet {
                         .onlyRetrieveFromCache(true)
                         .circleCrop().dontAnimate().error(R.drawable.ic_more_account).into(picture);
                 row.addView(picture, new LinearLayout.LayoutParams(dp(activity, 48), dp(activity, 48)));
-                picture.setOnClickListener(v -> { if (!item.imageUrl.isEmpty()) {
+                if (!readOnly) picture.setOnClickListener(v -> { if (!item.imageUrl.isEmpty()) {
                     avatar[0] = key; redraw[0].run();
                 }});
-                TextView text = label(activity, item.title + (key.equals(name[0]) ? "  ·  Primary" : "")
-                        + (key.equals(avatar[0]) && !item.imageUrl.isEmpty() ? "  ·  Avatar" : ""),
+                TextView text = label(activity, item.title + (!readOnly && key.equals(name[0]) ? "  ·  Primary" : "")
+                        + (!readOnly && key.equals(avatar[0]) && !item.imageUrl.isEmpty() ? "  ·  Avatar" : ""),
                         14, Color.WHITE);
                 text.setPadding(dp(activity, 12), 0, 0, 0);
                 row.addView(text, new LinearLayout.LayoutParams(0, -2, 1));
-                row.setOnClickListener(v -> { name[0] = key; redraw[0].run(); });
+                if (!readOnly) row.setOnClickListener(v -> { name[0] = key; redraw[0].run(); });
                 LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, -2);
                 params.bottomMargin = dp(activity, 7);
                 choices.addView(row, params);
@@ -98,7 +110,7 @@ final class CreatorMergeSheet {
         TextView cancel = label(activity, "Cancel", 14, Color.rgb(190, 200, 209));
         cancel.setPadding(dp(activity, 17), dp(activity, 14), dp(activity, 17), dp(activity, 14));
         cancel.setOnClickListener(v -> dialog.dismiss());
-        buttons.addView(cancel);
+        if (!readOnly) buttons.addView(cancel);
         TextView accept = label(activity, action, 14, Color.WHITE);
         accept.setTypeface(null, android.graphics.Typeface.BOLD);
         accept.setPadding(dp(activity, 22), dp(activity, 12), dp(activity, 22), dp(activity, 12));
