@@ -23,9 +23,11 @@ public class ManualCreatorMergeTest {
 
     @Before public void clean() {
         context.getSharedPreferences("manual_creator_merges_v1", 0).edit().clear().commit();
+        context.getSharedPreferences("creator_avatar_overrides_v1", 0).edit().clear().commit();
         context.getSharedPreferences("creator_favorites", 0).edit().clear().commit();
         context.getSharedPreferences(CreatorCatalog.PREFS, 0).edit().clear().commit();
         ManualCreatorMergeStore.clearCacheForTest();
+        CreatorAvatarOverrideStore.clearCacheForTest();
     }
 
     private NativeContentItem creator(String name, String image) {
