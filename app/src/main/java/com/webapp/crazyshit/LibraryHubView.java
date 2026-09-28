@@ -214,7 +214,6 @@ final class LibraryHubView extends ScrollView {
         int count = Math.min(14, creators.size());
         for (int i = 0; i < count; i++) {
             NativeContentItem creator = creators.get(i);
-            CreatorGalleryPreloader.warm(activity, creator);
             rail.addView(creatorCard(creator), creatorRailParams(i == count - 1));
         }
     }
@@ -587,6 +586,7 @@ final class LibraryHubView extends ScrollView {
         try {
             Glide.with(image)
                     .load(remoteImage(url, clean(creator.url)))
+                    .onlyRetrieveFromCache(true)
                     .circleCrop()
                     .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
                     .dontAnimate()
