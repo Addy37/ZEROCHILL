@@ -950,10 +950,32 @@ public final class ChaosFeedView extends FrameLayout {
         maintenanceResolveIssued = false;
     }
 
+    static boolean shouldQueueWarmPlayer(
+            boolean active,
+            boolean hostResumed,
+            boolean userPaging,
+            boolean allowsLookAhead,
+            int position,
+            int selectedPosition
+    ) {
+        return active && hostResumed && !userPaging && allowsLookAhead &&
+                position > selectedPosition && shouldPreparePlayer(position, selectedPosition);
+    }
+
     private void queueWarmPrepare(int position) {
-        if (!active || !hostResumed || userPaging) return;
-        if (!shouldPreparePlayer(position, selectedPosition) || position == selectedPosition) return;
-        if (!ChaosPreloadPolicy.allowsLookAhead(activity)) return;
+        if (!shouldQueueWarmPlayer(
+                active,
+                hostResumed,
+                userPaging,
+                ChaosPreloadPolicy.allowsLookAhead(activity),
+                position,
+                selectedPosition)) {
+            return;
+        }
+        if (maintenancePosition != selectedPosition) {
+            maintenancePosition = selectedPosition;
+            maintenanceResolveIssued = false;
+        }
         if (!pendingWarmPreparePositions.contains(position)) {
             pendingWarmPreparePositions.addLast(position);
         }
@@ -1068,6 +1090,7 @@ public final class ChaosFeedView extends FrameLayout {
         deferredPlayerReleases.addLast(player);
         if (active && hostResumed && !userPaging &&
                 pager.getScrollState() == ViewPager2.SCROLL_STATE_IDLE) {
+            maintenancePosition = selectedPosition;
             removeCallbacks(playerReleaseMaintenanceRunnable);
             postDelayed(playerReleaseMaintenanceRunnable, SWIPE_RELEASE_IDLE_DELAY_MS);
         }
