@@ -163,13 +163,92 @@ public class UpdateInboxStoreTest {
         assertEquals(2, UpdateInboxStore.unreadCreatorContentCount(
                 app, Arrays.asList("Emily Rinaudo")
         ));
+        assertEquals(
+                Arrays.asList(
+                        "https://fapello.com/video/emily-rinaudo/1/",
+                        "https://fapello.com/video/emily-rinaudo/2/"
+                ),
+                UpdateInboxStore.unreadCreatorFreshUrls(
+                        app, Arrays.asList("Emily Rinaudo")
+                )
+        );
 
         UpdateInboxStore.markCreatorRead(app, Arrays.asList("Emily Rinaudo"));
 
         assertEquals(0, UpdateInboxStore.unreadCreatorContentCount(
                 app, Arrays.asList("Emily Rinaudo")
         ));
+        assertTrue(UpdateInboxStore.unreadCreatorFreshUrls(
+                app, Arrays.asList("Emily Rinaudo")
+        ).isEmpty());
         assertEquals(0, UpdateInboxStore.unreadCount(app));
+    }
+
+    @Test
+    public void mergedCreatorAliasesReturnAllUnreadFreshUrls() {
+        NativeContentItem firstFavorite = new NativeContentItem(
+                NativeContentItem.KIND_CREATOR,
+                "Creator One",
+                "https://fapello.com/creator-one/",
+                "",
+                "",
+                "",
+                "",
+                "Fapello",
+                "Creator One"
+        );
+        NativeContentItem secondFavorite = new NativeContentItem(
+                NativeContentItem.KIND_CREATOR,
+                "Creator Two",
+                "https://fapello.com/creator-two/",
+                "",
+                "",
+                "",
+                "",
+                "Fapello",
+                "Creator Two"
+        );
+        CreatorFavoriteStore.toggle(app, firstFavorite);
+        CreatorFavoriteStore.toggle(app, secondFavorite);
+
+        NativeContentItem first = new NativeContentItem(
+                NativeContentItem.KIND_MEDIA,
+                "Creator One update",
+                "https://fapello.com/video/creator-one/10/",
+                "",
+                "",
+                "Creator One",
+                "",
+                "Fapello"
+        );
+        NativeContentItem second = new NativeContentItem(
+                NativeContentItem.KIND_MEDIA,
+                "Creator Two update",
+                "https://fapello.com/video/creator-two/20/",
+                "",
+                "",
+                "Creator Two",
+                "",
+                "Fapello"
+        );
+        UpdateInboxStore.record(app, Arrays.asList(
+                new NotificationCoordinator.SourceAlert(
+                        "fapello", "Fapello", Arrays.asList(first, second)
+                )
+        ));
+
+        List<String> aliases = Arrays.asList("Creator One", "Creator Two");
+        assertEquals(2, UpdateInboxStore.unreadCreatorContentCount(app, aliases));
+        assertEquals(
+                Arrays.asList(
+                        "https://fapello.com/video/creator-one/10/",
+                        "https://fapello.com/video/creator-two/20/"
+                ),
+                UpdateInboxStore.unreadCreatorFreshUrls(app, aliases)
+        );
+
+        UpdateInboxStore.markCreatorRead(app, aliases);
+        assertTrue(UpdateInboxStore.unreadCreatorFreshUrls(app, aliases).isEmpty());
     }
 
     @Test
