@@ -39,9 +39,25 @@ final class CreatorCatalog {
 
     static List<NativeContentItem> matching(Context context, String query, boolean favoritesOnly, int limit) {
         Set<String> favorites = CreatorFavoriteStore.names(context);
+        List<NativeContentItem> candidates;
+        if (favoritesOnly) {
+            ArrayList<NativeContentItem> seeds = new ArrayList<>();
+            for (String favorite : favorites) {
+                seeds.add(new NativeContentItem(NativeContentItem.KIND_CREATOR,
+                        favorite, "", "", "", "", "", "", favorite));
+            }
+            candidates = OnlyFapCreatorResults.merge(
+                    seeds,
+                    all(context),
+                    5000,
+                    BundledCreatorIndex.get(context.getApplicationContext()));
+        } else {
+            candidates = all(context);
+        }
+
         ArrayList<NativeContentItem> result = new ArrayList<>();
-        for (NativeContentItem item : all(context)) {
-            if (favoritesOnly && !favorites.contains(CreatorFavoriteStore.key(item))) continue;
+        for (NativeContentItem item : candidates) {
+            if (favoritesOnly && !CreatorFavoriteStore.contains(context, item)) continue;
             if (CreatorNameMatcher.rank(item.title, query) != Integer.MAX_VALUE
                     || CreatorNameMatcher.rank(item.searchQuery, query) != Integer.MAX_VALUE) result.add(item);
         }
@@ -51,7 +67,7 @@ final class CreatorCatalog {
         else result.sort(Comparator.<NativeContentItem>comparingInt(
                         item -> Math.min(CreatorNameMatcher.rank(item.title, query),
                                 CreatorNameMatcher.rank(item.searchQuery, query)))
-                .thenComparingInt(item -> favorites.contains(CreatorFavoriteStore.key(item)) ? 0 : 1)
+                .thenComparingInt(item -> CreatorFavoriteStore.contains(context, item) ? 0 : 1)
                 .thenComparing(names));
         return result.size() > limit ? new ArrayList<>(result.subList(0, limit)) : result;
     }
