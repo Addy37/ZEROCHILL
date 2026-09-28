@@ -331,9 +331,19 @@ final class CoomerFansRepository {
     }
 
     static boolean isDirectImageUrl(String value) {
-        if (!isCoomerFansUrl(value)) return false;
-        String lower = cleanStatic(value).toLowerCase(Locale.US);
-        return lower.matches(".*\\.(?:jpg|jpeg|png|webp|gif|avif)(?:\\?.*)?$");
+        try {
+            URI uri = new URI(cleanStatic(value));
+            if (!"https".equalsIgnoreCase(uri.getScheme()) || uri.getHost() == null) return false;
+            String host = uri.getHost().toLowerCase(Locale.US);
+            if (host.matches("img\\d+\\.coomerfans\\.com")) return true;
+            SourceConfig current = RemoteSourceConfigManager.snapshotOrNull();
+            if (current == null || current.coomerFans == null) return false;
+            String suffix = cleanStatic(current.coomerFans.imageHostSuffix).toLowerCase(Locale.US);
+            return !suffix.isEmpty() &&
+                    host.matches("img\\d+\\." + java.util.regex.Pattern.quote(suffix));
+        } catch (Exception ignored) {
+            return false;
+        }
     }
 
     private static boolean isImageCdnUrl(SourceConfig.CoomerFans config, String value) {

@@ -96,6 +96,7 @@ public final class CoomerFansRepositoryTest {
         Document document = Jsoup.parse(
                 "<div class='post'><img src='https://img5.coomerfans.com/a/photo-one.jpg'></div>" +
                         "<div class='post'><img src='https://img10.coomerfans.com/b/photo-two.webp'></div>" +
+                        "<div class='post'><img src='https://img3.coomerfans.com/c/opaque-media-id'></div>" +
                         "<div class='post'><img src='https://evil.example/not-allowed.jpg'></div>" +
                         "<div class='post'><img src='https://img5.coomerfans.com/avatar/user.jpg'></div>",
                 creator.url
@@ -104,7 +105,7 @@ public final class CoomerFansRepositoryTest {
         ArrayList<NativeContentItem> items =
                 repository.parseCreatorImages(document, config, creator, 24);
 
-        assertEquals(2, items.size());
+        assertEquals(3, items.size());
         assertTrue(items.get(0).isImage());
         assertEquals(creator.url, items.get(0).uploader);
         assertTrue(items.get(0).description.contains("CoomerFans"));
