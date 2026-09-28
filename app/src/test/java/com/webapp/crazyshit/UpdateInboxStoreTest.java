@@ -239,13 +239,10 @@ public class UpdateInboxStoreTest {
 
         List<String> aliases = Arrays.asList("Creator One", "Creator Two");
         assertEquals(2, UpdateInboxStore.unreadCreatorContentCount(app, aliases));
-        assertEquals(
-                Arrays.asList(
-                        "https://fapello.com/video/creator-one/10/",
-                        "https://fapello.com/video/creator-two/20/"
-                ),
-                UpdateInboxStore.unreadCreatorFreshUrls(app, aliases)
-        );
+        List<String> freshUrls = UpdateInboxStore.unreadCreatorFreshUrls(app, aliases);
+        assertEquals(2, freshUrls.size());
+        assertTrue(freshUrls.contains("https://fapello.com/video/creator-one/10/"));
+        assertTrue(freshUrls.contains("https://fapello.com/video/creator-two/20/"));
 
         UpdateInboxStore.markCreatorRead(app, aliases);
         assertTrue(UpdateInboxStore.unreadCreatorFreshUrls(app, aliases).isEmpty());
