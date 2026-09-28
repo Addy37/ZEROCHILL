@@ -71,13 +71,20 @@ final class CreatorCatalog {
         final LinkedHashMap<String, NativeContentItem> members;
         final Set<String> relationshipKeys;
         final boolean manual;
+        final boolean customAvatar;
 
         FavoriteGroup(NativeContentItem item, LinkedHashMap<String, NativeContentItem> members,
                       Set<String> relationshipKeys, boolean manual) {
+            this(item, members, relationshipKeys, manual, false);
+        }
+
+        FavoriteGroup(NativeContentItem item, LinkedHashMap<String, NativeContentItem> members,
+                      Set<String> relationshipKeys, boolean manual, boolean customAvatar) {
             this.item = item;
             this.members = members;
             this.relationshipKeys = relationshipKeys;
             this.manual = manual;
+            this.customAvatar = customAvatar;
         }
     }
 
@@ -162,7 +169,8 @@ final class CreatorCatalog {
                     display,
                     group.members,
                     group.relationshipKeys,
-                    group.manual
+                    group.manual,
+                    true
             ));
         }
         groups.sort(Comparator.comparing(group -> CreatorNameMatcher.normalized(group.item.title)));
