@@ -148,6 +148,72 @@ public class CreatorAvatarOverrideTest {
     }
 
     @Test
+    public void croppedAvatarPersistsFocusAndZoom() {
+        assertTrue(CreatorAvatarOverrideStore.save(
+                context,
+                keys("anna"),
+                "https://cdn.example.com/custom.jpg",
+                "https://fapello.com/anna/",
+                0.27f,
+                0.72f,
+                2.4f
+        ));
+
+        CreatorAvatarOverrideStore.clearCacheForTest();
+        CreatorAvatarOverrideStore.Override stored = CreatorAvatarOverrideStore.find(
+                CreatorAvatarOverrideStore.load(context),
+                keys("anna")
+        );
+
+        assertNotNull(stored);
+        assertEquals(0.27f, stored.focusX, 0.0001f);
+        assertEquals(0.72f, stored.focusY, 0.0001f);
+        assertEquals(2.4f, stored.zoom, 0.0001f);
+    }
+
+    @Test
+    public void legacyAvatarSaveDefaultsToCenteredCrop() {
+        assertTrue(CreatorAvatarOverrideStore.save(
+                context,
+                keys("anna"),
+                "https://cdn.example.com/custom.jpg",
+                "https://fapello.com/anna/"
+        ));
+
+        CreatorAvatarOverrideStore.Override stored = CreatorAvatarOverrideStore.find(
+                CreatorAvatarOverrideStore.load(context),
+                keys("anna")
+        );
+
+        assertNotNull(stored);
+        assertEquals(CreatorAvatarOverrideStore.DEFAULT_FOCUS, stored.focusX, 0.0001f);
+        assertEquals(CreatorAvatarOverrideStore.DEFAULT_FOCUS, stored.focusY, 0.0001f);
+        assertEquals(CreatorAvatarOverrideStore.DEFAULT_ZOOM, stored.zoom, 0.0001f);
+    }
+
+    @Test
+    public void invalidCropValuesAreRejected() {
+        assertFalse(CreatorAvatarOverrideStore.save(
+                context,
+                keys("anna"),
+                "https://cdn.example.com/custom.jpg",
+                "",
+                -0.1f,
+                0.5f,
+                1f
+        ));
+        assertFalse(CreatorAvatarOverrideStore.save(
+                context,
+                keys("anna"),
+                "https://cdn.example.com/custom.jpg",
+                "",
+                0.5f,
+                0.5f,
+                CreatorAvatarOverrideStore.MAX_ZOOM + 1f
+        ));
+    }
+
+    @Test
     public void invalidRemoteAvatarIsRejected() {
         assertFalse(CreatorAvatarOverrideStore.save(
                 context,
