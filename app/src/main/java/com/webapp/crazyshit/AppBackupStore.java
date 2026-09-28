@@ -8,6 +8,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -17,8 +18,34 @@ final class AppBackupStore {
     static JSONObject export(Context context) throws Exception {
         JSONObject document = new JSONObject().put("format", "crazyshit-backup").put("version", 1)
                 .put("createdAt", System.currentTimeMillis()).put("appVersion", BuildConfig.VERSION_NAME);
+        ArrayList<NativeContentItem> creatorBackups = new ArrayList<>();
+        ArrayList<String> savedCreatorKeys = new ArrayList<>(CreatorFavoriteStore.names(context));
+        java.util.Collections.sort(savedCreatorKeys);
+        List<NativeContentItem> enrichedCreators = CreatorCatalog.matching(
+                context, "", true, BackupDocument.MAX_ITEMS + 1);
+        for (String savedKey : savedCreatorKeys) {
+            String logical = CreatorFavoriteStore.logicalKey(context, savedKey);
+            NativeContentItem enriched = null;
+            for (NativeContentItem candidate : enrichedCreators) {
+                if (logical.equals(CreatorFavoriteStore.logicalKey(context, candidate))) {
+                    enriched = candidate;
+                    break;
+                }
+            }
+            creatorBackups.add(new NativeContentItem(
+                    NativeContentItem.KIND_CREATOR,
+                    savedKey,
+                    enriched == null ? "" : enriched.url,
+                    enriched == null ? "" : enriched.imageUrl,
+                    "",
+                    enriched == null ? "" : enriched.uploader,
+                    "",
+                    "",
+                    savedKey
+            ));
+        }
         document.put("creators", ContentItemCodec.encodeList(
-                CreatorCatalog.matching(context, "", true, BackupDocument.MAX_ITEMS + 1), BackupDocument.MAX_ITEMS + 1));
+                creatorBackups, BackupDocument.MAX_ITEMS + 1));
         JSONArray later = new JSONArray();
         for (FavoriteStore.Item item : FavoriteStore.load(context)) later.put(new JSONObject()
                 .put("title", item.title).put("url", item.url).put("savedAt", item.savedAt));
