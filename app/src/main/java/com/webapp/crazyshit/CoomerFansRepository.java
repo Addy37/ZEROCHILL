@@ -97,11 +97,7 @@ final class CoomerFansRepository {
             String url = absolute(link, "href", document.location());
             Creator parsed = parseCreator(url, link, document.location());
             if (parsed == null) continue;
-            String display = parsed.name;
-            if (CreatorNameMatcher.rank(display, query) == Integer.MAX_VALUE &&
-                    CreatorNameMatcher.rank(parsed.username, query) == Integer.MAX_VALUE) {
-                continue;
-            }
+            if (!matchesQuery(parsed.name, parsed.username, query)) continue;
             String key = parsed.service.toLowerCase(Locale.US) + ":" +
                     parsed.id.toLowerCase(Locale.US);
             result.putIfAbsent(key, parsed);
@@ -177,6 +173,43 @@ final class CoomerFansRepository {
         } catch (Exception ignored) {
             return null;
         }
+    }
+
+    private boolean matchesQuery(String name, String username, String query) {
+        if (CreatorNameMatcher.rank(name, query) != Integer.MAX_VALUE ||
+                CreatorNameMatcher.rank(username, query) != Integer.MAX_VALUE) {
+            return true;
+        }
+        String needle = CreatorNameMatcher.normalized(query).replace(" ", "");
+        String named = CreatorNameMatcher.normalized(name).replace(" ", "");
+        String handle = CreatorNameMatcher.normalized(username).replace(" ", "");
+        return oneEditApart(named, needle) || oneEditApart(handle, needle);
+    }
+
+    private boolean oneEditApart(String left, String right) {
+        if (left == null || right == null || left.length() < 5 || right.length() < 5 ||
+                Math.abs(left.length() - right.length()) > 1) {
+            return false;
+        }
+        int i = 0;
+        int j = 0;
+        int edits = 0;
+        while (i < left.length() && j < right.length()) {
+            if (left.charAt(i) == right.charAt(j)) {
+                i++;
+                j++;
+                continue;
+            }
+            if (++edits > 1) return false;
+            if (left.length() > right.length()) i++;
+            else if (right.length() > left.length()) j++;
+            else {
+                i++;
+                j++;
+            }
+        }
+        if (i < left.length() || j < right.length()) edits++;
+        return edits <= 1;
     }
 
     private boolean hasNextPage(Document document, int page) {

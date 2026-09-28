@@ -55,6 +55,20 @@ public final class CoomerFansRepositoryTest {
                 creators.get(0).url);
     }
 
+    @Test public void creatorSearchAllowsOneCharacterHandleAlias() {
+        Document document = Jsoup.parse(
+                "<section><div class='thumb'><a href='/u/onlyfans/456/sophieraiin'>" +
+                        "<span>sophieraiin</span></a></div></section>",
+                "https://coomerfans.com/?q=Sophie%20Rain"
+        );
+
+        List<CoomerFansRepository.Creator> creators =
+                repository.parseCreators(document, config, "Sophie Rain", 1);
+
+        assertEquals(1, creators.size());
+        assertEquals("sophieraiin", creators.get(0).username);
+    }
+
     @Test public void profileParserKeepsOnlyCoomerFansImages() {
         CoomerFansRepository.Creator creator = new CoomerFansRepository.Creator(
                 "onlyfans",
