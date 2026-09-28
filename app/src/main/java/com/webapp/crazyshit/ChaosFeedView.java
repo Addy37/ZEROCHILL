@@ -99,6 +99,7 @@ public final class ChaosFeedView extends FrameLayout {
     private static final long STREAM_RETRY_DELAY_MS = 450L;
     private static final long FAILED_CLIP_SKIP_DELAY_MS = 1200L;
     private static final long SWIPE_PREPARE_IDLE_DELAY_MS = 60L;
+    private static final long SWIPE_PREPARE_STAGGER_MS = 120L;
     private static final long SWIPE_RELEASE_IDLE_DELAY_MS = 360L;
     private static final long SWIPE_RELEASE_STAGGER_MS = 120L;
     private static final int SHITTOK_MAX_VIDEO_WIDTH = 1920;
@@ -131,6 +132,8 @@ public final class ChaosFeedView extends FrameLayout {
     private final Set<String> resolveRetried = new HashSet<>();
     private final Set<ChaosHolder> playerHolders =
             Collections.newSetFromMap(new IdentityHashMap<>());
+    private final Deque<ExoPlayer> deferredPlayerReleases = new ArrayDeque<>();
+    private final Deque<Integer> pendingWarmPreparePositions = new ArrayDeque<>();
     private final Random random = new Random();
     private final ChaosSourceMixer sourceMixer = new ChaosSourceMixer(repository, random);
     private final ShitTokAspectPriority aspectPriority = new ShitTokAspectPriority();
@@ -158,6 +161,7 @@ public final class ChaosFeedView extends FrameLayout {
     private boolean userPaging;
     private int creatorWarmAheadPosition = -1;
     private int maintenancePosition = -1;
+    private boolean maintenanceResolveIssued;
     private final Runnable saveRecentRunnable = this::saveRecentNow;
     private final Runnable creatorWarmAheadRunnable = this::warmNextCreatorGallery;
     private final Runnable playerPrepareMaintenanceRunnable = this::runDeferredPrepareMaintenance;
@@ -848,10 +852,13 @@ public final class ChaosFeedView extends FrameLayout {
         CrazyShitRepository.StreamInfo stream = streamCache.get(item.url);
         if (stream != null) {
             holder.noteResolutionRetryIfNeeded(resolveRetried.contains(item.url));
-            if (shouldPreparePlayer(position, selectedPosition)) {
-                holder.prepare(stream, active && hostResumed && position == selectedPosition);
+            if (position == selectedPosition) {
+                holder.prepare(stream, true);
+            } else if (shouldPreparePlayer(position, selectedPosition)
+                    && ChaosPreloadPolicy.allowsLookAhead(activity)) {
+                queueWarmPrepare(position);
             } else {
-                holder.releasePlayer();
+                holder.detachPlayerForDeferredRelease();
             }
         } else if (unplayable.contains(item.url)) {
             holder.showResolutionFailureAndSkip(resolveRetried.contains(item.url));
@@ -894,6 +901,8 @@ public final class ChaosFeedView extends FrameLayout {
     private void scheduleSwipePlayerMaintenance(int position) {
         cancelSwipePlayerMaintenance();
         maintenancePosition = position;
+        maintenanceResolveIssued = false;
+        pendingWarmPreparePositions.clear();
         if (!shouldRunSwipeMaintenance(
                 active, hostResumed, userPaging, maintenancePosition, selectedPosition)) {
             return;
@@ -905,6 +914,19 @@ public final class ChaosFeedView extends FrameLayout {
     private void cancelSwipePlayerMaintenance() {
         removeCallbacks(playerPrepareMaintenanceRunnable);
         removeCallbacks(playerReleaseMaintenanceRunnable);
+        pendingWarmPreparePositions.clear();
+        maintenanceResolveIssued = false;
+    }
+
+    private void queueWarmPrepare(int position) {
+        if (!active || !hostResumed || userPaging) return;
+        if (!shouldPreparePlayer(position, selectedPosition) || position == selectedPosition) return;
+        if (!ChaosPreloadPolicy.allowsLookAhead(activity)) return;
+        if (!pendingWarmPreparePositions.contains(position)) {
+            pendingWarmPreparePositions.addLast(position);
+        }
+        removeCallbacks(playerPrepareMaintenanceRunnable);
+        postDelayed(playerPrepareMaintenanceRunnable, SWIPE_PREPARE_STAGGER_MS);
     }
 
     private void runDeferredPrepareMaintenance() {
@@ -913,7 +935,36 @@ public final class ChaosFeedView extends FrameLayout {
                 active, hostResumed, userPaging, position, selectedPosition)) {
             return;
         }
-        resolveAhead(position);
+        if (!maintenanceResolveIssued) {
+            maintenanceResolveIssued = true;
+            resolveAhead(position);
+        }
+
+        Integer target = null;
+        while (!pendingWarmPreparePositions.isEmpty()) {
+            int candidate = pendingWarmPreparePositions.removeFirst();
+            if (candidate > selectedPosition &&
+                    shouldPreparePlayer(candidate, selectedPosition)) {
+                target = candidate;
+                break;
+            }
+        }
+        if (target == null) return;
+
+        ChaosHolder holder = holderAt(target);
+        if (holder != null && target < items.size()) {
+            NativeContentItem item = items.get(target);
+            CrazyShitRepository.StreamInfo stream = streamCache.get(item.url);
+            if (stream != null && holder.player == null) {
+                holder.prepare(stream, false);
+            }
+        }
+
+        if (!pendingWarmPreparePositions.isEmpty() &&
+                shouldRunSwipeMaintenance(
+                        active, hostResumed, userPaging, position, selectedPosition)) {
+            postDelayed(playerPrepareMaintenanceRunnable, SWIPE_PREPARE_STAGGER_MS);
+        }
     }
 
     private void runDeferredReleaseMaintenance() {
@@ -922,24 +973,64 @@ public final class ChaosFeedView extends FrameLayout {
                 active, hostResumed, userPaging, position, selectedPosition)) {
             return;
         }
-        boolean released = releaseOneDistantPlayer(position);
-        if (released && shouldRunSwipeMaintenance(
-                active, hostResumed, userPaging, position, selectedPosition)) {
+
+        ExoPlayer detached = deferredPlayerReleases.pollFirst();
+        if (detached != null) {
+            try {
+                detached.release();
+            } catch (Exception ignored) {
+            }
+        } else {
+            detachOneDistantPlayer(position);
+        }
+
+        if ((!deferredPlayerReleases.isEmpty() || hasDistantPlayer(position)) &&
+                shouldRunSwipeMaintenance(
+                        active, hostResumed, userPaging, position, selectedPosition)) {
             postDelayed(playerReleaseMaintenanceRunnable, SWIPE_RELEASE_STAGGER_MS);
         }
     }
 
-    private boolean releaseOneDistantPlayer(int selected) {
-        // Releasing a video decoder/surface can block the UI thread. Clean up one old holder at a
-        // time only after the pager is idle instead of stacking releases inside the swipe callback.
+    private boolean hasDistantPlayer(int selected) {
+        for (ChaosHolder holder : playerHolders) {
+            int position = holder.boundPosition;
+            if (position < 0 || !shouldPreparePlayer(position, selected)) return true;
+        }
+        return false;
+    }
+
+    private boolean detachOneDistantPlayer(int selected) {
+        // Detach a stale holder first. The expensive ExoPlayer.release() happens on a later
+        // idle slice so RecyclerView recycling and decoder teardown do not stack on one frame.
         for (ChaosHolder holder : new ArrayList<>(playerHolders)) {
             int position = holder.boundPosition;
             if (position < 0 || !shouldPreparePlayer(position, selected)) {
-                holder.releasePlayer();
+                holder.detachPlayerForDeferredRelease();
                 return true;
             }
         }
         return false;
+    }
+
+    private void enqueueDeferredPlayerRelease(ExoPlayer player) {
+        if (player == null) return;
+        deferredPlayerReleases.addLast(player);
+        if (active && hostResumed && !userPaging &&
+                pager.getScrollState() == ViewPager2.SCROLL_STATE_IDLE) {
+            removeCallbacks(playerReleaseMaintenanceRunnable);
+            postDelayed(playerReleaseMaintenanceRunnable, SWIPE_RELEASE_IDLE_DELAY_MS);
+        }
+    }
+
+    private void drainDeferredPlayerReleasesNow() {
+        removeCallbacks(playerReleaseMaintenanceRunnable);
+        while (!deferredPlayerReleases.isEmpty()) {
+            ExoPlayer player = deferredPlayerReleases.removeFirst();
+            try {
+                player.release();
+            } catch (Exception ignored) {
+            }
+        }
     }
 
     private void pauseAll() {
@@ -977,11 +1068,13 @@ public final class ChaosFeedView extends FrameLayout {
         }
 
         RecyclerView rv = pagerRecycler();
-        if (rv == null) return;
-        for (int i = 0; i < rv.getChildCount(); i++) {
-            RecyclerView.ViewHolder raw = rv.getChildViewHolder(rv.getChildAt(i));
-            if (raw instanceof ChaosHolder) ((ChaosHolder) raw).releasePlayer();
+        if (rv != null) {
+            for (int i = 0; i < rv.getChildCount(); i++) {
+                RecyclerView.ViewHolder raw = rv.getChildViewHolder(rv.getChildAt(i));
+                if (raw instanceof ChaosHolder) ((ChaosHolder) raw).releasePlayer();
+            }
         }
+        drainDeferredPlayerReleasesNow();
     }
 
     private void syncVisibleChrome() {
@@ -1433,8 +1526,11 @@ public final class ChaosFeedView extends FrameLayout {
         public void onBindViewHolder(@NonNull ChaosHolder holder, int position) {
             holder.bind(items.get(position), position);
             CrazyShitRepository.StreamInfo stream = streamCache.get(items.get(position).url);
-            if (stream != null && active && hostResumed) {
-                holder.prepare(stream, active && hostResumed && position == selectedPosition);
+            if (stream != null && active && hostResumed && position == selectedPosition) {
+                holder.prepare(stream, true);
+            } else if (stream != null && active && hostResumed &&
+                    shouldPreparePlayer(position, selectedPosition)) {
+                queueWarmPrepare(position);
             } else if (shouldResolvePosition(position)) {
                 resolveAt(position);
             }
@@ -1443,7 +1539,7 @@ public final class ChaosFeedView extends FrameLayout {
         @Override
         public void onViewRecycled(@NonNull ChaosHolder holder) {
             holder.pauseAndRecord();
-            holder.releasePlayer();
+            holder.detachPlayerForDeferredRelease();
             super.onViewRecycled(holder);
         }
 
@@ -1453,7 +1549,7 @@ public final class ChaosFeedView extends FrameLayout {
             int position = holder.getBindingAdapterPosition();
             if (!active || position == RecyclerView.NO_POSITION ||
                     Math.abs(position - selectedPosition) > 1) {
-                holder.releasePlayer();
+                holder.detachPlayerForDeferredRelease();
             }
             super.onViewDetachedFromWindow(holder);
         }
@@ -2080,7 +2176,7 @@ public final class ChaosFeedView extends FrameLayout {
 
         void bind(NativeContentItem next, int position) {
             pauseAndRecord();
-            releasePlayer();
+            detachPlayerForDeferredRelease();
             root.removeCallbacks(skipFailedClipRunnable);
             mediaLayer.animate().cancel();
             mediaLayer.setScaleX(1f);
@@ -2803,6 +2899,31 @@ public final class ChaosFeedView extends FrameLayout {
                 player.pause();
             } catch (Exception ignored) {
             }
+        }
+
+        void detachPlayerForDeferredRelease() {
+            root.removeCallbacks(hideControlsRunnable);
+            root.removeCallbacks(hideSeekBarRunnable);
+            root.removeCallbacks(skipFailedClipRunnable);
+            failurePending = false;
+            stopProgressUpdates();
+            restorePlaybackSpeed();
+            if (scrubbing) {
+                scrubbing = false;
+                pager.setUserInputEnabled(true);
+            }
+            ExoPlayer detached = player;
+            if (detached != null) {
+                try {
+                    detached.pause();
+                    playerView.setPlayer(null);
+                } catch (Exception ignored) {
+                }
+                player = null;
+                enqueueDeferredPlayerRelease(detached);
+            }
+            playerHolders.remove(this);
+            stream = null;
         }
 
         void releasePlayer() {
