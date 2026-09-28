@@ -92,7 +92,8 @@ final class GalleryMediaDownloader {
             String requestReferer
     ) {
         String mediaUrl = value(resolvedUrl);
-        if (mediaUrl.isEmpty() && isOnlyHavenDirectVideo(item)) {
+        if (mediaUrl.isEmpty() &&
+                (isOnlyHavenDirectVideo(item) || isCoomerFansDirectVideo(item))) {
             mediaUrl = value(item.url);
         }
         if (mediaUrl.isEmpty()) {
@@ -101,7 +102,11 @@ final class GalleryMediaDownloader {
         }
 
         String referer = value(requestReferer);
-        if (referer.isEmpty()) referer = value(item.url);
+        if (referer.isEmpty()) {
+            referer = isCoomerFansDirectVideo(item)
+                    ? coomerFansReferer(item)
+                    : value(item.url);
+        }
         VideoDownloadStore.downloadKnown(
                 activity,
                 item.title,
@@ -174,8 +179,9 @@ final class GalleryMediaDownloader {
         if (isOnlyHavenDirectImage(item) && !value(item.uploader).isEmpty()) {
             return value(item.uploader);
         }
-        if (isCoomerFansDirectImage(item) && !value(item.uploader).isEmpty()) {
-            return value(item.uploader);
+        if (isCoomerFansDirectImage(item)) {
+            String referer = coomerFansReferer(item);
+            if (!referer.isEmpty()) return referer;
         }
         return value(item.url);
     }
@@ -191,6 +197,19 @@ final class GalleryMediaDownloader {
         return item != null
                 && item.isImage()
                 && CoomerFansRepository.isDirectImageUrl(item.url);
+    }
+
+    private static boolean isCoomerFansDirectVideo(NativeContentItem item) {
+        return item != null
+                && item.isVideo()
+                && CoomerFansRepository.isDirectVideoUrl(item.url);
+    }
+
+    private static String coomerFansReferer(NativeContentItem item) {
+        if (item == null) return "";
+        if (CoomerFansRepository.isPostUrl(item.comments)) return value(item.comments);
+        if (CoomerFansRepository.isCoomerFansUrl(item.uploader)) return value(item.uploader);
+        return value(item.url);
     }
 
     private static boolean isOnlyHavenDirectVideo(NativeContentItem item) {

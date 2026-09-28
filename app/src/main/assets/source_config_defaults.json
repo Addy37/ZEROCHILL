@@ -274,7 +274,7 @@
       },
       "selectors": {
         "creatorLinks": "a[href^=/u/]",
-        "profileImages": "img[src],img[data-src],source[src],source[data-src],source[srcset],video[poster],a[href]"
+        "profileImages": "img[src],img[data-src],source[src],source[data-src],source[srcset],video[src],video[poster],a[href]"
       },
       "imageHostSuffix": "coomerfans.com"
     }

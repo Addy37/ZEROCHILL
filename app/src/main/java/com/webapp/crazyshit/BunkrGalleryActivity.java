@@ -576,7 +576,7 @@ public final class BunkrGalleryActivity extends Activity {
             if (!prefetch) adapter.setLoading(position, true);
             return;
         }
-        if (isOnlyHavenDirectImage(item)) {
+        if (isOnlyHavenDirectImage(item) || isCoomerFansDirectImage(item)) {
             adapter.setResolvedUrl(position, item.url);
             BunkrGallerySessionStore.setResolvedUrl(sessionId, item.url, item.url);
             if (prefetch) adapter.preloadImage(position);
@@ -627,9 +627,10 @@ public final class BunkrGalleryActivity extends Activity {
     private void preloadVideo(int position, NativeContentItem item) {
         if (resolvingMedia.contains(item.url)) return;
         String cached = adapter.resolvedUrl(position);
-        if (!cached.isEmpty() || isOnlyHavenDirectVideo(item)) {
+        if (!cached.isEmpty() || isOnlyHavenDirectVideo(item) || isCoomerFansDirectVideo(item)) {
             String url = cached.isEmpty() ? item.url : cached;
             String referer = isOnlyHavenDirectVideo(item) ? value(item.uploader)
+                    : isCoomerFansDirectVideo(item) ? coomerFansReferer(item)
                     : videoReferers.getOrDefault(item.url, item.url);
             if (warmedVideos.add(url)) warmIo.execute(() -> {
                 if (withinPreloadWindow(position)) {
@@ -709,6 +710,10 @@ public final class BunkrGalleryActivity extends Activity {
         }
         if (isOnlyHavenDirectVideo(item)) {
             startPlayer(position, item, item.url, value(item.uploader));
+            return;
+        }
+        if (isCoomerFansDirectVideo(item)) {
+            startPlayer(position, item, item.url, coomerFansReferer(item));
             return;
         }
 
@@ -1102,6 +1107,23 @@ public final class BunkrGalleryActivity extends Activity {
         return item != null && item.isImage() &&
                 OnlyHavenRepository.isOnlyHavenUrl(item.url) &&
                 OnlyHavenRepository.isDirectImageUrl(item.url);
+    }
+
+    private boolean isCoomerFansDirectImage(NativeContentItem item) {
+        return item != null && item.isImage() &&
+                CoomerFansRepository.isDirectImageUrl(item.url);
+    }
+
+    private boolean isCoomerFansDirectVideo(NativeContentItem item) {
+        return item != null && item.isVideo() &&
+                CoomerFansRepository.isDirectVideoUrl(item.url);
+    }
+
+    private String coomerFansReferer(NativeContentItem item) {
+        if (item == null) return "";
+        if (CoomerFansRepository.isPostUrl(item.comments)) return value(item.comments);
+        if (CoomerFansRepository.isCoomerFansUrl(item.uploader)) return value(item.uploader);
+        return value(item.url);
     }
 
     private boolean isOnlyHavenDirectVideo(NativeContentItem item) {

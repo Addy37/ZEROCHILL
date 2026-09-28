@@ -118,12 +118,49 @@ public final class CoomerFansRepositoryTest {
         );
 
         ArrayList<NativeContentItem> items =
-                repository.parseCreatorImages(document, config, creator, 12);
+                repository.parseCreatorMedia(
+                        document,
+                        config,
+                        creator,
+                        "https://coomerfans.com/p/999/123/onlyfans",
+                        12
+                );
 
         assertEquals(3, items.size());
         assertTrue(items.get(0).isImage());
         assertTrue(items.get(1).isImage());
         assertTrue(items.get(2).isImage());
+    }
+
+    @Test public void postParserIncludesDirectCoomerFansVideos() {
+        CoomerFansRepository.Creator creator = new CoomerFansRepository.Creator(
+                "onlyfans",
+                "123",
+                "mysticsiren444",
+                "MysticSiren444",
+                "https://coomerfans.com/u/onlyfans/123/mysticsiren444",
+                ""
+        );
+        String postUrl = "https://coomerfans.com/p/999/123/onlyfans";
+        Document document = Jsoup.parse(
+                "<div class='post-wrap'>" +
+                        "<video poster='https://img5.coomerfans.com/poster.jpg'>" +
+                        "<source src='https://storage.coomerfans.com/video/clip.mp4'>" +
+                        "</video>" +
+                        "</div>",
+                postUrl
+        );
+
+        ArrayList<NativeContentItem> items =
+                repository.parseCreatorMedia(document, config, creator, postUrl, 12);
+
+        assertEquals(2, items.size());
+        NativeContentItem video = null;
+        for (NativeContentItem item : items) if (item.isVideo()) video = item;
+        assertTrue(video != null);
+        assertEquals(postUrl, video.comments);
+        assertEquals("https://img5.coomerfans.com/poster.jpg", video.imageUrl);
+        assertTrue(CoomerFansRepository.isDirectVideoUrl(video.url));
     }
 
     @Test public void profileParserKeepsOnlyCoomerFansImages() {
@@ -145,7 +182,13 @@ public final class CoomerFansRepositoryTest {
         );
 
         ArrayList<NativeContentItem> items =
-                repository.parseCreatorImages(document, config, creator, 24);
+                repository.parseCreatorMedia(
+                        document,
+                        config,
+                        creator,
+                        "https://coomerfans.com/p/999/123/onlyfans",
+                        24
+                );
 
         assertEquals(3, items.size());
         assertTrue(items.get(0).isImage());

@@ -380,6 +380,9 @@ final class BunkrGalleryPagerAdapter
                 WikiFeetRepository.isWikiFeetUrl(item.uploader)) return item.uploader;
         if (item != null && !FapelloRepository.isPostUrl(item.url) &&
                 FapelloRepository.isModelUrl(item.uploader)) return item.uploader;
+        if (item != null && CoomerFansRepository.isPostUrl(item.comments)) {
+            return item.comments;
+        }
         if (item != null && CoomerFansRepository.isCoomerFansUrl(item.uploader)) {
             return item.uploader;
         }

@@ -1630,6 +1630,12 @@ public final class NativeFeedBrowserActivity extends Activity {
         if (OnlyHavenRepository.isOnlyHavenUrl(item.uploader)) {
             return value(item.uploader, "");
         }
+        if (CoomerFansRepository.isPostUrl(item.comments)) {
+            return value(item.comments, "");
+        }
+        if (CoomerFansRepository.isCoomerFansUrl(item.uploader)) {
+            return value(item.uploader, "");
+        }
         return value(item.url, "");
     }
 

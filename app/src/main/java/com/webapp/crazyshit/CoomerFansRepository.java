@@ -85,7 +85,7 @@ final class CoomerFansRepository {
         return new ProfilePage(posts, !posts.isEmpty());
     }
 
-    ArrayList<NativeContentItem> fetchPostImages(
+    ArrayList<NativeContentItem> fetchPostMedia(
             Context context,
             Creator creator,
             String postUrl,
@@ -95,7 +95,13 @@ final class CoomerFansRepository {
         SourceConfig.CoomerFans config = config();
         if (!config.enabled) throw new IOException("CoomerFans is temporarily unavailable");
         Document document = fetchConfigured(context, config, postUrl);
-        return parseCreatorImages(document, config, creator, Math.max(1, limit));
+        return parseCreatorMedia(
+                document,
+                config,
+                creator,
+                postUrl,
+                Math.max(1, limit)
+        );
     }
 
     ArrayList<String> parseProfilePostUrls(Document document, int limit) {
@@ -143,16 +149,18 @@ final class CoomerFansRepository {
         return values;
     }
 
-    ArrayList<NativeContentItem> parseCreatorImages(
+    ArrayList<NativeContentItem> parseCreatorMedia(
             Document document,
             SourceConfig.CoomerFans config,
             Creator creator,
+            String postUrl,
             int limit
     ) {
         LinkedHashMap<String, NativeContentItem> result = new LinkedHashMap<>();
         if (document == null || config == null || creator == null) {
             return new ArrayList<>();
         }
+        String poster = firstPoster(document, config);
         for (Element media : document.select(config.profileImagesSelector)) {
             for (String attr : new String[]{"src", "data-src", "poster", "href", "srcset"}) {
                 if (!media.hasAttr(attr)) continue;
@@ -160,11 +168,17 @@ final class CoomerFansRepository {
                 if ("srcset".equals(attr)) {
                     for (String part : raw.split(",")) {
                         String candidate = part.trim().split("\\s+")[0];
-                        addImageCandidate(result, candidate, document.location(), config, creator);
+                        addMediaCandidate(
+                                result, candidate, document.location(), config, creator,
+                                postUrl, poster
+                        );
                         if (result.size() >= limit) break;
                     }
                 } else {
-                    addImageCandidate(result, raw, document.location(), config, creator);
+                    addMediaCandidate(
+                            result, raw, document.location(), config, creator,
+                            postUrl, poster
+                    );
                 }
                 if (result.size() >= limit) break;
             }
@@ -173,32 +187,58 @@ final class CoomerFansRepository {
         return new ArrayList<>(result.values());
     }
 
-    private void addImageCandidate(
+    private void addMediaCandidate(
             LinkedHashMap<String, NativeContentItem> result,
             String raw,
             String base,
             SourceConfig.CoomerFans config,
-            Creator creator
+            Creator creator,
+            String postUrl,
+            String poster
     ) {
         String url = absolute(base, raw);
-        if (!isContentImageUrl(config, url)) return;
+        if (url.isEmpty()) return;
         String lower = url.toLowerCase(Locale.US);
         if (lower.contains("/istorage/") || lower.contains("/avatar") ||
                 lower.contains("/profile") || lower.contains("/logo") ||
                 lower.contains("/icon")) {
             return;
         }
+
+        boolean video = isContentVideoUrl(config, url);
+        boolean image = isContentImageUrl(config, url);
+        if (!video && !image) return;
+
         String title = creator.name.isEmpty() ? creator.username : creator.name;
+        String pageReferer = isPostUrl(postUrl) ? postUrl : creator.url;
+        String preview = image ? url : poster;
         result.putIfAbsent(url, new NativeContentItem(
-                NativeContentItem.KIND_IMAGE,
+                video ? NativeContentItem.KIND_MEDIA : NativeContentItem.KIND_IMAGE,
                 title,
                 url,
-                url,
+                preview,
                 "CoomerFans",
                 creator.url,
-                "",
+                pageReferer,
                 creator.service + " · CoomerFans"
         ));
+    }
+
+    private String firstPoster(Document document, SourceConfig.CoomerFans config) {
+        if (document == null || config == null) return "";
+        for (Element element : document.select(
+                "video[poster],meta[property=og:image][content],img[src],img[data-src]"
+        )) {
+            String attr = element.hasAttr("poster") ? "poster"
+                    : element.hasAttr("content") ? "content"
+                    : element.hasAttr("data-src") ? "data-src" : "src";
+            String candidate = absolute(element, attr, document.location());
+            if (isContentImageUrl(config, candidate) &&
+                    !candidate.toLowerCase(Locale.US).contains("/istorage/")) {
+                return candidate;
+            }
+        }
+        return "";
     }
 
     private Creator parseCreator(String url, Element link, String base) {
@@ -371,17 +411,46 @@ final class CoomerFansRepository {
         return config != null && isContentImageUrl(config, value);
     }
 
+    static boolean isDirectVideoUrl(String value) {
+        SourceConfig current = RemoteSourceConfigManager.snapshotOrNull();
+        SourceConfig.CoomerFans config = current == null ? null : current.coomerFans;
+        return config != null && isContentVideoUrl(config, value);
+    }
+
+    private static boolean trustedMediaHost(SourceConfig.CoomerFans config, String host) {
+        if (config == null || host == null) return false;
+        String suffix = cleanStatic(config.imageHostSuffix).toLowerCase(Locale.US);
+        if (suffix.isEmpty()) return false;
+        String cleanHost = host.toLowerCase(Locale.US);
+        return cleanHost.equals(suffix) || cleanHost.endsWith("." + suffix);
+    }
+
     private static boolean isContentImageUrl(SourceConfig.CoomerFans config, String value) {
         try {
             URI uri = new URI(cleanStatic(value));
-            if (!"https".equalsIgnoreCase(uri.getScheme()) || uri.getHost() == null) return false;
+            if (!"https".equalsIgnoreCase(uri.getScheme()) || uri.getHost() == null ||
+                    !trustedMediaHost(config, uri.getHost())) {
+                return false;
+            }
             String host = uri.getHost().toLowerCase(Locale.US);
             String suffix = cleanStatic(config.imageHostSuffix).toLowerCase(Locale.US);
-            boolean trustedHost = host.equals(suffix) || host.endsWith("." + suffix);
-            if (!trustedHost) return false;
             String path = uri.getPath() == null ? "" : uri.getPath().toLowerCase(Locale.US);
             if (host.matches("img\\d+\\." + java.util.regex.Pattern.quote(suffix))) return true;
             return path.matches(".*\\.(?:jpg|jpeg|png|webp|gif|avif)$");
+        } catch (Exception ignored) {
+            return false;
+        }
+    }
+
+    private static boolean isContentVideoUrl(SourceConfig.CoomerFans config, String value) {
+        try {
+            URI uri = new URI(cleanStatic(value));
+            if (!"https".equalsIgnoreCase(uri.getScheme()) || uri.getHost() == null ||
+                    !trustedMediaHost(config, uri.getHost())) {
+                return false;
+            }
+            String path = uri.getPath() == null ? "" : uri.getPath().toLowerCase(Locale.US);
+            return path.matches(".*\\.(?:mp4|webm|mov|m4v|m3u8|mpd)$");
         } catch (Exception ignored) {
             return false;
         }

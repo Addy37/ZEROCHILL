@@ -36,7 +36,7 @@ final class BunkrCreatorGalleryRepository {
     private static final int ONLYHAVEN_PAGE_SIZE = 36;
     private static final int COOMERFANS_PROFILE_POST_LIMIT = 12;
     private static final int COOMERFANS_POSTS_PER_BATCH = 4;
-    private static final int COOMERFANS_POST_IMAGE_LIMIT = 12;
+    private static final int COOMERFANS_POST_MEDIA_LIMIT = 12;
     private static final int COOMERFANS_IMMEDIATE_THRESHOLD = 24;
     private static final int COOMERFANS_FILL_LIMIT = 96;
     private static final int COOMERFANS_MAX_PAGES = 4;
@@ -850,11 +850,11 @@ final class BunkrCreatorGalleryRepository {
             ArrayList<Future<List<NativeContentItem>>> requests = new ArrayList<>();
             for (String postUrl : selectedPosts) {
                 requests.add(completed.submit(() ->
-                        new ArrayList<>(repository.fetchPostImages(
+                        new ArrayList<>(repository.fetchPostMedia(
                                 context,
                                 state.coomerFansCreator,
                                 postUrl,
-                                COOMERFANS_POST_IMAGE_LIMIT
+                                COOMERFANS_POST_MEDIA_LIMIT
                         ))
                 ));
             }
@@ -875,7 +875,7 @@ final class BunkrCreatorGalleryRepository {
                     List<NativeContentItem> items = future.get();
                     if (items == null) continue;
                     for (NativeContentItem item : items) {
-                        if (item == null || !item.isImage() ||
+                        if (item == null || (!item.isImage() && !item.isVideo()) ||
                                 item.url == null || item.url.isEmpty() ||
                                 !state.loadedMediaUrls.add(item.url)) continue;
                         result.add(item);

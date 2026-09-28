@@ -400,6 +400,9 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         if (item != null && OnlyHavenRepository.isOnlyHavenUrl(item.uploader)) {
             return item.uploader;
         }
+        if (item != null && CoomerFansRepository.isPostUrl(item.comments)) {
+            return item.comments;
+        }
         if (item != null && CoomerFansRepository.isCoomerFansUrl(item.uploader)) {
             return item.uploader;
         }
