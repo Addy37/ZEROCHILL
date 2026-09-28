@@ -129,6 +129,7 @@ public final class ChaosFeedView extends FrameLayout {
             Collections.newSetFromMap(new IdentityHashMap<>());
     private final Random random = new Random();
     private final ChaosSourceMixer sourceMixer = new ChaosSourceMixer(repository, random);
+    private final ShitTokAspectPriority aspectPriority = new ShitTokAspectPriority();
 
     private ViewPager2 pager;
     private ChaosAdapter adapter;
@@ -338,14 +339,15 @@ public final class ChaosFeedView extends FrameLayout {
             if (recentSet.contains(item.url)) recentFallback.add(item);
             else fresh.add(item);
         }
-        Collections.shuffle(fresh, random);
-        Collections.shuffle(recentFallback, random);
+        List<NativeContentItem> prioritizedFresh = aspectPriority.order(fresh, random);
+        List<NativeContentItem> prioritizedRecentFallback =
+                aspectPriority.order(recentFallback, random);
 
         activity.runOnUiThread(() -> {
             if (closed) return;
             poolLoading = false;
             int before = items.size();
-            appendUnique(fresh);
+            appendUnique(prioritizedFresh);
 
             int freshAdded = items.size() - before;
             if (freshAdded == 0) consecutiveDryLoads++;
@@ -354,7 +356,7 @@ public final class ChaosFeedView extends FrameLayout {
             // Previously watched clips stay out of the normal draw. Only recycle them if
             // several broad random batches in a row genuinely cannot produce fresh media.
             if (freshAdded < 4 && consecutiveDryLoads >= 3) {
-                appendUnique(recentFallback);
+                appendUnique(prioritizedRecentFallback);
             }
 
             int added = items.size() - before;
@@ -1397,6 +1399,7 @@ public final class ChaosFeedView extends FrameLayout {
         boolean retryAttempted;
         boolean failurePending;
         boolean horizontalVideo;
+        boolean aspectSampleRecorded;
         float videoAspectRatio;
         float restoreSpeed = 1f;
         float creatorSwipeDownX;
@@ -2000,6 +2003,7 @@ public final class ChaosFeedView extends FrameLayout {
             retryAttempted = false;
             failurePending = false;
             horizontalVideo = false;
+            aspectSampleRecorded = false;
             videoAspectRatio = 0f;
             fullscreen.setVisibility(View.GONE);
             seekBar.setProgress(0);
@@ -2206,6 +2210,10 @@ public final class ChaosFeedView extends FrameLayout {
                     float height = videoSize.height;
                     videoAspectRatio = width / Math.max(1f, height);
                     horizontalVideo = shouldOfferLandscapeFullscreen(videoAspectRatio);
+                    if (!aspectSampleRecorded) {
+                        aspectSampleRecorded = true;
+                        aspectPriority.record(item, videoAspectRatio);
+                    }
                     root.post(ChaosHolder.this::syncOrientationChrome);
                 }
 

@@ -217,6 +217,11 @@ final class ShitShowTapSource {
             String poster = cleanUrl(json.optString("poster", ""));
             String views = cleanText(json.optString("views", ""));
             String comments = cleanText(json.optString("comments", ""));
+            int mediaWidth = Math.max(0, json.optInt("width", 0));
+            int mediaHeight = Math.max(0, json.optInt("height", 0));
+            float aspectRatioHint = mediaWidth > 0 && mediaHeight > 0
+                    ? (float) mediaWidth / (float) mediaHeight
+                    : 0f;
 
             String itemUrl = "";
             if (isDirectMedia(direct)) itemUrl = direct;
@@ -233,7 +238,11 @@ final class ShitShowTapSource {
                         poster,
                         views,
                         "Shit Show",
-                        comments
+                        comments,
+                        "",
+                        "",
+                        0L,
+                        aspectRatioHint
                 ));
                 lock.notifyAll();
             }
@@ -361,8 +370,9 @@ final class ShitShowTapSource {
             "function page(o){var v=first(o,['permalink','link','href','page','page_url','story_url']);if(!v){var u=o&&o.url;if(typeof u==='string'&&!/\\.(mp4|webm|m4v|m3u8|mpd)(\\?|#|$)/i.test(u))v=u;}return abs(v);}" +
             "function media(o){var v=first(o,['video','video_url','media','media_url','stream','stream_url','src','source','file']);if(typeof v==='object'&&v)v=first(v,['url','src','file','mp4','hls']);var s=abs(v);return /\\.(mp4|webm|m4v|m3u8|mpd)(\\?|#|$)/i.test(s)?s:'';}" +
             "function poster(o){var v=first(o,['poster','thumbnail','thumb','image','image_url','thumbnail_url','preview','cover']);if(typeof v==='object'&&v)v=first(v,['url','src','large','medium','small']);return abs(v);}" +
+            "function dim(o,ks){var pools=[o&&o.video,o&&o.media,o&&o.source,o];for(var p=0;p<pools.length;p++){var v=first(pools[p],ks);var n=parseFloat(v);if(isFinite(n)&&n>0)return n;}return 0;}" +
             "function good(a){if(!Array.isArray(a)||!a.length)return false;var hits=0;for(var i=0;i<a.length&&i<10;i++){var o=a[i];if(o&&typeof o==='object'&&(o.permalink||o.id)&&(o.title||o.name||o.permalink))hits++;}return hits>0;}" +
-            "function emit(a){if(!good(a))return 0;var n=0;for(var i=0;i<a.length&&i<80;i++){var o=a[i];if(!o||typeof o!=='object')continue;var p=page(o),m=media(o);if(!p&&!m)continue;CSShitBridge.onStory(JSON.stringify({page:p,media:m,title:str(first(o,['title','name','headline','caption'])||'Shit Show'),poster:poster(o),views:str(first(o,['views','view_count','viewCount','views_count'])),comments:str(first(o,['comments','comment_count','commentCount','comments_count'])),id:str(o.id||'')}));n++;}return n;}" +
+            "function emit(a){if(!good(a))return 0;var n=0;for(var i=0;i<a.length&&i<80;i++){var o=a[i];if(!o||typeof o!=='object')continue;var p=page(o),m=media(o);if(!p&&!m)continue;CSShitBridge.onStory(JSON.stringify({page:p,media:m,title:str(first(o,['title','name','headline','caption'])||'Shit Show'),poster:poster(o),views:str(first(o,['views','view_count','viewCount','views_count'])),comments:str(first(o,['comments','comment_count','commentCount','comments_count'])),width:dim(o,['width','video_width','videoWidth','media_width','mediaWidth']),height:dim(o,['height','video_height','videoHeight','media_height','mediaHeight']),id:str(o.id||'')}));n++;}return n;}" +
             "var sent=0,names=['_stories','stories','shitshowStories','shitShowStories','storyList','story_list'];" +
             "for(var i=0;i<names.length;i++){try{sent+=emit(window[names[i]]);}catch(e){}}" +
             "if(!sent){try{var ks=Object.keys(window);for(var j=0;j<ks.length&&j<2500;j++){var v;try{v=window[ks[j]];}catch(e){continue;}if(good(v)){sent+=emit(v);if(sent)break;}}}catch(e){}}" +
