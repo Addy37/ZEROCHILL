@@ -21,6 +21,15 @@ public final class ShitTokPreloadPolicyTest {
     }
 
     @Test
+    public void swipeMaintenance_runsOnlyWhenPagerIsStableOnSamePage() {
+        assertTrue(ChaosFeedView.shouldRunSwipeMaintenance(true, true, false, 8, 8));
+        assertFalse(ChaosFeedView.shouldRunSwipeMaintenance(true, true, true, 8, 8));
+        assertFalse(ChaosFeedView.shouldRunSwipeMaintenance(true, true, false, 7, 8));
+        assertFalse(ChaosFeedView.shouldRunSwipeMaintenance(false, true, false, 8, 8));
+        assertFalse(ChaosFeedView.shouldRunSwipeMaintenance(true, false, false, 8, 8));
+    }
+
+    @Test
     public void clearDisplayGesture_usesIntentionalPinchThresholds() {
         assertTrue(ChaosFeedView.shouldEnterClearDisplay(0.78f));
         assertFalse(ChaosFeedView.shouldEnterClearDisplay(0.90f));

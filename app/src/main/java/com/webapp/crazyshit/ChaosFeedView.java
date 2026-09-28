@@ -98,6 +98,9 @@ public final class ChaosFeedView extends FrameLayout {
     private static final long RECENT_SAVE_DELAY_MS = 750L;
     private static final long STREAM_RETRY_DELAY_MS = 450L;
     private static final long FAILED_CLIP_SKIP_DELAY_MS = 1200L;
+    private static final long SWIPE_PREPARE_IDLE_DELAY_MS = 60L;
+    private static final long SWIPE_RELEASE_IDLE_DELAY_MS = 360L;
+    private static final long SWIPE_RELEASE_STAGGER_MS = 120L;
     private static final int SHITTOK_MAX_VIDEO_WIDTH = 1920;
     private static final int SHITTOK_MAX_VIDEO_HEIGHT = 1080;
     private static final int SHITTOK_MAX_VIDEO_BITRATE = 8_000_000;
@@ -154,8 +157,11 @@ public final class ChaosFeedView extends FrameLayout {
     private int selectedPosition;
     private boolean userPaging;
     private int creatorWarmAheadPosition = -1;
+    private int maintenancePosition = -1;
     private final Runnable saveRecentRunnable = this::saveRecentNow;
     private final Runnable creatorWarmAheadRunnable = this::warmNextCreatorGallery;
+    private final Runnable playerPrepareMaintenanceRunnable = this::runDeferredPrepareMaintenance;
+    private final Runnable playerReleaseMaintenanceRunnable = this::runDeferredReleaseMaintenance;
 
     public ChaosFeedView(Activity activity, Host host) {
         super(activity);
@@ -198,21 +204,30 @@ public final class ChaosFeedView extends FrameLayout {
         pager.registerOnPageChangeCallback(new ViewPager2.OnPageChangeCallback() {
             @Override
             public void onPageScrollStateChanged(int state) {
-                if (state == ViewPager2.SCROLL_STATE_DRAGGING) userPaging = true;
-                else if (state == ViewPager2.SCROLL_STATE_IDLE) userPaging = false;
+                if (state == ViewPager2.SCROLL_STATE_DRAGGING) {
+                    userPaging = true;
+                    cancelSwipePlayerMaintenance();
+                } else if (state == ViewPager2.SCROLL_STATE_IDLE) {
+                    userPaging = false;
+                    scheduleSwipePlayerMaintenance(selectedPosition);
+                }
             }
 
             @Override
             public void onPageSelected(int position) {
-                resetCreatorSwipePreview();
+                cancelSwipePlayerMaintenance();
                 int previousPosition = selectedPosition;
+                boolean changed = position != previousPosition;
+                if (changed) maintenancePosition = position;
+
+                resetCreatorSwipePreview();
                 if (autoAdvancePending && position != autoAdvanceFrom) {
                     autoAdvancePending = false;
                     autoAdvanceFrom = -1;
                 }
                 if (manualFullscreen && position != selectedPosition) exitManualFullscreen();
                 selectedPosition = position;
-                if (position != previousPosition) {
+                if (changed) {
                     sessionResume.clear();
                     host.onVerticalPageChanged(
                             position > previousPosition ? 1 : -1,
@@ -222,13 +237,14 @@ public final class ChaosFeedView extends FrameLayout {
                 }
                 markSeen(position);
                 pauseNonSelected(position);
-                releaseDistantPlayers(position);
-                resolveAhead(position);
                 playSelected();
                 warmCreatorGalleries(position);
                 ChaosHolder holder = holderAt(position);
                 if (holder != null) holder.showControlsTemporarily();
                 if (items.size() - position <= LOAD_AHEAD_AT) loadMorePool();
+                if (changed && pager.getScrollState() == ViewPager2.SCROLL_STATE_IDLE) {
+                    scheduleSwipePlayerMaintenance(position);
+                }
             }
         });
     }
@@ -242,6 +258,7 @@ public final class ChaosFeedView extends FrameLayout {
             warmCreatorGalleries(selectedPosition);
             syncVisibleChrome();
         } else {
+            cancelSwipePlayerMaintenance();
             pauseAll();
             rememberSelectedPosition();
             releaseAllPlayers();
@@ -269,6 +286,7 @@ public final class ChaosFeedView extends FrameLayout {
 
     public void onHostPause() {
         hostResumed = false;
+        cancelSwipePlayerMaintenance();
         cancelCreatorWarmAhead();
         if (!creatorGalleryHandoff) resetCreatorSwipePreview();
         pauseAll();
@@ -284,6 +302,7 @@ public final class ChaosFeedView extends FrameLayout {
     }
 
     public void refresh() {
+    cancelSwipePlayerMaintenance();
     cancelCreatorWarmAhead();
     resetCreatorSwipePreview();
     pauseAll();
@@ -316,6 +335,7 @@ public final class ChaosFeedView extends FrameLayout {
         hostResumed = false;
         exitManualFullscreen();
         if (commentsDialog != null && commentsDialog.isShowing()) commentsDialog.dismiss();
+        cancelSwipePlayerMaintenance();
         cancelCreatorWarmAhead();
         pauseAll();
         sessionResume.clear();
@@ -821,6 +841,7 @@ public final class ChaosFeedView extends FrameLayout {
 
     private void prepareVisible(int position) {
         if (!active || !hostResumed) return;
+        if (userPaging && position != selectedPosition) return;
         ChaosHolder holder = holderAt(position);
         if (holder == null || position < 0 || position >= items.size()) return;
         NativeContentItem item = items.get(position);
@@ -859,28 +880,66 @@ public final class ChaosFeedView extends FrameLayout {
         }
     }
 
-    private void releaseDistantPlayers(int selected) {
-        // Apply the preload window to every live player, including holders retained by
-        // RecyclerView but no longer attached. This keeps long ShitTok sessions bounded.
+    static boolean shouldRunSwipeMaintenance(
+            boolean active,
+            boolean hostResumed,
+            boolean userPaging,
+            int scheduledPosition,
+            int selectedPosition
+    ) {
+        return active && hostResumed && !userPaging &&
+                scheduledPosition >= 0 && scheduledPosition == selectedPosition;
+    }
+
+    private void scheduleSwipePlayerMaintenance(int position) {
+        cancelSwipePlayerMaintenance();
+        maintenancePosition = position;
+        if (!shouldRunSwipeMaintenance(
+                active, hostResumed, userPaging, maintenancePosition, selectedPosition)) {
+            return;
+        }
+        postDelayed(playerPrepareMaintenanceRunnable, SWIPE_PREPARE_IDLE_DELAY_MS);
+        postDelayed(playerReleaseMaintenanceRunnable, SWIPE_RELEASE_IDLE_DELAY_MS);
+    }
+
+    private void cancelSwipePlayerMaintenance() {
+        removeCallbacks(playerPrepareMaintenanceRunnable);
+        removeCallbacks(playerReleaseMaintenanceRunnable);
+    }
+
+    private void runDeferredPrepareMaintenance() {
+        int position = maintenancePosition;
+        if (!shouldRunSwipeMaintenance(
+                active, hostResumed, userPaging, position, selectedPosition)) {
+            return;
+        }
+        resolveAhead(position);
+    }
+
+    private void runDeferredReleaseMaintenance() {
+        int position = maintenancePosition;
+        if (!shouldRunSwipeMaintenance(
+                active, hostResumed, userPaging, position, selectedPosition)) {
+            return;
+        }
+        boolean released = releaseOneDistantPlayer(position);
+        if (released && shouldRunSwipeMaintenance(
+                active, hostResumed, userPaging, position, selectedPosition)) {
+            postDelayed(playerReleaseMaintenanceRunnable, SWIPE_RELEASE_STAGGER_MS);
+        }
+    }
+
+    private boolean releaseOneDistantPlayer(int selected) {
+        // Releasing a video decoder/surface can block the UI thread. Clean up one old holder at a
+        // time only after the pager is idle instead of stacking releases inside the swipe callback.
         for (ChaosHolder holder : new ArrayList<>(playerHolders)) {
             int position = holder.boundPosition;
             if (position < 0 || !shouldPreparePlayer(position, selected)) {
                 holder.releasePlayer();
+                return true;
             }
         }
-
-        // Defensive coverage for attached holders that have not registered a player yet.
-        RecyclerView rv = pagerRecycler();
-        if (rv == null) return;
-        for (int i = 0; i < rv.getChildCount(); i++) {
-            RecyclerView.ViewHolder raw = rv.getChildViewHolder(rv.getChildAt(i));
-            if (!(raw instanceof ChaosHolder) || playerHolders.contains(raw)) continue;
-            ChaosHolder holder = (ChaosHolder) raw;
-            int position = holder.getBindingAdapterPosition();
-            if (position != RecyclerView.NO_POSITION && !shouldPreparePlayer(position, selected)) {
-                holder.releasePlayer();
-            }
-        }
+        return false;
     }
 
     private void pauseAll() {
@@ -2738,7 +2797,8 @@ public final class ChaosFeedView extends FrameLayout {
                 long position = Math.max(0L, player.getCurrentPosition());
                 long duration = Math.max(0L, player.getDuration());
                 if (everStarted || position > 1000L) {
-                    PlaybackHistoryStore.record(activity, item.title, item.url, position, duration, false);
+                    PlaybackHistoryStore.record(
+                            activity, item.title, item.url, position, duration, false);
                 }
                 player.pause();
             } catch (Exception ignored) {

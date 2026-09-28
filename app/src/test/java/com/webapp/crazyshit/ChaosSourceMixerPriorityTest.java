@@ -20,10 +20,9 @@ public final class ChaosSourceMixerPriorityTest {
 
     @Test public void healthyMixLeadsWithKaoticAndKeepsEfuktAroundOneInThirteen() {
         List<NativeContentItem> result = ChaosSourceMixer.mixAvailable(
-                clips("Kaotic", 8), clips("Shit Show", 24), clips("Bunkr", 6),
-                clips("Fapello", 4), clips("OnlyHaven", 6), clips("CrazyShit", 12),
-                clips("EFukt", 12));
-        assertEquals(40, result.size());
+                clips("Kaotic", 8), clips("Shit Show", 24), clips("Fapello", 4),
+                clips("OnlyHaven", 6), clips("CrazyShit", 12), clips("EFukt", 12));
+        assertEquals(34, result.size());
         assertEquals(8, count(result, "Kaotic"));
         assertEquals(7, count(result, "Shit Show"));
         assertEquals(6, count(result, "CrazyShit"));
@@ -33,22 +32,27 @@ public final class ChaosSourceMixerPriorityTest {
     @Test public void failedPreferredSourcesLetLowerPriorityFillAvailablePool() {
         List<NativeContentItem> result = ChaosSourceMixer.mixAvailable(
                 Collections.emptyList(), clips("Shit Show", 2), Collections.emptyList(),
-                Collections.emptyList(), Collections.emptyList(), clips("CrazyShit", 2),
-                clips("EFukt", 12));
+                Collections.emptyList(), clips("CrazyShit", 2), clips("EFukt", 12));
         assertEquals(16, result.size());
         assertEquals(12, count(result, "EFukt"));
         List<NativeContentItem> noEfukt = ChaosSourceMixer.mixAvailable(
                 clips("Kaotic", 4), Collections.emptyList(), Collections.emptyList(),
-                Collections.emptyList(), Collections.emptyList(), Collections.emptyList(),
-                Collections.emptyList());
+                Collections.emptyList(), Collections.emptyList(), Collections.emptyList());
         assertEquals(4, noEfukt.size());
+    }
+
+    @Test public void bunkrIsNotPartOfShitTokMixedPool() {
+        List<NativeContentItem> result = ChaosSourceMixer.mixAvailable(
+                clips("Kaotic", 2), clips("Shit Show", 2), clips("Fapello", 2),
+                clips("OnlyHaven", 2), clips("CrazyShit", 2), clips("EFukt", 2));
+        assertEquals(0, count(result, "Bunkr"));
     }
 
     @Test public void sourceWeightsPreferKaoticAndStillAllowEfukt() {
         assertTrue(ShitTokAspectPriority.sourceWeight(clips("Kaotic", 1).get(0)) >
                 ShitTokAspectPriority.sourceWeight(clips("Shit Show", 1).get(0)));
         assertTrue(ShitTokAspectPriority.sourceWeight(clips("Shit Show", 1).get(0)) >
-                ShitTokAspectPriority.sourceWeight(clips("Bunkr", 1).get(0)));
+                ShitTokAspectPriority.sourceWeight(clips("Fapello", 1).get(0)));
         assertTrue(ShitTokAspectPriority.sourceWeight(clips("EFukt", 1).get(0)) > 0);
     }
 
