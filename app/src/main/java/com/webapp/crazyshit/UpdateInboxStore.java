@@ -102,6 +102,40 @@ final class UpdateInboxStore {
         return count;
     }
 
+    static int unreadCreatorContentCount(
+            Context context,
+            java.util.Collection<String> creatorNames
+    ) {
+        LinkedHashSet<String> wanted = normalizedCreatorNames(creatorNames);
+        if (wanted.isEmpty()) return 0;
+        int count = 0;
+        for (Entry entry : all(context)) {
+            if (entry.read || !CATEGORY_ONLYFAP.equals(entry.category)) continue;
+            if (!wanted.contains(CreatorNameMatcher.normalized(entry.creatorName))) continue;
+            count += Math.max(1, entry.count);
+        }
+        return count;
+    }
+
+    static void markCreatorRead(
+            Context context,
+            java.util.Collection<String> creatorNames
+    ) {
+        LinkedHashSet<String> wanted = normalizedCreatorNames(creatorNames);
+        if (wanted.isEmpty()) return;
+        synchronized (LOCK) {
+            ArrayList<Entry> entries = readLocked(context);
+            boolean changed = false;
+            for (Entry entry : entries) {
+                if (entry.read || !CATEGORY_ONLYFAP.equals(entry.category)) continue;
+                if (!wanted.contains(CreatorNameMatcher.normalized(entry.creatorName))) continue;
+                entry.read = true;
+                changed = true;
+            }
+            if (changed) writeLocked(context, entries);
+        }
+    }
+
     static void markRead(Context context, String id) {
         if (id == null || id.trim().isEmpty()) return;
         synchronized (LOCK) {
@@ -317,6 +351,18 @@ final class UpdateInboxStore {
             }
         }
         return changed;
+    }
+
+    private static LinkedHashSet<String> normalizedCreatorNames(
+            java.util.Collection<String> creatorNames
+    ) {
+        LinkedHashSet<String> result = new LinkedHashSet<>();
+        if (creatorNames == null) return result;
+        for (String name : creatorNames) {
+            String normalized = CreatorNameMatcher.normalized(name);
+            if (!normalized.isEmpty()) result.add(normalized);
+        }
+        return result;
     }
 
     private static String clean(String value) {

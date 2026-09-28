@@ -164,6 +164,7 @@ public final class CreatorsActivity extends Activity {
 
     private void openCreator(CreatorCatalog.FavoriteGroup group) {
         if (group == null || group.item == null) return;
+        UpdateInboxStore.markCreatorRead(this, creatorAliases(group));
         BrowseUi.hideKeyboard(this, input);
         CreatorGallerySpec spec = CreatorGallerySpec.from(group);
         String sessionId = CreatorGalleryPreloader.sessionId(this, spec.cacheKey);
@@ -272,6 +273,29 @@ public final class CreatorsActivity extends Activity {
         render();
     }
 
+    private List<String> creatorAliases(CreatorCatalog.FavoriteGroup group) {
+        ArrayList<String> aliases = new ArrayList<>();
+        if (group == null) return aliases;
+        aliases.addAll(group.relationshipKeys);
+        if (group.item != null) {
+            aliases.add(group.item.title);
+            aliases.add(group.item.searchQuery);
+        }
+        for (Map.Entry<String, NativeContentItem> member : group.members.entrySet()) {
+            aliases.add(member.getKey());
+            NativeContentItem item = member.getValue();
+            if (item != null) {
+                aliases.add(item.title);
+                aliases.add(item.searchQuery);
+            }
+        }
+        return aliases;
+    }
+
+    private int creatorUpdateCount(CreatorCatalog.FavoriteGroup group) {
+        return UpdateInboxStore.unreadCreatorContentCount(this, creatorAliases(group));
+    }
+
     private final class CreatorGridAdapter
             extends RecyclerView.Adapter<CreatorGridAdapter.Holder> {
         private final List<CreatorCatalog.FavoriteGroup> items = new ArrayList<>();
@@ -316,19 +340,21 @@ public final class CreatorsActivity extends Activity {
             avatar.setBackgroundColor(Color.rgb(19, 23, 27));
             avatarCard.addView(avatar, new MaterialCardView.LayoutParams(-1, -1));
 
-            TextView favorite = BrowseUi.text(CreatorsActivity.this, "★", 18, UiPalette.PRIMARY);
-            favorite.setGravity(Gravity.CENTER);
-            favorite.setBackground(BrowseUi.rounded(
+            TextView updateBadge = BrowseUi.text(CreatorsActivity.this, "", 11, Color.BLACK);
+            updateBadge.setTypeface(null, android.graphics.Typeface.BOLD);
+            updateBadge.setGravity(Gravity.CENTER);
+            updateBadge.setMinWidth(dp(26));
+            updateBadge.setPadding(dp(7), 0, dp(7), 0);
+            updateBadge.setBackground(BrowseUi.rounded(
                     CreatorsActivity.this,
-                    Color.argb(190, 0, 0, 0),
-                    14
+                    UiPalette.PRIMARY,
+                    13
             ));
-            favorite.setClickable(true);
-            favorite.setFocusable(true);
-            FrameLayout.LayoutParams favoriteParams =
-                    new FrameLayout.LayoutParams(dp(30), dp(30), Gravity.TOP | Gravity.END);
-            favoriteParams.setMargins(0, dp(1), dp(1), 0);
-            avatarFrame.addView(favorite, favoriteParams);
+            updateBadge.setVisibility(View.GONE);
+            FrameLayout.LayoutParams updateBadgeParams =
+                    new FrameLayout.LayoutParams(-2, dp(26), Gravity.TOP | Gravity.END);
+            updateBadgeParams.setMargins(0, dp(2), dp(2), 0);
+            avatarFrame.addView(updateBadge, updateBadgeParams);
 
             TextView more = BrowseUi.text(CreatorsActivity.this, "⋮", 23, Color.WHITE);
             more.setGravity(Gravity.CENTER);
@@ -345,7 +371,7 @@ public final class CreatorsActivity extends Activity {
             nameParams.setMargins(dp(2), dp(7), dp(2), 0);
             wrapper.addView(name, nameParams);
 
-            return new Holder(wrapper, avatar, name, favorite, more);
+            return new Holder(wrapper, avatar, name, updateBadge, more);
         }
 
         @Override
@@ -354,14 +380,26 @@ public final class CreatorsActivity extends Activity {
             NativeContentItem item = group.item;
             holder.bound = group;
             holder.name.setText(item.title);
-            holder.itemView.setContentDescription("Open " + item.title);
-            holder.favorite.setContentDescription("Remove " + item.title + " from favorite creators");
+            int unread = creatorUpdateCount(group);
+            if (unread > 0) {
+                holder.updateBadge.setText(unread > 99 ? "99+" : String.valueOf(unread));
+                holder.updateBadge.setContentDescription(
+                        unread + (unread == 1 ? " new item from " : " new items from ") + item.title
+                );
+                holder.updateBadge.setVisibility(View.VISIBLE);
+            } else {
+                holder.updateBadge.setText("");
+                holder.updateBadge.setContentDescription(null);
+                holder.updateBadge.setVisibility(View.GONE);
+            }
+            holder.itemView.setContentDescription(
+                    unread > 0
+                            ? "Open " + item.title + ". " + unread
+                            + (unread == 1 ? " new item." : " new items.")
+                            : "Open " + item.title
+            );
 
             holder.itemView.setOnClickListener(v -> openCreator(group));
-            View.OnClickListener remove = v -> {
-                removeGroup(group);
-            };
-            holder.favorite.setOnClickListener(remove);
             holder.more.setContentDescription("Creator options for " + item.title);
             holder.more.setOnClickListener(v -> showMenu(v, group));
 
@@ -436,15 +474,15 @@ public final class CreatorsActivity extends Activity {
         final class Holder extends RecyclerView.ViewHolder {
             final ImageView avatar;
             final TextView name;
-            final TextView favorite;
+            final TextView updateBadge;
             final TextView more;
             CreatorCatalog.FavoriteGroup bound;
 
-            Holder(View itemView, ImageView avatar, TextView name, TextView favorite, TextView more) {
+            Holder(View itemView, ImageView avatar, TextView name, TextView updateBadge, TextView more) {
                 super(itemView);
                 this.avatar = avatar;
                 this.name = name;
-                this.favorite = favorite;
+                this.updateBadge = updateBadge;
                 this.more = more;
             }
         }

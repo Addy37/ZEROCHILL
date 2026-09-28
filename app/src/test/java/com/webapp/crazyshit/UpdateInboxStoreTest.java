@@ -120,6 +120,59 @@ public class UpdateInboxStoreTest {
     }
 
     @Test
+    public void creatorUnreadCountCanBeConsumedByOpeningCreator() {
+        NativeContentItem favorite = new NativeContentItem(
+                NativeContentItem.KIND_CREATOR,
+                "Emily Rinaudo",
+                "https://fapello.com/emily-rinaudo/",
+                "",
+                "",
+                "",
+                "",
+                "Fapello",
+                "Emily Rinaudo"
+        );
+        CreatorFavoriteStore.toggle(app, favorite);
+
+        NativeContentItem first = new NativeContentItem(
+                NativeContentItem.KIND_MEDIA,
+                "OnlyFap video #1",
+                "https://fapello.com/video/emily-rinaudo/1/",
+                "",
+                "",
+                "Emily Rinaudo",
+                "",
+                "Fapello"
+        );
+        NativeContentItem second = new NativeContentItem(
+                NativeContentItem.KIND_MEDIA,
+                "OnlyFap video #2",
+                "https://fapello.com/video/emily-rinaudo/2/",
+                "",
+                "",
+                "Emily Rinaudo",
+                "",
+                "Fapello"
+        );
+        UpdateInboxStore.record(app, Arrays.asList(
+                new NotificationCoordinator.SourceAlert(
+                        "fapello", "Fapello", Arrays.asList(first, second)
+                )
+        ));
+
+        assertEquals(2, UpdateInboxStore.unreadCreatorContentCount(
+                app, Arrays.asList("Emily Rinaudo")
+        ));
+
+        UpdateInboxStore.markCreatorRead(app, Arrays.asList("Emily Rinaudo"));
+
+        assertEquals(0, UpdateInboxStore.unreadCreatorContentCount(
+                app, Arrays.asList("Emily Rinaudo")
+        ));
+        assertEquals(0, UpdateInboxStore.unreadCount(app));
+    }
+
+    @Test
     public void unfavoritingCreatorPrunesExistingInboxEntries() {
         NativeContentItem favorite = new NativeContentItem(
                 NativeContentItem.KIND_CREATOR,
