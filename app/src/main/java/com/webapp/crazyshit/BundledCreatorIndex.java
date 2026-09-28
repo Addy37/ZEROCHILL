@@ -8,7 +8,9 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 
 /** Compact, immutable creator names. Load once off the main thread; never store this in preferences. */
 final class BundledCreatorIndex {
@@ -16,6 +18,8 @@ final class BundledCreatorIndex {
     private final List<Entry> entries;
     private final Map<String, Entry> byName = new HashMap<>();
     private final Map<String, String> canonicalByAlias = new HashMap<>();
+    private final Map<String, String> canonicalBySafeVariant = new HashMap<>();
+    private final Set<String> ambiguousSafeVariants = new HashSet<>();
 
     private BundledCreatorIndex(List<Entry> entries) {
         this.entries = entries;
@@ -31,6 +35,38 @@ final class BundledCreatorIndex {
             for (int i = 1; i < entry.searchable.size(); i++) {
                 canonicalByAlias.put(entry.searchable.get(i), canonical);
             }
+        }
+
+        // Precompute conservative typo/truncation variants once. Favorite screens can contain
+        // thousands of learned creator rows, so canonicalKey() must stay O(1).
+        for (Entry entry : entries) {
+            String canonical = entry.searchable.get(0);
+            String compact = compact(canonical);
+            for (int missing = 1; missing <= 5 && compact.length() - missing >= 8; missing++) {
+                addSafeVariant(compact.substring(0, compact.length() - missing), canonical);
+            }
+            for (int i = 0; i < compact.length(); i++) {
+                char value = compact.charAt(i);
+                String doubled = compact.substring(0, i) + value + compact.substring(i);
+                addSafeVariant(doubled, canonical);
+                boolean repeated = (i > 0 && compact.charAt(i - 1) == value)
+                        || (i + 1 < compact.length() && compact.charAt(i + 1) == value);
+                if (repeated && compact.length() - 1 >= 8) {
+                    addSafeVariant(compact.substring(0, i) + compact.substring(i + 1), canonical);
+                }
+            }
+        }
+    }
+
+    private void addSafeVariant(String variant, String canonical) {
+        if (variant == null || variant.length() < 8 || variant.equals(compact(canonical))) return;
+        if (ambiguousSafeVariants.contains(variant)) return;
+        String previous = canonicalBySafeVariant.get(variant);
+        if (previous == null) {
+            canonicalBySafeVariant.put(variant, canonical);
+        } else if (!previous.equals(canonical)) {
+            canonicalBySafeVariant.remove(variant);
+            ambiguousSafeVariants.add(variant);
         }
     }
 
@@ -83,15 +119,8 @@ final class BundledCreatorIndex {
         if (exact != null) return exact;
 
         String compact = compact(normalized);
-        if (compact.length() < 8) return normalized;
-
-        String resolved = null;
-        for (Entry entry : entries) {
-            String canonical = entry.searchable.get(0);
-            if (!safeVariant(compact, compact(canonical))) continue;
-            if (resolved != null && !resolved.equals(canonical)) return normalized;
-            resolved = canonical;
-        }
+        if (compact.length() < 8 || ambiguousSafeVariants.contains(compact)) return normalized;
+        String resolved = canonicalBySafeVariant.get(compact);
         return resolved == null ? normalized : resolved;
     }
 
@@ -104,28 +133,6 @@ final class BundledCreatorIndex {
     boolean isCanonicalSpelling(String name) {
         String normalized = CreatorNameMatcher.normalized(name);
         return !normalized.isEmpty() && normalized.equals(canonicalKey(name));
-    }
-
-    private static boolean safeVariant(String candidate, String canonical) {
-        if (candidate.equals(canonical)) return true;
-        int missing = canonical.length() - candidate.length();
-        if (candidate.length() >= 8 && missing >= 1 && missing <= 5
-                && canonical.startsWith(candidate)) return true;
-        return repeatedLetterSlip(candidate, canonical);
-    }
-
-    private static boolean repeatedLetterSlip(String first, String second) {
-        if (Math.min(first.length(), second.length()) < 8
-                || Math.abs(first.length() - second.length()) != 1) return false;
-        String longer = first.length() > second.length() ? first : second;
-        String shorter = first.length() > second.length() ? second : first;
-        for (int i = 0; i < longer.length(); i++) {
-            if (!longer.substring(0, i).concat(longer.substring(i + 1)).equals(shorter)) continue;
-            char extra = longer.charAt(i);
-            if ((i > 0 && longer.charAt(i - 1) == extra)
-                    || (i + 1 < longer.length() && longer.charAt(i + 1) == extra)) return true;
-        }
-        return false;
     }
 
     private static String compact(String value) {
