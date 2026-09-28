@@ -56,8 +56,12 @@ public class ShowsHeroDesignTest {
         MaterialCardView artworkCard = (MaterialCardView) artwork.getParent();
         FrameLayout.LayoutParams artworkParams =
                 (FrameLayout.LayoutParams) artworkCard.getLayoutParams();
-        assertEquals(dp(activity, 248), artworkParams.width);
-        assertEquals(dp(activity, 140), artworkParams.height);
+        assertEquals(FrameLayout.LayoutParams.MATCH_PARENT, artworkParams.width);
+        assertEquals(
+                Math.round(activity.getResources().getDisplayMetrics().widthPixels * 9f / 16f),
+                artworkParams.height
+        );
+        assertEquals(ImageView.ScaleType.FIT_CENTER, artwork.getScaleType());
 
         Field maxItems = ShowsHubView.class.getDeclaredField("HERO_MAX_ITEMS");
         maxItems.setAccessible(true);
