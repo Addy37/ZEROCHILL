@@ -10,7 +10,7 @@ import java.util.Set;
 
 /** Launch metadata for one Favorite Creator card, including manually grouped source profiles. */
 final class CreatorGallerySpec {
-    private static final int MAX_SEEDS = 32;
+    private static final int MAX_SEEDS = 8;
 
     final NativeContentItem item;
     final String query;
@@ -62,14 +62,23 @@ final class CreatorGallerySpec {
         ArrayList<String> urls = new ArrayList<>();
         ArrayList<String> images = new ArrayList<>();
         if (grouped) {
-            Set<String> seen = new HashSet<>();
+            Set<String> seenNames = new HashSet<>();
+            Set<String> seenUrls = new HashSet<>();
             for (NativeContentItem member : group.members.values()) {
-                if (member == null || urls.size() >= MAX_SEEDS) break;
+                if (member == null || names.size() >= MAX_SEEDS) break;
+                String name = clean(member.searchQuery);
+                if (name.isEmpty()) name = clean(member.title);
+                String normalizedName = CreatorNameMatcher.normalized(name);
+                if (normalizedName.isEmpty() || !seenNames.add(normalizedName)) continue;
+
                 String url = clean(member.url);
-                if (!knownGallerySource(url)) continue;
-                String canonical = url.replaceAll("/+$", "").toLowerCase(Locale.US);
-                if (!seen.add(canonical)) continue;
-                names.add(clean(member.title).isEmpty() ? query : clean(member.title));
+                if (knownGallerySource(url)) {
+                    String canonical = url.replaceAll("/+$", "").toLowerCase(Locale.US);
+                    if (!seenUrls.add(canonical)) url = "";
+                } else {
+                    url = "";
+                }
+                names.add(name);
                 urls.add(url);
                 images.add(clean(member.imageUrl));
             }
