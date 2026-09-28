@@ -100,6 +100,12 @@
             android:windowSoftInputMode="adjustResize" />
 
         <activity
+            android:name=".CreatorAvatarCropActivity"
+            android:screenOrientation="portrait"
+            android:enableOnBackInvokedCallback="true"
+            android:exported="false" />
+
+        <activity
             android:name=".SearchActivity"
             android:enableOnBackInvokedCallback="true"
             android:exported="false"
