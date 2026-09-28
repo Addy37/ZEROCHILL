@@ -272,13 +272,18 @@ final class CoomerFansRepository {
             }
         }
 
-        java.util.regex.Matcher rawMedia = java.util.regex.Pattern.compile(
+        java.util.regex.Pattern rawMediaPattern = java.util.regex.Pattern.compile(
                 "(?i)https?://[^\\s\\\"'<>]+\\.(?:jpg|jpeg|png|webp|gif|mp4|webm|mov|m4v|m3u8|mpd)(?:\\?[^\\s\\\"'<>]*)?"
-        ).matcher(scope.outerHtml());
-        while (rawMedia.find() && result.size() < limit) {
-            addMediaCandidate(
-                    result, rawMedia.group(), base, config, creator, postUrl, poster
-            );
+        );
+        for (Element script : scope.select("script")) {
+            String scriptBody = script.data().isEmpty() ? script.html() : script.data();
+            java.util.regex.Matcher rawMedia = rawMediaPattern.matcher(scriptBody);
+            while (rawMedia.find() && result.size() < limit) {
+                addMediaCandidate(
+                        result, rawMedia.group(), base, config, creator, postUrl, poster
+                );
+            }
+            if (result.size() >= limit) return;
         }
     }
 
