@@ -30,6 +30,16 @@ public final class ShitTokPreloadPolicyTest {
     }
 
     @Test
+    public void warmPlayerBuilds_waitForIdleAndOnlyTargetForwardWindow() {
+        assertTrue(ChaosFeedView.shouldQueueWarmPlayer(true, true, false, true, 11, 10));
+        assertTrue(ChaosFeedView.shouldQueueWarmPlayer(true, true, false, true, 12, 10));
+        assertFalse(ChaosFeedView.shouldQueueWarmPlayer(true, true, true, true, 11, 10));
+        assertFalse(ChaosFeedView.shouldQueueWarmPlayer(true, true, false, false, 11, 10));
+        assertFalse(ChaosFeedView.shouldQueueWarmPlayer(true, true, false, true, 10, 10));
+        assertFalse(ChaosFeedView.shouldQueueWarmPlayer(true, true, false, true, 13, 10));
+    }
+
+    @Test
     public void clearDisplayGesture_usesIntentionalPinchThresholds() {
         assertTrue(ChaosFeedView.shouldEnterClearDisplay(0.78f));
         assertFalse(ChaosFeedView.shouldEnterClearDisplay(0.90f));
