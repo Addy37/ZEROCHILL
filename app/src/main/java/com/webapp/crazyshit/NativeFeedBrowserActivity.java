@@ -59,6 +59,9 @@ public final class NativeFeedBrowserActivity extends Activity {
     public static final String EXTRA_BUNKR_CREATOR_QUERY = "browser_bunkr_creator_query";
     public static final String EXTRA_FAPELLO_PROFILE_URL = "browser_fapello_profile_url";
     public static final String EXTRA_CREATOR_GALLERY_SESSION = "browser_creator_gallery_session";
+    public static final String EXTRA_CREATOR_AVATAR_PICKER = "browser_creator_avatar_picker";
+    public static final String EXTRA_PICKED_AVATAR_URL = "browser_picked_avatar_url";
+    public static final String EXTRA_PICKED_AVATAR_REFERER = "browser_picked_avatar_referer";
     static final String EXTRA_SHITTOK_RETURN_TRANSITION = "browser_shittok_return_transition";
     public static final String EXTRA_NOTIFICATION_FRESH_URLS =
             "browser_notification_fresh_urls";
@@ -113,6 +116,7 @@ public final class NativeFeedBrowserActivity extends Activity {
     private String showKind;
     private boolean showDetailsMode;
     private boolean memeMode;
+    private boolean creatorAvatarPickerMode;
     private boolean loading;
     private boolean endReached;
     private boolean fapelloFailureShown;
@@ -207,6 +211,24 @@ public final class NativeFeedBrowserActivity extends Activity {
         return intent;
     }
 
+    public static Intent createCreatorAvatarPicker(
+            Activity activity,
+            String title,
+            String query,
+            String fapelloProfileUrl,
+            String gallerySessionId
+    ) {
+        Intent intent = createCreatorGallery(
+                activity,
+                title,
+                query,
+                fapelloProfileUrl,
+                gallerySessionId
+        );
+        intent.putExtra(EXTRA_CREATOR_AVATAR_PICKER, true);
+        return intent;
+    }
+
     static String creatorProfileHint(NativeContentItem item) {
         if (item == null || item.url == null) return "";
         String url = item.url.trim();
@@ -222,6 +244,8 @@ public final class NativeFeedBrowserActivity extends Activity {
         title = value(getIntent().getStringExtra(EXTRA_TITLE), "Browse");
         baseUrl = value(getIntent().getStringExtra(EXTRA_BASE_URL), CrazyShitRepository.HOME);
         memeMode = getIntent().getBooleanExtra(EXTRA_MEME_MODE, false);
+        creatorAvatarPickerMode =
+                getIntent().getBooleanExtra(EXTRA_CREATOR_AVATAR_PICKER, false);
         source = value(getIntent().getStringExtra(EXTRA_SOURCE), SOURCE_CRAZYSHIT);
         creatorQuery = value(getIntent().getStringExtra(EXTRA_BUNKR_CREATOR_QUERY), "");
         fapelloProfileUrl = value(getIntent().getStringExtra(EXTRA_FAPELLO_PROFILE_URL), "");
@@ -869,11 +893,16 @@ public final class NativeFeedBrowserActivity extends Activity {
                 new BunkrGalleryAdapter.Listener() {
                     @Override
                     public void onOpen(int position, NativeContentItem item) {
+                        if (creatorAvatarPickerMode) {
+                            pickCreatorAvatar(item);
+                            return;
+                        }
                         openBunkrGallery(position, item);
                     }
 
                     @Override
                     public void onLongPress(NativeContentItem item, View anchor) {
+                        if (creatorAvatarPickerMode) return;
                         if (isCreatorGallery()) {
                             anchor.performHapticFeedback(
                                     android.view.HapticFeedbackConstants.LONG_PRESS
@@ -924,6 +953,9 @@ public final class NativeFeedBrowserActivity extends Activity {
                         : position == CREATOR_TAB_VIDEOS ? "Videos" : "All")
         );
         creatorTabsMediator.attach();
+        if (creatorAvatarPickerMode) {
+            creatorTabsPager.setCurrentItem(CREATOR_TAB_PICTURES, false);
+        }
         updateCreatorTabLabels();
         creatorTabsPager.registerOnPageChangeCallback(new ViewPager2.OnPageChangeCallback() {
             @Override
@@ -1450,6 +1482,51 @@ public final class NativeFeedBrowserActivity extends Activity {
         intent.putExtra(MemeViewerActivity.EXTRA_PAGE_URL, item.url);
         intent.putExtra(MemeViewerActivity.EXTRA_IMAGE_URL, item.imageUrl);
         startActivity(intent);
+    }
+
+    private void pickCreatorAvatar(NativeContentItem item) {
+        if (item == null || !item.isImage()) {
+            if (creatorTabsPager != null) {
+                creatorTabsPager.setCurrentItem(CREATOR_TAB_PICTURES, true);
+            }
+            Toast.makeText(this, "Choose a picture for the avatar.", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        String imageUrl = value(item.imageUrl, "");
+        if (imageUrl.isEmpty()) imageUrl = value(item.url, "");
+        if (!isRemoteUrl(imageUrl)) {
+            Toast.makeText(this, "That picture cannot be used as an avatar.", Toast.LENGTH_SHORT)
+                    .show();
+            return;
+        }
+        String referer = creatorAvatarReferer(item);
+        Intent result = new Intent();
+        result.putExtra(EXTRA_PICKED_AVATAR_URL, imageUrl);
+        result.putExtra(EXTRA_PICKED_AVATAR_REFERER, referer);
+        setResult(Activity.RESULT_OK, result);
+        finish();
+    }
+
+    private String creatorAvatarReferer(NativeContentItem item) {
+        if (item == null) return "";
+        if (WikiFeetRepository.isWikiFeetUrl(item.url)
+                && WikiFeetRepository.isWikiFeetUrl(item.uploader)) {
+            return value(item.uploader, "");
+        }
+        if (!FapelloRepository.isPostUrl(item.url)
+                && FapelloRepository.isModelUrl(item.uploader)) {
+            return value(item.uploader, "");
+        }
+        if (OnlyHavenRepository.isOnlyHavenUrl(item.uploader)) {
+            return value(item.uploader, "");
+        }
+        return value(item.url, "");
+    }
+
+    private boolean isRemoteUrl(String url) {
+        if (url == null) return false;
+        String clean = url.trim().toLowerCase(java.util.Locale.US);
+        return clean.startsWith("https://") || clean.startsWith("http://");
     }
 
     private void openBunkrGallery(int position, NativeContentItem item) {
