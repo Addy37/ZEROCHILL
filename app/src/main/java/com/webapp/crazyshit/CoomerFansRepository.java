@@ -164,6 +164,7 @@ final class CoomerFansRepository {
         for (Element media : document.select(config.profileImagesSelector)) {
             for (String attr : new String[]{"src", "data-src", "poster", "href", "srcset"}) {
                 if (!media.hasAttr(attr)) continue;
+                if ("poster".equals(attr)) continue;
                 String raw = media.attr(attr);
                 if ("srcset".equals(attr)) {
                     for (String part : raw.split(",")) {

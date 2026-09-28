@@ -154,7 +154,7 @@ public final class CoomerFansRepositoryTest {
         ArrayList<NativeContentItem> items =
                 repository.parseCreatorMedia(document, config, creator, postUrl, 12);
 
-        assertEquals(2, items.size());
+        assertEquals(1, items.size());
         NativeContentItem video = null;
         for (NativeContentItem item : items) if (item.isVideo()) video = item;
         assertTrue(video != null);
