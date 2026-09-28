@@ -4,11 +4,13 @@ This file identifies the current approved ZEROCHILL product baseline for test AP
 
 - Source-of-truth branch: `rebrand/zerochill`
 - Integration branch: `integration/zerochill-current`
-- Approved product baseline commit: `eb30d10fbf2841a701eeb38847017f46d56c9169`
-- Latest production release source commit: `eb30d10fbf2841a701eeb38847017f46d56c9169`
-- Device-tested APK source commit: `fd18ddc8b8c98988bbab4e4572bc0d215316e876`
-- Latest release PR: #183
-- Approval date: 2026-09-26
+- Approved product baseline commit: `e905d77604c9d9797b64e085e7afcf3689c4ee2b`
+- Latest production release source commit: `e905d77604c9d9797b64e085e7afcf3689c4ee2b`
+- Device-tested APK source commit: `e26b34c3f763948a1ed20551bd867ebd817cde49`
+- Latest release PR: #205
+- Approval date: 2026-09-28
+
+ZeroChill v4.1.0 was published from `e905d77` after release PR #205. This release adds reviewed and manual creator grouping, merged creator galleries, custom creator avatars with persistent pinch/drag crop framing, Favorite Creator unread-content count badges, adaptive ShitTok portrait-first ordering and creator-flow polish, OnlyFap search/gallery performance improvements, direct gallery downloads, and the approved swipeable full-width Shows hero with protected low-resolution artwork and mirrored top/bottom fades. The production workflow built and signed `ZeroChill.apk`, verified the package and signing certificate, confirmed a higher Android version code and upgrade compatibility from v4.0.0, and published tag `v4.1.0` with `SHA256SUMS.txt`. The previous v4.0.0 rollback baseline is preserved at `checkpoint/zerochill-approved-eb30d10`.
 
 ZeroChill v4.0.0 was published from `eb30d10` after release PR #183. This major release promotes Library to primary navigation, keeps ShitTok as the main landing tab, rebuilds Shows and OnlyFap as cinematic media hubs, adds the collapsing glass bottom navigation, refreshes Library search and playback, simplifies More and Settings, standardizes section branding, and includes the accumulated device-approved playback, loading, thumbnail, and navigation polish through PR #182. The production workflow built and signed `ZeroChill.apk`, verified the package and signing certificate, confirmed a higher Android version code and upgrade compatibility from v3.1.6, and published tag `v4.0.0`. The v3.1.6 rollback baseline is preserved at `checkpoint/zerochill-approved-afd270e`.
 
