@@ -172,6 +172,29 @@ public class CreatorAvatarOverrideTest {
     }
 
     @Test
+    public void legacyStoredAvatarWithoutCropFieldsLoadsCentered() {
+        context.getSharedPreferences("creator_avatar_overrides_v1", 0)
+                .edit()
+                .putString(
+                        "avatars",
+                        "[{\"keys\":[\"anna\"],\"image\":\"https://cdn.example.com/old.jpg\","
+                                + "\"referer\":\"https://fapello.com/anna/\"}]"
+                )
+                .commit();
+        CreatorAvatarOverrideStore.clearCacheForTest();
+
+        CreatorAvatarOverrideStore.Override stored = CreatorAvatarOverrideStore.find(
+                CreatorAvatarOverrideStore.load(context),
+                keys("anna")
+        );
+
+        assertNotNull(stored);
+        assertEquals(CreatorAvatarOverrideStore.DEFAULT_FOCUS, stored.focusX, 0.0001f);
+        assertEquals(CreatorAvatarOverrideStore.DEFAULT_FOCUS, stored.focusY, 0.0001f);
+        assertEquals(CreatorAvatarOverrideStore.DEFAULT_ZOOM, stored.zoom, 0.0001f);
+    }
+
+    @Test
     public void legacyAvatarSaveDefaultsToCenteredCrop() {
         assertTrue(CreatorAvatarOverrideStore.save(
                 context,
