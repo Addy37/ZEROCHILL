@@ -84,6 +84,48 @@ public final class CoomerFansRepositoryTest {
         assertEquals("https://coomerfans.com/p/222/123/onlyfans", posts.get(1));
     }
 
+    @Test public void creatorSearchKeepsServerFilteredAliasWhenNameChanged() {
+        Document document = Jsoup.parse(
+                "<section><div class='thumb'><a href='/u/onlyfans/456/mysticsoles444'>" +
+                        "<span>MysticSoles444</span></a></div></section>",
+                "https://coomerfans.com/?q=mysticsiren444"
+        );
+
+        List<CoomerFansRepository.Creator> creators =
+                repository.parseCreators(document, config, "mysticsiren444", 1);
+
+        assertEquals(1, creators.size());
+        assertEquals("mysticsoles444", creators.get(0).username);
+    }
+
+    @Test public void postParserReadsHrefDataSrcAndSrcsetMedia() {
+        CoomerFansRepository.Creator creator = new CoomerFansRepository.Creator(
+                "onlyfans",
+                "123",
+                "mysticsoles444",
+                "MysticSoles444",
+                "https://coomerfans.com/u/onlyfans/123/mysticsoles444",
+                ""
+        );
+        Document document = Jsoup.parse(
+                "<div class='post-wrap'>" +
+                        "<a href='/data/a/photo-one.jpg'>one</a>" +
+                        "<img data-src='https://storage.coomerfans.com/b/photo-two.webp'>" +
+                        "<source srcset='https://img5.coomerfans.com/c/opaque-id 1x'>" +
+                        "<img src='/istorage/123.jpg'>" +
+                        "</div>",
+                "https://coomerfans.com/p/999/123/onlyfans"
+        );
+
+        ArrayList<NativeContentItem> items =
+                repository.parseCreatorImages(document, config, creator, 12);
+
+        assertEquals(3, items.size());
+        assertTrue(items.get(0).isImage());
+        assertTrue(items.get(1).isImage());
+        assertTrue(items.get(2).isImage());
+    }
+
     @Test public void profileParserKeepsOnlyCoomerFansImages() {
         CoomerFansRepository.Creator creator = new CoomerFansRepository.Creator(
                 "onlyfans",

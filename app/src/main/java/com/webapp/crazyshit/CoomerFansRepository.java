@@ -116,19 +116,31 @@ final class CoomerFansRepository {
             String query,
             int limit
     ) {
-        LinkedHashMap<String, Creator> result = new LinkedHashMap<>();
+        LinkedHashMap<String, Creator> exact = new LinkedHashMap<>();
+        LinkedHashMap<String, Creator> fallback = new LinkedHashMap<>();
         if (document == null || config == null) return new ArrayList<>();
         for (Element link : document.select(config.creatorLinksSelector)) {
             String url = absolute(link, "href", document.location());
             Creator parsed = parseCreator(url, link, document.location());
             if (parsed == null) continue;
-            if (!matchesQuery(parsed.name, parsed.username, query)) continue;
             String key = parsed.service.toLowerCase(Locale.US) + ":" +
                     parsed.id.toLowerCase(Locale.US);
-            result.putIfAbsent(key, parsed);
-            if (result.size() >= limit) break;
+            if (matchesQuery(parsed.name, parsed.username, query)) {
+                exact.putIfAbsent(key, parsed);
+            } else {
+                // The server already filtered this page by query. Keep returned aliases as a
+                // bounded fallback instead of rejecting profiles whose public handle changed.
+                fallback.putIfAbsent(key, parsed);
+            }
+            if (exact.size() >= limit) break;
         }
-        return new ArrayList<>(result.values());
+        LinkedHashMap<String, Creator> result = exact.isEmpty() ? fallback : exact;
+        ArrayList<Creator> values = new ArrayList<>();
+        for (Creator creator : result.values()) {
+            values.add(creator);
+            if (values.size() >= limit) break;
+        }
+        return values;
     }
 
     ArrayList<NativeContentItem> parseCreatorImages(
@@ -141,29 +153,52 @@ final class CoomerFansRepository {
         if (document == null || config == null || creator == null) {
             return new ArrayList<>();
         }
-        for (Element image : document.select(config.profileImagesSelector)) {
-            String url = absolute(image, "src", document.location());
-            if (!isImageCdnUrl(config, url) || !isDirectImageUrl(url)) continue;
-            String lower = url.toLowerCase(Locale.US);
-            if (lower.contains("/avatar") || lower.contains("/profile") ||
-                    lower.contains("/logo") || lower.contains("/icon")) {
-                continue;
+        for (Element media : document.select(config.profileImagesSelector)) {
+            for (String attr : new String[]{"src", "data-src", "poster", "href", "srcset"}) {
+                if (!media.hasAttr(attr)) continue;
+                String raw = media.attr(attr);
+                if ("srcset".equals(attr)) {
+                    for (String part : raw.split(",")) {
+                        String candidate = part.trim().split("\\s+")[0];
+                        addImageCandidate(result, candidate, document.location(), config, creator);
+                        if (result.size() >= limit) break;
+                    }
+                } else {
+                    addImageCandidate(result, raw, document.location(), config, creator);
+                }
+                if (result.size() >= limit) break;
             }
-            String title = creator.name.isEmpty() ? creator.username : creator.name;
-            NativeContentItem item = new NativeContentItem(
-                    NativeContentItem.KIND_IMAGE,
-                    title,
-                    url,
-                    url,
-                    "CoomerFans",
-                    creator.url,
-                    "",
-                    creator.service + " · CoomerFans"
-            );
-            result.putIfAbsent(url, item);
             if (result.size() >= limit) break;
         }
         return new ArrayList<>(result.values());
+    }
+
+    private void addImageCandidate(
+            LinkedHashMap<String, NativeContentItem> result,
+            String raw,
+            String base,
+            SourceConfig.CoomerFans config,
+            Creator creator
+    ) {
+        String url = absolute(base, raw);
+        if (!isContentImageUrl(config, url)) return;
+        String lower = url.toLowerCase(Locale.US);
+        if (lower.contains("/istorage/") || lower.contains("/avatar") ||
+                lower.contains("/profile") || lower.contains("/logo") ||
+                lower.contains("/icon")) {
+            return;
+        }
+        String title = creator.name.isEmpty() ? creator.username : creator.name;
+        result.putIfAbsent(url, new NativeContentItem(
+                NativeContentItem.KIND_IMAGE,
+                title,
+                url,
+                url,
+                "CoomerFans",
+                creator.url,
+                "",
+                creator.service + " · CoomerFans"
+        ));
     }
 
     private Creator parseCreator(String url, Element link, String base) {
@@ -331,16 +366,22 @@ final class CoomerFansRepository {
     }
 
     static boolean isDirectImageUrl(String value) {
+        SourceConfig current = RemoteSourceConfigManager.snapshotOrNull();
+        SourceConfig.CoomerFans config = current == null ? null : current.coomerFans;
+        return config != null && isContentImageUrl(config, value);
+    }
+
+    private static boolean isContentImageUrl(SourceConfig.CoomerFans config, String value) {
         try {
             URI uri = new URI(cleanStatic(value));
             if (!"https".equalsIgnoreCase(uri.getScheme()) || uri.getHost() == null) return false;
             String host = uri.getHost().toLowerCase(Locale.US);
-            if (host.matches("img\\d+\\.coomerfans\\.com")) return true;
-            SourceConfig current = RemoteSourceConfigManager.snapshotOrNull();
-            if (current == null || current.coomerFans == null) return false;
-            String suffix = cleanStatic(current.coomerFans.imageHostSuffix).toLowerCase(Locale.US);
-            return !suffix.isEmpty() &&
-                    host.matches("img\\d+\\." + java.util.regex.Pattern.quote(suffix));
+            String suffix = cleanStatic(config.imageHostSuffix).toLowerCase(Locale.US);
+            boolean trustedHost = host.equals(suffix) || host.endsWith("." + suffix);
+            if (!trustedHost) return false;
+            String path = uri.getPath() == null ? "" : uri.getPath().toLowerCase(Locale.US);
+            if (host.matches("img\\d+\\." + java.util.regex.Pattern.quote(suffix))) return true;
+            return path.matches(".*\\.(?:jpg|jpeg|png|webp|gif|avif)$");
         } catch (Exception ignored) {
             return false;
         }
@@ -402,6 +443,16 @@ final class CoomerFansRepository {
             if (!clean.isEmpty() && clean.length() <= 180) return clean;
         }
         return "";
+    }
+
+    private String absolute(String base, String value) {
+        String clean = cleanUrl(value);
+        if (clean.isEmpty()) return "";
+        try {
+            return new URI(base).resolve(clean).toASCIIString();
+        } catch (Exception ignored) {
+            return clean;
+        }
     }
 
     private String absolute(Element element, String attr, String base) {
