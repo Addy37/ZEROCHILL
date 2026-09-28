@@ -1109,8 +1109,11 @@ final class BunkrCreatorGalleryRepository {
         if (state == null || !OnlyHavenRepository.isOnlyHavenUrl(profileUrl) ||
                 !state.onlyHavenProfileUrls.add(profileUrl)) return;
         try {
-            android.net.Uri parsed = android.net.Uri.parse(profileUrl);
-            List<String> parts = parsed.getPathSegments();
+            java.net.URI parsed = new java.net.URI(profileUrl);
+            String path = parsed.getPath();
+            String[] raw = path == null ? new String[0] : path.split("/");
+            ArrayList<String> parts = new ArrayList<>();
+            for (String part : raw) if (part != null && !part.trim().isEmpty()) parts.add(part.trim());
             int marker = parts.indexOf("creators");
             if (marker < 0 || marker + 2 >= parts.size()) {
                 state.onlyHavenProfileUrls.remove(profileUrl);
@@ -1118,8 +1121,7 @@ final class BunkrCreatorGalleryRepository {
             }
             String service = parts.get(marker + 1);
             String id = parts.get(marker + 2);
-            if (service == null || service.trim().isEmpty() ||
-                    id == null || id.trim().isEmpty()) {
+            if (service.isEmpty() || id.isEmpty()) {
                 state.onlyHavenProfileUrls.remove(profileUrl);
                 return;
             }
