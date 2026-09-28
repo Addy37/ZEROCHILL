@@ -214,6 +214,7 @@ final class LibraryHubView extends ScrollView {
         int count = Math.min(14, creators.size());
         for (int i = 0; i < count; i++) {
             NativeContentItem creator = creators.get(i);
+            CreatorGalleryPreloader.warm(activity, creator);
             rail.addView(creatorCard(creator), creatorRailParams(i == count - 1));
         }
     }

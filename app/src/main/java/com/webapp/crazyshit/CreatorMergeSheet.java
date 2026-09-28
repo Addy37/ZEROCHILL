@@ -1,7 +1,6 @@
 package com.webapp.crazyshit;
 
 import android.app.Activity;
-import android.content.res.ColorStateList;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.GradientDrawable;
@@ -14,10 +13,11 @@ import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
 import com.bumptech.glide.Glide;
+import com.bumptech.glide.load.model.GlideUrl;
+import com.bumptech.glide.load.model.LazyHeaders;
 import com.google.android.material.bottomsheet.BottomSheetDialog;
 import com.google.android.material.card.MaterialCardView;
 import java.util.Map;
-import java.util.Set;
 
 /** Compact local-only name and saved-avatar selector for manual creator relationships. */
 final class CreatorMergeSheet {
@@ -70,7 +70,12 @@ final class CreatorMergeSheet {
                 picture.setBackgroundColor(Color.rgb(28, 33, 39));
                 picture.setContentDescription("Use " + item.title + " avatar");
                 if (item.imageUrl.isEmpty()) picture.setImageResource(R.drawable.ic_more_account);
-                else Glide.with(picture).load(item.imageUrl).onlyRetrieveFromCache(true)
+                else Glide.with(picture).load(new GlideUrl(item.imageUrl,
+                                new LazyHeaders.Builder().addHeader("Referer",
+                                        item.uploader.isEmpty() ? item.url : item.uploader)
+                                        .addHeader("User-Agent", "Mozilla/5.0 (Linux; Android 16) AppleWebKit/537.36 Chrome/139.0 Mobile Safari/537.36")
+                                        .build()))
+                        .onlyRetrieveFromCache(true)
                         .circleCrop().dontAnimate().error(R.drawable.ic_more_account).into(picture);
                 row.addView(picture, new LinearLayout.LayoutParams(dp(activity, 48), dp(activity, 48)));
                 picture.setOnClickListener(v -> { if (!item.imageUrl.isEmpty()) {
