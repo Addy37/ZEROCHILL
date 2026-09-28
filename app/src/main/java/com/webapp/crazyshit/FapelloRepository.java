@@ -1351,7 +1351,10 @@ final class FapelloRepository {
     }
 
     private static String cleanStatic(String value) {
-        return value == null ? "" : value.replace('\u00a0', ' ').replaceAll("\\s+", " ").trim();
+        if (value == null) return "";
+        String decoded = value.replaceAll("(?i)&amp;", "&");
+        decoded = org.jsoup.parser.Parser.unescapeEntities(decoded, false);
+        return decoded.replace('\u00a0', ' ').replaceAll("\\s+", " ").trim();
     }
 
     private String fileTitle(String url) {
