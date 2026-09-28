@@ -88,6 +88,7 @@ final class SourceConfigEditor extends LinearLayout {
         addView(sourceCard(sources, "theync", "TheYNC"));
         addView(sourceCard(sources, "itemfix", "ItemFix"));
         addView(sourceCard(sources, "onlyhaven", "OnlyHaven"));
+        addView(sourceCard(sources, "coomerfans", "CoomerFans"));
 
         MaterialButton raw = button("Advanced: full JSON");
         raw.setOnClickListener(v -> showRawConfigDialog());

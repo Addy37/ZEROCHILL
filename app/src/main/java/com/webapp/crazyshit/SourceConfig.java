@@ -747,7 +747,7 @@ final class SourceConfig {
                     "?q={query}",
                     "u/{service}/{id}/{username}?page={page}",
                     "a[href^=/u/]",
-                    "div.post img[src]",
+                    "img[src],img[data-src],source[src],source[data-src],source[srcset],video[src],video[poster],a[href]",
                     "coomerfans.com"
             );
         }

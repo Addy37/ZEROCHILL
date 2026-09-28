@@ -1,5 +1,5 @@
 const ROOT_FIELDS = new Set(["schemaVersion", "configVersion", "updatedAt", "global", "sources"]);
-const SOURCE_IDS = ["fapello", "bunkr", "wikifeet", "wikifeetx", "kaotic", "theync", "itemfix", "onlyhaven"];
+const SOURCE_IDS = ["fapello", "bunkr", "wikifeet", "wikifeetx", "kaotic", "theync", "itemfix", "onlyhaven", "coomerfans"];
 const FAPELLO_FIELDS = new Set(["enabled", "baseUrl", "fallbackDomains", "userAgent",
   "requestHeaders", "ajaxHeaders", "refererOverride", "requestTimeoutMs", "ajaxTimeoutMs", "retryCount",
   "routes", "selectors", "patterns", "cdnHosts"]);
@@ -12,12 +12,17 @@ const WIKI_FIELDS = new Set(["enabled", "baseUrl", "fallbackDomains", "pictureHo
 const WEB_VIDEO_FIELDS = new Set(["enabled", "baseUrl", "fallbackDomains", "userAgent",
   "requestHeaders", "refererOverride", "requestTimeoutMs", "retryCount", "routes", "selectors", "patterns"]);
 const ONLYHAVEN_FIELDS = new Set([...WEB_VIDEO_FIELDS, "mediaBaseUrl", "imageBaseUrl"]);
+const COOMERFANS_FIELDS = new Set(["enabled", "baseUrl", "fallbackDomains", "userAgent",
+  "requestHeaders", "refererOverride", "requestTimeoutMs", "retryCount", "routes", "selectors",
+  "imageHostSuffix"]);
 const WEB_VIDEO_ROUTES = new Set(["feedFirst", "feedPage"]);
 const WEB_VIDEO_SELECTORS = new Set(["cardLinks", "playableVideo"]);
 const WEB_VIDEO_PATTERNS = new Set(["pageUrl", "scriptMediaUrl"]);
 const ONLYHAVEN_ROUTES = new Set(["creatorSearch", "creatorSearchApi", "creatorPage", "creatorPostsApi"]);
 const ONLYHAVEN_SELECTORS = new Set(["creatorLinks", "mediaLinks", "playableVideo", "playableImage"]);
 const ONLYHAVEN_PATTERNS = new Set(["creatorUrl", "scriptMediaUrl"]);
+const COOMERFANS_ROUTES = new Set(["creatorSearch", "creatorPage"]);
+const COOMERFANS_SELECTORS = new Set(["creatorLinks", "profileImages"]);
 const FAPELLO_ROUTES = new Set(["search", "creatorMedia", "creatorProfileFirst",
   "creatorProfilePage", "listingNewFirst", "listingNewPage", "listingHotFirst",
   "listingHotPage", "listingPopularFirst", "listingPopularPage", "popularVideosFirst",
@@ -89,7 +94,8 @@ function validateSource(id: string, value: unknown): string | null {
   const expectedFields = id === "fapello" ? FAPELLO_FIELDS :
     id === "bunkr" ? BUNKR_FIELDS :
     id === "wikifeet" || id === "wikifeetx" ? WIKI_FIELDS :
-    id === "onlyhaven" ? ONLYHAVEN_FIELDS : WEB_VIDEO_FIELDS;
+    id === "onlyhaven" ? ONLYHAVEN_FIELDS :
+    id === "coomerfans" ? COOMERFANS_FIELDS : WEB_VIDEO_FIELDS;
   const fieldError = unknown(value, expectedFields, id) ?? requireFields(value, expectedFields, id);
   if (fieldError) return fieldError;
   if (typeof value.userAgent !== "string" || !value.userAgent || value.userAgent.length > 512) {
@@ -126,7 +132,7 @@ function validateSource(id: string, value: unknown): string | null {
       return `${id}.${key} is not a valid selector value`;
     }
   }
-  for (const hostKey of ["pictureHost", "thumbnailHost"]) if (hostKey in value && !validateHost(value[hostKey])) {
+  for (const hostKey of ["pictureHost", "thumbnailHost", "imageHostSuffix"]) if (hostKey in value && !validateHost(value[hostKey])) {
     return `${id}.${hostKey} must be a hostname`;
   }
   if ("cdnHosts" in value && (!Array.isArray(value.cdnHosts) || value.cdnHosts.length > 16 ||
@@ -161,6 +167,14 @@ function validateSource(id: string, value: unknown): string | null {
       requireFields(value.patterns as Record<string, unknown>, ONLYHAVEN_PATTERNS, `${id}.patterns`);
     if (missing) return missing;
   }
+  if (id === "coomerfans") {
+    const routeError = unknown(value.routes, COOMERFANS_ROUTES, `${id}.routes`);
+    const selectorError = unknown(value.selectors, COOMERFANS_SELECTORS, `${id}.selectors`);
+    if (routeError || selectorError) return routeError ?? selectorError;
+    const missing = requireFields(value.routes as Record<string, unknown>, COOMERFANS_ROUTES, `${id}.routes`) ??
+      requireFields(value.selectors as Record<string, unknown>, COOMERFANS_SELECTORS, `${id}.selectors`);
+    if (missing) return missing;
+  }
 
   if (id === "bunkr") {
     const selectorError = unknown(value.selectors, BUNKR_SELECTORS, `${id}.selectors`);
@@ -185,7 +199,7 @@ function validateSource(id: string, value: unknown): string | null {
     feedFirst: new Set(["page"]), feedPage: new Set(["page"]),
     creatorSearch: new Set(["query"]),
     creatorSearchApi: new Set(["query", "limit", "offset"]),
-    creatorPage: new Set(["service", "id", "page"]),
+    creatorPage: new Set(["service", "id", "username", "page"]),
     creatorPostsApi: new Set(["service", "id", "offset", "limit"]),
   };
   for (const [key, route] of Object.entries(object(value.routes) ? value.routes : {})) {
@@ -247,6 +261,10 @@ export function validateSourceConfig(value: unknown): ValidationResult {
     return { valid: false, reason: `unsupported source ${id}` };
   }
   for (const id of SOURCE_IDS) {
+    if (!(id in value.sources)) {
+      if (id === "coomerfans") continue;
+      return { valid: false, reason: `${id} must contain enabled` };
+    }
     const error = validateSource(id, value.sources[id]);
     if (error) return { valid: false, reason: error };
   }
