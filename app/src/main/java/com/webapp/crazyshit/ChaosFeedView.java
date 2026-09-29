@@ -137,6 +137,7 @@ public final class ChaosFeedView extends FrameLayout {
     private final ChaosSourceMixer sourceMixer = new ChaosSourceMixer(repository, random);
     private final ShitTokAspectPriority aspectPriority = new ShitTokAspectPriority();
     private final ShitTokSessionResume sessionResume = new ShitTokSessionResume();
+    private final ShitTokRenderDiagnostics renderDiagnostics;
 
     private ViewPager2 pager;
     private ChaosAdapter adapter;
@@ -170,6 +171,7 @@ public final class ChaosFeedView extends FrameLayout {
         super(activity);
         this.activity = activity;
         this.host = host;
+        this.renderDiagnostics = new ShitTokRenderDiagnostics(activity);
         setBackgroundColor(Color.BLACK);
         loadRecent();
         loadHidden();
@@ -188,7 +190,20 @@ public final class ChaosFeedView extends FrameLayout {
         addView(pager, new FrameLayout.LayoutParams(-1, -1));
 
         RecyclerView rv = pagerRecycler();
-        if (rv != null) rv.setItemViewCacheSize(3);
+        if (rv != null) {
+            rv.setItemViewCacheSize(3);
+            rv.addOnItemTouchListener(new RecyclerView.SimpleOnItemTouchListener() {
+                @Override
+                public boolean onInterceptTouchEvent(
+                        @NonNull RecyclerView recyclerView,
+                        @NonNull MotionEvent event
+                ) {
+                    renderDiagnostics.onPagerTouch(
+                            event, pager.getScrollState(), selectedPosition);
+                    return false;
+                }
+            });
+        }
 
         initialProgress = new ProgressBar(activity);
         FrameLayout.LayoutParams pp = new FrameLayout.LayoutParams(dp(48), dp(48));
@@ -207,6 +222,7 @@ public final class ChaosFeedView extends FrameLayout {
         pager.registerOnPageChangeCallback(new ViewPager2.OnPageChangeCallback() {
             @Override
             public void onPageScrollStateChanged(int state) {
+                renderDiagnostics.onPagerState(state, selectedPosition);
                 if (state == ViewPager2.SCROLL_STATE_DRAGGING) {
                     userPaging = true;
                     cancelSwipePlayerMaintenance();
@@ -218,6 +234,9 @@ public final class ChaosFeedView extends FrameLayout {
 
             @Override
             public void onPageSelected(int position) {
+                renderDiagnostics.event(
+                        "PAGE_SELECTED", position,
+                        "from=" + selectedPosition + " items=" + items.size());
                 cancelSwipePlayerMaintenance();
                 int previousPosition = selectedPosition;
                 boolean changed = position != previousPosition;
@@ -333,6 +352,7 @@ public final class ChaosFeedView extends FrameLayout {
     public void close() {
         resetCreatorSwipePreview();
         closed = true;
+        renderDiagnostics.close();
         poolLoading = false;
         active = false;
         hostResumed = false;
