@@ -37,7 +37,10 @@ public final class CrazyShitApplication extends Application {
         if (needsMigration) migratePreferences(appPrefs);
 
         AppShortcuts.publish(this);
-        NotificationCoordinator.initialize(this);
+        boolean startupWizardPending = StartupWizardPolicy.shouldShow(this);
+        if (!startupWizardPending) {
+            NotificationCoordinator.initialize(this);
+        }
 
         registerActivityLifecycleCallbacks(new ActivityLifecycleCallbacks() {
             @Override
@@ -61,7 +64,9 @@ public final class CrazyShitApplication extends Application {
             @Override
             public void onActivityResumed(Activity activity) {
                 PhoneOrientationPolicy.applyBrowsingOrientation(activity);
-                NotificationCoordinator.onAppForeground(activity);
+                if (!StartupWizardPolicy.shouldShow(activity)) {
+                    NotificationCoordinator.onAppForeground(activity);
+                }
                 UiFoundationCoordinator.onActivityResumed(activity);
             }
 

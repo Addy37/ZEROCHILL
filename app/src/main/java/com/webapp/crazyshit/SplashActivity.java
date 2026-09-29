@@ -28,6 +28,7 @@ public final class SplashActivity extends Activity {
     private boolean leaving;
     private boolean handingOff;
     private boolean chaosHandoff;
+    private boolean startupWizard;
     private String launchAction;
 
     @Override
@@ -35,8 +36,10 @@ public final class SplashActivity extends Activity {
         super.onCreate(savedInstanceState);
         splashStartedAt = SystemClock.uptimeMillis();
         launchAction = getIntent() == null ? null : getIntent().getAction();
-        chaosHandoff = !AppShortcuts.isShortcutAction(launchAction)
-                || AppShortcuts.isChaosAction(launchAction);
+        startupWizard = StartupWizardPolicy.shouldShow(this);
+        chaosHandoff = !startupWizard
+                && (!AppShortcuts.isShortcutAction(launchAction)
+                || AppShortcuts.isChaosAction(launchAction));
         getWindow().setStatusBarColor(Color.BLACK);
         getWindow().setNavigationBarColor(Color.BLACK);
         setContentView(R.layout.activity_splash);
@@ -94,13 +97,18 @@ public final class SplashActivity extends Activity {
         handler.removeCallbacks(readinessRunnable);
         cancelReveals();
 
-        Intent intent = new Intent(this, NativeMainActivity.class);
+        Intent intent = new Intent(
+                this,
+                startupWizard ? StartupWizardActivity.class : NativeMainActivity.class
+        );
         if (chaosHandoff) {
             intent.putExtra(ChaosStartupOverlayController.EXTRA_STARTUP_HANDOFF, true);
         }
         if (AppShortcuts.isShortcutAction(launchAction)) {
             intent.setAction(launchAction);
-            intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+            if (!startupWizard) {
+                intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+            }
         }
         startActivity(intent);
         overridePendingTransition(0, 0);

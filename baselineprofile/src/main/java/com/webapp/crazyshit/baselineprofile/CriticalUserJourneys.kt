@@ -12,8 +12,49 @@ internal const val TARGET_PACKAGE = "com.addy37.crazyshitunofficial"
 internal fun MacrobenchmarkScope.launchApp() {
     pressHome()
     startActivityAndWait()
+    completeStartupWizardIfPresent()
     awaitMainNavigation()
     device.waitForIdle()
+}
+
+private fun MacrobenchmarkScope.completeStartupWizardIfPresent() {
+    val getStarted = device.wait(Until.findObject(By.text("GET STARTED")), 1_500) ?: return
+    getStarted.click()
+
+    val age = checkNotNull(
+        device.wait(Until.findObject(By.text("I confirm that I am 18 or older.")), 4_000)
+    ) {
+        "Startup wizard age confirmation did not appear"
+    }
+    if (!age.isChecked) age.click()
+    device.waitForIdle(150)
+    checkNotNull(device.findObject(By.text("CONTINUE"))) {
+        "Startup wizard age Continue action was not enabled"
+    }.click()
+
+    checkNotNull(device.wait(Until.findObject(By.text("Meet ZEROCHILL")), 4_000)) {
+        "Startup wizard experience page did not appear"
+    }
+    checkNotNull(device.findObject(By.text("CONTINUE"))).click()
+
+    checkNotNull(device.wait(Until.findObject(By.text("Built around gestures")), 4_000)) {
+        "Startup wizard controls page did not appear"
+    }
+    checkNotNull(device.findObject(By.text("CONTINUE"))).click()
+
+    checkNotNull(device.wait(Until.findObject(By.text("Make it yours")), 4_000)) {
+        "Startup wizard settings page did not appear"
+    }
+
+    for (description in listOf("Favorite creator alerts", "ZEROCHILL update alerts")) {
+        val toggle = device.findObject(By.desc(description))
+        if (toggle != null && toggle.isChecked) toggle.click()
+    }
+
+    checkNotNull(device.findObject(By.text("ENTER ZEROCHILL"))) {
+        "Startup wizard final action did not appear"
+    }.click()
+    device.waitForIdle(350)
 }
 
 private fun MacrobenchmarkScope.awaitMainNavigation() {

@@ -2,6 +2,7 @@ package com.webapp.crazyshit;
 
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.content.Context;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
@@ -37,6 +38,14 @@ final class GestureGuideDialog {
 
     static void show(Activity activity) {
         show(activity, false);
+    }
+
+    static void markSeen(Context context) {
+        if (context == null) return;
+        context.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
+                .edit()
+                .putBoolean(PREF_SEEN, true)
+                .apply();
     }
 
     private static void schedule(Activity activity, int attempt) {
@@ -76,7 +85,7 @@ final class GestureGuideDialog {
 
         TextView hint = text(
                 activity,
-                "ShitTok tip  •  Swipe for the next clip  •  Hold for 2×",
+                "ShitTok tip  •  Swipe for the next clip  •  Tap to pause",
                 13,
                 Color.WHITE,
                 true
@@ -155,8 +164,10 @@ final class GestureGuideDialog {
                 "Swipe down from a portrait video to keep it playing above the tabs.");
         addGesture(activity, content, "MINI", "Return to the player",
                 "Tap the mini-player to expand the same playback session.");
-        addGesture(activity, content, "2×", "ShitTok speed boost",
-                "Press and hold a ShitTok video to play at double speed. Swipe up or down for the next clip.");
+        addGesture(activity, content, "SWIPE", "Move through ShitTok",
+                "Swipe up or down for the next clip. Tap the current clip to pause or resume.");
+        addGesture(activity, content, "PINCH", "Resize creator galleries",
+                "Pinch inside an OnlyFap creator gallery to smoothly change the grid density.");
         addGesture(activity, content, "BACK", "Related video history",
                 "Swipe back to preview and return through the related videos you opened.");
 
