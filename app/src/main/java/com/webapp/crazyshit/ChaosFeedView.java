@@ -107,6 +107,7 @@ public final class ChaosFeedView extends FrameLayout {
     private static final int NEXT_PRELOAD_MIN_BUFFER_MS = 2_500;
     private static final int NEXT_PRELOAD_MAX_BUFFER_MS = 6_000;
     private static final String SITE = "https://crazyshit.com/";
+    private static final ExecutorService RECENT_PERSIST_IO = Executors.newSingleThreadExecutor();
 
     private final Activity activity;
     private final Host host;
@@ -1167,12 +1168,16 @@ public final class ChaosFeedView extends FrameLayout {
     }
 
     private void saveRecentNow() {
-        JSONArray array = new JSONArray();
-        for (String url : recentUrls) array.put(url);
-        activity.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-                .edit()
-                .putString(KEY_RECENT, array.toString())
-                .apply();
+        ArrayList<String> snapshot = new ArrayList<>(recentUrls);
+        Context appContext = activity.getApplicationContext();
+        RECENT_PERSIST_IO.execute(() -> {
+            JSONArray array = new JSONArray();
+            for (String url : snapshot) array.put(url);
+            appContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                    .edit()
+                    .putString(KEY_RECENT, array.toString())
+                    .commit();
+        });
     }
 
     private void loadHidden() {
