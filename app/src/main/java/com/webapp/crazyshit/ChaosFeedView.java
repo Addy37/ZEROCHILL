@@ -160,6 +160,7 @@ public final class ChaosFeedView extends FrameLayout {
     private int consecutiveDryLoads;
     private int selectedPosition;
     private boolean userPaging;
+    private boolean userTouchingPager;
     private int creatorWarmAheadPosition = -1;
     private int maintenancePosition = -1;
     private boolean maintenanceResolveIssued;
@@ -190,7 +191,26 @@ public final class ChaosFeedView extends FrameLayout {
         addView(pager, new FrameLayout.LayoutParams(-1, -1));
 
         RecyclerView rv = pagerRecycler();
-        if (rv != null) rv.setItemViewCacheSize(3);
+        if (rv != null) {
+            rv.setItemViewCacheSize(3);
+            rv.addOnItemTouchListener(new RecyclerView.SimpleOnItemTouchListener() {
+                @Override
+                public boolean onInterceptTouchEvent(
+                        @NonNull RecyclerView recyclerView,
+                        @NonNull MotionEvent event
+                ) {
+                    int action = event.getActionMasked();
+                    if (action == MotionEvent.ACTION_DOWN) {
+                        userTouchingPager = true;
+                    } else if (action == MotionEvent.ACTION_UP
+                            || action == MotionEvent.ACTION_CANCEL) {
+                        userTouchingPager = false;
+                        runIdleFeedWorkIfSafe();
+                    }
+                    return false;
+                }
+            });
+        }
 
         initialProgress = new ProgressBar(activity);
         FrameLayout.LayoutParams pp = new FrameLayout.LayoutParams(dp(48), dp(48));
@@ -214,9 +234,7 @@ public final class ChaosFeedView extends FrameLayout {
                     cancelSwipePlayerMaintenance();
                 } else if (state == ViewPager2.SCROLL_STATE_IDLE) {
                     userPaging = false;
-                    applyPendingPoolIfIdle();
-                    warmCreatorGalleries(selectedPosition);
-                    scheduleSwipePlayerMaintenance(selectedPosition);
+                    runIdleFeedWorkIfSafe();
                 }
             }
 
@@ -393,9 +411,15 @@ public final class ChaosFeedView extends FrameLayout {
     });
 }
 
-    static boolean shouldApplyLoadedPool(boolean closed, boolean userPaging, int scrollState) {
+    static boolean shouldApplyLoadedPool(
+            boolean closed,
+            boolean userPaging,
+            boolean userTouchingPager,
+            int scrollState
+    ) {
         return !closed
                 && !userPaging
+                && !userTouchingPager
                 && scrollState == ViewPager2.SCROLL_STATE_IDLE;
     }
 
@@ -404,7 +428,8 @@ public final class ChaosFeedView extends FrameLayout {
             List<NativeContentItem> prioritizedRecentFallback
     ) {
         if (closed) return;
-        if (!shouldApplyLoadedPool(closed, userPaging, pager.getScrollState())) {
+        if (!shouldApplyLoadedPool(
+                closed, userPaging, userTouchingPager, pager.getScrollState())) {
             pendingPoolFresh = prioritizedFresh;
             pendingPoolRecentFallback = prioritizedRecentFallback;
             return;
@@ -413,9 +438,20 @@ public final class ChaosFeedView extends FrameLayout {
         warmCreatorGalleries(selectedPosition);
     }
 
+    private void runIdleFeedWorkIfSafe() {
+        if (!shouldApplyLoadedPool(
+                closed, userPaging, userTouchingPager, pager.getScrollState())) {
+            return;
+        }
+        applyPendingPoolIfIdle();
+        warmCreatorGalleries(selectedPosition);
+        scheduleSwipePlayerMaintenance(selectedPosition);
+    }
+
     private void applyPendingPoolIfIdle() {
         if (pendingPoolFresh == null
-                || !shouldApplyLoadedPool(closed, userPaging, pager.getScrollState())) {
+                || !shouldApplyLoadedPool(
+                        closed, userPaging, userTouchingPager, pager.getScrollState())) {
             return;
         }
         List<NativeContentItem> fresh = pendingPoolFresh;
