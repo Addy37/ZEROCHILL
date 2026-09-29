@@ -109,21 +109,33 @@ final class SourceConfigEditor extends LinearLayout {
     private MaterialCardView sourceCard(JSONObject sources, String id, String label) {
         JSONObject source = object(sources, id);
         MaterialCardView card = card();
-        LinearLayout body = vertical(10);
+        LinearLayout row = new LinearLayout(getContext());
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(dp(10), dp(7), dp(8), dp(7));
 
-        LinearLayout heading = new LinearLayout(getContext());
-        heading.setGravity(Gravity.CENTER_VERTICAL);
         LinearLayout copy = vertical(0);
-        TextView title = text(label, 16, color(R.color.app_on_surface));
+        TextView title = text(label, 15, color(R.color.app_on_surface));
         title.setTypeface(null, Typeface.BOLD);
-        TextView summary = text(sourceSummary(id, source), 11,
+        TextView summary = text(sourceSummary(id, source), 10,
                 color(R.color.app_on_surface_variant));
         summary.setSingleLine(true);
         summary.setEllipsize(TextUtils.TruncateAt.END);
-        summary.setPadding(0, dp(1), dp(8), 0);
+        summary.setPadding(0, dp(1), dp(4), 0);
         copy.addView(title);
         copy.addView(summary);
-        heading.addView(copy, new LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        row.addView(copy, new LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+
+        MaterialButton edit = compactButton("Edit");
+        edit.setOnClickListener(v -> showCommonEditor(id, label, source));
+        LinearLayout.LayoutParams editParams = new LinearLayout.LayoutParams(dp(48), dp(32));
+        editParams.setMarginEnd(dp(3));
+        row.addView(edit, editParams);
+
+        MaterialButton advanced = compactButton("JSON");
+        advanced.setOnClickListener(v -> showRawSourceDialog(sources, id, label, source));
+        LinearLayout.LayoutParams jsonParams = new LinearLayout.LayoutParams(dp(52), dp(32));
+        jsonParams.setMarginEnd(dp(2));
+        row.addView(advanced, jsonParams);
 
         MaterialSwitch enabled = new MaterialSwitch(getContext());
         enabled.setChecked(source.optBoolean("enabled", true));
@@ -132,24 +144,9 @@ final class SourceConfigEditor extends LinearLayout {
             put(source, "enabled", checked);
             summary.setText(sourceSummary(id, source));
         });
-        heading.addView(enabled);
-        body.addView(heading);
+        row.addView(enabled);
 
-        LinearLayout actions = new LinearLayout(getContext());
-        actions.setOrientation(HORIZONTAL);
-        actions.setPadding(0, dp(5), 0, 0);
-        MaterialButton edit = compactButton("Edit");
-        MaterialButton advanced = compactButton("JSON");
-        edit.setOnClickListener(v -> showCommonEditor(id, label, source));
-        advanced.setOnClickListener(v -> showRawSourceDialog(sources, id, label, source));
-        LayoutParams actionParams1 = new LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
-        actionParams1.setMarginEnd(dp(3));
-        LayoutParams actionParams2 = new LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
-        actionParams2.setMarginStart(dp(3));
-        actions.addView(edit, actionParams1);
-        actions.addView(advanced, actionParams2);
-        body.addView(actions);
-        card.addView(body);
+        card.addView(row);
         return card;
     }
 
@@ -420,8 +417,10 @@ final class SourceConfigEditor extends LinearLayout {
 
     private MaterialButton compactButton(String value) {
         MaterialButton button = button(value);
-        button.setTextSize(11);
-        button.setMinHeight(dp(34));
+        button.setTextSize(10);
+        button.setMinWidth(0);
+        button.setPadding(dp(3), 0, dp(3), 0);
+        button.setMinHeight(dp(32));
         return button;
     }
 
