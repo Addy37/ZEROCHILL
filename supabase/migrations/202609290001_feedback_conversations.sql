@@ -22,7 +22,7 @@ revoke all on table public.feedback_messages from anon, authenticated;
 create or replace function public.touch_feedback_from_message()
 returns trigger
 language plpgsql
-security definer
+security invoker
 set search_path = public
 as $$
 begin
