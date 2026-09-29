@@ -1,5 +1,6 @@
 package com.addy37.crazyshitadmin;
 
+import android.app.AlertDialog;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.os.Bundle;
@@ -73,27 +74,41 @@ public final class FeedbackThreadActivity extends AppCompatActivity {
 
         LinearLayout header = new LinearLayout(this);
         header.setGravity(Gravity.CENTER_VERTICAL);
-        header.setPadding(dp(14), dp(12), dp(14), dp(6));
+        header.setPadding(dp(10), dp(8), dp(12), dp(4));
 
-        MaterialButton back = button("‹");
-        back.setTextSize(28);
+        MaterialButton back = compactButton("‹");
+        back.setTextSize(24);
         back.setContentDescription("Back");
         back.setOnClickListener(v -> finish());
-        header.addView(back, new LinearLayout.LayoutParams(dp(52), dp(52)));
+        header.addView(back, new LinearLayout.LayoutParams(dp(42), dp(38)));
 
         LinearLayout titles = new LinearLayout(this);
         titles.setOrientation(LinearLayout.VERTICAL);
-        titles.setPadding(dp(10), 0, 0, 0);
-        title = text("Feedback conversation", 22, Color.WHITE, true);
-        meta = text("Loading…", 12, color(R.color.app_on_surface_variant), false);
+        titles.setPadding(dp(9), 0, 0, 0);
+        title = text("Feedback conversation", 20, Color.WHITE, true);
+        meta = text("Loading…", 11, color(R.color.app_on_surface_variant), false);
+        meta.setMaxLines(2);
         titles.addView(title);
         titles.addView(meta);
         header.addView(titles, new LinearLayout.LayoutParams(0, -2, 1f));
+
+        MaterialButton delete = compactButton("");
+        delete.setIconResource(R.drawable.ic_delete);
+        delete.setIconTint(android.content.res.ColorStateList.valueOf(Color.rgb(255, 95, 95)));
+        delete.setIconSize(dp(20));
+        delete.setIconPadding(0);
+        delete.setIconGravity(MaterialButton.ICON_GRAVITY_TEXT_START);
+        delete.setContentDescription("Delete feedback");
+        delete.setMinWidth(0);
+        delete.setPadding(0, 0, 0, 0);
+        delete.setOnClickListener(v -> confirmDelete());
+        header.addView(delete, new LinearLayout.LayoutParams(dp(40), dp(36)));
+
         root.addView(header);
 
         LinearLayout statusRow = new LinearLayout(this);
         statusRow.setGravity(Gravity.CENTER_VERTICAL);
-        statusRow.setPadding(dp(16), 0, dp(16), dp(8));
+        statusRow.setPadding(dp(12), 0, dp(12), dp(5));
 
         status = new Spinner(this);
         status.setAdapter(new ArrayAdapter<>(
@@ -103,7 +118,7 @@ public final class FeedbackThreadActivity extends AppCompatActivity {
         ));
         statusRow.addView(status, new LinearLayout.LayoutParams(0, -2, 1f));
 
-        saveStatus = compactButton("Save status");
+        saveStatus = compactButton("Save");
         saveStatus.setOnClickListener(v -> saveStatus());
         statusRow.addView(saveStatus);
         root.addView(statusRow);
@@ -118,35 +133,40 @@ public final class FeedbackThreadActivity extends AppCompatActivity {
 
         messages = new LinearLayout(this);
         messages.setOrientation(LinearLayout.VERTICAL);
-        messages.setPadding(dp(14), dp(8), dp(14), dp(18));
+        messages.setPadding(dp(12), dp(4), dp(12), dp(10));
         messageScroll.addView(messages, new ScrollView.LayoutParams(-1, -2));
         refresh.addView(messageScroll);
         root.addView(refresh, new LinearLayout.LayoutParams(-1, 0, 1f));
 
         LinearLayout composeRow = new LinearLayout(this);
         composeRow.setGravity(Gravity.BOTTOM);
-        composeRow.setPadding(dp(12), dp(8), dp(12), dp(12));
+        composeRow.setPadding(dp(10), dp(6), dp(10), dp(9));
 
         composer = new EditText(this);
         composer.setHint("Reply to user…");
         composer.setHintTextColor(color(R.color.app_on_surface_variant));
         composer.setTextColor(Color.WHITE);
-        composer.setTextSize(15);
+        composer.setTextSize(14);
         composer.setMinLines(1);
-        composer.setMaxLines(5);
-        composer.setPadding(dp(14), dp(11), dp(14), dp(11));
-        composer.setBackground(rounded(color(R.color.app_surface), 16));
+        composer.setMaxLines(4);
+        composer.setPadding(dp(12), dp(9), dp(12), dp(9));
+        composer.setBackground(rounded(color(R.color.app_surface_raised), 12));
         composer.setFilters(new InputFilter[]{new InputFilter.LengthFilter(2000)});
         composeRow.addView(composer, new LinearLayout.LayoutParams(0, -2, 1f));
 
-        send = button("Send");
-        send.setTextColor(color(R.color.app_on_primary));
-        send.setBackgroundTintList(
-                android.content.res.ColorStateList.valueOf(color(R.color.app_primary))
-        );
+        send = primaryButton("");
+        send.setIconResource(R.drawable.ic_send);
+        send.setIconTint(android.content.res.ColorStateList.valueOf(Color.WHITE));
+        send.setIconSize(dp(22));
+        send.setIconPadding(0);
+        send.setIconGravity(MaterialButton.ICON_GRAVITY_TEXT_START);
+        send.setCornerRadius(dp(24));
+        send.setContentDescription("Send reply");
+        send.setMinWidth(0);
+        send.setPadding(0, 0, 0, 0);
         send.setOnClickListener(v -> sendReply());
-        LinearLayout.LayoutParams sendParams = new LinearLayout.LayoutParams(dp(84), dp(52));
-        sendParams.setMarginStart(dp(8));
+        LinearLayout.LayoutParams sendParams = new LinearLayout.LayoutParams(dp(48), dp(48));
+        sendParams.setMarginStart(dp(7));
         composeRow.addView(send, sendParams);
 
         root.addView(composeRow);
@@ -211,36 +231,34 @@ public final class FeedbackThreadActivity extends AppCompatActivity {
         row.setGravity(developer ? Gravity.END : Gravity.START);
 
         MaterialCardView bubble = new MaterialCardView(this);
-        bubble.setCardBackgroundColor(
-                developer ? Color.rgb(8, 55, 72) : color(R.color.app_surface)
-        );
-        bubble.setStrokeColor(
-                developer ? color(R.color.app_primary) : color(R.color.app_surface_variant)
-        );
+        bubble.setCardBackgroundColor(developer
+                ? color(R.color.app_surface_raised) : color(R.color.app_surface));
+        bubble.setStrokeColor(developer
+                ? color(R.color.app_primary) : color(R.color.app_divider));
         bubble.setStrokeWidth(dp(1));
-        bubble.setRadius(dp(16));
+        bubble.setRadius(dp(13));
         bubble.setCardElevation(0);
 
         LinearLayout body = new LinearLayout(this);
         body.setOrientation(LinearLayout.VERTICAL);
-        body.setPadding(dp(14), dp(11), dp(14), dp(10));
+        body.setPadding(dp(11), dp(8), dp(11), dp(8));
 
         TextView sender = text(
                 developer ? "ZEROCHILL" : "USER",
-                11,
+                10,
                 developer ? color(R.color.app_primary) : color(R.color.app_on_surface_variant),
                 true
         );
         body.addView(sender);
 
-        TextView copy = text(message.message, 15, Color.WHITE, false);
+        TextView copy = text(message.message, 14, Color.WHITE, false);
         copy.setMaxWidth(dp(300));
-        copy.setPadding(0, dp(4), 0, dp(5));
+        copy.setPadding(0, dp(2), 0, dp(3));
         body.addView(copy);
 
         TextView time = text(
                 formatDate(message.createdAt),
-                11,
+                10,
                 color(R.color.app_on_surface_variant),
                 false
         );
@@ -249,11 +267,11 @@ public final class FeedbackThreadActivity extends AppCompatActivity {
         if (developer && message.isRead()) {
             TextView seen = text(
                     "Seen by user · " + formatDate(message.readAt),
-                    11,
+                    10,
                     color(R.color.app_primary),
                     false
             );
-            seen.setPadding(0, dp(3), 0, 0);
+            seen.setPadding(0, dp(2), 0, 0);
             body.addView(seen);
         }
 
@@ -261,7 +279,7 @@ public final class FeedbackThreadActivity extends AppCompatActivity {
         row.addView(bubble, new LinearLayout.LayoutParams(-2, -2));
 
         LinearLayout.LayoutParams rowParams = new LinearLayout.LayoutParams(-1, -2);
-        rowParams.setMargins(0, dp(5), 0, dp(5));
+        rowParams.setMargins(0, dp(3), 0, dp(3));
         messages.addView(row, rowParams);
     }
 
@@ -292,6 +310,45 @@ public final class FeedbackThreadActivity extends AppCompatActivity {
         });
     }
 
+    private void confirmDelete() {
+        new AlertDialog.Builder(this)
+                .setTitle("Delete this feedback?")
+                .setMessage("This permanently deletes the feedback thread and every message in it. This cannot be undone.")
+                .setNegativeButton("Cancel", null)
+                .setPositiveButton("Delete", (dialog, which) -> deleteFeedback())
+                .show();
+    }
+
+    private void deleteFeedback() {
+        send.setEnabled(false);
+        saveStatus.setEnabled(false);
+        composer.setEnabled(false);
+        String token = SecureTokenStore.read(this);
+        network.execute(() -> {
+            try {
+                AdminRepository.deleteFeedback(token, feedbackId);
+                runOnUiThread(() -> {
+                    toast("Feedback deleted");
+                    setResult(RESULT_OK);
+                    finish();
+                });
+            } catch (SecurityException error) {
+                runOnUiThread(() -> {
+                    SecureTokenStore.clear(this);
+                    toast("Admin token expired.");
+                    finish();
+                });
+            } catch (Exception error) {
+                runOnUiThread(() -> {
+                    send.setEnabled(true);
+                    saveStatus.setEnabled(true);
+                    composer.setEnabled(true);
+                    toast(message(error));
+                });
+            }
+        });
+    }
+
     private void saveStatus() {
         saveStatus.setEnabled(false);
         String selectedStatus = String.valueOf(status.getSelectedItem());
@@ -315,7 +372,7 @@ public final class FeedbackThreadActivity extends AppCompatActivity {
 
     private void setSending(boolean sending) {
         send.setEnabled(!sending);
-        send.setText(sending ? "Sending…" : "Send");
+        send.setContentDescription(sending ? "Sending reply" : "Send reply");
         saveStatus.setEnabled(!sending);
     }
 
@@ -335,17 +392,31 @@ public final class FeedbackThreadActivity extends AppCompatActivity {
         button.setAllCaps(false);
         button.setTextColor(color(R.color.app_on_surface));
         button.setBackgroundTintList(
-                android.content.res.ColorStateList.valueOf(color(R.color.app_surface))
+                android.content.res.ColorStateList.valueOf(color(R.color.app_surface_raised))
         );
-        button.setCornerRadius(dp(14));
+        button.setStrokeColor(
+                android.content.res.ColorStateList.valueOf(color(R.color.app_divider))
+        );
+        button.setStrokeWidth(dp(1));
+        button.setCornerRadius(dp(10));
+        button.setInsetTop(0);
+        button.setInsetBottom(0);
+        return button;
+    }
+
+    private MaterialButton primaryButton(String value) {
+        MaterialButton button = button(value);
+        button.setTextColor(color(R.color.app_on_primary));
+        button.setBackgroundTintList(
+                android.content.res.ColorStateList.valueOf(color(R.color.app_primary))
+        );
+        button.setStrokeWidth(0);
         return button;
     }
 
     private MaterialButton compactButton(String value) {
         MaterialButton button = button(value);
-        button.setMinHeight(dp(42));
-        button.setInsetTop(0);
-        button.setInsetBottom(0);
+        button.setMinHeight(dp(36));
         return button;
     }
 

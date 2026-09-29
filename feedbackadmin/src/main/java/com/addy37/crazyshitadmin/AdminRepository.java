@@ -177,6 +177,12 @@ final class AdminRepository {
                 .put("status", status));
     }
 
+    static void deleteFeedback(String token, String id) throws Exception {
+        request(BuildConfig.ADMIN_FEEDBACK_ENDPOINT, token, new JSONObject()
+                .put("action", "delete")
+                .put("id", id));
+    }
+
     static AnalyticsDashboard analytics(String token) throws Exception {
         JSONObject result = request(BuildConfig.ADMIN_FEEDBACK_ENDPOINT, token,
                 new JSONObject().put("action", "analytics"));

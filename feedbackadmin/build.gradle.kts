@@ -12,8 +12,8 @@ android {
         applicationId = "com.addy37.crazyshitadmin"
         minSdk = 26
         targetSdk = 34
-        versionCode = 7
-        versionName = "1.4.0"
+        versionCode = 10
+        versionName = "1.5.2"
         buildConfigField(
             "String",
             "ADMIN_FEEDBACK_ENDPOINT",

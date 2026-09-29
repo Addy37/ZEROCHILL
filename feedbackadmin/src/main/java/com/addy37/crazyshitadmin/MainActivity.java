@@ -9,6 +9,7 @@ import android.graphics.Color;
 import android.graphics.Typeface;
 import android.os.Bundle;
 import android.text.InputType;
+import android.text.TextUtils;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
@@ -50,6 +51,7 @@ public final class MainActivity extends AppCompatActivity {
 
     private final ExecutorService network = Executors.newSingleThreadExecutor();
     private final List<AdminRepository.Item> allItems = new ArrayList<>();
+    private final List<MaterialButton> filterButtons = new ArrayList<>();
     private FeedbackAdapter adapter;
     private SwipeRefreshLayout swipe;
     private TextView count;
@@ -121,7 +123,7 @@ public final class MainActivity extends AppCompatActivity {
         token.setTextColor(color(R.color.app_on_surface));
         token.setHintTextColor(color(R.color.app_on_surface_variant));
 
-        MaterialButton connect = button("Connect securely");
+        MaterialButton connect = primaryButton("Connect securely");
         connect.setMinHeight(dp(52));
         ProgressBar progress = new ProgressBar(this);
         progress.setVisibility(View.GONE);
@@ -161,15 +163,16 @@ public final class MainActivity extends AppCompatActivity {
     private void showDashboard() {
         currentDestination = DASHBOARD;
         LinearLayout shell = screenShell();
-        LinearLayout content = column(18);
+        LinearLayout content = column(0);
+        content.setPadding(dp(14), dp(12), dp(14), dp(6));
 
         LinearLayout header = new LinearLayout(this);
         header.setGravity(Gravity.CENTER_VERTICAL);
         LinearLayout titles = column(0);
         TextView eyebrow = label("ZEROCHILL ADMIN");
-        TextView title = text("Dashboard", 30, Color.WHITE);
+        TextView title = text("Dashboard", 26, Color.WHITE);
         title.setTypeface(null, Typeface.BOLD);
-        TextView subtitle = text("Analytics, feedback, and sources", 14, color(R.color.app_on_surface_variant));
+        TextView subtitle = text("Live control center", 12, color(R.color.app_on_surface_variant));
         titles.addView(eyebrow);
         titles.addView(title);
         titles.addView(subtitle);
@@ -178,8 +181,8 @@ public final class MainActivity extends AppCompatActivity {
         header.addView(lock);
         content.addView(header);
 
-        TextView dashboardStatus = text("Refreshing live data…", 13, color(R.color.app_on_surface_variant));
-        dashboardStatus.setPadding(0, dp(12), 0, dp(2));
+        TextView dashboardStatus = text("Refreshing live data…", 11, color(R.color.app_on_surface_variant));
+        dashboardStatus.setPadding(0, dp(5), 0, dp(2));
         content.addView(dashboardStatus);
 
         LinearLayout userMetrics = new LinearLayout(this);
@@ -190,36 +193,29 @@ public final class MainActivity extends AppCompatActivity {
         userMetrics.addView(metricBlock(today), weighted());
         userMetrics.addView(metricBlock(week), weighted());
         userMetrics.addView(metricBlock(month), weighted());
-        content.addView(panel("ACTIVE USERS", "Anonymous active installs", userMetrics));
+        content.addView(panel("ACTIVE USERS", null, userMetrics));
 
-        LinearLayout trendBody = column(0);
-        TextView topCreator = text("Loading…", 22, Color.WHITE);
+        LinearLayout overview = column(0);
+        TextView topCreator = text("Loading…", 18, Color.WHITE);
         topCreator.setTypeface(null, Typeface.BOLD);
-        TextView creatorDetail = text("Trending creator", 13, color(R.color.app_on_surface_variant));
-        trendBody.addView(topCreator);
-        trendBody.addView(creatorDetail);
-        content.addView(panel("TRENDING NOW", "Most popular creator this week", trendBody));
-
-        LinearLayout feedbackBody = new LinearLayout(this);
-        feedbackBody.setOrientation(LinearLayout.HORIZONTAL);
-        TextView newFeedback = metricNumber("–", "New");
-        TextView totalFeedback = metricNumber("–", "Total");
-        feedbackBody.addView(metricBlock(newFeedback), weighted());
-        feedbackBody.addView(metricBlock(totalFeedback), weighted());
-        content.addView(panel("FEEDBACK", "New and total user submissions", feedbackBody));
-
-        LinearLayout sourceBody = column(0);
-        TextView sourceSummary = text("Loading source status…", 15, color(R.color.app_on_surface));
-        sourceBody.addView(sourceSummary);
-        content.addView(panel("SOURCE HEALTH", "Current remote source switches", sourceBody));
+        TextView creatorDetail = text("Trending creator", 11, color(R.color.app_on_surface_variant));
+        creatorDetail.setPadding(0, dp(1), 0, dp(8));
+        TextView feedbackSummary = text("Feedback  ·  loading", 13, color(R.color.app_on_surface));
+        feedbackSummary.setPadding(0, dp(5), 0, dp(6));
+        TextView sourceSummary = text("Sources  ·  loading", 12, color(R.color.app_on_surface_variant));
+        overview.addView(topCreator);
+        overview.addView(creatorDetail);
+        overview.addView(feedbackSummary);
+        overview.addView(sourceSummary);
+        content.addView(panel("AT A GLANCE", null, overview));
 
         LinearLayout quickBody = new LinearLayout(this);
         quickBody.setOrientation(LinearLayout.HORIZONTAL);
-        MaterialButton analytics = button("View analytics");
-        MaterialButton manageSources = button("Manage sources");
+        MaterialButton analytics = compactButton("Analytics");
+        MaterialButton manageSources = compactButton("Sources");
         quickBody.addView(analytics, weighted());
         quickBody.addView(manageSources, weighted());
-        content.addView(panel("QUICK ACTIONS", "Jump straight to the tools you use most", quickBody));
+        content.addView(panel("QUICK ACTIONS", null, quickBody));
 
         ScrollView scroll = new ScrollView(this);
         scroll.setFillViewport(true);
@@ -257,10 +253,10 @@ public final class MainActivity extends AppCompatActivity {
                     for (AdminRepository.Item item : feedbackItems) {
                         if ("submitted".equals(item.status)) submitted++;
                     }
-                    newFeedback.setText(String.format(Locale.US, "%,d", submitted));
-                    totalFeedback.setText(String.format(Locale.US, "%,d", feedbackItems.size()));
-                    sourceSummary.setText(dashboardSourceStatus(configItem));
-                    dashboardStatus.setText("Live data updated now");
+                    feedbackSummary.setText(String.format(Locale.US,
+                            "Feedback  ·  %,d new  ·  %,d total", submitted, feedbackItems.size()));
+                    sourceSummary.setText("Sources  ·  " + dashboardSourceStatus(configItem).replace("\n", "  ·  "));
+                    dashboardStatus.setText("Updated now");
                 });
             } catch (SecurityException error) {
                 runOnUiThread(() -> {
@@ -269,7 +265,7 @@ public final class MainActivity extends AppCompatActivity {
                     showPairing();
                 });
             } catch (Exception error) {
-                runOnUiThread(() -> dashboardStatus.setText("Could not refresh: " + message(error)));
+                runOnUiThread(() -> dashboardStatus.setText("Refresh failed: " + message(error)));
             }
         });
     }
@@ -277,16 +273,16 @@ public final class MainActivity extends AppCompatActivity {
     private void showInbox() {
         currentDestination = FEEDBACK;
         LinearLayout shell = screenShell();
-        LinearLayout page = column(16);
-        page.setPadding(dp(18), dp(18), dp(18), 0);
+        LinearLayout page = column(0);
+        page.setPadding(dp(14), dp(12), dp(14), 0);
 
         LinearLayout header = new LinearLayout(this);
         header.setGravity(Gravity.CENTER_VERTICAL);
         LinearLayout titles = column(0);
         TextView eyebrow = label("USER VOICE");
-        TextView title = text("Feedback", 30, Color.WHITE);
+        TextView title = text("Feedback", 26, Color.WHITE);
         title.setTypeface(null, Typeface.BOLD);
-        count = text("", 14, color(R.color.app_on_surface_variant));
+        count = text("", 12, color(R.color.app_on_surface_variant));
         titles.addView(eyebrow);
         titles.addView(title);
         titles.addView(count);
@@ -295,16 +291,20 @@ public final class MainActivity extends AppCompatActivity {
         header.addView(lock);
         page.addView(header);
 
+        filterButtons.clear();
         LinearLayout filters = new LinearLayout(this);
         filters.setOrientation(LinearLayout.HORIZONTAL);
-        filters.setPadding(0, dp(12), 0, dp(8));
+        filters.setPadding(0, dp(8), 0, dp(6));
         addFilter(filters, "All", "all");
+        addFilter(filters, "Unread", "unread");
         addFilter(filters, "Bugs", "bug_report");
         addFilter(filters, "Requests", "feature_request");
         page.addView(filters);
 
         RecyclerView list = new RecyclerView(this);
         list.setLayoutManager(new LinearLayoutManager(this));
+        list.setClipToPadding(false);
+        list.setPadding(0, 0, 0, dp(6));
         adapter = new FeedbackAdapter(this::showDetail);
         list.setAdapter(adapter);
         swipe = new SwipeRefreshLayout(this);
@@ -317,37 +317,41 @@ public final class MainActivity extends AppCompatActivity {
         shell.addView(bottomNav(FEEDBACK));
         setContentView(shell);
         lock.setOnClickListener(v -> confirmLock());
+        styleFilterButtons();
         load();
     }
 
     private void showSourceControl() {
         currentDestination = SOURCES;
         LinearLayout shell = screenShell();
-        LinearLayout page = column(16);
-        page.setPadding(dp(18), dp(18), dp(18), dp(8));
+        LinearLayout page = column(0);
+        page.setPadding(dp(14), dp(12), dp(14), dp(6));
 
+        LinearLayout header = new LinearLayout(this);
+        header.setGravity(Gravity.CENTER_VERTICAL);
+        LinearLayout titles = column(0);
         TextView eyebrow = label("REMOTE CONTROL");
-        TextView title = text("Source Control", 30, Color.WHITE);
+        TextView title = text("Source Control", 26, Color.WHITE);
         title.setTypeface(null, Typeface.BOLD);
-        TextView subtitle = text("Keep sources healthy without shipping a new APK.",
-                14, color(R.color.app_on_surface_variant));
-        page.addView(eyebrow);
-        page.addView(title);
-        page.addView(subtitle);
+        TextView subtitle = text("Remote switches and source configuration",
+                12, color(R.color.app_on_surface_variant));
+        titles.addView(eyebrow);
+        titles.addView(title);
+        titles.addView(subtitle);
+        header.addView(titles, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+        MaterialButton lock = compactButton("Lock");
+        header.addView(lock);
+        page.addView(header);
 
-        TextView status = text("Loading published configuration…", 14,
+        TextView status = text("Loading published configuration…", 12,
                 color(R.color.app_on_surface_variant));
-        status.setPadding(0, dp(12), 0, dp(6));
+        status.setPadding(0, dp(6), 0, dp(5));
         page.addView(status);
-
-        TextView help = text("Use each source card for normal changes. Advanced JSON stays available when you need deeper control.",
-                13, color(R.color.app_on_surface_variant));
-        help.setPadding(0, 0, 0, dp(8));
-        page.addView(help);
 
         SourceConfigEditor editor = new SourceConfigEditor(this);
         ScrollView editorScroll = new ScrollView(this);
         editorScroll.setFillViewport(true);
+        editorScroll.setClipToPadding(false);
         editorScroll.addView(editor, new ScrollView.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         page.addView(editorScroll, new LinearLayout.LayoutParams(
@@ -355,10 +359,10 @@ public final class MainActivity extends AppCompatActivity {
 
         LinearLayout actions = new LinearLayout(this);
         actions.setOrientation(LinearLayout.HORIZONTAL);
-        actions.setPadding(0, dp(6), 0, 0);
-        MaterialButton validate = button("Validate");
-        MaterialButton publish = button("Publish");
-        MaterialButton history = button("History");
+        actions.setPadding(0, dp(4), 0, 0);
+        MaterialButton validate = compactButton("Validate");
+        MaterialButton publish = primaryButton("Publish");
+        MaterialButton history = compactButton("History");
         publish.setEnabled(false);
         actions.addView(validate, weighted());
         actions.addView(publish, weighted());
@@ -368,11 +372,12 @@ public final class MainActivity extends AppCompatActivity {
         shell.addView(page, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
         shell.addView(bottomNav(SOURCES));
         setContentView(shell);
+        lock.setOnClickListener(v -> confirmLock());
 
         final long[] currentVersion = {0L};
         final String[] validatedText = {""};
         editor.setOnChangedListener(() -> {
-            if (!validatedText[0].isEmpty()) status.setText("Changes made. Validate again before publishing.");
+            if (!validatedText[0].isEmpty()) status.setText("Changed · validate again before publishing");
             validatedText[0] = "";
             publish.setEnabled(false);
         });
@@ -384,13 +389,13 @@ public final class MainActivity extends AppCompatActivity {
                     if (item == null) {
                         org.json.JSONObject defaults = bundledDefaults();
                         editor.setConfig(defaults);
-                        status.setText("No configuration is published. Bundled defaults are ready to validate.");
+                        status.setText("No published config · bundled defaults loaded");
                         return;
                     }
                     currentVersion[0] = item.optLong("config_version");
                     org.json.JSONObject config = item.optJSONObject("config");
                     editor.setConfig(config);
-                    status.setText(configStatus(item));
+                    status.setText(configStatus(item).replace("\n", "  ·  "));
                 });
             } catch (Exception error) {
                 runOnUiThread(() -> status.setText("Load failed: " + message(error)));
@@ -400,7 +405,7 @@ public final class MainActivity extends AppCompatActivity {
         validate.setOnClickListener(v -> {
             validate.setEnabled(false);
             publish.setEnabled(false);
-            status.setText("Validating changes…");
+            status.setText("Validating…");
             network.execute(() -> {
                 try {
                     org.json.JSONObject candidate = editor.getConfig();
@@ -410,7 +415,7 @@ public final class MainActivity extends AppCompatActivity {
                     validatedText[0] = candidate.toString();
                     runOnUiThread(() -> {
                         editor.setConfig(candidate);
-                        status.setText("Validated version " + (currentVersion[0] + 1L) + ". Ready to publish.");
+                        status.setText("Version " + (currentVersion[0] + 1L) + " validated · ready to publish");
                         validate.setEnabled(true);
                         publish.setEnabled(true);
                     });
@@ -428,12 +433,12 @@ public final class MainActivity extends AppCompatActivity {
             try {
                 if (!editor.getConfig().toString().equals(validatedText[0])) {
                     publish.setEnabled(false);
-                    status.setText("The configuration changed. Validate it again before publishing.");
+                    status.setText("Changed after validation · validate again");
                     return;
                 }
             } catch (Exception error) {
                 publish.setEnabled(false);
-                status.setText("Could not read the edited configuration. Validate it again.");
+                status.setText("Could not read changes · validate again");
                 return;
             }
             publish.setEnabled(false);
@@ -444,7 +449,7 @@ public final class MainActivity extends AppCompatActivity {
                             new org.json.JSONObject(validatedText[0]));
                     currentVersion[0] = version;
                     validatedText[0] = "";
-                    runOnUiThread(() -> status.setText("Published version " + version + ". Changes are live."));
+                    runOnUiThread(() -> status.setText("Version " + version + " published · live now"));
                 } catch (Exception error) {
                     runOnUiThread(() -> {
                         status.setText("Publish failed: " + message(error));
@@ -461,7 +466,7 @@ public final class MainActivity extends AppCompatActivity {
         LinearLayout nav = new LinearLayout(this);
         nav.setOrientation(LinearLayout.HORIZONTAL);
         nav.setGravity(Gravity.CENTER);
-        nav.setPadding(dp(6), dp(7), dp(6), dp(7));
+        nav.setPadding(dp(4), dp(4), dp(4), dp(5));
         nav.setBackgroundColor(color(R.color.app_surface));
 
         nav.addView(navButton("Dashboard", DASHBOARD, selected, v -> showDashboard()), weighted());
@@ -481,13 +486,16 @@ public final class MainActivity extends AppCompatActivity {
         button.setMaxLines(1);
         button.setMinWidth(0);
         button.setPadding(dp(2), 0, dp(2), 0);
-        button.setMinHeight(dp(44));
+        button.setMinHeight(dp(38));
         button.setInsetTop(0);
         button.setInsetBottom(0);
-        button.setCornerRadius(dp(13));
+        button.setCornerRadius(dp(11));
         button.setBackgroundTintList(ColorStateList.valueOf(active
-                ? color(R.color.app_primary) : color(R.color.app_surface_variant)));
-        button.setTextColor(active ? color(R.color.app_on_primary) : color(R.color.app_on_surface_variant));
+                ? color(R.color.app_surface_raised) : color(R.color.app_surface)));
+        button.setStrokeColor(ColorStateList.valueOf(active
+                ? color(R.color.app_primary) : color(R.color.app_surface)));
+        button.setStrokeWidth(active ? dp(1) : 0);
+        button.setTextColor(active ? color(R.color.app_primary) : color(R.color.app_on_surface_variant));
         button.setOnClickListener(click);
         return button;
     }
@@ -616,12 +624,27 @@ public final class MainActivity extends AppCompatActivity {
 
     private void addFilter(LinearLayout row, String label, String value) {
         MaterialButton item = compactButton(label);
-        item.setAllCaps(false);
+        item.setTag(value);
+        item.setTextSize(10);
+        item.setMinHeight(dp(34));
         item.setOnClickListener(v -> {
             filter = value;
             applyFilter();
         });
+        filterButtons.add(item);
         row.addView(item, weighted());
+    }
+
+    private void styleFilterButtons() {
+        for (MaterialButton item : filterButtons) {
+            boolean selected = String.valueOf(item.getTag()).equals(filter);
+            item.setBackgroundTintList(ColorStateList.valueOf(selected
+                    ? color(R.color.app_surface_raised) : color(R.color.app_surface)));
+            item.setStrokeColor(ColorStateList.valueOf(selected
+                    ? color(R.color.app_primary) : color(R.color.app_divider)));
+            item.setStrokeWidth(dp(1));
+            item.setTextColor(selected ? color(R.color.app_primary) : color(R.color.app_on_surface_variant));
+        }
     }
 
     private void load() {
@@ -657,10 +680,15 @@ public final class MainActivity extends AppCompatActivity {
         if (adapter == null || count == null) return;
         List<AdminRepository.Item> shown = new ArrayList<>();
         for (AdminRepository.Item item : allItems) {
-            if (filter.equals("all") || filter.equals(item.type)) shown.add(item);
+            if ("unread".equals(filter)) {
+                if (item.unreadCount > 0) shown.add(item);
+            } else if (filter.equals("all") || filter.equals(item.type)) {
+                shown.add(item);
+            }
         }
         adapter.setItems(shown);
-        count.setText(shown.size() + (shown.size() == 1 ? " submission" : " submissions"));
+        count.setText(shown.size() + (shown.size() == 1 ? " thread" : " threads"));
+        styleFilterButtons();
     }
 
     private void showDetail(AdminRepository.Item item) {
@@ -691,39 +719,39 @@ public final class MainActivity extends AppCompatActivity {
     private MaterialCardView panel(String title, String subtitle, View body) {
         MaterialCardView card = new MaterialCardView(this);
         card.setCardBackgroundColor(color(R.color.app_surface));
-        card.setStrokeColor(color(R.color.app_surface_variant));
+        card.setStrokeColor(color(R.color.app_divider));
         card.setStrokeWidth(dp(1));
-        card.setRadius(dp(20));
+        card.setRadius(dp(14));
         card.setCardElevation(0);
 
-        LinearLayout wrapper = column(16);
+        LinearLayout wrapper = column(12);
         TextView heading = label(title);
         wrapper.addView(heading);
         if (subtitle != null && !subtitle.isEmpty()) {
-            TextView detail = text(subtitle, 13, color(R.color.app_on_surface_variant));
-            detail.setPadding(0, dp(2), 0, dp(12));
+            TextView detail = text(subtitle, 11, color(R.color.app_on_surface_variant));
+            detail.setPadding(0, dp(1), 0, dp(7));
             wrapper.addView(detail);
         } else {
-            heading.setPadding(0, 0, 0, dp(12));
+            heading.setPadding(0, 0, 0, dp(7));
         }
         wrapper.addView(body);
         card.addView(wrapper);
-        LinearLayout.LayoutParams params = matchWrap(dp(8), dp(8));
+        LinearLayout.LayoutParams params = matchWrap(dp(5), dp(5));
         card.setLayoutParams(params);
         return card;
     }
 
     private LinearLayout metricBlock(TextView value) {
-        LinearLayout block = column(2);
+        LinearLayout block = column(1);
         block.setGravity(Gravity.CENTER);
         block.addView(value);
         return block;
     }
 
     private TextView metricNumber(String value, String caption) {
-        TextView result = text(value + "\n" + caption, 14, color(R.color.app_on_surface_variant));
+        TextView result = text(value + "\n" + caption, 13, color(R.color.app_on_surface_variant));
         android.text.SpannableString text = new android.text.SpannableString(value + "\n" + caption);
-        text.setSpan(new android.text.style.RelativeSizeSpan(1.8f), 0, value.length(), 0);
+        text.setSpan(new android.text.style.RelativeSizeSpan(1.55f), 0, value.length(), 0);
         text.setSpan(new android.text.style.StyleSpan(Typeface.BOLD), 0, value.length(), 0);
         result.setText(text);
         result.setGravity(Gravity.CENTER);
@@ -731,26 +759,38 @@ public final class MainActivity extends AppCompatActivity {
     }
 
     private TextView label(String value) {
-        TextView result = text(value, 11, color(R.color.app_primary));
+        TextView result = text(value, 10, color(R.color.app_on_surface_variant));
         result.setTypeface(null, Typeface.BOLD);
-        result.setLetterSpacing(0.08f);
+        result.setLetterSpacing(0.07f);
         return result;
     }
 
     private MaterialButton button(String value) {
         MaterialButton button = new MaterialButton(this);
         button.setText(value);
-        button.setTextColor(color(R.color.app_on_primary));
+        button.setTextColor(color(R.color.app_on_surface));
         button.setAllCaps(false);
-        button.setCornerRadius(dp(14));
+        button.setCornerRadius(dp(10));
+        button.setMinHeight(dp(38));
+        button.setInsetTop(0);
+        button.setInsetBottom(0);
+        button.setBackgroundTintList(ColorStateList.valueOf(color(R.color.app_surface_raised)));
+        button.setStrokeColor(ColorStateList.valueOf(color(R.color.app_divider)));
+        button.setStrokeWidth(dp(1));
+        return button;
+    }
+
+    private MaterialButton primaryButton(String value) {
+        MaterialButton button = button(value);
+        button.setTextColor(color(R.color.app_on_primary));
+        button.setBackgroundTintList(ColorStateList.valueOf(color(R.color.app_primary)));
+        button.setStrokeWidth(0);
         return button;
     }
 
     private MaterialButton compactButton(String value) {
         MaterialButton button = button(value);
-        button.setMinHeight(dp(42));
-        button.setInsetTop(0);
-        button.setInsetBottom(0);
+        button.setMinHeight(dp(36));
         return button;
     }
 
@@ -764,7 +804,7 @@ public final class MainActivity extends AppCompatActivity {
 
     private LinearLayout.LayoutParams weighted() {
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
-        params.setMargins(dp(3), 0, dp(3), 0);
+        params.setMargins(dp(2), 0, dp(2), 0);
         return params;
     }
 
@@ -782,9 +822,9 @@ public final class MainActivity extends AppCompatActivity {
     }
 
     private static String displayType(String type) {
-        if ("bug_report".equals(type)) return "BUG REPORT";
-        if ("feature_request".equals(type)) return "FEATURE REQUEST";
-        return "GENERAL FEEDBACK";
+        if ("bug_report".equals(type)) return "Bug report";
+        if ("feature_request".equals(type)) return "Feature request";
+        return "General feedback";
     }
 
     private static String stars(int rating) {
@@ -820,41 +860,61 @@ public final class MainActivity extends AppCompatActivity {
         @NonNull @Override public Holder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
             MaterialCardView card = new MaterialCardView(MainActivity.this);
             card.setCardBackgroundColor(color(R.color.app_surface));
-            card.setStrokeColor(color(R.color.app_surface_variant));
+            card.setStrokeColor(color(R.color.app_divider));
             card.setStrokeWidth(dp(1));
-            card.setRadius(dp(18));
+            card.setRadius(dp(12));
             card.setCardElevation(0);
-            TextView text = MainActivity.this.text("", 15, color(R.color.app_on_surface));
-            text.setPadding(dp(18), dp(16), dp(18), dp(16));
-            card.addView(text);
+
+            LinearLayout body = column(0);
+            body.setPadding(dp(12), dp(9), dp(12), dp(9));
+            TextView title = MainActivity.this.text("", 12, color(R.color.app_on_surface));
+            title.setTypeface(null, Typeface.BOLD);
+            TextView preview = MainActivity.this.text("", 14, color(R.color.app_on_surface));
+            preview.setMaxLines(2);
+            preview.setEllipsize(TextUtils.TruncateAt.END);
+            preview.setPadding(0, dp(2), 0, dp(3));
+            TextView meta = MainActivity.this.text("", 10, color(R.color.app_on_surface_variant));
+            meta.setSingleLine(true);
+            meta.setEllipsize(TextUtils.TruncateAt.END);
+            body.addView(title);
+            body.addView(preview);
+            body.addView(meta);
+            card.addView(body);
+
             RecyclerView.LayoutParams params = new RecyclerView.LayoutParams(-1, -2);
-            params.setMargins(0, 0, 0, dp(12));
+            params.setMargins(0, 0, 0, dp(7));
             card.setLayoutParams(params);
-            return new Holder(card, text);
+            return new Holder(card, title, preview, meta);
         }
 
         @Override public void onBindViewHolder(@NonNull Holder holder, int position) {
             AdminRepository.Item item = items.get(position);
             String preview = item.lastMessage == null ? "" : item.lastMessage.trim();
-            if (preview.length() > 180) preview = preview.substring(0, 177) + "…";
-            String unread = item.unreadCount > 0
-                    ? "  ·  " + item.unreadCount + (item.unreadCount == 1 ? " unread" : " unread")
-                    : "";
-            String sender = "developer".equals(item.lastSender) ? "YOU" : "USER";
-            holder.text.setText(
-                    displayType(item.type) + stars(item.rating) + unread +
-                            "\n" + sender + ": " + preview +
-                            "\n\n" + item.status.toUpperCase(Locale.US) + "  ·  " +
-                            formatDate(item.lastMessageAt)
-            );
+            String unread = item.unreadCount > 0 ? "  ·  " + item.unreadCount + " new" : "";
+            holder.title.setText(displayType(item.type) + stars(item.rating) + unread);
+            holder.title.setTextColor(item.unreadCount > 0
+                    ? color(R.color.app_primary) : color(R.color.app_on_surface));
+
+            String sender = "developer".equals(item.lastSender) ? "You" : "User";
+            holder.preview.setText(sender + ": " + preview);
+            holder.meta.setText(item.status.replace('_', ' ').toUpperCase(Locale.US) +
+                    "  ·  " + formatDate(item.lastMessageAt));
             holder.itemView.setOnClickListener(v -> click.open(item));
         }
 
         @Override public int getItemCount() { return items.size(); }
 
         final class Holder extends RecyclerView.ViewHolder {
-            final TextView text;
-            Holder(View view, TextView text) { super(view); this.text = text; }
+            final TextView title;
+            final TextView preview;
+            final TextView meta;
+
+            Holder(View view, TextView title, TextView preview, TextView meta) {
+                super(view);
+                this.title = title;
+                this.preview = preview;
+                this.meta = meta;
+            }
         }
     }
 
