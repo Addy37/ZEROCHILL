@@ -145,11 +145,13 @@ public final class FeedbackThreadActivity extends AppCompatActivity {
         send.setIconTint(android.content.res.ColorStateList.valueOf(Color.WHITE));
         send.setIconSize(dp(22));
         send.setIconPadding(0);
+        send.setIconGravity(MaterialButton.ICON_GRAVITY_TEXT_START);
+        send.setCornerRadius(dp(24));
         send.setContentDescription("Send reply");
         send.setMinWidth(0);
         send.setPadding(0, 0, 0, 0);
         send.setOnClickListener(v -> sendReply());
-        LinearLayout.LayoutParams sendParams = new LinearLayout.LayoutParams(dp(48), dp(44));
+        LinearLayout.LayoutParams sendParams = new LinearLayout.LayoutParams(dp(48), dp(48));
         sendParams.setMarginStart(dp(7));
         composeRow.addView(send, sendParams);
 
