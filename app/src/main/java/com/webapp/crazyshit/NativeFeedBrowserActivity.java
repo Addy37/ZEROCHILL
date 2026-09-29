@@ -51,6 +51,8 @@ public final class NativeFeedBrowserActivity extends Activity {
     private static final int CREATOR_TAB_PICTURES = 1;
     private static final int CREATOR_TAB_VIDEOS = 2;
     private static final int CREATOR_TAB_COUNT = 3;
+    private static final long CREATOR_GRID_SETTLE_DURATION_MS = 220L;
+    private static final long CREATOR_GRID_SETTLE_MAX_DELAY_MS = 85L;
 
     public static final String EXTRA_TITLE = "browser_title";
     public static final String EXTRA_BASE_URL = "browser_base_url";
@@ -1953,6 +1955,7 @@ public final class NativeFeedBrowserActivity extends Activity {
         );
         gallery.setGapStrategy(StaggeredGridLayoutManager.GAP_HANDLING_MOVE_ITEMS_BETWEEN_SPANS);
         list.setLayoutManager(gallery);
+        updateCreatorGalleryOverlayDensity(list, gallery.getSpanCount());
         RecyclerView.Adapter<?> listAdapter = list.getAdapter();
         if (listAdapter != null && listAdapter.getItemCount() > 0) {
             int safe = Math.min(position, listAdapter.getItemCount() - 1);
@@ -2022,6 +2025,7 @@ public final class NativeFeedBrowserActivity extends Activity {
         for (RecyclerView creatorRecycler : creatorTabRecyclers) {
             if (creatorRecycler == null) continue;
             RecyclerView.LayoutManager manager = creatorRecycler.getLayoutManager();
+            updateCreatorGalleryOverlayDensity(creatorRecycler, next);
             if (manager instanceof StaggeredGridLayoutManager) {
                 StaggeredGridLayoutManager grid = (StaggeredGridLayoutManager) manager;
                 if (grid.getSpanCount() != next) grid.setSpanCount(next);
@@ -2068,10 +2072,15 @@ public final class NativeFeedBrowserActivity extends Activity {
                         StaggeredGridLayoutManager grid =
                                 (StaggeredGridLayoutManager) list.getLayoutManager();
                         if (grid != null && grid.getSpanCount() != columns) {
-                            grid.setSpanCount(columns);
-                            if (focusPosition[0] != RecyclerView.NO_POSITION) {
-                                grid.scrollToPositionWithOffset(focusPosition[0], focusOffset[0]);
-                            }
+                            animateCreatorGridSpanChange(
+                                    list,
+                                    grid,
+                                    columns,
+                                    focusPosition[0],
+                                    focusOffset[0],
+                                    scaleDetector.getFocusX(),
+                                    scaleDetector.getFocusY()
+                            );
                         }
                         // Match the width of the next grid at each threshold. The visual
                         // thumbnail size remains continuous even when the span count changes.
@@ -2147,6 +2156,128 @@ public final class NativeFeedBrowserActivity extends Activity {
                 }
             }
         });
+    }
+
+    private void updateCreatorGalleryOverlayDensity(RecyclerView list, int columns) {
+        if (list == null) return;
+        RecyclerView.Adapter<?> listAdapter = list.getAdapter();
+        if (listAdapter instanceof BunkrGalleryAdapter) {
+            ((BunkrGalleryAdapter) listAdapter).setGridColumns(columns);
+        }
+    }
+
+    private void animateCreatorGridSpanChange(
+            RecyclerView list,
+            StaggeredGridLayoutManager grid,
+            int columns,
+            int focusPosition,
+            int focusOffset,
+            float focusX,
+            float focusY
+    ) {
+        if (list == null || grid == null || grid.getSpanCount() == columns) return;
+
+        java.util.HashMap<Integer, CreatorGridSnapshot> before = new java.util.HashMap<>();
+        for (int index = 0; index < list.getChildCount(); index++) {
+            View child = list.getChildAt(index);
+            int position = list.getChildAdapterPosition(child);
+            if (position == RecyclerView.NO_POSITION) continue;
+            before.put(position, new CreatorGridSnapshot(
+                    child.getX() + (child.getWidth() / 2f),
+                    child.getY() + (child.getHeight() / 2f),
+                    Math.max(1f, child.getWidth() * child.getScaleX())
+            ));
+            child.animate().cancel();
+            child.setTranslationX(0f);
+            child.setTranslationY(0f);
+            child.setScaleX(1f);
+            child.setScaleY(1f);
+            child.setRotation(0f);
+            child.setAlpha(1f);
+        }
+
+        updateCreatorGalleryOverlayDensity(list, columns);
+        grid.setSpanCount(columns);
+        if (focusPosition != RecyclerView.NO_POSITION) {
+            grid.scrollToPositionWithOffset(focusPosition, focusOffset);
+        }
+
+        if (!android.animation.ValueAnimator.areAnimatorsEnabled() || before.isEmpty()) return;
+
+        list.postOnAnimation(() -> {
+            if (isFinishing() || isDestroyed() || list.getLayoutManager() != grid) return;
+            float maxDistance = (float) Math.hypot(
+                    Math.max(1, list.getWidth()),
+                    Math.max(1, list.getHeight())
+            );
+            for (int index = 0; index < list.getChildCount(); index++) {
+                View child = list.getChildAt(index);
+                int position = list.getChildAdapterPosition(child);
+                CreatorGridSnapshot old = before.get(position);
+                if (old == null || child.getWidth() <= 0) continue;
+
+                float newCenterX = child.getLeft() + (child.getWidth() / 2f);
+                float newCenterY = child.getTop() + (child.getHeight() / 2f);
+                float translationX = old.centerX - newCenterX;
+                float translationY = old.centerY - newCenterY;
+                float startScale = Math.max(
+                        0.72f,
+                        Math.min(1.34f, old.width / Math.max(1f, child.getWidth()))
+                );
+                float rotation = Math.max(
+                        -1.25f,
+                        Math.min(
+                                1.25f,
+                                ((newCenterX - focusX) / Math.max(1f, list.getWidth())) * 2.5f
+                        )
+                );
+                float distance = (float) Math.hypot(
+                        newCenterX - focusX,
+                        newCenterY - focusY
+                );
+                long delay = creatorGridSettleDelay(distance, maxDistance);
+
+                child.animate().cancel();
+                child.setTranslationX(translationX);
+                child.setTranslationY(translationY);
+                child.setScaleX(startScale);
+                child.setScaleY(startScale);
+                child.setRotation(rotation);
+                child.setAlpha(0.94f);
+                child.animate()
+                        .translationX(0f)
+                        .translationY(0f)
+                        .scaleX(1f)
+                        .scaleY(1f)
+                        .rotation(0f)
+                        .alpha(1f)
+                        .setStartDelay(delay)
+                        .setDuration(CREATOR_GRID_SETTLE_DURATION_MS)
+                        .setInterpolator(new android.view.animation.OvershootInterpolator(0.42f))
+                        .start();
+            }
+        });
+    }
+
+    static long creatorGridSettleDelay(float distance, float maxDistance) {
+        if (maxDistance <= 0f || distance <= 0f) return 0L;
+        float fraction = Math.max(0f, Math.min(1f, distance / maxDistance));
+        return Math.min(
+                CREATOR_GRID_SETTLE_MAX_DELAY_MS,
+                Math.round(CREATOR_GRID_SETTLE_MAX_DELAY_MS * fraction)
+        );
+    }
+
+    private static final class CreatorGridSnapshot {
+        final float centerX;
+        final float centerY;
+        final float width;
+
+        CreatorGridSnapshot(float centerX, float centerY, float width) {
+            this.centerX = centerX;
+            this.centerY = centerY;
+            this.width = width;
+        }
     }
 
     private int clamp(int value, int minimum, int maximum) {
