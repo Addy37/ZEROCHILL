@@ -58,6 +58,9 @@ public class ShitTokSwipeStartTest {
 
     @Test public void twoFingerPinchStillHidesAndRestoresChrome() {
         Harness h = new Harness();
+        // Deliver one intact multi-pointer stream to the real PlayerView listener. The
+        // synthetic viewport's separate chrome children can split widely spaced pointers.
+        h.directPlayer = true;
         // Keep both spans above Android's density-dependent minimum scaling span.
         int minimum = ViewConfiguration.get(h.activity).getScaledMinimumScalingSpan();
         float unit = Math.max(200, minimum);
@@ -65,7 +68,7 @@ public class ShitTokSwipeStartTest {
         h.pointers(0, 8, MotionEvent.ACTION_POINTER_DOWN | (1 << 8), 400, 400 + unit * 5);
         h.pointers(0, 16, MotionEvent.ACTION_MOVE, 400, 400 + unit * 4);
         h.pointers(0, 24, MotionEvent.ACTION_MOVE, 400, 400 + unit * 2.5f);
-        assertTrue(ReflectionHelpers.<Boolean>getField(h.feed, "clearDisplay"));
+        assertTrue(h.pinchTrace.toString(), ReflectionHelpers.<Boolean>getField(h.feed, "clearDisplay"));
         assertFalse(h.pager.isUserInputEnabled());
         h.pointers(0, 32, MotionEvent.ACTION_POINTER_UP | (1 << 8), 400, 400 + unit * 2.5f);
         h.event(0, 40, MotionEvent.ACTION_UP, 400, 400);
@@ -77,7 +80,7 @@ public class ShitTokSwipeStartTest {
         h.pointers(1000, 1008, MotionEvent.ACTION_POINTER_DOWN | (1 << 8), 400, 400 + unit * 2.5f);
         h.pointers(1000, 1016, MotionEvent.ACTION_MOVE, 400, 400 + unit * 3.5f);
         h.pointers(1000, 1024, MotionEvent.ACTION_MOVE, 400, 400 + unit * 5);
-        assertFalse(ReflectionHelpers.<Boolean>getField(h.feed, "clearDisplay"));
+        assertFalse(h.pinchTrace.toString(), ReflectionHelpers.<Boolean>getField(h.feed, "clearDisplay"));
         h.pointers(1000, 1032, MotionEvent.ACTION_POINTER_UP | (1 << 8), 400, 400 + unit * 5);
         h.event(1000, 1040, MotionEvent.ACTION_UP, 400, 400);
         shadowOf(android.os.Looper.getMainLooper()).idle();
@@ -119,6 +122,9 @@ public class ShitTokSwipeStartTest {
         int childMoves;
         int clicks;
         Object holder;
+        PlayerView player;
+        boolean directPlayer;
+        final StringBuilder pinchTrace = new StringBuilder();
 
         Harness() {
             // Stop source/player work; keep the actual adapter, PlayerView listener and pager.
@@ -137,7 +143,7 @@ public class ShitTokSwipeStartTest {
             RecyclerView rv = (RecyclerView) pager.getChildAt(0);
             assertTrue(rv.getChildCount() > 0);
             holder = rv.getChildViewHolder(rv.getChildAt(0));
-            PlayerView player = ReflectionHelpers.getField(holder, "playerView");
+            player = ReflectionHelpers.getField(holder, "playerView");
             View.OnTouchListener original = shadowOf(player).getOnTouchListener();
             assertTrue(original != null);
             View.OnClickListener originalClick = shadowOf(player).getOnClickListener();
@@ -148,6 +154,11 @@ public class ShitTokSwipeStartTest {
             player.setOnTouchListener((v, event) -> {
                 if (event.getActionMasked() == MotionEvent.ACTION_MOVE) childMoves++;
                 boolean consumed = original.onTouch(v, event);
+                if (directPlayer) pinchTrace.append("action=").append(event.getActionMasked())
+                        .append(" pointers=").append(event.getPointerCount())
+                        .append(" input=").append(pager.isUserInputEnabled())
+                        .append(" clear=").append(ReflectionHelpers.<Boolean>getField(feed, "clearDisplay"))
+                        .append('\n');
                 if (!pager.isUserInputEnabled() && disabledAt < 0) disabledAt = eventOffset;
                 return consumed;
             });
@@ -187,7 +198,8 @@ public class ShitTokSwipeStartTest {
         void event(long down, long at, int action, float x, float y) {
             eventOffset = at;
             MotionEvent event = MotionEvent.obtain(base + down, base + at, action, x, y, 0);
-            feed.dispatchTouchEvent(event);
+            if (directPlayer) player.dispatchTouchEvent(event);
+            else feed.dispatchTouchEvent(event);
             event.recycle();
         }
 
@@ -208,7 +220,8 @@ public class ShitTokSwipeStartTest {
             MotionEvent event = MotionEvent.obtain(base + down, base + at, action, 2,
                     properties, coords, 0, 0, 1, 1, 0, 0,
                     android.view.InputDevice.SOURCE_TOUCHSCREEN, 0);
-            feed.dispatchTouchEvent(event);
+            if (directPlayer) player.dispatchTouchEvent(event);
+            else feed.dispatchTouchEvent(event);
             event.recycle();
         }
 
