@@ -76,6 +76,22 @@ public class ShitTokSwipeStartTest {
         h.finish();
     }
 
+    @Test public void secondFingerCancelsCreatorSwipeAndReleasesPager() {
+        Harness h = new Harness();
+        ReflectionHelpers.setField(h.holder, "item", new NativeContentItem(
+                NativeContentItem.KIND_MEDIA, "Fixture creator", "https://example.invalid/creator",
+                "", "", "", "", "OnlyHaven", "OnlyHaven"));
+        h.directPlayer = true;
+        h.event(0, 0, MotionEvent.ACTION_DOWN, 400, 700);
+        h.event(0, 16, MotionEvent.ACTION_MOVE, 300, 699);
+        assertTrue(ReflectionHelpers.<Boolean>getField(h.holder, "creatorSwipeTracking"));
+        assertFalse(h.pager.isUserInputEnabled());
+        h.pointers(0, 24, MotionEvent.ACTION_POINTER_DOWN | (1 << 8), 699, 900);
+        assertFalse(ReflectionHelpers.<Boolean>getField(h.holder, "creatorSwipeTracking"));
+        assertTrue(h.pager.isUserInputEnabled());
+        h.finish();
+    }
+
     @Test public void horizontalCreatorSwipeStillOwnsAndReleasesInput() {
         Harness h = new Harness();
         ReflectionHelpers.setField(h.holder, "item", new NativeContentItem(
