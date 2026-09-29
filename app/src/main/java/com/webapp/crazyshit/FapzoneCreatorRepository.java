@@ -701,9 +701,9 @@ final class FapzoneCreatorRepository {
     }
 
     private String cacheName(int mode) {
-        if (mode == MODE_TOP_50) return "onlyfap_trending_v5";
-        // v4 refreshes cards after enforcing Fapello → OnlyHaven → Bunkr artwork priority.
-        return "fapzone_creator_feed_v4_" + mode;
+        if (mode == MODE_TOP_50) return "onlyfap_trending_v6";
+        // v5 refreshes cards after removing unverified synthetic OnlyHaven avatar URLs.
+        return "fapzone_creator_feed_v5_" + mode;
     }
 
     private String serviceLabel(String service) {
