@@ -34,15 +34,17 @@ public final class ShitTokPreloadPolicyTest {
     @Test
     public void loadedBatch_appliesOnlyWhenPagerIsIdle() {
         assertTrue(ChaosFeedView.shouldApplyLoadedPool(
-                false, false, ViewPager2.SCROLL_STATE_IDLE));
+                false, false, false, ViewPager2.SCROLL_STATE_IDLE));
         assertFalse(ChaosFeedView.shouldApplyLoadedPool(
-                false, true, ViewPager2.SCROLL_STATE_IDLE));
+                false, true, false, ViewPager2.SCROLL_STATE_IDLE));
         assertFalse(ChaosFeedView.shouldApplyLoadedPool(
-                false, false, ViewPager2.SCROLL_STATE_DRAGGING));
+                false, false, true, ViewPager2.SCROLL_STATE_IDLE));
         assertFalse(ChaosFeedView.shouldApplyLoadedPool(
-                false, false, ViewPager2.SCROLL_STATE_SETTLING));
+                false, false, false, ViewPager2.SCROLL_STATE_DRAGGING));
         assertFalse(ChaosFeedView.shouldApplyLoadedPool(
-                true, false, ViewPager2.SCROLL_STATE_IDLE));
+                false, false, false, ViewPager2.SCROLL_STATE_SETTLING));
+        assertFalse(ChaosFeedView.shouldApplyLoadedPool(
+                true, false, false, ViewPager2.SCROLL_STATE_IDLE));
     }
 
     @Test
