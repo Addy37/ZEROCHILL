@@ -909,6 +909,9 @@ public final class ChaosFeedView extends FrameLayout {
             return;
         }
 
+        final long resolveStartedNs = renderDiagnostics.nowNs();
+        renderDiagnostics.event(
+                "RESOLVE_START", position, "selected=" + selectedPosition);
         io.execute(() -> {
             CrazyShitRepository.StreamInfo stream = ChaosStartupPreloader.takeResolved(item.url);
             try {
@@ -916,8 +919,16 @@ public final class ChaosFeedView extends FrameLayout {
             } catch (Exception ignored) {
             }
             CrazyShitRepository.StreamInfo resolved = stream;
+            renderDiagnostics.duration(
+                    "RESOLVE_BG",
+                    resolveStartedNs,
+                    position,
+                    "success=" + (resolved != null
+                            && resolved.mediaUrl != null
+                            && !resolved.mediaUrl.isEmpty()));
             activity.runOnUiThread(() -> {
                 if (closed) return;
+                long resolveUiStartedNs = renderDiagnostics.nowNs();
                 resolving.remove(item.url);
                 if (resolved == null || resolved.mediaUrl == null || resolved.mediaUrl.isEmpty()) {
                     if (shouldRetryResolution(item, position)) {
@@ -931,6 +942,11 @@ public final class ChaosFeedView extends FrameLayout {
                 }
                 prepareVisible(position);
                 if (position == selectedPosition) playSelected();
+                renderDiagnostics.duration(
+                        "RESOLVE_UI",
+                        resolveUiStartedNs,
+                        position,
+                        "selected=" + (position == selectedPosition));
             });
         });
     }
@@ -2408,6 +2424,7 @@ public final class ChaosFeedView extends FrameLayout {
                 return;
             }
 
+            long playerPrepareStartedNs = renderDiagnostics.nowNs();
             releasePlayer();
             stream = nextStream;
             lastAttemptedStream = nextStream;
@@ -2504,6 +2521,10 @@ public final class ChaosFeedView extends FrameLayout {
                 public void onPlaybackStateChanged(int state) {
                     if (player != createdPlayer) return;
                     if (state == Player.STATE_READY) {
+                        renderDiagnostics.event(
+                                "PLAYER_READY",
+                                boundPosition,
+                                "selected=" + (boundPosition == selectedPosition));
                         RatingFeedbackPrompt.recordSuccessfulPlayback(activity, nextStream.mediaUrl);
                         failurePending = false;
                         root.removeCallbacks(skipFailedClipRunnable);
@@ -2571,6 +2592,11 @@ public final class ChaosFeedView extends FrameLayout {
                 }
             });
             createdPlayer.prepare();
+            renderDiagnostics.duration(
+                    "PLAYER_PREPARE",
+                    playerPrepareStartedNs,
+                    boundPosition,
+                    "autoplay=" + autoplay);
         }
 
         private void maybeCompleteStartupHandoff() {
