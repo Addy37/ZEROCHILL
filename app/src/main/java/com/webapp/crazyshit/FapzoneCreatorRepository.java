@@ -152,8 +152,8 @@ final class FapzoneCreatorRepository {
     ) throws IOException {
         Context appContext = context.getApplicationContext();
 
-        // Discover is intentionally fresh on each load so the shelf actually changes.
-        // Keep the previous set only as an offline/network-failure fallback.
+        // Discover intentionally refreshes on each load so the set changes naturally.
+        // Keep the last successful set only as an offline/network-failure fallback.
         List<NativeContentItem> stale = readCache(appContext, MODE_TOP_50, true);
 
         LinkedHashMap<String, FapelloRepository.Model> models = new LinkedHashMap<>();
@@ -171,9 +171,10 @@ final class FapzoneCreatorRepository {
                             fapello.fetchModelListing(context, listing, page);
                     if (pageModels == null || pageModels.isEmpty()) break;
                     for (FapelloRepository.Model model : pageModels) {
-                        if (model == null ||
-                                !FapelloRepository.isModelUrl(model.url) ||
-                                !isUsableArtworkUrl(model.imageUrl)) {
+                        if (model == null || !FapelloRepository.isModelUrl(model.url)) continue;
+                        String imageUrl = clean(model.imageUrl);
+                        if (imageUrl.isEmpty() ||
+                                imageUrl.toLowerCase(Locale.US).contains("load.svg")) {
                             continue;
                         }
                         models.putIfAbsent(model.url, model);
@@ -197,17 +198,16 @@ final class FapzoneCreatorRepository {
 
         ArrayList<NativeContentItem> result = new ArrayList<>();
         for (FapelloRepository.Model model : pool) {
-            NativeContentItem base = CreatorCatalog.fromModel(model);
             result.add(new NativeContentItem(
-                    base.kind,
-                    base.title,
-                    base.url,
-                    base.imageUrl,
+                    NativeContentItem.KIND_CREATOR,
+                    model.name,
+                    model.url,
+                    model.imageUrl,
                     String.valueOf(result.size() + 1),
-                    base.uploader,
-                    base.comments,
+                    model.url,
+                    "",
                     "Random Fapello discovery pick",
-                    base.searchQuery
+                    model.name
             ));
             if (result.size() >= DISCOVER_ITEMS) break;
         }
@@ -257,61 +257,28 @@ final class FapzoneCreatorRepository {
         } catch (Exception ignored) {
         }
 
+        NativeContentItem album = null;
+        try {
+            album = chooseAlbum(creator.name, bunkr.searchAlbums(context, creator.name, 1));
+        } catch (Exception ignored) {
+        }
+
         String fapelloPreview = model == null ? "" : clean(model.imageUrl);
-        if (model != null && !isUsableArtworkUrl(fapelloPreview)) {
+        if (model != null && fapelloPreview.isEmpty()) {
             try {
                 fapelloPreview = chooseFapelloPreview(fapello.fetchModelMedia(context, model, 1));
             } catch (Exception ignored) {
             }
         }
 
-        String onlyHavenAvatar = clean(creator.imageUrl);
-        String onlyHavenGallery = "";
-        String imageUrl = chooseArtwork(fapelloPreview, onlyHavenAvatar, "", "");
-
-        // OnlyHaven is the second artwork source. Use its exact creator media before
-        // consulting Bunkr so a weaker Bunkr match cannot replace reliable creator art.
-        if (imageUrl.isEmpty()) {
-            try {
-                List<NativeContentItem> galleryMedia =
-                        onlyHaven.fetchCreatorMedia(context, creator, 1, 8);
-                onlyHavenGallery = chooseGalleryPreview(galleryMedia);
-                imageUrl = chooseArtwork(
-                        fapelloPreview,
-                        onlyHavenAvatar,
-                        onlyHavenGallery,
-                        ""
-                );
-            } catch (Exception ignored) {
-            }
-        }
-
-        NativeContentItem album = null;
-        String bunkrPreview = "";
-        if (imageUrl.isEmpty()) {
-            try {
-                album = chooseAlbum(creator.name, bunkr.searchAlbums(context, creator.name, 1));
-                bunkrPreview = album == null ? "" : clean(album.imageUrl);
-                imageUrl = chooseArtwork(
-                        fapelloPreview,
-                        onlyHavenAvatar,
-                        onlyHavenGallery,
-                        bunkrPreview
-                );
-            } catch (Exception ignored) {
-            }
-        }
-
+        String bunkrPreview = album == null ? "" : clean(album.imageUrl);
+        String imageUrl = chooseThumbnail(fapelloPreview, bunkrPreview);
         String cardUrl;
         String imageReferer;
-        if (model != null && imageUrl.equals(clean(fapelloPreview))) {
+        if (!fapelloPreview.isEmpty() && imageUrl.equals(fapelloPreview) && model != null) {
             cardUrl = model.url;
             imageReferer = model.url;
-        } else if (imageUrl.equals(clean(onlyHavenAvatar)) ||
-                imageUrl.equals(clean(onlyHavenGallery))) {
-            cardUrl = creator.url;
-            imageReferer = creator.url;
-        } else if (album != null && imageUrl.equals(clean(bunkrPreview))) {
+        } else if (album != null) {
             cardUrl = album.url;
             imageReferer = album.url;
         } else if (model != null) {
@@ -322,6 +289,25 @@ final class FapzoneCreatorRepository {
             imageReferer = creator.url;
         }
 
+        // Some OnlyHaven display names do not map cleanly to Fapello/Bunkr names.
+        // If the normal creator-card path has no artwork, use the exact creator media
+        // feed that already powers the unified gallery and cache that preview on the card.
+        if (imageUrl.isEmpty()) {
+            try {
+                List<NativeContentItem> galleryMedia =
+                        onlyHaven.fetchCreatorMedia(context, creator, 1, 8);
+                String galleryPreview = chooseGalleryPreview(galleryMedia);
+                if (!galleryPreview.isEmpty()) {
+                    imageUrl = galleryPreview;
+                    cardUrl = creator.url;
+                    imageReferer = creator.url;
+                }
+            } catch (Exception ignored) {
+            }
+        }
+
+        // OnlyHaven decides the live rank. Artwork first uses the same Fapello/Bunkr
+        // resolver as New, Hot and Popular, then falls back to the gallery's own media.
         NativeContentItem item = new NativeContentItem(
                 NativeContentItem.KIND_CREATOR,
                 creator.name,
@@ -371,58 +357,16 @@ final class FapzoneCreatorRepository {
             int rank,
             FapelloRepository.Model model
     ) {
+        NativeContentItem album = null;
+        try {
+            album = chooseAlbum(model.name, bunkr.searchAlbums(context, model.name, 1));
+        } catch (Exception ignored) {
+        }
+
         String fapelloPreview = clean(model.imageUrl);
-        if (!isUsableArtworkUrl(fapelloPreview)) {
+        if (fapelloPreview.isEmpty()) {
             try {
                 fapelloPreview = chooseFapelloPreview(fapello.fetchModelMedia(context, model, 1));
-            } catch (Exception ignored) {
-            }
-        }
-
-        OnlyHavenRepository.Creator onlyHavenCreator = null;
-        String onlyHavenAvatar = "";
-        String onlyHavenGallery = "";
-        String imageUrl = chooseArtwork(fapelloPreview, "", "", "");
-
-        // Fapello owns these shelves. Only query OnlyHaven when Fapello did not supply
-        // usable artwork, keeping the normal fast path unchanged.
-        if (imageUrl.isEmpty()) {
-            try {
-                onlyHavenCreator = chooseOnlyHavenCreator(
-                        model.name,
-                        onlyHaven.searchCreators(context, model.name, 6)
-                );
-                if (onlyHavenCreator != null) {
-                    onlyHavenAvatar = clean(onlyHavenCreator.imageUrl);
-                    imageUrl = chooseArtwork(fapelloPreview, onlyHavenAvatar, "", "");
-                    if (imageUrl.isEmpty()) {
-                        onlyHavenGallery = chooseGalleryPreview(
-                                onlyHaven.fetchCreatorMedia(context, onlyHavenCreator, 1, 8)
-                        );
-                        imageUrl = chooseArtwork(
-                                fapelloPreview,
-                                onlyHavenAvatar,
-                                onlyHavenGallery,
-                                ""
-                        );
-                    }
-                }
-            } catch (Exception ignored) {
-            }
-        }
-
-        NativeContentItem album = null;
-        String bunkrPreview = "";
-        if (imageUrl.isEmpty()) {
-            try {
-                album = chooseAlbum(model.name, bunkr.searchAlbums(context, model.name, 1));
-                bunkrPreview = album == null ? "" : clean(album.imageUrl);
-                imageUrl = chooseArtwork(
-                        fapelloPreview,
-                        onlyHavenAvatar,
-                        onlyHavenGallery,
-                        bunkrPreview
-                );
             } catch (Exception ignored) {
             }
         }
@@ -430,19 +374,11 @@ final class FapzoneCreatorRepository {
         // Keep the exact Fapello profile on the card. The creator gallery uses it directly
         // instead of having to rediscover or guess the profile slug from the display name.
         String cardUrl = model.url;
-        String imageReferer;
-        if (imageUrl.equals(clean(fapelloPreview))) {
-            imageReferer = model.url;
-        } else if (onlyHavenCreator != null &&
-                (imageUrl.equals(clean(onlyHavenAvatar)) ||
-                        imageUrl.equals(clean(onlyHavenGallery)))) {
-            imageReferer = onlyHavenCreator.url;
-        } else if (album != null && imageUrl.equals(clean(bunkrPreview))) {
-            imageReferer = album.url;
-        } else {
-            imageReferer = model.url;
-        }
-
+        String bunkrPreview = album == null ? "" : clean(album.imageUrl);
+        String imageUrl = chooseThumbnail(fapelloPreview, bunkrPreview);
+        String imageReferer = imageUrl.equals(fapelloPreview)
+                ? model.url
+                : album == null ? model.url : album.url;
         NativeContentItem item = new NativeContentItem(
                 NativeContentItem.KIND_CREATOR,
                 model.name,
@@ -451,114 +387,10 @@ final class FapzoneCreatorRepository {
                 String.valueOf(rank + 1),
                 imageReferer,
                 "",
-                "Fapello + OnlyHaven + Bunkr + WikiFeet + WikiFeet X",
+                "Bunkr + Fapello + OnlyHaven + WikiFeet + WikiFeet X",
                 model.name
         );
         return new ResolvedCreator(rank, item);
-    }
-
-    static final class ArtworkCandidate {
-        final String url;
-        final String referer;
-
-        ArtworkCandidate(String url, String referer) {
-            this.url = clean(url);
-            this.referer = clean(referer);
-        }
-    }
-
-    List<ArtworkCandidate> resolveArtworkCandidates(
-            Context context,
-            NativeContentItem creator
-    ) {
-        LinkedHashMap<String, ArtworkCandidate> candidates = new LinkedHashMap<>();
-        if (creator == null) return new ArrayList<>();
-
-        String name = clean(creator.searchQuery);
-        if (name.isEmpty()) name = clean(creator.title);
-
-        // Re-resolve only after the card's primary Glide request has failed. This keeps
-        // the normal shelf path fast while giving failed images a real source fallback.
-        try {
-            FapelloRepository.Model model = chooseFapelloModel(
-                    name,
-                    fapello.searchConfirmedModels(context, name, 6)
-            );
-            if (model != null) {
-                String preview = clean(model.imageUrl);
-                if (!isUsableArtworkUrl(preview)) {
-                    preview = chooseFapelloPreview(fapello.fetchModelMedia(context, model, 1));
-                }
-                addArtworkCandidate(candidates, preview, model.url);
-            }
-        } catch (Exception ignored) {
-        }
-
-        try {
-            OnlyHavenRepository.Creator onlyHavenCreator = chooseOnlyHavenCreator(
-                    name,
-                    onlyHaven.searchCreators(context, name, 6)
-            );
-            if (onlyHavenCreator != null) {
-                addArtworkCandidate(
-                        candidates,
-                        onlyHavenCreator.imageUrl,
-                        onlyHavenCreator.url
-                );
-                try {
-                    List<NativeContentItem> media =
-                            onlyHaven.fetchCreatorMedia(context, onlyHavenCreator, 1, 8);
-                    addArtworkCandidate(
-                            candidates,
-                            chooseGalleryPreview(media),
-                            onlyHavenCreator.url
-                    );
-                } catch (Exception ignored) {
-                }
-            }
-        } catch (Exception ignored) {
-        }
-
-        try {
-            NativeContentItem album = chooseAlbum(name, bunkr.searchAlbums(context, name, 1));
-            if (album != null) {
-                addArtworkCandidate(candidates, album.imageUrl, album.url);
-            }
-        } catch (Exception ignored) {
-        }
-
-        return new ArrayList<>(candidates.values());
-    }
-
-    private void addArtworkCandidate(
-            LinkedHashMap<String, ArtworkCandidate> candidates,
-            String url,
-            String referer
-    ) {
-        String cleanUrl = clean(url);
-        if (!isUsableArtworkUrl(cleanUrl)) return;
-        candidates.putIfAbsent(cleanUrl, new ArtworkCandidate(cleanUrl, referer));
-    }
-
-    private OnlyHavenRepository.Creator chooseOnlyHavenCreator(
-            String creatorName,
-            List<OnlyHavenRepository.Creator> creators
-    ) {
-        if (creators == null || creators.isEmpty()) return null;
-        OnlyHavenRepository.Creator best = null;
-        int bestRank = Integer.MAX_VALUE;
-        for (OnlyHavenRepository.Creator creator : creators) {
-            if (creator == null || !OnlyHavenRepository.isOnlyHavenUrl(creator.url)) continue;
-            int match = CreatorNameMatcher.rank(creator.name, creatorName);
-            if (match == Integer.MAX_VALUE) {
-                match = CreatorNameMatcher.rank(creator.id, creatorName);
-            }
-            if (match < bestRank) {
-                best = creator;
-                bestRank = match;
-            }
-        }
-        return bestRank == Integer.MAX_VALUE ? null : best;
     }
 
     private NativeContentItem chooseAlbum(String creatorName, List<NativeContentItem> albums) {
@@ -607,32 +439,25 @@ final class FapzoneCreatorRepository {
         return "";
     }
 
-    static String chooseArtwork(
-            String fapelloUrl,
-            String onlyHavenAvatarUrl,
-            String onlyHavenGalleryUrl,
-            String bunkrUrl
-    ) {
-        String[] candidates = {
-                fapelloUrl,
-                onlyHavenAvatarUrl,
-                onlyHavenGalleryUrl,
-                bunkrUrl
-        };
-        for (String candidate : candidates) {
-            if (isUsableArtworkUrl(candidate)) return clean(candidate);
-        }
-        return "";
+    private String chooseThumbnail(String fapelloUrl, String bunkrUrl) {
+        int fapelloScore = thumbnailScore(fapelloUrl, true);
+        int bunkrScore = thumbnailScore(bunkrUrl, false);
+        return fapelloScore >= bunkrScore ? clean(fapelloUrl) : clean(bunkrUrl);
     }
 
-    private static boolean isUsableArtworkUrl(String value) {
+    private int thumbnailScore(String value, boolean fapelloSource) {
         String url = clean(value);
-        if (url.isEmpty()) return false;
+        if (url.isEmpty()) return Integer.MIN_VALUE;
         String lower = url.toLowerCase(Locale.US);
-        return !lower.contains("load.svg") &&
-                !lower.contains("/data/avatars/default/") &&
-                !lower.contains("placeholder") &&
-                !lower.contains("/banners/");
+        if (lower.contains("load.svg") || lower.contains("/data/avatars/default/") ||
+                lower.contains("placeholder") || lower.contains("/banners/")) {
+            return -1000;
+        }
+        int score = 20;
+        if (lower.contains("/content/") || lower.contains("poster")) score += 35;
+        if (lower.contains("_300px") || lower.contains("thumb")) score += 15;
+        if (fapelloSource) score += 8;
+        return score;
     }
 
     private long fileCount(String description) {
@@ -729,7 +554,7 @@ final class FapzoneCreatorRepository {
                                 "description",
                                 mode == MODE_TOP_50
                                         ? "Random Fapello discovery pick"
-                                        : "Fapello + OnlyHaven + Bunkr + WikiFeet + WikiFeet X"
+                                        : "Bunkr + Fapello + OnlyHaven + WikiFeet + WikiFeet X"
                         ),
                         query
                 ));
@@ -772,8 +597,8 @@ final class FapzoneCreatorRepository {
 
     private String cacheName(int mode) {
         if (mode == MODE_TOP_50) return "onlyfap_discover_v1";
-        // v5 refreshes cards after removing unverified synthetic OnlyHaven avatar URLs.
-        return "fapzone_creator_feed_v5_" + mode;
+        // v3 discards cards cached before static Fapello routes were excluded from listings.
+        return "fapzone_creator_feed_v3_" + mode;
     }
 
     private String serviceLabel(String service) {
