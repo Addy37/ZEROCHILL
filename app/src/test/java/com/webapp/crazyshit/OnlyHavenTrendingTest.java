@@ -52,6 +52,7 @@ public class OnlyHavenTrendingTest {
         );
         assertEquals("Second", creators.get(1).name);
         assertEquals(7, creators.get(1).postCount);
+        assertEquals("", creators.get(1).imageUrl);
     }
 
     @Test
