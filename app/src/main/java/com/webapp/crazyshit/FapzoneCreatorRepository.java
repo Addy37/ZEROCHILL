@@ -32,7 +32,9 @@ final class FapzoneCreatorRepository {
 
     private static final int LIVE_ITEMS = 30;
     static final int DISCOVER_ITEMS = 16;
-    private static final int DISCOVER_PAGES_PER_LIST = 1;
+    static final int DISCOVER_CANDIDATES = 48;
+    static final int DISCOVER_START_PAGE = 2;
+    static final int DISCOVER_END_PAGE = 3;
     private static final int LIVE_PAGES = 4;
     private static final int PROGRESS_STEP = 6;
     private static final long CACHE_AGE_MS = TimeUnit.HOURS.toMillis(6);
@@ -165,7 +167,7 @@ final class FapzoneCreatorRepository {
         };
 
         for (String listing : listings) {
-            for (int page = 1; page <= DISCOVER_PAGES_PER_LIST; page++) {
+            for (int page = DISCOVER_START_PAGE; page <= DISCOVER_END_PAGE; page++) {
                 try {
                     List<FapelloRepository.Model> pageModels =
                             fapello.fetchModelListing(context, listing, page);
@@ -209,7 +211,7 @@ final class FapzoneCreatorRepository {
                     "Random Fapello discovery pick",
                     model.name
             ));
-            if (result.size() >= DISCOVER_ITEMS) break;
+            if (result.size() >= DISCOVER_CANDIDATES) break;
         }
 
         if (result.isEmpty()) {
@@ -220,6 +222,70 @@ final class FapzoneCreatorRepository {
         writeCache(appContext, MODE_TOP_50, result);
         if (listener != null) listener.onProgress(new ArrayList<>(result));
         return result;
+    }
+
+    static ArrayList<NativeContentItem> selectDiscoverItems(
+            List<NativeContentItem> candidates,
+            List<NativeContentItem> newItems,
+            List<NativeContentItem> hotItems,
+            List<NativeContentItem> popularItems
+    ) {
+        HashSet<String> excluded = new HashSet<>();
+        addCreatorKeys(excluded, newItems);
+        addCreatorKeys(excluded, hotItems);
+        addCreatorKeys(excluded, popularItems);
+
+        ArrayList<NativeContentItem> result = new ArrayList<>();
+        HashSet<String> seen = new HashSet<>();
+        if (candidates == null) return result;
+
+        for (NativeContentItem item : candidates) {
+            if (item == null || matchesCreatorKeys(excluded, item)) continue;
+            String identity = primaryCreatorKey(item);
+            if (identity.isEmpty() || !seen.add(identity)) continue;
+            result.add(item);
+            if (result.size() >= DISCOVER_ITEMS) break;
+        }
+        return result;
+    }
+
+    private static void addCreatorKeys(Set<String> keys, List<NativeContentItem> items) {
+        if (keys == null || items == null) return;
+        for (NativeContentItem item : items) {
+            if (item == null) continue;
+            String urlKey = creatorUrlKey(item);
+            String nameKey = creatorNameKey(item);
+            if (!urlKey.isEmpty()) keys.add(urlKey);
+            if (!nameKey.isEmpty()) keys.add(nameKey);
+        }
+    }
+
+    private static boolean matchesCreatorKeys(Set<String> keys, NativeContentItem item) {
+        if (keys == null || keys.isEmpty() || item == null) return false;
+        String urlKey = creatorUrlKey(item);
+        if (!urlKey.isEmpty() && keys.contains(urlKey)) return true;
+        String nameKey = creatorNameKey(item);
+        return !nameKey.isEmpty() && keys.contains(nameKey);
+    }
+
+    private static String primaryCreatorKey(NativeContentItem item) {
+        String urlKey = creatorUrlKey(item);
+        return urlKey.isEmpty() ? creatorNameKey(item) : urlKey;
+    }
+
+    private static String creatorUrlKey(NativeContentItem item) {
+        String url = clean(item == null ? "" : item.url).toLowerCase(Locale.US);
+        if (url.isEmpty()) return "";
+        while (url.endsWith("/")) url = url.substring(0, url.length() - 1);
+        return "url:" + url;
+    }
+
+    private static String creatorNameKey(NativeContentItem item) {
+        if (item == null) return "";
+        String value = clean(item.searchQuery);
+        if (value.isEmpty()) value = clean(item.title);
+        String compact = compact(value);
+        return compact.isEmpty() ? "" : "name:" + compact;
     }
 
     static String titleFor(int mode) {
@@ -523,7 +589,7 @@ final class FapzoneCreatorRepository {
 
     private List<NativeContentItem> readCache(Context context, int mode, boolean allowStale) {
         ArrayList<NativeContentItem> result = new ArrayList<>();
-        int limit = mode == MODE_TOP_50 ? DISCOVER_ITEMS : LIVE_ITEMS;
+        int limit = mode == MODE_TOP_50 ? DISCOVER_CANDIDATES : LIVE_ITEMS;
         try {
             SharedPreferences prefs = context.getSharedPreferences(cacheName(mode), Context.MODE_PRIVATE);
             long updated = prefs.getLong("updated", 0L);
@@ -596,7 +662,7 @@ final class FapzoneCreatorRepository {
     }
 
     private String cacheName(int mode) {
-        if (mode == MODE_TOP_50) return "onlyfap_discover_v1";
+        if (mode == MODE_TOP_50) return "onlyfap_discover_v2";
         // v3 discards cards cached before static Fapello routes were excluded from listings.
         return "fapzone_creator_feed_v3_" + mode;
     }
