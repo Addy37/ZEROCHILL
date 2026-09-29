@@ -1142,10 +1142,16 @@ public final class ChaosFeedView extends FrameLayout {
 
         ExoPlayer detached = deferredPlayerReleases.pollFirst();
         if (detached != null) {
+            long releaseStartedNs = renderDiagnostics.nowNs();
             try {
                 detached.release();
             } catch (Exception ignored) {
             }
+            renderDiagnostics.duration(
+                    "PLAYER_RELEASE",
+                    releaseStartedNs,
+                    selectedPosition,
+                    "sync=false");
         } else {
             detachOneDistantPlayer(position);
         }
@@ -1193,10 +1199,16 @@ public final class ChaosFeedView extends FrameLayout {
         removeCallbacks(playerReleaseMaintenanceRunnable);
         while (!deferredPlayerReleases.isEmpty()) {
             ExoPlayer player = deferredPlayerReleases.removeFirst();
+            long releaseStartedNs = renderDiagnostics.nowNs();
             try {
                 player.release();
             } catch (Exception ignored) {
             }
+            renderDiagnostics.duration(
+                    "PLAYER_RELEASE",
+                    releaseStartedNs,
+                    selectedPosition,
+                    "sync=drain");
         }
     }
 
@@ -1522,6 +1534,34 @@ public final class ChaosFeedView extends FrameLayout {
                 .setNeutralButton("Share", (dialog, which) -> sharePlaybackReport(report))
                 .setNegativeButton("Close", null)
                 .show();
+    }
+
+    private void showRenderDiagnostics() {
+        String report = renderDiagnostics.report();
+        new AlertDialog.Builder(activity)
+                .setTitle("ShitTok render diagnostics")
+                .setMessage(report)
+                .setPositiveButton("Copy", (dialog, which) -> copyRenderDiagnostics(report))
+                .setNeutralButton("Reset", (dialog, which) -> {
+                    renderDiagnostics.reset();
+                    Toast.makeText(
+                            activity, "Render diagnostics reset.", Toast.LENGTH_SHORT).show();
+                })
+                .setNegativeButton("Close", null)
+                .show();
+    }
+
+    private void copyRenderDiagnostics(String report) {
+        ClipboardManager clipboard = (ClipboardManager) activity.getSystemService(
+                Context.CLIPBOARD_SERVICE
+        );
+        if (clipboard == null) {
+            Toast.makeText(activity, "Clipboard isn't available.", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        clipboard.setPrimaryClip(
+                ClipData.newPlainText("ZEROCHILL ShitTok render diagnostics", report));
+        Toast.makeText(activity, "Render diagnostics copied.", Toast.LENGTH_SHORT).show();
     }
 
     private void copyPlaybackReport(String report) {
@@ -2724,6 +2764,12 @@ public final class ChaosFeedView extends FrameLayout {
                                     "Report problem",
                                     "Tell us what went wrong",
                                     () -> showPlaybackReport(this)
+                            ),
+                            VideoActionSheet.action(
+                                    R.drawable.ic_action_report,
+                                    "Render diagnostics",
+                                    "Copy timing around ShitTok freezes",
+                                    ChaosFeedView.this::showRenderDiagnostics
                             )
                     )
             );
@@ -3011,6 +3057,7 @@ public final class ChaosFeedView extends FrameLayout {
         }
 
         void detachPlayerForDeferredRelease() {
+            long detachStartedNs = renderDiagnostics.nowNs();
             root.removeCallbacks(hideControlsRunnable);
             root.removeCallbacks(skipFailedClipRunnable);
             failurePending = false;
@@ -3030,9 +3077,16 @@ public final class ChaosFeedView extends FrameLayout {
             }
             playerHolders.remove(this);
             stream = null;
+            renderDiagnostics.duration(
+                    "PLAYER_DETACH",
+                    detachStartedNs,
+                    boundPosition,
+                    "queued=" + (detached != null));
         }
 
         void releasePlayer() {
+            long releaseStartedNs = renderDiagnostics.nowNs();
+            boolean hadPlayer = player != null;
             root.removeCallbacks(hideControlsRunnable);
             root.removeCallbacks(skipFailedClipRunnable);
             failurePending = false;
@@ -3050,6 +3104,13 @@ public final class ChaosFeedView extends FrameLayout {
             }
             playerHolders.remove(this);
             stream = null;
+            if (hadPlayer) {
+                renderDiagnostics.duration(
+                        "PLAYER_RELEASE",
+                        releaseStartedNs,
+                        boundPosition,
+                        "sync=true");
+            }
         }
     }
 }
