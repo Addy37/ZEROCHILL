@@ -17,7 +17,6 @@ import android.view.Gravity;
 import android.view.HapticFeedbackConstants;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
-import android.view.ScaleGestureDetector;
 import android.view.View;
 import android.view.ViewGroup;
 import android.webkit.CookieManager;
@@ -1867,47 +1866,8 @@ public final class ChaosFeedView extends FrameLayout {
             });
 
             playerView.setLongClickable(false);
-            final float[] pinchScale = {1f};
-            final boolean[] pinchConsumed = {false};
-            ScaleGestureDetector clearDisplayGesture = new ScaleGestureDetector(
-                    activity,
-                    new ScaleGestureDetector.SimpleOnScaleGestureListener() {
-                        @Override
-                        public boolean onScaleBegin(ScaleGestureDetector detector) {
-                            pinchScale[0] = 1f;
-                            pinchConsumed[0] = true;
-                            pager.setUserInputEnabled(false);
-                            ViewParentCompat.disallow(playerView, true);
-                            return true;
-                        }
-
-                        @Override
-                        public boolean onScale(ScaleGestureDetector detector) {
-                            pinchScale[0] *= detector.getScaleFactor();
-                            pinchScale[0] = Math.max(0.5f, Math.min(2f, pinchScale[0]));
-                            if (!clearDisplay && shouldEnterClearDisplay(pinchScale[0])) {
-                                haptic(playerView);
-                                setClearDisplay(true);
-                                pinchScale[0] = 1f;
-                            } else if (clearDisplay && shouldExitClearDisplay(pinchScale[0])) {
-                                haptic(playerView);
-                                setClearDisplay(false);
-                                pinchScale[0] = 1f;
-                            }
-                            return true;
-                        }
-
-                        @Override
-                        public void onScaleEnd(ScaleGestureDetector detector) {
-                            pager.setUserInputEnabled(true);
-                            ViewParentCompat.disallow(playerView, false);
-                        }
-                    }
-            );
             playerView.setOnTouchListener((v, event) -> {
-                clearDisplayGesture.onTouchEvent(event);
                 int action = event.getActionMasked();
-                boolean multiTouch = event.getPointerCount() > 1 || clearDisplayGesture.isInProgress();
 
                 if (action == MotionEvent.ACTION_DOWN) {
                     creatorSwipeDownX = event.getX();
@@ -1915,18 +1875,17 @@ public final class ChaosFeedView extends FrameLayout {
                     creatorSwipeTracking = false;
                 }
 
-                if (action == MotionEvent.ACTION_POINTER_DOWN) {
+                if (event.getPointerCount() > 1) {
                     creatorSwipeTracking = false;
                     cancelCreatorSwipePreview(root);
                     ShitTokTransitionSnapshotStore.remove(creatorSwipeTransitionToken);
                     creatorSwipeTransitionToken = "";
-                    pager.setUserInputEnabled(false);
-                    ViewParentCompat.disallow(v, true);
-                    return true;
+                    pager.setUserInputEnabled(true);
+                    ViewParentCompat.disallow(v, false);
+                    return false;
                 }
 
-                if (action == MotionEvent.ACTION_MOVE && !multiTouch
-                        && !manualFullscreen) {
+                if (action == MotionEvent.ACTION_MOVE && !manualFullscreen) {
                     String creator = ShitTokCreatorMetadata.creatorName(item);
                     float dx = event.getX() - creatorSwipeDownX;
                     float dy = event.getY() - creatorSwipeDownY;
@@ -1984,11 +1943,8 @@ public final class ChaosFeedView extends FrameLayout {
 
                     pager.setUserInputEnabled(true);
                     ViewParentCompat.disallow(v, false);
-                    boolean consumedPinch = pinchConsumed[0];
-                    pinchConsumed[0] = false;
-                    if (consumedPinch) return true;
                 }
-                return multiTouch;
+                return false;
             });
 
             View.OnLongClickListener menuLongPress = v -> {
