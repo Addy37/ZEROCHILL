@@ -1,27 +1,79 @@
 # ZeroChill feedback setup
 
-The Android screen is already wired to a Supabase Edge Function. Users do not create accounts.
-Each app installation gets a random ID. The function hashes that ID before storing it.
+ZEROCHILL uses anonymous per-installation feedback identity. Users do not need accounts.
+Each app installation gets a random UUID. The feedback Edge Function hashes that UUID before
+database access, so the raw installation ID is not stored in Supabase.
 
-## One-time Supabase setup
+## Live endpoints
 
-1. Create a Supabase project.
-2. Run `supabase/migrations/202609120001_create_feedback.sql` in the SQL editor.
-3. Deploy `supabase/functions/feedback/index.ts` as an Edge Function named `feedback`.
-4. Add a long random `FEEDBACK_ID_SALT` secret to the Edge Function.
-5. Add these GitHub Actions repository secrets:
-   - `FEEDBACK_ENDPOINT`: `https://YOUR_PROJECT.supabase.co/functions/v1/feedback`
-   - `FEEDBACK_ANON_KEY`: the project's publishable or anon key
-6. Pass those secrets into the Gradle build environment used for release builds.
+- Public app feedback: `dynamic-api`
+- Private admin feedback: `feedback-admin`
 
-The Supabase URL and publishable key are client configuration, not administrator credentials.
-Never place the service-role key in the app or GitHub Actions build environment.
+The repository keeps the public handler under both
+`supabase/functions/dynamic-api/index.ts` (the live deployed slug) and
+`supabase/functions/feedback/index.ts` for compatibility with the original setup documentation.
 
-## Review and reply
+## Database
 
-Open Supabase, then **Table Editor > app_feedback**. You can filter by type, rating, version,
-device, section, or status. Change `status` and `developer_reply` in the row. The user sees the
-changes under **Feedback > My feedback** the next time they open it.
+Run:
+
+- `supabase/migrations/202609120001_create_feedback.sql` for the base feedback table on a new project.
+- `supabase/migrations/202609290001_feedback_conversations.sql` for threaded conversations and read receipts.
+
+`app_feedback` remains the ticket metadata and legacy compatibility row.
+`feedback_messages` stores every user/developer message with `created_at` and nullable
+`read_at`.
+
+The conversation migration backfills each existing ticket's original message and any existing
+`developer_reply` into `feedback_messages`. It does not delete or rename legacy columns.
+
+## Secrets and client configuration
+
+The public function requires:
+
+- `FEEDBACK_ID_SALT`
+- `SUPABASE_URL`
+- `SUPABASE_SERVICE_ROLE_KEY`
+
+The private admin function also requires:
+
+- `FEEDBACK_ADMIN_TOKEN_HASH`
+
+Release builds receive:
+
+- `FEEDBACK_ENDPOINT`
+- `FEEDBACK_ANON_KEY`
+
+The Supabase URL and publishable/anon key are client configuration. Keep the service-role key and
+admin token on the backend only.
+
+## Conversation behavior
+
+The public app can:
+
+- submit a new feedback ticket
+- list tickets owned by its hashed installation ID
+- open one owned thread
+- reply to that thread
+- mark developer messages read when the thread is opened
+
+The admin app can:
+
+- list all feedback threads
+- see unread user reply counts
+- open a thread
+- reply as ZEROCHILL
+- update ticket status
+- mark user messages read when the thread is opened
+- see when a developer message was read by the user
+
+Read receipts are therefore symmetric:
+
+- the user sees **Seen by ZEROCHILL** on user messages after the admin opens the thread
+- the admin sees **Seen by user** on developer messages after the user opens the thread
+
+Existing installed versions remain compatible because `message` and `developer_reply` continue
+to be populated on `app_feedback`.
 
 Allowed statuses are `submitted`, `reviewing`, `planned`, `in_progress`, `completed`, and
 `declined`.
