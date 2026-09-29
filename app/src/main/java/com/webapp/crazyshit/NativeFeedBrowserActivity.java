@@ -2204,30 +2204,26 @@ public final class NativeFeedBrowserActivity extends Activity {
         }
 
         java.util.HashMap<Integer, CreatorGridSnapshot> before = new java.util.HashMap<>();
-        int[] listLocation = new int[2];
-        list.getLocationOnScreen(listLocation);
         float oldListScaleX = Math.max(0.01f, list.getScaleX());
         float oldListScaleY = Math.max(0.01f, list.getScaleY());
-        float oldPivotX = list.getPivotX();
-        float oldPivotY = list.getPivotY();
 
         for (int index = 0; index < list.getChildCount(); index++) {
             View child = list.getChildAt(index);
             int position = list.getChildAdapterPosition(child);
             if (position == RecyclerView.NO_POSITION) continue;
 
-            float localCenterX = child.getLeft() + child.getTranslationX() +
-                    (child.getWidth() / 2f);
-            float localCenterY = child.getTop() + child.getTranslationY() +
-                    (child.getHeight() / 2f);
-            float screenCenterX = listLocation[0] + oldPivotX +
-                    ((localCenterX - oldPivotX) * oldListScaleX);
-            float screenCenterY = listLocation[1] + oldPivotY +
-                    ((localCenterY - oldPivotY) * oldListScaleY);
+            int[] childLocation = new int[2];
+            child.getLocationOnScreen(childLocation);
             float visualWidth = Math.max(
                     1f,
                     child.getWidth() * child.getScaleX() * oldListScaleX
             );
+            float visualHeight = Math.max(
+                    1f,
+                    child.getHeight() * child.getScaleY() * oldListScaleY
+            );
+            float screenCenterX = childLocation[0] + (visualWidth / 2f);
+            float screenCenterY = childLocation[1] + (visualHeight / 2f);
 
             before.put(position, new CreatorGridSnapshot(
                     screenCenterX,
@@ -2258,12 +2254,8 @@ public final class NativeFeedBrowserActivity extends Activity {
                     return true;
                 }
 
-                int[] nextListLocation = new int[2];
-                list.getLocationOnScreen(nextListLocation);
                 float nextListScaleX = Math.max(0.01f, list.getScaleX());
                 float nextListScaleY = Math.max(0.01f, list.getScaleY());
-                float nextPivotX = list.getPivotX();
-                float nextPivotY = list.getPivotY();
                 android.view.animation.PathInterpolator curve =
                         new android.view.animation.PathInterpolator(0.20f, 0f, 0.05f, 1f);
 
@@ -2273,12 +2265,12 @@ public final class NativeFeedBrowserActivity extends Activity {
                     CreatorGridSnapshot old = before.get(position);
                     if (old == null || child.getWidth() <= 0) continue;
 
-                    float localCenterX = child.getLeft() + (child.getWidth() / 2f);
-                    float localCenterY = child.getTop() + (child.getHeight() / 2f);
-                    float screenCenterX = nextListLocation[0] + nextPivotX +
-                            ((localCenterX - nextPivotX) * nextListScaleX);
-                    float screenCenterY = nextListLocation[1] + nextPivotY +
-                            ((localCenterY - nextPivotY) * nextListScaleY);
+                    int[] childLocation = new int[2];
+                    child.getLocationOnScreen(childLocation);
+                    float newVisualWidth = Math.max(1f, child.getWidth() * nextListScaleX);
+                    float newVisualHeight = Math.max(1f, child.getHeight() * nextListScaleY);
+                    float screenCenterX = childLocation[0] + (newVisualWidth / 2f);
+                    float screenCenterY = childLocation[1] + (newVisualHeight / 2f);
 
                     float translationX =
                             (old.screenCenterX - screenCenterX) / nextListScaleX;
@@ -2286,7 +2278,7 @@ public final class NativeFeedBrowserActivity extends Activity {
                             (old.screenCenterY - screenCenterY) / nextListScaleY;
                     float startScale = creatorGridMorphScale(
                             old.visualWidth,
-                            child.getWidth() * nextListScaleX
+                            newVisualWidth
                     );
 
                     // Apply the inverse transform before this new layout is ever drawn. The
