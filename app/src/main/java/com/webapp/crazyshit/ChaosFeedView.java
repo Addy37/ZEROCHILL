@@ -137,6 +137,7 @@ public final class ChaosFeedView extends FrameLayout {
     private final ChaosSourceMixer sourceMixer = new ChaosSourceMixer(repository, random);
     private final ShitTokAspectPriority aspectPriority = new ShitTokAspectPriority();
     private final ShitTokSessionResume sessionResume = new ShitTokSessionResume();
+    private final ShitTokRenderDiagnostics renderDiagnostics;
 
     private ViewPager2 pager;
     private ChaosAdapter adapter;
@@ -173,6 +174,7 @@ public final class ChaosFeedView extends FrameLayout {
         super(activity);
         this.activity = activity;
         this.host = host;
+        this.renderDiagnostics = new ShitTokRenderDiagnostics(activity);
         setBackgroundColor(Color.BLACK);
         loadRecent();
         loadHidden();
@@ -199,6 +201,8 @@ public final class ChaosFeedView extends FrameLayout {
                         @NonNull RecyclerView recyclerView,
                         @NonNull MotionEvent event
                 ) {
+                    renderDiagnostics.onPagerTouch(
+                            event, pager.getScrollState(), selectedPosition);
                     int action = event.getActionMasked();
                     if (action == MotionEvent.ACTION_DOWN) {
                         userTouchingPager = true;
@@ -229,6 +233,7 @@ public final class ChaosFeedView extends FrameLayout {
         pager.registerOnPageChangeCallback(new ViewPager2.OnPageChangeCallback() {
             @Override
             public void onPageScrollStateChanged(int state) {
+                renderDiagnostics.onPagerState(state, selectedPosition);
                 if (state == ViewPager2.SCROLL_STATE_DRAGGING) {
                     userPaging = true;
                     cancelSwipePlayerMaintenance();
@@ -240,6 +245,10 @@ public final class ChaosFeedView extends FrameLayout {
 
             @Override
             public void onPageSelected(int position) {
+                long pageCallbackStartedNs = renderDiagnostics.nowNs();
+                renderDiagnostics.event(
+                        "PAGE_SELECTED", position,
+                        "from=" + selectedPosition + " items=" + items.size());
                 cancelSwipePlayerMaintenance();
                 int previousPosition = selectedPosition;
                 boolean changed = position != previousPosition;
@@ -275,6 +284,11 @@ public final class ChaosFeedView extends FrameLayout {
                 if (changed && pager.getScrollState() == ViewPager2.SCROLL_STATE_IDLE) {
                     scheduleSwipePlayerMaintenance(position);
                 }
+                renderDiagnostics.duration(
+                        "PAGE_CALLBACK",
+                        pageCallbackStartedNs,
+                        position,
+                        "changed=" + changed);
             }
         });
     }
@@ -364,6 +378,7 @@ public final class ChaosFeedView extends FrameLayout {
     public void close() {
         resetCreatorSwipePreview();
         closed = true;
+        renderDiagnostics.close();
         poolLoading = false;
         pendingPoolFresh = null;
         pendingPoolRecentFallback = null;
