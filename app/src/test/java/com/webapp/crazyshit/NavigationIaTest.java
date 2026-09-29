@@ -160,14 +160,14 @@ public class NavigationIaTest {
                 "OnlyFap More");
         View featuredAction = findByDescription(activity.getWindow().getDecorView(),
                 "Open featured creator gallery");
-        View trendingShelf = findByDescription(activity.getWindow().getDecorView(),
-                "Trending creators shelf");
+        View discoverShelf = findByDescription(activity.getWindow().getDecorView(),
+                "Discover creators shelf");
         View primaryTopBar = findByDescription(activity.getWindow().getDecorView(),
                 "Primary top bar");
         assertNotNull(search);
         assertNotNull(heroMore);
         assertNotNull(featuredAction);
-        assertNotNull(trendingShelf);
+        assertNotNull(discoverShelf);
         assertNotNull(primaryTopBar);
         assertEquals(View.GONE, primaryTopBar.getVisibility());
         assertNull(findByDescription(activity.getWindow().getDecorView(),
