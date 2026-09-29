@@ -83,7 +83,7 @@ final class NotificationCoordinator {
     private static final long STARTUP_CHECK_AGE_MS = TimeUnit.MINUTES.toMillis(30);
     private static final long STUCK_CHECK_AGE_MS = TimeUnit.MINUTES.toMillis(3);
 
-    private static final int REQUEST_NOTIFICATIONS = 731;
+    static final int REQUEST_NOTIFICATIONS = 731;
     private static final int ID_GROUP = 4199;
     private static final int ID_UPDATE = 4201;
     private static final int ID_TEST = 4301;
@@ -232,6 +232,21 @@ final class NotificationCoordinator {
                 0);
         card.addView(body, new android.widget.LinearLayout.LayoutParams(-1, -2));
         return card;
+    }
+
+    static boolean requestPermissionForOnboarding(Activity activity) {
+        if (activity == null || canPost(activity)) return false;
+        if (Build.VERSION.SDK_INT < 33) return false;
+        requestPermission(activity);
+        return true;
+    }
+
+    static void markOnboardingHandled(Context context) {
+        if (context == null) return;
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                .edit()
+                .putBoolean(KEY_EDUCATION_SHOWN, true)
+                .apply();
     }
 
     static void requestPermissionFromSettings(Activity activity) {
