@@ -83,4 +83,45 @@ public class OnlyHavenTrendingTest {
         );
     }
 
+
+    @Test
+    public void creatorArtworkUsesFapelloThenOnlyHavenThenBunkr() {
+        String fapello = "https://fapello.com/content/model.jpg";
+        String onlyHavenAvatar = "https://img.cum.st/creator/onlyfans/model/avatar.webp";
+        String onlyHavenGallery = "https://img.cum.st/thumbnail/gallery/preview.webp";
+        String bunkr = "https://cdn.bunkr.example/model.jpg";
+
+        assertEquals(
+                fapello,
+                FapzoneCreatorRepository.chooseArtwork(
+                        fapello,
+                        onlyHavenAvatar,
+                        onlyHavenGallery,
+                        bunkr
+                )
+        );
+        assertEquals(
+                onlyHavenAvatar,
+                FapzoneCreatorRepository.chooseArtwork(
+                        "",
+                        onlyHavenAvatar,
+                        onlyHavenGallery,
+                        bunkr
+                )
+        );
+        assertEquals(
+                onlyHavenGallery,
+                FapzoneCreatorRepository.chooseArtwork(
+                        "https://fapello.com/data/avatars/default/avatar.jpg",
+                        "",
+                        onlyHavenGallery,
+                        bunkr
+                )
+        );
+        assertEquals(
+                bunkr,
+                FapzoneCreatorRepository.chooseArtwork("", "", "", bunkr)
+        );
+    }
+
 }
