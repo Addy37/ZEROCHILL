@@ -339,9 +339,20 @@ public final class PlaybackHistoryStore {
     }
 
     static void awaitPendingWritesForTests() {
-        try {
-            IO.submit(() -> { }).get();
-        } catch (Exception ignored) {
+        while (true) {
+            Future<?> pendingLoad;
+            boolean pendingWrite;
+            synchronized (LOCK) {
+                pendingLoad = loadFuture;
+                pendingWrite = writeScheduled;
+                if (pendingLoad == null && !pendingWrite) return;
+            }
+            try {
+                if (pendingLoad != null) pendingLoad.get();
+                else IO.submit(() -> { }).get();
+            } catch (Exception ignored) {
+                return;
+            }
         }
     }
 
