@@ -66,6 +66,7 @@ The admin app can:
 - update ticket status
 - mark user messages read when the thread is opened
 - see when a developer message was read by the user
+- permanently delete a feedback thread; its `feedback_messages` rows are removed by the existing foreign-key cascade
 
 Read receipts are therefore symmetric:
 
