@@ -24,10 +24,59 @@ public class PlaybackHistoryStoreTest {
     @Before
     public void setUp() {
         context = RuntimeEnvironment.getApplication();
+        PlaybackHistoryStore.resetForTests();
         context.getSharedPreferences("playback_history", Context.MODE_PRIVATE)
                 .edit()
                 .clear()
                 .commit();
+    }
+
+
+    @Test
+    public void recordIsVisibleImmediatelyAndPersistsAcrossCacheReset() {
+        PlaybackHistoryStore.initializeAsync(context);
+        PlaybackHistoryStore.record(
+                context,
+                "Cached clip",
+                "https://crazyshit.com/video/cached-clip/",
+                "https://cdn.example.com/cached.jpg",
+                45_000L,
+                120_000L,
+                false,
+                false
+        );
+
+        List<PlaybackHistoryStore.Item> immediate = PlaybackHistoryStore.load(context);
+        assertEquals(1, immediate.size());
+        assertEquals("Cached clip", immediate.get(0).title);
+
+        PlaybackHistoryStore.awaitPendingWritesForTests();
+        PlaybackHistoryStore.resetForTests();
+
+        List<PlaybackHistoryStore.Item> reloaded = PlaybackHistoryStore.load(context);
+        assertEquals(1, reloaded.size());
+        assertEquals("https://crazyshit.com/video/cached-clip/", reloaded.get(0).pageUrl);
+        assertEquals("https://cdn.example.com/cached.jpg", reloaded.get(0).posterUrl);
+    }
+
+    @Test
+    public void historyRemainsBoundedToTwoHundredItems() {
+        PlaybackHistoryStore.initializeAsync(context);
+        for (int i = 0; i < 205; i++) {
+            PlaybackHistoryStore.record(
+                    context,
+                    "Clip " + i,
+                    "https://crazyshit.com/video/clip-" + i + "/",
+                    45_000L,
+                    120_000L,
+                    false
+            );
+        }
+
+        List<PlaybackHistoryStore.Item> items = PlaybackHistoryStore.load(context);
+        assertEquals(200, items.size());
+        assertEquals("Clip 204", items.get(0).title);
+        assertEquals("Clip 5", items.get(199).title);
     }
 
     @Test
