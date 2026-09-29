@@ -356,9 +356,9 @@ final class OnlyFapHubView extends FrameLayout {
         body.addView(loadingLabel, loadingParams);
 
         trendingShelf = addCreatorShelf(
-                "Trending",
-                "Popular on OnlyHaven",
-                "Trending creators shelf"
+                "Discover",
+                "Random picks from Fapello",
+                "Discover creators shelf"
         );
         newShelf = addCreatorShelf(
                 "New Creators",
