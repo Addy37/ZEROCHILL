@@ -1880,6 +1880,8 @@ public final class ChaosFeedView extends FrameLayout {
                     cancelCreatorSwipePreview(root);
                     ShitTokTransitionSnapshotStore.remove(creatorSwipeTransitionToken);
                     creatorSwipeTransitionToken = "";
+                    pager.setUserInputEnabled(true);
+                    ViewParentCompat.disallow(v, false);
                     return false;
                 }
 
