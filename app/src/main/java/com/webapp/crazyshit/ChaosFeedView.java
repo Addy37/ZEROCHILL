@@ -205,7 +205,7 @@ public final class ChaosFeedView extends FrameLayout {
                     } else if (action == MotionEvent.ACTION_UP
                             || action == MotionEvent.ACTION_CANCEL) {
                         userTouchingPager = false;
-                        runIdleFeedWorkIfSafe();
+                        if (pendingPoolFresh != null) runIdleFeedWorkIfSafe();
                     }
                     return false;
                 }
@@ -263,7 +263,8 @@ public final class ChaosFeedView extends FrameLayout {
                 markSeen(position);
                 pauseNonSelected(position);
                 playSelected();
-                if (pager.getScrollState() == ViewPager2.SCROLL_STATE_IDLE) {
+                if (pager.getScrollState() == ViewPager2.SCROLL_STATE_IDLE
+                        && !userTouchingPager) {
                     warmCreatorGalleries(position);
                 } else {
                     cancelCreatorWarmAhead();
