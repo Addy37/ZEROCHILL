@@ -316,15 +316,15 @@ final class ShowsHubView extends FrameLayout {
         thisWeekShelf = addShelf(
                 "This Week",
                 "Fresh from CrazyShit, EFukt and Kaotic",
-                true,
+                false,
                 weeklyListener,
                 false,
                 false
         );
         crazyShelf = addShelf("CrazyShit Shows", "Series and recurring collections", false);
         efuktShelf = addShelf("EFukt Series", "Browse EFukt by series", false);
-        categoryShelf = addShelf("CrazyShit Categories", "Jump into a type of content", true);
-        kaoticCategoryShelf = addShelf("Kaotic Categories", "Browse Kaotic by category", true);
+        categoryShelf = addShelf("CrazyShit Categories", "Jump into a type of content", false);
+        kaoticCategoryShelf = addShelf("Kaotic Categories", "Browse Kaotic by category", false);
 
         heroCard.setOnClickListener(v -> openHero());
         heroAction.setOnClickListener(v -> openHero());
@@ -771,7 +771,7 @@ final class ShowsHubView extends FrameLayout {
         rail.setPadding(dp(2), 0, dp(22), 0);
         block.addView(rail, new LinearLayout.LayoutParams(
                 -1,
-                dp(wideCards ? 150 : 218)
+                dp(wideCards ? 150 : 194)
         ));
 
         block.setVisibility(View.GONE);
@@ -1079,8 +1079,8 @@ final class ShowsHubView extends FrameLayout {
             card.setFocusable(true);
             ZeroChillMotion.installPressFeedback(card);
 
-            int width = dp(wide ? 205 : 146);
-            int height = dp(wide ? 132 : 202);
+            int width = dp(wide ? 205 : 128);
+            int height = dp(wide ? 132 : 178);
             RecyclerView.LayoutParams params = new RecyclerView.LayoutParams(width, height);
             params.setMargins(dp(3), dp(2), dp(10), dp(4));
             card.setLayoutParams(params);
