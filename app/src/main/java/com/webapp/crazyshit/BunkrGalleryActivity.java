@@ -113,6 +113,7 @@ public final class BunkrGalleryActivity extends Activity {
     private final Set<String> warmedVideos = new HashSet<>();
     private final Map<String, String> videoReferers = new HashMap<>();
     private int pendingVideoPosition = -1;
+    private boolean autoplayInitialSelection;
 
     @Override
     protected void onCreate(Bundle state) {
@@ -132,6 +133,7 @@ public final class BunkrGalleryActivity extends Activity {
         }
         initialUrl = value(getIntent().getStringExtra(EXTRA_INITIAL_URL));
         initialPosition = Math.max(0, getIntent().getIntExtra(EXTRA_INITIAL_POSITION, 0));
+        autoplayInitialSelection = state == null && !initialUrl.isEmpty();
         if (albumTitle.isEmpty()) albumTitle = "OnlyFap gallery";
 
         if (state != null) {
@@ -311,6 +313,7 @@ public final class BunkrGalleryActivity extends Activity {
                 updateChrome(position);
                 resolvePhoto(position);
                 preloadNeighbors(position);
+                maybeAutoplayInitialSelection(position);
                 if (position >= Math.max(0, adapter.getItemCount() - 5)) loadMore();
             }
         });
@@ -368,6 +371,8 @@ public final class BunkrGalleryActivity extends Activity {
         updateChrome(start);
         resolvePhoto(start);
         preloadNeighbors(start);
+        int initialStart = start;
+        pager.post(() -> maybeAutoplayInitialSelection(initialStart));
         if (start >= Math.max(0, adapter.getItemCount() - 5)) loadMore();
     }
 
@@ -525,6 +530,30 @@ public final class BunkrGalleryActivity extends Activity {
             current = current.getCause();
         }
         return null;
+    }
+
+    private void maybeAutoplayInitialSelection(int position) {
+        NativeContentItem item = adapter == null ? null : adapter.itemAt(position);
+        if (!shouldAutoplayInitialSelection(
+                autoplayInitialSelection,
+                initialUrl,
+                item
+        )) return;
+        autoplayInitialSelection = false;
+        playVideo(position, item);
+    }
+
+    static boolean shouldAutoplayInitialSelection(
+            boolean requested,
+            String initialUrl,
+            NativeContentItem item
+    ) {
+        return requested
+                && item != null
+                && item.isVideo()
+                && initialUrl != null
+                && !initialUrl.isEmpty()
+                && initialUrl.equals(item.url);
     }
 
     private void onMediaTap(int position, NativeContentItem item) {
