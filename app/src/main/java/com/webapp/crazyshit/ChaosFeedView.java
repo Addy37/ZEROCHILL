@@ -149,6 +149,8 @@ public final class ChaosFeedView extends FrameLayout {
     private boolean active;
     private boolean hostResumed = true;
     private boolean poolLoading;
+    private List<NativeContentItem> pendingPoolFresh;
+    private List<NativeContentItem> pendingPoolRecentFallback;
     private volatile boolean closed;
     private boolean autoAdvancePending;
     private boolean chaosMuted;
@@ -212,6 +214,8 @@ public final class ChaosFeedView extends FrameLayout {
                     cancelSwipePlayerMaintenance();
                 } else if (state == ViewPager2.SCROLL_STATE_IDLE) {
                     userPaging = false;
+                    applyPendingPoolIfIdle();
+                    warmCreatorGalleries(selectedPosition);
                     scheduleSwipePlayerMaintenance(selectedPosition);
                 }
             }
@@ -241,7 +245,11 @@ public final class ChaosFeedView extends FrameLayout {
                 markSeen(position);
                 pauseNonSelected(position);
                 playSelected();
-                warmCreatorGalleries(position);
+                if (pager.getScrollState() == ViewPager2.SCROLL_STATE_IDLE) {
+                    warmCreatorGalleries(position);
+                } else {
+                    cancelCreatorWarmAhead();
+                }
                 ChaosHolder holder = holderAt(position);
                 if (holder != null) holder.showControlsTemporarily();
                 if (items.size() - position <= LOAD_AHEAD_AT) loadMorePool();
@@ -256,6 +264,7 @@ public final class ChaosFeedView extends FrameLayout {
         active = value;
         if (active && hostResumed) {
             pager.setUserInputEnabled(true);
+            applyPendingPoolIfIdle();
             resolveAhead(selectedPosition);
             playSelected();
             warmCreatorGalleries(selectedPosition);
@@ -281,6 +290,7 @@ public final class ChaosFeedView extends FrameLayout {
             resetCreatorSwipePreview();
         }
         if (active) {
+            applyPendingPoolIfIdle();
             resolveAhead(selectedPosition);
             playSelected();
             syncVisibleChrome();
@@ -313,6 +323,8 @@ public final class ChaosFeedView extends FrameLayout {
     consecutiveDryLoads = 0;
     sourceMixer.resetDeck();
     poolLoading = false;
+    pendingPoolFresh = null;
+    pendingPoolRecentFallback = null;
     autoAdvancePending = false;
     autoAdvanceFrom = -1;
     streamCache.clear();
@@ -334,6 +346,8 @@ public final class ChaosFeedView extends FrameLayout {
         resetCreatorSwipePreview();
         closed = true;
         poolLoading = false;
+        pendingPoolFresh = null;
+        pendingPoolRecentFallback = null;
         active = false;
         hostResumed = false;
         exitManualFullscreen();
@@ -374,50 +388,89 @@ public final class ChaosFeedView extends FrameLayout {
         List<NativeContentItem> prioritizedRecentFallback =
                 aspectPriority.order(recentFallback, random);
 
-        activity.runOnUiThread(() -> {
-            if (closed) return;
-            poolLoading = false;
-            int before = items.size();
-            appendUnique(prioritizedFresh);
-
-            int freshAdded = items.size() - before;
-            if (freshAdded == 0) consecutiveDryLoads++;
-            else consecutiveDryLoads = 0;
-
-            // Previously watched clips stay out of the normal draw. Only recycle them if
-            // several broad random batches in a row genuinely cannot produce fresh media.
-            if (freshAdded < 4 && consecutiveDryLoads >= 3) {
-                appendUnique(prioritizedRecentFallback);
-            }
-
-            int added = items.size() - before;
-            if (added > 0 && freshAdded == 0) consecutiveDryLoads = 0;
-
-            if (added > 0) {
-                adapter.notifyItemRangeInserted(before, added);
-                initialProgress.setVisibility(View.GONE);
-                empty.setVisibility(View.GONE);
-                resolveAhead(selectedPosition);
-                if (active && hostResumed) playSelected();
-                warmCreatorGalleries(selectedPosition);
-                tryPendingAutoAdvance();
-            }
-
-            boolean needsMore = items.size() < 14
-                    || (autoAdvancePending && autoAdvanceFrom + 1 >= items.size());
-            if (needsMore && consecutiveDryLoads < 4) {
-                loadMorePool();
-            } else if (items.isEmpty()) {
-                initialProgress.setVisibility(View.GONE);
-                empty.setText("ShitTok couldn't find a playable pool right now.\nPull away and come back to retry.");
-                empty.setVisibility(View.VISIBLE);
-            } else if (autoAdvancePending && autoAdvanceFrom + 1 >= items.size()) {
-                autoAdvancePending = false;
-                autoAdvanceFrom = -1;
-            }
-        });
+        activity.runOnUiThread(() ->
+                stageOrApplyLoadedPool(prioritizedFresh, prioritizedRecentFallback));
     });
 }
+
+    static boolean shouldApplyLoadedPool(boolean closed, boolean userPaging, int scrollState) {
+        return !closed
+                && !userPaging
+                && scrollState == ViewPager2.SCROLL_STATE_IDLE;
+    }
+
+    private void stageOrApplyLoadedPool(
+            List<NativeContentItem> prioritizedFresh,
+            List<NativeContentItem> prioritizedRecentFallback
+    ) {
+        if (closed) return;
+        if (!shouldApplyLoadedPool(closed, userPaging, pager.getScrollState())) {
+            pendingPoolFresh = prioritizedFresh;
+            pendingPoolRecentFallback = prioritizedRecentFallback;
+            return;
+        }
+        applyLoadedPool(prioritizedFresh, prioritizedRecentFallback);
+        warmCreatorGalleries(selectedPosition);
+    }
+
+    private void applyPendingPoolIfIdle() {
+        if (pendingPoolFresh == null
+                || !shouldApplyLoadedPool(closed, userPaging, pager.getScrollState())) {
+            return;
+        }
+        List<NativeContentItem> fresh = pendingPoolFresh;
+        List<NativeContentItem> fallback = pendingPoolRecentFallback == null
+                ? Collections.emptyList()
+                : pendingPoolRecentFallback;
+        pendingPoolFresh = null;
+        pendingPoolRecentFallback = null;
+        applyLoadedPool(fresh, fallback);
+    }
+
+    private void applyLoadedPool(
+            List<NativeContentItem> prioritizedFresh,
+            List<NativeContentItem> prioritizedRecentFallback
+    ) {
+        if (closed) return;
+        poolLoading = false;
+        int before = items.size();
+        appendUnique(prioritizedFresh);
+
+        int freshAdded = items.size() - before;
+        if (freshAdded == 0) consecutiveDryLoads++;
+        else consecutiveDryLoads = 0;
+
+        // Previously watched clips stay out of the normal draw. Only recycle them if
+        // several broad random batches in a row genuinely cannot produce fresh media.
+        if (freshAdded < 4 && consecutiveDryLoads >= 3) {
+            appendUnique(prioritizedRecentFallback);
+        }
+
+        int added = items.size() - before;
+        if (added > 0 && freshAdded == 0) consecutiveDryLoads = 0;
+
+        if (added > 0) {
+            adapter.notifyItemRangeInserted(before, added);
+            initialProgress.setVisibility(View.GONE);
+            empty.setVisibility(View.GONE);
+            resolveAhead(selectedPosition);
+            if (active && hostResumed) playSelected();
+            tryPendingAutoAdvance();
+        }
+
+        boolean needsMore = items.size() < 14
+                || (autoAdvancePending && autoAdvanceFrom + 1 >= items.size());
+        if (needsMore && consecutiveDryLoads < 4) {
+            loadMorePool();
+        } else if (items.isEmpty()) {
+            initialProgress.setVisibility(View.GONE);
+            empty.setText("ShitTok couldn't find a playable pool right now.\nPull away and come back to retry.");
+            empty.setVisibility(View.VISIBLE);
+        } else if (autoAdvancePending && autoAdvanceFrom + 1 >= items.size()) {
+            autoAdvancePending = false;
+            autoAdvanceFrom = -1;
+        }
+    }
 
     static boolean shouldPreparePlayer(int position, int selectedPosition) {
         return position >= selectedPosition && position <= selectedPosition + 2;
