@@ -146,6 +146,28 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         return Math.max(0.46f, 0.58f - ((columns - 5) * 0.05f));
     }
 
+    void pulseGridMorph(RecyclerView list) {
+        if (list == null || !android.animation.ValueAnimator.areAnimatorsEnabled()) return;
+        for (int index = 0; index < list.getChildCount(); index++) {
+            View child = list.getChildAt(index);
+            RecyclerView.ViewHolder raw = list.getChildViewHolder(child);
+            if (!(raw instanceof Holder)) continue;
+            View pulse = ((Holder) raw).morphPulse;
+            pulse.animate().cancel();
+            pulse.setAlpha(0f);
+            pulse.animate()
+                    .alpha(0.58f)
+                    .setDuration(55L)
+                    .setInterpolator(new android.view.animation.DecelerateInterpolator())
+                    .withEndAction(() -> pulse.animate()
+                            .alpha(0f)
+                            .setDuration(115L)
+                            .setInterpolator(new android.view.animation.DecelerateInterpolator())
+                            .start())
+                    .start();
+        }
+    }
+
     @Override
     public long getItemId(int position) {
         return items.get(position).url.hashCode();
@@ -241,7 +263,27 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         playIcon.setPadding(dp(parent, 11), dp(parent, 11), dp(parent, 9), dp(parent, 11));
         play.addView(playIcon, new FrameLayout.LayoutParams(-1, -1));
 
-        return new Holder(tile, image, source, sourceIcon, sourceVariant, fresh, play);
+        View morphPulse = new View(parent.getContext());
+        GradientDrawable morphPulseBackground = new GradientDrawable();
+        morphPulseBackground.setColor(Color.TRANSPARENT);
+        morphPulseBackground.setCornerRadius(dp(parent, 10));
+        morphPulseBackground.setStroke(dp(parent, 1), UiPalette.PRIMARY);
+        morphPulse.setBackground(morphPulseBackground);
+        morphPulse.setAlpha(0f);
+        morphPulse.setClickable(false);
+        morphPulse.setFocusable(false);
+        tile.addView(morphPulse, new FrameLayout.LayoutParams(-1, -1));
+
+        return new Holder(
+                tile,
+                image,
+                source,
+                sourceIcon,
+                sourceVariant,
+                fresh,
+                play,
+                morphPulse
+        );
     }
 
     @Override
@@ -259,6 +301,8 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
 
     @Override
     public void onBindViewHolder(@NonNull Holder holder, int position) {
+        holder.morphPulse.animate().cancel();
+        holder.morphPulse.setAlpha(0f);
         NativeContentItem item = items.get(position);
         holder.tile.setAspectRatio(adaptiveAspectRatios
                 ? aspectRatios.getOrDefault(item.url, 1f)
@@ -370,6 +414,8 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
     @Override
     public void onViewRecycled(@NonNull Holder holder) {
         Glide.with(holder.image).clear(holder.image);
+        holder.morphPulse.animate().cancel();
+        holder.morphPulse.setAlpha(0f);
         super.onViewRecycled(holder);
     }
 
@@ -528,6 +574,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         final TextView sourceVariant;
         final ImageView fresh;
         final View play;
+        final View morphPulse;
 
         Holder(
                 AspectRatioFrameLayout itemView,
@@ -536,7 +583,8 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
                 ImageView sourceIcon,
                 TextView sourceVariant,
                 ImageView fresh,
-                View play
+                View play,
+                View morphPulse
         ) {
             super(itemView);
             this.tile = itemView;
@@ -546,6 +594,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
             this.sourceVariant = sourceVariant;
             this.fresh = fresh;
             this.play = play;
+            this.morphPulse = morphPulse;
         }
     }
 
