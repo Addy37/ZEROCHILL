@@ -1341,9 +1341,11 @@ final class OnlyFapHubView extends FrameLayout {
 
     private static final class CreatorPortraitAdapter
             extends RecyclerView.Adapter<CreatorPortraitAdapter.Holder> {
+        private static final ExecutorService ARTWORK_FALLBACK_WORKERS =
+                Executors.newFixedThreadPool(3);
+
         private final Listener listener;
         private final List<NativeContentItem> items = new ArrayList<>();
-        private final ExecutorService artworkFallbackWorkers = Executors.newFixedThreadPool(3);
         private final FapzoneCreatorRepository artworkRepository = new FapzoneCreatorRepository();
         private final Map<String, List<FapzoneCreatorRepository.ArtworkCandidate>>
                 artworkFallbackCache = new ConcurrentHashMap<>();
@@ -1366,7 +1368,6 @@ final class OnlyFapHubView extends FrameLayout {
 
         void close() {
             closed = true;
-            artworkFallbackWorkers.shutdownNow();
             artworkFallbackCache.clear();
             items.clear();
         }
@@ -1614,7 +1615,7 @@ final class OnlyFapHubView extends FrameLayout {
             }
 
             Context appContext = holder.image.getContext().getApplicationContext();
-            artworkFallbackWorkers.execute(() -> {
+            ARTWORK_FALLBACK_WORKERS.execute(() -> {
                 List<FapzoneCreatorRepository.ArtworkCandidate> candidates;
                 try {
                     candidates = artworkRepository.resolveArtworkCandidates(
