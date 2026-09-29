@@ -1,5 +1,6 @@
 package com.addy37.crazyshitadmin;
 
+import android.app.AlertDialog;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.os.Bundle;
@@ -90,6 +91,19 @@ public final class FeedbackThreadActivity extends AppCompatActivity {
         titles.addView(title);
         titles.addView(meta);
         header.addView(titles, new LinearLayout.LayoutParams(0, -2, 1f));
+
+        MaterialButton delete = compactButton("");
+        delete.setIconResource(R.drawable.ic_delete);
+        delete.setIconTint(android.content.res.ColorStateList.valueOf(Color.rgb(255, 95, 95)));
+        delete.setIconSize(dp(20));
+        delete.setIconPadding(0);
+        delete.setIconGravity(MaterialButton.ICON_GRAVITY_TEXT_START);
+        delete.setContentDescription("Delete feedback");
+        delete.setMinWidth(0);
+        delete.setPadding(0, 0, 0, 0);
+        delete.setOnClickListener(v -> confirmDelete());
+        header.addView(delete, new LinearLayout.LayoutParams(dp(40), dp(36)));
+
         root.addView(header);
 
         LinearLayout statusRow = new LinearLayout(this);
@@ -290,6 +304,45 @@ public final class FeedbackThreadActivity extends AppCompatActivity {
             } catch (Exception error) {
                 runOnUiThread(() -> {
                     setSending(false);
+                    toast(message(error));
+                });
+            }
+        });
+    }
+
+    private void confirmDelete() {
+        new AlertDialog.Builder(this)
+                .setTitle("Delete this feedback?")
+                .setMessage("This permanently deletes the feedback thread and every message in it. This cannot be undone.")
+                .setNegativeButton("Cancel", null)
+                .setPositiveButton("Delete", (dialog, which) -> deleteFeedback())
+                .show();
+    }
+
+    private void deleteFeedback() {
+        send.setEnabled(false);
+        saveStatus.setEnabled(false);
+        composer.setEnabled(false);
+        String token = SecureTokenStore.read(this);
+        network.execute(() -> {
+            try {
+                AdminRepository.deleteFeedback(token, feedbackId);
+                runOnUiThread(() -> {
+                    toast("Feedback deleted");
+                    setResult(RESULT_OK);
+                    finish();
+                });
+            } catch (SecurityException error) {
+                runOnUiThread(() -> {
+                    SecureTokenStore.clear(this);
+                    toast("Admin token expired.");
+                    finish();
+                });
+            } catch (Exception error) {
+                runOnUiThread(() -> {
+                    send.setEnabled(true);
+                    saveStatus.setEnabled(true);
+                    composer.setEnabled(true);
                     toast(message(error));
                 });
             }
