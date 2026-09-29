@@ -1,6 +1,7 @@
 package com.webapp.crazyshit;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.robolectric.Shadows.shadowOf;
 
@@ -38,7 +39,62 @@ public class ShitTokSwipeStartTest {
     @Test public void traceTapThenVerticalDrag() {
         Harness h = new Harness();
         h.drag(true);
-        // Baseline diagnostic: report ownership before selecting a fix.
+        assertEquals("Single-finger drag must never disable pager input", -1, h.disabledAt);
+        assertEquals("Pager must grab the first move beyond its unchanged slop",
+                140 + (h.pagingSlop + 2) * 4, h.dragAt);
+        h.finish();
+    }
+
+    @Test public void smallTapMovementDoesNotStartPaging() {
+        Harness h = new Harness();
+        h.event(0, 0, MotionEvent.ACTION_DOWN, 400, 700);
+        h.event(0, 16, MotionEvent.ACTION_MOVE, 400, 700 - h.slop / 2f);
+        h.event(0, 40, MotionEvent.ACTION_UP, 400, 700 - h.slop / 2f);
+        assertEquals(-1, h.dragAt);
+        assertEquals(1, h.clicks);
+        h.finish();
+    }
+
+    @Test public void twoFingerPinchStillHidesAndRestoresChrome() {
+        Harness h = new Harness();
+        h.event(0, 0, MotionEvent.ACTION_DOWN, 400, 500);
+        h.pointers(0, 8, MotionEvent.ACTION_POINTER_DOWN | (1 << 8), 500, 900);
+        h.pointers(0, 16, MotionEvent.ACTION_MOVE, 540, 860);
+        h.pointers(0, 24, MotionEvent.ACTION_MOVE, 600, 800);
+        assertTrue(ReflectionHelpers.<Boolean>getField(h.feed, "clearDisplay"));
+        assertFalse(h.pager.isUserInputEnabled());
+        h.pointers(0, 32, MotionEvent.ACTION_POINTER_UP | (1 << 8), 600, 800);
+        h.event(0, 40, MotionEvent.ACTION_UP, 400, 600);
+        assertTrue(h.pager.isUserInputEnabled());
+        assertEquals(0, h.clicks);
+
+        h.event(1000, 1000, MotionEvent.ACTION_DOWN, 400, 600);
+        h.pointers(1000, 1008, MotionEvent.ACTION_POINTER_DOWN | (1 << 8), 600, 800);
+        h.pointers(1000, 1016, MotionEvent.ACTION_MOVE, 540, 860);
+        h.pointers(1000, 1024, MotionEvent.ACTION_MOVE, 480, 920);
+        assertFalse(ReflectionHelpers.<Boolean>getField(h.feed, "clearDisplay"));
+        h.pointers(1000, 1032, MotionEvent.ACTION_POINTER_UP | (1 << 8), 480, 920);
+        h.event(1000, 1040, MotionEvent.ACTION_UP, 400, 480);
+        assertTrue(h.pager.isUserInputEnabled());
+        assertEquals(-1, h.dragAt);
+        assertEquals(0, h.clicks);
+        h.finish();
+    }
+
+    @Test public void horizontalCreatorSwipeStillOwnsAndReleasesInput() {
+        Harness h = new Harness();
+        ReflectionHelpers.setField(h.holder, "item", new NativeContentItem(
+                NativeContentItem.KIND_MEDIA, "Fixture creator", "https://example.invalid/creator",
+                "", "", "", "", "OnlyHaven", "OnlyHaven"));
+        h.event(0, 0, MotionEvent.ACTION_DOWN, 400, 700);
+        h.event(0, 16, MotionEvent.ACTION_MOVE, 300, 699);
+        assertTrue(ReflectionHelpers.<Boolean>getField(h.holder, "creatorSwipeTracking"));
+        assertFalse(h.pager.isUserInputEnabled());
+        assertEquals(-1, h.dragAt);
+        h.event(0, 32, MotionEvent.ACTION_CANCEL, 300, 699);
+        assertTrue(h.pager.isUserInputEnabled());
+        assertFalse(ReflectionHelpers.<Boolean>getField(h.holder, "creatorSwipeTracking"));
+        assertEquals(0, h.clicks);
         h.finish();
     }
 
@@ -55,6 +111,8 @@ public class ShitTokSwipeStartTest {
         long firstMoveAt = -1;
         long slopAt = -1;
         int childMoves;
+        int clicks;
+        Object holder;
 
         Harness() {
             // Stop source/player work; keep the actual adapter, PlayerView listener and pager.
@@ -72,10 +130,15 @@ public class ShitTokSwipeStartTest {
             feed.layout(0, 0, 800, 1600);
             RecyclerView rv = (RecyclerView) pager.getChildAt(0);
             assertTrue(rv.getChildCount() > 0);
-            Object holder = rv.getChildViewHolder(rv.getChildAt(0));
+            holder = rv.getChildViewHolder(rv.getChildAt(0));
             PlayerView player = ReflectionHelpers.getField(holder, "playerView");
             View.OnTouchListener original = shadowOf(player).getOnTouchListener();
             assertTrue(original != null);
+            View.OnClickListener originalClick = shadowOf(player).getOnClickListener();
+            player.setOnClickListener(v -> {
+                clicks++;
+                originalClick.onClick(v);
+            });
             player.setOnTouchListener((v, event) -> {
                 if (event.getActionMasked() == MotionEvent.ACTION_MOVE) childMoves++;
                 boolean consumed = original.onTouch(v, event);
@@ -118,6 +181,27 @@ public class ShitTokSwipeStartTest {
         void event(long down, long at, int action, float x, float y) {
             eventOffset = at;
             MotionEvent event = MotionEvent.obtain(base + down, base + at, action, x, y, 0);
+            feed.dispatchTouchEvent(event);
+            event.recycle();
+        }
+
+        void pointers(long down, long at, int action, float firstY, float secondY) {
+            MotionEvent.PointerProperties[] properties = new MotionEvent.PointerProperties[2];
+            MotionEvent.PointerCoords[] coords = new MotionEvent.PointerCoords[2];
+            for (int i = 0; i < 2; i++) {
+                properties[i] = new MotionEvent.PointerProperties();
+                properties[i].id = i;
+                properties[i].toolType = MotionEvent.TOOL_TYPE_FINGER;
+                coords[i] = new MotionEvent.PointerCoords();
+                coords[i].x = 400;
+                coords[i].y = i == 0 ? firstY : secondY;
+                coords[i].pressure = 1;
+                coords[i].size = 1;
+            }
+            eventOffset = at;
+            MotionEvent event = MotionEvent.obtain(base + down, base + at, action, 2,
+                    properties, coords, 0, 0, 1, 1, 0, 0,
+                    android.view.InputDevice.SOURCE_TOUCHSCREEN, 0);
             feed.dispatchTouchEvent(event);
             event.recycle();
         }

@@ -1904,6 +1904,9 @@ public final class ChaosFeedView extends FrameLayout {
                         }
                     }
             );
+            // Clear display is a two-finger pinch. Android's default double-tap-and-drag
+            // quick scale otherwise disables paging during an ordinary tap-then-swipe.
+            clearDisplayGesture.setQuickScaleEnabled(false);
             playerView.setOnTouchListener((v, event) -> {
                 clearDisplayGesture.onTouchEvent(event);
                 int action = event.getActionMasked();
