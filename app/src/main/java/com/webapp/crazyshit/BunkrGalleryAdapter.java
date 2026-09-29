@@ -38,6 +38,7 @@ import java.util.Map;
 
 /** Dense mixed-media grid used for Bunkr albums. */
 final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter.Holder> {
+    private static final Object PAYLOAD_OVERLAY_DENSITY = new Object();
     private static final String USER_AGENT =
             "Mozilla/5.0 (Linux; Android 16) AppleWebKit/537.36 " +
             "(KHTML, like Gecko) Chrome/139.0 Mobile Safari/537.36";
@@ -54,6 +55,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
     private final Context context;
     private final Listener listener;
     private final boolean adaptiveAspectRatios;
+    private int gridColumns = 2;
     private final PreloadRequestTracker imagePreloads =
             new PreloadRequestTracker(320);
 
@@ -125,6 +127,23 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
 
     int size() {
         return items.size();
+    }
+
+    void setGridColumns(int columns) {
+        int next = Math.max(1, columns);
+        if (gridColumns == next) return;
+        gridColumns = next;
+        if (!items.isEmpty()) {
+            notifyItemRangeChanged(0, items.size(), PAYLOAD_OVERLAY_DENSITY);
+        }
+    }
+
+    static float overlayScaleForColumns(int columns) {
+        if (columns <= 2) return 1f;
+        if (columns == 3) return 0.82f;
+        if (columns == 4) return 0.68f;
+        if (columns == 5) return 0.58f;
+        return Math.max(0.46f, 0.58f - ((columns - 5) * 0.05f));
     }
 
     @Override
@@ -226,12 +245,26 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
     }
 
     @Override
+    public void onBindViewHolder(
+            @NonNull Holder holder,
+            int position,
+            @NonNull List<Object> payloads
+    ) {
+        if (!payloads.isEmpty() && payloads.contains(PAYLOAD_OVERLAY_DENSITY)) {
+            applyOverlayDensity(holder);
+            return;
+        }
+        onBindViewHolder(holder, position);
+    }
+
+    @Override
     public void onBindViewHolder(@NonNull Holder holder, int position) {
         NativeContentItem item = items.get(position);
         holder.tile.setAspectRatio(adaptiveAspectRatios
                 ? aspectRatios.getOrDefault(item.url, 1f)
                 : 1f);
         holder.play.setVisibility(item.isVideo() ? View.VISIBLE : View.GONE);
+        applyOverlayDensity(holder);
         boolean fresh = isHighlighted(item);
         holder.fresh.setVisibility(fresh ? View.VISIBLE : View.GONE);
         SourceBadge source = sourceBadge(item);
@@ -313,6 +346,25 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
             listener.onLongPress(items.get(current), v);
             return true;
         });
+    }
+
+    private void applyOverlayDensity(Holder holder) {
+        float scale = overlayScaleForColumns(gridColumns);
+
+        holder.source.setPivotX(0f);
+        holder.source.setPivotY(dp(holder.source, 26));
+        holder.source.setScaleX(scale);
+        holder.source.setScaleY(scale);
+
+        holder.fresh.setPivotX(dp(holder.fresh, 26));
+        holder.fresh.setPivotY(0f);
+        holder.fresh.setScaleX(scale);
+        holder.fresh.setScaleY(scale);
+
+        holder.play.setPivotX(dp(holder.play, 42));
+        holder.play.setPivotY(dp(holder.play, 42));
+        holder.play.setScaleX(scale);
+        holder.play.setScaleY(scale);
     }
 
     @Override
