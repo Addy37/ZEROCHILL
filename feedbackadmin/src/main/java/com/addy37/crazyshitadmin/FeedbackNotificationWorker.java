@@ -51,8 +51,12 @@ public final class FeedbackNotificationWorker extends Worker {
         if (android.os.Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(
                 getApplicationContext(), Manifest.permission.POST_NOTIFICATIONS)
                 != PackageManager.PERMISSION_GRANTED) return;
-        Intent intent = new Intent(getApplicationContext(), MainActivity.class);
-        PendingIntent pending = PendingIntent.getActivity(getApplicationContext(), 0, intent,
+        Intent intent = new Intent(getApplicationContext(), FeedbackThreadActivity.class)
+                .putExtra(FeedbackThreadActivity.EXTRA_FEEDBACK_ID, item.id);
+        PendingIntent pending = PendingIntent.getActivity(
+                getApplicationContext(),
+                item.id.hashCode(),
+                intent,
                 PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
         String title = item.type.replace('_', ' ');
         String copy = item.lastMessage == null || item.lastMessage.trim().isEmpty()
