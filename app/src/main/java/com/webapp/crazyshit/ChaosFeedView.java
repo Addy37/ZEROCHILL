@@ -2669,12 +2669,27 @@ public final class ChaosFeedView extends FrameLayout {
 
         private void syncPausedChrome() {
             boolean show = shouldShowPausedChrome(userPaused, clearDisplay);
-            pausePlayOverlay.setVisibility(show ? View.VISIBLE : View.GONE);
+            pausePlayOverlay.animate().cancel();
+            if (show) {
+                if (pausePlayOverlay.getVisibility() != View.VISIBLE) {
+                    pausePlayOverlay.setAlpha(0f);
+                    pausePlayOverlay.setVisibility(View.VISIBLE);
+                    pausePlayOverlay.animate()
+                            .alpha(0.72f)
+                            .setDuration(140L)
+                            .start();
+                } else {
+                    pausePlayOverlay.setAlpha(0.72f);
+                }
+            } else {
+                pausePlayOverlay.setVisibility(View.GONE);
+            }
             seekBar.setVisibility(show ? View.VISIBLE : View.INVISIBLE);
             seekBar.setAlpha(show ? 1f : 0f);
         }
 
         private void hidePausedChrome() {
+            pausePlayOverlay.animate().cancel();
             pausePlayOverlay.setVisibility(View.GONE);
             seekBar.animate().cancel();
             seekBar.setAlpha(0f);
