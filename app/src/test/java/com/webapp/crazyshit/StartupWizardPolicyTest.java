@@ -10,6 +10,7 @@ public class StartupWizardPolicyTest {
     public void freshInstallShowsWizard() {
         assertTrue(StartupWizardPolicy.shouldShowFromState(
                 false,
+                false,
                 1_000L,
                 1_000L,
                 false
@@ -19,6 +20,7 @@ public class StartupWizardPolicyTest {
     @Test
     public void inPlaceUpgradeDoesNotShowWizard() {
         assertFalse(StartupWizardPolicy.shouldShowFromState(
+                false,
                 false,
                 1_000L,
                 10_000L,
@@ -30,6 +32,7 @@ public class StartupWizardPolicyTest {
     public void completedWizardNeverShowsAgain() {
         assertFalse(StartupWizardPolicy.shouldShowFromState(
                 true,
+                false,
                 1_000L,
                 1_000L,
                 false
@@ -40,6 +43,7 @@ public class StartupWizardPolicyTest {
     public void legacyAcceptedInstallDoesNotGetRetroactiveWizard() {
         assertFalse(StartupWizardPolicy.shouldShowFromState(
                 false,
+                false,
                 1_000L,
                 1_000L,
                 true
@@ -47,8 +51,20 @@ public class StartupWizardPolicyTest {
     }
 
     @Test
+    public void clearedStorageShowsWizardEvenWhenPackageLooksUpgraded() {
+        assertTrue(StartupWizardPolicy.shouldShowFromState(
+                false,
+                true,
+                1_000L,
+                10_000L,
+                false
+        ));
+    }
+
+    @Test
     public void unknownInstallMetadataFailsSafeToWizard() {
         assertTrue(StartupWizardPolicy.shouldShowFromState(
+                false,
                 false,
                 0L,
                 0L,

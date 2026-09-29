@@ -157,26 +157,26 @@ public final class StartupWizardActivity extends Activity {
 
         transitioning = true;
         float direction = forward ? 1f : -1f;
+        incoming.setAlpha(0f);
+        incoming.setTranslationX(direction * dp(18));
+        pageHost.addView(incoming, new FrameLayout.LayoutParams(-1, -1));
+
         outgoing.animate()
                 .alpha(0f)
-                .translationX(-direction * dp(28))
-                .setDuration(115L)
+                .translationX(-direction * dp(14))
+                .setDuration(190L)
+                .setInterpolator(new DecelerateInterpolator())
+                .withEndAction(() -> pageHost.removeView(outgoing))
+                .start();
+
+        incoming.animate()
+                .alpha(1f)
+                .translationX(0f)
+                .setDuration(210L)
                 .setInterpolator(new DecelerateInterpolator())
                 .withEndAction(() -> {
-                    pageHost.removeAllViews();
-                    incoming.setAlpha(0f);
-                    incoming.setTranslationX(direction * dp(32));
-                    pageHost.addView(incoming, new FrameLayout.LayoutParams(-1, -1));
-                    incoming.animate()
-                            .alpha(1f)
-                            .translationX(0f)
-                            .setDuration(190L)
-                            .setInterpolator(new DecelerateInterpolator())
-                            .withEndAction(() -> {
-                                transitioning = false;
-                                onPageVisible(incoming);
-                            })
-                            .start();
+                    transitioning = false;
+                    onPageVisible(incoming);
                 })
                 .start();
     }
@@ -511,24 +511,7 @@ public final class StartupWizardActivity extends Activity {
             }
         }
 
-        if (!ValueAnimator.areAnimatorsEnabled() || !(view instanceof ScrollView)) return;
-        View child = ((ScrollView) view).getChildAt(0);
-        if (!(child instanceof LinearLayout)) return;
-        LinearLayout column = (LinearLayout) child;
-        int start = Math.max(0, column.getChildCount() - 6);
-        long delay = 30L;
-        for (int i = start; i < column.getChildCount(); i++) {
-            View item = column.getChildAt(i);
-            item.setAlpha(0f);
-            item.setTranslationY(dp(8));
-            item.animate()
-                    .alpha(1f)
-                    .translationY(0f)
-                    .setStartDelay(delay)
-                    .setDuration(180L)
-                    .start();
-            delay += 24L;
-        }
+
     }
 
     private void cancelAmbientPulse() {

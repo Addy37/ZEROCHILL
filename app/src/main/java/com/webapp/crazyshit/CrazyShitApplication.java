@@ -15,12 +15,14 @@ public final class CrazyShitApplication extends Application {
     public void onCreate() {
         super.onCreate();
         AppPerformance.begin();
+
+        SharedPreferences appPrefs = getSharedPreferences("app_prefs", MODE_PRIVATE);
+        StartupWizardPolicy.markFreshStorageIfEmpty(appPrefs);
+
         PlaybackHistoryStore.initializeAsync(this);
         RemoteSourceConfigManager.initialize(this);
         RemoteSourceConfigManager.refreshInBackground(this);
         AnalyticsTracker.initialize(this);
-
-        SharedPreferences appPrefs = getSharedPreferences("app_prefs", MODE_PRIVATE);
         boolean needsMigration = appPrefs.getBoolean("minimize_on_back", true)
                 || appPrefs.getBoolean("swipe_down_minimize", true)
                 || appPrefs.contains("collapse_header_enabled")
