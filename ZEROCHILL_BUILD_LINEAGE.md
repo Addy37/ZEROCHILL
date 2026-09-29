@@ -4,11 +4,13 @@ This file identifies the current approved ZEROCHILL product baseline for test AP
 
 - Source-of-truth branch: `rebrand/zerochill`
 - Integration branch: `integration/zerochill-current`
-- Approved product baseline commit: `e905d77604c9d9797b64e085e7afcf3689c4ee2b`
-- Latest production release source commit: `e905d77604c9d9797b64e085e7afcf3689c4ee2b`
-- Device-tested APK source commit: `e26b34c3f763948a1ed20551bd867ebd817cde49`
-- Latest release PR: #205
+- Approved product baseline commit: `024faa05543e80aade3a3ae50600891a0255bab8`
+- Latest production release source commit: `024faa05543e80aade3a3ae50600891a0255bab8`
+- Device-tested APK source commit: `d2cce061039c3a06985e14b14aa6f7f8b1027f42`
+- Latest release PR: #211
 - Approval date: 2026-09-28
+
+ZeroChill v4.1.1 was published from `024faa0` after release PR #211. This focused ShitTok update preserves the current clip position across tab switches, rebalances the warm feed toward Kaotic, Shit Show, and OnlyFap, reduces EFukt presence, removes unstable Bunkr content from ShitTok, and carries the device-approved swipe-smoothness work from PRs #209 and #210. Player preparation and cleanup are moved out of the active swipe path, RecyclerView no longer synchronously destroys players while paging, decoder cleanup is staggered while idle, and warm players are prepared one at a time. The production workflow built and signed `ZeroChill.apk`, verified the package and signing certificate, confirmed a higher Android version code and upgrade compatibility from v4.1.0, and published tag `v4.1.1` with `SHA256SUMS.txt`. The previous v4.1.0 rollback baseline is preserved at `checkpoint/zerochill-approved-e905d77`.
 
 ZeroChill v4.1.0 was published from `e905d77` after release PR #205. This release adds reviewed and manual creator grouping, merged creator galleries, custom creator avatars with persistent pinch/drag crop framing, Favorite Creator unread-content count badges, adaptive ShitTok portrait-first ordering and creator-flow polish, OnlyFap search/gallery performance improvements, direct gallery downloads, and the approved swipeable full-width Shows hero with protected low-resolution artwork and mirrored top/bottom fades. The production workflow built and signed `ZeroChill.apk`, verified the package and signing certificate, confirmed a higher Android version code and upgrade compatibility from v4.0.0, and published tag `v4.1.0` with `SHA256SUMS.txt`. The previous v4.0.0 rollback baseline is preserved at `checkpoint/zerochill-approved-eb30d10`.
 
