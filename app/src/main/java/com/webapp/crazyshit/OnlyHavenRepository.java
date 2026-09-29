@@ -424,10 +424,9 @@ final class OnlyHavenRepository {
             return imageBase(config) + "thumbnail/" + cleanHash + "/preview.webp";
         }
 
-        if (!clean(service).isEmpty() && !clean(id).isEmpty()) {
-            return imageBase(config) + "creator/" + urlToken(service) + "/" +
-                    urlToken(id) + "/avatar.webp";
-        }
+        // Do not invent a creator avatar URL when the API did not return avatar
+        // metadata. Some profiles have no image at that route, and treating the guessed
+        // URL as valid prevents the real OnlyHaven media and Bunkr fallbacks from running.
         return "";
     }
 
