@@ -19,19 +19,45 @@ public class CreatorGalleryMotionTest {
     }
 
     @Test
-    public void puzzleSettleRipplesOutwardFromPinchPoint() {
-        long near = NativeFeedBrowserActivity.creatorGridSettleDelay(20f, 1000f);
-        long middle = NativeFeedBrowserActivity.creatorGridSettleDelay(400f, 1000f);
-        long far = NativeFeedBrowserActivity.creatorGridSettleDelay(1000f, 1000f);
-
-        assertTrue(near < middle);
-        assertTrue(middle < far);
-        assertTrue(far <= 85L);
+    public void morphScalePreservesVisualSizeAcrossGridThreshold() {
+        assertEquals(
+                0.80f,
+                NativeFeedBrowserActivity.creatorGridMorphScale(80f, 100f),
+                0.001f
+        );
+        assertEquals(
+                1.20f,
+                NativeFeedBrowserActivity.creatorGridMorphScale(120f, 100f),
+                0.001f
+        );
+        assertEquals(
+                1f,
+                NativeFeedBrowserActivity.creatorGridMorphScale(100f, 100f),
+                0.001f
+        );
     }
 
     @Test
-    public void puzzleSettleDelayHandlesDegenerateDistance() {
-        assertEquals(0L, NativeFeedBrowserActivity.creatorGridSettleDelay(0f, 1000f));
-        assertEquals(0L, NativeFeedBrowserActivity.creatorGridSettleDelay(100f, 0f));
+    public void morphScaleClampsExtremeOrInvalidGeometry() {
+        assertEquals(
+                0.76f,
+                NativeFeedBrowserActivity.creatorGridMorphScale(20f, 100f),
+                0.001f
+        );
+        assertEquals(
+                1.24f,
+                NativeFeedBrowserActivity.creatorGridMorphScale(200f, 100f),
+                0.001f
+        );
+        assertEquals(
+                1f,
+                NativeFeedBrowserActivity.creatorGridMorphScale(0f, 100f),
+                0.001f
+        );
+        assertEquals(
+                1f,
+                NativeFeedBrowserActivity.creatorGridMorphScale(100f, 0f),
+                0.001f
+        );
     }
 }
