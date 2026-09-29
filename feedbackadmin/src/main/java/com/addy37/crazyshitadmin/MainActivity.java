@@ -648,8 +648,6 @@ public final class MainActivity extends AppCompatActivity {
     }
 
     private void load() {
-
-    private void load() {
         if (swipe == null) return;
         swipe.setRefreshing(true);
         String token = SecureTokenStore.read(this);
@@ -795,8 +793,6 @@ public final class MainActivity extends AppCompatActivity {
         button.setMinHeight(dp(36));
         return button;
     }
-
-    private TextView text(String value, int size, int color) {
 
     private TextView text(String value, int size, int color) {
         TextView text = new TextView(this);
