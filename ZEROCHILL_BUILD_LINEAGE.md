@@ -4,11 +4,13 @@ This file identifies the current approved ZEROCHILL product baseline for test AP
 
 - Source-of-truth branch: `rebrand/zerochill`
 - Integration branch: `integration/zerochill-current`
-- Approved product baseline commit: `024faa05543e80aade3a3ae50600891a0255bab8`
-- Latest production release source commit: `024faa05543e80aade3a3ae50600891a0255bab8`
-- Device-tested APK source commit: `d2cce061039c3a06985e14b14aa6f7f8b1027f42`
-- Latest release PR: #211
-- Approval date: 2026-09-28
+- Approved product baseline commit: `fc9c01e27f712119ba9c316981ab1c9b7da156a9`
+- Latest production release source commit: `fc9c01e27f712119ba9c316981ab1c9b7da156a9`
+- Device-tested APK source commit: `d4c2c7bdbd41690506bd0fe2c8053b05e92c5aba`
+- Latest release PR: #227
+- Approval date: 2026-09-29
+
+ZeroChill v4.2.0 was published from `fc9c01e` after release PR #227. This release adds the device-approved full-screen startup wizard for new installs, the holographic OnlyFap creator-gallery grid morph, Fapello-backed Discover with deeper duplicate-free creator selection, threaded feedback conversations with read receipts, compact Shows portrait shelves, tapped-video autoplay in creator galleries, corrected custom avatar framing on compact shelves, and the approved ShitTok swipe-start fixes that move history and anti-repeat persistence off the active swipe path. The production workflow rebuilt and signed `ZeroChill.apk`, verified the package and production signing certificate, confirmed a higher version code and upgrade compatibility from v4.1.1, and published tag `v4.2.0` with `SHA256SUMS.txt`. The previous v4.1.1 rollback baseline is preserved at `checkpoint/zerochill-approved-024faa0`.
 
 ZeroChill v4.1.1 was published from `024faa0` after release PR #211. This focused ShitTok update preserves the current clip position across tab switches, rebalances the warm feed toward Kaotic, Shit Show, and OnlyFap, reduces EFukt presence, removes unstable Bunkr content from ShitTok, and carries the device-approved swipe-smoothness work from PRs #209 and #210. Player preparation and cleanup are moved out of the active swipe path, RecyclerView no longer synchronously destroys players while paging, decoder cleanup is staggered while idle, and warm players are prepared one at a time. The production workflow built and signed `ZeroChill.apk`, verified the package and signing certificate, confirmed a higher Android version code and upgrade compatibility from v4.1.0, and published tag `v4.1.1` with `SHA256SUMS.txt`. The previous v4.1.0 rollback baseline is preserved at `checkpoint/zerochill-approved-e905d77`.
 
