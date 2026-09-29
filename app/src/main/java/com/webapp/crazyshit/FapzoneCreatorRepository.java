@@ -659,7 +659,7 @@ final class FapzoneCreatorRepository {
                                 "description",
                                 mode == MODE_TOP_50
                                         ? "OnlyHaven"
-                                        : "Bunkr + Fapello + OnlyHaven + WikiFeet + WikiFeet X"
+                                        : "Fapello + OnlyHaven + Bunkr + WikiFeet + WikiFeet X"
                         ),
                         query
                 ));
