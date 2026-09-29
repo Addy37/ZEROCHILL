@@ -40,6 +40,7 @@ public class OnlyFapDiscoverLifecycleTest {
         assertNotNull(discover);
         RecyclerView rail = rail(discover);
         assertNotNull(rail);
+        discover = (View) rail.getParent();
         hub.setTrending(OnlyFapDiscoverTest.creators(0, 138));
         assertEquals(View.GONE, discover.getVisibility());
         for (int count : new int[]{6, 12, 18, 24, 30}) {
