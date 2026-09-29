@@ -234,6 +234,7 @@ public final class ChaosFeedView extends FrameLayout {
 
             @Override
             public void onPageSelected(int position) {
+                long pageCallbackStartedNs = renderDiagnostics.nowNs();
                 renderDiagnostics.event(
                         "PAGE_SELECTED", position,
                         "from=" + selectedPosition + " items=" + items.size());
@@ -267,6 +268,11 @@ public final class ChaosFeedView extends FrameLayout {
                 if (changed && pager.getScrollState() == ViewPager2.SCROLL_STATE_IDLE) {
                     scheduleSwipePlayerMaintenance(position);
                 }
+                renderDiagnostics.duration(
+                        "PAGE_CALLBACK",
+                        pageCallbackStartedNs,
+                        position,
+                        "changed=" + changed);
             }
         });
     }
