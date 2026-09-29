@@ -88,7 +88,7 @@ final class LibraryHubView extends ScrollView {
 
         List<PlaybackHistoryStore.Item> history = PlaybackHistoryStore.load(activity);
         List<PlaybackHistoryStore.Item> continueItems = PlaybackHistoryStore.continueWatching(activity);
-        List<NativeContentItem> creators = CreatorCatalog.matching(activity, "", true, 20);
+        List<CreatorCatalog.FavoriteGroup> creators = CreatorCatalog.favoriteGroups(activity);
         List<FavoriteStore.Item> watchLater = FavoriteStore.load(activity);
         List<VideoDownloadStore.Entry> downloads = VideoDownloadStore.entries(activity);
 
@@ -203,23 +203,32 @@ final class LibraryHubView extends ScrollView {
         return card;
     }
 
-    private void addCreatorSection(List<NativeContentItem> creators) {
+    private void addCreatorSection(List<CreatorCatalog.FavoriteGroup> creators) {
         LinearLayout rail = addSectionShell(
                 "Favorite Creators",
                 "Your saved creators",
                 "View all",
                 () -> activity.startActivity(new Intent(activity, CreatorsActivity.class))
         );
+        List<CreatorAvatarOverrideStore.Override> avatarOverrides =
+                CreatorAvatarOverrideStore.load(activity);
 
         int count = Math.min(14, creators.size());
         for (int i = 0; i < count; i++) {
-            NativeContentItem creator = creators.get(i);
-            CreatorGalleryPreloader.warm(activity, creator);
-            rail.addView(creatorCard(creator), creatorRailParams(i == count - 1));
+            CreatorCatalog.FavoriteGroup group = creators.get(i);
+            CreatorGalleryPreloader.warm(activity, group.item);
+            rail.addView(
+                    creatorCard(group, avatarOverrides),
+                    creatorRailParams(i == count - 1)
+            );
         }
     }
 
-    private View creatorCard(NativeContentItem creator) {
+    private View creatorCard(
+            CreatorCatalog.FavoriteGroup group,
+            List<CreatorAvatarOverrideStore.Override> avatarOverrides
+    ) {
+        NativeContentItem creator = group.item;
         LinearLayout wrapper = new LinearLayout(activity);
         wrapper.setOrientation(LinearLayout.VERTICAL);
         wrapper.setGravity(Gravity.CENTER_HORIZONTAL);
@@ -241,11 +250,10 @@ final class LibraryHubView extends ScrollView {
         initials.setGravity(Gravity.CENTER);
         frame.addView(initials, new FrameLayout.LayoutParams(-1, -1));
 
-        ImageView image = new ImageView(activity);
-        image.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        CreatorAvatarImageView image = new CreatorAvatarImageView(activity);
         image.setBackgroundColor(Color.TRANSPARENT);
         frame.addView(image, new FrameLayout.LayoutParams(-1, -1));
-        loadCreatorImage(image, creator);
+        loadCreatorImage(image, group, avatarOverrides);
 
         wrapper.addView(avatar, new LinearLayout.LayoutParams(dp(84), dp(84)));
 
@@ -581,17 +589,45 @@ final class LibraryHubView extends ScrollView {
         requestThumbnail(cleanPage);
     }
 
-    private void loadCreatorImage(ImageView image, NativeContentItem creator) {
+    private void loadCreatorImage(
+            CreatorAvatarImageView image,
+            CreatorCatalog.FavoriteGroup group,
+            List<CreatorAvatarOverrideStore.Override> avatarOverrides
+    ) {
+        NativeContentItem creator = group == null ? null : group.item;
+        CreatorAvatarOverrideStore.Override avatarOverride =
+                group != null && group.customAvatar
+                        ? CreatorAvatarOverrideStore.find(
+                                avatarOverrides,
+                                group.relationshipKeys
+                        )
+                        : null;
+        if (avatarOverride != null) {
+            image.setAvatarCrop(
+                    avatarOverride.focusX,
+                    avatarOverride.focusY,
+                    avatarOverride.zoom
+            );
+        } else {
+            image.clearAvatarCrop();
+        }
+
         String url = creator == null ? "" : clean(creator.imageUrl);
         if (url.isEmpty()) return;
         try {
-            Glide.with(image)
-                    .load(remoteImage(url, clean(creator.url)))
-                    .onlyRetrieveFromCache(true)
-                    .circleCrop()
-                    .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
-                    .dontAnimate()
-                    .into(image);
+            com.bumptech.glide.RequestBuilder<android.graphics.drawable.Drawable> request =
+                    Glide.with(image)
+                            .load(remoteImage(
+                                    url,
+                                    clean(creator.uploader).isEmpty()
+                                            ? clean(creator.url)
+                                            : clean(creator.uploader)
+                            ))
+                            .onlyRetrieveFromCache(true)
+                            .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
+                            .dontAnimate();
+            if (avatarOverride == null) request.circleCrop();
+            request.into(image);
         } catch (Exception ignored) {
         }
     }
