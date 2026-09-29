@@ -46,6 +46,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -1342,6 +1343,10 @@ final class OnlyFapHubView extends FrameLayout {
             extends RecyclerView.Adapter<CreatorPortraitAdapter.Holder> {
         private final Listener listener;
         private final List<NativeContentItem> items = new ArrayList<>();
+        private final ExecutorService artworkFallbackWorkers = Executors.newFixedThreadPool(3);
+        private final FapzoneCreatorRepository artworkRepository = new FapzoneCreatorRepository();
+        private final Map<String, List<FapzoneCreatorRepository.ArtworkCandidate>>
+                artworkFallbackCache = new ConcurrentHashMap<>();
         private boolean closed;
 
         CreatorPortraitAdapter(Listener listener) {
@@ -1361,6 +1366,8 @@ final class OnlyFapHubView extends FrameLayout {
 
         void close() {
             closed = true;
+            artworkFallbackWorkers.shutdownNow();
+            artworkFallbackCache.clear();
             items.clear();
         }
 
@@ -1516,12 +1523,15 @@ final class OnlyFapHubView extends FrameLayout {
                 CreatorGalleryPreloader.warm(context, creator);
             }
 
-            loadStaticImage(holder.image, creator);
+            holder.boundKey = CreatorFavoriteStore.key(creator);
+            loadStaticImage(holder, creator);
         }
 
         @Override
         public void onViewRecycled(@NonNull Holder holder) {
+            holder.boundKey = "";
             Glide.with(holder.image).clear(holder.image);
+            holder.image.setImageDrawable(null);
             holder.card.setOnClickListener(null);
             holder.card.setOnLongClickListener(null);
             super.onViewRecycled(holder);
@@ -1532,27 +1542,23 @@ final class OnlyFapHubView extends FrameLayout {
             return items.size();
         }
 
-        private static void loadStaticImage(ImageView image, NativeContentItem creator) {
+        private void loadStaticImage(Holder holder, NativeContentItem creator) {
+            ImageView image = holder.image;
+            Glide.with(image).clear(image);
             String url = creator == null || creator.imageUrl == null
                     ? ""
                     : creator.imageUrl.trim();
             if (url.isEmpty()) {
-                image.setImageResource(R.drawable.ic_more_account);
+                image.setImageDrawable(null);
+                resolveFallbackArtwork(holder, creator, new HashSet<>());
                 return;
             }
 
-            LazyHeaders.Builder headers = new LazyHeaders.Builder()
-                    .addHeader("User-Agent", USER_AGENT);
-            String referer = creator.uploader == null || creator.uploader.trim().isEmpty()
-                    ? creator.url
-                    : creator.uploader;
-            if (referer != null && !referer.trim().isEmpty()) {
-                headers.addHeader("Referer", referer);
-            }
-
+            Set<String> rejected = new HashSet<>();
+            rejected.add(url);
             try {
                 Glide.with(image)
-                        .load(new GlideUrl(url, headers.build()))
+                        .load(remoteImageStatic(url, creator))
                         .centerCrop()
                         .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
                         .dontAnimate()
@@ -1560,11 +1566,189 @@ final class OnlyFapHubView extends FrameLayout {
                                 ZeroChillUi.color(
                                         image.getContext(),
                                         R.color.zc_surface_pressed)))
-                        .error(R.drawable.ic_more_account)
+                        .listener(new RequestListener<Drawable>() {
+                            @Override
+                            public boolean onLoadFailed(
+                                    GlideException e,
+                                    Object model,
+                                    Target<Drawable> target,
+                                    boolean isFirstResource
+                            ) {
+                                image.setImageDrawable(null);
+                                resolveFallbackArtwork(holder, creator, rejected);
+                                return true;
+                            }
+
+                            @Override
+                            public boolean onResourceReady(
+                                    Drawable resource,
+                                    Object model,
+                                    Target<Drawable> target,
+                                    DataSource dataSource,
+                                    boolean isFirstResource
+                            ) {
+                                return false;
+                            }
+                        })
                         .into(image);
             } catch (Exception ignored) {
-                image.setImageResource(R.drawable.ic_more_account);
+                image.setImageDrawable(null);
+                resolveFallbackArtwork(holder, creator, rejected);
             }
+        }
+
+        private void resolveFallbackArtwork(
+                Holder holder,
+                NativeContentItem creator,
+                Set<String> rejected
+        ) {
+            if (closed || creator == null) return;
+            String key = CreatorFavoriteStore.key(creator);
+            if (key.isEmpty() || !key.equals(holder.boundKey)) return;
+
+            List<FapzoneCreatorRepository.ArtworkCandidate> cached =
+                    artworkFallbackCache.get(key);
+            if (cached != null) {
+                loadFallbackCandidates(holder, creator, cached, 0, rejected);
+                return;
+            }
+
+            Context appContext = holder.image.getContext().getApplicationContext();
+            artworkFallbackWorkers.execute(() -> {
+                List<FapzoneCreatorRepository.ArtworkCandidate> candidates;
+                try {
+                    candidates = artworkRepository.resolveArtworkCandidates(
+                            appContext,
+                            creator
+                    );
+                } catch (Exception ignored) {
+                    candidates = Collections.emptyList();
+                }
+                artworkFallbackCache.put(key, candidates);
+                holder.image.post(() -> {
+                    if (closed || !key.equals(holder.boundKey)) return;
+                    loadFallbackCandidates(holder, creator, candidates, 0, rejected);
+                });
+            });
+        }
+
+        private void loadFallbackCandidates(
+                Holder holder,
+                NativeContentItem creator,
+                List<FapzoneCreatorRepository.ArtworkCandidate> candidates,
+                int index,
+                Set<String> rejected
+        ) {
+            if (closed || creator == null ||
+                    !CreatorFavoriteStore.key(creator).equals(holder.boundKey)) {
+                return;
+            }
+            int next = index;
+            while (candidates != null && next < candidates.size()) {
+                FapzoneCreatorRepository.ArtworkCandidate candidate = candidates.get(next);
+                String candidateUrl = candidate == null ? "" : candidate.url;
+                if (candidateUrl != null && !candidateUrl.isEmpty() &&
+                        !rejected.contains(candidateUrl)) {
+                    loadFallbackCandidate(
+                            holder,
+                            creator,
+                            candidates,
+                            next,
+                            candidate,
+                            rejected
+                    );
+                    return;
+                }
+                next++;
+            }
+
+            // Leave the portrait initials visible instead of covering the card with the
+            // generic account glyph when every real artwork source has failed.
+            holder.image.setImageDrawable(null);
+        }
+
+        private void loadFallbackCandidate(
+                Holder holder,
+                NativeContentItem creator,
+                List<FapzoneCreatorRepository.ArtworkCandidate> candidates,
+                int index,
+                FapzoneCreatorRepository.ArtworkCandidate candidate,
+                Set<String> rejected
+        ) {
+            ImageView image = holder.image;
+            String key = CreatorFavoriteStore.key(creator);
+            Set<String> nextRejected = new HashSet<>(rejected);
+            nextRejected.add(candidate.url);
+            try {
+                LazyHeaders.Builder headers = new LazyHeaders.Builder()
+                        .addHeader("User-Agent", USER_AGENT);
+                String referer = candidate.referer == null ? "" : candidate.referer.trim();
+                if (!referer.isEmpty()) headers.addHeader("Referer", referer);
+
+                Glide.with(image)
+                        .load(new GlideUrl(candidate.url, headers.build()))
+                        .centerCrop()
+                        .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
+                        .dontAnimate()
+                        .listener(new RequestListener<Drawable>() {
+                            @Override
+                            public boolean onLoadFailed(
+                                    GlideException e,
+                                    Object model,
+                                    Target<Drawable> target,
+                                    boolean isFirstResource
+                            ) {
+                                if (!key.equals(holder.boundKey)) return true;
+                                image.setImageDrawable(null);
+                                loadFallbackCandidates(
+                                        holder,
+                                        creator,
+                                        candidates,
+                                        index + 1,
+                                        nextRejected
+                                );
+                                return true;
+                            }
+
+                            @Override
+                            public boolean onResourceReady(
+                                    Drawable resource,
+                                    Object model,
+                                    Target<Drawable> target,
+                                    DataSource dataSource,
+                                    boolean isFirstResource
+                            ) {
+                                return false;
+                            }
+                        })
+                        .into(image);
+            } catch (Exception ignored) {
+                if (!key.equals(holder.boundKey)) return;
+                image.setImageDrawable(null);
+                loadFallbackCandidates(
+                        holder,
+                        creator,
+                        candidates,
+                        index + 1,
+                        nextRejected
+                );
+            }
+        }
+
+        private static GlideUrl remoteImageStatic(
+                String imageUrl,
+                NativeContentItem creator
+        ) {
+            LazyHeaders.Builder headers = new LazyHeaders.Builder()
+                    .addHeader("User-Agent", USER_AGENT);
+            String referer = creator == null || creator.uploader == null ||
+                    creator.uploader.trim().isEmpty()
+                    ? creator == null ? "" : creator.url
+                    : creator.uploader;
+            if (referer != null && !referer.trim().isEmpty()) {
+                headers.addHeader("Referer", referer);
+            }
+            return new GlideUrl(imageUrl, headers.build());
         }
 
         private static String initialsStatic(String value) {
@@ -1585,6 +1769,7 @@ final class OnlyFapHubView extends FrameLayout {
             final TextView initials;
             final TextView title;
             final TextView favorite;
+            String boundKey = "";
 
             Holder(
                     MaterialCardView card,
