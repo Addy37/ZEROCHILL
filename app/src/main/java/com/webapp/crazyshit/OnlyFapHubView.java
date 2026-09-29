@@ -1616,15 +1616,16 @@ final class OnlyFapHubView extends FrameLayout {
 
             Context appContext = holder.image.getContext().getApplicationContext();
             ARTWORK_FALLBACK_WORKERS.execute(() -> {
-                List<FapzoneCreatorRepository.ArtworkCandidate> candidates;
+                List<FapzoneCreatorRepository.ArtworkCandidate> resolved;
                 try {
-                    candidates = artworkRepository.resolveArtworkCandidates(
+                    resolved = artworkRepository.resolveArtworkCandidates(
                             appContext,
                             creator
                     );
                 } catch (Exception ignored) {
-                    candidates = Collections.emptyList();
+                    resolved = Collections.emptyList();
                 }
+                final List<FapzoneCreatorRepository.ArtworkCandidate> candidates = resolved;
                 artworkFallbackCache.put(key, candidates);
                 holder.image.post(() -> {
                     if (closed || !key.equals(holder.boundKey)) return;
