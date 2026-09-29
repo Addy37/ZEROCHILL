@@ -757,7 +757,13 @@ public final class ChaosFeedView extends FrameLayout {
 
     private void warmCreatorGalleries(int position) {
         if (closed || !active || !hostResumed || position < 0 || position >= items.size()) return;
+        long warmStartedNs = renderDiagnostics.nowNs();
         ShitTokCreatorGalleryPreloader.warm(activity, items.get(position));
+        renderDiagnostics.duration(
+                "CREATOR_WARM",
+                warmStartedNs,
+                position,
+                "selected=true");
 
         cancelCreatorWarmAhead();
         creatorWarmAheadPosition = position;
@@ -776,7 +782,13 @@ public final class ChaosFeedView extends FrameLayout {
         for (int next = position + 1; next < Math.min(items.size(), position + 8); next++) {
             NativeContentItem candidate = items.get(next);
             if (!ShitTokCreatorMetadata.hasCreator(candidate)) continue;
+            long warmStartedNs = renderDiagnostics.nowNs();
             ShitTokCreatorGalleryPreloader.warm(activity, candidate);
+            renderDiagnostics.duration(
+                    "CREATOR_WARM",
+                    warmStartedNs,
+                    next,
+                    "selected=false");
             break;
         }
     }
@@ -2470,6 +2482,10 @@ public final class ChaosFeedView extends FrameLayout {
                 public void onPlaybackStateChanged(int state) {
                     if (player != createdPlayer) return;
                     if (state == Player.STATE_READY) {
+                        renderDiagnostics.event(
+                                "PLAYER_READY",
+                                boundPosition,
+                                "selected=" + (boundPosition == selectedPosition));
                         RatingFeedbackPrompt.recordSuccessfulPlayback(activity, nextStream.mediaUrl);
                         failurePending = false;
                         root.removeCallbacks(skipFailedClipRunnable);
