@@ -22,7 +22,7 @@ import java.util.Map;
 /** Temporary in-memory diagnostics for ShitTok render stalls. */
 final class ShitTokRenderDiagnostics {
     private static final int MAX_EVENTS = 320;
-    private static final String BASELINE = "9f9a631 (PR #216)";
+    private static final String BASELINE = "9723afe (PR #217 behavior + diagnostics)";
 
     private final Object lock = new Object();
     private final Activity activity;
