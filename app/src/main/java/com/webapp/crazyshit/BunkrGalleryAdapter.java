@@ -38,6 +38,7 @@ import java.util.Map;
 
 /** Dense mixed-media grid used for Bunkr albums. */
 final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter.Holder> {
+    private static final Object PAYLOAD_OVERLAY_DENSITY = new Object();
     private static final String USER_AGENT =
             "Mozilla/5.0 (Linux; Android 16) AppleWebKit/537.36 " +
             "(KHTML, like Gecko) Chrome/139.0 Mobile Safari/537.36";
@@ -54,6 +55,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
     private final Context context;
     private final Listener listener;
     private final boolean adaptiveAspectRatios;
+    private int gridColumns = 2;
     private final PreloadRequestTracker imagePreloads =
             new PreloadRequestTracker(320);
 
@@ -125,6 +127,45 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
 
     int size() {
         return items.size();
+    }
+
+    void setGridColumns(int columns) {
+        int next = Math.max(1, columns);
+        if (gridColumns == next) return;
+        gridColumns = next;
+        if (!items.isEmpty()) {
+            notifyItemRangeChanged(0, items.size(), PAYLOAD_OVERLAY_DENSITY);
+        }
+    }
+
+    static float overlayScaleForColumns(int columns) {
+        if (columns <= 2) return 1f;
+        if (columns == 3) return 0.82f;
+        if (columns == 4) return 0.68f;
+        if (columns == 5) return 0.58f;
+        return Math.max(0.46f, 0.58f - ((columns - 5) * 0.05f));
+    }
+
+    void pulseGridMorph(RecyclerView list) {
+        if (list == null || !android.animation.ValueAnimator.areAnimatorsEnabled()) return;
+        for (int index = 0; index < list.getChildCount(); index++) {
+            View child = list.getChildAt(index);
+            RecyclerView.ViewHolder raw = list.getChildViewHolder(child);
+            if (!(raw instanceof Holder)) continue;
+            View pulse = ((Holder) raw).morphPulse;
+            pulse.animate().cancel();
+            pulse.setAlpha(0f);
+            pulse.animate()
+                    .alpha(0.58f)
+                    .setDuration(55L)
+                    .setInterpolator(new android.view.animation.DecelerateInterpolator())
+                    .withEndAction(() -> pulse.animate()
+                            .alpha(0f)
+                            .setDuration(115L)
+                            .setInterpolator(new android.view.animation.DecelerateInterpolator())
+                            .start())
+                    .start();
+        }
     }
 
     @Override
@@ -222,16 +263,52 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         playIcon.setPadding(dp(parent, 11), dp(parent, 11), dp(parent, 9), dp(parent, 11));
         play.addView(playIcon, new FrameLayout.LayoutParams(-1, -1));
 
-        return new Holder(tile, image, source, sourceIcon, sourceVariant, fresh, play);
+        View morphPulse = new View(parent.getContext());
+        GradientDrawable morphPulseBackground = new GradientDrawable();
+        morphPulseBackground.setColor(Color.TRANSPARENT);
+        morphPulseBackground.setCornerRadius(dp(parent, 10));
+        morphPulseBackground.setStroke(dp(parent, 1), UiPalette.PRIMARY);
+        morphPulse.setBackground(morphPulseBackground);
+        morphPulse.setAlpha(0f);
+        morphPulse.setClickable(false);
+        morphPulse.setFocusable(false);
+        tile.addView(morphPulse, new FrameLayout.LayoutParams(-1, -1));
+
+        return new Holder(
+                tile,
+                image,
+                source,
+                sourceIcon,
+                sourceVariant,
+                fresh,
+                play,
+                morphPulse
+        );
+    }
+
+    @Override
+    public void onBindViewHolder(
+            @NonNull Holder holder,
+            int position,
+            @NonNull List<Object> payloads
+    ) {
+        if (!payloads.isEmpty() && payloads.contains(PAYLOAD_OVERLAY_DENSITY)) {
+            applyOverlayDensity(holder);
+            return;
+        }
+        onBindViewHolder(holder, position);
     }
 
     @Override
     public void onBindViewHolder(@NonNull Holder holder, int position) {
+        holder.morphPulse.animate().cancel();
+        holder.morphPulse.setAlpha(0f);
         NativeContentItem item = items.get(position);
         holder.tile.setAspectRatio(adaptiveAspectRatios
                 ? aspectRatios.getOrDefault(item.url, 1f)
                 : 1f);
         holder.play.setVisibility(item.isVideo() ? View.VISIBLE : View.GONE);
+        applyOverlayDensity(holder);
         boolean fresh = isHighlighted(item);
         holder.fresh.setVisibility(fresh ? View.VISIBLE : View.GONE);
         SourceBadge source = sourceBadge(item);
@@ -315,9 +392,30 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         });
     }
 
+    private void applyOverlayDensity(Holder holder) {
+        float scale = overlayScaleForColumns(gridColumns);
+
+        holder.source.setPivotX(0f);
+        holder.source.setPivotY(dp(holder.source, 26));
+        holder.source.setScaleX(scale);
+        holder.source.setScaleY(scale);
+
+        holder.fresh.setPivotX(dp(holder.fresh, 26));
+        holder.fresh.setPivotY(0f);
+        holder.fresh.setScaleX(scale);
+        holder.fresh.setScaleY(scale);
+
+        holder.play.setPivotX(dp(holder.play, 42));
+        holder.play.setPivotY(dp(holder.play, 42));
+        holder.play.setScaleX(scale);
+        holder.play.setScaleY(scale);
+    }
+
     @Override
     public void onViewRecycled(@NonNull Holder holder) {
         Glide.with(holder.image).clear(holder.image);
+        holder.morphPulse.animate().cancel();
+        holder.morphPulse.setAlpha(0f);
         super.onViewRecycled(holder);
     }
 
@@ -476,6 +574,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         final TextView sourceVariant;
         final ImageView fresh;
         final View play;
+        final View morphPulse;
 
         Holder(
                 AspectRatioFrameLayout itemView,
@@ -484,7 +583,8 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
                 ImageView sourceIcon,
                 TextView sourceVariant,
                 ImageView fresh,
-                View play
+                View play,
+                View morphPulse
         ) {
             super(itemView);
             this.tile = itemView;
@@ -494,6 +594,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
             this.sourceVariant = sourceVariant;
             this.fresh = fresh;
             this.play = play;
+            this.morphPulse = morphPulse;
         }
     }
 

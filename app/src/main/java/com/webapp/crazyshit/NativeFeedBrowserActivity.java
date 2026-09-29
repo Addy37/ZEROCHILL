@@ -51,6 +51,8 @@ public final class NativeFeedBrowserActivity extends Activity {
     private static final int CREATOR_TAB_PICTURES = 1;
     private static final int CREATOR_TAB_VIDEOS = 2;
     private static final int CREATOR_TAB_COUNT = 3;
+    private static final long CREATOR_GRID_MORPH_DURATION_MS = 165L;
+    private static final long CREATOR_GRID_RELEASE_DURATION_MS = 110L;
 
     public static final String EXTRA_TITLE = "browser_title";
     public static final String EXTRA_BASE_URL = "browser_base_url";
@@ -1953,6 +1955,7 @@ public final class NativeFeedBrowserActivity extends Activity {
         );
         gallery.setGapStrategy(StaggeredGridLayoutManager.GAP_HANDLING_MOVE_ITEMS_BETWEEN_SPANS);
         list.setLayoutManager(gallery);
+        updateCreatorGalleryOverlayDensity(list, gallery.getSpanCount());
         RecyclerView.Adapter<?> listAdapter = list.getAdapter();
         if (listAdapter != null && listAdapter.getItemCount() > 0) {
             int safe = Math.min(position, listAdapter.getItemCount() - 1);
@@ -2022,6 +2025,7 @@ public final class NativeFeedBrowserActivity extends Activity {
         for (RecyclerView creatorRecycler : creatorTabRecyclers) {
             if (creatorRecycler == null) continue;
             RecyclerView.LayoutManager manager = creatorRecycler.getLayoutManager();
+            updateCreatorGalleryOverlayDensity(creatorRecycler, next);
             if (manager instanceof StaggeredGridLayoutManager) {
                 StaggeredGridLayoutManager grid = (StaggeredGridLayoutManager) manager;
                 if (grid.getSpanCount() != next) grid.setSpanCount(next);
@@ -2065,16 +2069,26 @@ public final class NativeFeedBrowserActivity extends Activity {
                                 Math.min(creatorGalleryMaximumColumns(),
                                         startColumns[0] / accumulatedScale[0]));
                         int columns = Math.round(density);
+
+                        // Keep the visual surface centered under the user's fingers while the
+                        // underlying staggered grid changes density.
+                        list.setPivotX(scaleDetector.getFocusX());
+                        list.setPivotY(scaleDetector.getFocusY());
+
                         StaggeredGridLayoutManager grid =
                                 (StaggeredGridLayoutManager) list.getLayoutManager();
                         if (grid != null && grid.getSpanCount() != columns) {
-                            grid.setSpanCount(columns);
-                            if (focusPosition[0] != RecyclerView.NO_POSITION) {
-                                grid.scrollToPositionWithOffset(focusPosition[0], focusOffset[0]);
-                            }
+                            morphCreatorGridSpanChange(
+                                    list,
+                                    grid,
+                                    columns,
+                                    focusPosition[0],
+                                    focusOffset[0]
+                            );
                         }
-                        // Match the width of the next grid at each threshold. The visual
-                        // thumbnail size remains continuous even when the span count changes.
+
+                        // Scale the whole surface between integer span counts so thumbnail
+                        // size follows the gesture continuously instead of stepping.
                         float remainder = columns / density;
                         list.setScaleX(remainder);
                         list.setScaleY(remainder);
@@ -2089,7 +2103,13 @@ public final class NativeFeedBrowserActivity extends Activity {
                             changeCreatorGalleryColumns(next - creatorGalleryColumns);
                         }
                         if (android.animation.ValueAnimator.areAnimatorsEnabled()) {
-                            list.animate().scaleX(1f).scaleY(1f).setDuration(120L).start();
+                            list.animate()
+                                    .scaleX(1f)
+                                    .scaleY(1f)
+                                    .setDuration(CREATOR_GRID_RELEASE_DURATION_MS)
+                                    .setInterpolator(new android.view.animation.PathInterpolator(
+                                            0.20f, 0f, 0.05f, 1f))
+                                    .start();
                         } else {
                             list.setScaleX(1f);
                             list.setScaleY(1f);
@@ -2147,6 +2167,165 @@ public final class NativeFeedBrowserActivity extends Activity {
                 }
             }
         });
+    }
+
+    private void updateCreatorGalleryOverlayDensity(RecyclerView list, int columns) {
+        if (list == null) return;
+        RecyclerView.Adapter<?> listAdapter = list.getAdapter();
+        if (listAdapter instanceof BunkrGalleryAdapter) {
+            ((BunkrGalleryAdapter) listAdapter).setGridColumns(columns);
+        }
+    }
+
+    private void pulseCreatorGalleryMorph(RecyclerView list) {
+        if (list == null) return;
+        RecyclerView.Adapter<?> listAdapter = list.getAdapter();
+        if (listAdapter instanceof BunkrGalleryAdapter) {
+            ((BunkrGalleryAdapter) listAdapter).pulseGridMorph(list);
+        }
+    }
+
+    private void morphCreatorGridSpanChange(
+            RecyclerView list,
+            StaggeredGridLayoutManager grid,
+            int columns,
+            int focusPosition,
+            int focusOffset
+    ) {
+        if (list == null || grid == null || grid.getSpanCount() == columns) return;
+
+        if (!android.animation.ValueAnimator.areAnimatorsEnabled()) {
+            updateCreatorGalleryOverlayDensity(list, columns);
+            grid.setSpanCount(columns);
+            if (focusPosition != RecyclerView.NO_POSITION) {
+                grid.scrollToPositionWithOffset(focusPosition, focusOffset);
+            }
+            return;
+        }
+
+        java.util.HashMap<Integer, CreatorGridSnapshot> before = new java.util.HashMap<>();
+        float oldListScaleX = Math.max(0.01f, list.getScaleX());
+        float oldListScaleY = Math.max(0.01f, list.getScaleY());
+
+        for (int index = 0; index < list.getChildCount(); index++) {
+            View child = list.getChildAt(index);
+            int position = list.getChildAdapterPosition(child);
+            if (position == RecyclerView.NO_POSITION) continue;
+
+            int[] childLocation = new int[2];
+            child.getLocationOnScreen(childLocation);
+            float visualWidth = Math.max(
+                    1f,
+                    child.getWidth() * child.getScaleX() * oldListScaleX
+            );
+            float visualHeight = Math.max(
+                    1f,
+                    child.getHeight() * child.getScaleY() * oldListScaleY
+            );
+            float screenCenterX = childLocation[0] + (visualWidth / 2f);
+            float screenCenterY = childLocation[1] + (visualHeight / 2f);
+
+            before.put(position, new CreatorGridSnapshot(
+                    screenCenterX,
+                    screenCenterY,
+                    visualWidth
+            ));
+
+            // A fast second threshold crossing can interrupt the previous morph. Capture its
+            // current visual position above, then clear old properties before the new layout.
+            child.animate().cancel();
+            child.setTranslationX(0f);
+            child.setTranslationY(0f);
+            child.setScaleX(1f);
+            child.setScaleY(1f);
+            child.setRotation(0f);
+            child.setAlpha(1f);
+        }
+
+        updateCreatorGalleryOverlayDensity(list, columns);
+
+        final android.view.ViewTreeObserver observer = list.getViewTreeObserver();
+        observer.addOnPreDrawListener(new android.view.ViewTreeObserver.OnPreDrawListener() {
+            @Override
+            public boolean onPreDraw() {
+                android.view.ViewTreeObserver current = list.getViewTreeObserver();
+                if (current.isAlive()) current.removeOnPreDrawListener(this);
+                if (isFinishing() || isDestroyed() || list.getLayoutManager() != grid) {
+                    return true;
+                }
+
+                float nextListScaleX = Math.max(0.01f, list.getScaleX());
+                float nextListScaleY = Math.max(0.01f, list.getScaleY());
+                android.view.animation.PathInterpolator curve =
+                        new android.view.animation.PathInterpolator(0.20f, 0f, 0.05f, 1f);
+
+                for (int index = 0; index < list.getChildCount(); index++) {
+                    View child = list.getChildAt(index);
+                    int position = list.getChildAdapterPosition(child);
+                    CreatorGridSnapshot old = before.get(position);
+                    if (old == null || child.getWidth() <= 0) continue;
+
+                    int[] childLocation = new int[2];
+                    child.getLocationOnScreen(childLocation);
+                    float newVisualWidth = Math.max(1f, child.getWidth() * nextListScaleX);
+                    float newVisualHeight = Math.max(1f, child.getHeight() * nextListScaleY);
+                    float screenCenterX = childLocation[0] + (newVisualWidth / 2f);
+                    float screenCenterY = childLocation[1] + (newVisualHeight / 2f);
+
+                    float translationX =
+                            (old.screenCenterX - screenCenterX) / nextListScaleX;
+                    float translationY =
+                            (old.screenCenterY - screenCenterY) / nextListScaleY;
+                    float startScale = creatorGridMorphScale(
+                            old.visualWidth,
+                            newVisualWidth
+                    );
+
+                    // Apply the inverse transform before this new layout is ever drawn. The
+                    // first rendered frame therefore matches the previous grid exactly.
+                    child.setTranslationX(translationX);
+                    child.setTranslationY(translationY);
+                    child.setScaleX(startScale);
+                    child.setScaleY(startScale);
+                    child.setRotation(0f);
+                    child.setAlpha(1f);
+                    child.animate()
+                            .translationX(0f)
+                            .translationY(0f)
+                            .scaleX(1f)
+                            .scaleY(1f)
+                            .setDuration(CREATOR_GRID_MORPH_DURATION_MS)
+                            .setInterpolator(curve)
+                            .start();
+                }
+
+                pulseCreatorGalleryMorph(list);
+                return true;
+            }
+        });
+
+        grid.setSpanCount(columns);
+        if (focusPosition != RecyclerView.NO_POSITION) {
+            grid.scrollToPositionWithOffset(focusPosition, focusOffset);
+        }
+        list.invalidate();
+    }
+
+    static float creatorGridMorphScale(float oldVisualWidth, float newVisualWidth) {
+        if (oldVisualWidth <= 0f || newVisualWidth <= 0f) return 1f;
+        return Math.max(0.76f, Math.min(1.24f, oldVisualWidth / newVisualWidth));
+    }
+
+    private static final class CreatorGridSnapshot {
+        final float screenCenterX;
+        final float screenCenterY;
+        final float visualWidth;
+
+        CreatorGridSnapshot(float screenCenterX, float screenCenterY, float visualWidth) {
+            this.screenCenterX = screenCenterX;
+            this.screenCenterY = screenCenterY;
+            this.visualWidth = visualWidth;
+        }
     }
 
     private int clamp(int value, int minimum, int maximum) {
