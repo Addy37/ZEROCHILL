@@ -52,6 +52,7 @@ public final class StartupWizardActivity extends Activity {
     private boolean updateAlerts;
     private boolean hapticsEnabled;
     private boolean awaitingNotificationPermission;
+    private boolean transitioning;
     private ObjectAnimator ambientPulse;
 
     @Override
@@ -96,6 +97,7 @@ public final class StartupWizardActivity extends Activity {
 
         backButton = actionButton("BACK", false);
         backButton.setOnClickListener(v -> {
+            if (transitioning) return;
             haptic(v);
             if (page > PAGE_WELCOME) showPage(page - 1, false);
             else closeWizard();
@@ -107,6 +109,7 @@ public final class StartupWizardActivity extends Activity {
 
         nextButton = actionButton("GET STARTED", true);
         nextButton.setOnClickListener(v -> {
+            if (transitioning) return;
             haptic(v);
             if (page == PAGE_SETTINGS) {
                 finishWizard();
@@ -136,6 +139,7 @@ public final class StartupWizardActivity extends Activity {
     }
 
     private void showPage(int next, boolean forward) {
+        if (transitioning) return;
         next = Math.max(PAGE_WELCOME, Math.min(PAGE_SETTINGS, next));
         cancelAmbientPulse();
         View incoming = buildPage(next);
@@ -144,12 +148,14 @@ public final class StartupWizardActivity extends Activity {
         updateChrome();
 
         if (outgoing == null || !ValueAnimator.areAnimatorsEnabled()) {
+            transitioning = false;
             pageHost.removeAllViews();
             pageHost.addView(incoming, new FrameLayout.LayoutParams(-1, -1));
             onPageVisible(incoming);
             return;
         }
 
+        transitioning = true;
         float direction = forward ? 1f : -1f;
         outgoing.animate()
                 .alpha(0f)
@@ -166,7 +172,10 @@ public final class StartupWizardActivity extends Activity {
                             .translationX(0f)
                             .setDuration(190L)
                             .setInterpolator(new DecelerateInterpolator())
-                            .withEndAction(() -> onPageVisible(incoming))
+                            .withEndAction(() -> {
+                                transitioning = false;
+                                onPageVisible(incoming);
+                            })
                             .start();
                 })
                 .start();
@@ -474,6 +483,7 @@ public final class StartupWizardActivity extends Activity {
 
     @Override
     public void onBackPressed() {
+        if (transitioning) return;
         if (page > PAGE_WELCOME) {
             showPage(page - 1, false);
             return;
