@@ -14,6 +14,8 @@ import android.widget.TextView;
 
 import com.google.android.material.card.MaterialCardView;
 
+import androidx.recyclerview.widget.RecyclerView;
+
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.Robolectric;
@@ -66,6 +68,51 @@ public class ShowsHeroDesignTest {
         Field maxItems = ShowsHubView.class.getDeclaredField("HERO_MAX_ITEMS");
         maxItems.setAccessible(true);
         assertEquals(8, maxItems.getInt(null));
+    }
+
+    @Test
+    public void keepsContinueWatchingLandscapeAndBrowseShelvesCompactPortrait() throws Exception {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        ShowsHubView hub = new ShowsHubView(activity, item -> { }, item -> { }, item -> { });
+        activity.setContentView(hub);
+
+        String[] browseShelfFields = new String[] {
+                "thisWeekShelf",
+                "crazyShelf",
+                "efuktShelf",
+                "categoryShelf",
+                "kaoticCategoryShelf"
+        };
+        for (String fieldName : browseShelfFields) {
+            RecyclerView rail = shelfRail(hub, fieldName);
+            RecyclerView.ViewHolder holder =
+                    rail.getAdapter().createViewHolder(rail, rail.getAdapter().getItemViewType(0));
+            assertEquals(dp(activity, 128), holder.itemView.getLayoutParams().width);
+            assertEquals(dp(activity, 178), holder.itemView.getLayoutParams().height);
+            assertEquals(dp(activity, 194), rail.getLayoutParams().height);
+            assertTrue(holder.itemView.getLayoutParams().height
+                    > holder.itemView.getLayoutParams().width);
+        }
+
+        RecyclerView continueRail = shelfRail(hub, "continueShelf");
+        RecyclerView.ViewHolder continueHolder = continueRail.getAdapter().createViewHolder(
+                continueRail,
+                continueRail.getAdapter().getItemViewType(0)
+        );
+        assertEquals(dp(activity, 248), continueHolder.itemView.getLayoutParams().width);
+        assertEquals(dp(activity, 140), continueHolder.itemView.getLayoutParams().height);
+        assertTrue(continueHolder.itemView.getLayoutParams().width
+                > continueHolder.itemView.getLayoutParams().height);
+    }
+
+    private static RecyclerView shelfRail(ShowsHubView hub, String fieldName) throws Exception {
+        Field shelfField = ShowsHubView.class.getDeclaredField(fieldName);
+        shelfField.setAccessible(true);
+        Object shelf = shelfField.get(hub);
+
+        Field railField = shelf.getClass().getDeclaredField("rail");
+        railField.setAccessible(true);
+        return (RecyclerView) railField.get(shelf);
     }
 
     private static int dp(Activity activity, int value) {
