@@ -470,6 +470,89 @@ final class FapzoneCreatorRepository {
         return new ResolvedCreator(rank, item);
     }
 
+    static final class ArtworkCandidate {
+        final String url;
+        final String referer;
+
+        ArtworkCandidate(String url, String referer) {
+            this.url = clean(url);
+            this.referer = clean(referer);
+        }
+    }
+
+    List<ArtworkCandidate> resolveArtworkCandidates(
+            Context context,
+            NativeContentItem creator
+    ) {
+        LinkedHashMap<String, ArtworkCandidate> candidates = new LinkedHashMap<>();
+        if (creator == null) return new ArrayList<>();
+
+        String name = clean(creator.searchQuery);
+        if (name.isEmpty()) name = clean(creator.title);
+
+        // Re-resolve only after the card's primary Glide request has failed. This keeps
+        // the normal shelf path fast while giving failed images a real source fallback.
+        try {
+            FapelloRepository.Model model = chooseFapelloModel(
+                    name,
+                    fapello.searchConfirmedModels(context, name, 6)
+            );
+            if (model != null) {
+                String preview = clean(model.imageUrl);
+                if (!isUsableArtworkUrl(preview)) {
+                    preview = chooseFapelloPreview(fapello.fetchModelMedia(context, model, 1));
+                }
+                addArtworkCandidate(candidates, preview, model.url);
+            }
+        } catch (Exception ignored) {
+        }
+
+        try {
+            OnlyHavenRepository.Creator onlyHavenCreator = chooseOnlyHavenCreator(
+                    name,
+                    onlyHaven.searchCreators(context, name, 6)
+            );
+            if (onlyHavenCreator != null) {
+                addArtworkCandidate(
+                        candidates,
+                        onlyHavenCreator.imageUrl,
+                        onlyHavenCreator.url
+                );
+                try {
+                    List<NativeContentItem> media =
+                            onlyHaven.fetchCreatorMedia(context, onlyHavenCreator, 1, 8);
+                    addArtworkCandidate(
+                            candidates,
+                            chooseGalleryPreview(media),
+                            onlyHavenCreator.url
+                    );
+                } catch (Exception ignored) {
+                }
+            }
+        } catch (Exception ignored) {
+        }
+
+        try {
+            NativeContentItem album = chooseAlbum(name, bunkr.searchAlbums(context, name, 1));
+            if (album != null) {
+                addArtworkCandidate(candidates, album.imageUrl, album.url);
+            }
+        } catch (Exception ignored) {
+        }
+
+        return new ArrayList<>(candidates.values());
+    }
+
+    private void addArtworkCandidate(
+            LinkedHashMap<String, ArtworkCandidate> candidates,
+            String url,
+            String referer
+    ) {
+        String cleanUrl = clean(url);
+        if (!isUsableArtworkUrl(cleanUrl)) return;
+        candidates.putIfAbsent(cleanUrl, new ArtworkCandidate(cleanUrl, referer));
+    }
+
     private OnlyHavenRepository.Creator chooseOnlyHavenCreator(
             String creatorName,
             List<OnlyHavenRepository.Creator> creators
