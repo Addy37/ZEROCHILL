@@ -171,6 +171,17 @@ public class SettingsActivity extends Activity {
                 "haptics_enabled",
                 true
         );
+        addAction(
+                appearance,
+                "Startup tour",
+                "Replay the ZEROCHILL introduction without resetting your data.",
+                "",
+                () -> {
+                    Intent intent = new Intent(this, StartupWizardActivity.class);
+                    intent.putExtra(StartupWizardPolicy.EXTRA_PREVIEW, true);
+                    startActivity(intent);
+                }
+        );
 
         LinearLayout library = addGroup(root, "Library & data");
         addAction(
