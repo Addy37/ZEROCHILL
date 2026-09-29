@@ -2,10 +2,12 @@ package com.addy37.crazyshitadmin;
 
 import android.app.AlertDialog;
 import android.content.Context;
+import android.content.res.ColorStateList;
 import android.content.Intent;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.text.InputType;
+import android.text.TextUtils;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
@@ -69,14 +71,6 @@ final class SourceConfigEditor extends LinearLayout {
         JSONObject global = object(config, "global");
         JSONObject sources = object(config, "sources");
 
-        MaterialButton analytics = button("View Analytics");
-        analytics.setOnClickListener(v -> getContext().startActivity(
-                new Intent(getContext(), AnalyticsActivity.class)));
-        LayoutParams analyticsParams = new LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT);
-        analyticsParams.bottomMargin = dp(8);
-        addView(analytics, analyticsParams);
-
         addView(section("GLOBAL"));
         addView(globalCard(global));
         addView(section("SOURCES"));
@@ -89,26 +83,23 @@ final class SourceConfigEditor extends LinearLayout {
         addView(sourceCard(sources, "itemfix", "ItemFix"));
         addView(sourceCard(sources, "onlyhaven", "OnlyHaven"));
 
-        MaterialButton raw = button("Advanced: full JSON");
+        MaterialButton raw = compactButton("Full JSON");
         raw.setOnClickListener(v -> showRawConfigDialog());
         LayoutParams rawParams = new LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT);
-        rawParams.topMargin = dp(8);
+        rawParams.topMargin = dp(4);
         addView(raw, rawParams);
     }
 
     private MaterialCardView globalCard(JSONObject global) {
         MaterialCardView card = card();
-        LinearLayout body = vertical(12);
-        TextView detail = text("Emergency controls shared by every source.", 13,
-                color(R.color.app_on_surface_variant));
-        body.addView(detail);
+        LinearLayout body = vertical(10);
         body.addView(switchRow("Source kill switches",
-                "Allow individual sources to be turned off remotely.",
+                "Remote on/off controls",
                 global.optBoolean("sourceKillSwitchesEnabled", true),
                 checked -> put(global, "sourceKillSwitchesEnabled", checked)));
         body.addView(switchRow("Fallback domains",
-                "Allow configured fallback domains when a primary domain fails.",
+                "Use configured fallback hosts",
                 global.optBoolean("fallbacksEnabled", true),
                 checked -> put(global, "fallbacksEnabled", checked)));
         card.addView(body);
@@ -118,16 +109,18 @@ final class SourceConfigEditor extends LinearLayout {
     private MaterialCardView sourceCard(JSONObject sources, String id, String label) {
         JSONObject source = object(sources, id);
         MaterialCardView card = card();
-        LinearLayout body = vertical(14);
+        LinearLayout body = vertical(10);
 
         LinearLayout heading = new LinearLayout(getContext());
         heading.setGravity(Gravity.CENTER_VERTICAL);
         LinearLayout copy = vertical(0);
-        TextView title = text(label, 19, color(R.color.app_on_surface));
+        TextView title = text(label, 16, color(R.color.app_on_surface));
         title.setTypeface(null, Typeface.BOLD);
-        TextView summary = text(sourceSummary(id, source), 13,
+        TextView summary = text(sourceSummary(id, source), 11,
                 color(R.color.app_on_surface_variant));
-        summary.setPadding(0, dp(4), dp(8), 0);
+        summary.setSingleLine(true);
+        summary.setEllipsize(TextUtils.TruncateAt.END);
+        summary.setPadding(0, dp(1), dp(8), 0);
         copy.addView(title);
         copy.addView(summary);
         heading.addView(copy, new LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
@@ -144,12 +137,17 @@ final class SourceConfigEditor extends LinearLayout {
 
         LinearLayout actions = new LinearLayout(getContext());
         actions.setOrientation(HORIZONTAL);
-        MaterialButton edit = button("Edit");
-        MaterialButton advanced = button("Advanced JSON");
+        actions.setPadding(0, dp(5), 0, 0);
+        MaterialButton edit = compactButton("Edit");
+        MaterialButton advanced = compactButton("JSON");
         edit.setOnClickListener(v -> showCommonEditor(id, label, source));
         advanced.setOnClickListener(v -> showRawSourceDialog(sources, id, label, source));
-        actions.addView(edit, new LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-        actions.addView(advanced, new LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        LayoutParams actionParams1 = new LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        actionParams1.setMarginEnd(dp(3));
+        LayoutParams actionParams2 = new LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        actionParams2.setMarginStart(dp(3));
+        actions.addView(edit, actionParams1);
+        actions.addView(advanced, actionParams2);
         body.addView(actions);
         card.addView(body);
         return card;
@@ -315,11 +313,11 @@ final class SourceConfigEditor extends LinearLayout {
     private View switchRow(String title, String subtitle, boolean checked, ToggleChange change) {
         LinearLayout row = new LinearLayout(getContext());
         row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setPadding(0, dp(6), 0, dp(6));
+        row.setPadding(0, dp(2), 0, dp(2));
         LinearLayout copy = vertical(0);
-        TextView titleView = text(title, 15, color(R.color.app_on_surface));
-        TextView subtitleView = text(subtitle, 12, color(R.color.app_on_surface_variant));
-        subtitleView.setPadding(0, dp(2), dp(8), 0);
+        TextView titleView = text(title, 14, color(R.color.app_on_surface));
+        TextView subtitleView = text(subtitle, 11, color(R.color.app_on_surface_variant));
+        subtitleView.setPadding(0, dp(1), dp(8), 0);
         copy.addView(titleView);
         copy.addView(subtitleView);
         row.addView(copy, new LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
@@ -343,7 +341,7 @@ final class SourceConfigEditor extends LinearLayout {
         String state = source.optBoolean("enabled", true) ? "ON" : "OFF";
         int retries = source.optInt("retryCount", 0);
         String timeoutText = timeout > 0 ? formatSeconds(timeout) : "timeout ?";
-        return state + " · " + compact(endpoint) + "\nRetries " + retries + " · " + timeoutText;
+        return state + "  ·  " + compact(endpoint) + "  ·  " + retries + " retries  ·  " + timeoutText;
     }
 
     private static String formatSeconds(int ms) {
@@ -379,12 +377,13 @@ final class SourceConfigEditor extends LinearLayout {
     private MaterialCardView card() {
         MaterialCardView card = new MaterialCardView(getContext());
         card.setCardBackgroundColor(color(R.color.app_surface));
-        card.setStrokeColor(color(R.color.app_surface_variant));
+        card.setStrokeColor(color(R.color.app_divider));
         card.setStrokeWidth(dp(1));
-        card.setRadius(dp(16));
+        card.setRadius(dp(12));
+        card.setCardElevation(0);
         LayoutParams params = new LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT);
-        params.bottomMargin = dp(12);
+        params.bottomMargin = dp(6);
         card.setLayoutParams(params);
         return card;
     }
@@ -397,16 +396,32 @@ final class SourceConfigEditor extends LinearLayout {
     }
 
     private TextView section(String value) {
-        TextView text = text(value, 12, color(R.color.app_on_surface_variant));
+        TextView text = text(value, 10, color(R.color.app_on_surface_variant));
         text.setTypeface(null, Typeface.BOLD);
-        text.setPadding(dp(4), dp(10), dp(4), dp(8));
+        text.setLetterSpacing(0.07f);
+        text.setPadding(dp(2), dp(7), dp(2), dp(5));
         return text;
     }
 
     private MaterialButton button(String value) {
         MaterialButton button = new MaterialButton(getContext());
         button.setText(value);
-        button.setTextColor(color(R.color.app_on_primary));
+        button.setAllCaps(false);
+        button.setTextColor(color(R.color.app_on_surface));
+        button.setMinHeight(dp(36));
+        button.setInsetTop(0);
+        button.setInsetBottom(0);
+        button.setCornerRadius(dp(10));
+        button.setBackgroundTintList(ColorStateList.valueOf(color(R.color.app_surface_raised)));
+        button.setStrokeColor(ColorStateList.valueOf(color(R.color.app_divider)));
+        button.setStrokeWidth(dp(1));
+        return button;
+    }
+
+    private MaterialButton compactButton(String value) {
+        MaterialButton button = button(value);
+        button.setTextSize(11);
+        button.setMinHeight(dp(34));
         return button;
     }
 
