@@ -449,13 +449,15 @@ final class OnlyFapHubView extends FrameLayout {
     }
 
     void refreshFavorites() {
-        List<NativeContentItem> favorites =
-                CreatorCatalog.matching(getContext(), "", true, 12);
+        List<CreatorCatalog.FavoriteGroup> favorites =
+                CreatorCatalog.favoriteGroups(getContext());
+        List<CreatorAvatarOverrideStore.Override> avatarOverrides =
+                CreatorAvatarOverrideStore.load(getContext());
         favoritesRail.removeAllViews();
         int count = Math.min(10, favorites.size());
         for (int i = 0; i < count; i++) {
             favoritesRail.addView(
-                    favoriteCreatorCard(favorites.get(i)),
+                    favoriteCreatorCard(favorites.get(i), avatarOverrides),
                     new LinearLayout.LayoutParams(dp(94), dp(108))
             );
         }
@@ -567,7 +569,11 @@ final class OnlyFapHubView extends FrameLayout {
         return new CreatorShelf(section, rail, adapter);
     }
 
-    private View favoriteCreatorCard(NativeContentItem creator) {
+    private View favoriteCreatorCard(
+            CreatorCatalog.FavoriteGroup group,
+            List<CreatorAvatarOverrideStore.Override> avatarOverrides
+    ) {
+        NativeContentItem creator = group.item;
         LinearLayout wrapper = new LinearLayout(getContext());
         wrapper.setOrientation(LinearLayout.VERTICAL);
         wrapper.setGravity(Gravity.CENTER_HORIZONTAL);
@@ -596,11 +602,10 @@ final class OnlyFapHubView extends FrameLayout {
         initials.setGravity(Gravity.CENTER);
         frame.addView(initials, new FrameLayout.LayoutParams(-1, -1));
 
-        ImageView image = new ImageView(getContext());
-        image.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        CreatorAvatarImageView image = new CreatorAvatarImageView(getContext());
         image.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
         frame.addView(image, new FrameLayout.LayoutParams(-1, -1));
-        loadCreatorImage(image, creator, true);
+        loadCreatorImage(image, group, avatarOverrides);
 
         wrapper.addView(avatar, new LinearLayout.LayoutParams(dp(72), dp(72)));
 
@@ -1152,10 +1157,28 @@ final class OnlyFapHubView extends FrameLayout {
     }
 
     private void loadCreatorImage(
-            ImageView image,
-            NativeContentItem creator,
-            boolean circle
+            CreatorAvatarImageView image,
+            CreatorCatalog.FavoriteGroup group,
+            List<CreatorAvatarOverrideStore.Override> avatarOverrides
     ) {
+        NativeContentItem creator = group == null ? null : group.item;
+        CreatorAvatarOverrideStore.Override avatarOverride =
+                group != null && group.customAvatar
+                        ? CreatorAvatarOverrideStore.find(
+                                avatarOverrides,
+                                group.relationshipKeys
+                        )
+                        : null;
+        if (avatarOverride != null) {
+            image.setAvatarCrop(
+                    avatarOverride.focusX,
+                    avatarOverride.focusY,
+                    avatarOverride.zoom
+            );
+        } else {
+            image.clearAvatarCrop();
+        }
+
         String url = creator == null ? "" : clean(creator.imageUrl);
         if (url.isEmpty()) {
             image.setImageResource(R.drawable.ic_more_account);
@@ -1164,16 +1187,18 @@ final class OnlyFapHubView extends FrameLayout {
         try {
             com.bumptech.glide.RequestBuilder<Drawable> request =
                     Glide.with(image)
-                            .load(remoteImage(url, creator.uploader.isEmpty()
-                                    ? creator.url
-                                    : creator.uploader))
+                            .load(remoteImage(
+                                    url,
+                                    creator.uploader.isEmpty()
+                                            ? creator.url
+                                            : creator.uploader
+                            ))
                             .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
                             .dontAnimate()
                             .placeholder(new ColorDrawable(
                                     ZeroChillUi.color(getContext(), R.color.zc_surface_pressed)))
                             .error(R.drawable.ic_more_account);
-            if (circle) request.circleCrop();
-            else request.centerCrop();
+            if (avatarOverride == null) request.circleCrop();
             request.into(image);
         } catch (Exception ignored) {
             image.setImageResource(R.drawable.ic_more_account);
