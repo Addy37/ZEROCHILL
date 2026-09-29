@@ -424,7 +424,7 @@ final class OnlyFapHubView extends FrameLayout {
 
     void setTrending(List<NativeContentItem> items) {
         discoverCandidates = safe(items);
-        refreshDiscoverShelf();
+        if (shelvesFinished) refreshDiscoverShelf();
         refreshHeroCandidates();
     }
 
@@ -432,7 +432,6 @@ final class OnlyFapHubView extends FrameLayout {
         newItems = safe(items);
         newShelf.adapter.replace(newItems);
         newShelf.container.setVisibility(newItems.isEmpty() ? View.GONE : View.VISIBLE);
-        refreshDiscoverShelf();
         refreshHeroCandidates();
     }
 
@@ -440,7 +439,6 @@ final class OnlyFapHubView extends FrameLayout {
         hotItems = safe(items);
         hotShelf.adapter.replace(hotItems);
         hotShelf.container.setVisibility(hotItems.isEmpty() ? View.GONE : View.VISIBLE);
-        refreshDiscoverShelf();
         refreshHeroCandidates();
     }
 
@@ -448,7 +446,6 @@ final class OnlyFapHubView extends FrameLayout {
         popularItems = safe(items);
         popularShelf.adapter.replace(popularItems);
         popularShelf.container.setVisibility(popularItems.isEmpty() ? View.GONE : View.VISIBLE);
-        refreshDiscoverShelf();
         refreshHeroCandidates();
     }
 
@@ -488,6 +485,8 @@ final class OnlyFapHubView extends FrameLayout {
 
     void finishLoading() {
         shelvesFinished = true;
+        // Select once against final shelves, never against progressively growing exclusions.
+        refreshDiscoverShelf();
         refreshHeroCandidates();
         if (heroItems.size() < HERO_MAX_ITEMS) requestMoreHeroDiscovery();
         loadingLabel.setVisibility(itemCount() == 0 ? View.VISIBLE : View.GONE);

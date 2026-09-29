@@ -111,6 +111,39 @@ jobs:
               output.write(f"ANDROID_KEY_PASSWORD={data['key_password']}\n")
           PY
 
+      - name: Audit live Fapello Discover pagination
+        continue-on-error: true
+        run: |
+          python3 - <<'PYTHON'
+          import sys
+          sys.path.insert(0, "tools")
+          import refresh_onlyfap_creator_index as source
+          config = source.source_config(source.DEFAULT_CONFIG, "fapello")
+          headers = source.configured_headers(config)
+          pages = {}
+          for listing, page in (("new", 4), ("new", 5), ("new", 6), ("hot", 5), ("popular", 5)):
+              url = source.fapello_listing_url(config, listing, page)
+              body = source.request_text(url, headers, retries=1)
+              parser = source.FapelloCreatorParser(config["baseUrl"])
+              parser.feed(body)
+              creators = {slug for name, slug in parser.creators}
+              if not creators:
+                  raise SystemExit(f"No parsed creators: {listing} page {page}")
+              pages[listing, page] = creators
+              print(f"DISCOVER_PAGINATION {listing} page {page}: {len(creators)} creators")
+          different = pages["new", 5] - pages["new", 4]
+          print(f"DISCOVER_PAGINATION New page 5 adds {len(different)} creators beyond page 4")
+          if not different or pages["new", 5] == pages["new", 6]:
+              raise SystemExit("Source did not return distinct deeper pages")
+          PYTHON
+
+      - name: Run focused OnlyFap Discover release regressions first
+        run: >-
+          gradle --no-daemon :app:testReleaseUnitTest
+          --tests 'com.webapp.crazyshit.OnlyFapDiscoverTest'
+          --tests 'com.webapp.crazyshit.OnlyFapDiscoverLifecycleTest'
+          --tests 'com.webapp.crazyshit.FapelloRepositoryTest'
+
       - name: Build signed upgrade candidate
         run: gradle --no-daemon :app:testReleaseUnitTest :app:assembleRelease
 
