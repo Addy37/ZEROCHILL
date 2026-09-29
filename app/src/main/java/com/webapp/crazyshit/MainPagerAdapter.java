@@ -1052,7 +1052,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                                 items -> showOnlyFapHubProgress(page, generation, mode, items));
                     } catch (Exception ignored) {
                     }
-                    finalShelves.put(mode, new ArrayList<>(result));
+                    finalShelves.put(mode, new java.util.ArrayList<>(result));
                     if (!result.isEmpty()) CreatorCatalog.remember(activity, result);
                     final List<NativeContentItem> items = result;
                     activity.runOnUiThread(() -> {
