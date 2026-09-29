@@ -2333,6 +2333,7 @@ public final class ChaosFeedView extends FrameLayout {
                 return;
             }
 
+            long playerPrepareStartedNs = renderDiagnostics.nowNs();
             releasePlayer();
             stream = nextStream;
             lastAttemptedStream = nextStream;
@@ -2496,6 +2497,11 @@ public final class ChaosFeedView extends FrameLayout {
                 }
             });
             createdPlayer.prepare();
+            renderDiagnostics.duration(
+                    "PLAYER_PREPARE",
+                    playerPrepareStartedNs,
+                    boundPosition,
+                    "autoplay=" + autoplay);
         }
 
         private void maybeCompleteStartupHandoff() {
@@ -2910,6 +2916,7 @@ public final class ChaosFeedView extends FrameLayout {
         }
 
         void detachPlayerForDeferredRelease() {
+            long detachStartedNs = renderDiagnostics.nowNs();
             root.removeCallbacks(hideControlsRunnable);
             root.removeCallbacks(skipFailedClipRunnable);
             failurePending = false;
@@ -2929,9 +2936,16 @@ public final class ChaosFeedView extends FrameLayout {
             }
             playerHolders.remove(this);
             stream = null;
+            renderDiagnostics.duration(
+                    "PLAYER_DETACH",
+                    detachStartedNs,
+                    boundPosition,
+                    "queued=" + (detached != null));
         }
 
         void releasePlayer() {
+            long releaseStartedNs = renderDiagnostics.nowNs();
+            boolean hadPlayer = player != null;
             root.removeCallbacks(hideControlsRunnable);
             root.removeCallbacks(skipFailedClipRunnable);
             failurePending = false;
@@ -2949,6 +2963,13 @@ public final class ChaosFeedView extends FrameLayout {
             }
             playerHolders.remove(this);
             stream = null;
+            if (hadPlayer) {
+                renderDiagnostics.duration(
+                        "PLAYER_RELEASE",
+                        releaseStartedNs,
+                        boundPosition,
+                        "sync=true");
+            }
         }
     }
 }
