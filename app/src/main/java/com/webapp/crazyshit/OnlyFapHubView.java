@@ -107,6 +107,7 @@ final class OnlyFapHubView extends FrameLayout {
     private final List<HeroCandidate> heroItems = new ArrayList<>();
     private final List<NativeContentItem> heroDiscoveryItems = new ArrayList<>();
 
+    private List<NativeContentItem> discoverCandidates = Collections.emptyList();
     private List<NativeContentItem> trendingItems = Collections.emptyList();
     private List<NativeContentItem> newItems = Collections.emptyList();
     private List<NativeContentItem> hotItems = Collections.emptyList();
@@ -383,6 +384,7 @@ final class OnlyFapHubView extends FrameLayout {
 
     void clear() {
         heroGeneration++;
+        discoverCandidates = Collections.emptyList();
         trendingItems = Collections.emptyList();
         newItems = Collections.emptyList();
         hotItems = Collections.emptyList();
@@ -421,9 +423,8 @@ final class OnlyFapHubView extends FrameLayout {
     }
 
     void setTrending(List<NativeContentItem> items) {
-        trendingItems = safe(items);
-        trendingShelf.adapter.replace(trendingItems);
-        trendingShelf.container.setVisibility(trendingItems.isEmpty() ? View.GONE : View.VISIBLE);
+        discoverCandidates = safe(items);
+        refreshDiscoverShelf();
         refreshHeroCandidates();
     }
 
@@ -431,6 +432,7 @@ final class OnlyFapHubView extends FrameLayout {
         newItems = safe(items);
         newShelf.adapter.replace(newItems);
         newShelf.container.setVisibility(newItems.isEmpty() ? View.GONE : View.VISIBLE);
+        refreshDiscoverShelf();
         refreshHeroCandidates();
     }
 
@@ -438,6 +440,7 @@ final class OnlyFapHubView extends FrameLayout {
         hotItems = safe(items);
         hotShelf.adapter.replace(hotItems);
         hotShelf.container.setVisibility(hotItems.isEmpty() ? View.GONE : View.VISIBLE);
+        refreshDiscoverShelf();
         refreshHeroCandidates();
     }
 
@@ -445,7 +448,21 @@ final class OnlyFapHubView extends FrameLayout {
         popularItems = safe(items);
         popularShelf.adapter.replace(popularItems);
         popularShelf.container.setVisibility(popularItems.isEmpty() ? View.GONE : View.VISIBLE);
+        refreshDiscoverShelf();
         refreshHeroCandidates();
+    }
+
+    private void refreshDiscoverShelf() {
+        trendingItems = FapzoneCreatorRepository.selectDiscoverItems(
+                discoverCandidates,
+                newItems,
+                hotItems,
+                popularItems
+        );
+        trendingShelf.adapter.replace(trendingItems);
+        trendingShelf.container.setVisibility(
+                trendingItems.isEmpty() ? View.GONE : View.VISIBLE
+        );
     }
 
     void refreshFavorites() {
