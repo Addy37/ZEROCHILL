@@ -55,13 +55,18 @@ public class OnlyHavenTrendingTest {
     }
 
     @Test
-    public void onlyFapTopModeIsPresentedAsTrending() {
-        assertEquals("Trending", FapzoneCreatorRepository.titleFor(
+    public void onlyFapTopModeIsPresentedAsDiscover() {
+        assertEquals("Discover", FapzoneCreatorRepository.titleFor(
                 FapzoneCreatorRepository.MODE_TOP_50
         ));
-        assertEquals("LIVE", FapzoneCreatorRepository.badgeFor(
+        assertEquals("Random picks from Fapello · fresh each visit",
+                FapzoneCreatorRepository.hintFor(
+                        FapzoneCreatorRepository.MODE_TOP_50
+                ));
+        assertEquals("MIX", FapzoneCreatorRepository.badgeFor(
                 FapzoneCreatorRepository.MODE_TOP_50
         ));
+        assertEquals(16, FapzoneCreatorRepository.DISCOVER_ITEMS);
     }
     @Test
     public void trendingArtworkFallsBackToGalleryPreview() {
