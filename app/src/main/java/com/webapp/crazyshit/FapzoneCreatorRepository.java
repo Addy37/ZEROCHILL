@@ -32,7 +32,7 @@ final class FapzoneCreatorRepository {
 
     private static final int LIVE_ITEMS = 30;
     static final int DISCOVER_ITEMS = 16;
-    private static final int DISCOVER_PAGES_PER_LIST = 2;
+    private static final int DISCOVER_PAGES_PER_LIST = 1;
     private static final int LIVE_PAGES = 4;
     private static final int PROGRESS_STEP = 6;
     private static final long CACHE_AGE_MS = TimeUnit.HOURS.toMillis(6);
