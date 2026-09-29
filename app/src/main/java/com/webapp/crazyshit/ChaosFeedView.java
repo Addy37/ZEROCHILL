@@ -402,6 +402,11 @@ public final class ChaosFeedView extends FrameLayout {
     private void loadMorePool() {
     if (closed || poolLoading) return;
     poolLoading = true;
+    final int requestPosition = selectedPosition;
+    final int requestItems = items.size();
+    final long batchStartedNs = renderDiagnostics.nowNs();
+    renderDiagnostics.event(
+            "BATCH_REQUEST", requestPosition, "items=" + requestItems);
 
     io.execute(() -> {
         List<NativeContentItem> mixed;
@@ -421,6 +426,13 @@ public final class ChaosFeedView extends FrameLayout {
         List<NativeContentItem> prioritizedFresh = aspectPriority.order(fresh, random);
         List<NativeContentItem> prioritizedRecentFallback =
                 aspectPriority.order(recentFallback, random);
+        renderDiagnostics.duration(
+                "BATCH_FETCH",
+                batchStartedNs,
+                requestPosition,
+                "mixed=" + mixed.size()
+                        + " fresh=" + prioritizedFresh.size()
+                        + " fallback=" + prioritizedRecentFallback.size());
 
         activity.runOnUiThread(() ->
                 stageOrApplyLoadedPool(prioritizedFresh, prioritizedRecentFallback));
@@ -484,6 +496,7 @@ public final class ChaosFeedView extends FrameLayout {
             List<NativeContentItem> prioritizedRecentFallback
     ) {
         if (closed) return;
+        long batchUiStartedNs = renderDiagnostics.nowNs();
         poolLoading = false;
         int before = items.size();
         appendUnique(prioritizedFresh);
@@ -522,6 +535,11 @@ public final class ChaosFeedView extends FrameLayout {
             autoAdvancePending = false;
             autoAdvanceFrom = -1;
         }
+        renderDiagnostics.duration(
+                "BATCH_UI_APPLY",
+                batchUiStartedNs,
+                selectedPosition,
+                "added=" + added + " items=" + items.size());
     }
 
     static boolean shouldPreparePlayer(int position, int selectedPosition) {
@@ -824,7 +842,10 @@ public final class ChaosFeedView extends FrameLayout {
 
     private void warmCreatorGalleries(int position) {
         if (closed || !active || !hostResumed || position < 0 || position >= items.size()) return;
+        long warmStartedNs = renderDiagnostics.nowNs();
         ShitTokCreatorGalleryPreloader.warm(activity, items.get(position));
+        renderDiagnostics.duration(
+                "CREATOR_WARM", warmStartedNs, position, "selected=true");
 
         cancelCreatorWarmAhead();
         creatorWarmAheadPosition = position;
@@ -843,7 +864,10 @@ public final class ChaosFeedView extends FrameLayout {
         for (int next = position + 1; next < Math.min(items.size(), position + 8); next++) {
             NativeContentItem candidate = items.get(next);
             if (!ShitTokCreatorMetadata.hasCreator(candidate)) continue;
+            long warmStartedNs = renderDiagnostics.nowNs();
             ShitTokCreatorGalleryPreloader.warm(activity, candidate);
+            renderDiagnostics.duration(
+                    "CREATOR_WARM", warmStartedNs, next, "selected=false");
             break;
         }
     }
