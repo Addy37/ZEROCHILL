@@ -50,6 +50,7 @@ public class ShitTokSwipeStartTest {
         h.event(0, 0, MotionEvent.ACTION_DOWN, 400, 700);
         h.event(0, 16, MotionEvent.ACTION_MOVE, 400, 700 - h.slop / 2f);
         h.event(0, 40, MotionEvent.ACTION_UP, 400, 700 - h.slop / 2f);
+        shadowOf(android.os.Looper.getMainLooper()).idle();
         assertEquals(-1, h.dragAt);
         assertEquals(1, h.clicks);
         h.finish();
@@ -57,24 +58,29 @@ public class ShitTokSwipeStartTest {
 
     @Test public void twoFingerPinchStillHidesAndRestoresChrome() {
         Harness h = new Harness();
-        h.event(0, 0, MotionEvent.ACTION_DOWN, 400, 500);
-        h.pointers(0, 8, MotionEvent.ACTION_POINTER_DOWN | (1 << 8), 500, 900);
-        h.pointers(0, 16, MotionEvent.ACTION_MOVE, 540, 860);
-        h.pointers(0, 24, MotionEvent.ACTION_MOVE, 600, 800);
+        // Keep both spans above Android's density-dependent minimum scaling span.
+        int minimum = ViewConfiguration.get(h.activity).getScaledMinimumScalingSpan();
+        float unit = Math.max(200, minimum);
+        h.event(0, 0, MotionEvent.ACTION_DOWN, 400, 400);
+        h.pointers(0, 8, MotionEvent.ACTION_POINTER_DOWN | (1 << 8), 400, 400 + unit * 5);
+        h.pointers(0, 16, MotionEvent.ACTION_MOVE, 400, 400 + unit * 4);
+        h.pointers(0, 24, MotionEvent.ACTION_MOVE, 400, 400 + unit * 2.5f);
         assertTrue(ReflectionHelpers.<Boolean>getField(h.feed, "clearDisplay"));
         assertFalse(h.pager.isUserInputEnabled());
-        h.pointers(0, 32, MotionEvent.ACTION_POINTER_UP | (1 << 8), 600, 800);
-        h.event(0, 40, MotionEvent.ACTION_UP, 400, 600);
+        h.pointers(0, 32, MotionEvent.ACTION_POINTER_UP | (1 << 8), 400, 400 + unit * 2.5f);
+        h.event(0, 40, MotionEvent.ACTION_UP, 400, 400);
+        shadowOf(android.os.Looper.getMainLooper()).idle();
         assertTrue(h.pager.isUserInputEnabled());
         assertEquals(0, h.clicks);
 
-        h.event(1000, 1000, MotionEvent.ACTION_DOWN, 400, 600);
-        h.pointers(1000, 1008, MotionEvent.ACTION_POINTER_DOWN | (1 << 8), 600, 800);
-        h.pointers(1000, 1016, MotionEvent.ACTION_MOVE, 540, 860);
-        h.pointers(1000, 1024, MotionEvent.ACTION_MOVE, 480, 920);
+        h.event(1000, 1000, MotionEvent.ACTION_DOWN, 400, 400);
+        h.pointers(1000, 1008, MotionEvent.ACTION_POINTER_DOWN | (1 << 8), 400, 400 + unit * 2.5f);
+        h.pointers(1000, 1016, MotionEvent.ACTION_MOVE, 400, 400 + unit * 3.5f);
+        h.pointers(1000, 1024, MotionEvent.ACTION_MOVE, 400, 400 + unit * 5);
         assertFalse(ReflectionHelpers.<Boolean>getField(h.feed, "clearDisplay"));
-        h.pointers(1000, 1032, MotionEvent.ACTION_POINTER_UP | (1 << 8), 480, 920);
-        h.event(1000, 1040, MotionEvent.ACTION_UP, 400, 480);
+        h.pointers(1000, 1032, MotionEvent.ACTION_POINTER_UP | (1 << 8), 400, 400 + unit * 5);
+        h.event(1000, 1040, MotionEvent.ACTION_UP, 400, 400);
+        shadowOf(android.os.Looper.getMainLooper()).idle();
         assertTrue(h.pager.isUserInputEnabled());
         assertEquals(-1, h.dragAt);
         assertEquals(0, h.clicks);
