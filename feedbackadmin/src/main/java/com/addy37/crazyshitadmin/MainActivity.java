@@ -55,6 +55,7 @@ public final class MainActivity extends AppCompatActivity {
     private TextView count;
     private String filter = "all";
     private String currentDestination = DASHBOARD;
+    private boolean resumedOnce;
 
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
@@ -63,6 +64,12 @@ public final class MainActivity extends AppCompatActivity {
                 this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
             ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.POST_NOTIFICATIONS}, 10);
         }
+    }
+
+    @Override protected void onResume() {
+        super.onResume();
+        if (resumedOnce && FEEDBACK.equals(currentDestination) && swipe != null) load();
+        resumedOnce = true;
     }
 
     @Override protected void onNewIntent(Intent intent) {
@@ -657,48 +664,8 @@ public final class MainActivity extends AppCompatActivity {
     }
 
     private void showDetail(AdminRepository.Item item) {
-        LinearLayout content = vertical(0);
-        TextView meta = text(displayType(item.type) + stars(item.rating) + "\n" +
-                item.message + "\n\nVersion " + item.appVersion + " · Android " + item.androidVersion +
-                "\n" + item.device + " · " + item.section + "\n" + formatDate(item.createdAt),
-                15, color(R.color.app_on_surface));
-        content.addView(meta);
-        String[] statuses = {"submitted", "reviewing", "planned", "completed"};
-        Spinner status = new Spinner(this);
-        status.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, statuses));
-        for (int i = 0; i < statuses.length; i++) if (statuses[i].equals(item.status)) status.setSelection(i);
-        EditText reply = new EditText(this);
-        reply.setHint("Developer reply");
-        reply.setMinLines(3);
-        reply.setText(item.reply);
-        content.addView(status);
-        content.addView(reply);
-        AlertDialog dialog = new AlertDialog.Builder(this)
-                .setTitle("Manage feedback")
-                .setView(content)
-                .setNegativeButton("Cancel", null)
-                .setPositiveButton("Save", null)
-                .create();
-        dialog.setOnShowListener(unused -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
-            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setEnabled(false);
-            network.execute(() -> {
-                try {
-                    AdminRepository.update(SecureTokenStore.read(this), item.id,
-                            status.getSelectedItem().toString(), reply.getText().toString().trim());
-                    runOnUiThread(() -> {
-                        dialog.dismiss();
-                        toast("Reply saved");
-                        load();
-                    });
-                } catch (Exception error) {
-                    runOnUiThread(() -> {
-                        dialog.getButton(AlertDialog.BUTTON_POSITIVE).setEnabled(true);
-                        toast(message(error));
-                    });
-                }
-            });
-        }));
-        dialog.show();
+        startActivity(new Intent(this, FeedbackThreadActivity.class)
+                .putExtra(FeedbackThreadActivity.EXTRA_FEEDBACK_ID, item.id));
     }
 
     private LinearLayout screenShell() {
@@ -868,10 +835,18 @@ public final class MainActivity extends AppCompatActivity {
 
         @Override public void onBindViewHolder(@NonNull Holder holder, int position) {
             AdminRepository.Item item = items.get(position);
-            String preview = item.message == null ? "" : item.message.trim();
+            String preview = item.lastMessage == null ? "" : item.lastMessage.trim();
             if (preview.length() > 180) preview = preview.substring(0, 177) + "…";
-            holder.text.setText(displayType(item.type) + stars(item.rating) + "\n" + preview +
-                    "\n\n" + item.status.toUpperCase(Locale.US) + "  ·  " + formatDate(item.createdAt));
+            String unread = item.unreadCount > 0
+                    ? "  ·  " + item.unreadCount + (item.unreadCount == 1 ? " unread" : " unread")
+                    : "";
+            String sender = "developer".equals(item.lastSender) ? "YOU" : "USER";
+            holder.text.setText(
+                    displayType(item.type) + stars(item.rating) + unread +
+                            "\n" + sender + ": " + preview +
+                            "\n\n" + item.status.toUpperCase(Locale.US) + "  ·  " +
+                            formatDate(item.lastMessageAt)
+            );
             holder.itemView.setOnClickListener(v -> click.open(item));
         }
 
