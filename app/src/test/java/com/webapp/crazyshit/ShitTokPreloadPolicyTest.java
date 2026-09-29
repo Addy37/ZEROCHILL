@@ -48,6 +48,13 @@ public final class ShitTokPreloadPolicyTest {
     }
 
     @Test
+    public void pausedChrome_onlyShowsForAnExplicitPauseOutsideClearDisplay() {
+        assertTrue(ChaosFeedView.shouldShowPausedChrome(true, false));
+        assertFalse(ChaosFeedView.shouldShowPausedChrome(false, false));
+        assertFalse(ChaosFeedView.shouldShowPausedChrome(true, true));
+    }
+
+    @Test
     public void startupQueue_seedsSixSwipeableItems() {
         assertEquals(6, ChaosStartupPreloader.STARTER_ITEMS);
     }
