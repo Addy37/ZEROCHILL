@@ -227,6 +227,24 @@ Deno.serve(async (request) => {
       return response({ item: data });
     }
 
+    if (action === "delete") {
+      const id = String(body.id ?? "");
+      if (!feedbackIdPattern.test(id)) {
+        return response({ error: "Invalid feedback ID." }, 400);
+      }
+
+      const current = await feedbackById(db, id);
+      if (!current) return response({ error: "Feedback thread not found." }, 404);
+
+      const { error } = await db
+        .from("app_feedback")
+        .delete()
+        .eq("id", id);
+      if (error) throw error;
+
+      return response({ deleted: true, id });
+    }
+
     if (action === "analytics") {
       const { data, error } = await db.rpc("analytics_dashboard");
       if (error) throw error;
