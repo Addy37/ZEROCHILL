@@ -140,9 +140,16 @@ public final class FeedbackThreadActivity extends AppCompatActivity {
         composer.setFilters(new InputFilter[]{new InputFilter.LengthFilter(2000)});
         composeRow.addView(composer, new LinearLayout.LayoutParams(0, -2, 1f));
 
-        send = primaryButton("Send");
+        send = primaryButton("");
+        send.setIconResource(R.drawable.ic_send);
+        send.setIconTint(android.content.res.ColorStateList.valueOf(Color.WHITE));
+        send.setIconSize(dp(22));
+        send.setIconPadding(0);
+        send.setContentDescription("Send reply");
+        send.setMinWidth(0);
+        send.setPadding(0, 0, 0, 0);
         send.setOnClickListener(v -> sendReply());
-        LinearLayout.LayoutParams sendParams = new LinearLayout.LayoutParams(dp(76), dp(44));
+        LinearLayout.LayoutParams sendParams = new LinearLayout.LayoutParams(dp(48), dp(44));
         sendParams.setMarginStart(dp(7));
         composeRow.addView(send, sendParams);
 
@@ -310,7 +317,7 @@ public final class FeedbackThreadActivity extends AppCompatActivity {
 
     private void setSending(boolean sending) {
         send.setEnabled(!sending);
-        send.setText(sending ? "Sending…" : "Send");
+        send.setContentDescription(sending ? "Sending reply" : "Send reply");
         saveStatus.setEnabled(!sending);
     }
 
