@@ -267,24 +267,15 @@ internal fun MacrobenchmarkScope.openCreatorProfileAndGallery() {
             attemptedCreators.joinToString()
     }
 
-    // The grid tap opens BunkrGalleryActivity at the selected video. Playback starts only
-    // after tapping that fullscreen page, and this viewer does not use ShitTok's
-    // "Play or pause video" accessibility description.
+    // The grid tap opens BunkrGalleryActivity at the selected video and now starts
+    // playback automatically. The viewer chrome hides when the player starts.
     checkNotNull(
         device.wait(Until.findObject(By.descStartsWith("Video,")), 12_000)
     ) {
         "Creator video viewer did not open"
     }
-    checkNotNull(device.wait(Until.findObject(By.desc("Download video")), 8_000)) {
-        "Creator video viewer chrome did not become ready"
-    }
-
-    // The pager can rebind its page while preloading adjacent media, which invalidates
-    // previously returned UiObject2 instances. Tap the stable fullscreen surface directly.
-    device.click(device.displayWidth / 2, device.displayHeight / 2)
-
     check(device.wait(Until.gone(By.desc("Download video")), 20_000)) {
-        "Creator video playback did not start"
+        "Creator video autoplay did not start"
     }
 }
 
