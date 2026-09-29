@@ -374,6 +374,11 @@ public final class ChaosFeedView extends FrameLayout {
     private void loadMorePool() {
     if (closed || poolLoading) return;
     poolLoading = true;
+    final int requestPosition = selectedPosition;
+    final int requestItems = items.size();
+    final long batchStartedNs = renderDiagnostics.nowNs();
+    renderDiagnostics.event(
+            "BATCH_REQUEST", requestPosition, "items=" + requestItems);
 
     io.execute(() -> {
         List<NativeContentItem> mixed;
@@ -393,9 +398,17 @@ public final class ChaosFeedView extends FrameLayout {
         List<NativeContentItem> prioritizedFresh = aspectPriority.order(fresh, random);
         List<NativeContentItem> prioritizedRecentFallback =
                 aspectPriority.order(recentFallback, random);
+        renderDiagnostics.duration(
+                "BATCH_FETCH",
+                batchStartedNs,
+                requestPosition,
+                "mixed=" + mixed.size()
+                        + " fresh=" + prioritizedFresh.size()
+                        + " fallback=" + prioritizedRecentFallback.size());
 
         activity.runOnUiThread(() -> {
             if (closed) return;
+            long batchUiStartedNs = renderDiagnostics.nowNs();
             poolLoading = false;
             int before = items.size();
             appendUnique(prioritizedFresh);
@@ -435,6 +448,11 @@ public final class ChaosFeedView extends FrameLayout {
                 autoAdvancePending = false;
                 autoAdvanceFrom = -1;
             }
+            renderDiagnostics.duration(
+                    "BATCH_UI_APPLY",
+                    batchUiStartedNs,
+                    selectedPosition,
+                    "added=" + added + " items=" + items.size());
         });
     });
 }
@@ -800,6 +818,9 @@ public final class ChaosFeedView extends FrameLayout {
             return;
         }
 
+        final long resolveStartedNs = renderDiagnostics.nowNs();
+        renderDiagnostics.event(
+                "RESOLVE_START", position, "selected=" + selectedPosition);
         io.execute(() -> {
             CrazyShitRepository.StreamInfo stream = ChaosStartupPreloader.takeResolved(item.url);
             try {
@@ -807,8 +828,16 @@ public final class ChaosFeedView extends FrameLayout {
             } catch (Exception ignored) {
             }
             CrazyShitRepository.StreamInfo resolved = stream;
+            renderDiagnostics.duration(
+                    "RESOLVE_BG",
+                    resolveStartedNs,
+                    position,
+                    "success=" + (resolved != null
+                            && resolved.mediaUrl != null
+                            && !resolved.mediaUrl.isEmpty()));
             activity.runOnUiThread(() -> {
                 if (closed) return;
+                long resolveUiStartedNs = renderDiagnostics.nowNs();
                 resolving.remove(item.url);
                 if (resolved == null || resolved.mediaUrl == null || resolved.mediaUrl.isEmpty()) {
                     if (shouldRetryResolution(item, position)) {
@@ -822,6 +851,11 @@ public final class ChaosFeedView extends FrameLayout {
                 }
                 prepareVisible(position);
                 if (position == selectedPosition) playSelected();
+                renderDiagnostics.duration(
+                        "RESOLVE_UI",
+                        resolveUiStartedNs,
+                        position,
+                        "selected=" + (position == selectedPosition));
             });
         });
     }
