@@ -15,6 +15,7 @@ public final class CrazyShitApplication extends Application {
     public void onCreate() {
         super.onCreate();
         AppPerformance.begin();
+        PlaybackHistoryStore.initializeAsync(this);
         RemoteSourceConfigManager.initialize(this);
         RemoteSourceConfigManager.refreshInBackground(this);
         AnalyticsTracker.initialize(this);
