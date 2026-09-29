@@ -15,6 +15,10 @@
             android:name=".AnalyticsActivity"
             android:exported="false" />
         <activity
+            android:name=".FeedbackThreadActivity"
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize" />
+        <activity
             android:name=".MainActivity"
             android:exported="true">
             <intent-filter>

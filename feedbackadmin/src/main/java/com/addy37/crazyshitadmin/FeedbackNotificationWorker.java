@@ -17,7 +17,7 @@ import java.util.List;
 
 public final class FeedbackNotificationWorker extends Worker {
     private static final String PREFS = "notification_state";
-    private static final String LAST_ID = "last_feedback_id";
+    private static final String LAST_EVENT = "last_feedback_event";
 
     public FeedbackNotificationWorker(@NonNull Context context, @NonNull WorkerParameters params) {
         super(context, params);
@@ -30,12 +30,15 @@ public final class FeedbackNotificationWorker extends Worker {
             List<AdminRepository.Item> items = AdminRepository.list(token);
             if (items.isEmpty()) return Result.success();
             String previous = getApplicationContext().getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-                    .getString(LAST_ID, "");
+                    .getString(LAST_EVENT, "");
             AdminRepository.Item newest = items.get(0);
+            String current = newest.id + "|" + newest.lastMessageAt;
             getApplicationContext().getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-                    .edit().putString(LAST_ID, newest.id).apply();
-            if (previous == null || previous.isEmpty() || previous.equals(newest.id)) return Result.success();
-            notify(newest);
+                    .edit().putString(LAST_EVENT, current).apply();
+            if (previous == null || previous.isEmpty() || previous.equals(current)) {
+                return Result.success();
+            }
+            if ("user".equals(newest.lastSender)) notify(newest);
             return Result.success();
         } catch (SecurityException error) {
             return Result.failure();
@@ -48,16 +51,22 @@ public final class FeedbackNotificationWorker extends Worker {
         if (android.os.Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(
                 getApplicationContext(), Manifest.permission.POST_NOTIFICATIONS)
                 != PackageManager.PERMISSION_GRANTED) return;
-        Intent intent = new Intent(getApplicationContext(), MainActivity.class);
-        PendingIntent pending = PendingIntent.getActivity(getApplicationContext(), 0, intent,
+        Intent intent = new Intent(getApplicationContext(), FeedbackThreadActivity.class)
+                .putExtra(FeedbackThreadActivity.EXTRA_FEEDBACK_ID, item.id);
+        PendingIntent pending = PendingIntent.getActivity(
+                getApplicationContext(),
+                item.id.hashCode(),
+                intent,
                 PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
         String title = item.type.replace('_', ' ');
+        String copy = item.lastMessage == null || item.lastMessage.trim().isEmpty()
+                ? item.message : item.lastMessage;
         NotificationCompat.Builder builder = new NotificationCompat.Builder(
                 getApplicationContext(), AdminApplication.CHANNEL_ID)
                 .setSmallIcon(com.addy37.crazyshitadmin.R.drawable.ic_admin_notification)
                 .setContentTitle("ZeroChill feedback: " + title)
-                .setContentText(item.message)
-                .setStyle(new NotificationCompat.BigTextStyle().bigText(item.message))
+                .setContentText(copy)
+                .setStyle(new NotificationCompat.BigTextStyle().bigText(copy))
                 .setContentIntent(pending)
                 .setAutoCancel(true)
                 .setPriority(NotificationCompat.PRIORITY_DEFAULT);

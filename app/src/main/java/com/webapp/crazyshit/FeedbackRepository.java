@@ -37,6 +37,10 @@ final class FeedbackRepository {
         final String status;
         final String developerReply;
         final String createdAt;
+        final String lastMessage;
+        final String lastSender;
+        final String lastMessageAt;
+        final int unreadCount;
 
         FeedbackItem(JSONObject value) {
             id = value.optString("id");
@@ -46,6 +50,50 @@ final class FeedbackRepository {
             status = value.optString("status", "submitted");
             developerReply = value.optString("developer_reply");
             createdAt = value.optString("created_at");
+            String fallback = developerReply.isEmpty() ? message : developerReply;
+            lastMessage = value.optString("last_message", fallback);
+            lastSender = value.optString(
+                    "last_sender",
+                    developerReply.isEmpty() ? "user" : "developer"
+            );
+            lastMessageAt = value.optString("last_message_at", createdAt);
+            unreadCount = Math.max(0, value.optInt("unread_count", 0));
+        }
+    }
+
+    static final class FeedbackMessage {
+        final String id;
+        final String feedbackId;
+        final String sender;
+        final String message;
+        final String createdAt;
+        final String readAt;
+
+        FeedbackMessage(JSONObject value) {
+            id = value.optString("id");
+            feedbackId = value.optString("feedback_id");
+            sender = value.optString("sender", "user");
+            message = value.optString("message");
+            createdAt = value.optString("created_at");
+            readAt = value.optString("read_at");
+        }
+
+        boolean fromDeveloper() {
+            return "developer".equals(sender);
+        }
+
+        boolean isRead() {
+            return readAt != null && !readAt.isEmpty() && !"null".equals(readAt);
+        }
+    }
+
+    static final class FeedbackThread {
+        final FeedbackItem item;
+        final List<FeedbackMessage> messages;
+
+        FeedbackThread(FeedbackItem item, List<FeedbackMessage> messages) {
+            this.item = item;
+            this.messages = messages;
         }
     }
 
@@ -99,6 +147,57 @@ final class FeedbackRepository {
         });
     }
 
+    static void thread(
+            Context context,
+            String feedbackId,
+            Callback<FeedbackThread> callback
+    ) {
+        NETWORK.execute(() -> {
+            try {
+                JSONObject result = request(basePayload(context, "thread")
+                        .put("feedback_id", feedbackId));
+                JSONObject itemObject = result.optJSONObject("item");
+                if (itemObject == null) {
+                    throw new IllegalStateException("Feedback thread could not load.");
+                }
+                JSONArray rows = result.optJSONArray("messages");
+                List<FeedbackMessage> messages = new ArrayList<>();
+                if (rows != null) {
+                    for (int i = 0; i < rows.length(); i++) {
+                        JSONObject row = rows.optJSONObject(i);
+                        if (row != null) messages.add(new FeedbackMessage(row));
+                    }
+                }
+                callback.complete(
+                        new FeedbackThread(new FeedbackItem(itemObject), messages),
+                        null
+                );
+            } catch (Exception error) {
+                callback.complete(null, error);
+            }
+        });
+    }
+
+    static void reply(
+            Context context,
+            String feedbackId,
+            String message,
+            Callback<FeedbackMessage> callback
+    ) {
+        NETWORK.execute(() -> {
+            try {
+                JSONObject result = request(basePayload(context, "reply")
+                        .put("feedback_id", feedbackId)
+                        .put("message", message));
+                JSONObject sent = result.optJSONObject("message");
+                if (sent == null) throw new IllegalStateException("Reply could not be sent.");
+                callback.complete(new FeedbackMessage(sent), null);
+            } catch (Exception error) {
+                callback.complete(null, error);
+            }
+        });
+    }
+
     private static JSONObject basePayload(Context context, String action) throws Exception {
         return new JSONObject()
                 .put("action", action)
@@ -141,8 +240,13 @@ final class FeedbackRepository {
             String raw = read(stream);
             if (status < 200 || status >= 300) {
                 String detail = raw;
-                try { detail = new JSONObject(raw).optString("error", raw); } catch (Exception ignored) { }
-                throw new IllegalStateException(detail.isEmpty() ? "Feedback request failed." : detail);
+                try {
+                    detail = new JSONObject(raw).optString("error", raw);
+                } catch (Exception ignored) {
+                }
+                throw new IllegalStateException(
+                        detail.isEmpty() ? "Feedback request failed." : detail
+                );
             }
             return raw.isEmpty() ? new JSONObject() : new JSONObject(raw);
         } finally {

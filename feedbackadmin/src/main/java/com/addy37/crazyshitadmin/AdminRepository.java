@@ -16,7 +16,9 @@ import java.util.List;
 final class AdminRepository {
     static final class Item {
         final String id, type, message, status, reply, appVersion, androidVersion, device, section, createdAt;
+        final String lastMessage, lastSender, lastMessageAt;
         final int rating;
+        final int unreadCount;
 
         Item(JSONObject value) {
             id = value.optString("id");
@@ -30,6 +32,45 @@ final class AdminRepository {
             device = value.optString("device", "unknown");
             section = value.optString("section", "unknown");
             createdAt = value.optString("created_at");
+            String fallback = reply.isEmpty() ? message : reply;
+            lastMessage = value.optString("last_message", fallback);
+            lastSender = value.optString(
+                    "last_sender",
+                    reply.isEmpty() ? "user" : "developer"
+            );
+            lastMessageAt = value.optString("last_message_at", createdAt);
+            unreadCount = Math.max(0, value.optInt("unread_count", 0));
+        }
+    }
+
+    static final class FeedbackMessage {
+        final String id, feedbackId, sender, message, createdAt, readAt;
+
+        FeedbackMessage(JSONObject value) {
+            id = value.optString("id");
+            feedbackId = value.optString("feedback_id");
+            sender = value.optString("sender", "user");
+            message = value.optString("message");
+            createdAt = value.optString("created_at");
+            readAt = value.optString("read_at");
+        }
+
+        boolean fromDeveloper() {
+            return "developer".equals(sender);
+        }
+
+        boolean isRead() {
+            return readAt != null && !readAt.isEmpty() && !"null".equals(readAt);
+        }
+    }
+
+    static final class FeedbackThread {
+        final Item item;
+        final List<FeedbackMessage> messages;
+
+        FeedbackThread(Item item, List<FeedbackMessage> messages) {
+            this.item = item;
+            this.messages = messages;
         }
     }
 
@@ -103,6 +144,37 @@ final class AdminRepository {
             for (int i = 0; i < rows.length(); i++) items.add(new Item(rows.getJSONObject(i)));
         }
         return items;
+    }
+
+    static FeedbackThread thread(String token, String id) throws Exception {
+        JSONObject result = request(BuildConfig.ADMIN_FEEDBACK_ENDPOINT, token,
+                new JSONObject().put("action", "thread").put("id", id));
+        JSONObject itemObject = result.optJSONObject("item");
+        if (itemObject == null) throw new IllegalStateException("Feedback thread could not load.");
+        JSONArray rows = result.optJSONArray("messages");
+        List<FeedbackMessage> messages = new ArrayList<>();
+        if (rows != null) {
+            for (int i = 0; i < rows.length(); i++) {
+                JSONObject row = rows.optJSONObject(i);
+                if (row != null) messages.add(new FeedbackMessage(row));
+            }
+        }
+        return new FeedbackThread(new Item(itemObject), messages);
+    }
+
+    static void reply(String token, String id, String status, String message) throws Exception {
+        request(BuildConfig.ADMIN_FEEDBACK_ENDPOINT, token, new JSONObject()
+                .put("action", "reply")
+                .put("id", id)
+                .put("status", status)
+                .put("message", message));
+    }
+
+    static void updateStatus(String token, String id, String status) throws Exception {
+        request(BuildConfig.ADMIN_FEEDBACK_ENDPOINT, token, new JSONObject()
+                .put("action", "status")
+                .put("id", id)
+                .put("status", status));
     }
 
     static AnalyticsDashboard analytics(String token) throws Exception {

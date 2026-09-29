@@ -69,6 +69,13 @@
             android:windowSoftInputMode="adjustResize" />
 
         <activity
+            android:name=".FeedbackThreadActivity"
+            android:screenOrientation="portrait"
+            android:enableOnBackInvokedCallback="true"
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize" />
+
+        <activity
             android:name=".FavoritesActivity"
             android:screenOrientation="portrait"
             android:enableOnBackInvokedCallback="true"
