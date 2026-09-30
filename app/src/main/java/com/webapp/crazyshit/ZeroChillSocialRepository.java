@@ -16,8 +16,10 @@ import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
@@ -132,6 +134,46 @@ final class ZeroChillSocialRepository {
             this.profile = profile;
             this.lastMessage = lastMessage;
             this.unreadCount = Math.max(0, unreadCount);
+        }
+    }
+
+    static final class SocialActivity {
+        static final String TYPE_LIKE = "like";
+        static final String TYPE_REPLY = "reply";
+
+        final String eventId;
+        final String type;
+        final String actorUserId;
+        final PublicProfile actor;
+        final String commentId;
+        final String pageUrl;
+        final String videoTitle;
+        final String originalBody;
+        final String replyBody;
+        final String createdAt;
+
+        SocialActivity(
+                String eventId,
+                String type,
+                String actorUserId,
+                PublicProfile actor,
+                String commentId,
+                String pageUrl,
+                String videoTitle,
+                String originalBody,
+                String replyBody,
+                String createdAt
+        ) {
+            this.eventId = clean(eventId);
+            this.type = clean(type);
+            this.actorUserId = clean(actorUserId);
+            this.actor = actor;
+            this.commentId = clean(commentId);
+            this.pageUrl = clean(pageUrl);
+            this.videoTitle = clean(videoTitle);
+            this.originalBody = clean(originalBody);
+            this.replyBody = clean(replyBody);
+            this.createdAt = clean(createdAt);
         }
     }
 
@@ -298,6 +340,148 @@ final class ZeroChillSocialRepository {
                 callback.complete(!currentlyLiked, null);
             } catch (Exception error) {
                 callback.complete(currentlyLiked, error);
+            }
+        });
+    }
+
+    static void loadCommentActivity(
+            Context context,
+            Callback<ArrayList<SocialActivity>> callback
+    ) {
+        NETWORK.execute(() -> {
+            try {
+                String token = ZeroChillAccountRepository.accessTokenBlocking(context);
+                String userId = ZeroChillAccountRepository.currentUserIdBlocking(context);
+                Response own = request(
+                        "GET",
+                        "/rest/v1/comments?select=id,canonical_url,video_title,body,created_at"
+                                + "&user_id=eq." + encode(userId)
+                                + "&deleted_at=is.null&order=created_at.desc&limit=200",
+                        token,
+                        null,
+                        null,
+                        null
+                );
+                if (!own.ok()) throw error(own, "Unable to load your comments.");
+                JSONArray ownRows = own.body.isEmpty() ? new JSONArray() : new JSONArray(own.body);
+                if (ownRows.length() == 0) {
+                    callback.complete(new ArrayList<>(), null);
+                    return;
+                }
+
+                LinkedHashMap<String, JSONObject> commentsById = new LinkedHashMap<>();
+                StringBuilder ids = new StringBuilder();
+                for (int i = 0; i < ownRows.length(); i++) {
+                    JSONObject row = ownRows.getJSONObject(i);
+                    String id = clean(row.optString("id"));
+                    if (id.isEmpty()) continue;
+                    commentsById.put(id, row);
+                    if (ids.length() > 0) ids.append(',');
+                    ids.append(id);
+                }
+                if (ids.length() == 0) {
+                    callback.complete(new ArrayList<>(), null);
+                    return;
+                }
+
+                String cutoff = java.time.Instant.now()
+                        .minus(30, java.time.temporal.ChronoUnit.DAYS)
+                        .toString();
+                Response likesResponse = request(
+                        "GET",
+                        "/rest/v1/comment_likes?select=comment_id,user_id,created_at"
+                                + "&comment_id=in.(" + ids + ")"
+                                + "&user_id=neq." + encode(userId)
+                                + "&created_at=gte." + encode(cutoff)
+                                + "&order=created_at.desc&limit=500",
+                        token,
+                        null,
+                        null,
+                        null
+                );
+                if (!likesResponse.ok()) throw error(likesResponse, "Unable to load comment likes.");
+                JSONArray likes = likesResponse.body.isEmpty()
+                        ? new JSONArray() : new JSONArray(likesResponse.body);
+
+                Response repliesResponse = request(
+                        "GET",
+                        "/rest/v1/comments?select=id,parent_id,user_id,body,created_at,canonical_url,video_title"
+                                + "&parent_id=in.(" + ids + ")"
+                                + "&user_id=neq." + encode(userId)
+                                + "&deleted_at=is.null"
+                                + "&created_at=gte." + encode(cutoff)
+                                + "&order=created_at.desc&limit=500",
+                        token,
+                        null,
+                        null,
+                        null
+                );
+                if (!repliesResponse.ok()) throw error(repliesResponse, "Unable to load comment replies.");
+                JSONArray replies = repliesResponse.body.isEmpty()
+                        ? new JSONArray() : new JSONArray(repliesResponse.body);
+
+                LinkedHashSet<String> actorIds = new LinkedHashSet<>();
+                for (int i = 0; i < likes.length(); i++) {
+                    String actorId = clean(likes.getJSONObject(i).optString("user_id"));
+                    if (!actorId.isEmpty()) actorIds.add(actorId);
+                }
+                for (int i = 0; i < replies.length(); i++) {
+                    String actorId = clean(replies.getJSONObject(i).optString("user_id"));
+                    if (!actorId.isEmpty()) actorIds.add(actorId);
+                }
+                Map<String, PublicProfile> profiles = loadProfiles(
+                        token,
+                        new ArrayList<>(actorIds)
+                );
+
+                ArrayList<SocialActivity> activity = new ArrayList<>();
+                for (int i = 0; i < likes.length(); i++) {
+                    JSONObject row = likes.getJSONObject(i);
+                    String commentId = clean(row.optString("comment_id"));
+                    String actorId = clean(row.optString("user_id"));
+                    JSONObject original = commentsById.get(commentId);
+                    PublicProfile actor = profiles.get(actorId);
+                    if (original == null || actor == null) continue;
+                    activity.add(new SocialActivity(
+                            "like:" + commentId + ":" + actorId,
+                            SocialActivity.TYPE_LIKE,
+                            actorId,
+                            actor,
+                            commentId,
+                            original.optString("canonical_url"),
+                            original.optString("video_title"),
+                            original.optString("body"),
+                            "",
+                            row.optString("created_at")
+                    ));
+                }
+
+                for (int i = 0; i < replies.length(); i++) {
+                    JSONObject row = replies.getJSONObject(i);
+                    String parentId = clean(row.optString("parent_id"));
+                    String actorId = clean(row.optString("user_id"));
+                    JSONObject original = commentsById.get(parentId);
+                    PublicProfile actor = profiles.get(actorId);
+                    if (original == null || actor == null) continue;
+                    activity.add(new SocialActivity(
+                            "reply:" + clean(row.optString("id")),
+                            SocialActivity.TYPE_REPLY,
+                            actorId,
+                            actor,
+                            clean(row.optString("id")),
+                            row.optString("canonical_url"),
+                            row.optString("video_title"),
+                            original.optString("body"),
+                            row.optString("body"),
+                            row.optString("created_at")
+                    ));
+                }
+
+                Collections.sort(activity, (left, right) ->
+                        Long.compare(socialTime(right.createdAt), socialTime(left.createdAt)));
+                callback.complete(activity, null);
+            } catch (Exception error) {
+                callback.complete(null, error);
             }
         });
     }
@@ -756,6 +940,14 @@ final class ZeroChillSocialRepository {
                 callback.complete(null, error);
             }
         });
+    }
+
+    private static long socialTime(String value) {
+        try {
+            return java.time.Instant.parse(clean(value)).toEpochMilli();
+        } catch (Exception ignored) {
+            return 0L;
+        }
     }
 
     private static String canonicalUrl(String raw) {
