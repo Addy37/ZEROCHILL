@@ -228,7 +228,7 @@ public final class ZeroChillAccountActivity extends Activity {
                 InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD
         );
         password.setAutofillHints(createMode
-                ? View.AUTOFILL_HINT_NEW_PASSWORD
+                ? "newPassword"
                 : View.AUTOFILL_HINT_PASSWORD);
         panel.addView(password, fieldParams());
 
