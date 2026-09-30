@@ -425,28 +425,30 @@ final class OnlyFapHubView extends FrameLayout {
     void setTrending(List<NativeContentItem> items) {
         discoverCandidates = safe(items);
         if (shelvesFinished) refreshDiscoverShelf();
-        refreshHeroCandidates();
+        // Creator metadata is persisted by the loader before the final shelf publish.
+        // Rebuild restored account favorites so newly learned artwork replaces placeholders.
+        refreshFavorites();
     }
 
     void setNewCreators(List<NativeContentItem> items) {
         newItems = safe(items);
         newShelf.adapter.replace(newItems);
         newShelf.container.setVisibility(newItems.isEmpty() ? View.GONE : View.VISIBLE);
-        refreshHeroCandidates();
+        refreshFavorites();
     }
 
     void setHot(List<NativeContentItem> items) {
         hotItems = safe(items);
         hotShelf.adapter.replace(hotItems);
         hotShelf.container.setVisibility(hotItems.isEmpty() ? View.GONE : View.VISIBLE);
-        refreshHeroCandidates();
+        refreshFavorites();
     }
 
     void setPopular(List<NativeContentItem> items) {
         popularItems = safe(items);
         popularShelf.adapter.replace(popularItems);
         popularShelf.container.setVisibility(popularItems.isEmpty() ? View.GONE : View.VISIBLE);
-        refreshHeroCandidates();
+        refreshFavorites();
     }
 
     private void refreshDiscoverShelf() {
@@ -603,6 +605,7 @@ final class OnlyFapHubView extends FrameLayout {
         avatar.setRadius(dp(36));
         avatar.setCardElevation(0f);
         avatar.setStrokeWidth(0);
+        avatar.setClipToOutline(true);
         avatar.setCardBackgroundColor(
                 ZeroChillUi.color(getContext(), R.color.zc_surface_pressed));
 
@@ -620,6 +623,13 @@ final class OnlyFapHubView extends FrameLayout {
 
         CreatorAvatarImageView image = new CreatorAvatarImageView(getContext());
         image.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
+        image.setOutlineProvider(new android.view.ViewOutlineProvider() {
+            @Override
+            public void getOutline(View view, android.graphics.Outline outline) {
+                outline.setOval(0, 0, view.getWidth(), view.getHeight());
+            }
+        });
+        image.setClipToOutline(true);
         frame.addView(image, new FrameLayout.LayoutParams(-1, -1));
         loadCreatorImage(image, group, avatarOverrides);
 
