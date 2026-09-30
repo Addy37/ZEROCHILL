@@ -245,6 +245,7 @@ public final class ChaosFeedView extends FrameLayout {
                 warmCreatorGalleries(position);
                 ChaosHolder holder = holderAt(position);
                 if (holder != null) holder.showControlsTemporarily();
+                refreshSelectedLikeStateLater(position);
                 if (items.size() - position <= LOAD_AHEAD_AT) loadMorePool();
                 if (changed && pager.getScrollState() == ViewPager2.SCROLL_STATE_IDLE) {
                     scheduleSwipePlayerMaintenance(position);
@@ -261,6 +262,8 @@ public final class ChaosFeedView extends FrameLayout {
             playSelected();
             warmCreatorGalleries(selectedPosition);
             syncVisibleChrome();
+            refreshSelectedLikeStateLater(selectedPosition);
+            refreshSelectedLikeStateLater(selectedPosition);
         } else {
             cancelSwipePlayerMaintenance();
             pauseAll();
@@ -1100,6 +1103,15 @@ public final class ChaosFeedView extends FrameLayout {
         drainDeferredPlayerReleasesNow();
     }
 
+    private void refreshSelectedLikeStateLater(int position) {
+        if (pager == null || !active || !hostResumed) return;
+        pager.postDelayed(() -> {
+            if (!active || !hostResumed || position != selectedPosition) return;
+            ChaosHolder holder = holderAt(position);
+            if (holder != null) holder.refreshVideoLikeState();
+        }, 220L);
+    }
+
     private void syncVisibleChrome() {
         RecyclerView rv = pagerRecycler();
         if (rv == null) return;
@@ -1577,6 +1589,7 @@ public final class ChaosFeedView extends FrameLayout {
         final LinearLayout playbackRail;
         final TextView title;
         final TextView meta;
+        final TextView like;
         final TextView save;
         final TextView comments;
         final TextView mute;
@@ -1599,6 +1612,9 @@ public final class ChaosFeedView extends FrameLayout {
         boolean failurePending;
         boolean horizontalVideo;
         boolean aspectSampleRecorded;
+        boolean videoLiked;
+        int videoLikeCount;
+        int videoLikeRequestGeneration;
         float videoAspectRatio;
         float creatorSwipeDownX;
         float creatorSwipeDownY;
@@ -1735,6 +1751,14 @@ public final class ChaosFeedView extends FrameLayout {
                     new LinearLayout.LayoutParams(dp(52), dp(60));
             creatorParams.setMargins(0, 0, 0, dp(2));
             actionRail.addView(creatorAvatarControl, creatorParams);
+
+            like = textIconActionButton(
+                    R.drawable.ic_action_heart_outline,
+                    "Like video",
+                    "shittok_like"
+            );
+            like.setCompoundDrawablePadding(dp(1));
+            actionRail.addView(like, actionParams());
 
             save = textIconActionButton(
                     R.drawable.ic_action_save_outline,
@@ -1971,6 +1995,11 @@ public final class ChaosFeedView extends FrameLayout {
                 else enterManualFullscreen(this);
                 showControlsTemporarily();
             });
+            like.setOnClickListener(v -> {
+                haptic(v);
+                toggleVideoLike();
+                showControlsTemporarily();
+            });
             save.setOnClickListener(v -> {
                 haptic(v);
                 toggleSaved(item, save);
@@ -2136,6 +2165,10 @@ public final class ChaosFeedView extends FrameLayout {
             horizontalVideo = false;
             aspectSampleRecorded = false;
             videoAspectRatio = 0f;
+            videoLiked = false;
+            videoLikeCount = 0;
+            videoLikeRequestGeneration++;
+            updateVideoLikeButton();
             fullscreen.setVisibility(View.GONE);
             seekBar.setProgress(0);
             seekBar.setEnabled(false);
@@ -2189,6 +2222,75 @@ public final class ChaosFeedView extends FrameLayout {
                         .into(poster);
             }
             syncOrientationChrome();
+        }
+
+        void refreshVideoLikeState() {
+            if (item == null || item.url == null || item.url.trim().isEmpty()) return;
+            String target = item.url;
+            int generation = ++videoLikeRequestGeneration;
+            ZeroChillSocialRepository.videoLikeState(activity, target, (state, error) ->
+                    activity.runOnUiThread(() -> {
+                        if (generation != videoLikeRequestGeneration
+                                || item == null
+                                || !target.equals(item.url)
+                                || state == null
+                                || error != null) {
+                            return;
+                        }
+                        videoLiked = state.liked;
+                        videoLikeCount = state.count;
+                        updateVideoLikeButton();
+                    })
+            );
+        }
+
+        private void toggleVideoLike() {
+            if (item == null || item.url == null || item.url.trim().isEmpty()) return;
+            if (!ZeroChillAccountRepository.hasStoredSession(activity)) {
+                activity.startActivity(new Intent(activity, ZeroChillAccountActivity.class));
+                return;
+            }
+
+            String target = item.url;
+            boolean wasLiked = videoLiked;
+            like.setEnabled(false);
+            ZeroChillSocialRepository.toggleVideoLike(activity, target, wasLiked, (state, error) ->
+                    activity.runOnUiThread(() -> {
+                        if (item == null || !target.equals(item.url)) return;
+                        like.setEnabled(true);
+                        if (error != null || state == null) {
+                            Toast.makeText(
+                                    activity,
+                                    error == null ? "Unable to update the like." : error.getMessage(),
+                                    Toast.LENGTH_LONG
+                            ).show();
+                            return;
+                        }
+                        videoLiked = state.liked;
+                        videoLikeCount = state.count;
+                        updateVideoLikeButton();
+                    })
+            );
+        }
+
+        private void updateVideoLikeButton() {
+            if (like == null) return;
+            like.setCompoundDrawablesWithIntrinsicBounds(
+                    0,
+                    videoLiked ? R.drawable.ic_action_heart_filled : R.drawable.ic_action_heart_outline,
+                    0,
+                    0
+            );
+            like.setCompoundDrawableTintList(ColorStateList.valueOf(
+                    videoLiked ? UiPalette.PRIMARY : Color.WHITE
+            ));
+            like.setText(videoLikeCount > 0 ? String.valueOf(videoLikeCount) : "");
+            like.setTextSize(10);
+            like.setTextColor(videoLiked ? UiPalette.PRIMARY : Color.WHITE);
+            like.setContentDescription(
+                    videoLiked ? "Unlike video" : "Like video"
+            );
+            like.setEnabled(true);
         }
 
         void resizeMediaForComments(int sheetTopOnScreen) {
