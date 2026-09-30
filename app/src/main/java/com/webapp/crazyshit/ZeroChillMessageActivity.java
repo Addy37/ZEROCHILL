@@ -404,6 +404,22 @@ public final class ZeroChillMessageActivity extends Activity {
         startActivity(intent);
     }
 
+    // A pause or a local calendar-day boundary starts a new visual group.
+    static boolean grouped(ZeroChillSocialRepository.DirectMessage first,
+                           ZeroChillSocialRepository.DirectMessage second) {
+        if (first == null || second == null || !first.senderId.equals(second.senderId)) return false;
+        try {
+            Instant a = Instant.parse(first.createdAt);
+            Instant b = Instant.parse(second.createdAt);
+            long gap = b.toEpochMilli() - a.toEpochMilli();
+            ZoneId zone = ZoneId.systemDefault();
+            return gap >= 0 && gap <= 300_000L
+                    && a.atZone(zone).toLocalDate().equals(b.atZone(zone).toLocalDate());
+        } catch (Exception ignored) {
+            return false;
+        }
+    }
+
     private final class MessageAdapter extends RecyclerView.Adapter<MessageAdapter.Holder> {
         private final ArrayList<ZeroChillSocialRepository.DirectMessage> items = new ArrayList<>();
 
@@ -422,34 +438,82 @@ public final class ZeroChillMessageActivity extends Activity {
         public Holder onCreateViewHolder(ViewGroup parent, int viewType) {
             LinearLayout row = new LinearLayout(ZeroChillMessageActivity.this);
             row.setOrientation(LinearLayout.HORIZONTAL);
+            row.setGravity(Gravity.BOTTOM);
+            row.setLayoutParams(new RecyclerView.LayoutParams(-1, -2));
+
+            ImageView senderAvatar = new ImageView(ZeroChillMessageActivity.this);
+            senderAvatar.setScaleType(ImageView.ScaleType.CENTER_CROP);
+            senderAvatar.setBackground(circle(Color.rgb(24, 27, 33)));
+            senderAvatar.setClipToOutline(true);
+            senderAvatar.setOnClickListener(v -> openProfile());
+            LinearLayout.LayoutParams avatarParams = new LinearLayout.LayoutParams(dp(28), dp(28));
+            avatarParams.setMarginEnd(dp(7));
+            avatarParams.bottomMargin = dp(2);
+            row.addView(senderAvatar, avatarParams);
 
             LinearLayout bubble = new LinearLayout(ZeroChillMessageActivity.this);
             bubble.setOrientation(LinearLayout.VERTICAL);
             bubble.setPadding(dp(12), dp(9), dp(12), dp(8));
 
             TextView body = text("", 14, Color.WHITE, false);
-            body.setMaxWidth(dp(300));
+            body.setTextDirection(View.TEXT_DIRECTION_FIRST_STRONG);
             bubble.addView(body);
 
-            TextView time = text("", 9, Color.rgb(148, 154, 164), false);
+            TextView time = text("", 10, Color.rgb(166, 172, 184), false);
             time.setPadding(0, dp(4), 0, 0);
-            bubble.addView(time);
+            LinearLayout.LayoutParams timeParams = new LinearLayout.LayoutParams(-2, -2);
+            timeParams.gravity = Gravity.END;
+            bubble.addView(time, timeParams);
 
             row.addView(bubble, new LinearLayout.LayoutParams(-2, -2));
-            RecyclerView.LayoutParams params = new RecyclerView.LayoutParams(-1, -2);
-            params.setMargins(0, dp(3), 0, dp(3));
-            row.setLayoutParams(params);
-            return new Holder(row, bubble, body, time);
+            return new Holder(row, senderAvatar, bubble, body, time);
         }
 
         @Override
         public void onBindViewHolder(Holder holder, int position) {
             ZeroChillSocialRepository.DirectMessage item = items.get(position);
             boolean incoming = partnerId.equals(item.senderId);
-            ((LinearLayout) holder.itemView).setGravity(incoming ? Gravity.START : Gravity.END);
-            holder.bubble.setBackground(messageBubble(!incoming));
+            boolean joinsPrevious = position > 0 && grouped(items.get(position - 1), item);
+            boolean joinsNext = position + 1 < items.size() && grouped(item, items.get(position + 1));
+            LinearLayout row = (LinearLayout) holder.itemView;
+            row.setGravity((incoming ? Gravity.LEFT : Gravity.RIGHT) | Gravity.BOTTOM);
+            // Keep the avatar gutter throughout an incoming group; outgoing rows have no gutter.
+            holder.senderAvatar.setVisibility(incoming
+                    ? (joinsNext ? View.INVISIBLE : View.VISIBLE) : View.GONE);
+            Glide.with(holder.senderAvatar).clear(holder.senderAvatar);
+            holder.senderAvatar.setImageDrawable(null);
+            holder.senderAvatar.clearColorFilter();
+            holder.senderAvatar.setPadding(0, 0, 0, 0);
+            if (incoming && !joinsNext) {
+                String url = partner == null ? "" : ZeroChillAccountRepository.avatarUrl(partner.avatarPath);
+                holder.senderAvatar.setContentDescription(partner == null
+                        ? "Sender profile" : "@" + partner.username + " profile");
+                if (url.isEmpty()) {
+                    holder.senderAvatar.setImageResource(R.drawable.ic_more_account);
+                    holder.senderAvatar.setPadding(dp(6), dp(6), dp(6), dp(6));
+                    holder.senderAvatar.setColorFilter(UiPalette.PRIMARY);
+                } else {
+                    Glide.with(holder.senderAvatar).load(url).circleCrop()
+                            .placeholder(R.drawable.ic_more_account)
+                            .error(R.drawable.ic_more_account).into(holder.senderAvatar);
+                }
+            }
+            RecyclerView.LayoutParams params = (RecyclerView.LayoutParams) row.getLayoutParams();
+            params.topMargin = dp(joinsPrevious ? 2 : 10);
+            params.bottomMargin = dp(joinsNext ? 0 : 4);
+            row.setLayoutParams(params);
+            int width = recycler.getWidth() > 0 ? recycler.getWidth()
+                    : getResources().getDisplayMetrics().widthPixels;
+            int available = width - recycler.getPaddingLeft() - recycler.getPaddingRight();
+            // Leave an opposite-side gutter even for long/unbroken text on narrow phones.
+            int bodyWidth = Math.max(dp(48), Math.min(dp(300),
+                    (int) (available * 0.78f) - dp(24) - (incoming ? dp(35) : 0)));
+            holder.body.setMaxWidth(bodyWidth);
+            holder.time.setMaxWidth(bodyWidth);
+            holder.bubble.setBackground(messageBubble(!incoming, joinsPrevious, joinsNext));
             holder.body.setText(item.body);
             holder.time.setText(formatTime(item.createdAt));
+            holder.time.setTextColor(incoming ? Color.rgb(166, 172, 184) : Color.rgb(226, 240, 255));
             holder.itemView.setContentDescription((incoming ? "From " : "You: ") + item.body);
             holder.itemView.setOnLongClickListener(v -> {
                 if (incoming) showReportDialog(item.id);
@@ -458,12 +522,14 @@ public final class ZeroChillMessageActivity extends Activity {
         }
 
         final class Holder extends RecyclerView.ViewHolder {
+            final ImageView senderAvatar;
             final LinearLayout bubble;
             final TextView body;
             final TextView time;
 
-            Holder(View itemView, LinearLayout bubble, TextView body, TextView time) {
+            Holder(View itemView, ImageView senderAvatar, LinearLayout bubble, TextView body, TextView time) {
                 super(itemView);
+                this.senderAvatar = senderAvatar;
                 this.bubble = bubble;
                 this.body = body;
                 this.time = time;
@@ -471,11 +537,15 @@ public final class ZeroChillMessageActivity extends Activity {
         }
     }
 
-    private GradientDrawable messageBubble(boolean mine) {
+    private GradientDrawable messageBubble(boolean mine, boolean joinsPrevious, boolean joinsNext) {
         GradientDrawable background = new GradientDrawable();
-        background.setColor(mine ? Color.rgb(7, 57, 78) : Color.rgb(20, 23, 28));
-        background.setCornerRadius(dp(17));
-        background.setStroke(dp(1), mine ? Color.rgb(10, 116, 154) : Color.rgb(45, 51, 59));
+        background.setColor(mine ? Color.rgb(8, 146, 208) : Color.rgb(35, 38, 45));
+        float round = dp(18);
+        float top = dp(joinsPrevious ? 6 : 18);
+        float bottom = dp(joinsNext ? 6 : 18);
+        background.setCornerRadii(mine
+                ? new float[]{round, round, top, top, bottom, bottom, round, round}
+                : new float[]{top, top, round, round, round, round, bottom, bottom});
         return background;
     }
 
