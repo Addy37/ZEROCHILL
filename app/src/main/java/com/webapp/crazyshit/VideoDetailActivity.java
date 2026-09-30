@@ -1862,8 +1862,8 @@ public class VideoDetailActivity extends Activity {
         if (playerView == null) return;
         boolean landscape = orientation == Configuration.ORIENTATION_LANDSCAPE;
 
-        View rewind = playerView.findViewById(R.id.exo_rew);
-        View forward = playerView.findViewById(R.id.exo_ffwd);
+        View rewind = playerView.findViewById(androidx.media3.ui.R.id.exo_rew);
+        View forward = playerView.findViewById(androidx.media3.ui.R.id.exo_ffwd);
         if (rewind != null) rewind.setVisibility(landscape ? View.VISIBLE : View.GONE);
         if (forward != null) forward.setVisibility(landscape ? View.VISIBLE : View.GONE);
 
@@ -1871,7 +1871,7 @@ public class VideoDetailActivity extends Activity {
             playerTitleView.setVisibility(landscape ? View.VISIBLE : View.GONE);
         }
 
-        View centerControls = playerView.findViewById(R.id.exo_center_controls);
+        View centerControls = playerView.findViewById(androidx.media3.ui.R.id.exo_center_controls);
         if (centerControls != null &&
                 centerControls.getLayoutParams() instanceof FrameLayout.LayoutParams) {
             FrameLayout.LayoutParams centerParams =
