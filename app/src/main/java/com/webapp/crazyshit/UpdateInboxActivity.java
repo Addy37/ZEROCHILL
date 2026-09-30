@@ -579,6 +579,7 @@ public final class UpdateInboxActivity extends Activity {
                     pageUrl,
                     (loaded, error) -> runOnUiThread(() -> {
                         commentPagesLoading.remove(pageKey);
+                        if (isFinishing() || isDestroyed()) return;
                         if (error != null || loaded == null) return;
                         for (ZeroChillSocialRepository.Comment comment : loaded) {
                             if (comment != null && comment.id != null && !comment.id.isEmpty()) {
@@ -605,6 +606,7 @@ public final class UpdateInboxActivity extends Activity {
                     state.likedByMe,
                     (liked, error) -> runOnUiThread(() -> {
                         commentLikeRequests.remove(commentId);
+                        if (isFinishing() || isDestroyed()) return;
                         if (error != null) {
                             Toast.makeText(
                                     UpdateInboxActivity.this,
@@ -618,7 +620,9 @@ public final class UpdateInboxActivity extends Activity {
                         int index = indexOf(entry.id);
                         if (index >= 0) notifyItemChanged(index, "social-like");
                         if (error == null && liked && entry.id.equals(holder.boundId)) {
-                            animateHeartPop(holder.like);
+                            holder.like.post(() -> {
+                                if (entry.id.equals(holder.boundId)) animateHeartPop(holder.like);
+                            });
                         }
                     })
             );
@@ -735,11 +739,15 @@ public final class UpdateInboxActivity extends Activity {
 
         private void bindThumbnail(Holder holder, UpdateInboxStore.Entry entry) {
             NativeContentItem first = entry.firstItem();
-            if (first == null
-                    && UpdateInboxStore.CATEGORY_SOCIAL.equals(entry.category)
+            if (UpdateInboxStore.CATEGORY_SOCIAL.equals(entry.category)
                     && entry.pageUrl != null
-                    && !entry.pageUrl.trim().isEmpty()) {
-                first = SocialContentContextStore.find(UpdateInboxActivity.this, entry.pageUrl);
+                    && !entry.pageUrl.trim().isEmpty()
+                    && (first == null || first.imageUrl == null || first.imageUrl.trim().isEmpty())) {
+                NativeContentItem cached =
+                        SocialContentContextStore.find(UpdateInboxActivity.this, entry.pageUrl);
+                if (cached != null && cached.imageUrl != null && !cached.imageUrl.trim().isEmpty()) {
+                    first = cached;
+                }
             }
             String imageUrl = first == null ? "" : first.imageUrl;
             String referer = first == null ? "" :
