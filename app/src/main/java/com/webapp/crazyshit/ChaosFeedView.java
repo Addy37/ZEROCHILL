@@ -1443,6 +1443,7 @@ public final class ChaosFeedView extends FrameLayout {
 
     private void openInlineComments(NativeContentItem item) {
         if (item == null || item.url == null || item.url.isEmpty()) return;
+        SocialContentContextStore.remember(activity, item);
         if (commentsDialog != null && commentsDialog.isShowing()) return;
 
         pager.animate().cancel();
