@@ -256,6 +256,10 @@ final class InlineCommentsDialog extends BottomSheetDialog {
             avatar.setPadding(dp(9), dp(9), dp(9), dp(9));
             avatar.setColorFilter(UiPalette.PRIMARY);
         }
+        avatar.setClickable(true);
+        avatar.setFocusable(true);
+        avatar.setContentDescription("Open @" + comment.username + " profile");
+        avatar.setOnClickListener(v -> openProfile(comment));
         row.addView(avatar, new LinearLayout.LayoutParams(dp(36), dp(36)));
 
         LinearLayout body = new LinearLayout(activity);
@@ -268,6 +272,10 @@ final class InlineCommentsDialog extends BottomSheetDialog {
                 ? "@" + comment.username
                 : comment.displayName + "  @" + comment.username;
         TextView name = text(identity, 12, UiPalette.PRIMARY, true);
+        name.setClickable(true);
+        name.setFocusable(true);
+        name.setContentDescription("Open @" + comment.username + " profile");
+        name.setOnClickListener(v -> openProfile(comment));
         body.addView(name);
 
         TextView copy = text(comment.body, 14, Color.rgb(235, 235, 239), false);
@@ -365,6 +373,13 @@ final class InlineCommentsDialog extends BottomSheetDialog {
     private void openAccount() {
         accountLaunched = true;
         activity.startActivity(new Intent(activity, ZeroChillAccountActivity.class));
+    }
+
+    private void openProfile(ZeroChillSocialRepository.Comment comment) {
+        if (comment == null || clean(comment.userId).isEmpty()) return;
+        Intent intent = new Intent(activity, ZeroChillPublicProfileActivity.class);
+        intent.putExtra(ZeroChillPublicProfileActivity.EXTRA_USER_ID, comment.userId);
+        activity.startActivity(intent);
     }
 
     private int depth(
