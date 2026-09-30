@@ -108,6 +108,7 @@ final class UpdateInboxStore {
                 String actor = clean(item.actor.displayName).isEmpty()
                         ? "@" + clean(item.actor.username)
                         : clean(item.actor.displayName);
+                entry.actorName = actor;
                 entry.title = actor + (ZeroChillSocialRepository.SocialActivity.TYPE_REPLY.equals(item.type)
                         ? " replied to your comment"
                         : " liked your comment");
@@ -476,6 +477,7 @@ final class UpdateInboxStore {
         String pageUrl = "";
         String videoTitle = "";
         String commentId = "";
+        String actorName = "";
         long timestamp;
         int count;
         int videoCount;
@@ -502,6 +504,7 @@ final class UpdateInboxStore {
                     .put("pageUrl", pageUrl)
                     .put("videoTitle", videoTitle)
                     .put("commentId", commentId)
+                    .put("actorName", actorName)
                     .put("timestamp", timestamp)
                     .put("count", count)
                     .put("videoCount", videoCount)
@@ -531,6 +534,7 @@ final class UpdateInboxStore {
             entry.pageUrl = value.optString("pageUrl", "");
             entry.videoTitle = value.optString("videoTitle", "");
             entry.commentId = value.optString("commentId", "");
+            entry.actorName = value.optString("actorName", "");
             entry.timestamp = value.optLong("timestamp", 0L);
             entry.count = value.optInt("count", 0);
             entry.videoCount = value.optInt("videoCount", 0);
