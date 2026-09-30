@@ -89,6 +89,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
     private final Page[] pages = new Page[PAGE_ARRAY_COUNT];
     private final ChaosFeedView chaosView;
     private final LibraryHubView libraryView;
+    private boolean librarySelected;
 
     public MainPagerAdapter(Activity activity, Host host) {
         this.activity = activity;
@@ -214,6 +215,8 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
 
     public void setPrimaryActive(int position) {
         chaosView.setActive(position == PAGE_CHAOS);
+        librarySelected = position == PAGE_LIBRARY;
+        libraryView.setSocialActive(librarySelected);
         Page shows = pageAt(PAGE_SERIES);
         if (shows != null && shows.showsHub != null) {
             shows.showsHub.setActive(position == PAGE_SERIES);
@@ -259,6 +262,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         Page shows = pageAt(PAGE_SERIES);
         if (shows != null && shows.showsHub != null) shows.showsHub.refreshContinueWatching();
         libraryView.refresh();
+        libraryView.setSocialActive(librarySelected);
     }
 
     public void saveState(android.os.Bundle out) {
@@ -292,6 +296,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
 
     public void onHostPause() {
         chaosView.onHostPause();
+        libraryView.setSocialActive(false);
     }
 
     public void onConfigurationChanged() {
