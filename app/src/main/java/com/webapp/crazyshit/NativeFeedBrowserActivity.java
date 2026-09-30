@@ -1744,7 +1744,7 @@ public final class NativeFeedBrowserActivity extends Activity {
         }
         PopupMenu menu = new PopupMenu(this, anchor);
         menu.getMenu().add(Menu.NONE, 2, 1, "Share");
-        menu.getMenu().add(Menu.NONE, 3, 2, "Video details");
+        menu.getMenu().add(Menu.NONE, 3, 2, "Open source website");
         menu.setOnMenuItemClickListener(clicked -> {
             if (clicked.getItemId() == 2) {
                 shareItem(item);
