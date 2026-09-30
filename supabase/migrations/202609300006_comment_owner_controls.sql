@@ -19,6 +19,15 @@ create policy "users post own comments"
         (select auth.uid()) = user_id
         and deleted_at is null
         and edited_at is null
+        and (
+            parent_id is null
+            or exists (
+                select 1
+                from public.comments parent
+                where parent.id = parent_id
+                  and parent.deleted_at is null
+            )
+        )
     );
 
 drop policy if exists "users edit own active comments" on public.comments;
@@ -47,6 +56,20 @@ revoke all on public.comments from anon, authenticated;
 grant select on public.comments to anon, authenticated;
 grant insert on public.comments to authenticated;
 grant update (body, edited_at, deleted_at) on public.comments to authenticated;
+
+drop policy if exists "users like comments as themselves" on public.comment_likes;
+create policy "users like comments as themselves"
+    on public.comment_likes for insert
+    to authenticated
+    with check (
+        (select auth.uid()) = user_id
+        and exists (
+            select 1
+            from public.comments comment
+            where comment.id = comment_id
+              and comment.deleted_at is null
+        )
+    );
 
 create or replace view public.comment_feed
 with (security_invoker = true)
