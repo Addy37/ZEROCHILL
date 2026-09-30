@@ -2,6 +2,7 @@ package com.webapp.crazyshit;
 
 import org.junit.Test;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -74,6 +75,118 @@ public class OnlyFapDiscoverTest {
             if ("Same Creator".equals(item.title)) duplicateCount++;
         }
         assertEquals(1, duplicateCount);
+    }
+
+    @Test
+    public void refillStartsOutsideEveryRegularFeedsLiveRange() throws Exception {
+        assertEquals(4, FapzoneCreatorRepository.LIVE_PAGES);
+        assertTrue(FapzoneCreatorRepository.DISCOVER_REFILL_START_PAGE
+                > FapzoneCreatorRepository.LIVE_PAGES);
+        assertEquals("https://fapello.com/page-5/",
+                FapelloRepository.listingUrl(FapelloRepository.LIST_NEW,
+                        FapzoneCreatorRepository.DISCOVER_REFILL_START_PAGE));
+        assertEquals("https://fapello.com/hot-5/",
+                FapelloRepository.listingUrl(FapelloRepository.LIST_HOT, 5));
+        assertEquals("https://fapello.com/popular-5/",
+                FapelloRepository.listingUrl(FapelloRepository.LIST_POPULAR, 5));
+    }
+
+    @Test
+    public void overlappingPoolRefillsInsteadOfSettlingAtTwoCreators() {
+        List<NativeContentItem> initial = creators(0, 48);
+        List<NativeContentItem> regular = creators(0, 46);
+        List<Integer> pages = new ArrayList<>();
+        List<NativeContentItem> pool = FapzoneCreatorRepository.refillDiscoverCandidates(
+                initial, Collections.emptyList(), regular,
+                Collections.emptyList(), Collections.emptyList(), (listing, page) -> {
+                    pages.add(page);
+                    // A thin first deeper page requires a second page round.
+                    if (!FapelloRepository.LIST_NEW.equals(listing)) return Collections.emptyList();
+                    return models(page == 5 ? 100 : 200, page == 5 ? 2 : 30);
+                });
+        List<NativeContentItem> selected = FapzoneCreatorRepository.selectDiscoverItems(
+                pool, regular, Collections.emptyList(), Collections.emptyList());
+        assertEquals(16, selected.size());
+        assertTrue(pages.contains(5));
+        assertTrue(pages.contains(6));
+        for (NativeContentItem item : regular) assertFalse(containsTitle(selected, item.title));
+    }
+
+    @Test
+    public void fullUniquePoolDoesNotRequestUnnecessaryRefillPages() {
+        List<NativeContentItem> initial = creators(100, 48);
+        List<NativeContentItem> pool = FapzoneCreatorRepository.refillDiscoverCandidates(
+                initial, Collections.emptyList(), creators(0, 30), creators(30, 30),
+                creators(60, 30), (listing, page) -> {
+                    throw new AssertionError("Full Discover must not fetch refill pages");
+                });
+        assertEquals(48, pool.size());
+        assertEquals(16, FapzoneCreatorRepository.selectDiscoverItems(pool,
+                creators(0, 30), creators(30, 30), creators(60, 30)).size());
+    }
+
+    @Test
+    public void aliasNamesAndCanonicalUrlsCannotDuplicateInsideDiscover() {
+        List<NativeContentItem> candidates = creators(100, 20);
+        candidates.add(0, creator("Same Name", "https://fapello.com/first/"));
+        candidates.add(1, creator("same_name", "https://fapello.com/alias/"));
+        candidates.add(2, creator("Different Name", "https://FAPELLO.com/first"));
+        List<NativeContentItem> selected = FapzoneCreatorRepository.selectDiscoverItems(
+                candidates, Collections.emptyList(), Collections.emptyList(), Collections.emptyList());
+        assertEquals(16, selected.size());
+        assertFalse(containsTitle(selected, "same_name"));
+        assertFalse(containsTitle(selected, "Different Name"));
+    }
+
+    @Test
+    public void failedPagesRetainCacheAndPartialFreshResultsWithoutDuplicates() {
+        List<NativeContentItem> cached = creators(100, 30);
+        List<NativeContentItem> pool = FapzoneCreatorRepository.refillDiscoverCandidates(
+                creators(100, 2), cached, creators(0, 30), Collections.emptyList(),
+                Collections.emptyList(), (listing, page) -> { throw new IOException("offline"); });
+        assertEquals(30, pool.size());
+        assertEquals(16, FapzoneCreatorRepository.selectDiscoverItems(pool,
+                creators(0, 30), Collections.emptyList(), Collections.emptyList()).size());
+    }
+
+    @Test
+    public void brokenListingDoesNotBlockOtherListingsAndInvalidArtworkIsIgnored() {
+        List<NativeContentItem> pool = FapzoneCreatorRepository.refillDiscoverCandidates(
+                Collections.emptyList(), Collections.emptyList(), Collections.emptyList(),
+                Collections.emptyList(), Collections.emptyList(), (listing, page) -> {
+                    if (FapelloRepository.LIST_NEW.equals(listing)) throw new IOException("unavailable");
+                    List<FapelloRepository.Model> models = models(200, 30);
+                    models.add(0, new FapelloRepository.Model("Bad", "https://fapello.com/bad/", ""));
+                    return models;
+                });
+        assertEquals(30, pool.size());
+        assertFalse(containsTitle(pool, "Bad"));
+    }
+
+    @Test
+    public void sourceExhaustionReturnsUsefulPartialResultsWithoutRelaxingExclusions() {
+        List<NativeContentItem> regular = creators(0, 46);
+        List<NativeContentItem> pool = FapzoneCreatorRepository.refillDiscoverCandidates(
+                creators(0, 48), Collections.emptyList(), regular, Collections.emptyList(),
+                Collections.emptyList(), (listing, page) -> Collections.emptyList());
+        assertEquals(2, pool.size());
+        assertFalse(containsTitle(pool, "Creator 0"));
+    }
+
+    static List<NativeContentItem> creators(int first, int count) {
+        ArrayList<NativeContentItem> items = new ArrayList<>();
+        for (int i = first; i < first + count; i++) {
+            items.add(creator("Creator " + i, "https://fapello.com/creator-" + i + "/"));
+        }
+        return items;
+    }
+
+    private static List<FapelloRepository.Model> models(int first, int count) {
+        ArrayList<FapelloRepository.Model> models = new ArrayList<>();
+        for (NativeContentItem item : creators(first, count)) {
+            models.add(new FapelloRepository.Model(item.title, item.url, item.imageUrl));
+        }
+        return models;
     }
 
     private static NativeContentItem creator(String title, String url) {

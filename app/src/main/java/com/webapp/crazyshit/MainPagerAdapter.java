@@ -1000,62 +1000,70 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
 
         final int generation = page.generation;
         AtomicInteger remaining = new AtomicInteger(2);
+        java.util.concurrent.CountDownLatch regularShelvesReady =
+                new java.util.concurrent.CountDownLatch(1);
+        java.util.Map<Integer, List<NativeContentItem>> finalShelves =
+                new java.util.concurrent.ConcurrentHashMap<>();
 
         page.onlyFapHubTasks.add(io.submit(() -> {
-            List<NativeContentItem> result = java.util.Collections.emptyList();
             try {
-                result = fapzoneCreatorRepository.fetch(
-                        activity,
-                        FapzoneCreatorRepository.MODE_TOP_50,
-                        items -> showOnlyFapHubProgress(
-                                page,
-                                generation,
-                                FapzoneCreatorRepository.MODE_TOP_50,
-                                items
-                        )
-                );
-            } catch (Exception ignored) {
-            }
-            if (!result.isEmpty()) CreatorCatalog.remember(activity, result);
-            final List<NativeContentItem> items = result;
-            activity.runOnUiThread(() -> {
-                if (generation == page.generation && page.onlyFapHub != null) {
-                    page.onlyFapHub.setTrending(items);
+                List<NativeContentItem> candidates = java.util.Collections.emptyList();
+                try {
+                    // Prefetch in parallel, but do not publish a row that later exclusions
+                    // can consume. The regular worker records final results before release.
+                    candidates = fapzoneCreatorRepository.fetch(
+                            activity, FapzoneCreatorRepository.MODE_TOP_50, null);
+                } catch (Exception ignored) {
                 }
-            });
-            finishOnlyFapHubSource(page, generation, remaining);
+                regularShelvesReady.await();
+                if (Thread.currentThread().isInterrupted()) return;
+                List<NativeContentItem> items = fapzoneCreatorRepository.completeDiscover(
+                        activity, candidates,
+                        finalShelves.get(FapzoneCreatorRepository.MODE_NEW),
+                        finalShelves.get(FapzoneCreatorRepository.MODE_HOT),
+                        finalShelves.get(FapzoneCreatorRepository.MODE_POPULAR));
+                if (Thread.currentThread().isInterrupted()) return;
+                if (!items.isEmpty()) CreatorCatalog.remember(activity, items);
+                activity.runOnUiThread(() -> {
+                    if (generation == page.generation && page.onlyFapHub != null) {
+                        page.onlyFapHub.setTrending(items);
+                    }
+                });
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+            } finally {
+                finishOnlyFapHubSource(page, generation, remaining);
+            }
         }));
 
         page.onlyFapHubTasks.add(io.submit(() -> {
-            int[] modes = {
-                    FapzoneCreatorRepository.MODE_NEW,
-                    FapzoneCreatorRepository.MODE_HOT,
-                    FapzoneCreatorRepository.MODE_POPULAR
-            };
-            for (int mode : modes) {
-                if (Thread.currentThread().isInterrupted()) break;
-                List<NativeContentItem> result = java.util.Collections.emptyList();
-                try {
-                    result = fapzoneCreatorRepository.fetch(
-                            activity,
-                            mode,
-                            items -> showOnlyFapHubProgress(
-                                    page,
-                                    generation,
-                                    mode,
-                                    items
-                            )
-                    );
-                } catch (Exception ignored) {
+            try {
+                int[] modes = {
+                        FapzoneCreatorRepository.MODE_NEW,
+                        FapzoneCreatorRepository.MODE_HOT,
+                        FapzoneCreatorRepository.MODE_POPULAR
+                };
+                for (int mode : modes) {
+                    if (Thread.currentThread().isInterrupted()) break;
+                    List<NativeContentItem> result = java.util.Collections.emptyList();
+                    try {
+                        result = fapzoneCreatorRepository.fetch(
+                                activity, mode,
+                                items -> showOnlyFapHubProgress(page, generation, mode, items));
+                    } catch (Exception ignored) {
+                    }
+                    finalShelves.put(mode, new java.util.ArrayList<>(result));
+                    if (!result.isEmpty()) CreatorCatalog.remember(activity, result);
+                    final List<NativeContentItem> items = result;
+                    activity.runOnUiThread(() -> {
+                        if (generation != page.generation || page.onlyFapHub == null) return;
+                        applyOnlyFapShelf(page.onlyFapHub, mode, items);
+                    });
                 }
-                if (!result.isEmpty()) CreatorCatalog.remember(activity, result);
-                final List<NativeContentItem> items = result;
-                activity.runOnUiThread(() -> {
-                    if (generation != page.generation || page.onlyFapHub == null) return;
-                    applyOnlyFapShelf(page.onlyFapHub, mode, items);
-                });
+            } finally {
+                regularShelvesReady.countDown();
+                finishOnlyFapHubSource(page, generation, remaining);
             }
-            finishOnlyFapHubSource(page, generation, remaining);
         }));
     }
 

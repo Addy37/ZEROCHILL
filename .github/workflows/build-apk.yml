@@ -186,6 +186,13 @@ jobs:
           gradle-version: '8.7'
           cache-provider: basic
 
+      - name: Run focused OnlyFap Discover regressions first
+        run: >-
+          gradle --no-daemon :app:testDebugUnitTest
+          --tests 'com.webapp.crazyshit.OnlyFapDiscoverTest'
+          --tests 'com.webapp.crazyshit.OnlyFapDiscoverLifecycleTest'
+          --tests 'com.webapp.crazyshit.FapelloRepositoryTest'
+
       # 2.8 starts by measuring the existing lint debt without blocking beta builds. The repository
       # currently has a large set of pre-existing lint findings. Once those are baselined/cleaned,
       # this audit can become a hard gate for new issues.
