@@ -68,18 +68,20 @@ public class NotificationCenterUiTest {
         RecyclerView.Adapter adapter = recycler.getAdapter();
         RecyclerView.ViewHolder holder = adapter.createViewHolder(recycler, 0);
         adapter.bindViewHolder(holder, 0);
-        android.widget.LinearLayout row = (android.widget.LinearLayout) holder.itemView;
+        android.widget.LinearLayout shell = (android.widget.LinearLayout) holder.itemView;
+        android.widget.LinearLayout row = (android.widget.LinearLayout) shell.getChildAt(1);
         assertTrue(row.getChildAt(0).getClipToOutline());
         assertEquals(row.getChildAt(0).getLayoutParams().width, row.getChildAt(0).getLayoutParams().height);
         android.widget.LinearLayout labels = (android.widget.LinearLayout) row.getChildAt(1);
-        assertEquals(1, ((TextView) labels.getChildAt(0)).getMaxLines());
-        assertEquals(2, ((TextView) labels.getChildAt(1)).getMaxLines());
+        assertEquals(2, ((TextView) labels.getChildAt(0)).getMaxLines());
+        assertEquals(3, ((TextView) labels.getChildAt(1)).getMaxLines());
         assertNotNull(((android.widget.ImageView) row.getChildAt(0)).getDrawable());
-        assertEquals(View.VISIBLE, row.getChildAt(2).getVisibility());
+        android.widget.FrameLayout trailing = (android.widget.FrameLayout) row.getChildAt(2);
+        assertEquals(View.VISIBLE, trailing.getChildAt(1).getVisibility());
         row.performClick();
         assertTrue(UpdateInboxStore.all(activity).get(0).read);
         adapter.bindViewHolder(holder, 0);
-        assertEquals(View.INVISIBLE, row.getChildAt(2).getVisibility());
+        assertEquals(View.INVISIBLE, trailing.getChildAt(1).getVisibility());
         controller.pause().stop().destroy();
     }
 
