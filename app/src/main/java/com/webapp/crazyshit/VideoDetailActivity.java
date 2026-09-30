@@ -1609,7 +1609,7 @@ public class VideoDetailActivity extends Activity {
                     @Override public void onSheetTopChanged(int top) { }
                     @Override public void onSheetClosed() {
                         if (activeComments == opened[0]) activeComments = null;
-                        refreshCommentCount(true);
+                        if (!isFinishing() && !isDestroyed()) refreshCommentCount(true);
                     }
                 });
         activeComments = opened[0];
@@ -1691,6 +1691,7 @@ public class VideoDetailActivity extends Activity {
         int generation = ++commentCountRequestGeneration;
         ZeroChillSocialRepository.loadComments(this, target, (loaded, error) ->
                 runOnUiThread(() -> {
+                    if (isFinishing() || isDestroyed()) return;
                     if (generation != commentCountRequestGeneration || !target.equals(pageUrl)) return;
                     if (error != null || loaded == null) return;
                     int visible = 0;
