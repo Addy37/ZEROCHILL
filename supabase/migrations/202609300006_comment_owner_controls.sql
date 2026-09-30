@@ -19,15 +19,6 @@ create policy "users post own comments"
         (select auth.uid()) = user_id
         and deleted_at is null
         and edited_at is null
-        and (
-            parent_id is null
-            or exists (
-                select 1
-                from public.comments parent
-                where parent.id = parent_id
-                  and parent.deleted_at is null
-            )
-        )
     );
 
 drop policy if exists "users edit own active comments" on public.comments;
