@@ -1431,14 +1431,6 @@ public final class ChaosFeedView extends FrameLayout {
 
     private void openInlineComments(NativeContentItem item) {
         if (item == null || item.url == null || item.url.isEmpty()) return;
-        if (!supportsComments(item)) {
-            Toast.makeText(
-                    activity,
-                    "Comments are not available for this source in ShitTok.",
-                    Toast.LENGTH_SHORT
-            ).show();
-            return;
-        }
         if (commentsDialog != null && commentsDialog.isShowing()) return;
 
         pager.animate().cancel();
@@ -1488,27 +1480,11 @@ public final class ChaosFeedView extends FrameLayout {
     }
 
     private void preloadReadyComments(NativeContentItem item, int position) {
-        if (item == null || !supportsComments(item)) return;
-        if (position != selectedPosition || !active || !hostResumed) return;
-        if (!ChaosPreloadPolicy.allowsCommentPreload(activity)) return;
-        String url = item.url;
-        pager.postDelayed(() -> {
-            if (!active || !hostResumed || position != selectedPosition) return;
-            if (!ChaosPreloadPolicy.allowsCommentPreload(activity)) return;
-            if (selectedPosition < 0 || selectedPosition >= items.size()) return;
-            NativeContentItem selected = items.get(selectedPosition);
-            if (selected == null || !url.equals(selected.url)) return;
-            NativeCommentsLoader.preload(activity, url);
-        }, 850L);
+        // ZeroChill comments are Supabase rows, so no hidden source-site preload is needed.
     }
 
     private boolean supportsComments(NativeContentItem item) {
-        return item != null
-                && !EfuktRepository.isEfuktUrl(item.url)
-                && !BunkrRepository.isBunkrUrl(item.url)
-                && !FapelloRepository.isFapelloUrl(item.url)
-                && !WebVideoSourceRepository.isKaoticUrl(item.url)
-                && !OnlyHavenRepository.isOnlyHavenUrl(item.url);
+        return item != null && item.url != null && !item.url.trim().isEmpty();
     }
 
     private void haptic(View view) {

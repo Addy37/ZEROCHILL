@@ -55,9 +55,8 @@ final class ResponsiveFitmentController {
         } else if (activity instanceof FavoritesActivity) {
             installSafeInsets(activity);
             fitSingleColumn(activity, widthDp, 920);
-        } else if (activity instanceof CommentsActivity) {
-            fitSecondaryShell(activity, landscape, widthDp, 920, 56);
-        } else if (activity instanceof LoginActivity || activity instanceof ProfileActivity) {
+        } else if (activity instanceof ZeroChillAccountActivity) {
+            installSafeInsets(activity);
             fitSecondaryShell(activity, landscape, widthDp, 980, 56);
         } else if (activity instanceof WebFallbackActivity) {
             fitSecondaryShell(activity, landscape, widthDp, 1100, 54);

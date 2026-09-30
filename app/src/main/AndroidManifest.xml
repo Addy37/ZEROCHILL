@@ -38,22 +38,23 @@
         </provider>
 
         <activity
-            android:name=".LoginActivity"
+            android:name=".ZeroChillAccountActivity"
             android:screenOrientation="portrait"
             android:enableOnBackInvokedCallback="true"
-            android:exported="false" />
-
-        <activity
-            android:name=".ProfileActivity"
-            android:screenOrientation="portrait"
-            android:enableOnBackInvokedCallback="true"
-            android:exported="false" />
-
-        <activity
-            android:name=".CommentsActivity"
-            android:screenOrientation="portrait"
-            android:enableOnBackInvokedCallback="true"
-            android:exported="false" />
+            android:exported="true"
+            android:launchMode="singleTop"
+            android:theme="@style/Theme.ZeroChill.Account"
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="com.addy37.zerochill"
+                    android:host="auth"
+                    android:path="/confirmed" />
+            </intent-filter>
+        </activity>
 
         <activity
             android:name=".SettingsActivity"

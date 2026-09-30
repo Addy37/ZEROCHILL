@@ -35,6 +35,16 @@ android {
         )
         buildConfigField(
             "String",
+            "ACCOUNT_SUPABASE_URL",
+            "\"${System.getenv("SUPABASE_URL") ?: "https://fketutffusxgjxjlckci.supabase.co"}\""
+        )
+        buildConfigField(
+            "String",
+            "ACCOUNT_SUPABASE_PUBLISHABLE_KEY",
+            "\"${System.getenv("SUPABASE_PUBLISHABLE_KEY") ?: ""}\""
+        )
+        buildConfigField(
+            "String",
             "SOURCE_CONFIG_ENDPOINT",
             "\"${System.getenv("SOURCE_CONFIG_ENDPOINT") ?: ""}\""
         )

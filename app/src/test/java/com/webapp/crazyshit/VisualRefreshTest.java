@@ -305,7 +305,7 @@ public class VisualRefreshTest {
         assertEquals("5 Reasons to Say \"What in the Fuc...\"", homeHolder.title.getText().toString());
         assertEquals(4, homeHolder.title.getMaxLines());
         assertEquals("41.1K views", homeHolder.info.getText().toString());
-        assertEquals("💬 12K", homeHolder.comments.getText().toString());
+        assertEquals("💬 Comments", homeHolder.comments.getText().toString());
 
         NativeFeedAdapter regularAdapter = new NativeFeedAdapter(host.get(), listener);
         regularAdapter.setViewMode(NativeFeedAdapter.VIEW_LIST);

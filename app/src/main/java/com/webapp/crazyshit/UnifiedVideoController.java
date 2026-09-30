@@ -710,14 +710,7 @@ final class UnifiedVideoController {
         player.addListener(new Player.Listener() {
             @Override
             public void onPlaybackStateChanged(int playbackState) {
-                if (playbackState == Player.STATE_READY) {
-                    String readyPageUrl = pageUrl;
-                    playerView.postDelayed(() -> {
-                        if (readyPageUrl.equals(pageUrl)) {
-                            NativeCommentsLoader.preload(activity, readyPageUrl);
-                        }
-                    }, 650L);
-                } else if (playbackState == Player.STATE_ENDED) {
+                if (playbackState == Player.STATE_ENDED) {
                     savePlaybackState(true);
                 }
             }

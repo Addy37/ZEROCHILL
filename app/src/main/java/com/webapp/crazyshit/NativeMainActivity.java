@@ -1012,11 +1012,11 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
                 ? "Remove from Watch Later"
                 : "Watch Later";
         ArrayList<VideoActionSheet.Action> actions = new ArrayList<>();
-        if (item.comments != null && !item.comments.isEmpty()) {
+        if (item.isVideo() && item.url != null && !item.url.isEmpty()) {
             actions.add(VideoActionSheet.action(
                     R.drawable.ic_action_comments,
                     "Comments",
-                    item.comments + " ready to view",
+                    "Join the ZeroChill conversation",
                     () -> openComments(item)
             ));
         }
