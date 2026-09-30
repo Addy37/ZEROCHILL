@@ -12,7 +12,6 @@ import android.provider.Settings;
 import android.text.InputType;
 import android.view.Gravity;
 import android.view.View;
-import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
@@ -23,6 +22,7 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import com.bumptech.glide.Glide;
+import com.google.android.material.checkbox.MaterialCheckBox;
 
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
@@ -95,42 +95,49 @@ public final class ZeroChillAccountActivity extends Activity {
 
     private void buildShell() {
         FrameLayout root = new FrameLayout(this);
-        root.setBackgroundColor(ZeroChillUi.background(this));
+        root.setBackgroundColor(Color.BLACK);
+        addAmbientGlow(root, Gravity.TOP | Gravity.END, dp(220), dp(220), dp(64), dp(-70));
+        addAmbientGlow(root, Gravity.BOTTOM | Gravity.START, dp(180), dp(180), dp(-58), dp(90));
 
         LinearLayout shell = new LinearLayout(this);
         shell.setOrientation(LinearLayout.VERTICAL);
+        shell.setBackgroundColor(Color.TRANSPARENT);
         root.addView(shell, new FrameLayout.LayoutParams(-1, -1));
 
         LinearLayout top = new LinearLayout(this);
         top.setGravity(Gravity.CENTER_VERTICAL);
-        top.setPadding(dp(8), dp(6), dp(12), dp(6));
+        top.setPadding(dp(10), dp(3), dp(14), dp(3));
         ZeroChillUi.styleTopBar(top);
-        shell.addView(top, new LinearLayout.LayoutParams(-1, dp(64)));
+        shell.addView(top, new LinearLayout.LayoutParams(-1, dp(58)));
 
-        TextView back = text("‹", 32, Color.WHITE, false);
+        TextView back = text("‹", 31, Color.WHITE, false);
         back.setGravity(Gravity.CENTER);
         back.setContentDescription("Back");
         back.setOnClickListener(v -> finish());
-        top.addView(back, new LinearLayout.LayoutParams(dp(48), dp(48)));
+        ZeroChillMotion.installPressFeedback(back);
+        top.addView(back, new LinearLayout.LayoutParams(dp(44), dp(44)));
 
         LinearLayout titles = new LinearLayout(this);
         titles.setOrientation(LinearLayout.VERTICAL);
         titles.setPadding(dp(6), 0, 0, 0);
         top.addView(titles, new LinearLayout.LayoutParams(0, -2, 1f));
 
-        TextView title = text("Account", 20, Color.WHITE, true);
+        TextView title = text("Account", 19, Color.WHITE, true);
         titles.addView(title);
-        TextView subtitle = text("Your ZeroChill profile", 11,
-                ZeroChillUi.color(this, R.color.zc_text_secondary), false);
+        TextView subtitle = text("ZEROCHILL ID", 9,
+                ZeroChillUi.color(this, R.color.zc_text_muted), true);
+        subtitle.setLetterSpacing(0.10f);
         titles.addView(subtitle);
 
         ScrollView scroll = new ScrollView(this);
         scroll.setFillViewport(true);
+        scroll.setClipToPadding(false);
+        scroll.setOverScrollMode(View.OVER_SCROLL_NEVER);
         shell.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1f));
 
         content = new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL);
-        content.setPadding(dp(20), dp(18), dp(20), dp(36));
+        content.setPadding(dp(22), dp(24), dp(22), dp(34));
         scroll.addView(content, new ScrollView.LayoutParams(-1, -2));
 
         progress = new ProgressBar(this);
@@ -160,27 +167,38 @@ public final class ZeroChillAccountActivity extends Activity {
     private void showAuth() {
         content.removeAllViews();
 
-        TextView brand = text("ZEROCHILL", 28, Color.WHITE, true);
-        content.addView(brand);
+        addEyebrow(content, createMode ? "NEW IDENTITY" : "WELCOME BACK");
+        content.addView(wordmark(32f));
+
         TextView copy = text(
-                "Create a profile to sync favorite creators and join comments, likes, replies, and messages.",
-                14,
+                createMode
+                        ? "Build your ZEROCHILL identity once, then carry your creators and conversations with you."
+                        : "Sign in to your ZEROCHILL identity and pick up where you left off.",
+                13,
                 ZeroChillUi.color(this, R.color.zc_text_secondary),
                 false
         );
-        copy.setPadding(0, dp(8), 0, dp(20));
-        copy.setLineSpacing(0f, 1.1f);
-        content.addView(copy);
+        copy.setLineSpacing(0f, 1.12f);
+        LinearLayout.LayoutParams copyParams = new LinearLayout.LayoutParams(-1, -2);
+        copyParams.topMargin = dp(9);
+        copyParams.bottomMargin = dp(18);
+        content.addView(copy, copyParams);
+
+        LinearLayout panel = new LinearLayout(this);
+        panel.setOrientation(LinearLayout.VERTICAL);
+        panel.setPadding(dp(12), dp(12), dp(12), dp(14));
+        panel.setBackground(panelBackground(20));
+        content.addView(panel, new LinearLayout.LayoutParams(-1, -2));
 
         LinearLayout tabs = new LinearLayout(this);
         tabs.setOrientation(LinearLayout.HORIZONTAL);
-        content.addView(tabs, new LinearLayout.LayoutParams(-1, dp(44)));
+        panel.addView(tabs, new LinearLayout.LayoutParams(-1, dp(42)));
 
         TextView signInTab = tab("SIGN IN", !createMode);
         TextView createTab = tab("CREATE ACCOUNT", createMode);
         tabs.addView(signInTab, new LinearLayout.LayoutParams(0, -1, 1f));
         LinearLayout.LayoutParams createParams = new LinearLayout.LayoutParams(0, -1, 1f);
-        createParams.setMarginStart(dp(8));
+        createParams.setMarginStart(dp(7));
         tabs.addView(createTab, createParams);
         signInTab.setOnClickListener(v -> {
             createMode = false;
@@ -191,34 +209,46 @@ public final class ZeroChillAccountActivity extends Activity {
             showAuth();
         });
 
-        EditText email = field("Email", InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS);
-        content.addView(email, fieldParams());
+        EditText email = field(
+                "Email",
+                InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS
+        );
+        email.setAutofillHints(View.AUTOFILL_HINT_EMAIL_ADDRESS);
+        panel.addView(email, fieldParams());
 
         EditText username = null;
         if (createMode) {
             username = field("Username", InputType.TYPE_CLASS_TEXT);
-            content.addView(username, fieldParams());
+            username.setAutofillHints(View.AUTOFILL_HINT_USERNAME);
+            panel.addView(username, fieldParams());
         }
 
-        EditText password = field("Password", InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
-        content.addView(password, fieldParams());
+        EditText password = field(
+                "Password",
+                InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD
+        );
+        password.setAutofillHints(createMode
+                ? View.AUTOFILL_HINT_NEW_PASSWORD
+                : View.AUTOFILL_HINT_PASSWORD);
+        panel.addView(password, fieldParams());
 
-        CheckBox adult = null;
-        CheckBox terms = null;
+        MaterialCheckBox adult = null;
+        MaterialCheckBox terms = null;
         if (createMode) {
             adult = check("I confirm that I am 18 or older.");
             terms = check("I agree to the Terms and Community Rules.");
-            content.addView(adult);
-            content.addView(terms);
+            panel.addView(adult);
+            panel.addView(terms);
         }
 
         final EditText usernameField = username;
-        final CheckBox adultCheck = adult;
-        final CheckBox termsCheck = terms;
+        final MaterialCheckBox adultCheck = adult;
+        final MaterialCheckBox termsCheck = terms;
+
         TextView submit = primaryButton(createMode ? "CREATE ACCOUNT" : "SIGN IN");
         LinearLayout.LayoutParams submitParams = new LinearLayout.LayoutParams(-1, dp(50));
-        submitParams.setMargins(0, dp(18), 0, 0);
-        content.addView(submit, submitParams);
+        submitParams.setMargins(0, dp(14), 0, 0);
+        panel.addView(submit, submitParams);
 
         submit.setOnClickListener(v -> {
             String emailValue = email.getText().toString();
@@ -271,106 +301,200 @@ public final class ZeroChillAccountActivity extends Activity {
             }
         });
 
+        LinearLayout privacyCard = new LinearLayout(this);
+        privacyCard.setOrientation(LinearLayout.HORIZONTAL);
+        privacyCard.setGravity(Gravity.CENTER_VERTICAL);
+        privacyCard.setPadding(dp(13), dp(11), dp(13), dp(11));
+        privacyCard.setBackground(panelBackground(16));
+        TextView lock = text("◆", 10, UiPalette.PRIMARY, true);
+        lock.setGravity(Gravity.TOP);
+        privacyCard.addView(lock, new LinearLayout.LayoutParams(dp(24), -2));
         TextView privacy = text(
-                "Your email stays private. ZeroChill does not require a real name, phone number, or birth date.",
-                12,
+                "Private by default. Your email is never shown on your public ZEROCHILL profile.",
+                11,
                 ZeroChillUi.color(this, R.color.zc_text_muted),
                 false
         );
-        privacy.setPadding(0, dp(16), 0, 0);
-        content.addView(privacy);
+        privacy.setLineSpacing(0f, 1.08f);
+        privacyCard.addView(privacy, new LinearLayout.LayoutParams(0, -2, 1f));
+        LinearLayout.LayoutParams privacyParams = new LinearLayout.LayoutParams(-1, -2);
+        privacyParams.topMargin = dp(12);
+        content.addView(privacyCard, privacyParams);
     }
 
     private void showVerification(String email) {
-        content.removeAllViews();
-        TextView title = text("CHECK YOUR EMAIL", 23, Color.WHITE, true);
-        content.addView(title);
-        TextView copy = text(
+        showStatusCard(
+                "CHECK YOUR EMAIL",
+                "IDENTITY PENDING",
                 "We sent a verification message to " + email
-                        + ". Tap the link and ZeroChill will reopen automatically.",
-                14,
-                ZeroChillUi.color(this, R.color.zc_text_secondary),
-                false
+                        + ". Tap the link and ZEROCHILL will reopen automatically.",
+                "GO TO SIGN IN",
+                () -> {
+                    createMode = false;
+                    showAuth();
+                }
         );
-        copy.setPadding(0, dp(10), 0, dp(22));
-        content.addView(copy);
-        TextView signIn = primaryButton("GO TO SIGN IN");
-        signIn.setOnClickListener(v -> {
-            createMode = false;
-            showAuth();
-        });
-        content.addView(signIn, new LinearLayout.LayoutParams(-1, dp(50)));
     }
 
     private void showConfirmed() {
+        showStatusCard(
+                "EMAIL VERIFIED",
+                "IDENTITY READY",
+                "Your email is confirmed. Sign in to finish opening your ZEROCHILL profile.",
+                "SIGN IN",
+                () -> {
+                    createMode = false;
+                    showAuth();
+                }
+        );
+    }
+
+    private void showStatusCard(
+            String titleValue,
+            String eyebrowValue,
+            String bodyValue,
+            String actionLabel,
+            Runnable action
+    ) {
         content.removeAllViews();
-        TextView title = text("EMAIL VERIFIED", 23, Color.WHITE, true);
-        content.addView(title);
+        addEyebrow(content, eyebrowValue);
+        TextView title = text(titleValue, 28, Color.WHITE, true);
+        LinearLayout.LayoutParams titleParams = new LinearLayout.LayoutParams(-1, -2);
+        titleParams.topMargin = dp(7);
+        content.addView(title, titleParams);
+
+        LinearLayout card = new LinearLayout(this);
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setPadding(dp(16), dp(16), dp(16), dp(16));
+        card.setBackground(panelBackground(19));
+
         TextView copy = text(
-                "Your email is confirmed. Sign in to finish opening your ZeroChill profile.",
-                14,
+                bodyValue,
+                13,
                 ZeroChillUi.color(this, R.color.zc_text_secondary),
                 false
         );
-        copy.setPadding(0, dp(10), 0, dp(22));
-        content.addView(copy);
-        TextView signIn = primaryButton("SIGN IN");
-        signIn.setOnClickListener(v -> {
-            createMode = false;
-            showAuth();
-        });
-        content.addView(signIn, new LinearLayout.LayoutParams(-1, dp(50)));
+        copy.setLineSpacing(0f, 1.12f);
+        card.addView(copy);
+
+        TextView button = primaryButton(actionLabel);
+        LinearLayout.LayoutParams buttonParams = new LinearLayout.LayoutParams(-1, dp(48));
+        buttonParams.topMargin = dp(16);
+        card.addView(button, buttonParams);
+        button.setOnClickListener(v -> action.run());
+
+        LinearLayout.LayoutParams cardParams = new LinearLayout.LayoutParams(-1, -2);
+        cardParams.topMargin = dp(18);
+        content.addView(card, cardParams);
     }
 
     private void showProfile(ZeroChillAccountRepository.AccountState state) {
         content.removeAllViews();
 
+        addEyebrow(content, "YOUR IDENTITY");
+
+        LinearLayout hero = new LinearLayout(this);
+        hero.setOrientation(LinearLayout.HORIZONTAL);
+        hero.setGravity(Gravity.CENTER_VERTICAL);
+        hero.setPadding(dp(15), dp(15), dp(15), dp(15));
+        hero.setBackground(panelBackground(20));
+
+        FrameLayout avatarHalo = new FrameLayout(this);
+        avatarHalo.setBackground(circle(UiPalette.PRIMARY_CONTAINER));
+        avatarHalo.setPadding(dp(3), dp(3), dp(3), dp(3));
+
         ImageView avatar = new ImageView(this);
         avatar.setScaleType(ImageView.ScaleType.CENTER_CROP);
-        avatar.setBackground(circle(Color.rgb(28, 28, 33)));
+        avatar.setBackground(circle(Color.rgb(13, 15, 19)));
         String avatarUrl = ZeroChillAccountRepository.avatarUrl(state.avatarPath);
         if (!avatarUrl.isEmpty()) {
             Glide.with(avatar).load(avatarUrl).circleCrop().into(avatar);
         } else {
             avatar.setImageResource(R.drawable.ic_more_account);
-            avatar.setPadding(dp(24), dp(24), dp(24), dp(24));
+            avatar.setPadding(dp(20), dp(20), dp(20), dp(20));
             avatar.setColorFilter(UiPalette.PRIMARY);
         }
-        LinearLayout.LayoutParams avatarParams = new LinearLayout.LayoutParams(dp(104), dp(104));
-        avatarParams.gravity = Gravity.CENTER_HORIZONTAL;
-        content.addView(avatar, avatarParams);
+        avatarHalo.addView(avatar, new FrameLayout.LayoutParams(-1, -1));
+        hero.addView(avatarHalo, new LinearLayout.LayoutParams(dp(82), dp(82)));
 
-        TextView changeAvatar = secondaryButton("CHANGE AVATAR");
-        LinearLayout.LayoutParams avatarButtonParams = new LinearLayout.LayoutParams(-1, dp(46));
-        avatarButtonParams.setMargins(0, dp(14), 0, dp(22));
-        content.addView(changeAvatar, avatarButtonParams);
-        changeAvatar.setOnClickListener(v -> chooseAvatar());
+        LinearLayout identity = new LinearLayout(this);
+        identity.setOrientation(LinearLayout.VERTICAL);
+        identity.setPadding(dp(14), 0, 0, 0);
 
         TextView username = text(
-                state.username.isEmpty() ? "ZeroChill user" : "@" + state.username,
-                24,
+                state.username.isEmpty() ? "ZEROCHILL USER" : "@" + state.username,
+                21,
                 Color.WHITE,
                 true
         );
-        username.setGravity(Gravity.CENTER_HORIZONTAL);
-        content.addView(username);
+        identity.addView(username);
+
+        if (!state.displayName.isEmpty()) {
+            TextView display = text(
+                    state.displayName,
+                    13,
+                    UiPalette.PRIMARY,
+                    true
+            );
+            LinearLayout.LayoutParams displayParams = new LinearLayout.LayoutParams(-1, -2);
+            displayParams.topMargin = dp(3);
+            identity.addView(display, displayParams);
+        }
 
         TextView email = text(
                 state.email,
-                13,
-                ZeroChillUi.color(this, R.color.zc_text_secondary),
+                11,
+                ZeroChillUi.color(this, R.color.zc_text_muted),
                 false
         );
-        email.setGravity(Gravity.CENTER_HORIZONTAL);
-        email.setPadding(0, dp(5), 0, dp(22));
-        content.addView(email);
+        LinearLayout.LayoutParams emailParams = new LinearLayout.LayoutParams(-1, -2);
+        emailParams.topMargin = dp(5);
+        identity.addView(email, emailParams);
+        hero.addView(identity, new LinearLayout.LayoutParams(0, -2, 1f));
+
+        LinearLayout.LayoutParams heroParams = new LinearLayout.LayoutParams(-1, -2);
+        heroParams.topMargin = dp(9);
+        content.addView(hero, heroParams);
+
+        LinearLayout actions = new LinearLayout(this);
+        actions.setOrientation(LinearLayout.HORIZONTAL);
+        LinearLayout.LayoutParams actionsParams = new LinearLayout.LayoutParams(-1, dp(44));
+        actionsParams.topMargin = dp(9);
+        content.addView(actions, actionsParams);
+
+        TextView changeAvatar = secondaryButton("CHANGE AVATAR");
+        changeAvatar.setOnClickListener(v -> chooseAvatar());
+        actions.addView(changeAvatar, new LinearLayout.LayoutParams(0, -1, 1f));
+
+        TextView signOut = secondaryButton("SIGN OUT");
+        signOut.setTextColor(Color.rgb(228, 138, 138));
+        signOut.setOnClickListener(v -> {
+            signOut.setEnabled(false);
+            ZeroChillAccountRepository.signOut(this, (ignored, error) -> runOnUiThread(() -> {
+                account = null;
+                createMode = false;
+                showAuth();
+            }));
+        });
+        LinearLayout.LayoutParams signOutParams = new LinearLayout.LayoutParams(0, -1, 1f);
+        signOutParams.setMarginStart(dp(8));
+        actions.addView(signOut, signOutParams);
+
+        TextView section = text("PROFILE", 10, UiPalette.PRIMARY, true);
+        section.setLetterSpacing(0.11f);
+        LinearLayout.LayoutParams sectionParams = new LinearLayout.LayoutParams(-1, -2);
+        sectionParams.topMargin = dp(24);
+        content.addView(section, sectionParams);
 
         EditText displayName = field("Display name (optional)", InputType.TYPE_CLASS_TEXT);
         displayName.setText(state.displayName);
+        displayName.setAutofillHints(View.AUTOFILL_HINT_NAME);
         content.addView(displayName, fieldParams());
 
-        TextView save = secondaryButton("SAVE PROFILE");
-        content.addView(save, new LinearLayout.LayoutParams(-1, dp(46)));
+        TextView save = primaryButton("SAVE PROFILE");
+        LinearLayout.LayoutParams saveParams = new LinearLayout.LayoutParams(-1, dp(48));
+        saveParams.topMargin = dp(10);
+        content.addView(save, saveParams);
         save.setOnClickListener(v -> {
             save.setEnabled(false);
             ZeroChillAccountRepository.updateDisplayName(
@@ -383,32 +507,35 @@ public final class ZeroChillAccountActivity extends Activity {
                         } else {
                             account = updated;
                             Toast.makeText(this, "Profile updated.", Toast.LENGTH_SHORT).show();
+                            showProfile(updated);
                         }
                     })
             );
         });
 
+        LinearLayout syncCard = new LinearLayout(this);
+        syncCard.setOrientation(LinearLayout.VERTICAL);
+        syncCard.setPadding(dp(14), dp(13), dp(14), dp(13));
+        syncCard.setBackground(panelBackground(17));
+
+        TextView syncTitle = text("SYNCED TO ZEROCHILL", 10, UiPalette.PRIMARY, true);
+        syncTitle.setLetterSpacing(0.08f);
+        syncCard.addView(syncTitle);
+
         TextView synced = text(
-                "Favorite creators are linked to this account. Comments, replies, likes, and DMs use this profile identity.",
-                13,
+                "Favorite creators stay linked to this identity. Comments, replies, likes, and DMs use the same profile.",
+                12,
                 ZeroChillUi.color(this, R.color.zc_text_secondary),
                 false
         );
-        synced.setPadding(0, dp(22), 0, dp(22));
         synced.setLineSpacing(0f, 1.1f);
-        content.addView(synced);
+        LinearLayout.LayoutParams syncedParams = new LinearLayout.LayoutParams(-1, -2);
+        syncedParams.topMargin = dp(5);
+        syncCard.addView(synced, syncedParams);
 
-        TextView signOut = secondaryButton("SIGN OUT");
-        signOut.setTextColor(Color.rgb(230, 130, 130));
-        signOut.setOnClickListener(v -> {
-            signOut.setEnabled(false);
-            ZeroChillAccountRepository.signOut(this, (ignored, error) -> runOnUiThread(() -> {
-                account = null;
-                createMode = false;
-                showAuth();
-            }));
-        });
-        content.addView(signOut, new LinearLayout.LayoutParams(-1, dp(46)));
+        LinearLayout.LayoutParams syncParams = new LinearLayout.LayoutParams(-1, -2);
+        syncParams.topMargin = dp(12);
+        content.addView(syncCard, syncParams);
     }
 
     private void chooseAvatar() {
@@ -464,56 +591,84 @@ public final class ZeroChillAccountActivity extends Activity {
         EditText view = new EditText(this);
         view.setHint(hint);
         view.setHintTextColor(ZeroChillUi.color(this, R.color.zc_text_muted));
-        view.setTextColor(Color.WHITE);
-        view.setTextSize(15);
+        view.setTextColor(Color.rgb(242, 244, 247));
+        view.setTextSize(14);
         view.setSingleLine(true);
         view.setInputType(inputType);
-        view.setPadding(dp(14), 0, dp(14), 0);
-        view.setBackground(roundRect(Color.rgb(24, 24, 29), 14, Color.rgb(48, 48, 56)));
+        view.setPadding(dp(15), 0, dp(15), 0);
+        view.setBackground(fieldBackground());
+        view.setSelectAllOnFocus(false);
         return view;
     }
 
     private LinearLayout.LayoutParams fieldParams() {
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, dp(52));
-        params.setMargins(0, dp(12), 0, 0);
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, dp(50));
+        params.setMargins(0, dp(10), 0, 0);
         return params;
     }
 
-    private CheckBox check(String label) {
-        CheckBox view = new CheckBox(this);
+    private MaterialCheckBox check(String label) {
+        MaterialCheckBox view = new MaterialCheckBox(this);
         view.setText(label);
         view.setTextColor(ZeroChillUi.color(this, R.color.zc_text_secondary));
-        view.setTextSize(13);
-        view.setButtonTintList(android.content.res.ColorStateList.valueOf(UiPalette.PRIMARY));
-        view.setPadding(0, dp(9), 0, 0);
+        view.setTextSize(12.5f);
+        view.setButtonTintList(new android.content.res.ColorStateList(
+                new int[][]{
+                        new int[]{android.R.attr.state_checked},
+                        new int[]{}
+                },
+                new int[]{UiPalette.PRIMARY, Color.rgb(98, 104, 112)}
+        ));
+        view.setPadding(0, dp(6), 0, 0);
         return view;
     }
 
     private TextView tab(String label, boolean selected) {
-        TextView view = text(label, 12, selected ? Color.WHITE : ZeroChillUi.color(this, R.color.zc_text_secondary), true);
+        TextView view = text(
+                label,
+                11,
+                selected ? UiPalette.PRIMARY : ZeroChillUi.color(this, R.color.zc_text_secondary),
+                true
+        );
         view.setGravity(Gravity.CENTER);
-        view.setBackground(roundRect(
-                selected ? UiPalette.PRIMARY_CONTAINER : Color.rgb(20, 20, 24),
-                13,
-                selected ? UiPalette.PRIMARY : Color.rgb(43, 43, 49)
-        ));
+        view.setLetterSpacing(0.04f);
+        view.setBackground(selected ? selectedTabBackground() : quietTabBackground());
+        ZeroChillMotion.installPressFeedback(view);
         return view;
     }
 
     private TextView primaryButton(String label) {
-        TextView view = text(label, 13, Color.WHITE, true);
+        TextView view = text(label, 12, UiPalette.ON_PRIMARY, true);
         view.setGravity(Gravity.CENTER);
-        view.setBackground(roundRect(UiPalette.PRIMARY_DIM, 14, UiPalette.PRIMARY));
+        view.setLetterSpacing(0.06f);
+        view.setBackground(primaryButtonBackground());
         ZeroChillMotion.installPressFeedback(view);
         return view;
     }
 
     private TextView secondaryButton(String label) {
-        TextView view = text(label, 13, UiPalette.PRIMARY, true);
+        TextView view = text(label, 11, UiPalette.PRIMARY, true);
         view.setGravity(Gravity.CENTER);
-        view.setBackground(roundRect(Color.rgb(22, 22, 27), 14, Color.rgb(48, 48, 56)));
+        view.setLetterSpacing(0.05f);
+        view.setBackground(secondaryButtonBackground());
         ZeroChillMotion.installPressFeedback(view);
         return view;
+    }
+
+    private void addEyebrow(LinearLayout parent, String value) {
+        TextView eyebrow = text(value, 10, UiPalette.PRIMARY, true);
+        eyebrow.setLetterSpacing(0.12f);
+        parent.addView(eyebrow);
+    }
+
+    private LinearLayout wordmark(float size) {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        TextView zero = text("ZERO", Math.round(size), Color.rgb(243, 244, 246), true);
+        TextView chill = text("CHILL", Math.round(size), UiPalette.PRIMARY, false);
+        row.addView(zero);
+        row.addView(chill);
+        return row;
     }
 
     private TextView text(String value, int size, int color, boolean bold) {
@@ -525,11 +680,59 @@ public final class ZeroChillAccountActivity extends Activity {
         return view;
     }
 
-    private GradientDrawable roundRect(int fill, int radiusDp, int stroke) {
-        GradientDrawable background = new GradientDrawable();
-        background.setColor(fill);
+    private GradientDrawable fieldBackground() {
+        GradientDrawable background = new GradientDrawable(
+                GradientDrawable.Orientation.TL_BR,
+                new int[]{Color.argb(238, 18, 21, 26), Color.argb(238, 9, 11, 15)}
+        );
+        background.setCornerRadius(dp(15));
+        background.setStroke(dp(1), Color.rgb(43, 56, 66));
+        return background;
+    }
+
+    private GradientDrawable panelBackground(int radiusDp) {
+        GradientDrawable background = new GradientDrawable(
+                GradientDrawable.Orientation.TL_BR,
+                new int[]{Color.argb(235, 18, 21, 26), Color.argb(235, 8, 10, 14)}
+        );
         background.setCornerRadius(dp(radiusDp));
-        background.setStroke(dp(1), stroke);
+        background.setStroke(dp(1), Color.rgb(43, 57, 66));
+        return background;
+    }
+
+    private GradientDrawable selectedTabBackground() {
+        GradientDrawable background = new GradientDrawable(
+                GradientDrawable.Orientation.TL_BR,
+                new int[]{Color.argb(210, 6, 45, 66), Color.argb(180, 5, 31, 47)}
+        );
+        background.setCornerRadius(dp(14));
+        background.setStroke(dp(1), Color.rgb(24, 163, 222));
+        return background;
+    }
+
+    private GradientDrawable quietTabBackground() {
+        GradientDrawable background = new GradientDrawable();
+        background.setColor(Color.argb(125, 10, 11, 14));
+        background.setCornerRadius(dp(14));
+        background.setStroke(dp(1), Color.rgb(42, 46, 53));
+        return background;
+    }
+
+    private GradientDrawable primaryButtonBackground() {
+        GradientDrawable background = new GradientDrawable(
+                GradientDrawable.Orientation.LEFT_RIGHT,
+                new int[]{Color.rgb(8, 146, 208), Color.rgb(35, 174, 229)}
+        );
+        background.setCornerRadius(dp(17));
+        background.setStroke(dp(1), Color.rgb(80, 198, 244));
+        return background;
+    }
+
+    private GradientDrawable secondaryButtonBackground() {
+        GradientDrawable background = new GradientDrawable();
+        background.setColor(Color.argb(180, 11, 13, 17));
+        background.setCornerRadius(dp(15));
+        background.setStroke(dp(1), Color.rgb(43, 52, 60));
         return background;
     }
 
@@ -540,10 +743,46 @@ public final class ZeroChillAccountActivity extends Activity {
         return background;
     }
 
+    private void addAmbientGlow(
+            FrameLayout parent,
+            int gravity,
+            int width,
+            int height,
+            int marginX,
+            int marginY
+    ) {
+        View glow = new View(this);
+        GradientDrawable background = new GradientDrawable();
+        background.setShape(GradientDrawable.OVAL);
+        background.setGradientType(GradientDrawable.RADIAL_GRADIENT);
+        background.setGradientRadius(Math.max(width, height) * 0.52f);
+        background.setColors(new int[]{
+                Color.argb(46, 8, 146, 208),
+                Color.argb(12, 8, 146, 208),
+                Color.TRANSPARENT
+        });
+        glow.setBackground(background);
+        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(width, height);
+        params.gravity = gravity;
+        params.leftMargin = marginX;
+        params.rightMargin = marginX;
+        params.topMargin = marginY;
+        params.bottomMargin = marginY;
+        parent.addView(glow, params);
+    }
+
     private void setFormEnabled(boolean enabled) {
-        content.setEnabled(enabled);
-        for (int i = 0; i < content.getChildCount(); i++) content.getChildAt(i).setEnabled(enabled);
+        setEnabledRecursive(content, enabled);
         progress.setVisibility(enabled ? View.GONE : View.VISIBLE);
+    }
+
+    private void setEnabledRecursive(View view, boolean enabled) {
+        view.setEnabled(enabled);
+        if (!(view instanceof android.view.ViewGroup)) return;
+        android.view.ViewGroup group = (android.view.ViewGroup) view;
+        for (int i = 0; i < group.getChildCount(); i++) {
+            setEnabledRecursive(group.getChildAt(i), enabled);
+        }
     }
 
     private void showBusy(boolean busy) {
