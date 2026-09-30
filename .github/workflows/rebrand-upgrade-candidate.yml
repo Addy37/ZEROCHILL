@@ -24,6 +24,8 @@ jobs:
     steps:
       - name: Check out project
         uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - name: Set up Java 17
         uses: actions/setup-java@v5
@@ -137,6 +139,21 @@ jobs:
               raise SystemExit("Source did not return distinct deeper pages")
           PYTHON
 
+      - name: Run focused DM regressions before build
+        run: >-
+          gradle --no-daemon :app:testDebugUnitTest :app:testReleaseUnitTest
+          --tests 'com.webapp.crazyshit.ZeroChillMessageThreadUiTest'
+
+      - name: Embed beta source lineage
+        run: |
+          python3 - <<'PY'
+          import json, pathlib, subprocess
+          pathlib.Path('app/src/main/assets/zerochill-build.json').write_text(json.dumps({
+              'source_commit': subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip(),
+              'source_branch': '${{ github.head_ref || github.ref_name }}'
+          }))
+          PY
+
       - name: Run focused OnlyFap Discover release regressions first
         run: >-
           gradle --no-daemon :app:testReleaseUnitTest
@@ -145,7 +162,30 @@ jobs:
           --tests 'com.webapp.crazyshit.FapelloRepositoryTest'
 
       - name: Build signed upgrade candidate
-        run: gradle --no-daemon :app:testReleaseUnitTest :app:assembleRelease
+        run: gradle --no-daemon :app:testReleaseUnitTest :app:assembleRelease :app:assembleDebug
+
+      - name: Verify and upload signed beta
+        run: |
+          set -euo pipefail
+          REF_NAME="${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}"
+          SAFE_REF="$(printf '%s' "$REF_NAME" | tr '/ ' '--' | tr -cd 'A-Za-z0-9._-')"
+          SOURCE_SHA="$(git rev-parse HEAD)"
+          BETA_APK="ZeroChill-Beta-${SAFE_REF}-${SOURCE_SHA:0:7}.apk"
+          cp app/build/outputs/apk/debug/app-debug.apk "$BETA_APK"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$BETA_APK"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt2" dump badging "$BETA_APK" | grep "package: name='com.addy37.crazyshitunofficial.dev'"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt2" dump badging "$BETA_APK" | grep "application-label:'ZeroChill Beta'"
+          sha256sum "$BETA_APK" > SHA256SUMS-beta.txt
+
+      - name: Upload signed beta
+        uses: actions/upload-artifact@v4
+        with:
+          name: ZeroChill-signed-beta
+          path: |
+            ZeroChill-Beta-*.apk
+            SHA256SUMS-beta.txt
+          if-no-files-found: error
+          retention-days: 14
 
       - name: Prepare candidate
         run: |

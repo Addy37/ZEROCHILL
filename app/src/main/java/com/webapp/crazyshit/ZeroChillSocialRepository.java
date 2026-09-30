@@ -92,6 +92,7 @@ final class ZeroChillSocialRepository {
         final String body;
         final String createdAt;
         final String readAt;
+        final boolean pending;
 
         DirectMessage(JSONObject value) {
             id = value.optString("id");
@@ -100,6 +101,17 @@ final class ZeroChillSocialRepository {
             body = value.optString("body");
             createdAt = value.optString("created_at");
             readAt = value.isNull("read_at") ? "" : value.optString("read_at");
+            pending = false;
+        }
+
+        DirectMessage(String clientId, String recipient, String message) {
+            id = clientId;
+            senderId = ""; // Local outgoing row; the server supplies auth.uid().
+            recipientId = recipient;
+            body = message;
+            createdAt = java.time.Instant.now().toString();
+            readAt = "";
+            pending = true;
         }
 
         boolean unreadFor(String userId) {
@@ -438,21 +450,20 @@ final class ZeroChillSocialRepository {
     static void sendDirectMessage(
             Context context,
             String recipientId,
+            String clientId,
             String body,
             Callback<DirectMessage> callback
     ) {
         NETWORK.execute(() -> {
             try {
                 String recipient = clean(recipientId);
-                String message = clean(body);
+                String message = body == null ? "" : body;
                 if (recipient.isEmpty()) throw new IllegalArgumentException("This user is unavailable.");
-                if (message.isEmpty() || message.length() > 2000) {
+                if (message.trim().isEmpty() || message.length() > 2000) {
                     throw new IllegalArgumentException("Message must contain 1 to 2000 characters.");
                 }
                 String token = ZeroChillAccountRepository.accessTokenBlocking(context);
-                JSONObject row = new JSONObject()
-                        .put("recipient_id", recipient)
-                        .put("body", message);
+                JSONObject row = directMessagePayload(clientId, recipient, message);
                 Response response = request(
                         "POST",
                         "/rest/v1/direct_messages",
@@ -476,6 +487,14 @@ final class ZeroChillSocialRepository {
                 callback.complete(null, error);
             }
         });
+    }
+
+    // The existing UUID primary key links local echo, refresh, and POST response.
+    // No content-based matching: identical consecutive messages remain distinct.
+    static JSONObject directMessagePayload(String clientId, String recipient, String body)
+            throws org.json.JSONException {
+        return new JSONObject().put("id", java.util.UUID.fromString(clientId).toString())
+                .put("recipient_id", recipient).put("body", body);
     }
 
     static void markDirectMessagesRead(

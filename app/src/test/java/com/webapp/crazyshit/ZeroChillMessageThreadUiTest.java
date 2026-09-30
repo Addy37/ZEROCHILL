@@ -64,7 +64,7 @@ public class ZeroChillMessageThreadUiTest {
         RecyclerView.ViewHolder holder = adapter.createViewHolder(recycler, 0);
         LinearLayout row = (LinearLayout) holder.itemView;
         ImageView avatar = (ImageView) row.getChildAt(0);
-        LinearLayout bubble = (LinearLayout) row.getChildAt(1);
+        LinearLayout bubble = (LinearLayout) ((LinearLayout) row.getChildAt(1)).getChildAt(0);
         TextView body = (TextView) bubble.getChildAt(0);
         TextView time = (TextView) bubble.getChildAt(1);
         adapter.bindViewHolder(holder, 0);
@@ -119,7 +119,7 @@ public class ZeroChillMessageThreadUiTest {
         RecyclerView.ViewHolder holder = adapter.createViewHolder(recycler, 0);
         adapter.bindViewHolder(holder, 1);
         LinearLayout row = (LinearLayout) holder.itemView;
-        LinearLayout bubble = (LinearLayout) row.getChildAt(1);
+        LinearLayout bubble = (LinearLayout) ((LinearLayout) row.getChildAt(1)).getChildAt(0);
         TextView body = (TextView) bubble.getChildAt(0);
         assertEquals(Gravity.RIGHT, row.getGravity() & Gravity.HORIZONTAL_GRAVITY_MASK);
         assertEquals(fullBody, body.getText().toString());
@@ -135,7 +135,7 @@ public class ZeroChillMessageThreadUiTest {
                 new String(new char[2000]).replace('\0', 'W')};
         RecyclerView.ViewHolder holder = adapter.createViewHolder(recycler, 0);
         LinearLayout row = (LinearLayout) holder.itemView;
-        LinearLayout bubble = (LinearLayout) row.getChildAt(1);
+        LinearLayout bubble = (LinearLayout) ((LinearLayout) row.getChildAt(1)).getChildAt(0);
         TextView body = (TextView) bubble.getChildAt(0);
         // Reproduce the prior default params: all text is in the layout, but lines
         // extend below the measured TextView. A getText/lineCount check misses this.
@@ -178,6 +178,157 @@ public class ZeroChillMessageThreadUiTest {
         for (int line = 0; line < text.getLineCount(); line++) {
             assertEquals(0, text.getEllipsisCount(line));
         }
+    }
+
+    @Test public void sendUsesExactBodyAndUuidRefreshResolvesPendingWithoutDuplicates() throws Exception {
+        ZeroChillMessageActivity activity = shell();
+        RecyclerView recycler = (RecyclerView) field(activity, "recycler");
+        EditText composer = (EditText) field(activity, "composer");
+        java.util.ArrayList<ZeroChillSocialRepository.Callback<ZeroChillSocialRepository.DirectMessage>> callbacks = new java.util.ArrayList<>();
+        String[] sent = new String[2];
+        setField(activity, "messageSender", (ZeroChillMessageActivity.MessageSender) (context, recipient, id, value, callback) -> {
+            sent[0] = id;
+            sent[1] = value;
+            callbacks.add(callback);
+        });
+        setField(activity, "threadLoader", (ZeroChillMessageActivity.ThreadLoader) (context, partner, callback) -> {});
+        String value = "  this looks the same chatgpt\nsecond line  ";
+        composer.setText(value);
+        composer.requestFocus();
+        LinearLayout root = (LinearLayout) recycler.getParent();
+        layout(root, 420, recycler, composer); // keyboard-sized window
+        invoke(activity, "sendMessage");
+        assertEquals(value, sent[1]);
+        JSONObject payload = ZeroChillSocialRepository.directMessagePayload(sent[0], "other", sent[1]);
+        assertEquals(value, payload.getString("body"));
+        assertEquals(sent[0], payload.getString("id"));
+        RecyclerView.Adapter adapter = recycler.getAdapter();
+        assertEquals(1, adapter.getItemCount());
+        RecyclerView.ViewHolder holder = adapter.createViewHolder(recycler, 0);
+        adapter.bindViewHolder(holder, 0);
+        TextView body = (TextView) field(holder, "body");
+        TextView status = (TextView) field(holder, "status");
+        assertEquals("Sending…", status.getText().toString());
+        assertComplete((LinearLayout) holder.itemView, body, value);
+        Method replace = adapter.getClass().getDeclaredMethod("replace", java.util.List.class);
+        replace.setAccessible(true);
+        replace.invoke(adapter, java.util.Collections.emptyList()); // stale refresh
+        assertEquals(1, adapter.getItemCount());
+        adapter.bindViewHolder(holder, 0);
+        assertEquals(value, body.getText().toString());
+        ZeroChillSocialRepository.DirectMessage confirmed = new ZeroChillSocialRepository.DirectMessage(
+                payload.put("sender_id", "me").put("created_at", "2026-09-30T12:01:00Z"));
+        replace.invoke(adapter, Arrays.asList(confirmed)); // server copy arrives before POST callback
+        assertEquals(1, adapter.getItemCount());
+        adapter.bindViewHolder(holder, 0);
+        assertEquals(View.GONE, status.getVisibility());
+        assertComplete((LinearLayout) holder.itemView, body, value);
+        callbacks.get(0).complete(confirmed, null);
+        assertEquals(1, adapter.getItemCount());
+        assertEquals("", composer.getText().toString());
+        replace.invoke(adapter, java.util.Collections.emptyList()); // keep confirmed local echo
+        assertEquals(1, adapter.getItemCount());
+        replace.invoke(adapter, Arrays.asList(confirmed));
+        adapter.bindViewHolder(holder, 0);
+        assertComplete((LinearLayout) holder.itemView, body, value);
+        assertEquals(1, adapter.getItemCount());
+    }
+
+    @Test public void seenMovesToLatestReadOutgoingAndResetsOnRecycling() throws Exception {
+        ZeroChillMessageActivity activity = shell();
+        RecyclerView recycler = (RecyclerView) field(activity, "recycler");
+        RecyclerView.Adapter adapter = recycler.getAdapter();
+        Method replace = adapter.getClass().getDeclaredMethod("replace", java.util.List.class);
+        replace.setAccessible(true);
+        ZeroChillSocialRepository.DirectMessage first = readMessage("me", "2026-09-30T12:00:00Z", "first");
+        ZeroChillSocialRepository.DirectMessage lastRead = readMessage("me", "2026-09-30T12:01:00Z", "read");
+        ZeroChillSocialRepository.DirectMessage last = message("me", "2026-09-30T12:02:00Z", "unread");
+        ZeroChillSocialRepository.DirectMessage incoming = readMessage("other", "2026-09-30T12:03:00Z", "reply");
+        replace.invoke(adapter, Arrays.asList(first, lastRead, last, incoming));
+        RecyclerView.ViewHolder holder = adapter.createViewHolder(recycler, 0);
+        TextView status = (TextView) field(holder, "status");
+        for (int position : new int[]{0, 1, 2, 3, 1, 0}) {
+            adapter.bindViewHolder(holder, position);
+            assertEquals(position == 1 ? View.VISIBLE : View.GONE, status.getVisibility());
+            assertEquals(position == 1 ? "Seen" : "", status.getText().toString());
+        }
+        replace.invoke(adapter, Arrays.asList(first, lastRead,
+                readMessage("me", "2026-09-30T12:02:00Z", "unread"), incoming));
+        adapter.bindViewHolder(holder, 1);
+        assertEquals(View.GONE, status.getVisibility());
+        adapter.bindViewHolder(holder, 2);
+        assertEquals("Seen", status.getText().toString());
+    }
+
+    @Test public void failedSendKeepsDraftAndEditedComposerSurvivesSuccess() throws Exception {
+        ZeroChillMessageActivity activity = shell();
+        RecyclerView recycler = (RecyclerView) field(activity, "recycler");
+        EditText composer = (EditText) field(activity, "composer");
+        java.util.ArrayList<ZeroChillSocialRepository.Callback<ZeroChillSocialRepository.DirectMessage>> callbacks = new java.util.ArrayList<>();
+        String[] id = new String[1];
+        setField(activity, "messageSender", (ZeroChillMessageActivity.MessageSender) (context, recipient, clientId, body, callback) -> {
+            id[0] = clientId;
+            callbacks.add(callback);
+        });
+        setField(activity, "threadLoader", (ZeroChillMessageActivity.ThreadLoader) (context, partner, callback) -> {});
+        composer.setText("original complete message");
+        invoke(activity, "sendMessage");
+        callbacks.get(0).complete(null, new Exception("offline"));
+        assertEquals(0, recycler.getAdapter().getItemCount());
+        assertEquals("original complete message", composer.getText().toString());
+        invoke(activity, "sendMessage");
+        composer.setText("next draft");
+        callbacks.get(1).complete(new ZeroChillSocialRepository.DirectMessage(new JSONObject()
+                .put("id", id[0]).put("sender_id", "me").put("recipient_id", "other")
+                .put("body", "original complete message").put("created_at", "2026-09-30T12:00:00Z")), null);
+        assertEquals("next draft", composer.getText().toString());
+        assertEquals(1, recycler.getAdapter().getItemCount());
+    }
+
+    @Test public void identicalMessagesHaveDistinctIdsAndReadRefreshBeatsOlderPostResponse() throws Exception {
+        ZeroChillMessageActivity activity = shell();
+        RecyclerView.Adapter adapter = ((RecyclerView) field(activity, "recycler")).getAdapter();
+        Method upsert = adapter.getClass().getDeclaredMethod("upsert", ZeroChillSocialRepository.DirectMessage.class);
+        Method replace = adapter.getClass().getDeclaredMethod("replace", java.util.List.class);
+        upsert.setAccessible(true);
+        replace.setAccessible(true);
+        String firstId = java.util.UUID.randomUUID().toString();
+        String secondId = java.util.UUID.randomUUID().toString();
+        upsert.invoke(adapter, new ZeroChillSocialRepository.DirectMessage(firstId, "other", "same full text"));
+        upsert.invoke(adapter, new ZeroChillSocialRepository.DirectMessage(secondId, "other", "same full text"));
+        ZeroChillSocialRepository.DirectMessage first = new ZeroChillSocialRepository.DirectMessage(new JSONObject()
+                .put("id", firstId).put("sender_id", "me").put("body", "same full text")
+                .put("created_at", "2026-09-30T12:00:00Z").put("read_at", "2026-09-30T12:02:00Z"));
+        replace.invoke(adapter, Arrays.asList(first));
+        assertEquals(2, adapter.getItemCount());
+        upsert.invoke(adapter, new ZeroChillSocialRepository.DirectMessage(new JSONObject()
+                .put("id", firstId).put("sender_id", "me").put("body", "same full text")
+                .put("created_at", "2026-09-30T12:00:00Z")));
+        assertEquals(2, adapter.getItemCount());
+        RecyclerView recycler = (RecyclerView) field(activity, "recycler");
+        RecyclerView.ViewHolder holder = adapter.createViewHolder(recycler, 0);
+        adapter.bindViewHolder(holder, 0);
+        assertEquals("Seen", ((TextView) field(holder, "status")).getText().toString());
+        adapter.bindViewHolder(holder, 1);
+        assertEquals("Sending…", ((TextView) field(holder, "status")).getText().toString());
+    }
+
+    private ZeroChillSocialRepository.DirectMessage readMessage(String sender, String time, String value) throws Exception {
+        return new ZeroChillSocialRepository.DirectMessage(new JSONObject().put("id", time)
+                .put("sender_id", sender).put("body", value).put("created_at", time)
+                .put("read_at", "2026-09-30T12:05:00Z"));
+    }
+
+    private void invoke(Object target, String name) throws Exception {
+        Method method = target.getClass().getDeclaredMethod(name);
+        method.setAccessible(true);
+        method.invoke(target);
+    }
+
+    private void setField(Object target, String name, Object value) throws Exception {
+        Field field = target.getClass().getDeclaredField(name);
+        field.setAccessible(true);
+        field.set(target, value);
     }
 
     @Test public void resizedConversationKeepsComposerBelowScrollableThreadAndRestoresHeight() throws Exception {

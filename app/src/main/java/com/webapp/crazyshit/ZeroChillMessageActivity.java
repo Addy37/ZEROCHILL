@@ -3,6 +3,7 @@ package com.webapp.crazyshit;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.Intent;
+import android.content.Context;
 import android.graphics.Color;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
@@ -31,6 +32,8 @@ import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.LinkedHashMap;
+import java.util.UUID;
 import java.util.Locale;
 
 /** One-to-one ZEROCHILL direct-message thread. */
@@ -47,6 +50,19 @@ public final class ZeroChillMessageActivity extends Activity {
             handler.postDelayed(this, REFRESH_MS);
         }
     };
+
+    interface MessageSender {
+        void send(Context context, String recipient, String clientId, String body,
+                  ZeroChillSocialRepository.Callback<ZeroChillSocialRepository.DirectMessage> callback);
+    }
+
+    interface ThreadLoader {
+        void load(Context context, String partner,
+                  ZeroChillSocialRepository.Callback<ArrayList<ZeroChillSocialRepository.DirectMessage>> callback);
+    }
+
+    private MessageSender messageSender = ZeroChillSocialRepository::sendDirectMessage;
+    private ThreadLoader threadLoader = ZeroChillSocialRepository::loadDirectMessages;
 
     private String partnerId = "";
     private ZeroChillSocialRepository.PublicProfile partner;
@@ -248,7 +264,7 @@ public final class ZeroChillMessageActivity extends Activity {
         loading = true;
         long revisionAtStart = threadRevision;
         if (showLoading) progress.setVisibility(View.VISIBLE);
-        ZeroChillSocialRepository.loadDirectMessages(this, partnerId, (items, error) ->
+        threadLoader.load(this, partnerId, (items, error) ->
                 runOnUiThread(() -> {
                     loading = false;
                     progress.setVisibility(View.GONE);
@@ -301,25 +317,34 @@ public final class ZeroChillMessageActivity extends Activity {
             Toast.makeText(this, "Unblock this user before messaging them.", Toast.LENGTH_SHORT).show();
             return;
         }
-        String value = composer.getText().toString().trim();
-        if (value.isEmpty()) return;
+        String value = composer.getText().toString();
+        if (value.trim().isEmpty() || !send.isEnabled()) return;
+        String clientId = UUID.randomUUID().toString();
+        threadRevision++;
+        adapter.upsert(new ZeroChillSocialRepository.DirectMessage(clientId, partnerId, value));
+        recycler.scrollToPosition(adapter.getItemCount() - 1);
         send.setEnabled(false);
-        ZeroChillSocialRepository.sendDirectMessage(this, partnerId, value, (message, error) ->
+        // Keep the draft until confirmation so a failed request never loses it.
+        messageSender.send(this, partnerId, clientId, value, (message, error) ->
                 runOnUiThread(() -> {
-                    send.setEnabled(true);
+                    send.setEnabled(!blockedByMe);
                     if (error != null) {
-                        Toast.makeText(this, error.getMessage(), Toast.LENGTH_LONG).show();
+                        // A refresh may already have confirmed this UUID despite a lost POST response.
+                        if (adapter.removePending(clientId)) {
+                            threadRevision++;
+                            Toast.makeText(this, error.getMessage(), Toast.LENGTH_LONG).show();
+                        } else if (value.equals(composer.getText().toString())) {
+                            composer.setText("");
+                        }
                         return;
                     }
-                    composer.setText("");
+                    if (value.equals(composer.getText().toString())) composer.setText("");
                     threadRevision++;
                     if (message != null) {
                         adapter.upsert(message);
                         lastMessageId = message.id;
-                        if (adapter.getItemCount() > 0) {
-                            recycler.scrollToPosition(adapter.getItemCount() - 1);
-                        }
                     }
+                    recycler.scrollToPosition(adapter.getItemCount() - 1);
                     loadThread(false);
                 })
         );
@@ -446,9 +471,19 @@ public final class ZeroChillMessageActivity extends Activity {
     private final class MessageAdapter extends RecyclerView.Adapter<MessageAdapter.Holder> {
         private final ArrayList<ZeroChillSocialRepository.DirectMessage> items = new ArrayList<>();
 
+        // Retain local rows until a refresh includes their UUID, even if that
+        // refresh started before Send. Confirmed echoes are retained the same way.
+        private final LinkedHashMap<String, ZeroChillSocialRepository.DirectMessage> echoes = new LinkedHashMap<>();
+
         void replace(List<ZeroChillSocialRepository.DirectMessage> next) {
             items.clear();
-            if (next != null) items.addAll(next);
+            if (next != null) {
+                for (ZeroChillSocialRepository.DirectMessage message : next) {
+                    echoes.remove(message.id);
+                    items.add(message);
+                }
+            }
+            items.addAll(echoes.values());
             notifyDataSetChanged();
         }
 
@@ -456,13 +491,40 @@ public final class ZeroChillMessageActivity extends Activity {
             if (message == null) return;
             for (int i = 0; i < items.size(); i++) {
                 if (message.id.equals(items.get(i).id)) {
+                    ZeroChillSocialRepository.DirectMessage current = items.get(i);
+                    // A refresh can carry a newer read receipt than the POST response.
+                    if (!current.pending && !current.readAt.isEmpty() && message.readAt.isEmpty()) {
+                        message = current;
+                    }
+                    echoes.put(message.id, message);
                     items.set(i, message);
-                    notifyItemChanged(i);
+                    notifyDataSetChanged(); // Group endings and Seen can change on adjacent rows.
                     return;
                 }
             }
+            echoes.put(message.id, message);
             items.add(message);
-            notifyItemInserted(items.size() - 1);
+            notifyDataSetChanged();
+        }
+
+        boolean removePending(String id) {
+            for (int i = 0; i < items.size(); i++) {
+                if (id.equals(items.get(i).id) && items.get(i).pending) {
+                    items.remove(i);
+                    echoes.remove(id);
+                    notifyDataSetChanged();
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        int latestSeenPosition() {
+            for (int i = items.size() - 1; i >= 0; i--) {
+                ZeroChillSocialRepository.DirectMessage item = items.get(i);
+                if (!partnerId.equals(item.senderId) && !item.pending && !item.readAt.isEmpty()) return i;
+            }
+            return -1;
         }
 
         @Override
@@ -504,8 +566,16 @@ public final class ZeroChillMessageActivity extends Activity {
             timeParams.gravity = Gravity.END;
             bubble.addView(time, timeParams);
 
-            row.addView(bubble, new LinearLayout.LayoutParams(-2, -2));
-            return new Holder(row, senderAvatar, bubble, body, time);
+            LinearLayout messageColumn = new LinearLayout(ZeroChillMessageActivity.this);
+            messageColumn.setOrientation(LinearLayout.VERTICAL);
+            messageColumn.addView(bubble, new LinearLayout.LayoutParams(-2, -2));
+            TextView status = text("", 10, ZeroChillUi.color(ZeroChillMessageActivity.this, R.color.zc_text_muted), false);
+            status.setPadding(dp(12), dp(3), dp(12), 0);
+            LinearLayout.LayoutParams statusParams = new LinearLayout.LayoutParams(-2, -2);
+            statusParams.gravity = Gravity.END;
+            messageColumn.addView(status, statusParams);
+            row.addView(messageColumn, new LinearLayout.LayoutParams(-2, -2));
+            return new Holder(row, senderAvatar, bubble, body, time, status);
         }
 
         @Override
@@ -553,6 +623,16 @@ public final class ZeroChillMessageActivity extends Activity {
             holder.body.setText(item.body);
             holder.time.setText(formatTime(item.createdAt));
             holder.time.setVisibility(joinsNext ? View.GONE : View.VISIBLE);
+            String status = !incoming && item.pending ? "Sending…"
+                    : position == latestSeenPosition() ? "Seen" : "";
+            holder.status.setText(status);
+            holder.status.setVisibility(status.isEmpty() ? View.GONE : View.VISIBLE);
+            holder.bubble.animate().cancel();
+            boolean settled = item.id.equals(holder.boundId) && holder.wasPending && !item.pending;
+            holder.bubble.setAlpha(item.pending || settled ? 0.82f : 1f);
+            if (settled) holder.bubble.animate().alpha(1f).setDuration(140L).start();
+            holder.boundId = item.id;
+            holder.wasPending = item.pending;
             holder.time.setTextColor(incoming ? Color.rgb(166, 172, 184) : Color.rgb(226, 240, 255));
             holder.itemView.setContentDescription((incoming ? "From " : "You: ") + item.body);
             holder.itemView.setOnLongClickListener(v -> {
@@ -566,13 +646,17 @@ public final class ZeroChillMessageActivity extends Activity {
             final LinearLayout bubble;
             final TextView body;
             final TextView time;
+            final TextView status;
+            String boundId = "";
+            boolean wasPending;
 
-            Holder(View itemView, ImageView senderAvatar, LinearLayout bubble, TextView body, TextView time) {
+            Holder(View itemView, ImageView senderAvatar, LinearLayout bubble, TextView body, TextView time, TextView status) {
                 super(itemView);
                 this.senderAvatar = senderAvatar;
                 this.bubble = bubble;
                 this.body = body;
                 this.time = time;
+                this.status = status;
             }
         }
     }
