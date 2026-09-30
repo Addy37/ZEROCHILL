@@ -69,6 +69,7 @@ public final class ZeroChillMessageActivity extends Activity {
     private boolean blockedByMe;
     private boolean resumed;
     private boolean loading;
+    private boolean sending;
     private boolean refreshQueued;
     private long threadRevision;
     private String lastMessageId = "";
@@ -318,16 +319,18 @@ public final class ZeroChillMessageActivity extends Activity {
             return;
         }
         String value = composer.getText().toString();
-        if (value.trim().isEmpty() || !send.isEnabled()) return;
+        if (value.trim().isEmpty() || sending || !send.isEnabled()) return;
         String clientId = UUID.randomUUID().toString();
         threadRevision++;
         adapter.upsert(new ZeroChillSocialRepository.DirectMessage(clientId, partnerId, value));
         recycler.scrollToPosition(adapter.getItemCount() - 1);
+        sending = true;
         send.setEnabled(false);
         // Keep the draft until confirmation so a failed request never loses it.
         messageSender.send(this, partnerId, clientId, value, (message, error) ->
                 runOnUiThread(() -> {
-                    send.setEnabled(!blockedByMe);
+                    sending = false;
+                    send.setEnabled(!blockedByMe && !sending);
                     if (error != null) {
                         // A refresh may already have confirmed this UUID despite a lost POST response.
                         if (adapter.removePending(clientId)) {
@@ -363,7 +366,7 @@ public final class ZeroChillMessageActivity extends Activity {
 
     private void updateComposerState() {
         composer.setEnabled(!blockedByMe);
-        send.setEnabled(!blockedByMe);
+        send.setEnabled(!blockedByMe && !sending);
         composer.setHint(blockedByMe
                 ? "You blocked this user"
                 : "Message @" + (partner == null ? "" : partner.username));
@@ -586,6 +589,7 @@ public final class ZeroChillMessageActivity extends Activity {
             boolean joinsNext = position + 1 < items.size() && grouped(item, items.get(position + 1));
             LinearLayout row = (LinearLayout) holder.itemView;
             row.setGravity((incoming ? Gravity.LEFT : Gravity.RIGHT) | Gravity.BOTTOM);
+            ((LinearLayout) holder.bubble.getParent()).setGravity(incoming ? Gravity.LEFT : Gravity.RIGHT);
             // Keep the avatar gutter throughout an incoming group; outgoing rows have no gutter.
             holder.senderAvatar.setVisibility(incoming
                     ? (joinsNext ? View.INVISIBLE : View.VISIBLE) : View.GONE);

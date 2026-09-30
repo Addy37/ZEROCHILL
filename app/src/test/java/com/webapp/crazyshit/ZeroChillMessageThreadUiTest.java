@@ -199,6 +199,8 @@ public class ZeroChillMessageThreadUiTest {
         layout(root, 420, recycler, composer); // keyboard-sized window
         invoke(activity, "sendMessage");
         assertEquals(value, sent[1]);
+        invoke(activity, "sendMessage");
+        assertEquals("Only one POST while sending", 1, callbacks.size());
         JSONObject payload = ZeroChillSocialRepository.directMessagePayload(sent[0], "other", sent[1]);
         assertEquals(value, payload.getString("body"));
         assertEquals(sent[0], payload.getString("id"));
@@ -311,6 +313,29 @@ public class ZeroChillMessageThreadUiTest {
         assertEquals("Seen", ((TextView) field(holder, "status")).getText().toString());
         adapter.bindViewHolder(holder, 1);
         assertEquals("Sending…", ((TextView) field(holder, "status")).getText().toString());
+    }
+
+    @Test public void shortPendingBubbleKeepsRightEdgeAndRecycledIncomingResetsOpacity() throws Exception {
+        ZeroChillMessageActivity activity = shell();
+        RecyclerView recycler = (RecyclerView) field(activity, "recycler");
+        RecyclerView.Adapter adapter = recycler.getAdapter();
+        Method upsert = adapter.getClass().getDeclaredMethod("upsert", ZeroChillSocialRepository.DirectMessage.class);
+        Method replace = adapter.getClass().getDeclaredMethod("replace", java.util.List.class);
+        upsert.setAccessible(true);
+        replace.setAccessible(true);
+        upsert.invoke(adapter, new ZeroChillSocialRepository.DirectMessage(java.util.UUID.randomUUID().toString(), "other", "Hi"));
+        RecyclerView.ViewHolder holder = adapter.createViewHolder(recycler, 0);
+        adapter.bindViewHolder(holder, 0);
+        LinearLayout row = (LinearLayout) holder.itemView;
+        LinearLayout bubble = (LinearLayout) field(holder, "bubble");
+        measureRow(row);
+        assertEquals(((View) bubble.getParent()).getWidth(), bubble.getRight());
+        assertEquals(0.82f, bubble.getAlpha(), 0.001f);
+        replace.invoke(adapter, Arrays.asList(message("other", "2026-09-30T12:00:00Z", "incoming")));
+        adapter.bindViewHolder(holder, 0);
+        assertEquals(View.GONE, ((TextView) field(holder, "status")).getVisibility());
+        assertEquals(1f, bubble.getAlpha(), 0.001f);
+        assertComplete(row, (TextView) field(holder, "body"), "incoming");
     }
 
     private ZeroChillSocialRepository.DirectMessage readMessage(String sender, String time, String value) throws Exception {
