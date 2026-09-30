@@ -26,16 +26,16 @@ async function withBackend(sessionActive: boolean, execute: (calls: string[]) =>
   globalThis.fetch = async (input, init) => {
     const url = String(input);
     calls.push(url);
-    if (url.endsWith("/auth/v1/user")) return response({ id: "verified-owner", aud: "authenticated", email: "test@example.com" });
+    if (url.endsWith("/auth/v1/user")) return response({ id: "11111111-1111-4111-8111-111111111111", aud: "authenticated", email: "test@example.com" });
     if (url.endsWith("/rest/v1/rpc/current_zerochill_session")) return response(sessionActive);
     if (url.includes("/storage/v1/object/list/avatars")) {
-      assert(String(init?.body).includes("verified-owner"), "Must list only the verified owner's avatar folder");
+      assert(String(init?.body).includes("11111111-1111-4111-8111-111111111111"), "Must list only the verified owner's avatar folder");
       return storageFailure ? response({ message: "Storage unavailable" }, 500) : response([]);
     }
-    if (url.endsWith("/auth/v1/admin/users/verified-owner")) {
+    if (url.endsWith("/auth/v1/admin/users/11111111-1111-4111-8111-111111111111")) {
       assert(init?.method === "DELETE");
       assert(new Headers(init?.headers).get("Authorization") === "Bearer server-test-key");
-      return response({ id: "verified-owner" });
+      return response({ id: "11111111-1111-4111-8111-111111111111" });
     }
     throw new Error(`Unexpected request: ${url}`);
   };
@@ -58,7 +58,7 @@ Deno.test("Deletion derives owner from verified Auth and uses server-only admin 
     const result = await handleDeleteAccount(post({ confirmation: "DELETE" }));
     assert(result.status === 200);
     assert((await result.json()).deleted === true);
-    assert(calls.some(url => url.endsWith("/auth/v1/admin/users/verified-owner")));
+    assert(calls.some(url => url.endsWith("/auth/v1/admin/users/11111111-1111-4111-8111-111111111111")));
   });
 });
 
