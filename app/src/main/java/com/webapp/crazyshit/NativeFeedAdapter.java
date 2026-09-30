@@ -648,17 +648,14 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
         holder.overlayComments.setVisibility(View.GONE);
         holder.overlayComments.setOnClickListener(null);
 
-        if (!meme && item.comments != null && !item.comments.isEmpty()) {
-            String compact = compactCount(item.comments);
+        if (!meme && item.isVideo() && item.url != null && !item.url.isEmpty()) {
             if (viewMode == VIEW_CARDS || viewMode == VIEW_POSTERS) {
                 holder.overlayComments.setVisibility(View.VISIBLE);
-                holder.overlayComments.setText(viewMode == VIEW_CARDS
-                        ? compact + " comments"
-                        : "💬 " + compact);
+                holder.overlayComments.setText(viewMode == VIEW_CARDS ? "Comments" : "💬");
                 holder.overlayComments.setOnClickListener(v -> listener.onComments(item));
             } else {
                 holder.comments.setVisibility(View.VISIBLE);
-                holder.comments.setText("💬 " + compact);
+                holder.comments.setText("💬 Comments");
                 holder.comments.setOnClickListener(v -> listener.onComments(item));
             }
         }
