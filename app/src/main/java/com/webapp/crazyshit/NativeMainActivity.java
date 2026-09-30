@@ -1031,7 +1031,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
                 () -> shareItem(item)
         ));
         actions.add(VideoActionSheet.action(
-                R.drawable.ic_more_account,
+                R.drawable.ic_player_play,
                 "Video details",
                 "Open the ZEROCHILL player, actions, and related videos",
                 () -> openNativeItem(item)
