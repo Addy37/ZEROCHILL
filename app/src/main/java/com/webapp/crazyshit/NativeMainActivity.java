@@ -872,7 +872,11 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
                 if (resolved != null && resolved.mediaUrl != null && !resolved.mediaUrl.isEmpty()) {
                     openVideoDetail(resolved, item, playbackIdent);
                 } else {
-                    openFallback(item.url);
+                    Toast.makeText(
+                            this,
+                            "Couldn't resolve this video natively right now.",
+                            Toast.LENGTH_SHORT
+                    ).show();
                 }
             });
         });
@@ -1027,9 +1031,15 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
                 () -> shareItem(item)
         ));
         actions.add(VideoActionSheet.action(
-                R.drawable.ic_more_website,
+                R.drawable.ic_player_play,
                 "Video details",
-                "View the source page",
+                "Open the ZEROCHILL player, actions, and related videos",
+                () -> openNativeItem(item)
+        ));
+        actions.add(VideoActionSheet.action(
+                R.drawable.ic_more_website,
+                "Open source website",
+                "Open the original video page",
                 () -> openFallback(item.url)
         ));
 

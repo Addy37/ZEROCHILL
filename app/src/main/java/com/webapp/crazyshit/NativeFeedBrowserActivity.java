@@ -1557,7 +1557,11 @@ public final class NativeFeedBrowserActivity extends Activity {
                 if (requestGeneration != generation || isFinishing()) return;
                 progress.setVisibility(View.GONE);
                 if (resolved == null || resolved.mediaUrl == null || resolved.mediaUrl.isEmpty()) {
-                    openWebsite(item.url);
+                    Toast.makeText(
+                            this,
+                            "Couldn't resolve this video natively right now.",
+                            Toast.LENGTH_SHORT
+                    ).show();
                     return;
                 }
                 Intent intent = new Intent(this, VideoDetailActivity.class);
@@ -1569,9 +1573,6 @@ public final class NativeFeedBrowserActivity extends Activity {
                 intent.putExtra(VideoDetailActivity.EXTRA_COMMENTS, item.comments);
                 intent.putExtra(VideoDetailActivity.EXTRA_RELATED_FEED_URL, baseUrl);
                 intent.putExtra(VideoDetailActivity.EXTRA_SOURCE, source);
-                if (showDetailsMode) {
-                    intent.putExtra(VideoDetailActivity.EXTRA_SHOWS_ORIGIN, true);
-                }
                 if (item.imageUrl != null && !item.imageUrl.trim().isEmpty()) {
                     intent.putExtra(VideoDetailActivity.EXTRA_POSTER_URL, item.imageUrl);
                 }
@@ -1743,7 +1744,7 @@ public final class NativeFeedBrowserActivity extends Activity {
         }
         PopupMenu menu = new PopupMenu(this, anchor);
         menu.getMenu().add(Menu.NONE, 2, 1, "Share");
-        menu.getMenu().add(Menu.NONE, 3, 2, "Video details");
+        menu.getMenu().add(Menu.NONE, 3, 2, "Open source website");
         menu.setOnMenuItemClickListener(clicked -> {
             if (clicked.getItemId() == 2) {
                 shareItem(item);
@@ -1784,9 +1785,15 @@ public final class NativeFeedBrowserActivity extends Activity {
                 () -> shareItem(item)
         ));
         actions.add(VideoActionSheet.action(
-                R.drawable.ic_more_website,
+                R.drawable.ic_player_play,
                 "Video details",
-                "Use the compatibility browser",
+                "Open the ZEROCHILL player, actions, and related videos",
+                () -> openVideo(item)
+        ));
+        actions.add(VideoActionSheet.action(
+                R.drawable.ic_more_website,
+                "Open source website",
+                "Open the original video page",
                 () -> openWebsite(item.url)
         ));
 

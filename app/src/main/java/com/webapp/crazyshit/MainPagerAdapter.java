@@ -558,10 +558,11 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
             activity.runOnUiThread(() -> {
                 if (activity.isFinishing() || activity.isDestroyed()) return;
                 if (resolved == null || resolved.mediaUrl == null || resolved.mediaUrl.isEmpty()) {
-                    android.content.Intent fallback =
-                            new android.content.Intent(activity, WebFallbackActivity.class);
-                    fallback.putExtra(WebFallbackActivity.EXTRA_URL, item.url);
-                    activity.startActivity(fallback);
+                    android.widget.Toast.makeText(
+                            activity,
+                            "Couldn't resolve this video natively right now.",
+                            android.widget.Toast.LENGTH_SHORT
+                    ).show();
                     return;
                 }
 
@@ -583,7 +584,6 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                 intent.putExtra(VideoDetailActivity.EXTRA_UPLOADER, item.uploader);
                 intent.putExtra(VideoDetailActivity.EXTRA_COMMENTS, item.comments);
                 intent.putExtra(VideoDetailActivity.EXTRA_SOURCE, source);
-                intent.putExtra(VideoDetailActivity.EXTRA_SHOWS_ORIGIN, true);
                 intent.putExtra(
                         VideoDetailActivity.EXTRA_MEDIA_REFERER,
                         resolved.requestReferer
@@ -635,10 +635,11 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
             activity.runOnUiThread(() -> {
                 if (activity.isFinishing() || activity.isDestroyed()) return;
                 if (resolved == null || resolved.mediaUrl == null || resolved.mediaUrl.isEmpty()) {
-                    android.content.Intent fallback =
-                            new android.content.Intent(activity, WebFallbackActivity.class);
-                    fallback.putExtra(WebFallbackActivity.EXTRA_URL, history.pageUrl);
-                    activity.startActivity(fallback);
+                    android.widget.Toast.makeText(
+                            activity,
+                            "Couldn't resume this video natively right now.",
+                            android.widget.Toast.LENGTH_SHORT
+                    ).show();
                     return;
                 }
 
@@ -659,7 +660,6 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                 intent.putExtra(PlayerActivity.EXTRA_START_POSITION,
                         history.complete ? 0L : history.positionMs);
                 intent.putExtra(VideoDetailActivity.EXTRA_SOURCE, source);
-                intent.putExtra(VideoDetailActivity.EXTRA_SHOWS_ORIGIN, true);
                 intent.putExtra(VideoDetailActivity.EXTRA_SHOWS_CONTINUE_RESUME, true);
                 intent.putExtra(
                         VideoDetailActivity.EXTRA_MEDIA_REFERER,
