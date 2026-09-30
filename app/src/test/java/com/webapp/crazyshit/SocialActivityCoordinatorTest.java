@@ -29,6 +29,7 @@ public class SocialActivityCoordinatorTest {
     @Before public void setup() {
         host = Robolectric.buildActivity(Activity.class).setup().get();
         host.getSharedPreferences("zerochill_update_inbox_v1", Context.MODE_PRIVATE).edit().clear().commit();
+        host.getSharedPreferences("zerochill_account_alert_preferences_v1", 0).edit().clear().commit();
         account = "me";
         coordinator = new SocialActivityCoordinator(host, (context, callback) -> requests.add(callback), context -> account,
                 new SocialActivityCoordinator.Presenter() {
@@ -107,4 +108,25 @@ public class SocialActivityCoordinatorTest {
         coordinator.pause(host);
     }
 
+    @Test public void disablingRepliesPreservesHistoryAndSuppressesNewEntriesAndBanners() throws Exception {
+        ZeroChillSocialRepository.SocialActivity old = event("old");
+        complete(0, old);
+        host.getSharedPreferences("zerochill_account_alert_preferences_v1", 0).edit()
+                .putString("me", new ZeroChillNotificationPreferences.Values(false, true, true, true, true).json().toString())
+                .commit();
+        tick();
+        complete(1, event("disabled"), old);
+        assertTrue(alerts.isEmpty());
+        assertEquals(1, UpdateInboxStore.allForAccount(host, "me").size());
+        assertEquals("old", UpdateInboxStore.allForAccount(host, "me").get(0).commentId);
+        host.getSharedPreferences("zerochill_account_alert_preferences_v1", 0).edit().remove("me").commit();
+        tick();
+        complete(2, event("enabled"), old);
+        assertEquals(1, alerts.size());
+        assertEquals("enabled", alerts.get(0).commentId);
+        assertEquals(2, UpdateInboxStore.allForAccount(host, "me").size());
+        coordinator.pause(host);
+    }
+
 }
+
