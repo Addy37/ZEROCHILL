@@ -82,6 +82,7 @@ public final class UpdateInboxActivity extends Activity {
         inboxPreferences = getSharedPreferences("zerochill_update_inbox_v1", Context.MODE_PRIVATE);
         observing = true;
         inboxPreferences.registerOnSharedPreferenceChangeListener(inboxListener);
+        if (adapter != null) adapter.invalidateSocialLikeStates();
         render();
         refreshSocialActivity();
     }
@@ -350,6 +351,11 @@ public final class UpdateInboxActivity extends Activity {
         }
 
         @Override public int getItemCount() { return items.size(); }
+
+        void invalidateSocialLikeStates() {
+            commentStates.clear();
+            if (!items.isEmpty()) notifyItemRangeChanged(0, items.size(), "social-like");
+        }
 
         @Override
         public Holder onCreateViewHolder(ViewGroup parent, int viewType) {
