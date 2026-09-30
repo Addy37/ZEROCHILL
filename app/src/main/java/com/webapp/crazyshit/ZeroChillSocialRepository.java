@@ -39,6 +39,8 @@ final class ZeroChillSocialRepository {
         final String userId;
         final String body;
         final String createdAt;
+        final String editedAt;
+        final String deletedAt;
         final String username;
         final String displayName;
         final String avatarPath;
@@ -51,11 +53,21 @@ final class ZeroChillSocialRepository {
             userId = value.optString("user_id");
             body = value.optString("body");
             createdAt = value.optString("created_at");
+            editedAt = value.isNull("edited_at") ? "" : value.optString("edited_at");
+            deletedAt = value.isNull("deleted_at") ? "" : value.optString("deleted_at");
             username = value.optString("username");
             displayName = value.optString("display_name");
             avatarPath = value.optString("avatar_path");
             likeCount = Math.max(0, value.optInt("like_count", 0));
             this.likedByMe = likedByMe;
+        }
+
+        boolean deleted() {
+            return !clean(deletedAt).isEmpty();
+        }
+
+        boolean edited() {
+            return !deleted() && !clean(editedAt).isEmpty();
         }
     }
 
@@ -214,7 +226,7 @@ final class ZeroChillSocialRepository {
                 if (key.isEmpty()) throw new IllegalArgumentException("This video does not have a stable page URL.");
                 Response response = request(
                         "GET",
-                        "/rest/v1/comment_feed?select=id,parent_id,user_id,body,created_at,username,display_name,avatar_path,like_count"
+                        "/rest/v1/comment_feed?select=id,parent_id,user_id,body,created_at,edited_at,deleted_at,username,display_name,avatar_path,like_count"
                                 + "&content_key=eq." + encode(key) + "&order=created_at.asc",
                         "",
                         null,
@@ -297,6 +309,75 @@ final class ZeroChillSocialRepository {
                         "return=minimal"
                 );
                 if (!response.ok()) throw error(response, "Unable to post the comment.");
+                callback.complete(true, null);
+            } catch (Exception error) {
+                callback.complete(false, error);
+            }
+        });
+    }
+
+    static void editComment(
+            Context context,
+            String commentId,
+            String body,
+            Callback<Boolean> callback
+    ) {
+        NETWORK.execute(() -> {
+            try {
+                String id = clean(commentId);
+                String message = clean(body);
+                if (id.isEmpty()) throw new IllegalArgumentException("This comment is unavailable.");
+                if (message.isEmpty() || message.length() > 2000) {
+                    throw new IllegalArgumentException("Comment must contain 1 to 2000 characters.");
+                }
+                String token = ZeroChillAccountRepository.accessTokenBlocking(context);
+                String userId = ZeroChillAccountRepository.currentUserIdBlocking(context);
+                JSONObject row = new JSONObject()
+                        .put("body", message)
+                        .put("edited_at", java.time.Instant.now().toString());
+                Response response = request(
+                        "PATCH",
+                        "/rest/v1/comments?id=eq." + encode(id)
+                                + "&user_id=eq." + encode(userId)
+                                + "&deleted_at=is.null",
+                        token,
+                        row.toString().getBytes(StandardCharsets.UTF_8),
+                        "application/json",
+                        "return=minimal"
+                );
+                if (!response.ok()) throw error(response, "Unable to edit the comment.");
+                callback.complete(true, null);
+            } catch (Exception error) {
+                callback.complete(false, error);
+            }
+        });
+    }
+
+    static void deleteComment(
+            Context context,
+            String commentId,
+            Callback<Boolean> callback
+    ) {
+        NETWORK.execute(() -> {
+            try {
+                String id = clean(commentId);
+                if (id.isEmpty()) throw new IllegalArgumentException("This comment is unavailable.");
+                String token = ZeroChillAccountRepository.accessTokenBlocking(context);
+                String userId = ZeroChillAccountRepository.currentUserIdBlocking(context);
+                JSONObject row = new JSONObject()
+                        .put("body", "Comment deleted")
+                        .put("deleted_at", java.time.Instant.now().toString());
+                Response response = request(
+                        "PATCH",
+                        "/rest/v1/comments?id=eq." + encode(id)
+                                + "&user_id=eq." + encode(userId)
+                                + "&deleted_at=is.null",
+                        token,
+                        row.toString().getBytes(StandardCharsets.UTF_8),
+                        "application/json",
+                        "return=minimal"
+                );
+                if (!response.ok()) throw error(response, "Unable to delete the comment.");
                 callback.complete(true, null);
             } catch (Exception error) {
                 callback.complete(false, error);
