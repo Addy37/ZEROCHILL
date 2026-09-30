@@ -2633,7 +2633,7 @@ public final class ChaosFeedView extends FrameLayout {
                                     () -> share(item)
                             ),
                             VideoActionSheet.action(
-                                    R.drawable.ic_more_website,
+                                    R.drawable.ic_player_play,
                                     "Video details",
                                     "View the full video page",
                                     this::openCurrentDetails
