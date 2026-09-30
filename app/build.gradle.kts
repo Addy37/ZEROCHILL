@@ -33,7 +33,7 @@ android {
             "ANALYTICS_ENDPOINT",
             "\"${System.getenv("ANALYTICS_ENDPOINT") ?: "https://fketutffusxgjxjlckci.supabase.co/functions/v1/analytics-ingest"}\""
         )
-        buildConfigField(
+        buildConfigField(\n            "String",\n            "ACCOUNT_SUPABASE_URL",\n            "\\\"${System.getenv("SUPABASE_URL") ?: "https://fketutffusxgjxjlckci.supabase.co"}\\\""\n        )\n        buildConfigField(\n            "String",\n            "ACCOUNT_SUPABASE_PUBLISHABLE_KEY",\n            "\\\"${System.getenv("SUPABASE_PUBLISHABLE_KEY") ?: ""}\\\""\n        )\n        buildConfigField(
             "String",
             "SOURCE_CONFIG_ENDPOINT",
             "\"${System.getenv("SOURCE_CONFIG_ENDPOINT") ?: ""}\""

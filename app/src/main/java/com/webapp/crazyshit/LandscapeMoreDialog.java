@@ -83,8 +83,8 @@ final class LandscapeMoreDialog {
                 new Action(
                         R.drawable.ic_more_account,
                         "Account",
-                        "Coming Soon",
-                        () -> AccountComingSoonDialog.show(activity)
+                        "Profile, favorites and social",
+                        () -> activity.startActivity(new Intent(activity, ZeroChillAccountActivity.class))
                 ),
                 new Action(
                         R.drawable.ic_action_feedback,

@@ -842,12 +842,6 @@ public class VideoDetailActivity extends Activity {
             public void onPlaybackStateChanged(int playbackState) {
                 if (playbackState == Player.STATE_READY) {
                     RatingFeedbackPrompt.recordSuccessfulPlayback(VideoDetailActivity.this, mediaUrl);
-                    String readyPageUrl = pageUrl;
-                    playerView.postDelayed(() -> {
-                        if (supportsComments() && readyPageUrl.equals(pageUrl)) {
-                            NativeCommentsLoader.preload(VideoDetailActivity.this, readyPageUrl);
-                        }
-                    }, 650L);
                 } else if (playbackState == Player.STATE_ENDED) {
                     savePlaybackState(true);
                 }
@@ -1719,7 +1713,7 @@ public class VideoDetailActivity extends Activity {
     }
 
     private boolean supportsComments() {
-        return !isEfukt() && !isBunkr();
+        return pageUrl != null && !pageUrl.trim().isEmpty();
     }
 
     private void minimizeFromMenu() {

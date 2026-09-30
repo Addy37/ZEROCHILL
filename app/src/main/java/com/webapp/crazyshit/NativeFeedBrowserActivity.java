@@ -2355,7 +2355,7 @@ public final class NativeFeedBrowserActivity extends Activity {
     }
 
     private boolean supportsComments() {
-        return !isEfukt() && !isBunkr() && !isKaotic();
+        return true;
     }
 
     private String showSourceLabel() {

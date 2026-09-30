@@ -38,22 +38,11 @@
         </provider>
 
         <activity
-            android:name=".LoginActivity"
+            android:name=".ZeroChillAccountActivity"
             android:screenOrientation="portrait"
             android:enableOnBackInvokedCallback="true"
-            android:exported="false" />
-
-        <activity
-            android:name=".ProfileActivity"
-            android:screenOrientation="portrait"
-            android:enableOnBackInvokedCallback="true"
-            android:exported="false" />
-
-        <activity
-            android:name=".CommentsActivity"
-            android:screenOrientation="portrait"
-            android:enableOnBackInvokedCallback="true"
-            android:exported="false" />
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize" />
 
         <activity
             android:name=".SettingsActivity"

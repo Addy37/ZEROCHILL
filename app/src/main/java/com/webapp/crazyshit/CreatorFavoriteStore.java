@@ -44,6 +44,12 @@ final class CreatorFavoriteStore {
         }
         preferences.edit().putStringSet(KEY_CREATORS, favorites).apply();
         CreatorCatalog.remember(context, java.util.Collections.singletonList(creator));
+        ZeroChillAccountRepository.setCreatorFavorite(
+                context,
+                key,
+                creator.title,
+                favorite
+        );
         return favorite;
     }
 
@@ -51,6 +57,17 @@ final class CreatorFavoriteStore {
         return new HashSet<>(context.getApplicationContext()
                 .getSharedPreferences(PREFS, Context.MODE_PRIVATE)
                 .getStringSet(KEY_CREATORS, new HashSet<>()));
+    }
+
+    static synchronized void mergeNames(Context context, Set<String> remote) {
+        if (remote == null || remote.isEmpty()) return;
+        SharedPreferences preferences = context.getApplicationContext()
+                .getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+        Set<String> merged = new HashSet<>(
+                preferences.getStringSet(KEY_CREATORS, new HashSet<>())
+        );
+        merged.addAll(remote);
+        preferences.edit().putStringSet(KEY_CREATORS, merged).apply();
     }
 
     static String key(NativeContentItem creator) {
