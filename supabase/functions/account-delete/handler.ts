@@ -1,4 +1,4 @@
-import { createClient } from "npm:@supabase/supabase-js@2.58.0";
+import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2.58.0";
 
 const json = (status: number, body: Record<string, unknown>) =>
   new Response(JSON.stringify(body), {
@@ -7,7 +7,7 @@ const json = (status: number, body: Record<string, unknown>) =>
   });
 
 async function removeAvatarFolder(
-  admin: ReturnType<typeof createClient>,
+  admin: SupabaseClient,
   path: string,
   depth = 0,
 ): Promise<void> {

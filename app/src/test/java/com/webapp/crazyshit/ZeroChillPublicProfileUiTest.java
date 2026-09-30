@@ -35,7 +35,7 @@ public class ZeroChillPublicProfileUiTest {
         assertNotNull(find(activity.getWindow().getDecorView(), "Miami. Here for chaos and creators."));
         assertNotNull(find(activity.getWindow().getDecorView(), "addy37test"));
         assertNotNull(findType(activity.getWindow().getDecorView(), ScrollView.class));
-        capture(activity.getWindow().getDecorView(), "profile-account-2-public.png", 320, 800);
+        capture(activity.findViewById(android.R.id.content), "profile-account-2-public.png", 320, 800);
 
         render(activity, profile(false, ""));
         assertNull(find(activity.getWindow().getDecorView(), "Miami. Here for chaos and creators."));
@@ -85,6 +85,9 @@ public class ZeroChillPublicProfileUiTest {
                 ZeroChillSocialRepository.PublicProfile.class);
         render.setAccessible(true);
         render.invoke(activity, profile);
+        Method busy = ZeroChillPublicProfileActivity.class.getDeclaredMethod("showBusy", boolean.class);
+        busy.setAccessible(true);
+        busy.invoke(activity, false);
     }
 
     private static View find(View root, String text) {

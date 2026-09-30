@@ -603,14 +603,22 @@ public final class ZeroChillAccountActivity extends Activity {
         sectionParams.topMargin = dp(24);
         content.addView(section, sectionParams);
 
+        TextView nameLabel = text("Display name", 12, ZeroChillUi.color(this, R.color.zc_text_secondary), false);
+        LinearLayout.LayoutParams nameLabelParams = new LinearLayout.LayoutParams(-1, -2);
+        nameLabelParams.topMargin = dp(12);
+        content.addView(nameLabel, nameLabelParams);
         EditText displayName = field("Display name (optional)", InputType.TYPE_CLASS_TEXT);
-        displayName.setFilters(new InputFilter[]{new InputFilter.LengthFilter(40)});
+        displayName.setFilters(new InputFilter[]{codePointFilter(40)});
         displayName.setText(hasDraft && state.userId.equals(draftUser) ? draftName : state.displayName);
         displayName.setAutofillHints(View.AUTOFILL_HINT_NAME);
         displayName.setContentDescription("Display name");
         content.addView(displayName, fieldParams());
         nameField = displayName;
 
+        TextView bioLabel = text("Bio", 12, ZeroChillUi.color(this, R.color.zc_text_secondary), false);
+        LinearLayout.LayoutParams bioLabelParams = new LinearLayout.LayoutParams(-1, -2);
+        bioLabelParams.topMargin = dp(12);
+        content.addView(bioLabel, bioLabelParams);
         EditText bio = field("Bio (optional)",
                 InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_MULTI_LINE
                         | InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);
@@ -619,7 +627,7 @@ public final class ZeroChillAccountActivity extends Activity {
         bio.setMaxLines(5);
         bio.setGravity(Gravity.TOP | Gravity.START);
         bio.setPadding(dp(15), dp(13), dp(15), dp(13));
-        bio.setFilters(new InputFilter[]{new InputFilter.LengthFilter(160)});
+        bio.setFilters(new InputFilter[]{codePointFilter(160)});
         bio.setText(hasDraft && state.userId.equals(draftUser) ? draftBio : state.bio);
         bio.setContentDescription("Bio");
         LinearLayout.LayoutParams bioParams = new LinearLayout.LayoutParams(-1, -2);
@@ -627,14 +635,14 @@ public final class ZeroChillAccountActivity extends Activity {
         content.addView(bio, bioParams);
         bioField = bio;
 
-        TextView counter = text(bio.length() + "/160", 11,
+        TextView counter = text(Character.codePointCount(bio.getText(), 0, bio.length()) + "/160", 11,
                 ZeroChillUi.color(this, R.color.zc_text_muted), false);
         counter.setGravity(Gravity.END);
         content.addView(counter);
         bio.addTextChangedListener(new TextWatcher() {
             @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
             @Override public void onTextChanged(CharSequence s, int start, int before, int count) {
-                counter.setText(s.length() + "/160");
+                counter.setText(Character.codePointCount(s, 0, s.length()) + "/160");
             }
             @Override public void afterTextChanged(Editable s) {}
         });
@@ -695,6 +703,18 @@ public final class ZeroChillAccountActivity extends Activity {
         LinearLayout.LayoutParams footerParams = new LinearLayout.LayoutParams(-1, -2);
         footerParams.topMargin = dp(20);
         content.addView(footer, footerParams);
+    }
+
+    static InputFilter codePointFilter(int maximum) {
+        return (source, start, end, dest, dstart, dend) -> {
+            String retained = dest.subSequence(0, dstart).toString() + dest.subSequence(dend, dest.length());
+            int remaining = maximum - retained.codePointCount(0, retained.length());
+            if (remaining <= 0) return "";
+            int added = Character.codePointCount(source, start, end);
+            if (added <= remaining) return null;
+            int stop = Character.offsetByCodePoints(source, start, remaining);
+            return source.subSequence(start, stop);
+        };
     }
 
     private void section(String title) {
