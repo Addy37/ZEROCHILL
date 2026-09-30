@@ -1,6 +1,7 @@
 package com.webapp.crazyshit;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.Intent;
 import android.content.res.Configuration;
 import android.graphics.Color;
@@ -12,10 +13,12 @@ import android.view.ViewGroup;
 import android.view.Window;
 import android.view.WindowManager;
 import android.view.inputmethod.EditorInfo;
+import android.view.inputmethod.InputMethodManager;
 import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
+import android.widget.PopupMenu;
 import android.widget.ProgressBar;
 import android.widget.ScrollView;
 import android.widget.TextView;
@@ -51,6 +54,9 @@ final class InlineCommentsDialog extends BottomSheetDialog {
     private BottomSheetBehavior<FrameLayout> behavior;
     private FrameLayout bottomSheet;
     private ZeroChillSocialRepository.Comment replyTarget;
+    private ZeroChillSocialRepository.Comment editTarget;
+    private boolean autoReplyConsumed;
+    private final boolean autoReplyToFocus;
     private boolean closeDispatched;
     private boolean accountLaunched;
     private boolean posting;
@@ -62,7 +68,7 @@ final class InlineCommentsDialog extends BottomSheetDialog {
             String ignoredSourceCount,
             ResizeListener resizeListener
     ) {
-        this(activity, pageUrl, pageTitle, ignoredSourceCount, "", resizeListener);
+        this(activity, pageUrl, pageTitle, ignoredSourceCount, "", false, resizeListener);
     }
 
     InlineCommentsDialog(
@@ -73,11 +79,24 @@ final class InlineCommentsDialog extends BottomSheetDialog {
             String focusCommentId,
             ResizeListener resizeListener
     ) {
+        this(activity, pageUrl, pageTitle, ignoredSourceCount, focusCommentId, false, resizeListener);
+    }
+
+    InlineCommentsDialog(
+            Activity activity,
+            String pageUrl,
+            String pageTitle,
+            String ignoredSourceCount,
+            String focusCommentId,
+            boolean autoReplyToFocus,
+            ResizeListener resizeListener
+    ) {
         super(activity);
         this.activity = activity;
         this.pageUrl = clean(pageUrl);
         this.pageTitle = clean(pageTitle).isEmpty() ? "Comments" : clean(pageTitle);
         this.focusCommentId = clean(focusCommentId);
+        this.autoReplyToFocus = autoReplyToFocus;
         this.resizeListener = resizeListener;
         setCancelable(true);
         setCanceledOnTouchOutside(true);
@@ -236,7 +255,11 @@ final class InlineCommentsDialog extends BottomSheetDialog {
 
     private void render(ArrayList<ZeroChillSocialRepository.Comment> comments) {
         commentsContainer.removeAllViews();
-        headerTitle.setText(comments.size() + (comments.size() == 1 ? " comment" : " comments"));
+        int visibleCount = 0;
+        for (ZeroChillSocialRepository.Comment comment : comments) {
+            if (!comment.deleted()) visibleCount++;
+        }
+        headerTitle.setText(visibleCount + (visibleCount == 1 ? " comment" : " comments"));
 
         if (comments.isEmpty()) {
             showMessage("No comments yet. Start the conversation.");
@@ -247,21 +270,29 @@ final class InlineCommentsDialog extends BottomSheetDialog {
         for (ZeroChillSocialRepository.Comment comment : comments) byId.put(comment.id, comment);
 
         View focusRow = null;
+        ZeroChillSocialRepository.Comment focusComment = null;
         for (ZeroChillSocialRepository.Comment comment : comments) {
             int depth = depth(comment, byId);
             View row = commentRow(comment);
             commentsContainer.addView(row, commentParams(depth));
             if (!focusCommentId.isEmpty() && focusCommentId.equals(comment.id)) {
                 focusRow = row;
+                focusComment = comment;
             }
         }
 
         if (focusRow != null) {
             final View target = focusRow;
+            final ZeroChillSocialRepository.Comment targetComment = focusComment;
             scrollView.post(() -> {
                 scrollView.smoothScrollTo(0, Math.max(0, target.getTop() - dp(18)));
                 target.setBackground(roundRect(Color.argb(52, 8, 146, 208), 12));
                 target.postDelayed(() -> target.setBackgroundColor(Color.TRANSPARENT), 1600L);
+                if (autoReplyToFocus && !autoReplyConsumed && targetComment != null
+                        && !targetComment.deleted()) {
+                    autoReplyConsumed = true;
+                    startReply(targetComment);
+                }
             });
         }
     }
@@ -295,20 +326,42 @@ final class InlineCommentsDialog extends BottomSheetDialog {
         bodyParams.setMargins(dp(10), 0, 0, 0);
         row.addView(body, bodyParams);
 
+        LinearLayout nameRow = new LinearLayout(activity);
+        nameRow.setGravity(Gravity.CENTER_VERTICAL);
+        body.addView(nameRow, new LinearLayout.LayoutParams(-1, -2));
+
         String identity = comment.displayName.isEmpty()
                 ? "@" + comment.username
                 : comment.displayName + "  @" + comment.username;
-        TextView name = text(identity, 12, UiPalette.PRIMARY, true);
-        name.setClickable(true);
-        name.setFocusable(true);
+        TextView name = text(identity, 12, comment.deleted() ? Color.rgb(145, 145, 154) : UiPalette.PRIMARY, true);
+        name.setClickable(!comment.deleted());
+        name.setFocusable(!comment.deleted());
         name.setContentDescription("Open @" + comment.username + " profile");
-        name.setOnClickListener(v -> openProfile(comment));
-        body.addView(name);
+        if (!comment.deleted()) name.setOnClickListener(v -> openProfile(comment));
+        nameRow.addView(name, new LinearLayout.LayoutParams(0, -2, 1f));
 
-        TextView copy = text(comment.body, 14, Color.rgb(235, 235, 239), false);
+        if (!comment.deleted() && isOwner(comment)) {
+            TextView menu = text("⋮", 20, Color.rgb(170, 170, 180), true);
+            menu.setGravity(Gravity.CENTER);
+            menu.setContentDescription("Comment options");
+            menu.setOnClickListener(v -> showCommentMenu(v, comment));
+            nameRow.addView(menu, new LinearLayout.LayoutParams(dp(36), dp(32)));
+        }
+
+        TextView copy = text(
+                comment.deleted() ? "Comment deleted" : comment.body,
+                14,
+                comment.deleted() ? Color.rgb(135, 135, 145) : Color.rgb(235, 235, 239),
+                false
+        );
+        if (comment.deleted()) {
+            copy.setTypeface(null, android.graphics.Typeface.ITALIC);
+        }
         copy.setLineSpacing(0f, 1.08f);
         copy.setPadding(0, dp(4), 0, dp(7));
         body.addView(copy);
+
+        if (comment.deleted()) return row;
 
         LinearLayout actions = new LinearLayout(activity);
         actions.setGravity(Gravity.CENTER_VERTICAL);
@@ -328,6 +381,12 @@ final class InlineCommentsDialog extends BottomSheetDialog {
         like.setPadding(dp(6), dp(4), dp(8), dp(4));
         like.setOnClickListener(v -> toggleLike(comment));
         actions.addView(like);
+
+        if (comment.edited()) {
+            TextView edited = text("Edited", 10, Color.rgb(125, 125, 136), false);
+            edited.setPadding(dp(8), dp(4), 0, dp(4));
+            actions.addView(edited);
+        }
         return row;
     }
 
@@ -355,16 +414,32 @@ final class InlineCommentsDialog extends BottomSheetDialog {
             openAccount();
             return;
         }
+        editTarget = null;
         replyTarget = comment;
+        composerInput.setText("");
         replyContext.setText("Replying to @" + comment.username + "  •  tap to cancel");
         replyContext.setVisibility(View.VISIBLE);
-        composerInput.requestFocus();
+        focusComposer();
+    }
+
+    private void startEdit(ZeroChillSocialRepository.Comment comment) {
+        if (comment == null || comment.deleted() || !isOwner(comment)) return;
+        replyTarget = null;
+        editTarget = comment;
+        replyContext.setText("Editing your comment  •  tap to cancel");
+        replyContext.setVisibility(View.VISIBLE);
+        composerInput.setText(comment.body);
+        composerInput.setSelection(composerInput.length());
+        focusComposer();
     }
 
     private void cancelReply() {
         replyTarget = null;
+        editTarget = null;
         replyContext.setText("");
         replyContext.setVisibility(View.GONE);
+        composerInput.setText("");
+        updateComposerHint();
     }
 
     private void submit() {
@@ -377,24 +452,92 @@ final class InlineCommentsDialog extends BottomSheetDialog {
         if (message.isEmpty()) return;
         posting = true;
         composerInput.setEnabled(false);
-        ZeroChillSocialRepository.postComment(
-                activity,
-                pageUrl,
-                pageTitle,
-                replyTarget == null ? "" : replyTarget.id,
-                message,
-                (ok, error) -> activity.runOnUiThread(() -> {
+        ZeroChillSocialRepository.Callback<Boolean> completed = (ok, error) ->
+                activity.runOnUiThread(() -> {
                     posting = false;
                     composerInput.setEnabled(true);
                     if (error != null) {
                         Toast.makeText(activity, error.getMessage(), Toast.LENGTH_LONG).show();
                     } else {
-                        composerInput.setText("");
                         cancelReply();
                         loadComments();
                     }
+                });
+        if (editTarget != null) {
+            ZeroChillSocialRepository.editComment(
+                    activity,
+                    editTarget.id,
+                    message,
+                    completed
+            );
+        } else {
+            ZeroChillSocialRepository.postComment(
+                    activity,
+                    pageUrl,
+                    pageTitle,
+                    replyTarget == null ? "" : replyTarget.id,
+                    message,
+                    completed
+            );
+        }
+    }
+
+    private boolean isOwner(ZeroChillSocialRepository.Comment comment) {
+        return comment != null
+                && !clean(comment.userId).isEmpty()
+                && comment.userId.equals(ZeroChillSessionStore.currentUserId(activity));
+    }
+
+    private void showCommentMenu(View anchor, ZeroChillSocialRepository.Comment comment) {
+        PopupMenu menu = new PopupMenu(activity, anchor);
+        menu.getMenu().add("Edit");
+        menu.getMenu().add("Delete");
+        menu.setOnMenuItemClickListener(item -> {
+            if ("Edit".contentEquals(item.getTitle())) {
+                startEdit(comment);
+                return true;
+            }
+            if ("Delete".contentEquals(item.getTitle())) {
+                confirmDelete(comment);
+                return true;
+            }
+            return false;
+        });
+        menu.show();
+    }
+
+    private void confirmDelete(ZeroChillSocialRepository.Comment comment) {
+        if (!isOwner(comment) || comment.deleted()) return;
+        new AlertDialog.Builder(activity)
+                .setTitle("Delete comment?")
+                .setMessage("Replies will stay in the conversation.")
+                .setNegativeButton("Cancel", null)
+                .setPositiveButton("Delete", (dialog, which) -> {
+                    ZeroChillSocialRepository.deleteComment(
+                            activity,
+                            comment.id,
+                            (ok, error) -> activity.runOnUiThread(() -> {
+                                if (error != null) {
+                                    Toast.makeText(activity, error.getMessage(), Toast.LENGTH_LONG).show();
+                                } else {
+                                    if (editTarget != null && comment.id.equals(editTarget.id)) {
+                                        cancelReply();
+                                    }
+                                    loadComments();
+                                }
+                            })
+                    );
                 })
-        );
+                .show();
+    }
+
+    private void focusComposer() {
+        composerInput.requestFocus();
+        composerInput.post(() -> {
+            InputMethodManager keyboard = (InputMethodManager)
+                    activity.getSystemService(Activity.INPUT_METHOD_SERVICE);
+            if (keyboard != null) keyboard.showSoftInput(composerInput, InputMethodManager.SHOW_IMPLICIT);
+        });
     }
 
     private void openAccount() {
