@@ -99,7 +99,7 @@ final class ZeroChillSocialRepository {
             recipientId = value.optString("recipient_id");
             body = value.optString("body");
             createdAt = value.optString("created_at");
-            readAt = value.optString("read_at");
+            readAt = value.isNull("read_at") ? "" : value.optString("read_at");
         }
 
         boolean unreadFor(String userId) {
