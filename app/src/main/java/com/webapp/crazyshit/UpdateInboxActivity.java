@@ -19,6 +19,7 @@ import android.view.ViewGroup;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.DiffUtil;
@@ -31,7 +32,11 @@ import com.bumptech.glide.load.model.GlideUrl;
 import com.bumptech.glide.load.model.LazyHeaders;
 
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 /** Notification history backed by the existing local update inbox. */
 public final class UpdateInboxActivity extends Activity {
@@ -308,8 +313,19 @@ public final class UpdateInboxActivity extends Activity {
 
     private final class UpdateAdapter extends RecyclerView.Adapter<UpdateAdapter.Holder> {
         private final ArrayList<UpdateInboxStore.Entry> items = new ArrayList<>();
+        private final Map<String, ZeroChillSocialRepository.Comment> commentStates = new HashMap<>();
+        private final Set<String> commentPagesLoading = new HashSet<>();
+        private final Set<String> commentLikeRequests = new HashSet<>();
+        private String loadedAccount = "";
 
         void replace(List<UpdateInboxStore.Entry> next) {
+            String account = ZeroChillSessionStore.currentUserId(UpdateInboxActivity.this);
+            if (!account.equals(loadedAccount)) {
+                loadedAccount = account;
+                commentStates.clear();
+                commentPagesLoading.clear();
+                commentLikeRequests.clear();
+            }
             ArrayList<UpdateInboxStore.Entry> previous = new ArrayList<>(items);
             ArrayList<UpdateInboxStore.Entry> incoming = new ArrayList<>();
             if (next != null) incoming.addAll(next);
@@ -389,9 +405,15 @@ public final class UpdateInboxActivity extends Activity {
             labels.addView(actions, new LinearLayout.LayoutParams(-1, -2));
 
             TextView reply = actionPill("Reply");
-            TextView view = actionPill("View");
+            TextView like = actionPill("");
+            like.setMinWidth(dp(58));
+            like.setPadding(dp(12), 0, dp(12), 0);
+            like.setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_action_heart_outline, 0, 0, 0);
+            like.setCompoundDrawableTintList(android.content.res.ColorStateList.valueOf(Color.WHITE));
+            like.setCompoundDrawablePadding(dp(4));
+            like.setContentDescription("Like reply");
             actions.addView(reply, actionPillParams());
-            actions.addView(view, actionPillParams());
+            actions.addView(like, actionPillParams());
 
             android.widget.FrameLayout trailing = new android.widget.FrameLayout(UpdateInboxActivity.this);
             LinearLayout.LayoutParams trailingParams = new LinearLayout.LayoutParams(dp(52), dp(52));
@@ -401,6 +423,7 @@ public final class UpdateInboxActivity extends Activity {
             thumbnail.setScaleType(ImageView.ScaleType.CENTER_CROP);
             thumbnail.setClipToOutline(true);
             thumbnail.setBackground(BrowseUi.rounded(UpdateInboxActivity.this, BrowseUi.SURFACE, 10));
+            ZeroChillMotion.installPressFeedback(thumbnail);
             trailing.addView(thumbnail, new android.widget.FrameLayout.LayoutParams(dp(48), dp(48), Gravity.CENTER));
 
             View unread = new View(UpdateInboxActivity.this);
@@ -416,7 +439,7 @@ public final class UpdateInboxActivity extends Activity {
             dividerParams.setMargins(dp(60), 0, 0, 0);
             shell.addView(divider, dividerParams);
 
-            return new Holder(shell, row, section, avatar, title, subtitle, actions, reply, view,
+            return new Holder(shell, row, section, avatar, title, subtitle, actions, reply, like,
                     trailing, thumbnail, unread);
         }
 
@@ -463,9 +486,9 @@ public final class UpdateInboxActivity extends Activity {
 
             holder.actions.setVisibility(replyNotification ? View.VISIBLE : View.GONE);
             holder.reply.setVisibility(replyNotification ? View.VISIBLE : View.GONE);
-            holder.view.setVisibility(replyNotification ? View.VISIBLE : View.GONE);
+            holder.like.setVisibility(replyNotification ? View.VISIBLE : View.GONE);
             holder.reply.setOnClickListener(v -> openSocial(entry, true));
-            holder.view.setOnClickListener(v -> openSocial(entry, false));
+            bindSocialLike(holder, entry, replyNotification);
 
             boolean becameRead = holder.itemView.isAttachedToWindow()
                     && entry.read && entry.id.equals(holder.boundId)
@@ -491,6 +514,138 @@ public final class UpdateInboxActivity extends Activity {
 
             bindAvatar(holder.avatar, entry);
             bindThumbnail(holder, entry);
+        }
+
+        private void bindSocialLike(
+                Holder holder,
+                UpdateInboxStore.Entry entry,
+                boolean replyNotification
+        ) {
+            holder.like.animate().cancel();
+            holder.like.setScaleX(1f);
+            holder.like.setScaleY(1f);
+            holder.like.setAlpha(1f);
+            holder.like.setText("");
+            holder.like.setCompoundDrawablesWithIntrinsicBounds(
+                    R.drawable.ic_action_heart_outline, 0, 0, 0
+            );
+            holder.like.setCompoundDrawableTintList(android.content.res.ColorStateList.valueOf(Color.WHITE));
+            holder.like.setTextColor(Color.WHITE);
+            holder.like.setOnClickListener(null);
+
+            if (!replyNotification) return;
+            String commentId = entry.commentId == null ? "" : entry.commentId.trim();
+            String page = entry.pageUrl == null ? "" : entry.pageUrl.trim();
+            if (commentId.isEmpty() || page.isEmpty()) {
+                holder.like.setVisibility(View.GONE);
+                return;
+            }
+
+            ZeroChillSocialRepository.Comment state = commentStates.get(commentId);
+            if (state == null) {
+                holder.like.setEnabled(false);
+                holder.like.setContentDescription("Loading reply like state");
+                requestCommentStates(page);
+                return;
+            }
+            if (state.deleted()) {
+                holder.like.setVisibility(View.GONE);
+                return;
+            }
+
+            holder.like.setEnabled(!commentLikeRequests.contains(commentId));
+            holder.like.setCompoundDrawablesWithIntrinsicBounds(
+                    state.likedByMe
+                            ? R.drawable.ic_action_heart_filled
+                            : R.drawable.ic_action_heart_outline,
+                    0,
+                    0,
+                    0
+            );
+            holder.like.setCompoundDrawableTintList(android.content.res.ColorStateList.valueOf(
+                    state.likedByMe ? UiPalette.PRIMARY : Color.WHITE
+            ));
+            holder.like.setText(state.likeCount > 0 ? String.valueOf(state.likeCount) : "");
+            holder.like.setTextColor(state.likedByMe ? UiPalette.PRIMARY : Color.WHITE);
+            holder.like.setContentDescription(state.likedByMe ? "Unlike reply" : "Like reply");
+            holder.like.setOnClickListener(v -> toggleNotificationCommentLike(holder, entry));
+        }
+
+        private void requestCommentStates(String pageUrl) {
+            String pageKey = ZeroChillSocialRepository.contentKey(pageUrl);
+            if (pageKey.isEmpty() || !commentPagesLoading.add(pageKey)) return;
+            ZeroChillSocialRepository.loadComments(
+                    UpdateInboxActivity.this,
+                    pageUrl,
+                    (loaded, error) -> runOnUiThread(() -> {
+                        commentPagesLoading.remove(pageKey);
+                        if (error != null || loaded == null) return;
+                        for (ZeroChillSocialRepository.Comment comment : loaded) {
+                            if (comment != null && comment.id != null && !comment.id.isEmpty()) {
+                                commentStates.put(comment.id, comment);
+                            }
+                        }
+                        if (!items.isEmpty()) notifyItemRangeChanged(0, items.size(), "social-like");
+                    })
+            );
+        }
+
+        private void toggleNotificationCommentLike(
+                Holder holder,
+                UpdateInboxStore.Entry entry
+        ) {
+            String commentId = entry.commentId == null ? "" : entry.commentId.trim();
+            ZeroChillSocialRepository.Comment state = commentStates.get(commentId);
+            if (state == null || state.deleted() || !commentLikeRequests.add(commentId)) return;
+
+            holder.like.setEnabled(false);
+            ZeroChillSocialRepository.toggleCommentLike(
+                    UpdateInboxActivity.this,
+                    commentId,
+                    state.likedByMe,
+                    (liked, error) -> runOnUiThread(() -> {
+                        commentLikeRequests.remove(commentId);
+                        if (error != null) {
+                            Toast.makeText(
+                                    UpdateInboxActivity.this,
+                                    error.getMessage() == null ? "Unable to update the like." : error.getMessage(),
+                                    Toast.LENGTH_SHORT
+                            ).show();
+                        } else {
+                            ZeroChillSocialRepository.Comment current = commentStates.get(commentId);
+                            if (current != null) commentStates.put(commentId, current.withLikeState(liked));
+                        }
+                        int index = indexOf(entry.id);
+                        if (index >= 0) notifyItemChanged(index, "social-like");
+                        if (error == null && liked && entry.id.equals(holder.boundId)) {
+                            animateHeartPop(holder.like);
+                        }
+                    })
+            );
+        }
+
+        private int indexOf(String id) {
+            for (int i = 0; i < items.size(); i++) {
+                if (items.get(i).id.equals(id)) return i;
+            }
+            return -1;
+        }
+
+        private void animateHeartPop(View heart) {
+            if (heart == null || !ZeroChillMotion.animationsEnabled(UpdateInboxActivity.this)) return;
+            heart.animate().cancel();
+            heart.setScaleX(0.88f);
+            heart.setScaleY(0.88f);
+            heart.animate()
+                    .scaleX(1.08f)
+                    .scaleY(1.08f)
+                    .setDuration(ZeroChillMotion.QUICK_MS)
+                    .withEndAction(() -> heart.animate()
+                            .scaleX(1f)
+                            .scaleY(1f)
+                            .setDuration(ZeroChillMotion.PRESS_IN_MS)
+                            .start())
+                    .start();
         }
 
         private String sectionLabel(int position) {
@@ -580,6 +735,12 @@ public final class UpdateInboxActivity extends Activity {
 
         private void bindThumbnail(Holder holder, UpdateInboxStore.Entry entry) {
             NativeContentItem first = entry.firstItem();
+            if (first == null
+                    && UpdateInboxStore.CATEGORY_SOCIAL.equals(entry.category)
+                    && entry.pageUrl != null
+                    && !entry.pageUrl.trim().isEmpty()) {
+                first = SocialContentContextStore.find(UpdateInboxActivity.this, entry.pageUrl);
+            }
             String imageUrl = first == null ? "" : first.imageUrl;
             String referer = first == null ? "" :
                     (first.uploader == null || first.uploader.trim().isEmpty()
@@ -587,13 +748,17 @@ public final class UpdateInboxActivity extends Activity {
             boolean show = imageUrl != null && !imageUrl.trim().isEmpty();
             if (!(referer.startsWith("https://") || referer.startsWith("http://"))) referer = first == null ? "" : first.url;
             holder.thumbnail.setVisibility(show ? View.VISIBLE : View.GONE);
+            holder.thumbnail.setClickable(show);
+            holder.thumbnail.setFocusable(show);
+            holder.thumbnail.setContentDescription(show ? "Open video and conversation" : null);
+            holder.thumbnail.setOnClickListener(show ? v -> open(entry) : null);
             LinearLayout.LayoutParams params = (LinearLayout.LayoutParams) holder.trailing.getLayoutParams();
             params.width = dp(show ? 52 : 14);
             holder.trailing.setLayoutParams(params);
             Glide.with(holder.thumbnail).clear(holder.thumbnail);
             if (show) {
                 holder.thumbnail.setImageDrawable(null);
-                loadImage(holder.thumbnail, imageUrl, referer, R.drawable.ic_more_update, false);
+                loadImage(holder.thumbnail, imageUrl, referer, 0, false);
             }
         }
 
@@ -617,9 +782,8 @@ public final class UpdateInboxActivity extends Activity {
             com.bumptech.glide.RequestBuilder<android.graphics.drawable.Drawable> request =
                     Glide.with(view)
                             .load(model)
-                            .transition(DrawableTransitionOptions.withCrossFade((int) ZeroChillMotion.QUICK_MS))
-                            .placeholder(fallback)
-                            .error(fallback);
+                            .transition(DrawableTransitionOptions.withCrossFade((int) ZeroChillMotion.QUICK_MS));
+            if (fallback != 0) request = request.placeholder(fallback).error(fallback);
             if (circle) request = request.circleCrop();
             request.into(view);
         }
@@ -651,7 +815,7 @@ public final class UpdateInboxActivity extends Activity {
             final TextView subtitle;
             final LinearLayout actions;
             final TextView reply;
-            final TextView view;
+            final TextView like;
             final android.widget.FrameLayout trailing;
             final ImageView thumbnail;
             final View unread;
@@ -666,7 +830,7 @@ public final class UpdateInboxActivity extends Activity {
                     TextView subtitle,
                     LinearLayout actions,
                     TextView reply,
-                    TextView view,
+                    TextView like,
                     android.widget.FrameLayout trailing,
                     ImageView thumbnail,
                     View unread
@@ -679,7 +843,7 @@ public final class UpdateInboxActivity extends Activity {
                 this.subtitle = subtitle;
                 this.actions = actions;
                 this.reply = reply;
-                this.view = view;
+                this.like = like;
                 this.trailing = trailing;
                 this.thumbnail = thumbnail;
                 this.unread = unread;
