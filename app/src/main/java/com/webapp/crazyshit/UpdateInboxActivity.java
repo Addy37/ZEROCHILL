@@ -5,6 +5,7 @@ import android.content.Intent;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.graphics.Color;
+import android.graphics.drawable.InsetDrawable;
 import android.os.Bundle;
 import android.text.Spannable;
 import android.text.SpannableStringBuilder;
@@ -21,9 +22,11 @@ import android.widget.TextView;
 
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.DiffUtil;
+import androidx.recyclerview.widget.DefaultItemAnimator;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.bumptech.glide.Glide;
+import com.bumptech.glide.load.resource.drawable.DrawableTransitionOptions;
 import com.bumptech.glide.load.model.GlideUrl;
 import com.bumptech.glide.load.model.LazyHeaders;
 
@@ -149,6 +152,20 @@ public final class UpdateInboxActivity extends Activity {
         recycler.setLayoutManager(new LinearLayoutManager(this));
         recycler.setPadding(0, dp(4), 0, dp(16));
         recycler.setClipToPadding(false);
+        DefaultItemAnimator itemAnimator = new DefaultItemAnimator();
+        if (ZeroChillMotion.animationsEnabled(this)) {
+            itemAnimator.setAddDuration(ZeroChillMotion.STANDARD_MS);
+            itemAnimator.setChangeDuration(ZeroChillMotion.QUICK_MS);
+            itemAnimator.setRemoveDuration(ZeroChillMotion.QUICK_MS);
+            itemAnimator.setMoveDuration(ZeroChillMotion.STANDARD_MS);
+        } else {
+            itemAnimator.setSupportsChangeAnimations(false);
+            itemAnimator.setAddDuration(0);
+            itemAnimator.setChangeDuration(0);
+            itemAnimator.setRemoveDuration(0);
+            itemAnimator.setMoveDuration(0);
+        }
+        recycler.setItemAnimator(itemAnimator);
         adapter = new UpdateAdapter();
         recycler.setAdapter(adapter);
         root.addView(recycler, new LinearLayout.LayoutParams(-1, 0, 1f));
@@ -159,16 +176,19 @@ public final class UpdateInboxActivity extends Activity {
 
     private TextView filter(String label, String filter) {
         TextView view = BrowseUi.action(this, label, label + " notifications", v -> {
+            if (activeFilter.equals(filter)) return;
             activeFilter = filter;
             render();
         });
         view.setTextSize(12);
+        view.setMinHeight(dp(44));
+        view.setPadding(dp(4), 0, dp(4), 0);
         ZeroChillMotion.installPressFeedback(view);
         return view;
     }
 
     private LinearLayout.LayoutParams filterParams(int index) {
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, dp(34), 1f);
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, dp(44), 1f);
         params.setMargins(index == 0 ? 0 : dp(2), 0, index == 3 ? 0 : dp(2), 0);
         return params;
     }
@@ -195,32 +215,24 @@ public final class UpdateInboxActivity extends Activity {
     }
 
     private void refreshSocialActivity() {
-        if (socialLoading || !ZeroChillAccountRepository.hasStoredSession(this)) return;
-        String accountId = ZeroChillSessionStore.currentUserId(this);
-        if (accountId.isEmpty()) return;
-        socialLoading = true;
-        final int generation = ++socialGeneration;
-        ZeroChillSocialRepository.loadCommentActivity(this, (items, error) ->
-                runOnUiThread(() -> {
-                    if (generation != socialGeneration) return;
-                    socialLoading = false;
-                    String current = ZeroChillSessionStore.currentUserId(this);
-                    if (!accountId.equals(current)) return;
-                    if (error == null && items != null && !items.isEmpty()) {
-                        UpdateInboxStore.recordSocialActivities(this, accountId, items);
-                    }
-                    if (observing && !isFinishing() && !isDestroyed()) render();
-                })
-        );
+        SocialActivityCoordinator.requestRefresh(this);
     }
 
     private void styleFilter(TextView view, boolean selected) {
         view.setTextColor(selected ? Color.WHITE : BrowseUi.MUTED);
-        view.setBackground(BrowseUi.rounded(
+        view.setBackground(new InsetDrawable(BrowseUi.rounded(
                 this,
-                selected ? UiPalette.PRIMARY_CONTAINER : Color.TRANSPARENT,
-                10
-        ));
+                selected ? UiPalette.PRIMARY_CONTAINER : Color.rgb(24, 27, 32),
+                13
+        ), 0, dp(5), 0, dp(5)));
+        Boolean oldSelection = (Boolean) view.getTag();
+        if (oldSelection == null) {
+            view.setScaleX(1f);
+            view.setScaleY(1f);
+        } else if (oldSelection != selected) {
+            ZeroChillMotion.animateSelection(view, selected);
+        }
+        view.setTag(selected);
     }
 
     private void open(UpdateInboxStore.Entry entry) {
@@ -269,27 +281,25 @@ public final class UpdateInboxActivity extends Activity {
     private void openSocial(UpdateInboxStore.Entry entry, boolean reply) {
         UpdateInboxStore.markRead(this, entry.id);
         render();
-        new InlineCommentsDialog(
-                this,
-                entry.pageUrl,
-                entry.videoTitle,
-                "",
-                entry.commentId,
-                reply,
-                null
-        ).show();
+        SocialContentNavigator.open(this, entry, reply);
     }
 
     private String socialActor(UpdateInboxStore.Entry entry) {
         if (entry.actorName != null && !entry.actorName.trim().isEmpty()) {
-            return entry.actorName.trim();
+            return cleanDisplayName(entry.actorName);
         }
         String title = entry.title == null ? "" : entry.title.trim();
         String[] suffixes = {" replied to your comment", " liked your comment"};
         for (String suffix : suffixes) {
-            if (title.endsWith(suffix)) return title.substring(0, title.length() - suffix.length());
+            if (title.endsWith(suffix)) return cleanDisplayName(title.substring(0, title.length() - suffix.length()));
         }
-        return title;
+        return cleanDisplayName(title);
+    }
+
+    private String cleanDisplayName(String raw) {
+        String name = raw == null ? "" : raw.trim();
+        while (name.startsWith("@")) name = name.substring(1).trim();
+        return name.isEmpty() ? "Someone" : name;
     }
 
     private int dp(int value) {
@@ -329,7 +339,7 @@ public final class UpdateInboxActivity extends Activity {
         public Holder onCreateViewHolder(ViewGroup parent, int viewType) {
             LinearLayout shell = new LinearLayout(UpdateInboxActivity.this);
             shell.setOrientation(LinearLayout.VERTICAL);
-            shell.setPadding(dp(14), 0, dp(10), 0);
+            shell.setPadding(dp(10), 0, dp(10), 0);
             RecyclerView.LayoutParams shellParams = new RecyclerView.LayoutParams(-1, -2);
             shell.setLayoutParams(shellParams);
 
@@ -342,11 +352,14 @@ public final class UpdateInboxActivity extends Activity {
             LinearLayout row = new LinearLayout(UpdateInboxActivity.this);
             row.setOrientation(LinearLayout.HORIZONTAL);
             row.setGravity(Gravity.TOP);
-            row.setPadding(dp(2), dp(10), 0, dp(10));
+            row.setPadding(dp(10), dp(12), dp(7), dp(12));
+            row.setBackground(BrowseUi.rounded(UpdateInboxActivity.this, Color.rgb(17, 20, 24), 14));
             row.setFocusable(true);
             row.setClickable(true);
             ZeroChillMotion.installPressFeedback(row);
-            shell.addView(row, new LinearLayout.LayoutParams(-1, -2));
+            LinearLayout.LayoutParams rowParams = new LinearLayout.LayoutParams(-1, -2);
+            rowParams.setMargins(0, dp(3), 0, dp(3));
+            shell.addView(row, rowParams);
 
             ImageView avatar = new ImageView(UpdateInboxActivity.this);
             avatar.setScaleType(ImageView.ScaleType.CENTER_CROP);
@@ -356,7 +369,7 @@ public final class UpdateInboxActivity extends Activity {
 
             LinearLayout labels = new LinearLayout(UpdateInboxActivity.this);
             labels.setOrientation(LinearLayout.VERTICAL);
-            labels.setPadding(dp(12), dp(1), dp(8), 0);
+            labels.setPadding(dp(12), dp(1), dp(5), 0);
             row.addView(labels, new LinearLayout.LayoutParams(0, -2, 1f));
 
             TextView title = BrowseUi.text(UpdateInboxActivity.this, "", 15, Color.WHITE);
@@ -372,7 +385,7 @@ public final class UpdateInboxActivity extends Activity {
 
             LinearLayout actions = new LinearLayout(UpdateInboxActivity.this);
             actions.setGravity(Gravity.CENTER_VERTICAL);
-            actions.setPadding(0, dp(7), 0, 0);
+            actions.setPadding(0, dp(3), 0, 0);
             labels.addView(actions, new LinearLayout.LayoutParams(-1, -2));
 
             TextView reply = actionPill("Reply");
@@ -381,14 +394,14 @@ public final class UpdateInboxActivity extends Activity {
             actions.addView(view, actionPillParams());
 
             android.widget.FrameLayout trailing = new android.widget.FrameLayout(UpdateInboxActivity.this);
-            LinearLayout.LayoutParams trailingParams = new LinearLayout.LayoutParams(dp(56), dp(56));
+            LinearLayout.LayoutParams trailingParams = new LinearLayout.LayoutParams(dp(52), dp(52));
             row.addView(trailing, trailingParams);
 
             ImageView thumbnail = new ImageView(UpdateInboxActivity.this);
             thumbnail.setScaleType(ImageView.ScaleType.CENTER_CROP);
             thumbnail.setClipToOutline(true);
             thumbnail.setBackground(BrowseUi.rounded(UpdateInboxActivity.this, BrowseUi.SURFACE, 10));
-            trailing.addView(thumbnail, new android.widget.FrameLayout.LayoutParams(dp(52), dp(52), Gravity.CENTER));
+            trailing.addView(thumbnail, new android.widget.FrameLayout.LayoutParams(dp(48), dp(48), Gravity.CENTER));
 
             View unread = new View(UpdateInboxActivity.this);
             unread.setBackground(circle(UiPalette.PRIMARY));
@@ -398,7 +411,7 @@ public final class UpdateInboxActivity extends Activity {
             trailing.addView(unread, dotParams);
 
             View divider = new View(UpdateInboxActivity.this);
-            divider.setBackgroundColor(Color.rgb(29, 29, 33));
+            divider.setBackgroundColor(Color.rgb(23, 27, 31));
             LinearLayout.LayoutParams dividerParams = new LinearLayout.LayoutParams(-1, dp(1));
             dividerParams.setMargins(dp(60), 0, 0, 0);
             shell.addView(divider, dividerParams);
@@ -411,18 +424,18 @@ public final class UpdateInboxActivity extends Activity {
             TextView view = BrowseUi.text(UpdateInboxActivity.this, label, 12, Color.rgb(220, 220, 226));
             view.setGravity(Gravity.CENTER);
             view.setTypeface(null, android.graphics.Typeface.BOLD);
-            view.setBackground(BrowseUi.rounded(
-                    UpdateInboxActivity.this,
-                    Color.rgb(38, 38, 43),
-                    15
-            ));
+            view.setMinWidth(dp(74));
+            view.setPadding(dp(14), 0, dp(14), 0);
+            view.setBackground(new InsetDrawable(BrowseUi.rounded(
+                    UpdateInboxActivity.this, Color.rgb(37, 43, 51), 12
+            ), 0, dp(4), 0, dp(4)));
             ZeroChillMotion.installPressFeedback(view);
             return view;
         }
 
         private LinearLayout.LayoutParams actionPillParams() {
-            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-2, dp(32));
-            params.setMargins(0, 0, dp(7), 0);
+            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-2, dp(44));
+            params.setMargins(0, 0, dp(4), 0);
             return params;
         }
 
@@ -448,16 +461,30 @@ public final class UpdateInboxActivity extends Activity {
             holder.subtitle.setText(detailText(entry));
             holder.subtitle.setVisibility(holder.subtitle.getText().length() == 0 ? View.GONE : View.VISIBLE);
 
-            holder.actions.setVisibility(social ? View.VISIBLE : View.GONE);
+            holder.actions.setVisibility(replyNotification ? View.VISIBLE : View.GONE);
             holder.reply.setVisibility(replyNotification ? View.VISIBLE : View.GONE);
-            holder.view.setVisibility(social ? View.VISIBLE : View.GONE);
+            holder.view.setVisibility(replyNotification ? View.VISIBLE : View.GONE);
             holder.reply.setOnClickListener(v -> openSocial(entry, true));
             holder.view.setOnClickListener(v -> openSocial(entry, false));
 
-            holder.unread.setVisibility(entry.read ? View.INVISIBLE : View.VISIBLE);
-            holder.row.setAlpha(entry.read ? 0.82f : 1f);
+            boolean becameRead = holder.itemView.isAttachedToWindow()
+                    && entry.read && entry.id.equals(holder.boundId)
+                    && holder.unread.getVisibility() == View.VISIBLE;
+            holder.unread.animate().cancel();
+            holder.unread.setVisibility(entry.read && !becameRead ? View.INVISIBLE : View.VISIBLE);
+            if (becameRead && ZeroChillMotion.animationsEnabled(UpdateInboxActivity.this)) {
+                holder.unread.animate().alpha(0f).scaleX(0.4f).scaleY(0.4f)
+                        .setDuration(ZeroChillMotion.QUICK_MS)
+                        .withEndAction(() -> holder.unread.setVisibility(View.INVISIBLE)).start();
+            } else {
+                holder.unread.setAlpha(1f);
+                holder.unread.setScaleX(1f);
+                holder.unread.setScaleY(1f);
+            }
+            holder.boundId = entry.id;
+            holder.row.setAlpha(1f);
             holder.row.setContentDescription(
-                    entry.title + ". " + entry.subtitle
+                    styledTitle(entry).toString() + ". " + entry.subtitle
                             + (entry.read ? ". Read." : ". Unread notification.")
             );
             holder.row.setOnClickListener(v -> open(entry));
@@ -561,7 +588,7 @@ public final class UpdateInboxActivity extends Activity {
                     && !UpdateInboxStore.CATEGORY_SOCIAL.equals(entry.category);
             holder.thumbnail.setVisibility(show ? View.VISIBLE : View.GONE);
             LinearLayout.LayoutParams params = (LinearLayout.LayoutParams) holder.trailing.getLayoutParams();
-            params.width = dp(show ? 56 : 14);
+            params.width = dp(show ? 52 : 14);
             holder.trailing.setLayoutParams(params);
             Glide.with(holder.thumbnail).clear(holder.thumbnail);
             if (show) {
@@ -590,7 +617,7 @@ public final class UpdateInboxActivity extends Activity {
             com.bumptech.glide.RequestBuilder<android.graphics.drawable.Drawable> request =
                     Glide.with(view)
                             .load(model)
-                            .dontAnimate()
+                            .transition(DrawableTransitionOptions.withCrossFade((int) ZeroChillMotion.QUICK_MS))
                             .placeholder(fallback)
                             .error(fallback);
             if (circle) request = request.circleCrop();
@@ -628,6 +655,7 @@ public final class UpdateInboxActivity extends Activity {
             final android.widget.FrameLayout trailing;
             final ImageView thumbnail;
             final View unread;
+            String boundId;
 
             Holder(
                     LinearLayout shell,

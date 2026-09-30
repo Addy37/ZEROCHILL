@@ -135,6 +135,12 @@ public final class ZeroChillPublicProfileActivity extends Activity {
 
         ImageView avatar = new ImageView(this);
         avatar.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        avatar.setClipToOutline(true);
+        avatar.setOutlineProvider(new android.view.ViewOutlineProvider() {
+            @Override public void getOutline(View view, android.graphics.Outline outline) {
+                outline.setOval(0, 0, view.getWidth(), view.getHeight());
+            }
+        });
         avatar.setBackground(circle(Color.rgb(12, 14, 18)));
         String avatarUrl = ZeroChillAccountRepository.avatarUrl(profile.avatarPath);
         if (avatarUrl.isEmpty()) {
@@ -153,7 +159,7 @@ public final class ZeroChillPublicProfileActivity extends Activity {
             card.addView(display, displayParams);
         }
 
-        TextView username = text("@" + profile.username, profile.displayName.isEmpty() ? 23 : 14,
+        TextView username = text(SocialUi.cleanName(profile.username), profile.displayName.isEmpty() ? 23 : 14,
                 profile.displayName.isEmpty() ? Color.WHITE : UiPalette.PRIMARY, true);
         LinearLayout.LayoutParams userParams = new LinearLayout.LayoutParams(-2, -2);
         userParams.topMargin = dp(profile.displayName.isEmpty() ? 15 : 3);
@@ -254,7 +260,7 @@ public final class ZeroChillPublicProfileActivity extends Activity {
 
     private void confirmBlock(boolean block) {
         if (currentProfile == null) return;
-        String username = "@" + currentProfile.username;
+        String username = SocialUi.name(currentProfile.displayName, currentProfile.username);
         new AlertDialog.Builder(this)
                 .setTitle(block ? "Block " + username + "?" : "Unblock " + username + "?")
                 .setMessage(block
@@ -289,7 +295,7 @@ public final class ZeroChillPublicProfileActivity extends Activity {
         if (currentProfile == null) return;
         String[] reasons = {"Spam", "Harassment", "Other"};
         new AlertDialog.Builder(this)
-                .setTitle("Report @" + currentProfile.username)
+                .setTitle("Report " + SocialUi.name(currentProfile.displayName, currentProfile.username))
                 .setItems(reasons, (dialog, which) -> {
                     String reason = which == 0 ? "spam" : which == 1 ? "harassment" : "other";
                     ZeroChillSocialRepository.reportUser(

@@ -79,12 +79,12 @@ final class UpdateInboxStore {
         }
     }
 
-    static void recordSocialActivities(
+    static List<Entry> recordSocialActivities(
             Context context,
             String accountId,
             List<ZeroChillSocialRepository.SocialActivity> activity
     ) {
-        if (context == null || clean(accountId).isEmpty() || activity == null || activity.isEmpty()) return;
+        if (context == null || clean(accountId).isEmpty() || activity == null || activity.isEmpty()) return Collections.emptyList();
         synchronized (LOCK) {
             ArrayList<Entry> existing = readLocked(context);
             pruneNonFavoriteContent(context, existing);
@@ -105,9 +105,9 @@ final class UpdateInboxStore {
                 entry.pageUrl = clean(item.pageUrl);
                 entry.videoTitle = clean(item.videoTitle);
                 entry.commentId = clean(item.commentId);
-                String actor = clean(item.actor.displayName).isEmpty()
-                        ? "@" + clean(item.actor.username)
-                        : clean(item.actor.displayName);
+                NativeContentItem content = SocialContentContextStore.find(context, entry.pageUrl);
+                if (content != null) entry.items.add(content);
+                String actor = SocialUi.name(item.actor.displayName, item.actor.username);
                 entry.actorName = actor;
                 entry.title = actor + (ZeroChillSocialRepository.SocialActivity.TYPE_REPLY.equals(item.type)
                         ? " replied to your comment"
@@ -129,10 +129,12 @@ final class UpdateInboxStore {
                 if (fingerprints.add(entry.fingerprint)) incoming.add(entry);
             }
 
-            if (incoming.isEmpty()) return;
+            if (incoming.isEmpty()) return Collections.emptyList();
+            ArrayList<Entry> inserted = new ArrayList<>(incoming);
             incoming.addAll(existing);
             dedupeAndTrim(incoming);
             writeLocked(context, incoming);
+            return inserted;
         }
     }
 

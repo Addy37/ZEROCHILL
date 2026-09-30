@@ -425,6 +425,12 @@ public final class ZeroChillAccountActivity extends Activity {
 
         ImageView avatar = new ImageView(this);
         avatar.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        avatar.setClipToOutline(true);
+        avatar.setOutlineProvider(new android.view.ViewOutlineProvider() {
+            @Override public void getOutline(View view, android.graphics.Outline outline) {
+                outline.setOval(0, 0, view.getWidth(), view.getHeight());
+            }
+        });
         avatar.setBackground(circle(Color.rgb(13, 15, 19)));
         String avatarUrl = ZeroChillAccountRepository.avatarUrl(state.avatarPath);
         if (!avatarUrl.isEmpty()) {
@@ -442,7 +448,7 @@ public final class ZeroChillAccountActivity extends Activity {
         identity.setPadding(dp(14), 0, 0, 0);
 
         TextView username = text(
-                state.username.isEmpty() ? "ZEROCHILL USER" : "@" + state.username,
+                SocialUi.name(state.displayName, state.username),
                 21,
                 Color.WHITE,
                 true
@@ -451,7 +457,7 @@ public final class ZeroChillAccountActivity extends Activity {
 
         if (!state.displayName.isEmpty()) {
             TextView display = text(
-                    state.displayName,
+                    SocialUi.cleanName(state.username),
                     13,
                     UiPalette.PRIMARY,
                     true

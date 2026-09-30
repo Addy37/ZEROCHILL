@@ -274,32 +274,7 @@ final class LibrarySocialHubView extends LinearLayout {
     }
 
     private void refreshSocialActivity() {
-        if (closed) return;
-        syncSession();
-        if (session.isEmpty() || socialLoading || !active) return;
-        final String requestedSession = session;
-        final int generation = ++socialGeneration;
-        socialLoading = true;
-        ZeroChillSocialRepository.loadCommentActivity(activity, (items, error) ->
-                activity.runOnUiThread(() -> {
-                    if (closed || generation != socialGeneration) return;
-                    socialLoading = false;
-                    String actualSession = sessionProvider.current(activity);
-                    if (actualSession == null) actualSession = "";
-                    if (!requestedSession.equals(actualSession)) {
-                        refreshSocialActivity();
-                        return;
-                    }
-                    if (error == null && items != null && !items.isEmpty()) {
-                        UpdateInboxStore.recordSocialActivities(
-                                activity,
-                                requestedSession,
-                                items
-                        );
-                    }
-                    refreshNotifications();
-                })
-        );
+        if (!closed && active) SocialActivityCoordinator.requestRefresh(activity);
     }
 
     private void showMessages(ZeroChillSocialRepository.Conversation latest, int unread) {
@@ -309,7 +284,7 @@ final class LibrarySocialHubView extends LinearLayout {
         String stamp = "";
         if (latest != null && latest.profile != null && latest.lastMessage != null) {
             ZeroChillSocialRepository.PublicProfile profile = latest.profile;
-            name = profile.displayName.isEmpty() ? "@" + profile.username : profile.displayName;
+            name = SocialUi.name(profile.displayName, profile.username);
             preview = latest.lastMessage.body;
             stamp = time(latest.lastMessage.createdAt);
         }

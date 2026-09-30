@@ -70,10 +70,12 @@ public final class CrazyShitApplication extends Application {
                     NotificationCoordinator.onAppForeground(activity);
                 }
                 UiFoundationCoordinator.onActivityResumed(activity);
+                if (!StartupWizardPolicy.shouldShow(activity)) SocialActivityCoordinator.onResumed(activity);
             }
 
             @Override
             public void onActivityPaused(Activity activity) {
+                SocialActivityCoordinator.onPaused(activity);
                 UiFoundationCoordinator.onActivityPaused(activity);
             }
 

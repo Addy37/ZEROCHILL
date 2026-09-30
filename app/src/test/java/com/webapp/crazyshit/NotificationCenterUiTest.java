@@ -16,6 +16,7 @@ import org.robolectric.annotation.Config;
 import org.robolectric.Shadows;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.util.Collections;
 import static org.junit.Assert.*;
 
 @RunWith(RobolectricTestRunner.class)
@@ -81,6 +82,7 @@ public class NotificationCenterUiTest {
         row.performClick();
         assertTrue(UpdateInboxStore.all(activity).get(0).read);
         adapter.bindViewHolder(holder, 0);
+        Shadows.shadowOf(android.os.Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(200));
         assertEquals(View.INVISIBLE, trailing.getChildAt(1).getVisibility());
         controller.pause().stop().destroy();
     }
@@ -100,6 +102,64 @@ public class NotificationCenterUiTest {
         assertEquals("You're caught up", text(activity, "count").getText().toString());
         controller.resume();
         assertEquals("1 unread notification", text(activity, "count").getText().toString());
+        controller.pause().stop().destroy();
+    }
+
+    @Test public void cachedSocialNamesAreCleanAndLikesUseTheWholeRow() throws Exception {
+        ActivityController<UpdateInboxActivity> controller = Robolectric.buildActivity(UpdateInboxActivity.class).setup();
+        UpdateInboxActivity activity = controller.get();
+        UpdateInboxStore.Entry entry = new UpdateInboxStore.Entry();
+        entry.id = "social:like";
+        entry.category = UpdateInboxStore.CATEGORY_SOCIAL;
+        entry.socialType = ZeroChillSocialRepository.SocialActivity.TYPE_LIKE;
+        entry.actorName = "@Addy37";
+        entry.title = "@Addy37 liked your comment";
+        entry.subtitle = "Original comment text";
+        RecyclerView recycler = (RecyclerView) value(activity, "recycler");
+        Object adapter = value(activity, "adapter");
+        Method replace = adapter.getClass().getDeclaredMethod("replace", java.util.List.class);
+        replace.setAccessible(true);
+        replace.invoke(adapter, Collections.singletonList(entry));
+        RecyclerView.Adapter rows = (RecyclerView.Adapter) adapter;
+        RecyclerView.ViewHolder holder = rows.createViewHolder(recycler, 0);
+        rows.bindViewHolder(holder, 0);
+        android.widget.LinearLayout row = (android.widget.LinearLayout) ((android.widget.LinearLayout) holder.itemView).getChildAt(1);
+        android.widget.LinearLayout labels = (android.widget.LinearLayout) row.getChildAt(1);
+        assertEquals("Addy37 liked your comment", ((TextView) labels.getChildAt(0)).getText().toString());
+        assertEquals(View.GONE, labels.getChildAt(2).getVisibility());
+        assertTrue(row.isClickable());
+        controller.pause().stop().destroy();
+    }
+
+    @Test public void replyActionsHaveGenerousTouchTargetsAndFilterStateSurvivesRefresh() throws Exception {
+        ActivityController<UpdateInboxActivity> controller = Robolectric.buildActivity(UpdateInboxActivity.class).setup();
+        UpdateInboxActivity activity = controller.get();
+        UpdateInboxStore.Entry entry = new UpdateInboxStore.Entry();
+        entry.id = "social:reply";
+        entry.category = UpdateInboxStore.CATEGORY_SOCIAL;
+        entry.socialType = ZeroChillSocialRepository.SocialActivity.TYPE_REPLY;
+        entry.actorName = "Addy37";
+        RecyclerView recycler = (RecyclerView) value(activity, "recycler");
+        Object adapter = value(activity, "adapter");
+        Method replace = adapter.getClass().getDeclaredMethod("replace", java.util.List.class);
+        replace.setAccessible(true);
+        replace.invoke(adapter, Collections.singletonList(entry));
+        RecyclerView.Adapter rows = (RecyclerView.Adapter) adapter;
+        RecyclerView.ViewHolder holder = rows.createViewHolder(recycler, 0);
+        rows.bindViewHolder(holder, 0);
+        android.widget.LinearLayout row = (android.widget.LinearLayout) ((android.widget.LinearLayout) holder.itemView).getChildAt(1);
+        android.widget.LinearLayout labels = (android.widget.LinearLayout) row.getChildAt(1);
+        android.widget.LinearLayout actions = (android.widget.LinearLayout) labels.getChildAt(2);
+        assertEquals(View.VISIBLE, actions.getVisibility());
+        assertEquals(44, Math.round(actions.getChildAt(0).getLayoutParams().height
+                / activity.getResources().getDisplayMetrics().density));
+        assertEquals(44, Math.round(actions.getChildAt(1).getLayoutParams().height
+                / activity.getResources().getDisplayMetrics().density));
+        TextView social = text(activity, "socialFilter");
+        social.performClick();
+        render(activity);
+        assertEquals(Boolean.TRUE, social.getTag());
+        assertEquals(Boolean.FALSE, text(activity, "allFilter").getTag());
         controller.pause().stop().destroy();
     }
 

@@ -934,6 +934,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
 
     private void openComments(NativeContentItem item) {
         if (item == null || item.url == null || item.url.isEmpty()) return;
+        SocialContentContextStore.remember(this, item);
         new InlineCommentsDialog(
                 this,
                 item.url,
@@ -1205,7 +1206,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     }
 
     private void markLibraryUpdatesSeen() {
-        UpdateInboxStore.markAllRead(this);
+        // Visiting Library does not mean the user has read each social conversation.
         refreshLibraryUpdateIndicator();
     }
 

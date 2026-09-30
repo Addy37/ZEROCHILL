@@ -62,6 +62,17 @@ final class ZeroChillSocialRepository {
             this.likedByMe = likedByMe;
         }
 
+        private Comment(Comment source, boolean liked) {
+            id = source.id; parentId = source.parentId; userId = source.userId;
+            body = source.body; createdAt = source.createdAt; editedAt = source.editedAt;
+            deletedAt = source.deletedAt; username = source.username;
+            displayName = source.displayName; avatarPath = source.avatarPath;
+            likedByMe = liked;
+            likeCount = Math.max(0, source.likeCount + (liked == source.likedByMe ? 0 : liked ? 1 : -1));
+        }
+
+        Comment withLikeState(boolean liked) { return new Comment(this, liked); }
+
         boolean deleted() {
             return !clean(deletedAt).isEmpty();
         }

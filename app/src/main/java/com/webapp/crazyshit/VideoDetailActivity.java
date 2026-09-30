@@ -83,6 +83,9 @@ public class VideoDetailActivity extends Activity {
     public static final String EXTRA_SHOWS_ORIGIN = "shows_origin";
     public static final String EXTRA_PLAYBACK_IDENT = "playback_ident";
     public static final String EXTRA_SHOWS_CONTINUE_RESUME = "shows_continue_resume";
+    public static final String EXTRA_SOCIAL_ENTRY = "social_entry";
+    public static final String EXTRA_SOCIAL_FOCUS_COMMENT_ID = "social_focus_comment_id";
+    public static final String EXTRA_SOCIAL_AUTO_REPLY = "social_auto_reply";
 
     private static final String SITE = "https://crazyshit.com/";
     private static final int CONTROL_TIMEOUT_MS = 2500;
@@ -146,6 +149,13 @@ public class VideoDetailActivity extends Activity {
     private String posterUrl;
     private boolean showsOrigin;
     private boolean playbackIdent;
+    private boolean socialEntry;
+    private String socialFocusCommentId;
+    private boolean socialAutoReply;
+    private boolean socialCommentsOpened;
+    private InlineCommentsDialog activeComments;
+    private boolean socialNavigationPendingReturn;
+    private boolean socialReturnPlayWhenReady;
     private boolean videoLiked;
     private int videoLikeCount;
     private String videoLikePageUrl = "";
@@ -259,6 +269,11 @@ public class VideoDetailActivity extends Activity {
         posterUrl = clean(getIntent().getStringExtra(EXTRA_POSTER_URL));
         showsOrigin = getIntent().getBooleanExtra(EXTRA_SHOWS_ORIGIN, false);
         playbackIdent = showsOrigin || getIntent().getBooleanExtra(EXTRA_PLAYBACK_IDENT, false);
+        socialEntry = getIntent().getBooleanExtra(EXTRA_SOCIAL_ENTRY, false);
+        socialFocusCommentId = clean(getIntent().getStringExtra(EXTRA_SOCIAL_FOCUS_COMMENT_ID));
+        socialAutoReply = getIntent().getBooleanExtra(EXTRA_SOCIAL_AUTO_REPLY, false);
+        socialCommentsOpened = state != null && state.getBoolean("social_comments_opened", false)
+                && !state.getBoolean("social_comments_visible", false);
         requestedStartPosition = getIntent().getLongExtra(PlayerActivity.EXTRA_START_POSITION, -1L);
 
         if (mediaUrl == null || mediaUrl.trim().isEmpty()) {
@@ -287,6 +302,12 @@ public class VideoDetailActivity extends Activity {
         applyOrientation(getResources().getConfiguration().orientation);
         if (!showsOrigin) loadRelated();
         root.post(this::playEntranceOnce);
+        if (socialEntry && !socialCommentsOpened) {
+            socialCommentsOpened = true;
+            root.post(() -> {
+                if (!isFinishing() && !isDestroyed() && supportsComments()) openComments();
+            });
+        }
     }
 
     private void buildUi() {
@@ -1541,13 +1562,43 @@ public class VideoDetailActivity extends Activity {
 
     private void openComments() {
         if (pageUrl.isEmpty() || !supportsComments()) return;
-        new InlineCommentsDialog(
+        SocialContentContextStore.remember(this, new NativeContentItem(NativeContentItem.KIND_MEDIA,
+                title, pageUrl, posterUrl, views, uploader, comments));
+        if (activeComments != null && activeComments.isShowing()) return;
+        activeComments = new InlineCommentsDialog(
                 this,
                 pageUrl,
                 title,
                 comments,
-                null
-        ).show();
+                socialEntry ? socialFocusCommentId : "",
+                socialEntry && socialAutoReply,
+                new InlineCommentsDialog.ResizeListener() {
+                    @Override public void onSheetTopChanged(int top) { }
+                    @Override public void onSheetClosed() { activeComments = null; }
+                }
+        );
+        activeComments.show();
+        // Subsequent manual opens are ordinary comment browsing, including after related navigation.
+        socialFocusCommentId = "";
+        socialAutoReply = false;
+    }
+
+    boolean openSocialCommentsIfCurrent(String targetPageUrl, String commentId, boolean reply) {
+        if (!ZeroChillSocialRepository.contentKey(targetPageUrl).equals(ZeroChillSocialRepository.contentKey(pageUrl)) || !supportsComments()) return false;
+        if (activeComments != null && activeComments.isShowing()) activeComments.dismiss();
+        activeComments = new InlineCommentsDialog(this, pageUrl, title, comments, commentId, reply,
+                new InlineCommentsDialog.ResizeListener() {
+                    @Override public void onSheetTopChanged(int top) { }
+                    @Override public void onSheetClosed() { activeComments = null; }
+                });
+        activeComments.show();
+        return true;
+    }
+
+    void prepareForSocialNavigation() {
+        socialNavigationPendingReturn = true;
+        socialReturnPlayWhenReady = player != null && player.getPlayWhenReady();
+        if (player != null) player.pause();
     }
 
     private void refreshVideoLikeState(boolean force) {
@@ -1982,6 +2033,7 @@ public class VideoDetailActivity extends Activity {
     }
 
     private void onPhysicalOrientation(SensorMediaOrientationListener.Position position) {
+        if (socialEntry && activeComments != null && activeComments.isShowing()) return;
         if (showsOrigin || portraitVideo) return;
         if (position == SensorMediaOrientationListener.Position.LANDSCAPE) {
             sensorFullscreen = true;
@@ -2081,7 +2133,12 @@ public class VideoDetailActivity extends Activity {
             PhoneOrientationPolicy.exitFullscreenVideo(this);
             return;
         }
-        if (restorePreviousRelatedVideo(true)) return;
+        if (!socialEntry && restorePreviousRelatedVideo(true)) return;
+        if (socialEntry) {
+            savePlaybackState(false);
+            finish();
+            return;
+        }
         if (getSharedPreferences("app_prefs", MODE_PRIVATE).getBoolean("minimize_on_back", true)) {
             minimizing = true;
             minimizeToFeed();
@@ -2118,6 +2175,13 @@ public class VideoDetailActivity extends Activity {
     @Override
     public void onBackPressed() {
         handleBack();
+    }
+
+    @Override
+    protected void onSaveInstanceState(Bundle outState) {
+        outState.putBoolean("social_comments_opened", socialCommentsOpened);
+        outState.putBoolean("social_comments_visible", activeComments != null && activeComments.isShowing());
+        super.onSaveInstanceState(outState);
     }
 
     private boolean rememberPositionEnabled() {
@@ -2264,6 +2328,10 @@ public class VideoDetailActivity extends Activity {
         super.onResume();
         recoveryResumed = true;
         if (orientationListener != null) orientationListener.enable();
+        if (socialNavigationPendingReturn) {
+            socialNavigationPendingReturn = false;
+            if (player != null) player.setPlayWhenReady(socialReturnPlayWhenReady);
+        }
         updateSwipeEnabled();
         if (detailsScroll != null) applyDetailsBackground();
         refreshVideoLikeState(true);
@@ -2286,6 +2354,7 @@ public class VideoDetailActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        if (activeComments != null) activeComments.dismiss();
         if (orientationListener != null) orientationListener.disable();
         abortRelatedBackPreview();
         dismissShowsLaunchCurtain(true);
