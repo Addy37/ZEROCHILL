@@ -12,7 +12,11 @@ The current repository query reads the latest 500 message rows, so unread counts
 
 Notifications reuse `UpdateInboxStore` and `UpdateInboxActivity`, now titled Notifications. The existing persistent inbox keeps up to 200 entries, newest first, with individual read state and Read all. Tapping a creator entry opens its gallery with fresh-content markers. Tapping an app update opens the existing update check.
 
-Supported events remain favorite OnlyFap creator activity from the existing content checker and app release updates. No fake events, comment/reply/like alerts, or duplicate DM notifications are added. Creator and app updates are local to the installation, available signed out, and are not cloud-synced. Existing favorites determine which creator events remain in history. Android notification permission does not gate the in-app history.
+Supported events include favorite OnlyFap creator activity, ZeroChill app releases, replies to the signed-in user's comments, and likes on the signed-in user's comments. Social activity reuses the existing comments, comment likes, profiles, and account session APIs without a new backend table. The client reads activity from the last 30 days across the user's 200 most recent comments, dedupes repeated polling results, and keeps stored social rows scoped to the account that received them.
+
+Creator and app updates remain available signed out. Social activity is only visible while its matching ZeroChill account is signed in. Notification history remains local to the installation and is not cloud-synced. Existing favorites determine which creator events remain in history. Android notification permission does not gate the in-app history.
+
+The notification center includes a Social filter. Tapping a like or reply opens the existing ZeroChill comment sheet for the original video and briefly highlights the matching comment or reply. No Android push notifications, realtime subscriptions, mention alerts, or duplicate DM notifications are added.
 
 The center listens for local history changes while resumed, with short row/read-state transitions and press feedback. Its old activity name and More entry remain compatible.
 
