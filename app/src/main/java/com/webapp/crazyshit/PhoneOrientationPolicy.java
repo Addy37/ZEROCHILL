@@ -53,6 +53,11 @@ final class PhoneOrientationPolicy {
         requestFullscreen(activity, ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
     }
 
+    static void enterPortraitFullscreen(Activity activity) {
+        if (activity == null || activity.isFinishing()) return;
+        requestFullscreen(activity, ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
+    }
+
     static void enterShowsFullscreen(Activity activity, boolean portraitVideo) {
         if (activity == null || activity.isFinishing()) return;
         requestFullscreen(
