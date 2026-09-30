@@ -29,6 +29,11 @@ public class NotificationCenterUiTest {
         org.robolectric.RuntimeEnvironment.getApplication()
                 .getSharedPreferences("zerochill_social_content_context_v1", Context.MODE_PRIVATE)
                 .edit().clear().commit();
+        PlaybackHistoryStore.resetForTests();
+        org.robolectric.RuntimeEnvironment.getApplication()
+                .getSharedPreferences("playback_history", Context.MODE_PRIVATE)
+                .edit().clear().commit();
+        PlaybackHistoryStore.resetForTests();
     }
 
     @Test public void emptyHistoryAndZeroUnreadRemainCleanAcrossRecreation() throws Exception {
@@ -211,6 +216,29 @@ public class NotificationCenterUiTest {
         assertTrue(thumbnail.isClickable());
         assertEquals("Open video and conversation", thumbnail.getContentDescription());
         controller.pause().stop().destroy();
+    }
+
+    @Test public void olderSocialRowsCanRecoverPosterFromLocalPlaybackHistory() {
+        Context context = org.robolectric.RuntimeEnvironment.getApplication();
+        String pageUrl = "https://crazyshit.com/video/history-thumbnail";
+        String posterUrl = "https://cdn.example/history-thumb.jpg";
+        PlaybackHistoryStore.record(
+                context,
+                "History thumbnail",
+                pageUrl,
+                posterUrl,
+                8_000L,
+                60_000L,
+                false,
+                false
+        );
+        PlaybackHistoryStore.awaitPendingWritesForTests();
+
+        NativeContentItem recovered =
+                UpdateInboxActivity.localArtworkFromHistory(context, pageUrl);
+        assertNotNull(recovered);
+        assertEquals(pageUrl, recovered.url);
+        assertEquals(posterUrl, recovered.imageUrl);
     }
 
     @Test @org.robolectric.annotation.GraphicsMode(org.robolectric.annotation.GraphicsMode.Mode.NATIVE)
