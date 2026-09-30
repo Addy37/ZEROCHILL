@@ -72,8 +72,6 @@ select
     c.user_id,
     c.body,
     c.created_at,
-    c.edited_at,
-    c.deleted_at,
     p.username,
     p.display_name,
     p.avatar_path,
@@ -84,7 +82,9 @@ select
             from public.comment_likes cl
             where cl.comment_id = c.id
         )
-    end as like_count
+    end as like_count,
+    c.edited_at,
+    c.deleted_at
 from public.comments c
 join public.profiles p on p.user_id = c.user_id;
 
