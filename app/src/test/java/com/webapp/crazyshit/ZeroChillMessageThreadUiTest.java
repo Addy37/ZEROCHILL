@@ -70,10 +70,12 @@ public class ZeroChillMessageThreadUiTest {
         adapter.bindViewHolder(holder, 0);
         assertEquals(Gravity.LEFT, row.getGravity() & Gravity.HORIZONTAL_GRAVITY_MASK);
         assertEquals(View.INVISIBLE, avatar.getVisibility());
+        assertEquals(View.GONE, time.getVisibility());
         assertEquals(Color.rgb(35, 38, 45), ((GradientDrawable) bubble.getBackground()).getColor().getDefaultColor());
         int firstGap = ((RecyclerView.LayoutParams) row.getLayoutParams()).topMargin;
         adapter.bindViewHolder(holder, 1);
         assertEquals(View.VISIBLE, avatar.getVisibility());
+        assertEquals(View.VISIBLE, time.getVisibility());
         assertNotNull(avatar.getDrawable());
         assertTrue(((RecyclerView.LayoutParams) row.getLayoutParams()).topMargin < firstGap);
         adapter.bindViewHolder(holder, 2);
@@ -81,8 +83,10 @@ public class ZeroChillMessageThreadUiTest {
         assertEquals(View.GONE, avatar.getVisibility());
         assertEquals(Color.rgb(8, 146, 208), ((GradientDrawable) bubble.getBackground()).getColor().getDefaultColor());
         assertEquals(Color.WHITE, body.getCurrentTextColor());
-        assertFalse(time.getText().toString().isEmpty());
+        assertEquals(View.GONE, time.getVisibility());
         adapter.bindViewHolder(holder, 3);
+        assertEquals(View.VISIBLE, time.getVisibility());
+        assertFalse(time.getText().toString().isEmpty());
         row.measure(View.MeasureSpec.makeMeasureSpec(320, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
         row.layout(0, 0, 320, row.getMeasuredHeight());
         assertEquals(2000, body.getText().length());
@@ -90,6 +94,7 @@ public class ZeroChillMessageThreadUiTest {
         assertTrue(bubble.getMeasuredWidth() < row.getMeasuredWidth());
         adapter.bindViewHolder(holder, 1);
         assertEquals(View.VISIBLE, avatar.getVisibility());
+        assertEquals(View.VISIBLE, time.getVisibility());
         assertEquals("Another incoming message", body.getText().toString());
     }
 
