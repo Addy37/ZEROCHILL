@@ -97,7 +97,6 @@ public final class ZeroChillAccountActivity extends Activity {
         FrameLayout root = new FrameLayout(this);
         root.setBackgroundColor(Color.BLACK);
         addAmbientGlow(root, Gravity.TOP | Gravity.END, dp(220), dp(220), dp(64), dp(-70));
-        addAmbientGlow(root, Gravity.BOTTOM | Gravity.START, dp(180), dp(180), dp(-58), dp(90));
 
         LinearLayout shell = new LinearLayout(this);
         shell.setOrientation(LinearLayout.VERTICAL);
