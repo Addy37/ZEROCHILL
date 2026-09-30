@@ -59,6 +59,17 @@ public class PhoneOrientationPolicyTest {
         activity.finish();
     }
 
+    @Test public void legacyShowsPortraitFullscreenAlsoStaysLockedPortrait() {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        PhoneOrientationPolicy.enterShowsFullscreen(activity, true);
+        PhoneOrientationPolicy.applyBrowsingOrientation(activity);
+        assertEquals(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT,
+                activity.getRequestedOrientation());
+        PhoneOrientationPolicy.exitFullscreenVideo(activity);
+        PhoneOrientationPolicy.onActivityDestroyed(activity);
+        activity.finish();
+    }
+
     @Test public void fullscreenCanRotateAndReturningRestoresPortrait() {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
         PhoneOrientationPolicy.applyBrowsingOrientation(activity);
