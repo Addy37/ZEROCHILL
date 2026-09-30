@@ -53,6 +53,8 @@ public final class ZeroChillMessageActivity extends Activity {
     private boolean blockedByMe;
     private boolean resumed;
     private boolean loading;
+    private boolean refreshQueued;
+    private long threadRevision;
     private String lastMessageId = "";
 
     private ImageView avatar;
@@ -239,19 +241,31 @@ public final class ZeroChillMessageActivity extends Activity {
     }
 
     private void loadThread(boolean showLoading) {
-        if (loading) return;
+        if (loading) {
+            refreshQueued = true;
+            return;
+        }
         loading = true;
+        long revisionAtStart = threadRevision;
         if (showLoading) progress.setVisibility(View.VISIBLE);
         ZeroChillSocialRepository.loadDirectMessages(this, partnerId, (items, error) ->
                 runOnUiThread(() -> {
                     loading = false;
                     progress.setVisibility(View.GONE);
+                    boolean stale = revisionAtStart != threadRevision;
+                    boolean rerun = refreshQueued || stale;
+                    refreshQueued = false;
                     if (error != null || items == null) {
                         if (showLoading) Toast.makeText(
                                 this,
                                 error == null ? "Couldn't load messages." : error.getMessage(),
                                 Toast.LENGTH_LONG
                         ).show();
+                        if (rerun) loadThread(false);
+                        return;
+                    }
+                    if (stale) {
+                        loadThread(false);
                         return;
                     }
                     String newest = items.isEmpty() ? "" : items.get(items.size() - 1).id;
@@ -277,6 +291,7 @@ public final class ZeroChillMessageActivity extends Activity {
                                 }
                         );
                     }
+                    if (rerun) loadThread(false);
                 })
         );
     }
@@ -297,6 +312,14 @@ public final class ZeroChillMessageActivity extends Activity {
                         return;
                     }
                     composer.setText("");
+                    threadRevision++;
+                    if (message != null) {
+                        adapter.upsert(message);
+                        lastMessageId = message.id;
+                        if (adapter.getItemCount() > 0) {
+                            recycler.scrollToPosition(adapter.getItemCount() - 1);
+                        }
+                    }
                     loadThread(false);
                 })
         );
@@ -427,6 +450,19 @@ public final class ZeroChillMessageActivity extends Activity {
             items.clear();
             if (next != null) items.addAll(next);
             notifyDataSetChanged();
+        }
+
+        void upsert(ZeroChillSocialRepository.DirectMessage message) {
+            if (message == null) return;
+            for (int i = 0; i < items.size(); i++) {
+                if (message.id.equals(items.get(i).id)) {
+                    items.set(i, message);
+                    notifyItemChanged(i);
+                    return;
+                }
+            }
+            items.add(message);
+            notifyItemInserted(items.size() - 1);
         }
 
         @Override
