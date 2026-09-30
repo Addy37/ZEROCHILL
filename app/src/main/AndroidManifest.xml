@@ -41,8 +41,19 @@
             android:name=".ZeroChillAccountActivity"
             android:screenOrientation="portrait"
             android:enableOnBackInvokedCallback="true"
-            android:exported="false"
-            android:windowSoftInputMode="adjustResize" />
+            android:exported="true"
+            android:launchMode="singleTop"
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="com.addy37.zerochill"
+                    android:host="auth"
+                    android:path="/confirmed" />
+            </intent-filter>
+        </activity>
 
         <activity
             android:name=".SettingsActivity"
