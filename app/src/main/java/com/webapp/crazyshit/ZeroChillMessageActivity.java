@@ -180,6 +180,13 @@ public final class ZeroChillMessageActivity extends Activity {
         composer.setPadding(dp(14), dp(10), dp(14), dp(10));
         composer.setFilters(new InputFilter[]{new InputFilter.LengthFilter(2000)});
         composer.setBackground(inputBackground());
+        composer.setOnFocusChangeListener((view, hasFocus) -> {
+            if (!hasFocus) return;
+            recycler.postDelayed(() -> {
+                int count = adapter == null ? 0 : adapter.getItemCount();
+                if (count > 0) recycler.scrollToPosition(count - 1);
+            }, 180L);
+        });
         compose.addView(composer, new LinearLayout.LayoutParams(0, -2, 1f));
 
         send = new ImageView(this);
