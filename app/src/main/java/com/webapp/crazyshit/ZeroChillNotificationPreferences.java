@@ -9,6 +9,7 @@ import java.util.concurrent.Executors;
 /** Account-synced in-app alert choices. Existing history and DM unread state are untouched. */
 final class ZeroChillNotificationPreferences {
     private static final String PREFS = "zerochill_account_alert_preferences_v1";
+    private static final java.util.concurrent.ConcurrentHashMap<String, Long> LAST_REFRESH = new java.util.concurrent.ConcurrentHashMap<>();
     private static final ExecutorService NETWORK = Executors.newSingleThreadExecutor();
     static final class Values {
         final boolean replies, likes, directMessages, creatorUpdates, appUpdates;
@@ -40,6 +41,15 @@ final class ZeroChillNotificationPreferences {
             return Values.from(new JSONObject(context.getApplicationContext().getSharedPreferences(PREFS, 0)
                     .getString(account, "{}")));
         } catch (Exception ignored) { return Values.defaults(); }
+    }
+    static void refreshIfNeeded(Context context) {
+        String account = ZeroChillSessionStore.currentUserId(context);
+        if (account.isEmpty()) return;
+        long now = android.os.SystemClock.elapsedRealtime();
+        Long previous = LAST_REFRESH.get(account);
+        if (previous != null && now - previous < 60_000L) return;
+        LAST_REFRESH.put(account, now);
+        load(context, (value, error) -> { });
     }
     static void load(Context context, ZeroChillAccountRepository.Callback<Values> callback) {
         final Context app = context.getApplicationContext();

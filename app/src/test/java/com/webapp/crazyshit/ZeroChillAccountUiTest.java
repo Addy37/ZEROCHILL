@@ -19,6 +19,9 @@ import org.robolectric.RobolectricTestRunner;
 import org.robolectric.Shadows;
 import org.robolectric.annotation.Config;
 import org.robolectric.annotation.GraphicsMode;
+import org.robolectric.annotation.Implements;
+import org.robolectric.annotation.Implementation;
+import android.content.Context;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -27,9 +30,25 @@ import java.lang.reflect.Method;
 import static org.junit.Assert.*;
 
 @RunWith(RobolectricTestRunner.class)
-@Config(application = Application.class, sdk = 35, qualifiers = "w320dp-h800dp-xhdpi")
+@Config(application = Application.class, sdk = 35, qualifiers = "w320dp-h800dp-xhdpi",
+        shadows = {ZeroChillAccountUiTest.Accounts.class, ZeroChillAccountUiTest.Sessions.class})
 public class ZeroChillAccountUiTest {
     private static final String OWNER = "00000000-0000-0000-0000-000000000001";
+
+    @Implements(value = ZeroChillAccountRepository.class, isInAndroidSdk = false)
+    public static class Accounts {
+        @Implementation protected static boolean isConfigured() { return true; }
+        @Implementation protected static boolean hasStoredSession(Context context) { return true; }
+        @Implementation protected static void current(Context context,
+                ZeroChillAccountRepository.Callback<ZeroChillAccountRepository.AccountState> callback) {
+            callback.complete(new ZeroChillAccountRepository.AccountState(true, false,
+                    OWNER, "addy@example.com", "addy37test", "Addy37", "", "2026-09-30", "Here for creators."), null);
+        }
+    }
+    @Implements(value = ZeroChillSessionStore.class, isInAndroidSdk = false)
+    public static class Sessions {
+        @Implementation protected static String currentUserId(Context context) { return OWNER; }
+    }
 
     @Test public void ownIdentityAndProfileFieldsRenderAndOpenPublicProfile() throws Exception {
         ZeroChillAccountActivity activity = create(null);

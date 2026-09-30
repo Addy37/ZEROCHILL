@@ -329,6 +329,32 @@ public final class ZeroChillPublicProfileActivity extends Activity {
                             ? " creator in common" : " creators in common"), 12,
                             ZeroChillUi.color(this, R.color.zc_text_secondary), false);
                     sharedSection.addView(count);
+                    LinearLayout artwork = new LinearLayout(this);
+                    artwork.setGravity(Gravity.CENTER_VERTICAL);
+                    int shown = 0;
+                    for (ZeroChillSocialRepository.SharedCreator creator : shared) {
+                        NativeContentItem metadata = creator.metadata;
+                        if (metadata == null || metadata.imageUrl.trim().isEmpty()) continue;
+                        if (shown++ >= 3) break;
+                        ImageView avatar = new ImageView(this);
+                        avatar.setScaleType(ImageView.ScaleType.CENTER_CROP);
+                        avatar.setContentDescription(creator.name.isEmpty() ? creator.key : creator.name);
+                        Object model = metadata.imageUrl;
+                        String referer = metadata.uploader.isEmpty() ? metadata.url : metadata.uploader;
+                        if (!referer.isEmpty() && metadata.imageUrl.startsWith("https://"))
+                            model = new com.bumptech.glide.load.model.GlideUrl(metadata.imageUrl,
+                                    new com.bumptech.glide.load.model.LazyHeaders.Builder()
+                                            .addHeader("Referer", referer).build());
+                        Glide.with(avatar).load(model).circleCrop().into(avatar);
+                        LinearLayout.LayoutParams avatarParams = new LinearLayout.LayoutParams(dp(36), dp(36));
+                        avatarParams.setMarginEnd(dp(7));
+                        artwork.addView(avatar, avatarParams);
+                    }
+                    if (artwork.getChildCount() > 0) {
+                        LinearLayout.LayoutParams artParams = new LinearLayout.LayoutParams(-1, -2);
+                        artParams.topMargin = dp(10);
+                        sharedSection.addView(artwork, artParams);
+                    }
                     TextView names = text(sharedNames(shared), 12,
                             ZeroChillUi.color(this, R.color.zc_text_secondary), false);
                     LinearLayout.LayoutParams namesParams = new LinearLayout.LayoutParams(-1, -2);

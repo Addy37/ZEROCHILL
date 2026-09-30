@@ -106,6 +106,7 @@ final class SocialActivityCoordinator {
             presenter.hide();
         }
         if (account.isEmpty() || loading || SystemClock.elapsedRealtime() - lastPoll < POLL_MS) return;
+        ZeroChillNotificationPreferences.refreshIfNeeded(context);
         final String requestedAccount = account;
         final int requestGeneration = generation;
         loading = true;

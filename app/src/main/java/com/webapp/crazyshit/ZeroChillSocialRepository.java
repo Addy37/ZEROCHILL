@@ -115,8 +115,12 @@ final class ZeroChillSocialRepository {
     static final class SharedCreator {
         final String key;
         final String name;
+        final NativeContentItem metadata;
 
-        SharedCreator(JSONObject value) {
+        SharedCreator(JSONObject value) { this(value, null); }
+
+        SharedCreator(JSONObject value, NativeContentItem metadata) {
+            this.metadata = metadata;
             key = clean(value.optString("creator_key"));
             name = clean(value.optString("creator_name"));
         }
@@ -647,8 +651,12 @@ final class ZeroChillSocialRepository {
                 if (!response.ok()) throw error(response, "Unable to load shared creators.");
                 JSONArray rows = response.body.isEmpty() ? new JSONArray() : new JSONArray(response.body);
                 ArrayList<SharedCreator> shared = new ArrayList<>();
+                Map<String, NativeContentItem> artwork = new LinkedHashMap<>();
+                for (NativeContentItem item : CreatorCatalog.rawFavorites(context))
+                    artwork.put(CreatorFavoriteStore.key(item), item);
                 for (int i = 0; i < rows.length(); i++) {
-                    SharedCreator creator = new SharedCreator(rows.getJSONObject(i));
+                    JSONObject row = rows.getJSONObject(i);
+                    SharedCreator creator = new SharedCreator(row, artwork.get(clean(row.optString("creator_key"))));
                     if (!creator.key.isEmpty()) shared.add(creator);
                 }
                 requireSameAccount(context, expectedUser);
