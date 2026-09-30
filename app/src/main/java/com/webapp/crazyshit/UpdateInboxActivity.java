@@ -37,6 +37,8 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 /** Notification history backed by the existing local update inbox. */
 public final class UpdateInboxActivity extends Activity {
@@ -58,6 +60,7 @@ public final class UpdateInboxActivity extends Activity {
     private SharedPreferences inboxPreferences;
     private boolean observing;
     private boolean socialLoading;
+    private final ExecutorService artworkIo = Executors.newSingleThreadExecutor();
     private int socialGeneration;
     private final Runnable refreshHistory = () -> {
         if (observing && !isFinishing() && !isDestroyed()) render();
@@ -101,6 +104,12 @@ public final class UpdateInboxActivity extends Activity {
     protected void onSaveInstanceState(Bundle state) {
         state.putString("filter", activeFilter);
         super.onSaveInstanceState(state);
+    }
+
+    @Override
+    protected void onDestroy() {
+        artworkIo.shutdownNow();
+        super.onDestroy();
     }
 
     private void buildUi() {
@@ -308,6 +317,26 @@ public final class UpdateInboxActivity extends Activity {
         return name.isEmpty() ? "Someone" : name;
     }
 
+    static NativeContentItem localArtworkFromHistory(Context context, String pageUrl) {
+        if (context == null || pageUrl == null || pageUrl.trim().isEmpty()) return null;
+        String key = ZeroChillSocialRepository.contentKey(pageUrl);
+        if (key.isEmpty()) return null;
+        for (PlaybackHistoryStore.Item item : PlaybackHistoryStore.load(context)) {
+            if (item == null || item.posterUrl == null || item.posterUrl.trim().isEmpty()) continue;
+            if (!key.equals(ZeroChillSocialRepository.contentKey(item.pageUrl))) continue;
+            return new NativeContentItem(
+                    NativeContentItem.KIND_MEDIA,
+                    item.title,
+                    item.pageUrl,
+                    item.posterUrl,
+                    "",
+                    "",
+                    ""
+            );
+        }
+        return null;
+    }
+
     private int dp(int value) {
         return BrowseUi.dp(this, value);
     }
@@ -317,6 +346,8 @@ public final class UpdateInboxActivity extends Activity {
         private final Map<String, ZeroChillSocialRepository.Comment> commentStates = new HashMap<>();
         private final Set<String> commentPagesLoading = new HashSet<>();
         private final Set<String> commentLikeRequests = new HashSet<>();
+        private final Set<String> artworkLookups = new HashSet<>();
+        private final Set<String> artworkChecked = new HashSet<>();
         private String loadedAccount = "";
 
         void replace(List<UpdateInboxStore.Entry> next) {
@@ -760,6 +791,9 @@ public final class UpdateInboxActivity extends Activity {
                     (first.uploader == null || first.uploader.trim().isEmpty()
                             ? first.url : first.uploader);
             boolean show = imageUrl != null && !imageUrl.trim().isEmpty();
+            if (!show && UpdateInboxStore.CATEGORY_SOCIAL.equals(entry.category)) {
+                requestLocalSocialArtwork(entry);
+            }
             if (!(referer.startsWith("https://") || referer.startsWith("http://"))) referer = first == null ? "" : first.url;
             holder.thumbnail.setVisibility(show ? View.VISIBLE : View.GONE);
             holder.thumbnail.setClickable(show);
@@ -774,6 +808,31 @@ public final class UpdateInboxActivity extends Activity {
                 holder.thumbnail.setImageDrawable(null);
                 loadImage(holder.thumbnail, imageUrl, referer, 0, false);
             }
+        }
+
+        private void requestLocalSocialArtwork(UpdateInboxStore.Entry entry) {
+            if (entry == null || entry.pageUrl == null || entry.pageUrl.trim().isEmpty()) return;
+            String pageUrl = entry.pageUrl.trim();
+            String key = ZeroChillSocialRepository.contentKey(pageUrl);
+            if (key.isEmpty() || artworkChecked.contains(key) || !artworkLookups.add(key)) return;
+
+            Context appContext = getApplicationContext();
+            artworkIo.execute(() -> {
+                NativeContentItem recovered = localArtworkFromHistory(appContext, pageUrl);
+                if (recovered != null) SocialContentContextStore.remember(appContext, recovered);
+                runOnUiThread(() -> {
+                    artworkLookups.remove(key);
+                    artworkChecked.add(key);
+                    if (isFinishing() || isDestroyed() || recovered == null) return;
+                    for (int i = 0; i < items.size(); i++) {
+                        UpdateInboxStore.Entry candidate = items.get(i);
+                        if (candidate != null
+                                && key.equals(ZeroChillSocialRepository.contentKey(candidate.pageUrl))) {
+                            notifyItemChanged(i, "artwork");
+                        }
+                    }
+                });
+            });
         }
 
         private void loadImage(
