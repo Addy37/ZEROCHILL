@@ -1,5 +1,8 @@
 package com.webapp.crazyshit;
 
+import android.animation.AnimatorSet;
+import android.animation.ObjectAnimator;
+import android.animation.ValueAnimator;
 import android.app.Activity;
 import android.content.Intent;
 import android.graphics.Bitmap;
@@ -12,6 +15,7 @@ import android.provider.Settings;
 import android.text.InputType;
 import android.view.Gravity;
 import android.view.View;
+import android.view.animation.LinearInterpolator;
 import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
@@ -33,6 +37,9 @@ public final class ZeroChillAccountActivity extends Activity {
 
     private LinearLayout content;
     private ProgressBar progress;
+    private FrameLayout accountRoot;
+    private View ambientGlow;
+    private AnimatorSet ambientAnimator;
     private boolean createMode;
     private ZeroChillAccountRepository.AccountState account;
 
@@ -43,6 +50,18 @@ public final class ZeroChillAccountActivity extends Activity {
         buildShell();
         ResponsiveFitmentController.applySoon(this);
         if (!handleAuthRedirect(getIntent())) loadAccount();
+    }
+
+    @Override
+    protected void onStart() {
+        super.onStart();
+        if (accountRoot != null) accountRoot.post(this::startAmbientMotion);
+    }
+
+    @Override
+    protected void onStop() {
+        stopAmbientMotion();
+        super.onStop();
     }
 
     @Override
@@ -96,7 +115,8 @@ public final class ZeroChillAccountActivity extends Activity {
     private void buildShell() {
         FrameLayout root = new FrameLayout(this);
         root.setBackgroundColor(Color.BLACK);
-        addAmbientGlow(root, Gravity.TOP | Gravity.END, dp(220), dp(220), dp(64), dp(-70));
+        accountRoot = root;
+        ambientGlow = addAmbientGlow(root, dp(320));
 
         LinearLayout shell = new LinearLayout(this);
         shell.setOrientation(LinearLayout.VERTICAL);
@@ -106,7 +126,8 @@ public final class ZeroChillAccountActivity extends Activity {
         LinearLayout top = new LinearLayout(this);
         top.setGravity(Gravity.CENTER_VERTICAL);
         top.setPadding(dp(10), dp(3), dp(14), dp(3));
-        ZeroChillUi.styleTopBar(top);
+        top.setBackground(headerBackground());
+        top.setElevation(0f);
         shell.addView(top, new LinearLayout.LayoutParams(-1, dp(58)));
 
         TextView back = text("‹", 31, Color.WHITE, false);
@@ -742,32 +763,93 @@ public final class ZeroChillAccountActivity extends Activity {
         return background;
     }
 
-    private void addAmbientGlow(
-            FrameLayout parent,
-            int gravity,
-            int width,
-            int height,
-            int marginX,
-            int marginY
-    ) {
+    private View addAmbientGlow(FrameLayout parent, int size) {
         View glow = new View(this);
         GradientDrawable background = new GradientDrawable();
         background.setShape(GradientDrawable.OVAL);
         background.setGradientType(GradientDrawable.RADIAL_GRADIENT);
-        background.setGradientRadius(Math.max(width, height) * 0.52f);
+        background.setGradientRadius(size * 0.31f);
         background.setColors(new int[]{
-                Color.argb(46, 8, 146, 208),
-                Color.argb(12, 8, 146, 208),
+                Color.argb(52, 8, 146, 208),
+                Color.argb(18, 8, 146, 208),
+                Color.argb(4, 8, 146, 208),
                 Color.TRANSPARENT
         });
         glow.setBackground(background);
-        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(width, height);
-        params.gravity = gravity;
-        params.leftMargin = marginX;
-        params.rightMargin = marginX;
-        params.topMargin = marginY;
-        params.bottomMargin = marginY;
-        parent.addView(glow, params);
+        glow.setAlpha(0.62f);
+        parent.addView(glow, new FrameLayout.LayoutParams(size, size));
+        return glow;
+    }
+
+    private void startAmbientMotion() {
+        if (accountRoot == null || ambientGlow == null) return;
+        int width = accountRoot.getWidth();
+        int height = accountRoot.getHeight();
+        if (width <= 0 || height <= 0) return;
+
+        stopAmbientMotion();
+
+        float startX = -ambientGlow.getWidth() * 0.42f;
+        float endX = Math.max(startX, width - ambientGlow.getWidth() * 0.58f);
+        float startY = Math.max(0f, height * 0.16f);
+        float endY = Math.max(startY, height * 0.70f - ambientGlow.getHeight() * 0.5f);
+
+        ambientGlow.setTranslationX(startX);
+        ambientGlow.setTranslationY(startY);
+
+        ObjectAnimator driftX = ObjectAnimator.ofFloat(
+                ambientGlow,
+                View.TRANSLATION_X,
+                startX,
+                endX
+        );
+        driftX.setDuration(15_000L);
+        driftX.setRepeatCount(ValueAnimator.INFINITE);
+        driftX.setRepeatMode(ValueAnimator.REVERSE);
+        driftX.setInterpolator(new LinearInterpolator());
+
+        ObjectAnimator driftY = ObjectAnimator.ofFloat(
+                ambientGlow,
+                View.TRANSLATION_Y,
+                startY,
+                endY
+        );
+        driftY.setDuration(19_000L);
+        driftY.setRepeatCount(ValueAnimator.INFINITE);
+        driftY.setRepeatMode(ValueAnimator.REVERSE);
+        driftY.setInterpolator(new LinearInterpolator());
+
+        ObjectAnimator breathe = ObjectAnimator.ofFloat(
+                ambientGlow,
+                View.ALPHA,
+                0.42f,
+                0.72f
+        );
+        breathe.setDuration(8_000L);
+        breathe.setRepeatCount(ValueAnimator.INFINITE);
+        breathe.setRepeatMode(ValueAnimator.REVERSE);
+        breathe.setInterpolator(new LinearInterpolator());
+
+        ambientAnimator = new AnimatorSet();
+        ambientAnimator.playTogether(driftX, driftY, breathe);
+        ambientAnimator.start();
+    }
+
+    private void stopAmbientMotion() {
+        if (ambientAnimator == null) return;
+        ambientAnimator.cancel();
+        ambientAnimator = null;
+    }
+
+    private GradientDrawable headerBackground() {
+        GradientDrawable background = new GradientDrawable(
+                GradientDrawable.Orientation.TOP_BOTTOM,
+                new int[]{
+                        Color.argb(246, 0, 0, 0),
+                        Color.argb(238, 12, 15, 20)
+                }
+        );
+        return background;
     }
 
     private void setFormEnabled(boolean enabled) {
