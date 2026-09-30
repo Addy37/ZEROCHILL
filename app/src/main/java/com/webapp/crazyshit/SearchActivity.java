@@ -740,9 +740,11 @@ public final class SearchActivity extends Activity {
                 if (destroyed || isFinishing() || requestGeneration != generation) return;
                 progress.setVisibility(View.GONE);
                 if (resolved == null || resolved.mediaUrl == null || resolved.mediaUrl.isEmpty()) {
-                    Intent fallback = new Intent(this, WebFallbackActivity.class);
-                    fallback.putExtra(WebFallbackActivity.EXTRA_URL, item.url);
-                    startActivity(fallback);
+                    Toast.makeText(
+                            this,
+                            "Couldn't resolve this video natively right now.",
+                            Toast.LENGTH_SHORT
+                    ).show();
                     return;
                 }
                 Intent intent = new Intent(this, VideoDetailActivity.class);
