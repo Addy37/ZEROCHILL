@@ -1665,12 +1665,14 @@ public class VideoDetailActivity extends Activity {
                     "Keep playing while you browse",
                     this::minimizeFromMenu
             ));
-            actions.add(VideoActionSheet.action(
-                    R.drawable.ic_action_fullscreen,
-                    "Fullscreen",
-                    "Allow rotation while the video stays fullscreen",
-                    () -> setRotatableFullscreen(true)
-            ));
+            if (!portraitVideo) {
+                actions.add(VideoActionSheet.action(
+                        R.drawable.ic_action_fullscreen,
+                        "Fullscreen",
+                        "Allow rotation while the video stays fullscreen",
+                        () -> setRotatableFullscreen(true)
+                ));
+            }
         }
 
         VideoActionSheet.showCompact(
@@ -1937,10 +1939,10 @@ public class VideoDetailActivity extends Activity {
         boolean portraitOrientation = getResources().getConfiguration().orientation
                 != Configuration.ORIENTATION_LANDSCAPE;
         portraitFullscreen = enabled && portraitVideo && portraitOrientation;
-        rotatableFullscreen = portraitFullscreen;
+        rotatableFullscreen = false;
         sensorFullscreen = false;
-        if (rotatableFullscreen) {
-            PhoneOrientationPolicy.enterFullscreenVideo(this);
+        if (portraitFullscreen) {
+            PhoneOrientationPolicy.enterPortraitFullscreen(this);
         } else {
             PhoneOrientationPolicy.exitFullscreenVideo(this);
         }
@@ -1949,6 +1951,10 @@ public class VideoDetailActivity extends Activity {
     }
 
     private void setRotatableFullscreen(boolean enabled) {
+        if (enabled && portraitVideo) {
+            setPortraitFullscreen(true);
+            return;
+        }
         rotatableFullscreen = enabled;
         sensorFullscreen = false;
         if (enabled) {
@@ -1962,7 +1968,7 @@ public class VideoDetailActivity extends Activity {
     }
 
     private void onPhysicalOrientation(SensorMediaOrientationListener.Position position) {
-        if (showsOrigin) return;
+        if (showsOrigin || portraitVideo) return;
         if (position == SensorMediaOrientationListener.Position.LANDSCAPE) {
             sensorFullscreen = true;
             rotatableFullscreen = true;
@@ -2048,7 +2054,11 @@ public class VideoDetailActivity extends Activity {
             finish();
             return;
         }
-        if (portraitFullscreen || rotatableFullscreen) {
+        if (portraitFullscreen) {
+            setPortraitFullscreen(false);
+            return;
+        }
+        if (rotatableFullscreen) {
             setRotatableFullscreen(false);
             return;
         }
