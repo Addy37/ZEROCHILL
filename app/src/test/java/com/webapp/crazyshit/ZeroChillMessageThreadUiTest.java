@@ -98,6 +98,33 @@ public class ZeroChillMessageThreadUiTest {
         assertEquals("Another incoming message", body.getText().toString());
     }
 
+    @Test public void sentMessageUpsertKeepsCompleteBodyAndNewestPosition() throws Exception {
+        ZeroChillMessageActivity activity = shell();
+        RecyclerView recycler = (RecyclerView) field(activity, "recycler");
+        RecyclerView.Adapter adapter = recycler.getAdapter();
+        Method replace = adapter.getClass().getDeclaredMethod("replace", java.util.List.class);
+        replace.setAccessible(true);
+        Method upsert = adapter.getClass().getDeclaredMethod(
+                "upsert",
+                ZeroChillSocialRepository.DirectMessage.class
+        );
+        upsert.setAccessible(true);
+        replace.invoke(adapter, Arrays.asList(
+                message("me", "2026-09-30T12:00:00Z", "previous")
+        ));
+        String fullBody = "this looks the same chatgpt";
+        upsert.invoke(adapter, message("me", "2026-09-30T12:01:00Z", fullBody));
+        assertEquals(2, adapter.getItemCount());
+
+        RecyclerView.ViewHolder holder = adapter.createViewHolder(recycler, 0);
+        adapter.bindViewHolder(holder, 1);
+        LinearLayout row = (LinearLayout) holder.itemView;
+        LinearLayout bubble = (LinearLayout) row.getChildAt(1);
+        TextView body = (TextView) bubble.getChildAt(0);
+        assertEquals(Gravity.RIGHT, row.getGravity() & Gravity.HORIZONTAL_GRAVITY_MASK);
+        assertEquals(fullBody, body.getText().toString());
+    }
+
     @Test public void resizedConversationKeepsComposerBelowScrollableThreadAndRestoresHeight() throws Exception {
         ZeroChillMessageActivity activity = shell();
         RecyclerView recycler = (RecyclerView) field(activity, "recycler");
