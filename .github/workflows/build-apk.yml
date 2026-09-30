@@ -186,6 +186,14 @@ jobs:
           gradle-version: '8.7'
           cache-provider: basic
 
+      - name: Run focused Library social hub regressions first
+        run: >-
+          gradle --no-daemon :app:testDebugUnitTest
+          --tests 'com.webapp.crazyshit.LibrarySocialHub*'
+          --tests 'com.webapp.crazyshit.NotificationCenterUiTest'
+          --tests 'com.webapp.crazyshit.UpdateInboxStoreTest'
+          --tests 'com.webapp.crazyshit.OnlyFapFavoriteAvatarTest'
+
       - name: Run focused DM regressions first
         run: >-
           gradle --no-daemon :app:testDebugUnitTest

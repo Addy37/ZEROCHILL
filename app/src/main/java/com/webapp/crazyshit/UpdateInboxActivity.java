@@ -2,6 +2,8 @@ package com.webapp.crazyshit;
 
 import android.app.Activity;
 import android.content.Intent;
+import android.content.Context;
+import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.os.Bundle;
 import android.text.TextUtils;
@@ -13,6 +15,7 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import androidx.recyclerview.widget.LinearLayoutManager;
+import androidx.recyclerview.widget.DiffUtil;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.bumptech.glide.Glide;
@@ -22,7 +25,7 @@ import com.bumptech.glide.load.model.LazyHeaders;
 import java.util.ArrayList;
 import java.util.List;
 
-/** In-app activity inbox for source updates. */
+/** Notification history backed by the existing local update inbox. */
 public final class UpdateInboxActivity extends Activity {
     private static final String FILTER_ALL = "";
     private static final String FILTER_CREATORS = UpdateInboxStore.CATEGORY_ONLYFAP;
@@ -37,6 +40,16 @@ public final class UpdateInboxActivity extends Activity {
     private TextView appFilter;
     private TextView markAll;
     private String activeFilter = FILTER_ALL;
+    private SharedPreferences inboxPreferences;
+    private boolean observing;
+    private final Runnable refreshHistory = () -> {
+        if (observing && !isFinishing() && !isDestroyed()) render();
+    };
+    private final SharedPreferences.OnSharedPreferenceChangeListener inboxListener = (prefs, key) -> {
+        if (recycler == null) return;
+        recycler.removeCallbacks(refreshHistory);
+        recycler.post(refreshHistory);
+    };
 
     @Override
     protected void onCreate(Bundle state) {
@@ -49,7 +62,20 @@ public final class UpdateInboxActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
+        inboxPreferences = getSharedPreferences("zerochill_update_inbox_v1", Context.MODE_PRIVATE);
+        observing = true;
+        inboxPreferences.registerOnSharedPreferenceChangeListener(inboxListener);
         render();
+    }
+
+    @Override
+    protected void onPause() {
+        observing = false;
+        if (inboxPreferences != null) {
+            inboxPreferences.unregisterOnSharedPreferenceChangeListener(inboxListener);
+        }
+        if (recycler != null) recycler.removeCallbacks(refreshHistory);
+        super.onPause();
     }
 
     @Override
@@ -73,18 +99,19 @@ public final class UpdateInboxActivity extends Activity {
         LinearLayout titles = new LinearLayout(this);
         titles.setOrientation(LinearLayout.VERTICAL);
         titles.setPadding(dp(12), 0, dp(8), 0);
-        TextView title = BrowseUi.text(this, "Updates", 22, Color.WHITE);
+        TextView title = BrowseUi.text(this, "Notifications", 22, Color.WHITE);
         title.setTypeface(null, android.graphics.Typeface.BOLD);
         titles.addView(title);
         count = BrowseUi.text(this, "", 11, BrowseUi.MUTED);
         titles.addView(count);
         header.addView(titles, new LinearLayout.LayoutParams(0, -2, 1f));
 
-        markAll = BrowseUi.action(this, "Read all", "Mark all updates read", v -> {
+        markAll = BrowseUi.action(this, "Read all", "Mark all notifications read", v -> {
             UpdateInboxStore.markAllRead(this);
             render();
         });
         markAll.setTextSize(12);
+        ZeroChillMotion.installPressFeedback(markAll);
         header.addView(markAll, new LinearLayout.LayoutParams(dp(80), dp(44)));
         root.addView(header);
 
@@ -108,7 +135,8 @@ public final class UpdateInboxActivity extends Activity {
 
         recycler = new RecyclerView(this);
         recycler.setLayoutManager(new LinearLayoutManager(this));
-        recycler.setItemAnimator(null);
+        recycler.setPadding(0, dp(4), 0, dp(16));
+        recycler.setClipToPadding(false);
         adapter = new UpdateAdapter();
         recycler.setAdapter(adapter);
         root.addView(recycler, new LinearLayout.LayoutParams(-1, 0, 1f));
@@ -118,11 +146,12 @@ public final class UpdateInboxActivity extends Activity {
     }
 
     private TextView filter(String label, String filter) {
-        TextView view = BrowseUi.action(this, label, label + " updates", v -> {
+        TextView view = BrowseUi.action(this, label, label + " notifications", v -> {
             activeFilter = filter;
             render();
         });
         view.setTextSize(13);
+        ZeroChillMotion.installPressFeedback(view);
         return view;
     }
 
@@ -141,13 +170,13 @@ public final class UpdateInboxActivity extends Activity {
 
         count.setText(unread == 0
                 ? "You're caught up"
-                : unread + (unread == 1 ? " unread update" : " unread updates"));
+                : unread + (unread == 1 ? " unread notification" : " unread notifications"));
         markAll.setVisibility(unread == 0 ? View.INVISIBLE : View.VISIBLE);
 
         empty.setVisibility(items.isEmpty() ? View.VISIBLE : View.GONE);
         empty.setText(UpdateInboxStore.all(this).isEmpty()
-                ? "No updates yet\n\nZEROCHILL will collect new content from your favorite creators here."
-                : "No updates in this section.");
+                ? "No notifications yet\n\nFavorite creator activity and app updates will appear here."
+                : "No notifications in this section.");
 
         styleFilter(allFilter, FILTER_ALL.equals(activeFilter));
         styleFilter(creatorsFilter, FILTER_CREATORS.equals(activeFilter));
@@ -208,9 +237,27 @@ public final class UpdateInboxActivity extends Activity {
         private final ArrayList<UpdateInboxStore.Entry> items = new ArrayList<>();
 
         void replace(List<UpdateInboxStore.Entry> next) {
+            ArrayList<UpdateInboxStore.Entry> previous = new ArrayList<>(items);
+            ArrayList<UpdateInboxStore.Entry> incoming = new ArrayList<>();
+            if (next != null) incoming.addAll(next);
+            DiffUtil.DiffResult changes = DiffUtil.calculateDiff(new DiffUtil.Callback() {
+                @Override public int getOldListSize() { return previous.size(); }
+                @Override public int getNewListSize() { return incoming.size(); }
+                @Override public boolean areItemsTheSame(int oldPosition, int newPosition) {
+                    return previous.get(oldPosition).id.equals(incoming.get(newPosition).id);
+                }
+                @Override public boolean areContentsTheSame(int oldPosition, int newPosition) {
+                    try {
+                        return previous.get(oldPosition).encode().toString()
+                                .equals(incoming.get(newPosition).encode().toString());
+                    } catch (Exception ignored) {
+                        return false;
+                    }
+                }
+            });
             items.clear();
-            if (next != null) items.addAll(next);
-            notifyDataSetChanged();
+            items.addAll(incoming);
+            changes.dispatchUpdatesTo(this);
         }
 
         @Override
@@ -227,6 +274,7 @@ public final class UpdateInboxActivity extends Activity {
             row.setBackground(BrowseUi.rounded(UpdateInboxActivity.this, BrowseUi.SURFACE, 16));
             row.setFocusable(true);
             row.setClickable(true);
+            ZeroChillMotion.installPressFeedback(row);
 
             RecyclerView.LayoutParams params = new RecyclerView.LayoutParams(-1, -2);
             params.setMargins(dp(12), dp(4), dp(12), dp(4));
@@ -287,13 +335,13 @@ public final class UpdateInboxActivity extends Activity {
             holder.itemView.setAlpha(entry.read ? 0.76f : 1f);
             holder.itemView.setContentDescription(
                     entry.title + ". " + entry.subtitle +
-                            (entry.read ? ". Read." : ". New update.")
+                            (entry.read ? ". Read." : ". Unread notification.")
             );
             holder.itemView.setOnClickListener(v -> open(entry));
 
             Glide.with(holder.avatar).clear(holder.avatar);
             int fallback = UpdateInboxStore.CATEGORY_ONLYFAP.equals(entry.category)
-                    ? R.drawable.ic_launcher_legacy
+                    ? R.drawable.ic_zerochill_devil
                     : R.drawable.ic_more_update;
             holder.avatar.setImageResource(fallback);
 

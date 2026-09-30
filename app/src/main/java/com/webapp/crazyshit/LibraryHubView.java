@@ -47,6 +47,7 @@ final class LibraryHubView extends ScrollView {
     private final Activity activity;
     private final Listener listener;
     private final LinearLayout content;
+    private final LibrarySocialHubView socialHub;
     private final Map<String, List<ImageView>> thumbnailTargets = new HashMap<>();
     private final Map<String, String> resolvedThumbnails = new HashMap<>();
     private final java.util.Set<String> requestedThumbnails = new java.util.HashSet<>();
@@ -70,6 +71,8 @@ final class LibraryHubView extends ScrollView {
         content.setOrientation(LinearLayout.VERTICAL);
         content.setPadding(dp(12), dp(18), dp(12), dp(36));
         addView(content, new ScrollView.LayoutParams(-1, -2));
+        socialHub = new LibrarySocialHubView(activity);
+        content.addView(socialHub, new LinearLayout.LayoutParams(-1, -2));
 
         thumbnailResolvers = new RenderedThumbnailResolver[] {
                 new RenderedThumbnailResolver(activity, this::onThumbnailResolved),
@@ -82,7 +85,10 @@ final class LibraryHubView extends ScrollView {
     void refresh() {
         if (closed) return;
         int scrollY = getScrollY();
-        content.removeAllViews();
+        if (content.getChildCount() > 1) {
+            content.removeViews(1, content.getChildCount() - 1);
+        }
+        socialHub.refresh();
         thumbnailTargets.clear();
         requestedThumbnails.clear();
 
@@ -130,11 +136,16 @@ final class LibraryHubView extends ScrollView {
         if (closed) return;
         closed = true;
         ShowsContinueFrameStore.removeListener(frameListener);
+        socialHub.close();
         for (RenderedThumbnailResolver resolver : thumbnailResolvers) {
             if (resolver != null) resolver.close();
         }
         thumbnailTargets.clear();
         requestedThumbnails.clear();
+    }
+
+    void setSocialActive(boolean active) {
+        socialHub.setActive(active);
     }
 
     private void addContinueSection(List<PlaybackHistoryStore.Item> items) {
@@ -239,6 +250,7 @@ final class LibraryHubView extends ScrollView {
 
         MaterialCardView avatar = mediaCard(42);
         avatar.setRadius(dp(42));
+        avatar.setClipToOutline(true);
         avatar.setCardBackgroundColor(Color.rgb(19, 23, 27));
 
         FrameLayout frame = new FrameLayout(activity);
@@ -252,6 +264,12 @@ final class LibraryHubView extends ScrollView {
 
         CreatorAvatarImageView image = new CreatorAvatarImageView(activity);
         image.setBackgroundColor(Color.TRANSPARENT);
+        image.setOutlineProvider(new android.view.ViewOutlineProvider() {
+            @Override public void getOutline(View view, android.graphics.Outline outline) {
+                outline.setOval(0, 0, view.getWidth(), view.getHeight());
+            }
+        });
+        image.setClipToOutline(true);
         frame.addView(image, new FrameLayout.LayoutParams(-1, -1));
         loadCreatorImage(image, group, avatarOverrides);
 
