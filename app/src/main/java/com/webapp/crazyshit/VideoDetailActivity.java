@@ -371,45 +371,6 @@ public class VideoDetailActivity extends Activity {
         playerView.setResizeMode(resizeMode);
         playerContainer.addView(playerView, new FrameLayout.LayoutParams(-1, -1));
 
-        portraitSeekBar = new SeekBar(this);
-        portraitSeekBar.setMax(1000);
-        portraitSeekBar.setProgress(0);
-        portraitSeekBar.setSplitTrack(false);
-        portraitSeekBar.setPadding(dp(8), 0, dp(8), 0);
-        portraitSeekBar.setProgressTintList(ColorStateList.valueOf(UiPalette.PRIMARY));
-        portraitSeekBar.setProgressBackgroundTintList(
-                ColorStateList.valueOf(Color.argb(100, 255, 255, 255))
-        );
-        portraitSeekBar.setThumbTintList(ColorStateList.valueOf(UiPalette.PRIMARY));
-        portraitSeekBar.setContentDescription("Video progress. Drag to seek.");
-        FrameLayout.LayoutParams portraitSeekParams =
-                new FrameLayout.LayoutParams(-1, dp(28));
-        portraitSeekParams.gravity = Gravity.BOTTOM;
-        playerContainer.addView(portraitSeekBar, portraitSeekParams);
-        portraitSeekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
-            @Override
-            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
-                if (!fromUser || player == null) return;
-                long duration = Math.max(0L, player.getDuration());
-                if (duration <= 0L) return;
-                player.seekTo(portraitSeekPosition(progress, seekBar.getMax(), duration));
-            }
-
-            @Override
-            public void onStartTrackingTouch(SeekBar seekBar) {
-                portraitSeekScrubbing = true;
-                showPortraitSeekBar();
-            }
-
-            @Override
-            public void onStopTrackingTouch(SeekBar seekBar) {
-                portraitSeekScrubbing = false;
-                updatePortraitProgress();
-                schedulePortraitSeekBarHide();
-            }
-        });
-        portraitSeekBar.setVisibility(View.INVISIBLE);
-        portraitSeekBar.setAlpha(0f);
 
         startupPoster = new ImageView(this);
         startupPoster.setBackgroundColor(Color.BLACK);
@@ -426,13 +387,6 @@ public class VideoDetailActivity extends Activity {
                 new FrameLayout.LayoutParams(dp(38), dp(38), Gravity.CENTER);
         playerContainer.addView(startupPosterLoading, startupLoadingParams);
 
-        playerView.setOnTouchListener((view, event) -> {
-            if (event.getActionMasked() == MotionEvent.ACTION_UP) {
-                showPortraitSeekBar();
-            }
-            return false;
-        });
-
         View playerBack = playerView.findViewById(R.id.player_back);
         playerTitleView = playerView.findViewById(R.id.player_title);
         portraitFullscreenButton = playerView.findViewById(R.id.player_portrait_fullscreen);
@@ -448,9 +402,16 @@ public class VideoDetailActivity extends Activity {
         });
         portraitFullscreenButton.setOnClickListener(v -> {
             haptic(v);
-            setRotatableFullscreen(!rotatableFullscreen);
+            boolean portraitOrientation = getResources().getConfiguration().orientation
+                    != Configuration.ORIENTATION_LANDSCAPE;
+            if (portraitVideo && portraitOrientation) {
+                setPortraitFullscreen(!portraitFullscreen);
+            } else {
+                setRotatableFullscreen(!rotatableFullscreen);
+            }
         });
         updatePortraitFullscreenButton();
+        applyPlayerChrome(getResources().getConfiguration().orientation);
         playerView.hideController();
 
         detailsScroll = new ScrollView(this);
@@ -907,8 +868,6 @@ public class VideoDetailActivity extends Activity {
             }
         });
         player.prepare();
-        startPortraitProgressTicker();
-        showPortraitSeekBar();
     }
 
     static boolean isPortraitVideoSize(int width, int height, float pixelWidthHeightRatio) {
@@ -1876,10 +1835,37 @@ public class VideoDetailActivity extends Activity {
         playerContainer.setTranslationY(0f);
         playerContainer.setAlpha(1f);
         updatePortraitFullscreenButton();
+        applyPlayerChrome(orientation);
         updateSwipeEnabled();
         updatePortraitProgress();
         if (canShowPortraitSeekBar()) showPortraitSeekBar();
         shell.requestApplyInsets();
+    }
+
+    private void applyPlayerChrome(int orientation) {
+        if (playerView == null) return;
+        boolean landscape = orientation == Configuration.ORIENTATION_LANDSCAPE;
+
+        View rewind = playerView.findViewById(R.id.exo_rew);
+        View forward = playerView.findViewById(R.id.exo_ffwd);
+        if (rewind != null) rewind.setVisibility(landscape ? View.VISIBLE : View.GONE);
+        if (forward != null) forward.setVisibility(landscape ? View.VISIBLE : View.GONE);
+
+        if (playerTitleView != null) {
+            playerTitleView.setVisibility(landscape ? View.VISIBLE : View.GONE);
+        }
+
+        View centerControls = playerView.findViewById(R.id.exo_center_controls);
+        if (centerControls != null &&
+                centerControls.getLayoutParams() instanceof FrameLayout.LayoutParams) {
+            FrameLayout.LayoutParams centerParams =
+                    (FrameLayout.LayoutParams) centerControls.getLayoutParams();
+            centerParams.gravity = landscape
+                    ? Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL
+                    : Gravity.CENTER;
+            centerParams.bottomMargin = landscape ? dp(62) : 0;
+            centerControls.setLayoutParams(centerParams);
+        }
     }
 
     private void maybeDismissShowsLaunchCurtain() {
@@ -2010,7 +1996,9 @@ public class VideoDetailActivity extends Activity {
                         : R.drawable.ic_action_fullscreen
         );
         portraitFullscreenButton.setContentDescription(
-                fullscreen ? "Exit fullscreen" : "Fullscreen"
+                portraitVideo && portraitOrientation
+                        ? (fullscreen ? "Exit portrait fullscreen" : "Fill screen")
+                        : (fullscreen ? "Exit fullscreen" : "Fullscreen")
         );
     }
 
@@ -2182,7 +2170,6 @@ public class VideoDetailActivity extends Activity {
 
     private void releasePlayer() {
         playbackRecovery.cancel();
-        stopPortraitProgressTicker();
         portraitSeekScrubbing = false;
         if (portraitSeekBar != null) portraitSeekBar.setProgress(0);
         if (playerView != null) playerView.setPlayer(null);
@@ -2254,7 +2241,6 @@ public class VideoDetailActivity extends Activity {
         recoveryResumed = true;
         if (orientationListener != null) orientationListener.enable();
         updateSwipeEnabled();
-        startPortraitProgressTicker();
         if (detailsScroll != null) applyDetailsBackground();
         refreshVideoLikeState(true);
     }
