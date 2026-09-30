@@ -477,7 +477,7 @@ public class VideoDetailActivity extends Activity {
         actions.setPadding(0, 0, 0, dp(3));
         detailsColumn.addView(actions, new LinearLayout.LayoutParams(-1, -2));
         if (supportsComments()) {
-            actions.addView(actionButton(comments.isEmpty() ? "💬 Comments" : "💬 " + comments, this::openComments), actionParams());
+            actions.addView(actionButton("💬 Comments", this::openComments), actionParams());
         }
         actions.addView(actionButton("♡ Later", this::toggleWatchLater), actionParams());
         actions.addView(actionButton("↗ Share", this::sharePage), actionParams());
@@ -1157,15 +1157,6 @@ public class VideoDetailActivity extends Activity {
         meta.setEllipsize(TextUtils.TruncateAt.END);
         meta.setPadding(0, dp(5), 0, 0);
         copy.addView(meta);
-
-        if (!clean(item.comments).isEmpty()) {
-            TextView commentCount = new TextView(this);
-            commentCount.setText(item.comments + " comments");
-            commentCount.setTextColor(UiPalette.PRIMARY);
-            commentCount.setTextSize(11);
-            commentCount.setPadding(0, dp(5), 0, 0);
-            copy.addView(commentCount);
-        }
 
         relatedImages.put(item.url, image);
         String resolvedThumbnail = resolvedRelatedThumbnails.get(item.url);
