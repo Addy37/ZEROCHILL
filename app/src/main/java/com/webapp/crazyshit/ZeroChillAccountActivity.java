@@ -41,7 +41,56 @@ public final class ZeroChillAccountActivity extends Activity {
         super.onCreate(state);
         ZeroChillUi.applySystemBars(this);
         buildShell();
-        loadAccount();
+        ResponsiveFitmentController.applySoon(this);
+        if (!handleAuthRedirect(getIntent())) loadAccount();
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        if (!handleAuthRedirect(intent)) loadAccount();
+    }
+
+    @Override
+    protected void onDestroy() {
+        ResponsiveFitmentController.release(this);
+        super.onDestroy();
+    }
+
+    private boolean handleAuthRedirect(Intent intent) {
+        Uri uri = intent == null ? null : intent.getData();
+        if (uri == null
+                || !"com.addy37.zerochill".equalsIgnoreCase(uri.getScheme())
+                || !"auth".equalsIgnoreCase(uri.getHost())
+                || !"/confirmed".equals(uri.getPath())) {
+            return false;
+        }
+
+        showBusy(true);
+        ZeroChillAccountRepository.completeAuthRedirect(
+                this,
+                uri,
+                (state, error) -> runOnUiThread(() -> {
+                    showBusy(false);
+                    if (error != null) {
+                        Toast.makeText(
+                                this,
+                                error.getMessage() == null ? "Email confirmation failed." : error.getMessage(),
+                                Toast.LENGTH_LONG
+                        ).show();
+                        createMode = false;
+                        showAuth();
+                    } else if (state != null && state.signedIn) {
+                        account = state;
+                        Toast.makeText(this, "Email verified.", Toast.LENGTH_SHORT).show();
+                        showProfile(state);
+                    } else {
+                        showConfirmed();
+                    }
+                })
+        );
+        return true;
     }
 
     private void buildShell() {
@@ -238,7 +287,7 @@ public final class ZeroChillAccountActivity extends Activity {
         content.addView(title);
         TextView copy = text(
                 "We sent a verification message to " + email
-                        + ". Verify the address, then return here and sign in.",
+                        + ". Tap the link and ZeroChill will reopen automatically.",
                 14,
                 ZeroChillUi.color(this, R.color.zc_text_secondary),
                 false
@@ -246,6 +295,26 @@ public final class ZeroChillAccountActivity extends Activity {
         copy.setPadding(0, dp(10), 0, dp(22));
         content.addView(copy);
         TextView signIn = primaryButton("GO TO SIGN IN");
+        signIn.setOnClickListener(v -> {
+            createMode = false;
+            showAuth();
+        });
+        content.addView(signIn, new LinearLayout.LayoutParams(-1, dp(50)));
+    }
+
+    private void showConfirmed() {
+        content.removeAllViews();
+        TextView title = text("EMAIL VERIFIED", 23, Color.WHITE, true);
+        content.addView(title);
+        TextView copy = text(
+                "Your email is confirmed. Sign in to finish opening your ZeroChill profile.",
+                14,
+                ZeroChillUi.color(this, R.color.zc_text_secondary),
+                false
+        );
+        copy.setPadding(0, dp(10), 0, dp(22));
+        content.addView(copy);
+        TextView signIn = primaryButton("SIGN IN");
         signIn.setOnClickListener(v -> {
             createMode = false;
             showAuth();
