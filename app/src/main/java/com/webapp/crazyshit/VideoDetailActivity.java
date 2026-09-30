@@ -120,6 +120,8 @@ public class VideoDetailActivity extends Activity {
     private TextView metaView;
     private TextView playerTitleView;
     private TextView videoLikeButton;
+    private TextView commentButton;
+    private TextView watchLaterButton;
     private ImageButton portraitFullscreenButton;
     private ProgressBar loading;
     private ImageView startupPoster;
@@ -160,6 +162,9 @@ public class VideoDetailActivity extends Activity {
     private int videoLikeCount;
     private String videoLikePageUrl = "";
     private int videoLikeRequestGeneration;
+    private int commentCount;
+    private String commentCountPageUrl = "";
+    private int commentCountRequestGeneration;
     private final PlaybackRecovery playbackRecovery = new PlaybackRecovery();
     private boolean recoveryResumed;
     private long requestedStartPosition;
@@ -463,13 +468,33 @@ public class VideoDetailActivity extends Activity {
         actions.setGravity(Gravity.CENTER_VERTICAL);
         actions.setPadding(0, 0, 0, dp(3));
         detailsColumn.addView(actions, new LinearLayout.LayoutParams(-1, -2));
-        videoLikeButton = actionButton("♡ Like", this::toggleVideoLike);
+        videoLikeButton = actionIconButton(
+                R.drawable.ic_action_heart_outline,
+                this::toggleVideoLike,
+                "Like this video"
+        );
         actions.addView(videoLikeButton, actionParams());
         if (supportsComments()) {
-            actions.addView(actionButton("💬 Comments", this::openComments), actionParams());
+            commentButton = actionIconButton(
+                    R.drawable.ic_action_comments,
+                    this::openComments,
+                    "Open comments"
+            );
+            actions.addView(commentButton, actionParams());
         }
-        actions.addView(actionButton("♡ Later", this::toggleWatchLater), actionParams());
-        actions.addView(actionButton("↗ Share", this::sharePage), actionParams());
+        watchLaterButton = actionIconButton(
+                FavoriteStore.contains(this, pageUrl)
+                        ? R.drawable.ic_nav_saved
+                        : R.drawable.ic_action_save_outline,
+                this::toggleWatchLater,
+                "Save to Watch Later"
+        );
+        actions.addView(watchLaterButton, actionParams());
+        actions.addView(actionIconButton(
+                R.drawable.ic_action_share,
+                this::sharePage,
+                "Share video"
+        ), actionParams());
 
         TextView relatedTitle = new TextView(this);
         relatedTitle.setText("Related videos");
@@ -751,15 +776,20 @@ public class VideoDetailActivity extends Activity {
         }
     }
 
-    private TextView actionButton(String text, Runnable action) {
+    private TextView actionIconButton(int icon, Runnable action, String description) {
         TextView button = new TextView(this);
-        button.setText(text);
+        button.setText("");
         button.setTextColor(Color.rgb(238, 238, 242));
-        button.setTextSize(13);
+        button.setTextSize(11);
         button.setGravity(Gravity.CENTER);
         button.setBackground(actionPill());
+        button.setCompoundDrawablesWithIntrinsicBounds(icon, 0, 0, 0);
+        button.setCompoundDrawableTintList(ColorStateList.valueOf(Color.WHITE));
+        button.setCompoundDrawablePadding(dp(4));
+        button.setContentDescription(description);
         button.setClickable(true);
         button.setFocusable(true);
+        ZeroChillMotion.installPressFeedback(button);
         button.setOnClickListener(v -> {
             haptic(v);
             action.run();
@@ -995,6 +1025,8 @@ public class VideoDetailActivity extends Activity {
             metaView.setText(TextUtils.join("  •  ", parts));
         }
         refreshVideoLikeState(false);
+        refreshCommentCount(false);
+        updateWatchLaterButton();
     }
 
     private void loadRelated() {
@@ -1577,6 +1609,7 @@ public class VideoDetailActivity extends Activity {
                     @Override public void onSheetTopChanged(int top) { }
                     @Override public void onSheetClosed() {
                         if (activeComments == opened[0]) activeComments = null;
+                        refreshCommentCount(true);
                     }
                 });
         activeComments = opened[0];
@@ -1601,7 +1634,11 @@ public class VideoDetailActivity extends Activity {
         String target = pageUrl == null ? "" : pageUrl.trim();
         if (target.isEmpty()) {
             videoLikeButton.setEnabled(false);
-            videoLikeButton.setText("♡ Like");
+            videoLikeButton.setText("");
+            videoLikeButton.setCompoundDrawablesWithIntrinsicBounds(
+                    R.drawable.ic_action_heart_outline, 0, 0, 0
+            );
+            videoLikeButton.setCompoundDrawableTintList(ColorStateList.valueOf(Color.WHITE));
             return;
         }
         if (!force && target.equals(videoLikePageUrl)) return;
@@ -1621,12 +1658,81 @@ public class VideoDetailActivity extends Activity {
 
     private void updateVideoLikeButton() {
         if (videoLikeButton == null) return;
-        String suffix = videoLikeCount > 0 ? " " + videoLikeCount : " Like";
-        videoLikeButton.setText((videoLiked ? "♥" : "♡") + suffix);
+        videoLikeButton.setCompoundDrawablesWithIntrinsicBounds(
+                videoLiked ? R.drawable.ic_action_heart_filled : R.drawable.ic_action_heart_outline,
+                0,
+                0,
+                0
+        );
+        videoLikeButton.setCompoundDrawableTintList(ColorStateList.valueOf(
+                videoLiked ? UiPalette.PRIMARY : Color.WHITE
+        ));
+        videoLikeButton.setText(videoLikeCount > 0 ? String.valueOf(videoLikeCount) : "");
         videoLikeButton.setTextColor(videoLiked ? UiPalette.PRIMARY : Color.rgb(238, 238, 242));
         videoLikeButton.setEnabled(true);
         videoLikeButton.setContentDescription(
                 videoLiked ? "Unlike this video" : "Like this video"
+        );
+    }
+
+    private void refreshCommentCount(boolean force) {
+        if (commentButton == null) return;
+        String target = pageUrl == null ? "" : pageUrl.trim();
+        if (target.isEmpty()) {
+            commentButton.setText("");
+            commentButton.setEnabled(false);
+            return;
+        }
+        if (!force && target.equals(commentCountPageUrl)) return;
+
+        commentCountPageUrl = target;
+        commentButton.setText("");
+        commentButton.setEnabled(true);
+        int generation = ++commentCountRequestGeneration;
+        ZeroChillSocialRepository.loadComments(this, target, (loaded, error) ->
+                runOnUiThread(() -> {
+                    if (generation != commentCountRequestGeneration || !target.equals(pageUrl)) return;
+                    if (error != null || loaded == null) return;
+                    int visible = 0;
+                    for (ZeroChillSocialRepository.Comment comment : loaded) {
+                        if (comment != null && !comment.deleted()) visible++;
+                    }
+                    commentCount = visible;
+                    updateCommentButton();
+                })
+        );
+    }
+
+    private void updateCommentButton() {
+        if (commentButton == null) return;
+        commentButton.setCompoundDrawablesWithIntrinsicBounds(
+                R.drawable.ic_action_comments, 0, 0, 0
+        );
+        commentButton.setCompoundDrawableTintList(ColorStateList.valueOf(Color.WHITE));
+        commentButton.setText(String.valueOf(Math.max(0, commentCount)));
+        commentButton.setTextColor(Color.rgb(238, 238, 242));
+        commentButton.setEnabled(true);
+        commentButton.setContentDescription(
+                commentCount == 1 ? "Open 1 comment" : "Open " + commentCount + " comments"
+        );
+    }
+
+    private void updateWatchLaterButton() {
+        if (watchLaterButton == null) return;
+        boolean saved = pageUrl != null && !pageUrl.isEmpty() && FavoriteStore.contains(this, pageUrl);
+        watchLaterButton.setCompoundDrawablesWithIntrinsicBounds(
+                saved ? R.drawable.ic_nav_saved : R.drawable.ic_action_save_outline,
+                0,
+                0,
+                0
+        );
+        watchLaterButton.setCompoundDrawableTintList(ColorStateList.valueOf(
+                saved ? UiPalette.PRIMARY : Color.WHITE
+        ));
+        watchLaterButton.setText("");
+        watchLaterButton.setTextColor(saved ? UiPalette.PRIMARY : Color.rgb(238, 238, 242));
+        watchLaterButton.setContentDescription(
+                saved ? "Remove from Watch Later" : "Save to Watch Later"
         );
     }
 
@@ -1669,6 +1775,7 @@ public class VideoDetailActivity extends Activity {
             FavoriteStore.add(this, title, pageUrl);
             Toast.makeText(this, "Saved to Watch Later.", Toast.LENGTH_SHORT).show();
         }
+        updateWatchLaterButton();
     }
 
     private void sharePage() {
