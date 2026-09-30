@@ -136,14 +136,18 @@ final class UpdateInboxStore {
     }
 
     static List<Entry> all(Context context) {
+        return allForAccount(context, ZeroChillSessionStore.currentUserId(context));
+    }
+
+    static List<Entry> allForAccount(Context context, String accountId) {
         synchronized (LOCK) {
             ArrayList<Entry> entries = readLocked(context);
             if (pruneNonFavoriteContent(context, entries)) writeLocked(context, entries);
-            String accountId = ZeroChillSessionStore.currentUserId(context);
             ArrayList<Entry> visible = new ArrayList<>();
+            String current = clean(accountId);
             for (Entry entry : entries) {
                 if (CATEGORY_SOCIAL.equals(entry.category)
-                        && (accountId.isEmpty() || !accountId.equals(entry.accountId))) {
+                        && (current.isEmpty() || !current.equals(entry.accountId))) {
                     continue;
                 }
                 visible.add(entry);
