@@ -6,6 +6,8 @@ import android.security.keystore.KeyGenParameterSpec;
 import android.security.keystore.KeyProperties;
 import android.util.Base64;
 
+import org.json.JSONObject;
+
 import java.nio.charset.StandardCharsets;
 import java.security.KeyStore;
 
@@ -62,6 +64,24 @@ final class ZeroChillSessionStore {
                 .edit()
                 .clear()
                 .apply();
+    }
+
+    static String currentUserId(Context context) {
+        try {
+            String session = read(context);
+            if (session.isEmpty()) return "";
+            String token = new JSONObject(session).optString("access_token", "");
+            String[] parts = token.split("\\.");
+            if (parts.length < 2) return "";
+            byte[] decoded = Base64.decode(
+                    parts[1],
+                    Base64.URL_SAFE | Base64.NO_WRAP | Base64.NO_PADDING
+            );
+            return new JSONObject(new String(decoded, StandardCharsets.UTF_8))
+                    .optString("sub", "");
+        } catch (Exception ignored) {
+            return "";
+        }
     }
 
     private static SecretKey getOrCreateKey() throws Exception {
