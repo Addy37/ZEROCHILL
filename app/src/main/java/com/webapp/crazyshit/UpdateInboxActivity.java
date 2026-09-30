@@ -28,6 +28,7 @@ import java.util.List;
 /** Notification history backed by the existing local update inbox. */
 public final class UpdateInboxActivity extends Activity {
     private static final String FILTER_ALL = "";
+    private static final String FILTER_SOCIAL = UpdateInboxStore.CATEGORY_SOCIAL;
     private static final String FILTER_CREATORS = UpdateInboxStore.CATEGORY_ONLYFAP;
     private static final String FILTER_APP = UpdateInboxStore.CATEGORY_APP;
 
@@ -36,12 +37,15 @@ public final class UpdateInboxActivity extends Activity {
     private TextView count;
     private TextView empty;
     private TextView allFilter;
+    private TextView socialFilter;
     private TextView creatorsFilter;
     private TextView appFilter;
     private TextView markAll;
     private String activeFilter = FILTER_ALL;
     private SharedPreferences inboxPreferences;
     private boolean observing;
+    private boolean socialLoading;
+    private int socialGeneration;
     private final Runnable refreshHistory = () -> {
         if (observing && !isFinishing() && !isDestroyed()) render();
     };
@@ -66,6 +70,7 @@ public final class UpdateInboxActivity extends Activity {
         observing = true;
         inboxPreferences.registerOnSharedPreferenceChangeListener(inboxListener);
         render();
+        refreshSocialActivity();
     }
 
     @Override
@@ -121,11 +126,13 @@ public final class UpdateInboxActivity extends Activity {
         filters.setPadding(dp(12), dp(4), dp(12), dp(8));
 
         allFilter = filter("All", FILTER_ALL);
+        socialFilter = filter("Social", FILTER_SOCIAL);
         creatorsFilter = filter("Creators", FILTER_CREATORS);
         appFilter = filter("App", FILTER_APP);
         filters.addView(allFilter, filterParams(0));
-        filters.addView(creatorsFilter, filterParams(1));
-        filters.addView(appFilter, filterParams(2));
+        filters.addView(socialFilter, filterParams(1));
+        filters.addView(creatorsFilter, filterParams(2));
+        filters.addView(appFilter, filterParams(3));
         root.addView(filters);
 
         empty = BrowseUi.text(this, "", 15, BrowseUi.MUTED);
@@ -157,9 +164,7 @@ public final class UpdateInboxActivity extends Activity {
 
     private LinearLayout.LayoutParams filterParams(int index) {
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, dp(42), 1f);
-        if (index == 0) params.setMargins(0, 0, dp(4), 0);
-        else if (index == 1) params.setMargins(dp(2), 0, dp(2), 0);
-        else params.setMargins(dp(4), 0, 0, 0);
+        params.setMargins(index == 0 ? 0 : dp(2), 0, index == 3 ? 0 : dp(2), 0);
         return params;
     }
 
@@ -175,12 +180,33 @@ public final class UpdateInboxActivity extends Activity {
 
         empty.setVisibility(items.isEmpty() ? View.VISIBLE : View.GONE);
         empty.setText(UpdateInboxStore.all(this).isEmpty()
-                ? "No notifications yet\n\nFavorite creator activity and app updates will appear here."
+                ? "No notifications yet\n\nReplies, comment likes, creator activity, and app updates will appear here."
                 : "No notifications in this section.");
 
         styleFilter(allFilter, FILTER_ALL.equals(activeFilter));
+        styleFilter(socialFilter, FILTER_SOCIAL.equals(activeFilter));
         styleFilter(creatorsFilter, FILTER_CREATORS.equals(activeFilter));
         styleFilter(appFilter, FILTER_APP.equals(activeFilter));
+    }
+
+    private void refreshSocialActivity() {
+        if (socialLoading || !ZeroChillAccountRepository.hasStoredSession(this)) return;
+        String accountId = ZeroChillSessionStore.currentUserId(this);
+        if (accountId.isEmpty()) return;
+        socialLoading = true;
+        final int generation = ++socialGeneration;
+        ZeroChillSocialRepository.loadCommentActivity(this, (items, error) ->
+                runOnUiThread(() -> {
+                    if (generation != socialGeneration) return;
+                    socialLoading = false;
+                    String current = ZeroChillSessionStore.currentUserId(this);
+                    if (!accountId.equals(current)) return;
+                    if (error == null && items != null && !items.isEmpty()) {
+                        UpdateInboxStore.recordSocialActivities(this, accountId, items);
+                    }
+                    if (observing && !isFinishing() && !isDestroyed()) render();
+                })
+        );
     }
 
     private void styleFilter(TextView view, boolean selected) {
@@ -195,6 +221,19 @@ public final class UpdateInboxActivity extends Activity {
     private void open(UpdateInboxStore.Entry entry) {
         UpdateInboxStore.markRead(this, entry.id);
         render();
+
+        if (UpdateInboxStore.CATEGORY_SOCIAL.equals(entry.category)
+                && entry.pageUrl != null && !entry.pageUrl.trim().isEmpty()) {
+            new InlineCommentsDialog(
+                    this,
+                    entry.pageUrl,
+                    entry.videoTitle,
+                    "",
+                    entry.commentId,
+                    null
+            ).show();
+            return;
+        }
 
         if (UpdateInboxStore.CATEGORY_APP.equals(entry.category)) {
             Intent intent = new Intent(this, SettingsActivity.class);
@@ -342,6 +381,8 @@ public final class UpdateInboxActivity extends Activity {
             Glide.with(holder.avatar).clear(holder.avatar);
             int fallback = UpdateInboxStore.CATEGORY_ONLYFAP.equals(entry.category)
                     ? R.drawable.ic_zerochill_devil
+                    : UpdateInboxStore.CATEGORY_SOCIAL.equals(entry.category)
+                    ? R.drawable.ic_more_account
                     : R.drawable.ic_more_update;
             holder.avatar.setImageResource(fallback);
 
