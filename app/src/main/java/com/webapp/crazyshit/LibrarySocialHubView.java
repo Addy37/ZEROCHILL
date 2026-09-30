@@ -5,7 +5,6 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.graphics.Color;
-import android.util.Base64;
 import android.os.Handler;
 import android.os.Looper;
 import android.text.TextUtils;
@@ -24,7 +23,6 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
-import org.json.JSONObject;
 
 /** Compact communication entry points above the Library media rails. */
 final class LibrarySocialHubView extends LinearLayout {
@@ -49,6 +47,7 @@ final class LibrarySocialHubView extends LinearLayout {
         @Override public void run() {
             if (!active || closed) return;
             refreshMessages();
+            refreshSocialActivity();
             handler.postDelayed(this, POLL_MS);
         }
     };
@@ -63,9 +62,11 @@ final class LibrarySocialHubView extends LinearLayout {
     private String session = "";
     private boolean active;
     private boolean loading;
+    private boolean socialLoading;
     private boolean closed;
     private boolean listening;
     private int requestGeneration;
+    private int socialGeneration;
     private String boundAvatarUrl = "";
 
     LibrarySocialHubView(Activity activity) {
@@ -200,6 +201,7 @@ final class LibrarySocialHubView extends LinearLayout {
         if (value) {
             refreshNotifications();
             refreshMessages();
+            refreshSocialActivity();
             handler.postDelayed(poll, POLL_MS);
         }
     }
@@ -207,6 +209,7 @@ final class LibrarySocialHubView extends LinearLayout {
     void refresh() {
         refreshNotifications();
         refreshMessages();
+        refreshSocialActivity();
     }
 
     private void refreshNotifications() {
@@ -227,16 +230,24 @@ final class LibrarySocialHubView extends LinearLayout {
                         + (latest == null ? "" : ". Latest: " + latest.title));
     }
 
-    private void refreshMessages() {
-        if (closed) return;
+    private String syncSession() {
         String current = sessionProvider.current(activity);
         if (current == null) current = "";
         if (!current.equals(session)) {
             session = current;
             requestGeneration++;
+            socialGeneration++;
             loading = false;
+            socialLoading = false;
             showMessages(null, 0);
+            refreshNotifications();
         }
+        return session;
+    }
+
+    private void refreshMessages() {
+        if (closed) return;
+        syncSession();
         if (session.isEmpty() || loading || !active) return;
         final String requestedSession = session;
         final int generation = ++requestGeneration;
@@ -260,6 +271,35 @@ final class LibrarySocialHubView extends LinearLayout {
             showMessages(items.isEmpty() ? null : items.get(0), unread);
             ZeroChillMessageBadgeStore.setUnreadCount(activity, unread);
         }));
+    }
+
+    private void refreshSocialActivity() {
+        if (closed) return;
+        syncSession();
+        if (session.isEmpty() || socialLoading || !active) return;
+        final String requestedSession = session;
+        final int generation = ++socialGeneration;
+        socialLoading = true;
+        ZeroChillSocialRepository.loadCommentActivity(activity, (items, error) ->
+                activity.runOnUiThread(() -> {
+                    if (closed || generation != socialGeneration) return;
+                    socialLoading = false;
+                    String actualSession = sessionProvider.current(activity);
+                    if (actualSession == null) actualSession = "";
+                    if (!requestedSession.equals(actualSession)) {
+                        refreshSocialActivity();
+                        return;
+                    }
+                    if (error == null && items != null && !items.isEmpty()) {
+                        UpdateInboxStore.recordSocialActivities(
+                                activity,
+                                requestedSession,
+                                items
+                        );
+                    }
+                    refreshNotifications();
+                })
+        );
     }
 
     private void showMessages(ZeroChillSocialRepository.Conversation latest, int unread) {
@@ -319,18 +359,7 @@ final class LibrarySocialHubView extends LinearLayout {
     }
 
     private static String accountId(Context context) {
-        try {
-            String token = new JSONObject(ZeroChillSessionStore.read(context))
-                    .optString("access_token", "");
-            String[] parts = token.split("\\.");
-            if (parts.length < 2) return "";
-            JSONObject payload = new JSONObject(new String(Base64.decode(parts[1],
-                    Base64.URL_SAFE | Base64.NO_WRAP | Base64.NO_PADDING),
-                    java.nio.charset.StandardCharsets.UTF_8));
-            return payload.optString("sub", "");
-        } catch (Exception ignored) {
-            return "";
-        }
+        return ZeroChillSessionStore.currentUserId(context);
     }
 
     private TextView label(String value, float size, int color) {
@@ -377,6 +406,8 @@ final class LibrarySocialHubView extends LinearLayout {
         closed = true;
         active = false;
         requestGeneration++;
+        socialGeneration++;
+        socialLoading = false;
         handler.removeCallbacksAndMessages(null);
         if (listening) updatesPreferences.unregisterOnSharedPreferenceChangeListener(updatesListener);
         listening = false;
