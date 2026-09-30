@@ -513,6 +513,7 @@ public final class ZeroChillMessageActivity extends Activity {
             holder.bubble.setBackground(messageBubble(!incoming, joinsPrevious, joinsNext));
             holder.body.setText(item.body);
             holder.time.setText(formatTime(item.createdAt));
+            holder.time.setVisibility(joinsNext ? View.GONE : View.VISIBLE);
             holder.time.setTextColor(incoming ? Color.rgb(166, 172, 184) : Color.rgb(226, 240, 255));
             holder.itemView.setContentDescription((incoming ? "From " : "You: ") + item.body);
             holder.itemView.setOnLongClickListener(v -> {
@@ -540,9 +541,10 @@ public final class ZeroChillMessageActivity extends Activity {
     private GradientDrawable messageBubble(boolean mine, boolean joinsPrevious, boolean joinsNext) {
         GradientDrawable background = new GradientDrawable();
         background.setColor(mine ? Color.rgb(8, 146, 208) : Color.rgb(35, 38, 45));
-        float round = dp(18);
-        float top = dp(joinsPrevious ? 6 : 18);
-        float bottom = dp(joinsNext ? 6 : 18);
+        float round = dp(22);
+        float joined = dp(7);
+        float top = joinsPrevious ? joined : round;
+        float bottom = joinsNext ? joined : round;
         background.setCornerRadii(mine
                 ? new float[]{round, round, top, top, bottom, bottom, round, round}
                 : new float[]{top, top, round, round, round, round, bottom, bottom});
