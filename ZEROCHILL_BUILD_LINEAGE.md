@@ -4,11 +4,13 @@ This file identifies the current approved ZEROCHILL product baseline for test AP
 
 - Source-of-truth branch: `rebrand/zerochill`
 - Integration branch: `integration/zerochill-current`
-- Approved product baseline commit: `fc9c01e27f712119ba9c316981ab1c9b7da156a9`
-- Latest production release source commit: `fc9c01e27f712119ba9c316981ab1c9b7da156a9`
-- Device-tested APK source commit: `d4c2c7bdbd41690506bd0fe2c8053b05e92c5aba`
-- Latest release PR: #227
+- Approved product baseline commit: `48c14a83e1bcde45641bd07a0d606e2e35a273d4`
+- Latest production release source commit: `48c14a83e1bcde45641bd07a0d606e2e35a273d4`
+- Device-tested APK source commit: `08c8e026760360b251e13c6aa6f33e05638efe0a`
+- Latest release PR: #231
 - Approval date: 2026-09-29
+
+ZeroChill v4.2.1 was published from `48c14a8` after release PR #231. It includes the device-approved OnlyFap Discover lifecycle/refill fix from PR #230 and the cleared-storage startup-wizard routing and no-blink transitions from PR #229. Discover now waits for final regular-shelf results, refills shortages from deeper configured Fapello listings, and publishes once while retaining randomized selection, duplicate protection, and cached fallback. The production workflow passed release unit tests, rebuilt and signed `ZeroChill.apk`, verified the package and production certificate, confirmed version code `4002001` upgrades from v4.2.0, and published tag `v4.2.1` with `SHA256SUMS.txt`. The device-tested candidate `08c8e02` also passed full debug/release unit tests and APK builds, all six performance CI jobs, and Android 15 in-place upgrade verification. Lint diagnostics match the prior approved baseline with no added findings. The previous v4.2.0 release source is preserved at `checkpoint/zerochill-approved-fc9c01e`.
 
 ZeroChill v4.2.0 was published from `fc9c01e` after release PR #227. This release adds the device-approved full-screen startup wizard for new installs, the holographic OnlyFap creator-gallery grid morph, Fapello-backed Discover with deeper duplicate-free creator selection, threaded feedback conversations with read receipts, compact Shows portrait shelves, tapped-video autoplay in creator galleries, corrected custom avatar framing on compact shelves, and the approved ShitTok swipe-start fixes that move history and anti-repeat persistence off the active swipe path. The production workflow rebuilt and signed `ZeroChill.apk`, verified the package and production signing certificate, confirmed a higher version code and upgrade compatibility from v4.1.1, and published tag `v4.2.0` with `SHA256SUMS.txt`. The previous v4.1.1 rollback baseline is preserved at `checkpoint/zerochill-approved-024faa0`.
 
