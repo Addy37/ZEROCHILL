@@ -863,8 +863,22 @@ public class VideoDetailActivity extends Activity {
                 }
                 if (portraitVideo == isPortrait) return;
                 portraitVideo = isPortrait;
-                if (!portraitVideo && portraitFullscreen) setPortraitFullscreen(false);
-                else updatePortraitFullscreenButton();
+                if (portraitVideo) {
+                    if (sensorFullscreen || rotatableFullscreen) {
+                        sensorFullscreen = false;
+                        rotatableFullscreen = false;
+                        portraitFullscreen = false;
+                        PhoneOrientationPolicy.exitFullscreenVideo(VideoDetailActivity.this);
+                        applyOrientation(getResources().getConfiguration().orientation);
+                    } else {
+                        PhoneOrientationPolicy.applyBrowsingOrientation(VideoDetailActivity.this);
+                    }
+                    updatePortraitFullscreenButton();
+                } else if (portraitFullscreen) {
+                    setPortraitFullscreen(false);
+                } else {
+                    updatePortraitFullscreenButton();
+                }
             }
         });
         player.prepare();
