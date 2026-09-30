@@ -3,6 +3,7 @@ package com.webapp.crazyshit;
 import android.app.Application;
 import android.content.Context;
 
+import org.json.JSONObject;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -208,6 +209,56 @@ public class UpdateInboxStoreTest {
 
         assertTrue(UpdateInboxStore.all(app).isEmpty());
         assertEquals(0, UpdateInboxStore.unreadCount(app));
+    }
+
+    @Test
+    public void socialActivityIsDedupedAndScopedToTheSignedInAccount() throws Exception {
+        ZeroChillSocialRepository.PublicProfile actor =
+                new ZeroChillSocialRepository.PublicProfile(
+                        new JSONObject()
+                                .put("user_id", "actor-1")
+                                .put("username", "reply_guy")
+                                .put("display_name", "Reply Guy")
+                                .put("avatar_path", ""),
+                        false
+                );
+        ZeroChillSocialRepository.SocialActivity like =
+                new ZeroChillSocialRepository.SocialActivity(
+                        "like:comment-1:actor-1",
+                        ZeroChillSocialRepository.SocialActivity.TYPE_LIKE,
+                        "actor-1",
+                        actor,
+                        "comment-1",
+                        "https://example.com/video/1",
+                        "Video one",
+                        "My original comment",
+                        "",
+                        "2026-09-30T15:00:00Z"
+                );
+        ZeroChillSocialRepository.SocialActivity reply =
+                new ZeroChillSocialRepository.SocialActivity(
+                        "reply:reply-1",
+                        ZeroChillSocialRepository.SocialActivity.TYPE_REPLY,
+                        "actor-1",
+                        actor,
+                        "reply-1",
+                        "https://example.com/video/1",
+                        "Video one",
+                        "My original comment",
+                        "This is a reply",
+                        "2026-09-30T16:00:00Z"
+                );
+
+        UpdateInboxStore.recordSocialActivities(app, "account-a", Arrays.asList(like, reply));
+        UpdateInboxStore.recordSocialActivities(app, "account-a", Arrays.asList(like, reply));
+
+        List<UpdateInboxStore.Entry> mine = UpdateInboxStore.allForAccount(app, "account-a");
+        assertEquals(2, mine.size());
+        assertEquals(UpdateInboxStore.CATEGORY_SOCIAL, mine.get(0).category);
+        assertEquals("Reply Guy replied to your comment", mine.get(0).title);
+        assertEquals("reply-1", mine.get(0).commentId);
+        assertTrue(UpdateInboxStore.allForAccount(app, "account-b").isEmpty());
+        assertTrue(UpdateInboxStore.allForAccount(app, "").isEmpty());
     }
 
     @Test

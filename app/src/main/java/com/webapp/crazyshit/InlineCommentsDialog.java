@@ -39,6 +39,7 @@ final class InlineCommentsDialog extends BottomSheetDialog {
     private final Activity activity;
     private final String pageUrl;
     private final String pageTitle;
+    private final String focusCommentId;
     private final ResizeListener resizeListener;
 
     private LinearLayout commentsContainer;
@@ -61,10 +62,22 @@ final class InlineCommentsDialog extends BottomSheetDialog {
             String ignoredSourceCount,
             ResizeListener resizeListener
     ) {
+        this(activity, pageUrl, pageTitle, ignoredSourceCount, "", resizeListener);
+    }
+
+    InlineCommentsDialog(
+            Activity activity,
+            String pageUrl,
+            String pageTitle,
+            String ignoredSourceCount,
+            String focusCommentId,
+            ResizeListener resizeListener
+    ) {
         super(activity);
         this.activity = activity;
         this.pageUrl = clean(pageUrl);
         this.pageTitle = clean(pageTitle).isEmpty() ? "Comments" : clean(pageTitle);
+        this.focusCommentId = clean(focusCommentId);
         this.resizeListener = resizeListener;
         setCancelable(true);
         setCanceledOnTouchOutside(true);
@@ -233,9 +246,23 @@ final class InlineCommentsDialog extends BottomSheetDialog {
         Map<String, ZeroChillSocialRepository.Comment> byId = new HashMap<>();
         for (ZeroChillSocialRepository.Comment comment : comments) byId.put(comment.id, comment);
 
+        View focusRow = null;
         for (ZeroChillSocialRepository.Comment comment : comments) {
             int depth = depth(comment, byId);
-            commentsContainer.addView(commentRow(comment), commentParams(depth));
+            View row = commentRow(comment);
+            commentsContainer.addView(row, commentParams(depth));
+            if (!focusCommentId.isEmpty() && focusCommentId.equals(comment.id)) {
+                focusRow = row;
+            }
+        }
+
+        if (focusRow != null) {
+            final View target = focusRow;
+            scrollView.post(() -> {
+                scrollView.smoothScrollTo(0, Math.max(0, target.getTop() - dp(18)));
+                target.setBackground(roundRect(Color.argb(52, 8, 146, 208), 12));
+                target.postDelayed(() -> target.setBackgroundColor(Color.TRANSPARENT), 1600L);
+            });
         }
     }
 

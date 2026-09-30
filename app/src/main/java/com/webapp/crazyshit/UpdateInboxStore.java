@@ -18,6 +18,7 @@ import java.util.Set;
 final class UpdateInboxStore {
     static final String CATEGORY_ONLYFAP = "onlyfap";
     static final String CATEGORY_VIDEOS = "videos";
+    static final String CATEGORY_SOCIAL = "social";
     static final String CATEGORY_APP = "app";
 
     private static final String PREFS = "zerochill_update_inbox_v1";
@@ -78,11 +79,80 @@ final class UpdateInboxStore {
         }
     }
 
+    static void recordSocialActivities(
+            Context context,
+            String accountId,
+            List<ZeroChillSocialRepository.SocialActivity> activity
+    ) {
+        if (context == null || clean(accountId).isEmpty() || activity == null || activity.isEmpty()) return;
+        synchronized (LOCK) {
+            ArrayList<Entry> existing = readLocked(context);
+            pruneNonFavoriteContent(context, existing);
+            LinkedHashSet<String> fingerprints = new LinkedHashSet<>();
+            for (Entry current : existing) fingerprints.add(current.fingerprint);
+
+            ArrayList<Entry> incoming = new ArrayList<>();
+            for (ZeroChillSocialRepository.SocialActivity item : activity) {
+                if (item == null || clean(item.eventId).isEmpty() || item.actor == null) continue;
+                Entry entry = new Entry();
+                entry.timestamp = parseTimestamp(item.createdAt);
+                if (entry.timestamp <= 0L) entry.timestamp = System.currentTimeMillis();
+                entry.category = CATEGORY_SOCIAL;
+                entry.sourceKey = "social";
+                entry.sourceLabel = "Social";
+                entry.accountId = clean(accountId);
+                entry.socialType = clean(item.type);
+                entry.pageUrl = clean(item.pageUrl);
+                entry.videoTitle = clean(item.videoTitle);
+                entry.commentId = clean(item.commentId);
+                String actor = clean(item.actor.displayName).isEmpty()
+                        ? "@" + clean(item.actor.username)
+                        : clean(item.actor.displayName);
+                entry.title = actor + (ZeroChillSocialRepository.SocialActivity.TYPE_REPLY.equals(item.type)
+                        ? " replied to your comment"
+                        : " liked your comment");
+                entry.subtitle = truncate(
+                        ZeroChillSocialRepository.SocialActivity.TYPE_REPLY.equals(item.type)
+                                ? item.replyBody
+                                : item.originalBody,
+                        180
+                );
+                entry.avatarUrl = ZeroChillAccountRepository.avatarUrl(item.actor.avatarPath);
+                entry.count = 1;
+                entry.fingerprint = fingerprint(
+                        CATEGORY_SOCIAL,
+                        entry.accountId + "|" + item.eventId,
+                        Collections.emptyList()
+                );
+                entry.id = entry.fingerprint + ":" + entry.timestamp;
+                if (fingerprints.add(entry.fingerprint)) incoming.add(entry);
+            }
+
+            if (incoming.isEmpty()) return;
+            incoming.addAll(existing);
+            dedupeAndTrim(incoming);
+            writeLocked(context, incoming);
+        }
+    }
+
     static List<Entry> all(Context context) {
+        return allForAccount(context, ZeroChillSessionStore.currentUserId(context));
+    }
+
+    static List<Entry> allForAccount(Context context, String accountId) {
         synchronized (LOCK) {
             ArrayList<Entry> entries = readLocked(context);
             if (pruneNonFavoriteContent(context, entries)) writeLocked(context, entries);
-            return new ArrayList<>(entries);
+            ArrayList<Entry> visible = new ArrayList<>();
+            String current = clean(accountId);
+            for (Entry entry : entries) {
+                if (CATEGORY_SOCIAL.equals(entry.category)
+                        && (current.isEmpty() || !current.equals(entry.accountId))) {
+                    continue;
+                }
+                visible.add(entry);
+            }
+            return visible;
         }
     }
 
@@ -155,8 +225,13 @@ final class UpdateInboxStore {
     static void markAllRead(Context context) {
         synchronized (LOCK) {
             ArrayList<Entry> entries = readLocked(context);
+            String accountId = ZeroChillSessionStore.currentUserId(context);
             boolean changed = false;
             for (Entry entry : entries) {
+                if (CATEGORY_SOCIAL.equals(entry.category)
+                        && (accountId.isEmpty() || !accountId.equals(entry.accountId))) {
+                    continue;
+                }
                 if (!entry.read) {
                     entry.read = true;
                     changed = true;
@@ -341,7 +416,7 @@ final class UpdateInboxStore {
                 changed = true;
                 continue;
             }
-            if (CATEGORY_APP.equals(entry.category)) continue;
+            if (CATEGORY_APP.equals(entry.category) || CATEGORY_SOCIAL.equals(entry.category)) continue;
             boolean keepFavoriteCreator = CATEGORY_ONLYFAP.equals(entry.category)
                     && !entry.creatorName.isEmpty()
                     && isFavoriteCreator(context, entry.creatorName);
@@ -365,6 +440,20 @@ final class UpdateInboxStore {
         return result;
     }
 
+    private static long parseTimestamp(String value) {
+        try {
+            return java.time.Instant.parse(clean(value)).toEpochMilli();
+        } catch (Exception ignored) {
+            return 0L;
+        }
+    }
+
+    private static String truncate(String value, int max) {
+        String clean = clean(value);
+        if (clean.length() <= max) return clean;
+        return clean.substring(0, Math.max(0, max - 1)).trim() + "…";
+    }
+
     private static String clean(String value) {
         return value == null ? "" : value.trim();
     }
@@ -382,6 +471,11 @@ final class UpdateInboxStore {
         String avatarReferer = "";
         String fapelloProfileUrl = "";
         String appVersion = "";
+        String accountId = "";
+        String socialType = "";
+        String pageUrl = "";
+        String videoTitle = "";
+        String commentId = "";
         long timestamp;
         int count;
         int videoCount;
@@ -403,6 +497,11 @@ final class UpdateInboxStore {
                     .put("avatarReferer", avatarReferer)
                     .put("fapelloProfileUrl", fapelloProfileUrl)
                     .put("appVersion", appVersion)
+                    .put("accountId", accountId)
+                    .put("socialType", socialType)
+                    .put("pageUrl", pageUrl)
+                    .put("videoTitle", videoTitle)
+                    .put("commentId", commentId)
                     .put("timestamp", timestamp)
                     .put("count", count)
                     .put("videoCount", videoCount)
@@ -427,6 +526,11 @@ final class UpdateInboxStore {
             entry.avatarReferer = value.optString("avatarReferer", "");
             entry.fapelloProfileUrl = value.optString("fapelloProfileUrl", "");
             entry.appVersion = value.optString("appVersion", "");
+            entry.accountId = value.optString("accountId", "");
+            entry.socialType = value.optString("socialType", "");
+            entry.pageUrl = value.optString("pageUrl", "");
+            entry.videoTitle = value.optString("videoTitle", "");
+            entry.commentId = value.optString("commentId", "");
             entry.timestamp = value.optLong("timestamp", 0L);
             entry.count = value.optInt("count", 0);
             entry.videoCount = value.optInt("videoCount", 0);
