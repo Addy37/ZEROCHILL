@@ -70,6 +70,54 @@ final class CreatorFavoriteStore {
         preferences.edit().putStringSet(KEY_CREATORS, merged).apply();
     }
 
+    /** Switches only account favorites, preserving the original signed-out local collection. */
+    static synchronized Set<String> activateAccount(Context context, String userId) {
+        SharedPreferences prefs = context.getApplicationContext().getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+        String active = prefs.getString("account_owner", "");
+        Set<String> current = names(context);
+        SharedPreferences.Editor edit = prefs.edit();
+        if (!userId.equals(active)) {
+            if (active.isEmpty()) edit.putStringSet("guest_creators", current);
+            else edit.putStringSet("account_creators_" + active, current);
+            Set<String> scoped = new HashSet<>(prefs.getStringSet("account_creators_" + userId, new HashSet<>()));
+            edit.putStringSet(KEY_CREATORS, scoped).putString("account_owner", userId);
+        }
+        // Legacy local favorites are imported once, into the first account used after this upgrade.
+        String importer = prefs.getString("legacy_import_owner", "");
+        if (importer.isEmpty()) {
+            importer = userId;
+            edit.putString("legacy_import_owner", userId).putStringSet("legacy_import_pending", current);
+        }
+        edit.apply();
+        return userId.equals(importer) ? new HashSet<>(prefs.getStringSet("legacy_import_pending", new HashSet<>())) : new HashSet<>();
+    }
+
+    static synchronized void replaceAccountNames(Context context, String userId, Set<String> names) {
+        SharedPreferences prefs = context.getApplicationContext().getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+        if (!userId.equals(prefs.getString("account_owner", ""))) return;
+        SharedPreferences.Editor edit = prefs.edit().putStringSet(KEY_CREATORS, new HashSet<>(names))
+                .putStringSet("account_creators_" + userId, new HashSet<>(names));
+        if (userId.equals(prefs.getString("legacy_import_owner", ""))) edit.remove("legacy_import_pending");
+        edit.apply();
+    }
+
+    static synchronized void deactivateAccount(Context context) {
+        SharedPreferences prefs = context.getApplicationContext().getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+        String active = prefs.getString("account_owner", "");
+        if (active.isEmpty()) return;
+        prefs.edit().putStringSet("account_creators_" + active, names(context))
+                .putStringSet(KEY_CREATORS, new HashSet<>(prefs.getStringSet("guest_creators", new HashSet<>())))
+                .remove("account_owner").apply();
+    }
+
+    static synchronized void removeAccount(Context context, String userId) {
+        SharedPreferences prefs = context.getApplicationContext().getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+        if (userId.equals(prefs.getString("account_owner", ""))) deactivateAccount(context);
+        SharedPreferences.Editor edit = prefs.edit().remove("account_creators_" + userId);
+        if (userId.equals(prefs.getString("legacy_import_owner", ""))) edit.remove("legacy_import_pending");
+        edit.apply();
+    }
+
     static String key(NativeContentItem creator) {
         if (creator == null) return "";
         String value = clean(creator.searchQuery);
@@ -81,3 +129,4 @@ final class CreatorFavoriteStore {
         return value == null ? "" : value.trim();
     }
 }
+

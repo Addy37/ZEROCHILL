@@ -30,7 +30,8 @@ final class UpdateInboxStore {
     }
 
     static void record(Context context, List<NotificationCoordinator.SourceAlert> alerts) {
-        if (context == null || alerts == null || alerts.isEmpty()) return;
+        if (context == null || alerts == null || alerts.isEmpty()
+                || !ZeroChillNotificationPreferences.cached(context).creatorUpdates) return;
         synchronized (LOCK) {
             ArrayList<Entry> incoming = buildEntries(context.getApplicationContext(), alerts);
             if (incoming.isEmpty()) return;
@@ -50,7 +51,8 @@ final class UpdateInboxStore {
             String title,
             boolean beta
     ) {
-        if (context == null || version == null || version.trim().isEmpty()) return;
+        if (context == null || version == null || version.trim().isEmpty()
+                || !ZeroChillNotificationPreferences.cached(context).appUpdates) return;
         synchronized (LOCK) {
             Entry entry = new Entry();
             entry.timestamp = System.currentTimeMillis();
@@ -93,7 +95,8 @@ final class UpdateInboxStore {
 
             ArrayList<Entry> incoming = new ArrayList<>();
             for (ZeroChillSocialRepository.SocialActivity item : activity) {
-                if (item == null || clean(item.eventId).isEmpty() || item.actor == null) continue;
+                if (item == null || clean(item.eventId).isEmpty() || item.actor == null
+                        || !ZeroChillNotificationPreferences.cachedForAccount(context, accountId).allowsSocial(item.type)) continue;
                 Entry entry = new Entry();
                 entry.timestamp = parseTimestamp(item.createdAt);
                 if (entry.timestamp <= 0L) entry.timestamp = System.currentTimeMillis();
@@ -135,6 +138,14 @@ final class UpdateInboxStore {
             dedupeAndTrim(incoming);
             writeLocked(context, incoming);
             return inserted;
+        }
+    }
+
+    static void removeAccount(Context context, String accountId) {
+        synchronized (LOCK) {
+            ArrayList<Entry> entries = readLocked(context);
+            entries.removeIf(entry -> CATEGORY_SOCIAL.equals(entry.category) && accountId.equals(entry.accountId));
+            writeLocked(context, entries);
         }
     }
 
@@ -590,3 +601,4 @@ final class UpdateInboxStore {
         }
     }
 }
+

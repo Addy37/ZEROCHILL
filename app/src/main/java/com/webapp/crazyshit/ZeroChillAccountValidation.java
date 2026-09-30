@@ -21,7 +21,7 @@ final class ZeroChillAccountValidation {
         String value = raw == null ? "" : raw.trim();
         int at = value.indexOf('@');
         int dot = value.lastIndexOf('.');
-        if (value.length() < 5 || at <= 0 || dot <= at + 1 || dot >= value.length() - 1) {
+        if (value.length() > 254 || !value.matches("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$") || value.length() < 5 || at <= 0 || dot <= at + 1 || dot >= value.length() - 1) {
             return "Enter a valid email address.";
         }
         return "";
@@ -34,7 +34,22 @@ final class ZeroChillAccountValidation {
         return "";
     }
 
+    static String profile(String displayName, String bio) {
+        if (displayName != null && displayName.codePointCount(0, displayName.length()) > 40)
+            return "Display name must be 40 characters or fewer.";
+        if (bio != null && bio.codePointCount(0, bio.length()) > 160)
+            return "Bio must be 160 characters or fewer.";
+        return "";
+    }
+
+    static String passwordChange(String password, String confirmation) {
+        String error = password(password);
+        if (!error.isEmpty()) return error;
+        return password.equals(confirmation) ? "" : "Passwords do not match.";
+    }
+
     static String normalizedUsername(String raw) {
         return raw == null ? "" : raw.trim().toLowerCase(Locale.US);
     }
 }
+

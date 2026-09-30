@@ -97,6 +97,7 @@ final class ZeroChillSocialRepository {
         final String username;
         final String displayName;
         final String avatarPath;
+        final String bio;
         final String createdAt;
         final boolean currentUser;
 
@@ -105,8 +106,19 @@ final class ZeroChillSocialRepository {
             username = value.optString("username");
             displayName = value.optString("display_name");
             avatarPath = value.optString("avatar_path");
+            bio = value.optString("bio");
             createdAt = value.optString("created_at");
             this.currentUser = currentUser;
+        }
+    }
+
+    static final class SharedCreator {
+        final String key;
+        final String name;
+
+        SharedCreator(JSONObject value) {
+            key = clean(value.optString("creator_key"));
+            name = clean(value.optString("creator_name"));
         }
     }
 
@@ -585,7 +597,7 @@ final class ZeroChillSocialRepository {
                 if (id.isEmpty()) throw new IllegalArgumentException("This profile is unavailable.");
                 Response response = request(
                         "GET",
-                        "/rest/v1/profiles?select=user_id,username,display_name,avatar_path,created_at"
+                        "/rest/v1/profiles?select=user_id,username,display_name,avatar_path,bio,created_at"
                                 + "&user_id=eq." + encode(id) + "&limit=1",
                         "",
                         null,
@@ -604,6 +616,75 @@ final class ZeroChillSocialRepository {
                     }
                 }
                 callback.complete(new PublicProfile(rows.getJSONObject(0), current), null);
+            } catch (Exception error) {
+                callback.complete(null, error);
+            }
+        });
+    }
+
+    static void loadSharedCreators(
+            Context context,
+            String targetUserId,
+            Callback<ArrayList<SharedCreator>> callback
+    ) {
+        final String expectedUser = ZeroChillSessionStore.currentUserId(context);
+        NETWORK.execute(() -> {
+            try {
+                requireSameAccount(context, expectedUser);
+                String target = clean(targetUserId);
+                String self = ZeroChillAccountRepository.currentUserIdBlocking(context);
+                if (!expectedUser.equals(self)) throw new IllegalStateException("Account changed. Try again.");
+                if (target.isEmpty() || target.equals(self)) {
+                    callback.complete(new ArrayList<>(), null);
+                    return;
+                }
+                String token = ZeroChillAccountRepository.accessTokenBlocking(context);
+                requireSameAccount(context, expectedUser);
+                JSONObject args = new JSONObject().put("target_user_id", target);
+                Response response = request("POST", "/rest/v1/rpc/shared_zerochill_creators",
+                        token, args.toString().getBytes(StandardCharsets.UTF_8),
+                        "application/json", null);
+                if (!response.ok()) throw error(response, "Unable to load shared creators.");
+                JSONArray rows = response.body.isEmpty() ? new JSONArray() : new JSONArray(response.body);
+                ArrayList<SharedCreator> shared = new ArrayList<>();
+                for (int i = 0; i < rows.length(); i++) {
+                    SharedCreator creator = new SharedCreator(rows.getJSONObject(i));
+                    if (!creator.key.isEmpty()) shared.add(creator);
+                }
+                requireSameAccount(context, expectedUser);
+                callback.complete(shared, null);
+            } catch (Exception error) {
+                callback.complete(null, error);
+            }
+        });
+    }
+
+    static void loadBlockedUsers(Context context, Callback<ArrayList<PublicProfile>> callback) {
+        final String expectedUser = ZeroChillSessionStore.currentUserId(context);
+        NETWORK.execute(() -> {
+            try {
+                requireSameAccount(context, expectedUser);
+                String token = ZeroChillAccountRepository.accessTokenBlocking(context);
+                String current = ZeroChillAccountRepository.currentUserIdBlocking(context);
+                if (!expectedUser.equals(current)) throw new IllegalStateException("Account changed. Try again.");
+                Response response = request("GET", "/rest/v1/user_blocks?select=blocked_id"
+                                + "&blocker_id=eq." + encode(current) + "&order=created_at.desc&limit=500",
+                        token, null, null, null);
+                if (!response.ok()) throw error(response, "Unable to load blocked users.");
+                JSONArray rows = response.body.isEmpty() ? new JSONArray() : new JSONArray(response.body);
+                ArrayList<String> ids = new ArrayList<>();
+                for (int i = 0; i < rows.length(); i++) {
+                    String id = clean(rows.getJSONObject(i).optString("blocked_id"));
+                    if (!id.isEmpty()) ids.add(id);
+                }
+                Map<String, PublicProfile> profiles = loadProfiles(token, ids);
+                requireSameAccount(context, expectedUser);
+                ArrayList<PublicProfile> blocked = new ArrayList<>();
+                for (String id : ids) {
+                    PublicProfile profile = profiles.get(id);
+                    if (profile != null) blocked.add(profile);
+                }
+                callback.complete(blocked, null);
             } catch (Exception error) {
                 callback.complete(null, error);
             }
@@ -806,11 +887,14 @@ final class ZeroChillSocialRepository {
     }
 
     static void blockState(Context context, String userId, Callback<Boolean> callback) {
+        final String expectedUser = ZeroChillSessionStore.currentUserId(context);
         NETWORK.execute(() -> {
             try {
+                requireSameAccount(context, expectedUser);
                 String target = clean(userId);
                 String token = ZeroChillAccountRepository.accessTokenBlocking(context);
                 String current = ZeroChillAccountRepository.currentUserIdBlocking(context);
+                if (!expectedUser.equals(current)) throw new IllegalStateException("Account changed. Try again.");
                 Response response = request(
                         "GET",
                         "/rest/v1/user_blocks?select=blocked_id&blocker_id=eq." + current
@@ -822,6 +906,7 @@ final class ZeroChillSocialRepository {
                 );
                 if (!response.ok()) throw error(response, "Unable to load block status.");
                 JSONArray rows = response.body.isEmpty() ? new JSONArray() : new JSONArray(response.body);
+                requireSameAccount(context, expectedUser);
                 callback.complete(rows.length() > 0, null);
             } catch (Exception error) {
                 callback.complete(false, error);
@@ -835,12 +920,15 @@ final class ZeroChillSocialRepository {
             boolean blocked,
             Callback<Boolean> callback
     ) {
+        final String expectedUser = ZeroChillSessionStore.currentUserId(context);
         NETWORK.execute(() -> {
             try {
+                requireSameAccount(context, expectedUser);
                 String target = clean(userId);
                 if (target.isEmpty()) throw new IllegalArgumentException("This user is unavailable.");
                 String token = ZeroChillAccountRepository.accessTokenBlocking(context);
                 String current = ZeroChillAccountRepository.currentUserIdBlocking(context);
+                if (!expectedUser.equals(current)) throw new IllegalStateException("Account changed. Try again.");
                 Response response;
                 if (blocked) {
                     JSONObject row = new JSONObject().put("blocked_id", target);
@@ -866,11 +954,19 @@ final class ZeroChillSocialRepository {
                 if (!response.ok()) throw error(response, blocked
                         ? "Unable to block this user."
                         : "Unable to unblock this user.");
+                requireSameAccount(context, expectedUser);
                 callback.complete(blocked, null);
             } catch (Exception error) {
                 callback.complete(!blocked, error);
             }
         });
+    }
+
+    private static void requireSameAccount(Context context, String expectedUser) {
+        if (expectedUser.isEmpty()
+                || !expectedUser.equals(ZeroChillSessionStore.currentUserId(context))) {
+            throw new IllegalStateException("Account changed. Try again.");
+        }
     }
 
     static void reportUser(

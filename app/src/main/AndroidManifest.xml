@@ -21,6 +21,9 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.CrazyShit"
         android:usesCleartextTraffic="false">
+        <activity android:name=".ZeroChillAccountSecurityActivity" android:exported="false" android:windowSoftInputMode="adjustResize" />
+        <activity android:name=".ZeroChillSocialSettingsActivity" android:exported="false" android:windowSoftInputMode="adjustResize" />
+
 
         <service
             android:name=".AcceleratedDownloadService"
@@ -213,3 +216,4 @@
     </application>
 
 </manifest>
+

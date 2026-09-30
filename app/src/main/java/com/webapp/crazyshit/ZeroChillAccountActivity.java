@@ -13,6 +13,9 @@ import android.net.Uri;
 import android.os.Bundle;
 import android.provider.Settings;
 import android.text.InputType;
+import android.text.InputFilter;
+import android.text.Editable;
+import android.text.TextWatcher;
 import android.view.Gravity;
 import android.view.View;
 import android.view.animation.LinearInterpolator;
@@ -34,6 +37,10 @@ import java.io.InputStream;
 /** First-party ZeroChill account entry point. Existing app use remains account-optional. */
 public final class ZeroChillAccountActivity extends Activity {
     private static final int AVATAR_REQUEST = 6401;
+    private static final int SECURITY_REQUEST = 6402;
+    private static final String DRAFT_USER = "draft_user";
+    private static final String DRAFT_NAME = "draft_name";
+    private static final String DRAFT_BIO = "draft_bio";
 
     private LinearLayout content;
     private ProgressBar progress;
@@ -42,11 +49,26 @@ public final class ZeroChillAccountActivity extends Activity {
     private AnimatorSet ambientAnimator;
     private boolean createMode;
     private ZeroChillAccountRepository.AccountState account;
+    private TextView identityPrimary;
+    private TextView identitySecondary;
+    private String renderedUserId = "";
+    private EditText nameField;
+    private EditText bioField;
+    private String draftUser = "";
+    private String draftName = "";
+    private String draftBio = "";
+    private boolean hasDraft;
 
     @Override
     protected void onCreate(Bundle state) {
         super.onCreate(state);
         ZeroChillUi.applySystemBars(this);
+        if (state != null) {
+            draftUser = state.getString(DRAFT_USER, "");
+            draftName = state.getString(DRAFT_NAME, "");
+            draftBio = state.getString(DRAFT_BIO, "");
+            hasDraft = state.containsKey(DRAFT_USER);
+        }
         buildShell();
         ResponsiveFitmentController.applySoon(this);
         if (!handleAuthRedirect(getIntent())) loadAccount();
@@ -69,6 +91,37 @@ public final class ZeroChillAccountActivity extends Activity {
         super.onNewIntent(intent);
         setIntent(intent);
         if (!handleAuthRedirect(intent)) loadAccount();
+    }
+
+    @Override
+    protected void onSaveInstanceState(Bundle out) {
+        captureDraft();
+        if (hasDraft) {
+            out.putString(DRAFT_USER, draftUser);
+            out.putString(DRAFT_NAME, draftName);
+            out.putString(DRAFT_BIO, draftBio);
+        }
+        super.onSaveInstanceState(out);
+    }
+
+    private void captureDraft() {
+        if (account == null || !account.signedIn || nameField == null || bioField == null) return;
+        draftUser = account.userId;
+        draftName = nameField.getText().toString();
+        draftBio = bioField.getText().toString();
+        hasDraft = true;
+    }
+
+    private boolean sameAccount(String userId) {
+        return !isFinishing() && !isDestroyed() && account != null
+                && account.signedIn && account.userId.equals(userId)
+                && userId.equals(ZeroChillSessionStore.currentUserId(this));
+    }
+
+    private void clearDraft() {
+        hasDraft = false;
+        draftUser = draftName = draftBio = "";
+        nameField = bioField = null;
     }
 
     @Override
@@ -178,13 +231,30 @@ public final class ZeroChillAccountActivity extends Activity {
         }
         ZeroChillAccountRepository.current(this, (value, error) -> runOnUiThread(() -> {
             showBusy(false);
-            account = value;
+            if (isFinishing() || isDestroyed()) return;
+            if (error != null) {
+                Toast.makeText(this, error.getMessage() == null ? "Couldn't load your account." : error.getMessage(), Toast.LENGTH_LONG).show();
+                if (account != null && account.signedIn) return;
+                if (ZeroChillAccountRepository.hasStoredSession(this)) {
+                    showRetry();
+                    return;
+                }
+            }
+            String sessionUser = ZeroChillSessionStore.currentUserId(this);
+            if (value != null && value.signedIn && !value.userId.equals(sessionUser)) {
+                loadAccount();
+                return;
+            }
             if (value != null && value.signedIn) showProfile(value);
-            else showAuth();
+            else if (!sessionUser.isEmpty()) showRetry();
+            else { account = value; clearDraft(); showAuth(); }
         }));
     }
 
     private void showAuth() {
+        renderedUserId = "";
+        identityPrimary = identitySecondary = null;
+        nameField = bioField = null;
         content.removeAllViews();
 
         addEyebrow(content, createMode ? "NEW IDENTITY" : "WELCOME BACK");
@@ -409,6 +479,10 @@ public final class ZeroChillAccountActivity extends Activity {
     }
 
     private void showProfile(ZeroChillAccountRepository.AccountState state) {
+        if (renderedUserId.equals(state.userId)) captureDraft();
+        else if (hasDraft && !draftUser.equals(state.userId)) clearDraft();
+        account = state;
+        renderedUserId = state.userId;
         content.removeAllViews();
 
         addEyebrow(content, "YOUR IDENTITY");
@@ -454,8 +528,9 @@ public final class ZeroChillAccountActivity extends Activity {
                 true
         );
         identity.addView(username);
+        identityPrimary = username;
 
-        if (!state.displayName.isEmpty()) {
+        {
             TextView display = text(
                     SocialUi.cleanName(state.username),
                     13,
@@ -465,6 +540,8 @@ public final class ZeroChillAccountActivity extends Activity {
             LinearLayout.LayoutParams displayParams = new LinearLayout.LayoutParams(-1, -2);
             displayParams.topMargin = dp(3);
             identity.addView(display, displayParams);
+            display.setVisibility(state.displayName.isEmpty() ? View.GONE : View.VISIBLE);
+            identitySecondary = display;
         }
 
         TextView email = text(
@@ -476,6 +553,17 @@ public final class ZeroChillAccountActivity extends Activity {
         LinearLayout.LayoutParams emailParams = new LinearLayout.LayoutParams(-1, -2);
         emailParams.topMargin = dp(5);
         identity.addView(email, emailParams);
+        TextView publicLink = text("View public profile  ›", 12, UiPalette.PRIMARY, true);
+        publicLink.setGravity(Gravity.CENTER_VERTICAL);
+        publicLink.setMinHeight(dp(42));
+        publicLink.setContentDescription("View public profile");
+        publicLink.setOnClickListener(v -> {
+            Intent intent = new Intent(this, ZeroChillPublicProfileActivity.class);
+            intent.putExtra(ZeroChillPublicProfileActivity.EXTRA_USER_ID, state.userId);
+            startActivity(intent);
+        });
+        ZeroChillMotion.installPressFeedback(publicLink);
+        identity.addView(publicLink);
         hero.addView(identity, new LinearLayout.LayoutParams(0, -2, 1f));
 
         LinearLayout.LayoutParams heroParams = new LinearLayout.LayoutParams(-1, -2);
@@ -496,8 +584,11 @@ public final class ZeroChillAccountActivity extends Activity {
         signOut.setTextColor(Color.rgb(228, 138, 138));
         signOut.setOnClickListener(v -> {
             signOut.setEnabled(false);
+            String owner = state.userId;
             ZeroChillAccountRepository.signOut(this, (ignored, error) -> runOnUiThread(() -> {
+                if (isFinishing() || isDestroyed() || account == null || !owner.equals(account.userId)) return;
                 account = null;
+                clearDraft();
                 createMode = false;
                 showAuth();
             }));
@@ -513,55 +604,143 @@ public final class ZeroChillAccountActivity extends Activity {
         content.addView(section, sectionParams);
 
         EditText displayName = field("Display name (optional)", InputType.TYPE_CLASS_TEXT);
-        displayName.setText(state.displayName);
+        displayName.setFilters(new InputFilter[]{new InputFilter.LengthFilter(40)});
+        displayName.setText(hasDraft && state.userId.equals(draftUser) ? draftName : state.displayName);
         displayName.setAutofillHints(View.AUTOFILL_HINT_NAME);
+        displayName.setContentDescription("Display name");
         content.addView(displayName, fieldParams());
+        nameField = displayName;
+
+        EditText bio = field("Bio (optional)",
+                InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_MULTI_LINE
+                        | InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);
+        bio.setSingleLine(false);
+        bio.setMinLines(3);
+        bio.setMaxLines(5);
+        bio.setGravity(Gravity.TOP | Gravity.START);
+        bio.setPadding(dp(15), dp(13), dp(15), dp(13));
+        bio.setFilters(new InputFilter[]{new InputFilter.LengthFilter(160)});
+        bio.setText(hasDraft && state.userId.equals(draftUser) ? draftBio : state.bio);
+        bio.setContentDescription("Bio");
+        LinearLayout.LayoutParams bioParams = new LinearLayout.LayoutParams(-1, -2);
+        bioParams.topMargin = dp(10);
+        content.addView(bio, bioParams);
+        bioField = bio;
+
+        TextView counter = text(bio.length() + "/160", 11,
+                ZeroChillUi.color(this, R.color.zc_text_muted), false);
+        counter.setGravity(Gravity.END);
+        content.addView(counter);
+        bio.addTextChangedListener(new TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+            @Override public void onTextChanged(CharSequence s, int start, int before, int count) {
+                counter.setText(s.length() + "/160");
+            }
+            @Override public void afterTextChanged(Editable s) {}
+        });
 
         TextView save = primaryButton("SAVE PROFILE");
         LinearLayout.LayoutParams saveParams = new LinearLayout.LayoutParams(-1, dp(48));
         saveParams.topMargin = dp(10);
         content.addView(save, saveParams);
         save.setOnClickListener(v -> {
+            String owner = state.userId;
+            if (!sameAccount(owner)) return;
+            String newName = displayName.getText().toString();
+            String newBio = bio.getText().toString();
             save.setEnabled(false);
-            ZeroChillAccountRepository.updateDisplayName(
-                    this,
-                    displayName.getText().toString(),
+            ZeroChillAccountRepository.updateProfile(this, newName, newBio,
                     (updated, error) -> runOnUiThread(() -> {
+                        if (!sameAccount(owner)) return;
                         save.setEnabled(true);
                         if (error != null) {
                             Toast.makeText(this, error.getMessage(), Toast.LENGTH_LONG).show();
-                        } else {
+                        } else if (updated != null) {
                             account = updated;
+                            hasDraft = false;
+                            draftUser = draftName = draftBio = "";
+                            if (identityPrimary != null) identityPrimary.setText(
+                                    SocialUi.name(updated.displayName, updated.username));
+                            if (identitySecondary != null) {
+                                identitySecondary.setText(SocialUi.cleanName(updated.username));
+                                identitySecondary.setVisibility(updated.displayName.isEmpty()
+                                        ? View.GONE : View.VISIBLE);
+                            }
+                            save.setText("SAVED");
+                            if (ZeroChillMotion.animationsEnabled(this)) {
+                                save.setAlpha(0.6f);
+                                save.animate().alpha(1f).setDuration(ZeroChillMotion.QUICK_MS).start();
+                            }
+                            save.postDelayed(() -> {
+                                if (!isFinishing() && !isDestroyed()) save.setText("SAVE PROFILE");
+                            }, 1200L);
                             Toast.makeText(this, "Profile updated.", Toast.LENGTH_SHORT).show();
-                            showProfile(updated);
                         }
-                    })
-            );
+                    }));
         });
 
-        LinearLayout syncCard = new LinearLayout(this);
-        syncCard.setOrientation(LinearLayout.VERTICAL);
-        syncCard.setPadding(dp(14), dp(13), dp(14), dp(13));
-        syncCard.setBackground(panelBackground(17));
+        section("ACCOUNT & SECURITY");
+        settingsRow("Change email", android.R.drawable.ic_dialog_email, () -> openSecurity("email"));
+        settingsRow("Change password", android.R.drawable.ic_lock_lock, () -> openSecurity("password"));
+        settingsRow("Delete account", android.R.drawable.ic_menu_delete, () -> openSecurity("delete"));
 
-        TextView syncTitle = text("SYNCED TO ZEROCHILL", 10, UiPalette.PRIMARY, true);
-        syncTitle.setLetterSpacing(0.08f);
-        syncCard.addView(syncTitle);
+        section("SOCIAL");
+        settingsRow("Notification preferences", android.R.drawable.ic_dialog_info, () -> openSocial("notifications"));
+        settingsRow("Blocked users", android.R.drawable.ic_menu_close_clear_cancel, () -> openSocial("blocked"));
 
-        TextView synced = text(
-                "Favorite creators stay linked to this identity. Comments, replies, likes, and DMs use the same profile.",
-                12,
-                ZeroChillUi.color(this, R.color.zc_text_secondary),
-                false
-        );
-        synced.setLineSpacing(0f, 1.1f);
-        LinearLayout.LayoutParams syncedParams = new LinearLayout.LayoutParams(-1, -2);
-        syncedParams.topMargin = dp(5);
-        syncCard.addView(synced, syncedParams);
+        TextView footer = text(
+                "SYNCED TO ZEROCHILL\nYour creators, comments, replies, likes, and DMs stay linked to this identity.",
+                11, ZeroChillUi.color(this, R.color.zc_text_muted), false);
+        footer.setLineSpacing(dp(5), 1f);
+        LinearLayout.LayoutParams footerParams = new LinearLayout.LayoutParams(-1, -2);
+        footerParams.topMargin = dp(20);
+        content.addView(footer, footerParams);
+    }
 
-        LinearLayout.LayoutParams syncParams = new LinearLayout.LayoutParams(-1, -2);
-        syncParams.topMargin = dp(12);
-        content.addView(syncCard, syncParams);
+    private void section(String title) {
+        TextView heading = text(title, 10, UiPalette.PRIMARY, true);
+        heading.setLetterSpacing(0.11f);
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, -2);
+        params.topMargin = dp(25);
+        params.bottomMargin = dp(7);
+        content.addView(heading, params);
+    }
+
+    private void settingsRow(String label, int iconRes, Runnable action) {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(dp(16), dp(7), dp(14), dp(7));
+        row.setMinimumHeight(dp(54));
+        row.setBackground(panelBackground(14));
+        ImageView symbol = new ImageView(this);
+        symbol.setImageResource(iconRes);
+        symbol.setColorFilter(UiPalette.PRIMARY);
+        symbol.setPadding(dp(4), dp(4), dp(4), dp(4));
+        row.addView(symbol, new LinearLayout.LayoutParams(dp(28), dp(28)));
+        TextView title = text(label, 14, Color.WHITE, true);
+        LinearLayout.LayoutParams titleParams = new LinearLayout.LayoutParams(0, -2, 1f);
+        titleParams.setMarginStart(dp(10));
+        row.addView(title, titleParams);
+        row.addView(text("›", 24, ZeroChillUi.color(this, R.color.zc_text_muted), false));
+        LinearLayout.LayoutParams rowParams = new LinearLayout.LayoutParams(-1, -2);
+        rowParams.topMargin = dp(7);
+        content.addView(row, rowParams);
+        row.setContentDescription(label);
+        row.setOnClickListener(v -> { captureDraft(); action.run(); });
+        ZeroChillMotion.installPressFeedback(row);
+    }
+
+    private void openSecurity(String mode) {
+        Intent intent = new Intent(this, ZeroChillAccountSecurityActivity.class);
+        intent.putExtra(ZeroChillAccountSecurityActivity.EXTRA_MODE, mode);
+        startActivityForResult(intent, SECURITY_REQUEST);
+    }
+
+    private void openSocial(String mode) {
+        Intent intent = new Intent(this, ZeroChillSocialSettingsActivity.class);
+        intent.putExtra(ZeroChillSocialSettingsActivity.EXTRA_MODE, mode);
+        startActivity(intent);
     }
 
     private void chooseAvatar() {
@@ -574,13 +753,20 @@ public final class ZeroChillAccountActivity extends Activity {
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == SECURITY_REQUEST) {
+            if (resultCode == RESULT_OK) loadAccount();
+            return;
+        }
         if (requestCode != AVATAR_REQUEST || resultCode != RESULT_OK || data == null) return;
         Uri uri = data.getData();
         if (uri == null) return;
         try {
+            String owner = account == null ? "" : account.userId;
+            captureDraft();
             byte[] jpeg = avatarBytes(uri);
             showBusy(true);
             ZeroChillAccountRepository.uploadAvatar(this, jpeg, (url, error) -> runOnUiThread(() -> {
+                if (!sameAccount(owner)) return;
                 showBusy(false);
                 if (error != null) {
                     Toast.makeText(this, error.getMessage(), Toast.LENGTH_LONG).show();
@@ -788,7 +974,7 @@ public final class ZeroChillAccountActivity extends Activity {
     }
 
     private void startAmbientMotion() {
-        if (accountRoot == null || ambientGlow == null) return;
+        if (accountRoot == null || ambientGlow == null || !ZeroChillMotion.animationsEnabled(this)) return;
         int width = accountRoot.getWidth();
         int height = accountRoot.getHeight();
         if (width <= 0 || height <= 0) return;
@@ -877,6 +1063,17 @@ public final class ZeroChillAccountActivity extends Activity {
         content.setVisibility(busy ? View.INVISIBLE : View.VISIBLE);
     }
 
+    private void showRetry() {
+        content.removeAllViews();
+        content.addView(text("Couldn't load your account. Check your connection and try again.",
+                14, ZeroChillUi.color(this, R.color.zc_text_secondary), false));
+        TextView retry = primaryButton("TRY AGAIN");
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, dp(48));
+        params.topMargin = dp(20);
+        content.addView(retry, params);
+        retry.setOnClickListener(v -> loadAccount());
+    }
+
     private void showMessage(String message) {
         content.removeAllViews();
         content.addView(text(message, 14, ZeroChillUi.color(this, R.color.zc_text_secondary), false));
@@ -886,3 +1083,4 @@ public final class ZeroChillAccountActivity extends Activity {
         return Math.round(value * getResources().getDisplayMetrics().density);
     }
 }
+

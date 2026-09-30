@@ -186,6 +186,14 @@ jobs:
           gradle-version: '8.7'
           cache-provider: basic
 
+      - name: Run focused profile and account regressions first
+        run: >-
+          gradle --no-daemon :app:testDebugUnitTest
+          --tests 'com.webapp.crazyshit.ZeroChillAccount*'
+          --tests 'com.webapp.crazyshit.ZeroChillPublicProfileUiTest'
+          --tests 'com.webapp.crazyshit.ZeroChillSocialSettingsUiTest'
+          --tests 'com.webapp.crazyshit.ProfileAccountIsolationTest'
+
       - name: Run focused Library social hub regressions first
         run: >-
           gradle --no-daemon :app:testDebugUnitTest
@@ -300,3 +308,4 @@ jobs:
           path: ${{ steps.apk_lineage.outputs.release_apk }}
           if-no-files-found: error
           retention-days: 14
+

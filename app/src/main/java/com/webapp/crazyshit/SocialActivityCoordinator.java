@@ -147,6 +147,7 @@ final class SocialActivityCoordinator {
                     || InlineCommentsDialog.isOpenFor(resumed, latest.pageUrl)) return;
             android.view.View focus = resumed.getCurrentFocus();
             if (focus instanceof android.widget.EditText) return;
+            if (!ZeroChillNotificationPreferences.cachedForAccount(context, requestedAccount).allowsSocial(latest.socialType)) return;
             presenter.show(resumed, latest);
         }));
     }
@@ -156,3 +157,4 @@ final class SocialActivityCoordinator {
         catch (Exception ignored) { return 0L; }
     }
 }
+
