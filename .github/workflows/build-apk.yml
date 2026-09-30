@@ -186,6 +186,11 @@ jobs:
           gradle-version: '8.7'
           cache-provider: basic
 
+      - name: Run focused DM regressions first
+        run: >-
+          gradle --no-daemon :app:testDebugUnitTest
+          --tests 'com.webapp.crazyshit.ZeroChillMessageThreadUiTest'
+
       - name: Run focused OnlyFap Discover regressions first
         run: >-
           gradle --no-daemon :app:testDebugUnitTest

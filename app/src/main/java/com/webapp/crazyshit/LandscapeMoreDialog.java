@@ -67,12 +67,22 @@ final class LandscapeMoreDialog {
         LinearLayout content = new LinearLayout(activity);
         content.setOrientation(LinearLayout.VERTICAL);
 
+        int unreadMessages = ZeroChillMessageBadgeStore.unreadCount(activity);
         List<Action> actions = actions(
                 new Action(
                         R.drawable.ic_action_download,
                         "Downloads",
                         "Saved videos and active downloads",
                         () -> activity.startActivity(new Intent(activity, DownloadedActivity.class))
+                ),
+                new Action(
+                        R.drawable.ic_action_message,
+                        "Messages",
+                        unreadMessages > 0
+                                ? unreadMessages + (unreadMessages == 1 ? " unread message" : " unread messages")
+                                : "Private conversations",
+                        unreadMessages,
+                        () -> activity.startActivity(new Intent(activity, ZeroChillInboxActivity.class))
                 ),
                 new Action(
                         R.drawable.ic_more_settings,

@@ -38,6 +38,19 @@
         </provider>
 
         <activity
+            android:name=".ZeroChillInboxActivity"
+            android:screenOrientation="portrait"
+            android:enableOnBackInvokedCallback="true"
+            android:exported="false" />
+
+        <activity
+            android:name=".ZeroChillMessageActivity"
+            android:screenOrientation="portrait"
+            android:enableOnBackInvokedCallback="true"
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize" />
+
+        <activity
             android:name=".ZeroChillPublicProfileActivity"
             android:screenOrientation="portrait"
             android:enableOnBackInvokedCallback="true"

@@ -17,11 +17,13 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-/** ZeroChill-owned social data: comments, replies, and likes. */
+/** ZeroChill-owned social data: comments, likes, profiles, blocks, reports, and messaging. */
 final class ZeroChillSocialRepository {
     private static final ExecutorService NETWORK = Executors.newFixedThreadPool(2);
 
@@ -80,6 +82,56 @@ final class ZeroChillSocialRepository {
             avatarPath = value.optString("avatar_path");
             createdAt = value.optString("created_at");
             this.currentUser = currentUser;
+        }
+    }
+
+    static final class DirectMessage {
+        final String id;
+        final String senderId;
+        final String recipientId;
+        final String body;
+        final String createdAt;
+        final String readAt;
+        final boolean pending;
+
+        DirectMessage(JSONObject value) {
+            id = value.optString("id");
+            senderId = value.optString("sender_id");
+            recipientId = value.optString("recipient_id");
+            body = value.optString("body");
+            createdAt = value.optString("created_at");
+            readAt = value.isNull("read_at") ? "" : value.optString("read_at");
+            pending = false;
+        }
+
+        DirectMessage(String clientId, String recipient, String message) {
+            id = clientId;
+            senderId = ""; // Local outgoing row; the server supplies auth.uid().
+            recipientId = recipient;
+            body = message;
+            createdAt = java.time.Instant.now().toString();
+            readAt = "";
+            pending = true;
+        }
+
+        boolean unreadFor(String userId) {
+            return clean(userId).equals(recipientId) && clean(readAt).isEmpty();
+        }
+
+        String partnerId(String userId) {
+            return clean(userId).equals(senderId) ? recipientId : senderId;
+        }
+    }
+
+    static final class Conversation {
+        final PublicProfile profile;
+        final DirectMessage lastMessage;
+        final int unreadCount;
+
+        Conversation(PublicProfile profile, DirectMessage lastMessage, int unreadCount) {
+            this.profile = profile;
+            this.lastMessage = lastMessage;
+            this.unreadCount = Math.max(0, unreadCount);
         }
     }
 
@@ -280,6 +332,357 @@ final class ZeroChillSocialRepository {
                 callback.complete(null, error);
             }
         });
+    }
+
+    static void loadInbox(Context context, Callback<ArrayList<Conversation>> callback) {
+        NETWORK.execute(() -> {
+            try {
+                String token = ZeroChillAccountRepository.accessTokenBlocking(context);
+                String userId = ZeroChillAccountRepository.currentUserIdBlocking(context);
+                Response response = request(
+                        "GET",
+                        "/rest/v1/direct_messages?select=id,sender_id,recipient_id,body,created_at,read_at"
+                                + "&or=(sender_id.eq." + userId + ",recipient_id.eq." + userId + ")"
+                                + "&order=created_at.desc&limit=500",
+                        token,
+                        null,
+                        null,
+                        null
+                );
+                if (!response.ok()) throw error(response, "Unable to load messages.");
+                JSONArray rows = response.body.isEmpty() ? new JSONArray() : new JSONArray(response.body);
+
+                LinkedHashMap<String, DirectMessage> lastByPartner = new LinkedHashMap<>();
+                LinkedHashMap<String, Integer> unreadByPartner = new LinkedHashMap<>();
+                ArrayList<String> partnerIds = new ArrayList<>();
+                for (int i = 0; i < rows.length(); i++) {
+                    DirectMessage message = new DirectMessage(rows.getJSONObject(i));
+                    String partnerId = message.partnerId(userId);
+                    if (partnerId.isEmpty()) continue;
+                    if (!lastByPartner.containsKey(partnerId)) {
+                        lastByPartner.put(partnerId, message);
+                        partnerIds.add(partnerId);
+                    }
+                    if (message.unreadFor(userId)) {
+                        unreadByPartner.put(
+                                partnerId,
+                                unreadByPartner.getOrDefault(partnerId, 0) + 1
+                        );
+                    }
+                }
+
+                Map<String, PublicProfile> profiles = loadProfiles(token, partnerIds);
+                ArrayList<Conversation> conversations = new ArrayList<>();
+                for (String partnerId : partnerIds) {
+                    PublicProfile profile = profiles.get(partnerId);
+                    if (profile == null) continue;
+                    conversations.add(new Conversation(
+                            profile,
+                            lastByPartner.get(partnerId),
+                            unreadByPartner.getOrDefault(partnerId, 0)
+                    ));
+                }
+                callback.complete(conversations, null);
+            } catch (Exception error) {
+                callback.complete(null, error);
+            }
+        });
+    }
+
+    static void unreadMessageCount(Context context, Callback<Integer> callback) {
+        NETWORK.execute(() -> {
+            try {
+                String token = ZeroChillAccountRepository.accessTokenBlocking(context);
+                String userId = ZeroChillAccountRepository.currentUserIdBlocking(context);
+                Response response = request(
+                        "GET",
+                        "/rest/v1/direct_messages?select=id&recipient_id=eq." + userId
+                                + "&read_at=is.null&limit=500",
+                        token,
+                        null,
+                        null,
+                        null
+                );
+                if (!response.ok()) throw error(response, "Unable to load unread messages.");
+                JSONArray rows = response.body.isEmpty() ? new JSONArray() : new JSONArray(response.body);
+                callback.complete(rows.length(), null);
+            } catch (Exception error) {
+                callback.complete(0, error);
+            }
+        });
+    }
+
+    static void loadDirectMessages(
+            Context context,
+            String partnerId,
+            Callback<ArrayList<DirectMessage>> callback
+    ) {
+        NETWORK.execute(() -> {
+            try {
+                String other = clean(partnerId);
+                if (other.isEmpty()) throw new IllegalArgumentException("This conversation is unavailable.");
+                String token = ZeroChillAccountRepository.accessTokenBlocking(context);
+                String userId = ZeroChillAccountRepository.currentUserIdBlocking(context);
+                Response response = request(
+                        "GET",
+                        "/rest/v1/direct_messages?select=id,sender_id,recipient_id,body,created_at,read_at"
+                                + "&or=(and(sender_id.eq." + userId + ",recipient_id.eq." + other + "),"
+                                + "and(sender_id.eq." + other + ",recipient_id.eq." + userId + "))"
+                                + "&order=created_at.asc&limit=500",
+                        token,
+                        null,
+                        null,
+                        null
+                );
+                if (!response.ok()) throw error(response, "Unable to load the conversation.");
+                JSONArray rows = response.body.isEmpty() ? new JSONArray() : new JSONArray(response.body);
+                ArrayList<DirectMessage> messages = new ArrayList<>();
+                for (int i = 0; i < rows.length(); i++) {
+                    messages.add(new DirectMessage(rows.getJSONObject(i)));
+                }
+                callback.complete(messages, null);
+            } catch (Exception error) {
+                callback.complete(null, error);
+            }
+        });
+    }
+
+    static void sendDirectMessage(
+            Context context,
+            String recipientId,
+            String clientId,
+            String body,
+            Callback<DirectMessage> callback
+    ) {
+        NETWORK.execute(() -> {
+            try {
+                String recipient = clean(recipientId);
+                String message = body == null ? "" : body;
+                if (recipient.isEmpty()) throw new IllegalArgumentException("This user is unavailable.");
+                if (message.trim().isEmpty() || message.length() > 2000) {
+                    throw new IllegalArgumentException("Message must contain 1 to 2000 characters.");
+                }
+                String token = ZeroChillAccountRepository.accessTokenBlocking(context);
+                JSONObject row = directMessagePayload(clientId, recipient, message);
+                Response response = request(
+                        "POST",
+                        "/rest/v1/direct_messages",
+                        token,
+                        row.toString().getBytes(StandardCharsets.UTF_8),
+                        "application/json",
+                        "return=representation"
+                );
+                if (!response.ok()) {
+                    if (response.status == 401 || response.status == 403) {
+                        throw new IllegalStateException("You can't message this user.");
+                    }
+                    throw error(response, "Unable to send the message.");
+                }
+                JSONArray rows = response.body.isEmpty() ? new JSONArray() : new JSONArray(response.body);
+                callback.complete(
+                        rows.length() == 0 ? null : new DirectMessage(rows.getJSONObject(0)),
+                        null
+                );
+            } catch (Exception error) {
+                callback.complete(null, error);
+            }
+        });
+    }
+
+    // The existing UUID primary key links local echo, refresh, and POST response.
+    // No content-based matching: identical consecutive messages remain distinct.
+    static JSONObject directMessagePayload(String clientId, String recipient, String body)
+            throws org.json.JSONException {
+        return new JSONObject().put("id", java.util.UUID.fromString(clientId).toString())
+                .put("recipient_id", recipient).put("body", body);
+    }
+
+    static void markDirectMessagesRead(
+            Context context,
+            String senderId,
+            Callback<Boolean> callback
+    ) {
+        NETWORK.execute(() -> {
+            try {
+                String sender = clean(senderId);
+                if (sender.isEmpty()) {
+                    callback.complete(true, null);
+                    return;
+                }
+                String token = ZeroChillAccountRepository.accessTokenBlocking(context);
+                String userId = ZeroChillAccountRepository.currentUserIdBlocking(context);
+                JSONObject body = new JSONObject().put("read_at", java.time.Instant.now().toString());
+                Response response = request(
+                        "PATCH",
+                        "/rest/v1/direct_messages?recipient_id=eq." + userId
+                                + "&sender_id=eq." + sender + "&read_at=is.null",
+                        token,
+                        body.toString().getBytes(StandardCharsets.UTF_8),
+                        "application/json",
+                        "return=minimal"
+                );
+                if (!response.ok()) throw error(response, "Unable to update message status.");
+                callback.complete(true, null);
+            } catch (Exception error) {
+                callback.complete(false, error);
+            }
+        });
+    }
+
+    static void blockState(Context context, String userId, Callback<Boolean> callback) {
+        NETWORK.execute(() -> {
+            try {
+                String target = clean(userId);
+                String token = ZeroChillAccountRepository.accessTokenBlocking(context);
+                String current = ZeroChillAccountRepository.currentUserIdBlocking(context);
+                Response response = request(
+                        "GET",
+                        "/rest/v1/user_blocks?select=blocked_id&blocker_id=eq." + current
+                                + "&blocked_id=eq." + target + "&limit=1",
+                        token,
+                        null,
+                        null,
+                        null
+                );
+                if (!response.ok()) throw error(response, "Unable to load block status.");
+                JSONArray rows = response.body.isEmpty() ? new JSONArray() : new JSONArray(response.body);
+                callback.complete(rows.length() > 0, null);
+            } catch (Exception error) {
+                callback.complete(false, error);
+            }
+        });
+    }
+
+    static void setBlocked(
+            Context context,
+            String userId,
+            boolean blocked,
+            Callback<Boolean> callback
+    ) {
+        NETWORK.execute(() -> {
+            try {
+                String target = clean(userId);
+                if (target.isEmpty()) throw new IllegalArgumentException("This user is unavailable.");
+                String token = ZeroChillAccountRepository.accessTokenBlocking(context);
+                String current = ZeroChillAccountRepository.currentUserIdBlocking(context);
+                Response response;
+                if (blocked) {
+                    JSONObject row = new JSONObject().put("blocked_id", target);
+                    response = request(
+                            "POST",
+                            "/rest/v1/user_blocks",
+                            token,
+                            row.toString().getBytes(StandardCharsets.UTF_8),
+                            "application/json",
+                            "return=minimal"
+                    );
+                } else {
+                    response = request(
+                            "DELETE",
+                            "/rest/v1/user_blocks?blocker_id=eq." + current
+                                    + "&blocked_id=eq." + target,
+                            token,
+                            null,
+                            null,
+                            "return=minimal"
+                    );
+                }
+                if (!response.ok()) throw error(response, blocked
+                        ? "Unable to block this user."
+                        : "Unable to unblock this user.");
+                callback.complete(blocked, null);
+            } catch (Exception error) {
+                callback.complete(!blocked, error);
+            }
+        });
+    }
+
+    static void reportUser(
+            Context context,
+            String userId,
+            String reason,
+            Callback<Boolean> callback
+    ) {
+        submitReport(context, userId, "", reason, callback);
+    }
+
+    static void reportDirectMessage(
+            Context context,
+            String userId,
+            String messageId,
+            String reason,
+            Callback<Boolean> callback
+    ) {
+        submitReport(context, userId, messageId, reason, callback);
+    }
+
+    private static void submitReport(
+            Context context,
+            String userId,
+            String messageId,
+            String reason,
+            Callback<Boolean> callback
+    ) {
+        NETWORK.execute(() -> {
+            try {
+                String target = clean(userId);
+                String normalizedReason = clean(reason).toLowerCase(java.util.Locale.US);
+                if (!"spam".equals(normalizedReason)
+                        && !"harassment".equals(normalizedReason)
+                        && !"other".equals(normalizedReason)) {
+                    normalizedReason = "other";
+                }
+                String token = ZeroChillAccountRepository.accessTokenBlocking(context);
+                JSONObject row = new JSONObject()
+                        .put("reported_user_id", target)
+                        .put("reason", normalizedReason);
+                if (!clean(messageId).isEmpty()) row.put("direct_message_id", messageId);
+                Response response = request(
+                        "POST",
+                        "/rest/v1/social_reports",
+                        token,
+                        row.toString().getBytes(StandardCharsets.UTF_8),
+                        "application/json",
+                        "return=minimal"
+                );
+                if (!response.ok()) throw error(response, "Unable to submit the report.");
+                callback.complete(true, null);
+            } catch (Exception error) {
+                callback.complete(false, error);
+            }
+        });
+    }
+
+    private static Map<String, PublicProfile> loadProfiles(
+            String token,
+            ArrayList<String> userIds
+    ) throws Exception {
+        LinkedHashMap<String, PublicProfile> profiles = new LinkedHashMap<>();
+        if (userIds == null || userIds.isEmpty()) return profiles;
+        StringBuilder ids = new StringBuilder();
+        for (String value : userIds) {
+            String id = clean(value);
+            if (id.isEmpty()) continue;
+            if (ids.length() > 0) ids.append(',');
+            ids.append(id);
+        }
+        if (ids.length() == 0) return profiles;
+        Response response = request(
+                "GET",
+                "/rest/v1/profiles?select=user_id,username,display_name,avatar_path,created_at"
+                        + "&user_id=in.(" + ids + ")",
+                token,
+                null,
+                null,
+                null
+        );
+        if (!response.ok()) throw error(response, "Unable to load profiles.");
+        JSONArray rows = response.body.isEmpty() ? new JSONArray() : new JSONArray(response.body);
+        for (int i = 0; i < rows.length(); i++) {
+            PublicProfile profile = new PublicProfile(rows.getJSONObject(i), false);
+            profiles.put(profile.userId, profile);
+        }
+        return profiles;
     }
 
     static void videoLikeState(Context context, String pageUrl, Callback<VideoLikeState> callback) {

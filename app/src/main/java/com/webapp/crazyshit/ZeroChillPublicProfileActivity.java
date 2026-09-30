@@ -1,6 +1,7 @@
 package com.webapp.crazyshit;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.Intent;
 import android.graphics.Color;
 import android.graphics.drawable.GradientDrawable;
@@ -27,6 +28,9 @@ public final class ZeroChillPublicProfileActivity extends Activity {
     private LinearLayout content;
     private ProgressBar progress;
     private String userId = "";
+    private ZeroChillSocialRepository.PublicProfile currentProfile;
+    private boolean blockedByMe;
+    private TextView blockButton;
 
     @Override
     protected void onCreate(Bundle state) {
@@ -36,6 +40,12 @@ public final class ZeroChillPublicProfileActivity extends Activity {
         buildShell();
         ResponsiveFitmentController.applySoon(this);
         loadProfile();
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (currentProfile != null && !currentProfile.currentUser) loadBlockState();
     }
 
     @Override
@@ -102,6 +112,7 @@ public final class ZeroChillPublicProfileActivity extends Activity {
     }
 
     private void render(ZeroChillSocialRepository.PublicProfile profile) {
+        currentProfile = profile;
         content.removeAllViews();
 
         TextView eyebrow = text("ZEROCHILL MEMBER", 10, UiPalette.PRIMARY, true);
@@ -161,6 +172,35 @@ public final class ZeroChillPublicProfileActivity extends Activity {
             editParams.topMargin = dp(14);
             content.addView(edit, editParams);
         } else {
+            TextView message = button("MESSAGE");
+            message.setOnClickListener(v -> openMessage(profile));
+            LinearLayout.LayoutParams messageParams = new LinearLayout.LayoutParams(-1, dp(48));
+            messageParams.topMargin = dp(14);
+            content.addView(message, messageParams);
+
+            LinearLayout actions = new LinearLayout(this);
+            actions.setOrientation(LinearLayout.HORIZONTAL);
+            LinearLayout.LayoutParams actionsParams = new LinearLayout.LayoutParams(-1, dp(44));
+            actionsParams.topMargin = dp(8);
+            content.addView(actions, actionsParams);
+
+            blockButton = secondaryButton("BLOCK");
+            blockButton.setOnClickListener(v -> {
+                if (!requireSignedIn()) return;
+                confirmBlock(!blockedByMe);
+            });
+            actions.addView(blockButton, new LinearLayout.LayoutParams(0, -1, 1f));
+
+            TextView report = secondaryButton("REPORT");
+            report.setTextColor(Color.rgb(228, 138, 138));
+            report.setOnClickListener(v -> {
+                if (!requireSignedIn()) return;
+                showReportDialog();
+            });
+            LinearLayout.LayoutParams reportParams = new LinearLayout.LayoutParams(0, -1, 1f);
+            reportParams.setMarginStart(dp(8));
+            actions.addView(report, reportParams);
+
             LinearLayout note = new LinearLayout(this);
             note.setOrientation(LinearLayout.VERTICAL);
             note.setPadding(dp(15), dp(13), dp(15), dp(13));
@@ -169,7 +209,7 @@ public final class ZeroChillPublicProfileActivity extends Activity {
             label.setLetterSpacing(0.08f);
             note.addView(label);
             TextView body = text(
-                    "This identity is used for ZEROCHILL comments, replies, likes, and private messaging.",
+                    "ZEROCHILL comments, replies, likes, and private messages use this identity.",
                     12,
                     ZeroChillUi.color(this, R.color.zc_text_secondary),
                     false
@@ -181,7 +221,89 @@ public final class ZeroChillPublicProfileActivity extends Activity {
             LinearLayout.LayoutParams noteParams = new LinearLayout.LayoutParams(-1, -2);
             noteParams.topMargin = dp(14);
             content.addView(note, noteParams);
+
+            loadBlockState();
         }
+    }
+
+    private void openMessage(ZeroChillSocialRepository.PublicProfile profile) {
+        if (!requireSignedIn()) return;
+        Intent intent = new Intent(this, ZeroChillMessageActivity.class);
+        intent.putExtra(ZeroChillMessageActivity.EXTRA_USER_ID, profile.userId);
+        startActivity(intent);
+    }
+
+    private boolean requireSignedIn() {
+        if (ZeroChillAccountRepository.hasStoredSession(this)) return true;
+        startActivity(new Intent(this, ZeroChillAccountActivity.class));
+        return false;
+    }
+
+    private void loadBlockState() {
+        if (!ZeroChillAccountRepository.hasStoredSession(this) || currentProfile == null) return;
+        ZeroChillSocialRepository.blockState(this, currentProfile.userId, (blocked, error) ->
+                runOnUiThread(() -> {
+                    if (error != null) return;
+                    blockedByMe = Boolean.TRUE.equals(blocked);
+                    if (blockButton != null) {
+                        blockButton.setText(blockedByMe ? "UNBLOCK" : "BLOCK");
+                    }
+                })
+        );
+    }
+
+    private void confirmBlock(boolean block) {
+        if (currentProfile == null) return;
+        String username = "@" + currentProfile.username;
+        new AlertDialog.Builder(this)
+                .setTitle(block ? "Block " + username + "?" : "Unblock " + username + "?")
+                .setMessage(block
+                        ? "You won't be able to message each other while blocked."
+                        : "You and this user will be able to message each other again.")
+                .setNegativeButton("Cancel", null)
+                .setPositiveButton(block ? "Block" : "Unblock", (dialog, which) ->
+                        ZeroChillSocialRepository.setBlocked(
+                                this,
+                                currentProfile.userId,
+                                block,
+                                (value, error) -> runOnUiThread(() -> {
+                                    if (error != null) {
+                                        Toast.makeText(this, error.getMessage(), Toast.LENGTH_LONG).show();
+                                        return;
+                                    }
+                                    blockedByMe = Boolean.TRUE.equals(value);
+                                    if (blockButton != null) {
+                                        blockButton.setText(blockedByMe ? "UNBLOCK" : "BLOCK");
+                                    }
+                                    Toast.makeText(
+                                            this,
+                                            blockedByMe ? "User blocked." : "User unblocked.",
+                                            Toast.LENGTH_SHORT
+                                    ).show();
+                                })
+                        ))
+                .show();
+    }
+
+    private void showReportDialog() {
+        if (currentProfile == null) return;
+        String[] reasons = {"Spam", "Harassment", "Other"};
+        new AlertDialog.Builder(this)
+                .setTitle("Report @" + currentProfile.username)
+                .setItems(reasons, (dialog, which) -> {
+                    String reason = which == 0 ? "spam" : which == 1 ? "harassment" : "other";
+                    ZeroChillSocialRepository.reportUser(
+                            this,
+                            currentProfile.userId,
+                            reason,
+                            (ok, error) -> runOnUiThread(() -> Toast.makeText(
+                                    this,
+                                    error == null ? "Report submitted." : error.getMessage(),
+                                    error == null ? Toast.LENGTH_SHORT : Toast.LENGTH_LONG
+                            ).show())
+                    );
+                })
+                .show();
     }
 
     private TextView button(String label) {
@@ -194,6 +316,19 @@ public final class ZeroChillPublicProfileActivity extends Activity {
         );
         background.setCornerRadius(dp(17));
         background.setStroke(dp(1), Color.rgb(80, 198, 244));
+        view.setBackground(background);
+        ZeroChillMotion.installPressFeedback(view);
+        return view;
+    }
+
+    private TextView secondaryButton(String label) {
+        TextView view = text(label, 11, UiPalette.PRIMARY, true);
+        view.setGravity(Gravity.CENTER);
+        view.setLetterSpacing(0.05f);
+        GradientDrawable background = new GradientDrawable();
+        background.setColor(Color.argb(180, 11, 13, 17));
+        background.setCornerRadius(dp(15));
+        background.setStroke(dp(1), Color.rgb(43, 52, 60));
         view.setBackground(background);
         ZeroChillMotion.installPressFeedback(view);
         return view;
