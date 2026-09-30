@@ -17,6 +17,7 @@ import org.junit.runner.RunWith;
 import org.robolectric.Robolectric;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.annotation.Config;
+import org.robolectric.annotation.GraphicsMode;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.Arrays;
@@ -24,6 +25,7 @@ import static org.junit.Assert.*;
 
 @RunWith(RobolectricTestRunner.class)
 @Config(application = Application.class, sdk = 35)
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
 public class ZeroChillMessageThreadUiTest {
     private ZeroChillSocialRepository.DirectMessage message(String sender, String time, String body) throws Exception {
         return new ZeroChillSocialRepository.DirectMessage(new JSONObject()
