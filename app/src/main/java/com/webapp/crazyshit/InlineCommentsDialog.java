@@ -158,6 +158,7 @@ final class InlineCommentsDialog extends BottomSheetDialog {
         shell.addView(header, new LinearLayout.LayoutParams(-1, dp(48)));
 
         headerTitle = text("Comments", 17, Color.WHITE, true);
+        headerTitle.setGravity(Gravity.CENTER_VERTICAL);
         header.addView(headerTitle, new LinearLayout.LayoutParams(0, -1, 1f));
 
         TextView close = text("×", 28, Color.WHITE, false);

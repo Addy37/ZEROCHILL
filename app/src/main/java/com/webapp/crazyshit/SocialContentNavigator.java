@@ -17,13 +17,18 @@ import java.util.concurrent.Executors;
 final class SocialContentNavigator {
     private static final ExecutorService IO = Executors.newFixedThreadPool(2);
     private static final Handler MAIN = new Handler(Looper.getMainLooper());
+    interface Resolver { CrazyShitRepository.StreamInfo resolve(Activity host, String url, NativeContentItem cached) throws Exception; }
+    interface Session { String current(Activity host); }
+    static Resolver resolver = (host, url, cached) -> cached == null ? PlayableSourceRouter.resolve(host, url) : PlayableSourceRouter.resolve(host, cached);
+    static Session session = ZeroChillSessionStore::currentUserId;
+    static java.util.concurrent.Executor executor = IO;
     private static final WeakHashMap<Activity, String> PENDING = new WeakHashMap<>();
 
     private SocialContentNavigator() {}
 
     static void open(Activity activity, UpdateInboxStore.Entry entry, boolean reply) {
         if (activity == null || entry == null || activity.isFinishing() || activity.isDestroyed()) return;
-        String accountId = ZeroChillSessionStore.currentUserId(activity);
+        String accountId = session.current(activity);
         if (!UpdateInboxStore.CATEGORY_SOCIAL.equals(entry.category)
                 || accountId.isEmpty() || !accountId.equals(entry.accountId)) return;
         String pageUrl = clean(entry.pageUrl);
@@ -45,11 +50,11 @@ final class SocialContentNavigator {
             if (request.equals(PENDING.get(activity))) return;
             PENDING.put(activity, request);
         }
-        IO.execute(() -> {
+        executor.execute(() -> {
             CrazyShitRepository.StreamInfo stream = null;
             try {
                 // Fapello's existing browser fallback needs the foreground Activity context.
-                stream = cached == null ? PlayableSourceRouter.resolve(activity, pageUrl) : PlayableSourceRouter.resolve(activity, cached);
+                stream = resolver.resolve(activity, pageUrl, cached);
             } catch (Exception ignored) {
                 // Keep the older notification's comment-sheet path if the native source is unavailable.
             }
@@ -60,7 +65,7 @@ final class SocialContentNavigator {
                     PENDING.remove(activity);
                 }
                 if (activity.isFinishing() || activity.isDestroyed() || !SocialActivityCoordinator.canNavigate(activity)
-                        || !accountId.equals(ZeroChillSessionStore.currentUserId(activity))) return;
+                        || !accountId.equals(session.current(activity))) return;
                 if (resolved == null || clean(resolved.mediaUrl).isEmpty()
                         || isImageMedia(resolved.mediaUrl)) {
                     showFallback(activity, accountId, pageUrl, title, commentId, reply);
@@ -99,7 +104,7 @@ final class SocialContentNavigator {
     private static void showFallback(Activity activity, String accountId, String pageUrl,
                                      String title, String commentId, boolean reply) {
         if (activity.isFinishing() || activity.isDestroyed() || !SocialActivityCoordinator.canNavigate(activity)
-                || !accountId.equals(ZeroChillSessionStore.currentUserId(activity))) return;
+                || !accountId.equals(session.current(activity))) return;
         if (!InlineCommentsDialog.isOpenFor(activity, pageUrl))
             new InlineCommentsDialog(activity, pageUrl, title, "", commentId, reply, null).show();
     }

@@ -222,7 +222,7 @@ public final class UpdateInboxActivity extends Activity {
         view.setTextColor(selected ? Color.WHITE : BrowseUi.MUTED);
         view.setBackground(new InsetDrawable(BrowseUi.rounded(
                 this,
-                selected ? UiPalette.PRIMARY_CONTAINER : Color.rgb(24, 27, 32),
+                selected ? UiPalette.PRIMARY : Color.rgb(24, 27, 32),
                 13
         ), 0, dp(5), 0, dp(5)));
         Boolean oldSelection = (Boolean) view.getTag();

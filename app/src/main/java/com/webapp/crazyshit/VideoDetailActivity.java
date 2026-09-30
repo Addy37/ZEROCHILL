@@ -1565,33 +1565,28 @@ public class VideoDetailActivity extends Activity {
         SocialContentContextStore.remember(this, new NativeContentItem(NativeContentItem.KIND_MEDIA,
                 title, pageUrl, posterUrl, views, uploader, comments));
         if (activeComments != null && activeComments.isShowing()) return;
-        activeComments = new InlineCommentsDialog(
-                this,
-                pageUrl,
-                title,
-                comments,
-                socialEntry ? socialFocusCommentId : "",
-                socialEntry && socialAutoReply,
-                new InlineCommentsDialog.ResizeListener() {
-                    @Override public void onSheetTopChanged(int top) { }
-                    @Override public void onSheetClosed() { activeComments = null; }
-                }
-        );
-        activeComments.show();
-        // Subsequent manual opens are ordinary comment browsing, including after related navigation.
+        showCommentSheet(socialEntry ? socialFocusCommentId : "", socialEntry && socialAutoReply);
         socialFocusCommentId = "";
         socialAutoReply = false;
+    }
+
+    private void showCommentSheet(String focusId, boolean reply) {
+        final InlineCommentsDialog[] opened = new InlineCommentsDialog[1];
+        opened[0] = new InlineCommentsDialog(this, pageUrl, title, comments, focusId, reply,
+                new InlineCommentsDialog.ResizeListener() {
+                    @Override public void onSheetTopChanged(int top) { }
+                    @Override public void onSheetClosed() {
+                        if (activeComments == opened[0]) activeComments = null;
+                    }
+                });
+        activeComments = opened[0];
+        activeComments.show();
     }
 
     boolean openSocialCommentsIfCurrent(String targetPageUrl, String commentId, boolean reply) {
         if (!ZeroChillSocialRepository.contentKey(targetPageUrl).equals(ZeroChillSocialRepository.contentKey(pageUrl)) || !supportsComments()) return false;
         if (activeComments != null && activeComments.isShowing()) activeComments.dismiss();
-        activeComments = new InlineCommentsDialog(this, pageUrl, title, comments, commentId, reply,
-                new InlineCommentsDialog.ResizeListener() {
-                    @Override public void onSheetTopChanged(int top) { }
-                    @Override public void onSheetClosed() { activeComments = null; }
-                });
-        activeComments.show();
+        showCommentSheet(commentId, reply);
         return true;
     }
 

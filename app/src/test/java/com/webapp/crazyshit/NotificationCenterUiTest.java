@@ -125,7 +125,9 @@ public class NotificationCenterUiTest {
         rows.bindViewHolder(holder, 0);
         android.widget.LinearLayout row = (android.widget.LinearLayout) ((android.widget.LinearLayout) holder.itemView).getChildAt(1);
         android.widget.LinearLayout labels = (android.widget.LinearLayout) row.getChildAt(1);
-        assertEquals("Addy37 liked your comment", ((TextView) labels.getChildAt(0)).getText().toString());
+        assertTrue(((TextView) labels.getChildAt(0)).getText().toString().startsWith("Addy37 liked your comment"));
+        assertFalse(((TextView) labels.getChildAt(0)).getText().toString().contains("@"));
+        assertFalse(row.getContentDescription().toString().contains("@"));
         assertEquals(View.GONE, labels.getChildAt(2).getVisibility());
         assertTrue(row.isClickable());
         controller.pause().stop().destroy();
@@ -161,6 +163,36 @@ public class NotificationCenterUiTest {
         assertEquals(Boolean.TRUE, social.getTag());
         assertEquals(Boolean.FALSE, text(activity, "allFilter").getTag());
         controller.pause().stop().destroy();
+    }
+
+    @Test @org.robolectric.annotation.GraphicsMode(org.robolectric.annotation.GraphicsMode.Mode.NATIVE)
+    @Config(qualifiers = "w320dp-h800dp-xhdpi")
+    public void renderDenseActivityFeedAtNarrowPhoneWidth() throws Exception {
+        ActivityController<UpdateInboxActivity> controller = Robolectric.buildActivity(UpdateInboxActivity.class).setup();
+        UpdateInboxActivity activity = controller.get();
+        activity.getSharedPreferences("app_prefs", Context.MODE_PRIVATE).edit().putBoolean("immersive_motion_enabled", false).commit();
+        java.util.ArrayList<UpdateInboxStore.Entry> entries = new java.util.ArrayList<>();
+        for (int i=0;i<5;i++) {
+            UpdateInboxStore.Entry entry = new UpdateInboxStore.Entry();
+            entry.id = "visual-"+i; entry.category = UpdateInboxStore.CATEGORY_SOCIAL;
+            entry.socialType = i%2==0 ? "reply" : "like"; entry.actorName = i%2==0 ? "Addy37" : "Alex";
+            entry.timestamp = System.currentTimeMillis() - (23L+i*15L)*60_000L; entry.read = i>2;
+            entry.subtitle = i%2==0 ? "There should be someone hopefully eventually" : "This is the comment where the conversation started.";
+            entries.add(entry);
+        }
+        Object adapter = value(activity,"adapter");
+        Method replace = adapter.getClass().getDeclaredMethod("replace",java.util.List.class); replace.setAccessible(true); replace.invoke(adapter,entries);
+        text(activity,"count").setText("3 unread notifications");
+        View root = activity.findViewById(android.R.id.content);
+        root.measure(View.MeasureSpec.makeMeasureSpec(640,View.MeasureSpec.EXACTLY),View.MeasureSpec.makeMeasureSpec(1600,View.MeasureSpec.EXACTLY));
+        root.layout(0,0,640,1600);
+        android.graphics.Bitmap image = android.graphics.Bitmap.createBitmap(640,1600,android.graphics.Bitmap.Config.ARGB_8888);
+        root.draw(new android.graphics.Canvas(image));
+        java.io.File folder = new java.io.File("build/reports/visual-tests"); assertTrue(folder.exists() || folder.mkdirs());
+        try (java.io.FileOutputStream out = new java.io.FileOutputStream(new java.io.File(folder,"notifications-social-polish.png"))) {
+            assertTrue(image.compress(android.graphics.Bitmap.CompressFormat.PNG,100,out));
+        }
+        image.recycle(); controller.pause().stop().destroy();
     }
 
     private void render(UpdateInboxActivity activity) throws Exception {

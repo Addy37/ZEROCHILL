@@ -90,13 +90,13 @@ public class InlineCommentsUiTest {
     }
     @Test public void commentsRenderAtNarrowPhoneWidth() throws Exception {
         InlineCommentsDialog dialog = shell();
+        Method build = InlineCommentsDialog.class.getDeclaredMethod("buildContent"); build.setAccessible(true);
+        View content = (View) build.invoke(dialog);
         render(dialog, comment("1", "", "There should be someone hopefully eventually", false, false, false),
                 comment("2", "1", "You can keep scrolling and come back to this conversation.", false, true, true),
                 comment("3", "", "Comment deleted", true, false, false),
                 comment("4", "3", "The reply stays right here.", false, false, false));
-        View list = (View) field(dialog,"commentsContainer");
-        View shell = list;
-        while (shell.getParent() instanceof View) shell = (View) shell.getParent();
+        View shell = content;
         int width = 640, height = 1080;
         shell.measure(View.MeasureSpec.makeMeasureSpec(width,View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(height,View.MeasureSpec.EXACTLY));
         shell.layout(0,0,width,height);
