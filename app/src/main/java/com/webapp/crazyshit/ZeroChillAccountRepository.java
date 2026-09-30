@@ -24,6 +24,7 @@ import java.util.concurrent.Executors;
 final class ZeroChillAccountRepository {
     private static final ExecutorService NETWORK = Executors.newSingleThreadExecutor();
     private static final long REFRESH_EARLY_SECONDS = 60L;
+    static final String AUTH_REDIRECT_URI = "com.addy37.zerochill://auth/confirmed";
 
     interface Callback<T> {
         void complete(T value, Exception error);
@@ -121,7 +122,56 @@ final class ZeroChillAccountRepository {
                 syncCreatorFavoritesBlocking(context, session);
                 callback.complete(state, null);
             } catch (Exception error) {
+                ZeroChillSessionStore.clear(context);
                 callback.complete(AccountState.signedOut(), error);
+            }
+        });
+    }
+
+    static void completeAuthRedirect(
+            Context context,
+            android.net.Uri uri,
+            Callback<AccountState> callback
+    ) {
+        NETWORK.execute(() -> {
+            try {
+                if (uri == null
+                        || !"com.addy37.zerochill".equalsIgnoreCase(clean(uri.getScheme()))
+                        || !"auth".equalsIgnoreCase(clean(uri.getHost()))
+                        || !"/confirmed".equals(clean(uri.getPath()))) {
+                    throw new IllegalArgumentException("Invalid account confirmation link.");
+                }
+
+                java.util.Map<String, String> values = redirectValues(uri);
+                String redirectError = clean(values.get("error_description"));
+                if (redirectError.isEmpty()) redirectError = clean(values.get("error"));
+                if (!redirectError.isEmpty()) {
+                    throw new IllegalStateException(redirectError.replace('+', ' '));
+                }
+
+                String accessToken = clean(values.get("access_token"));
+                String refreshToken = clean(values.get("refresh_token"));
+                if (accessToken.isEmpty() || refreshToken.isEmpty()) {
+                    callback.complete(AccountState.signedOut(), null);
+                    return;
+                }
+
+                long expiresIn = 3600L;
+                try {
+                    expiresIn = Math.max(60L, Long.parseLong(clean(values.get("expires_in"))));
+                } catch (Exception ignored) {
+                }
+                JSONObject token = new JSONObject()
+                        .put("access_token", accessToken)
+                        .put("refresh_token", refreshToken)
+                        .put("expires_in", expiresIn);
+                Session session = saveSession(context, token);
+                AccountState state = loadAccount(session);
+                syncCreatorFavoritesBlocking(context, session);
+                callback.complete(state, null);
+            } catch (Exception error) {
+                ZeroChillSessionStore.clear(context);
+                callback.complete(null, error);
             }
         });
     }
@@ -163,7 +213,7 @@ final class ZeroChillAccountRepository {
 
                 Response response = request(
                         "POST",
-                        "/auth/v1/signup",
+                        "/auth/v1/signup?redirect_to=" + encode(AUTH_REDIRECT_URI),
                         "",
                         body.toString().getBytes(StandardCharsets.UTF_8),
                         "application/json",
@@ -599,6 +649,31 @@ final class ZeroChillAccountRepository {
             message = "An account already exists for that email.";
         }
         return new IllegalStateException(message);
+    }
+
+    private static java.util.Map<String, String> redirectValues(android.net.Uri uri) {
+        java.util.Map<String, String> values = new java.util.HashMap<>();
+        String query = uri.getEncodedQuery();
+        String fragment = uri.getEncodedFragment();
+        addEncodedPairs(values, query);
+        addEncodedPairs(values, fragment);
+        return values;
+    }
+
+    private static void addEncodedPairs(java.util.Map<String, String> values, String encoded) {
+        if (encoded == null || encoded.isEmpty()) return;
+        for (String pair : encoded.split("&")) {
+            if (pair.isEmpty()) continue;
+            int separator = pair.indexOf('=');
+            String key = separator >= 0 ? pair.substring(0, separator) : pair;
+            String value = separator >= 0 ? pair.substring(separator + 1) : "";
+            try {
+                key = java.net.URLDecoder.decode(key, StandardCharsets.UTF_8.name());
+                value = java.net.URLDecoder.decode(value, StandardCharsets.UTF_8.name());
+            } catch (Exception ignored) {
+            }
+            if (!key.isEmpty()) values.put(key, value);
+        }
     }
 
     private static JSONObject jsonObject(String raw) throws Exception {
