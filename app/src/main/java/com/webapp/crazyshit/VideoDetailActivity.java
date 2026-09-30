@@ -1255,7 +1255,11 @@ public class VideoDetailActivity extends Activity {
                 if (isFinishing() || requestGeneration != relatedPlayGeneration) return;
                 loading.setVisibility(View.GONE);
                 if (resolved == null || resolved.mediaUrl == null || resolved.mediaUrl.isEmpty()) {
-                    openWebsite(item.url);
+                    Toast.makeText(
+                            this,
+                            "Couldn't resolve that related video natively right now.",
+                            Toast.LENGTH_SHORT
+                    ).show();
                     return;
                 }
                 pushCurrentVideo();
@@ -1678,8 +1682,8 @@ public class VideoDetailActivity extends Activity {
         ));
         actions.add(VideoActionSheet.action(
                 R.drawable.ic_more_website,
-                "Video details",
-                "View this video on the site",
+                "Open source website",
+                "Open the original video page",
                 () -> openWebsite(pageUrl)
         ));
         if (!showsOrigin &&
