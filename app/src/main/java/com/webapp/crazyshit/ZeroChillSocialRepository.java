@@ -65,6 +65,24 @@ final class ZeroChillSocialRepository {
         }
     }
 
+    static final class PublicProfile {
+        final String userId;
+        final String username;
+        final String displayName;
+        final String avatarPath;
+        final String createdAt;
+        final boolean currentUser;
+
+        PublicProfile(JSONObject value, boolean currentUser) {
+            userId = value.optString("user_id");
+            username = value.optString("username");
+            displayName = value.optString("display_name");
+            avatarPath = value.optString("avatar_path");
+            createdAt = value.optString("created_at");
+            this.currentUser = currentUser;
+        }
+    }
+
     private static final class Response {
         final int status;
         final String body;
@@ -228,6 +246,38 @@ final class ZeroChillSocialRepository {
                 callback.complete(!currentlyLiked, null);
             } catch (Exception error) {
                 callback.complete(currentlyLiked, error);
+            }
+        });
+    }
+
+    static void loadProfile(Context context, String userId, Callback<PublicProfile> callback) {
+        NETWORK.execute(() -> {
+            try {
+                String id = clean(userId);
+                if (id.isEmpty()) throw new IllegalArgumentException("This profile is unavailable.");
+                Response response = request(
+                        "GET",
+                        "/rest/v1/profiles?select=user_id,username,display_name,avatar_path,created_at"
+                                + "&user_id=eq." + encode(id) + "&limit=1",
+                        "",
+                        null,
+                        null,
+                        null
+                );
+                if (!response.ok()) throw error(response, "Unable to load the profile.");
+                JSONArray rows = response.body.isEmpty() ? new JSONArray() : new JSONArray(response.body);
+                if (rows.length() == 0) throw new IllegalStateException("This profile is unavailable.");
+
+                boolean current = false;
+                if (ZeroChillAccountRepository.hasStoredSession(context)) {
+                    try {
+                        current = id.equals(ZeroChillAccountRepository.currentUserIdBlocking(context));
+                    } catch (Exception ignored) {
+                    }
+                }
+                callback.complete(new PublicProfile(rows.getJSONObject(0), current), null);
+            } catch (Exception error) {
+                callback.complete(null, error);
             }
         });
     }
