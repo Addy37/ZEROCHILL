@@ -26,6 +26,14 @@ public class NotificationCenterUiTest {
         org.robolectric.RuntimeEnvironment.getApplication()
                 .getSharedPreferences("zerochill_update_inbox_v1", Context.MODE_PRIVATE)
                 .edit().clear().commit();
+        org.robolectric.RuntimeEnvironment.getApplication()
+                .getSharedPreferences("zerochill_social_content_context_v1", Context.MODE_PRIVATE)
+                .edit().clear().commit();
+        PlaybackHistoryStore.resetForTests();
+        org.robolectric.RuntimeEnvironment.getApplication()
+                .getSharedPreferences("playback_history", Context.MODE_PRIVATE)
+                .edit().clear().commit();
+        PlaybackHistoryStore.resetForTests();
     }
 
     @Test public void emptyHistoryAndZeroUnreadRemainCleanAcrossRecreation() throws Exception {
@@ -157,12 +165,80 @@ public class NotificationCenterUiTest {
                 / activity.getResources().getDisplayMetrics().density));
         assertEquals(44, Math.round(actions.getChildAt(1).getLayoutParams().height
                 / activity.getResources().getDisplayMetrics().density));
+        TextView inlineLike = (TextView) actions.getChildAt(1);
+        assertNotEquals("View", inlineLike.getText().toString());
+        assertNotNull(inlineLike.getCompoundDrawables()[0]);
         TextView social = text(activity, "socialFilter");
         social.performClick();
         render(activity);
         assertEquals(Boolean.TRUE, social.getTag());
         assertEquals(Boolean.FALSE, text(activity, "allFilter").getTag());
         controller.pause().stop().destroy();
+    }
+
+    @Test public void socialRowsReuseLocallyCapturedVideoThumbnailWithoutStoredEntryArtwork() throws Exception {
+        ActivityController<UpdateInboxActivity> controller = Robolectric.buildActivity(UpdateInboxActivity.class).setup();
+        UpdateInboxActivity activity = controller.get();
+        String pageUrl = "https://crazyshit.com/video/thumbnail-test";
+        SocialContentContextStore.remember(
+                activity,
+                new NativeContentItem(
+                        NativeContentItem.KIND_MEDIA,
+                        "Thumbnail test",
+                        pageUrl,
+                        "https://cdn.example/thumb.jpg",
+                        "",
+                        pageUrl,
+                        ""
+                )
+        );
+        UpdateInboxStore.Entry entry = new UpdateInboxStore.Entry();
+        entry.id = "social:thumb";
+        entry.category = UpdateInboxStore.CATEGORY_SOCIAL;
+        entry.socialType = ZeroChillSocialRepository.SocialActivity.TYPE_LIKE;
+        entry.actorName = "Addy37";
+        entry.pageUrl = pageUrl;
+
+        RecyclerView recycler = (RecyclerView) value(activity, "recycler");
+        Object adapter = value(activity, "adapter");
+        Method replace = adapter.getClass().getDeclaredMethod("replace", java.util.List.class);
+        replace.setAccessible(true);
+        replace.invoke(adapter, Collections.singletonList(entry));
+        RecyclerView.Adapter rows = (RecyclerView.Adapter) adapter;
+        RecyclerView.ViewHolder holder = rows.createViewHolder(recycler, 0);
+        rows.bindViewHolder(holder, 0);
+
+        android.widget.LinearLayout row =
+                (android.widget.LinearLayout) ((android.widget.LinearLayout) holder.itemView).getChildAt(1);
+        android.widget.FrameLayout trailing = (android.widget.FrameLayout) row.getChildAt(2);
+        View thumbnail = trailing.getChildAt(0);
+        assertEquals(View.VISIBLE, thumbnail.getVisibility());
+        assertTrue(thumbnail.isClickable());
+        assertEquals("Open video and conversation", thumbnail.getContentDescription());
+        controller.pause().stop().destroy();
+    }
+
+    @Test public void olderSocialRowsCanRecoverPosterFromLocalPlaybackHistory() {
+        Context context = org.robolectric.RuntimeEnvironment.getApplication();
+        String pageUrl = "https://crazyshit.com/video/history-thumbnail";
+        String posterUrl = "https://cdn.example/history-thumb.jpg";
+        PlaybackHistoryStore.record(
+                context,
+                "History thumbnail",
+                pageUrl,
+                posterUrl,
+                8_000L,
+                60_000L,
+                false,
+                false
+        );
+        PlaybackHistoryStore.awaitPendingWritesForTests();
+
+        NativeContentItem recovered =
+                UpdateInboxActivity.localArtworkFromHistory(context, pageUrl);
+        assertNotNull(recovered);
+        assertEquals(pageUrl, recovered.url);
+        assertEquals(posterUrl, recovered.imageUrl);
     }
 
     @Test @org.robolectric.annotation.GraphicsMode(org.robolectric.annotation.GraphicsMode.Mode.NATIVE)
