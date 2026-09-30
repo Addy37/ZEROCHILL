@@ -116,6 +116,7 @@ public class VideoDetailActivity extends Activity {
     private TextView titleView;
     private TextView metaView;
     private TextView playerTitleView;
+    private TextView videoLikeButton;
     private ImageButton portraitFullscreenButton;
     private ProgressBar loading;
     private ImageView startupPoster;
@@ -145,6 +146,10 @@ public class VideoDetailActivity extends Activity {
     private String posterUrl;
     private boolean showsOrigin;
     private boolean playbackIdent;
+    private boolean videoLiked;
+    private int videoLikeCount;
+    private String videoLikePageUrl = "";
+    private int videoLikeRequestGeneration;
     private final PlaybackRecovery playbackRecovery = new PlaybackRecovery();
     private boolean recoveryResumed;
     private long requestedStartPosition;
@@ -476,6 +481,8 @@ public class VideoDetailActivity extends Activity {
         actions.setGravity(Gravity.CENTER_VERTICAL);
         actions.setPadding(0, 0, 0, dp(3));
         detailsColumn.addView(actions, new LinearLayout.LayoutParams(-1, -2));
+        videoLikeButton = actionButton("♡ Like", this::toggleVideoLike);
+        actions.addView(videoLikeButton, actionParams());
         if (supportsComments()) {
             actions.addView(actionButton("💬 Comments", this::openComments), actionParams());
         }
@@ -993,6 +1000,7 @@ public class VideoDetailActivity extends Activity {
             if (!uploader.isEmpty()) parts.add(uploader);
             metaView.setText(TextUtils.join("  •  ", parts));
         }
+        refreshVideoLikeState(false);
     }
 
     private void loadRelated() {
@@ -1563,6 +1571,70 @@ public class VideoDetailActivity extends Activity {
                 comments,
                 null
         ).show();
+    }
+
+    private void refreshVideoLikeState(boolean force) {
+        if (videoLikeButton == null) return;
+        String target = pageUrl == null ? "" : pageUrl.trim();
+        if (target.isEmpty()) {
+            videoLikeButton.setEnabled(false);
+            videoLikeButton.setText("♡ Like");
+            return;
+        }
+        if (!force && target.equals(videoLikePageUrl)) return;
+
+        videoLikePageUrl = target;
+        int generation = ++videoLikeRequestGeneration;
+        ZeroChillSocialRepository.videoLikeState(this, target, (state, error) ->
+                runOnUiThread(() -> {
+                    if (generation != videoLikeRequestGeneration || !target.equals(pageUrl)) return;
+                    if (error != null || state == null) return;
+                    videoLiked = state.liked;
+                    videoLikeCount = state.count;
+                    updateVideoLikeButton();
+                })
+        );
+    }
+
+    private void updateVideoLikeButton() {
+        if (videoLikeButton == null) return;
+        String suffix = videoLikeCount > 0 ? " " + videoLikeCount : " Like";
+        videoLikeButton.setText((videoLiked ? "♥" : "♡") + suffix);
+        videoLikeButton.setTextColor(videoLiked ? UiPalette.PRIMARY : Color.rgb(238, 238, 242));
+        videoLikeButton.setEnabled(true);
+        videoLikeButton.setContentDescription(
+                videoLiked ? "Unlike this video" : "Like this video"
+        );
+    }
+
+    private void toggleVideoLike() {
+        if (pageUrl == null || pageUrl.trim().isEmpty()) return;
+        if (!ZeroChillAccountRepository.hasStoredSession(this)) {
+            startActivity(new Intent(this, ZeroChillAccountActivity.class));
+            return;
+        }
+
+        String target = pageUrl;
+        boolean wasLiked = videoLiked;
+        videoLikeButton.setEnabled(false);
+        ZeroChillSocialRepository.toggleVideoLike(this, target, wasLiked, (state, error) ->
+                runOnUiThread(() -> {
+                    if (!target.equals(pageUrl)) return;
+                    videoLikeButton.setEnabled(true);
+                    if (error != null || state == null) {
+                        Toast.makeText(
+                                this,
+                                error == null ? "Unable to update the like." : error.getMessage(),
+                                Toast.LENGTH_LONG
+                        ).show();
+                        return;
+                    }
+                    videoLikePageUrl = target;
+                    videoLiked = state.liked;
+                    videoLikeCount = state.count;
+                    updateVideoLikeButton();
+                })
+        );
     }
 
     private void toggleWatchLater() {
@@ -2180,6 +2252,7 @@ public class VideoDetailActivity extends Activity {
         updateSwipeEnabled();
         startPortraitProgressTicker();
         if (detailsScroll != null) applyDetailsBackground();
+        refreshVideoLikeState(true);
     }
 
     @Override
