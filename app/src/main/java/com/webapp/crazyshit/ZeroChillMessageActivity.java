@@ -493,7 +493,10 @@ public final class ZeroChillMessageActivity extends Activity {
 
             TextView body = text("", 14, Color.WHITE, false);
             body.setTextDirection(View.TEXT_DIRECTION_FIRST_STRONG);
-            bubble.addView(body);
+            // Vertical LinearLayout defaults to MATCH_PARENT width. Its uniform-width
+            // second pass freezes the first height while narrowing the text, clipping
+            // wrapped lines. Measure both dimensions from the text in the first pass.
+            bubble.addView(body, new LinearLayout.LayoutParams(-2, -2));
 
             TextView time = text("", 10, Color.rgb(166, 172, 184), false);
             time.setPadding(0, dp(4), 0, 0);

@@ -125,6 +125,61 @@ public class ZeroChillMessageThreadUiTest {
         assertEquals(fullBody, body.getText().toString());
     }
 
+    @Test public void completeWrappedTextFitsAfterSendRefreshAndHolderReuse() throws Exception {
+        ZeroChillMessageActivity activity = shell();
+        RecyclerView recycler = (RecyclerView) field(activity, "recycler");
+        RecyclerView.Adapter adapter = recycler.getAdapter();
+        Method replace = adapter.getClass().getDeclaredMethod("replace", java.util.List.class);
+        replace.setAccessible(true);
+        String[] bodies = {"this looks the same chatgpt", "Hi", "first line\nsecond line\nthird line",
+                new String(new char[2000]).replace('\0', 'W')};
+        RecyclerView.ViewHolder holder = adapter.createViewHolder(recycler, 0);
+        LinearLayout row = (LinearLayout) holder.itemView;
+        LinearLayout bubble = (LinearLayout) row.getChildAt(1);
+        TextView body = (TextView) bubble.getChildAt(0);
+        // Reproduce the prior default params: all text is in the layout, but lines
+        // extend below the measured TextView. A getText/lineCount check misses this.
+        replace.invoke(adapter, Arrays.asList(message("me", "2026-09-30T12:00:00Z", bodies[0])));
+        adapter.bindViewHolder(holder, 0);
+        body.setLayoutParams(new LinearLayout.LayoutParams(-1, -2));
+        measureRow(row);
+        assertTrue("Legacy measurement must reproduce visual clipping",
+                body.getLayout().getHeight() > body.getHeight() - body.getCompoundPaddingTop()
+                        - body.getCompoundPaddingBottom());
+        body.setLayoutParams(new LinearLayout.LayoutParams(-2, -2));
+        for (String sender : new String[]{"me", "other"}) {
+            for (String value : bodies) {
+                ZeroChillSocialRepository.DirectMessage item = message(sender, "2026-09-30T12:00:00Z", value);
+                replace.invoke(adapter, Arrays.asList(item, message(sender, "2026-09-30T12:01:00Z", "next")));
+                adapter.bindViewHolder(holder, 0); // grouped, hidden timestamp
+                assertComplete(row, body, value);
+                replace.invoke(adapter, Arrays.asList(item)); // refreshed, visible timestamp
+                adapter.bindViewHolder(holder, 0);
+                assertComplete(row, body, value);
+            }
+        }
+    }
+
+    private void measureRow(LinearLayout row) {
+        row.measure(View.MeasureSpec.makeMeasureSpec(320, View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
+        row.layout(0, 0, 320, row.getMeasuredHeight());
+    }
+
+    private void assertComplete(LinearLayout row, TextView body, String value) {
+        measureRow(row);
+        assertEquals(value, body.getText().toString());
+        android.text.Layout text = body.getLayout();
+        assertNotNull(text);
+        assertEquals(value.length(), text.getLineEnd(text.getLineCount() - 1));
+        assertTrue("Every line must fit visibly", text.getHeight() <= body.getHeight()
+                - body.getCompoundPaddingTop() - body.getCompoundPaddingBottom());
+        assertTrue(body.getBottom() <= ((View) body.getParent()).getHeight());
+        for (int line = 0; line < text.getLineCount(); line++) {
+            assertEquals(0, text.getEllipsisCount(line));
+        }
+    }
+
     @Test public void resizedConversationKeepsComposerBelowScrollableThreadAndRestoresHeight() throws Exception {
         ZeroChillMessageActivity activity = shell();
         RecyclerView recycler = (RecyclerView) field(activity, "recycler");
