@@ -263,7 +263,6 @@ public final class ChaosFeedView extends FrameLayout {
             warmCreatorGalleries(selectedPosition);
             syncVisibleChrome();
             refreshSelectedLikeStateLater(selectedPosition);
-            refreshSelectedLikeStateLater(selectedPosition);
         } else {
             cancelSwipePlayerMaintenance();
             pauseAll();
@@ -288,6 +287,7 @@ public final class ChaosFeedView extends FrameLayout {
             resolveAhead(selectedPosition);
             playSelected();
             syncVisibleChrome();
+            refreshSelectedLikeStateLater(selectedPosition);
         }
     }
 
