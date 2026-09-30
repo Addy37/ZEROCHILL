@@ -30,6 +30,7 @@ final class SocialActivityCoordinator {
     private WeakReference<Activity> host = new WeakReference<>(null);
     private String account = "";
     private boolean baselined;
+    private long newestSeenTimestamp;
     private boolean loading;
     private long lastPoll = -POLL_MS;
     private int generation;
@@ -100,6 +101,7 @@ final class SocialActivityCoordinator {
             lastPoll = -POLL_MS;
             account = current;
             baselined = false;
+            newestSeenTimestamp = 0L;
             seen.clear();
             presenter.hide();
         }
@@ -120,10 +122,15 @@ final class SocialActivityCoordinator {
             boolean announce = baselined;
             baselined = true;
             UpdateInboxStore.Entry latest = null;
+            long newestInPoll = newestSeenTimestamp;
             for (ZeroChillSocialRepository.SocialActivity event : activityItems) {
                 String key = requestedAccount + "|" + event.eventId;
                 boolean first = seen.add(key);
-                if (!announce || !first) continue;
+                long eventTime = timestamp(event.createdAt);
+                newestInPoll = Math.max(newestInPoll, eventTime);
+                // The bounded history can evict older events still returned by the 30-day query.
+                // A backfill must not become a fresh banner when its ID falls out of the seen set.
+                if (!announce || !first || eventTime < newestSeenTimestamp) continue;
                 for (UpdateInboxStore.Entry entry : inserted) {
                     // Each inserted event has a stable account/event fingerprint, regardless of read state.
                     if (entry.commentId.equals(event.commentId)
@@ -132,6 +139,7 @@ final class SocialActivityCoordinator {
                             && (latest == null || entry.timestamp > latest.timestamp)) latest = entry;
                 }
             }
+            newestSeenTimestamp = newestInPoll;
             while (seen.size() > 1000) seen.remove(seen.iterator().next());
             Activity resumed = host.get();
             if (latest == null || resumed == null || resumed instanceof UpdateInboxActivity

@@ -183,6 +183,8 @@ public class NotificationCenterUiTest {
         Object adapter = value(activity,"adapter");
         Method replace = adapter.getClass().getDeclaredMethod("replace",java.util.List.class); replace.setAccessible(true); replace.invoke(adapter,entries);
         text(activity,"count").setText("3 unread notifications");
+        text(activity,"empty").setVisibility(View.GONE);
+        ((RecyclerView) value(activity,"recycler")).setItemAnimator(null);
         View root = activity.findViewById(android.R.id.content);
         root.measure(View.MeasureSpec.makeMeasureSpec(640,View.MeasureSpec.EXACTLY),View.MeasureSpec.makeMeasureSpec(1600,View.MeasureSpec.EXACTLY));
         root.layout(0,0,640,1600);

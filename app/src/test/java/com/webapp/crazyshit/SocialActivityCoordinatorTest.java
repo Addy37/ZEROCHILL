@@ -91,4 +91,20 @@ public class SocialActivityCoordinatorTest {
         assertTrue(alerts.isEmpty());
         coordinator.pause(host);
     }
+    @Test public void olderBackfillNeverBecomesAnAlertAfterBoundedHistoryEviction() throws Exception {
+        ZeroChillSocialRepository.SocialActivity old = event("old");
+        ZeroChillSocialRepository.SocialActivity recent = event("recent");
+        old = new ZeroChillSocialRepository.SocialActivity(old.eventId, old.type, old.actorUserId, old.actor,
+                old.commentId, old.pageUrl, old.videoTitle, old.originalBody, old.replyBody,
+                java.time.Instant.now().minusSeconds(60).toString());
+        complete(0, recent, old);
+        host.getSharedPreferences("zerochill_update_inbox_v1", Context.MODE_PRIVATE).edit().clear().commit();
+        java.lang.reflect.Field field = SocialActivityCoordinator.class.getDeclaredField("seen"); field.setAccessible(true);
+        ((java.util.Set<?>) field.get(coordinator)).clear();
+        tick(); complete(1, old);
+        assertTrue(alerts.isEmpty());
+        assertEquals(1, UpdateInboxStore.allForAccount(host,"me").size());
+        coordinator.pause(host);
+    }
+
 }

@@ -13,6 +13,15 @@ import static org.junit.Assert.assertTrue;
 @RunWith(RobolectricTestRunner.class)
 @Config(application = Application.class, sdk = 35)
 public class SocialContentNavigationTest {
+    private Object previousCoordinator;
+    @org.junit.Before public void isolateLifecycleTracking() throws Exception {
+        java.lang.reflect.Field field = SocialActivityCoordinator.class.getDeclaredField("instance"); field.setAccessible(true);
+        previousCoordinator = field.get(null); field.set(null, null);
+    }
+    @org.junit.After public void restoreLifecycleTracking() throws Exception {
+        java.lang.reflect.Field field = SocialActivityCoordinator.class.getDeclaredField("instance"); field.setAccessible(true);
+        field.set(null, previousCoordinator);
+    }
     @Test
     public void nativeRouteAcceptsRecognizedVideoPagesButNotUnknownOrCreatorPages() {
         assertTrue(SocialContentNavigator.supportsNativeVideo("https://crazyshit.com/video/clip"));
@@ -83,6 +92,31 @@ public class SocialContentNavigationTest {
             org.junit.Assert.assertNull(org.robolectric.Shadows.shadowOf(host).getNextStartedActivity());
         } finally {
             SocialContentNavigator.session = savedSession; SocialContentNavigator.resolver = savedResolver;
+            SocialContentNavigator.executor = savedExecutor;
+        }
+    }
+
+    @Test public void pausedOriginCannotOpenVideoAfterDelayedResolution() throws Exception {
+        android.app.Activity host = org.robolectric.Robolectric.buildActivity(android.app.Activity.class).setup().get();
+        SocialContentNavigator.Session savedSession = SocialContentNavigator.session;
+        SocialContentNavigator.Resolver savedResolver = SocialContentNavigator.resolver;
+        java.util.concurrent.Executor savedExecutor = SocialContentNavigator.executor;
+        java.util.ArrayList<Runnable> work = new java.util.ArrayList<>();
+        SocialActivityCoordinator tracker = new SocialActivityCoordinator(host, (context, callback) -> {}, context -> "me",
+                new SocialActivityCoordinator.Presenter() { public void show(android.app.Activity activity,UpdateInboxStore.Entry entry){} public void hide(){} });
+        java.lang.reflect.Field field = SocialActivityCoordinator.class.getDeclaredField("instance"); field.setAccessible(true); field.set(null,tracker);
+        try {
+            tracker.resume(host);
+            SocialContentNavigator.session = activity -> "me"; SocialContentNavigator.executor = work::add;
+            SocialContentNavigator.resolver = (activity,url,cached) -> new CrazyShitRepository.StreamInfo("https://cdn.example/video.mp4",url,"Video");
+            UpdateInboxStore.Entry entry = new UpdateInboxStore.Entry(); entry.category = UpdateInboxStore.CATEGORY_SOCIAL;
+            entry.accountId = "me"; entry.pageUrl = "https://crazyshit.com/video/original"; entry.commentId = "reply";
+            SocialContentNavigator.open(host,entry,false);
+            tracker.pause(host); work.get(0).run();
+            org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
+            org.junit.Assert.assertNull(org.robolectric.Shadows.shadowOf(host).getNextStartedActivity());
+        } finally {
+            tracker.pause(host); SocialContentNavigator.session = savedSession; SocialContentNavigator.resolver = savedResolver;
             SocialContentNavigator.executor = savedExecutor;
         }
     }

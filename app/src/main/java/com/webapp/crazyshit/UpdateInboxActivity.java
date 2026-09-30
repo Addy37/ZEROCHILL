@@ -584,8 +584,8 @@ public final class UpdateInboxActivity extends Activity {
             String referer = first == null ? "" :
                     (first.uploader == null || first.uploader.trim().isEmpty()
                             ? first.url : first.uploader);
-            boolean show = imageUrl != null && !imageUrl.trim().isEmpty()
-                    && !UpdateInboxStore.CATEGORY_SOCIAL.equals(entry.category);
+            boolean show = imageUrl != null && !imageUrl.trim().isEmpty();
+            if (!(referer.startsWith("https://") || referer.startsWith("http://"))) referer = first == null ? "" : first.url;
             holder.thumbnail.setVisibility(show ? View.VISIBLE : View.GONE);
             LinearLayout.LayoutParams params = (LinearLayout.LayoutParams) holder.trailing.getLayoutParams();
             params.width = dp(show ? 52 : 14);
