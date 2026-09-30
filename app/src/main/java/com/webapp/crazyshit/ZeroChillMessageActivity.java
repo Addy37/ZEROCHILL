@@ -254,13 +254,22 @@ public final class ZeroChillMessageActivity extends Activity {
                     if (changed && !items.isEmpty()) {
                         recycler.scrollToPosition(items.size() - 1);
                     }
-                    ZeroChillSocialRepository.markDirectMessagesRead(
-                            this,
-                            partnerId,
-                            (ignored, markError) -> {
-                                if (markError == null) ZeroChillMessageBadgeStore.refresh(this);
-                            }
-                    );
+                    boolean hasUnreadIncoming = false;
+                    for (ZeroChillSocialRepository.DirectMessage item : items) {
+                        if (partnerId.equals(item.senderId) && item.readAt.isEmpty()) {
+                            hasUnreadIncoming = true;
+                            break;
+                        }
+                    }
+                    if (hasUnreadIncoming) {
+                        ZeroChillSocialRepository.markDirectMessagesRead(
+                                this,
+                                partnerId,
+                                (ignored, markError) -> {
+                                    if (markError == null) ZeroChillMessageBadgeStore.refresh(this);
+                                }
+                        );
+                    }
                 })
         );
     }
