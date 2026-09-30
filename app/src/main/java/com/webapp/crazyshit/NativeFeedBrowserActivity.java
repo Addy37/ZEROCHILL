@@ -1763,16 +1763,16 @@ public final class NativeFeedBrowserActivity extends Activity {
                 ? "Remove from Watch Later"
                 : "Watch Later";
         ArrayList<VideoActionSheet.Action> actions = new ArrayList<>();
-        if (item.comments != null && !item.comments.isEmpty()) {
+        if (item.isVideo() && item.url != null && !item.url.isEmpty()) {
             actions.add(VideoActionSheet.action(
                     R.drawable.ic_action_comments,
                     "Comments",
-                    item.comments + " ready to view",
+                    "Join the ZeroChill conversation",
                     () -> new InlineCommentsDialog(
                             this,
                             item.url,
                             item.title,
-                            item.comments,
+                            "",
                             null
                     ).show()
             ));
