@@ -43,6 +43,12 @@ public final class ZeroChillPublicProfileActivity extends Activity {
     }
 
     @Override
+    protected void onResume() {
+        super.onResume();
+        if (currentProfile != null && !currentProfile.currentUser) loadBlockState();
+    }
+
+    @Override
     protected void onDestroy() {
         ResponsiveFitmentController.release(this);
         super.onDestroy();
