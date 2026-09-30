@@ -63,7 +63,7 @@ final class PhoneOrientationPolicy {
         requestFullscreen(
                 activity,
                 portraitVideo
-                        ? ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
+                        ? ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
                         : ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
         );
     }
