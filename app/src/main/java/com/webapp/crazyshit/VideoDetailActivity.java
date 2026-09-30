@@ -465,8 +465,8 @@ public class VideoDetailActivity extends Activity {
 
         LinearLayout actions = new LinearLayout(this);
         actions.setOrientation(LinearLayout.HORIZONTAL);
-        actions.setGravity(Gravity.CENTER_VERTICAL);
-        actions.setPadding(0, 0, 0, dp(3));
+        actions.setGravity(Gravity.CENTER_HORIZONTAL | Gravity.CENTER_VERTICAL);
+        actions.setPadding(0, dp(2), 0, dp(3));
         detailsColumn.addView(actions, new LinearLayout.LayoutParams(-1, -2));
         videoLikeButton = actionIconButton(
                 R.drawable.ic_action_heart_outline,
@@ -541,8 +541,8 @@ public class VideoDetailActivity extends Activity {
     }
 
     private LinearLayout.LayoutParams actionParams() {
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, dp(40), 1f);
-        params.setMargins(dp(3), 0, dp(3), 0);
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(dp(54), dp(60));
+        params.setMargins(dp(2), 0, dp(2), 0);
         return params;
     }
 
@@ -778,17 +778,20 @@ public class VideoDetailActivity extends Activity {
 
     private TextView actionIconButton(int icon, Runnable action, String description) {
         TextView button = new TextView(this);
-        button.setText("");
-        button.setTextColor(Color.rgb(238, 238, 242));
-        button.setTextSize(11);
+        button.setText(" ");
+        button.setTextColor(Color.TRANSPARENT);
+        button.setTextSize(10);
         button.setGravity(Gravity.CENTER);
-        button.setBackground(actionPill());
-        button.setCompoundDrawablesWithIntrinsicBounds(icon, 0, 0, 0);
+        button.setBackgroundColor(Color.TRANSPARENT);
+        button.setPadding(dp(6), dp(5), dp(6), dp(5));
+        button.setCompoundDrawablesWithIntrinsicBounds(0, icon, 0, 0);
         button.setCompoundDrawableTintList(ColorStateList.valueOf(Color.WHITE));
-        button.setCompoundDrawablePadding(dp(4));
+        button.setCompoundDrawablePadding(dp(1));
         button.setContentDescription(description);
         button.setClickable(true);
         button.setFocusable(true);
+        button.setMinWidth(dp(48));
+        button.setMinHeight(dp(48));
         ZeroChillMotion.installPressFeedback(button);
         button.setOnClickListener(v -> {
             haptic(v);
@@ -1634,9 +1637,10 @@ public class VideoDetailActivity extends Activity {
         String target = pageUrl == null ? "" : pageUrl.trim();
         if (target.isEmpty()) {
             videoLikeButton.setEnabled(false);
-            videoLikeButton.setText("");
+            videoLikeButton.setText(" ");
+            videoLikeButton.setTextColor(Color.TRANSPARENT);
             videoLikeButton.setCompoundDrawablesWithIntrinsicBounds(
-                    R.drawable.ic_action_heart_outline, 0, 0, 0
+                    0, R.drawable.ic_action_heart_outline, 0, 0
             );
             videoLikeButton.setCompoundDrawableTintList(ColorStateList.valueOf(Color.WHITE));
             return;
@@ -1659,16 +1663,19 @@ public class VideoDetailActivity extends Activity {
     private void updateVideoLikeButton() {
         if (videoLikeButton == null) return;
         videoLikeButton.setCompoundDrawablesWithIntrinsicBounds(
-                videoLiked ? R.drawable.ic_action_heart_filled : R.drawable.ic_action_heart_outline,
                 0,
+                videoLiked ? R.drawable.ic_action_heart_filled : R.drawable.ic_action_heart_outline,
                 0,
                 0
         );
         videoLikeButton.setCompoundDrawableTintList(ColorStateList.valueOf(
                 videoLiked ? UiPalette.PRIMARY : Color.WHITE
         ));
-        videoLikeButton.setText(videoLikeCount > 0 ? String.valueOf(videoLikeCount) : "");
-        videoLikeButton.setTextColor(videoLiked ? UiPalette.PRIMARY : Color.rgb(238, 238, 242));
+        boolean showCount = videoLikeCount > 0;
+        videoLikeButton.setText(showCount ? String.valueOf(videoLikeCount) : " ");
+        videoLikeButton.setTextColor(showCount
+                ? (videoLiked ? UiPalette.PRIMARY : Color.rgb(238, 238, 242))
+                : Color.TRANSPARENT);
         videoLikeButton.setEnabled(true);
         videoLikeButton.setContentDescription(
                 videoLiked ? "Unlike this video" : "Like this video"
@@ -1679,7 +1686,8 @@ public class VideoDetailActivity extends Activity {
         if (commentButton == null) return;
         String target = pageUrl == null ? "" : pageUrl.trim();
         if (target.isEmpty()) {
-            commentButton.setText("");
+            commentButton.setText(" ");
+            commentButton.setTextColor(Color.TRANSPARENT);
             commentButton.setEnabled(false);
             return;
         }
@@ -1707,7 +1715,7 @@ public class VideoDetailActivity extends Activity {
     private void updateCommentButton() {
         if (commentButton == null) return;
         commentButton.setCompoundDrawablesWithIntrinsicBounds(
-                R.drawable.ic_action_comments, 0, 0, 0
+                0, R.drawable.ic_action_comments, 0, 0
         );
         commentButton.setCompoundDrawableTintList(ColorStateList.valueOf(Color.WHITE));
         commentButton.setText(String.valueOf(Math.max(0, commentCount)));
@@ -1722,16 +1730,16 @@ public class VideoDetailActivity extends Activity {
         if (watchLaterButton == null) return;
         boolean saved = pageUrl != null && !pageUrl.isEmpty() && FavoriteStore.contains(this, pageUrl);
         watchLaterButton.setCompoundDrawablesWithIntrinsicBounds(
-                saved ? R.drawable.ic_nav_saved : R.drawable.ic_action_save_outline,
                 0,
+                saved ? R.drawable.ic_nav_saved : R.drawable.ic_action_save_outline,
                 0,
                 0
         );
         watchLaterButton.setCompoundDrawableTintList(ColorStateList.valueOf(
                 saved ? UiPalette.PRIMARY : Color.WHITE
         ));
-        watchLaterButton.setText("");
-        watchLaterButton.setTextColor(saved ? UiPalette.PRIMARY : Color.rgb(238, 238, 242));
+        watchLaterButton.setText(" ");
+        watchLaterButton.setTextColor(Color.TRANSPARENT);
         watchLaterButton.setContentDescription(
                 saved ? "Remove from Watch Later" : "Save to Watch Later"
         );
