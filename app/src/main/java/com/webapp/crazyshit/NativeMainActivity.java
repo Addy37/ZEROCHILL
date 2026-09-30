@@ -1305,6 +1305,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         } else {
             refreshLibraryUpdateIndicator();
         }
+        ZeroChillMessageBadgeStore.refresh(this);
         applyChaosFullscreenChrome();
         scheduleRatingPromptCheck();
     }
