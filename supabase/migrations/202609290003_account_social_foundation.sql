@@ -278,20 +278,36 @@ create policy "participants read direct messages"
     to authenticated
     using ((select auth.uid()) = sender_id or (select auth.uid()) = recipient_id);
 
+create or replace function private.can_send_zerochill_dm(recipient uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+    select
+        auth.uid() is not null
+        and recipient <> auth.uid()
+        and not exists (
+            select 1
+            from public.user_blocks b
+            where
+                (b.blocker_id = recipient and b.blocked_id = auth.uid())
+                or (b.blocker_id = auth.uid() and b.blocked_id = recipient)
+        );
+$$;
+
+revoke all on function private.can_send_zerochill_dm(uuid) from public, anon;
+grant usage on schema private to authenticated;
+grant execute on function private.can_send_zerochill_dm(uuid) to authenticated;
+
 drop policy if exists "users send direct messages as themselves" on public.direct_messages;
 create policy "users send direct messages as themselves"
     on public.direct_messages for insert
     to authenticated
     with check (
         (select auth.uid()) = sender_id
-        and recipient_id <> (select auth.uid())
-        and not exists (
-            select 1
-            from public.user_blocks b
-            where
-                (b.blocker_id = recipient_id and b.blocked_id = sender_id)
-                or (b.blocker_id = sender_id and b.blocked_id = recipient_id)
-        )
+        and private.can_send_zerochill_dm(recipient_id)
     );
 
 grant select, insert on public.direct_messages to authenticated;
