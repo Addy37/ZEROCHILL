@@ -82,6 +82,8 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
     private final BunkrRepository bunkrRepository = new BunkrRepository();
     private final FapzoneCreatorRepository fapzoneCreatorRepository =
             new FapzoneCreatorRepository();
+    private final FavoriteCreatorArtworkHydrator favoriteCreatorArtworkHydrator =
+            new FavoriteCreatorArtworkHydrator();
     private final BrowseArtworkResolver browseArtworkResolver;
     private final ExecutorService io = Executors.newFixedThreadPool(5);
     private final Page[] pages = new Page[PAGE_ARRAY_COUNT];
@@ -999,6 +1001,17 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         page.onlyFapHub.refreshFavorites();
 
         final int generation = page.generation;
+        page.onlyFapFavoriteArtworkTask = io.submit(() ->
+                favoriteCreatorArtworkHydrator.hydrate(
+                        activity,
+                        10,
+                        () -> activity.runOnUiThread(() -> {
+                            if (generation == page.generation && page.onlyFapHub != null) {
+                                page.onlyFapHub.refreshFavorites();
+                            }
+                        })
+                )
+        );
         AtomicInteger remaining = new AtomicInteger(2);
         java.util.concurrent.CountDownLatch regularShelvesReady =
                 new java.util.concurrent.CountDownLatch(1);
@@ -1115,6 +1128,10 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
 
     private void cancelOnlyFapHubTasks(Page page) {
         if (page == null) return;
+        if (page.onlyFapFavoriteArtworkTask != null) {
+            page.onlyFapFavoriteArtworkTask.cancel(true);
+            page.onlyFapFavoriteArtworkTask = null;
+        }
         for (java.util.concurrent.Future<?> task : page.onlyFapHubTasks) {
             if (task != null) task.cancel(true);
         }
@@ -1363,6 +1380,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                 new java.util.ArrayList<>();
         final java.util.List<java.util.concurrent.Future<?>> onlyFapHubTasks =
                 new java.util.ArrayList<>();
+        java.util.concurrent.Future<?> onlyFapFavoriteArtworkTask;
         final java.util.List<TextView> homeChips = new java.util.ArrayList<>();
         int currentPage;
         boolean loading;
