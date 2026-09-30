@@ -16,10 +16,16 @@ Supported events include favorite OnlyFap creator activity, ZeroChill app releas
 
 Creator and app updates remain available signed out. Social activity is only visible while its matching ZeroChill account is signed in. Notification history remains local to the installation and is not cloud-synced. Existing favorites determine which creator events remain in history. Android notification permission does not gate the in-app history.
 
-The notification center includes a Social filter. Tapping a like or reply opens the existing ZeroChill comment sheet for the original video and briefly highlights the matching comment or reply. No Android push notifications, realtime subscriptions, mention alerts, or duplicate DM notifications are added.
+The notification center includes a Social filter. Social rows use a compact activity-feed layout with a 48dp circular avatar, bold actor name, compact inline timestamp, reply/comment preview, small electric-blue unread dot, and direct View/Reply actions. Creator entries reuse existing content art as a right-side thumbnail when one is already available. The filter tabs are intentionally shorter and flatter than the original hub design.
+
+Tapping a like or reply opens the existing ZeroChill comment sheet for the original video and briefly highlights the matching comment or reply. Reply opens the same thread with the composer targeted at that reply. No Android push notifications, realtime subscriptions, mention alerts, or duplicate DM notifications are added.
 
 The center listens for local history changes while resumed, with short row/read-state transitions and press feedback. Its old activity name and More entry remain compatible.
 
+## Comment ownership
+
+Signed-in users can edit or delete only comments they own. Editing reuses the existing comment composer and records edited_at; the UI shows an Edited label. Delete is a soft delete: the body becomes `Comment deleted` and deleted_at is set. The tombstone remains in the thread so replies and existing notification links do not lose their parent position. Deleted comments no longer expose like/reply controls in the updated client, and new likes are rejected by backend policy.
+
 ## Compatibility
 
-No database migrations, backend deployments, policy changes, remote source configuration, package changes, signing changes, data-store renames, or media-store changes. The beta uses the existing `.dev` application ID and persistent signing key, alongside stable installs. Device verification should cover narrow screens, large font settings, avatars, account switching, new messages, notification read state, media rails, and collapsing navigation.
+This pass adds one backward-compatible Supabase migration for owner-only comment updates and sanitized deleted-comment tombstones. It does not change DM schema or policies, remote source configuration, package identity, signing, data-store names, favorites, history, downloads, or media stores. Existing clients continue to read active comments normally. The beta uses the existing `.dev` application ID and persistent signing key, alongside stable installs. Device verification should cover comment edit/delete, nested replies after deletion, notification View/Reply actions, narrow screens, large font settings, avatars, account switching, notification read state, media rails, and collapsing navigation.
