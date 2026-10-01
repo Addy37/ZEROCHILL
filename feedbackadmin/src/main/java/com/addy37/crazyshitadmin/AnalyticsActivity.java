@@ -29,8 +29,6 @@ import java.util.concurrent.Executors;
 
 /** Aggregate-only product analytics. No per-install or per-account activity history is exposed here. */
 public final class AnalyticsActivity extends AppCompatActivity {
-    private static final int COLLAPSED_ROWS = 5;
-
     private final ExecutorService network = Executors.newSingleThreadExecutor();
     private final Set<String> expandedCards = new HashSet<>();
     private LinearLayout content;
@@ -286,7 +284,7 @@ public final class AnalyticsActivity extends AppCompatActivity {
                 barParams.setMargins(0, dp(3), 0, 0);
                 block.addView(bar, barParams);
 
-                if (index >= COLLAPSED_ROWS) {
+                if (index >= AnalyticsListPolicy.COLLAPSED_ROWS) {
                     block.setVisibility(expandedCards.contains(key) ? View.VISIBLE : View.GONE);
                     overflow.add(block);
                 }
@@ -384,7 +382,7 @@ public final class AnalyticsActivity extends AppCompatActivity {
                 params.setMargins(0, dp(3), 0, 0);
                 block.addView(bar, params);
 
-                if (index >= COLLAPSED_ROWS) {
+                if (index >= AnalyticsListPolicy.COLLAPSED_ROWS) {
                     block.setVisibility(expandedCards.contains(key) ? View.VISIBLE : View.GONE);
                     overflow.add(block);
                 }
@@ -396,9 +394,8 @@ public final class AnalyticsActivity extends AppCompatActivity {
     }
 
     private void addExpandControl(LinearLayout body, String key, int count, List<View> overflow) {
-        if (count <= COLLAPSED_ROWS || overflow.isEmpty()) return;
-        MaterialButton toggle = compactButton(expandedCards.contains(key)
-                ? "Show less ↑" : "View all " + count + " ↓");
+        if (count <= AnalyticsListPolicy.COLLAPSED_ROWS || overflow.isEmpty()) return;
+        MaterialButton toggle = compactButton(AnalyticsListPolicy.toggleLabel(count, expandedCards.contains(key)));
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, dp(38));
         params.topMargin = dp(7);
@@ -408,7 +405,7 @@ public final class AnalyticsActivity extends AppCompatActivity {
             if (expand) expandedCards.add(key);
             else expandedCards.remove(key);
             for (View row : overflow) row.setVisibility(expand ? View.VISIBLE : View.GONE);
-            toggle.setText(expand ? "Show less ↑" : "View all " + count + " ↓");
+            toggle.setText(AnalyticsListPolicy.toggleLabel(count, expand));
         });
     }
 
