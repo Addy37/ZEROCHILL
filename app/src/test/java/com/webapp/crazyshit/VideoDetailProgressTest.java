@@ -53,9 +53,9 @@ public class VideoDetailProgressTest {
 
     @Test
     public void showsManualFullscreenLeavesOtherSensorRotationBehaviorUnchanged() {
-        assertFalse(VideoDetailActivity.shouldAutoRotateFromSensor(true, false, false));
-        assertTrue(VideoDetailActivity.shouldAutoRotateFromSensor(false, false, false));
-        assertFalse(VideoDetailActivity.shouldAutoRotateFromSensor(false, true, false));
-        assertFalse(VideoDetailActivity.shouldAutoRotateFromSensor(false, false, true));
+        assertFalse(ShowsPlaybackOrientationPolicy.shouldAutoRotateFromSensor(true, false, false));
+        assertTrue(ShowsPlaybackOrientationPolicy.shouldAutoRotateFromSensor(false, false, false));
+        assertFalse(ShowsPlaybackOrientationPolicy.shouldAutoRotateFromSensor(false, true, false));
+        assertFalse(ShowsPlaybackOrientationPolicy.shouldAutoRotateFromSensor(false, false, true));
     }
 }
