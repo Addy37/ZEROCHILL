@@ -190,6 +190,7 @@ jobs:
         run: >-
           gradle --no-daemon :app:testDebugUnitTest
           --tests 'com.webapp.crazyshit.BottomNavigationInsetsTest'
+          --tests 'com.webapp.crazyshit.BottomNavigationDrawableRenderTest'
           --tests 'com.webapp.crazyshit.NavigationIaTest'
           --tests 'com.webapp.crazyshit.NavigationMotionControllerTest'
           --tests 'com.webapp.crazyshit.PhoneOrientationPolicyTest'

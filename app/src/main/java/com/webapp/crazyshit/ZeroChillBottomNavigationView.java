@@ -96,6 +96,9 @@ final class ZeroChillBottomNavigationView extends BottomNavigationView {
         if (getParent() instanceof FrostedNavigationLayout) {
             super.dispatchApplyWindowInsets(
                     ((FrostedNavigationLayout) getParent()).navigationContentInsets(insets));
+            // Material restores its constructor padding on every inset dispatch. Keep the
+            // current visual gutter, including when navigation mode changes mid-collapse.
+            applyCollapseGutter(collapseProgress);
             // Before Android 11, ViewGroup forwards a child's returned insets to siblings.
             // The local content adaptation must never escape this navbar's subtree.
             return insets;
@@ -434,6 +437,7 @@ final class ZeroChillBottomNavigationView extends BottomNavigationView {
 
     private void applyCollapseProgress(float progress) {
         float p = clamp(progress, 0f, 1f);
+        applyCollapseGutter(p);
         int expandedHeight = getResources().getDimensionPixelSize(R.dimen.zc_bottom_nav_height);
         int collapsedHeight = dp(COLLAPSED_HEIGHT_DP);
         int sideMargin = Math.round(lerp(dp(10), dp(COLLAPSED_SIDE_MARGIN_DP), p));
@@ -456,6 +460,17 @@ final class ZeroChillBottomNavigationView extends BottomNavigationView {
 
         setItemCollapseVisuals(p);
         invalidate();
+    }
+
+    private void applyCollapseGutter(float progress) {
+        // The expanded gutter preserves the approved production menu placement. As the
+        // outer glass shrinks, release that visual space so Material can still measure
+        // its complete icon/indicator container. System clearance belongs to the shell.
+        int expandedGutter = getResources().getDimensionPixelSize(R.dimen.zc_nav_menu_bottom_gutter);
+        int gutter = Math.round(lerp(expandedGutter, 0, clamp(progress, 0f, 1f)));
+        if (getPaddingBottom() != gutter) {
+            setPadding(getPaddingLeft(), getPaddingTop(), getPaddingRight(), gutter);
+        }
     }
 
     private void setItemCollapseVisuals(float progress) {

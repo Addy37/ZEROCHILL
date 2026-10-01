@@ -70,7 +70,10 @@ public class BottomNavigationInsetsTest {
                 + " menu=" + ((View) item.getParent()).getHeight() + " item=" + item.getHeight()
                 + " container=" + container.getHeight() + " icon=" + icon.getHeight()
                 + " translation=" + container.getTranslationY();
-        System.out.println("NAV_ICON_MEASURE " + state);
+        if (nav.getSelectedItemId() == 6 && bottom == 24) {
+            System.out.println("NAV_ICON_MEASURE " + state + " scaleType=" + icon.getScaleType()
+                    + " drawable=" + icon.getDrawable().getBounds());
+        }
         assertEquals(state, View.VISIBLE, icon.getVisibility());
         assertEquals(state, 1f, icon.getAlpha(), 0f);
         assertEquals(state, dp(nav.getContext(), 24), icon.getWidth());
@@ -191,7 +194,7 @@ public class BottomNavigationInsetsTest {
                     assertEquals(gestureTop - dp(activity, bottom - 24), nav.getTop());
                     assertEquals(height, nav.getHeight());
                     assertEquals(width, nav.getWidth());
-                    assertEquals(dp(activity, 24), nav.getPaddingBottom());
+                    assertEquals(Math.round(dp(activity, 24) * (1f - progress)), nav.getPaddingBottom());
                     assertEquals(expected, menuGeometry(nav));
                     assertEquals(capsule, nav.selectedCapsuleBoundsForTest());
                     assertLabelsInsideBar(nav);
@@ -220,7 +223,7 @@ public class BottomNavigationInsetsTest {
         }
     }
 
-    private static ActivityController<NativeMainActivity> createActivity() {
+    static ActivityController<NativeMainActivity> createActivity() {
         org.robolectric.RuntimeEnvironment.getApplication().getSharedPreferences("app_prefs", 0)
                 .edit().putBoolean("access_notice_2_8_3_accepted", true).apply();
         ActivityController<NativeMainActivity> controller = Robolectric.buildActivity(NativeMainActivity.class)
@@ -231,7 +234,7 @@ public class BottomNavigationInsetsTest {
         return controller;
     }
 
-    private static WindowInsets systemInsets(NativeMainActivity activity, int bottomDp) {
+    static WindowInsets systemInsets(NativeMainActivity activity, int bottomDp) {
         return new WindowInsets.Builder()
                 .setInsets(WindowInsets.Type.statusBars(), android.graphics.Insets.of(0, dp(activity, 24), 0, 0))
                 .setVisible(WindowInsets.Type.statusBars(), true)
@@ -239,7 +242,7 @@ public class BottomNavigationInsetsTest {
                 .setVisible(WindowInsets.Type.navigationBars(), true).build();
     }
 
-    private static void layoutShell(FrostedNavigationLayout shell) {
+    static void layoutShell(FrostedNavigationLayout shell) {
         measure(shell, Math.round(360 * shell.getResources().getDisplayMetrics().density),
                 Math.round(800 * shell.getResources().getDisplayMetrics().density));
     }

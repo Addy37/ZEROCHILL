@@ -27,7 +27,9 @@
         <item name="itemTextAppearanceInactive">@style/TextAppearance.ZeroChill.Label</item>
     </style>
     <!-- Retain production 4.3.1 menu geometry under the 24dp gesture reference inset.
-         Keep that visual gutter as style padding, independent of system clearance.
+         Capture the expanded visual gutter as style padding, independent of system
+         clearance. ZeroChillBottomNavigationView releases it during collapse so Material
+         can measure the full icon container inside the smaller outer glass.
          NativeMainActivity's outer shell still uses the actual navigation-bar inset. -->
     <style name="Widget.ZeroChill.BottomNavigation.Floating" parent="Widget.ZeroChill.BottomNavigation">
         <item name="android:paddingBottom">@dimen/zc_nav_menu_bottom_gutter</item>
