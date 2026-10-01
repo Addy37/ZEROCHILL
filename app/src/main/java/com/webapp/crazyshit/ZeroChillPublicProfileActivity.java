@@ -12,6 +12,7 @@ import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
+import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -20,6 +21,7 @@ import com.bumptech.glide.Glide;
 import java.time.OffsetDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Locale;
+import java.util.ArrayList;
 
 /** Public ZeroChill identity shown from comments and other social surfaces. */
 public final class ZeroChillPublicProfileActivity extends Activity {
@@ -31,6 +33,10 @@ public final class ZeroChillPublicProfileActivity extends Activity {
     private ZeroChillSocialRepository.PublicProfile currentProfile;
     private boolean blockedByMe;
     private TextView blockButton;
+    private LinearLayout sharedSection;
+    private String loadedForAccount = "";
+    private int requestEpoch;
+    private boolean openedEdit;
 
     @Override
     protected void onCreate(Bundle state) {
@@ -45,7 +51,13 @@ public final class ZeroChillPublicProfileActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
-        if (currentProfile != null && !currentProfile.currentUser) loadBlockState();
+        String account = ZeroChillSessionStore.currentUserId(this);
+        if (openedEdit || (currentProfile != null && !loadedForAccount.equals(account))) {
+            openedEdit = false;
+            loadProfile();
+        } else if (currentProfile != null && !currentProfile.currentUser) {
+            loadBlockState();
+        }
     }
 
     @Override
@@ -85,10 +97,14 @@ public final class ZeroChillPublicProfileActivity extends Activity {
         subtitle.setLetterSpacing(0.10f);
         titles.addView(subtitle);
 
+        ScrollView scroll = new ScrollView(this);
+        scroll.setFillViewport(true);
+        scroll.setClipToPadding(false);
+        shell.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1f));
         content = new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL);
         content.setPadding(dp(22), dp(28), dp(22), dp(34));
-        shell.addView(content, new LinearLayout.LayoutParams(-1, 0, 1f));
+        scroll.addView(content, new ScrollView.LayoutParams(-1, -2));
 
         progress = new ProgressBar(this);
         ZeroChillUi.styleProgress(progress);
@@ -100,19 +116,27 @@ public final class ZeroChillPublicProfileActivity extends Activity {
     }
 
     private void loadProfile() {
+        int epoch = ++requestEpoch;
+        String account = ZeroChillSessionStore.currentUserId(this);
         showBusy(true);
         ZeroChillSocialRepository.loadProfile(this, userId, (profile, error) -> runOnUiThread(() -> {
+            if (isFinishing() || isDestroyed() || epoch != requestEpoch
+                    || !account.equals(ZeroChillSessionStore.currentUserId(this))) return;
             showBusy(false);
             if (error != null || profile == null) {
                 showError(error == null ? "This profile is unavailable." : error.getMessage());
                 return;
             }
+            loadedForAccount = account;
             render(profile);
         }));
     }
 
     private void render(ZeroChillSocialRepository.PublicProfile profile) {
         currentProfile = profile;
+        blockedByMe = false;
+        blockButton = null;
+        sharedSection = null;
         content.removeAllViews();
 
         TextView eyebrow = text("ZEROCHILL MEMBER", 10, UiPalette.PRIMARY, true);
@@ -165,6 +189,15 @@ public final class ZeroChillPublicProfileActivity extends Activity {
         userParams.topMargin = dp(profile.displayName.isEmpty() ? 15 : 3);
         card.addView(username, userParams);
 
+        if (!profile.bio.trim().isEmpty()) {
+            TextView bio = text(profile.bio, 13, Color.rgb(215, 223, 230), false);
+            bio.setGravity(Gravity.CENTER);
+            bio.setLineSpacing(dp(3), 1f);
+            LinearLayout.LayoutParams bioParams = new LinearLayout.LayoutParams(-1, -2);
+            bioParams.topMargin = dp(15);
+            card.addView(bio, bioParams);
+        }
+
         TextView joined = text(joinedLabel(profile.createdAt), 11,
                 ZeroChillUi.color(this, R.color.zc_text_muted), false);
         LinearLayout.LayoutParams joinedParams = new LinearLayout.LayoutParams(-2, -2);
@@ -173,7 +206,10 @@ public final class ZeroChillPublicProfileActivity extends Activity {
 
         if (profile.currentUser) {
             TextView edit = button("EDIT MY PROFILE");
-            edit.setOnClickListener(v -> startActivity(new Intent(this, ZeroChillAccountActivity.class)));
+            edit.setOnClickListener(v -> {
+                openedEdit = true;
+                startActivity(new Intent(this, ZeroChillAccountActivity.class));
+            });
             LinearLayout.LayoutParams editParams = new LinearLayout.LayoutParams(-1, dp(48));
             editParams.topMargin = dp(14);
             content.addView(edit, editParams);
@@ -228,6 +264,12 @@ public final class ZeroChillPublicProfileActivity extends Activity {
             noteParams.topMargin = dp(14);
             content.addView(note, noteParams);
 
+            sharedSection = new LinearLayout(this);
+            sharedSection.setOrientation(LinearLayout.VERTICAL);
+            LinearLayout.LayoutParams sharedParams = new LinearLayout.LayoutParams(-1, -2);
+            sharedParams.topMargin = dp(15);
+            content.addView(sharedSection, sharedParams);
+
             loadBlockState();
         }
     }
@@ -246,20 +288,116 @@ public final class ZeroChillPublicProfileActivity extends Activity {
     }
 
     private void loadBlockState() {
-        if (!ZeroChillAccountRepository.hasStoredSession(this) || currentProfile == null) return;
-        ZeroChillSocialRepository.blockState(this, currentProfile.userId, (blocked, error) ->
+        if (currentProfile == null || currentProfile.currentUser) return;
+        if (!ZeroChillAccountRepository.hasStoredSession(this)
+                || ZeroChillSessionStore.currentUserId(this).isEmpty()) {
+            if (sharedSection != null) sharedSection.removeAllViews();
+            return;
+        }
+        String account = ZeroChillSessionStore.currentUserId(this);
+        String target = currentProfile.userId;
+        ZeroChillSocialRepository.blockState(this, target, (blocked, error) ->
                 runOnUiThread(() -> {
+                    if (!sameRequest(account, target)) return;
                     if (error != null) return;
                     blockedByMe = Boolean.TRUE.equals(blocked);
                     if (blockButton != null) {
                         blockButton.setText(blockedByMe ? "UNBLOCK" : "BLOCK");
                     }
+                    if (sharedSection != null) sharedSection.removeAllViews();
+                    if (!blockedByMe) loadSharedCreators(account, target);
                 })
         );
     }
 
+    private void loadSharedCreators(String account, String target) {
+        ZeroChillSocialRepository.loadSharedCreators(this, target, (shared, error) ->
+                runOnUiThread(() -> {
+                    if (!sameRequest(account, target) || blockedByMe || sharedSection == null) return;
+                    sharedSection.removeAllViews();
+                    if (error != null || shared == null || shared.isEmpty()) return;
+                    sharedSection.setPadding(dp(15), dp(14), dp(15), dp(16));
+                    sharedSection.setBackground(panelBackground());
+                    TextView label = text("SHARED WITH YOU", 10, UiPalette.PRIMARY, true);
+                    label.setLetterSpacing(0.08f);
+                    sharedSection.addView(label);
+                    TextView title = text("Shared creators", 15, Color.WHITE, true);
+                    LinearLayout.LayoutParams titleParams = new LinearLayout.LayoutParams(-1, -2);
+                    titleParams.topMargin = dp(9);
+                    sharedSection.addView(title, titleParams);
+                    TextView count = text(shared.size() + (shared.size() == 1
+                            ? " creator in common" : " creators in common"), 12,
+                            ZeroChillUi.color(this, R.color.zc_text_secondary), false);
+                    sharedSection.addView(count);
+                    LinearLayout artwork = new LinearLayout(this);
+                    artwork.setGravity(Gravity.CENTER_VERTICAL);
+                    int shown = 0;
+                    for (ZeroChillSocialRepository.SharedCreator creator : shared) {
+                        NativeContentItem metadata = creator.metadata;
+                        if (metadata == null || metadata.imageUrl.trim().isEmpty()) continue;
+                        if (shown++ >= 3) break;
+                        ImageView avatar = new ImageView(this);
+                        avatar.setScaleType(ImageView.ScaleType.CENTER_CROP);
+                        avatar.setContentDescription(creator.name.isEmpty() ? creator.key : creator.name);
+                        Object model = metadata.imageUrl;
+                        String referer = metadata.uploader.isEmpty() ? metadata.url : metadata.uploader;
+                        if (!referer.isEmpty() && metadata.imageUrl.startsWith("https://"))
+                            model = new com.bumptech.glide.load.model.GlideUrl(metadata.imageUrl,
+                                    new com.bumptech.glide.load.model.LazyHeaders.Builder()
+                                            .addHeader("Referer", referer).build());
+                        Glide.with(avatar).load(model).circleCrop().into(avatar);
+                        LinearLayout.LayoutParams avatarParams = new LinearLayout.LayoutParams(dp(36), dp(36));
+                        avatarParams.setMarginEnd(dp(7));
+                        artwork.addView(avatar, avatarParams);
+                    }
+                    if (artwork.getChildCount() > 0) {
+                        LinearLayout.LayoutParams artParams = new LinearLayout.LayoutParams(-1, -2);
+                        artParams.topMargin = dp(10);
+                        sharedSection.addView(artwork, artParams);
+                    }
+                    TextView names = text(sharedNames(shared), 12,
+                            ZeroChillUi.color(this, R.color.zc_text_secondary), false);
+                    LinearLayout.LayoutParams namesParams = new LinearLayout.LayoutParams(-1, -2);
+                    namesParams.topMargin = dp(8);
+                    sharedSection.addView(names, namesParams);
+                    sharedSection.setContentDescription("Shared creators. " + shared.size()
+                            + " creators in common. Open list.");
+                    sharedSection.setOnClickListener(v -> {
+                        String[] creators = new String[shared.size()];
+                        for (int i = 0; i < shared.size(); i++) {
+                            ZeroChillSocialRepository.SharedCreator creator = shared.get(i);
+                            creators[i] = creator.name.isEmpty() ? creator.key : creator.name;
+                        }
+                        new AlertDialog.Builder(this)
+                                .setTitle("Shared creators")
+                                .setItems(creators, (dialog, index) -> dialog.dismiss())
+                                .setPositiveButton("Close", null)
+                                .show();
+                    });
+                    ZeroChillMotion.installPressFeedback(sharedSection);
+                }));
+    }
+
+    static String sharedNames(ArrayList<ZeroChillSocialRepository.SharedCreator> shared) {
+        StringBuilder names = new StringBuilder();
+        for (int i = 0; i < Math.min(shared.size(), 3); i++) {
+            if (names.length() > 0) names.append("  ·  ");
+            ZeroChillSocialRepository.SharedCreator creator = shared.get(i);
+            names.append(creator.name.isEmpty() ? creator.key : creator.name);
+        }
+        return names.toString();
+    }
+
+    private boolean sameRequest(String account, String target) {
+        return !isFinishing() && !isDestroyed() && currentProfile != null
+                && target.equals(currentProfile.userId)
+                && account.equals(ZeroChillSessionStore.currentUserId(this));
+    }
+
     private void confirmBlock(boolean block) {
         if (currentProfile == null) return;
+        String account = ZeroChillSessionStore.currentUserId(this);
+        String target = currentProfile.userId;
         String username = SocialUi.name(currentProfile.displayName, currentProfile.username);
         new AlertDialog.Builder(this)
                 .setTitle(block ? "Block " + username + "?" : "Unblock " + username + "?")
@@ -270,9 +408,10 @@ public final class ZeroChillPublicProfileActivity extends Activity {
                 .setPositiveButton(block ? "Block" : "Unblock", (dialog, which) ->
                         ZeroChillSocialRepository.setBlocked(
                                 this,
-                                currentProfile.userId,
+                                target,
                                 block,
                                 (value, error) -> runOnUiThread(() -> {
+                                    if (!sameRequest(account, target)) return;
                                     if (error != null) {
                                         Toast.makeText(this, error.getMessage(), Toast.LENGTH_LONG).show();
                                         return;
@@ -281,6 +420,8 @@ public final class ZeroChillPublicProfileActivity extends Activity {
                                     if (blockButton != null) {
                                         blockButton.setText(blockedByMe ? "UNBLOCK" : "BLOCK");
                                     }
+                                    if (sharedSection != null) sharedSection.removeAllViews();
+                                    if (!blockedByMe) loadSharedCreators(account, target);
                                     Toast.makeText(
                                             this,
                                             blockedByMe ? "User blocked." : "User unblocked.",

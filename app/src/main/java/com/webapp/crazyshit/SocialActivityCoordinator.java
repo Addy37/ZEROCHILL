@@ -106,6 +106,7 @@ final class SocialActivityCoordinator {
             presenter.hide();
         }
         if (account.isEmpty() || loading || SystemClock.elapsedRealtime() - lastPoll < POLL_MS) return;
+        ZeroChillNotificationPreferences.refreshIfNeeded(context);
         final String requestedAccount = account;
         final int requestGeneration = generation;
         loading = true;
@@ -147,6 +148,7 @@ final class SocialActivityCoordinator {
                     || InlineCommentsDialog.isOpenFor(resumed, latest.pageUrl)) return;
             android.view.View focus = resumed.getCurrentFocus();
             if (focus instanceof android.widget.EditText) return;
+            if (!ZeroChillNotificationPreferences.cachedForAccount(context, requestedAccount).allowsSocial(latest.socialType)) return;
             presenter.show(resumed, latest);
         }));
     }
@@ -156,3 +158,4 @@ final class SocialActivityCoordinator {
         catch (Exception ignored) { return 0L; }
     }
 }
+

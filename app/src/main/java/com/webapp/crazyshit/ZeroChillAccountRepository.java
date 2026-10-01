@@ -39,6 +39,7 @@ final class ZeroChillAccountRepository {
         final String displayName;
         final String avatarPath;
         final String createdAt;
+        final String bio;
 
         AccountState(
                 boolean signedIn,
@@ -50,6 +51,12 @@ final class ZeroChillAccountRepository {
                 String avatarPath,
                 String createdAt
         ) {
+            this(signedIn, pendingVerification, userId, email, username, displayName, avatarPath, createdAt, "");
+        }
+
+        AccountState(boolean signedIn, boolean pendingVerification, String userId, String email,
+                String username, String displayName, String avatarPath, String createdAt, String bio) {
+            this.bio = clean(bio);
             this.signedIn = signedIn;
             this.pendingVerification = pendingVerification;
             this.userId = clean(userId);
@@ -111,6 +118,7 @@ final class ZeroChillAccountRepository {
     }
 
     static void current(Context context, Callback<AccountState> callback) {
+        final String expected = ZeroChillSessionStore.currentUserId(context);
         NETWORK.execute(() -> {
             try {
                 Session session = freshSession(context);
@@ -120,10 +128,14 @@ final class ZeroChillAccountRepository {
                 }
                 AccountState state = loadAccount(session);
                 syncCreatorFavoritesBlocking(context, session);
+                ZeroChillNotificationPreferences.load(context, (preferences, failure) -> { });
+                if (!state.userId.equals(ZeroChillSessionStore.currentUserId(context)))
+                    throw new IllegalStateException("Account changed. Reopen this screen.");
                 callback.complete(state, null);
             } catch (Exception error) {
-                ZeroChillSessionStore.clear(context);
-                callback.complete(AccountState.signedOut(), error);
+                if (error instanceof SessionExpiredException && expected.equals(ZeroChillSessionStore.currentUserId(context)))
+                    ZeroChillSessionStore.clear(context);
+                callback.complete(null, error);
             }
         });
     }
@@ -168,6 +180,7 @@ final class ZeroChillAccountRepository {
                 Session session = saveSession(context, token);
                 AccountState state = loadAccount(session);
                 syncCreatorFavoritesBlocking(context, session);
+                ZeroChillNotificationPreferences.load(context, (preferences, failure) -> { });
                 callback.complete(state, null);
             } catch (Exception error) {
                 ZeroChillSessionStore.clear(context);
@@ -264,6 +277,7 @@ final class ZeroChillAccountRepository {
                 Session session = saveSession(context, jsonObject(response.body));
                 AccountState state = loadAccount(session);
                 syncCreatorFavoritesBlocking(context, session);
+                ZeroChillNotificationPreferences.load(context, (preferences, failure) -> { });
                 callback.complete(state, null);
             } catch (Exception error) {
                 callback.complete(null, error);
@@ -272,21 +286,109 @@ final class ZeroChillAccountRepository {
     }
 
     static void signOut(Context context, Callback<Boolean> callback) {
+        final Session exiting = readSession(context);
+        ZeroChillSessionStore.clear(context);
+        CreatorFavoriteStore.deactivateAccount(context);
         NETWORK.execute(() -> {
             Exception failure = null;
             try {
-                Session session = readSession(context);
+                Session session = exiting;
                 if (session != null && !session.accessToken.isEmpty()) {
                     request("POST", "/auth/v1/logout", session.accessToken, new byte[0],
                             "application/json", null);
                 }
             } catch (Exception error) {
                 failure = error;
-            } finally {
-                ZeroChillSessionStore.clear(context);
             }
             callback.complete(true, failure);
         });
+    }
+
+    static void updateProfile(Context context, String displayName, String bio, Callback<AccountState> callback) {
+        final String expected = ZeroChillSessionStore.currentUserId(context);
+        NETWORK.execute(() -> {
+            try {
+                String validation = ZeroChillAccountValidation.profile(displayName, bio);
+                if (!validation.isEmpty()) throw new IllegalArgumentException(validation);
+                JSONObject body = new JSONObject().put("display_name", clean(displayName))
+                        .put("bio", clean(bio)).put("updated_at", java.time.Instant.now().toString());
+                restBlocking(context, expected, "PATCH", "/rest/v1/profiles?user_id=eq." + encode(expected), body);
+                Session session = requireExpectedSession(context, expected);
+                AccountState result = loadAccount(session);
+                requireExpectedSession(context, expected);
+                callback.complete(result, null);
+            } catch (Exception error) { callback.complete(null, error); }
+        });
+    }
+
+    static void changeEmail(Context context, String email, Callback<AccountState> callback) {
+        final String expected = ZeroChillSessionStore.currentUserId(context);
+        NETWORK.execute(() -> {
+            try {
+                String validation = ZeroChillAccountValidation.email(email);
+                if (!validation.isEmpty()) throw new IllegalArgumentException(validation);
+                restBlocking(context, expected, "PUT", "/auth/v1/user?redirect_to=" + encode(AUTH_REDIRECT_URI),
+                        new JSONObject().put("email", clean(email)));
+                AccountState result = loadAccount(requireExpectedSession(context, expected));
+                requireExpectedSession(context, expected);
+                callback.complete(result, null);
+            } catch (Exception error) { callback.complete(null, error); }
+        });
+    }
+
+    static void changePassword(Context context, String password, String confirmation, Callback<Boolean> callback) {
+        final String expected = ZeroChillSessionStore.currentUserId(context);
+        NETWORK.execute(() -> {
+            try {
+                String validation = ZeroChillAccountValidation.passwordChange(password, confirmation);
+                if (!validation.isEmpty()) throw new IllegalArgumentException(validation);
+                restBlocking(context, expected, "PUT", "/auth/v1/user", new JSONObject().put("password", password));
+                callback.complete(true, null);
+            } catch (Exception error) { callback.complete(false, error); }
+        });
+    }
+
+    static void deleteAccount(Context context, Callback<Boolean> callback) {
+        final String expected = ZeroChillSessionStore.currentUserId(context);
+        NETWORK.execute(() -> {
+            try {
+                String result = restBlocking(context, expected, "POST", "/functions/v1/account-delete", new JSONObject().put("confirmation", "DELETE"));
+                if (!new JSONObject(result).optBoolean("deleted", false))
+                    throw new IllegalStateException("Account deletion was not confirmed. Try again.");
+                if (expected.equals(ZeroChillSessionStore.currentUserId(context))) {
+                    ZeroChillSessionStore.clear(context);
+                    CreatorFavoriteStore.deactivateAccount(context);
+                }
+                CreatorFavoriteStore.removeAccount(context, expected);
+                ZeroChillNotificationPreferences.clearAccount(context, expected);
+                UpdateInboxStore.removeAccount(context, expected);
+                callback.complete(true, null);
+            } catch (Exception error) { callback.complete(false, error); }
+        });
+    }
+
+    static String restBlocking(Context context, String expected, String method, String path, JSONObject body) throws Exception {
+        Session session = requireExpectedSession(context, expected);
+        Response response = request(method, path, session.accessToken,
+                body == null ? null : body.toString().getBytes(StandardCharsets.UTF_8),
+                body == null ? null : "application/json", "return=minimal");
+        if (!response.ok()) {
+            if (response.status == 401 && expected.equals(ZeroChillSessionStore.currentUserId(context)))
+                ZeroChillSessionStore.clear(context);
+            throw responseError(response, "Unable to update your account. Try again.");
+        }
+        if (!expected.equals(ZeroChillSessionStore.currentUserId(context)))
+            throw new IllegalStateException("Account changed. Reopen this screen.");
+        return response.body;
+    }
+
+    private static Session requireExpectedSession(Context context, String expected) throws Exception {
+        if (clean(expected).isEmpty() || !expected.equals(ZeroChillSessionStore.currentUserId(context)))
+            throw new IllegalStateException("Sign in again to use this feature.");
+        Session session = requireSession(context);
+        if (!expected.equals(jwtSubject(session.accessToken)))
+            throw new IllegalStateException("Account changed. Reopen this screen.");
+        return session;
     }
 
     static void updateDisplayName(
@@ -320,6 +422,7 @@ final class ZeroChillAccountRepository {
     }
 
     static void uploadAvatar(Context context, byte[] jpeg, Callback<String> callback) {
+        final String expected = ZeroChillSessionStore.currentUserId(context);
         NETWORK.execute(() -> {
             try {
                 if (jpeg == null || jpeg.length == 0) {
@@ -328,7 +431,7 @@ final class ZeroChillAccountRepository {
                 if (jpeg.length > 512 * 1024) {
                     throw new IllegalArgumentException("Avatar image is too large.");
                 }
-                Session session = requireSession(context);
+                Session session = requireExpectedSession(context, expected);
                 String userId = jwtSubject(session.accessToken);
                 String path = userId + "/avatar.jpg";
                 Response upload = request(
@@ -346,6 +449,7 @@ final class ZeroChillAccountRepository {
                 JSONObject update = new JSONObject()
                         .put("avatar_path", path)
                         .put("updated_at", java.time.Instant.now().toString());
+                requireExpectedSession(context, expected);
                 Response profile = request(
                         "PATCH",
                         "/rest/v1/profiles?user_id=eq." + encode(userId),
@@ -355,6 +459,7 @@ final class ZeroChillAccountRepository {
                         "return=minimal"
                 );
                 if (!profile.ok()) throw responseError(profile, "Avatar uploaded, but the profile did not update.");
+                requireExpectedSession(context, expected);
                 callback.complete(avatarUrl(path), null);
             } catch (Exception error) {
                 callback.complete(null, error);
@@ -369,9 +474,10 @@ final class ZeroChillAccountRepository {
             boolean favorite
     ) {
         if (!hasStoredSession(context) || clean(creatorKey).isEmpty()) return;
+        final String expected = ZeroChillSessionStore.currentUserId(context);
         NETWORK.execute(() -> {
             try {
-                Session session = requireSession(context);
+                Session session = requireExpectedSession(context, expected);
                 String userId = jwtSubject(session.accessToken);
                 if (favorite) {
                     JSONObject row = new JSONObject()
@@ -432,7 +538,7 @@ final class ZeroChillAccountRepository {
 
         Response profileResponse = request(
                 "GET",
-                "/rest/v1/profiles?select=user_id,username,display_name,avatar_path,created_at"
+                "/rest/v1/profiles?select=user_id,username,display_name,avatar_path,created_at,bio"
                         + "&user_id=eq." + encode(userId) + "&limit=1",
                 session.accessToken,
                 null,
@@ -452,7 +558,8 @@ final class ZeroChillAccountRepository {
                 profile.optString("username"),
                 profile.optString("display_name"),
                 profile.optString("avatar_path"),
-                profile.optString("created_at")
+                profile.optString("created_at"),
+                profile.optString("bio")
         );
     }
 
@@ -472,43 +579,29 @@ final class ZeroChillAccountRepository {
     private static void syncCreatorFavoritesBlocking(Context context, Session session) {
         try {
             String userId = jwtSubject(session.accessToken);
-            Set<String> merged = new HashSet<>(CreatorFavoriteStore.names(context));
-            Response response = request(
-                    "GET",
-                    "/rest/v1/creator_favorites?select=creator_key,creator_name&user_id=eq."
-                            + encode(userId),
-                    session.accessToken,
-                    null,
-                    null,
-                    null
-            );
-            if (response.ok()) {
-                JSONArray rows = jsonArray(response.body);
-                for (int i = 0; i < rows.length(); i++) {
-                    String key = clean(rows.getJSONObject(i).optString("creator_key"));
-                    if (!key.isEmpty()) merged.add(key);
-                }
+            if (!userId.equals(ZeroChillSessionStore.currentUserId(context))) return;
+            Set<String> pending = CreatorFavoriteStore.activateAccount(context, userId);
+            Response response = request("GET", "/rest/v1/creator_favorites?select=creator_key,creator_name&user_id=eq."
+                    + encode(userId), session.accessToken, null, null, null);
+            if (!response.ok()) return;
+            Set<String> remote = new HashSet<>();
+            JSONArray rows = jsonArray(response.body);
+            for (int i = 0; i < rows.length(); i++) {
+                String key = clean(rows.getJSONObject(i).optString("creator_key"));
+                if (!key.isEmpty()) remote.add(key);
             }
-
-            if (!merged.isEmpty()) {
-                JSONArray rows = new JSONArray();
-                for (String key : merged) {
-                    rows.put(new JSONObject()
-                            .put("creator_key", key)
-                            .put("creator_name", key));
-                }
-                request(
-                        "POST",
-                        "/rest/v1/creator_favorites?on_conflict=user_id,creator_key",
-                        session.accessToken,
-                        rows.toString().getBytes(StandardCharsets.UTF_8),
-                        "application/json",
-                        "resolution=merge-duplicates,return=minimal"
-                );
-                CreatorFavoriteStore.mergeNames(context, merged);
+            if (!pending.isEmpty()) {
+                JSONArray additions = new JSONArray();
+                for (String key : pending) additions.put(new JSONObject().put("creator_key", key).put("creator_name", key));
+                Response upload = request("POST", "/rest/v1/creator_favorites?on_conflict=user_id,creator_key",
+                        session.accessToken, additions.toString().getBytes(StandardCharsets.UTF_8),
+                        "application/json", "resolution=merge-duplicates,return=minimal");
+                if (!upload.ok()) return;
+                remote.addAll(pending);
             }
-        } catch (Exception ignored) {
-        }
+            if (userId.equals(ZeroChillSessionStore.currentUserId(context)))
+                CreatorFavoriteStore.replaceAccountNames(context, userId, remote);
+        } catch (Exception ignored) { }
     }
 
     private static Session requireSession(Context context) throws Exception {
@@ -519,7 +612,7 @@ final class ZeroChillAccountRepository {
         return session;
     }
 
-    private static Session freshSession(Context context) throws Exception {
+    private static synchronized Session freshSession(Context context) throws Exception {
         Session current = readSession(context);
         if (current == null || !current.valid()) return null;
         long now = System.currentTimeMillis() / 1000L;
@@ -535,9 +628,15 @@ final class ZeroChillAccountRepository {
                 null
         );
         if (!response.ok()) {
-            ZeroChillSessionStore.clear(context);
-            return null;
+            if (response.status == 400 || response.status == 401) {
+                if (current.refreshToken.equals(readSession(context) == null ? "" : readSession(context).refreshToken))
+                    ZeroChillSessionStore.clear(context);
+                return null;
+            }
+            throw responseError(response, "Unable to refresh your session. Try again.");
         }
+        if (!current.refreshToken.equals(readSession(context) == null ? "" : readSession(context).refreshToken))
+            return readSession(context);
         return saveSession(context, jsonObject(response.body));
     }
 
@@ -630,6 +729,10 @@ final class ZeroChillAccountRepository {
         return request(method, path, accessToken, body, contentType, prefer, new String[0]);
     }
 
+    private static final class SessionExpiredException extends IllegalStateException {
+        SessionExpiredException(String message) { super(message); }
+    }
+
     private static Exception responseError(Response response, String fallback) {
         String message = fallback;
         try {
@@ -648,7 +751,8 @@ final class ZeroChillAccountRepository {
         } else if (message.toLowerCase().contains("user already registered")) {
             message = "An account already exists for that email.";
         }
-        return new IllegalStateException(message);
+        return response.status == 401 ? new SessionExpiredException("Your session expired. Sign in again.")
+                : new IllegalStateException(message);
     }
 
     private static java.util.Map<String, String> redirectValues(android.net.Uri uri) {
@@ -720,3 +824,4 @@ final class ZeroChillAccountRepository {
         if (!isConfigured()) throw new IllegalStateException("ZeroChill accounts are not configured in this build.");
     }
 }
+
