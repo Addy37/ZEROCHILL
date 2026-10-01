@@ -123,20 +123,21 @@ public class BottomNavigationInsetsTest {
 
     @Config(sdk = 26)
     @Test public void legacyButtonInsetsAreAlsoOwnedByOuterShell() {
-        ActivityController<NativeMainActivity> controller = createActivity();
-        NativeMainActivity activity = controller.get();
-        FrostedNavigationLayout shell = ReflectionHelpers.getField(activity, "shell");
-        ZeroChillBottomNavigationView nav = ReflectionHelpers.getField(activity, "bottomNavigation");
+        // Exercise the old platform inset API without loading two SDK font runtimes in
+        // one test process. The full shell/menu layout is covered above on current Android.
+        android.content.Context context = org.robolectric.RuntimeEnvironment.getApplication();
+        FrostedNavigationLayout shell = new FrostedNavigationLayout(context);
         for (int bottom : new int[]{48, 24, 48}) {
             WindowInsets legacy = ReflectionHelpers.callConstructor(WindowInsets.class,
                     ReflectionHelpers.ClassParameter.from(Rect.class,
-                            new Rect(0, dp(activity, 24), 0, dp(activity, bottom))));
-            shell.dispatchApplyWindowInsets(legacy);
-            layoutShell(shell);
-            assertEquals(dp(activity, bottom), shell.getPaddingBottom());
-            assertEquals(dp(activity, 24), nav.getPaddingBottom());
+                            new Rect(3, dp(context, 24), 5, dp(context, bottom))));
+            WindowInsets content = shell.navigationContentInsets(legacy);
+            assertEquals(0, content.getSystemWindowInsetBottom());
+            assertEquals(0, content.getSystemWindowInsetLeft());
+            assertEquals(0, content.getSystemWindowInsetRight());
+            assertEquals(dp(context, bottom), legacy.getSystemWindowInsetBottom());
+            assertEquals(dp(context, 24), legacy.getSystemWindowInsetTop());
         }
-        controller.pause().stop().destroy();
     }
 
     private static ActivityController<NativeMainActivity> createActivity() {
@@ -215,7 +216,7 @@ public class BottomNavigationInsetsTest {
         throw new AssertionError(id);
     }
 
-    private static int dp(NativeMainActivity activity, int dp) {
-        return Math.round(dp * activity.getResources().getDisplayMetrics().density);
+    private static int dp(android.content.Context context, int dp) {
+        return Math.round(dp * context.getResources().getDisplayMetrics().density);
     }
 }
