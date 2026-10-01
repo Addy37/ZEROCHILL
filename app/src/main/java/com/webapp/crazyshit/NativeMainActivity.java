@@ -145,6 +145,24 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         }
         showPrimaryPage(startPage, false);
         dispatchLauncherShortcut();
+
+        boolean shortcutLaunch = getIntent() != null
+                && AppShortcuts.isShortcutAction(getIntent().getAction());
+        if (!shortcutLaunch && ZeroChillIdUpgradeAnnouncement.shouldShow(this) && overlayRoot != null) {
+            overlayRoot.postDelayed(() -> {
+                if (isFinishing() || isDestroyed()) return;
+                boolean shown = ZeroChillIdUpgradeAnnouncement.maybeShow(this, () -> {
+                    NotificationCoordinator.maybeOfferPermission(this);
+                    scheduleRatingPromptCheck();
+                });
+                if (!shown) {
+                    NotificationCoordinator.maybeOfferPermission(this);
+                    scheduleRatingPromptCheck();
+                }
+            }, 650L);
+            return;
+        }
+
         NotificationCoordinator.maybeOfferPermission(this);
         scheduleRatingPromptCheck();
     }
