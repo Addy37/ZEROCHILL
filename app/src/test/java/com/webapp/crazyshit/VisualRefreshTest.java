@@ -208,10 +208,14 @@ public class VisualRefreshTest {
         assertEquals("OnlyFap", nav.getMenu().findItem(3).getTitle());
         assertEquals("Library", nav.getMenu().findItem(6).getTitle());
         assertNull(nav.getMenu().findItem(5));
+        assertEquals(main.getResources().getDimensionPixelSize(R.dimen.zc_nav_menu_bottom_gutter),
+                nav.getPaddingBottom());
         for (int id : new int[] {2, 4, 3, 6}) {
             View tab = nav.findViewById(id);
             assertTrue("Tab " + id + " width=" + tab.getWidth() + " nav=" + nav.getWidth(), tab.getWidth() >= BrowseUi.dp(main, 48));
-            assertEquals(nav.getHeight(), tab.getHeight());
+            // Material's menu fills the content area above the approved visual gutter.
+            assertEquals(nav.getHeight() - nav.getPaddingTop() - nav.getPaddingBottom(),
+                    tab.getHeight());
             assertEquals(0, Math.round(tab.getTranslationY()));
         }
         prefs.edit().putInt("native_view_home", NativeFeedAdapter.VIEW_GRID).apply();
