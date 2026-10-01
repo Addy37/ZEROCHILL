@@ -9,6 +9,7 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowInsets;
 import android.widget.TextView;
+import android.widget.ImageView;
 
 import com.google.android.material.bottomnavigation.BottomNavigationView;
 
@@ -32,6 +33,83 @@ import static org.robolectric.Shadows.shadowOf;
 @GraphicsMode(GraphicsMode.Mode.LEGACY)
 public class BottomNavigationInsetsTest {
     private static final int[] IDS = {2, 4, 3, 6};
+
+    @Test public void completeIconDrawablesRemainVisibleThroughCollapseAndLiveInsetSwitches() {
+        ActivityController<NativeMainActivity> controller = createActivity();
+        NativeMainActivity activity = controller.get();
+        FrostedNavigationLayout shell = ReflectionHelpers.getField(activity, "shell");
+        ZeroChillBottomNavigationView nav = ReflectionHelpers.getField(activity, "bottomNavigation");
+        for (float progress : new float[]{0f, 0.25f, 0.5f, 0.75f, 1f, 0.5f, 0f}) {
+            nav.setCollapseProgressForTest(progress);
+            for (int selected : IDS) {
+                nav.setSelectedItemId(selected);
+                nav.setPagerPosition(indexOf(selected));
+                shadowOf(android.os.Looper.getMainLooper()).idle();
+                for (int bottom : new int[]{24, 48, 80, 24}) {
+                    shell.dispatchApplyWindowInsets(systemInsets(activity, bottom));
+                    layoutShell(shell);
+                    // Include repeated draws: collapse transforms must not accumulate or
+                    // oscillate between layout and dispatchDraw, or after a tab restyle.
+                    draw(nav);
+                    for (int id : IDS) assertCompleteIconVisible(nav, id, progress, bottom);
+                    draw(nav);
+                    for (int id : IDS) assertCompleteIconVisible(nav, id, progress, bottom);
+                }
+            }
+        }
+        controller.pause().stop().destroy();
+    }
+
+    private static void assertCompleteIconVisible(ZeroChillBottomNavigationView nav,
+            int id, float progress, int bottom) {
+        View item = nav.findViewById(id);
+        ImageView icon = item.findViewById(com.google.android.material.R.id.navigation_bar_item_icon_view);
+        View container = item.findViewById(com.google.android.material.R.id.navigation_bar_item_icon_container);
+        String state = "tab=" + id + " selected=" + nav.getSelectedItemId() + " collapse=" + progress
+                + " inset=" + bottom + " nav=" + nav.getHeight() + " padding=" + nav.getPaddingBottom()
+                + " menu=" + ((View) item.getParent()).getHeight() + " item=" + item.getHeight()
+                + " container=" + container.getHeight() + " icon=" + icon.getHeight()
+                + " translation=" + container.getTranslationY();
+        System.out.println("NAV_ICON_MEASURE " + state);
+        assertEquals(state, View.VISIBLE, icon.getVisibility());
+        assertEquals(state, 1f, icon.getAlpha(), 0f);
+        assertEquals(state, dp(nav.getContext(), 24), icon.getWidth());
+        assertEquals(state, dp(nav.getContext(), 24), icon.getHeight());
+        assertNotNull(state, icon.getDrawable());
+        RectF drawable = new RectF(icon.getDrawable().getBounds());
+        assertTrue(state + " empty drawable bounds", drawable.width() > 0 && drawable.height() > 0);
+        icon.getImageMatrix().mapRect(drawable);
+        drawable.offset(icon.getPaddingLeft(), icon.getPaddingTop());
+        assertContains(state + " ImageView drawable", new RectF(0, 0, icon.getWidth(), icon.getHeight()), drawable);
+        assertVisibleInAncestors(nav, icon, drawable, state + " drawable");
+        assertVisibleInAncestors(nav, icon, new RectF(0, 0, icon.getWidth(), icon.getHeight()), state + " ImageView");
+    }
+
+    private static void assertVisibleInAncestors(ViewGroup nav, View child, RectF rect, String state) {
+        while (child != nav) {
+            ViewGroup parent = (ViewGroup) child.getParent();
+            child.getMatrix().mapRect(rect);
+            rect.offset(child.getLeft() - parent.getScrollX(), child.getTop() - parent.getScrollY());
+            if (parent.getClipChildren()) {
+                assertContains(state + " clipped by " + parent.getClass().getSimpleName(),
+                        new RectF(0, 0, parent.getWidth(), parent.getHeight()), rect);
+            }
+            if (parent.getClipToPadding() && (parent.getPaddingLeft() != 0 || parent.getPaddingTop() != 0
+                    || parent.getPaddingRight() != 0 || parent.getPaddingBottom() != 0)) {
+                assertContains(state + " padding clip " + parent.getClass().getSimpleName(),
+                        new RectF(parent.getPaddingLeft(), parent.getPaddingTop(),
+                                parent.getWidth() - parent.getPaddingRight(), parent.getHeight() - parent.getPaddingBottom()), rect);
+            }
+            child = parent;
+        }
+        assertContains(state + " outer glass bounds", new RectF(0, 0, nav.getWidth(), nav.getHeight()), rect);
+    }
+
+    private static void assertContains(String state, RectF parent, RectF child) {
+        assertTrue(state + " parent=" + parent + " child=" + child,
+                child.left >= parent.left - 0.01f && child.top >= parent.top - 0.01f
+                        && child.right <= parent.right + 0.01f && child.bottom <= parent.bottom + 0.01f);
+    }
 
     @Test public void gestureGeometryMatchesProductionMaterialMenuIncludingLibraryCapsule() {
         ActivityController<NativeMainActivity> controller = createActivity();
