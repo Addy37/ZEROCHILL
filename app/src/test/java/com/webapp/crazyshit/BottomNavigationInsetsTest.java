@@ -18,6 +18,7 @@ import org.robolectric.Robolectric;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.android.controller.ActivityController;
 import org.robolectric.annotation.Config;
+import org.robolectric.annotation.GraphicsMode;
 import org.robolectric.util.ReflectionHelpers;
 
 import java.util.ArrayList;
@@ -28,6 +29,7 @@ import static org.robolectric.Shadows.shadowOf;
 
 @RunWith(RobolectricTestRunner.class)
 @Config(application = Application.class, sdk = 35)
+@GraphicsMode(GraphicsMode.Mode.LEGACY)
 public class BottomNavigationInsetsTest {
     private static final int[] IDS = {2, 4, 3, 6};
 
@@ -47,6 +49,8 @@ public class BottomNavigationInsetsTest {
         }
         StableBottomNavigationController.styleBar(production);
         production.setSelectedItemId(6);
+        android.widget.FrameLayout root = ReflectionHelpers.getField(activity, "overlayRoot");
+        root.addView(production, new android.widget.FrameLayout.LayoutParams(dp(activity, 340), dp(activity, 64)));
         for (int id : IDS) {
             View item = production.findViewById(id);
             item.setMinimumHeight(0);
@@ -55,6 +59,10 @@ public class BottomNavigationInsetsTest {
         WindowInsets gesture = systemInsets(activity, 24);
         shell.dispatchApplyWindowInsets(gesture);
         production.dispatchApplyWindowInsets(gesture);
+        layoutShell(shell);
+        measure(production, nav.getWidth(), nav.getHeight());
+        // Material posts active-indicator sizing until the measured item width is available.
+        shadowOf(android.os.Looper.getMainLooper()).idle();
         layoutShell(shell);
         measure(production, nav.getWidth(), nav.getHeight());
         assertEquals(dp(activity, 24), production.getPaddingBottom());
@@ -132,6 +140,8 @@ public class BottomNavigationInsetsTest {
                 .edit().putBoolean("access_notice_2_8_3_accepted", true).apply();
         ActivityController<NativeMainActivity> controller = Robolectric.buildActivity(NativeMainActivity.class)
                 .create().start().resume().visible();
+        // Application.class omits ZeroChillApplication's UI-foundation lifecycle callback.
+        StableBottomNavigationController.attach(controller.get());
         shadowOf(android.os.Looper.getMainLooper()).idle();
         return controller;
     }
