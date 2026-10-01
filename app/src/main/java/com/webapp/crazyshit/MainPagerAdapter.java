@@ -521,6 +521,31 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         ));
     }
 
+    private void openFavoriteCreator(CreatorCatalog.FavoriteGroup group) {
+        if (group == null || group.item == null) return;
+        CreatorGallerySpec spec = CreatorGallerySpec.from(group);
+        CreatorGalleryPreloader.warm(
+                activity,
+                spec,
+                CreatorGalleryPreloader.PRIORITY_HIGH
+        );
+        String sessionId = CreatorGalleryPreloader.sessionId(activity, spec.cacheKey);
+        if (sessionId.isEmpty() && spec.grouped) {
+            sessionId = CreatorGalleryPreloader.composeInMemoryMergedSession(activity, spec);
+        }
+        activity.startActivity(NativeFeedBrowserActivity.createCreatorGallery(
+                activity,
+                spec.item.title,
+                spec.query,
+                spec.profileHint,
+                sessionId,
+                spec.cacheKey,
+                spec.seedNames,
+                spec.seedUrls,
+                spec.seedImages
+        ));
+    }
+
     private void openShowDetails(NativeContentItem item) {
         if (item == null || item.url == null || item.url.isEmpty()) return;
         String source = WebVideoSourceRepository.isKaoticUrl(item.url)
@@ -758,6 +783,11 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                                     CreatorGalleryPreloader.PRIORITY_HIGH
                             );
                             openBrowseItem(creator);
+                        }
+
+                        @Override
+                        public void onOpenFavoriteCreator(CreatorCatalog.FavoriteGroup group) {
+                            openFavoriteCreator(group);
                         }
 
                         @Override
