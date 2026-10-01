@@ -153,6 +153,21 @@ public class SettingsActivity extends Activity {
                     if (appUpdater != null) appUpdater.check(true);
                 }
         );
+        if (getPackageName().endsWith(".dev")) {
+            addAction(
+                    notifications,
+                    "Preview update experience",
+                    "Test the floating update card, progress bar, and ready state. No APK is installed.",
+                    "",
+                    () -> {
+                        AppUpdater.requestPreviewOnNextResume(this);
+                        Intent intent = new Intent(this, NativeMainActivity.class);
+                        intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+                        startActivity(intent);
+                        finish();
+                    }
+            );
+        }
 
         LinearLayout playback = addGroup(root, "Playback");
         addAction(
