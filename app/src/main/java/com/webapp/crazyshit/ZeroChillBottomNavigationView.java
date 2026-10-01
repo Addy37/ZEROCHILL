@@ -15,13 +15,13 @@ import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewConfiguration;
 import android.view.ViewGroup;
+import android.view.WindowInsets;
 import android.widget.ImageView;
 import android.widget.TextView;
 import android.view.animation.DecelerateInterpolator;
 
 import androidx.annotation.RequiresApi;
 import androidx.core.content.ContextCompat;
-import androidx.core.view.ViewCompat;
 
 import com.google.android.material.bottomnavigation.BottomNavigationView;
 
@@ -72,7 +72,7 @@ final class ZeroChillBottomNavigationView extends BottomNavigationView {
     private OnNavigationDragListener navigationDragListener;
 
     ZeroChillBottomNavigationView(Context context) {
-        super(context);
+        super(context, null, 0, R.style.Widget_ZeroChill_BottomNavigation_Floating);
         Drawable drawable = ContextCompat.getDrawable(context, R.drawable.zc_nav_selected_glass);
         selectedGlass = drawable == null ? null : drawable.mutate();
         swipeTouchSlop = ViewConfiguration.get(context).getScaledTouchSlop();
@@ -80,14 +80,20 @@ final class ZeroChillBottomNavigationView extends BottomNavigationView {
         // The theme's 64dp minimum would otherwise keep Material's menu at full height
         // inside a 50dp parent, cutting its icon container during the transition.
         setMinimumHeight(0);
-        // NativeMainActivity's shell already owns system-bar insets. Material's default
-        // BottomNavigationView listener would apply the navigation-bar inset again, which
-        // compresses the fixed-height menu when Android is using three-button navigation.
-        ViewCompat.setOnApplyWindowInsetsListener(this, (view, insets) -> insets);
         addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> {
             updateItemColors();
             setItemCollapseVisuals(clamp(collapseProgress, 0f, 1f));
         });
+    }
+
+    @Override
+    public WindowInsets dispatchApplyWindowInsets(WindowInsets insets) {
+        // Keep Material's listener and its initial style padding. Only the shell-hosted
+        // floating bar has already been positioned inside the system's safe content area.
+        WindowInsets contentInsets = getParent() instanceof FrostedNavigationLayout
+                ? ((FrostedNavigationLayout) getParent()).navigationContentInsets(insets)
+                : insets;
+        return super.dispatchApplyWindowInsets(contentInsets);
     }
 
     void setPagerPosition(float position) {

@@ -186,6 +186,14 @@ jobs:
           gradle-version: '8.7'
           cache-provider: basic
 
+      - name: Run focused navigation regressions first
+        run: >-
+          gradle --no-daemon :app:testDebugUnitTest :app:testReleaseUnitTest
+          --tests 'com.webapp.crazyshit.BottomNavigationInsetsTest'
+          --tests 'com.webapp.crazyshit.NavigationIaTest'
+          --tests 'com.webapp.crazyshit.NavigationMotionControllerTest'
+          --tests 'com.webapp.crazyshit.PhoneOrientationPolicyTest'
+
       - name: Run focused profile and account regressions first
         run: >-
           gradle --no-daemon :app:testDebugUnitTest
