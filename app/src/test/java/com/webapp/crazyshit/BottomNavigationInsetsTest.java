@@ -78,11 +78,14 @@ public class BottomNavigationInsetsTest {
         assertEquals(state, 1f, icon.getAlpha(), 0f);
         assertEquals(state, dp(nav.getContext(), 24), icon.getWidth());
         assertEquals(state, dp(nav.getContext(), 24), icon.getHeight());
+        assertEquals(state, ImageView.ScaleType.FIT_CENTER, icon.getScaleType());
         assertNotNull(state, icon.getDrawable());
         RectF drawable = new RectF(icon.getDrawable().getBounds());
         assertTrue(state + " empty drawable bounds", drawable.width() > 0 && drawable.height() > 0);
         icon.getImageMatrix().mapRect(drawable);
         drawable.offset(icon.getPaddingLeft(), icon.getPaddingTop());
+        assertEquals(state + " drawable width must not shrink", dp(nav.getContext(), 24), drawable.width(), 0.01f);
+        assertEquals(state + " drawable height must not shrink", dp(nav.getContext(), 24), drawable.height(), 0.01f);
         assertContains(state + " ImageView drawable", new RectF(0, 0, icon.getWidth(), icon.getHeight()), drawable);
         assertVisibleInAncestors(nav, icon, drawable, state + " drawable");
         assertVisibleInAncestors(nav, icon, new RectF(0, 0, icon.getWidth(), icon.getHeight()), state + " ImageView");
