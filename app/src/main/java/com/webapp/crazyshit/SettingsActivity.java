@@ -161,9 +161,11 @@ public class SettingsActivity extends Activity {
                     "",
                     () -> {
                         AppUpdater.requestPreviewOnNextResume(this);
-                        Intent intent = new Intent(this, NativeMainActivity.class);
-                        intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
-                        startActivity(intent);
+                        Intent intent = getPackageManager().getLaunchIntentForPackage(getPackageName());
+                        if (intent != null) {
+                            intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+                            startActivity(intent);
+                        }
                         finish();
                     }
             );
