@@ -624,10 +624,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                 intent.putExtra(VideoDetailActivity.EXTRA_COMMENTS, item.comments);
                 intent.putExtra(VideoDetailActivity.EXTRA_SOURCE, source);
                 if (manualLandscapeFullscreen) {
-                    intent.putExtra(
-                            VideoDetailActivity.EXTRA_MANUAL_LANDSCAPE_FULLSCREEN,
-                            true
-                    );
+                    VideoDetailActivity.requireManualLandscapeFullscreen(intent);
                 }
                 intent.putExtra(
                         VideoDetailActivity.EXTRA_MEDIA_REFERER,
