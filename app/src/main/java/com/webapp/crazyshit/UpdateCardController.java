@@ -42,7 +42,7 @@ final class UpdateCardController {
         this.activity = activity;
 
         card = new MaterialCardView(activity);
-        ZeroChillUi.styleMaterialCard(card, R.dimen.zc_card_radius_large);
+        ZeroChillUi.styleMaterialCard(card, R.dimen.zc_radius_large);
         card.setStrokeColor(UiPalette.PRIMARY);
         card.setStrokeWidth(dp(1));
         card.setCardElevation(dp(10));
@@ -122,8 +122,10 @@ final class UpdateCardController {
             Action later
     ) {
         ensureAttached();
+        eyebrow.setText("ZEROCHILL UPDATE");
         progress.setVisibility(View.GONE);
         percent.setText("");
+        percent.setTextColor(Color.WHITE);
         title.setText("Version " + cleanVersion(version) + " is ready");
         body.setText(summary == null || summary.trim().isEmpty()
                 ? "A new ZEROCHILL update is available."
@@ -141,6 +143,8 @@ final class UpdateCardController {
             Action cancel
     ) {
         ensureAttached();
+        eyebrow.setText("DOWNLOADING UPDATE");
+        percent.setTextColor(Color.WHITE);
         int safe = Math.max(0, Math.min(100, progressPercent));
         title.setText("Downloading " + cleanVersion(version));
         percent.setText(safe + "%");
@@ -155,6 +159,8 @@ final class UpdateCardController {
 
     void showPreparing(String version, Action cancel) {
         ensureAttached();
+        eyebrow.setText("VERIFYING UPDATE");
+        percent.setTextColor(Color.WHITE);
         title.setText("Preparing " + cleanVersion(version));
         percent.setText("");
         progress.setVisibility(View.VISIBLE);
@@ -198,6 +204,7 @@ final class UpdateCardController {
     void showError(String version, Action retry, Action dismiss) {
         ensureAttached();
         eyebrow.setText("UPDATE PAUSED");
+        percent.setTextColor(Color.WHITE);
         title.setText("Couldn't download " + cleanVersion(version));
         body.setText("Your current ZEROCHILL install is untouched.");
         percent.setText("");
@@ -251,8 +258,6 @@ final class UpdateCardController {
     }
 
     private void showCard() {
-        eyebrow.setText(eyebrow.getText().length() == 0 ? "ZEROCHILL UPDATE" : eyebrow.getText());
-        percent.setTextColor(Color.WHITE);
         card.setVisibility(View.VISIBLE);
         card.bringToFront();
         if (!ZeroChillMotion.animationsEnabled(activity)) return;
