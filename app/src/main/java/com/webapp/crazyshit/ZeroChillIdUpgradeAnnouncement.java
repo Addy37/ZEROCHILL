@@ -90,6 +90,7 @@ final class ZeroChillIdUpgradeAnnouncement {
         card.setStrokeColor(Color.argb(205, 8, 146, 208));
         card.setStrokeWidth(dp(activity, 1));
         card.setCardElevation(dp(activity, 10));
+        card.setContentDescription("ZEROCHILL ID is here. Create account, sign in, or maybe later.");
 
         LinearLayout content = new LinearLayout(activity);
         content.setOrientation(LinearLayout.VERTICAL);
