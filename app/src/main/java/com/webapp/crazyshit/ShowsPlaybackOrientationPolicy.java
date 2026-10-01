@@ -23,4 +23,12 @@ final class ShowsPlaybackOrientationPolicy {
     ) {
         return !manualLandscapeFullscreen && !showsOrigin && !portraitVideo;
     }
+
+    static boolean shouldForceLandscapeOnFullscreen(
+            boolean manualLandscapeFullscreen,
+            boolean showsOrigin,
+            boolean portraitVideo
+    ) {
+        return !portraitVideo && (manualLandscapeFullscreen || showsOrigin);
+    }
 }
