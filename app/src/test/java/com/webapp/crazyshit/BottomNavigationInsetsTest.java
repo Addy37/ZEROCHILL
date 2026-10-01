@@ -58,6 +58,8 @@ public class BottomNavigationInsetsTest {
         }
         WindowInsets gesture = systemInsets(activity, 24);
         shell.dispatchApplyWindowInsets(gesture);
+        assertSame("nav must return raw insets for legacy parent/sibling dispatch",
+                gesture, nav.dispatchApplyWindowInsets(gesture));
         production.dispatchApplyWindowInsets(gesture);
         layoutShell(shell);
         measure(production, nav.getWidth(), nav.getHeight());

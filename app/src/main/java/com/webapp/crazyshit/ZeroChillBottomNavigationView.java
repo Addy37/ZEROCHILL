@@ -93,10 +93,14 @@ final class ZeroChillBottomNavigationView extends BottomNavigationView {
     public WindowInsets dispatchApplyWindowInsets(WindowInsets insets) {
         // Keep Material's listener and its initial style padding. Only the shell-hosted
         // floating bar has already been positioned inside the system's safe content area.
-        WindowInsets contentInsets = getParent() instanceof FrostedNavigationLayout
-                ? ((FrostedNavigationLayout) getParent()).navigationContentInsets(insets)
-                : insets;
-        return super.dispatchApplyWindowInsets(contentInsets);
+        if (getParent() instanceof FrostedNavigationLayout) {
+            super.dispatchApplyWindowInsets(
+                    ((FrostedNavigationLayout) getParent()).navigationContentInsets(insets));
+            // Before Android 11, ViewGroup forwards a child's returned insets to siblings.
+            // The local content adaptation must never escape this navbar's subtree.
+            return insets;
+        }
+        return super.dispatchApplyWindowInsets(insets);
     }
 
     void setPagerPosition(float position) {
