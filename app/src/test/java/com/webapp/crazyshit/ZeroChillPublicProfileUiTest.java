@@ -1,11 +1,13 @@
 package com.webapp.crazyshit;
 
 import android.app.Application;
+import android.app.Dialog;
 import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.ImageView;
 import android.widget.ScrollView;
 import android.widget.TextView;
 
@@ -15,6 +17,7 @@ import org.junit.runner.RunWith;
 import org.robolectric.Robolectric;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.Shadows;
+import org.robolectric.shadows.ShadowDialog;
 import org.robolectric.annotation.Config;
 import org.robolectric.annotation.GraphicsMode;
 
@@ -54,6 +57,47 @@ public class ZeroChillPublicProfileUiTest {
         assertEquals(ZeroChillAccountActivity.class.getName(), started.getComponent().getClassName());
     }
 
+    @Test public void publicProfileUsesCompactHeroAndMessageSizing() throws Exception {
+        ZeroChillPublicProfileActivity activity = create();
+        render(activity, profile(false, ""));
+
+        View message = find(activity.getWindow().getDecorView(), "MESSAGE");
+        assertNotNull(message);
+        assertEquals(dp(activity, 44), message.getLayoutParams().height);
+
+        ImageView avatar = (ImageView) findType(activity.getWindow().getDecorView(), ImageView.class);
+        assertNotNull(avatar);
+        View halo = (View) avatar.getParent();
+        assertEquals(dp(activity, 96), halo.getLayoutParams().width);
+        assertEquals(dp(activity, 96), halo.getLayoutParams().height);
+    }
+
+    @Test public void sharedCreatorsOpenInZeroChillSheet() throws Exception {
+        ZeroChillPublicProfileActivity activity = create();
+        render(activity, profile(false, ""));
+
+        ArrayList<ZeroChillSocialRepository.SharedCreator> rows = new ArrayList<>();
+        rows.add(new ZeroChillSocialRepository.SharedCreator(
+                new JSONObject().put("creator_key", "haesicks").put("creator_name", "haesicks")));
+        rows.add(new ZeroChillSocialRepository.SharedCreator(
+                new JSONObject().put("creator_key", "kira").put("creator_name", "kira pregiato")));
+
+        Method method = ZeroChillPublicProfileActivity.class.getDeclaredMethod(
+                "showSharedCreatorsSheet",
+                ArrayList.class
+        );
+        method.setAccessible(true);
+        method.invoke(activity, rows);
+
+        Dialog dialog = ShadowDialog.getLatestDialog();
+        assertNotNull(dialog);
+        assertEquals(Dialog.class, dialog.getClass());
+        assertNotNull(find(dialog.getWindow().getDecorView(), "Shared creators"));
+        assertNotNull(find(dialog.getWindow().getDecorView(), "haesicks"));
+        assertNotNull(find(dialog.getWindow().getDecorView(), "kira pregiato"));
+        assertNotNull(find(dialog.getWindow().getDecorView(), "CLOSE"));
+    }
+
     @Test public void sharedCreatorNamesStayBoundedWhileCountCanShowFullIntersection() throws Exception {
         ArrayList<ZeroChillSocialRepository.SharedCreator> rows = new ArrayList<>();
         for (int i = 0; i < 5; i++) rows.add(new ZeroChillSocialRepository.SharedCreator(
@@ -88,6 +132,10 @@ public class ZeroChillPublicProfileUiTest {
         Method busy = ZeroChillPublicProfileActivity.class.getDeclaredMethod("showBusy", boolean.class);
         busy.setAccessible(true);
         busy.invoke(activity, false);
+    }
+
+    private static int dp(ZeroChillPublicProfileActivity activity, int value) {
+        return Math.round(value * activity.getResources().getDisplayMetrics().density);
     }
 
     private static View find(View root, String text) {
