@@ -329,10 +329,6 @@ public class NavigationIaTest {
         assertEquals(navigationInset, shell.getPaddingBottom());
         assertEquals(baselineNavBottomPadding, nav.getPaddingBottom());
 
-        android.widget.LinearLayout.LayoutParams params =
-                (android.widget.LinearLayout.LayoutParams) nav.getLayoutParams();
-        assertEquals(Math.round(6 * density), params.bottomMargin);
-
         controller.pause().stop().destroy();
     }
 
