@@ -36,6 +36,8 @@ import java.io.InputStream;
 
 /** First-party ZeroChill account entry point. Existing app use remains account-optional. */
 public final class ZeroChillAccountActivity extends Activity {
+    static final String EXTRA_START_CREATE = "zerochill_account_start_create";
+    private static final String STATE_CREATE_MODE = "state_create_mode";
     private static final int AVATAR_REQUEST = 6401;
     private static final int SECURITY_REQUEST = 6402;
     private static final String DRAFT_USER = "draft_user";
@@ -63,6 +65,11 @@ public final class ZeroChillAccountActivity extends Activity {
     protected void onCreate(Bundle state) {
         super.onCreate(state);
         ZeroChillUi.applySystemBars(this);
+        boolean requestedCreate = getIntent() != null
+                && getIntent().getBooleanExtra(EXTRA_START_CREATE, false);
+        createMode = state == null
+                ? requestedCreate
+                : state.getBoolean(STATE_CREATE_MODE, requestedCreate);
         if (state != null) {
             draftUser = state.getString(DRAFT_USER, "");
             draftName = state.getString(DRAFT_NAME, "");
@@ -96,6 +103,7 @@ public final class ZeroChillAccountActivity extends Activity {
     @Override
     protected void onSaveInstanceState(Bundle out) {
         captureDraft();
+        out.putBoolean(STATE_CREATE_MODE, createMode);
         if (hasDraft) {
             out.putString(DRAFT_USER, draftUser);
             out.putString(DRAFT_NAME, draftName);
