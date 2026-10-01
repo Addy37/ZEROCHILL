@@ -1574,7 +1574,7 @@ public final class NativeFeedBrowserActivity extends Activity {
                 intent.putExtra(VideoDetailActivity.EXTRA_RELATED_FEED_URL, baseUrl);
                 intent.putExtra(VideoDetailActivity.EXTRA_SOURCE, source);
                 if (showDetailsMode) {
-                    VideoDetailActivity.requireManualLandscapeFullscreen(intent);
+                    ShowsPlaybackOrientationPolicy.requireManualLandscapeFullscreen(intent);
                 }
                 if (item.imageUrl != null && !item.imageUrl.trim().isEmpty()) {
                     intent.putExtra(VideoDetailActivity.EXTRA_POSTER_URL, item.imageUrl);
