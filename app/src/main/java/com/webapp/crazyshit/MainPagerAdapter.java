@@ -624,7 +624,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                 intent.putExtra(VideoDetailActivity.EXTRA_COMMENTS, item.comments);
                 intent.putExtra(VideoDetailActivity.EXTRA_SOURCE, source);
                 if (manualLandscapeFullscreen) {
-                    VideoDetailActivity.requireManualLandscapeFullscreen(intent);
+                    ShowsPlaybackOrientationPolicy.requireManualLandscapeFullscreen(intent);
                 }
                 intent.putExtra(
                         VideoDetailActivity.EXTRA_MEDIA_REFERER,
@@ -710,7 +710,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                         history.complete ? 0L : history.positionMs);
                 intent.putExtra(VideoDetailActivity.EXTRA_SOURCE, source);
                 if (manualLandscapeFullscreen) {
-                    VideoDetailActivity.requireManualLandscapeFullscreen(intent);
+                    ShowsPlaybackOrientationPolicy.requireManualLandscapeFullscreen(intent);
                 }
                 intent.putExtra(VideoDetailActivity.EXTRA_SHOWS_CONTINUE_RESUME, true);
                 intent.putExtra(
