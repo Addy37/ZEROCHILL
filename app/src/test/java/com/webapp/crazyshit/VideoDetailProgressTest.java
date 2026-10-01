@@ -50,4 +50,12 @@ public class VideoDetailProgressTest {
         assertFalse(VideoDetailActivity.isPortraitVideoSize(1080, 1080, 1f));
         assertTrue(VideoDetailActivity.isPortraitVideoSize(720, 1280, 0f));
     }
+
+    @Test
+    public void showsManualFullscreenLeavesOtherSensorRotationBehaviorUnchanged() {
+        assertFalse(VideoDetailActivity.shouldAutoRotateFromSensor(true, false, false));
+        assertTrue(VideoDetailActivity.shouldAutoRotateFromSensor(false, false, false));
+        assertFalse(VideoDetailActivity.shouldAutoRotateFromSensor(false, true, false));
+        assertFalse(VideoDetailActivity.shouldAutoRotateFromSensor(false, false, true));
+    }
 }
