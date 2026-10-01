@@ -3,6 +3,7 @@ package com.webapp.crazyshit;
 import android.app.Activity;
 import android.app.Application;
 import android.content.ComponentName;
+import android.content.Intent;
 import android.content.pm.ActivityInfo;
 import android.content.res.Configuration;
 
@@ -83,6 +84,26 @@ public class PhoneOrientationPolicyTest {
         PhoneOrientationPolicy.applyBrowsingOrientation(activity);
         assertEquals(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT,
                 activity.getRequestedOrientation());
+        PhoneOrientationPolicy.onActivityDestroyed(activity);
+        activity.finish();
+    }
+
+    @Test public void showsCanStillRotateAfterManualFullscreenRequest() {
+        Intent intent = new Intent();
+        VideoDetailActivity.requireManualLandscapeFullscreen(intent);
+        assertTrue(intent.getBooleanExtra(
+                VideoDetailActivity.EXTRA_MANUAL_LANDSCAPE_FULLSCREEN,
+                false
+        ));
+
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        PhoneOrientationPolicy.applyBrowsingOrientation(activity);
+        PhoneOrientationPolicy.enterFullscreenVideo(activity);
+        assertEquals(
+                ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR,
+                activity.getRequestedOrientation()
+        );
+        PhoneOrientationPolicy.exitFullscreenVideo(activity);
         PhoneOrientationPolicy.onActivityDestroyed(activity);
         activity.finish();
     }
