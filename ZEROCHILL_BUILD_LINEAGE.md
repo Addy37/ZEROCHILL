@@ -4,11 +4,13 @@ This file identifies the current approved ZEROCHILL product baseline for test AP
 
 - Source-of-truth branch: `rebrand/zerochill`
 - Integration branch: `integration/zerochill-current`
-- Approved product baseline commit: `794b5d76f82e06b1ef1c8d0fc5e51945ecc258d8`
-- Latest production release source commit: `794b5d76f82e06b1ef1c8d0fc5e51945ecc258d8`
-- Device-tested APK source commit: `95da8763b75fb0227c208d13b82632e07743b4c6`
-- Latest release PR: #247
+- Approved product baseline commit: `afae8040f4e039375d434c8f08bf3b1b689212b0`
+- Latest production release source commit: `afae8040f4e039375d434c8f08bf3b1b689212b0`
+- Device-tested APK source commit: `64f25ea2e9c6edca87faa6399a2d2c49e7b9a954`
+- Latest release PR: #255
 - Approval date: 2026-10-01
+
+ZeroChill v4.3.1 was published from `afae804` after release PR #255. This maintenance release adds ShitTok comment counts, the compact in-app update experience, the merged OnlyFap favorite-gallery fix, and the device-approved Shows manual fullscreen/landscape behavior from PRs #250 through #254. The production release workflow rebuilt and signed `ZeroChill.apk`, verified package `com.addy37.crazyshitunofficial`, production signing identity, version code `4003001`, and upgrade compatibility from v4.3.0, then published tag `v4.3.1` with `SHA256SUMS.txt`. The published APK SHA-256 is `b73c9313e69f0229b222b41ce8cab826109424098f28efc56598a70d3c2a5142`. The final functional device-tested tree came from `64f25ea`; the release PR then changed only release metadata. Build Android APK #1667 and Signed Upgrade Candidate #568 passed before publication, and production release workflow #116 completed successfully. The previous v4.3.0 release source is preserved at `checkpoint/zerochill-approved-794b5d7`.
 
 ZeroChill v4.3.0 was published from `794b5d7` after device-approved release PR #247. This major account and social release adds ZEROCHILL ID account creation/sign-in, public profiles, avatars and bios, account-scoped creator favorites, comment replies and likes, video likes, direct messages with unread/read state, the Library social hub, native social notifications with deep return into content, Profile + Account 2.0 security controls, Shared Creators, the optional startup-wizard account entry, and the one-time ZEROCHILL ID announcement for existing users upgrading into 4.3. Branded account/security email delivery is live through the authenticated ZEROCHILL mail domain, while the deployed Profile + Account 2.0 Supabase migrations and account-delete Edge Function remain the backend baseline. The production workflow rebuilt and signed `ZeroChill.apk`, verified package `com.addy37.crazyshitunofficial`, production signing identity, version code `4003000`, and upgrade compatibility from v4.2.1, then published tag `v4.3.0` with `SHA256SUMS.txt`. The published APK SHA-256 is `ad07c8962368df443ce5b2c16f2263d0e34f5328869a6f96b73c74bb698a4e63`. The signed device-tested candidate came from `95da876`, passed 349 debug and 349 release unit tests with one skipped in each suite and no failures/errors, all six performance jobs, and Android 15 in-place upgrade verification. The previous v4.2.1 release source is preserved at `checkpoint/zerochill-approved-48c14a8`.
 
