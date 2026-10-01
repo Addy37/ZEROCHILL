@@ -104,11 +104,97 @@ final class AdminRepository {
         }
     }
 
+    static final class SocialSummary {
+        final long accountsTotal, accountsToday, accountsWeek;
+        final long socialUsersTotal, socialUsersToday, socialUsersWeek;
+        final long profilesWithAvatar, profilesWithBio;
+        final long commentsTotal, commentsToday, commentsWeek, repliesTotal, repliesWeek;
+        final long videoLikesTotal, videoLikesWeek, commentLikesTotal, commentLikesWeek;
+        final long messagesTotal, messagesToday, messagesWeek, messageSendersWeek;
+        final long conversationsWeek, messagesRead, messagesUnread;
+        final double messageReadRate;
+        final long creatorFavoritesTotal, creatorFavoriteAccounts;
+        final double averageFavoritesPerAccount;
+        final long blocksTotal, notificationPreferenceUsers;
+        final long repliesDisabled, likesDisabled, directMessagesDisabled;
+
+        SocialSummary(JSONObject value) {
+            JSONObject accounts = object(value, "accounts");
+            accountsTotal = accounts.optLong("total");
+            accountsToday = accounts.optLong("new_today");
+            accountsWeek = accounts.optLong("new_week");
+
+            JSONObject users = object(value, "social_users");
+            socialUsersTotal = users.optLong("total");
+            socialUsersToday = users.optLong("today");
+            socialUsersWeek = users.optLong("week");
+
+            JSONObject profiles = object(value, "profile_adoption");
+            profilesWithAvatar = profiles.optLong("with_avatar");
+            profilesWithBio = profiles.optLong("with_bio");
+
+            JSONObject comments = object(value, "comments");
+            commentsTotal = comments.optLong("total");
+            commentsToday = comments.optLong("today");
+            commentsWeek = comments.optLong("week");
+            repliesTotal = comments.optLong("replies_total");
+            repliesWeek = comments.optLong("replies_week");
+
+            JSONObject likes = object(value, "likes");
+            videoLikesTotal = likes.optLong("video_total");
+            videoLikesWeek = likes.optLong("video_week");
+            commentLikesTotal = likes.optLong("comment_total");
+            commentLikesWeek = likes.optLong("comment_week");
+
+            JSONObject messages = object(value, "messages");
+            messagesTotal = messages.optLong("total");
+            messagesToday = messages.optLong("today");
+            messagesWeek = messages.optLong("week");
+            messageSendersWeek = messages.optLong("senders_week");
+            conversationsWeek = messages.optLong("conversations_week");
+            messagesRead = messages.optLong("read");
+            messagesUnread = messages.optLong("unread");
+            messageReadRate = messages.optDouble("read_rate_percent", 0d);
+
+            JSONObject favorites = object(value, "creator_favorites");
+            creatorFavoritesTotal = favorites.optLong("total");
+            creatorFavoriteAccounts = favorites.optLong("accounts");
+            averageFavoritesPerAccount = favorites.optDouble("average_per_account", 0d);
+
+            JSONObject safety = object(value, "safety");
+            blocksTotal = safety.optLong("blocks");
+
+            JSONObject preferences = object(value, "notification_preferences");
+            notificationPreferenceUsers = preferences.optLong("customized_users");
+            repliesDisabled = preferences.optLong("replies_disabled");
+            likesDisabled = preferences.optLong("likes_disabled");
+            directMessagesDisabled = preferences.optLong("direct_messages_disabled");
+        }
+    }
+
+    static final class ReleaseAdoption {
+        final String version;
+        final long usersToday, usersWeek, usersMonth;
+        final double percentToday, percentWeek, percentMonth;
+
+        ReleaseAdoption(JSONObject value) {
+            version = value.optString("version");
+            usersToday = value.optLong("users_today");
+            usersWeek = value.optLong("users_week");
+            usersMonth = value.optLong("users_month");
+            percentToday = value.optDouble("percent_today", 0d);
+            percentWeek = value.optDouble("percent_week", 0d);
+            percentMonth = value.optDouble("percent_month", 0d);
+        }
+    }
+
     static final class AnalyticsDashboard {
         final long dailyUsers;
         final long weeklyUsers;
         final long monthlyUsers;
         final String generatedAt;
+        final SocialSummary social;
+        final ReleaseAdoption releaseAdoption;
         final List<AnalyticsRow> sections;
         final List<AnalyticsRow> sources;
         final List<AnalyticsRow> creators;
@@ -123,6 +209,8 @@ final class AdminRepository {
             weeklyUsers = active == null ? 0L : active.optLong("weekly");
             monthlyUsers = active == null ? 0L : active.optLong("monthly");
             generatedAt = value.optString("generated_at");
+            social = new SocialSummary(object(value, "social"));
+            releaseAdoption = new ReleaseAdoption(object(value, "release_adoption"));
             sections = analyticsRows(value.optJSONArray("sections"));
             sources = analyticsRows(value.optJSONArray("sources"));
             creators = analyticsRows(value.optJSONArray("creators"));
@@ -232,6 +320,12 @@ final class AdminRepository {
         JSONObject result = request(BuildConfig.ADMIN_SOURCE_CONFIG_ENDPOINT, token,
                 new JSONObject().put("action", "rollback").put("configVersion", version));
         return result.optLong("configVersion");
+    }
+
+    private static JSONObject object(JSONObject parent, String key) {
+        if (parent == null) return new JSONObject();
+        JSONObject value = parent.optJSONObject(key);
+        return value == null ? new JSONObject() : value;
     }
 
     private static List<AnalyticsRow> analyticsRows(JSONArray values) {
