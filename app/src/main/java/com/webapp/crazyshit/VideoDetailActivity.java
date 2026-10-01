@@ -2141,7 +2141,11 @@ public class VideoDetailActivity extends Activity {
         rotatableFullscreen = enabled;
         sensorFullscreen = false;
         if (enabled) {
-            PhoneOrientationPolicy.enterFullscreenVideo(this);
+            if (showsOrigin) {
+                PhoneOrientationPolicy.enterShowsFullscreen(this, false);
+            } else {
+                PhoneOrientationPolicy.enterFullscreenVideo(this);
+            }
         } else {
             portraitFullscreen = false;
             PhoneOrientationPolicy.exitFullscreenVideo(this);
