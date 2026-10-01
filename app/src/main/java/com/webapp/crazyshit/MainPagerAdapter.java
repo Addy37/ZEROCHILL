@@ -126,7 +126,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
 
             @Override
             public void onOpenHistory(PlaybackHistoryStore.Item item) {
-                openShowsResume(item);
+                openShowsResume(item, false);
             }
 
             @Override
@@ -561,21 +561,28 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
     }
 
     void openLibraryVideo(NativeContentItem item) {
-        openShowsVideo(item);
+        openShowsVideo(item, false);
     }
 
     void openLibraryHistory(NativeContentItem item) {
         if (item == null) return;
         for (PlaybackHistoryStore.Item history : PlaybackHistoryStore.load(activity)) {
             if (history.pageUrl.equals(item.url)) {
-                openShowsResume(history);
+                openShowsResume(history, false);
                 return;
             }
         }
-        openShowsVideo(item);
+        openShowsVideo(item, false);
     }
 
     private void openShowsVideo(NativeContentItem item) {
+        openShowsVideo(item, true);
+    }
+
+    private void openShowsVideo(
+            NativeContentItem item,
+            boolean manualLandscapeFullscreen
+    ) {
         if (item == null || !item.isVideo() || item.url == null || item.url.trim().isEmpty()) {
             return;
         }
@@ -616,6 +623,12 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                 intent.putExtra(VideoDetailActivity.EXTRA_UPLOADER, item.uploader);
                 intent.putExtra(VideoDetailActivity.EXTRA_COMMENTS, item.comments);
                 intent.putExtra(VideoDetailActivity.EXTRA_SOURCE, source);
+                if (manualLandscapeFullscreen) {
+                    intent.putExtra(
+                            VideoDetailActivity.EXTRA_MANUAL_LANDSCAPE_FULLSCREEN,
+                            true
+                    );
+                }
                 intent.putExtra(
                         VideoDetailActivity.EXTRA_MEDIA_REFERER,
                         resolved.requestReferer
@@ -647,6 +660,13 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
     }
 
     private void openShowsResume(PlaybackHistoryStore.Item history) {
+        openShowsResume(history, true);
+    }
+
+    private void openShowsResume(
+            PlaybackHistoryStore.Item history,
+            boolean manualLandscapeFullscreen
+    ) {
         if (history == null || history.pageUrl == null || history.pageUrl.trim().isEmpty()) return;
         NativeContentItem item = new NativeContentItem(
                 NativeContentItem.KIND_MEDIA,
@@ -692,6 +712,12 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                 intent.putExtra(PlayerActivity.EXTRA_START_POSITION,
                         history.complete ? 0L : history.positionMs);
                 intent.putExtra(VideoDetailActivity.EXTRA_SOURCE, source);
+                if (manualLandscapeFullscreen) {
+                    intent.putExtra(
+                            VideoDetailActivity.EXTRA_MANUAL_LANDSCAPE_FULLSCREEN,
+                            true
+                    );
+                }
                 intent.putExtra(VideoDetailActivity.EXTRA_SHOWS_CONTINUE_RESUME, true);
                 intent.putExtra(
                         VideoDetailActivity.EXTRA_MEDIA_REFERER,
