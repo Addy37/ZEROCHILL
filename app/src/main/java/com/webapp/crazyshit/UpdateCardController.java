@@ -5,9 +5,11 @@ import android.app.Activity;
 import android.content.res.ColorStateList;
 import android.graphics.Color;
 import android.graphics.Typeface;
+import android.os.Build;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.WindowInsets;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
@@ -44,17 +46,17 @@ final class UpdateCardController {
         this.activity = activity;
 
         card = new MaterialCardView(activity);
-        ZeroChillUi.styleMaterialCard(card, R.dimen.zc_radius_large);
+        ZeroChillUi.styleMaterialCard(card, R.dimen.zc_radius_medium);
         card.setStrokeColor(UiPalette.PRIMARY);
         card.setStrokeWidth(dp(1));
-        card.setCardElevation(dp(10));
+        card.setCardElevation(dp(12));
         card.setClickable(true);
         card.setFocusable(true);
         card.setTag("zerochill_update_card");
 
         content = new LinearLayout(activity);
         content.setOrientation(LinearLayout.VERTICAL);
-        content.setPadding(dp(14), dp(12), dp(14), dp(11));
+        content.setPadding(dp(11), dp(8), dp(11), dp(8));
 
         LinearLayout header = new LinearLayout(activity);
         header.setOrientation(LinearLayout.HORIZONTAL);
@@ -64,28 +66,29 @@ final class UpdateCardController {
         icon.setImageResource(R.mipmap.ic_launcher);
         icon.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
         icon.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
-        LinearLayout.LayoutParams iconParams = new LinearLayout.LayoutParams(dp(34), dp(34));
-        iconParams.rightMargin = dp(10);
+        LinearLayout.LayoutParams iconParams = new LinearLayout.LayoutParams(dp(28), dp(28));
+        iconParams.rightMargin = dp(8);
         header.addView(icon, iconParams);
 
         LinearLayout titles = new LinearLayout(activity);
         titles.setOrientation(LinearLayout.VERTICAL);
-        eyebrow = text("ZEROCHILL UPDATE", 9, UiPalette.PRIMARY);
+        eyebrow = text("ZEROCHILL UPDATE", 8, UiPalette.PRIMARY);
         eyebrow.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         eyebrow.setLetterSpacing(0.08f);
-        title = text("", 16, Color.WHITE);
+        title = text("", 14, Color.WHITE);
         title.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
-        body = text("", 11, Color.rgb(184, 190, 198));
-        body.setMaxLines(2);
+        body = text("", 10, Color.rgb(184, 190, 198));
+        body.setSingleLine(true);
+        body.setEllipsize(android.text.TextUtils.TruncateAt.END);
         titles.addView(eyebrow);
         titles.addView(title);
         titles.addView(body);
         header.addView(titles, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 
-        percent = text("", 12, Color.WHITE);
+        percent = text("", 11, Color.WHITE);
         percent.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         percent.setGravity(Gravity.END);
-        percent.setMinWidth(dp(42));
+        percent.setMinWidth(dp(36));
         header.addView(percent);
         content.addView(header);
 
@@ -97,20 +100,20 @@ final class UpdateCardController {
         progress.setProgressBackgroundTintList(ColorStateList.valueOf(Color.rgb(47, 53, 61)));
         progress.setVisibility(View.GONE);
         LinearLayout.LayoutParams progressParams =
-                new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(4));
-        progressParams.topMargin = dp(9);
+                new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(3));
+        progressParams.topMargin = dp(6);
         content.addView(progress, progressParams);
 
         actions = new LinearLayout(activity);
         actions.setGravity(Gravity.END | Gravity.CENTER_VERTICAL);
-        actions.setPadding(0, dp(8), 0, 0);
+        actions.setPadding(0, dp(4), 0, 0);
 
         secondary = button(false);
         primary = button(true);
         actions.addView(secondary);
         LinearLayout.LayoutParams primaryParams =
-                new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(36));
-        primaryParams.leftMargin = dp(7);
+                new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(28));
+        primaryParams.leftMargin = dp(6);
         actions.addView(primary, primaryParams);
         content.addView(actions);
 
@@ -225,7 +228,7 @@ final class UpdateCardController {
         card.animate().cancel();
         card.animate()
                 .alpha(0f)
-                .translationY(dp(18))
+                .translationY(-dp(14))
                 .setDuration(ZeroChillMotion.QUICK_MS)
                 .withEndAction(this::detach)
                 .start();
@@ -242,20 +245,19 @@ final class UpdateCardController {
         ViewGroup host = (ViewGroup) decor;
 
         int availableWidth = activity.getResources().getDisplayMetrics().widthPixels - dp(24);
-        int width = Math.min(availableWidth, dp(440));
+        int width = Math.min(availableWidth, dp(420));
         FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
                 Math.max(dp(260), width),
                 ViewGroup.LayoutParams.WRAP_CONTENT,
-                Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL
+                Gravity.TOP | Gravity.CENTER_HORIZONTAL
         );
         params.leftMargin = dp(12);
         params.rightMargin = dp(12);
-        boolean mainShell = "NativeMainActivity".equals(activity.getClass().getSimpleName());
-        params.bottomMargin = mainShell ? dp(78) : dp(18);
+        params.topMargin = topSafeInset() + dp(6);
         card.setLayoutParams(params);
         if (ZeroChillMotion.animationsEnabled(activity)) {
             card.setAlpha(0f);
-            card.setTranslationY(dp(18));
+            card.setTranslationY(-dp(14));
         } else {
             card.setAlpha(1f);
             card.setTranslationY(0f);
@@ -272,7 +274,7 @@ final class UpdateCardController {
         if (card.getAlpha() >= 0.99f && Math.abs(card.getTranslationY()) < 0.5f) return;
         card.animate().cancel();
         card.setAlpha(0f);
-        card.setTranslationY(dp(18));
+        card.setTranslationY(-dp(14));
         card.animate()
                 .alpha(1f)
                 .translationY(0f)
@@ -298,15 +300,15 @@ final class UpdateCardController {
     private MaterialButton button(boolean emphasized) {
         MaterialButton button = new MaterialButton(activity);
         button.setAllCaps(false);
-        button.setTextSize(11);
+        button.setTextSize(10);
         button.setMinWidth(0);
-        button.setMinHeight(dp(36));
+        button.setMinHeight(dp(28));
         button.setInsetTop(0);
         button.setInsetBottom(0);
-        button.setCornerRadius(dp(10));
-        button.setPadding(dp(12), 0, dp(12), 0);
+        button.setCornerRadius(dp(9));
+        button.setPadding(dp(10), 0, dp(10), 0);
         LinearLayout.LayoutParams params =
-                new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(36));
+                new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(28));
         button.setLayoutParams(params);
         if (emphasized) primaryStyle(button);
         return button;
@@ -352,6 +354,17 @@ final class UpdateCardController {
         card.animate().cancel();
         ViewParentCompat.remove(card);
         attached = false;
+    }
+
+    private int topSafeInset() {
+        WindowInsets insets = activity.getWindow().getDecorView().getRootWindowInsets();
+        if (insets == null) return 0;
+        if (Build.VERSION.SDK_INT >= 30) {
+            return insets.getInsetsIgnoringVisibility(
+                    WindowInsets.Type.statusBars() | WindowInsets.Type.displayCutout()
+            ).top;
+        }
+        return Math.max(0, insets.getSystemWindowInsetTop());
     }
 
     private int dp(int value) {
