@@ -90,9 +90,9 @@ public class PhoneOrientationPolicyTest {
 
     @Test public void showsCanStillRotateAfterManualFullscreenRequest() {
         Intent intent = new Intent();
-        VideoDetailActivity.requireManualLandscapeFullscreen(intent);
+        ShowsPlaybackOrientationPolicy.requireManualLandscapeFullscreen(intent);
         assertTrue(intent.getBooleanExtra(
-                VideoDetailActivity.EXTRA_MANUAL_LANDSCAPE_FULLSCREEN,
+                ShowsPlaybackOrientationPolicy.EXTRA_MANUAL_LANDSCAPE_FULLSCREEN,
                 false
         ));
 
