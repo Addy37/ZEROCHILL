@@ -1108,7 +1108,10 @@ public final class ChaosFeedView extends FrameLayout {
         pager.postDelayed(() -> {
             if (!active || !hostResumed || position != selectedPosition) return;
             ChaosHolder holder = holderAt(position);
-            if (holder != null) holder.refreshVideoLikeState();
+            if (holder != null) {
+                holder.refreshVideoLikeState();
+                holder.refreshCommentCount();
+            }
         }, 220L);
     }
 
@@ -1464,6 +1467,8 @@ public final class ChaosFeedView extends FrameLayout {
                     @Override
                     public void onSheetClosed() {
                         commentsDialog = null;
+                        ChaosHolder holder = holderAt(selectedPosition);
+                        if (holder != null) holder.refreshCommentCount();
                         restoreAfterComments();
                     }
                 }
@@ -1498,6 +1503,15 @@ public final class ChaosFeedView extends FrameLayout {
 
     private boolean supportsComments(NativeContentItem item) {
         return item != null && item.url != null && !item.url.trim().isEmpty();
+    }
+
+    static int visibleCommentCount(List<ZeroChillSocialRepository.Comment> loaded) {
+        if (loaded == null || loaded.isEmpty()) return 0;
+        int visible = 0;
+        for (ZeroChillSocialRepository.Comment comment : loaded) {
+            if (comment != null && !comment.deleted()) visible++;
+        }
+        return visible;
     }
 
     private void haptic(View view) {
@@ -1616,6 +1630,8 @@ public final class ChaosFeedView extends FrameLayout {
         boolean videoLiked;
         int videoLikeCount;
         int videoLikeRequestGeneration;
+        int commentCount;
+        int commentCountRequestGeneration;
         float videoAspectRatio;
         float creatorSwipeDownX;
         float creatorSwipeDownY;
@@ -1758,7 +1774,7 @@ public final class ChaosFeedView extends FrameLayout {
                     "Like video",
                     "shittok_like"
             );
-            like.setCompoundDrawablePadding(dp(1));
+            prepareCountedAction(like);
             actionRail.addView(like, actionParams());
 
             save = textIconActionButton(
@@ -1773,6 +1789,7 @@ public final class ChaosFeedView extends FrameLayout {
                     "Open comments",
                     "shittok_comments"
             );
+            prepareCountedAction(comments);
             actionRail.addView(comments, actionParams());
 
             TextView share = textIconActionButton(
@@ -2061,6 +2078,12 @@ public final class ChaosFeedView extends FrameLayout {
             return button;
         }
 
+        private void prepareCountedAction(TextView button) {
+            if (button == null) return;
+            button.setPadding(dp(12), dp(4), dp(12), dp(4));
+            button.setCompoundDrawablePadding(dp(1));
+        }
+
         private ImageView imageActionButton(int icon, String description, String tag) {
             ImageView button = new ImageView(activity);
             button.setImageResource(icon);
@@ -2170,6 +2193,9 @@ public final class ChaosFeedView extends FrameLayout {
             videoLikeCount = 0;
             videoLikeRequestGeneration++;
             updateVideoLikeButton();
+            commentCount = 0;
+            commentCountRequestGeneration++;
+            updateCommentButton();
             fullscreen.setVisibility(View.GONE);
             seekBar.setProgress(0);
             seekBar.setEnabled(false);
@@ -2292,6 +2318,45 @@ public final class ChaosFeedView extends FrameLayout {
                     videoLiked ? "Unlike video" : "Like video"
             );
             like.setEnabled(true);
+        }
+
+        void refreshCommentCount() {
+            if (item == null || item.url == null || item.url.trim().isEmpty()
+                    || !supportsComments(item)) return;
+            String target = item.url;
+            int generation = ++commentCountRequestGeneration;
+            ZeroChillSocialRepository.loadComments(activity, target, (loaded, error) ->
+                    activity.runOnUiThread(() -> {
+                        if (generation != commentCountRequestGeneration
+                                || item == null
+                                || !target.equals(item.url)
+                                || loaded == null
+                                || error != null) {
+                            return;
+                        }
+                        commentCount = visibleCommentCount(loaded);
+                        updateCommentButton();
+                    })
+            );
+        }
+
+        private void updateCommentButton() {
+            if (comments == null) return;
+            comments.setCompoundDrawablesWithIntrinsicBounds(
+                    0,
+                    R.drawable.ic_action_comments,
+                    0,
+                    0
+            );
+            comments.setText(commentCount > 0 ? String.valueOf(commentCount) : "");
+            comments.setTextSize(10);
+            comments.setTextColor(Color.WHITE);
+            comments.setContentDescription(
+                    commentCount == 1 ? "Open 1 comment"
+                            : commentCount > 1 ? "Open " + commentCount + " comments"
+                            : "Open comments"
+            );
+            comments.setEnabled(true);
         }
 
         void resizeMediaForComments(int sheetTopOnScreen) {
