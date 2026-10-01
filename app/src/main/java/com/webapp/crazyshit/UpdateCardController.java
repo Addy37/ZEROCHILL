@@ -1,5 +1,6 @@
 package com.webapp.crazyshit;
 
+import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.content.res.ColorStateList;
 import android.graphics.Color;
@@ -19,6 +20,7 @@ import com.google.android.material.card.MaterialCardView;
 import java.util.Locale;
 
 /** Small in-app updater surface that stays out of the way of primary navigation. */
+@SuppressLint("SetTextI18n")
 final class UpdateCardController {
     interface Action {
         void run();
@@ -248,10 +250,16 @@ final class UpdateCardController {
         );
         params.leftMargin = dp(12);
         params.rightMargin = dp(12);
-        params.bottomMargin = activity instanceof NativeMainActivity ? dp(78) : dp(18);
+        boolean mainShell = "NativeMainActivity".equals(activity.getClass().getSimpleName());
+        params.bottomMargin = mainShell ? dp(78) : dp(18);
         card.setLayoutParams(params);
-        card.setAlpha(1f);
-        card.setTranslationY(0f);
+        if (ZeroChillMotion.animationsEnabled(activity)) {
+            card.setAlpha(0f);
+            card.setTranslationY(dp(18));
+        } else {
+            card.setAlpha(1f);
+            card.setTranslationY(0f);
+        }
         host.addView(card);
         card.bringToFront();
         attached = true;
