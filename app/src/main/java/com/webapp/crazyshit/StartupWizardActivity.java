@@ -54,6 +54,8 @@ public final class StartupWizardActivity extends Activity {
     private boolean awaitingNotificationPermission;
     private boolean transitioning;
     private ObjectAnimator ambientPulse;
+    private LinearLayout accountCardHost;
+    private int accountRefreshEpoch;
 
     @Override
     protected void onCreate(Bundle state) {
@@ -69,6 +71,12 @@ public final class StartupWizardActivity extends Activity {
         ZeroChillUi.applySystemBars(this);
         buildShell();
         showPage(PAGE_WELCOME, false);
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (page == PAGE_SETTINGS && accountCardHost != null) refreshAccountCard();
     }
 
     private void buildShell() {
@@ -142,6 +150,8 @@ public final class StartupWizardActivity extends Activity {
         if (transitioning) return;
         next = Math.max(PAGE_WELCOME, Math.min(PAGE_SETTINGS, next));
         cancelAmbientPulse();
+        accountRefreshEpoch++;
+        accountCardHost = null;
         View incoming = buildPage(next);
         View outgoing = pageHost.getChildCount() == 0 ? null : pageHost.getChildAt(0);
         page = next;
@@ -359,6 +369,11 @@ public final class StartupWizardActivity extends Activity {
         addTitle(column, "Make it yours");
         addSubtitle(column, "Choose your starting preferences. You can change them later in Settings.");
 
+        accountCardHost = new LinearLayout(this);
+        accountCardHost.setOrientation(LinearLayout.VERTICAL);
+        column.addView(accountCardHost, cardParams());
+        refreshAccountCard();
+
         column.addView(settingsSwitch(
                 "Favorite creator alerts",
                 "Notify me when creators I follow have new content.",
@@ -391,6 +406,189 @@ public final class StartupWizardActivity extends Activity {
         noteParams.topMargin = dp(8);
         column.addView(note, noteParams);
         return scroll;
+    }
+
+    private void refreshAccountCard() {
+        if (accountCardHost == null) return;
+        final LinearLayout target = accountCardHost;
+        final int epoch = ++accountRefreshEpoch;
+
+        if (!ZeroChillAccountRepository.isConfigured()) {
+            renderAccountUnavailable(target);
+            return;
+        }
+
+        boolean storedSession = ZeroChillAccountRepository.hasStoredSession(this);
+        String sessionUser = ZeroChillSessionStore.currentUserId(this);
+        if (!storedSession || sessionUser.isEmpty()) {
+            renderAccountSignedOut(target);
+            return;
+        }
+
+        renderAccountChecking(target);
+        ZeroChillAccountRepository.current(this, (state, error) -> runOnUiThread(() -> {
+            if (isFinishing() || isDestroyed() || epoch != accountRefreshEpoch
+                    || accountCardHost != target) return;
+            if (error == null && state != null && state.signedIn) {
+                renderAccountSignedIn(target, state);
+            } else {
+                renderAccountConnectedFallback(target);
+            }
+        }));
+    }
+
+    private void prepareAccountCard(LinearLayout card, String eyebrow) {
+        card.removeAllViews();
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setPadding(dp(15), dp(14), dp(15), dp(14));
+        card.setBackground(panelBackground(17));
+        TextView label = text(eyebrow, 10.5f, UiPalette.PRIMARY, true);
+        label.setLetterSpacing(0.09f);
+        card.addView(label);
+    }
+
+    private void renderAccountSignedOut(LinearLayout card) {
+        prepareAccountCard(card, "YOUR ZEROCHILL ID");
+
+        TextView title = text("Take your identity with you", 16.5f, Color.WHITE, true);
+        LinearLayout.LayoutParams titleParams = new LinearLayout.LayoutParams(-1, -2);
+        titleParams.topMargin = dp(7);
+        card.addView(title, titleParams);
+
+        TextView body = text(
+                "Create an account to keep your identity, favorite creators, comments, messages, and social activity with you.",
+                12.3f,
+                color(R.color.zc_text_secondary),
+                false
+        );
+        body.setLineSpacing(0f, 1.10f);
+        LinearLayout.LayoutParams bodyParams = new LinearLayout.LayoutParams(-1, -2);
+        bodyParams.topMargin = dp(4);
+        card.addView(body, bodyParams);
+
+        LinearLayout actions = new LinearLayout(this);
+        actions.setOrientation(LinearLayout.HORIZONTAL);
+        LinearLayout.LayoutParams actionParams = new LinearLayout.LayoutParams(-1, dp(46));
+        actionParams.topMargin = dp(12);
+        card.addView(actions, actionParams);
+
+        TextView create = actionButton("CREATE ACCOUNT", true);
+        create.setContentDescription("Create ZEROCHILL account");
+        create.setOnClickListener(v -> {
+            haptic(v);
+            openAccount(true);
+        });
+        actions.addView(create, new LinearLayout.LayoutParams(0, -1, 1f));
+
+        TextView signIn = actionButton("SIGN IN", false);
+        signIn.setContentDescription("Sign in to ZEROCHILL");
+        signIn.setOnClickListener(v -> {
+            haptic(v);
+            openAccount(false);
+        });
+        LinearLayout.LayoutParams signInParams = new LinearLayout.LayoutParams(0, -1, 1f);
+        signInParams.setMarginStart(dp(8));
+        actions.addView(signIn, signInParams);
+
+        TextView optional = text(
+                "Optional. You can always do this later.",
+                11f,
+                color(R.color.zc_text_muted),
+                false
+        );
+        optional.setGravity(Gravity.CENTER);
+        LinearLayout.LayoutParams optionalParams = new LinearLayout.LayoutParams(-1, -2);
+        optionalParams.topMargin = dp(9);
+        card.addView(optional, optionalParams);
+    }
+
+    private void renderAccountChecking(LinearLayout card) {
+        prepareAccountCard(card, "YOUR ZEROCHILL ID");
+        TextView checking = text(
+                "Checking your signed-in identity…",
+                12.5f,
+                color(R.color.zc_text_secondary),
+                false
+        );
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, -2);
+        params.topMargin = dp(7);
+        card.addView(checking, params);
+    }
+
+    private void renderAccountSignedIn(
+            LinearLayout card,
+            ZeroChillAccountRepository.AccountState state
+    ) {
+        prepareAccountCard(card, "ZEROCHILL ID CONNECTED");
+        String name = state.displayName == null ? "" : state.displayName.trim();
+        if (name.isEmpty()) name = SocialUi.cleanName(state.username);
+        if (name.isEmpty()) name = "Your account";
+
+        TextView title = text("Signed in as " + name, 16.5f, Color.WHITE, true);
+        LinearLayout.LayoutParams titleParams = new LinearLayout.LayoutParams(-1, -2);
+        titleParams.topMargin = dp(7);
+        card.addView(title, titleParams);
+
+        TextView body = text(
+                "Your identity, creators, comments, messages, and social activity are connected.",
+                12.3f,
+                color(R.color.zc_text_secondary),
+                false
+        );
+        body.setLineSpacing(0f, 1.10f);
+        LinearLayout.LayoutParams bodyParams = new LinearLayout.LayoutParams(-1, -2);
+        bodyParams.topMargin = dp(4);
+        card.addView(body, bodyParams);
+
+        TextView manage = actionButton("MANAGE ACCOUNT", false);
+        manage.setOnClickListener(v -> {
+            haptic(v);
+            openAccount(false);
+        });
+        LinearLayout.LayoutParams manageParams = new LinearLayout.LayoutParams(-1, dp(44));
+        manageParams.topMargin = dp(11);
+        card.addView(manage, manageParams);
+    }
+
+    private void renderAccountConnectedFallback(LinearLayout card) {
+        prepareAccountCard(card, "ZEROCHILL ID CONNECTED");
+        TextView body = text(
+                "Your account is connected on this device. Open Account to manage your ZEROCHILL ID.",
+                12.3f,
+                color(R.color.zc_text_secondary),
+                false
+        );
+        LinearLayout.LayoutParams bodyParams = new LinearLayout.LayoutParams(-1, -2);
+        bodyParams.topMargin = dp(7);
+        card.addView(body, bodyParams);
+
+        TextView manage = actionButton("MANAGE ACCOUNT", false);
+        manage.setOnClickListener(v -> {
+            haptic(v);
+            openAccount(false);
+        });
+        LinearLayout.LayoutParams manageParams = new LinearLayout.LayoutParams(-1, dp(44));
+        manageParams.topMargin = dp(11);
+        card.addView(manage, manageParams);
+    }
+
+    private void renderAccountUnavailable(LinearLayout card) {
+        prepareAccountCard(card, "YOUR ZEROCHILL ID");
+        TextView body = text(
+                "Account setup is unavailable in this build. You can still finish setup and use ZEROCHILL.",
+                12.3f,
+                color(R.color.zc_text_secondary),
+                false
+        );
+        LinearLayout.LayoutParams bodyParams = new LinearLayout.LayoutParams(-1, -2);
+        bodyParams.topMargin = dp(7);
+        card.addView(body, bodyParams);
+    }
+
+    private void openAccount(boolean create) {
+        Intent intent = new Intent(this, ZeroChillAccountActivity.class);
+        intent.putExtra(ZeroChillAccountActivity.EXTRA_START_CREATE, create);
+        startActivity(intent);
     }
 
     private void updateChrome() {
