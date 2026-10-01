@@ -2341,7 +2341,6 @@ public final class ChaosFeedView extends FrameLayout {
                     0,
                     0
             );
-            comments.setCompoundDrawableTintList(ColorStateList.valueOf(Color.WHITE));
             comments.setText(commentCount > 0 ? String.valueOf(commentCount) : "");
             comments.setTextSize(10);
             comments.setTextColor(Color.WHITE);
