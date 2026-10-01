@@ -84,7 +84,7 @@ public class VideoDetailActivity extends Activity {
     public static final String EXTRA_PLAYBACK_IDENT = "playback_ident";
     public static final String EXTRA_SHOWS_CONTINUE_RESUME = "shows_continue_resume";
     public static final String EXTRA_MANUAL_LANDSCAPE_FULLSCREEN =
-            "manual_landscape_fullscreen";
+            ShowsPlaybackOrientationPolicy.EXTRA_MANUAL_LANDSCAPE_FULLSCREEN;
     public static final String EXTRA_SOCIAL_ENTRY = "social_entry";
     public static final String EXTRA_SOCIAL_FOCUS_COMMENT_ID = "social_focus_comment_id";
     public static final String EXTRA_SOCIAL_AUTO_REPLY = "social_auto_reply";
@@ -954,20 +954,6 @@ public class VideoDetailActivity extends Activity {
     static boolean orientationMatches(int currentOrientation, int targetOrientation) {
         return targetOrientation != Configuration.ORIENTATION_UNDEFINED &&
                 currentOrientation == targetOrientation;
-    }
-
-    static boolean shouldAutoRotateFromSensor(
-            boolean manualLandscapeFullscreen,
-            boolean showsOrigin,
-            boolean portraitVideo
-    ) {
-        return !manualLandscapeFullscreen && !showsOrigin && !portraitVideo;
-    }
-
-    static void requireManualLandscapeFullscreen(Intent intent) {
-        if (intent != null) {
-            intent.putExtra(EXTRA_MANUAL_LANDSCAPE_FULLSCREEN, true);
-        }
     }
 
     static float portraitProgressFraction(long positionMs, long durationMs) {
@@ -2166,7 +2152,7 @@ public class VideoDetailActivity extends Activity {
 
     private void onPhysicalOrientation(SensorMediaOrientationListener.Position position) {
         if (socialEntry && activeComments != null && activeComments.isShowing()) return;
-        if (!shouldAutoRotateFromSensor(
+        if (!ShowsPlaybackOrientationPolicy.shouldAutoRotateFromSensor(
                 manualLandscapeFullscreen,
                 showsOrigin,
                 portraitVideo
