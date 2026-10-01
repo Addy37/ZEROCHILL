@@ -1774,7 +1774,7 @@ public final class ChaosFeedView extends FrameLayout {
                     "Like video",
                     "shittok_like"
             );
-            like.setCompoundDrawablePadding(dp(1));
+            prepareCountedAction(like);
             actionRail.addView(like, actionParams());
 
             save = textIconActionButton(
@@ -1789,6 +1789,7 @@ public final class ChaosFeedView extends FrameLayout {
                     "Open comments",
                     "shittok_comments"
             );
+            prepareCountedAction(comments);
             actionRail.addView(comments, actionParams());
 
             TextView share = textIconActionButton(
@@ -2075,6 +2076,12 @@ public final class ChaosFeedView extends FrameLayout {
             button.setCompoundDrawablesWithIntrinsicBounds(0, icon, 0, 0);
             button.setCompoundDrawableTintList(ColorStateList.valueOf(Color.WHITE));
             return button;
+        }
+
+        private void prepareCountedAction(TextView button) {
+            if (button == null) return;
+            button.setPadding(dp(12), dp(4), dp(12), dp(4));
+            button.setCompoundDrawablePadding(dp(1));
         }
 
         private ImageView imageActionButton(int icon, String description, String tag) {
