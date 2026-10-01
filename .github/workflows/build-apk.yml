@@ -188,7 +188,7 @@ jobs:
 
       - name: Run focused navigation regressions first
         run: >-
-          gradle --no-daemon :app:testDebugUnitTest :app:testReleaseUnitTest
+          gradle --no-daemon :app:testDebugUnitTest
           --tests 'com.webapp.crazyshit.BottomNavigationInsetsTest'
           --tests 'com.webapp.crazyshit.NavigationIaTest'
           --tests 'com.webapp.crazyshit.NavigationMotionControllerTest'

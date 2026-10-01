@@ -12,6 +12,7 @@ import android.graphics.RuntimeShader;
 import android.graphics.drawable.Drawable;
 import android.os.Build;
 import android.view.MotionEvent;
+import android.view.ContextThemeWrapper;
 import android.view.View;
 import android.view.ViewConfiguration;
 import android.view.ViewGroup;
@@ -72,7 +73,9 @@ final class ZeroChillBottomNavigationView extends BottomNavigationView {
     private OnNavigationDragListener navigationDragListener;
 
     ZeroChillBottomNavigationView(Context context) {
-        super(context, null, 0, R.style.Widget_ZeroChill_BottomNavigation_Floating);
+        // Material forwards defStyleAttr, but not defStyleRes, to the platform View.
+        // Supply the floating style through that attr so initial padding is captured too.
+        super(new ContextThemeWrapper(context, R.style.ThemeOverlay_ZeroChill_FloatingBottomNavigation));
         Drawable drawable = ContextCompat.getDrawable(context, R.drawable.zc_nav_selected_glass);
         selectedGlass = drawable == null ? null : drawable.mutate();
         swipeTouchSlop = ViewConfiguration.get(context).getScaledTouchSlop();
