@@ -2,11 +2,15 @@ package com.webapp.crazyshit;
 
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.app.Dialog;
 import android.content.Intent;
 import android.graphics.Color;
+import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
 import android.view.Gravity;
+import android.view.Window;
+import android.view.WindowManager;
 import android.view.View;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
@@ -146,7 +150,7 @@ public final class ZeroChillPublicProfileActivity extends Activity {
         LinearLayout card = new LinearLayout(this);
         card.setOrientation(LinearLayout.VERTICAL);
         card.setGravity(Gravity.CENTER_HORIZONTAL);
-        card.setPadding(dp(18), dp(22), dp(18), dp(20));
+        card.setPadding(dp(18), dp(18), dp(18), dp(17));
         card.setBackground(panelBackground());
         LinearLayout.LayoutParams cardParams = new LinearLayout.LayoutParams(-1, -2);
         cardParams.topMargin = dp(10);
@@ -155,7 +159,7 @@ public final class ZeroChillPublicProfileActivity extends Activity {
         FrameLayout halo = new FrameLayout(this);
         halo.setBackground(circle(UiPalette.PRIMARY_CONTAINER));
         halo.setPadding(dp(3), dp(3), dp(3), dp(3));
-        card.addView(halo, new LinearLayout.LayoutParams(dp(112), dp(112)));
+        card.addView(halo, new LinearLayout.LayoutParams(dp(96), dp(96)));
 
         ImageView avatar = new ImageView(this);
         avatar.setScaleType(ImageView.ScaleType.CENTER_CROP);
@@ -179,14 +183,14 @@ public final class ZeroChillPublicProfileActivity extends Activity {
         if (!profile.displayName.isEmpty()) {
             TextView display = text(profile.displayName, 22, Color.WHITE, true);
             LinearLayout.LayoutParams displayParams = new LinearLayout.LayoutParams(-2, -2);
-            displayParams.topMargin = dp(15);
+            displayParams.topMargin = dp(12);
             card.addView(display, displayParams);
         }
 
         TextView username = text(SocialUi.cleanName(profile.username), profile.displayName.isEmpty() ? 23 : 14,
                 profile.displayName.isEmpty() ? Color.WHITE : UiPalette.PRIMARY, true);
         LinearLayout.LayoutParams userParams = new LinearLayout.LayoutParams(-2, -2);
-        userParams.topMargin = dp(profile.displayName.isEmpty() ? 15 : 3);
+        userParams.topMargin = dp(profile.displayName.isEmpty() ? 12 : 2);
         card.addView(username, userParams);
 
         if (!profile.bio.trim().isEmpty()) {
@@ -194,7 +198,7 @@ public final class ZeroChillPublicProfileActivity extends Activity {
             bio.setGravity(Gravity.CENTER);
             bio.setLineSpacing(dp(3), 1f);
             LinearLayout.LayoutParams bioParams = new LinearLayout.LayoutParams(-1, -2);
-            bioParams.topMargin = dp(15);
+            bioParams.topMargin = dp(12);
             card.addView(bio, bioParams);
         }
 
@@ -216,7 +220,7 @@ public final class ZeroChillPublicProfileActivity extends Activity {
         } else {
             TextView message = button("MESSAGE");
             message.setOnClickListener(v -> openMessage(profile));
-            LinearLayout.LayoutParams messageParams = new LinearLayout.LayoutParams(-1, dp(48));
+            LinearLayout.LayoutParams messageParams = new LinearLayout.LayoutParams(-1, dp(44));
             messageParams.topMargin = dp(14);
             content.addView(message, messageParams);
 
@@ -362,20 +366,207 @@ public final class ZeroChillPublicProfileActivity extends Activity {
                     sharedSection.addView(names, namesParams);
                     sharedSection.setContentDescription("Shared creators. " + shared.size()
                             + " creators in common. Open list.");
-                    sharedSection.setOnClickListener(v -> {
-                        String[] creators = new String[shared.size()];
-                        for (int i = 0; i < shared.size(); i++) {
-                            ZeroChillSocialRepository.SharedCreator creator = shared.get(i);
-                            creators[i] = creator.name.isEmpty() ? creator.key : creator.name;
-                        }
-                        new AlertDialog.Builder(this)
-                                .setTitle("Shared creators")
-                                .setItems(creators, (dialog, index) -> dialog.dismiss())
-                                .setPositiveButton("Close", null)
-                                .show();
-                    });
+                    sharedSection.setOnClickListener(v -> showSharedCreatorsSheet(shared));
                     ZeroChillMotion.installPressFeedback(sharedSection);
                 }));
+    }
+
+    private void showSharedCreatorsSheet(ArrayList<ZeroChillSocialRepository.SharedCreator> shared) {
+        if (shared == null || shared.isEmpty() || isFinishing() || isDestroyed()) return;
+
+        Dialog dialog = new Dialog(this);
+        dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
+
+        FrameLayout host = new FrameLayout(this);
+        host.setPadding(dp(12), 0, dp(12), dp(12));
+
+        LinearLayout sheet = new LinearLayout(this);
+        sheet.setOrientation(LinearLayout.VERTICAL);
+        sheet.setPadding(dp(20), dp(10), dp(20), dp(20));
+        sheet.setBackground(sharedSheetBackground());
+        host.addView(sheet, new FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM));
+
+        View handle = new View(this);
+        GradientDrawable handleBackground = new GradientDrawable();
+        handleBackground.setColor(Color.rgb(74, 85, 94));
+        handleBackground.setCornerRadius(dp(99));
+        handle.setBackground(handleBackground);
+        LinearLayout.LayoutParams handleParams = new LinearLayout.LayoutParams(dp(38), dp(4));
+        handleParams.gravity = Gravity.CENTER_HORIZONTAL;
+        handleParams.bottomMargin = dp(14);
+        sheet.addView(handle, handleParams);
+
+        TextView title = text("Shared creators", 20, Color.WHITE, true);
+        sheet.addView(title);
+
+        TextView subtitle = text(
+                shared.size() + (shared.size() == 1 ? " creator you both follow" : " creators you both follow"),
+                12,
+                ZeroChillUi.color(this, R.color.zc_text_secondary),
+                false
+        );
+        LinearLayout.LayoutParams subtitleParams = new LinearLayout.LayoutParams(-1, -2);
+        subtitleParams.topMargin = dp(3);
+        sheet.addView(subtitle, subtitleParams);
+
+        ScrollView scroll = new ScrollView(this);
+        scroll.setClipToPadding(false);
+        scroll.setVerticalScrollBarEnabled(false);
+        LinearLayout rows = new LinearLayout(this);
+        rows.setOrientation(LinearLayout.VERTICAL);
+        scroll.addView(rows, new ScrollView.LayoutParams(-1, -2));
+        LinearLayout.LayoutParams scrollParams = new LinearLayout.LayoutParams(
+                -1,
+                shared.size() > 4 ? dp(320) : -2
+        );
+        scrollParams.topMargin = dp(14);
+        sheet.addView(scroll, scrollParams);
+
+        for (ZeroChillSocialRepository.SharedCreator creator : shared) {
+            LinearLayout row = new LinearLayout(this);
+            row.setGravity(Gravity.CENTER_VERTICAL);
+            row.setPadding(dp(12), dp(9), dp(10), dp(9));
+            row.setBackground(sharedCreatorRowBackground());
+            String creatorName = creator.name.isEmpty() ? creator.key : creator.name;
+            row.setContentDescription("Open creator " + creatorName);
+
+            ImageView avatar = new ImageView(this);
+            bindSharedCreatorAvatar(avatar, creator);
+            row.addView(avatar, new LinearLayout.LayoutParams(dp(44), dp(44)));
+
+            LinearLayout labels = new LinearLayout(this);
+            labels.setOrientation(LinearLayout.VERTICAL);
+            LinearLayout.LayoutParams labelsParams = new LinearLayout.LayoutParams(0, -2, 1f);
+            labelsParams.setMarginStart(dp(12));
+            row.addView(labels, labelsParams);
+
+            TextView name = text(creatorName, 14, Color.WHITE, true);
+            name.setSingleLine(true);
+            name.setEllipsize(android.text.TextUtils.TruncateAt.END);
+            labels.addView(name);
+
+            TextView hint = text(
+                    "Open creator",
+                    10,
+                    ZeroChillUi.color(this, R.color.zc_text_muted),
+                    false
+            );
+            LinearLayout.LayoutParams hintParams = new LinearLayout.LayoutParams(-1, -2);
+            hintParams.topMargin = dp(2);
+            labels.addView(hint, hintParams);
+
+            TextView chevron = text("›", 28, UiPalette.PRIMARY, false);
+            chevron.setGravity(Gravity.CENTER);
+            row.addView(chevron, new LinearLayout.LayoutParams(dp(32), dp(44)));
+
+            row.setOnClickListener(v -> {
+                dialog.dismiss();
+                openSharedCreator(creator);
+            });
+            ZeroChillMotion.installPressFeedback(row);
+
+            LinearLayout.LayoutParams rowParams = new LinearLayout.LayoutParams(-1, -2);
+            rowParams.bottomMargin = dp(8);
+            rows.addView(row, rowParams);
+        }
+
+        TextView close = secondaryButton("CLOSE");
+        close.setOnClickListener(v -> dialog.dismiss());
+        LinearLayout.LayoutParams closeParams = new LinearLayout.LayoutParams(-1, dp(44));
+        closeParams.topMargin = dp(6);
+        sheet.addView(close, closeParams);
+
+        dialog.setContentView(host);
+        dialog.show();
+
+        Window window = dialog.getWindow();
+        if (window != null) {
+            window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+            window.setGravity(Gravity.BOTTOM);
+            window.setLayout(WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.WRAP_CONTENT);
+            WindowManager.LayoutParams attributes = window.getAttributes();
+            attributes.dimAmount = 0.68f;
+            window.setAttributes(attributes);
+            window.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
+        }
+    }
+
+    private void openSharedCreator(ZeroChillSocialRepository.SharedCreator creator) {
+        if (creator == null) return;
+        NativeContentItem metadata = creator.metadata;
+        String fallback = creator.name.isEmpty() ? creator.key : creator.name;
+        String title = metadata == null || metadata.title == null || metadata.title.trim().isEmpty()
+                ? fallback
+                : metadata.title.trim();
+        String query = title.isEmpty() ? fallback : title;
+        if (query.isEmpty()) return;
+        String profileHint = metadata == null
+                ? ""
+                : NativeFeedBrowserActivity.creatorProfileHint(metadata);
+        startActivity(NativeFeedBrowserActivity.createCreatorGallery(
+                this,
+                query,
+                query,
+                profileHint
+        ));
+    }
+
+    private void bindSharedCreatorAvatar(
+            ImageView avatar,
+            ZeroChillSocialRepository.SharedCreator creator
+    ) {
+        avatar.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        avatar.setClipToOutline(true);
+        avatar.setOutlineProvider(new android.view.ViewOutlineProvider() {
+            @Override public void getOutline(View view, android.graphics.Outline outline) {
+                outline.setOval(0, 0, view.getWidth(), view.getHeight());
+            }
+        });
+        avatar.setBackground(circle(Color.rgb(12, 14, 18)));
+
+        NativeContentItem metadata = creator == null ? null : creator.metadata;
+        if (metadata == null || metadata.imageUrl == null || metadata.imageUrl.trim().isEmpty()) {
+            avatar.setImageResource(R.drawable.ic_more_account);
+            avatar.setPadding(dp(11), dp(11), dp(11), dp(11));
+            avatar.setColorFilter(UiPalette.PRIMARY);
+            return;
+        }
+
+        Object model = metadata.imageUrl;
+        String referer = metadata.uploader == null || metadata.uploader.trim().isEmpty()
+                ? metadata.url
+                : metadata.uploader;
+        if (referer != null && !referer.trim().isEmpty() && metadata.imageUrl.startsWith("https://")) {
+            model = new com.bumptech.glide.load.model.GlideUrl(
+                    metadata.imageUrl,
+                    new com.bumptech.glide.load.model.LazyHeaders.Builder()
+                            .addHeader("Referer", referer)
+                            .build()
+            );
+        }
+        avatar.clearColorFilter();
+        avatar.setPadding(0, 0, 0, 0);
+        Glide.with(avatar).load(model).circleCrop().into(avatar);
+    }
+
+    private GradientDrawable sharedSheetBackground() {
+        GradientDrawable background = new GradientDrawable(
+                GradientDrawable.Orientation.TL_BR,
+                new int[]{Color.rgb(18, 23, 29), Color.rgb(6, 9, 13)}
+        );
+        background.setCornerRadius(dp(26));
+        background.setStroke(dp(1), Color.rgb(42, 67, 80));
+        return background;
+    }
+
+    private GradientDrawable sharedCreatorRowBackground() {
+        GradientDrawable background = new GradientDrawable(
+                GradientDrawable.Orientation.TL_BR,
+                new int[]{Color.argb(245, 17, 21, 26), Color.argb(245, 9, 12, 16)}
+        );
+        background.setCornerRadius(dp(16));
+        background.setStroke(dp(1), Color.rgb(38, 50, 58));
+        return background;
     }
 
     static String sharedNames(ArrayList<ZeroChillSocialRepository.SharedCreator> shared) {
