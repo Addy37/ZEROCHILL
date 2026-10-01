@@ -201,6 +201,24 @@ final class UpdateInboxStore {
         return count;
     }
 
+    static ArrayList<String> unreadCreatorFreshUrls(
+            Context context,
+            java.util.Collection<String> creatorNames
+    ) {
+        LinkedHashSet<String> wanted = normalizedCreatorNames(creatorNames);
+        LinkedHashSet<String> fresh = new LinkedHashSet<>();
+        if (wanted.isEmpty()) return new ArrayList<>();
+        for (Entry entry : all(context)) {
+            if (entry.read || !CATEGORY_ONLYFAP.equals(entry.category)) continue;
+            if (!wanted.contains(CreatorNameMatcher.normalized(entry.creatorName))) continue;
+            for (String url : entry.freshUrls) {
+                String clean = clean(url);
+                if (!clean.isEmpty()) fresh.add(clean);
+            }
+        }
+        return new ArrayList<>(fresh);
+    }
+
     static void markCreatorRead(
             Context context,
             java.util.Collection<String> creatorNames
