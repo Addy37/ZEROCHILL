@@ -964,6 +964,12 @@ public class VideoDetailActivity extends Activity {
         return !manualLandscapeFullscreen && !showsOrigin && !portraitVideo;
     }
 
+    static void requireManualLandscapeFullscreen(Intent intent) {
+        if (intent != null) {
+            intent.putExtra(EXTRA_MANUAL_LANDSCAPE_FULLSCREEN, true);
+        }
+    }
+
     static float portraitProgressFraction(long positionMs, long durationMs) {
         if (durationMs <= 0L || positionMs <= 0L) return 0f;
         return Math.max(0f, Math.min(1f, positionMs / (float) durationMs));
