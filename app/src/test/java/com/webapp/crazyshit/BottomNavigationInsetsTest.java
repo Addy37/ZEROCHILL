@@ -63,6 +63,10 @@ public class BottomNavigationInsetsTest {
         measure(production, nav.getWidth(), nav.getHeight());
         // Material posts active-indicator sizing until the measured item width is available.
         shadowOf(android.os.Looper.getMainLooper()).idle();
+        // Attachment can dispatch the test window's default zero insets. Reapply the
+        // simulated production input after that asynchronous dispatch, before comparison.
+        shell.dispatchApplyWindowInsets(gesture);
+        production.dispatchApplyWindowInsets(gesture);
         layoutShell(shell);
         measure(production, nav.getWidth(), nav.getHeight());
         assertEquals(dp(activity, 24), production.getPaddingBottom());
