@@ -88,7 +88,7 @@ public class PhoneOrientationPolicyTest {
         activity.finish();
     }
 
-    @Test public void showsCanStillRotateAfterManualFullscreenRequest() {
+    @Test public void showsManualFullscreenRequestsLandscape() {
         Intent intent = new Intent();
         ShowsPlaybackOrientationPolicy.requireManualLandscapeFullscreen(intent);
         assertTrue(intent.getBooleanExtra(
@@ -98,9 +98,9 @@ public class PhoneOrientationPolicyTest {
 
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
         PhoneOrientationPolicy.applyBrowsingOrientation(activity);
-        PhoneOrientationPolicy.enterFullscreenVideo(activity);
+        PhoneOrientationPolicy.enterShowsFullscreen(activity, false);
         assertEquals(
-                ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR,
+                ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE,
                 activity.getRequestedOrientation()
         );
         PhoneOrientationPolicy.exitFullscreenVideo(activity);
