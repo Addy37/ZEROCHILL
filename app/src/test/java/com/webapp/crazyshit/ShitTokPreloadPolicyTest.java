@@ -4,6 +4,8 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
+import androidx.viewpager2.widget.ViewPager2;
+
 import org.junit.Test;
 import java.util.HashSet;
 import java.util.Set;
@@ -27,6 +29,22 @@ public final class ShitTokPreloadPolicyTest {
         assertFalse(ChaosFeedView.shouldRunSwipeMaintenance(true, true, false, 7, 8));
         assertFalse(ChaosFeedView.shouldRunSwipeMaintenance(false, true, false, 8, 8));
         assertFalse(ChaosFeedView.shouldRunSwipeMaintenance(true, false, false, 8, 8));
+    }
+
+    @Test
+    public void loadedBatch_appliesOnlyWhenPagerIsIdle() {
+        assertTrue(ChaosFeedView.shouldApplyLoadedPool(
+                false, false, false, ViewPager2.SCROLL_STATE_IDLE));
+        assertFalse(ChaosFeedView.shouldApplyLoadedPool(
+                false, true, false, ViewPager2.SCROLL_STATE_IDLE));
+        assertFalse(ChaosFeedView.shouldApplyLoadedPool(
+                false, false, true, ViewPager2.SCROLL_STATE_IDLE));
+        assertFalse(ChaosFeedView.shouldApplyLoadedPool(
+                false, false, false, ViewPager2.SCROLL_STATE_DRAGGING));
+        assertFalse(ChaosFeedView.shouldApplyLoadedPool(
+                false, false, false, ViewPager2.SCROLL_STATE_SETTLING));
+        assertFalse(ChaosFeedView.shouldApplyLoadedPool(
+                true, false, false, ViewPager2.SCROLL_STATE_IDLE));
     }
 
     @Test
