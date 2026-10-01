@@ -58,6 +58,11 @@ import java.util.concurrent.Executors;
 final class OnlyFapHubView extends FrameLayout {
     interface Listener {
         void onOpenCreator(NativeContentItem creator);
+
+        default void onOpenFavoriteCreator(CreatorCatalog.FavoriteGroup group) {
+            if (group != null) onOpenCreator(group.item);
+        }
+
         void onSearch();
 
         default void onMore() {
@@ -598,7 +603,7 @@ final class OnlyFapHubView extends FrameLayout {
         wrapper.setClickable(true);
         wrapper.setFocusable(true);
         wrapper.setContentDescription("Open " + creator.title + " gallery");
-        wrapper.setOnClickListener(v -> listener.onOpenCreator(creator));
+        wrapper.setOnClickListener(v -> listener.onOpenFavoriteCreator(group));
         ZeroChillMotion.installPressFeedback(wrapper);
 
         MaterialCardView avatar = new MaterialCardView(getContext());
