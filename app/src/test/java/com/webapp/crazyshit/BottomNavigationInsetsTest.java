@@ -15,6 +15,7 @@ import com.google.android.material.bottomnavigation.BottomNavigationView;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.Robolectric;
+import org.robolectric.RobolectricTestRunner;
 import org.robolectric.android.controller.ActivityController;
 import org.robolectric.annotation.Config;
 import org.robolectric.util.ReflectionHelpers;
@@ -115,8 +116,10 @@ public class BottomNavigationInsetsTest {
         FrostedNavigationLayout shell = ReflectionHelpers.getField(activity, "shell");
         ZeroChillBottomNavigationView nav = ReflectionHelpers.getField(activity, "bottomNavigation");
         for (int bottom : new int[]{48, 24, 48}) {
-            shell.dispatchApplyWindowInsets(new WindowInsets(new Rect(0, dp(activity, 24), 0,
-                    dp(activity, bottom))));
+            WindowInsets legacy = ReflectionHelpers.callConstructor(WindowInsets.class,
+                    ReflectionHelpers.ClassParameter.from(Rect.class,
+                            new Rect(0, dp(activity, 24), 0, dp(activity, bottom))));
+            shell.dispatchApplyWindowInsets(legacy);
             layoutShell(shell);
             assertEquals(dp(activity, bottom), shell.getPaddingBottom());
             assertEquals(dp(activity, 24), nav.getPaddingBottom());
