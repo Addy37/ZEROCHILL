@@ -2141,8 +2141,14 @@ public class VideoDetailActivity extends Activity {
         rotatableFullscreen = enabled;
         sensorFullscreen = false;
         if (enabled) {
-            if (showsOrigin) {
-                PhoneOrientationPolicy.enterShowsFullscreen(this, false);
+            if (ShowsPlaybackOrientationPolicy.shouldForceLandscapeOnFullscreen(
+                    manualLandscapeFullscreen,
+                    showsOrigin,
+                    portraitVideo
+            )) {
+                // Match ShitTok: an explicit fullscreen tap on horizontal media
+                // immediately requests sensor-landscape orientation.
+                PhoneOrientationPolicy.enterSensorFullscreen(this);
             } else {
                 PhoneOrientationPolicy.enterFullscreenVideo(this);
             }
