@@ -10,6 +10,7 @@ ZeroChill 4.3.0 is a major account and social update built on the device-approve
 - Keeps creator favorites separated by signed-in account while preserving the signed-out collection.
 - Adds account-synced notification preferences for supported in-app activity.
 - Adds an optional Create Account / Sign In entry to the final startup-wizard page without blocking app use.
+- Existing users upgrading to 4.3 get a one-time ZEROCHILL ID introduction with direct Create Account and Sign In actions.
 
 ## Social
 
