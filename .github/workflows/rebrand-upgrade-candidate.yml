@@ -5,6 +5,8 @@ on:
     branches: [ main, rebrand/zerochill ]
     paths:
       - 'app/**'
+      - 'RELEASE_VERSION'
+      - 'RELEASE_NOTES.md'
       - '.github/workflows/rebrand-upgrade-candidate.yml'
   workflow_dispatch:
 
