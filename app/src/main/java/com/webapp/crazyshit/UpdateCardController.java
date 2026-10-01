@@ -380,14 +380,7 @@ final class UpdateCardController {
     }
 
     private int fallbackStatusBarHeight() {
-        int resource = activity.getResources().getIdentifier(
-                "status_bar_height",
-                "dimen",
-                "android"
-        );
-        return resource > 0
-                ? activity.getResources().getDimensionPixelSize(resource)
-                : dp(24);
+        return dp(24);
     }
 
     private void updateTopMargin(int topMargin) {
