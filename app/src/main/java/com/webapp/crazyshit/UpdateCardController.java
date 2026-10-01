@@ -244,14 +244,14 @@ final class UpdateCardController {
         if (!(decor instanceof ViewGroup)) return;
         ViewGroup host = (ViewGroup) decor;
 
-        int availableWidth = activity.getResources().getDisplayMetrics().widthPixels - dp(24);
-        int width = Math.min(availableWidth, dp(420));
+        int availableWidth = activity.getResources().getDisplayMetrics().widthPixels - dp(30);
+        int width = Math.min(availableWidth, dp(414));
         FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
                 Math.max(dp(260), width),
                 ViewGroup.LayoutParams.WRAP_CONTENT,
                 Gravity.TOP | Gravity.CENTER_HORIZONTAL
         );
-        params.leftMargin = dp(12);
+        params.leftMargin = dp(18);
         params.rightMargin = dp(12);
         params.topMargin = topSafeInset() + dp(6);
         card.setLayoutParams(params);
@@ -263,6 +263,11 @@ final class UpdateCardController {
             card.setTranslationY(0f);
         }
         host.addView(card);
+        card.setOnApplyWindowInsetsListener((view, insets) -> {
+            updateTopMargin(safeTopInset(insets) + dp(6));
+            return insets;
+        });
+        card.requestApplyInsets();
         card.bringToFront();
         attached = true;
     }
@@ -357,14 +362,41 @@ final class UpdateCardController {
     }
 
     private int topSafeInset() {
-        WindowInsets insets = activity.getWindow().getDecorView().getRootWindowInsets();
-        if (insets == null) return 0;
-        if (Build.VERSION.SDK_INT >= 30) {
-            return insets.getInsetsIgnoringVisibility(
-                    WindowInsets.Type.statusBars() | WindowInsets.Type.displayCutout()
-            ).top;
+        return safeTopInset(activity.getWindow().getDecorView().getRootWindowInsets());
+    }
+
+    private int safeTopInset(WindowInsets insets) {
+        int inset = 0;
+        if (insets != null) {
+            if (Build.VERSION.SDK_INT >= 30) {
+                inset = insets.getInsetsIgnoringVisibility(
+                        WindowInsets.Type.statusBars() | WindowInsets.Type.displayCutout()
+                ).top;
+            } else {
+                inset = Math.max(0, insets.getSystemWindowInsetTop());
+            }
         }
-        return Math.max(0, insets.getSystemWindowInsetTop());
+        return Math.max(inset, fallbackStatusBarHeight());
+    }
+
+    private int fallbackStatusBarHeight() {
+        int resource = activity.getResources().getIdentifier(
+                "status_bar_height",
+                "dimen",
+                "android"
+        );
+        return resource > 0
+                ? activity.getResources().getDimensionPixelSize(resource)
+                : dp(24);
+    }
+
+    private void updateTopMargin(int topMargin) {
+        ViewGroup.LayoutParams raw = card.getLayoutParams();
+        if (!(raw instanceof FrameLayout.LayoutParams)) return;
+        FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) raw;
+        if (params.topMargin == topMargin) return;
+        params.topMargin = topMargin;
+        card.setLayoutParams(params);
     }
 
     private int dp(int value) {
