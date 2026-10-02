@@ -323,6 +323,8 @@ public final class NativeFeedBrowserActivity extends Activity {
     @Override
     protected void onCreate(Bundle state) {
         super.onCreate(state);
+        GalleryMediaTransition.requestWindowFeature(this);
+        GalleryMediaTransition.configureSource(this);
         title = value(getIntent().getStringExtra(EXTRA_TITLE), "Browse");
         baseUrl = value(getIntent().getStringExtra(EXTRA_BASE_URL), CrazyShitRepository.HOME);
         memeMode = getIntent().getBooleanExtra(EXTRA_MEME_MODE, false);
@@ -995,12 +997,16 @@ public final class NativeFeedBrowserActivity extends Activity {
                 this,
                 new BunkrGalleryAdapter.Listener() {
                     @Override
-                    public void onOpen(int position, NativeContentItem item) {
+                    public void onOpen(
+                            int position,
+                            NativeContentItem item,
+                            View transitionAnchor
+                    ) {
                         if (creatorAvatarPickerMode) {
                             pickCreatorAvatar(item);
                             return;
                         }
-                        openBunkrGallery(position, item);
+                        openBunkrGallery(position, item, transitionAnchor);
                     }
 
                     @Override
@@ -1688,7 +1694,11 @@ public final class NativeFeedBrowserActivity extends Activity {
         return clean.startsWith("https://") || clean.startsWith("http://");
     }
 
-    private void openBunkrGallery(int position, NativeContentItem item) {
+    private void openBunkrGallery(
+            int position,
+            NativeContentItem item,
+            View transitionAnchor
+    ) {
         if (item == null || bunkrGalleryAdapter == null) return;
         if (!isCreatorGallery()) BunkrGallerySessionStore.replace(
                 bunkrGallerySessionId,
@@ -1712,7 +1722,7 @@ public final class NativeFeedBrowserActivity extends Activity {
         );
         intent.putExtra(BunkrGalleryActivity.EXTRA_INITIAL_URL, item.url);
         intent.putExtra(BunkrGalleryActivity.EXTRA_INITIAL_POSITION, position);
-        startActivity(intent);
+        GalleryMediaTransition.start(this, intent, transitionAnchor, item);
     }
 
     private void showItemMenu(NativeContentItem item, View anchor) {
@@ -1913,6 +1923,8 @@ public final class NativeFeedBrowserActivity extends Activity {
             int columns;
             if (landscape) columns = config.screenWidthDp >= 900 ? 7 : 5;
             else columns = config.screenWidthDp >= 600 ? 5 : 3;
+            if (old instanceof GridLayoutManager
+                    && ((GridLayoutManager) old).getSpanCount() == columns) return;
             GridLayoutManager gallery = new GridLayoutManager(this, columns);
             recycler.setLayoutManager(gallery);
             if (bunkrGalleryAdapter.getItemCount() > 0) {
@@ -1950,6 +1962,11 @@ public final class NativeFeedBrowserActivity extends Activity {
     private void applyCreatorGalleryLayout(RecyclerView list) {
         if (list == null) return;
         RecyclerView.LayoutManager old = list.getLayoutManager();
+        // Resume/reentry must retain the holders and their loaded Glide drawables.
+        // Replacing an unchanged manager briefly redraws the entire grid as placeholders.
+        if (old instanceof StaggeredGridLayoutManager
+                && ((StaggeredGridLayoutManager) old).getSpanCount()
+                        == creatorGalleryColumnCount()) return;
         int position = 0;
         int offset = 0;
         if (old != null) {
@@ -2482,7 +2499,10 @@ public final class NativeFeedBrowserActivity extends Activity {
         super.onSaveInstanceState(state);
     }
 
-    @Override protected void onPause() { persistBrowser(); super.onPause(); }
+    @Override protected void onPause() {
+        persistBrowser();
+        super.onPause();
+    }
 
     @Override
     protected void onResume() {
@@ -2493,7 +2513,16 @@ public final class NativeFeedBrowserActivity extends Activity {
                     BunkrGallerySessionStore.snapshot(bunkrGallerySessionId);
             if (snapshot != null) {
                 if (snapshot.items.size() > bunkrGalleryAdapter.size()) {
-                    replaceBunkrItems(snapshot.items);
+                    // The viewer only appends to this session. Merge without replacing
+                    // existing media or rebinding the shared return thumbnail.
+                    if (isCreatorGallery()) {
+                        int activeTab = activeCreatorTab();
+                        for (int tab = 0; tab < CREATOR_TAB_COUNT; tab++) {
+                            if (creatorTabAdapters[tab] != null) creatorTabAdapters[tab].append(
+                                    filterCreatorItems(snapshot.items, tab), tab == activeTab);
+                        }
+                        updateCreatorTabLabels();
+                    } else bunkrGalleryAdapter.append(snapshot.items);
                 }
                 currentPage = snapshot.currentPage;
                 endReached = snapshot.endReached;

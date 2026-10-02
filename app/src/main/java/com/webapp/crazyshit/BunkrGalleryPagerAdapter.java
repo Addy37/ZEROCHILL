@@ -14,10 +14,12 @@ import android.widget.ProgressBar;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
+import androidx.core.view.ViewCompat;
 import androidx.media3.common.Player;
 import androidx.media3.ui.AspectRatioFrameLayout;
 import androidx.media3.ui.PlayerView;
 import androidx.recyclerview.widget.RecyclerView;
+import androidx.viewpager2.widget.ViewPager2;
 
 import com.bumptech.glide.Glide;
 import com.bumptech.glide.load.DataSource;
@@ -48,6 +50,9 @@ final class BunkrGalleryPagerAdapter
         void onMediaLongPress(int position, NativeContentItem item);
 
         void onResolvedImageFailed(int position, NativeContentItem item);
+
+        default void onSharedElementReady(View target) {
+        }
     }
 
     private final Context context;
@@ -59,11 +64,20 @@ final class BunkrGalleryPagerAdapter
     private final Set<String> failed = new HashSet<>();
     private int activeVideoPosition = RecyclerView.NO_POSITION;
     private Player activePlayer;
+    private String sharedElementUrl = "";
+    private String sharedElementName = "";
+    private boolean sharedElementDelivered;
 
     BunkrGalleryPagerAdapter(Context context, Listener listener) {
         this.context = context.getApplicationContext();
         this.listener = listener;
         setHasStableIds(true);
+    }
+
+    void setInitialSharedElement(String itemUrl, String transitionName) {
+        sharedElementUrl = value(itemUrl);
+        sharedElementName = value(transitionName);
+        sharedElementDelivered = false;
     }
 
     void replace(List<NativeContentItem> incoming, Map<String, String> resolved) {
@@ -182,6 +196,27 @@ final class BunkrGalleryPagerAdapter
         if (old != RecyclerView.NO_POSITION && old < items.size()) notifyItemChanged(old);
     }
 
+    View prepareSharedReturn(ViewPager2 pager, int position) {
+        RecyclerView list = (RecyclerView) pager.getChildAt(0);
+        RecyclerView.ViewHolder raw = list.findViewHolderForAdapterPosition(position);
+        if (!(raw instanceof Holder)) return null;
+        Holder holder = (Holder) raw;
+        if (holder.image.getDrawable() == null || holder.image.getDrawable() instanceof ColorDrawable
+                || !sharedElementName.equals(ViewCompat.getTransitionName(holder.image))) return null;
+        // Preserve the already loaded poster. notifyItemChanged here would restart
+        // Glide and briefly clear the drawable just as Android captures the return.
+        activeVideoPosition = RecyclerView.NO_POSITION;
+        activePlayer = null;
+        holder.playerView.setPlayer(null);
+        holder.playerView.setVisibility(View.GONE);
+        holder.image.setVisibility(View.VISIBLE);
+        holder.image.setAlpha(1f);
+        holder.play.setVisibility(View.GONE);
+        holder.progress.setVisibility(View.GONE);
+        holder.failure.setVisibility(View.GONE);
+        return holder.image;
+    }
+
     @Override
     public long getItemId(int position) {
         return items.get(position).url.hashCode();
@@ -191,10 +226,10 @@ final class BunkrGalleryPagerAdapter
     @Override
     public Holder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
         FrameLayout root = new FrameLayout(parent.getContext());
-        root.setBackgroundColor(Color.BLACK);
         root.setLayoutParams(new RecyclerView.LayoutParams(-1, -1));
 
         ZoomableImageView image = new ZoomableImageView(parent.getContext());
+        image.setBackground(null);
         root.addView(image, new FrameLayout.LayoutParams(-1, -1));
 
         PlayerView playerView = new PlayerView(parent.getContext());
@@ -246,6 +281,7 @@ final class BunkrGalleryPagerAdapter
     @Override
     public void onBindViewHolder(@NonNull Holder holder, int position) {
         NativeContentItem item = items.get(position);
+        GalleryMediaTransition.clearName(holder.image);
         holder.image.resetZoom();
         holder.image.setZoomEnabled(item.isImage());
         String resolved = value(resolvedUrls.get(item.url));
@@ -314,6 +350,26 @@ final class BunkrGalleryPagerAdapter
             }
         }
 
+        if (!sharedElementName.isEmpty() && item.url.equals(sharedElementUrl)) {
+            ViewCompat.setTransitionName(holder.image, sharedElementName);
+            if (!sharedElementDelivered) {
+                holder.image.post(() -> {
+                    int current = holder.getBindingAdapterPosition();
+                    if (sharedElementDelivered
+                            || current == RecyclerView.NO_POSITION
+                            || current >= items.size()
+                            || !item.url.equals(items.get(current).url)
+                            || !item.url.equals(sharedElementUrl)
+                            || !sharedElementName.equals(
+                                    ViewCompat.getTransitionName(holder.image))) {
+                        return;
+                    }
+                    sharedElementDelivered = true;
+                    listener.onSharedElementReady(holder.image);
+                });
+            }
+        }
+
         holder.itemView.setContentDescription(
                 (item.isVideo() ? "Video, " : "Photo, ") + item.title +
                         ". Long press to download."
@@ -341,6 +397,7 @@ final class BunkrGalleryPagerAdapter
 
     @Override
     public void onViewRecycled(@NonNull Holder holder) {
+        GalleryMediaTransition.clearName(holder.image);
         holder.playerView.setPlayer(null);
         holder.itemView.setOnLongClickListener(null);
         holder.image.setOnClickListener(null);

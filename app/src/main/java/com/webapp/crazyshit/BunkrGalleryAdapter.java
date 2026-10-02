@@ -15,6 +15,7 @@ import android.widget.ImageView;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
+import androidx.core.view.ViewCompat;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.bumptech.glide.Glide;
@@ -44,7 +45,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
             "(KHTML, like Gecko) Chrome/139.0 Mobile Safari/537.36";
 
     interface Listener {
-        void onOpen(int position, NativeContentItem item);
+        void onOpen(int position, NativeContentItem item, View transitionAnchor);
 
         void onLongPress(NativeContentItem item, View anchor);
     }
@@ -304,6 +305,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         holder.morphPulse.animate().cancel();
         holder.morphPulse.setAlpha(0f);
         NativeContentItem item = items.get(position);
+        ViewCompat.setTransitionName(holder.image, GalleryMediaTransition.transitionName(item));
         holder.tile.setAspectRatio(adaptiveAspectRatios
                 ? aspectRatios.getOrDefault(item.url, 1f)
                 : 1f);
@@ -382,7 +384,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         holder.itemView.setOnClickListener(v -> {
             int current = holder.getBindingAdapterPosition();
             if (current == RecyclerView.NO_POSITION || current >= items.size()) return;
-            listener.onOpen(current, items.get(current));
+            listener.onOpen(current, items.get(current), holder.image);
         });
         holder.itemView.setOnLongClickListener(v -> {
             int current = holder.getBindingAdapterPosition();
@@ -413,6 +415,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
 
     @Override
     public void onViewRecycled(@NonNull Holder holder) {
+        GalleryMediaTransition.clearName(holder.image);
         Glide.with(holder.image).clear(holder.image);
         holder.morphPulse.animate().cancel();
         holder.morphPulse.setAlpha(0f);
