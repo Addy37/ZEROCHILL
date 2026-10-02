@@ -363,7 +363,9 @@ final class BunkrGalleryPagerAdapter
                                 if (holder.imageRequest != request || !item.url.equals(holder.boundUrl)) return true;
                                 holder.imageLoading = false;
                                 holder.itemView.post(() -> {
-                                    if (holder.imageRequest == request) updateState(holder, position);
+                                    if (holder.imageRequest == request) {
+                                        updateState(holder, holder.getBindingAdapterPosition());
+                                    }
                                 });
                                 if (!item.isImage() || resolved.isEmpty()) return false;
                                 holder.itemView.post(() -> {
@@ -392,7 +394,9 @@ final class BunkrGalleryPagerAdapter
                                 if (holder.imageRequest != request || !item.url.equals(holder.boundUrl)) return true;
                                 holder.imageLoading = false;
                                 holder.itemView.post(() -> {
-                                    if (holder.imageRequest == request) updateState(holder, position);
+                                    if (holder.imageRequest == request) {
+                                        updateState(holder, holder.getBindingAdapterPosition());
+                                    }
                                 });
                                 return false;
                             }
@@ -400,7 +404,7 @@ final class BunkrGalleryPagerAdapter
                 // Glide owns both resources during the preview/full-resolution handoff.
                 if (item.isImage() && !resolved.isEmpty() && !value(item.imageUrl).isEmpty()
                         && !preview.equals(item.imageUrl)) {
-                    imageRequest.thumbnail(Glide.with(holder.image)
+                    imageRequest = imageRequest.thumbnail(Glide.with(holder.image)
                             .load(withHeaders(item.imageUrl, imageReferer(item)))
                             .fitCenter().diskCacheStrategy(DiskCacheStrategy.ALL).dontAnimate());
                 }
