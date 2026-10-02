@@ -24,6 +24,10 @@ final class PhoneOrientationPolicy {
 
     static void applyBrowsingOrientation(Activity activity) {
         if (activity == null || activity.isFinishing()) return;
+        if (activity instanceof BunkrGalleryActivity) {
+            requestFullscreen(activity, ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR);
+            return;
+        }
         if (!isPhoneSized(activity)) {
             if (PORTRAIT_LOCKED_ACTIVITIES.remove(activity)) {
                 activity.setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED);
