@@ -76,7 +76,7 @@ final class GalleryMediaTransition {
         fadeIn.setStartDelay(75L);
         fadeIn.setDuration(145L);
         window.setEnterTransition(fadeIn);
-        window.setReturnTransition(new Fade(Fade.OUT).setDuration(110L));
+        // Keep the shared media visible continuously while it shrinks back to the grid.\n        // A separate viewer return fade caused a black frame before the shared-element return.\n        window.setReturnTransition(null);
     }
 
     static boolean canUse(Activity activity, View anchor, NativeContentItem item) {
