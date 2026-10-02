@@ -50,8 +50,8 @@ public class BottomNavigationDrawableRenderTest {
                 View item = nav.findViewById(id);
                 ImageView icon = item.findViewById(com.google.android.material.R.id.navigation_bar_item_icon_view);
                 TextView label = item.findViewById(id == ids[selected]
-                        ? com.google.android.material.R.id.navigation_bar_item_large_label
-                        : com.google.android.material.R.id.navigation_bar_item_small_label);
+                        ? com.google.android.material.R.id.navigation_bar_item_large_label_view
+                        : com.google.android.material.R.id.navigation_bar_item_small_label_view);
                 RectF content = mappedBounds(nav, icon);
                 RectF labelBounds = mappedBounds(nav, label);
                 content.union(labelBounds);
