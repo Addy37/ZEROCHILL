@@ -467,11 +467,10 @@ final class ZeroChillBottomNavigationView extends BottomNavigationView {
     }
 
     private void applyCollapseGutter(float progress) {
-        // Preserve Material's measured content height and its complete icon container.
-        // In the 64dp bar its icon/label union is 8..40dp before padding: an 8dp top
-        // share centers that group at 32dp. Release both shares continuously during
-        // collapse, leaving the approved 50dp endpoint unchanged. System clearance
-        // belongs to the shell, not this visual spacing.
+        // Preserve the approved production gesture geometry in the 64dp expanded bar:
+        // Material keeps the 24dp visual gutter below the menu. Release that gutter
+        // continuously during collapse so the approved 50dp compact endpoint remains
+        // unchanged. System clearance belongs to the shell, not this visual spacing.
         float p = clamp(progress, 0f, 1f);
         int expandedGutter = getResources().getDimensionPixelSize(R.dimen.zc_nav_menu_bottom_gutter);
         int expandedTop = getResources().getDimensionPixelSize(R.dimen.zc_nav_menu_top_gutter);
