@@ -2,8 +2,10 @@ package com.webapp.crazyshit;
 
 import android.content.Context;
 import android.graphics.Canvas;
+import android.os.Build;
 import android.util.AttributeSet;
 import android.view.View;
+import android.view.WindowInsets;
 import android.widget.LinearLayout;
 
 /** Draws a hardware-backed backdrop blur beneath the portrait navigation on Android 12+. */
@@ -39,6 +41,17 @@ final class FrostedNavigationLayout extends LinearLayout {
 
     View frostedNavigationViewForTest() {
         return navigationView;
+    }
+
+    /** The activity pads this shell using real insets; its floating nav is inside that area. */
+    @SuppressWarnings("deprecation")
+    WindowInsets navigationContentInsets(WindowInsets insets) {
+        if (Build.VERSION.SDK_INT >= 29) {
+            return insets.inset(insets.getSystemWindowInsetLeft(),
+                    insets.getSystemWindowInsetTop(), insets.getSystemWindowInsetRight(),
+                    insets.getSystemWindowInsetBottom());
+        }
+        return insets.replaceSystemWindowInsets(0, 0, 0, 0);
     }
 
     @Override

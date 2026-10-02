@@ -290,6 +290,52 @@ public class NavigationIaTest {
         controller.pause().stop().destroy();
     }
 
+    @Test public void threeButtonNavigationInsetIsOwnedByShellNotAppliedAgainToBottomNav() {
+        android.content.Context context = org.robolectric.RuntimeEnvironment.getApplication();
+        context.getSharedPreferences("app_prefs", 0).edit()
+                .putBoolean("access_notice_2_8_3_accepted", true).apply();
+
+        ActivityController<NativeMainActivity> controller =
+                Robolectric.buildActivity(NativeMainActivity.class)
+                        .create().start().resume().visible();
+        shadowOf(android.os.Looper.getMainLooper()).idle();
+
+        NativeMainActivity activity = controller.get();
+        View shell = ReflectionHelpers.getField(activity, "shell");
+        ZeroChillBottomNavigationView nav =
+                ReflectionHelpers.getField(activity, "bottomNavigation");
+
+        int baselineNavBottomPadding = nav.getPaddingBottom();
+        int baselineNavTopPadding = nav.getPaddingTop();
+        assertEquals(activity.getResources().getDimensionPixelSize(R.dimen.zc_nav_menu_bottom_gutter),
+                baselineNavTopPadding + baselineNavBottomPadding);
+        float density = activity.getResources().getDisplayMetrics().density;
+        int statusInset = Math.round(24 * density);
+        int navigationInset = Math.round(48 * density);
+        android.view.WindowInsets insets = new android.view.WindowInsets.Builder()
+                .setInsets(
+                        android.view.WindowInsets.Type.statusBars(),
+                        android.graphics.Insets.of(0, statusInset, 0, 0)
+                )
+                .setVisible(android.view.WindowInsets.Type.statusBars(), true)
+                .setInsets(
+                        android.view.WindowInsets.Type.navigationBars(),
+                        android.graphics.Insets.of(0, 0, 0, navigationInset)
+                )
+                .setVisible(android.view.WindowInsets.Type.navigationBars(), true)
+                .build();
+
+        shell.dispatchApplyWindowInsets(insets);
+        nav.dispatchApplyWindowInsets(insets);
+        shadowOf(android.os.Looper.getMainLooper()).idle();
+
+        assertEquals(navigationInset, shell.getPaddingBottom());
+        assertEquals(baselineNavBottomPadding, nav.getPaddingBottom());
+        assertEquals(baselineNavTopPadding, nav.getPaddingTop());
+
+        controller.pause().stop().destroy();
+    }
+
     @Test public void portraitChromePassesCannotResetCompactOrIntermediateNavGeometry() {
         android.content.Context context = org.robolectric.RuntimeEnvironment.getApplication();
         context.getSharedPreferences("app_prefs", 0).edit()

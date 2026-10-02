@@ -13,6 +13,8 @@
     <dimen name="zc_touch_target">48dp</dimen>
     <dimen name="zc_top_bar_height">56dp</dimen>
     <dimen name="zc_bottom_nav_height">64dp</dimen>
+    <dimen name="zc_nav_menu_bottom_gutter">24dp</dimen>
+    <dimen name="zc_nav_menu_top_gutter">8dp</dimen>
     <dimen name="zc_nav_icon">24dp</dimen>
     <dimen name="zc_nav_indicator_width">50dp</dimen>
     <dimen name="zc_nav_indicator_height">30dp</dimen>
