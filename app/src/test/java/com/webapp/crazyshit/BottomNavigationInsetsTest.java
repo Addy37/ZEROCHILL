@@ -161,7 +161,8 @@ public class BottomNavigationInsetsTest {
         assertEquals(dp(activity, 20), nav.getPaddingBottom());
         // Keep Material child geometry intact while applying the device-tuned 4dp
         // expanded offset. System clearance remains owned by the shell.
-        assertEquals(menuGeometry(production), menuGeometry(nav, nav.getPaddingTop()));
+        assertEquals(menuGeometry(production),
+                menuGeometry(nav, nav.getPaddingTop(), dp(activity, 2)));
         draw(nav);
         Rect item = bounds(production, production.findViewById(6));
         RectF expectedCapsule = new RectF(item.left + dp(activity, 4), dp(activity, 9),
@@ -301,23 +302,37 @@ public class BottomNavigationInsetsTest {
     }
 
     private static List<String> menuGeometry(BottomNavigationView nav) {
-        return menuGeometry(nav, 0);
+        return menuGeometry(nav, 0, 0);
     }
 
     private static List<String> menuGeometry(BottomNavigationView nav, int originY) {
+        return menuGeometry(nav, originY, 0);
+    }
+
+    private static List<String> menuGeometry(BottomNavigationView nav, int originY, int labelVisualOffset) {
         List<String> result = new ArrayList<>();
-        for (int id : IDS) collectGeometry(nav, nav.findViewById(id), result, originY);
+        for (int id : IDS) {
+            collectGeometry(nav, nav.findViewById(id), result, originY, labelVisualOffset);
+        }
         return result;
     }
 
-    private static void collectGeometry(ViewGroup nav, View view, List<String> result, int originY) {
+    private static void collectGeometry(ViewGroup nav, View view, List<String> result,
+            int originY, int labelVisualOffset) {
         Rect rect = bounds(nav, view);
         rect.offset(0, -originY);
+        float translationY = view.getTranslationY();
+        if (view instanceof TextView && labelVisualOffset != 0) {
+            rect.offset(0, -labelVisualOffset);
+            translationY -= labelVisualOffset;
+        }
         result.add(view.getClass().getSimpleName() + ":" + rect + ":"
-                + view.getTranslationY() + ":" + view.getAlpha() + ":" + view.getVisibility());
+                + translationY + ":" + view.getAlpha() + ":" + view.getVisibility());
         if (view instanceof ViewGroup) {
             ViewGroup group = (ViewGroup) view;
-            for (int i = 0; i < group.getChildCount(); i++) collectGeometry(nav, group.getChildAt(i), result, originY);
+            for (int i = 0; i < group.getChildCount(); i++) {
+                collectGeometry(nav, group.getChildAt(i), result, originY, labelVisualOffset);
+            }
         }
     }
 
