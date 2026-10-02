@@ -33,6 +33,79 @@ import static org.robolectric.Shadows.shadowOf;
 @Config(application = Application.class, sdk = 35, qualifiers = "w411dp-h891dp-xhdpi")
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 public class BottomNavigationDrawableRenderTest {
+    @Test public void reportExpandedVisualGapAgainstMaterialReference() throws Exception {
+        ActivityController<NativeMainActivity> controller = BottomNavigationInsetsTest.createActivity();
+        NativeMainActivity activity = controller.get();
+        ZeroChillBottomNavigationView nav = ReflectionHelpers.getField(activity, "bottomNavigation");
+        FrostedNavigationLayout shell = ReflectionHelpers.getField(activity, "shell");
+        float density = activity.getResources().getDisplayMetrics().density;
+        int[] ids = {2, 4, 3, 6};
+        com.google.android.material.bottomnavigation.BottomNavigationView reference =
+                new com.google.android.material.bottomnavigation.BottomNavigationView(activity);
+        reference.setMinimumHeight(0);
+        for (int id : ids) {
+            android.view.MenuItem item = nav.getMenu().findItem(id);
+            reference.getMenu().add(0, id, 0, item.getTitle()).setIcon(item.getIcon());
+        }
+        StableBottomNavigationController.styleBar(reference);
+        android.widget.FrameLayout root = ReflectionHelpers.getField(activity, "overlayRoot");
+        root.addView(reference, new android.widget.FrameLayout.LayoutParams(680, 128));
+        for (int selected : ids) {
+            nav.setSelectedItemId(selected);
+            reference.setSelectedItemId(selected);
+            shadowOf(android.os.Looper.getMainLooper()).idle();
+            shell.dispatchApplyWindowInsets(BottomNavigationInsetsTest.systemInsets(activity, 24));
+            BottomNavigationInsetsTest.layoutShell(shell);
+            for (int inset : new int[]{24, 18}) {
+                reference.dispatchApplyWindowInsets(BottomNavigationInsetsTest.systemInsets(activity, inset));
+                reference.measure(View.MeasureSpec.makeMeasureSpec(nav.getWidth(), View.MeasureSpec.EXACTLY),
+                        View.MeasureSpec.makeMeasureSpec(nav.getHeight(), View.MeasureSpec.EXACTLY));
+                reference.layout(0, 0, nav.getWidth(), nav.getHeight());
+                for (int id : ids) {
+                    printVisualGeometry(reference, id, "material-inset=" + inset + " selected=" + selected);
+                }
+            }
+            for (int id : ids) printVisualGeometry(nav, id, "beta selected=" + selected);
+        }
+        controller.pause().stop().destroy();
+    }
+
+    private static void printVisualGeometry(ViewGroup nav, int id, String state) {
+        View item = nav.findViewById(id);
+        ImageView icon = item.findViewById(com.google.android.material.R.id.navigation_bar_item_icon_view);
+        View container = item.findViewById(com.google.android.material.R.id.navigation_bar_item_icon_container);
+        android.graphics.Rect iconInk = inkBounds(nav, icon);
+        for (int labelId : new int[]{com.google.android.material.R.id.navigation_bar_item_small_label_view,
+                com.google.android.material.R.id.navigation_bar_item_large_label_view}) {
+            TextView label = item.findViewById(labelId);
+            RectF bounds = mappedBounds(nav, label);
+            android.graphics.Rect ink = inkBounds(nav, label);
+            android.graphics.Paint.FontMetrics fm = label.getPaint().getFontMetrics();
+            System.out.println("NAV_GAP " + state + " tab=" + id + " itemHeight=" + item.getHeight()
+                    + " icon=" + mappedBounds(nav, icon) + " container=" + mappedBounds(nav, container)
+                    + " iconInk=" + iconInk + " label=" + bounds + " visible=" + label.getVisibility()
+                    + " labelInk=" + ink + " gap=" + (ink.top - iconInk.bottom)
+                    + " baseline=" + (bounds.top + label.getBaseline()) + " scale=" + label.getScaleY()
+                    + " pivot=" + label.getPivotY() + " translation=" + label.getTranslationY()
+                    + " font=" + fm.top + "," + fm.ascent + "," + fm.descent + "," + fm.bottom
+                    + " includeFontPadding=" + label.getIncludeFontPadding());
+        }
+    }
+
+    private static android.graphics.Rect inkBounds(ViewGroup nav, View child) {
+        Bitmap bitmap = Bitmap.createBitmap(nav.getWidth(), nav.getHeight(), Bitmap.Config.ARGB_8888);
+        Canvas canvas = new Canvas(bitmap);
+        applyIconTransform(canvas, nav, child);
+        child.draw(canvas);
+        android.graphics.Rect bounds = new android.graphics.Rect();
+        for (int y = 0; y < bitmap.getHeight(); y++) for (int x = 0; x < bitmap.getWidth(); x++) {
+            if (Color.alpha(bitmap.getPixel(x, y)) >= 128) bounds.union(x, y, x + 1, y + 1);
+        }
+        bitmap.recycle();
+        assertFalse("empty ink " + child, bounds.isEmpty());
+        return bounds;
+    }
+
     @Test public void expandedContentMatchesV431ReferenceThroughLiveInsets() {
         ActivityController<NativeMainActivity> controller = BottomNavigationInsetsTest.createActivity();
         NativeMainActivity activity = controller.get();
