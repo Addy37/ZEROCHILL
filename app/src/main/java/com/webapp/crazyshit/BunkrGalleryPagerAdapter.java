@@ -492,7 +492,9 @@ final class BunkrGalleryPagerAdapter
         holder.play.setVisibility(item.isVideo() && !active ? View.VISIBLE : View.GONE);
         boolean showFailure = failed.contains(item.url) && !active;
         holder.failure.setVisibility(showFailure ? View.VISIBLE : View.GONE);
-        boolean openingPreview = sharedElementOpening && item.url.equals(sharedElementUrl);
+        boolean openingPreview = sharedElementOpening && item.url.equals(sharedElementUrl)
+                && (item.isVideo() || resolvedUrl(position).isEmpty()
+                || !resolvedUrl(position).equals(holder.requestedImageUrl) || holder.imageLoading);
         // Resolution may finish during expansion, but the thumbnail still awaits its full request.
         boolean awaitingFullImage = item.isImage() && !resolvedUrl(position).isEmpty()
                 && !resolvedUrl(position).equals(holder.requestedImageUrl);

@@ -349,6 +349,8 @@ public class GalleryMediaRevealTest {
 
     @Test public void sharedExpansionKeepsBlurEvenWhenResolutionHasFinished() {
         BunkrGalleryPagerAdapter adapter = adapter(NativeContentItem.KIND_IMAGE);
+        adapter.replace(Collections.singletonList(new NativeContentItem(NativeContentItem.KIND_IMAGE,
+                "Test", "test", "thumbnail", "", "", "", "")), Collections.emptyMap());
         adapter.setInitialSharedElement("test", "zerochill_gallery_media_test");
         adapter.setResolvedUrl(0, "full");
         BunkrGalleryPagerAdapter.Holder holder = holder(adapter);
@@ -356,6 +358,21 @@ public class GalleryMediaRevealTest {
         holder.imageLoading = false; // Cached thumbnail has arrived while full image is deferred.
         adapter.onBindViewHolder(holder, 0, Collections.singletonList(new Object()));
         assertTrue(holder.image.hasLoadingBlur());
+        assertNoSpinner(holder);
+        adapter.finishOpeningTransition();
+        adapter.onBindViewHolder(holder, 0, Collections.singletonList(new Object()));
+        assertTrue(holder.image.hasLoadingBlur()); // Full-request rebind has not run yet.
+        adapter.onViewRecycled(holder);
+    }
+
+    @Test public void readyFullImageIsNotReblurredBySharedExpansion() {
+        BunkrGalleryPagerAdapter adapter = adapter(NativeContentItem.KIND_IMAGE);
+        adapter.setInitialSharedElement("test", "zerochill_gallery_media_test");
+        adapter.setResolvedUrl(0, "full");
+        BunkrGalleryPagerAdapter.Holder holder = holder(adapter);
+        holder.imageLoading = false;
+        adapter.onBindViewHolder(holder, 0, Collections.singletonList(new Object()));
+        assertFalse(holder.image.hasLoadingBlur());
         assertNoSpinner(holder);
         adapter.onViewRecycled(holder);
     }
@@ -395,7 +412,7 @@ public class GalleryMediaRevealTest {
         BunkrGalleryPagerAdapter adapter = adapter(NativeContentItem.KIND_MEDIA);
         BunkrGalleryPagerAdapter.Holder holder = holder(adapter);
         holder.image.setImageDrawable(bitmap());
-        activity.setContentView(holder.itemView); // View-posted buffering delay needs an attached holder.
+        activity.setContentView(holder.itemView);
         assertTrue(holder.playerView.getVideoSurfaceView() instanceof TextureView);
         Player player = new IdlePlayer();
         adapter.activateVideo(0, player);
