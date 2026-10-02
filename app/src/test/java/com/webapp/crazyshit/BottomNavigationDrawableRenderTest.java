@@ -33,7 +33,7 @@ import static org.robolectric.Shadows.shadowOf;
 @Config(application = Application.class, sdk = 35, qualifiers = "w411dp-h891dp-xhdpi")
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 public class BottomNavigationDrawableRenderTest {
-    @Test public void expandedContentUsesDeviceTunedGutterThroughLiveInsets() {
+    @Test public void expandedContentMatchesV431ReferenceThroughLiveInsets() {
         ActivityController<NativeMainActivity> controller = BottomNavigationInsetsTest.createActivity();
         NativeMainActivity activity = controller.get();
         ZeroChillBottomNavigationView nav = ReflectionHelpers.getField(activity, "bottomNavigation");
@@ -47,42 +47,47 @@ public class BottomNavigationDrawableRenderTest {
             for (int inset : new int[]{24, 48, 80, 24}) {
                 shell.dispatchApplyWindowInsets(BottomNavigationInsetsTest.systemInsets(activity, inset));
                 BottomNavigationInsetsTest.layoutShell(shell);
-                Bitmap bitmap = Bitmap.createBitmap(nav.getWidth(), nav.getHeight(), Bitmap.Config.ARGB_8888);
+                Bitmap bitmap = Bitmap.createBitmap(
+                        nav.getWidth(), nav.getHeight(), Bitmap.Config.ARGB_8888);
                 nav.draw(new Canvas(bitmap));
+
+                assertEquals("v4.3.1 expanded top padding inset=" + inset,
+                        0, nav.getPaddingTop());
+                assertEquals("v4.3.1 reference gesture padding inset=" + inset,
+                        Math.round(24f * density), nav.getPaddingBottom());
+
                 for (int id : ids) {
                     View item = nav.findViewById(id);
-                    ImageView icon = item.findViewById(com.google.android.material.R.id.navigation_bar_item_icon_view);
+                    ImageView icon = item.findViewById(
+                            com.google.android.material.R.id.navigation_bar_item_icon_view);
                     TextView label = item.findViewById(id == ids[selected]
                             ? com.google.android.material.R.id.navigation_bar_item_large_label_view
                             : com.google.android.material.R.id.navigation_bar_item_small_label_view);
                     RectF iconBounds = mappedBounds(nav, icon);
                     RectF labelBounds = mappedBounds(nav, label);
-                    RectF content = new RectF(iconBounds);
-                    content.union(labelBounds);
-                    String state = "expanded selected=" + ids[selected] + " tab=" + id + " inset=" + inset;
-                    if (inset == 24) System.out.println("NAV_VERTICAL_MEASURE " + state
-                            + " nav=" + nav.getHeight() + " paddingTop=" + nav.getPaddingTop()
-                            + " paddingBottom=" + nav.getPaddingBottom() + " menu=" + ((View) item.getParent()).getHeight()
-                            + " item=" + item.getHeight() + " icon=" + iconBounds
-                            + " label=" + labelBounds + " baseline=" + (labelBounds.top + label.getBaseline())
-                            + " capsule=" + nav.selectedCapsuleBoundsForTest());
-                    assertEquals(state + " device-tuned expanded top gutter",
-                            Math.round(4f * density), nav.getPaddingTop());
-                    assertEquals(state + " device-tuned expanded bottom gutter",
-                            Math.round(20f * density), nav.getPaddingBottom());
+                    String state = "expanded selected=" + ids[selected]
+                            + " tab=" + id + " inset=" + inset;
+
                     assertEquals(state + " label visible", View.VISIBLE, label.getVisibility());
                     assertEquals(state + " label alpha", 1f, label.getAlpha(), 0f);
-                    assertEquals(state + " expanded label offset", 2f * density,
-                            label.getTranslationY(), 0.01f);
-                    assertTrue(state + " label below icon", labelBounds.top + label.getBaseline() > iconBounds.bottom);
-                    // Material keeps both small/large label views in the item hierarchy,
-                    // so compare the selected label's visible geometry rather than an
-                    // isolated pixel oracle that omits its sibling label state.
+                    assertEquals(state + " no custom label translation",
+                            0f, label.getTranslationY(), 0.01f);
+                    assertTrue(state + " label below icon",
+                            labelBounds.top + label.getBaseline() > iconBounds.bottom);
                 }
-                RectF capsule = nav.selectedCapsuleBoundsForTest();
-                assertEquals("expanded selected capsule centered inset=" + inset,
-                        nav.getHeight() / 2f, capsule.centerY(), 0.5f);
-                assertEquals("expanded capsule retains its design height", 46f * density, capsule.height(), 0.5f);
+
+                View selectedItem = nav.findViewById(ids[selected]);
+                RectF itemBounds = mappedBounds(nav, selectedItem);
+                RectF expectedCapsule = new RectF(
+                        itemBounds.left + 4f * density,
+                        Math.max(3f * density, itemBounds.top + 4f * density),
+                        itemBounds.right - 4f * density,
+                        Math.min(nav.getHeight() - 3f * density,
+                                itemBounds.bottom + 10f * density)
+                );
+                assertEquals("v4.3.1 selected capsule inset=" + inset,
+                        expectedCapsule, nav.selectedCapsuleBoundsForTest());
+
                 bitmap.recycle();
             }
         }
