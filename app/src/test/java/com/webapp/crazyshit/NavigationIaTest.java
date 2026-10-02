@@ -307,8 +307,9 @@ public class NavigationIaTest {
 
         int baselineNavBottomPadding = nav.getPaddingBottom();
         int baselineNavTopPadding = nav.getPaddingTop();
-        assertEquals(activity.getResources().getDimensionPixelSize(R.dimen.zc_nav_menu_bottom_gutter),
-                baselineNavTopPadding + baselineNavBottomPadding);
+        assertEquals(0, baselineNavTopPadding);
+        assertEquals(activity.getResources().getDimensionPixelSize(
+                R.dimen.zc_nav_reference_gesture_inset), baselineNavBottomPadding);
         float density = activity.getResources().getDisplayMetrics().density;
         int statusInset = Math.round(24 * density);
         int navigationInset = Math.round(48 * density);
