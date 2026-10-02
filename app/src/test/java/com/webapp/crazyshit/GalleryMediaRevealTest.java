@@ -41,7 +41,6 @@ import static org.junit.Assert.*;
 public class GalleryMediaRevealTest {
     private Activity activity;
     private ZoomableImageView image;
-    private ProgressBar progress;
     private GalleryMediaReveal reveal;
 
     @Before public void setUp() {
@@ -49,12 +48,9 @@ public class GalleryMediaRevealTest {
         setMotion(true);
         FrameLayout root = new FrameLayout(activity);
         image = new ZoomableImageView(activity);
-        progress = new ProgressBar(activity);
-        progress.setVisibility(View.GONE);
         root.addView(image);
-        root.addView(progress);
         activity.setContentView(root);
-        reveal = new GalleryMediaReveal(image, progress);
+        reveal = new GalleryMediaReveal(image);
     }
 
     @After public void tearDown() {
@@ -63,20 +59,13 @@ public class GalleryMediaRevealTest {
         activity.finish();
     }
 
-    @Test public void fastLoadsNeverFlashSpinnerAndSlowLoadsKeepOneDeadline() {
+    @Test public void loadingKeepsPreviewBlurredUntilCompletion() {
         reveal.setLoading(true);
-        idle(150);
-        assertEquals(View.GONE, progress.getVisibility());
+        idle(5000);
+        assertTrue(image.hasLoadingBlur());
         reveal.setLoading(false);
-        idle(300);
-        assertEquals(View.GONE, progress.getVisibility());
-        reveal.setLoading(true);
-        idle(150);
-        reveal.setLoading(true); // A status update must not restart the delay.
-        idle(80);
-        assertEquals(View.VISIBLE, progress.getVisibility());
-        reveal.setLoading(false);
-        assertEquals(View.GONE, progress.getVisibility());
+        assertFalse(image.hasLoadingBlur());
+        idle(5000);
     }
 
     @Test public void remoteImageCrossfadesPreviewAndReturnSettlesFinalDrawable() {
@@ -93,11 +82,15 @@ public class GalleryMediaRevealTest {
     @Test public void cachedImagesReducedMotionAndSharedExpansionSkipRevealAnimation() {
         for (DataSource source : new DataSource[]{DataSource.MEMORY_CACHE,
                 DataSource.RESOURCE_DISK_CACHE, DataSource.DATA_DISK_CACHE, DataSource.LOCAL}) {
-            assertFalse(reveal.imageTransition(source, true).transition(bitmap(), target()));
+            Drawable full = bitmap();
+            assertTrue(reveal.imageTransition(source, true).transition(full, target()));
+            assertSame(full, image.getDrawable());
         }
-        assertFalse(reveal.imageTransition(DataSource.REMOTE, false).transition(bitmap(), target()));
+        assertTrue(reveal.imageTransition(DataSource.REMOTE, false).transition(bitmap(), target()));
+        assertFalse(image.getDrawable() instanceof TransitionDrawable);
         setMotion(false);
-        assertFalse(reveal.imageTransition(DataSource.REMOTE, true).transition(bitmap(), target()));
+        assertTrue(reveal.imageTransition(DataSource.REMOTE, true).transition(bitmap(), target()));
+        assertFalse(image.getDrawable() instanceof TransitionDrawable);
     }
 
     @Test public void settlingCrossfadePreservesPinchZoomAndDisplayedBounds() {
@@ -150,12 +143,12 @@ public class GalleryMediaRevealTest {
         assertEquals(1f, image.getAlpha(), 0f);
     }
 
-    @Test public void cancelledLoadingCannotShowSpinnerOnRecycledOrExitedMedia() {
+    @Test public void cancelledLoadingRemovesBlurOnRecycledOrExitedMedia() {
         reveal.setLoading(true);
         idle(100);
         reveal.cancelAndSettle();
         idle(400);
-        assertEquals(View.GONE, progress.getVisibility());
+        assertFalse(image.hasLoadingBlur());
     }
 
     @Test public void loadingPayloadPreservesDrawableImageRequestAndZoom() {
@@ -174,7 +167,7 @@ public class GalleryMediaRevealTest {
         adapter.setLoading(0, false);
         adapter.onBindViewHolder(holder, 0, Collections.singletonList(new Object()));
         idle(400);
-        assertEquals(View.GONE, holder.progress.getVisibility());
+        assertNoSpinner(holder);
         adapter.onViewRecycled(holder);
     }
 
@@ -354,15 +347,46 @@ public class GalleryMediaRevealTest {
         assertFalse(image.hasLoadingBlur());
     }
 
-    @Test public void sharedMotionSkipsBlurAndKeepsOriginalSpinnerDeadline() {
-        reveal.setLoading(true, false);
-        idle(150);
-        assertFalse(image.hasLoadingBlur());
-        reveal.setLoading(true, true);
+    @Test public void sharedExpansionKeepsBlurEvenWhenResolutionHasFinished() {
+        BunkrGalleryPagerAdapter adapter = adapter(NativeContentItem.KIND_IMAGE);
+        adapter.setInitialSharedElement("test", "zerochill_gallery_media_test");
+        adapter.setResolvedUrl(0, "full");
+        BunkrGalleryPagerAdapter.Holder holder = holder(adapter);
+        assertTrue(holder.image.hasLoadingBlur());
+        holder.imageLoading = false; // Cached thumbnail has arrived while full image is deferred.
+        adapter.onBindViewHolder(holder, 0, Collections.singletonList(new Object()));
+        assertTrue(holder.image.hasLoadingBlur());
+        assertNoSpinner(holder);
+        adapter.onViewRecycled(holder);
+    }
+
+    @Test public void thumbnailDeliveryNeverRemovesLoadingBlur() {
+        image.setImageDrawable(bitmap());
+        reveal.setLoading(true);
+        assertFalse(reveal.imageTransition(DataSource.MEMORY_CACHE, true, false)
+                .transition(bitmap(), target()));
         assertTrue(image.hasLoadingBlur());
-        idle(80);
-        assertEquals(View.VISIBLE, progress.getVisibility());
-        reveal.cancelAndSettle();
+    }
+
+    @Test public void sharpResourceIsInstalledBeforeBlurIsRemoved() {
+        image.layout(0, 0, 720, 1280);
+        image.setImageDrawable(bitmap());
+        reveal.setLoading(true);
+        Drawable full = bitmap();
+        Transition.ViewAdapter checked = new Transition.ViewAdapter() {
+            @Override public View getView() { return image; }
+            @Override public Drawable getCurrentDrawable() { return image.getDrawable(); }
+            @Override public void setDrawable(Drawable drawable) {
+                assertTrue(image.hasLoadingBlur());
+                image.setImageDrawable(drawable);
+            }
+        };
+        assertTrue(reveal.imageTransition(DataSource.MEMORY_CACHE, true).transition(full, checked));
+        assertSame(full, image.getDrawable());
+        assertFalse(image.hasLoadingBlur());
+        reveal.setLoading(true);
+        assertTrue(reveal.imageTransition(DataSource.REMOTE, true).transition(bitmap(), checked));
+        assertTrue(image.getDrawable() instanceof GalleryFitCrossFade);
         assertFalse(image.hasLoadingBlur());
     }
 
@@ -388,9 +412,16 @@ public class GalleryMediaRevealTest {
         adapter.onBindViewHolder(holder, 0, Collections.singletonList(new Object()));
         idle(300);
         assertEquals(View.GONE, holder.image.getVisibility());
-        assertEquals(View.VISIBLE, holder.progress.getVisibility());
+        assertNoSpinner(holder);
         adapter.onViewRecycled(holder);
         player.release();
+    }
+
+    private void assertNoSpinner(BunkrGalleryPagerAdapter.Holder holder) {
+        FrameLayout root = (FrameLayout) holder.itemView;
+        for (int i = 0; i < root.getChildCount(); i++) {
+            assertFalse(root.getChildAt(i) instanceof ProgressBar);
+        }
     }
 
     private void assertFitted(ZoomableImageView view, Drawable drawable,

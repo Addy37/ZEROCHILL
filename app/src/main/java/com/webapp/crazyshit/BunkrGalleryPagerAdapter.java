@@ -11,7 +11,6 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.webkit.CookieManager;
 import android.widget.FrameLayout;
-import android.widget.ProgressBar;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
@@ -263,7 +262,6 @@ final class BunkrGalleryPagerAdapter
         holder.playerView.setPlayer(null);
         holder.playerView.setVisibility(View.GONE);
         holder.play.setVisibility(View.GONE);
-        holder.progress.setVisibility(View.GONE);
         holder.failure.setVisibility(View.GONE);
         return holder.image;
     }
@@ -309,15 +307,6 @@ final class BunkrGalleryPagerAdapter
         playParams.gravity = Gravity.CENTER;
         root.addView(play, playParams);
 
-        ProgressBar progress = new ProgressBar(parent.getContext());
-        progress.setVisibility(View.GONE);
-        FrameLayout.LayoutParams progressParams = new FrameLayout.LayoutParams(
-                dp(parent, 48),
-                dp(parent, 48)
-        );
-        progressParams.gravity = Gravity.CENTER;
-        root.addView(progress, progressParams);
-
         TextView failure = new TextView(parent.getContext());
         failure.setText("Couldn't load this item.\nTap to retry or use the menu to open its page.");
         failure.setTextColor(Color.rgb(205, 205, 212));
@@ -328,7 +317,7 @@ final class BunkrGalleryPagerAdapter
         failure.setVisibility(View.GONE);
         root.addView(failure, new FrameLayout.LayoutParams(-1, -1));
 
-        return new Holder(root, image, playerView, play, progress, failure);
+        return new Holder(root, image, playerView, play, failure);
     }
 
     @Override
@@ -503,10 +492,14 @@ final class BunkrGalleryPagerAdapter
         holder.play.setVisibility(item.isVideo() && !active ? View.VISIBLE : View.GONE);
         boolean showFailure = failed.contains(item.url) && !active;
         holder.failure.setVisibility(showFailure ? View.VISIBLE : View.GONE);
-        holder.reveal.setLoading(!revealsStopped && !showFailure && (loading.contains(item.url)
+        boolean openingPreview = sharedElementOpening && item.url.equals(sharedElementUrl);
+        // Resolution may finish during expansion, but the thumbnail still awaits its full request.
+        boolean awaitingFullImage = item.isImage() && !resolvedUrl(position).isEmpty()
+                && !resolvedUrl(position).equals(holder.requestedImageUrl);
+        holder.reveal.setLoading(!revealsStopped && !showFailure && (openingPreview
+                || awaitingFullImage || loading.contains(item.url)
                 || (!active && holder.imageLoading)
-                || (active && (!activeVideoFrameRendered || activeVideoBuffering))),
-                !(sharedElementOpening && item.url.equals(sharedElementUrl)));
+                || (active && (!activeVideoFrameRendered || activeVideoBuffering))));
     }
 
     @Override public void onAttachedToRecyclerView(@NonNull RecyclerView recyclerView) {
@@ -593,7 +586,6 @@ final class BunkrGalleryPagerAdapter
         final ZoomableImageView image;
         final PlayerView playerView;
         final TextView play;
-        final ProgressBar progress;
         final TextView failure;
         final GalleryMediaReveal reveal;
         String boundUrl = "";
@@ -606,16 +598,14 @@ final class BunkrGalleryPagerAdapter
                 ZoomableImageView image,
                 PlayerView playerView,
                 TextView play,
-                ProgressBar progress,
                 TextView failure
         ) {
             super(root);
             this.image = image;
             this.playerView = playerView;
             this.play = play;
-            this.progress = progress;
             this.failure = failure;
-            this.reveal = new GalleryMediaReveal(image, progress);
+            this.reveal = new GalleryMediaReveal(image);
         }
     }
 }

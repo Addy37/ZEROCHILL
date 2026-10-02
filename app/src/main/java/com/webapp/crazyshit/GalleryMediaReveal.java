@@ -10,36 +10,19 @@ import com.bumptech.glide.request.transition.Transition;
 
 /** Loading motion for one pager holder, independent of Activity shared-element motion. */
 final class GalleryMediaReveal {
-    static final long SPINNER_DELAY_MS = 220L;
     static final int IMAGE_FADE_MS = 190;
     static final long POSTER_FADE_MS = 150L;
 
     private final ZoomableImageView image;
-    private final View progress;
-    private boolean waiting;
     private boolean videoRevealed;
-    private final Runnable showProgress;
 
-    GalleryMediaReveal(ZoomableImageView image, View progress) {
+    GalleryMediaReveal(ZoomableImageView image) {
         this.image = image;
-        this.progress = progress;
-        showProgress = () -> {
-            if (waiting) progress.setVisibility(View.VISIBLE);
-        };
     }
 
     void setLoading(boolean loading) {
-        setLoading(loading, true);
-    }
-
-    void setLoading(boolean loading, boolean blurAllowed) {
-        // A revealed video keeps its last frame during later buffering.
-        if (!videoRevealed) image.setLoadingBlur(loading && blurAllowed);
-        if (waiting == loading) return;
-        waiting = loading;
-        progress.removeCallbacks(showProgress);
-        if (loading) progress.postDelayed(showProgress, SPINNER_DELAY_MS);
-        else progress.setVisibility(View.GONE);
+        // The preview itself carries loading. A revealed video retains its last frame.
+        if (!videoRevealed) image.setLoadingBlur(loading);
     }
 
     Transition<Drawable> imageTransition(DataSource source, boolean allowMotion) {
@@ -54,12 +37,17 @@ final class GalleryMediaReveal {
         return (resource, target) -> {
             Drawable preview = image.hasLoadingBlur() && animate
                     ? image.loadingPreviewSnapshot() : target.getCurrentDrawable();
-            image.setLoadingBlur(false);
             if (!animate || preview == null || resource.getIntrinsicWidth() <= 0
-                    || resource.getIntrinsicHeight() <= 0) return false;
+                    || resource.getIntrinsicHeight() <= 0) {
+                // Install sharp pixels before removing blur, including cache/reduced-motion hits.
+                target.setDrawable(resource);
+                image.setLoadingBlur(false);
+                return true;
+            }
             GalleryFitCrossFade fade = new GalleryFitCrossFade(preview, resource,
                     image.getWidth(), image.getHeight());
             target.setDrawable(fade);
+            image.setLoadingBlur(false);
             fade.startTransition(IMAGE_FADE_MS);
             return true;
         };
@@ -94,9 +82,6 @@ final class GalleryMediaReveal {
     }
 
     void cancelAndSettle() {
-        waiting = false;
-        progress.removeCallbacks(showProgress);
-        progress.setVisibility(View.GONE);
         image.animate().cancel();
         image.animate().withEndAction(null);
         image.setAlpha(1f);
