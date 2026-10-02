@@ -660,7 +660,12 @@ public final class BunkrGalleryActivity extends Activity {
                 initialUrl,
                 item
         )) return;
-        if (sharedElementPending) {
+        if (shouldDelayInitialAutoplay(
+                sharedElementPending,
+                autoplayInitialSelection,
+                initialUrl,
+                item
+        )) {
             pendingTransitionAutoplayPosition = position;
             return;
         }
@@ -680,6 +685,16 @@ public final class BunkrGalleryActivity extends Activity {
                 && initialUrl != null
                 && !initialUrl.isEmpty()
                 && initialUrl.equals(item.url);
+    }
+
+    static boolean shouldDelayInitialAutoplay(
+            boolean sharedTransitionPending,
+            boolean requested,
+            String initialUrl,
+            NativeContentItem item
+    ) {
+        return sharedTransitionPending
+                && shouldAutoplayInitialSelection(requested, initialUrl, item);
     }
 
     private void onMediaTap(int position, NativeContentItem item) {
