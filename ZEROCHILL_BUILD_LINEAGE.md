@@ -4,11 +4,13 @@ This file identifies the current approved ZEROCHILL product baseline for test AP
 
 - Source-of-truth branch: `rebrand/zerochill`
 - Integration branch: `integration/zerochill-current`
-- Approved product baseline commit: `afae8040f4e039375d434c8f08bf3b1b689212b0`
-- Latest production release source commit: `afae8040f4e039375d434c8f08bf3b1b689212b0`
-- Device-tested APK source commit: `64f25ea2e9c6edca87faa6399a2d2c49e7b9a954`
-- Latest release PR: #255
-- Approval date: 2026-10-01
+- Approved product baseline commit: `fde995d75885a3715d41e29b705939b37e1caaf1`
+- Latest production release source commit: `fde995d75885a3715d41e29b705939b37e1caaf1`
+- Device-tested APK source commit: `c1ec6ca25a15cc4e999d6ebc1b9796f427acef77`
+- Latest release PR: #263
+- Approval date: 2026-10-02
+
+ZeroChill v4.3.2 was published from `fde995d` after release PR #263. This maintenance polish release carries the device-approved floating-navbar inset/alignment fixes from PRs #257 and #258, the OnlyFap gallery expansion, Android rotation-policy, blurred-preview/media-fitting, and electric-blue video-loading work from PRs #259 through #261, and the app-wide scroll-aware thumbnail/avatar fade from PR #262. The production release workflow rebuilt and signed `ZeroChill.apk`, verified package `com.addy37.crazyshitunofficial`, production signing identity, version code `4003002`, and upgrade compatibility from v4.3.1, then published tag `v4.3.2` with `SHA256SUMS.txt`. The published APK SHA-256 is `3a2bfeca1b28b48566b3b71efdb24c98d8ca3530aa536f15bed8fdd7fc28cb0b`. The final device-tested functional tree came from `c1ec6ca`; the release PR changed only release metadata. Build Android APK #1739 and Signed Upgrade Candidate #631 passed before publication, and production release workflow #117 completed successfully. Earlier gallery/animation performance jobs that lost their emulator remain documented as validation limitations; physical-device tests were approved before merge. The previous v4.3.1 release source is preserved at `checkpoint/zerochill-approved-afae804`.
 
 ZeroChill v4.3.1 was published from `afae804` after release PR #255. This maintenance release adds ShitTok comment counts, the compact in-app update experience, the merged OnlyFap favorite-gallery fix, and the device-approved Shows manual fullscreen/landscape behavior from PRs #250 through #254. The production release workflow rebuilt and signed `ZeroChill.apk`, verified package `com.addy37.crazyshitunofficial`, production signing identity, version code `4003001`, and upgrade compatibility from v4.3.0, then published tag `v4.3.1` with `SHA256SUMS.txt`. The published APK SHA-256 is `b73c9313e69f0229b222b41ce8cab826109424098f28efc56598a70d3c2a5142`. The final functional device-tested tree came from `64f25ea`; the release PR then changed only release metadata. Build Android APK #1667 and Signed Upgrade Candidate #568 passed before publication, and production release workflow #116 completed successfully. The previous v4.3.0 release source is preserved at `checkpoint/zerochill-approved-794b5d7`.
 
