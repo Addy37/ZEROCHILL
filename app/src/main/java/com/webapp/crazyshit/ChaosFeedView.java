@@ -2144,6 +2144,7 @@ public final class ChaosFeedView extends FrameLayout {
                         .circleCrop()
                         .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
                         .dontAnimate()
+                        .transition(ThumbnailFades.avatar())
                         .placeholder(R.drawable.ic_more_account)
                         .error(R.drawable.ic_more_account)
                         .into(creatorAvatar);

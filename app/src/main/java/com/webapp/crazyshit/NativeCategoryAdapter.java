@@ -67,9 +67,6 @@ public final class NativeCategoryAdapter extends RecyclerView.Adapter<NativeCate
     private static final float ASPECT_PORTRAIT = 4f / 5f;
     private static final float ASPECT_SQUARE = 1f;
 
-    private static final DrawableCrossFadeFactory CREATOR_CROSS_FADE =
-            new DrawableCrossFadeFactory.Builder(260).setCrossFadeEnabled(true).build();
-
     public interface Listener {
         void onOpen(NativeContentItem item);
     }
@@ -445,6 +442,7 @@ public final class NativeCategoryAdapter extends RecyclerView.Adapter<NativeCate
                     .diskCacheStrategy(DiskCacheStrategy.NONE)
                     .skipMemoryCache(false)
                     .dontAnimate()
+                    .transition(ThumbnailFades.thumbnail())
                     .centerCrop()
                     .placeholder(new ColorDrawable(Color.rgb(31, 31, 35)))
                     .error(new ColorDrawable(Color.rgb(31, 31, 35)))
@@ -472,6 +470,7 @@ public final class NativeCategoryAdapter extends RecyclerView.Adapter<NativeCate
                 .load(remoteImage(imageUrl.trim(), artwork == null ? item.url : artwork.referer))
                 .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
                 .dontAnimate()
+                .transition(ThumbnailFades.thumbnail())
                 .centerCrop()
                 .placeholder(new ColorDrawable(Color.rgb(31, 31, 35)))
                 .error(new ColorDrawable(Color.rgb(31, 31, 35)))
@@ -542,7 +541,7 @@ public final class NativeCategoryAdapter extends RecyclerView.Adapter<NativeCate
                     }
                 });
         if (ZeroChillMotion.animationsEnabled(holder.image.getContext())) {
-            foreground = foreground.transition(DrawableTransitionOptions.with(CREATOR_CROSS_FADE));
+            foreground = foreground.transition(ThumbnailFades.hero());
         } else {
             foreground = foreground.dontAnimate();
         }
@@ -559,7 +558,7 @@ public final class NativeCategoryAdapter extends RecyclerView.Adapter<NativeCate
                         : backdropPlaceholder)
                 .error(new ColorDrawable(Color.TRANSPARENT));
         if (ZeroChillMotion.animationsEnabled(holder.backdrop.getContext())) {
-            backdrop = backdrop.transition(DrawableTransitionOptions.with(CREATOR_CROSS_FADE));
+            backdrop = backdrop.transition(ThumbnailFades.hero());
         } else {
             backdrop = backdrop.dontAnimate();
         }

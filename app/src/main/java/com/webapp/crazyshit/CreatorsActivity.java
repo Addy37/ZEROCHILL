@@ -437,6 +437,7 @@ public final class CreatorsActivity extends Activity {
                     Glide.with(holder.avatar)
                             .load(url)
                             .dontAnimate()
+                            .transition(ThumbnailFades.avatar())
                             .placeholder(new ColorDrawable(Color.rgb(19, 23, 27)))
                             .error(R.drawable.ic_more_account)
                             .into(holder.avatar);
@@ -446,6 +447,7 @@ public final class CreatorsActivity extends Activity {
                                     .load(url)
                                     .circleCrop()
                                     .dontAnimate()
+                                    .transition(ThumbnailFades.avatar())
                                     .placeholder(new ColorDrawable(Color.rgb(19, 23, 27)))
                                     .error(R.drawable.ic_more_account);
                     Glide.with(holder.avatar)
@@ -453,6 +455,7 @@ public final class CreatorsActivity extends Activity {
                             .onlyRetrieveFromCache(true)
                             .circleCrop()
                             .dontAnimate()
+                            .transition(ThumbnailFades.avatar())
                             .placeholder(new ColorDrawable(Color.rgb(19, 23, 27)))
                             .error(network)
                             .into(holder.avatar);

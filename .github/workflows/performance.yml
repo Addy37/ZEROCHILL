@@ -30,6 +30,10 @@ jobs:
             test: com.webapp.crazyshit.baselineprofile.MainFlowsBenchmark#showsScroll
             rules: Macrobenchmark
             task: :baselineprofile:connectedBenchmarkReleaseAndroidTest
+          - flow: shows-scroll-motion
+            test: com.webapp.crazyshit.baselineprofile.MainFlowsBenchmark#showsScroll
+            rules: Macrobenchmark
+            task: :baselineprofile:connectedBenchmarkReleaseAndroidTest
           - flow: chaos-scroll
             test: com.webapp.crazyshit.baselineprofile.MainFlowsBenchmark#chaosScroll
             rules: Macrobenchmark
@@ -77,7 +81,7 @@ jobs:
           api-level: 35
           arch: x86_64
           profile: pixel_6
-          disable-animations: true
+          disable-animations: ${{ matrix.flow != 'shows-scroll-motion' }}
           disk-size: 4096M
           script: >-
             gradle --no-daemon ${{ matrix.task }}

@@ -154,7 +154,7 @@ public final class ZeroChillSocialSettingsActivity extends Activity {
             avatar.setScaleType(ImageView.ScaleType.CENTER_CROP);
             String url = ZeroChillAccountRepository.avatarUrl(profile.avatarPath);
             if (url.isEmpty()) avatar.setImageResource(R.drawable.ic_more_account);
-            else Glide.with(avatar).load(url).circleCrop().into(avatar);
+            else Glide.with(avatar).load(url).circleCrop().transition(ThumbnailFades.avatar()).into(avatar);
             avatar.setBackground(circle());
             avatar.setClipToOutline(true);
             avatar.setOutlineProvider(new android.view.ViewOutlineProvider() {

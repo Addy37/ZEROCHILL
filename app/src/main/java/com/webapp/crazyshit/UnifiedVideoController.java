@@ -1223,6 +1223,7 @@ final class UnifiedVideoController {
                     .centerCrop()
                     .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
                     .dontAnimate()
+                    .transition(ThumbnailFades.thumbnail())
                     .placeholder(new ColorDrawable(Color.rgb(18, 18, 21)))
                     .error(new ColorDrawable(Color.rgb(18, 18, 21)))
                     .into(view);

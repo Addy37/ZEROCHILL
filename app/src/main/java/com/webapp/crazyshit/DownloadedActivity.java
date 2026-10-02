@@ -424,6 +424,7 @@ public final class DownloadedActivity extends Activity {
                     .load(entry.imageUrl)
                     .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
                     .centerCrop()
+                    .transition(ThumbnailFades.thumbnail())
                     .into(image);
         } else {
             image.setImageResource(R.drawable.ic_action_download);

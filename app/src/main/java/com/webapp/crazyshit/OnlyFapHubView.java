@@ -1045,7 +1045,7 @@ final class OnlyFapHubView extends FrameLayout {
                     .load(remoteImage(imageUrl, referer))
                     .centerCrop()
                     .diskCacheStrategy(DiskCacheStrategy.ALL)
-                    .transition(DrawableTransitionOptions.withCrossFade(220))
+                    .transition(ThumbnailFades.hero())
                     .placeholder(new ColorDrawable(Color.rgb(13, 16, 19)))
                     .error(new ColorDrawable(Color.rgb(13, 16, 19)))
                     .listener(new RequestListener<Drawable>() {
@@ -1226,6 +1226,7 @@ final class OnlyFapHubView extends FrameLayout {
                             ))
                             .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
                             .dontAnimate()
+                            .transition(ThumbnailFades.avatar())
                             .placeholder(new ColorDrawable(
                                     ZeroChillUi.color(getContext(), R.color.zc_surface_pressed)))
                             .error(R.drawable.ic_more_account);
@@ -1587,6 +1588,7 @@ final class OnlyFapHubView extends FrameLayout {
                         .centerCrop()
                         .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
                         .dontAnimate()
+                        .transition(ThumbnailFades.thumbnail())
                         .placeholder(new ColorDrawable(
                                 ZeroChillUi.color(
                                         image.getContext(),

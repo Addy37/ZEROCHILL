@@ -51,7 +51,7 @@ final class SocialActivityBanner implements SocialActivityCoordinator.Presenter 
         row.addView(avatar, new LinearLayout.LayoutParams(dp(38), dp(38)));
         avatar.setImageResource(R.drawable.ic_more_account);
         if (!entry.avatarUrl.isEmpty()) Glide.with(avatar).load(entry.avatarUrl).circleCrop()
-                .transition(com.bumptech.glide.load.resource.drawable.DrawableTransitionOptions.withCrossFade(140))
+                .transition(ThumbnailFades.avatar())
                 .placeholder(R.drawable.ic_more_account).error(R.drawable.ic_more_account).into(avatar);
         LinearLayout copy = new LinearLayout(activity);
         copy.setOrientation(LinearLayout.VERTICAL);
