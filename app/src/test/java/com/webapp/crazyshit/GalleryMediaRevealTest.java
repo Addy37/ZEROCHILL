@@ -40,19 +40,21 @@ import static org.junit.Assert.*;
 @Config(application = Application.class, sdk = 35)
 public class GalleryMediaRevealTest {
     private Activity activity;
+    private org.robolectric.android.controller.ActivityController<Activity> activityController;
     private ZoomableImageView image;
     private GalleryVideoLoadingView dots;
     private GalleryMediaReveal reveal;
 
     @Before public void setUp() {
-        activity = Robolectric.buildActivity(Activity.class).setup().get();
+        activityController = Robolectric.buildActivity(Activity.class).setup();
+        activity = activityController.get();
         setMotion(true);
         FrameLayout root = new FrameLayout(activity);
         image = new ZoomableImageView(activity);
         root.addView(image);
         dots = new GalleryVideoLoadingView(activity);
         root.addView(dots, new FrameLayout.LayoutParams(60, 32));
-        activity.setContentView(root);
+        attachContent(root);
         reveal = new GalleryMediaReveal(image, dots);
     }
 
@@ -415,7 +417,7 @@ public class GalleryMediaRevealTest {
         BunkrGalleryPagerAdapter adapter = adapter(NativeContentItem.KIND_MEDIA);
         BunkrGalleryPagerAdapter.Holder holder = holder(adapter);
         holder.image.setImageDrawable(bitmap());
-        activity.setContentView(holder.itemView);
+        attachContent(holder.itemView);
         assertTrue(holder.playerView.getVideoSurfaceView() instanceof TextureView);
         Player player = new IdlePlayer();
         adapter.activateVideo(0, player);
@@ -443,7 +445,10 @@ public class GalleryMediaRevealTest {
         assertEquals(View.GONE, dots.getVisibility());
         reveal.setVideoLoading(true);
         idle(80);
-        assertEquals(View.VISIBLE, dots.getVisibility());
+        assertEquals("attached=" + dots.isAttachedToWindow() + " window=" + dots.getWindowVisibility()
+                + " parentShown=" + ((View) dots.getParent()).isShown()
+                + " waiting=" + ReflectionHelpers.getField(dots, "waiting"),
+                View.VISIBLE, dots.getVisibility());
         assertNotNull(ReflectionHelpers.getField(dots, "bounce"));
         reveal.setVideoLoading(false);
         idle(250);
@@ -509,7 +514,7 @@ public class GalleryMediaRevealTest {
         setMotion(false);
         BunkrGalleryPagerAdapter adapter = adapter(NativeContentItem.KIND_MEDIA);
         BunkrGalleryPagerAdapter.Holder holder = holder(adapter);
-        activity.setContentView(holder.itemView);
+        attachContent(holder.itemView);
         assertEquals(View.VISIBLE, holder.play.getVisibility());
         assertEquals(View.GONE, holder.loadingDots.getVisibility());
         adapter.setLoading(0, true);
@@ -542,7 +547,7 @@ public class GalleryMediaRevealTest {
     @Test public void photosNeverShowVideoDotsAndRecyclingCancelsVideoDelay() {
         BunkrGalleryPagerAdapter adapter = adapter(NativeContentItem.KIND_IMAGE);
         BunkrGalleryPagerAdapter.Holder holder = holder(adapter);
-        activity.setContentView(holder.itemView);
+        attachContent(holder.itemView);
         adapter.setLoading(0, true);
         adapter.onBindViewHolder(holder, 0, Collections.singletonList(new Object()));
         idle(1000);
@@ -550,7 +555,7 @@ public class GalleryMediaRevealTest {
         adapter.onViewRecycled(holder);
         adapter = adapter(NativeContentItem.KIND_MEDIA);
         holder = holder(adapter);
-        activity.setContentView(holder.itemView);
+        attachContent(holder.itemView);
         adapter.setLoading(0, true);
         adapter.onBindViewHolder(holder, 0, Collections.singletonList(new Object()));
         idle(100);
@@ -587,6 +592,11 @@ public class GalleryMediaRevealTest {
         try (java.io.FileOutputStream stream = new java.io.FileOutputStream(out)) {
             assertTrue(strip.compress(Bitmap.CompressFormat.PNG, 100, stream));
         }
+    }
+
+    private void attachContent(View content) {
+        activity.setContentView(content);
+        activityController.visible();
     }
 
     private void assertNoSpinner(BunkrGalleryPagerAdapter.Holder holder) {
