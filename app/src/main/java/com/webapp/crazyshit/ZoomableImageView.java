@@ -4,7 +4,11 @@ import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
 import android.animation.ValueAnimator;
 import android.content.Context;
+import android.graphics.Bitmap;
+import android.graphics.Canvas;
 import android.graphics.Matrix;
+import android.graphics.Paint;
+import android.graphics.Rect;
 import android.graphics.RectF;
 import android.graphics.drawable.Drawable;
 import android.view.GestureDetector;
@@ -30,6 +34,10 @@ final class ZoomableImageView extends ImageView {
     private float lastY;
     private boolean zoomEnabled = true;
     private ValueAnimator zoomAnimator;
+    private boolean loadingBlur;
+    private Bitmap blurredPreview;
+    private final Paint previewPaint = new Paint(Paint.FILTER_BITMAP_FLAG);
+    private final Rect previewBounds = new Rect();
 
     ZoomableImageView(Context context) {
         super(context);
@@ -110,14 +118,79 @@ final class ZoomableImageView extends ImageView {
     @Override
     public void setImageDrawable(Drawable drawable) {
         super.setImageDrawable(drawable);
-        if (zoomMatrix != null) post(this::resetZoom);
+        // Fit before the first draw, rather than showing new pixels with the old matrix.
+        if (zoomMatrix != null) resetZoom();
+    }
+
+    /** Finish a loading crossfade without changing the user's current displayed bounds. */
+    void setImageDrawablePreservingZoom(Drawable drawable) {
+        Drawable previous = getDrawable();
+        int oldWidth = previous == null ? 0 : previous.getIntrinsicWidth();
+        int oldHeight = previous == null ? 0 : previous.getIntrinsicHeight();
+        super.setImageDrawable(drawable);
+        if (drawable != null && oldWidth > 0 && oldHeight > 0
+                && drawable.getIntrinsicWidth() > 0 && drawable.getIntrinsicHeight() > 0) {
+            zoomMatrix.preScale((float) oldWidth / drawable.getIntrinsicWidth(),
+                    (float) oldHeight / drawable.getIntrinsicHeight());
+        }
+        setImageMatrix(zoomMatrix);
     }
 
     @Override
     protected void onSizeChanged(int width, int height, int oldWidth, int oldHeight) {
         super.onSizeChanged(width, height, oldWidth, oldHeight);
-        post(this::resetZoom);
+        if (getDrawable() instanceof GalleryFitCrossFade) {
+            ((GalleryFitCrossFade) getDrawable()).setViewport(
+                    width - getPaddingLeft() - getPaddingRight(),
+                    height - getPaddingTop() - getPaddingBottom());
+        }
+        resetZoom();
     }
+
+    void setLoadingBlur(boolean enabled) {
+        if (loadingBlur == enabled) return;
+        loadingBlur = enabled;
+        blurredPreview = null;
+        GalleryPreviewBlur.applyHardware(this, enabled);
+        invalidate();
+    }
+
+    boolean hasLoadingBlur() { return loadingBlur; }
+
+    Drawable loadingPreviewSnapshot() {
+        Bitmap snapshot = GalleryPreviewBlur.snapshot(this, this::drawUnblurredImage);
+        return snapshot == null ? null : new android.graphics.drawable.BitmapDrawable(
+                getResources(), snapshot);
+    }
+
+    Drawable ownedPreviewSnapshot() {
+        Bitmap snapshot = GalleryPreviewBlur.snapshot(this, this::drawUnblurredImage, false);
+        return snapshot == null ? null : new android.graphics.drawable.BitmapDrawable(
+                getResources(), snapshot);
+    }
+
+    @Override public void setImageMatrix(Matrix matrix) {
+        blurredPreview = null;
+        super.setImageMatrix(matrix);
+    }
+
+    @Override protected void onDraw(Canvas canvas) {
+        if (loadingBlur && android.os.Build.VERSION.SDK_INT < 31) {
+            if (blurredPreview == null) {
+                blurredPreview = GalleryPreviewBlur.snapshot(this, this::drawUnblurredImage);
+            }
+            if (blurredPreview != null) {
+                previewBounds.set(0, 0, getWidth(), getHeight());
+                canvas.drawBitmap(blurredPreview, null, previewBounds, previewPaint);
+                return;
+            }
+        }
+        super.onDraw(canvas);
+    }
+
+    // Capture only ImageView pixels, bypassing this view's blur without calling draw recursively.
+    @android.annotation.SuppressLint("WrongCall")
+    private void drawUnblurredImage(Canvas canvas) { super.onDraw(canvas); }
 
     @Override
     public boolean onTouchEvent(MotionEvent event) {

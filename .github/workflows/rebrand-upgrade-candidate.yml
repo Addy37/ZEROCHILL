@@ -141,7 +141,7 @@ jobs:
               raise SystemExit("Source did not return distinct deeper pages")
           PYTHON
 
-      - name: Run focused navigation regressions first
+      - name: Run focused navigation and gallery regressions first
         run: >-
           gradle --no-daemon :app:testDebugUnitTest
           --tests 'com.webapp.crazyshit.BottomNavigationInsetsTest'
@@ -149,6 +149,11 @@ jobs:
           --tests 'com.webapp.crazyshit.NavigationIaTest'
           --tests 'com.webapp.crazyshit.NavigationMotionControllerTest'
           --tests 'com.webapp.crazyshit.PhoneOrientationPolicyTest'
+          --tests 'com.webapp.crazyshit.GalleryMediaRevealTest'
+          --tests 'com.webapp.crazyshit.GalleryViewerLifecycleTest'
+          --tests 'com.webapp.crazyshit.GalleryMediaTransitionTest'
+          --tests 'com.webapp.crazyshit.GallerySnapshotTest'
+          --tests 'com.webapp.crazyshit.CreatorMergedGalleryTest'
 
       - name: Run focused DM regressions before build
         run: >-
