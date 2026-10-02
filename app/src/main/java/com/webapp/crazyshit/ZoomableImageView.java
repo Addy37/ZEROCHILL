@@ -188,6 +188,8 @@ final class ZoomableImageView extends ImageView {
         super.onDraw(canvas);
     }
 
+    // Capture only ImageView pixels, bypassing this view's blur without calling draw recursively.
+    @android.annotation.SuppressLint("WrongCall")
     private void drawUnblurredImage(Canvas canvas) { super.onDraw(canvas); }
 
     @Override
