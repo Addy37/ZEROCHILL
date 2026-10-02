@@ -996,6 +996,13 @@ public final class BunkrGalleryActivity extends Activity {
             }
 
             @Override
+            public void onPlayWhenReadyChanged(boolean playWhenReady, int reason) {
+                if (player != startedPlayer || returningToGallery || isFinishing()) return;
+                adapter.onVideoBuffering(position, startedPlayer,
+                        startedPlayer.getPlaybackState() == Player.STATE_BUFFERING && playWhenReady);
+            }
+
+            @Override
             public void onPlaybackStateChanged(int playbackState) {
                 if (player != startedPlayer || returningToGallery || isFinishing()) return;
                 adapter.onVideoBuffering(position, startedPlayer,

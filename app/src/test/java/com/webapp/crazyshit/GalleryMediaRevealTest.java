@@ -99,6 +99,31 @@ public class GalleryMediaRevealTest {
         assertFalse(reveal.imageTransition(DataSource.REMOTE, true).transition(bitmap(), target()));
     }
 
+    @Test public void settlingCrossfadePreservesPinchZoomAndDisplayedBounds() {
+        Drawable preview = new BitmapDrawable(activity.getResources(),
+                Bitmap.createBitmap(40, 20, Bitmap.Config.ARGB_8888));
+        Drawable full = bitmap();
+        image.setImageDrawable(preview);
+        reveal.imageTransition(DataSource.REMOTE, true).transition(full, target());
+        idle(1);
+        ReflectionHelpers.setField(image, "zoom", 2f);
+        android.graphics.Matrix matrix = ReflectionHelpers.getField(image, "zoomMatrix");
+        matrix.postScale(2f, 2f);
+        image.setImageMatrix(matrix);
+        Drawable beforeDrawable = image.getDrawable();
+        android.graphics.RectF before = new android.graphics.RectF(0, 0,
+                beforeDrawable.getIntrinsicWidth(), beforeDrawable.getIntrinsicHeight());
+        image.getImageMatrix().mapRect(before);
+        reveal.cancelAndSettle();
+        idle(300); // No drawable-swap reset may run alongside the return capture.
+        android.graphics.RectF after = new android.graphics.RectF(0, 0,
+                full.getIntrinsicWidth(), full.getIntrinsicHeight());
+        image.getImageMatrix().mapRect(after);
+        assertEquals(2f, (float) ReflectionHelpers.getField(image, "zoom"), 0f);
+        assertEquals(before, after);
+        assertSame(full, image.getDrawable());
+    }
+
     @Test public void posterFadeCanBeInterruptedByReturnWithoutHidingRestoredPoster() {
         Drawable poster = bitmap();
         image.setImageDrawable(poster);

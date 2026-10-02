@@ -113,6 +113,20 @@ final class ZoomableImageView extends ImageView {
         if (zoomMatrix != null) post(this::resetZoom);
     }
 
+    /** Finish a loading crossfade without changing the user's current displayed bounds. */
+    void setImageDrawablePreservingZoom(Drawable drawable) {
+        Drawable previous = getDrawable();
+        int oldWidth = previous == null ? 0 : previous.getIntrinsicWidth();
+        int oldHeight = previous == null ? 0 : previous.getIntrinsicHeight();
+        super.setImageDrawable(drawable);
+        if (drawable != null && oldWidth > 0 && oldHeight > 0
+                && drawable.getIntrinsicWidth() > 0 && drawable.getIntrinsicHeight() > 0) {
+            zoomMatrix.preScale((float) oldWidth / drawable.getIntrinsicWidth(),
+                    (float) oldHeight / drawable.getIntrinsicHeight());
+        }
+        setImageMatrix(zoomMatrix);
+    }
+
     @Override
     protected void onSizeChanged(int width, int height, int oldWidth, int oldHeight) {
         super.onSizeChanged(width, height, oldWidth, oldHeight);

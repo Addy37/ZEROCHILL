@@ -82,7 +82,7 @@ final class GalleryMediaReveal {
         Drawable drawable = image.getDrawable();
         if (drawable instanceof TransitionDrawable) {
             TransitionDrawable transition = (TransitionDrawable) drawable;
-            image.setImageDrawable(transition.getDrawable(transition.getNumberOfLayers() - 1));
+            image.setImageDrawablePreservingZoom(transition.getDrawable(transition.getNumberOfLayers() - 1));
         }
     }
 }
