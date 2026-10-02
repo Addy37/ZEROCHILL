@@ -33,7 +33,7 @@ import static org.robolectric.Shadows.shadowOf;
 @Config(application = Application.class, sdk = 35, qualifiers = "w411dp-h891dp-xhdpi")
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 public class BottomNavigationDrawableRenderTest {
-    @Test public void expandedContentAndCapsuleAreVerticallyCenteredThroughLiveInsets() {
+    @Test public void expandedContentMatchesApprovedGestureGeometryThroughLiveInsets() {
         ActivityController<NativeMainActivity> controller = BottomNavigationInsetsTest.createActivity();
         NativeMainActivity activity = controller.get();
         ZeroChillBottomNavigationView nav = ReflectionHelpers.getField(activity, "bottomNavigation");
@@ -66,9 +66,9 @@ public class BottomNavigationDrawableRenderTest {
                             + " item=" + item.getHeight() + " icon=" + iconBounds
                             + " label=" + labelBounds + " baseline=" + (labelBounds.top + label.getBaseline())
                             + " capsule=" + nav.selectedCapsuleBoundsForTest());
-                    assertEquals(state + " content center", nav.getHeight() / 2f, content.centerY(), density);
-                    assertEquals(state + " balanced top/bottom content space", content.top,
-                            nav.getHeight() - content.bottom, 2f * density);
+                    assertEquals(state + " approved expanded top gutter", 0, nav.getPaddingTop());
+                    assertEquals(state + " approved expanded bottom gutter",
+                            Math.round(24f * density), nav.getPaddingBottom());
                     assertEquals(state + " label visible", View.VISIBLE, label.getVisibility());
                     assertEquals(state + " label alpha", 1f, label.getAlpha(), 0f);
                     assertTrue(state + " label below icon", labelBounds.top + label.getBaseline() > iconBounds.bottom);
