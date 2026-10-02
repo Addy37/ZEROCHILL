@@ -118,7 +118,7 @@ public class BottomNavigationInsetsTest {
                         && child.right <= parent.right + 0.01f && child.bottom <= parent.bottom + 0.01f);
     }
 
-    @Test public void expandedGeometryMatchesApprovedProductionGestureLayoutIncludingLibraryCapsule() {
+    @Test public void expandedGeometryUsesDeviceTunedGutterIncludingLibraryCapsule() {
         ActivityController<NativeMainActivity> controller = createActivity();
         NativeMainActivity activity = controller.get();
         ZeroChillBottomNavigationView nav = ReflectionHelpers.getField(activity, "bottomNavigation");
@@ -157,11 +157,11 @@ public class BottomNavigationInsetsTest {
         layoutShell(shell);
         measure(production, nav.getWidth(), nav.getHeight());
         assertEquals(dp(activity, 24), production.getPaddingBottom());
-        assertEquals(0, nav.getPaddingTop());
-        assertEquals(production.getPaddingBottom(), nav.getPaddingBottom());
-        // Device approval is the production gesture layout itself. Keep the same menu
-        // origin and child geometry while system clearance remains owned by the shell.
-        assertEquals(menuGeometry(production), menuGeometry(nav));
+        assertEquals(dp(activity, 4), nav.getPaddingTop());
+        assertEquals(dp(activity, 20), nav.getPaddingBottom());
+        // Keep Material child geometry intact while applying the device-tuned 4dp
+        // expanded offset. System clearance remains owned by the shell.
+        assertEquals(menuGeometry(production), menuGeometry(nav, nav.getPaddingTop()));
         draw(nav);
         Rect item = bounds(production, production.findViewById(6));
         RectF expectedCapsule = new RectF(item.left + dp(activity, 4), dp(activity, 9),
