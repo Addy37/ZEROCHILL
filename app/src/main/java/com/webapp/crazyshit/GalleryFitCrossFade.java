@@ -59,14 +59,17 @@ final class GalleryFitCrossFade extends TransitionDrawable {
     }
 
     /** Wrapper alpha/bounds are independent of Glide's drawable and use subpixel fitting. */
-    private static final class FittedLayer extends Drawable {
+    private static final class FittedLayer extends Drawable implements Drawable.Callback {
         private final Drawable resource;
         private GalleryFitCrossFade owner;
         private final Rect originalBounds = new Rect();
         private final RectF fittedBounds = new RectF();
         private int opacity = 255;
 
-        FittedLayer(Drawable resource) { this.resource = resource; }
+        FittedLayer(Drawable resource) {
+            this.resource = resource;
+            resource.setCallback(this);
+        }
 
         @Override public int getIntrinsicWidth() { return resource.getIntrinsicWidth(); }
         @Override public int getIntrinsicHeight() { return resource.getIntrinsicHeight(); }
@@ -74,6 +77,13 @@ final class GalleryFitCrossFade extends TransitionDrawable {
         @Override public int getAlpha() { return opacity; }
         @Override public int getOpacity() { return PixelFormat.TRANSLUCENT; }
         @Override public void setColorFilter(ColorFilter filter) { }
+        @Override public void invalidateDrawable(Drawable who) { invalidateSelf(); }
+        @Override public void scheduleDrawable(Drawable who, Runnable action, long when) {
+            scheduleSelf(action, when);
+        }
+        @Override public void unscheduleDrawable(Drawable who, Runnable action) {
+            unscheduleSelf(action);
+        }
 
         @Override public void draw(Canvas canvas) {
             if (owner == null || opacity == 0) return;

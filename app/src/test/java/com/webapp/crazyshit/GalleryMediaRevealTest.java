@@ -298,6 +298,41 @@ public class GalleryMediaRevealTest {
         assertFalse(image.hasLoadingBlur());
     }
 
+    @Test public void animatedResourceCallbacksReachViewAndDrawingRestoresResourceState() {
+        image.layout(0, 0, 720, 1280);
+        Drawable full = bitmap();
+        image.setImageDrawable(bitmap());
+        reveal.imageTransition(DataSource.REMOTE, true).transition(full, target());
+        Drawable fade = image.getDrawable();
+        int[] forwarded = new int[3];
+        Runnable frame = () -> { };
+        fade.setCallback(new Drawable.Callback() {
+            @Override public void invalidateDrawable(Drawable who) { forwarded[0]++; }
+            @Override public void scheduleDrawable(Drawable who, Runnable action, long when) {
+                assertSame(frame, action);
+                forwarded[1]++;
+            }
+            @Override public void unscheduleDrawable(Drawable who, Runnable action) {
+                assertSame(frame, action);
+                forwarded[2]++;
+            }
+        });
+        full.invalidateSelf();
+        full.scheduleSelf(frame, 100L);
+        full.unscheduleSelf(frame);
+        assertArrayEquals(new int[]{1, 1, 1}, forwarded);
+        Drawable.Callback callback = full.getCallback();
+        android.graphics.Rect bounds = new android.graphics.Rect(full.getBounds());
+        int alpha = full.getAlpha();
+        fade.draw(new android.graphics.Canvas(Bitmap.createBitmap(64, 64, Bitmap.Config.ARGB_8888)));
+        assertSame(callback, full.getCallback());
+        assertEquals(bounds, full.getBounds());
+        assertEquals(alpha, full.getAlpha());
+        reveal.cancelAndSettle();
+        assertSame(full, image.getDrawable());
+        assertSame(image, full.getCallback());
+    }
+
     @Config(sdk = 28)
     @org.robolectric.annotation.GraphicsMode(org.robolectric.annotation.GraphicsMode.Mode.NATIVE)
     @Test public void olderAndroidBlurSoftensOwnedSnapshotWithoutModifyingSourcePixels() {
