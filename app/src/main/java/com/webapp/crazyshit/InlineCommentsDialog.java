@@ -422,7 +422,7 @@ final class InlineCommentsDialog extends BottomSheetDialog {
         avatar.setBackground(circle(Color.rgb(40, 40, 46)));
         String avatarUrl = ZeroChillAccountRepository.avatarUrl(comment.avatarPath);
         if (!avatarUrl.isEmpty()) {
-            Glide.with(avatar).load(avatarUrl).circleCrop().transition(com.bumptech.glide.load.resource.drawable.DrawableTransitionOptions.withCrossFade(140)).into(avatar);
+            Glide.with(avatar).load(avatarUrl).circleCrop().transition(ThumbnailFades.avatar()).into(avatar);
         } else {
             avatar.setImageResource(R.drawable.ic_more_account);
             avatar.setPadding(dp(9), dp(9), dp(9), dp(9));

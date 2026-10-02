@@ -148,7 +148,7 @@ final class CreatorListAdapter extends RecyclerView.Adapter<CreatorListAdapter.H
                     .addHeader("Referer", item.uploader.isEmpty() ? item.url : item.uploader)
                     .addHeader("User-Agent", "Mozilla/5.0 (Linux; Android 16) AppleWebKit/537.36 Chrome/139.0 Mobile Safari/537.36")
                     .build());
-            Glide.with(holder.avatar).load(url).circleCrop().dontAnimate()
+            Glide.with(holder.avatar).load(url).circleCrop().transition(ThumbnailFades.avatar())
                     .placeholder(R.drawable.ic_more_account).error(R.drawable.ic_more_account)
                     .into(holder.avatar);
         }

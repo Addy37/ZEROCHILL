@@ -643,7 +643,7 @@ final class LibraryHubView extends ScrollView {
                             ))
                             .onlyRetrieveFromCache(true)
                             .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
-                            .dontAnimate();
+                            .transition(ThumbnailFades.avatar());
             if (avatarOverride == null) request.circleCrop();
             request.into(image);
         } catch (Exception ignored) {
@@ -689,7 +689,7 @@ final class LibraryHubView extends ScrollView {
                     .load(model)
                     .centerCrop()
                     .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
-                    .dontAnimate()
+                    .transition(ThumbnailFades.thumbnail())
                     .placeholder(new ColorDrawable(Color.rgb(22, 25, 29)))
                     .error(new ColorDrawable(Color.rgb(22, 25, 29)))
                     .into(image);

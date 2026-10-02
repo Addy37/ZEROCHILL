@@ -250,7 +250,7 @@ public final class ZeroChillMessageActivity extends Activity {
             } else {
                 avatar.setPadding(0, 0, 0, 0);
                 avatar.clearColorFilter();
-                Glide.with(avatar).load(url).circleCrop().into(avatar);
+                Glide.with(avatar).load(url).circleCrop().transition(ThumbnailFades.avatar()).into(avatar);
             }
             loadBlockState();
             loadThread(true);
@@ -607,6 +607,7 @@ public final class ZeroChillMessageActivity extends Activity {
                     holder.senderAvatar.setColorFilter(UiPalette.PRIMARY);
                 } else {
                     Glide.with(holder.senderAvatar).load(url).circleCrop()
+                            .transition(ThumbnailFades.avatar())
                             .placeholder(R.drawable.ic_more_account)
                             .error(R.drawable.ic_more_account).into(holder.senderAvatar);
                 }

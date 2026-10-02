@@ -176,7 +176,7 @@ public final class ZeroChillPublicProfileActivity extends Activity {
             avatar.setPadding(dp(28), dp(28), dp(28), dp(28));
             avatar.setColorFilter(UiPalette.PRIMARY);
         } else {
-            Glide.with(avatar).load(avatarUrl).circleCrop().into(avatar);
+            Glide.with(avatar).load(avatarUrl).circleCrop().transition(ThumbnailFades.avatar()).into(avatar);
         }
         halo.addView(avatar, new FrameLayout.LayoutParams(-1, -1));
 
@@ -349,7 +349,7 @@ public final class ZeroChillPublicProfileActivity extends Activity {
                             model = new com.bumptech.glide.load.model.GlideUrl(metadata.imageUrl,
                                     new com.bumptech.glide.load.model.LazyHeaders.Builder()
                                             .addHeader("Referer", referer).build());
-                        Glide.with(avatar).load(model).circleCrop().into(avatar);
+                        Glide.with(avatar).load(model).circleCrop().transition(ThumbnailFades.avatar()).into(avatar);
                         LinearLayout.LayoutParams avatarParams = new LinearLayout.LayoutParams(dp(36), dp(36));
                         avatarParams.setMarginEnd(dp(7));
                         artwork.addView(avatar, avatarParams);
@@ -546,7 +546,7 @@ public final class ZeroChillPublicProfileActivity extends Activity {
         }
         avatar.clearColorFilter();
         avatar.setPadding(0, 0, 0, 0);
-        Glide.with(avatar).load(model).circleCrop().into(avatar);
+        Glide.with(avatar).load(model).circleCrop().transition(ThumbnailFades.avatar()).into(avatar);
     }
 
     private GradientDrawable sharedSheetBackground() {

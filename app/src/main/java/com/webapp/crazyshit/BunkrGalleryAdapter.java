@@ -335,7 +335,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
             RequestBuilder<Drawable> request = Glide.with(holder.image)
                     .load(withHeaders(item.imageUrl, imageReferer(item)))
                     .diskCacheStrategy(DiskCacheStrategy.ALL)
-                    .transition(DrawableTransitionOptions.withCrossFade(130))
+                    .transition(ThumbnailFades.thumbnail())
                     .placeholder(new ColorDrawable(Color.rgb(20, 20, 23)))
                     .error(new ColorDrawable(Color.rgb(20, 20, 23)));
             if (adaptiveAspectRatios) {
@@ -372,7 +372,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
                 RequestBuilder<Drawable> fallback = Glide.with(holder.image)
                         .load(withHeaders(item.url, imageReferer(item)))
                         .diskCacheStrategy(DiskCacheStrategy.ALL)
-                        .dontAnimate();
+                        .transition(ThumbnailFades.thumbnail());
                 fallback = adaptiveAspectRatios
                         ? fallback.dontTransform().override(384, 384)
                         : fallback.centerCrop().override(360, 360);

@@ -146,7 +146,7 @@ final class ShowDetailsHeader extends FrameLayout {
                     .diskCacheStrategy(DiskCacheStrategy.NONE)
                     .skipMemoryCache(false)
                     .centerCrop()
-                    .dontAnimate()
+                    .transition(ThumbnailFades.hero())
                     .placeholder(new ColorDrawable(Color.rgb(14, 16, 19)))
                     .error(new ColorDrawable(Color.rgb(14, 16, 19)))
                     .into(artwork);
@@ -166,7 +166,7 @@ final class ShowDetailsHeader extends FrameLayout {
                 .load(new GlideUrl(cleanImage, headers.build()))
                 .diskCacheStrategy(DiskCacheStrategy.ALL)
                 .centerCrop()
-                .dontAnimate()
+                .transition(ThumbnailFades.hero())
                 .placeholder(new ColorDrawable(Color.rgb(14, 16, 19)))
                 .error(new ColorDrawable(Color.rgb(14, 16, 19)))
                 .into(artwork);

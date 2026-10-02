@@ -123,6 +123,7 @@ final class CreatorProfileHeader extends LinearLayout {
             Glide.with(avatar)
                     .load(withReferer(creator.imageUrl, creator.url))
                     .circleCrop()
+                    .transition(ThumbnailFades.avatar())
                     .placeholder(R.drawable.ic_more_account)
                     .error(R.drawable.ic_more_account)
                     .into(avatar);
@@ -158,6 +159,7 @@ final class CreatorProfileHeader extends LinearLayout {
         Glide.with(banner)
                 .load(withReferer(heroUrl, referer))
                 .centerCrop()
+                .transition(ThumbnailFades.hero())
                 .placeholder(new ColorDrawable(Color.rgb(13, 15, 18)))
                 .error(new ColorDrawable(Color.rgb(13, 15, 18)))
                 .into(banner);

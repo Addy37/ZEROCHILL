@@ -240,6 +240,7 @@ public final class ZeroChillInboxActivity extends Activity {
                 Glide.with(holder.avatar)
                         .load(avatarUrl)
                         .circleCrop()
+                        .transition(ThumbnailFades.avatar())
                         .placeholder(R.drawable.ic_more_account)
                         .into(holder.avatar);
             }

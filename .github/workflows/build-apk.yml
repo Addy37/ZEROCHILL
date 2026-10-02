@@ -186,6 +186,11 @@ jobs:
           gradle-version: '8.7'
           cache-provider: basic
 
+      - name: Run focused thumbnail loading regressions first
+        run: >-
+          gradle --no-daemon :app:testDebugUnitTest
+          --tests 'com.webapp.crazyshit.ThumbnailLoadTransitionTest'
+
       - name: Run focused navigation and gallery regressions first
         run: >-
           gradle --no-daemon :app:testDebugUnitTest
