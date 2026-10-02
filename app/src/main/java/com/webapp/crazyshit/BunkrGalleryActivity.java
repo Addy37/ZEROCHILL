@@ -101,6 +101,10 @@ public final class BunkrGalleryActivity extends Activity {
     private ZeroChillLoadingView initialLoading;
     private ProgressBar loadMoreLoading;
     private boolean chromeVisible = true;
+    private boolean restoreChromeAfterLandscape;
+    private boolean landscapeFullscreen;
+    private boolean sensorFullscreen;
+    private SensorMediaOrientationListener orientationListener;
     private ExoPlayer player;
     private final PlaybackRecovery playbackRecovery = new PlaybackRecovery();
     private boolean recoveryResumed;
@@ -121,11 +125,10 @@ public final class BunkrGalleryActivity extends Activity {
     @Override
     protected void onCreate(Bundle state) {
         super.onCreate(state);
-        PhoneOrientationPolicy.enterFullscreenVideo(this);
         GalleryMediaTransition.requestWindowFeature(this);
         getWindow().setStatusBarColor(Color.BLACK);
         getWindow().setNavigationBarColor(Color.BLACK);
-        setSystemBars(true);
+        orientationListener = new SensorMediaOrientationListener(this, this::onPhysicalOrientation);
 
         sessionId = value(getIntent().getStringExtra(EXTRA_SESSION_ID));
         albumTitle = value(getIntent().getStringExtra(EXTRA_TITLE));
@@ -185,7 +188,7 @@ public final class BunkrGalleryActivity extends Activity {
         }
 
         buildUi();
-        applyViewerFullscreen();
+        applyViewerOrientation(getResources().getConfiguration().orientation);
         if (snapshot == null || snapshot.items.isEmpty()) {
             initialLoading.setVisibility(View.VISIBLE);
             loadInitialPage();
@@ -1060,10 +1063,34 @@ public final class BunkrGalleryActivity extends Activity {
     @Override
     public void onConfigurationChanged(Configuration newConfig) {
         super.onConfigurationChanged(newConfig);
-        applyViewerFullscreen();
+        applyViewerOrientation(newConfig.orientation);
     }
 
-    private void applyViewerFullscreen() {
+    private void onPhysicalOrientation(SensorMediaOrientationListener.Position position) {
+        if (position == SensorMediaOrientationListener.Position.LANDSCAPE) {
+            sensorFullscreen = true;
+            PhoneOrientationPolicy.enterSensorFullscreen(this);
+        } else if (sensorFullscreen) {
+            sensorFullscreen = false;
+            PhoneOrientationPolicy.exitFullscreenVideo(this);
+        }
+    }
+
+    private void applyViewerOrientation(int orientation) {
+        boolean landscape = orientation == Configuration.ORIENTATION_LANDSCAPE;
+        if (topBar == null || bottomBar == null) {
+            setSystemBars(true);
+            return;
+        }
+        if (landscape && !landscapeFullscreen) {
+            landscapeFullscreen = true;
+            restoreChromeAfterLandscape = chromeVisible;
+            if (chromeVisible) setChromeVisible(false);
+        } else if (!landscape && landscapeFullscreen) {
+            landscapeFullscreen = false;
+            if (restoreChromeAfterLandscape) setChromeVisible(true);
+            restoreChromeAfterLandscape = false;
+        }
         setSystemBars(true);
     }
 
@@ -1195,7 +1222,7 @@ public final class BunkrGalleryActivity extends Activity {
     protected void onResume() {
         super.onResume();
         recoveryResumed = true;
-        setSystemBars(true);
+        if (orientationListener != null) orientationListener.enable();
     }
 
     @Override protected void onSaveInstanceState(Bundle state) {
@@ -1213,6 +1240,7 @@ public final class BunkrGalleryActivity extends Activity {
     @Override
     protected void onPause() {
         recoveryResumed = false;
+        if (orientationListener != null) orientationListener.disable();
         BunkrGallerySessionStore.persist(this, sessionId);
         releasePlayer();
         super.onPause();
@@ -1221,6 +1249,7 @@ public final class BunkrGalleryActivity extends Activity {
     @Override
     protected void onDestroy() {
         generation++;
+        if (orientationListener != null) orientationListener.disable();
         releasePlayer();
         pageIo.shutdownNow();
         mediaIo.shutdownNow();
