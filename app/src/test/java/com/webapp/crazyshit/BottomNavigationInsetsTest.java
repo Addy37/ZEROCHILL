@@ -118,7 +118,7 @@ public class BottomNavigationInsetsTest {
                         && child.right <= parent.right + 0.01f && child.bottom <= parent.bottom + 0.01f);
     }
 
-    @Test public void expandedCenteringPreservesMaterialChildMeasurementsIncludingLibraryCapsule() {
+    @Test public void expandedGeometryMatchesApprovedProductionGestureLayoutIncludingLibraryCapsule() {
         ActivityController<NativeMainActivity> controller = createActivity();
         NativeMainActivity activity = controller.get();
         ZeroChillBottomNavigationView nav = ReflectionHelpers.getField(activity, "bottomNavigation");
@@ -157,9 +157,11 @@ public class BottomNavigationInsetsTest {
         layoutShell(shell);
         measure(production, nav.getWidth(), nav.getHeight());
         assertEquals(dp(activity, 24), production.getPaddingBottom());
-        assertEquals(production.getPaddingBottom(), nav.getPaddingTop() + nav.getPaddingBottom());
-        // Centering changes the menu origin, not any Material child dimension/layout.
-        assertEquals(menuGeometry(production), menuGeometry(nav, nav.getPaddingTop()));
+        assertEquals(0, nav.getPaddingTop());
+        assertEquals(production.getPaddingBottom(), nav.getPaddingBottom());
+        // Device approval is the production gesture layout itself. Keep the same menu
+        // origin and child geometry while system clearance remains owned by the shell.
+        assertEquals(menuGeometry(production), menuGeometry(nav));
         draw(nav);
         Rect item = bounds(production, production.findViewById(6));
         RectF expectedCapsule = new RectF(item.left + dp(activity, 4), dp(activity, 9),
