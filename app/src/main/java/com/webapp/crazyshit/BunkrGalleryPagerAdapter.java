@@ -328,23 +328,24 @@ final class BunkrGalleryPagerAdapter
             }
         }
 
-        if (!sharedElementDelivered
-                && !sharedElementName.isEmpty()
-                && item.url.equals(sharedElementUrl)) {
+        if (!sharedElementName.isEmpty() && item.url.equals(sharedElementUrl)) {
             ViewCompat.setTransitionName(holder.image, sharedElementName);
-            holder.image.post(() -> {
-                int current = holder.getBindingAdapterPosition();
-                if (sharedElementDelivered
-                        || current == RecyclerView.NO_POSITION
-                        || current >= items.size()
-                        || !item.url.equals(items.get(current).url)
-                        || !item.url.equals(sharedElementUrl)
-                        || !sharedElementName.equals(ViewCompat.getTransitionName(holder.image))) {
-                    return;
-                }
-                sharedElementDelivered = true;
-                listener.onSharedElementReady(holder.image);
-            });
+            if (!sharedElementDelivered) {
+                holder.image.post(() -> {
+                    int current = holder.getBindingAdapterPosition();
+                    if (sharedElementDelivered
+                            || current == RecyclerView.NO_POSITION
+                            || current >= items.size()
+                            || !item.url.equals(items.get(current).url)
+                            || !item.url.equals(sharedElementUrl)
+                            || !sharedElementName.equals(
+                                    ViewCompat.getTransitionName(holder.image))) {
+                        return;
+                    }
+                    sharedElementDelivered = true;
+                    listener.onSharedElementReady(holder.image);
+                });
+            }
         }
 
         holder.itemView.setContentDescription(
