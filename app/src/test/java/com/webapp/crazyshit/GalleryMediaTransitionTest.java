@@ -63,7 +63,7 @@ public class GalleryMediaTransitionTest {
     @Test
     public void tappedVideoWaitsForExpansionBeforeAutoplay() {
         NativeContentItem video = item(
-                NativeContentItem.KIND_VIDEO,
+                NativeContentItem.KIND_MEDIA,
                 "https://fapello.com/creator/video-1/"
         );
 
