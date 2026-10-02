@@ -5,7 +5,6 @@ import android.graphics.drawable.TransitionDrawable;
 import android.view.View;
 
 import com.bumptech.glide.load.DataSource;
-import com.bumptech.glide.request.transition.DrawableCrossFadeTransition;
 import com.bumptech.glide.request.transition.NoTransition;
 import com.bumptech.glide.request.transition.Transition;
 
@@ -30,6 +29,12 @@ final class GalleryMediaReveal {
     }
 
     void setLoading(boolean loading) {
+        setLoading(loading, true);
+    }
+
+    void setLoading(boolean loading, boolean blurAllowed) {
+        // A revealed video keeps its last frame during later buffering.
+        if (!videoRevealed) image.setLoadingBlur(loading && blurAllowed);
         if (waiting == loading) return;
         waiting = loading;
         progress.removeCallbacks(showProgress);
@@ -38,11 +43,26 @@ final class GalleryMediaReveal {
     }
 
     Transition<Drawable> imageTransition(DataSource source, boolean allowMotion) {
+        return imageTransition(source, allowMotion, true);
+    }
+
+    Transition<Drawable> imageTransition(DataSource source, boolean allowMotion, boolean fullImage) {
+        if (!fullImage) return NoTransition.get();
         // Cache hits display immediately. Never animate the shared element during expansion.
-        return source == DataSource.REMOTE && allowMotion
-                && ZeroChillMotion.animationsEnabled(image.getContext())
-                ? new DrawableCrossFadeTransition(IMAGE_FADE_MS, true)
-                : NoTransition.get();
+        boolean animate = source == DataSource.REMOTE && allowMotion
+                && ZeroChillMotion.animationsEnabled(image.getContext());
+        return (resource, target) -> {
+            Drawable preview = image.hasLoadingBlur() && animate
+                    ? image.loadingPreviewSnapshot() : target.getCurrentDrawable();
+            image.setLoadingBlur(false);
+            if (!animate || preview == null || resource.getIntrinsicWidth() <= 0
+                    || resource.getIntrinsicHeight() <= 0) return false;
+            GalleryFitCrossFade fade = new GalleryFitCrossFade(preview, resource,
+                    image.getWidth(), image.getHeight());
+            target.setDrawable(fade);
+            fade.startTransition(IMAGE_FADE_MS);
+            return true;
+        };
     }
 
     void showPoster() {
@@ -61,12 +81,14 @@ final class GalleryMediaReveal {
         if (image.getDrawable() == null || !allowMotion
                 || !ZeroChillMotion.animationsEnabled(image.getContext())) {
             image.setVisibility(View.GONE);
+            image.setLoadingBlur(false);
             image.setAlpha(1f);
             return;
         }
         image.animate().alpha(0f).setDuration(POSTER_FADE_MS).withEndAction(() -> {
             if (!videoRevealed) return;
             image.setVisibility(View.GONE);
+            image.setLoadingBlur(false);
             image.setAlpha(1f);
         }).start();
     }
@@ -78,6 +100,7 @@ final class GalleryMediaReveal {
         image.animate().cancel();
         image.animate().withEndAction(null);
         image.setAlpha(1f);
+        image.setLoadingBlur(false);
         if (videoRevealed) image.setVisibility(View.GONE);
         Drawable drawable = image.getDrawable();
         if (drawable instanceof TransitionDrawable) {
@@ -85,4 +108,6 @@ final class GalleryMediaReveal {
             image.setImageDrawablePreservingZoom(transition.getDrawable(transition.getNumberOfLayers() - 1));
         }
     }
+
+    boolean isVideoRevealed() { return videoRevealed; }
 }

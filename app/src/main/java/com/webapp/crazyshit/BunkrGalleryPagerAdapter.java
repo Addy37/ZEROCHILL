@@ -6,6 +6,7 @@ import android.graphics.drawable.Drawable;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.GradientDrawable;
 import android.view.Gravity;
+import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.webkit.CookieManager;
@@ -224,6 +225,16 @@ final class BunkrGalleryPagerAdapter
 
     void finishOpeningTransition() {
         sharedElementOpening = false;
+        int initial = indexOfUrl(sharedElementUrl);
+        if (initial >= 0 && !resolvedUrl(initial).isEmpty()) notifyItemChanged(initial);
+        if (attachedList == null) return;
+        for (int i = 0; i < attachedList.getChildCount(); i++) {
+            RecyclerView.ViewHolder raw = attachedList.getChildViewHolder(attachedList.getChildAt(i));
+            if (raw instanceof Holder) {
+                Holder holder = (Holder) raw;
+                updateState(holder, holder.getBindingAdapterPosition());
+            }
+        }
     }
 
     void stopReveals() {
@@ -270,7 +281,9 @@ final class BunkrGalleryPagerAdapter
         ZoomableImageView image = new ZoomableImageView(parent.getContext());
         image.setBackground(null);
 
-        PlayerView playerView = new PlayerView(parent.getContext());
+        // TextureView keeps video in the same composition as the loading poster.
+        PlayerView playerView = (PlayerView) LayoutInflater.from(parent.getContext())
+                .inflate(R.layout.view_video_player_texture, root, false);
         playerView.setBackgroundColor(Color.BLACK);
         playerView.setResizeMode(AspectRatioFrameLayout.RESIZE_MODE_FIT);
         playerView.setUseController(true);
@@ -332,7 +345,10 @@ final class BunkrGalleryPagerAdapter
         GalleryMediaTransition.clearName(holder.image);
         holder.image.setZoomEnabled(item.isImage());
         String resolved = value(resolvedUrls.get(item.url));
-        String preview = item.isVideo() || resolved.isEmpty() ? value(item.imageUrl) : resolved;
+        boolean opening = sharedElementOpening && item.url.equals(sharedElementUrl)
+                && !value(item.imageUrl).isEmpty();
+        // The thumbnail owns the shared expansion. Upgrade it once Android finishes.
+        String preview = item.isVideo() || resolved.isEmpty() || opening ? value(item.imageUrl) : resolved;
         boolean activeVideo = item.isVideo() && position == activeVideoPosition && activePlayer != null;
         if (!activeVideo && (!sameItem || !preview.equals(holder.requestedImageUrl))) {
             holder.requestedImageUrl = preview;
@@ -343,14 +359,17 @@ final class BunkrGalleryPagerAdapter
                 Glide.with(holder.image).clear(holder.image);
                 holder.image.setImageDrawable(new ColorDrawable(Color.BLACK));
             } else {
+                // The old request is cleared by into(). Keep only pixels we own while waiting.
+                Drawable placeholder = sameItem ? holder.image.ownedPreviewSnapshot() : null;
                 RequestBuilder<Drawable> imageRequest = Glide.with(holder.image)
                         .load(withHeaders(preview, imageReferer(item)))
                         .fitCenter()
                         .diskCacheStrategy(DiskCacheStrategy.ALL)
                         .transition(DrawableTransitionOptions.with((source, first) ->
                                 holder.reveal.imageTransition(source, !revealsStopped
-                                        && !(sharedElementOpening && item.url.equals(sharedElementUrl)))))
-                        .placeholder(sameItem ? holder.image.getDrawable() : new ColorDrawable(Color.BLACK))
+                                        && !(sharedElementOpening && item.url.equals(sharedElementUrl)),
+                                        item.isImage() && !resolved.isEmpty() && preview.equals(resolved))))
+                        .placeholder(placeholder != null ? placeholder : new ColorDrawable(Color.BLACK))
                         .error(new ColorDrawable(Color.BLACK))
                         .listener(new RequestListener<Drawable>() {
                             @Override
@@ -473,14 +492,18 @@ final class BunkrGalleryPagerAdapter
             holder.playerView.setPlayer(active ? activePlayer : null);
         }
         holder.playerView.setVisibility(active ? View.VISIBLE : View.GONE);
-        if (active && activeVideoFrameRendered) holder.reveal.revealVideo(!revealsStopped);
-        else holder.reveal.showPoster();
+        if (active && activeVideoFrameRendered) {
+            if (!activeVideoBuffering || holder.reveal.isVideoRevealed()) {
+                holder.reveal.revealVideo(!revealsStopped);
+            }
+        } else holder.reveal.showPoster();
         holder.play.setVisibility(item.isVideo() && !active ? View.VISIBLE : View.GONE);
         boolean showFailure = failed.contains(item.url) && !active;
         holder.failure.setVisibility(showFailure ? View.VISIBLE : View.GONE);
         holder.reveal.setLoading(!revealsStopped && !showFailure && (loading.contains(item.url)
                 || (!active && holder.imageLoading)
-                || (active && (!activeVideoFrameRendered || activeVideoBuffering))));
+                || (active && (!activeVideoFrameRendered || activeVideoBuffering))),
+                !(sharedElementOpening && item.url.equals(sharedElementUrl)));
     }
 
     @Override public void onAttachedToRecyclerView(@NonNull RecyclerView recyclerView) {
