@@ -501,6 +501,13 @@ public class GalleryMediaRevealTest {
         root.setVisibility(View.VISIBLE);
         idle(300);
         assertEquals(View.VISIBLE, dots.getVisibility());
+        setWindowVisibility(root, View.GONE);
+        idle(300);
+        assertEquals(View.GONE, dots.getVisibility());
+        assertNull(ReflectionHelpers.getField(dots, "bounce"));
+        setWindowVisibility(root, View.VISIBLE);
+        idle(300);
+        assertEquals(View.VISIBLE, dots.getVisibility());
         root.removeView(dots);
         idle(500);
         assertEquals(View.GONE, dots.getVisibility());
@@ -597,6 +604,16 @@ public class GalleryMediaRevealTest {
     private void attachContent(View content) {
         activity.setContentView(content);
         activityController.visible();
+        // Robolectric attaches/shows content but leaves AttachInfo's window visibility GONE.
+        // Supply the WindowManager visibility event so loading uses the same gate as a device.
+        setWindowVisibility(activity.getWindow().getDecorView(), View.VISIBLE);
+    }
+
+    private void setWindowVisibility(View view, int visibility) {
+        Object attachInfo = ReflectionHelpers.getField(view, "mAttachInfo");
+        assertNotNull(attachInfo);
+        ReflectionHelpers.setField(attachInfo, "mWindowVisibility", visibility);
+        view.dispatchWindowVisibilityChanged(visibility);
     }
 
     private void assertNoSpinner(BunkrGalleryPagerAdapter.Holder holder) {
