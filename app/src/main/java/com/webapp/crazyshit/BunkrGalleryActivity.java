@@ -103,8 +103,8 @@ public final class BunkrGalleryActivity extends Activity {
     private boolean chromeVisible = true;
     private boolean restoreChromeAfterLandscape;
     private boolean landscapeFullscreen;
-    private boolean sensorFullscreen;
-    private SensorMediaOrientationListener orientationListener;
+    private View viewerBackdrop;
+    private boolean returningToGallery;
     private ExoPlayer player;
     private final PlaybackRecovery playbackRecovery = new PlaybackRecovery();
     private boolean recoveryResumed;
@@ -125,10 +125,10 @@ public final class BunkrGalleryActivity extends Activity {
     @Override
     protected void onCreate(Bundle state) {
         super.onCreate(state);
+        PhoneOrientationPolicy.applyBrowsingOrientation(this);
         GalleryMediaTransition.requestWindowFeature(this);
         getWindow().setStatusBarColor(Color.BLACK);
         getWindow().setNavigationBarColor(Color.BLACK);
-        orientationListener = new SensorMediaOrientationListener(this, this::onPhysicalOrientation);
 
         sessionId = value(getIntent().getStringExtra(EXTRA_SESSION_ID));
         albumTitle = value(getIntent().getStringExtra(EXTRA_TITLE));
@@ -199,7 +199,9 @@ public final class BunkrGalleryActivity extends Activity {
 
     private void buildUi() {
         FrameLayout root = new FrameLayout(this);
-        root.setBackgroundColor(Color.BLACK);
+        viewerBackdrop = new View(this);
+        viewerBackdrop.setBackgroundColor(Color.BLACK);
+        root.addView(viewerBackdrop, new FrameLayout.LayoutParams(-1, -1));
 
         pager = new ViewPager2(this);
         pager.setOrientation(ViewPager2.ORIENTATION_HORIZONTAL);
@@ -334,6 +336,9 @@ public final class BunkrGalleryActivity extends Activity {
         }
 
         setContentView(root);
+        // Even a transparent ColorDrawable makes a ViewGroup an implicit
+        // transition group. Keep ancestors background-free so only siblings leave.
+        findViewById(android.R.id.content).setBackground(null);
         if (sharedElementPending) {
             root.postDelayed(this::startSharedElementFallback, 900L);
         }
@@ -611,7 +616,7 @@ public final class BunkrGalleryActivity extends Activity {
     }
 
     private void finishViewer() {
-        if (isFinishing()) return;
+        if (isFinishing() || returningToGallery) return;
         NativeContentItem current = adapter == null || pager == null
                 ? null
                 : adapter.itemAt(pager.getCurrentItem());
@@ -627,12 +632,30 @@ public final class BunkrGalleryActivity extends Activity {
             return;
         }
 
-        if (current != null && current.isVideo() && player != null) {
-            releasePlayer();
-            pager.post(this::finishAfterTransition);
-        } else {
-            finishAfterTransition();
+        returningToGallery = true;
+        generation++;
+        topBar.animate().cancel();
+        bottomBar.animate().cancel();
+        pager.setUserInputEnabled(false);
+        View target = adapter.prepareSharedReturn(pager, pager.getCurrentItem());
+        releasePlayer();
+        if (target == null) {
+            finish();
+            overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out);
+            return;
         }
+        GalleryMediaTransition.configureReturnSurfaces(this, viewerBackdrop, topBar, bottomBar,
+                initialLoading, loadMoreLoading);
+        // Leave the poster drawn before Android captures its return snapshot.
+        target.getViewTreeObserver().addOnPreDrawListener(new android.view.ViewTreeObserver.OnPreDrawListener() {
+            @Override public boolean onPreDraw() {
+                target.getViewTreeObserver().removeOnPreDrawListener(this);
+                setResult(RESULT_OK);
+                finishAfterTransition();
+                return true;
+            }
+        });
+        target.invalidate();
     }
 
     static boolean canReturnWithSharedElement(
@@ -654,6 +677,7 @@ public final class BunkrGalleryActivity extends Activity {
     }
 
     private void maybeAutoplayInitialSelection(int position) {
+        if (returningToGallery || isFinishing()) return;
         NativeContentItem item = adapter == null ? null : adapter.itemAt(position);
         if (!shouldAutoplayInitialSelection(
                 autoplayInitialSelection,
@@ -1066,16 +1090,6 @@ public final class BunkrGalleryActivity extends Activity {
         applyViewerOrientation(newConfig.orientation);
     }
 
-    private void onPhysicalOrientation(SensorMediaOrientationListener.Position position) {
-        if (position == SensorMediaOrientationListener.Position.LANDSCAPE) {
-            sensorFullscreen = true;
-            PhoneOrientationPolicy.enterSensorFullscreen(this);
-        } else if (sensorFullscreen) {
-            sensorFullscreen = false;
-            PhoneOrientationPolicy.exitFullscreenVideo(this);
-        }
-    }
-
     private void applyViewerOrientation(int orientation) {
         boolean landscape = orientation == Configuration.ORIENTATION_LANDSCAPE;
         if (topBar == null || bottomBar == null) {
@@ -1222,7 +1236,6 @@ public final class BunkrGalleryActivity extends Activity {
     protected void onResume() {
         super.onResume();
         recoveryResumed = true;
-        if (orientationListener != null) orientationListener.enable();
     }
 
     @Override protected void onSaveInstanceState(Bundle state) {
@@ -1240,7 +1253,6 @@ public final class BunkrGalleryActivity extends Activity {
     @Override
     protected void onPause() {
         recoveryResumed = false;
-        if (orientationListener != null) orientationListener.disable();
         BunkrGallerySessionStore.persist(this, sessionId);
         releasePlayer();
         super.onPause();
@@ -1249,7 +1261,6 @@ public final class BunkrGalleryActivity extends Activity {
     @Override
     protected void onDestroy() {
         generation++;
-        if (orientationListener != null) orientationListener.disable();
         releasePlayer();
         pageIo.shutdownNow();
         mediaIo.shutdownNow();

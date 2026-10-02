@@ -2,7 +2,10 @@ package com.webapp.crazyshit;
 
 import android.app.Activity;
 import android.app.ActivityOptions;
+import android.app.SharedElementCallback;
 import android.content.Intent;
+import android.graphics.Rect;
+import android.transition.Fade;
 import android.transition.ChangeBounds;
 import android.transition.ChangeClipBounds;
 import android.transition.ChangeImageTransform;
@@ -11,10 +14,13 @@ import android.transition.Transition;
 import android.transition.TransitionListenerAdapter;
 import android.transition.TransitionSet;
 import android.view.View;
+import android.view.ViewGroup;
 import android.view.Window;
 import android.view.animation.PathInterpolator;
 
 import androidx.core.view.ViewCompat;
+import java.util.List;
+import java.util.Map;
 
 /** Shared-media motion between the creator grid and the full-screen gallery viewer. */
 final class GalleryMediaTransition {
@@ -41,6 +47,41 @@ final class GalleryMediaTransition {
         window.setExitTransition(null);
         window.setReenterTransition(null);
         window.setTransitionBackgroundFadeDuration(0L);
+        activity.setExitSharedElementCallback(new SharedElementCallback() {
+            @Override public void onMapSharedElements(List<String> names, Map<String, View> elements) {
+                // A grid holder can be recycled while paging. Map from the currently
+                // visible media identity instead of Android's old View reference.
+                for (String name : new java.util.ArrayList<>(names)) {
+                    if (!name.startsWith("zerochill_gallery_media_")) continue;
+                    View target = findVisibleNamedView(window.getDecorView(), name);
+                    if (target == null) { elements.remove(name); names.remove(name); }
+                    else elements.put(name, target);
+                }
+            }
+        });
+    }
+
+    static View findVisibleNamedView(View view, String name) {
+        if (view == null) return null;
+        if (name.equals(ViewCompat.getTransitionName(view)) && view.isShown()
+                && view.getGlobalVisibleRect(new Rect())) return view;
+        if (view instanceof ViewGroup) {
+            ViewGroup group = (ViewGroup) view;
+            for (int i = 0; i < group.getChildCount(); i++) {
+                View found = findVisibleNamedView(group.getChildAt(i), name);
+                if (found != null) return found;
+            }
+        }
+        return null;
+    }
+
+    static void configureReturnSurfaces(Activity activity, View... surfaces) {
+        Fade fade = new Fade(Fade.OUT);
+        fade.setDuration(EXPAND_DURATION_MS);
+        for (View surface : surfaces) if (surface != null) fade.addTarget(surface);
+        // Only independent backdrop/chrome siblings leave. The shared ImageView
+        // and its pager ancestors remain opaque in alpha throughout the shrink.
+        activity.getWindow().setReturnTransition(fade);
     }
 
     static void configureViewer(Activity activity, Runnable onEnterFinished) {

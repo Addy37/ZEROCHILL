@@ -19,6 +19,7 @@ import androidx.media3.common.Player;
 import androidx.media3.ui.AspectRatioFrameLayout;
 import androidx.media3.ui.PlayerView;
 import androidx.recyclerview.widget.RecyclerView;
+import androidx.viewpager2.widget.ViewPager2;
 
 import com.bumptech.glide.Glide;
 import com.bumptech.glide.load.DataSource;
@@ -195,6 +196,27 @@ final class BunkrGalleryPagerAdapter
         if (old != RecyclerView.NO_POSITION && old < items.size()) notifyItemChanged(old);
     }
 
+    View prepareSharedReturn(ViewPager2 pager, int position) {
+        RecyclerView list = (RecyclerView) pager.getChildAt(0);
+        RecyclerView.ViewHolder raw = list.findViewHolderForAdapterPosition(position);
+        if (!(raw instanceof Holder)) return null;
+        Holder holder = (Holder) raw;
+        if (holder.image.getDrawable() == null || holder.image.getDrawable() instanceof ColorDrawable
+                || !sharedElementName.equals(ViewCompat.getTransitionName(holder.image))) return null;
+        // Preserve the already loaded poster. notifyItemChanged here would restart
+        // Glide and briefly clear the drawable just as Android captures the return.
+        activeVideoPosition = RecyclerView.NO_POSITION;
+        activePlayer = null;
+        holder.playerView.setPlayer(null);
+        holder.playerView.setVisibility(View.GONE);
+        holder.image.setVisibility(View.VISIBLE);
+        holder.image.setAlpha(1f);
+        holder.play.setVisibility(View.GONE);
+        holder.progress.setVisibility(View.GONE);
+        holder.failure.setVisibility(View.GONE);
+        return holder.image;
+    }
+
     @Override
     public long getItemId(int position) {
         return items.get(position).url.hashCode();
@@ -204,10 +226,10 @@ final class BunkrGalleryPagerAdapter
     @Override
     public Holder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
         FrameLayout root = new FrameLayout(parent.getContext());
-        root.setBackgroundColor(Color.BLACK);
         root.setLayoutParams(new RecyclerView.LayoutParams(-1, -1));
 
         ZoomableImageView image = new ZoomableImageView(parent.getContext());
+        image.setBackground(null);
         root.addView(image, new FrameLayout.LayoutParams(-1, -1));
 
         PlayerView playerView = new PlayerView(parent.getContext());

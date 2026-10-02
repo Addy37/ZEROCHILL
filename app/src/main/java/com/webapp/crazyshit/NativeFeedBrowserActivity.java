@@ -96,6 +96,7 @@ public final class NativeFeedBrowserActivity extends Activity {
 
     private NativeFeedAdapter adapter;
     private BunkrGalleryAdapter bunkrGalleryAdapter;
+    private GalleryLaunchOrientation galleryLaunchOrientation;
     private final BunkrGalleryAdapter[] creatorTabAdapters =
             new BunkrGalleryAdapter[CREATOR_TAB_COUNT];
     private final RecyclerView[] creatorTabRecyclers =
@@ -377,6 +378,7 @@ public final class NativeFeedBrowserActivity extends Activity {
         } else if (BunkrRepository.isAlbumUrl(baseUrl)) source = SOURCE_BUNKR;
         else if (WebVideoSourceRepository.isKaoticUrl(baseUrl)) source = SOURCE_KAOTIC;
         else if (EfuktRepository.isEfuktUrl(baseUrl)) source = SOURCE_EFUKT;
+        if (isBunkr()) galleryLaunchOrientation = new GalleryLaunchOrientation(this);
         restoredBrowserState = state;
         if (state != null) {
             browserSnapshot = state.getString("browser_snapshot", browserSnapshot);
@@ -1722,6 +1724,10 @@ public final class NativeFeedBrowserActivity extends Activity {
         );
         intent.putExtra(BunkrGalleryActivity.EXTRA_INITIAL_URL, item.url);
         intent.putExtra(BunkrGalleryActivity.EXTRA_INITIAL_POSITION, position);
+        intent.putExtra(GalleryLaunchOrientation.EXTRA_ORIENTATION,
+                galleryLaunchOrientation == null
+                        ? GalleryLaunchOrientation.fromIntent(null)
+                        : galleryLaunchOrientation.capture());
         GalleryMediaTransition.start(this, intent, transitionAnchor, item);
     }
 
@@ -1923,6 +1929,8 @@ public final class NativeFeedBrowserActivity extends Activity {
             int columns;
             if (landscape) columns = config.screenWidthDp >= 900 ? 7 : 5;
             else columns = config.screenWidthDp >= 600 ? 5 : 3;
+            if (old instanceof GridLayoutManager
+                    && ((GridLayoutManager) old).getSpanCount() == columns) return;
             GridLayoutManager gallery = new GridLayoutManager(this, columns);
             recycler.setLayoutManager(gallery);
             if (bunkrGalleryAdapter.getItemCount() > 0) {
@@ -1960,6 +1968,11 @@ public final class NativeFeedBrowserActivity extends Activity {
     private void applyCreatorGalleryLayout(RecyclerView list) {
         if (list == null) return;
         RecyclerView.LayoutManager old = list.getLayoutManager();
+        // Resume/reentry must retain the holders and their loaded Glide drawables.
+        // Replacing an unchanged manager briefly redraws the entire grid as placeholders.
+        if (old instanceof StaggeredGridLayoutManager
+                && ((StaggeredGridLayoutManager) old).getSpanCount()
+                        == creatorGalleryColumnCount()) return;
         int position = 0;
         int offset = 0;
         if (old != null) {
@@ -2492,18 +2505,32 @@ public final class NativeFeedBrowserActivity extends Activity {
         super.onSaveInstanceState(state);
     }
 
-    @Override protected void onPause() { persistBrowser(); super.onPause(); }
+    @Override protected void onPause() {
+        if (galleryLaunchOrientation != null) galleryLaunchOrientation.disable();
+        persistBrowser();
+        super.onPause();
+    }
 
     @Override
     protected void onResume() {
         super.onResume();
+        if (galleryLaunchOrientation != null) galleryLaunchOrientation.startSampling();
         if (creatorProfile != null) creatorProfile.refresh();
         if (isBunkr() && bunkrGalleryAdapter != null) {
             BunkrGallerySessionStore.Snapshot snapshot =
                     BunkrGallerySessionStore.snapshot(bunkrGallerySessionId);
             if (snapshot != null) {
                 if (snapshot.items.size() > bunkrGalleryAdapter.size()) {
-                    replaceBunkrItems(snapshot.items);
+                    // The viewer only appends to this session. Merge without replacing
+                    // existing media or rebinding the shared return thumbnail.
+                    if (isCreatorGallery()) {
+                        int activeTab = activeCreatorTab();
+                        for (int tab = 0; tab < CREATOR_TAB_COUNT; tab++) {
+                            if (creatorTabAdapters[tab] != null) creatorTabAdapters[tab].append(
+                                    filterCreatorItems(snapshot.items, tab), tab == activeTab);
+                        }
+                        updateCreatorTabLabels();
+                    } else bunkrGalleryAdapter.append(snapshot.items);
                 }
                 currentPage = snapshot.currentPage;
                 endReached = snapshot.endReached;
@@ -2519,6 +2546,7 @@ public final class NativeFeedBrowserActivity extends Activity {
     @Override
     protected void onDestroy() {
         generation++;
+        if (galleryLaunchOrientation != null) galleryLaunchOrientation.disable();
         if (isFinishing() && !shitTokReturnTransition.isEmpty()) {
             ShitTokTransitionSnapshotStore.remove(shitTokReturnTransition);
         }
