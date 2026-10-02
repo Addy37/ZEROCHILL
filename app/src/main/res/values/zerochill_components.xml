@@ -26,14 +26,4 @@
         <item name="itemTextAppearanceActive">@style/TextAppearance.ZeroChill.Label</item>
         <item name="itemTextAppearanceInactive">@style/TextAppearance.ZeroChill.Label</item>
     </style>
-    <!-- Capture the total expanded visual gutter, independently of system clearance.
-         ZeroChillBottomNavigationView distributes it above/below the menu for centering
-         and releases both shares during collapse without reducing the icon container.
-         NativeMainActivity's outer shell uses the actual navigation-bar inset. -->
-    <style name="Widget.ZeroChill.BottomNavigation.Floating" parent="Widget.ZeroChill.BottomNavigation">
-        <item name="android:paddingBottom">@dimen/zc_nav_menu_bottom_gutter</item>
-    </style>
-    <style name="ThemeOverlay.ZeroChill.FloatingBottomNavigation" parent="">
-        <item name="bottomNavigationStyle">@style/Widget.ZeroChill.BottomNavigation.Floating</item>
-    </style>
 </resources>

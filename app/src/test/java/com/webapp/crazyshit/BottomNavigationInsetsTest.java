@@ -118,14 +118,18 @@ public class BottomNavigationInsetsTest {
                         && child.right <= parent.right + 0.01f && child.bottom <= parent.bottom + 0.01f);
     }
 
-    @Test public void expandedCenteringPreservesMaterialChildMeasurementsIncludingLibraryCapsule() {
+    @Test public void expandedGeometryMatchesV431MaterialReferenceIncludingLibraryCapsule() {
         ActivityController<NativeMainActivity> controller = createActivity();
         NativeMainActivity activity = controller.get();
         ZeroChillBottomNavigationView nav = ReflectionHelpers.getField(activity, "bottomNavigation");
         FrostedNavigationLayout shell = ReflectionHelpers.getField(activity, "shell");
         nav.setSelectedItemId(6);
         nav.setPagerPosition(3f);
-        // The production constructor used the theme's original style and Material listener.
+
+        // Recreate v4.3.1's Material hierarchy with the screenshot-calibrated 16dp
+        // bottom padding. The image does not expose the device's raw WindowInsets;
+        // the earlier 24dp fixture was an assumption, not a measured reference.
+        // The current shell continues to own the actual system navigation clearance.
         BottomNavigationView production = new BottomNavigationView(activity);
         production.setMinimumHeight(0);
         for (int id : IDS) {
@@ -135,36 +139,46 @@ public class BottomNavigationInsetsTest {
         StableBottomNavigationController.styleBar(production);
         production.setSelectedItemId(6);
         android.widget.FrameLayout root = ReflectionHelpers.getField(activity, "overlayRoot");
-        root.addView(production, new android.widget.FrameLayout.LayoutParams(dp(activity, 340), dp(activity, 64)));
+        root.addView(production, new android.widget.FrameLayout.LayoutParams(
+                dp(activity, 340), dp(activity, 64)));
         for (int id : IDS) {
             View item = production.findViewById(id);
             item.setMinimumHeight(0);
             item.getLayoutParams().height = ViewGroup.LayoutParams.MATCH_PARENT;
         }
-        WindowInsets gesture = systemInsets(activity, 24);
-        shell.dispatchApplyWindowInsets(gesture);
+
+        WindowInsets referenceGesture = systemInsets(activity, 16);
+        WindowInsets actualButtonNav = systemInsets(activity, 80);
+        shell.dispatchApplyWindowInsets(actualButtonNav);
         assertSame("nav must return raw insets for legacy parent/sibling dispatch",
-                gesture, nav.dispatchApplyWindowInsets(gesture));
-        production.dispatchApplyWindowInsets(gesture);
+                actualButtonNav, nav.dispatchApplyWindowInsets(actualButtonNav));
+        production.dispatchApplyWindowInsets(referenceGesture);
         layoutShell(shell);
         measure(production, nav.getWidth(), nav.getHeight());
-        // Material posts active-indicator sizing until the measured item width is available.
+
         shadowOf(android.os.Looper.getMainLooper()).idle();
-        // Attachment can dispatch the test window's default zero insets. Reapply the
-        // simulated production input after that asynchronous dispatch, before comparison.
-        shell.dispatchApplyWindowInsets(gesture);
-        production.dispatchApplyWindowInsets(gesture);
+        shell.dispatchApplyWindowInsets(actualButtonNav);
+        nav.dispatchApplyWindowInsets(actualButtonNav);
+        production.dispatchApplyWindowInsets(referenceGesture);
         layoutShell(shell);
         measure(production, nav.getWidth(), nav.getHeight());
-        assertEquals(dp(activity, 24), production.getPaddingBottom());
-        assertEquals(production.getPaddingBottom(), nav.getPaddingTop() + nav.getPaddingBottom());
-        // Centering changes the menu origin, not any Material child dimension/layout.
-        assertEquals(menuGeometry(production), menuGeometry(nav, nav.getPaddingTop()));
+
+        assertEquals(dp(activity, 16), production.getPaddingBottom());
+        assertEquals(production.getPaddingTop(), nav.getPaddingTop());
+        assertEquals(production.getPaddingBottom(), nav.getPaddingBottom());
+        assertEquals("expanded hierarchy must match v4.3.1 Material geometry",
+                menuGeometry(production), menuGeometry(nav));
+
         draw(nav);
         Rect item = bounds(production, production.findViewById(6));
-        RectF expectedCapsule = new RectF(item.left + dp(activity, 4), dp(activity, 9),
-                item.right - dp(activity, 4), dp(activity, 55));
-        assertEquals(expectedCapsule, nav.selectedCapsuleBoundsForTest());
+        RectF expectedCapsule = new RectF(
+                item.left + dp(activity, 4),
+                Math.max(dp(activity, 3), item.top + dp(activity, 4)),
+                item.right - dp(activity, 4),
+                Math.min(production.getHeight() - dp(activity, 3), item.bottom + dp(activity, 10))
+        );
+        assertEquals("selected capsule must use v4.3.1 bounds",
+                expectedCapsule, nav.selectedCapsuleBoundsForTest());
         assertLabelsInsideBar(nav);
         controller.pause().stop().destroy();
     }
@@ -197,7 +211,7 @@ public class BottomNavigationInsetsTest {
                     assertEquals(gestureTop - dp(activity, bottom - 24), nav.getTop());
                     assertEquals(height, nav.getHeight());
                     assertEquals(width, nav.getWidth());
-                    assertEquals(Math.round(dp(activity, 24) * (1f - progress)), nav.getPaddingTop() + nav.getPaddingBottom());
+                    assertEquals(Math.round(dp(activity, 16) * (1f - progress)), nav.getPaddingTop() + nav.getPaddingBottom());
                     assertEquals(expected, menuGeometry(nav));
                     assertEquals(capsule, nav.selectedCapsuleBoundsForTest());
                     assertLabelsInsideBar(nav);
@@ -299,23 +313,19 @@ public class BottomNavigationInsetsTest {
     }
 
     private static List<String> menuGeometry(BottomNavigationView nav) {
-        return menuGeometry(nav, 0);
-    }
-
-    private static List<String> menuGeometry(BottomNavigationView nav, int originY) {
         List<String> result = new ArrayList<>();
-        for (int id : IDS) collectGeometry(nav, nav.findViewById(id), result, originY);
+        for (int id : IDS) collectGeometry(nav, nav.findViewById(id), result);
         return result;
     }
 
-    private static void collectGeometry(ViewGroup nav, View view, List<String> result, int originY) {
-        Rect rect = bounds(nav, view);
-        rect.offset(0, -originY);
-        result.add(view.getClass().getSimpleName() + ":" + rect + ":"
+    private static void collectGeometry(ViewGroup nav, View view, List<String> result) {
+        result.add(view.getClass().getSimpleName() + ":" + bounds(nav, view) + ":"
                 + view.getTranslationY() + ":" + view.getAlpha() + ":" + view.getVisibility());
         if (view instanceof ViewGroup) {
             ViewGroup group = (ViewGroup) view;
-            for (int i = 0; i < group.getChildCount(); i++) collectGeometry(nav, group.getChildAt(i), result, originY);
+            for (int i = 0; i < group.getChildCount(); i++) {
+                collectGeometry(nav, group.getChildAt(i), result);
+            }
         }
     }
 

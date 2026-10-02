@@ -196,7 +196,9 @@ public class VisualRefreshTest {
         View shitTokTab = nav.findViewById(4);
         assertEquals((showsTab.getWidth() + shitTokTab.getWidth()) / 2f - BrowseUi.dp(main, 8),
                 capsule.width(), 1f);
-        assertEquals(nav.getHeight() / 2f, capsule.centerY(), 1f);
+        // v4.3.1 anchors the selected glass to Material's item bounds rather than
+        // forcing its center to the navbar midpoint.
+        assertTrue(capsule.top >= BrowseUi.dp(main, 3));
         assertTrue(capsule.bottom > capsule.top);
         assertTrue(capsule.bottom <= nav.getHeight() - BrowseUi.dp(main, 3));
         assertEquals(0.5f, slidingNav.pagerPositionForTest(), 0.001f);
@@ -208,12 +210,13 @@ public class VisualRefreshTest {
         assertEquals("OnlyFap", nav.getMenu().findItem(3).getTitle());
         assertEquals("Library", nav.getMenu().findItem(6).getTitle());
         assertNull(nav.getMenu().findItem(5));
-        assertEquals(main.getResources().getDimensionPixelSize(R.dimen.zc_nav_menu_bottom_gutter),
-                nav.getPaddingTop() + nav.getPaddingBottom());
+        assertEquals(0, nav.getPaddingTop());
+        assertEquals(main.getResources().getDimensionPixelSize(
+                R.dimen.zc_nav_reference_gesture_inset), nav.getPaddingBottom());
         for (int id : new int[] {2, 4, 3, 6}) {
             View tab = nav.findViewById(id);
             assertTrue("Tab " + id + " width=" + tab.getWidth() + " nav=" + nav.getWidth(), tab.getWidth() >= BrowseUi.dp(main, 48));
-            // Material's menu retains its measured height while its origin is centered.
+            // Expanded geometry matches the v4.3.1 Material reference inset.
             assertEquals(nav.getHeight() - nav.getPaddingTop() - nav.getPaddingBottom(),
                     tab.getHeight());
             assertEquals(0, Math.round(tab.getTranslationY()));
