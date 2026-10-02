@@ -120,9 +120,7 @@ final class ZeroChillBottomNavigationView extends BottomNavigationView {
             return Api30Insets.withNavigationBottom(base, bottom);
         }
         if (Build.VERSION.SDK_INT >= 29) {
-            return new WindowInsets.Builder(base)
-                    .setSystemWindowInsets(Insets.of(0, 0, 0, bottom))
-                    .build();
+            return Api29Insets.withSystemBottom(base, bottom);
         }
         return base.replaceSystemWindowInsets(0, 0, 0, bottom);
     }
@@ -572,6 +570,18 @@ final class ZeroChillBottomNavigationView extends BottomNavigationView {
 
     private static float clamp(float value, float min, float max) {
         return Math.max(min, Math.min(max, value));
+    }
+
+    @RequiresApi(29)
+    private static final class Api29Insets {
+        private Api29Insets() {
+        }
+
+        static WindowInsets withSystemBottom(WindowInsets base, int bottom) {
+            return new WindowInsets.Builder(base)
+                    .setSystemWindowInsets(Insets.of(0, 0, 0, bottom))
+                    .build();
+        }
     }
 
     @RequiresApi(30)
