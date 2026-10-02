@@ -58,6 +58,7 @@ public final class BunkrGalleryActivity extends Activity {
     public static final String EXTRA_MEDIA_FILTER = "bunkr_gallery_media_filter";
     public static final String EXTRA_INITIAL_URL = "bunkr_gallery_initial_url";
     public static final String EXTRA_INITIAL_POSITION = "bunkr_gallery_initial_position";
+    public static final String EXTRA_SHARED_ELEMENT_NAME = "bunkr_gallery_shared_element_name";
     public static final String FILTER_ALL = "all";
     public static final String FILTER_PICTURES = "pictures";
     public static final String FILTER_VIDEOS = "videos";
@@ -114,10 +115,17 @@ public final class BunkrGalleryActivity extends Activity {
     private final Map<String, String> videoReferers = new HashMap<>();
     private int pendingVideoPosition = -1;
     private boolean autoplayInitialSelection;
+    private String sharedElementName = "";
+    private boolean sharedElementPending;
+    private boolean sharedElementStarted;
+    private boolean sharedElementCompleted;
+    private View sharedElementTarget;
+    private int pendingTransitionAutoplayPosition = -1;
 
     @Override
     protected void onCreate(Bundle state) {
         super.onCreate(state);
+        GalleryMediaTransition.requestWindowFeature(this);
         getWindow().setStatusBarColor(Color.BLACK);
         getWindow().setNavigationBarColor(Color.BLACK);
         orientationListener = new SensorMediaOrientationListener(this, this::onPhysicalOrientation);
@@ -133,6 +141,18 @@ public final class BunkrGalleryActivity extends Activity {
         }
         initialUrl = value(getIntent().getStringExtra(EXTRA_INITIAL_URL));
         initialPosition = Math.max(0, getIntent().getIntExtra(EXTRA_INITIAL_POSITION, 0));
+        sharedElementName = state == null
+                ? value(getIntent().getStringExtra(EXTRA_SHARED_ELEMENT_NAME))
+                : "";
+        sharedElementPending = !sharedElementName.isEmpty()
+                && ZeroChillMotion.animationsEnabled(this);
+        if (sharedElementPending) {
+            GalleryMediaTransition.configureViewer(
+                    this,
+                    this::onSharedElementEnterFinished
+            );
+            postponeEnterTransition();
+        }
         autoplayInitialSelection = state == null && !initialUrl.isEmpty();
         if (albumTitle.isEmpty()) albumTitle = "OnlyFap gallery";
 
@@ -204,8 +224,14 @@ public final class BunkrGalleryActivity extends Activity {
                     public void onResolvedImageFailed(int position, NativeContentItem item) {
                         BunkrGallerySessionStore.clearResolvedUrl(sessionId, item.url);
                     }
+
+                    @Override
+                    public void onSharedElementReady(View target) {
+                        BunkrGalleryActivity.this.onSharedElementReady(target);
+                    }
                 }
         );
+        adapter.setInitialSharedElement(initialUrl, sharedElementName);
         pager.setAdapter(adapter);
         root.addView(pager, new FrameLayout.LayoutParams(-1, -1));
 
@@ -217,7 +243,7 @@ public final class BunkrGalleryActivity extends Activity {
 
         TextView back = action("‹", 32);
         back.setContentDescription("Back");
-        back.setOnClickListener(v -> finish());
+        back.setOnClickListener(v -> finishViewer());
         topBar.addView(back, new LinearLayout.LayoutParams(dp(52), dp(54)));
 
         LinearLayout heading = new LinearLayout(this);
@@ -302,7 +328,15 @@ public final class BunkrGalleryActivity extends Activity {
         loadMoreParams.gravity = Gravity.CENTER;
         root.addView(loadMoreLoading, loadMoreParams);
 
+        if (sharedElementPending) {
+            topBar.setAlpha(0f);
+            bottomBar.setAlpha(0f);
+        }
+
         setContentView(root);
+        if (sharedElementPending) {
+            root.postDelayed(this::startSharedElementFallback, 900L);
+        }
 
         pager.registerOnPageChangeCallback(new ViewPager2.OnPageChangeCallback() {
             @Override
@@ -532,6 +566,93 @@ public final class BunkrGalleryActivity extends Activity {
         return null;
     }
 
+    private void onSharedElementReady(View target) {
+        if (!sharedElementPending || sharedElementStarted || target == null) return;
+        String targetName = ViewCompat.getTransitionName(target);
+        if (!sharedElementName.equals(targetName)) return;
+        sharedElementTarget = target;
+        target.post(() -> {
+            if (!sharedElementPending || sharedElementStarted || isFinishing()) return;
+            sharedElementStarted = true;
+            startPostponedEnterTransition();
+        });
+    }
+
+    private void startSharedElementFallback() {
+        if (!sharedElementPending || sharedElementStarted || isFinishing()) return;
+        sharedElementStarted = true;
+        startPostponedEnterTransition();
+        // With no matching target Android may have no shared transition to finish.
+        // Restore normal viewer behavior even in that fallback.
+        if (sharedElementTarget == null) {
+            getWindow().getDecorView().postDelayed(() -> {
+                if (sharedElementPending) onSharedElementEnterFinished();
+            }, GalleryMediaTransition.EXPAND_DURATION_MS + 80L);
+        }
+    }
+
+    private void onSharedElementEnterFinished() {
+        if (!sharedElementPending) return;
+        sharedElementPending = false;
+        sharedElementCompleted = sharedElementTarget != null;
+        if (chromeVisible && topBar != null && bottomBar != null) {
+            topBar.animate().cancel();
+            bottomBar.animate().cancel();
+            topBar.animate().alpha(1f)
+                    .setDuration(GalleryMediaTransition.CHROME_FADE_MS).start();
+            bottomBar.animate().alpha(1f)
+                    .setDuration(GalleryMediaTransition.CHROME_FADE_MS).start();
+        }
+        int autoplayPosition = pendingTransitionAutoplayPosition;
+        pendingTransitionAutoplayPosition = -1;
+        if (autoplayPosition >= 0) {
+            maybeAutoplayInitialSelection(autoplayPosition);
+        }
+    }
+
+    private void finishViewer() {
+        if (isFinishing()) return;
+        NativeContentItem current = adapter == null || pager == null
+                ? null
+                : adapter.itemAt(pager.getCurrentItem());
+        boolean sharedReturn = sharedElementCompleted
+                && canReturnWithSharedElement(sharedElementName, initialUrl, current);
+        if (!sharedReturn) {
+            if (sharedElementPending) {
+                sharedElementPending = false;
+                startPostponedEnterTransition();
+            }
+            finish();
+            overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out);
+            return;
+        }
+
+        if (current != null && current.isVideo() && player != null) {
+            releasePlayer();
+            pager.post(this::finishAfterTransition);
+        } else {
+            finishAfterTransition();
+        }
+    }
+
+    static boolean canReturnWithSharedElement(
+            String transitionName,
+            String initialUrl,
+            NativeContentItem current
+    ) {
+        return transitionName != null
+                && !transitionName.isEmpty()
+                && initialUrl != null
+                && !initialUrl.isEmpty()
+                && current != null
+                && initialUrl.equals(current.url);
+    }
+
+    @Override
+    public void onBackPressed() {
+        finishViewer();
+    }
+
     private void maybeAutoplayInitialSelection(int position) {
         NativeContentItem item = adapter == null ? null : adapter.itemAt(position);
         if (!shouldAutoplayInitialSelection(
@@ -539,7 +660,12 @@ public final class BunkrGalleryActivity extends Activity {
                 initialUrl,
                 item
         )) return;
+        if (sharedElementPending) {
+            pendingTransitionAutoplayPosition = position;
+            return;
+        }
         autoplayInitialSelection = false;
+        pendingTransitionAutoplayPosition = -1;
         playVideo(position, item);
     }
 
