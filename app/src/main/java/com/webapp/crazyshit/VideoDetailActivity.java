@@ -1254,7 +1254,9 @@ public class VideoDetailActivity extends Activity {
                     .load(source)
                     .centerCrop()
                     .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
-                    .transition(view == startupPoster ? com.bumptech.glide.load.resource.drawable.DrawableTransitionOptions.withNoTransition() : ThumbnailFades.thumbnail())
+                    .transition(view == startupPoster
+                            ? new com.bumptech.glide.load.resource.drawable.DrawableTransitionOptions().dontTransition()
+                            : ThumbnailFades.thumbnail())
                     .placeholder(new ColorDrawable(Color.rgb(18, 18, 21)))
                     .error(new ColorDrawable(Color.rgb(18, 18, 21)))
                     .into(view);
