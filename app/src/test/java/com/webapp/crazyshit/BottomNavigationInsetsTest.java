@@ -118,14 +118,17 @@ public class BottomNavigationInsetsTest {
                         && child.right <= parent.right + 0.01f && child.bottom <= parent.bottom + 0.01f);
     }
 
-    @Test public void expandedGeometryUsesDeviceTunedGutterIncludingLibraryCapsule() {
+    @Test public void expandedGeometryMatchesV431MaterialReferenceIncludingLibraryCapsule() {
         ActivityController<NativeMainActivity> controller = createActivity();
         NativeMainActivity activity = controller.get();
         ZeroChillBottomNavigationView nav = ReflectionHelpers.getField(activity, "bottomNavigation");
         FrostedNavigationLayout shell = ReflectionHelpers.getField(activity, "shell");
         nav.setSelectedItemId(6);
         nav.setPagerPosition(3f);
-        // The production constructor used the theme's original style and Material listener.
+
+        // v4.3.1 used a plain Material BottomNavigationView that received the 24dp
+        // gesture-navigation inset directly. Treat that rendered hierarchy as the
+        // expanded geometry oracle while the current shell owns the real system inset.
         BottomNavigationView production = new BottomNavigationView(activity);
         production.setMinimumHeight(0);
         for (int id : IDS) {
@@ -135,68 +138,46 @@ public class BottomNavigationInsetsTest {
         StableBottomNavigationController.styleBar(production);
         production.setSelectedItemId(6);
         android.widget.FrameLayout root = ReflectionHelpers.getField(activity, "overlayRoot");
-        root.addView(production, new android.widget.FrameLayout.LayoutParams(dp(activity, 340), dp(activity, 64)));
+        root.addView(production, new android.widget.FrameLayout.LayoutParams(
+                dp(activity, 340), dp(activity, 64)));
         for (int id : IDS) {
             View item = production.findViewById(id);
             item.setMinimumHeight(0);
             item.getLayoutParams().height = ViewGroup.LayoutParams.MATCH_PARENT;
         }
-        WindowInsets gesture = systemInsets(activity, 24);
-        shell.dispatchApplyWindowInsets(gesture);
+
+        WindowInsets referenceGesture = systemInsets(activity, 24);
+        WindowInsets actualButtonNav = systemInsets(activity, 80);
+        shell.dispatchApplyWindowInsets(actualButtonNav);
         assertSame("nav must return raw insets for legacy parent/sibling dispatch",
-                gesture, nav.dispatchApplyWindowInsets(gesture));
-        production.dispatchApplyWindowInsets(gesture);
+                actualButtonNav, nav.dispatchApplyWindowInsets(actualButtonNav));
+        production.dispatchApplyWindowInsets(referenceGesture);
         layoutShell(shell);
         measure(production, nav.getWidth(), nav.getHeight());
-        // Material posts active-indicator sizing until the measured item width is available.
+
         shadowOf(android.os.Looper.getMainLooper()).idle();
-        // Attachment can dispatch the test window's default zero insets. Reapply the
-        // simulated production input after that asynchronous dispatch, before comparison.
-        shell.dispatchApplyWindowInsets(gesture);
-        production.dispatchApplyWindowInsets(gesture);
+        shell.dispatchApplyWindowInsets(actualButtonNav);
+        nav.dispatchApplyWindowInsets(actualButtonNav);
+        production.dispatchApplyWindowInsets(referenceGesture);
         layoutShell(shell);
         measure(production, nav.getWidth(), nav.getHeight());
+
         assertEquals(dp(activity, 24), production.getPaddingBottom());
-        assertEquals(dp(activity, 4), nav.getPaddingTop());
-        assertEquals(dp(activity, 20), nav.getPaddingBottom());
-        // Keep Material item/icon measurements intact. Labels intentionally receive
-        // a 2dp expanded-only visual offset, so whole-hierarchy position equality is no
-        // longer the correct regression contract.
-        for (int id : IDS) {
-            View productionItem = production.findViewById(id);
-            View navItem = nav.findViewById(id);
-            assertEquals(productionItem.getWidth(), navItem.getWidth());
-            assertEquals(productionItem.getHeight(), navItem.getHeight());
+        assertEquals(production.getPaddingTop(), nav.getPaddingTop());
+        assertEquals(production.getPaddingBottom(), nav.getPaddingBottom());
+        assertEquals("expanded hierarchy must match v4.3.1 Material geometry",
+                menuGeometry(production), menuGeometry(nav));
 
-            ImageView productionIcon = productionItem.findViewById(
-                    com.google.android.material.R.id.navigation_bar_item_icon_view);
-            ImageView navIcon = navItem.findViewById(
-                    com.google.android.material.R.id.navigation_bar_item_icon_view);
-            assertEquals(productionIcon.getWidth(), navIcon.getWidth());
-            assertEquals(productionIcon.getHeight(), navIcon.getHeight());
-
-            View productionContainer = productionItem.findViewById(
-                    com.google.android.material.R.id.navigation_bar_item_icon_container);
-            View navContainer = navItem.findViewById(
-                    com.google.android.material.R.id.navigation_bar_item_icon_container);
-            assertEquals(productionContainer.getWidth(), navContainer.getWidth());
-            assertEquals(productionContainer.getHeight(), navContainer.getHeight());
-
-            for (int labelId : new int[] {
-                    com.google.android.material.R.id.navigation_bar_item_small_label_view,
-                    com.google.android.material.R.id.navigation_bar_item_large_label_view}) {
-                TextView productionLabel = productionItem.findViewById(labelId);
-                TextView navLabel = navItem.findViewById(labelId);
-                assertEquals(productionLabel.getWidth(), navLabel.getWidth());
-                assertEquals(productionLabel.getHeight(), navLabel.getHeight());
-                assertEquals(dp(activity, 2), navLabel.getTranslationY(), 0.01f);
-            }
-        }
         draw(nav);
         Rect item = bounds(production, production.findViewById(6));
-        RectF expectedCapsule = new RectF(item.left + dp(activity, 4), dp(activity, 9),
-                item.right - dp(activity, 4), dp(activity, 55));
-        assertEquals(expectedCapsule, nav.selectedCapsuleBoundsForTest());
+        RectF expectedCapsule = new RectF(
+                item.left + dp(activity, 4),
+                Math.max(dp(activity, 3), item.top + dp(activity, 4)),
+                item.right - dp(activity, 4),
+                Math.min(production.getHeight() - dp(activity, 3), item.bottom + dp(activity, 10))
+        );
+        assertEquals("selected capsule must use v4.3.1 bounds",
+                expectedCapsule, nav.selectedCapsuleBoundsForTest());
         assertLabelsInsideBar(nav);
         controller.pause().stop().destroy();
     }
@@ -331,36 +312,18 @@ public class BottomNavigationInsetsTest {
     }
 
     private static List<String> menuGeometry(BottomNavigationView nav) {
-        return menuGeometry(nav, 0, 0);
-    }
-
-    private static List<String> menuGeometry(BottomNavigationView nav, int originY) {
-        return menuGeometry(nav, originY, 0);
-    }
-
-    private static List<String> menuGeometry(BottomNavigationView nav, int originY, int labelVisualOffset) {
         List<String> result = new ArrayList<>();
-        for (int id : IDS) {
-            collectGeometry(nav, nav.findViewById(id), result, originY, labelVisualOffset);
-        }
+        for (int id : IDS) collectGeometry(nav, nav.findViewById(id), result);
         return result;
     }
 
-    private static void collectGeometry(ViewGroup nav, View view, List<String> result,
-            int originY, int labelVisualOffset) {
-        Rect rect = bounds(nav, view);
-        rect.offset(0, -originY);
-        float translationY = view.getTranslationY();
-        if (view instanceof TextView && labelVisualOffset != 0) {
-            rect.offset(0, -labelVisualOffset);
-            translationY -= labelVisualOffset;
-        }
-        result.add(view.getClass().getSimpleName() + ":" + rect + ":"
-                + translationY + ":" + view.getAlpha() + ":" + view.getVisibility());
+    private static void collectGeometry(ViewGroup nav, View view, List<String> result) {
+        result.add(view.getClass().getSimpleName() + ":" + bounds(nav, view) + ":"
+                + view.getTranslationY() + ":" + view.getAlpha() + ":" + view.getVisibility());
         if (view instanceof ViewGroup) {
             ViewGroup group = (ViewGroup) view;
             for (int i = 0; i < group.getChildCount(); i++) {
-                collectGeometry(nav, group.getChildAt(i), result, originY, labelVisualOffset);
+                collectGeometry(nav, group.getChildAt(i), result);
             }
         }
     }
