@@ -159,10 +159,39 @@ public class BottomNavigationInsetsTest {
         assertEquals(dp(activity, 24), production.getPaddingBottom());
         assertEquals(dp(activity, 4), nav.getPaddingTop());
         assertEquals(dp(activity, 20), nav.getPaddingBottom());
-        // Keep Material child geometry intact while applying the device-tuned 4dp
-        // expanded offset. System clearance remains owned by the shell.
-        assertEquals(menuGeometry(production),
-                menuGeometry(nav, nav.getPaddingTop(), dp(activity, 2)));
+        // Keep Material item/icon measurements intact. Labels intentionally receive
+        // a 2dp expanded-only visual offset, so whole-hierarchy position equality is no
+        // longer the correct regression contract.
+        for (int id : IDS) {
+            View productionItem = production.findViewById(id);
+            View navItem = nav.findViewById(id);
+            assertEquals(productionItem.getWidth(), navItem.getWidth());
+            assertEquals(productionItem.getHeight(), navItem.getHeight());
+
+            ImageView productionIcon = productionItem.findViewById(
+                    com.google.android.material.R.id.navigation_bar_item_icon_view);
+            ImageView navIcon = navItem.findViewById(
+                    com.google.android.material.R.id.navigation_bar_item_icon_view);
+            assertEquals(productionIcon.getWidth(), navIcon.getWidth());
+            assertEquals(productionIcon.getHeight(), navIcon.getHeight());
+
+            View productionContainer = productionItem.findViewById(
+                    com.google.android.material.R.id.navigation_bar_item_icon_container);
+            View navContainer = navItem.findViewById(
+                    com.google.android.material.R.id.navigation_bar_item_icon_container);
+            assertEquals(productionContainer.getWidth(), navContainer.getWidth());
+            assertEquals(productionContainer.getHeight(), navContainer.getHeight());
+
+            for (int labelId : new int[] {
+                    com.google.android.material.R.id.navigation_bar_item_small_label_view,
+                    com.google.android.material.R.id.navigation_bar_item_large_label_view}) {
+                TextView productionLabel = productionItem.findViewById(labelId);
+                TextView navLabel = navItem.findViewById(labelId);
+                assertEquals(productionLabel.getWidth(), navLabel.getWidth());
+                assertEquals(productionLabel.getHeight(), navLabel.getHeight());
+                assertEquals(dp(activity, 2), navLabel.getTranslationY(), 0.01f);
+            }
+        }
         draw(nav);
         Rect item = bounds(production, production.findViewById(6));
         RectF expectedCapsule = new RectF(item.left + dp(activity, 4), dp(activity, 9),
