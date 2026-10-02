@@ -8,6 +8,7 @@ import android.graphics.RectF;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowInsets;
+import android.view.MotionEvent;
 import android.widget.TextView;
 import android.widget.ImageView;
 
@@ -117,7 +118,7 @@ public class BottomNavigationInsetsTest {
                         && child.right <= parent.right + 0.01f && child.bottom <= parent.bottom + 0.01f);
     }
 
-    @Test public void gestureGeometryMatchesProductionMaterialMenuIncludingLibraryCapsule() {
+    @Test public void expandedCenteringPreservesMaterialChildMeasurementsIncludingLibraryCapsule() {
         ActivityController<NativeMainActivity> controller = createActivity();
         NativeMainActivity activity = controller.get();
         ZeroChillBottomNavigationView nav = ReflectionHelpers.getField(activity, "bottomNavigation");
@@ -156,14 +157,13 @@ public class BottomNavigationInsetsTest {
         layoutShell(shell);
         measure(production, nav.getWidth(), nav.getHeight());
         assertEquals(dp(activity, 24), production.getPaddingBottom());
-        assertEquals(production.getPaddingBottom(), nav.getPaddingBottom());
-        assertEquals(menuGeometry(production), menuGeometry(nav));
+        assertEquals(production.getPaddingBottom(), nav.getPaddingTop() + nav.getPaddingBottom());
+        // Centering changes the menu origin, not any Material child dimension/layout.
+        assertEquals(menuGeometry(production), menuGeometry(nav, nav.getPaddingTop()));
         draw(nav);
         Rect item = bounds(production, production.findViewById(6));
-        RectF expectedCapsule = new RectF(item.left + dp(activity, 4),
-                Math.max(dp(activity, 3), item.top + dp(activity, 4)),
-                item.right - dp(activity, 4),
-                Math.min(production.getHeight() - dp(activity, 3), item.bottom + dp(activity, 10)));
+        RectF expectedCapsule = new RectF(item.left + dp(activity, 4), dp(activity, 9),
+                item.right - dp(activity, 4), dp(activity, 55));
         assertEquals(expectedCapsule, nav.selectedCapsuleBoundsForTest());
         assertLabelsInsideBar(nav);
         controller.pause().stop().destroy();
@@ -197,7 +197,7 @@ public class BottomNavigationInsetsTest {
                     assertEquals(gestureTop - dp(activity, bottom - 24), nav.getTop());
                     assertEquals(height, nav.getHeight());
                     assertEquals(width, nav.getWidth());
-                    assertEquals(Math.round(dp(activity, 24) * (1f - progress)), nav.getPaddingBottom());
+                    assertEquals(Math.round(dp(activity, 24) * (1f - progress)), nav.getPaddingTop() + nav.getPaddingBottom());
                     assertEquals(expected, menuGeometry(nav));
                     assertEquals(capsule, nav.selectedCapsuleBoundsForTest());
                     assertLabelsInsideBar(nav);
@@ -224,6 +224,44 @@ public class BottomNavigationInsetsTest {
             assertEquals(dp(context, bottom), legacy.getSystemWindowInsetBottom());
             assertEquals(dp(context, 24), legacy.getSystemWindowInsetTop());
         }
+    }
+
+    @Test public void capsuleEdgeDragsFollowItsCenteredBoundsThroughCollapse() {
+        ActivityController<NativeMainActivity> controller = createActivity();
+        NativeMainActivity activity = controller.get();
+        ZeroChillBottomNavigationView nav = ReflectionHelpers.getField(activity, "bottomNavigation");
+        FrostedNavigationLayout shell = ReflectionHelpers.getField(activity, "shell");
+        java.util.concurrent.atomic.AtomicInteger starts = new java.util.concurrent.atomic.AtomicInteger();
+        java.util.concurrent.atomic.AtomicInteger ends = new java.util.concurrent.atomic.AtomicInteger();
+        nav.setOnNavigationDragListener(new ZeroChillBottomNavigationView.OnNavigationDragListener() {
+            public boolean onNavigationDragStart() { starts.incrementAndGet(); return true; }
+            public void onNavigationDragBy(float delta) { assertTrue(delta > 0); }
+            public void onNavigationDragEnd(boolean canceled) { assertFalse(canceled); ends.incrementAndGet(); }
+        });
+        int expected = 0;
+        for (float progress : new float[]{0f, 0.5f, 1f}) {
+            nav.setCollapseProgressForTest(progress);
+            for (float page : new float[]{1.5f, 3f}) {
+                nav.setPagerPosition(page);
+                shell.dispatchApplyWindowInsets(systemInsets(activity, 48));
+                layoutShell(shell);
+                draw(nav);
+                RectF capsule = nav.selectedCapsuleBoundsForTest();
+                for (float y : new float[]{capsule.top + 0.5f, capsule.bottom - 0.5f}) {
+                    float x = capsule.centerX();
+                    for (int action : new int[]{MotionEvent.ACTION_DOWN, MotionEvent.ACTION_MOVE, MotionEvent.ACTION_UP}) {
+                        MotionEvent event = MotionEvent.obtain(0, 20, action,
+                                action == MotionEvent.ACTION_DOWN ? x : x + dp(activity, 24), y, 0);
+                        nav.dispatchTouchEvent(event);
+                        event.recycle();
+                    }
+                    expected++;
+                    assertEquals("capsule edge must accept horizontal drag", expected, starts.get());
+                    assertEquals(expected, ends.get());
+                }
+            }
+        }
+        controller.pause().stop().destroy();
     }
 
     static ActivityController<NativeMainActivity> createActivity() {
@@ -261,17 +299,23 @@ public class BottomNavigationInsetsTest {
     }
 
     private static List<String> menuGeometry(BottomNavigationView nav) {
+        return menuGeometry(nav, 0);
+    }
+
+    private static List<String> menuGeometry(BottomNavigationView nav, int originY) {
         List<String> result = new ArrayList<>();
-        for (int id : IDS) collectGeometry(nav, nav.findViewById(id), result);
+        for (int id : IDS) collectGeometry(nav, nav.findViewById(id), result, originY);
         return result;
     }
 
-    private static void collectGeometry(ViewGroup nav, View view, List<String> result) {
-        result.add(view.getClass().getSimpleName() + ":" + bounds(nav, view) + ":"
+    private static void collectGeometry(ViewGroup nav, View view, List<String> result, int originY) {
+        Rect rect = bounds(nav, view);
+        rect.offset(0, -originY);
+        result.add(view.getClass().getSimpleName() + ":" + rect + ":"
                 + view.getTranslationY() + ":" + view.getAlpha() + ":" + view.getVisibility());
         if (view instanceof ViewGroup) {
             ViewGroup group = (ViewGroup) view;
-            for (int i = 0; i < group.getChildCount(); i++) collectGeometry(nav, group.getChildAt(i), result);
+            for (int i = 0; i < group.getChildCount(); i++) collectGeometry(nav, group.getChildAt(i), result, originY);
         }
     }
 

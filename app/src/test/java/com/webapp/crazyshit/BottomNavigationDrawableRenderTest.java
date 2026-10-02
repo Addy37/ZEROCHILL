@@ -22,6 +22,7 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.util.ArrayList;
 import java.util.List;
+import java.security.MessageDigest;
 
 import static org.junit.Assert.*;
 import static org.robolectric.Shadows.shadowOf;
@@ -31,43 +32,122 @@ import static org.robolectric.Shadows.shadowOf;
 @Config(application = Application.class, sdk = 35, qualifiers = "w411dp-h891dp-xhdpi")
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 public class BottomNavigationDrawableRenderTest {
-    @Test public void expandedContentAndCapsuleAreVerticallyCentered() {
+    @Test public void expandedContentAndCapsuleAreVerticallyCenteredThroughLiveInsets() {
         ActivityController<NativeMainActivity> controller = BottomNavigationInsetsTest.createActivity();
         NativeMainActivity activity = controller.get();
         ZeroChillBottomNavigationView nav = ReflectionHelpers.getField(activity, "bottomNavigation");
         FrostedNavigationLayout shell = ReflectionHelpers.getField(activity, "shell");
         int[] ids = {2, 4, 3, 6};
+        float density = activity.getResources().getDisplayMetrics().density;
         for (int selected = 0; selected < ids.length; selected++) {
             nav.setSelectedItemId(ids[selected]);
             nav.setPagerPosition(selected);
             shadowOf(android.os.Looper.getMainLooper()).idle();
-            shell.dispatchApplyWindowInsets(BottomNavigationInsetsTest.systemInsets(activity, 24));
-            BottomNavigationInsetsTest.layoutShell(shell);
-            Bitmap bitmap = Bitmap.createBitmap(nav.getWidth(), nav.getHeight(), Bitmap.Config.ARGB_8888);
-            nav.draw(new Canvas(bitmap));
-            bitmap.recycle();
-            for (int id : ids) {
-                View item = nav.findViewById(id);
-                ImageView icon = item.findViewById(com.google.android.material.R.id.navigation_bar_item_icon_view);
-                TextView label = item.findViewById(id == ids[selected]
-                        ? com.google.android.material.R.id.navigation_bar_item_large_label_view
-                        : com.google.android.material.R.id.navigation_bar_item_small_label_view);
-                RectF content = mappedBounds(nav, icon);
-                RectF labelBounds = mappedBounds(nav, label);
-                content.union(labelBounds);
-                System.out.println("NAV_VERTICAL_MEASURE selected=" + ids[selected] + " tab=" + id
-                        + " nav=" + nav.getHeight() + " paddingTop=" + nav.getPaddingTop()
-                        + " paddingBottom=" + nav.getPaddingBottom() + " menu=" + ((View) item.getParent()).getHeight()
-                        + " item=" + item.getHeight() + " icon=" + mappedBounds(nav, icon)
-                        + " label=" + labelBounds + " baseline=" + (labelBounds.top + label.getBaseline())
-                        + " capsule=" + nav.selectedCapsuleBoundsForTest());
-                assertEquals("expanded icon/label content tab=" + id, nav.getHeight() / 2f,
-                        content.centerY(), activity.getResources().getDisplayMetrics().density);
+            for (int inset : new int[]{24, 48, 80, 24}) {
+                shell.dispatchApplyWindowInsets(BottomNavigationInsetsTest.systemInsets(activity, inset));
+                BottomNavigationInsetsTest.layoutShell(shell);
+                Bitmap bitmap = Bitmap.createBitmap(nav.getWidth(), nav.getHeight(), Bitmap.Config.ARGB_8888);
+                nav.draw(new Canvas(bitmap));
+                for (int id : ids) {
+                    View item = nav.findViewById(id);
+                    ImageView icon = item.findViewById(com.google.android.material.R.id.navigation_bar_item_icon_view);
+                    TextView label = item.findViewById(id == ids[selected]
+                            ? com.google.android.material.R.id.navigation_bar_item_large_label_view
+                            : com.google.android.material.R.id.navigation_bar_item_small_label_view);
+                    RectF iconBounds = mappedBounds(nav, icon);
+                    RectF labelBounds = mappedBounds(nav, label);
+                    RectF content = new RectF(iconBounds);
+                    content.union(labelBounds);
+                    String state = "expanded selected=" + ids[selected] + " tab=" + id + " inset=" + inset;
+                    if (inset == 24) System.out.println("NAV_VERTICAL_MEASURE " + state
+                            + " nav=" + nav.getHeight() + " paddingTop=" + nav.getPaddingTop()
+                            + " paddingBottom=" + nav.getPaddingBottom() + " menu=" + ((View) item.getParent()).getHeight()
+                            + " item=" + item.getHeight() + " icon=" + iconBounds
+                            + " label=" + labelBounds + " baseline=" + (labelBounds.top + label.getBaseline())
+                            + " capsule=" + nav.selectedCapsuleBoundsForTest());
+                    assertEquals(state + " content center", nav.getHeight() / 2f, content.centerY(), density);
+                    assertEquals(state + " balanced top/bottom content space", content.top,
+                            nav.getHeight() - content.bottom, 2f * density);
+                    assertEquals(state + " label visible", View.VISIBLE, label.getVisibility());
+                    assertEquals(state + " label alpha", 1f, label.getAlpha(), 0f);
+                    assertTrue(state + " label below icon", labelBounds.top + label.getBaseline() > iconBounds.bottom);
+                    Bitmap expectedLabel = Bitmap.createBitmap(nav.getWidth(), nav.getHeight(), Bitmap.Config.ARGB_8888);
+                    Canvas canvas = new Canvas(expectedLabel);
+                    applyIconTransform(canvas, nav, label);
+                    label.draw(canvas);
+                    assertIconPixels(bitmap, expectedLabel, state + " actual label pixels");
+                    expectedLabel.recycle();
+                }
+                RectF capsule = nav.selectedCapsuleBoundsForTest();
+                assertEquals("expanded selected capsule centered inset=" + inset,
+                        nav.getHeight() / 2f, capsule.centerY(), 0.5f);
+                assertEquals("expanded capsule retains its design height", 46f * density, capsule.height(), 0.5f);
+                bitmap.recycle();
             }
-            assertEquals("expanded selected capsule", nav.getHeight() / 2f,
-                    nav.selectedCapsuleBoundsForTest().centerY(), 0.5f);
         }
         controller.pause().stop().destroy();
+    }
+
+    @Test public void childBoundsAndLabelBaselinesMoveContinuouslyAndReverseExactly() {
+        ActivityController<NativeMainActivity> controller = BottomNavigationInsetsTest.createActivity();
+        NativeMainActivity activity = controller.get();
+        ZeroChillBottomNavigationView nav = ReflectionHelpers.getField(activity, "bottomNavigation");
+        FrostedNavigationLayout shell = ReflectionHelpers.getField(activity, "shell");
+        int[] ids = {2, 4, 3, 6};
+        float tolerance = 2f * activity.getResources().getDisplayMetrics().density;
+        for (int selected = 0; selected < ids.length; selected++) {
+            nav.setSelectedItemId(ids[selected]);
+            nav.setPagerPosition(selected);
+            shadowOf(android.os.Looper.getMainLooper()).idle();
+            List<List<Float>> forward = new ArrayList<>();
+            for (int step = 0; step <= 100; step++) {
+                List<Float> geometry = sampleGeometry(nav, shell, activity, ids, step / 100f,
+                        step % 2 == 0 ? 24 : 80);
+                if (step > 0) {
+                    List<Float> previous = forward.get(step - 1);
+                    for (int i = 0; i < geometry.size(); i++) assertEquals(
+                            "no position/height/baseline jump selected=" + ids[selected] + " step=" + step + " value=" + i,
+                            previous.get(i), geometry.get(i), tolerance);
+                }
+                forward.add(geometry);
+            }
+            for (int step = 100; step >= 0; step--) assertEquals(
+                    "no accumulated transforms/reversal selected=" + ids[selected] + " step=" + step,
+                    forward.get(step), sampleGeometry(nav, shell, activity, ids, step / 100f, 48));
+        }
+        controller.pause().stop().destroy();
+    }
+
+    private static List<Float> sampleGeometry(ZeroChillBottomNavigationView nav, FrostedNavigationLayout shell,
+            NativeMainActivity activity, int[] ids, float progress, int inset) {
+        nav.setCollapseProgressForTest(progress);
+        shell.dispatchApplyWindowInsets(BottomNavigationInsetsTest.systemInsets(activity, inset));
+        BottomNavigationInsetsTest.layoutShell(shell);
+        Bitmap bitmap = Bitmap.createBitmap(nav.getWidth(), nav.getHeight(), Bitmap.Config.ARGB_8888);
+        nav.draw(new Canvas(bitmap));
+        bitmap.recycle();
+        List<Float> values = new ArrayList<>();
+        for (int id : ids) {
+            View item = nav.findViewById(id);
+            View icon = item.findViewById(com.google.android.material.R.id.navigation_bar_item_icon_view);
+            RectF bounds = mappedBounds(nav, icon);
+            values.add(bounds.top); values.add(bounds.bottom);
+            values.add((float) item.getHeight());
+            View container = item.findViewById(com.google.android.material.R.id.navigation_bar_item_icon_container);
+            RectF containerBounds = mappedBounds(nav, container);
+            values.add(containerBounds.top); values.add(containerBounds.bottom);
+            for (int labelId : new int[]{com.google.android.material.R.id.navigation_bar_item_small_label_view,
+                    com.google.android.material.R.id.navigation_bar_item_large_label_view}) {
+                TextView label = item.findViewById(labelId);
+                RectF labelBounds = mappedBounds(nav, label);
+                values.add(labelBounds.top); values.add(labelBounds.bottom);
+                values.add(labelBounds.top + label.getBaseline());
+            }
+        }
+        RectF capsule = nav.selectedCapsuleBoundsForTest();
+        values.add(capsule.top); values.add(capsule.bottom);
+        values.add((float) nav.getPaddingTop()); values.add((float) nav.getPaddingBottom());
+        return values;
     }
 
     private static RectF mappedBounds(ViewGroup nav, View child) {
@@ -109,7 +189,10 @@ public class BottomNavigationDrawableRenderTest {
                                 + " collapse=" + progress + " inset=" + inset);
                         expected.recycle();
                     }
-                    if (selected == 3 && inset == 24) save(rendered, "nav-library-" + progress);
+                    if (selected == 3 && inset == 24) {
+                        save(rendered, "nav-library-" + progress);
+                        if (progress == 1f) assertApprovedCollapsedRender(rendered);
+                    }
                     rendered.recycle();
                 }
             }
@@ -146,6 +229,22 @@ public class BottomNavigationDrawableRenderTest {
         }
         assertTrue(state + " empty icon oracle", solidPixels > 10);
         assertEquals(state + " missing complete icon pixels out of " + solidPixels, 0, missing);
+    }
+
+    private static void assertApprovedCollapsedRender(Bitmap bitmap) throws Exception {
+        // Pixel fingerprint of the b53c7ae native Library-selected render approved on
+        // device. Protect the entire collapsed glass, icons and capsule, not just bounds.
+        assertEquals(480, bitmap.getWidth());
+        assertEquals(100, bitmap.getHeight());
+        MessageDigest digest = MessageDigest.getInstance("SHA-256");
+        int[] pixels = new int[bitmap.getWidth() * bitmap.getHeight()];
+        bitmap.getPixels(pixels, 0, bitmap.getWidth(), 0, 0, bitmap.getWidth(), bitmap.getHeight());
+        for (int pixel : pixels) digest.update(new byte[]{(byte) (pixel >>> 24), (byte) (pixel >>> 16),
+                (byte) (pixel >>> 8), (byte) pixel});
+        StringBuilder hex = new StringBuilder();
+        for (byte value : digest.digest()) hex.append(String.format(java.util.Locale.ROOT, "%02x", value & 255));
+        assertEquals("approved collapsed pixels changed",
+                "7c552e1707f27cac5fa9fcfc335bee1713150f53b661d28edbd64cd853bfb8bb", hex.toString());
     }
 
     private static void save(Bitmap bitmap, String name) throws Exception {

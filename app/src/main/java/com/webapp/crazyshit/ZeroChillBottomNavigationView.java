@@ -50,6 +50,7 @@ final class ZeroChillBottomNavigationView extends BottomNavigationView {
     private final Rect firstRect = new Rect();
     private final Rect secondRect = new Rect();
     private final RectF indicatorRect = new RectF();
+    private final RectF capsuleHitRect = new RectF();
     private final Runnable settleReflectionRunnable = this::settleReflection;
 
     private float pagerPosition;
@@ -270,16 +271,7 @@ final class ZeroChillBottomNavigationView extends BottomNavigationView {
     }
 
     private boolean isInsideSelectedCapsule(float x, float y) {
-        int index = Math.max(0, Math.min(PAGE_NAV_IDS.length - 1, Math.round(pagerPosition)));
-        View item = findViewById(PAGE_NAV_IDS[index]);
-        if (item == null || item.getWidth() <= 0 || item.getHeight() <= 0) return false;
-
-        descendantRect(item, firstRect);
-        float left = firstRect.left + dp(4);
-        float right = firstRect.right - dp(4);
-        float top = firstRect.top + dp(3);
-        float bottom = firstRect.bottom + dp(10);
-        return x >= left && x <= right && y >= top && y <= bottom;
+        return selectedGlassBounds(capsuleHitRect) && capsuleHitRect.contains(x, y);
     }
 
     private void updateTouchReflection(MotionEvent event, int action) {
@@ -323,35 +315,11 @@ final class ZeroChillBottomNavigationView extends BottomNavigationView {
     }
 
     private void drawSelectedGlass(Canvas canvas) {
-        if (getWidth() <= 0 || getHeight() <= 0) return;
-
-        float position = clamp(pagerPosition, 0f, PAGE_NAV_IDS.length - 1f);
-        int lower = Math.min(PAGE_NAV_IDS.length - 1, (int) Math.floor(position));
-        int upper = Math.min(PAGE_NAV_IDS.length - 1, lower + 1);
-        float fraction = position - lower;
-
-        View first = findViewById(PAGE_NAV_IDS[lower]);
-        View second = findViewById(PAGE_NAV_IDS[upper]);
-        if (first == null || second == null || first.getWidth() <= 0 || second.getWidth() <= 0) {
-            return;
-        }
-
-        descendantRect(first, firstRect);
-        descendantRect(second, secondRect);
-
-        float firstCenter = firstRect.exactCenterX();
-        float secondCenter = secondRect.exactCenterX();
-        float center = lerp(firstCenter, secondCenter, fraction);
-        // Keep the approved selected capsule insets while it follows pager movement.
-        float width = lerp(firstRect.width(), secondRect.width(), fraction) - dp(8);
-        float top = Math.max(dp(3), lerp(firstRect.top, secondRect.top, fraction) + dp(4));
-        float bottom = Math.min(getHeight() - dp(3),
-                lerp(firstRect.bottom, secondRect.bottom, fraction) + dp(10));
-        if (bottom <= top) return;
-
-        float midY = (top + bottom) / 2f;
-        float halfWidth = width * pressScale / 2f;
-        float halfHeight = (bottom - top) * pressScale / 2f;
+        if (!selectedGlassBounds(indicatorRect)) return;
+        float center = indicatorRect.centerX();
+        float midY = indicatorRect.centerY();
+        float halfWidth = indicatorRect.width() * pressScale / 2f;
+        float halfHeight = indicatorRect.height() * pressScale / 2f;
         indicatorRect.set(center - halfWidth, midY - halfHeight,
                 center + halfWidth, midY + halfHeight);
 
@@ -366,6 +334,42 @@ final class ZeroChillBottomNavigationView extends BottomNavigationView {
         }
 
         drawGpuReflection(canvas);
+    }
+
+    /** Unpressed capsule geometry shared by drawing and navbar drag hit-testing. */
+    private boolean selectedGlassBounds(RectF out) {
+        if (getWidth() <= 0 || getHeight() <= 0) return false;
+
+        float position = clamp(pagerPosition, 0f, PAGE_NAV_IDS.length - 1f);
+        int lower = Math.min(PAGE_NAV_IDS.length - 1, (int) Math.floor(position));
+        int upper = Math.min(PAGE_NAV_IDS.length - 1, lower + 1);
+        float fraction = position - lower;
+
+        View first = findViewById(PAGE_NAV_IDS[lower]);
+        View second = findViewById(PAGE_NAV_IDS[upper]);
+        if (first == null || second == null || first.getWidth() <= 0 || second.getWidth() <= 0) {
+            return false;
+        }
+
+        descendantRect(first, firstRect);
+        descendantRect(second, secondRect);
+
+        float firstCenter = firstRect.exactCenterX();
+        float secondCenter = secondRect.exactCenterX();
+        float center = lerp(firstCenter, secondCenter, fraction);
+        // Keep the approved selected capsule insets while it follows pager movement.
+        float width = lerp(firstRect.width(), secondRect.width(), fraction) - dp(8);
+        // Retain the existing capsule height, independently of the menu's new origin.
+        // Center it while expanded; release the correction continuously so the approved
+        // collapsed capsule keeps its exact original bounds and rounding.
+        float top = Math.max(dp(3), lerp(firstRect.top, secondRect.top, fraction)
+                - getPaddingTop() + dp(4));
+        float bottom = Math.min(getHeight() - dp(3),
+                lerp(firstRect.bottom, secondRect.bottom, fraction) - getPaddingTop() + dp(10));
+        if (bottom <= top) return false;
+        float shift = (getHeight() / 2f - (top + bottom) / 2f) * (1f - collapseProgress);
+        out.set(center - width / 2f, top + shift, center + width / 2f, bottom + shift);
+        return true;
     }
 
     private void drawGpuReflection(Canvas canvas) {
@@ -463,13 +467,19 @@ final class ZeroChillBottomNavigationView extends BottomNavigationView {
     }
 
     private void applyCollapseGutter(float progress) {
-        // The expanded gutter preserves the approved production menu placement. As the
-        // outer glass shrinks, release that visual space so Material can still measure
-        // its complete icon/indicator container. System clearance belongs to the shell.
+        // Preserve Material's measured content height and its complete icon container.
+        // In the 64dp bar its icon/label union is 8..40dp before padding: an 8dp top
+        // share centers that group at 32dp. Release both shares continuously during
+        // collapse, leaving the approved 50dp endpoint unchanged. System clearance
+        // belongs to the shell, not this visual spacing.
+        float p = clamp(progress, 0f, 1f);
         int expandedGutter = getResources().getDimensionPixelSize(R.dimen.zc_nav_menu_bottom_gutter);
-        int gutter = Math.round(lerp(expandedGutter, 0, clamp(progress, 0f, 1f)));
-        if (getPaddingBottom() != gutter) {
-            setPadding(getPaddingLeft(), getPaddingTop(), getPaddingRight(), gutter);
+        int expandedTop = getResources().getDimensionPixelSize(R.dimen.zc_nav_menu_top_gutter);
+        int gutter = Math.round(lerp(expandedGutter, 0, p));
+        int top = Math.min(gutter, Math.round(lerp(expandedTop, 0, p)));
+        int bottom = gutter - top;
+        if (getPaddingTop() != top || getPaddingBottom() != bottom) {
+            setPadding(getPaddingLeft(), top, getPaddingRight(), bottom);
         }
     }
 

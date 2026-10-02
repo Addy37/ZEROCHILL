@@ -305,9 +305,10 @@ public class NavigationIaTest {
         ZeroChillBottomNavigationView nav =
                 ReflectionHelpers.getField(activity, "bottomNavigation");
 
-        int baselineNavBottomPadding = activity.getResources()
-                .getDimensionPixelSize(R.dimen.zc_nav_menu_bottom_gutter);
-        assertEquals(baselineNavBottomPadding, nav.getPaddingBottom());
+        int baselineNavBottomPadding = nav.getPaddingBottom();
+        int baselineNavTopPadding = nav.getPaddingTop();
+        assertEquals(activity.getResources().getDimensionPixelSize(R.dimen.zc_nav_menu_bottom_gutter),
+                baselineNavTopPadding + baselineNavBottomPadding);
         float density = activity.getResources().getDisplayMetrics().density;
         int statusInset = Math.round(24 * density);
         int navigationInset = Math.round(48 * density);
@@ -330,6 +331,7 @@ public class NavigationIaTest {
 
         assertEquals(navigationInset, shell.getPaddingBottom());
         assertEquals(baselineNavBottomPadding, nav.getPaddingBottom());
+        assertEquals(baselineNavTopPadding, nav.getPaddingTop());
 
         controller.pause().stop().destroy();
     }
