@@ -37,6 +37,7 @@ final class ZoomableImageView extends ImageView {
     private boolean loadingBlur;
     private Bitmap blurredPreview;
     private final Paint previewPaint = new Paint(Paint.FILTER_BITMAP_FLAG);
+    private final Rect previewBounds = new Rect();
 
     ZoomableImageView(Context context) {
         super(context);
@@ -179,7 +180,8 @@ final class ZoomableImageView extends ImageView {
                 blurredPreview = GalleryPreviewBlur.snapshot(this, this::drawUnblurredImage);
             }
             if (blurredPreview != null) {
-                canvas.drawBitmap(blurredPreview, null, new Rect(0, 0, getWidth(), getHeight()), previewPaint);
+                previewBounds.set(0, 0, getWidth(), getHeight());
+                canvas.drawBitmap(blurredPreview, null, previewBounds, previewPaint);
                 return;
             }
         }

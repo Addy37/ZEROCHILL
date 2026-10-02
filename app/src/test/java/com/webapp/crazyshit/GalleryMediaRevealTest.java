@@ -336,6 +336,7 @@ public class GalleryMediaRevealTest {
         BunkrGalleryPagerAdapter adapter = adapter(NativeContentItem.KIND_MEDIA);
         BunkrGalleryPagerAdapter.Holder holder = holder(adapter);
         holder.image.setImageDrawable(bitmap());
+        activity.setContentView(holder.itemView); // View-posted buffering delay needs an attached holder.
         assertTrue(holder.playerView.getVideoSurfaceView() instanceof TextureView);
         Player player = new IdlePlayer();
         adapter.activateVideo(0, player);

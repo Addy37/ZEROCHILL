@@ -184,6 +184,7 @@ final class BunkrGalleryPagerAdapter
         if (url.isEmpty() || !preloadedImages.add(url)) return;
         Glide.with(context)
                 .load(withHeaders(url, imageReferer(item)))
+                .disallowHardwareConfig()
                 .fitCenter()
                 .diskCacheStrategy(DiskCacheStrategy.ALL)
                 .override(context.getResources().getDisplayMetrics().widthPixels,
@@ -363,6 +364,7 @@ final class BunkrGalleryPagerAdapter
                 Drawable placeholder = sameItem ? holder.image.ownedPreviewSnapshot() : null;
                 RequestBuilder<Drawable> imageRequest = Glide.with(holder.image)
                         .load(withHeaders(preview, imageReferer(item)))
+                        .disallowHardwareConfig()
                         .fitCenter()
                         .diskCacheStrategy(DiskCacheStrategy.ALL)
                         .transition(DrawableTransitionOptions.with((source, first) ->
@@ -425,6 +427,7 @@ final class BunkrGalleryPagerAdapter
                         && !preview.equals(item.imageUrl)) {
                     imageRequest = imageRequest.thumbnail(Glide.with(holder.image)
                             .load(withHeaders(item.imageUrl, imageReferer(item)))
+                            .disallowHardwareConfig()
                             .fitCenter().diskCacheStrategy(DiskCacheStrategy.ALL).dontAnimate());
                 }
                 imageRequest.into(holder.image);
