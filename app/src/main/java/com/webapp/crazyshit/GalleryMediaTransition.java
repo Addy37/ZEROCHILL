@@ -38,7 +38,7 @@ final class GalleryMediaTransition {
         window.setSharedElementExitTransition(sharedElementTransition());
         window.setSharedElementReenterTransition(sharedElementTransition());
         window.setExitTransition(new Fade(Fade.OUT).setDuration(90L));
-        window.setReenterTransition(new Fade(Fade.IN).setDuration(120L));
+        // Keep the source grid fully visible behind the returning shared media.\n        // A regular-view reenter fade briefly darkens the grid and reads as a black flash.\n        window.setReenterTransition(null);
     }
 
     static void configureViewer(Activity activity, Runnable onEnterFinished) {
