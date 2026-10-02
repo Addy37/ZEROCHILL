@@ -17,6 +17,8 @@ jobs:
       FEEDBACK_ANON_KEY: ${{ secrets.FEEDBACK_ANON_KEY }}
       SOURCE_CONFIG_ENDPOINT: https://fketutffusxgjxjlckci.supabase.co/functions/v1/app-config
       SUPABASE_PUBLISHABLE_KEY: ${{ secrets.FEEDBACK_ANON_KEY }}
+      # CI/test artifacts must never write to production analytics.
+      ANALYTICS_ENDPOINT: ""
 
     steps:
       - name: Check out project
