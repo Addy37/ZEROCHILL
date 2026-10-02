@@ -301,7 +301,6 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
 
     @Override
     public void onBindViewHolder(@NonNull Holder holder, int position) {
-        GalleryMediaTransition.clearName(holder.image);
         holder.morphPulse.animate().cancel();
         holder.morphPulse.setAlpha(0f);
         NativeContentItem item = items.get(position);
