@@ -323,6 +323,8 @@ public final class NativeFeedBrowserActivity extends Activity {
     @Override
     protected void onCreate(Bundle state) {
         super.onCreate(state);
+        GalleryMediaTransition.requestWindowFeature(this);
+        GalleryMediaTransition.configureSource(this);
         title = value(getIntent().getStringExtra(EXTRA_TITLE), "Browse");
         baseUrl = value(getIntent().getStringExtra(EXTRA_BASE_URL), CrazyShitRepository.HOME);
         memeMode = getIntent().getBooleanExtra(EXTRA_MEME_MODE, false);
@@ -995,12 +997,16 @@ public final class NativeFeedBrowserActivity extends Activity {
                 this,
                 new BunkrGalleryAdapter.Listener() {
                     @Override
-                    public void onOpen(int position, NativeContentItem item) {
+                    public void onOpen(
+                            int position,
+                            NativeContentItem item,
+                            View transitionAnchor
+                    ) {
                         if (creatorAvatarPickerMode) {
                             pickCreatorAvatar(item);
                             return;
                         }
-                        openBunkrGallery(position, item);
+                        openBunkrGallery(position, item, transitionAnchor);
                     }
 
                     @Override
@@ -1688,7 +1694,11 @@ public final class NativeFeedBrowserActivity extends Activity {
         return clean.startsWith("https://") || clean.startsWith("http://");
     }
 
-    private void openBunkrGallery(int position, NativeContentItem item) {
+    private void openBunkrGallery(
+            int position,
+            NativeContentItem item,
+            View transitionAnchor
+    ) {
         if (item == null || bunkrGalleryAdapter == null) return;
         if (!isCreatorGallery()) BunkrGallerySessionStore.replace(
                 bunkrGallerySessionId,
@@ -1712,7 +1722,7 @@ public final class NativeFeedBrowserActivity extends Activity {
         );
         intent.putExtra(BunkrGalleryActivity.EXTRA_INITIAL_URL, item.url);
         intent.putExtra(BunkrGalleryActivity.EXTRA_INITIAL_POSITION, position);
-        startActivity(intent);
+        GalleryMediaTransition.start(this, intent, transitionAnchor, item);
     }
 
     private void showItemMenu(NativeContentItem item, View anchor) {
