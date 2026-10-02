@@ -44,6 +44,7 @@ final class ZeroChillBottomNavigationView extends BottomNavigationView {
     private static final long COLLAPSE_DURATION_MS = 210L;
     private static final int COLLAPSED_HEIGHT_DP = 50;
     private static final int COLLAPSED_SIDE_MARGIN_DP = 60;
+    private static final int EXPANDED_LABEL_OFFSET_DP = 2;
     private static final float HORIZONTAL_DOMINANCE = 1.25f;
 
     private final Drawable selectedGlass;
@@ -488,7 +489,8 @@ final class ZeroChillBottomNavigationView extends BottomNavigationView {
             View item = findViewById(id);
             if (item == null) continue;
             if (item.getMinimumHeight() != 0) item.setMinimumHeight(0);
-            applyLabelAlpha(item, labelAlpha);
+            applyLabelVisuals(item, labelAlpha,
+                    dp(EXPANDED_LABEL_OFFSET_DP) * (1f - progress));
             View iconContainer = item.findViewById(
                     com.google.android.material.R.id.navigation_bar_item_icon_container);
             if (iconContainer != null && iconContainer.getHeight() > 0) {
@@ -503,15 +505,18 @@ final class ZeroChillBottomNavigationView extends BottomNavigationView {
         }
     }
 
-    private static void applyLabelAlpha(View view, float labelAlpha) {
+    private static void applyLabelVisuals(View view, float labelAlpha, float translationY) {
         if (view instanceof TextView) {
             if (Math.abs(view.getAlpha() - labelAlpha) > 0.001f) view.setAlpha(labelAlpha);
+            if (Math.abs(view.getTranslationY() - translationY) > 0.01f) {
+                view.setTranslationY(translationY);
+            }
             return;
         }
         if (!(view instanceof ViewGroup)) return;
         ViewGroup group = (ViewGroup) view;
         for (int i = 0; i < group.getChildCount(); i++) {
-            applyLabelAlpha(group.getChildAt(i), labelAlpha);
+            applyLabelVisuals(group.getChildAt(i), labelAlpha, translationY);
         }
     }
 
