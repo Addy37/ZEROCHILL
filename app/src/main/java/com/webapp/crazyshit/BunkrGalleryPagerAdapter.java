@@ -14,6 +14,7 @@ import android.widget.ProgressBar;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
+import androidx.core.view.ViewCompat;
 import androidx.media3.common.Player;
 import androidx.media3.ui.AspectRatioFrameLayout;
 import androidx.media3.ui.PlayerView;
@@ -48,6 +49,9 @@ final class BunkrGalleryPagerAdapter
         void onMediaLongPress(int position, NativeContentItem item);
 
         void onResolvedImageFailed(int position, NativeContentItem item);
+
+        default void onSharedElementReady(View target) {
+        }
     }
 
     private final Context context;
@@ -59,11 +63,20 @@ final class BunkrGalleryPagerAdapter
     private final Set<String> failed = new HashSet<>();
     private int activeVideoPosition = RecyclerView.NO_POSITION;
     private Player activePlayer;
+    private String sharedElementUrl = "";
+    private String sharedElementName = "";
+    private boolean sharedElementDelivered;
 
     BunkrGalleryPagerAdapter(Context context, Listener listener) {
         this.context = context.getApplicationContext();
         this.listener = listener;
         setHasStableIds(true);
+    }
+
+    void setInitialSharedElement(String itemUrl, String transitionName) {
+        sharedElementUrl = value(itemUrl);
+        sharedElementName = value(transitionName);
+        sharedElementDelivered = false;
     }
 
     void replace(List<NativeContentItem> incoming, Map<String, String> resolved) {
@@ -246,6 +259,7 @@ final class BunkrGalleryPagerAdapter
     @Override
     public void onBindViewHolder(@NonNull Holder holder, int position) {
         NativeContentItem item = items.get(position);
+        GalleryMediaTransition.clearName(holder.image);
         holder.image.resetZoom();
         holder.image.setZoomEnabled(item.isImage());
         String resolved = value(resolvedUrls.get(item.url));
@@ -314,6 +328,25 @@ final class BunkrGalleryPagerAdapter
             }
         }
 
+        if (!sharedElementDelivered
+                && !sharedElementName.isEmpty()
+                && item.url.equals(sharedElementUrl)) {
+            ViewCompat.setTransitionName(holder.image, sharedElementName);
+            holder.image.post(() -> {
+                int current = holder.getBindingAdapterPosition();
+                if (sharedElementDelivered
+                        || current == RecyclerView.NO_POSITION
+                        || current >= items.size()
+                        || !item.url.equals(items.get(current).url)
+                        || !item.url.equals(sharedElementUrl)
+                        || !sharedElementName.equals(ViewCompat.getTransitionName(holder.image))) {
+                    return;
+                }
+                sharedElementDelivered = true;
+                listener.onSharedElementReady(holder.image);
+            });
+        }
+
         holder.itemView.setContentDescription(
                 (item.isVideo() ? "Video, " : "Photo, ") + item.title +
                         ". Long press to download."
@@ -341,6 +374,7 @@ final class BunkrGalleryPagerAdapter
 
     @Override
     public void onViewRecycled(@NonNull Holder holder) {
+        GalleryMediaTransition.clearName(holder.image);
         holder.playerView.setPlayer(null);
         holder.itemView.setOnLongClickListener(null);
         holder.image.setOnClickListener(null);
