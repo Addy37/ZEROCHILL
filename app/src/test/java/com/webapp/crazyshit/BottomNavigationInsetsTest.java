@@ -126,9 +126,10 @@ public class BottomNavigationInsetsTest {
         nav.setSelectedItemId(6);
         nav.setPagerPosition(3f);
 
-        // v4.3.1 used a plain Material BottomNavigationView that received the 24dp
-        // gesture-navigation inset directly. Treat that rendered hierarchy as the
-        // expanded geometry oracle while the current shell owns the real system inset.
+        // Recreate v4.3.1's Material hierarchy with the screenshot-calibrated 16dp
+        // bottom padding. The image does not expose the device's raw WindowInsets;
+        // the earlier 24dp fixture was an assumption, not a measured reference.
+        // The current shell continues to own the actual system navigation clearance.
         BottomNavigationView production = new BottomNavigationView(activity);
         production.setMinimumHeight(0);
         for (int id : IDS) {
@@ -146,7 +147,7 @@ public class BottomNavigationInsetsTest {
             item.getLayoutParams().height = ViewGroup.LayoutParams.MATCH_PARENT;
         }
 
-        WindowInsets referenceGesture = systemInsets(activity, 24);
+        WindowInsets referenceGesture = systemInsets(activity, 16);
         WindowInsets actualButtonNav = systemInsets(activity, 80);
         shell.dispatchApplyWindowInsets(actualButtonNav);
         assertSame("nav must return raw insets for legacy parent/sibling dispatch",
@@ -162,7 +163,7 @@ public class BottomNavigationInsetsTest {
         layoutShell(shell);
         measure(production, nav.getWidth(), nav.getHeight());
 
-        assertEquals(dp(activity, 24), production.getPaddingBottom());
+        assertEquals(dp(activity, 16), production.getPaddingBottom());
         assertEquals(production.getPaddingTop(), nav.getPaddingTop());
         assertEquals(production.getPaddingBottom(), nav.getPaddingBottom());
         assertEquals("expanded hierarchy must match v4.3.1 Material geometry",
@@ -210,7 +211,7 @@ public class BottomNavigationInsetsTest {
                     assertEquals(gestureTop - dp(activity, bottom - 24), nav.getTop());
                     assertEquals(height, nav.getHeight());
                     assertEquals(width, nav.getWidth());
-                    assertEquals(Math.round(dp(activity, 24) * (1f - progress)), nav.getPaddingTop() + nav.getPaddingBottom());
+                    assertEquals(Math.round(dp(activity, 16) * (1f - progress)), nav.getPaddingTop() + nav.getPaddingBottom());
                     assertEquals(expected, menuGeometry(nav));
                     assertEquals(capsule, nav.selectedCapsuleBoundsForTest());
                     assertLabelsInsideBar(nav);

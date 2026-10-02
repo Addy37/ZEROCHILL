@@ -33,7 +33,7 @@ import static org.robolectric.Shadows.shadowOf;
 @Config(application = Application.class, sdk = 35, qualifiers = "w411dp-h891dp-xhdpi")
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 public class BottomNavigationDrawableRenderTest {
-    @Test public void reportExpandedVisualGapAgainstMaterialReference() throws Exception {
+    @Test public void expandedInkGapMatchesScreenshotCalibratedMaterialReference() throws Exception {
         ActivityController<NativeMainActivity> controller = BottomNavigationInsetsTest.createActivity();
         NativeMainActivity activity = controller.get();
         ZeroChillBottomNavigationView nav = ReflectionHelpers.getField(activity, "bottomNavigation");
@@ -56,18 +56,67 @@ public class BottomNavigationDrawableRenderTest {
             shadowOf(android.os.Looper.getMainLooper()).idle();
             shell.dispatchApplyWindowInsets(BottomNavigationInsetsTest.systemInsets(activity, 24));
             BottomNavigationInsetsTest.layoutShell(shell);
-            for (int inset : new int[]{24, 18}) {
+            for (int inset : new int[]{24, 16}) {
                 reference.dispatchApplyWindowInsets(BottomNavigationInsetsTest.systemInsets(activity, inset));
                 reference.measure(View.MeasureSpec.makeMeasureSpec(nav.getWidth(), View.MeasureSpec.EXACTLY),
                         View.MeasureSpec.makeMeasureSpec(nav.getHeight(), View.MeasureSpec.EXACTLY));
                 reference.layout(0, 0, nav.getWidth(), nav.getHeight());
                 for (int id : ids) {
                     printVisualGeometry(reference, id, "material-inset=" + inset + " selected=" + selected);
+                    if (inset == 16) {
+                        for (int actualInset : new int[]{24, 48, 80, 24}) {
+                            shell.dispatchApplyWindowInsets(BottomNavigationInsetsTest.systemInsets(activity, actualInset));
+                            BottomNavigationInsetsTest.layoutShell(shell);
+                            assertVisualGapMatchesReference(reference, nav, id, selected, actualInset);
+                        }
+                    } else {
+                        View container = reference.findViewById(id).findViewById(
+                                com.google.android.material.R.id.navigation_bar_item_icon_container);
+                        assertEquals("24dp synthetic gutter compresses 30dp container", Math.round(26 * density), container.getHeight());
+                    }
                 }
             }
             for (int id : ids) printVisualGeometry(nav, id, "beta selected=" + selected);
         }
         controller.pause().stop().destroy();
+    }
+
+    private static void assertVisualGapMatchesReference(ViewGroup reference, ZeroChillBottomNavigationView nav,
+            int id, int selected, int inset) {
+        float density = nav.getResources().getDisplayMetrics().density;
+        View item = nav.findViewById(id);
+        View referenceItem = reference.findViewById(id);
+        View container = item.findViewById(com.google.android.material.R.id.navigation_bar_item_icon_container);
+        ImageView icon = item.findViewById(com.google.android.material.R.id.navigation_bar_item_icon_view);
+        ImageView referenceIcon = referenceItem.findViewById(com.google.android.material.R.id.navigation_bar_item_icon_view);
+        int labelId = id == selected ? com.google.android.material.R.id.navigation_bar_item_large_label_view
+                : com.google.android.material.R.id.navigation_bar_item_small_label_view;
+        TextView label = item.findViewById(labelId);
+        TextView referenceLabel = referenceItem.findViewById(labelId);
+        String state = "selected=" + selected + " tab=" + id + " inset=" + inset;
+        assertEquals(state + " full container height", Math.round(30 * density), container.getHeight());
+        assertEquals(state + " unchanged icon size", Math.round(24 * density), icon.getHeight());
+        android.graphics.Rect iconInk = inkBounds(nav, icon);
+        android.graphics.Rect labelInk = inkBounds(nav, label);
+        int actualGap = labelInk.top - iconInk.bottom;
+        int referenceGap = inkBounds(reference, referenceLabel).top - inkBounds(reference, referenceIcon).bottom;
+        assertTrue(state + " reference has visible breathing room: " + referenceGap,
+                referenceGap >= Math.round(3 * density));
+        assertEquals(state + " drawable-to-glyph gap", referenceGap, actualGap);
+        assertEquals(state + " icon ink position", inkBounds(reference, referenceIcon), iconInk);
+        assertEquals(state + " label ink position", inkBounds(reference, referenceLabel), labelInk);
+        assertEquals(state + " label baseline", mappedBounds(reference, referenceLabel).top + referenceLabel.getBaseline(),
+                mappedBounds(nav, label).top + label.getBaseline(), 0f);
+        assertEquals(state + " label scale", 1f, label.getScaleY(), 0f);
+        assertEquals(state + " no label offset", 0f, label.getTranslationY(), 0f);
+        Bitmap rendered = Bitmap.createBitmap(nav.getWidth(), nav.getHeight(), Bitmap.Config.ARGB_8888);
+        nav.draw(new Canvas(rendered));
+        Bitmap expected = Bitmap.createBitmap(nav.getWidth(), nav.getHeight(), Bitmap.Config.ARGB_8888);
+        Canvas canvas = new Canvas(expected);
+        applyIconTransform(canvas, nav, label);
+        label.draw(canvas);
+        assertIconPixels(rendered, expected, state + " complete label glyphs");
+        rendered.recycle(); expected.recycle();
     }
 
     private static void printVisualGeometry(ViewGroup nav, int id, String state) {
@@ -98,8 +147,10 @@ public class BottomNavigationDrawableRenderTest {
         applyIconTransform(canvas, nav, child);
         child.draw(canvas);
         android.graphics.Rect bounds = new android.graphics.Rect();
+        int[] pixels = new int[bitmap.getWidth() * bitmap.getHeight()];
+        bitmap.getPixels(pixels, 0, bitmap.getWidth(), 0, 0, bitmap.getWidth(), bitmap.getHeight());
         for (int y = 0; y < bitmap.getHeight(); y++) for (int x = 0; x < bitmap.getWidth(); x++) {
-            if (Color.alpha(bitmap.getPixel(x, y)) >= 128) bounds.union(x, y, x + 1, y + 1);
+            if (Color.alpha(pixels[y * bitmap.getWidth() + x]) >= 128) bounds.union(x, y, x + 1, y + 1);
         }
         bitmap.recycle();
         assertFalse("empty ink " + child, bounds.isEmpty());
@@ -127,7 +178,7 @@ public class BottomNavigationDrawableRenderTest {
                 assertEquals("v4.3.1 expanded top padding inset=" + inset,
                         0, nav.getPaddingTop());
                 assertEquals("v4.3.1 reference gesture padding inset=" + inset,
-                        Math.round(24f * density), nav.getPaddingBottom());
+                        Math.round(16f * density), nav.getPaddingBottom());
 
                 for (int id : ids) {
                     View item = nav.findViewById(id);
