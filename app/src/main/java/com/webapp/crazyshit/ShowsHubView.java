@@ -787,6 +787,7 @@ final class ShowsHubView extends FrameLayout {
                             .load(embedded)
                             .diskCacheStrategy(DiskCacheStrategy.NONE)
                             .skipMemoryCache(false)
+                            .dontAnimate()
                             .transition(hero ? ThumbnailFades.hero() : ThumbnailFades.thumbnail())
                             .placeholder(new ColorDrawable(Color.rgb(20, 22, 25)))
                             .error(new ColorDrawable(Color.rgb(20, 22, 25)));
@@ -826,6 +827,7 @@ final class ShowsHubView extends FrameLayout {
                         .diskCacheStrategy(
                                 hero ? DiskCacheStrategy.ALL : DiskCacheStrategy.AUTOMATIC
                         )
+                        .dontAnimate()
                         .transition(hero ? ThumbnailFades.hero() : ThumbnailFades.thumbnail())
                         .placeholder(new ColorDrawable(Color.rgb(20, 22, 25)))
                         .error(new ColorDrawable(Color.rgb(20, 22, 25)));
@@ -852,6 +854,7 @@ final class ShowsHubView extends FrameLayout {
                 .diskCacheStrategy(DiskCacheStrategy.NONE)
                 .skipMemoryCache(false)
                 .centerCrop()
+                .dontAnimate()
                 .transition(ThumbnailFades.thumbnail())
                 .placeholder(new ColorDrawable(Color.rgb(20, 22, 25)))
                 .error(new ColorDrawable(Color.rgb(20, 22, 25)))

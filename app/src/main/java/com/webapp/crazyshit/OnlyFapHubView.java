@@ -1225,6 +1225,7 @@ final class OnlyFapHubView extends FrameLayout {
                                             : creator.uploader
                             ))
                             .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
+                            .dontAnimate()
                             .transition(ThumbnailFades.avatar())
                             .placeholder(new ColorDrawable(
                                     ZeroChillUi.color(getContext(), R.color.zc_surface_pressed)))
@@ -1586,6 +1587,7 @@ final class OnlyFapHubView extends FrameLayout {
                         .load(new GlideUrl(url, headers.build()))
                         .centerCrop()
                         .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
+                        .dontAnimate()
                         .transition(ThumbnailFades.thumbnail())
                         .placeholder(new ColorDrawable(
                                 ZeroChillUi.color(

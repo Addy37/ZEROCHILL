@@ -88,7 +88,7 @@ final class CreatorMergeSheet {
                                         .addHeader("User-Agent", "Mozilla/5.0 (Linux; Android 16) AppleWebKit/537.36 Chrome/139.0 Mobile Safari/537.36")
                                         .build()))
                         .onlyRetrieveFromCache(true)
-                        .circleCrop().transition(ThumbnailFades.avatar()).error(R.drawable.ic_more_account).into(picture);
+                        .circleCrop().dontAnimate().transition(ThumbnailFades.avatar()).error(R.drawable.ic_more_account).into(picture);
                 row.addView(picture, new LinearLayout.LayoutParams(dp(activity, 48), dp(activity, 48)));
                 if (!readOnly) picture.setOnClickListener(v -> { if (!item.imageUrl.isEmpty()) {
                     avatar[0] = key; redraw[0].run();

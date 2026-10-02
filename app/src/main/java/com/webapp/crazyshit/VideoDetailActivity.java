@@ -1254,6 +1254,7 @@ public class VideoDetailActivity extends Activity {
                     .load(source)
                     .centerCrop()
                     .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
+                    .dontAnimate()
                     .transition(view == startupPoster
                             ? new com.bumptech.glide.load.resource.drawable.DrawableTransitionOptions().dontTransition()
                             : ThumbnailFades.thumbnail())

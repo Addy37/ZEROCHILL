@@ -783,6 +783,7 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
         com.bumptech.glide.RequestBuilder<Drawable> request = Glide.with(holder.image)
                 .load(source)
                 .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
+                .dontAnimate()
                 .transition(ThumbnailFades.thumbnail())
                 .placeholder(new ColorDrawable(ZeroChillUi.color(
                         holder.image.getContext(), R.color.zc_surface_glass_strong)))

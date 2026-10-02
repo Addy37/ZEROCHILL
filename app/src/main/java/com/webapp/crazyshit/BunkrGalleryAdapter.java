@@ -372,6 +372,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
                 RequestBuilder<Drawable> fallback = Glide.with(holder.image)
                         .load(withHeaders(item.url, imageReferer(item)))
                         .diskCacheStrategy(DiskCacheStrategy.ALL)
+                        .dontAnimate()
                         .transition(ThumbnailFades.thumbnail());
                 fallback = adaptiveAspectRatios
                         ? fallback.dontTransform().override(384, 384)
