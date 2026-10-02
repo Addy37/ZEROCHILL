@@ -599,6 +599,7 @@ public final class BunkrGalleryActivity extends Activity {
     private void onSharedElementEnterFinished() {
         if (!sharedElementPending) return;
         sharedElementPending = false;
+        if (adapter != null) adapter.finishOpeningTransition();
         sharedElementCompleted = sharedElementTarget != null;
         if (chromeVisible && topBar != null && bottomBar != null) {
             topBar.animate().cancel();
@@ -617,6 +618,7 @@ public final class BunkrGalleryActivity extends Activity {
 
     private void finishViewer() {
         if (isFinishing() || returningToGallery) return;
+        if (adapter != null) adapter.stopReveals();
         NativeContentItem current = adapter == null || pager == null
                 ? null
                 : adapter.itemAt(pager.getCurrentItem());
@@ -985,9 +987,19 @@ public final class BunkrGalleryActivity extends Activity {
         else if (lower.contains(".mpd")) media.setMimeType(MimeTypes.APPLICATION_MPD);
         player.setMediaItem(media.build());
         playbackRecovery.bind(player, item.url);
+        ExoPlayer startedPlayer = player;
         player.addListener(new Player.Listener() {
             @Override
+            public void onRenderedFirstFrame() {
+                if (player != startedPlayer || returningToGallery || isFinishing()) return;
+                adapter.onVideoFirstFrame(position, startedPlayer);
+            }
+
+            @Override
             public void onPlaybackStateChanged(int playbackState) {
+                if (player != startedPlayer || returningToGallery || isFinishing()) return;
+                adapter.onVideoBuffering(position, startedPlayer,
+                        playbackState == Player.STATE_BUFFERING && startedPlayer.getPlayWhenReady());
                 if (playbackState == Player.STATE_READY) {
                     RatingFeedbackPrompt.recordSuccessfulPlayback(
                             BunkrGalleryActivity.this, mediaUrl);
@@ -1275,6 +1287,7 @@ public final class BunkrGalleryActivity extends Activity {
     @Override
     protected void onDestroy() {
         generation++;
+        if (adapter != null) adapter.stopReveals();
         releasePlayer();
         pageIo.shutdownNow();
         mediaIo.shutdownNow();
