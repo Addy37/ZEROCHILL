@@ -196,7 +196,9 @@ public class VisualRefreshTest {
         View shitTokTab = nav.findViewById(4);
         assertEquals((showsTab.getWidth() + shitTokTab.getWidth()) / 2f - BrowseUi.dp(main, 8),
                 capsule.width(), 1f);
-        assertEquals(nav.getHeight() / 2f, capsule.centerY(), 1f);
+        // v4.3.1 anchors the selected glass to Material's item bounds rather than
+        // forcing its center to the navbar midpoint.
+        assertTrue(capsule.top >= BrowseUi.dp(main, 3));
         assertTrue(capsule.bottom > capsule.top);
         assertTrue(capsule.bottom <= nav.getHeight() - BrowseUi.dp(main, 3));
         assertEquals(0.5f, slidingNav.pagerPositionForTest(), 0.001f);
