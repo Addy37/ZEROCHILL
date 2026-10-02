@@ -4,9 +4,11 @@ import android.app.Application;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.RectF;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ImageView;
+import android.widget.TextView;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -29,6 +31,56 @@ import static org.robolectric.Shadows.shadowOf;
 @Config(application = Application.class, sdk = 35, qualifiers = "w411dp-h891dp-xhdpi")
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 public class BottomNavigationDrawableRenderTest {
+    @Test public void expandedContentAndCapsuleAreVerticallyCentered() {
+        ActivityController<NativeMainActivity> controller = BottomNavigationInsetsTest.createActivity();
+        NativeMainActivity activity = controller.get();
+        ZeroChillBottomNavigationView nav = ReflectionHelpers.getField(activity, "bottomNavigation");
+        FrostedNavigationLayout shell = ReflectionHelpers.getField(activity, "shell");
+        int[] ids = {2, 4, 3, 6};
+        for (int selected = 0; selected < ids.length; selected++) {
+            nav.setSelectedItemId(ids[selected]);
+            nav.setPagerPosition(selected);
+            shadowOf(android.os.Looper.getMainLooper()).idle();
+            shell.dispatchApplyWindowInsets(BottomNavigationInsetsTest.systemInsets(activity, 24));
+            BottomNavigationInsetsTest.layoutShell(shell);
+            Bitmap bitmap = Bitmap.createBitmap(nav.getWidth(), nav.getHeight(), Bitmap.Config.ARGB_8888);
+            nav.draw(new Canvas(bitmap));
+            bitmap.recycle();
+            for (int id : ids) {
+                View item = nav.findViewById(id);
+                ImageView icon = item.findViewById(com.google.android.material.R.id.navigation_bar_item_icon_view);
+                TextView label = item.findViewById(id == ids[selected]
+                        ? com.google.android.material.R.id.navigation_bar_item_large_label
+                        : com.google.android.material.R.id.navigation_bar_item_small_label);
+                RectF content = mappedBounds(nav, icon);
+                RectF labelBounds = mappedBounds(nav, label);
+                content.union(labelBounds);
+                System.out.println("NAV_VERTICAL_MEASURE selected=" + ids[selected] + " tab=" + id
+                        + " nav=" + nav.getHeight() + " paddingTop=" + nav.getPaddingTop()
+                        + " paddingBottom=" + nav.getPaddingBottom() + " menu=" + ((View) item.getParent()).getHeight()
+                        + " item=" + item.getHeight() + " icon=" + mappedBounds(nav, icon)
+                        + " label=" + labelBounds + " baseline=" + (labelBounds.top + label.getBaseline())
+                        + " capsule=" + nav.selectedCapsuleBoundsForTest());
+                assertEquals("expanded icon/label content tab=" + id, nav.getHeight() / 2f,
+                        content.centerY(), activity.getResources().getDisplayMetrics().density);
+            }
+            assertEquals("expanded selected capsule", nav.getHeight() / 2f,
+                    nav.selectedCapsuleBoundsForTest().centerY(), 0.5f);
+        }
+        controller.pause().stop().destroy();
+    }
+
+    private static RectF mappedBounds(ViewGroup nav, View child) {
+        RectF rect = new RectF(0, 0, child.getWidth(), child.getHeight());
+        while (child != nav) {
+            ViewGroup parent = (ViewGroup) child.getParent();
+            child.getMatrix().mapRect(rect);
+            rect.offset(child.getLeft() - parent.getScrollX(), child.getTop() - parent.getScrollY());
+            child = parent;
+        }
+        return rect;
+    }
+
     @Test public void everyTabRendersItsCompleteIconAtEverySizeAndSelection() throws Exception {
         ActivityController<NativeMainActivity> controller = BottomNavigationInsetsTest.createActivity();
         NativeMainActivity activity = controller.get();
