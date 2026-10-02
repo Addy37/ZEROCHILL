@@ -93,7 +93,7 @@ public class ThumbnailLoadTransitionTest {
         assertFalse(ThumbnailFades.shouldStart(DataSource.REMOTE, image));
         activity.getSharedPreferences("app_prefs", Context.MODE_PRIVATE).edit()
                 .putBoolean("immersive_motion_enabled", true).commit();
-        root.getViewTreeObserver().dispatchOnScrollChanged();
+        ReflectionHelpers.callInstanceMethod(root.getViewTreeObserver(), "dispatchOnScrollChanged");
         assertFalse(ThumbnailFades.shouldStart(DataSource.REMOTE, image));
         idle(101);
         assertTrue(ThumbnailFades.shouldStart(DataSource.REMOTE, image));
@@ -181,7 +181,7 @@ public class ThumbnailLoadTransitionTest {
         }
         for (int i = 0; i < 4; i++) assertTrue(reveal(views[i], source()));
         assertFalse(reveal(views[4], source()));
-        root.getViewTreeObserver().dispatchOnScrollChanged();
+        ReflectionHelpers.callInstanceMethod(root.getViewTreeObserver(), "dispatchOnScrollChanged");
         ThumbnailFades.FadeDrawable first = (ThumbnailFades.FadeDrawable) views[0].getDrawable();
         first.setBounds(0, 0, 100, 100);
         Bitmap frame = Bitmap.createBitmap(100, 100, Bitmap.Config.ARGB_8888);
