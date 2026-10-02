@@ -137,6 +137,7 @@ public class ThumbnailLoadTransitionTest {
     @Test public void settlingRecyclerRowsAppearImmediately() {
         root.removeView(image);
         RecyclerView list = new RecyclerView(activity);
+        list.setLayoutManager(new androidx.recyclerview.widget.LinearLayoutManager(activity));
         root.addView(list, new FrameLayout.LayoutParams(100, 100));
         list.addView(image);
         list.layout(0, 0, 100, 100);
