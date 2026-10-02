@@ -7,7 +7,6 @@ import android.transition.ChangeBounds;
 import android.transition.ChangeClipBounds;
 import android.transition.ChangeImageTransform;
 import android.transition.ChangeTransform;
-import android.transition.Fade;
 import android.transition.Transition;
 import android.transition.TransitionListenerAdapter;
 import android.transition.TransitionSet;
@@ -37,8 +36,11 @@ final class GalleryMediaTransition {
         window.setAllowReturnTransitionOverlap(true);
         window.setSharedElementExitTransition(sharedElementTransition());
         window.setSharedElementReenterTransition(sharedElementTransition());
-        window.setExitTransition(new Fade(Fade.OUT).setDuration(90L));
-        // Keep the source grid fully visible behind the returning shared media.\n        // A regular-view reenter fade briefly darkens the grid and reads as a black flash.\n        window.setReenterTransition(null);
+        // The shared media is the only animated element. Keeping regular Activity and
+        // background fades disabled prevents a black frame during the return handoff.
+        window.setExitTransition(null);
+        window.setReenterTransition(null);
+        window.setTransitionBackgroundFadeDuration(0L);
     }
 
     static void configureViewer(Activity activity, Runnable onEnterFinished) {
@@ -71,12 +73,9 @@ final class GalleryMediaTransition {
         }
         window.setSharedElementEnterTransition(enter);
         window.setSharedElementReturnTransition(sharedElementTransition());
-
-        Fade fadeIn = new Fade(Fade.IN);
-        fadeIn.setStartDelay(75L);
-        fadeIn.setDuration(145L);
-        window.setEnterTransition(fadeIn);
-        // Keep the shared media visible continuously while it shrinks back to the grid.\n        // A separate viewer return fade caused a black frame before the shared-element return.\n        window.setReturnTransition(null);
+        window.setEnterTransition(null);
+        window.setReturnTransition(null);
+        window.setTransitionBackgroundFadeDuration(0L);
     }
 
     static boolean canUse(Activity activity, View anchor, NativeContentItem item) {
