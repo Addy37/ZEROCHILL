@@ -646,15 +646,29 @@ public final class BunkrGalleryActivity extends Activity {
         }
         GalleryMediaTransition.configureReturnSurfaces(this, viewerBackdrop, topBar, bottomBar,
                 initialLoading, loadMoreLoading);
+        final boolean[] returnStarted = {false};
+        Runnable startReturn = () -> {
+            if (returnStarted[0]) return;
+            returnStarted[0] = true;
+            if (isFinishing() || isDestroyed()) return;
+            setResult(RESULT_OK);
+            finishAfterTransition();
+        };
         // Leave the poster drawn before Android captures its return snapshot.
-        target.getViewTreeObserver().addOnPreDrawListener(new android.view.ViewTreeObserver.OnPreDrawListener() {
+        android.view.ViewTreeObserver.OnPreDrawListener ready = new android.view.ViewTreeObserver.OnPreDrawListener() {
             @Override public boolean onPreDraw() {
                 target.getViewTreeObserver().removeOnPreDrawListener(this);
-                setResult(RESULT_OK);
-                finishAfterTransition();
+                startReturn.run();
                 return true;
             }
-        });
+        };
+        target.getViewTreeObserver().addOnPreDrawListener(ready);
+        // A screen-off or window-stop interruption may prevent the next draw.
+        target.postDelayed(() -> {
+            if (target.getViewTreeObserver().isAlive())
+                target.getViewTreeObserver().removeOnPreDrawListener(ready);
+            startReturn.run();
+        }, 350L);
         target.invalidate();
     }
 

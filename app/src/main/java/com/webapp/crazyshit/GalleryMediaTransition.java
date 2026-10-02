@@ -42,8 +42,7 @@ final class GalleryMediaTransition {
         window.setAllowReturnTransitionOverlap(true);
         window.setSharedElementExitTransition(sharedElementTransition());
         window.setSharedElementReenterTransition(sharedElementTransition());
-        // The shared media is the only animated element. Keeping regular Activity and
-        // background fades disabled prevents a black frame during the return handoff.
+        // Source content stays drawn behind the viewer's independent return scrim.
         window.setExitTransition(null);
         window.setReenterTransition(null);
         window.setTransitionBackgroundFadeDuration(0L);

@@ -14,6 +14,7 @@ import android.widget.FrameLayout;
 
 import androidx.recyclerview.widget.RecyclerView;
 import androidx.recyclerview.widget.StaggeredGridLayoutManager;
+import androidx.viewpager2.widget.ViewPager2;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -149,6 +150,48 @@ public class GalleryViewerLifecycleTest {
         assertEquals(0, changes[0]);
         assertEquals(1, changes[1]);
         assertSame(first, adapter.snapshot().get(0));
+    }
+
+    @Test public void videoReturnRestoresLoadedPosterWithoutAGlideRebind() {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        NativeContentItem video = item(NativeContentItem.KIND_MEDIA, "poster-test");
+        BunkrGalleryPagerAdapter adapter = new BunkrGalleryPagerAdapter(activity,
+                new BunkrGalleryPagerAdapter.Listener() {
+                    @Override public void onMediaTap(int p, NativeContentItem item) { }
+                    @Override public void onMediaLongPress(int p, NativeContentItem item) { }
+                    @Override public void onResolvedImageFailed(int p, NativeContentItem item) { }
+                });
+        adapter.setInitialSharedElement(video.url, GalleryMediaTransition.transitionName(video));
+        adapter.replace(Collections.singletonList(video), Collections.emptyMap());
+        ViewPager2 pager = new ViewPager2(activity);
+        pager.setAdapter(adapter);
+        activity.setContentView(pager);
+        pager.measure(View.MeasureSpec.makeMeasureSpec(400, View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(800, View.MeasureSpec.EXACTLY));
+        pager.layout(0, 0, 400, 800);
+        RecyclerView list = (RecyclerView) pager.getChildAt(0);
+        BunkrGalleryPagerAdapter.Holder holder = (BunkrGalleryPagerAdapter.Holder)
+                list.findViewHolderForAdapterPosition(0);
+        assertNotNull(holder);
+        android.graphics.drawable.BitmapDrawable poster = new android.graphics.drawable.BitmapDrawable(
+                activity.getResources(), android.graphics.Bitmap.createBitmap(10, 10,
+                android.graphics.Bitmap.Config.ARGB_8888));
+        holder.image.setImageDrawable(poster);
+        holder.image.setVisibility(View.GONE);
+        holder.playerView.setVisibility(View.VISIBLE);
+        ReflectionHelpers.setField(adapter, "activeVideoPosition", 0);
+        final int[] rebinds = {0};
+        adapter.registerAdapterDataObserver(new RecyclerView.AdapterDataObserver() {
+            @Override public void onItemRangeChanged(int start, int count) { rebinds[0]++; }
+        });
+        assertSame(holder.image, adapter.prepareSharedReturn(pager, 0));
+        adapter.clearActiveVideo();
+        assertEquals(0, rebinds[0]);
+        assertSame(poster, holder.image.getDrawable());
+        assertEquals(View.VISIBLE, holder.image.getVisibility());
+        assertEquals(1f, holder.image.getAlpha(), 0f);
+        assertEquals(View.GONE, holder.playerView.getVisibility());
+        assertEquals(View.GONE, holder.play.getVisibility());
     }
 
     private ActivityController<BunkrGalleryActivity> viewer(String kind, int orientation) {
