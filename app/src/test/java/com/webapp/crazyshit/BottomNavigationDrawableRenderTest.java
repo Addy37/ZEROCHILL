@@ -72,6 +72,8 @@ public class BottomNavigationDrawableRenderTest {
                             Math.round(20f * density), nav.getPaddingBottom());
                     assertEquals(state + " label visible", View.VISIBLE, label.getVisibility());
                     assertEquals(state + " label alpha", 1f, label.getAlpha(), 0f);
+                    assertEquals(state + " expanded label offset", 2f * density,
+                            label.getTranslationY(), 0.01f);
                     assertTrue(state + " label below icon", labelBounds.top + label.getBaseline() > iconBounds.bottom);
                     Bitmap expectedLabel = Bitmap.createBitmap(nav.getWidth(), nav.getHeight(), Bitmap.Config.ARGB_8888);
                     Canvas canvas = new Canvas(expectedLabel);
@@ -150,6 +152,7 @@ public class BottomNavigationDrawableRenderTest {
                 RectF labelBounds = mappedBounds(nav, label);
                 values.add(labelBounds.top); values.add(labelBounds.bottom);
                 values.add(labelBounds.top + label.getBaseline());
+                values.add(label.getTranslationY());
             }
         }
         RectF capsule = nav.selectedCapsuleBoundsForTest();
