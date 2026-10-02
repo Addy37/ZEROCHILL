@@ -96,7 +96,6 @@ public final class NativeFeedBrowserActivity extends Activity {
 
     private NativeFeedAdapter adapter;
     private BunkrGalleryAdapter bunkrGalleryAdapter;
-    private GalleryLaunchOrientation galleryLaunchOrientation;
     private final BunkrGalleryAdapter[] creatorTabAdapters =
             new BunkrGalleryAdapter[CREATOR_TAB_COUNT];
     private final RecyclerView[] creatorTabRecyclers =
@@ -378,7 +377,6 @@ public final class NativeFeedBrowserActivity extends Activity {
         } else if (BunkrRepository.isAlbumUrl(baseUrl)) source = SOURCE_BUNKR;
         else if (WebVideoSourceRepository.isKaoticUrl(baseUrl)) source = SOURCE_KAOTIC;
         else if (EfuktRepository.isEfuktUrl(baseUrl)) source = SOURCE_EFUKT;
-        if (isBunkr()) galleryLaunchOrientation = new GalleryLaunchOrientation(this);
         restoredBrowserState = state;
         if (state != null) {
             browserSnapshot = state.getString("browser_snapshot", browserSnapshot);
@@ -1724,10 +1722,6 @@ public final class NativeFeedBrowserActivity extends Activity {
         );
         intent.putExtra(BunkrGalleryActivity.EXTRA_INITIAL_URL, item.url);
         intent.putExtra(BunkrGalleryActivity.EXTRA_INITIAL_POSITION, position);
-        intent.putExtra(GalleryLaunchOrientation.EXTRA_ORIENTATION,
-                galleryLaunchOrientation == null
-                        ? GalleryLaunchOrientation.fromIntent(null)
-                        : galleryLaunchOrientation.capture());
         GalleryMediaTransition.start(this, intent, transitionAnchor, item);
     }
 
@@ -2506,7 +2500,6 @@ public final class NativeFeedBrowserActivity extends Activity {
     }
 
     @Override protected void onPause() {
-        if (galleryLaunchOrientation != null) galleryLaunchOrientation.disable();
         persistBrowser();
         super.onPause();
     }
@@ -2514,7 +2507,6 @@ public final class NativeFeedBrowserActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
-        if (galleryLaunchOrientation != null) galleryLaunchOrientation.startSampling();
         if (creatorProfile != null) creatorProfile.refresh();
         if (isBunkr() && bunkrGalleryAdapter != null) {
             BunkrGallerySessionStore.Snapshot snapshot =
@@ -2546,7 +2538,6 @@ public final class NativeFeedBrowserActivity extends Activity {
     @Override
     protected void onDestroy() {
         generation++;
-        if (galleryLaunchOrientation != null) galleryLaunchOrientation.disable();
         if (isFinishing() && !shitTokReturnTransition.isEmpty()) {
             ShitTokTransitionSnapshotStore.remove(shitTokReturnTransition);
         }

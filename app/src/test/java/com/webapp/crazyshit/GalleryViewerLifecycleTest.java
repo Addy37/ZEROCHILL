@@ -8,6 +8,7 @@ import android.content.res.Configuration;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
 import android.os.Bundle;
+import android.provider.Settings;
 import android.transition.Fade;
 import android.view.View;
 import android.widget.FrameLayout;
@@ -31,60 +32,71 @@ import static org.junit.Assert.*;
 @RunWith(org.robolectric.RobolectricTestRunner.class)
 @Config(application = Application.class, sdk = 35)
 public class GalleryViewerLifecycleTest {
-    @Test public void launchPoseMapsToFixedOrientationsOnly() {
-        assertEquals(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT,
-                GalleryLaunchOrientation.fixedOrientation(0, -1));
-        assertEquals(ActivityInfo.SCREEN_ORIENTATION_REVERSE_LANDSCAPE,
-                GalleryLaunchOrientation.fixedOrientation(90, -1));
-        assertEquals(ActivityInfo.SCREEN_ORIENTATION_REVERSE_PORTRAIT,
-                GalleryLaunchOrientation.fixedOrientation(180, -1));
-        assertEquals(ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE,
-                GalleryLaunchOrientation.fixedOrientation(270, -1));
-        assertEquals(ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE,
-                GalleryLaunchOrientation.fixedOrientation(-1, ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE));
-        assertEquals(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT,
-                GalleryLaunchOrientation.fromIntent(new Intent().putExtra(
-                        GalleryLaunchOrientation.EXTRA_ORIENTATION, ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR)));
-    }
-
-    @Test public void imageAndVideoLaunchUseIdenticalFixedPolicy() {
-        for (String kind : new String[]{NativeContentItem.KIND_IMAGE, NativeContentItem.KIND_MEDIA}) {
-            for (int orientation : new int[]{ActivityInfo.SCREEN_ORIENTATION_PORTRAIT,
-                    ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE,
-                    ActivityInfo.SCREEN_ORIENTATION_REVERSE_LANDSCAPE}) {
-                ActivityController<BunkrGalleryActivity> controller = viewer(kind, orientation);
-                BunkrGalleryActivity activity = controller.get();
-                assertFalse(activity.isFinishing());
-                assertEquals(orientation, activity.getRequestedOrientation());
-                // Global creation/resume policy must never overwrite the launch lock.
-                PhoneOrientationPolicy.applyBrowsingOrientation(activity);
-                assertEquals(orientation, activity.getRequestedOrientation());
-                BunkrGalleryPagerAdapter adapter = ReflectionHelpers.getField(activity, "adapter");
-                assertNotNull(adapter);
-                assertEquals(1, adapter.getItemCount());
-                controller.destroy();
-                PhoneOrientationPolicy.onActivityDestroyed(activity);
+    @Test public void imageAndVideoLaunchDelegateToAndroidForEitherAutoRotateSetting() {
+        android.content.ContentResolver resolver = RuntimeEnvironment.getApplication().getContentResolver();
+        int original = Settings.System.getInt(resolver, Settings.System.ACCELEROMETER_ROTATION, 0);
+        try {
+            for (int autoRotate : new int[]{0, 1}) {
+                Settings.System.putInt(resolver, Settings.System.ACCELEROMETER_ROTATION, autoRotate);
+                for (String kind : new String[]{NativeContentItem.KIND_IMAGE, NativeContentItem.KIND_MEDIA}) {
+                    ActivityController<BunkrGalleryActivity> controller = viewer(kind);
+                    BunkrGalleryActivity activity = controller.get();
+                    assertFalse(activity.isFinishing());
+                    assertEquals(ActivityInfo.SCREEN_ORIENTATION_USER, activity.getRequestedOrientation());
+                    // Global creation/resume policy must not replace USER with a fixed lock or fullSensor.
+                    PhoneOrientationPolicy.applyBrowsingOrientation(activity);
+                    assertEquals(ActivityInfo.SCREEN_ORIENTATION_USER, activity.getRequestedOrientation());
+                    assertEquals(autoRotate, Settings.System.getInt(resolver,
+                            Settings.System.ACCELEROMETER_ROTATION, -1));
+                    BunkrGalleryPagerAdapter adapter = ReflectionHelpers.getField(activity, "adapter");
+                    assertNotNull(adapter);
+                    assertEquals(1, adapter.getItemCount());
+                    controller.destroy();
+                    PhoneOrientationPolicy.onActivityDestroyed(activity);
+                }
             }
+        } finally {
+            Settings.System.putInt(resolver, Settings.System.ACCELEROMETER_ROTATION, original);
         }
     }
 
-    @Test public void sampledRotationCannotChangeAnOpenedViewerAndBrowsingRestoresPortrait() {
-        ActivityController<BunkrGalleryActivity> controller = viewer(
-                NativeContentItem.KIND_IMAGE, ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE);
+    @Test public void configurationChangesRetainViewerMediaAndSharedReturnTarget() {
+        for (String kind : new String[]{NativeContentItem.KIND_IMAGE, NativeContentItem.KIND_MEDIA}) {
+            ActivityController<BunkrGalleryActivity> controller = viewer(kind);
+            BunkrGalleryActivity activity = controller.get();
+            ViewPager2 pager = ReflectionHelpers.getField(activity, "pager");
+            BunkrGalleryPagerAdapter adapter = ReflectionHelpers.getField(activity, "adapter");
+            String transitionName = ReflectionHelpers.getField(activity, "sharedElementName");
+            String initialUrl = ReflectionHelpers.getField(activity, "initialUrl");
+            for (int orientation : new int[]{Configuration.ORIENTATION_LANDSCAPE,
+                    Configuration.ORIENTATION_PORTRAIT}) {
+                Configuration config = new Configuration(activity.getResources().getConfiguration());
+                config.orientation = orientation;
+                activity.onConfigurationChanged(config);
+                PhoneOrientationPolicy.applyBrowsingOrientation(activity);
+                assertFalse(activity.isFinishing());
+                assertEquals(ActivityInfo.SCREEN_ORIENTATION_USER, activity.getRequestedOrientation());
+                assertSame(pager, ReflectionHelpers.getField(activity, "pager"));
+                assertSame(adapter, ReflectionHelpers.getField(activity, "adapter"));
+                assertEquals(0, pager.getCurrentItem());
+                assertTrue(BunkrGalleryActivity.canReturnWithSharedElement(
+                        transitionName, initialUrl, adapter.itemAt(0)));
+            }
+            controller.destroy();
+            PhoneOrientationPolicy.onActivityDestroyed(activity);
+        }
+    }
+
+    @Test public void recreationKeepsUserPolicyAndClosingRestoresBrowsingPortrait() {
+        ActivityController<BunkrGalleryActivity> controller = viewer(NativeContentItem.KIND_IMAGE);
         BunkrGalleryActivity activity = controller.get();
-        GalleryLaunchOrientation sourceSampler = new GalleryLaunchOrientation(activity);
-        sourceSampler.onOrientationChanged(0);
-        sourceSampler.onOrientationChanged(90);
-        sourceSampler.onOrientationChanged(270);
-        PhoneOrientationPolicy.applyBrowsingOrientation(activity);
-        assertEquals(ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE, activity.getRequestedOrientation());
         Bundle saved = new Bundle();
         controller.saveInstanceState(saved).destroy();
         PhoneOrientationPolicy.onActivityDestroyed(activity);
         ActivityController<BunkrGalleryActivity> recreated = Robolectric.buildActivity(
                 BunkrGalleryActivity.class, activity.getIntent()).create(saved);
         assertFalse(recreated.get().isFinishing());
-        assertEquals(ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE, recreated.get().getRequestedOrientation());
+        assertEquals(ActivityInfo.SCREEN_ORIENTATION_USER, recreated.get().getRequestedOrientation());
         recreated.get().onBackPressed();
         assertTrue(recreated.get().isFinishing());
         recreated.destroy();
@@ -97,8 +109,7 @@ public class GalleryViewerLifecycleTest {
     }
 
     @Test public void viewerOwnsTransparentContainersAndSeparateBlackBackdrop() {
-        ActivityController<BunkrGalleryActivity> controller = viewer(
-                NativeContentItem.KIND_IMAGE, ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
+        ActivityController<BunkrGalleryActivity> controller = viewer(NativeContentItem.KIND_IMAGE);
         BunkrGalleryActivity activity = controller.get();
         FrameLayout content = activity.findViewById(android.R.id.content);
         assertNull(content.getBackground());
@@ -194,7 +205,7 @@ public class GalleryViewerLifecycleTest {
         assertEquals(View.GONE, holder.play.getVisibility());
     }
 
-    private ActivityController<BunkrGalleryActivity> viewer(String kind, int orientation) {
+    private ActivityController<BunkrGalleryActivity> viewer(String kind) {
         NativeContentItem media = item(kind, "test-media");
         String session = BunkrGallerySessionStore.create("Test", "");
         BunkrGallerySessionStore.replace(session, Collections.singletonList(media), 1, true);
@@ -202,8 +213,7 @@ public class GalleryViewerLifecycleTest {
                 .putExtra(BunkrGalleryActivity.EXTRA_SESSION_ID, session)
                 .putExtra(BunkrGalleryActivity.EXTRA_INITIAL_URL, media.url)
                 .putExtra(BunkrGalleryActivity.EXTRA_SHARED_ELEMENT_NAME,
-                        GalleryMediaTransition.transitionName(media))
-                .putExtra(GalleryLaunchOrientation.EXTRA_ORIENTATION, orientation);
+                        GalleryMediaTransition.transitionName(media));
         return Robolectric.buildActivity(BunkrGalleryActivity.class, intent).create();
     }
 
