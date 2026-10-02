@@ -3,6 +3,7 @@ package com.webapp.crazyshit;
 import android.animation.ValueAnimator;
 import android.content.Context;
 import android.graphics.Canvas;
+import android.graphics.Insets;
 import android.graphics.Color;
 import android.content.res.ColorStateList;
 import android.graphics.Paint;
@@ -12,7 +13,6 @@ import android.graphics.RuntimeShader;
 import android.graphics.drawable.Drawable;
 import android.os.Build;
 import android.view.MotionEvent;
-import android.view.ContextThemeWrapper;
 import android.view.View;
 import android.view.ViewConfiguration;
 import android.view.ViewGroup;
@@ -44,7 +44,6 @@ final class ZeroChillBottomNavigationView extends BottomNavigationView {
     private static final long COLLAPSE_DURATION_MS = 210L;
     private static final int COLLAPSED_HEIGHT_DP = 50;
     private static final int COLLAPSED_SIDE_MARGIN_DP = 60;
-    private static final int EXPANDED_LABEL_OFFSET_DP = 2;
     private static final float HORIZONTAL_DOMINANCE = 1.25f;
 
     private final Drawable selectedGlass;
@@ -75,9 +74,9 @@ final class ZeroChillBottomNavigationView extends BottomNavigationView {
     private OnNavigationDragListener navigationDragListener;
 
     ZeroChillBottomNavigationView(Context context) {
-        // Material forwards defStyleAttr, but not defStyleRes, to the platform View.
-        // Supply the floating style through that attr so initial padding is captured too.
-        super(new ContextThemeWrapper(context, R.style.ThemeOverlay_ZeroChill_FloatingBottomNavigation));
+        // Match the approved v4.3.1 Material baseline. System clearance is handled by
+        // the outer shell; this view receives a synthetic reference gesture inset below.
+        super(context);
         Drawable drawable = ContextCompat.getDrawable(context, R.drawable.zc_nav_selected_glass);
         selectedGlass = drawable == null ? null : drawable.mutate();
         swipeTouchSlop = ViewConfiguration.get(context).getScaledTouchSlop();
@@ -93,19 +92,39 @@ final class ZeroChillBottomNavigationView extends BottomNavigationView {
 
     @Override
     public WindowInsets dispatchApplyWindowInsets(WindowInsets insets) {
-        // Keep Material's listener and its initial style padding. Only the shell-hosted
-        // floating bar has already been positioned inside the system's safe content area.
         if (getParent() instanceof FrostedNavigationLayout) {
-            super.dispatchApplyWindowInsets(
-                    ((FrostedNavigationLayout) getParent()).navigationContentInsets(insets));
-            // Material restores its constructor padding on every inset dispatch. Keep the
-            // current visual gutter, including when navigation mode changes mid-collapse.
+            FrostedNavigationLayout shell = (FrostedNavigationLayout) getParent();
+            WindowInsets local = shell.navigationContentInsets(insets);
+            int referenceBottom = Math.round(lerp(
+                    getResources().getDimensionPixelSize(R.dimen.zc_nav_reference_gesture_inset),
+                    0,
+                    clamp(collapseProgress, 0f, 1f)
+            ));
+
+            // v4.3.1's approved expanded geometry came from Material receiving the
+            // gesture-navigation bottom inset itself. Recreate that exact local input
+            // while the shell separately owns the device's real system-bar clearance.
+            super.dispatchApplyWindowInsets(withReferenceBottomInset(local, referenceBottom));
             applyCollapseGutter(collapseProgress);
+
             // Before Android 11, ViewGroup forwards a child's returned insets to siblings.
-            // The local content adaptation must never escape this navbar's subtree.
+            // Never let this navbar-local reference inset escape its subtree.
             return insets;
         }
         return super.dispatchApplyWindowInsets(insets);
+    }
+
+    @SuppressWarnings("deprecation")
+    private static WindowInsets withReferenceBottomInset(WindowInsets base, int bottom) {
+        if (Build.VERSION.SDK_INT >= 30) {
+            return Api30Insets.withNavigationBottom(base, bottom);
+        }
+        if (Build.VERSION.SDK_INT >= 29) {
+            return new WindowInsets.Builder(base)
+                    .setSystemWindowInsets(Insets.of(0, 0, 0, bottom))
+                    .build();
+        }
+        return base.replaceSystemWindowInsets(0, 0, 0, bottom);
     }
 
     void setPagerPosition(float position) {
@@ -358,18 +377,16 @@ final class ZeroChillBottomNavigationView extends BottomNavigationView {
         float firstCenter = firstRect.exactCenterX();
         float secondCenter = secondRect.exactCenterX();
         float center = lerp(firstCenter, secondCenter, fraction);
-        // Keep the approved selected capsule insets while it follows pager movement.
         float width = lerp(firstRect.width(), secondRect.width(), fraction) - dp(8);
-        // Retain the existing capsule height, independently of the menu's new origin.
-        // Center it while expanded; release the correction continuously so the approved
-        // collapsed capsule keeps its exact original bounds and rounding.
-        float top = Math.max(dp(3), lerp(firstRect.top, secondRect.top, fraction)
-                - getPaddingTop() + dp(4));
+
+        // Exact v4.3.1 capsule geometry. Because the reference Material inset is released
+        // during collapse, this same formula also preserves the approved compact endpoint.
+        float top = Math.max(dp(3), lerp(firstRect.top, secondRect.top, fraction) + dp(4));
         float bottom = Math.min(getHeight() - dp(3),
-                lerp(firstRect.bottom, secondRect.bottom, fraction) - getPaddingTop() + dp(10));
+                lerp(firstRect.bottom, secondRect.bottom, fraction) + dp(10));
         if (bottom <= top) return false;
-        float shift = (getHeight() / 2f - (top + bottom) / 2f) * (1f - collapseProgress);
-        out.set(center - width / 2f, top + shift, center + width / 2f, bottom + shift);
+
+        out.set(center - width / 2f, top, center + width / 2f, bottom);
         return true;
     }
 
@@ -468,18 +485,12 @@ final class ZeroChillBottomNavigationView extends BottomNavigationView {
     }
 
     private void applyCollapseGutter(float progress) {
-        // Preserve the approved production gesture geometry in the 64dp expanded bar:
-        // Material keeps the 24dp visual gutter below the menu. Release that gutter
-        // continuously during collapse so the approved 50dp compact endpoint remains
-        // unchanged. System clearance belongs to the shell, not this visual spacing.
         float p = clamp(progress, 0f, 1f);
-        int expandedGutter = getResources().getDimensionPixelSize(R.dimen.zc_nav_menu_bottom_gutter);
-        int expandedTop = getResources().getDimensionPixelSize(R.dimen.zc_nav_menu_top_gutter);
-        int gutter = Math.round(lerp(expandedGutter, 0, p));
-        int top = Math.min(gutter, Math.round(lerp(expandedTop, 0, p)));
-        int bottom = gutter - top;
-        if (getPaddingTop() != top || getPaddingBottom() != bottom) {
-            setPadding(getPaddingLeft(), top, getPaddingRight(), bottom);
+        int expandedBottom = getResources().getDimensionPixelSize(
+                R.dimen.zc_nav_reference_gesture_inset);
+        int bottom = Math.round(lerp(expandedBottom, 0, p));
+        if (getPaddingTop() != 0 || getPaddingBottom() != bottom) {
+            setPadding(getPaddingLeft(), 0, getPaddingRight(), bottom);
         }
     }
 
@@ -489,8 +500,7 @@ final class ZeroChillBottomNavigationView extends BottomNavigationView {
             View item = findViewById(id);
             if (item == null) continue;
             if (item.getMinimumHeight() != 0) item.setMinimumHeight(0);
-            applyLabelVisuals(item, labelAlpha,
-                    dp(EXPANDED_LABEL_OFFSET_DP) * (1f - progress));
+            applyLabelAlpha(item, labelAlpha);
             View iconContainer = item.findViewById(
                     com.google.android.material.R.id.navigation_bar_item_icon_container);
             if (iconContainer != null && iconContainer.getHeight() > 0) {
@@ -505,18 +515,15 @@ final class ZeroChillBottomNavigationView extends BottomNavigationView {
         }
     }
 
-    private static void applyLabelVisuals(View view, float labelAlpha, float translationY) {
+    private static void applyLabelAlpha(View view, float labelAlpha) {
         if (view instanceof TextView) {
             if (Math.abs(view.getAlpha() - labelAlpha) > 0.001f) view.setAlpha(labelAlpha);
-            if (Math.abs(view.getTranslationY() - translationY) > 0.01f) {
-                view.setTranslationY(translationY);
-            }
             return;
         }
         if (!(view instanceof ViewGroup)) return;
         ViewGroup group = (ViewGroup) view;
         for (int i = 0; i < group.getChildCount(); i++) {
-            applyLabelVisuals(group.getChildAt(i), labelAlpha, translationY);
+            applyLabelAlpha(group.getChildAt(i), labelAlpha);
         }
     }
 
@@ -565,6 +572,18 @@ final class ZeroChillBottomNavigationView extends BottomNavigationView {
 
     private static float clamp(float value, float min, float max) {
         return Math.max(min, Math.min(max, value));
+    }
+
+    @RequiresApi(30)
+    private static final class Api30Insets {
+        private Api30Insets() {
+        }
+
+        static WindowInsets withNavigationBottom(WindowInsets base, int bottom) {
+            return new WindowInsets.Builder(base)
+                    .setInsets(WindowInsets.Type.navigationBars(), Insets.of(0, 0, 0, bottom))
+                    .build();
+        }
     }
 
     @RequiresApi(33)
