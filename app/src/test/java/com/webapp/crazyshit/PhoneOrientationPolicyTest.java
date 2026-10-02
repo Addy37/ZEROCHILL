@@ -23,25 +23,17 @@ import static org.junit.Assert.assertTrue;
 public class PhoneOrientationPolicyTest {
     @Test public void launchAndBrowsingActivitiesStartPortraitBeforeOnCreate() throws Exception {
         Application app = RuntimeEnvironment.getApplication();
-        Class<?>[] portraitActivities = {
+        Class<?>[] activities = {
                 SplashActivity.class, NativeMainActivity.class, VideoDetailActivity.class,
-                PlayerActivity.class, WebFallbackActivity.class, SearchActivity.class,
-                SettingsActivity.class, CreatorsActivity.class
+                PlayerActivity.class, BunkrGalleryActivity.class, WebFallbackActivity.class,
+                SearchActivity.class, SettingsActivity.class, CreatorsActivity.class
         };
-        for (Class<?> activity : portraitActivities) {
+        for (Class<?> activity : activities) {
             ActivityInfo info = app.getPackageManager().getActivityInfo(
                     new ComponentName(app, activity), 0);
             assertEquals(activity.getSimpleName(), ActivityInfo.SCREEN_ORIENTATION_PORTRAIT,
                     info.screenOrientation);
         }
-
-        ActivityInfo gallery = app.getPackageManager().getActivityInfo(
-                new ComponentName(app, BunkrGalleryActivity.class), 0);
-        assertEquals(
-                BunkrGalleryActivity.class.getSimpleName(),
-                ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR,
-                gallery.screenOrientation
-        );
     }
 
     @Test public void landscapePhoneRemainsPhoneSizedForFullscreenExit() {
