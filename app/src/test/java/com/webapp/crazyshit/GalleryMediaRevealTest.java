@@ -41,6 +41,7 @@ import static org.junit.Assert.*;
 public class GalleryMediaRevealTest {
     private Activity activity;
     private ZoomableImageView image;
+    private GalleryVideoLoadingView dots;
     private GalleryMediaReveal reveal;
 
     @Before public void setUp() {
@@ -49,8 +50,10 @@ public class GalleryMediaRevealTest {
         FrameLayout root = new FrameLayout(activity);
         image = new ZoomableImageView(activity);
         root.addView(image);
+        dots = new GalleryVideoLoadingView(activity);
+        root.addView(dots, new FrameLayout.LayoutParams(60, 32));
         activity.setContentView(root);
-        reveal = new GalleryMediaReveal(image);
+        reveal = new GalleryMediaReveal(image, dots);
     }
 
     @After public void tearDown() {
@@ -432,6 +435,158 @@ public class GalleryMediaRevealTest {
         assertNoSpinner(holder);
         adapter.onViewRecycled(holder);
         player.release();
+    }
+
+    @Test public void dotsUseOneDelayAndFastVideoLoadsNeverFlash() {
+        reveal.setVideoLoading(true);
+        idle(150);
+        assertEquals(View.GONE, dots.getVisibility());
+        reveal.setVideoLoading(true);
+        idle(80);
+        assertEquals(View.VISIBLE, dots.getVisibility());
+        assertNotNull(ReflectionHelpers.getField(dots, "bounce"));
+        reveal.setVideoLoading(false);
+        idle(250);
+        assertEquals(View.GONE, dots.getVisibility());
+        assertNull(ReflectionHelpers.getField(dots, "bounce"));
+        reveal.setVideoLoading(true);
+        idle(100);
+        reveal.setVideoLoading(false);
+        idle(1000);
+        assertEquals(View.GONE, dots.getVisibility());
+    }
+
+    @Test public void dotsRemainStillWhenMotionIsDisabledAndStopDuringReturn() {
+        setMotion(false);
+        reveal.setVideoLoading(true);
+        idle(300);
+        assertEquals(View.VISIBLE, dots.getVisibility());
+        assertEquals("Loading video", dots.getContentDescription());
+        assertNull(ReflectionHelpers.getField(dots, "bounce"));
+        reveal.cancelAndSettle();
+        idle(1000);
+        assertEquals(View.GONE, dots.getVisibility());
+        reveal.setVideoLoading(true);
+        idle(100);
+        reveal.cancelAndSettle();
+        idle(1000);
+        assertEquals(View.GONE, dots.getVisibility());
+    }
+
+    @Test public void dotsRestartCleanlyIfBufferingReturnsDuringTheirFade() {
+        reveal.setVideoLoading(true);
+        idle(300);
+        reveal.setVideoLoading(false);
+        idle(30);
+        reveal.setVideoLoading(true);
+        idle(300);
+        assertEquals(View.VISIBLE, dots.getVisibility());
+        assertEquals(1f, dots.getAlpha(), 0f);
+        assertNotNull(ReflectionHelpers.getField(dots, "bounce"));
+    }
+
+    @Test public void hiddenParentAndDetachStopDotsAndCancelPendingCallbacks() {
+        FrameLayout root = (FrameLayout) dots.getParent();
+        reveal.setVideoLoading(true);
+        idle(300);
+        root.setVisibility(View.GONE);
+        idle(300);
+        assertEquals(View.GONE, dots.getVisibility());
+        assertNull(ReflectionHelpers.getField(dots, "bounce"));
+        root.setVisibility(View.VISIBLE);
+        idle(300);
+        assertEquals(View.VISIBLE, dots.getVisibility());
+        root.removeView(dots);
+        idle(500);
+        assertEquals(View.GONE, dots.getVisibility());
+        assertNull(ReflectionHelpers.getField(dots, "bounce"));
+        root.addView(dots);
+        idle(500);
+        assertEquals(View.GONE, dots.getVisibility());
+    }
+
+    @Test public void resolvingAndBufferingUseDotsWhileManualVideoKeepsPlayButton() {
+        setMotion(false);
+        BunkrGalleryPagerAdapter adapter = adapter(NativeContentItem.KIND_MEDIA);
+        BunkrGalleryPagerAdapter.Holder holder = holder(adapter);
+        activity.setContentView(holder.itemView);
+        assertEquals(View.VISIBLE, holder.play.getVisibility());
+        assertEquals(View.GONE, holder.loadingDots.getVisibility());
+        adapter.setLoading(0, true);
+        adapter.onBindViewHolder(holder, 0, Collections.singletonList(new Object()));
+        assertEquals(View.GONE, holder.play.getVisibility());
+        idle(300);
+        assertEquals(View.VISIBLE, holder.loadingDots.getVisibility());
+        Player player = new IdlePlayer();
+        adapter.activateVideo(0, player);
+        adapter.setLoading(0, false);
+        adapter.onVideoBuffering(0, player, false);
+        adapter.onBindViewHolder(holder, 0, Collections.singletonList(new Object()));
+        assertEquals(View.VISIBLE, holder.loadingDots.getVisibility()); // READY without a frame.
+        adapter.onVideoFirstFrame(0, player);
+        adapter.onBindViewHolder(holder, 0, Collections.singletonList(new Object()));
+        assertEquals(View.GONE, holder.loadingDots.getVisibility());
+        adapter.onVideoBuffering(0, player, true);
+        adapter.onBindViewHolder(holder, 0, Collections.singletonList(new Object()));
+        idle(300);
+        assertEquals(View.VISIBLE, holder.loadingDots.getVisibility());
+        adapter.setFailed(0, true);
+        adapter.clearActiveVideo();
+        adapter.onBindViewHolder(holder, 0, Collections.singletonList(new Object()));
+        assertEquals(View.GONE, holder.loadingDots.getVisibility());
+        assertEquals(View.VISIBLE, holder.failure.getVisibility());
+        adapter.onViewRecycled(holder);
+        player.release();
+    }
+
+    @Test public void photosNeverShowVideoDotsAndRecyclingCancelsVideoDelay() {
+        BunkrGalleryPagerAdapter adapter = adapter(NativeContentItem.KIND_IMAGE);
+        BunkrGalleryPagerAdapter.Holder holder = holder(adapter);
+        activity.setContentView(holder.itemView);
+        adapter.setLoading(0, true);
+        adapter.onBindViewHolder(holder, 0, Collections.singletonList(new Object()));
+        idle(1000);
+        assertEquals(View.GONE, holder.loadingDots.getVisibility());
+        adapter.onViewRecycled(holder);
+        adapter = adapter(NativeContentItem.KIND_MEDIA);
+        holder = holder(adapter);
+        activity.setContentView(holder.itemView);
+        adapter.setLoading(0, true);
+        adapter.onBindViewHolder(holder, 0, Collections.singletonList(new Object()));
+        idle(100);
+        adapter.onViewRecycled(holder);
+        idle(1000);
+        assertEquals(View.GONE, holder.loadingDots.getVisibility());
+    }
+
+    @org.robolectric.annotation.GraphicsMode(org.robolectric.annotation.GraphicsMode.Mode.NATIVE)
+    @Test public void dotsRenderElectricBlueAtThreeBouncePhases() throws Exception {
+        float density = activity.getResources().getDisplayMetrics().density;
+        int width = Math.round(60f * density), height = Math.round(32f * density);
+        dots.layout(0, 0, width, height);
+        Bitmap strip = Bitmap.createBitmap(width * 3, height, Bitmap.Config.ARGB_8888);
+        strip.eraseColor(android.graphics.Color.BLACK);
+        android.graphics.Canvas canvas = new android.graphics.Canvas(strip);
+        float[] phases = {0f, 0.22f, 0.36f};
+        for (int i = 0; i < phases.length; i++) {
+            ReflectionHelpers.setField(dots, "phase", phases[i]);
+            int save = canvas.save();
+            canvas.translate(i * width, 0f);
+            dots.draw(canvas);
+            canvas.restoreToCount(save);
+        }
+        int bluePixels = 0;
+        for (int y = 0; y < height; y++) for (int x = 0; x < width * 3; x++) {
+            int color = strip.getPixel(x, y);
+            if (android.graphics.Color.blue(color) > 70
+                    && android.graphics.Color.red(color) < 20) bluePixels++;
+        }
+        assertTrue(bluePixels > 10);
+        java.io.File out = new java.io.File("build/reports/visual-tests/gallery-video-dots.png");
+        out.getParentFile().mkdirs();
+        try (java.io.FileOutputStream stream = new java.io.FileOutputStream(out)) {
+            assertTrue(strip.compress(Bitmap.CompressFormat.PNG, 100, stream));
+        }
     }
 
     private void assertNoSpinner(BunkrGalleryPagerAdapter.Holder holder) {

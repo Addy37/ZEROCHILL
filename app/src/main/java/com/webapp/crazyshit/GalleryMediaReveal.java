@@ -14,15 +14,21 @@ final class GalleryMediaReveal {
     static final long POSTER_FADE_MS = 150L;
 
     private final ZoomableImageView image;
+    private final GalleryVideoLoadingView loadingDots;
     private boolean videoRevealed;
 
-    GalleryMediaReveal(ZoomableImageView image) {
+    GalleryMediaReveal(ZoomableImageView image, GalleryVideoLoadingView loadingDots) {
         this.image = image;
+        this.loadingDots = loadingDots;
     }
 
     void setLoading(boolean loading) {
         // The preview itself carries loading. A revealed video retains its last frame.
         if (!videoRevealed) image.setLoadingBlur(loading);
+    }
+
+    void setVideoLoading(boolean loading) {
+        loadingDots.setLoading(loading);
     }
 
     Transition<Drawable> imageTransition(DataSource source, boolean allowMotion) {
@@ -82,6 +88,7 @@ final class GalleryMediaReveal {
     }
 
     void cancelAndSettle() {
+        loadingDots.cancelAndHide();
         image.animate().cancel();
         image.animate().withEndAction(null);
         image.setAlpha(1f);

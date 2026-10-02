@@ -307,6 +307,11 @@ final class BunkrGalleryPagerAdapter
         playParams.gravity = Gravity.CENTER;
         root.addView(play, playParams);
 
+        GalleryVideoLoadingView loadingDots = new GalleryVideoLoadingView(parent.getContext());
+        FrameLayout.LayoutParams dotsParams = new FrameLayout.LayoutParams(dp(parent, 60), dp(parent, 32));
+        dotsParams.gravity = Gravity.CENTER;
+        root.addView(loadingDots, dotsParams);
+
         TextView failure = new TextView(parent.getContext());
         failure.setText("Couldn't load this item.\nTap to retry or use the menu to open its page.");
         failure.setTextColor(Color.rgb(205, 205, 212));
@@ -317,7 +322,7 @@ final class BunkrGalleryPagerAdapter
         failure.setVisibility(View.GONE);
         root.addView(failure, new FrameLayout.LayoutParams(-1, -1));
 
-        return new Holder(root, image, playerView, play, failure);
+        return new Holder(root, image, playerView, play, loadingDots, failure);
     }
 
     @Override
@@ -489,7 +494,6 @@ final class BunkrGalleryPagerAdapter
                 holder.reveal.revealVideo(!revealsStopped);
             }
         } else holder.reveal.showPoster();
-        holder.play.setVisibility(item.isVideo() && !active ? View.VISIBLE : View.GONE);
         boolean showFailure = failed.contains(item.url) && !active;
         holder.failure.setVisibility(showFailure ? View.VISIBLE : View.GONE);
         boolean openingPreview = sharedElementOpening && item.url.equals(sharedElementUrl)
@@ -498,6 +502,12 @@ final class BunkrGalleryPagerAdapter
         // Resolution may finish during expansion, but the thumbnail still awaits its full request.
         boolean awaitingFullImage = item.isImage() && !resolvedUrl(position).isEmpty()
                 && !resolvedUrl(position).equals(holder.requestedImageUrl);
+        boolean videoLoading = item.isVideo() && !revealsStopped && !showFailure
+                && (openingPreview || loading.contains(item.url)
+                || (active && (!activeVideoFrameRendered || activeVideoBuffering)));
+        holder.reveal.setVideoLoading(videoLoading);
+        holder.play.setVisibility(item.isVideo() && !active && !videoLoading && !showFailure
+                ? View.VISIBLE : View.GONE);
         holder.reveal.setLoading(!revealsStopped && !showFailure && (openingPreview
                 || awaitingFullImage || loading.contains(item.url)
                 || (!active && holder.imageLoading)
@@ -588,6 +598,7 @@ final class BunkrGalleryPagerAdapter
         final ZoomableImageView image;
         final PlayerView playerView;
         final TextView play;
+        final GalleryVideoLoadingView loadingDots;
         final TextView failure;
         final GalleryMediaReveal reveal;
         String boundUrl = "";
@@ -600,14 +611,16 @@ final class BunkrGalleryPagerAdapter
                 ZoomableImageView image,
                 PlayerView playerView,
                 TextView play,
+                GalleryVideoLoadingView loadingDots,
                 TextView failure
         ) {
             super(root);
             this.image = image;
             this.playerView = playerView;
             this.play = play;
+            this.loadingDots = loadingDots;
             this.failure = failure;
-            this.reveal = new GalleryMediaReveal(image);
+            this.reveal = new GalleryMediaReveal(image, loadingDots);
         }
     }
 }
