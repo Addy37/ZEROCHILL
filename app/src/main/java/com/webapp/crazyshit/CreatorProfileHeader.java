@@ -29,6 +29,10 @@ final class CreatorProfileHeader extends LinearLayout {
     private final ExecutorService heroIo = Executors.newSingleThreadExecutor();
     private boolean detached;
 
+    CreatorProfileHeader(Context context, String title, String query, String url) {
+        this(context, title, query, url, "");
+    }
+
     CreatorProfileHeader(
             Context context,
             String title,
