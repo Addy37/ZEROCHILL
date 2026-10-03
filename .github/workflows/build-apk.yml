@@ -192,6 +192,7 @@ jobs:
         run: >-
           gradle --no-daemon :app:testDebugUnitTest
           --tests 'com.webapp.crazyshit.HeaderProfileAvatarTest'
+          --tests 'com.webapp.crazyshit.VisualRefreshTest'
           --tests 'com.webapp.crazyshit.ZeroChillAccountUiTest'
 
       - name: Run focused profile and social cleanup regressions first

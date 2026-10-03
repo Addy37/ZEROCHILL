@@ -131,10 +131,13 @@ public class VisualRefreshTest {
         assertTrue(shell instanceof FrostedNavigationLayout);
         View topBar = shell.getChildAt(0);
         assertTrue(topBar instanceof LinearLayout);
-        assertEquals(3, ((LinearLayout) topBar).getChildCount());
+        assertEquals(4, ((LinearLayout) topBar).getChildCount());
         View search = ((LinearLayout) topBar).getChildAt(1);
         assertEquals("Global Search", String.valueOf(search.getContentDescription()));
-        View more = ((LinearLayout) topBar).getChildAt(2);
+        View avatar = ((LinearLayout) topBar).getChildAt(2);
+        assertTrue(avatar instanceof HeaderProfileAvatar);
+        assertEquals(View.GONE, avatar.getVisibility());
+        View more = ((LinearLayout) topBar).getChildAt(3);
         assertEquals("More", String.valueOf(more.getContentDescription()));
 
         RecyclerView homeList = ReflectionHelpers.getField(home, "recycler");
