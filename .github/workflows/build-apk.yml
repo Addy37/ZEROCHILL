@@ -17,6 +17,8 @@ jobs:
       FEEDBACK_ANON_KEY: ${{ secrets.FEEDBACK_ANON_KEY }}
       SOURCE_CONFIG_ENDPOINT: https://fketutffusxgjxjlckci.supabase.co/functions/v1/app-config
       SUPABASE_PUBLISHABLE_KEY: ${{ secrets.FEEDBACK_ANON_KEY }}
+      # CI/test artifacts must never write to production analytics.
+      ANALYTICS_ENDPOINT: ""
 
     steps:
       - name: Check out project
@@ -185,6 +187,25 @@ jobs:
         with:
           gradle-version: '8.7'
           cache-provider: basic
+
+      - name: Run focused thumbnail loading regressions first
+        run: >-
+          gradle --no-daemon :app:testDebugUnitTest
+          --tests 'com.webapp.crazyshit.ThumbnailLoadTransitionTest'
+
+      - name: Run focused navigation and gallery regressions first
+        run: >-
+          gradle --no-daemon :app:testDebugUnitTest
+          --tests 'com.webapp.crazyshit.BottomNavigationInsetsTest'
+          --tests 'com.webapp.crazyshit.BottomNavigationDrawableRenderTest'
+          --tests 'com.webapp.crazyshit.NavigationIaTest'
+          --tests 'com.webapp.crazyshit.NavigationMotionControllerTest'
+          --tests 'com.webapp.crazyshit.PhoneOrientationPolicyTest'
+          --tests 'com.webapp.crazyshit.GalleryMediaRevealTest'
+          --tests 'com.webapp.crazyshit.GalleryViewerLifecycleTest'
+          --tests 'com.webapp.crazyshit.GalleryMediaTransitionTest'
+          --tests 'com.webapp.crazyshit.GallerySnapshotTest'
+          --tests 'com.webapp.crazyshit.CreatorMergedGalleryTest'
 
       - name: Run focused profile and account regressions first
         run: >-

@@ -13,6 +13,10 @@
     <dimen name="zc_touch_target">48dp</dimen>
     <dimen name="zc_top_bar_height">56dp</dimen>
     <dimen name="zc_bottom_nav_height">64dp</dimen>
+    <!-- 10878 reference: 64dp shell, 48dp Material item. A 24dp gutter instead
+         leaves only 40dp and compresses the 30dp icon container to 26dp between
+         its two 7dp margins, while raising the bottom-anchored labels by 8dp. -->
+    <dimen name="zc_nav_reference_gesture_inset">16dp</dimen>
     <dimen name="zc_nav_icon">24dp</dimen>
     <dimen name="zc_nav_indicator_width">50dp</dimen>
     <dimen name="zc_nav_indicator_height">30dp</dimen>

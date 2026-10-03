@@ -254,7 +254,7 @@ final class OnlyFapCreatorSearchAdapter
                 Glide.with(target)
                         .load(source)
                         .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
-                        .transition(DrawableTransitionOptions.withCrossFade(200))
+                        .transition(circle ? ThumbnailFades.avatar() : ThumbnailFades.thumbnail())
                         .placeholder(R.drawable.ic_more_account)
                         .error(R.drawable.ic_more_account);
         if (circle) request.circleCrop();

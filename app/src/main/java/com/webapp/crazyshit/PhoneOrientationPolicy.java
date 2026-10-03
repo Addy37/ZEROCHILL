@@ -24,6 +24,12 @@ final class PhoneOrientationPolicy {
 
     static void applyBrowsingOrientation(Activity activity) {
         if (activity == null || activity.isFinishing()) return;
+        if (activity instanceof BunkrGalleryActivity) {
+            // Android owns viewer rotation and observes changes to the user's
+            // auto-rotate setting. Browsing activities keep their existing policy.
+            requestFullscreen(activity, ActivityInfo.SCREEN_ORIENTATION_USER);
+            return;
+        }
         if (!isPhoneSized(activity)) {
             if (PORTRAIT_LOCKED_ACTIVITIES.remove(activity)) {
                 activity.setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED);

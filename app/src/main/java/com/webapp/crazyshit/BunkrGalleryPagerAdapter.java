@@ -6,20 +6,24 @@ import android.graphics.drawable.Drawable;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.GradientDrawable;
 import android.view.Gravity;
+import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.webkit.CookieManager;
 import android.widget.FrameLayout;
-import android.widget.ProgressBar;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
+import androidx.core.view.ViewCompat;
 import androidx.media3.common.Player;
 import androidx.media3.ui.AspectRatioFrameLayout;
 import androidx.media3.ui.PlayerView;
 import androidx.recyclerview.widget.RecyclerView;
+import androidx.viewpager2.widget.ViewPager2;
 
 import com.bumptech.glide.Glide;
+import com.bumptech.glide.RequestBuilder;
+import com.bumptech.glide.load.resource.drawable.DrawableTransitionOptions;
 import com.bumptech.glide.load.DataSource;
 import com.bumptech.glide.load.engine.DiskCacheStrategy;
 import com.bumptech.glide.load.engine.GlideException;
@@ -48,6 +52,9 @@ final class BunkrGalleryPagerAdapter
         void onMediaLongPress(int position, NativeContentItem item);
 
         void onResolvedImageFailed(int position, NativeContentItem item);
+
+        default void onSharedElementReady(View target) {
+        }
     }
 
     private final Context context;
@@ -57,13 +64,29 @@ final class BunkrGalleryPagerAdapter
     private final Set<String> preloadedImages = new HashSet<>();
     private final Set<String> loading = new HashSet<>();
     private final Set<String> failed = new HashSet<>();
+    private static final Object STATE_PAYLOAD = new Object();
+    private boolean activeVideoFrameRendered;
+    private boolean activeVideoBuffering;
+    private boolean sharedElementOpening;
+    private boolean revealsStopped;
+    private RecyclerView attachedList;
     private int activeVideoPosition = RecyclerView.NO_POSITION;
     private Player activePlayer;
+    private String sharedElementUrl = "";
+    private String sharedElementName = "";
+    private boolean sharedElementDelivered;
 
     BunkrGalleryPagerAdapter(Context context, Listener listener) {
         this.context = context.getApplicationContext();
         this.listener = listener;
         setHasStableIds(true);
+    }
+
+    void setInitialSharedElement(String itemUrl, String transitionName) {
+        sharedElementUrl = value(itemUrl);
+        sharedElementName = value(transitionName);
+        sharedElementDelivered = false;
+        sharedElementOpening = !sharedElementName.isEmpty();
     }
 
     void replace(List<NativeContentItem> incoming, Map<String, String> resolved) {
@@ -112,7 +135,7 @@ final class BunkrGalleryPagerAdapter
         } else {
             loading.remove(item.url);
         }
-        notifyItemChanged(position);
+        notifyItemChanged(position, STATE_PAYLOAD);
     }
 
     boolean isLoading(int position) {
@@ -134,7 +157,7 @@ final class BunkrGalleryPagerAdapter
         } else {
             failed.remove(item.url);
         }
-        notifyItemChanged(position);
+        notifyItemChanged(position, STATE_PAYLOAD);
     }
 
     void setResolvedUrl(int position, String mediaUrl) {
@@ -160,6 +183,7 @@ final class BunkrGalleryPagerAdapter
         if (url.isEmpty() || !preloadedImages.add(url)) return;
         Glide.with(context)
                 .load(withHeaders(url, imageReferer(item)))
+                .disallowHardwareConfig()
                 .fitCenter()
                 .diskCacheStrategy(DiskCacheStrategy.ALL)
                 .override(context.getResources().getDisplayMetrics().widthPixels,
@@ -171,15 +195,75 @@ final class BunkrGalleryPagerAdapter
         int old = activeVideoPosition;
         activeVideoPosition = position;
         activePlayer = player;
-        if (old != RecyclerView.NO_POSITION && old < items.size()) notifyItemChanged(old);
-        if (position >= 0 && position < items.size()) notifyItemChanged(position);
+        activeVideoFrameRendered = false;
+        activeVideoBuffering = true;
+        if (old != RecyclerView.NO_POSITION && old < items.size()) notifyItemChanged(old, STATE_PAYLOAD);
+        if (position >= 0 && position < items.size()) notifyItemChanged(position, STATE_PAYLOAD);
+    }
+
+    void onVideoFirstFrame(int position, Player player) {
+        if (revealsStopped || player == null || player != activePlayer || position != activeVideoPosition) return;
+        activeVideoFrameRendered = true;
+        notifyItemChanged(position, STATE_PAYLOAD);
+    }
+
+    void onVideoBuffering(int position, Player player, boolean buffering) {
+        if (revealsStopped || player == null || player != activePlayer || position != activeVideoPosition) return;
+        if (activeVideoBuffering == buffering) return;
+        activeVideoBuffering = buffering;
+        notifyItemChanged(position, STATE_PAYLOAD);
     }
 
     void clearActiveVideo() {
         int old = activeVideoPosition;
         activeVideoPosition = RecyclerView.NO_POSITION;
         activePlayer = null;
-        if (old != RecyclerView.NO_POSITION && old < items.size()) notifyItemChanged(old);
+        activeVideoFrameRendered = false;
+        activeVideoBuffering = false;
+        if (old != RecyclerView.NO_POSITION && old < items.size()) notifyItemChanged(old, STATE_PAYLOAD);
+    }
+
+    void finishOpeningTransition() {
+        sharedElementOpening = false;
+        int initial = indexOfUrl(sharedElementUrl);
+        if (initial >= 0 && !resolvedUrl(initial).isEmpty()) notifyItemChanged(initial);
+        if (attachedList == null) return;
+        for (int i = 0; i < attachedList.getChildCount(); i++) {
+            RecyclerView.ViewHolder raw = attachedList.getChildViewHolder(attachedList.getChildAt(i));
+            if (raw instanceof Holder) {
+                Holder holder = (Holder) raw;
+                updateState(holder, holder.getBindingAdapterPosition());
+            }
+        }
+    }
+
+    void stopReveals() {
+        revealsStopped = true;
+        if (attachedList == null) return;
+        for (int i = 0; i < attachedList.getChildCount(); i++) {
+            RecyclerView.ViewHolder holder = attachedList.getChildViewHolder(attachedList.getChildAt(i));
+            if (holder instanceof Holder) ((Holder) holder).reveal.cancelAndSettle();
+        }
+    }
+
+    View prepareSharedReturn(ViewPager2 pager, int position) {
+        RecyclerView list = (RecyclerView) pager.getChildAt(0);
+        RecyclerView.ViewHolder raw = list.findViewHolderForAdapterPosition(position);
+        if (!(raw instanceof Holder)) return null;
+        Holder holder = (Holder) raw;
+        if (holder.image.getDrawable() == null || holder.image.getDrawable() instanceof ColorDrawable
+                || !sharedElementName.equals(ViewCompat.getTransitionName(holder.image))) return null;
+        // Preserve the already loaded poster. notifyItemChanged here would restart
+        // Glide and briefly clear the drawable just as Android captures the return.
+        activeVideoPosition = RecyclerView.NO_POSITION;
+        activePlayer = null;
+        holder.reveal.cancelAndSettle();
+        holder.reveal.showPoster();
+        holder.playerView.setPlayer(null);
+        holder.playerView.setVisibility(View.GONE);
+        holder.play.setVisibility(View.GONE);
+        holder.failure.setVisibility(View.GONE);
+        return holder.image;
     }
 
     @Override
@@ -191,19 +275,21 @@ final class BunkrGalleryPagerAdapter
     @Override
     public Holder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
         FrameLayout root = new FrameLayout(parent.getContext());
-        root.setBackgroundColor(Color.BLACK);
         root.setLayoutParams(new RecyclerView.LayoutParams(-1, -1));
 
         ZoomableImageView image = new ZoomableImageView(parent.getContext());
-        root.addView(image, new FrameLayout.LayoutParams(-1, -1));
+        image.setBackground(null);
 
-        PlayerView playerView = new PlayerView(parent.getContext());
+        // TextureView keeps video in the same composition as the loading poster.
+        PlayerView playerView = (PlayerView) LayoutInflater.from(parent.getContext())
+                .inflate(R.layout.view_video_player_texture, root, false);
         playerView.setBackgroundColor(Color.BLACK);
         playerView.setResizeMode(AspectRatioFrameLayout.RESIZE_MODE_FIT);
         playerView.setUseController(true);
-        playerView.setShowBuffering(PlayerView.SHOW_BUFFERING_WHEN_PLAYING);
+        playerView.setShowBuffering(PlayerView.SHOW_BUFFERING_NEVER);
         playerView.setVisibility(View.GONE);
         root.addView(playerView, new FrameLayout.LayoutParams(-1, -1));
+        root.addView(image, new FrameLayout.LayoutParams(-1, -1));
 
         TextView play = new TextView(parent.getContext());
         play.setText("▶");
@@ -221,14 +307,10 @@ final class BunkrGalleryPagerAdapter
         playParams.gravity = Gravity.CENTER;
         root.addView(play, playParams);
 
-        ProgressBar progress = new ProgressBar(parent.getContext());
-        progress.setVisibility(View.GONE);
-        FrameLayout.LayoutParams progressParams = new FrameLayout.LayoutParams(
-                dp(parent, 48),
-                dp(parent, 48)
-        );
-        progressParams.gravity = Gravity.CENTER;
-        root.addView(progress, progressParams);
+        GalleryVideoLoadingView loadingDots = new GalleryVideoLoadingView(parent.getContext());
+        FrameLayout.LayoutParams dotsParams = new FrameLayout.LayoutParams(dp(parent, 60), dp(parent, 32));
+        dotsParams.gravity = Gravity.CENTER;
+        root.addView(loadingDots, dotsParams);
 
         TextView failure = new TextView(parent.getContext());
         failure.setText("Couldn't load this item.\nTap to retry or use the menu to open its page.");
@@ -240,40 +322,50 @@ final class BunkrGalleryPagerAdapter
         failure.setVisibility(View.GONE);
         root.addView(failure, new FrameLayout.LayoutParams(-1, -1));
 
-        return new Holder(root, image, playerView, play, progress, failure);
+        return new Holder(root, image, playerView, play, loadingDots, failure);
     }
 
     @Override
     public void onBindViewHolder(@NonNull Holder holder, int position) {
         NativeContentItem item = items.get(position);
-        holder.image.resetZoom();
+        boolean sameItem = item.url.equals(holder.boundUrl);
+        if (!sameItem) {
+            holder.reveal.cancelAndSettle();
+            holder.boundUrl = item.url;
+            holder.requestedImageUrl = "";
+            holder.imageLoading = false;
+            holder.image.resetZoom();
+            holder.reveal.showPoster();
+        }
+        GalleryMediaTransition.clearName(holder.image);
         holder.image.setZoomEnabled(item.isImage());
         String resolved = value(resolvedUrls.get(item.url));
-        String preview = item.isVideo() || resolved.isEmpty() ? value(item.imageUrl) : resolved;
-        boolean activeVideo = item.isVideo() && position == activeVideoPosition &&
-                activePlayer != null;
-
-        holder.playerView.setPlayer(activeVideo ? activePlayer : null);
-        holder.playerView.setVisibility(activeVideo ? View.VISIBLE : View.GONE);
-        holder.image.setVisibility(activeVideo ? View.GONE : View.VISIBLE);
-        holder.play.setVisibility(item.isVideo() && !activeVideo ? View.VISIBLE : View.GONE);
-        holder.progress.setVisibility(loading.contains(item.url) ? View.VISIBLE : View.GONE);
-        boolean showFailure = failed.contains(item.url) && !activeVideo;
-        holder.failure.setVisibility(showFailure ? View.VISIBLE : View.GONE);
-
-        if (!activeVideo) {
+        boolean opening = sharedElementOpening && item.url.equals(sharedElementUrl)
+                && !value(item.imageUrl).isEmpty();
+        // The thumbnail owns the shared expansion. Upgrade it once Android finishes.
+        String preview = item.isVideo() || resolved.isEmpty() || opening ? value(item.imageUrl) : resolved;
+        boolean activeVideo = item.isVideo() && position == activeVideoPosition && activePlayer != null;
+        if (!activeVideo && (!sameItem || !preview.equals(holder.requestedImageUrl))) {
+            holder.requestedImageUrl = preview;
+            int request = ++holder.imageRequest;
+            holder.imageLoading = !preview.isEmpty();
+            updateState(holder, position);
             if (preview.isEmpty()) {
                 Glide.with(holder.image).clear(holder.image);
                 holder.image.setImageDrawable(new ColorDrawable(Color.BLACK));
             } else {
-                Glide.with(holder.image)
+                // The old request is cleared by into(). Keep only pixels we own while waiting.
+                Drawable placeholder = sameItem ? holder.image.ownedPreviewSnapshot() : null;
+                RequestBuilder<Drawable> imageRequest = Glide.with(holder.image)
                         .load(withHeaders(preview, imageReferer(item)))
+                        .disallowHardwareConfig()
                         .fitCenter()
                         .diskCacheStrategy(DiskCacheStrategy.ALL)
-                        .dontAnimate()
-                        .placeholder(item.imageUrl == null || item.imageUrl.isEmpty()
-                                ? new ColorDrawable(Color.BLACK)
-                                : null)
+                        .transition(DrawableTransitionOptions.with((source, first) ->
+                                holder.reveal.imageTransition(source, !revealsStopped
+                                        && !(sharedElementOpening && item.url.equals(sharedElementUrl)),
+                                        item.isImage() && !resolved.isEmpty() && preview.equals(resolved))))
+                        .placeholder(placeholder != null ? placeholder : new ColorDrawable(Color.BLACK))
                         .error(new ColorDrawable(Color.BLACK))
                         .listener(new RequestListener<Drawable>() {
                             @Override
@@ -283,11 +375,18 @@ final class BunkrGalleryPagerAdapter
                                     Target<Drawable> target,
                                     boolean firstResource
                             ) {
+                                if (holder.imageRequest != request || !item.url.equals(holder.boundUrl)) return true;
+                                holder.imageLoading = false;
+                                holder.itemView.post(() -> {
+                                    if (holder.imageRequest == request) {
+                                        updateState(holder, holder.getBindingAdapterPosition());
+                                    }
+                                });
                                 if (!item.isImage() || resolved.isEmpty()) return false;
                                 holder.itemView.post(() -> {
                                     int current = holder.getBindingAdapterPosition();
-                                    if (current == RecyclerView.NO_POSITION ||
-                                            current >= items.size() ||
+                                    if (holder.imageRequest != request || revealsStopped ||
+                                            current == RecyclerView.NO_POSITION || current >= items.size() ||
                                             !item.url.equals(items.get(current).url) ||
                                             !resolved.equals(resolvedUrls.get(item.url))) return;
                                     resolvedUrls.remove(item.url);
@@ -307,10 +406,46 @@ final class BunkrGalleryPagerAdapter
                                     DataSource source,
                                     boolean firstResource
                             ) {
+                                if (holder.imageRequest != request || !item.url.equals(holder.boundUrl)) return true;
+                                holder.imageLoading = false;
+                                holder.itemView.post(() -> {
+                                    if (holder.imageRequest == request) {
+                                        updateState(holder, holder.getBindingAdapterPosition());
+                                    }
+                                });
                                 return false;
                             }
-                        })
-                        .into(holder.image);
+                        });
+                // Glide owns both resources during the preview/full-resolution handoff.
+                if (item.isImage() && !resolved.isEmpty() && !value(item.imageUrl).isEmpty()
+                        && !preview.equals(item.imageUrl)) {
+                    imageRequest = imageRequest.thumbnail(Glide.with(holder.image)
+                            .load(withHeaders(item.imageUrl, imageReferer(item)))
+                            .disallowHardwareConfig()
+                            .fitCenter().diskCacheStrategy(DiskCacheStrategy.ALL).dontAnimate());
+                }
+                imageRequest.into(holder.image);
+            }
+        }
+        updateState(holder, position);
+
+        if (!sharedElementName.isEmpty() && item.url.equals(sharedElementUrl)) {
+            ViewCompat.setTransitionName(holder.image, sharedElementName);
+            if (!sharedElementDelivered) {
+                holder.image.post(() -> {
+                    int current = holder.getBindingAdapterPosition();
+                    if (sharedElementDelivered
+                            || current == RecyclerView.NO_POSITION
+                            || current >= items.size()
+                            || !item.url.equals(items.get(current).url)
+                            || !item.url.equals(sharedElementUrl)
+                            || !sharedElementName.equals(
+                                    ViewCompat.getTransitionName(holder.image))) {
+                        return;
+                    }
+                    sharedElementDelivered = true;
+                    listener.onSharedElementReady(holder.image);
+                });
             }
         }
 
@@ -340,7 +475,75 @@ final class BunkrGalleryPagerAdapter
     }
 
     @Override
+    public void onBindViewHolder(@NonNull Holder holder, int position, @NonNull List<Object> payloads) {
+        if (!payloads.isEmpty() && items.get(position).url.equals(holder.boundUrl)) {
+            updateState(holder, position);
+        } else onBindViewHolder(holder, position);
+    }
+
+    private void updateState(Holder holder, int position) {
+        NativeContentItem item = itemAt(position);
+        if (item == null || !item.url.equals(holder.boundUrl)) return;
+        boolean active = item.isVideo() && position == activeVideoPosition && activePlayer != null;
+        if (holder.playerView.getPlayer() != (active ? activePlayer : null)) {
+            holder.playerView.setPlayer(active ? activePlayer : null);
+        }
+        holder.playerView.setVisibility(active ? View.VISIBLE : View.GONE);
+        if (active && activeVideoFrameRendered) {
+            if (!activeVideoBuffering || holder.reveal.isVideoRevealed()) {
+                holder.reveal.revealVideo(!revealsStopped);
+            }
+        } else holder.reveal.showPoster();
+        boolean showFailure = failed.contains(item.url) && !active;
+        holder.failure.setVisibility(showFailure ? View.VISIBLE : View.GONE);
+        boolean openingPreview = sharedElementOpening && item.url.equals(sharedElementUrl)
+                && (item.isVideo() || resolvedUrl(position).isEmpty()
+                || !resolvedUrl(position).equals(holder.requestedImageUrl) || holder.imageLoading);
+        // Resolution may finish during expansion, but the thumbnail still awaits its full request.
+        boolean awaitingFullImage = item.isImage() && !resolvedUrl(position).isEmpty()
+                && !resolvedUrl(position).equals(holder.requestedImageUrl);
+        boolean videoLoading = item.isVideo() && !revealsStopped && !showFailure
+                && (openingPreview || loading.contains(item.url)
+                || (active && (!activeVideoFrameRendered || activeVideoBuffering)));
+        holder.reveal.setVideoLoading(videoLoading);
+        holder.play.setVisibility(item.isVideo() && !active && !videoLoading && !showFailure
+                ? View.VISIBLE : View.GONE);
+        holder.reveal.setLoading(!revealsStopped && !showFailure && (openingPreview
+                || awaitingFullImage || loading.contains(item.url)
+                || (!active && holder.imageLoading)
+                || (active && (!activeVideoFrameRendered || activeVideoBuffering))));
+    }
+
+    @Override public void onAttachedToRecyclerView(@NonNull RecyclerView recyclerView) {
+        super.onAttachedToRecyclerView(recyclerView);
+        attachedList = recyclerView;
+    }
+
+    @Override public void onDetachedFromRecyclerView(@NonNull RecyclerView recyclerView) {
+        stopReveals();
+        attachedList = null;
+        super.onDetachedFromRecyclerView(recyclerView);
+    }
+
+    @Override public void onViewDetachedFromWindow(@NonNull Holder holder) {
+        holder.reveal.cancelAndSettle();
+        super.onViewDetachedFromWindow(holder);
+    }
+
+    @Override public void onViewAttachedToWindow(@NonNull Holder holder) {
+        super.onViewAttachedToWindow(holder);
+        int position = holder.getBindingAdapterPosition();
+        if (position != RecyclerView.NO_POSITION) updateState(holder, position);
+    }
+
+    @Override
     public void onViewRecycled(@NonNull Holder holder) {
+        holder.reveal.cancelAndSettle();
+        holder.imageRequest++;
+        holder.boundUrl = "";
+        holder.requestedImageUrl = "";
+        holder.imageLoading = false;
+        GalleryMediaTransition.clearName(holder.image);
         holder.playerView.setPlayer(null);
         holder.itemView.setOnLongClickListener(null);
         holder.image.setOnClickListener(null);
@@ -395,23 +598,29 @@ final class BunkrGalleryPagerAdapter
         final ZoomableImageView image;
         final PlayerView playerView;
         final TextView play;
-        final ProgressBar progress;
+        final GalleryVideoLoadingView loadingDots;
         final TextView failure;
+        final GalleryMediaReveal reveal;
+        String boundUrl = "";
+        String requestedImageUrl = "";
+        int imageRequest;
+        boolean imageLoading;
 
         Holder(
                 View root,
                 ZoomableImageView image,
                 PlayerView playerView,
                 TextView play,
-                ProgressBar progress,
+                GalleryVideoLoadingView loadingDots,
                 TextView failure
         ) {
             super(root);
             this.image = image;
             this.playerView = playerView;
             this.play = play;
-            this.progress = progress;
+            this.loadingDots = loadingDots;
             this.failure = failure;
+            this.reveal = new GalleryMediaReveal(image, loadingDots);
         }
     }
 }

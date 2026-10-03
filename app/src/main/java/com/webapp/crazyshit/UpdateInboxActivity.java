@@ -855,7 +855,7 @@ public final class UpdateInboxActivity extends Activity {
             com.bumptech.glide.RequestBuilder<android.graphics.drawable.Drawable> request =
                     Glide.with(view)
                             .load(model)
-                            .transition(DrawableTransitionOptions.withCrossFade((int) ZeroChillMotion.QUICK_MS));
+                            .transition(circle ? ThumbnailFades.avatar() : ThumbnailFades.thumbnail());
             if (fallback != 0) request = request.placeholder(fallback).error(fallback);
             if (circle) request = request.circleCrop();
             request.into(view);

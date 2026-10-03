@@ -1,17 +1,13 @@
 package com.webapp.crazyshit;
 
 import android.app.Activity;
-import android.app.AlertDialog;
+import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageInfo;
-import android.graphics.Color;
 import android.net.Uri;
 import android.os.Build;
 import android.provider.Settings;
-import android.widget.LinearLayout;
-import android.widget.ProgressBar;
-import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.core.content.FileProvider;
@@ -35,25 +31,34 @@ import java.util.regex.Pattern;
 
 final class AppUpdater {
     private static final long CHECK_INTERVAL_MS = 4L * 60L * 60L * 1000L;
+    private static final long CARD_LATER_MS = 12L * 60L * 60L * 1000L;
     private static final Pattern NUMBER = Pattern.compile("\\d+");
+    private static final String PREF_CARD_LATER_VERSION = "update_card_later_version";
+    private static final String PREF_CARD_LATER_UNTIL = "update_card_later_until";
+    private static final String PREF_PREVIEW_NEXT_RESUME = "beta_update_preview_next_resume";
 
     private final Activity activity;
     private final ExecutorService io = Executors.newSingleThreadExecutor();
     private final boolean betaChannel;
+    private final UpdateCardController card;
 
     private volatile boolean checking;
     private volatile boolean cancelDownload;
     private File pendingInstall;
     private boolean waitingForInstallPermission;
+    private ReleaseInfo activeRelease;
 
     AppUpdater(Activity activity) {
         this.activity = activity;
         this.betaChannel = activity.getPackageName().endsWith(".dev");
+        this.card = new UpdateCardController(activity);
     }
 
     void check(boolean manual) {
         if (checking) {
-            if (manual) Toast.makeText(activity, "Already checking for updates…", Toast.LENGTH_SHORT).show();
+            if (manual) {
+                Toast.makeText(activity, "Already checking for updates…", Toast.LENGTH_SHORT).show();
+            }
             return;
         }
 
@@ -82,8 +87,9 @@ final class AppUpdater {
                                     release.title,
                                     release.beta
                             );
-                        } else {
-                            showUpdateDialog(release, current);
+                        }
+                        if (manual || !isCardSnoozed(release.version)) {
+                            showUpdateCard(release, current);
                         }
                     } else if (manual) {
                         if (betaChannel) {
@@ -101,17 +107,22 @@ final class AppUpdater {
             } catch (Exception e) {
                 activity.runOnUiThread(() -> {
                     checking = false;
-                    if (manual) Toast.makeText(
-                            activity,
-                            "Couldn't check for updates right now.",
-                            Toast.LENGTH_SHORT
-                    ).show();
+                    if (manual) {
+                        Toast.makeText(
+                                activity,
+                                "Couldn't check for updates right now.",
+                                Toast.LENGTH_SHORT
+                        ).show();
+                    }
                 });
             }
         });
     }
 
     void onHostResume() {
+        if (betaChannel && consumePreviewRequest()) {
+            previewUpdateExperience();
+        }
         if (!waitingForInstallPermission || pendingInstall == null) return;
         if (Build.VERSION.SDK_INT < 26 || activity.getPackageManager().canRequestPackageInstalls()) {
             waitingForInstallPermission = false;
@@ -121,7 +132,76 @@ final class AppUpdater {
 
     void close() {
         cancelDownload = true;
+        card.detachImmediately();
         io.shutdownNow();
+    }
+
+    static void requestPreviewOnNextResume(Context context) {
+        if (context == null || !context.getPackageName().endsWith(".dev")) return;
+        context.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
+                .edit()
+                .putBoolean(PREF_PREVIEW_NEXT_RESUME, true)
+                .apply();
+    }
+
+    private boolean consumePreviewRequest() {
+        SharedPreferences prefs = activity.getSharedPreferences("app_prefs", Activity.MODE_PRIVATE);
+        if (!prefs.getBoolean(PREF_PREVIEW_NEXT_RESUME, false)) return false;
+        prefs.edit().remove(PREF_PREVIEW_NEXT_RESUME).apply();
+        return true;
+    }
+
+    private void previewUpdateExperience() {
+        if (!betaChannel) return;
+        ReleaseInfo preview = new ReleaseInfo(
+                "4.3.1 preview",
+                "ShitTok social polish and a smoother in-app updater.",
+                "",
+                "",
+                "",
+                true,
+                true
+        );
+        activeRelease = preview;
+        card.showAvailable(
+                preview.version,
+                preview.title,
+                () -> simulatePreviewDownload(preview),
+                card::dismiss
+        );
+    }
+
+    private void simulatePreviewDownload(ReleaseInfo preview) {
+        cancelDownload = false;
+        io.execute(() -> {
+            long total = 14_800_000L;
+            for (int percent = 0; percent <= 100; percent += 2) {
+                if (cancelDownload || Thread.currentThread().isInterrupted()) {
+                    activity.runOnUiThread(() -> showUpdateCard(preview, currentVersion()));
+                    return;
+                }
+                long downloaded = total * percent / 100L;
+                final int shown = percent;
+                activity.runOnUiThread(() ->
+                        card.showDownloading(
+                                preview.version,
+                                shown,
+                                downloaded,
+                                total,
+                                () -> cancelDownload = true
+                        )
+                );
+                try {
+                    Thread.sleep(70L);
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                    return;
+                }
+            }
+            activity.runOnUiThread(() ->
+                    card.showPreviewReady(preview.version, card::dismiss)
+            );
+        });
     }
 
     private ReleaseInfo fetchStable() throws Exception {
@@ -173,7 +253,7 @@ final class AppUpdater {
 
         String title = release.optString("name", tag);
         String page = release.optString("html_url", "");
-        return new ReleaseInfo(tag, title, apkName, apkUrl, page, beta);
+        return new ReleaseInfo(tag, title, apkName, apkUrl, page, beta, false);
     }
 
     private String httpGetFirst(List<String> addresses) throws Exception {
@@ -219,56 +299,42 @@ final class AppUpdater {
         return out.toByteArray();
     }
 
-    private void showUpdateDialog(ReleaseInfo release, String current) {
+    private void showUpdateCard(ReleaseInfo release, String current) {
+        activeRelease = release;
         String channel = release.beta ? "beta" : "stable";
-        new AlertDialog.Builder(activity)
-                .setTitle("Update available")
-                .setMessage(
-                        release.title + " is available.\n\n" +
-                        "Installed: " + current + "\n" +
-                        "Available: " + release.version + "\n" +
-                        "Channel: " + channel + "\n\n" +
-                        "The APK can be downloaded inside the app. Android will still show its required install confirmation."
-                )
-                .setNegativeButton("Later", null)
-                .setPositiveButton("Download & install", (dialog, which) -> downloadAndInstall(release))
-                .show();
+        String summary = release.title == null ? "" : release.title.trim();
+        if (summary.isEmpty() || summary.equalsIgnoreCase(release.version)) {
+            summary = "Installed " + current + " · " + channel + " update";
+        }
+        String finalSummary = summary;
+        card.showAvailable(
+                release.version,
+                finalSummary,
+                () -> downloadAndStage(release),
+                () -> {
+                    snoozeCard(release.version);
+                    card.dismiss();
+                }
+        );
     }
 
-    private void downloadAndInstall(ReleaseInfo release) {
+    private void downloadAndStage(ReleaseInfo release) {
+        if (release == null) return;
+        if (release.preview) {
+            simulatePreviewDownload(release);
+            return;
+        }
         cancelDownload = false;
-
-        LinearLayout box = new LinearLayout(activity);
-        box.setOrientation(LinearLayout.VERTICAL);
-        int pad = dp(20);
-        box.setPadding(pad, dp(12), pad, dp(6));
-
-        TextView label = new TextView(activity);
-        label.setText("Starting download…");
-        label.setTextColor(Color.WHITE);
-        label.setTextSize(14);
-        box.addView(label, new LinearLayout.LayoutParams(-1, -2));
-
-        ProgressBar bar = new ProgressBar(activity, null, android.R.attr.progressBarStyleHorizontal);
-        bar.setMax(100);
-        bar.setIndeterminate(true);
-        LinearLayout.LayoutParams bp = new LinearLayout.LayoutParams(-1, dp(8));
-        bp.setMargins(0, dp(14), 0, dp(8));
-        box.addView(bar, bp);
-
-        AlertDialog dialog = new AlertDialog.Builder(activity)
-                .setTitle("Downloading update")
-                .setView(box)
-                .setNegativeButton("Cancel", (d, w) -> cancelDownload = true)
-                .create();
-        dialog.setCanceledOnTouchOutside(false);
-        dialog.show();
+        activeRelease = release;
+        card.showDownloading(release.version, 0, 0L, -1L, () -> cancelDownload = true);
 
         io.execute(() -> {
             HttpURLConnection connection = null;
             try {
                 File dir = new File(activity.getCacheDir(), "updates");
-                if (!dir.exists() && !dir.mkdirs()) throw new Exception("Couldn't create update folder");
+                if (!dir.exists() && !dir.mkdirs()) {
+                    throw new Exception("Couldn't create update folder");
+                }
                 File target = new File(dir, "ZeroChill-update.apk");
                 if (target.exists()) target.delete();
 
@@ -283,6 +349,7 @@ final class AppUpdater {
                 long total = connection.getContentLengthLong();
                 long downloaded = 0L;
                 int lastPercent = -1;
+                long lastUnknownUpdate = 0L;
                 try (InputStream input = new BufferedInputStream(connection.getInputStream());
                      FileOutputStream output = new FileOutputStream(target)) {
                     byte[] buffer = new byte[32 * 1024];
@@ -291,34 +358,55 @@ final class AppUpdater {
                         if (cancelDownload) throw new InterruptedException("Cancelled");
                         output.write(buffer, 0, read);
                         downloaded += read;
-                        if (total > 0) {
-                            int percent = (int) Math.min(100L, downloaded * 100L / total);
-                            if (percent != lastPercent) {
-                                lastPercent = percent;
-                                final int p = percent;
-                                activity.runOnUiThread(() -> {
-                                    bar.setIndeterminate(false);
-                                    bar.setProgress(p);
-                                    label.setText("Downloading… " + p + "%");
-                                });
-                            }
+
+                        int percent = total > 0
+                                ? (int) Math.min(100L, downloaded * 100L / total)
+                                : 0;
+                        boolean shouldUpdate = total > 0
+                                ? percent != lastPercent
+                                : downloaded - lastUnknownUpdate >= 256L * 1024L;
+                        if (shouldUpdate) {
+                            lastPercent = percent;
+                            lastUnknownUpdate = downloaded;
+                            final int p = percent;
+                            final long bytes = downloaded;
+                            final long all = total;
+                            activity.runOnUiThread(() ->
+                                    card.showDownloading(
+                                            release.version,
+                                            p,
+                                            bytes,
+                                            all,
+                                            () -> cancelDownload = true
+                                    )
+                            );
                         }
                     }
                 }
 
+                activity.runOnUiThread(() ->
+                        card.showPreparing(release.version, () -> cancelDownload = true)
+                );
+                if (cancelDownload) throw new InterruptedException("Cancelled");
                 verifyPackage(target);
                 pendingInstall = target;
-                activity.runOnUiThread(() -> {
-                    dialog.dismiss();
-                    requestInstall(target);
-                });
+                activity.runOnUiThread(() ->
+                        card.showReady(
+                                release.version,
+                                () -> requestInstall(target),
+                                card::dismiss
+                        )
+                );
             } catch (InterruptedException cancelled) {
-                activity.runOnUiThread(dialog::dismiss);
-            } catch (Exception e) {
-                activity.runOnUiThread(() -> {
-                    dialog.dismiss();
-                    Toast.makeText(activity, "Update download failed.", Toast.LENGTH_LONG).show();
-                });
+                activity.runOnUiThread(() -> showUpdateCard(release, currentVersion()));
+            } catch (Exception error) {
+                activity.runOnUiThread(() ->
+                        card.showError(
+                                release.version,
+                                () -> downloadAndStage(release),
+                                card::dismiss
+                        )
+                );
             } finally {
                 if (connection != null) connection.disconnect();
             }
@@ -367,7 +455,29 @@ final class AppUpdater {
             activity.startActivity(intent);
         } catch (Exception e) {
             Toast.makeText(activity, "Couldn't open Android's installer.", Toast.LENGTH_LONG).show();
+            if (activeRelease != null) {
+                card.showReady(
+                        activeRelease.version,
+                        () -> requestInstall(apk),
+                        card::dismiss
+                );
+            }
         }
+    }
+
+    private boolean isCardSnoozed(String version) {
+        SharedPreferences prefs = activity.getSharedPreferences("app_prefs", Activity.MODE_PRIVATE);
+        return version != null
+                && version.equals(prefs.getString(PREF_CARD_LATER_VERSION, ""))
+                && System.currentTimeMillis() < prefs.getLong(PREF_CARD_LATER_UNTIL, 0L);
+    }
+
+    private void snoozeCard(String version) {
+        activity.getSharedPreferences("app_prefs", Activity.MODE_PRIVATE)
+                .edit()
+                .putString(PREF_CARD_LATER_VERSION, version == null ? "" : version)
+                .putLong(PREF_CARD_LATER_UNTIL, System.currentTimeMillis() + CARD_LATER_MS)
+                .apply();
     }
 
     private String currentVersion() {
@@ -403,10 +513,6 @@ final class AppUpdater {
         return out;
     }
 
-    private int dp(int value) {
-        return Math.round(value * activity.getResources().getDisplayMetrics().density);
-    }
-
     private static final class ReleaseInfo {
         final String version;
         final String title;
@@ -414,14 +520,24 @@ final class AppUpdater {
         final String apkUrl;
         final String pageUrl;
         final boolean beta;
+        final boolean preview;
 
-        ReleaseInfo(String version, String title, String apkName, String apkUrl, String pageUrl, boolean beta) {
+        ReleaseInfo(
+                String version,
+                String title,
+                String apkName,
+                String apkUrl,
+                String pageUrl,
+                boolean beta,
+                boolean preview
+        ) {
             this.version = version;
             this.title = title;
             this.apkName = apkName;
             this.apkUrl = apkUrl;
             this.pageUrl = pageUrl;
             this.beta = beta;
+            this.preview = preview;
         }
     }
 }

@@ -362,6 +362,7 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
                     .diskCacheStrategy(DiskCacheStrategy.NONE)
                     .skipMemoryCache(false)
                     .dontAnimate()
+                    .transition(ThumbnailFades.thumbnail())
                     .centerCrop()
                     .placeholder(new ColorDrawable(Color.rgb(31, 31, 36)))
                     .error(new ColorDrawable(Color.rgb(31, 31, 36)))
@@ -383,6 +384,7 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
                 .load(source)
                 .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
                 .dontAnimate()
+                .transition(ThumbnailFades.thumbnail())
                 .centerCrop()
                 .placeholder(new ColorDrawable(Color.rgb(31, 31, 36)))
                 .error(new ColorDrawable(Color.rgb(31, 31, 36)));

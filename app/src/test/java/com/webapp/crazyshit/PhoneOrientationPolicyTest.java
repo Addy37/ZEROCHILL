@@ -3,6 +3,7 @@ package com.webapp.crazyshit;
 import android.app.Activity;
 import android.app.Application;
 import android.content.ComponentName;
+import android.content.Intent;
 import android.content.pm.ActivityInfo;
 import android.content.res.Configuration;
 
@@ -83,6 +84,47 @@ public class PhoneOrientationPolicyTest {
         PhoneOrientationPolicy.applyBrowsingOrientation(activity);
         assertEquals(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT,
                 activity.getRequestedOrientation());
+        PhoneOrientationPolicy.onActivityDestroyed(activity);
+        activity.finish();
+    }
+
+    @Test public void showsManualFullscreenRequestsLandscape() {
+        Intent intent = new Intent();
+        ShowsPlaybackOrientationPolicy.requireManualLandscapeFullscreen(intent);
+        boolean manualLandscapeFullscreen = intent.getBooleanExtra(
+                ShowsPlaybackOrientationPolicy.EXTRA_MANUAL_LANDSCAPE_FULLSCREEN,
+                false
+        );
+        assertTrue(manualLandscapeFullscreen);
+        assertTrue(ShowsPlaybackOrientationPolicy.shouldForceLandscapeOnFullscreen(
+                manualLandscapeFullscreen,
+                false,
+                false
+        ));
+        assertTrue(ShowsPlaybackOrientationPolicy.shouldForceLandscapeOnFullscreen(
+                false,
+                true,
+                false
+        ));
+        assertFalse(ShowsPlaybackOrientationPolicy.shouldForceLandscapeOnFullscreen(
+                false,
+                false,
+                false
+        ));
+        assertFalse(ShowsPlaybackOrientationPolicy.shouldForceLandscapeOnFullscreen(
+                true,
+                false,
+                true
+        ));
+
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        PhoneOrientationPolicy.applyBrowsingOrientation(activity);
+        PhoneOrientationPolicy.enterSensorFullscreen(activity);
+        assertEquals(
+                ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE,
+                activity.getRequestedOrientation()
+        );
+        PhoneOrientationPolicy.exitFullscreenVideo(activity);
         PhoneOrientationPolicy.onActivityDestroyed(activity);
         activity.finish();
     }

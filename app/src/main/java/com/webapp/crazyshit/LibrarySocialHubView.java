@@ -300,6 +300,7 @@ final class LibrarySocialHubView extends LinearLayout {
                 messageAvatar.clearColorFilter();
                 messageAvatar.setPadding(0, 0, 0, 0);
                 Glide.with(messageAvatar).load(avatarUrl).circleCrop()
+                        .transition(ThumbnailFades.avatar())
                         .placeholder(R.drawable.ic_more_account)
                         .error(R.drawable.ic_more_account).into(messageAvatar);
             }

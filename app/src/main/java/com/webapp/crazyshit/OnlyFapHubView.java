@@ -58,6 +58,11 @@ import java.util.concurrent.Executors;
 final class OnlyFapHubView extends FrameLayout {
     interface Listener {
         void onOpenCreator(NativeContentItem creator);
+
+        default void onOpenFavoriteCreator(CreatorCatalog.FavoriteGroup group) {
+            if (group != null) onOpenCreator(group.item);
+        }
+
         void onSearch();
 
         default void onMore() {
@@ -598,7 +603,7 @@ final class OnlyFapHubView extends FrameLayout {
         wrapper.setClickable(true);
         wrapper.setFocusable(true);
         wrapper.setContentDescription("Open " + creator.title + " gallery");
-        wrapper.setOnClickListener(v -> listener.onOpenCreator(creator));
+        wrapper.setOnClickListener(v -> listener.onOpenFavoriteCreator(group));
         ZeroChillMotion.installPressFeedback(wrapper);
 
         MaterialCardView avatar = new MaterialCardView(getContext());
@@ -1040,7 +1045,7 @@ final class OnlyFapHubView extends FrameLayout {
                     .load(remoteImage(imageUrl, referer))
                     .centerCrop()
                     .diskCacheStrategy(DiskCacheStrategy.ALL)
-                    .transition(DrawableTransitionOptions.withCrossFade(220))
+                    .transition(ThumbnailFades.hero())
                     .placeholder(new ColorDrawable(Color.rgb(13, 16, 19)))
                     .error(new ColorDrawable(Color.rgb(13, 16, 19)))
                     .listener(new RequestListener<Drawable>() {
@@ -1221,6 +1226,7 @@ final class OnlyFapHubView extends FrameLayout {
                             ))
                             .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
                             .dontAnimate()
+                            .transition(ThumbnailFades.avatar())
                             .placeholder(new ColorDrawable(
                                     ZeroChillUi.color(getContext(), R.color.zc_surface_pressed)))
                             .error(R.drawable.ic_more_account);
@@ -1582,6 +1588,7 @@ final class OnlyFapHubView extends FrameLayout {
                         .centerCrop()
                         .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
                         .dontAnimate()
+                        .transition(ThumbnailFades.thumbnail())
                         .placeholder(new ColorDrawable(
                                 ZeroChillUi.color(
                                         image.getContext(),

@@ -784,6 +784,7 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
                 .load(source)
                 .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
                 .dontAnimate()
+                .transition(ThumbnailFades.thumbnail())
                 .placeholder(new ColorDrawable(ZeroChillUi.color(
                         holder.image.getContext(), R.color.zc_surface_glass_strong)))
                 .error(new ColorDrawable(ZeroChillUi.color(

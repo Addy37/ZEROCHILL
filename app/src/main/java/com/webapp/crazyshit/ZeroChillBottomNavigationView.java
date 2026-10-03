@@ -3,6 +3,7 @@ package com.webapp.crazyshit;
 import android.animation.ValueAnimator;
 import android.content.Context;
 import android.graphics.Canvas;
+import android.graphics.Insets;
 import android.graphics.Color;
 import android.content.res.ColorStateList;
 import android.graphics.Paint;
@@ -15,6 +16,7 @@ import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewConfiguration;
 import android.view.ViewGroup;
+import android.view.WindowInsets;
 import android.widget.ImageView;
 import android.widget.TextView;
 import android.view.animation.DecelerateInterpolator;
@@ -48,6 +50,7 @@ final class ZeroChillBottomNavigationView extends BottomNavigationView {
     private final Rect firstRect = new Rect();
     private final Rect secondRect = new Rect();
     private final RectF indicatorRect = new RectF();
+    private final RectF capsuleHitRect = new RectF();
     private final Runnable settleReflectionRunnable = this::settleReflection;
 
     private float pagerPosition;
@@ -71,6 +74,8 @@ final class ZeroChillBottomNavigationView extends BottomNavigationView {
     private OnNavigationDragListener navigationDragListener;
 
     ZeroChillBottomNavigationView(Context context) {
+        // Match the approved v4.3.1 Material baseline. System clearance is handled by
+        // the outer shell; this view receives a synthetic reference gesture inset below.
         super(context);
         Drawable drawable = ContextCompat.getDrawable(context, R.drawable.zc_nav_selected_glass);
         selectedGlass = drawable == null ? null : drawable.mutate();
@@ -83,6 +88,41 @@ final class ZeroChillBottomNavigationView extends BottomNavigationView {
             updateItemColors();
             setItemCollapseVisuals(clamp(collapseProgress, 0f, 1f));
         });
+    }
+
+    @Override
+    public WindowInsets dispatchApplyWindowInsets(WindowInsets insets) {
+        if (getParent() instanceof FrostedNavigationLayout) {
+            FrostedNavigationLayout shell = (FrostedNavigationLayout) getParent();
+            WindowInsets local = shell.navigationContentInsets(insets);
+            int referenceBottom = Math.round(lerp(
+                    getResources().getDimensionPixelSize(R.dimen.zc_nav_reference_gesture_inset),
+                    0,
+                    clamp(collapseProgress, 0f, 1f)
+            ));
+
+            // v4.3.1's approved expanded geometry came from Material receiving the
+            // gesture-navigation bottom inset itself. Recreate that exact local input
+            // while the shell separately owns the device's real system-bar clearance.
+            super.dispatchApplyWindowInsets(withReferenceBottomInset(local, referenceBottom));
+            applyCollapseGutter(collapseProgress);
+
+            // Before Android 11, ViewGroup forwards a child's returned insets to siblings.
+            // Never let this navbar-local reference inset escape its subtree.
+            return insets;
+        }
+        return super.dispatchApplyWindowInsets(insets);
+    }
+
+    @SuppressWarnings("deprecation")
+    private static WindowInsets withReferenceBottomInset(WindowInsets base, int bottom) {
+        if (Build.VERSION.SDK_INT >= 30) {
+            return Api30Insets.withNavigationBottom(base, bottom);
+        }
+        if (Build.VERSION.SDK_INT >= 29) {
+            return Api29Insets.withSystemBottom(base, bottom);
+        }
+        return base.replaceSystemWindowInsets(0, 0, 0, bottom);
     }
 
     void setPagerPosition(float position) {
@@ -249,16 +289,7 @@ final class ZeroChillBottomNavigationView extends BottomNavigationView {
     }
 
     private boolean isInsideSelectedCapsule(float x, float y) {
-        int index = Math.max(0, Math.min(PAGE_NAV_IDS.length - 1, Math.round(pagerPosition)));
-        View item = findViewById(PAGE_NAV_IDS[index]);
-        if (item == null || item.getWidth() <= 0 || item.getHeight() <= 0) return false;
-
-        descendantRect(item, firstRect);
-        float left = firstRect.left + dp(4);
-        float right = firstRect.right - dp(4);
-        float top = firstRect.top + dp(3);
-        float bottom = firstRect.bottom + dp(10);
-        return x >= left && x <= right && y >= top && y <= bottom;
+        return selectedGlassBounds(capsuleHitRect) && capsuleHitRect.contains(x, y);
     }
 
     private void updateTouchReflection(MotionEvent event, int action) {
@@ -302,35 +333,11 @@ final class ZeroChillBottomNavigationView extends BottomNavigationView {
     }
 
     private void drawSelectedGlass(Canvas canvas) {
-        if (getWidth() <= 0 || getHeight() <= 0) return;
-
-        float position = clamp(pagerPosition, 0f, PAGE_NAV_IDS.length - 1f);
-        int lower = Math.min(PAGE_NAV_IDS.length - 1, (int) Math.floor(position));
-        int upper = Math.min(PAGE_NAV_IDS.length - 1, lower + 1);
-        float fraction = position - lower;
-
-        View first = findViewById(PAGE_NAV_IDS[lower]);
-        View second = findViewById(PAGE_NAV_IDS[upper]);
-        if (first == null || second == null || first.getWidth() <= 0 || second.getWidth() <= 0) {
-            return;
-        }
-
-        descendantRect(first, firstRect);
-        descendantRect(second, secondRect);
-
-        float firstCenter = firstRect.exactCenterX();
-        float secondCenter = secondRect.exactCenterX();
-        float center = lerp(firstCenter, secondCenter, fraction);
-        // Keep the approved selected capsule insets while it follows pager movement.
-        float width = lerp(firstRect.width(), secondRect.width(), fraction) - dp(8);
-        float top = Math.max(dp(3), lerp(firstRect.top, secondRect.top, fraction) + dp(4));
-        float bottom = Math.min(getHeight() - dp(3),
-                lerp(firstRect.bottom, secondRect.bottom, fraction) + dp(10));
-        if (bottom <= top) return;
-
-        float midY = (top + bottom) / 2f;
-        float halfWidth = width * pressScale / 2f;
-        float halfHeight = (bottom - top) * pressScale / 2f;
+        if (!selectedGlassBounds(indicatorRect)) return;
+        float center = indicatorRect.centerX();
+        float midY = indicatorRect.centerY();
+        float halfWidth = indicatorRect.width() * pressScale / 2f;
+        float halfHeight = indicatorRect.height() * pressScale / 2f;
         indicatorRect.set(center - halfWidth, midY - halfHeight,
                 center + halfWidth, midY + halfHeight);
 
@@ -345,6 +352,40 @@ final class ZeroChillBottomNavigationView extends BottomNavigationView {
         }
 
         drawGpuReflection(canvas);
+    }
+
+    /** Unpressed capsule geometry shared by drawing and navbar drag hit-testing. */
+    private boolean selectedGlassBounds(RectF out) {
+        if (getWidth() <= 0 || getHeight() <= 0) return false;
+
+        float position = clamp(pagerPosition, 0f, PAGE_NAV_IDS.length - 1f);
+        int lower = Math.min(PAGE_NAV_IDS.length - 1, (int) Math.floor(position));
+        int upper = Math.min(PAGE_NAV_IDS.length - 1, lower + 1);
+        float fraction = position - lower;
+
+        View first = findViewById(PAGE_NAV_IDS[lower]);
+        View second = findViewById(PAGE_NAV_IDS[upper]);
+        if (first == null || second == null || first.getWidth() <= 0 || second.getWidth() <= 0) {
+            return false;
+        }
+
+        descendantRect(first, firstRect);
+        descendantRect(second, secondRect);
+
+        float firstCenter = firstRect.exactCenterX();
+        float secondCenter = secondRect.exactCenterX();
+        float center = lerp(firstCenter, secondCenter, fraction);
+        float width = lerp(firstRect.width(), secondRect.width(), fraction) - dp(8);
+
+        // Exact v4.3.1 capsule geometry. Because the reference Material inset is released
+        // during collapse, this same formula also preserves the approved compact endpoint.
+        float top = Math.max(dp(3), lerp(firstRect.top, secondRect.top, fraction) + dp(4));
+        float bottom = Math.min(getHeight() - dp(3),
+                lerp(firstRect.bottom, secondRect.bottom, fraction) + dp(10));
+        if (bottom <= top) return false;
+
+        out.set(center - width / 2f, top, center + width / 2f, bottom);
+        return true;
     }
 
     private void drawGpuReflection(Canvas canvas) {
@@ -416,6 +457,7 @@ final class ZeroChillBottomNavigationView extends BottomNavigationView {
 
     private void applyCollapseProgress(float progress) {
         float p = clamp(progress, 0f, 1f);
+        applyCollapseGutter(p);
         int expandedHeight = getResources().getDimensionPixelSize(R.dimen.zc_bottom_nav_height);
         int collapsedHeight = dp(COLLAPSED_HEIGHT_DP);
         int sideMargin = Math.round(lerp(dp(10), dp(COLLAPSED_SIDE_MARGIN_DP), p));
@@ -438,6 +480,16 @@ final class ZeroChillBottomNavigationView extends BottomNavigationView {
 
         setItemCollapseVisuals(p);
         invalidate();
+    }
+
+    private void applyCollapseGutter(float progress) {
+        float p = clamp(progress, 0f, 1f);
+        int expandedBottom = getResources().getDimensionPixelSize(
+                R.dimen.zc_nav_reference_gesture_inset);
+        int bottom = Math.round(lerp(expandedBottom, 0, p));
+        if (getPaddingTop() != 0 || getPaddingBottom() != bottom) {
+            setPadding(getPaddingLeft(), 0, getPaddingRight(), bottom);
+        }
     }
 
     private void setItemCollapseVisuals(float progress) {
@@ -518,6 +570,30 @@ final class ZeroChillBottomNavigationView extends BottomNavigationView {
 
     private static float clamp(float value, float min, float max) {
         return Math.max(min, Math.min(max, value));
+    }
+
+    @RequiresApi(29)
+    private static final class Api29Insets {
+        private Api29Insets() {
+        }
+
+        static WindowInsets withSystemBottom(WindowInsets base, int bottom) {
+            return new WindowInsets.Builder(base)
+                    .setSystemWindowInsets(Insets.of(0, 0, 0, bottom))
+                    .build();
+        }
+    }
+
+    @RequiresApi(30)
+    private static final class Api30Insets {
+        private Api30Insets() {
+        }
+
+        static WindowInsets withNavigationBottom(WindowInsets base, int bottom) {
+            return new WindowInsets.Builder(base)
+                    .setInsets(WindowInsets.Type.navigationBars(), Insets.of(0, 0, 0, bottom))
+                    .build();
+        }
     }
 
     @RequiresApi(33)

@@ -87,7 +87,11 @@ final class ShitTokCreatorSwipePreview extends FrameLayout {
                 activity,
                 new BunkrGalleryAdapter.Listener() {
                     @Override
-                    public void onOpen(int position, NativeContentItem item) {
+                    public void onOpen(
+                            int position,
+                            NativeContentItem item,
+                            View transitionAnchor
+                    ) {
                     }
 
                     @Override

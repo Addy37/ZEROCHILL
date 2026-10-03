@@ -516,7 +516,7 @@ public final class ZeroChillAccountActivity extends Activity {
         avatar.setBackground(circle(Color.rgb(13, 15, 19)));
         String avatarUrl = ZeroChillAccountRepository.avatarUrl(state.avatarPath);
         if (!avatarUrl.isEmpty()) {
-            Glide.with(avatar).load(avatarUrl).circleCrop().into(avatar);
+            Glide.with(avatar).load(avatarUrl).circleCrop().transition(ThumbnailFades.avatar()).into(avatar);
         } else {
             avatar.setImageResource(R.drawable.ic_more_account);
             avatar.setPadding(dp(20), dp(20), dp(20), dp(20));

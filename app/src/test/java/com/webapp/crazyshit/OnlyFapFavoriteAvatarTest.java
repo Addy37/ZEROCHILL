@@ -27,6 +27,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 @RunWith(RobolectricTestRunner.class)
 @Config(application = Application.class, sdk = 35)
@@ -129,6 +130,61 @@ public class OnlyFapFavoriteAvatarTest {
         View frame = (View) image.getParent();
         MaterialCardView card = (MaterialCardView) frame.getParent();
         assertTrue(card.getClipToOutline());
+
+        hub.close();
+    }
+
+    @Test
+    public void favoriteShelfClickPreservesMergedCreatorGroup() {
+        favorites("alpha one", "alpha two");
+        CreatorCatalog.remember(
+                context,
+                Arrays.asList(
+                        creator("Alpha One", "https://cdn.example.com/alpha-one.jpg"),
+                        creator("Alpha Two", "https://cdn.example.com/alpha-two.jpg")
+                )
+        );
+
+        java.util.List<CreatorCatalog.FavoriteGroup> before =
+                CreatorCatalog.favoriteGroups(context);
+        assertEquals(2, before.size());
+        CreatorCatalog.FavoriteGroup first = before.get(0);
+        CreatorCatalog.FavoriteGroup second = before.get(1);
+        String primaryKey = first.relationshipKeys.iterator().next();
+        assertTrue(ManualCreatorMergeStore.merge(
+                context,
+                first.relationshipKeys,
+                second.relationshipKeys,
+                primaryKey,
+                primaryKey
+        ));
+
+        CreatorCatalog.FavoriteGroup merged =
+                CreatorCatalog.favoriteGroups(context).get(0);
+        assertEquals(2, merged.members.size());
+
+        AtomicReference<CreatorCatalog.FavoriteGroup> opened = new AtomicReference<>();
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        OnlyFapHubView hub = new OnlyFapHubView(activity, new OnlyFapHubView.Listener() {
+            @Override public void onOpenCreator(NativeContentItem creator) { }
+            @Override public void onOpenFavoriteCreator(CreatorCatalog.FavoriteGroup group) {
+                opened.set(group);
+            }
+            @Override public void onSearch() { }
+            @Override public void onMore() { }
+            @Override public void onViewAllFavorites() { }
+        });
+        activity.setContentView(hub);
+
+        LinearLayout rail = favoriteRail(hub);
+        assertEquals(1, rail.getChildCount());
+        rail.getChildAt(0).performClick();
+
+        assertNotNull(opened.get());
+        assertEquals(2, opened.get().members.size());
+        CreatorGallerySpec spec = CreatorGallerySpec.from(opened.get());
+        assertTrue(spec.grouped);
+        assertEquals(2, spec.seedUrls.size());
 
         hub.close();
     }
