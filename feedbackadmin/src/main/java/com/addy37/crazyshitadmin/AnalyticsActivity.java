@@ -132,6 +132,7 @@ public final class AnalyticsActivity extends AppCompatActivity {
 
         addReleaseCard(dashboard.releaseAdoption);
         addSocialCards(dashboard.social);
+        addFavoriteCreatorCard(dashboard.favoriteCreators);
 
         addRankingCard("creators", "TRENDING CREATORS", "Who users are opening most",
                 dashboard.creators, true,
@@ -240,6 +241,61 @@ public final class AnalyticsActivity extends AppCompatActivity {
                 String.format(Locale.US, "%,d replies · %,d likes",
                         social.repliesDisabled, social.likesDisabled)));
         content.addView(card("PREFERENCES & SAFETY", "Aggregate controls only, never individual activity", preferences));
+    }
+
+    private void addFavoriteCreatorCard(List<AdminRepository.FavoriteCreatorRow> rows) {
+        LinearLayout body = vertical(0);
+        if (rows.isEmpty()) {
+            body.addView(text(
+                    "Favorites will appear after signed-in users save OnlyFap creators.",
+                    13, color(R.color.app_on_surface_variant)));
+        } else {
+            long max = Math.max(1L, rows.get(0).favoriteCount);
+            ArrayList<View> overflow = new ArrayList<>();
+            for (int index = 0; index < rows.size(); index++) {
+                AdminRepository.FavoriteCreatorRow row = rows.get(index);
+                LinearLayout block = vertical(0);
+                block.setPadding(0, dp(4), 0, dp(4));
+
+                LinearLayout line = new LinearLayout(this);
+                line.setGravity(Gravity.CENTER_VERTICAL);
+                TextView name = text((index + 1) + ". " + row.value,
+                        14, color(R.color.app_on_surface));
+                if (index < 3) name.setTypeface(null, Typeface.BOLD);
+                line.addView(name, new LinearLayout.LayoutParams(
+                        0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+
+                String countLabel = row.favoriteCount == 1
+                        ? "1 favorite"
+                        : String.format(Locale.US, "%,d favorites", row.favoriteCount);
+                TextView counts = text(countLabel, 10, color(R.color.app_on_surface_variant));
+                counts.setGravity(Gravity.END);
+                line.addView(counts);
+                block.addView(line);
+
+                ProgressBar bar = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
+                bar.setMax(1000);
+                bar.setProgress((int) Math.min(1000L, (row.favoriteCount * 1000L) / max));
+                bar.setProgressTintList(ColorStateList.valueOf(color(R.color.app_primary)));
+                bar.setProgressBackgroundTintList(ColorStateList.valueOf(color(R.color.app_surface_variant)));
+                LinearLayout.LayoutParams barParams = new LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT, dp(3));
+                barParams.setMargins(0, dp(3), 0, 0);
+                block.addView(bar, barParams);
+
+                if (index >= AnalyticsListPolicy.COLLAPSED_ROWS) {
+                    block.setVisibility(expandedCards.contains("favorite_creators")
+                            ? View.VISIBLE : View.GONE);
+                    overflow.add(block);
+                }
+                body.addView(block);
+            }
+            addExpandControl(body, "favorite_creators", rows.size(), overflow);
+        }
+        content.addView(card(
+                "FAVORITED CREATORS",
+                "Most saved by signed-in ZEROCHILL users",
+                body));
     }
 
     private void addRankingCard(
