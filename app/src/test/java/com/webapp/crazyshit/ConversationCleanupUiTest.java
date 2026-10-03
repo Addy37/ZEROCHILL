@@ -43,7 +43,7 @@ public class ConversationCleanupUiTest {
         Dialog dialog = (Dialog) field(activity, "removeDialog");
         assertNotNull(dialog);
         assertTrue(dialog.isShowing());
-        View cancel = dialog.findViewWithTag("conversation-remove-cancel");
+        View cancel = dialog.getWindow().getDecorView().findViewWithTag("conversation-remove-cancel");
         assertNotNull(cancel);
         cancel.performClick();
         idle();
@@ -186,7 +186,7 @@ public class ConversationCleanupUiTest {
     private void confirmLatest(ZeroChillInboxActivity activity) throws Exception {
         Dialog dialog = (Dialog) field(activity, "removeDialog");
         assertNotNull(dialog);
-        View confirm = dialog.findViewWithTag("conversation-remove-confirm");
+        View confirm = dialog.getWindow().getDecorView().findViewWithTag("conversation-remove-confirm");
         assertNotNull(confirm);
         confirm.performClick();
     }
