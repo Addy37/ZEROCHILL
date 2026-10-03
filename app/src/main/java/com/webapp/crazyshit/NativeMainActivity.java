@@ -459,7 +459,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         headerTitle.setTextSize(28f);
         headerTitle.setSingleLine(true);
         TextViewCompat.setAutoSizeTextTypeUniformWithConfiguration(
-                headerTitle, 24, 28, 1, TypedValue.COMPLEX_UNIT_SP);
+                headerTitle, 14, 28, 1, TypedValue.COMPLEX_UNIT_SP);
         labels.addView(headerTitle);
 
         headerSubtitle = new TextView(this);

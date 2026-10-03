@@ -124,6 +124,8 @@ public class HeaderProfileAvatarTest {
         java.lang.reflect.Method method = NativeMainActivity.class.getDeclaredMethod("buildTopBar");
         method.setAccessible(true);
         LinearLayout bar = (LinearLayout) method.invoke(main);
+        android.widget.TextView title = ReflectionHelpers.getField(main, "headerTitle");
+        title.setText("ZEROCHILL Shows");
         HeaderProfileAvatar view = (HeaderProfileAvatar) bar.getChildAt(2);
         view.resume();
         assertEquals("Search", bar.getChildAt(1).getContentDescription());
@@ -133,6 +135,7 @@ public class HeaderProfileAvatarTest {
                 View.MeasureSpec.makeMeasureSpec(height, View.MeasureSpec.EXACTLY));
         bar.layout(0, 0, width, height);
         assertTrue(bar.getChildAt(3).getRight() <= width);
+        assertTrue(title.getLayout().getLineWidth(0) <= title.getWidth());
         assertTrue(view.getWidth() >= BrowseUi.dp(main, 44));
         view.close();
     }

@@ -124,6 +124,7 @@ public class ZeroChillAccountUiTest {
     @Test public void draftSurvivesRecreationForSameUser() throws Exception {
         ZeroChillAccountActivity before = create(null);
         render(before);
+        find(before.getWindow().getDecorView(), "EDIT PROFILE").performClick();
         ((EditText) findDescription(before.getWindow().getDecorView(), "Display name")).setText("Draft name");
         ((EditText) findDescription(before.getWindow().getDecorView(), "Bio")).setText("Draft bio");
         Bundle state = new Bundle();
@@ -131,6 +132,7 @@ public class ZeroChillAccountUiTest {
         before.finish();
         ZeroChillAccountActivity after = create(state);
         render(after);
+        assertEquals(View.VISIBLE, ((View) findDescription(after.getWindow().getDecorView(), "Display name").getParent()).getVisibility());
         assertEquals("Draft name", ((EditText) findDescription(
                 after.getWindow().getDecorView(), "Display name")).getText().toString());
         assertEquals("Draft bio", ((EditText) findDescription(
