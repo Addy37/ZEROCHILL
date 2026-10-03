@@ -73,7 +73,8 @@ final class SocialActivityCoordinator {
     private static boolean eligible(Activity activity) {
         return activity instanceof NativeMainActivity || activity instanceof MainActivity
                 || activity instanceof VideoDetailActivity || activity instanceof BunkrGalleryActivity
-                || activity instanceof PlayerActivity || activity instanceof UpdateInboxActivity;
+                || activity instanceof PlayerActivity || activity instanceof UpdateInboxActivity
+                || activity instanceof ZeroChillAccountActivity;
     }
 
     void resume(Activity activity) {

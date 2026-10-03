@@ -133,6 +133,7 @@ final class ZeroChillAccountRepository {
                 ZeroChillNotificationPreferences.load(context, (preferences, failure) -> { });
                 if (!state.userId.equals(ZeroChillSessionStore.currentUserId(context)))
                     throw new IllegalStateException("Account changed. Reopen this screen.");
+                AccountProfileCache.record(context, state);
                 callback.complete(state, null);
             } catch (Exception error) {
                 if (error instanceof SessionExpiredException && expected.equals(ZeroChillSessionStore.currentUserId(context)))
@@ -183,6 +184,7 @@ final class ZeroChillAccountRepository {
                 AccountState state = loadAccount(session);
                 syncCreatorFavoritesBlocking(context, session);
                 ZeroChillNotificationPreferences.load(context, (preferences, failure) -> { });
+                AccountProfileCache.record(context, state);
                 callback.complete(state, null);
             } catch (Exception error) {
                 ZeroChillSessionStore.clear(context);
@@ -240,6 +242,7 @@ final class ZeroChillAccountRepository {
                     Session session = saveSession(context, result);
                     AccountState state = loadAccount(session);
                     syncCreatorFavoritesBlocking(context, session);
+                    AccountProfileCache.record(context, state);
                     callback.complete(state, null);
                 } else {
                     callback.complete(AccountState.pending(email.trim()), null);
@@ -280,6 +283,7 @@ final class ZeroChillAccountRepository {
                 AccountState state = loadAccount(session);
                 syncCreatorFavoritesBlocking(context, session);
                 ZeroChillNotificationPreferences.load(context, (preferences, failure) -> { });
+                AccountProfileCache.record(context, state);
                 callback.complete(state, null);
             } catch (Exception error) {
                 callback.complete(null, error);
@@ -318,6 +322,7 @@ final class ZeroChillAccountRepository {
                 Session session = requireExpectedSession(context, expected);
                 AccountState result = loadAccount(session);
                 requireExpectedSession(context, expected);
+                AccountProfileCache.record(context, result);
                 callback.complete(result, null);
             } catch (Exception error) { callback.complete(null, error); }
         });
@@ -333,6 +338,7 @@ final class ZeroChillAccountRepository {
                         new JSONObject().put("email", clean(email)));
                 AccountState result = loadAccount(requireExpectedSession(context, expected));
                 requireExpectedSession(context, expected);
+                AccountProfileCache.record(context, result);
                 callback.complete(result, null);
             } catch (Exception error) { callback.complete(null, error); }
         });
@@ -416,7 +422,9 @@ final class ZeroChillAccountRepository {
                         "return=minimal"
                 );
                 if (!response.ok()) throw responseError(response, "Unable to update the profile.");
-                callback.complete(loadAccount(session), null);
+                AccountState updated = loadAccount(session);
+                AccountProfileCache.record(context, updated);
+                callback.complete(updated, null);
             } catch (Exception error) {
                 callback.complete(null, error);
             }
@@ -492,8 +500,10 @@ final class ZeroChillAccountRepository {
                 };
                 String path = ProfileAvatarUpload.save(expected, jpeg, backend, pending);
                 requireExpectedSession(app, expected);
-                callback.complete(new AccountState(true, false, before.userId, before.email, before.username,
-                        before.displayName, path, before.createdAt, before.bio), null);
+                AccountState updated = new AccountState(true, false, before.userId, before.email, before.username,
+                        before.displayName, path, before.createdAt, before.bio);
+                AccountProfileCache.record(app, updated);
+                callback.complete(updated, null);
             } catch (Exception error) { callback.complete(null, error); }
         });
     }

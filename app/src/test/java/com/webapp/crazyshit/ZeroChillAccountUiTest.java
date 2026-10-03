@@ -13,6 +13,7 @@ import android.widget.ScrollView;
 import android.widget.TextView;
 
 import org.junit.Test;
+import org.junit.Before;
 import org.junit.runner.RunWith;
 import org.robolectric.Robolectric;
 import org.robolectric.RobolectricTestRunner;
@@ -41,13 +42,37 @@ public class ZeroChillAccountUiTest {
         @Implementation protected static boolean hasStoredSession(Context context) { return true; }
         @Implementation protected static void current(Context context,
                 ZeroChillAccountRepository.Callback<ZeroChillAccountRepository.AccountState> callback) {
-            callback.complete(new ZeroChillAccountRepository.AccountState(true, false,
-                    OWNER, "addy@example.com", "addy37test", "Addy37", "", "2026-09-30", "Here for creators."), null);
+            String owner = Sessions.current;
+            callback.complete(owner.isEmpty() ? ZeroChillAccountRepository.AccountState.signedOut()
+                    : new ZeroChillAccountRepository.AccountState(true, false,
+                    owner, "addy@example.com", "addy37test", OWNER.equals(owner) ? "Addy37" : "Second user",
+                    "", "2026-09-30", "Here for creators."), null);
         }
     }
     @Implements(value = ZeroChillSessionStore.class, isInAndroidSdk = false)
     public static class Sessions {
-        @Implementation protected static String currentUserId(Context context) { return OWNER; }
+        static String current = OWNER;
+        @Implementation protected static String currentUserId(Context context) { return current; }
+    }
+    @Before public void resetAccount() { Sessions.current = OWNER; }
+
+    @Test public void sessionChangeClosesPreviousSocialHubAndSignedOutRemovesPersonalContent() {
+        ZeroChillAccountActivity activity = create(null);
+        LibrarySocialHubView old = org.robolectric.util.ReflectionHelpers.getField(activity, "socialHub");
+        Sessions.current = "00000000-0000-0000-0000-000000000002";
+        ZeroChillSessionStore.preferences(activity).edit().putString("test-owner", Sessions.current).apply();
+        Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
+        assertTrue(org.robolectric.util.ReflectionHelpers.getField(old, "closed"));
+        assertNotNull(find(activity.getWindow().getDecorView(), "Second user"));
+        LibrarySocialHubView next = org.robolectric.util.ReflectionHelpers.getField(activity, "socialHub");
+        assertNotSame(old, next);
+        Sessions.current = "";
+        ZeroChillSessionStore.preferences(activity).edit().putString("test-owner", "").apply();
+        Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
+        assertTrue(org.robolectric.util.ReflectionHelpers.getField(next, "closed"));
+        assertNull(org.robolectric.util.ReflectionHelpers.getField(activity, "socialHub"));
+        assertNull(findDescriptionPrefix(activity.getWindow().getDecorView(), "Messages."));
+        assertNull(find(activity.getWindow().getDecorView(), "Second user"));
     }
 
     @Test public void ownIdentityAndProfileFieldsRenderAndOpenPublicProfile() throws Exception {
@@ -79,9 +104,59 @@ public class ZeroChillAccountUiTest {
         assertEquals(OWNER, launched.getStringExtra(ZeroChillPublicProfileActivity.EXTRA_USER_ID));
     }
 
+    @Test public void socialCardsReuseDestinationsBelowIdentityAndAboveAccountControls() throws Exception {
+        ZeroChillAccountActivity activity = create(null);
+        View root = activity.getWindow().getDecorView();
+        View messages = findDescriptionPrefix(root, "Messages.");
+        View notifications = findDescriptionPrefix(root, "Notifications.");
+        assertNotNull(messages);
+        assertNotNull(notifications);
+        UpdateInboxStore.recordAppUpdate(activity, "profile-hub-test", "Recent update", false);
+        Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
+        LibrarySocialHubView stateHub = org.robolectric.util.ReflectionHelpers.getField(activity, "socialHub");
+        TextView notificationBadge = org.robolectric.util.ReflectionHelpers.getField(stateHub, "notificationBadge");
+        assertEquals(View.VISIBLE, notificationBadge.getVisibility());
+        assertEquals("1", notificationBadge.getText().toString());
+        assertTrue(notifications.getContentDescription().toString().contains("Recent update"));
+        android.widget.LinearLayout content = org.robolectric.util.ReflectionHelpers.getField(activity, "content");
+        LibrarySocialHubView hub = org.robolectric.util.ReflectionHelpers.getField(activity, "socialHub");
+        assertTrue(content.indexOfChild(hub) > content.indexOfChild(find(root, "YOUR IDENTITY")));
+        assertTrue(content.indexOfChild(hub) < content.indexOfChild(find(root, "ACCOUNT & SECURITY")));
+        assertTrue(content.indexOfChild(find(root, "SIGN OUT")) > content.indexOfChild(hub));
+        View editor = (View) findDescription(root, "Display name").getParent();
+        assertEquals(View.GONE, editor.getVisibility());
+        find(root, "EDIT PROFILE").performClick();
+        assertEquals(View.VISIBLE, editor.getVisibility());
+        find(root, "CLOSE EDITOR").performClick();
+        assertEquals(View.GONE, editor.getVisibility());
+        messages.performClick();
+        assertEquals(ZeroChillInboxActivity.class.getName(), Shadows.shadowOf(activity)
+                .getNextStartedActivity().getComponent().getClassName());
+        notifications.performClick();
+        assertEquals(UpdateInboxActivity.class.getName(), Shadows.shadowOf(activity)
+                .getNextStartedActivity().getComponent().getClassName());
+        activity.onPause();
+        assertFalse(org.robolectric.util.ReflectionHelpers.getField(hub, "active"));
+        activity.onResume();
+        assertTrue(org.robolectric.util.ReflectionHelpers.getField(hub, "active"));
+    }
+
+    private static View findDescriptionPrefix(View root, String prefix) {
+        if (root.getContentDescription() != null && root.getContentDescription().toString().startsWith(prefix)) return root;
+        if (root instanceof ViewGroup) {
+            ViewGroup group = (ViewGroup) root;
+            for (int i = 0; i < group.getChildCount(); i++) {
+                View found = findDescriptionPrefix(group.getChildAt(i), prefix);
+                if (found != null) return found;
+            }
+        }
+        return null;
+    }
+
     @Test public void draftSurvivesRecreationForSameUser() throws Exception {
         ZeroChillAccountActivity before = create(null);
         render(before);
+        find(before.getWindow().getDecorView(), "EDIT PROFILE").performClick();
         ((EditText) findDescription(before.getWindow().getDecorView(), "Display name")).setText("Draft name");
         ((EditText) findDescription(before.getWindow().getDecorView(), "Bio")).setText("Draft bio");
         Bundle state = new Bundle();
@@ -89,6 +164,7 @@ public class ZeroChillAccountUiTest {
         before.finish();
         ZeroChillAccountActivity after = create(state);
         render(after);
+        assertEquals(View.VISIBLE, ((View) findDescription(after.getWindow().getDecorView(), "Display name").getParent()).getVisibility());
         assertEquals("Draft name", ((EditText) findDescription(
                 after.getWindow().getDecorView(), "Display name")).getText().toString());
         assertEquals("Draft bio", ((EditText) findDescription(

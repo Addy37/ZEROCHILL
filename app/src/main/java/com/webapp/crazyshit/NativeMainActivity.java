@@ -76,6 +76,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     private FrameLayout overlayRoot;
     private LinearLayout shell;
     private View topBar;
+    private HeaderProfileAvatar headerProfileAvatar;
     private TextView headerTitle;
     private TextView headerSubtitle;
     private RecyclerView recycler;
@@ -458,7 +459,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         headerTitle.setTextSize(28f);
         headerTitle.setSingleLine(true);
         TextViewCompat.setAutoSizeTextTypeUniformWithConfiguration(
-                headerTitle, 24, 28, 1, TypedValue.COMPLEX_UNIT_SP);
+                headerTitle, 14, 28, 1, TypedValue.COMPLEX_UNIT_SP);
         labels.addView(headerTitle);
 
         headerSubtitle = new TextView(this);
@@ -482,6 +483,9 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
             openContextualSearch();
         });
         bar.addView(search, new LinearLayout.LayoutParams(dp(44), dp(48)));
+
+        headerProfileAvatar = new HeaderProfileAvatar(this);
+        bar.addView(headerProfileAvatar, new LinearLayout.LayoutParams(dp(44), dp(48)));
 
         ImageView more = new ImageView(this);
         more.setImageResource(R.drawable.ic_more_overflow);
@@ -1306,6 +1310,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     @Override
     protected void onPause() {
         super.onPause();
+        if (headerProfileAvatar != null) headerProfileAvatar.pause();
         if (overlayRoot != null) overlayRoot.removeCallbacks(ratingPromptCheck);
         if (miniPlayer != null) miniPlayer.onPause();
         if (primaryPagerAdapter != null) primaryPagerAdapter.onHostPause();
@@ -1314,6 +1319,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     @Override
     protected void onResume() {
         super.onResume();
+        if (headerProfileAvatar != null) headerProfileAvatar.resume();
         if (miniPlayer != null) miniPlayer.onResume();
         if (primaryPagerAdapter != null) primaryPagerAdapter.onHostResume();
         if (appUpdater != null) {
@@ -1331,6 +1337,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
 
     @Override
     protected void onDestroy() {
+        if (headerProfileAvatar != null) headerProfileAvatar.close();
         if (miniPlayer != null) miniPlayer.stop();
         if (primaryPagerAdapter != null) primaryPagerAdapter.close();
         if (feedAdapter != null) feedAdapter.close();

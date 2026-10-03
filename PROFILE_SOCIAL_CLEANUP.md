@@ -12,7 +12,9 @@ Upload stages an immutable new object, then compare-and-sets the previous profil
 
 ## Messages
 
-Long-press a conversation and confirm Remove. Only the current account's inbox/thread view is cleared, including unread counts and Library previews. No shared message row or other participant's read/history state is removed. Any later message in either direction restores the conversation, showing only messages strictly after that user's clear timestamp.
+Long-press a conversation to enter inbox selection mode. Tap additional conversations to add or remove them, use All to select the full visible inbox, Delete to remove the selection, or Cancel/Back to exit without changing anything. Selected cards use the existing dark surface with a cyan border and check indicator. The stock Android confirmation dialog is replaced by a compact ZEROCHILL bottom sheet whose copy and Remove action adapt to the selected count.
+
+Batch cleanup reuses the existing per-conversation RPC sequentially rather than adding a broader delete endpoint. Successful clears disappear immediately. If part of a batch fails, only failed conversations remain selected so the user can retry. Only the current account's inbox/thread view is cleared, including unread counts and Library previews. No shared message row or other participant's read/history state is removed. Any later message in either direction restores the conversation, showing only messages strictly after that user's clear timestamp.
 
 Migration `20261003171153_conversation_cleanup.sql` adds `conversation_clear_state` with owner-only SELECT RLS. Clients cannot directly write the table. The private authenticated clear RPC derives the owner and server timestamp, validates a live session and existing conversation, and has a public invoker wrapper. The visible-message RPC is a security invoker and applies cleanup before the existing 500-row query limit. Existing direct_messages RLS/grants remain unchanged. Older apps can still read their old view of all messages; they do not honor the new clear preference.
 
@@ -24,7 +26,7 @@ Swipe left to remove an individual notification, or long-press for a confirmed D
 
 ## Validation
 
-New focused tests cover crop output/recreation/cancel, avatar replacement/failure/CAS/lost response/cleanup debt, conversation confirmations and account isolation, Library refresh, notification delete/Clear All/cancel/read/count/scoping/replay and actor avatar updates. Android CI runs focused regressions before full debug/release suites and builds, plus lint audit. SQL rollback-only fixture tests strict cutoff, new incoming/outgoing messages, other-party history/privacy, live-session checks, grants, and denial of shared message deletes.
+New focused tests cover crop output/recreation/cancel, avatar replacement/failure/CAS/lost response/cleanup debt, conversation multi-select/Select All/branded confirmation/partial failure/account isolation, Library refresh, notification delete/Clear All/cancel/read/count/scoping/replay and actor avatar updates. Android CI runs focused regressions before full debug/release suites and builds, plus lint audit. SQL rollback-only fixture tests strict cutoff, new incoming/outgoing messages, other-party history/privacy, live-session checks, grants, and denial of shared message deletes.
 
 Device testing remains required for the real photo picker, pinch/drag/save, repeated avatar uploads and two-account views, conversation send/receive/clear, notification gestures, and install compatibility. No merge until device approval.
 

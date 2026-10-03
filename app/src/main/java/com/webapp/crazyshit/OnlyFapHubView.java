@@ -75,6 +75,7 @@ final class OnlyFapHubView extends FrameLayout {
         void onViewAllFavorites();
     }
 
+    private HeaderProfileAvatar profileAvatar;
     private static final String USER_AGENT =
             "Mozilla/5.0 (Linux; Android 16) AppleWebKit/537.36 " +
                     "(KHTML, like Gecko) Chrome/139.0 Mobile Safari/537.36";
@@ -201,6 +202,11 @@ final class OnlyFapHubView extends FrameLayout {
         heroSearch.setOnClickListener(v -> listener.onSearch());
         ZeroChillMotion.installPressFeedback(heroSearch);
         heroBar.addView(heroSearch, new LinearLayout.LayoutParams(dp(44), dp(48)));
+
+        if (context instanceof android.app.Activity) {
+            profileAvatar = new HeaderProfileAvatar((android.app.Activity) context);
+            heroBar.addView(profileAvatar, new LinearLayout.LayoutParams(dp(44), dp(48)));
+        }
 
         ImageView heroMore = new ImageView(context);
         heroMore.setImageResource(R.drawable.ic_more_overflow);
@@ -507,7 +513,14 @@ final class OnlyFapHubView extends FrameLayout {
         return trendingItems.size() + newItems.size() + hotItems.size() + popularItems.size();
     }
 
+    void setProfileActive(boolean active) {
+        if (profileAvatar == null) return;
+        if (active) profileAvatar.resume();
+        else profileAvatar.pause();
+    }
+
     void setActive(boolean active) {
+        setProfileActive(active);
         if (this.active == active) return;
         this.active = active;
         if (!active) {
@@ -538,6 +551,7 @@ final class OnlyFapHubView extends FrameLayout {
     }
 
     void close() {
+        if (profileAvatar != null) profileAvatar.close();
         closed = true;
         active = false;
         heroHandler.removeCallbacksAndMessages(null);

@@ -82,10 +82,18 @@ final class LibrarySocialHubView extends LinearLayout {
     private String boundAvatarUrl = "";
 
     LibrarySocialHubView(Activity activity) {
-        this(activity, ZeroChillSocialRepository::loadInbox, LibrarySocialHubView::accountId);
+        this(activity, "CONNECT");
+    }
+
+    LibrarySocialHubView(Activity activity, String heading) {
+        this(activity, ZeroChillSocialRepository::loadInbox, LibrarySocialHubView::accountId, heading);
     }
 
     LibrarySocialHubView(Activity activity, InboxLoader inboxLoader, SessionProvider sessionProvider) {
+        this(activity, inboxLoader, sessionProvider, "CONNECT");
+    }
+
+    private LibrarySocialHubView(Activity activity, InboxLoader inboxLoader, SessionProvider sessionProvider, String title) {
         super(activity);
         this.activity = activity;
         this.inboxLoader = inboxLoader;
@@ -94,7 +102,7 @@ final class LibrarySocialHubView extends LinearLayout {
         setOrientation(VERTICAL);
         setPadding(dp(2), 0, dp(2), 0);
 
-        TextView heading = label("CONNECT", 11, UiPalette.PRIMARY);
+        TextView heading = label(title, 11, UiPalette.PRIMARY);
         heading.setTypeface(null, android.graphics.Typeface.BOLD);
         heading.setLetterSpacing(0.15f);
         LayoutParams headingParams = new LayoutParams(-1, -2);
