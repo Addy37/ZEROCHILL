@@ -12,7 +12,7 @@ public class ProfileAvatarUploadTest {
         public Set<String> read() { return new HashSet<>(paths); }
         public void write(Set<String> value) { paths = new HashSet<>(value); }
     }
-    static final class Backend implements ProfileAvatarUpload.Backend {
+    static class Backend implements ProfileAvatarUpload.Backend {
         String path = USER + "/avatar.jpg";
         Set<String> objects = new HashSet<>();
         boolean failUpload, failReplace, failDelete, lostResponse, competingUpdate;
@@ -105,6 +105,49 @@ public class ProfileAvatarUploadTest {
         try { ProfileAvatarUpload.save(USER, new byte[]{1}, server, queue); fail(); }
         catch (Exception expected) { assertTrue(expected.getMessage().contains("another device")); }
         assertEquals(USER + "/avatar-other.jpg", server.path); assertEquals(2, server.objects.size());
+    }
+    @Test public void recoveryKeepsCurrentLegacyAndRecentStagingButRemovesLostOldObject() throws Exception {
+        long now=1700000000000L; // Trusted Storage server time, independent of any phone clock.
+        String current=USER+"/avatar-00000000-0000-4000-8000-000000000010.jpg";
+        String old=USER+"/avatar-00000000-0000-4000-8000-000000000011.jpg";
+        String recent=USER+"/avatar-00000000-0000-4000-8000-000000000012.jpg";
+        Backend server=new Backend() {
+            public ProfileAvatarUpload.StoredImages oldestImages() {
+                java.util.List<ProfileAvatarUpload.StoredImage> rows=new java.util.ArrayList<>();
+                for(String object:objects) rows.add(new ProfileAvatarUpload.StoredImage(
+                        object.substring(USER.length()+1),object.equals(recent)?now:now-172800000L));
+                return new ProfileAvatarUpload.StoredImages(rows, now);
+            }
+        };
+        server.path=current;server.objects.add(current);server.objects.add(old);server.objects.add(recent);
+        ProfileAvatarUpload.recoverAbandoned(USER,server);
+        assertFalse(server.objects.contains(old));assertTrue(server.objects.contains(current));
+        assertTrue(server.objects.contains(recent));assertTrue(server.objects.contains(USER+"/avatar.jpg"));
+    }
+    @Test public void missingServerDateSkipsRemoteRecovery() throws Exception {
+        String old=USER+"/avatar-00000000-0000-4000-8000-000000000011.jpg";
+        Backend server=new Backend() {
+            public ProfileAvatarUpload.StoredImages oldestImages() {
+                return new ProfileAvatarUpload.StoredImages(java.util.Collections.singletonList(
+                        new ProfileAvatarUpload.StoredImage(old.substring(USER.length()+1),1L)),0L);
+            }
+        };
+        server.objects.add(old);
+        ProfileAvatarUpload.recoverAbandoned(USER,server);
+        assertTrue(server.objects.contains(old));
+    }
+    @Test public void suspendedUploadCannotPublishExpiredStaging() throws Exception {
+        Backend server=new Backend() {
+            long elapsed;
+            public long monotonicMillis() { return elapsed; }
+            public void upload(String value,byte[] jpeg) throws Exception {
+                super.upload(value,jpeg); elapsed=24*60*60*1000L;
+            }
+        };
+        String previous=server.path;
+        try { ProfileAvatarUpload.save(USER,new byte[]{1},server,new Pending()); fail(); }
+        catch (Exception expected) { assertEquals("Avatar upload expired. Try again.",expected.getMessage()); }
+        assertEquals(previous,server.path);assertEquals(1,server.objects.size());
     }
     @Test public void cleanupRejectsAnotherAccountPath() throws Exception {
         Backend server = new Backend(); Pending queue = new Pending(); queue.paths.add("other/avatar.jpg");

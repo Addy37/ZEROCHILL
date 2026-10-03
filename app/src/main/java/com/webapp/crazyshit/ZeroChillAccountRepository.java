@@ -95,9 +95,11 @@ final class ZeroChillAccountRepository {
     private static final class Response {
         final int status;
         final String body;
+        final long serverTime;
 
-        Response(int status, String body) {
+        Response(int status, String body, long serverTime) {
             this.status = status;
+            this.serverTime = serverTime;
             this.body = body == null ? "" : body;
         }
 
@@ -428,6 +430,7 @@ final class ZeroChillAccountRepository {
                 Session session = requireExpectedSession(app, expected);
                 AccountState before = loadAccount(session);
                 ProfileAvatarUpload.Backend backend = new ProfileAvatarUpload.Backend() {
+                    public long monotonicMillis() { return android.os.SystemClock.elapsedRealtime(); }
                     public String currentPath() throws Exception {
                         Response response = request("GET", "/rest/v1/profiles?select=avatar_path&user_id=eq."
                                 + encode(expected) + "&limit=1", session.accessToken, null, null, null);
@@ -453,6 +456,24 @@ final class ZeroChillAccountRepository {
                         if (!response.ok()) throw responseError(response, "Unable to update the profile avatar.");
                         JSONArray rows = jsonArray(response.body);
                         return rows.length() == 1 && next.equals(rows.getJSONObject(0).optString("avatar_path"));
+                    }
+                    public ProfileAvatarUpload.StoredImages oldestImages() throws Exception {
+                        JSONObject body = new JSONObject().put("prefix", expected + "/").put("limit", 100)
+                                .put("offset", 0).put("search", "avatar-")
+                                .put("sortBy", new JSONObject().put("column", "created_at").put("order", "asc"));
+                        Response response = request("POST", "/storage/v1/object/list/avatars", session.accessToken,
+                                body.toString().getBytes(StandardCharsets.UTF_8), "application/json", null);
+                        if (!response.ok()) throw responseError(response, "Unable to check previous avatar files. Try again.");
+                        JSONArray rows = jsonArray(response.body);
+                        java.util.List<ProfileAvatarUpload.StoredImage> images = new java.util.ArrayList<>();
+                        for (int i = 0; i < rows.length(); i++) {
+                            JSONObject row = rows.getJSONObject(i);
+                            long created = 0L;
+                            try { created = java.time.Instant.parse(row.optString("created_at")).toEpochMilli(); }
+                            catch (Exception ignored) { }
+                            images.add(new ProfileAvatarUpload.StoredImage(row.optString("name"), created));
+                        }
+                        return new ProfileAvatarUpload.StoredImages(images, response.serverTime);
                     }
                     public void remove(String path) throws Exception {
                         JSONObject body = new JSONObject().put("prefixes", new JSONArray().put(path));
@@ -722,7 +743,7 @@ final class ZeroChillAccountRepository {
             InputStream stream = status >= 200 && status < 300
                     ? connection.getInputStream()
                     : connection.getErrorStream();
-            return new Response(status, read(stream));
+            return new Response(status, read(stream), connection.getHeaderFieldDate("Date", 0L));
         } finally {
             if (connection != null) connection.disconnect();
         }
