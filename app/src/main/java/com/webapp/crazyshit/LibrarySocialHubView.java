@@ -65,6 +65,18 @@ final class LibrarySocialHubView extends LinearLayout {
     private boolean socialLoading;
     private boolean closed;
     private boolean listening;
+    private final SharedPreferences.OnSharedPreferenceChangeListener messagesListener =
+            (prefs, key) -> onMessagesChanged(key);
+
+    private void onMessagesChanged(String key) {
+        if (key != null && key.equals("cleanup:" + session)) activity.runOnUiThread(() -> {
+            if (closed) return;
+            requestGeneration++;
+            loading = false;
+            showMessages(null, ZeroChillMessageBadgeStore.unreadCount(activity));
+            refreshMessages();
+        });
+    }
     private int requestGeneration;
     private int socialGeneration;
     private String boundAvatarUrl = "";
@@ -288,6 +300,7 @@ final class LibrarySocialHubView extends LinearLayout {
             preview = latest.lastMessage.body;
             stamp = time(latest.lastMessage.createdAt);
         }
+        AccountAvatarImages.track(messageAvatar, latest == null || latest.profile == null ? "" : latest.profile.userId);
         String avatarUrl = latest == null || latest.profile == null ? ""
                 : ZeroChillAccountRepository.avatarUrl(latest.profile.avatarPath);
         if (!avatarUrl.equals(boundAvatarUrl) || messageAvatar.getDrawable() == null) {
@@ -299,10 +312,7 @@ final class LibrarySocialHubView extends LinearLayout {
             if (!avatarUrl.isEmpty()) {
                 messageAvatar.clearColorFilter();
                 messageAvatar.setPadding(0, 0, 0, 0);
-                Glide.with(messageAvatar).load(avatarUrl).circleCrop()
-                        .transition(ThumbnailFades.avatar())
-                        .placeholder(R.drawable.ic_more_account)
-                        .error(R.drawable.ic_more_account).into(messageAvatar);
+                AccountAvatarImages.bind(messageAvatar, latest.profile.userId, latest.profile.avatarPath);
             }
         }
         messageName.setText(name);
@@ -364,6 +374,8 @@ final class LibrarySocialHubView extends LinearLayout {
     @Override protected void onAttachedToWindow() {
         super.onAttachedToWindow();
         updatesPreferences.registerOnSharedPreferenceChangeListener(updatesListener);
+        activity.getSharedPreferences(ZeroChillMessageBadgeStore.PREFS, Context.MODE_PRIVATE)
+                .registerOnSharedPreferenceChangeListener(messagesListener);
         listening = true;
         if (active) {
             handler.removeCallbacks(poll);
@@ -372,7 +384,11 @@ final class LibrarySocialHubView extends LinearLayout {
     }
 
     @Override protected void onDetachedFromWindow() {
-        if (listening) updatesPreferences.unregisterOnSharedPreferenceChangeListener(updatesListener);
+        if (listening) {
+            updatesPreferences.unregisterOnSharedPreferenceChangeListener(updatesListener);
+            activity.getSharedPreferences(ZeroChillMessageBadgeStore.PREFS, Context.MODE_PRIVATE)
+                    .unregisterOnSharedPreferenceChangeListener(messagesListener);
+        }
         listening = false;
         handler.removeCallbacks(poll);
         super.onDetachedFromWindow();
@@ -385,7 +401,11 @@ final class LibrarySocialHubView extends LinearLayout {
         socialGeneration++;
         socialLoading = false;
         handler.removeCallbacksAndMessages(null);
-        if (listening) updatesPreferences.unregisterOnSharedPreferenceChangeListener(updatesListener);
+        if (listening) {
+            updatesPreferences.unregisterOnSharedPreferenceChangeListener(updatesListener);
+            activity.getSharedPreferences(ZeroChillMessageBadgeStore.PREFS, Context.MODE_PRIVATE)
+                    .unregisterOnSharedPreferenceChangeListener(messagesListener);
+        }
         listening = false;
         Glide.with(messageAvatar).clear(messageAvatar);
     }

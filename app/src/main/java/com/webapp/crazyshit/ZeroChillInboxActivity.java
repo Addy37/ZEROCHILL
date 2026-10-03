@@ -1,6 +1,7 @@
 package com.webapp.crazyshit;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.Intent;
 import android.graphics.Color;
 import android.os.Bundle;
@@ -33,6 +34,20 @@ public final class ZeroChillInboxActivity extends Activity {
     private TextView status;
     private TextView empty;
     private ProgressBar progress;
+    private String renderedUser = "";
+    private int requestGeneration;
+    private boolean clearing;
+
+    interface ConversationClearer {
+        void clear(android.content.Context context, String partner,
+                   ZeroChillSocialRepository.Callback<Boolean> callback);
+    }
+    interface InboxLoader {
+        void load(android.content.Context context,
+                  ZeroChillSocialRepository.Callback<ArrayList<ZeroChillSocialRepository.Conversation>> callback);
+    }
+    private InboxLoader inboxLoader = ZeroChillSocialRepository::loadInbox;
+    private ConversationClearer conversationClearer = ZeroChillSocialRepository::clearConversation;
 
     @Override
     protected void onCreate(Bundle state) {
@@ -43,6 +58,7 @@ public final class ZeroChillInboxActivity extends Activity {
             finish();
             return;
         }
+        renderedUser = ZeroChillSessionStore.currentUserId(this);
         buildUi();
         ResponsiveFitmentController.applySoon(this);
     }
@@ -50,7 +66,13 @@ public final class ZeroChillInboxActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
-        if (recycler != null) loadInbox();
+        if (recycler != null) {
+            if (!renderedUser.equals(ZeroChillSessionStore.currentUserId(this))) {
+                finish();
+                return;
+            }
+            loadInbox();
+        }
     }
 
     @Override
@@ -113,8 +135,12 @@ public final class ZeroChillInboxActivity extends Activity {
     }
 
     private void loadInbox() {
+        final int generation = ++requestGeneration;
+        final String user = ZeroChillSessionStore.currentUserId(this);
         progress.setVisibility(adapter.getItemCount() == 0 ? View.VISIBLE : View.GONE);
-        ZeroChillSocialRepository.loadInbox(this, (items, error) -> runOnUiThread(() -> {
+        inboxLoader.load(this, (items, error) -> runOnUiThread(() -> {
+            if (isFinishing() || isDestroyed() || generation != requestGeneration
+                    || !user.equals(ZeroChillSessionStore.currentUserId(this))) return;
             progress.setVisibility(View.GONE);
             if (error != null || items == null) {
                 Toast.makeText(
@@ -125,15 +151,50 @@ public final class ZeroChillInboxActivity extends Activity {
                 return;
             }
             adapter.replace(items);
-            int unread = 0;
-            for (ZeroChillSocialRepository.Conversation item : items) unread += item.unreadCount;
-            ZeroChillMessageBadgeStore.setUnreadCount(this, unread);
-            status.setText(unread == 0
-                    ? "ZEROCHILL DMs"
-                    : unread + (unread == 1 ? " unread message" : " unread messages"));
-            empty.setVisibility(items.isEmpty() ? View.VISIBLE : View.GONE);
-            recycler.setVisibility(items.isEmpty() ? View.GONE : View.VISIBLE);
+            renderCounts();
         }));
+    }
+
+    private void renderCounts() {
+        int unread = 0;
+        for (ZeroChillSocialRepository.Conversation item : adapter.items) unread += item.unreadCount;
+        ZeroChillMessageBadgeStore.setUnreadCount(this, unread);
+        status.setText(unread == 0 ? "ZEROCHILL DMs"
+                : unread + (unread == 1 ? " unread message" : " unread messages"));
+        empty.setVisibility(adapter.items.isEmpty() ? View.VISIBLE : View.GONE);
+        recycler.setVisibility(adapter.items.isEmpty() ? View.GONE : View.VISIBLE);
+    }
+
+    private void confirmRemove(ZeroChillSocialRepository.Conversation item) {
+        if (clearing) return;
+        final String user = ZeroChillSessionStore.currentUserId(this);
+        new AlertDialog.Builder(this)
+                .setTitle("Remove conversation?")
+                .setMessage("This clears the conversation from your inbox and hides its old messages for you. "
+                        + "The other person's history stays. A new message will bring the conversation back.")
+                .setNegativeButton("Cancel", null)
+                .setPositiveButton("Remove", (dialog, which) -> {
+                    if (clearing || !user.equals(ZeroChillSessionStore.currentUserId(this))) return;
+                    clearing = true;
+                    ++requestGeneration; // A pre-clear inbox response cannot restore the row.
+                    conversationClearer.clear(this, item.profile.userId, (ok, error) -> runOnUiThread(() -> {
+                        clearing = false;
+                        if (isFinishing() || isDestroyed()
+                                || !user.equals(ZeroChillSessionStore.currentUserId(this))) return;
+                        if (error != null || !Boolean.TRUE.equals(ok)) {
+                            Toast.makeText(this, error == null ? "Couldn't remove the conversation."
+                                    : error.getMessage(), Toast.LENGTH_LONG).show();
+                            loadInbox();
+                            return;
+                        }
+                        ++requestGeneration;
+                        adapter.items.removeIf(row -> row.profile.userId.equals(item.profile.userId));
+                        adapter.notifyDataSetChanged();
+                        progress.setVisibility(View.GONE);
+                        renderCounts();
+                        loadInbox(); // Includes any message sent after the server cutoff.
+                    }));
+                }).show();
     }
 
     private void open(ZeroChillSocialRepository.Conversation item) {
@@ -225,10 +286,16 @@ public final class ZeroChillInboxActivity extends Activity {
             holder.itemView.setContentDescription(
                     label + ". " + item.lastMessage.body
                             + (item.unreadCount > 0 ? ". " + item.unreadCount + " unread." : "")
+                            + ". Long press to remove conversation."
             );
             holder.itemView.setOnClickListener(v -> open(item));
+            holder.itemView.setOnLongClickListener(v -> {
+                confirmRemove(item);
+                return true;
+            });
 
             Glide.with(holder.avatar).clear(holder.avatar);
+            AccountAvatarImages.track(holder.avatar, profile.userId);
             String avatarUrl = ZeroChillAccountRepository.avatarUrl(profile.avatarPath);
             if (avatarUrl.isEmpty()) {
                 holder.avatar.setImageResource(R.drawable.ic_more_account);
@@ -237,12 +304,7 @@ public final class ZeroChillInboxActivity extends Activity {
             } else {
                 holder.avatar.setPadding(0, 0, 0, 0);
                 holder.avatar.clearColorFilter();
-                Glide.with(holder.avatar)
-                        .load(avatarUrl)
-                        .circleCrop()
-                        .transition(ThumbnailFades.avatar())
-                        .placeholder(R.drawable.ic_more_account)
-                        .into(holder.avatar);
+                AccountAvatarImages.bind(holder.avatar, profile.userId, profile.avatarPath);
             }
         }
 

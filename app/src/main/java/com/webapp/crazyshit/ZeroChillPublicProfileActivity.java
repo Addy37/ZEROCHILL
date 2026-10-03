@@ -170,13 +170,14 @@ public final class ZeroChillPublicProfileActivity extends Activity {
             }
         });
         avatar.setBackground(circle(Color.rgb(12, 14, 18)));
+        AccountAvatarImages.track(avatar, profile.userId);
         String avatarUrl = ZeroChillAccountRepository.avatarUrl(profile.avatarPath);
         if (avatarUrl.isEmpty()) {
             avatar.setImageResource(R.drawable.ic_more_account);
             avatar.setPadding(dp(28), dp(28), dp(28), dp(28));
             avatar.setColorFilter(UiPalette.PRIMARY);
         } else {
-            Glide.with(avatar).load(avatarUrl).circleCrop().transition(ThumbnailFades.avatar()).into(avatar);
+            AccountAvatarImages.bind(avatar, profile.userId, profile.avatarPath);
         }
         halo.addView(avatar, new FrameLayout.LayoutParams(-1, -1));
 

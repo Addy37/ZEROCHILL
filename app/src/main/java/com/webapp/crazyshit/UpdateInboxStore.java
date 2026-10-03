@@ -24,6 +24,11 @@ final class UpdateInboxStore {
     private static final String PREFS = "zerochill_update_inbox_v1";
     private static final String KEY_ENTRIES = "entries";
     private static final int MAX_ENTRIES = 200;
+    private static final String KEY_DELETED = "deleted_entries";
+    private static final String KEY_SOCIAL_CUTOFFS = "social_cleanup_cutoffs";
+    private static final int MAX_DELETED = 2000;
+    // Social polling only backfills 30 days. Keep markers for an extra day.
+    private static final long SOCIAL_RETENTION_MS = 31L * 24 * 60 * 60 * 1000;
     private static final Object LOCK = new Object();
 
     private UpdateInboxStore() {
@@ -34,6 +39,8 @@ final class UpdateInboxStore {
                 || !ZeroChillNotificationPreferences.cached(context).creatorUpdates) return;
         synchronized (LOCK) {
             ArrayList<Entry> incoming = buildEntries(context.getApplicationContext(), alerts);
+            CleanupState cleanup = new CleanupState(context);
+            incoming.removeIf(cleanup::contains);
             if (incoming.isEmpty()) return;
 
             ArrayList<Entry> existing = readLocked(context);
@@ -68,6 +75,7 @@ final class UpdateInboxStore {
             entry.fingerprint = fingerprint(CATEGORY_APP, entry.appVersion, Collections.emptyList());
             entry.id = entry.fingerprint + ":" + entry.timestamp;
 
+            if (new CleanupState(context).contains(entry)) return;
             ArrayList<Entry> existing = readLocked(context);
             pruneNonFavoriteContent(context, existing);
             for (Entry current : existing) {
@@ -93,6 +101,8 @@ final class UpdateInboxStore {
             LinkedHashSet<String> fingerprints = new LinkedHashSet<>();
             for (Entry current : existing) fingerprints.add(current.fingerprint);
 
+            CleanupState cleanup = new CleanupState(context);
+            boolean refreshed = false;
             ArrayList<Entry> incoming = new ArrayList<>();
             for (ZeroChillSocialRepository.SocialActivity item : activity) {
                 if (item == null || clean(item.eventId).isEmpty() || item.actor == null
@@ -112,6 +122,7 @@ final class UpdateInboxStore {
                 if (content != null) entry.items.add(content);
                 String actor = SocialUi.name(item.actor.displayName, item.actor.username);
                 entry.actorName = actor;
+                entry.actorId = clean(item.actor.userId);
                 entry.title = actor + (ZeroChillSocialRepository.SocialActivity.TYPE_REPLY.equals(item.type)
                         ? " replied to your comment"
                         : " liked your comment");
@@ -129,10 +140,27 @@ final class UpdateInboxStore {
                         Collections.emptyList()
                 );
                 entry.id = entry.fingerprint + ":" + entry.timestamp;
-                if (fingerprints.add(entry.fingerprint)) incoming.add(entry);
+                if (cleanup.contains(entry)) continue;
+                if (fingerprints.add(entry.fingerprint)) {
+                    incoming.add(entry);
+                } else {
+                    for (Entry current : existing) {
+                        if (!entry.accountId.equals(current.accountId)
+                                || !entry.fingerprint.equals(current.fingerprint)) continue;
+                        if (!entry.avatarUrl.equals(current.avatarUrl) || !entry.actorId.equals(current.actorId)) {
+                            current.avatarUrl = entry.avatarUrl;
+                            current.actorId = entry.actorId;
+                            refreshed = true;
+                        }
+                        break;
+                    }
+                }
             }
 
-            if (incoming.isEmpty()) return Collections.emptyList();
+            if (incoming.isEmpty()) {
+                if (refreshed) writeLocked(context, existing);
+                return Collections.emptyList();
+            }
             ArrayList<Entry> inserted = new ArrayList<>(incoming);
             incoming.addAll(existing);
             dedupeAndTrim(incoming);
@@ -145,8 +173,143 @@ final class UpdateInboxStore {
         synchronized (LOCK) {
             ArrayList<Entry> entries = readLocked(context);
             entries.removeIf(entry -> CATEGORY_SOCIAL.equals(entry.category) && accountId.equals(entry.accountId));
+            ArrayList<Entry> deleted = readDeletedLocked(context);
+            deleted.removeIf(entry -> accountId.equals(entry.accountId));
+            JSONObject cutoffs = readCutoffsLocked(context);
+            cutoffs.remove(accountId);
+            writeCleanupLocked(context, deleted, cutoffs);
             writeLocked(context, entries);
         }
+    }
+
+    /** Only current-account social history and installation-wide creator/app history are removable. */
+    static boolean delete(Context context, String id, String accountId) {
+        synchronized (LOCK) {
+            if (!clean(accountId).equals(ZeroChillSessionStore.currentUserId(context))) return false;
+            ArrayList<Entry> entries = readLocked(context);
+            pruneNonFavoriteContent(context, entries);
+            for (int i = 0; i < entries.size(); i++) {
+                Entry entry = entries.get(i);
+                if (!clean(id).equals(entry.id) || !visibleTo(entry, accountId)) continue;
+                rememberDeletedLocked(context, Collections.singletonList(entry));
+                entries.remove(i);
+                writeLocked(context, entries);
+                return true;
+            }
+            return false;
+        }
+    }
+
+    static int clearAll(Context context, String accountId) {
+        synchronized (LOCK) {
+            if (!clean(accountId).equals(ZeroChillSessionStore.currentUserId(context))) return 0;
+            ArrayList<Entry> entries = readLocked(context);
+            pruneNonFavoriteContent(context, entries);
+            ArrayList<Entry> removed = new ArrayList<>();
+            entries.removeIf(entry -> {
+                if (!visibleTo(entry, accountId)) return false;
+                removed.add(entry);
+                return true;
+            });
+            if (!removed.isEmpty()) {
+                rememberDeletedLocked(context, removed);
+                writeLocked(context, entries);
+            }
+            return removed.size();
+        }
+    }
+
+    static void refreshActorAvatar(Context context, String actorId, String avatarPath) {
+        if (clean(actorId).isEmpty()) return;
+        synchronized (LOCK) {
+            String accountId = ZeroChillSessionStore.currentUserId(context);
+            String url = ZeroChillAccountRepository.avatarUrl(avatarPath);
+            ArrayList<Entry> entries = readLocked(context);
+            boolean changed = false;
+            for (Entry entry : entries) {
+                if (!CATEGORY_SOCIAL.equals(entry.category) || !accountId.equals(entry.accountId)
+                        || !actorId.equals(entry.actorId) || url.equals(entry.avatarUrl)) continue;
+                entry.avatarUrl = url;
+                changed = true;
+            }
+            if (changed) writeLocked(context, entries);
+        }
+    }
+
+    private static boolean visibleTo(Entry entry, String accountId) {
+        return !CATEGORY_SOCIAL.equals(entry.category)
+                || (!clean(accountId).isEmpty() && clean(accountId).equals(entry.accountId));
+    }
+
+    private static final class CleanupState {
+        final LinkedHashSet<String> fingerprints = new LinkedHashSet<>();
+        final JSONObject cutoffs;
+        CleanupState(Context context) {
+            cutoffs = readCutoffsLocked(context);
+            for (Entry deleted : readDeletedLocked(context)) {
+                fingerprints.add(deleted.accountId + "|" + deleted.fingerprint);
+            }
+        }
+        boolean contains(Entry entry) {
+            return (CATEGORY_SOCIAL.equals(entry.category)
+                    && entry.timestamp <= cutoffs.optLong(entry.accountId, -1L))
+                    || fingerprints.contains(entry.accountId + "|" + entry.fingerprint);
+        }
+    }
+
+    private static ArrayList<Entry> readDeletedLocked(Context context) {
+        ArrayList<Entry> deleted = new ArrayList<>();
+        try {
+            JSONArray values = new JSONArray(context.getApplicationContext()
+                    .getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY_DELETED, "[]"));
+            long cutoff = System.currentTimeMillis() - SOCIAL_RETENTION_MS;
+            for (int i = 0; i < values.length(); i++) {
+                JSONObject value = values.optJSONObject(i);
+                if (value == null) continue;
+                Entry entry = new Entry();
+                entry.fingerprint = value.optString("fingerprint");
+                entry.accountId = value.optString("accountId");
+                entry.timestamp = value.optLong("timestamp");
+                if (!entry.accountId.isEmpty() && entry.timestamp < cutoff) continue;
+                deleted.add(entry);
+            }
+        } catch (Exception ignored) { }
+        return deleted;
+    }
+
+    private static JSONObject readCutoffsLocked(Context context) {
+        try {
+            return new JSONObject(context.getApplicationContext().getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                    .getString(KEY_SOCIAL_CUTOFFS, "{}"));
+        } catch (Exception ignored) { return new JSONObject(); }
+    }
+
+    private static void rememberDeletedLocked(Context context, List<Entry> removed) {
+        ArrayList<Entry> deleted = readDeletedLocked(context);
+        JSONObject cutoffs = readCutoffsLocked(context);
+        deleted.addAll(removed);
+        while (deleted.size() > MAX_DELETED) {
+            Entry oldest = deleted.remove(0);
+            // Compact excessive social markers into an account cutoff. Existing unremoved rows
+            // stay visible; only old polling backfill is suppressed. Other accounts stay isolated.
+            if (!oldest.accountId.isEmpty()) {
+                try { cutoffs.put(oldest.accountId, Math.max(oldest.timestamp,
+                        cutoffs.optLong(oldest.accountId, -1L))); } catch (Exception ignored) { }
+            }
+        }
+        writeCleanupLocked(context, deleted, cutoffs);
+    }
+
+    private static void writeCleanupLocked(Context context, List<Entry> deleted, JSONObject cutoffs) {
+        JSONArray values = new JSONArray();
+        for (Entry entry : deleted) {
+            try {
+                values.put(new JSONObject().put("fingerprint", entry.fingerprint)
+                        .put("accountId", entry.accountId).put("timestamp", entry.timestamp));
+            } catch (Exception ignored) { }
+        }
+        context.getApplicationContext().getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+                .putString(KEY_DELETED, values.toString()).putString(KEY_SOCIAL_CUTOFFS, cutoffs.toString()).apply();
     }
 
     static List<Entry> all(Context context) {
@@ -491,6 +654,7 @@ final class UpdateInboxStore {
         String videoTitle = "";
         String commentId = "";
         String actorName = "";
+        String actorId = "";
         long timestamp;
         int count;
         int videoCount;
@@ -518,6 +682,7 @@ final class UpdateInboxStore {
                     .put("videoTitle", videoTitle)
                     .put("commentId", commentId)
                     .put("actorName", actorName)
+                    .put("actorId", actorId)
                     .put("timestamp", timestamp)
                     .put("count", count)
                     .put("videoCount", videoCount)
@@ -548,6 +713,14 @@ final class UpdateInboxStore {
             entry.videoTitle = value.optString("videoTitle", "");
             entry.commentId = value.optString("commentId", "");
             entry.actorName = value.optString("actorName", "");
+            entry.actorId = value.optString("actorId", "");
+            if (entry.actorId.isEmpty() && CATEGORY_SOCIAL.equals(entry.category)) {
+                String base = clean(BuildConfig.ACCOUNT_SUPABASE_URL) + "/storage/v1/object/public/avatars/";
+                if (entry.avatarUrl.startsWith(base)) {
+                    String folder = entry.avatarUrl.substring(base.length()).split("/", 2)[0];
+                    try { entry.actorId = java.util.UUID.fromString(folder).toString(); } catch (Exception ignored) { }
+                }
+            }
             entry.timestamp = value.optLong("timestamp", 0L);
             entry.count = value.optInt("count", 0);
             entry.videoCount = value.optInt("videoCount", 0);

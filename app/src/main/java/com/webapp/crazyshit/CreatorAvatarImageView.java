@@ -2,6 +2,9 @@ package com.webapp.crazyshit;
 
 import android.content.Context;
 import android.graphics.Matrix;
+import android.graphics.Bitmap;
+import android.graphics.Canvas;
+import android.graphics.Color;
 import android.graphics.drawable.Drawable;
 import android.util.AttributeSet;
 import android.widget.ImageView;
@@ -82,6 +85,25 @@ final class CreatorAvatarImageView extends ImageView {
 
     float avatarZoom() {
         return zoom;
+    }
+
+    /** Render the same square underneath the circular preview, with no extra crop. */
+    Bitmap avatarBitmap(int side) {
+        Drawable drawable = getDrawable();
+        if (drawable == null || getWidth() <= 0 || getHeight() <= 0) {
+            throw new IllegalStateException("Wait for the image to load.");
+        }
+        applyCrop();
+        Bitmap output = Bitmap.createBitmap(side, side, Bitmap.Config.ARGB_8888);
+        Canvas canvas = new Canvas(output);
+        canvas.drawColor(Color.BLACK);
+        canvas.scale(side / (float) getWidth(), side / (float) getHeight());
+        canvas.concat(getImageMatrix());
+        android.graphics.Rect previous = new android.graphics.Rect(drawable.getBounds());
+        drawable.setBounds(0, 0, drawable.getIntrinsicWidth(), drawable.getIntrinsicHeight());
+        drawable.draw(canvas);
+        drawable.setBounds(previous);
+        return output;
     }
 
     @Override

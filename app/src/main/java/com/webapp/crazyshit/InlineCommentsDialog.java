@@ -420,9 +420,10 @@ final class InlineCommentsDialog extends BottomSheetDialog {
         });
         avatar.setClipToOutline(true);
         avatar.setBackground(circle(Color.rgb(40, 40, 46)));
+        AccountAvatarImages.track(avatar, comment.userId);
         String avatarUrl = ZeroChillAccountRepository.avatarUrl(comment.avatarPath);
         if (!avatarUrl.isEmpty()) {
-            Glide.with(avatar).load(avatarUrl).circleCrop().transition(ThumbnailFades.avatar()).into(avatar);
+            AccountAvatarImages.bind(avatar, comment.userId, comment.avatarPath);
         } else {
             avatar.setImageResource(R.drawable.ic_more_account);
             avatar.setPadding(dp(9), dp(9), dp(9), dp(9));

@@ -421,49 +421,59 @@ final class ZeroChillAccountRepository {
         });
     }
 
-    static void uploadAvatar(Context context, byte[] jpeg, Callback<String> callback) {
-        final String expected = ZeroChillSessionStore.currentUserId(context);
+    static void uploadAvatar(Context context, String expected, byte[] jpeg, Callback<AccountState> callback) {
+        Context app = context.getApplicationContext();
         NETWORK.execute(() -> {
             try {
-                if (jpeg == null || jpeg.length == 0) {
-                    throw new IllegalArgumentException("Choose an image first.");
-                }
-                if (jpeg.length > 512 * 1024) {
-                    throw new IllegalArgumentException("Avatar image is too large.");
-                }
-                Session session = requireExpectedSession(context, expected);
-                String userId = jwtSubject(session.accessToken);
-                String path = userId + "/avatar.jpg";
-                Response upload = request(
-                        "POST",
-                        "/storage/v1/object/avatars/" + path,
-                        session.accessToken,
-                        jpeg,
-                        "image/jpeg",
-                        null,
-                        "x-upsert",
-                        "true"
-                );
-                if (!upload.ok()) throw responseError(upload, "Unable to upload the avatar.");
-
-                JSONObject update = new JSONObject()
-                        .put("avatar_path", path)
-                        .put("updated_at", java.time.Instant.now().toString());
-                requireExpectedSession(context, expected);
-                Response profile = request(
-                        "PATCH",
-                        "/rest/v1/profiles?user_id=eq." + encode(userId),
-                        session.accessToken,
-                        update.toString().getBytes(StandardCharsets.UTF_8),
-                        "application/json",
-                        "return=minimal"
-                );
-                if (!profile.ok()) throw responseError(profile, "Avatar uploaded, but the profile did not update.");
-                requireExpectedSession(context, expected);
-                callback.complete(avatarUrl(path), null);
-            } catch (Exception error) {
-                callback.complete(null, error);
-            }
+                Session session = requireExpectedSession(app, expected);
+                AccountState before = loadAccount(session);
+                ProfileAvatarUpload.Backend backend = new ProfileAvatarUpload.Backend() {
+                    public String currentPath() throws Exception {
+                        Response response = request("GET", "/rest/v1/profiles?select=avatar_path&user_id=eq."
+                                + encode(expected) + "&limit=1", session.accessToken, null, null, null);
+                        if (!response.ok()) throw responseError(response, "Unable to load the avatar.");
+                        JSONArray rows = jsonArray(response.body);
+                        if (rows.length() != 1) throw new IllegalStateException("Your profile is unavailable.");
+                        return rows.getJSONObject(0).optString("avatar_path");
+                    }
+                    public void upload(String path, byte[] data) throws Exception {
+                        requireExpectedSession(app, expected);
+                        Response response = request("POST", "/storage/v1/object/avatars/" + path,
+                                session.accessToken, data, "image/jpeg", null);
+                        if (!response.ok()) throw responseError(response, "Unable to upload the avatar.");
+                    }
+                    public boolean replace(String previous, String next) throws Exception {
+                        requireExpectedSession(app, expected);
+                        JSONObject body = new JSONObject().put("avatar_path", next)
+                                .put("updated_at", java.time.Instant.now().toString());
+                        Response response = request("PATCH", "/rest/v1/profiles?user_id=eq." + encode(expected)
+                                + "&avatar_path=eq." + encode(previous) + "&select=avatar_path",
+                                session.accessToken, body.toString().getBytes(StandardCharsets.UTF_8),
+                                "application/json", "return=representation");
+                        if (!response.ok()) throw responseError(response, "Unable to update the profile avatar.");
+                        JSONArray rows = jsonArray(response.body);
+                        return rows.length() == 1 && next.equals(rows.getJSONObject(0).optString("avatar_path"));
+                    }
+                    public void remove(String path) throws Exception {
+                        JSONObject body = new JSONObject().put("prefixes", new JSONArray().put(path));
+                        Response response = request("DELETE", "/storage/v1/object/avatars", session.accessToken,
+                                body.toString().getBytes(StandardCharsets.UTF_8), "application/json", null);
+                        if (!response.ok()) throw responseError(response, "Unable to clean up the previous avatar. Try again.");
+                    }
+                };
+                android.content.SharedPreferences prefs = app.getSharedPreferences("profile_avatar_cleanup_v1", Context.MODE_PRIVATE);
+                ProfileAvatarUpload.Pending pending = new ProfileAvatarUpload.Pending() {
+                    public Set<String> read() { return new HashSet<>(prefs.getStringSet(expected, java.util.Collections.emptySet())); }
+                    public void write(Set<String> paths) throws Exception {
+                        if (!prefs.edit().putStringSet(expected, new HashSet<>(paths)).commit())
+                            throw new java.io.IOException("Unable to save avatar cleanup state.");
+                    }
+                };
+                String path = ProfileAvatarUpload.save(expected, jpeg, backend, pending);
+                requireExpectedSession(app, expected);
+                callback.complete(new AccountState(true, false, before.userId, before.email, before.username,
+                        before.displayName, path, before.createdAt, before.bio), null);
+            } catch (Exception error) { callback.complete(null, error); }
         });
     }
 

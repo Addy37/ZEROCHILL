@@ -65,6 +65,7 @@ public final class ZeroChillMessageActivity extends Activity {
     private ThreadLoader threadLoader = ZeroChillSocialRepository::loadDirectMessages;
 
     private String partnerId = "";
+    private String renderedUser = "";
     private ZeroChillSocialRepository.PublicProfile partner;
     private boolean blockedByMe;
     private boolean resumed;
@@ -72,6 +73,7 @@ public final class ZeroChillMessageActivity extends Activity {
     private boolean sending;
     private boolean refreshQueued;
     private long threadRevision;
+    private int partnerRequestGeneration;
     private String lastMessageId = "";
 
     private ImageView avatar;
@@ -95,15 +97,20 @@ public final class ZeroChillMessageActivity extends Activity {
             finish();
             return;
         }
+        renderedUser = ZeroChillSessionStore.currentUserId(this);
         buildUi();
         ResponsiveFitmentController.applySoon(this);
-        loadPartner();
     }
 
     @Override
     protected void onResume() {
         super.onResume();
+        if (!accountStillCurrent()) {
+            finish();
+            return;
+        }
         resumed = true;
+        if (avatar != null && !renderedUser.isEmpty()) loadPartner();
         handler.removeCallbacks(refreshRunnable);
         handler.postDelayed(refreshRunnable, REFRESH_MS);
     }
@@ -225,7 +232,10 @@ public final class ZeroChillMessageActivity extends Activity {
     }
 
     private void loadPartner() {
+        final int generation = ++partnerRequestGeneration;
         ZeroChillSocialRepository.loadProfile(this, partnerId, (profile, error) -> runOnUiThread(() -> {
+            if (generation != partnerRequestGeneration || !accountStillCurrent()
+                    || isFinishing() || isDestroyed()) return;
             if (error != null || profile == null || profile.currentUser) {
                 Toast.makeText(
                         this,
@@ -242,6 +252,7 @@ public final class ZeroChillMessageActivity extends Activity {
             title.setText(label);
             subtitle.setText("@" + profile.username);
             composer.setHint("Message @" + profile.username);
+            AccountAvatarImages.track(avatar, profile.userId);
             String url = ZeroChillAccountRepository.avatarUrl(profile.avatarPath);
             if (url.isEmpty()) {
                 avatar.setImageResource(R.drawable.ic_more_account);
@@ -250,7 +261,7 @@ public final class ZeroChillMessageActivity extends Activity {
             } else {
                 avatar.setPadding(0, 0, 0, 0);
                 avatar.clearColorFilter();
-                Glide.with(avatar).load(url).circleCrop().transition(ThumbnailFades.avatar()).into(avatar);
+                AccountAvatarImages.bind(avatar, profile.userId, profile.avatarPath);
             }
             loadBlockState();
             loadThread(true);
@@ -267,6 +278,7 @@ public final class ZeroChillMessageActivity extends Activity {
         if (showLoading) progress.setVisibility(View.VISIBLE);
         threadLoader.load(this, partnerId, (items, error) ->
                 runOnUiThread(() -> {
+                    if (!accountStillCurrent() || isFinishing() || isDestroyed()) return;
                     loading = false;
                     progress.setVisibility(View.GONE);
                     boolean stale = revisionAtStart != threadRevision;
@@ -313,7 +325,12 @@ public final class ZeroChillMessageActivity extends Activity {
         );
     }
 
+    private boolean accountStillCurrent() {
+        return renderedUser.isEmpty() || renderedUser.equals(ZeroChillSessionStore.currentUserId(this));
+    }
+
     private void sendMessage() {
+        if (!accountStillCurrent()) { finish(); return; }
         if (blockedByMe) {
             Toast.makeText(this, "Unblock this user before messaging them.", Toast.LENGTH_SHORT).show();
             return;
@@ -329,6 +346,7 @@ public final class ZeroChillMessageActivity extends Activity {
         // Keep the draft until confirmation so a failed request never loses it.
         messageSender.send(this, partnerId, clientId, value, (message, error) ->
                 runOnUiThread(() -> {
+                    if (!accountStillCurrent() || isFinishing() || isDestroyed()) return;
                     sending = false;
                     send.setEnabled(!blockedByMe && !sending);
                     if (error != null) {
@@ -356,6 +374,7 @@ public final class ZeroChillMessageActivity extends Activity {
     private void loadBlockState() {
         ZeroChillSocialRepository.blockState(this, partnerId, (blocked, error) ->
                 runOnUiThread(() -> {
+                    if (!accountStillCurrent() || isFinishing() || isDestroyed()) return;
                     if (error == null) {
                         blockedByMe = Boolean.TRUE.equals(blocked);
                         updateComposerState();
@@ -455,6 +474,11 @@ public final class ZeroChillMessageActivity extends Activity {
         startActivity(intent);
     }
 
+    private static boolean atOrBefore(String timestamp, String cutoff) {
+        try { return !Instant.parse(timestamp).isAfter(Instant.parse(cutoff)); }
+        catch (Exception ignored) { return false; }
+    }
+
     // A pause or a local calendar-day boundary starts a new visual group.
     static boolean grouped(ZeroChillSocialRepository.DirectMessage first,
                            ZeroChillSocialRepository.DirectMessage second) {
@@ -479,6 +503,12 @@ public final class ZeroChillMessageActivity extends Activity {
         private final LinkedHashMap<String, ZeroChillSocialRepository.DirectMessage> echoes = new LinkedHashMap<>();
 
         void replace(List<ZeroChillSocialRepository.DirectMessage> next) {
+            if (next instanceof ZeroChillSocialRepository.ClearedMessageList) {
+                String cutoff = ((ZeroChillSocialRepository.ClearedMessageList) next).cutoff;
+                if (!cutoff.isEmpty()) {
+                    echoes.values().removeIf(message -> !message.pending && atOrBefore(message.createdAt, cutoff));
+                }
+            }
             items.clear();
             if (next != null) {
                 for (ZeroChillSocialRepository.DirectMessage message : next) {
@@ -597,6 +627,7 @@ public final class ZeroChillMessageActivity extends Activity {
             holder.senderAvatar.setImageDrawable(null);
             holder.senderAvatar.clearColorFilter();
             holder.senderAvatar.setPadding(0, 0, 0, 0);
+            AccountAvatarImages.track(holder.senderAvatar, incoming ? partnerId : "");
             if (incoming && !joinsNext) {
                 String url = partner == null ? "" : ZeroChillAccountRepository.avatarUrl(partner.avatarPath);
                 holder.senderAvatar.setContentDescription(partner == null
@@ -606,10 +637,7 @@ public final class ZeroChillMessageActivity extends Activity {
                     holder.senderAvatar.setPadding(dp(6), dp(6), dp(6), dp(6));
                     holder.senderAvatar.setColorFilter(UiPalette.PRIMARY);
                 } else {
-                    Glide.with(holder.senderAvatar).load(url).circleCrop()
-                            .transition(ThumbnailFades.avatar())
-                            .placeholder(R.drawable.ic_more_account)
-                            .error(R.drawable.ic_more_account).into(holder.senderAvatar);
+                    AccountAvatarImages.bind(holder.senderAvatar, partnerId, partner.avatarPath);
                 }
             }
             RecyclerView.LayoutParams params = (RecyclerView.LayoutParams) row.getLayoutParams();

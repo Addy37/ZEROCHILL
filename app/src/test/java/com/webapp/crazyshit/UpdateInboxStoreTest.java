@@ -10,6 +10,8 @@ import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.RuntimeEnvironment;
 import org.robolectric.annotation.Config;
+import org.robolectric.annotation.Implements;
+import org.robolectric.annotation.Implementation;
 
 import java.util.Arrays;
 import java.util.List;
@@ -19,13 +21,19 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 @RunWith(RobolectricTestRunner.class)
-@Config(application = Application.class, sdk = 35)
+@Config(application = Application.class, sdk = 35, shadows = UpdateInboxStoreTest.Sessions.class)
 public class UpdateInboxStoreTest {
     private Application app;
+    @Implements(value = ZeroChillSessionStore.class, isInAndroidSdk = false)
+    public static class Sessions {
+        static String account = "";
+        @Implementation protected static String currentUserId(Context context) { return account; }
+    }
 
     @Before
     public void setUp() {
         app = RuntimeEnvironment.getApplication();
+        Sessions.account = "";
         app.getSharedPreferences("zerochill_update_inbox_v1", Context.MODE_PRIVATE)
                 .edit()
                 .clear()
@@ -283,4 +291,69 @@ public class UpdateInboxStoreTest {
         assertEquals(2, UpdateInboxStore.all(app).size());
         assertEquals(1, UpdateInboxStore.unreadCount(app));
     }
+    @Test public void deleteUnreadNotificationUpdatesCountAndDoesNotReturnOnRepeatDetection() {
+        UpdateInboxStore.recordAppUpdate(app, "4.3.2", "ZeroChill", false);
+        String id = UpdateInboxStore.all(app).get(0).id;
+        assertTrue(UpdateInboxStore.delete(app, id, ""));
+        assertEquals(0, UpdateInboxStore.unreadCount(app));
+        UpdateInboxStore.recordAppUpdate(app, "4.3.2", "ZeroChill", false);
+        assertTrue(UpdateInboxStore.all(app).isEmpty());
+        UpdateInboxStore.recordAppUpdate(app, "4.3.3", "ZeroChill", false);
+        assertEquals(1, UpdateInboxStore.unreadCount(app));
+    }
+
+    @Test public void socialDeletionAndClearAllRemainAccountScopedAndPollingDoesNotResurrectRows() throws Exception {
+        ZeroChillSocialRepository.SocialActivity first = social("old", "actor/avatar-1.jpg");
+        ZeroChillSocialRepository.SocialActivity newer = social("new", "actor/avatar-1.jpg");
+        UpdateInboxStore.recordSocialActivities(app, "account-a", Arrays.asList(first));
+        UpdateInboxStore.recordSocialActivities(app, "account-b", Arrays.asList(first));
+        UpdateInboxStore.recordAppUpdate(app, "4.3.2", "ZeroChill", false);
+        Sessions.account = "account-a";
+        String foreignId = UpdateInboxStore.allForAccount(app, "account-b").stream()
+                .filter(entry -> UpdateInboxStore.CATEGORY_SOCIAL.equals(entry.category)).findFirst().get().id;
+        assertFalse(UpdateInboxStore.delete(app, foreignId, "account-a"));
+        assertEquals(2, UpdateInboxStore.clearAll(app, "account-a"));
+        assertTrue(UpdateInboxStore.all(app).isEmpty());
+        assertEquals(1, UpdateInboxStore.allForAccount(app, "account-b").size());
+        assertTrue(UpdateInboxStore.recordSocialActivities(app, "account-a", Arrays.asList(first)).isEmpty());
+        assertEquals(1, UpdateInboxStore.recordSocialActivities(app, "account-a", Arrays.asList(newer)).size());
+        assertEquals(1, UpdateInboxStore.unreadCount(app));
+        Sessions.account = "account-b";
+        assertEquals(0, UpdateInboxStore.clearAll(app, "account-a"));
+        assertEquals(1, UpdateInboxStore.unreadCount(app));
+        String mine = UpdateInboxStore.all(app).get(0).id;
+        assertTrue(UpdateInboxStore.delete(app, mine, "account-b"));
+        assertTrue(UpdateInboxStore.recordSocialActivities(app, "account-b", Arrays.asList(first)).isEmpty());
+        assertEquals(1, UpdateInboxStore.allForAccount(app, "account-a").size());
+    }
+
+    @Test public void pollingRefreshesStoredActorAvatarWithoutResettingReadStateOrAnnouncingAnInsert() throws Exception {
+        Sessions.account = "account-a";
+        UpdateInboxStore.recordSocialActivities(app, "account-a", Arrays.asList(social("same", "actor/avatar-1.jpg")));
+        String id = UpdateInboxStore.all(app).get(0).id;
+        UpdateInboxStore.markRead(app, id);
+        assertTrue(UpdateInboxStore.recordSocialActivities(app, "account-a",
+                Arrays.asList(social("same", "actor/avatar-2.jpg"))).isEmpty());
+        UpdateInboxStore.Entry updated = UpdateInboxStore.all(app).get(0);
+        assertTrue(updated.avatarUrl.endsWith("actor/avatar-2.jpg"));
+        assertEquals("actor", updated.actorId);
+        assertEquals(id, updated.id);
+        assertTrue(updated.read);
+        UpdateInboxStore.refreshActorAvatar(app, "actor", "actor/avatar-3.jpg");
+        assertTrue(UpdateInboxStore.all(app).get(0).avatarUrl.endsWith("actor/avatar-3.jpg"));
+        Sessions.account = "account-b";
+        UpdateInboxStore.refreshActorAvatar(app, "actor", "actor/avatar-4.jpg");
+        assertTrue(UpdateInboxStore.allForAccount(app, "account-a").get(0).avatarUrl.endsWith("actor/avatar-3.jpg"));
+    }
+
+    private ZeroChillSocialRepository.SocialActivity social(String event, String avatar) throws Exception {
+        ZeroChillSocialRepository.PublicProfile actor = new ZeroChillSocialRepository.PublicProfile(
+                new JSONObject().put("user_id", "actor").put("username", "actor")
+                        .put("display_name", "Actor").put("avatar_path", avatar), false);
+        return new ZeroChillSocialRepository.SocialActivity("reply:" + event,
+                ZeroChillSocialRepository.SocialActivity.TYPE_REPLY, "actor", actor, event,
+                "https://example.com/video/1", "Video", "Original", "Reply",
+                java.time.Instant.now().toString());
+    }
+
 }
