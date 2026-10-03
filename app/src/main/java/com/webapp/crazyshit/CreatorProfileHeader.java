@@ -29,7 +29,13 @@ final class CreatorProfileHeader extends LinearLayout {
     private final ExecutorService heroIo = Executors.newSingleThreadExecutor();
     private boolean detached;
 
-    CreatorProfileHeader(Context context, String title, String query, String url) {
+    CreatorProfileHeader(
+            Context context,
+            String title,
+            String query,
+            String url,
+            String galleryCacheKey
+    ) {
         super(context);
         setOrientation(VERTICAL);
         setBackgroundColor(Color.BLACK);
@@ -52,6 +58,8 @@ final class CreatorProfileHeader extends LinearLayout {
             }
         }
         creator = found;
+        CreatorCatalog.FavoriteGroup mergedGroup =
+                CreatorMergeUi.findManualGroup(context, galleryCacheKey);
 
         FrameLayout hero = new FrameLayout(context);
         hero.setBackgroundColor(Color.rgb(13, 15, 18));
@@ -99,9 +107,33 @@ final class CreatorProfileHeader extends LinearLayout {
         name.setEllipsize(android.text.TextUtils.TruncateAt.END);
         labels.addView(name, new LayoutParams(-1, -2));
 
-        TextView subtitle = BrowseUi.text(context, "OnlyFap creator", 12, Color.rgb(205, 209, 216));
+        LinearLayout meta = new LinearLayout(context);
+        meta.setOrientation(HORIZONTAL);
+        meta.setGravity(Gravity.CENTER_VERTICAL);
+
+        TextView subtitle = BrowseUi.text(
+                context,
+                mergedGroup == null
+                        ? "OnlyFap creator"
+                        : "Merged from " + mergedGroup.members.size() + " profiles",
+                12,
+                Color.rgb(205, 209, 216)
+        );
         subtitle.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
-        labels.addView(subtitle, new LayoutParams(-1, -2));
+        meta.addView(subtitle, new LayoutParams(-2, -2));
+
+        if (mergedGroup != null) {
+            TextView mergeBadge = CreatorMergeUi.badge(context);
+            CreatorMergeUi.bind(
+                    mergeBadge,
+                    mergedGroup,
+                    () -> CreatorMergeUi.showMembers(context, mergedGroup)
+            );
+            LayoutParams mergeParams = new LayoutParams(-2, dp(22));
+            mergeParams.setMarginStart(dp(7));
+            meta.addView(mergeBadge, mergeParams);
+        }
+        labels.addView(meta, new LayoutParams(-1, -2));
 
         identity.addView(labels, new LayoutParams(0, -2, 1f));
 
