@@ -281,6 +281,7 @@ public class NotificationCenterUiTest {
         text(activity, "clearAll").performClick();
         android.app.AlertDialog cancelled = org.robolectric.shadows.ShadowAlertDialog.getLatestAlertDialog();
         cancelled.getButton(android.content.DialogInterface.BUTTON_NEGATIVE).performClick();
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
         assertEquals(1, UpdateInboxStore.unreadCount(activity));
         text(activity, "markAll").performClick();
         assertEquals(0, UpdateInboxStore.unreadCount(activity));
@@ -288,6 +289,7 @@ public class NotificationCenterUiTest {
         text(activity, "clearAll").performClick();
         org.robolectric.shadows.ShadowAlertDialog.getLatestAlertDialog()
                 .getButton(android.content.DialogInterface.BUTTON_POSITIVE).performClick();
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
         assertTrue(UpdateInboxStore.all(activity).isEmpty());
         assertEquals(View.INVISIBLE, text(activity, "clearAll").getVisibility());
         UpdateInboxStore.recordAppUpdate(activity, "4.3.3", "ZeroChill", false);
@@ -310,6 +312,7 @@ public class NotificationCenterUiTest {
         assertTrue(row.performLongClick());
         org.robolectric.shadows.ShadowAlertDialog.getLatestAlertDialog()
                 .getButton(android.content.DialogInterface.BUTTON_POSITIVE).performClick();
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
         assertEquals(0, UpdateInboxStore.unreadCount(activity));
         assertEquals(0, adapter.getItemCount());
         assertEquals("You're caught up", text(activity, "count").getText().toString());

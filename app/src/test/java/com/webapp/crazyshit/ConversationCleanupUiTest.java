@@ -36,13 +36,16 @@ public class ConversationCleanupUiTest {
         assertTrue(holder.itemView.performLongClick());
         AlertDialog dialog = ShadowAlertDialog.getLatestAlertDialog();
         dialog.getButton(AlertDialog.BUTTON_NEGATIVE).performClick();
+        idle();
         assertEquals(0, clears.size());
         assertEquals(1, adapter.getItemCount());
         holder.itemView.performLongClick();
         ShadowAlertDialog.getLatestAlertDialog().getButton(AlertDialog.BUTTON_POSITIVE).performClick();
+        idle();
         assertEquals(1, clears.size());
         assertEquals(1, adapter.getItemCount()); // Wait for server confirmation.
         clears.get(0).complete(false, new Exception("offline"));
+        idle();
         assertEquals(1, adapter.getItemCount());
     }
 
@@ -64,15 +67,20 @@ public class ConversationCleanupUiTest {
         adapter.bindViewHolder(holder, 0);
         holder.itemView.performLongClick();
         ShadowAlertDialog.getLatestAlertDialog().getButton(AlertDialog.BUTTON_POSITIVE).performClick();
+        idle();
         clears.get(0).complete(true, null);
+        idle();
         assertEquals(1, adapter.getItemCount());
         assertEquals("2 unread messages", ((TextView) field(activity, "status")).getText().toString());
         loads.get(0).complete(new ArrayList<>(Arrays.asList(cleared, kept)), null);
+        idle();
         assertEquals("Old inbox callback cannot restore removed row", 1, adapter.getItemCount());
         loads.get(1).complete(new ArrayList<>(Arrays.asList(kept)), null);
+        idle();
         assertEquals(1, adapter.getItemCount());
         invoke(activity, "loadInbox");
         loads.get(2).complete(new ArrayList<>(Arrays.asList(conversation("other", 1), kept)), null);
+        idle();
         assertEquals("Later server messages can restore conversation", 2, adapter.getItemCount());
         assertEquals("3 unread messages", ((TextView) field(activity, "status")).getText().toString());
     }
@@ -109,6 +117,8 @@ public class ConversationCleanupUiTest {
         replace.invoke(adapter, messages);
         assertEquals(1, adapter.getItemCount());
     }
+
+    private void idle() { org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle(); }
 
     private ZeroChillInboxActivity shell() throws Exception {
         ZeroChillInboxActivity activity = Robolectric.buildActivity(ZeroChillInboxActivity.class).get();

@@ -17,8 +17,15 @@ public class ProfileAvatarUploadTest {
         Set<String> objects = new HashSet<>();
         boolean failUpload, failReplace, failDelete, lostResponse, competingUpdate;
         int uploads;
+        boolean firstReconcileFails;
+        boolean reconcileFailed;
         Backend() { objects.add(path); }
-        public String currentPath() { return path; }
+        public String currentPath() throws Exception {
+            if (firstReconcileFails && path.contains("avatar-") && !reconcileFailed) {
+                reconcileFailed = true; throw new Exception("temporary read failure");
+            }
+            return path;
+        }
         public void upload(String value, byte[] jpeg) throws Exception {
             uploads++;
             if (failUpload) throw new Exception("upload failed");
@@ -66,6 +73,13 @@ public class ProfileAvatarUploadTest {
         String saved = ProfileAvatarUpload.save(USER, new byte[]{1}, server, queue);
         assertEquals(saved, server.path);
         assertEquals(2, server.objects.size());
+    }
+    @Test public void lostResponseAndFirstReadFailureCanStillConfirmCommittedAvatar() throws Exception {
+        Backend server = new Backend(); Pending queue = new Pending();
+        server.lostResponse = true; server.firstReconcileFails = true;
+        String saved = ProfileAvatarUpload.save(USER, new byte[]{1}, server, queue);
+        assertEquals(saved, server.path); assertTrue(server.reconcileFailed);
+        assertEquals(2, server.objects.size()); assertTrue(queue.paths.isEmpty());
     }
     @Test public void cleanupDebtBlocksMoreUploadsUntilDeletionWorks() throws Exception {
         Backend server = new Backend(); Pending queue = new Pending();

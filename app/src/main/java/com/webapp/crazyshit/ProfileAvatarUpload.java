@@ -38,6 +38,9 @@ final class ProfileAvatarUpload {
             boolean committed = false;
             try { committed = next.equals(backend.currentPath()); } catch (Exception ignored) { }
             try { cleanup(owner, backend, pending); } catch (Exception ignored) { }
+            if (!committed) {
+                try { committed = next.equals(backend.currentPath()); } catch (Exception ignored) { }
+            }
             if (!committed) throw error;
         }
         // Deletion failure does not roll back a committed profile. Retry debt before the next upload.
