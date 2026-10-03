@@ -12,8 +12,8 @@ android {
         applicationId = "com.addy37.crazyshitadmin"
         minSdk = 26
         targetSdk = 34
-        versionCode = 10
-        versionName = "1.5.2"
+        versionCode = 11
+        versionName = "1.6.0"
         buildConfigField(
             "String",
             "ADMIN_FEEDBACK_ENDPOINT",
@@ -64,6 +64,8 @@ android {
 }
 
 dependencies {
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("org.json:json:20240303")
     implementation("com.google.android.material:material:1.12.0")
     implementation("androidx.core:core:1.15.0")
     implementation("androidx.recyclerview:recyclerview:1.4.0")
