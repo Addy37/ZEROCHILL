@@ -483,7 +483,13 @@ public final class NativeFeedBrowserActivity extends Activity {
             appBarParams.gravity = Gravity.TOP;
             coordinator.addView(creatorAppBar, appBarParams);
 
-            creatorProfile = new CreatorProfileHeader(this, title, creatorQuery, baseUrl);
+            creatorProfile = new CreatorProfileHeader(
+                    this,
+                    title,
+                    creatorQuery,
+                    baseUrl,
+                    creatorGalleryCacheKey
+            );
             AppBarLayout.LayoutParams profileParams =
                     new AppBarLayout.LayoutParams(-1, dp(184));
             profileParams.setScrollFlags(
