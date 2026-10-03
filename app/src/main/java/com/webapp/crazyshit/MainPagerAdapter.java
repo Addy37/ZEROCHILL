@@ -251,6 +251,8 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
 
     public void onHostResume() {
         chaosView.onHostResume();
+        Page profilePage = pageAt(PAGE_ONLYFAP);
+        if (profilePage != null && profilePage.onlyFapHub != null) profilePage.onlyFapHub.setProfileActive(true);
         Page onlyFap = pageAt(PAGE_ONLYFAP);
         if (onlyFap != null && onlyFap.onlyFapHub != null) {
             onlyFap.onlyFapHub.refreshFavorites();
@@ -296,6 +298,8 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
 
     public void onHostPause() {
         chaosView.onHostPause();
+        Page profilePage = pageAt(PAGE_ONLYFAP);
+        if (profilePage != null && profilePage.onlyFapHub != null) profilePage.onlyFapHub.setProfileActive(false);
         libraryView.setSocialActive(false);
     }
 

@@ -79,6 +79,48 @@ public class ZeroChillAccountUiTest {
         assertEquals(OWNER, launched.getStringExtra(ZeroChillPublicProfileActivity.EXTRA_USER_ID));
     }
 
+    @Test public void socialCardsReuseDestinationsBelowIdentityAndAboveAccountControls() throws Exception {
+        ZeroChillAccountActivity activity = create(null);
+        View root = activity.getWindow().getDecorView();
+        View messages = findDescriptionPrefix(root, "Messages.");
+        View notifications = findDescriptionPrefix(root, "Notifications.");
+        assertNotNull(messages);
+        assertNotNull(notifications);
+        android.widget.LinearLayout content = org.robolectric.util.ReflectionHelpers.getField(activity, "content");
+        LibrarySocialHubView hub = org.robolectric.util.ReflectionHelpers.getField(activity, "socialHub");
+        assertTrue(content.indexOfChild(hub) > content.indexOfChild(find(root, "YOUR IDENTITY")));
+        assertTrue(content.indexOfChild(hub) < content.indexOfChild(find(root, "ACCOUNT & SECURITY")));
+        assertTrue(content.indexOfChild(find(root, "SIGN OUT")) > content.indexOfChild(hub));
+        View editor = (View) findDescription(root, "Display name").getParent();
+        assertEquals(View.GONE, editor.getVisibility());
+        find(root, "EDIT PROFILE").performClick();
+        assertEquals(View.VISIBLE, editor.getVisibility());
+        find(root, "CLOSE EDITOR").performClick();
+        assertEquals(View.GONE, editor.getVisibility());
+        messages.performClick();
+        assertEquals(ZeroChillInboxActivity.class.getName(), Shadows.shadowOf(activity)
+                .getNextStartedActivity().getComponent().getClassName());
+        notifications.performClick();
+        assertEquals(UpdateInboxActivity.class.getName(), Shadows.shadowOf(activity)
+                .getNextStartedActivity().getComponent().getClassName());
+        activity.onPause();
+        assertFalse(org.robolectric.util.ReflectionHelpers.getField(hub, "active"));
+        activity.onResume();
+        assertTrue(org.robolectric.util.ReflectionHelpers.getField(hub, "active"));
+    }
+
+    private static View findDescriptionPrefix(View root, String prefix) {
+        if (root.getContentDescription() != null && root.getContentDescription().toString().startsWith(prefix)) return root;
+        if (root instanceof ViewGroup) {
+            ViewGroup group = (ViewGroup) root;
+            for (int i = 0; i < group.getChildCount(); i++) {
+                View found = findDescriptionPrefix(group.getChildAt(i), prefix);
+                if (found != null) return found;
+            }
+        }
+        return null;
+    }
+
     @Test public void draftSurvivesRecreationForSameUser() throws Exception {
         ZeroChillAccountActivity before = create(null);
         render(before);

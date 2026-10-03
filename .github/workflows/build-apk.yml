@@ -188,6 +188,12 @@ jobs:
           gradle-version: '8.7'
           cache-provider: basic
 
+      - name: Run focused header profile hub regressions first
+        run: >-
+          gradle --no-daemon :app:testDebugUnitTest
+          --tests 'com.webapp.crazyshit.HeaderProfileAvatarTest'
+          --tests 'com.webapp.crazyshit.ZeroChillAccountUiTest'
+
       - name: Run focused profile and social cleanup regressions first
         run: >-
           gradle --no-daemon :app:testDebugUnitTest

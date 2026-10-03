@@ -25,6 +25,10 @@ final class ZeroChillSessionStore {
 
     private ZeroChillSessionStore() {}
 
+    static SharedPreferences preferences(Context context) {
+        return context.getApplicationContext().getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+    }
+
     static void save(Context context, String value) throws Exception {
         SecretKey key = getOrCreateKey();
         Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
@@ -59,6 +63,7 @@ final class ZeroChillSessionStore {
     }
 
     static void clear(Context context) {
+        AccountProfileCache.clear(context);
         context.getApplicationContext()
                 .getSharedPreferences(PREFS, Context.MODE_PRIVATE)
                 .edit()
