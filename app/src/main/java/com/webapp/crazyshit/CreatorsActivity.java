@@ -358,6 +358,12 @@ public final class CreatorsActivity extends Activity {
             updateBadgeParams.setMargins(0, dp(2), dp(2), 0);
             avatarFrame.addView(updateBadge, updateBadgeParams);
 
+            TextView mergeBadge = CreatorMergeUi.badge(CreatorsActivity.this);
+            FrameLayout.LayoutParams mergeBadgeParams =
+                    new FrameLayout.LayoutParams(-2, dp(22), Gravity.BOTTOM | Gravity.END);
+            mergeBadgeParams.setMargins(0, 0, dp(1), dp(1));
+            avatarFrame.addView(mergeBadge, mergeBadgeParams);
+
             TextView more = BrowseUi.text(CreatorsActivity.this, "⋮", 23, Color.WHITE);
             more.setGravity(Gravity.CENTER);
             more.setBackground(BrowseUi.rounded(CreatorsActivity.this, Color.argb(190, 0, 0, 0), 14));
@@ -373,7 +379,7 @@ public final class CreatorsActivity extends Activity {
             nameParams.setMargins(dp(2), dp(7), dp(2), 0);
             wrapper.addView(name, nameParams);
 
-            return new Holder(wrapper, avatar, name, updateBadge, more);
+            return new Holder(wrapper, avatar, name, updateBadge, mergeBadge, more);
         }
 
         @Override
@@ -382,6 +388,11 @@ public final class CreatorsActivity extends Activity {
             NativeContentItem item = group.item;
             holder.bound = group;
             holder.name.setText(item.title);
+            CreatorMergeUi.bind(
+                    holder.mergeBadge,
+                    group,
+                    () -> CreatorMergeUi.showMembers(CreatorsActivity.this, group)
+            );
             int unread = creatorUpdateCount(group);
             if (unread > 0) {
                 holder.updateBadge.setText(unread > 99 ? "99+" : String.valueOf(unread));
@@ -497,14 +508,23 @@ public final class CreatorsActivity extends Activity {
             final CreatorAvatarImageView avatar;
             final TextView name;
             final TextView updateBadge;
+            final TextView mergeBadge;
             final TextView more;
             CreatorCatalog.FavoriteGroup bound;
 
-            Holder(View itemView, CreatorAvatarImageView avatar, TextView name, TextView updateBadge, TextView more) {
+            Holder(
+                    View itemView,
+                    CreatorAvatarImageView avatar,
+                    TextView name,
+                    TextView updateBadge,
+                    TextView mergeBadge,
+                    TextView more
+            ) {
                 super(itemView);
                 this.avatar = avatar;
                 this.name = name;
                 this.updateBadge = updateBadge;
+                this.mergeBadge = mergeBadge;
                 this.more = more;
             }
         }
