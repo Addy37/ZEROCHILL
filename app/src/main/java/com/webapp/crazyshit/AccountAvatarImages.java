@@ -27,7 +27,8 @@ final class AccountAvatarImages {
         } else {
             view.clearColorFilter();
             view.setPadding(0, 0, 0, 0);
-            Glide.with(view).load(url).circleCrop().transition(ThumbnailFades.avatar()).into(view);
+            Glide.with(view).load(url).circleCrop().transition(ThumbnailFades.avatar())
+                    .placeholder(R.drawable.ic_more_account).error(R.drawable.ic_more_account).into(view);
         }
     }
 
