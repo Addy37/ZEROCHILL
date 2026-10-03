@@ -638,7 +638,23 @@ final class OnlyFapHubView extends FrameLayout {
         frame.addView(image, new FrameLayout.LayoutParams(-1, -1));
         loadCreatorImage(image, group, avatarOverrides);
 
-        wrapper.addView(avatar, new LinearLayout.LayoutParams(dp(72), dp(72)));
+        FrameLayout avatarWrap = new FrameLayout(getContext());
+        FrameLayout.LayoutParams avatarParams =
+                new FrameLayout.LayoutParams(dp(72), dp(72), Gravity.CENTER);
+        avatarWrap.addView(avatar, avatarParams);
+
+        TextView mergeBadge = CreatorMergeUi.badge(getContext());
+        CreatorMergeUi.bind(
+                mergeBadge,
+                group,
+                () -> CreatorMergeUi.showMembers(getContext(), group)
+        );
+        FrameLayout.LayoutParams mergeBadgeParams =
+                new FrameLayout.LayoutParams(-2, dp(22), Gravity.BOTTOM | Gravity.END);
+        mergeBadgeParams.setMargins(0, 0, 0, 0);
+        avatarWrap.addView(mergeBadge, mergeBadgeParams);
+
+        wrapper.addView(avatarWrap, new LinearLayout.LayoutParams(dp(76), dp(76)));
 
         TextView name = text(
                 creator.title,
@@ -649,7 +665,7 @@ final class OnlyFapHubView extends FrameLayout {
         name.setMaxLines(2);
         name.setEllipsize(TextUtils.TruncateAt.END);
         LinearLayout.LayoutParams nameParams = new LinearLayout.LayoutParams(dp(90), -2);
-        nameParams.topMargin = dp(5);
+        nameParams.topMargin = dp(1);
         wrapper.addView(name, nameParams);
         return wrapper;
     }
