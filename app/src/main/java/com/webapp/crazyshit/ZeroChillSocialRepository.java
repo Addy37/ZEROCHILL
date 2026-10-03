@@ -164,6 +164,11 @@ final class ZeroChillSocialRepository {
         }
     }
 
+    static final class ClearedMessageList extends ArrayList<DirectMessage> {
+        final String cutoff;
+        ClearedMessageList(String cutoff) { this.cutoff = cutoff; }
+    }
+
     static final class Conversation {
         final PublicProfile profile;
         final DirectMessage lastMessage;
@@ -700,13 +705,17 @@ final class ZeroChillSocialRepository {
     }
 
     static void loadInbox(Context context, Callback<ArrayList<Conversation>> callback) {
+        final String expectedUser = ZeroChillSessionStore.currentUserId(context);
+        final long cleanupRevision = ZeroChillMessageBadgeStore.cleanupRevision(context, expectedUser);
         NETWORK.execute(() -> {
             try {
+                requireSameAccount(context, expectedUser);
                 String token = ZeroChillAccountRepository.accessTokenBlocking(context);
-                String userId = ZeroChillAccountRepository.currentUserIdBlocking(context);
+                requireSameAccount(context, expectedUser);
+                String userId = expectedUser;
                 Response response = request(
                         "GET",
-                        "/rest/v1/direct_messages?select=id,sender_id,recipient_id,body,created_at,read_at"
+                        "/rest/v1/rpc/visible_zerochill_direct_messages?select=id,sender_id,recipient_id,body,created_at,read_at"
                                 + "&or=(sender_id.eq." + userId + ",recipient_id.eq." + userId + ")"
                                 + "&order=created_at.desc&limit=500",
                         token,
@@ -747,6 +756,8 @@ final class ZeroChillSocialRepository {
                             unreadByPartner.getOrDefault(partnerId, 0)
                     ));
                 }
+                requireSameAccount(context, expectedUser);
+                requireCleanupRevision(context, expectedUser, cleanupRevision);
                 callback.complete(conversations, null);
             } catch (Exception error) {
                 callback.complete(null, error);
@@ -755,13 +766,17 @@ final class ZeroChillSocialRepository {
     }
 
     static void unreadMessageCount(Context context, Callback<Integer> callback) {
+        final String expectedUser = ZeroChillSessionStore.currentUserId(context);
+        final long cleanupRevision = ZeroChillMessageBadgeStore.cleanupRevision(context, expectedUser);
         NETWORK.execute(() -> {
             try {
+                requireSameAccount(context, expectedUser);
                 String token = ZeroChillAccountRepository.accessTokenBlocking(context);
-                String userId = ZeroChillAccountRepository.currentUserIdBlocking(context);
+                requireSameAccount(context, expectedUser);
+                String userId = expectedUser;
                 Response response = request(
                         "GET",
-                        "/rest/v1/direct_messages?select=id&recipient_id=eq." + userId
+                        "/rest/v1/rpc/visible_zerochill_direct_messages?select=id&recipient_id=eq." + userId
                                 + "&read_at=is.null&limit=500",
                         token,
                         null,
@@ -770,6 +785,8 @@ final class ZeroChillSocialRepository {
                 );
                 if (!response.ok()) throw error(response, "Unable to load unread messages.");
                 JSONArray rows = response.body.isEmpty() ? new JSONArray() : new JSONArray(response.body);
+                requireSameAccount(context, expectedUser);
+                requireCleanupRevision(context, expectedUser, cleanupRevision);
                 callback.complete(rows.length(), null);
             } catch (Exception error) {
                 callback.complete(0, error);
@@ -782,15 +799,21 @@ final class ZeroChillSocialRepository {
             String partnerId,
             Callback<ArrayList<DirectMessage>> callback
     ) {
+        final String expectedUser = ZeroChillSessionStore.currentUserId(context);
+        final long cleanupRevision = ZeroChillMessageBadgeStore.cleanupRevision(context, expectedUser);
         NETWORK.execute(() -> {
             try {
                 String other = clean(partnerId);
                 if (other.isEmpty()) throw new IllegalArgumentException("This conversation is unavailable.");
+                requireSameAccount(context, expectedUser);
                 String token = ZeroChillAccountRepository.accessTokenBlocking(context);
-                String userId = ZeroChillAccountRepository.currentUserIdBlocking(context);
+                requireSameAccount(context, expectedUser);
+                String userId = expectedUser;
+                String cutoff = loadConversationCutoff(token, other);
+                requireSameAccount(context, expectedUser);
                 Response response = request(
                         "GET",
-                        "/rest/v1/direct_messages?select=id,sender_id,recipient_id,body,created_at,read_at"
+                        "/rest/v1/rpc/visible_zerochill_direct_messages?select=id,sender_id,recipient_id,body,created_at,read_at"
                                 + "&or=(and(sender_id.eq." + userId + ",recipient_id.eq." + other + "),"
                                 + "and(sender_id.eq." + other + ",recipient_id.eq." + userId + "))"
                                 + "&order=created_at.asc&limit=500",
@@ -801,10 +824,12 @@ final class ZeroChillSocialRepository {
                 );
                 if (!response.ok()) throw error(response, "Unable to load the conversation.");
                 JSONArray rows = response.body.isEmpty() ? new JSONArray() : new JSONArray(response.body);
-                ArrayList<DirectMessage> messages = new ArrayList<>();
+                ArrayList<DirectMessage> messages = new ClearedMessageList(cutoff);
                 for (int i = 0; i < rows.length(); i++) {
                     messages.add(new DirectMessage(rows.getJSONObject(i)));
                 }
+                requireSameAccount(context, expectedUser);
+                requireCleanupRevision(context, expectedUser, cleanupRevision);
                 callback.complete(messages, null);
             } catch (Exception error) {
                 callback.complete(null, error);
@@ -819,6 +844,7 @@ final class ZeroChillSocialRepository {
             String body,
             Callback<DirectMessage> callback
     ) {
+        final String expectedUser = ZeroChillSessionStore.currentUserId(context);
         NETWORK.execute(() -> {
             try {
                 String recipient = clean(recipientId);
@@ -827,7 +853,9 @@ final class ZeroChillSocialRepository {
                 if (message.trim().isEmpty() || message.length() > 2000) {
                     throw new IllegalArgumentException("Message must contain 1 to 2000 characters.");
                 }
+                requireSameAccount(context, expectedUser);
                 String token = ZeroChillAccountRepository.accessTokenBlocking(context);
+                requireSameAccount(context, expectedUser);
                 JSONObject row = directMessagePayload(clientId, recipient, message);
                 Response response = request(
                         "POST",
@@ -844,6 +872,7 @@ final class ZeroChillSocialRepository {
                     throw error(response, "Unable to send the message.");
                 }
                 JSONArray rows = response.body.isEmpty() ? new JSONArray() : new JSONArray(response.body);
+                requireSameAccount(context, expectedUser);
                 callback.complete(
                         rows.length() == 0 ? null : new DirectMessage(rows.getJSONObject(0)),
                         null
@@ -867,6 +896,7 @@ final class ZeroChillSocialRepository {
             String senderId,
             Callback<Boolean> callback
     ) {
+        final String expectedUser = ZeroChillSessionStore.currentUserId(context);
         NETWORK.execute(() -> {
             try {
                 String sender = clean(senderId);
@@ -874,24 +904,66 @@ final class ZeroChillSocialRepository {
                     callback.complete(true, null);
                     return;
                 }
+                requireSameAccount(context, expectedUser);
                 String token = ZeroChillAccountRepository.accessTokenBlocking(context);
-                String userId = ZeroChillAccountRepository.currentUserIdBlocking(context);
+                requireSameAccount(context, expectedUser);
+                String userId = expectedUser;
+                String cutoff = loadConversationCutoff(token, sender);
+                requireSameAccount(context, expectedUser);
                 JSONObject body = new JSONObject().put("read_at", java.time.Instant.now().toString());
                 Response response = request(
                         "PATCH",
                         "/rest/v1/direct_messages?recipient_id=eq." + userId
-                                + "&sender_id=eq." + sender + "&read_at=is.null",
+                                + "&sender_id=eq." + sender + "&read_at=is.null"
+                                + (cutoff.isEmpty() ? "" : "&created_at=gt." + encode(cutoff)),
                         token,
                         body.toString().getBytes(StandardCharsets.UTF_8),
                         "application/json",
                         "return=minimal"
                 );
                 if (!response.ok()) throw error(response, "Unable to update message status.");
+                requireSameAccount(context, expectedUser);
                 callback.complete(true, null);
             } catch (Exception error) {
                 callback.complete(false, error);
             }
         });
+    }
+
+    /** Removes only this account's view. Shared message rows and read receipts are untouched. */
+    static void clearConversation(Context context, String partnerId, Callback<Boolean> callback) {
+        final String expectedUser = ZeroChillSessionStore.currentUserId(context);
+        NETWORK.execute(() -> {
+            try {
+                String other = java.util.UUID.fromString(clean(partnerId)).toString();
+                requireSameAccount(context, expectedUser);
+                String token = ZeroChillAccountRepository.accessTokenBlocking(context);
+                requireSameAccount(context, expectedUser);
+                Response response = request("POST", "/rest/v1/rpc/clear_zerochill_conversation", token,
+                        new JSONObject().put("partner", other).toString().getBytes(StandardCharsets.UTF_8),
+                        "application/json", null);
+                if (!response.ok()) throw error(response, "Unable to remove the conversation.");
+                requireSameAccount(context, expectedUser);
+                ZeroChillMessageBadgeStore.conversationCleared(context, expectedUser);
+                callback.complete(true, null);
+            } catch (Exception error) {
+                callback.complete(false, error);
+            }
+        });
+    }
+
+    private static String loadConversationCutoff(String token, String partner) throws Exception {
+        Response response = request("GET", "/rest/v1/conversation_clear_state?select=cleared_at"
+                + "&partner_id=eq." + encode(partner), token, null, null, null);
+        if (!response.ok()) throw error(response, "Unable to load conversation state.");
+        JSONArray rows = response.body.isEmpty() ? new JSONArray() : new JSONArray(response.body);
+        return rows.length() == 0 ? "" : rows.getJSONObject(0).optString("cleared_at");
+    }
+
+    private static void requireCleanupRevision(Context context, String userId, long revision) {
+        if (revision != ZeroChillMessageBadgeStore.cleanupRevision(context, userId)) {
+            throw new IllegalStateException("Messages changed. Refreshing your inbox.");
+        }
     }
 
     static void blockState(Context context, String userId, Callback<Boolean> callback) {
@@ -1030,6 +1102,13 @@ final class ZeroChillSocialRepository {
             } catch (Exception error) {
                 callback.complete(false, error);
             }
+        });
+    }
+
+    static void loadAvatarProfiles(Context context, ArrayList<String> ids, Callback<Map<String, PublicProfile>> callback) {
+        NETWORK.execute(() -> {
+            try { callback.complete(loadProfiles("", ids), null); }
+            catch (Exception error) { callback.complete(null, error); }
         });
     }
 

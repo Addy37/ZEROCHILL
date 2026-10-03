@@ -3,6 +3,14 @@ package com.webapp.crazyshit;
 import android.app.Activity;
 import android.content.Intent;
 import android.graphics.Color;
+import android.graphics.Bitmap;
+import android.net.Uri;
+import android.widget.Toast;
+import com.bumptech.glide.request.target.CustomTarget;
+import com.bumptech.glide.request.transition.Transition;
+import android.graphics.drawable.Drawable;
+import java.io.File;
+import java.io.FileOutputStream;
 import android.graphics.drawable.ColorDrawable;
 import android.os.Bundle;
 import android.view.Gravity;
@@ -26,7 +34,19 @@ public final class CreatorAvatarCropActivity extends Activity {
     static final String EXTRA_FOCUS_Y = "creator_avatar_crop_focus_y";
     static final String EXTRA_ZOOM = "creator_avatar_crop_zoom";
 
+    static final String EXTRA_LOCAL_URI = "account_avatar_crop_uri";
+    static final String EXTRA_CROPPED_FILE = "account_avatar_crop_file";
     private CreatorAvatarImageView image;
+    private boolean imageReady;
+    private boolean saving;
+    private TextView saveButton;
+
+    static Intent createLocal(Activity activity, Uri uri) {
+        return new Intent(activity, CreatorAvatarCropActivity.class)
+                .putExtra(EXTRA_LOCAL_URI, uri.toString())
+                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                .setData(uri);
+    }
     private ScaleGestureDetector scaleDetector;
     private float lastX;
     private float lastY;
@@ -42,7 +62,9 @@ public final class CreatorAvatarCropActivity extends Activity {
         super.onCreate(state);
         String imageUrl = clean(getIntent().getStringExtra(EXTRA_IMAGE_URL));
         String referer = clean(getIntent().getStringExtra(EXTRA_REFERER));
-        if (!remote(imageUrl)) {
+        String local = clean(getIntent().getStringExtra(EXTRA_LOCAL_URI));
+        boolean localImage = !local.isEmpty() && (local.startsWith("content://") || local.startsWith("file://"));
+        if (!localImage && !remote(imageUrl)) {
             setResult(RESULT_CANCELED);
             finish();
             return;
@@ -94,6 +116,8 @@ public final class CreatorAvatarCropActivity extends Activity {
         image = new CreatorAvatarImageView(this);
         image.setBackgroundColor(Color.rgb(19, 23, 27));
         image.resetAvatarCrop();
+        if (state != null) image.setAvatarCrop(state.getFloat(EXTRA_FOCUS_X, 0.5f),
+                state.getFloat(EXTRA_FOCUS_Y, 0.5f), state.getFloat(EXTRA_ZOOM, 1f));
         cropCard.addView(image, new MaterialCardView.LayoutParams(-1, -1));
 
         scaleDetector = new ScaleGestureDetector(
@@ -136,22 +160,35 @@ public final class CreatorAvatarCropActivity extends Activity {
             }
         });
 
-        GlideUrl glideUrl = new GlideUrl(
-                imageUrl,
-                new LazyHeaders.Builder()
-                        .addHeader("Referer", referer.isEmpty() ? imageUrl : referer)
-                        .addHeader(
-                                "User-Agent",
-                                "Mozilla/5.0 (Linux; Android 16) AppleWebKit/537.36 Chrome/139.0 Mobile Safari/537.36"
-                        )
-                        .build()
-        );
-        Glide.with(image)
-                .load(glideUrl)
-                .dontAnimate()
-                .placeholder(new ColorDrawable(Color.rgb(19, 23, 27)))
-                .error(R.drawable.ic_more_account)
-                .into(image);
+        if (localImage) {
+            // Glide bounds decoding and applies EXIF orientation before the editor sees pixels.
+            Glide.with(this).asBitmap().load(Uri.parse(local)).override(2048, 2048)
+                    .downsample(com.bumptech.glide.load.resource.bitmap.DownsampleStrategy.AT_MOST)
+                    .dontTransform().dontAnimate().into(new CustomTarget<Bitmap>() {
+                @Override public void onResourceReady(Bitmap bitmap, Transition<? super Bitmap> transition) {
+                    image.setImageBitmap(bitmap);
+                    imageReady = true;
+                    if (saveButton != null) saveButton.setEnabled(true);
+                }
+                @Override public void onLoadCleared(Drawable placeholder) {
+                    imageReady = false;
+                    image.setImageDrawable(null);
+                    if (saveButton != null) saveButton.setEnabled(false);
+                }
+                @Override public void onLoadFailed(Drawable errorDrawable) {
+                    imageReady = false;
+                    Toast.makeText(CreatorAvatarCropActivity.this, "Couldn't read that image.", Toast.LENGTH_LONG).show();
+                }
+            });
+        } else {
+            GlideUrl glideUrl = new GlideUrl(imageUrl, new LazyHeaders.Builder()
+                    .addHeader("Referer", referer.isEmpty() ? imageUrl : referer)
+                    .addHeader("User-Agent", "Mozilla/5.0 (Linux; Android 16) AppleWebKit/537.36 Chrome/139.0 Mobile Safari/537.36")
+                    .build());
+            Glide.with(image).load(glideUrl).dontAnimate()
+                    .placeholder(new ColorDrawable(Color.rgb(19, 23, 27)))
+                    .error(R.drawable.ic_more_account).into(image);
+        }
 
         TextView zoom = BrowseUi.text(
                 this,
@@ -180,6 +217,10 @@ public final class CreatorAvatarCropActivity extends Activity {
         buttons.addView(reset, resetParams);
 
         TextView save = BrowseUi.action(this, "Save", "Save avatar crop", v -> {
+            if (localImage) {
+                saveLocalCrop();
+                return;
+            }
             Intent result = new Intent()
                     .putExtra(EXTRA_IMAGE_URL, imageUrl)
                     .putExtra(EXTRA_REFERER, referer)
@@ -190,6 +231,8 @@ public final class CreatorAvatarCropActivity extends Activity {
             v.performHapticFeedback(android.view.HapticFeedbackConstants.CONFIRM);
             finish();
         });
+        saveButton = save;
+        save.setEnabled(!localImage || imageReady);
         save.setTextSize(14);
         save.setTextColor(Color.BLACK);
         save.setTypeface(null, android.graphics.Typeface.BOLD);
@@ -200,6 +243,57 @@ public final class CreatorAvatarCropActivity extends Activity {
 
         root.addView(buttons, new LinearLayout.LayoutParams(-1, -2));
         setContentView(root);
+    }
+
+    @Override protected void onSaveInstanceState(Bundle out) {
+        if (image != null) {
+            out.putFloat(EXTRA_FOCUS_X, image.avatarFocusX());
+            out.putFloat(EXTRA_FOCUS_Y, image.avatarFocusY());
+            out.putFloat(EXTRA_ZOOM, image.avatarZoom());
+        }
+        super.onSaveInstanceState(out);
+    }
+
+    private void saveLocalCrop() {
+        if (!imageReady || saving) return;
+        saving = true;
+        saveButton.setEnabled(false);
+        final Bitmap cropped;
+        try { cropped = image.avatarBitmap(512); }
+        catch (Exception error) {
+            saving = false;
+            saveButton.setEnabled(imageReady);
+            Toast.makeText(this, "Wait for the image to load.", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        new Thread(() -> {
+            File file = null;
+            try {
+                File folder = new File(getCacheDir(), "profile-avatar-crops");
+                if (!folder.isDirectory() && !folder.mkdirs()) throw new java.io.IOException("Unable to save crop.");
+                // Expired cache exports are safe to remove; no profile is changed by the editor.
+                File[] old = folder.listFiles();
+                if (old != null) for (File item : old) if (item.lastModified() < System.currentTimeMillis() - 86400000L) item.delete();
+                file = File.createTempFile("avatar-", ".jpg", folder);
+                try (FileOutputStream output = new FileOutputStream(file)) {
+                    if (!cropped.compress(Bitmap.CompressFormat.JPEG, 84, output)) throw new java.io.IOException("Unable to save crop.");
+                }
+                if (file.length() > 512 * 1024) throw new java.io.IOException("Avatar image is too large.");
+                final File result = file;
+                runOnUiThread(() -> {
+                    if (isFinishing() || isDestroyed()) { result.delete(); return; }
+                    setResult(RESULT_OK, new Intent().putExtra(EXTRA_CROPPED_FILE, result.getAbsolutePath()));
+                    finish();
+                });
+            } catch (Exception error) {
+                if (file != null) file.delete();
+                runOnUiThread(() -> {
+                    saving = false;
+                    saveButton.setEnabled(imageReady);
+                    Toast.makeText(this, "Couldn't save that crop.", Toast.LENGTH_LONG).show();
+                });
+            } finally { cropped.recycle(); }
+        }, "profile-avatar-crop").start();
     }
 
     private int dp(int value) {

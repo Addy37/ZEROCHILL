@@ -5,8 +5,6 @@ import android.animation.ObjectAnimator;
 import android.animation.ValueAnimator;
 import android.app.Activity;
 import android.content.Intent;
-import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
 import android.graphics.Color;
 import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
@@ -31,8 +29,6 @@ import android.widget.Toast;
 import com.bumptech.glide.Glide;
 import com.google.android.material.checkbox.MaterialCheckBox;
 
-import java.io.ByteArrayOutputStream;
-import java.io.InputStream;
 
 /** First-party ZeroChill account entry point. Existing app use remains account-optional. */
 public final class ZeroChillAccountActivity extends Activity {
@@ -40,6 +36,8 @@ public final class ZeroChillAccountActivity extends Activity {
     private static final String STATE_CREATE_MODE = "state_create_mode";
     private static final int AVATAR_REQUEST = 6401;
     private static final int SECURITY_REQUEST = 6402;
+    private static final int AVATAR_CROP_REQUEST = 6403;
+    private String avatarOwner = "";
     private static final String DRAFT_USER = "draft_user";
     private static final String DRAFT_NAME = "draft_name";
     private static final String DRAFT_BIO = "draft_bio";
@@ -71,6 +69,7 @@ public final class ZeroChillAccountActivity extends Activity {
                 ? requestedCreate
                 : state.getBoolean(STATE_CREATE_MODE, requestedCreate);
         if (state != null) {
+            avatarOwner = state.getString("avatar_owner", "");
             draftUser = state.getString(DRAFT_USER, "");
             draftName = state.getString(DRAFT_NAME, "");
             draftBio = state.getString(DRAFT_BIO, "");
@@ -103,6 +102,7 @@ public final class ZeroChillAccountActivity extends Activity {
     @Override
     protected void onSaveInstanceState(Bundle out) {
         captureDraft();
+        out.putString("avatar_owner", avatarOwner);
         out.putBoolean(STATE_CREATE_MODE, createMode);
         if (hasDraft) {
             out.putString(DRAFT_USER, draftUser);
@@ -514,9 +514,10 @@ public final class ZeroChillAccountActivity extends Activity {
             }
         });
         avatar.setBackground(circle(Color.rgb(13, 15, 19)));
+        AccountAvatarImages.track(avatar, state.userId);
         String avatarUrl = ZeroChillAccountRepository.avatarUrl(state.avatarPath);
         if (!avatarUrl.isEmpty()) {
-            Glide.with(avatar).load(avatarUrl).circleCrop().transition(ThumbnailFades.avatar()).into(avatar);
+            AccountAvatarImages.bind(avatar, state.userId, state.avatarPath);
         } else {
             avatar.setImageResource(R.drawable.ic_more_account);
             avatar.setPadding(dp(20), dp(20), dp(20), dp(20));
@@ -771,7 +772,15 @@ public final class ZeroChillAccountActivity extends Activity {
         startActivity(intent);
     }
 
+    private boolean avatarOwnerCurrent(String owner) {
+        return !isFinishing() && !isDestroyed() && !owner.isEmpty()
+                && owner.equals(ZeroChillSessionStore.currentUserId(this));
+    }
+
     private void chooseAvatar() {
+        if (account == null || !account.signedIn) return;
+        avatarOwner = account.userId;
+        captureDraft();
         Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
         intent.addCategory(Intent.CATEGORY_OPENABLE);
         intent.setType("image/*");
@@ -785,46 +794,40 @@ public final class ZeroChillAccountActivity extends Activity {
             if (resultCode == RESULT_OK) loadAccount();
             return;
         }
-        if (requestCode != AVATAR_REQUEST || resultCode != RESULT_OK || data == null) return;
-        Uri uri = data.getData();
-        if (uri == null) return;
+        if (requestCode == AVATAR_REQUEST) {
+            if (resultCode == RESULT_OK && data != null && data.getData() != null && avatarOwnerCurrent(avatarOwner)) {
+                startActivityForResult(CreatorAvatarCropActivity.createLocal(this, data.getData()), AVATAR_CROP_REQUEST);
+            }
+            return;
+        }
+        if (requestCode != AVATAR_CROP_REQUEST || resultCode != RESULT_OK || data == null) return;
+        String owner = avatarOwner;
+        java.io.File crop = new java.io.File(data.getStringExtra(CreatorAvatarCropActivity.EXTRA_CROPPED_FILE) == null
+                ? "" : data.getStringExtra(CreatorAvatarCropActivity.EXTRA_CROPPED_FILE));
         try {
-            String owner = account == null ? "" : account.userId;
-            captureDraft();
-            byte[] jpeg = avatarBytes(uri);
+            java.io.File folder = new java.io.File(getCacheDir(), "profile-avatar-crops");
+            if (!crop.getCanonicalFile().getParentFile().equals(folder.getCanonicalFile())) return;
+            if (!avatarOwnerCurrent(owner)) { crop.delete(); return; }
+            if (crop.length() == 0 || crop.length() > 512 * 1024) throw new java.io.IOException("Invalid crop.");
+            byte[] jpeg = java.nio.file.Files.readAllBytes(crop.toPath());
+            crop.delete();
             showBusy(true);
-            ZeroChillAccountRepository.uploadAvatar(this, jpeg, (url, error) -> runOnUiThread(() -> {
-                if (!sameAccount(owner)) return;
+            ZeroChillAccountRepository.uploadAvatar(this, owner, jpeg, (updated, error) -> runOnUiThread(() -> {
+                if (!avatarOwnerCurrent(owner)) return;
                 showBusy(false);
                 if (error != null) {
                     Toast.makeText(this, error.getMessage(), Toast.LENGTH_LONG).show();
                 } else {
+                    AccountAvatarImages.changed(owner, updated.avatarPath);
+                    UpdateInboxStore.refreshActorAvatar(this, owner, updated.avatarPath);
+                    showProfile(updated);
                     Toast.makeText(this, "Avatar updated.", Toast.LENGTH_SHORT).show();
-                    loadAccount();
                 }
             }));
         } catch (Exception error) {
-            Toast.makeText(this, "Couldn't read that image.", Toast.LENGTH_LONG).show();
+            crop.delete();
+            Toast.makeText(this, "Couldn't read that crop.", Toast.LENGTH_LONG).show();
         }
-    }
-
-    private byte[] avatarBytes(Uri uri) throws Exception {
-        Bitmap source;
-        try (InputStream input = getContentResolver().openInputStream(uri)) {
-            source = BitmapFactory.decodeStream(input);
-        }
-        if (source == null) throw new IllegalArgumentException("Invalid image.");
-        int side = Math.min(source.getWidth(), source.getHeight());
-        int left = Math.max(0, (source.getWidth() - side) / 2);
-        int top = Math.max(0, (source.getHeight() - side) / 2);
-        Bitmap square = Bitmap.createBitmap(source, left, top, side, side);
-        Bitmap scaled = Bitmap.createScaledBitmap(square, 512, 512, true);
-        ByteArrayOutputStream output = new ByteArrayOutputStream();
-        scaled.compress(Bitmap.CompressFormat.JPEG, 84, output);
-        if (square != source) square.recycle();
-        if (scaled != square) scaled.recycle();
-        source.recycle();
-        return output.toByteArray();
     }
 
     private EditText field(String hint, int inputType) {

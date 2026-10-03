@@ -50,9 +50,7 @@ final class SocialActivityBanner implements SocialActivityCoordinator.Presenter 
         avatar.setClipToOutline(true);
         row.addView(avatar, new LinearLayout.LayoutParams(dp(38), dp(38)));
         avatar.setImageResource(R.drawable.ic_more_account);
-        if (!entry.avatarUrl.isEmpty()) Glide.with(avatar).load(entry.avatarUrl).circleCrop()
-                .transition(ThumbnailFades.avatar())
-                .placeholder(R.drawable.ic_more_account).error(R.drawable.ic_more_account).into(avatar);
+        AccountAvatarImages.bindUrl(avatar, entry.actorId, entry.avatarUrl);
         LinearLayout copy = new LinearLayout(activity);
         copy.setOrientation(LinearLayout.VERTICAL);
         copy.setPadding(dp(10), 0, dp(6), 0);

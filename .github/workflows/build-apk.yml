@@ -188,6 +188,16 @@ jobs:
           gradle-version: '8.7'
           cache-provider: basic
 
+      - name: Run focused profile and social cleanup regressions first
+        run: >-
+          gradle --no-daemon :app:testDebugUnitTest
+          --tests 'com.webapp.crazyshit.ProfileAvatar*'
+          --tests 'com.webapp.crazyshit.ConversationCleanupUiTest'
+          --tests 'com.webapp.crazyshit.UpdateInboxStoreTest'
+          --tests 'com.webapp.crazyshit.NotificationCenterUiTest'
+          --tests 'com.webapp.crazyshit.LibrarySocialHubTest'
+          --tests 'com.webapp.crazyshit.ZeroChillMessageThreadUiTest'
+
       - name: Run focused thumbnail loading regressions first
         run: >-
           gradle --no-daemon :app:testDebugUnitTest

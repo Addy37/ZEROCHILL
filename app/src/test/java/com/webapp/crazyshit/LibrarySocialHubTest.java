@@ -113,6 +113,34 @@ public class LibrarySocialHubTest {
         hub.close();
     }
 
+    @Test public void conversationCleanupImmediatelyInvalidatesLibraryPreviewAndStalePoll() throws Exception {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        FakeInbox loader = new FakeInbox();
+        LibrarySocialHubView hub = new LibrarySocialHubView(activity, loader, context -> "account-a");
+        activity.setContentView(hub);
+        hub.setActive(true);
+        ArrayList<ZeroChillSocialRepository.Conversation> old = new ArrayList<>(Arrays.asList(
+                conversation("Old partner", "Old message", "", 3)));
+        loader.calls.get(0).complete(old, null);
+        Shadows.shadowOf(Looper.getMainLooper()).idle();
+        hub.refresh();
+        assertEquals(2, loader.calls.size());
+        ZeroChillMessageBadgeStore.conversationCleared(activity, "account-b");
+        Shadows.shadowOf(Looper.getMainLooper()).idle();
+        assertEquals("Other accounts must not reset preview", 2, loader.calls.size());
+        ZeroChillMessageBadgeStore.conversationCleared(activity, "account-a");
+        Shadows.shadowOf(Looper.getMainLooper()).idle();
+        assertEquals(3, loader.calls.size());
+        assertEquals("No conversations yet", ((TextView) field(hub, "messageName")).getText());
+        loader.calls.get(1).complete(old, null);
+        Shadows.shadowOf(Looper.getMainLooper()).idle();
+        assertEquals("No conversations yet", ((TextView) field(hub, "messageName")).getText());
+        loader.calls.get(2).complete(new ArrayList<>(), null);
+        Shadows.shadowOf(Looper.getMainLooper()).idle();
+        assertEquals(View.GONE, badge(hub, "messageBadge").getVisibility());
+        hub.close();
+    }
+
     @Test public void libraryRenderHasCompactHubAndExistingEmptyState() throws Exception {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
         LibraryHubView library = new LibraryHubView(activity, null);
