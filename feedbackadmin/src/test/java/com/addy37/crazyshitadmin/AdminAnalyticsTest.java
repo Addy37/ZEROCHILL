@@ -13,6 +13,9 @@ public class AdminAnalyticsTest {
         JSONObject root = new JSONObject()
                 .put("active_users", new JSONObject()
                         .put("daily", 20).put("weekly", 50).put("monthly", 100))
+                .put("favorite_creators", new org.json.JSONArray()
+                        .put(new JSONObject().put("value", "Demon Mika").put("favorite_count", 3))
+                        .put(new JSONObject().put("value", "Sasha Grey").put("favorite_count", 2)))
                 .put("release_adoption", new JSONObject()
                         .put("version", "4.3.0")
                         .put("users_today", 18)
@@ -59,6 +62,9 @@ public class AdminAnalyticsTest {
         assertEquals(7, dashboard.social.conversationsWeek);
         assertEquals(82.2, dashboard.social.messageReadRate, 0.01);
         assertEquals(15, dashboard.social.creatorFavoriteAccounts);
+        assertEquals(2, dashboard.favoriteCreators.size());
+        assertEquals("Demon Mika", dashboard.favoriteCreators.get(0).value);
+        assertEquals(3, dashboard.favoriteCreators.get(0).favoriteCount);
         assertEquals("4.3.0", dashboard.releaseAdoption.version);
         assertEquals(70.0, dashboard.releaseAdoption.percentWeek, 0.01);
     }
