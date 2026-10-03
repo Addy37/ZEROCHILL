@@ -104,6 +104,16 @@ final class AdminRepository {
         }
     }
 
+    static final class FavoriteCreatorRow {
+        final String value;
+        final long favoriteCount;
+
+        FavoriteCreatorRow(JSONObject row) {
+            value = row.optString("value", "Unknown");
+            favoriteCount = Math.max(0L, row.optLong("favorite_count"));
+        }
+    }
+
     static final class SocialSummary {
         final long accountsTotal, accountsToday, accountsWeek;
         final long socialUsersTotal, socialUsersToday, socialUsersWeek;
@@ -198,6 +208,7 @@ final class AdminRepository {
         final List<AnalyticsRow> sections;
         final List<AnalyticsRow> sources;
         final List<AnalyticsRow> creators;
+        final List<FavoriteCreatorRow> favoriteCreators;
         final List<AnalyticsRow> versions;
         final List<AnalyticsRow> deviceModels;
         final List<AnalyticsRow> deviceManufacturers;
@@ -214,6 +225,7 @@ final class AdminRepository {
             sections = analyticsRows(value.optJSONArray("sections"));
             sources = analyticsRows(value.optJSONArray("sources"));
             creators = analyticsRows(value.optJSONArray("creators"));
+            favoriteCreators = favoriteCreatorRows(value.optJSONArray("favorite_creators"));
             versions = analyticsRows(value.optJSONArray("versions"));
             deviceModels = analyticsRows(value.optJSONArray("device_models"));
             deviceManufacturers = analyticsRows(value.optJSONArray("device_manufacturers"));
@@ -326,6 +338,16 @@ final class AdminRepository {
         if (parent == null) return new JSONObject();
         JSONObject value = parent.optJSONObject(key);
         return value == null ? new JSONObject() : value;
+    }
+
+    private static List<FavoriteCreatorRow> favoriteCreatorRows(JSONArray values) {
+        List<FavoriteCreatorRow> rows = new ArrayList<>();
+        if (values == null) return rows;
+        for (int index = 0; index < values.length(); index++) {
+            JSONObject row = values.optJSONObject(index);
+            if (row != null) rows.add(new FavoriteCreatorRow(row));
+        }
+        return rows;
     }
 
     private static List<AnalyticsRow> analyticsRows(JSONArray values) {
