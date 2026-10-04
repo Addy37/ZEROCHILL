@@ -4,6 +4,9 @@ import android.app.Application;
 import android.content.Intent;
 import android.content.res.Configuration;
 import android.view.View;
+import android.os.Looper;
+import java.time.Duration;
+import static org.robolectric.Shadows.shadowOf;
 import androidx.media3.ui.PlayerControlView;
 import androidx.media3.ui.PlayerView;
 import org.junit.Test;
@@ -77,6 +80,12 @@ public class ShowsFullscreenRoutingTest {
         orient(activity, Configuration.ORIENTATION_PORTRAIT);
         assertTrue(overlay.isFullyVisible());
         assertEquals(View.GONE, overlay.findViewById(R.id.shows_fullscreen_toggle).getVisibility());
+        ReflectionHelpers.callInstanceMethod(activity, "hideVideoControls");
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(250));
+        ReflectionHelpers.callInstanceMethod(activity, "restoreFromSwipe");
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(350));
+        assertTrue(overlay.isFullyVisible());
+        assertFalse(player.isControllerFullyVisible());
         ((ShowsFullscreenControls) ReflectionHelpers.getField(activity, "fullscreenControls")).release();
     }
 }

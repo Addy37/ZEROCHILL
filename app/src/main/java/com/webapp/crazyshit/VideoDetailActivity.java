@@ -812,7 +812,7 @@ public class VideoDetailActivity extends Activity {
                 .alpha(1f)
                 .setDuration(150L)
                 .setInterpolator(new DecelerateInterpolator())
-                .withEndAction(() -> playerView.showController())
+                .withEndAction(this::showVideoControls)
                 .start();
         if (detailsScroll != null) {
             detailsScroll.animate().cancel();
@@ -1074,6 +1074,9 @@ public class VideoDetailActivity extends Activity {
     private void updateMetadataUi() {
         if (titleView != null) titleView.setText(title);
         if (playerTitleView != null) playerTitleView.setText(title);
+        if (fullscreenOverlay != null) {
+            ((TextView) fullscreenOverlay.findViewById(R.id.player_title)).setText(title);
+        }
         if (metaView != null) {
             ArrayList<String> parts = new ArrayList<>();
             if (!views.isEmpty()) parts.add(views + " views");
