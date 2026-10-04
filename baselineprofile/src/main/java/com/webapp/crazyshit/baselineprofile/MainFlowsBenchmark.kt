@@ -70,11 +70,15 @@ class MainFlowsBenchmark {
         packageName = TARGET_PACKAGE,
         metrics = playbackMetrics(),
         compilationMode = CompilationMode.None(),
-        startupMode = StartupMode.WARM,
+        // Retained background/foreground testing must not clear the task on launch.
+        startupMode = StartupMode.HOT,
         iterations = 1,
         setupBlock = { launchApp() }
     ) {
-        browseChaosLongSession()
+        // Framework warmup only needs a ready player. Keep the ten-minute soak
+        // in the measured iteration rather than duplicating it before capture.
+        if (iteration == null) openAndScrollChaos(swipes = 0)
+        else browseChaosLongSession()
     }
 
     @Test
