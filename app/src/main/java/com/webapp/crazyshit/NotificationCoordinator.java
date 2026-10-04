@@ -178,7 +178,7 @@ final class NotificationCoordinator {
         if (!prefs.getBoolean(PREF_UPDATE_ALERTS, true)) return;
         prefs.edit().putBoolean(KEY_EDUCATION_SHOWN, true).apply();
 
-        AlertDialog dialog = new AlertDialog.Builder(activity)
+        AlertDialog dialog = new ZeroChillDialog.Builder(activity)
                 .setView(notificationEducationView(activity))
                 .setNegativeButton("Not now", null)
                 .setPositiveButton("Enable", (ignored, which) -> requestPermission(activity))

@@ -18,10 +18,8 @@ import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
-import android.widget.PopupMenu;
 import android.widget.ScrollView;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
@@ -136,14 +134,14 @@ public class FavoritesActivity extends Activity {
         header.addView(clearAction, new LinearLayout.LayoutParams(dp(48), dp(48)));
         root.addView(header);
 
-        input = new EditText(this);
+        input = new ZeroChillEditText(this);
         input.setHint("Search " + sectionTitle());
         input.setHintTextColor(BrowseUi.MUTED);
         input.setTextColor(Color.WHITE);
         input.setTextSize(16);
         input.setSingleLine(true);
         input.setPadding(dp(14), 0, dp(14), 0);
-        input.setBackground(BrowseUi.rounded(this, BrowseUi.SURFACE, 14));
+        input.setBackgroundResource(R.drawable.zc_input_field);
         input.setContentDescription("Search " + sectionTitle());
         LinearLayout.LayoutParams inputParams = new LinearLayout.LayoutParams(-1, dp(50));
         inputParams.setMargins(dp(12), 0, dp(12), dp(8));
@@ -331,7 +329,7 @@ public class FavoritesActivity extends Activity {
     }
 
     private void showHistoryMenu(View anchor, PlaybackHistoryStore.Item item, boolean continueOnly) {
-        PopupMenu menu = new PopupMenu(this, anchor);
+        ZeroChillMenu menu = new ZeroChillMenu(this, anchor);
         menu.getMenu().add(continueOnly ? "Remove from Continue Watching" : "Delete from history");
         menu.setOnMenuItemClickListener(clicked -> {
             haptic(anchor);
@@ -425,12 +423,12 @@ public class FavoritesActivity extends Activity {
     }
 
     private void showWatchLaterMenu(View anchor, FavoriteStore.Item item) {
-        PopupMenu menu = new PopupMenu(this, anchor);
+        ZeroChillMenu menu = new ZeroChillMenu(this, anchor);
         menu.getMenu().add("Remove from Watch Later");
         menu.setOnMenuItemClickListener(clicked -> {
             haptic(anchor);
             FavoriteStore.remove(this, item.url);
-            Toast.makeText(this, "Removed from Watch Later.", Toast.LENGTH_SHORT).show();
+            ZeroChillToast.makeText(this, "Removed from Watch Later.", ZeroChillToast.LENGTH_SHORT).show();
             renderAllPages();
             return true;
         });
@@ -640,7 +638,7 @@ public class FavoritesActivity extends Activity {
     }
 
     private void showSectionMenu(View anchor) {
-        PopupMenu menu = new PopupMenu(this, anchor);
+        ZeroChillMenu menu = new ZeroChillMenu(this, anchor);
         String label = tab == TAB_WATCH_LATER
                 ? "Clear Watch Later"
                 : "Clear watch history";
@@ -655,7 +653,7 @@ public class FavoritesActivity extends Activity {
 
     private void confirmClear() {
         boolean watchLater = tab == TAB_WATCH_LATER;
-        new AlertDialog.Builder(this)
+        new ZeroChillDialog.Builder(this).destructive()
                 .setTitle(watchLater ? "Clear Watch Later?" : "Clear watch history?")
                 .setMessage(watchLater
                         ? "This removes every saved Watch Later item from this device."

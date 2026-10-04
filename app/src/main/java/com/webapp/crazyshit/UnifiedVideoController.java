@@ -28,7 +28,6 @@ import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.ScrollView;
 import android.widget.TextView;
-import android.widget.Toast;
 import android.window.OnBackInvokedCallback;
 import android.window.OnBackInvokedDispatcher;
 
@@ -278,7 +277,7 @@ final class UnifiedVideoController {
         relatedContainer.setOrientation(LinearLayout.VERTICAL);
         detailsColumn.addView(relatedContainer, new LinearLayout.LayoutParams(-1, -2));
 
-        loading = new ProgressBar(activity);
+        loading = new ZeroChillProgressBar(activity);
         loading.setVisibility(View.GONE);
         FrameLayout.LayoutParams loadParams = new FrameLayout.LayoutParams(dp(48), dp(48));
         loadParams.gravity = Gravity.CENTER;
@@ -937,10 +936,10 @@ final class UnifiedVideoController {
         if (pageUrl.isEmpty()) return;
         if (FavoriteStore.contains(activity, pageUrl)) {
             FavoriteStore.remove(activity, pageUrl);
-            Toast.makeText(activity, "Removed from Watch Later.", Toast.LENGTH_SHORT).show();
+            ZeroChillToast.makeText(activity, "Removed from Watch Later.", ZeroChillToast.LENGTH_SHORT).show();
         } else {
             FavoriteStore.add(activity, title, pageUrl);
-            Toast.makeText(activity, "Saved to Watch Later.", Toast.LENGTH_SHORT).show();
+            ZeroChillToast.makeText(activity, "Saved to Watch Later.", ZeroChillToast.LENGTH_SHORT).show();
         }
     }
 
@@ -1046,7 +1045,7 @@ final class UnifiedVideoController {
     private void showSpeedMenu() {
         String[] labels = {"0.5×", "0.75×", "1×", "1.25×", "1.5×", "2×"};
         float[] speeds = {0.5f, 0.75f, 1f, 1.25f, 1.5f, 2f};
-        new AlertDialog.Builder(activity)
+        new ZeroChillDialog.Builder(activity)
                 .setTitle("Playback speed")
                 .setItems(labels, (dialog, which) -> {
                     if (player != null) player.setPlaybackParameters(new PlaybackParameters(speeds[which]));
@@ -1061,7 +1060,7 @@ final class UnifiedVideoController {
                 AspectRatioFrameLayout.RESIZE_MODE_FILL,
                 AspectRatioFrameLayout.RESIZE_MODE_ZOOM
         };
-        new AlertDialog.Builder(activity)
+        new ZeroChillDialog.Builder(activity)
                 .setTitle("Video size")
                 .setItems(labels, (dialog, which) -> {
                     resizeMode = modes[which];
@@ -1199,7 +1198,7 @@ final class UnifiedVideoController {
     private void showPlaybackFailure() {
         if (failureShown || activity.isFinishing()) return;
         failureShown = true;
-        new AlertDialog.Builder(activity)
+        new ZeroChillDialog.Builder(activity)
                 .setTitle("Couldn't play this stream")
                 .setMessage("The native player couldn't continue this video. You can open the webpage instead.")
                 .setNegativeButton("Close", null)

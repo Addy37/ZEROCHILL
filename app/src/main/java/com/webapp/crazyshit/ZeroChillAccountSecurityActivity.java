@@ -13,7 +13,6 @@ import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
-import android.widget.Toast;
 
 /** Authenticated account changes. Passwords stay only in live input fields. */
 public final class ZeroChillAccountSecurityActivity extends Activity {
@@ -77,7 +76,7 @@ public final class ZeroChillAccountSecurityActivity extends Activity {
                 setBusy(false);
                 if (failure != null) { showError(failure); return; }
                 boolean accepted = state != null && value.equalsIgnoreCase(state.email);
-                new AlertDialog.Builder(this)
+                new ZeroChillDialog.Builder(this)
                         .setTitle(accepted ? "Email updated" : "Check your email")
                         .setMessage(accepted
                                 ? "Your account now uses " + value + "."
@@ -109,7 +108,7 @@ public final class ZeroChillAccountSecurityActivity extends Activity {
                         if (failure != null) { showError(failure); return; }
                         password.setText("");
                         confirm.setText("");
-                        Toast.makeText(this, "Password updated.", Toast.LENGTH_SHORT).show();
+                        ZeroChillToast.showAfterNavigation(this, "Password updated.", ZeroChillToast.LENGTH_SHORT);
                         finish();
                     }));
         });
@@ -118,7 +117,7 @@ public final class ZeroChillAccountSecurityActivity extends Activity {
     private void deleteForm() {
         heading("DELETE ACCOUNT");
         copy("Deleting your account removes your profile, avatar, favorite creators, comments and replies, likes, messages, blocks, reports, and notification activity. Replies left by other people under your comments and messages on both sides of your conversations are removed too. Your local downloads, playback history, and app settings stay on this device.");
-        button("CONTINUE", () -> new AlertDialog.Builder(this)
+        button("CONTINUE", () -> new ZeroChillDialog.Builder(this)
                 .setTitle("Delete your ZEROCHILL identity?")
                 .setMessage("This cannot be undone. Your social content and conversations will be removed.")
                 .setNegativeButton("CANCEL", null)
@@ -127,7 +126,7 @@ public final class ZeroChillAccountSecurityActivity extends Activity {
     }
 
     private void finalConfirmation() {
-        EditText phrase = new EditText(this);
+        EditText phrase = new ZeroChillEditText(this);
         phrase.setSingleLine(true);
         phrase.setHint("Type DELETE");
         phrase.setTextColor(Color.WHITE);
@@ -135,7 +134,7 @@ public final class ZeroChillAccountSecurityActivity extends Activity {
         LinearLayout wrapper = new LinearLayout(this);
         wrapper.setPadding(dp(20), 0, dp(20), 0);
         wrapper.addView(phrase, new LinearLayout.LayoutParams(-1, -2));
-        AlertDialog dialog = new AlertDialog.Builder(this)
+        AlertDialog dialog = new ZeroChillDialog.Builder(this).destructive()
                 .setTitle("Final confirmation")
                 .setMessage("Type DELETE to permanently remove your account.")
                 .setView(wrapper)
@@ -188,7 +187,7 @@ public final class ZeroChillAccountSecurityActivity extends Activity {
     }
 
     private EditText field(String hint, int type) {
-        EditText field = new EditText(this);
+        EditText field = new ZeroChillEditText(this);
         field.setHint(hint);
         field.setInputType(type);
         field.setSingleLine(true);
@@ -196,11 +195,7 @@ public final class ZeroChillAccountSecurityActivity extends Activity {
         field.setHintTextColor(Color.rgb(126, 137, 147));
         field.setTextSize(15);
         field.setPadding(dp(16), 0, dp(16), 0);
-        GradientDrawable background = new GradientDrawable();
-        background.setColor(Color.rgb(17, 21, 26));
-        background.setCornerRadius(dp(15));
-        background.setStroke(dp(1), Color.rgb(43, 57, 66));
-        field.setBackground(background);
+        field.setBackgroundResource(R.drawable.zc_input_field);
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, dp(54));
         params.bottomMargin = dp(10);
         content.addView(field, params);
@@ -228,13 +223,13 @@ public final class ZeroChillAccountSecurityActivity extends Activity {
     private void expired() {
         if (isFinishing() || isDestroyed()) return;
         setBusy(false);
-        Toast.makeText(this, "Sign in again to manage your account.", Toast.LENGTH_LONG).show();
+        ZeroChillToast.showAfterNavigation(this, "Sign in again to manage your account.", ZeroChillToast.LENGTH_LONG);
         setResult(RESULT_OK);
         finish();
     }
 
     private void showError(Exception error) {
-        Toast.makeText(this, error.getMessage() == null ? "Please try again." : error.getMessage(), Toast.LENGTH_LONG).show();
+        ZeroChillToast.makeText(this, error.getMessage() == null ? "Please try again." : error.getMessage(), ZeroChillToast.LENGTH_LONG).show();
     }
 
     private TextView label(String text, int size, int color) {

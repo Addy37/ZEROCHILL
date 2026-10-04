@@ -16,7 +16,6 @@ import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
@@ -164,7 +163,7 @@ public final class ZeroChillInboxActivity extends Activity {
         header.addView(selectionActions, new LinearLayout.LayoutParams(-2, dp(48)));
         root.addView(header, new LinearLayout.LayoutParams(-1, dp(58)));
 
-        progress = new ProgressBar(this);
+        progress = new ZeroChillProgressBar(this);
         ZeroChillUi.styleProgress(progress);
         LinearLayout.LayoutParams progressParams = new LinearLayout.LayoutParams(dp(40), dp(40));
         progressParams.gravity = Gravity.CENTER_HORIZONTAL;
@@ -217,10 +216,10 @@ public final class ZeroChillInboxActivity extends Activity {
                     || !user.equals(ZeroChillSessionStore.currentUserId(this))) return;
             progress.setVisibility(View.GONE);
             if (error != null || items == null) {
-                Toast.makeText(
+                ZeroChillToast.makeText(
                         this,
                         error == null ? "Couldn't load messages." : error.getMessage(),
-                        Toast.LENGTH_LONG
+                        ZeroChillToast.LENGTH_LONG
                 ).show();
                 return;
             }
@@ -475,7 +474,7 @@ public final class ZeroChillInboxActivity extends Activity {
             String message = failed.size() == 1
                     ? "Couldn't remove 1 conversation."
                     : "Couldn't remove " + failed.size() + " conversations.";
-            Toast.makeText(this, message, Toast.LENGTH_LONG).show();
+            ZeroChillToast.makeText(this, message, ZeroChillToast.LENGTH_LONG).show();
         }
         loadInbox(); // Includes any message sent after each server cutoff.
     }

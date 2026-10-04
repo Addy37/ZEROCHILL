@@ -17,10 +17,8 @@ import android.view.ViewGroup;
 import android.widget.EditText;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
-import android.widget.PopupMenu;
 import android.widget.ProgressBar;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
@@ -187,7 +185,7 @@ public final class ZeroChillMessageActivity extends Activity {
         recycler.setAdapter(adapter);
         root.addView(recycler, new LinearLayout.LayoutParams(-1, 0, 1f));
 
-        progress = new ProgressBar(this);
+        progress = new ZeroChillProgressBar(this);
         ZeroChillUi.styleProgress(progress);
         progress.setVisibility(View.GONE);
 
@@ -196,7 +194,7 @@ public final class ZeroChillMessageActivity extends Activity {
         compose.setPadding(dp(10), dp(7), dp(10), dp(10));
         compose.setBackgroundColor(Color.rgb(5, 6, 8));
 
-        composer = new EditText(this);
+        composer = new ZeroChillEditText(this);
         composer.setHint("Message @" + partnerId);
         composer.setHintTextColor(Color.rgb(116, 122, 132));
         composer.setTextColor(Color.WHITE);
@@ -237,11 +235,11 @@ public final class ZeroChillMessageActivity extends Activity {
             if (generation != partnerRequestGeneration || !accountStillCurrent()
                     || isFinishing() || isDestroyed()) return;
             if (error != null || profile == null || profile.currentUser) {
-                Toast.makeText(
+                ZeroChillToast.showAfterNavigation(
                         this,
                         error == null ? "This conversation is unavailable." : error.getMessage(),
-                        Toast.LENGTH_LONG
-                ).show();
+                        ZeroChillToast.LENGTH_LONG
+                );
                 finish();
                 return;
             }
@@ -285,10 +283,10 @@ public final class ZeroChillMessageActivity extends Activity {
                     boolean rerun = refreshQueued || stale;
                     refreshQueued = false;
                     if (error != null || items == null) {
-                        if (showLoading) Toast.makeText(
+                        if (showLoading) ZeroChillToast.makeText(
                                 this,
                                 error == null ? "Couldn't load messages." : error.getMessage(),
-                                Toast.LENGTH_LONG
+                                ZeroChillToast.LENGTH_LONG
                         ).show();
                         if (rerun) loadThread(false);
                         return;
@@ -332,7 +330,7 @@ public final class ZeroChillMessageActivity extends Activity {
     private void sendMessage() {
         if (!accountStillCurrent()) { finish(); return; }
         if (blockedByMe) {
-            Toast.makeText(this, "Unblock this user before messaging them.", Toast.LENGTH_SHORT).show();
+            ZeroChillToast.makeText(this, "Unblock this user before messaging them.", ZeroChillToast.LENGTH_SHORT).show();
             return;
         }
         String value = composer.getText().toString();
@@ -353,7 +351,7 @@ public final class ZeroChillMessageActivity extends Activity {
                         // A refresh may already have confirmed this UUID despite a lost POST response.
                         if (adapter.removePending(clientId)) {
                             threadRevision++;
-                            Toast.makeText(this, error.getMessage(), Toast.LENGTH_LONG).show();
+                            ZeroChillToast.makeText(this, error.getMessage(), ZeroChillToast.LENGTH_LONG).show();
                         } else if (value.equals(composer.getText().toString())) {
                             composer.setText("");
                         }
@@ -393,7 +391,7 @@ public final class ZeroChillMessageActivity extends Activity {
     }
 
     private void showOptions(View anchor) {
-        PopupMenu menu = new PopupMenu(this, anchor);
+        ZeroChillMenu menu = new ZeroChillMenu(this, anchor);
         menu.getMenu().add("View profile");
         menu.getMenu().add(blockedByMe ? "Unblock user" : "Block user");
         menu.getMenu().add("Report user");
@@ -413,7 +411,7 @@ public final class ZeroChillMessageActivity extends Activity {
 
     private void confirmBlock(boolean block) {
         String username = partner == null ? "this user" : "@" + partner.username;
-        new AlertDialog.Builder(this)
+        new ZeroChillDialog.Builder(this).destructive()
                 .setTitle(block ? "Block " + username + "?" : "Unblock " + username + "?")
                 .setMessage(block
                         ? "You won't be able to message each other while blocked."
@@ -426,15 +424,15 @@ public final class ZeroChillMessageActivity extends Activity {
                                 block,
                                 (value, error) -> runOnUiThread(() -> {
                                     if (error != null) {
-                                        Toast.makeText(this, error.getMessage(), Toast.LENGTH_LONG).show();
+                                        ZeroChillToast.makeText(this, error.getMessage(), ZeroChillToast.LENGTH_LONG).show();
                                         return;
                                     }
                                     blockedByMe = Boolean.TRUE.equals(value);
                                     updateComposerState();
-                                    Toast.makeText(
+                                    ZeroChillToast.makeText(
                                             this,
                                             blockedByMe ? "User blocked." : "User unblocked.",
-                                            Toast.LENGTH_SHORT
+                                            ZeroChillToast.LENGTH_SHORT
                                     ).show();
                                 })
                         ))
@@ -443,15 +441,15 @@ public final class ZeroChillMessageActivity extends Activity {
 
     private void showReportDialog(String messageId) {
         String[] reasons = {"Spam", "Harassment", "Other"};
-        new AlertDialog.Builder(this)
+        new ZeroChillDialog.Builder(this)
                 .setTitle(messageId.isEmpty() ? "Report user" : "Report message")
                 .setItems(reasons, (dialog, which) -> {
                     String reason = which == 0 ? "spam" : which == 1 ? "harassment" : "other";
                     ZeroChillSocialRepository.Callback<Boolean> callback =
-                            (ok, error) -> runOnUiThread(() -> Toast.makeText(
+                            (ok, error) -> runOnUiThread(() -> ZeroChillToast.makeText(
                                     this,
                                     error == null ? "Report submitted." : error.getMessage(),
-                                    error == null ? Toast.LENGTH_SHORT : Toast.LENGTH_LONG
+                                    error == null ? ZeroChillToast.LENGTH_SHORT : ZeroChillToast.LENGTH_LONG
                             ).show());
                     if (messageId.isEmpty()) {
                         ZeroChillSocialRepository.reportUser(this, partnerId, reason, callback);

@@ -12,7 +12,6 @@ import android.os.Handler;
 import android.os.Looper;
 import android.webkit.CookieManager;
 import android.webkit.WebSettings;
-import android.widget.Toast;
 
 import org.json.JSONObject;
 
@@ -639,7 +638,7 @@ final class VideoDownloadStore {
     }
 
     private static void toast(Context context, String message) {
-        MAIN.post(() -> Toast.makeText(context, message, Toast.LENGTH_SHORT).show());
+        MAIN.post(() -> ZeroChillToast.makeText(context, message, ZeroChillToast.LENGTH_SHORT).show());
     }
 
     static final class Entry {

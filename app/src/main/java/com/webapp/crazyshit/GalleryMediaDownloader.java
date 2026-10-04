@@ -6,7 +6,6 @@ import android.net.Uri;
 import android.os.Environment;
 import android.webkit.CookieManager;
 import android.webkit.WebSettings;
-import android.widget.Toast;
 
 import java.util.Locale;
 import java.util.concurrent.ExecutorService;
@@ -248,7 +247,7 @@ final class GalleryMediaDownloader {
 
     private static void toast(Activity activity, String message) {
         activity.runOnUiThread(() ->
-                Toast.makeText(activity, message, Toast.LENGTH_SHORT).show()
+                ZeroChillToast.makeText(activity, message, ZeroChillToast.LENGTH_SHORT).show()
         );
     }
 }

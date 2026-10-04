@@ -92,7 +92,7 @@ final class UpdateCardController {
         header.addView(percent);
         content.addView(header);
 
-        progress = new ProgressBar(activity, null, android.R.attr.progressBarStyleHorizontal);
+        progress = new ZeroChillProgressBar(activity, null, android.R.attr.progressBarStyleHorizontal);
         progress.setMax(1000);
         progress.setProgress(0);
         progress.setIndeterminate(false);

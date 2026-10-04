@@ -14,7 +14,6 @@ import android.widget.ProgressBar;
 import android.widget.ScrollView;
 import android.widget.Switch;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import com.bumptech.glide.Glide;
 
@@ -86,7 +85,7 @@ public final class ZeroChillSocialSettingsActivity extends Activity {
         content.setOrientation(LinearLayout.VERTICAL);
         content.setPadding(dp(20), dp(20), dp(20), dp(32));
         scroll.addView(content, new ScrollView.LayoutParams(-1, -2));
-        progress = new ProgressBar(this);
+        progress = new ZeroChillProgressBar(this);
         ZeroChillUi.styleProgress(progress);
         FrameLayout.LayoutParams loading = new FrameLayout.LayoutParams(dp(40), dp(40), Gravity.CENTER);
         body.addView(progress, loading);
@@ -184,7 +183,7 @@ public final class ZeroChillSocialSettingsActivity extends Activity {
                             if (!valid(request)) return;
                             if (error != null) {
                                 unblock.setEnabled(true);
-                                Toast.makeText(this, error.getMessage(), Toast.LENGTH_LONG).show();
+                                ZeroChillToast.makeText(this, error.getMessage(), ZeroChillToast.LENGTH_LONG).show();
                                 return;
                             }
                             users.remove(profile);
@@ -239,7 +238,7 @@ public final class ZeroChillSocialSettingsActivity extends Activity {
             if (!valid(request)) return;
             saving = false;
             if (error != null) {
-                Toast.makeText(this, error.getMessage(), Toast.LENGTH_LONG).show();
+                ZeroChillToast.makeText(this, error.getMessage(), ZeroChillToast.LENGTH_LONG).show();
                 applyChecks(preferenceValues);
             } else {
                 preferenceValues = saved;
@@ -279,7 +278,7 @@ public final class ZeroChillSocialSettingsActivity extends Activity {
         content.addView(row, params);
         TextView name = label(title, 14, Color.WHITE, false);
         row.addView(name, new LinearLayout.LayoutParams(0, -2, 1f));
-        Switch toggle = new Switch(this);
+        Switch toggle = new ZeroChillSwitch(this);
         toggle.setChecked(checked);
         toggle.setContentDescription(title);
         row.addView(toggle);

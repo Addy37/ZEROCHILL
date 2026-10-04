@@ -27,7 +27,6 @@ import android.window.OnBackInvokedCallback;
 import android.window.OnBackInvokedDispatcher;
 import android.widget.FrameLayout;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import androidx.media3.common.MediaItem;
 import androidx.media3.common.MimeTypes;
@@ -507,7 +506,7 @@ public class PlayerActivity extends Activity {
     private void showSpeedMenu() {
         String[] labels = {"0.5×", "0.75×", "1×", "1.25×", "1.5×", "2×"};
         float[] speeds = {0.5f, 0.75f, 1f, 1.25f, 1.5f, 2f};
-        new AlertDialog.Builder(this)
+        new ZeroChillDialog.Builder(this)
                 .setTitle("Playback speed")
                 .setItems(labels, (dialog, which) -> {
                     if (player != null) {
@@ -526,7 +525,7 @@ public class PlayerActivity extends Activity {
                 AspectRatioFrameLayout.RESIZE_MODE_FILL,
                 AspectRatioFrameLayout.RESIZE_MODE_ZOOM
         };
-        new AlertDialog.Builder(this)
+        new ZeroChillDialog.Builder(this)
                 .setTitle("Video size")
                 .setItems(labels, (dialog, which) -> {
                     resizeMode = modes[which];
@@ -539,15 +538,15 @@ public class PlayerActivity extends Activity {
 
     private void toggleWatchLater() {
         if (pageUrl == null || pageUrl.isEmpty()) {
-            Toast.makeText(this, "This video has no page to save.", Toast.LENGTH_SHORT).show();
+            ZeroChillToast.makeText(this, "This video has no page to save.", ZeroChillToast.LENGTH_SHORT).show();
             return;
         }
         if (FavoriteStore.contains(this, pageUrl)) {
             FavoriteStore.remove(this, pageUrl);
-            Toast.makeText(this, "Removed from Watch Later.", Toast.LENGTH_SHORT).show();
+            ZeroChillToast.makeText(this, "Removed from Watch Later.", ZeroChillToast.LENGTH_SHORT).show();
         } else {
             FavoriteStore.add(this, title, pageUrl);
-            Toast.makeText(this, "Saved to Watch Later.", Toast.LENGTH_SHORT).show();
+            ZeroChillToast.makeText(this, "Saved to Watch Later.", ZeroChillToast.LENGTH_SHORT).show();
         }
         haptic(playerView);
     }
@@ -565,7 +564,7 @@ public class PlayerActivity extends Activity {
         if (failureShown || isFinishing()) return;
         failureShown = true;
         RatingFeedbackPrompt.recordPlaybackError(this);
-        new AlertDialog.Builder(this)
+        new ZeroChillDialog.Builder(this)
                 .setTitle("Couldn't play this stream")
                 .setMessage("This video isn't exposing a stream the native player can use. You can open the normal webpage instead.")
                 .setCancelable(false)

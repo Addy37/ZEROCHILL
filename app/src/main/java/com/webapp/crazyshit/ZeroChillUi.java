@@ -13,6 +13,7 @@ import android.text.style.ForegroundColorSpan;
 import android.view.View;
 import android.view.Window;
 import android.widget.ProgressBar;
+import android.widget.Button;
 import android.widget.TextView;
 
 import androidx.core.content.ContextCompat;
@@ -131,6 +132,17 @@ final class ZeroChillUi {
         if (progress == null) return;
         progress.setIndeterminateTintList(ColorStateList.valueOf(
                 color(progress.getContext(), R.color.zc_cyan)));
+    }
+
+    static void styleActionButton(Button button, boolean primary) {
+        if (button == null) return;
+        Context context = button.getContext();
+        button.setAllCaps(false);
+        button.setTextColor(color(context, primary ? R.color.zc_text_primary : R.color.zc_cyan));
+        button.setBackgroundTintList(null);
+        button.setBackground(primary ? sheetGlass(context) : panelGlass(context));
+        button.setMinHeight(dimension(context, R.dimen.zc_touch_target));
+        ZeroChillMotion.installPressFeedback(button);
     }
 
     static void styleChip(TextView chip, boolean selected) {

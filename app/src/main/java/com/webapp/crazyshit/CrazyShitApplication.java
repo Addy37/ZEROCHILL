@@ -66,6 +66,7 @@ public final class CrazyShitApplication extends Application {
             @Override
             public void onActivityResumed(Activity activity) {
                 PhoneOrientationPolicy.applyBrowsingOrientation(activity);
+                ZeroChillToast.onResumed(activity);
                 if (!StartupWizardPolicy.shouldShow(activity)) {
                     NotificationCoordinator.onAppForeground(activity);
                 }
@@ -75,6 +76,7 @@ public final class CrazyShitApplication extends Application {
 
             @Override
             public void onActivityPaused(Activity activity) {
+                ZeroChillToast.onPaused(activity);
                 SocialActivityCoordinator.onPaused(activity);
                 UiFoundationCoordinator.onActivityPaused(activity);
             }

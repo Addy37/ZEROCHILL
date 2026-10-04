@@ -21,7 +21,6 @@ import android.widget.HorizontalScrollView;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
@@ -268,7 +267,7 @@ public final class SearchActivity extends Activity {
         row.setGravity(Gravity.CENTER_VERTICAL);
         row.setPadding(dp(12), dp(8), dp(12), dp(6));
 
-        input = new EditText(this);
+        input = new ZeroChillEditText(this);
         input.setHint(bunkrOnly ? "Search creators" : "Search creators or videos");
         input.setHintTextColor(ZeroChillUi.color(this, R.color.zc_text_muted));
         input.setTextColor(ZeroChillUi.color(this, R.color.zc_text_primary));
@@ -280,7 +279,7 @@ public final class SearchActivity extends Activity {
                 : "Search creators, albums and videos");
         input.setImeOptions(EditorInfo.IME_ACTION_SEARCH);
         input.setPadding(dp(14), 0, dp(14), 0);
-        input.setBackgroundResource(R.drawable.zc_search_field);
+        input.setBackgroundResource(R.drawable.zc_input_field);
         input.setOnEditorActionListener((v, actionId, event) -> {
             if (actionId == EditorInfo.IME_ACTION_SEARCH) {
                 runSearch();
@@ -740,10 +739,10 @@ public final class SearchActivity extends Activity {
                 if (destroyed || isFinishing() || requestGeneration != generation) return;
                 progress.setVisibility(View.GONE);
                 if (resolved == null || resolved.mediaUrl == null || resolved.mediaUrl.isEmpty()) {
-                    Toast.makeText(
+                    ZeroChillToast.makeText(
                             this,
                             "Couldn't resolve this video natively right now.",
-                            Toast.LENGTH_SHORT
+                            ZeroChillToast.LENGTH_SHORT
                     ).show();
                     return;
                 }

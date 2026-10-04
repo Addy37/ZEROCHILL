@@ -27,7 +27,6 @@ import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.SeekBar;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.media3.common.MediaItem;
@@ -191,7 +190,7 @@ public final class ChaosFeedView extends FrameLayout {
         RecyclerView rv = pagerRecycler();
         if (rv != null) rv.setItemViewCacheSize(3);
 
-        initialProgress = new ProgressBar(activity);
+        initialProgress = new ZeroChillProgressBar(activity);
         FrameLayout.LayoutParams pp = new FrameLayout.LayoutParams(dp(48), dp(48));
         pp.gravity = Gravity.CENTER;
         addView(initialProgress, pp);
@@ -1238,7 +1237,7 @@ public final class ChaosFeedView extends FrameLayout {
         resolveRetried.remove(item.url);
         items.remove(index);
         adapter.notifyDataSetChanged();
-        Toast.makeText(activity, "Won't show this clip again.", Toast.LENGTH_SHORT).show();
+        ZeroChillToast.makeText(activity, "Won't show this clip again.", ZeroChillToast.LENGTH_SHORT).show();
 
         if (items.isEmpty()) {
             exitManualFullscreen();
@@ -1390,7 +1389,7 @@ public final class ChaosFeedView extends FrameLayout {
                 holder.lastFailureStage,
                 holder.retryAttempted
         );
-        new AlertDialog.Builder(activity)
+        new ZeroChillDialog.Builder(activity)
                 .setTitle("Playback report")
                 .setMessage(report)
                 .setPositiveButton("Copy", (dialog, which) -> copyPlaybackReport(report))
@@ -1404,11 +1403,11 @@ public final class ChaosFeedView extends FrameLayout {
                 Context.CLIPBOARD_SERVICE
         );
         if (clipboard == null) {
-            Toast.makeText(activity, "Clipboard isn't available.", Toast.LENGTH_SHORT).show();
+            ZeroChillToast.makeText(activity, "Clipboard isn't available.", ZeroChillToast.LENGTH_SHORT).show();
             return;
         }
         clipboard.setPrimaryClip(ClipData.newPlainText("CrazyShit playback report", report));
-        Toast.makeText(activity, "Playback report copied.", Toast.LENGTH_SHORT).show();
+        ZeroChillToast.makeText(activity, "Playback report copied.", ZeroChillToast.LENGTH_SHORT).show();
     }
 
     private void sharePlaybackReport(String report) {
@@ -1423,10 +1422,10 @@ public final class ChaosFeedView extends FrameLayout {
         if (item == null) return;
         if (FavoriteStore.contains(activity, item.url)) {
             FavoriteStore.remove(activity, item.url);
-            Toast.makeText(activity, "Removed from Watch Later.", Toast.LENGTH_SHORT).show();
+            ZeroChillToast.makeText(activity, "Removed from Watch Later.", ZeroChillToast.LENGTH_SHORT).show();
         } else {
             FavoriteStore.add(activity, item.title, item.url);
-            Toast.makeText(activity, "Saved to Watch Later.", Toast.LENGTH_SHORT).show();
+            ZeroChillToast.makeText(activity, "Saved to Watch Later.", ZeroChillToast.LENGTH_SHORT).show();
         }
         updateSaveButton(item, button);
     }
@@ -1671,7 +1670,7 @@ public final class ChaosFeedView extends FrameLayout {
             playerView.setContentDescription("Play or pause video");
             mediaLayer.addView(playerView, new FrameLayout.LayoutParams(-1, -1));
 
-            loading = new ProgressBar(activity);
+            loading = new ZeroChillProgressBar(activity);
             loading.setContentDescription("Loading video");
             FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(dp(44), dp(44));
             lp.gravity = Gravity.CENTER;
@@ -1993,10 +1992,10 @@ public final class ChaosFeedView extends FrameLayout {
                 haptic(v);
                 CreatorFavoriteStore.toggle(activity, creatorIdentity);
                 refreshCreatorFavoriteBadge();
-                Toast.makeText(
+                ZeroChillToast.makeText(
                         activity,
                         "Added " + creatorIdentity.title + " to Favorite Creators.",
-                        Toast.LENGTH_SHORT
+                        ZeroChillToast.LENGTH_SHORT
                 ).show();
                 showControlsTemporarily();
             });
@@ -2287,10 +2286,10 @@ public final class ChaosFeedView extends FrameLayout {
                         if (item == null || !target.equals(item.url)) return;
                         like.setEnabled(true);
                         if (error != null || state == null) {
-                            Toast.makeText(
+                            ZeroChillToast.makeText(
                                     activity,
                                     error == null ? "Unable to update the like." : error.getMessage(),
-                                    Toast.LENGTH_LONG
+                                    ZeroChillToast.LENGTH_LONG
                             ).show();
                             return;
                         }

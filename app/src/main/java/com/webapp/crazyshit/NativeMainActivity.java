@@ -29,7 +29,6 @@ import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.TextView;
-import android.widget.Toast;
 import android.window.OnBackInvokedDispatcher;
 
 import androidx.media3.common.util.UnstableApi;
@@ -291,7 +290,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         });
         shell.addView(primaryPager, new LinearLayout.LayoutParams(-1, 0, 1f));
 
-        swipeRefresh = new SwipeRefreshLayout(this);
+        swipeRefresh = new ZeroChillRefreshLayout(this);
         swipeRefresh.setColorSchemeColors(UiPalette.PRIMARY);
         swipeRefresh.setOnRefreshListener(this::refreshCurrentScreen);
         content.addView(swipeRefresh, new FrameLayout.LayoutParams(-1, -1));
@@ -849,7 +848,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
                     if (feedAdapter.getItemCount() == 0) {
                         showNativeEmpty("Couldn't load this feed.\nTap to open the website fallback.");
                     } else {
-                        Toast.makeText(this, "Couldn't load more right now.", Toast.LENGTH_SHORT).show();
+                        ZeroChillToast.makeText(this, "Couldn't load more right now.", ZeroChillToast.LENGTH_SHORT).show();
                     }
                 });
             }
@@ -894,10 +893,10 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
                 if (resolved != null && resolved.mediaUrl != null && !resolved.mediaUrl.isEmpty()) {
                     openVideoDetail(resolved, item, playbackIdent);
                 } else {
-                    Toast.makeText(
+                    ZeroChillToast.makeText(
                             this,
                             "Couldn't resolve this video natively right now.",
-                            Toast.LENGTH_SHORT
+                            ZeroChillToast.LENGTH_SHORT
                     ).show();
                 }
             });
@@ -1002,12 +1001,12 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
 
     private void showViewStyleDialog() {
         if (!isFeedScreen()) {
-            Toast.makeText(this, "View styles apply to feeds.", Toast.LENGTH_SHORT).show();
+            ZeroChillToast.makeText(this, "View styles apply to feeds.", ZeroChillToast.LENGTH_SHORT).show();
             return;
         }
         String[] choices = {"Cards", "List", "Grid", "Posters"};
         int selected = currentViewMode();
-        AlertDialog dialog = new AlertDialog.Builder(this)
+        AlertDialog dialog = new ZeroChillDialog.Builder(this)
                 .setTitle("View style")
                 .setSingleChoiceItems(choices, selected, null)
                 .setNegativeButton("Cancel", null)
@@ -1094,10 +1093,10 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     private void toggleWatchLater(NativeContentItem item) {
         if (FavoriteStore.contains(this, item.url)) {
             FavoriteStore.remove(this, item.url);
-            Toast.makeText(this, "Removed from Watch Later.", Toast.LENGTH_SHORT).show();
+            ZeroChillToast.makeText(this, "Removed from Watch Later.", ZeroChillToast.LENGTH_SHORT).show();
         } else {
             FavoriteStore.add(this, item.title, item.url);
-            Toast.makeText(this, "Saved to Watch Later.", Toast.LENGTH_SHORT).show();
+            ZeroChillToast.makeText(this, "Saved to Watch Later.", ZeroChillToast.LENGTH_SHORT).show();
         }
     }
 
@@ -1110,7 +1109,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     }
 
     private void showSearchDialog() {
-        EditText input = new EditText(this);
+        EditText input = new ZeroChillEditText(this);
         input.setHint("Search ZeroChill");
         input.setSingleLine(true);
         input.setInputType(InputType.TYPE_CLASS_TEXT);
@@ -1119,7 +1118,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         wrapper.setPadding(pad, 0, pad, 0);
         wrapper.addView(input, new FrameLayout.LayoutParams(-1, -2));
 
-        AlertDialog dialog = new AlertDialog.Builder(this)
+        AlertDialog dialog = new ZeroChillDialog.Builder(this)
                 .setTitle("Search")
                 .setView(wrapper)
                 .setNegativeButton("Cancel", null)

@@ -19,7 +19,6 @@ import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
-import android.widget.PopupMenu;
 import android.widget.ScrollView;
 import android.widget.TextView;
 
@@ -110,14 +109,14 @@ public final class DownloadedActivity extends Activity {
         header.addView(title, new LinearLayout.LayoutParams(0, -2, 1f));
         root.addView(header);
 
-        input = new EditText(this);
+        input = new ZeroChillEditText(this);
         input.setHint("Search Downloads");
         input.setHintTextColor(BrowseUi.MUTED);
         input.setTextColor(Color.WHITE);
         input.setTextSize(16);
         input.setSingleLine(true);
         input.setPadding(dp(14), 0, dp(14), 0);
-        input.setBackground(BrowseUi.rounded(this, BrowseUi.SURFACE, 14));
+        input.setBackgroundResource(R.drawable.zc_input_field);
         input.setContentDescription("Search Downloads");
         LinearLayout.LayoutParams inputParams = new LinearLayout.LayoutParams(-1, dp(50));
         inputParams.setMargins(dp(12), 0, dp(12), dp(8));
@@ -381,7 +380,7 @@ public final class DownloadedActivity extends Activity {
     }
 
     private void showDownloadMenu(View anchor, VideoDownloadStore.Entry entry) {
-        PopupMenu menu = new PopupMenu(this, anchor);
+        ZeroChillMenu menu = new ZeroChillMenu(this, anchor);
         if (entry.status == DownloadManager.STATUS_SUCCESSFUL) {
             menu.getMenu().add("Play");
         } else if (entry.status == DownloadManager.STATUS_FAILED) {
@@ -451,7 +450,7 @@ public final class DownloadedActivity extends Activity {
         String message = entry.status == DownloadManager.STATUS_SUCCESSFUL
                 ? "Remove this downloaded video from the device?"
                 : "Cancel and remove this download?";
-        new AlertDialog.Builder(this)
+        new ZeroChillDialog.Builder(this).destructive()
                 .setTitle("Remove download")
                 .setMessage(message)
                 .setNegativeButton("Keep", null)

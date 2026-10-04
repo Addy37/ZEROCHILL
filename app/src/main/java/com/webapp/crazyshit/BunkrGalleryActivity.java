@@ -18,10 +18,8 @@ import android.view.WindowInsetsController;
 import android.webkit.CookieManager;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
-import android.widget.PopupMenu;
 import android.widget.ProgressBar;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import androidx.annotation.OptIn;
 import androidx.core.graphics.Insets;
@@ -323,7 +321,7 @@ public final class BunkrGalleryActivity extends Activity {
         root.addView(initialLoading, loadingParams);
         initialLoading.setVisibility(View.GONE);
 
-        loadMoreLoading = new ProgressBar(this);
+        loadMoreLoading = new ZeroChillProgressBar(this);
         loadMoreLoading.setVisibility(View.GONE);
         FrameLayout.LayoutParams loadMoreParams =
                 new FrameLayout.LayoutParams(dp(40), dp(40));
@@ -418,7 +416,7 @@ public final class BunkrGalleryActivity extends Activity {
     private void loadInitialPage() {
         if (albumUrl.isEmpty() && !isCreatorGallery()) {
             initialLoading.setVisibility(View.GONE);
-            Toast.makeText(this, "This album could not be opened.", Toast.LENGTH_SHORT).show();
+            ZeroChillToast.makeText(this, "This album could not be opened.", ZeroChillToast.LENGTH_SHORT).show();
             return;
         }
         int requestGeneration = generation;
@@ -452,12 +450,12 @@ public final class BunkrGalleryActivity extends Activity {
                             BunkrGallerySessionStore.snapshot(sessionId);
                     if (fresh != null && !fresh.items.isEmpty()) showSnapshot(fresh);
                     if (fapelloFailure != null) showFapelloFailure(fapelloFailure);
-                    else if (fresh == null || fresh.items.isEmpty()) Toast.makeText(
+                    else if (fresh == null || fresh.items.isEmpty()) ZeroChillToast.makeText(
                             this,
                             isCreatorGallery()
                                     ? "No matching pictures or videos loaded. Try again."
                                     : "No supported pictures or videos were found.",
-                            Toast.LENGTH_LONG
+                            ZeroChillToast.LENGTH_LONG
                     ).show();
                 });
             } catch (Exception error) {
@@ -465,14 +463,14 @@ public final class BunkrGalleryActivity extends Activity {
                     if (requestGeneration != generation || isFinishing()) return;
                     initialLoading.setVisibility(View.GONE);
                     FapelloSourceException failure = fapelloFailure(error);
-                    Toast.makeText(
+                    ZeroChillToast.makeText(
                             this,
                             failure != null
                                     ? failure.userMessage()
                                     : isCreatorGallery()
                                     ? "Couldn't build this creator gallery. Try again."
                                     : "Couldn't load this album.",
-                            Toast.LENGTH_LONG
+                            ZeroChillToast.LENGTH_LONG
                     ).show();
                 });
             }
@@ -543,10 +541,10 @@ public final class BunkrGalleryActivity extends Activity {
                     initialLoading.setVisibility(View.GONE);
                     loadMoreLoading.setVisibility(View.GONE);
                     if (adapter.getItemCount() == 0) {
-                        Toast.makeText(
+                        ZeroChillToast.makeText(
                                 this,
                                 "Couldn't load more matching media.",
-                                Toast.LENGTH_SHORT
+                                ZeroChillToast.LENGTH_SHORT
                         ).show();
                     }
                 });
@@ -557,7 +555,7 @@ public final class BunkrGalleryActivity extends Activity {
     private void showFapelloFailure(FapelloSourceException failure) {
         if (failure == null || fapelloFailureShown) return;
         fapelloFailureShown = true;
-        Toast.makeText(this, failure.userMessage(), Toast.LENGTH_LONG).show();
+        ZeroChillToast.makeText(this, failure.userMessage(), ZeroChillToast.LENGTH_LONG).show();
     }
 
     private FapelloSourceException fapelloFailure(Throwable error) {
@@ -898,7 +896,7 @@ public final class BunkrGalleryActivity extends Activity {
                     if (pendingVideoPosition == position && pager.getCurrentItem() == position) {
                         pendingVideoPosition = -1;
                         adapter.setFailed(position, true);
-                        Toast.makeText(this, "Couldn't play this video.", Toast.LENGTH_SHORT).show();
+                        ZeroChillToast.makeText(this, "Couldn't play this video.", ZeroChillToast.LENGTH_SHORT).show();
                     }
                 });
             }
@@ -957,7 +955,7 @@ public final class BunkrGalleryActivity extends Activity {
                     if (requestGeneration != generation || isFinishing()) return;
                     adapter.setLoading(position, false);
                     adapter.setFailed(position, true);
-                    Toast.makeText(this, "Couldn't play this video.", Toast.LENGTH_SHORT).show();
+                    ZeroChillToast.makeText(this, "Couldn't play this video.", ZeroChillToast.LENGTH_SHORT).show();
                 });
             }
         });
@@ -1026,12 +1024,12 @@ public final class BunkrGalleryActivity extends Activity {
                 }, () -> {
                     RatingFeedbackPrompt.recordPlaybackError(BunkrGalleryActivity.this);
                     releasePlayer(); adapter.setFailed(position, true);
-                    Toast.makeText(BunkrGalleryActivity.this, "Couldn't refresh this video. Tap it to retry.", Toast.LENGTH_SHORT).show();
+                    ZeroChillToast.makeText(BunkrGalleryActivity.this, "Couldn't refresh this video. Tap it to retry.", ZeroChillToast.LENGTH_SHORT).show();
                 })) return;
                 RatingFeedbackPrompt.recordPlaybackError(BunkrGalleryActivity.this);
                 releasePlayer();
                 adapter.setFailed(position, true);
-                Toast.makeText(BunkrGalleryActivity.this, "Couldn't continue this video. Tap it to retry.", Toast.LENGTH_SHORT).show();
+                ZeroChillToast.makeText(BunkrGalleryActivity.this, "Couldn't continue this video. Tap it to retry.", ZeroChillToast.LENGTH_SHORT).show();
             }
         });
         player.setPlayWhenReady(true);
@@ -1165,7 +1163,7 @@ public final class BunkrGalleryActivity extends Activity {
 
     private void showMenu(View anchor) {
         NativeContentItem current = adapter.itemAt(pager.getCurrentItem());
-        PopupMenu menu = new PopupMenu(this, anchor);
+        ZeroChillMenu menu = new ZeroChillMenu(this, anchor);
         if (current != null && current.isVideo()) {
             menu.getMenu().add(Menu.NONE, 3, 0, "Download video");
         }
@@ -1226,7 +1224,7 @@ public final class BunkrGalleryActivity extends Activity {
         int position = pager.getCurrentItem();
         NativeContentItem item = adapter.itemAt(position);
         if (item == null || !item.isVideo()) {
-            Toast.makeText(this, "This item is not a video.", Toast.LENGTH_SHORT).show();
+            ZeroChillToast.makeText(this, "This item is not a video.", ZeroChillToast.LENGTH_SHORT).show();
             return;
         }
         downloadVideoItem(position, item);

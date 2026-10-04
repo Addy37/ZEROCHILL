@@ -12,7 +12,6 @@ import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.card.MaterialCardView;
@@ -119,7 +118,7 @@ public final class FeedbackActivity extends Activity {
         updateTypeButtons(types);
 
         label("YOUR MESSAGE");
-        message = new EditText(this);
+        message = new ZeroChillEditText(this);
         message.setHint("What should I know?");
         message.setHintTextColor(Color.rgb(115, 115, 124));
         message.setTextColor(Color.WHITE);
@@ -127,7 +126,7 @@ public final class FeedbackActivity extends Activity {
         message.setGravity(Gravity.TOP | Gravity.START);
         message.setMinHeight(dp(150));
         message.setPadding(dp(16), dp(14), dp(16), dp(14));
-        message.setBackground(rounded(SURFACE, 16));
+        message.setBackgroundResource(R.drawable.zc_input_field);
         message.setFilters(new InputFilter[]{new InputFilter.LengthFilter(2000)});
         content.addView(message, marginParams(-1, -2, 0, 0, 0, dp(8)));
 
@@ -211,13 +210,13 @@ public final class FeedbackActivity extends Activity {
                     submit.setEnabled(true);
                     submit.setText("Send feedback");
                     if (error != null) {
-                        Toast.makeText(this, "Couldn't send feedback. Try again.", Toast.LENGTH_LONG).show();
+                        ZeroChillToast.makeText(this, "Couldn't send feedback. Try again.", ZeroChillToast.LENGTH_LONG).show();
                         return;
                     }
                     message.setText("");
                     selectedRating = 0;
                     RatingFeedbackPrompt.markFeedbackSubmitted(this);
-                    Toast.makeText(this, "Feedback sent. Thank you.", Toast.LENGTH_LONG).show();
+                    ZeroChillToast.makeText(this, "Feedback sent. Thank you.", ZeroChillToast.LENGTH_LONG).show();
                     showHistory();
                 }));
     }

@@ -5,7 +5,6 @@ import android.content.Intent;
 import android.graphics.Color;
 import android.graphics.Bitmap;
 import android.net.Uri;
-import android.widget.Toast;
 import com.bumptech.glide.request.target.CustomTarget;
 import com.bumptech.glide.request.transition.Transition;
 import android.graphics.drawable.Drawable;
@@ -177,7 +176,7 @@ public final class CreatorAvatarCropActivity extends Activity {
                 }
                 @Override public void onLoadFailed(Drawable errorDrawable) {
                     imageReady = false;
-                    Toast.makeText(CreatorAvatarCropActivity.this, "Couldn't read that image.", Toast.LENGTH_LONG).show();
+                    ZeroChillToast.makeText(CreatorAvatarCropActivity.this, "Couldn't read that image.", ZeroChillToast.LENGTH_LONG).show();
                 }
             });
         } else {
@@ -263,7 +262,7 @@ public final class CreatorAvatarCropActivity extends Activity {
         catch (Exception error) {
             saving = false;
             saveButton.setEnabled(imageReady);
-            Toast.makeText(this, "Wait for the image to load.", Toast.LENGTH_SHORT).show();
+            ZeroChillToast.makeText(this, "Wait for the image to load.", ZeroChillToast.LENGTH_SHORT).show();
             return;
         }
         new Thread(() -> {
@@ -290,7 +289,7 @@ public final class CreatorAvatarCropActivity extends Activity {
                 runOnUiThread(() -> {
                     saving = false;
                     saveButton.setEnabled(imageReady);
-                    Toast.makeText(this, "Couldn't save that crop.", Toast.LENGTH_LONG).show();
+                    ZeroChillToast.makeText(this, "Couldn't save that crop.", ZeroChillToast.LENGTH_LONG).show();
                 });
             } finally { cropped.recycle(); }
         }, "profile-avatar-crop").start();
