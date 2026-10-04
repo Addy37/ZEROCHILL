@@ -94,7 +94,8 @@ final class ChaosCompletedReplayController {
         }
 
         void restartIfCompleted(int position) {
-            if (pager == null || pager.getChildCount() == 0) return;
+            if (pager == null || pager.getChildCount() == 0
+                    || !feed.canReplayCompletedPage(position)) return;
             View child = pager.getChildAt(0);
             if (!(child instanceof RecyclerView)) return;
             RecyclerView recycler = (RecyclerView) child;

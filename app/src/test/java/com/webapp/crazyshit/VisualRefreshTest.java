@@ -333,7 +333,7 @@ public class VisualRefreshTest {
         host.pause().stop().destroy();
     }
 
-    @Test public void shitTokActionsUseCompactGlassRails() {
+    @Test public void shitTokActionsFloatWithoutVolumeOrShare() {
         ActivityController<Activity> host = Robolectric.buildActivity(Activity.class).setup();
         host.get().setTheme(R.style.Theme_CrazyShit);
         ChaosFeedView feed = new ChaosFeedView(host.get(), item -> { });
@@ -344,27 +344,27 @@ public class VisualRefreshTest {
             View root = holder.itemView;
 
             View actionRail = root.findViewWithTag("shittok_action_rail");
-            View playbackRail = root.findViewWithTag("shittok_playback_rail");
             assertNotNull(actionRail);
-            assertNotNull(playbackRail);
-            assertNotNull(actionRail.getBackground());
-            assertNotNull(playbackRail.getBackground());
+            assertNull(root.findViewWithTag("shittok_playback_rail"));
+            assertNull(root.findViewWithTag("shittok_mute"));
+            assertNull(root.findViewWithTag("shittok_share"));
+            assertNull(actionRail.getBackground());
+            assertEquals(5, ((ViewGroup) actionRail).getChildCount());
 
             for (String tag : new String[] {
+                    "shittok_like",
                     "shittok_save",
                     "shittok_comments",
-                    "shittok_share",
+                    "shittok_auto_scroll",
                     "shittok_more",
-                    "shittok_mute",
-                    "shittok_fullscreen"
+                    "shittok_landscape_like",
+                    "shittok_landscape_comments",
+                    "shittok_landscape_save",
+                    "shittok_landscape_auto_scroll"
             }) {
                 View control = root.findViewWithTag(tag);
                 assertNotNull(tag, control);
-                if ("shittok_fullscreen".equals(tag)) {
-                    assertTrue(tag, control instanceof ImageView);
-                } else {
-                    assertTrue(tag, control instanceof TextView);
-                }
+                assertTrue(tag, control instanceof TextView);
                 assertTrue(tag, control.getLayoutParams().width >= BrowseUi.dp(host.get(), 48));
                 assertTrue(tag, control.getLayoutParams().height >= BrowseUi.dp(host.get(), 48));
                 assertNotNull(tag, control.getContentDescription());
@@ -374,6 +374,77 @@ public class VisualRefreshTest {
             assertEquals("Save to Watch Later", String.valueOf(save.getContentDescription()));
             View fullscreen = root.findViewWithTag("shittok_fullscreen");
             assertEquals(View.GONE, fullscreen.getVisibility());
+            assertEquals("Full screen", ((TextView) fullscreen).getText().toString());
+            assertEquals("Auto Scroll off. Tap to turn on", String.valueOf(
+                    root.findViewWithTag("shittok_auto_scroll").getContentDescription()));
+        } finally {
+            feed.close();
+            host.pause().stop().destroy();
+        }
+    }
+
+    @Test public void shitTokAutoScrollIsSessionOnlyAndLandscapeHasOwnControls() throws Exception {
+        ActivityController<Activity> host = Robolectric.buildActivity(Activity.class).setup();
+        host.get().setTheme(R.style.Theme_CrazyShit);
+        ChaosFeedView feed = new ChaosFeedView(host.get(), item -> { });
+        try {
+            RecyclerView.Adapter<?> adapter = ReflectionHelpers.getField(feed, "adapter");
+            RecyclerView.ViewHolder holder = adapter.onCreateViewHolder(
+                    new RecyclerView(host.get()), 0);
+            View root = holder.itemView;
+            View portraitToggle = root.findViewWithTag("shittok_auto_scroll");
+            View landscapeToggle = root.findViewWithTag("shittok_landscape_auto_scroll");
+            assertEquals("Auto Scroll off. Tap to turn on",
+                    String.valueOf(portraitToggle.getContentDescription()));
+            portraitToggle.performClick();
+            assertEquals("Auto Scroll on. Tap to turn off",
+                    String.valueOf(portraitToggle.getContentDescription()));
+            // A detached holder won't be part of pagerRecycler's child iteration; the
+            // attached layout uses that path. Its second control toggles the same feed field.
+            landscapeToggle.performClick();
+            assertEquals(Boolean.FALSE, ReflectionHelpers.getField(feed, "autoScrollEnabled"));
+
+            android.content.res.Configuration original = new android.content.res.Configuration(
+                    host.get().getResources().getConfiguration());
+            android.content.res.Configuration landscape = new android.content.res.Configuration(original);
+            landscape.orientation = android.content.res.Configuration.ORIENTATION_LANDSCAPE;
+            host.get().getResources().updateConfiguration(landscape,
+                    host.get().getResources().getDisplayMetrics());
+            ReflectionHelpers.setField(feed, "manualFullscreen", true);
+            ReflectionHelpers.callInstanceMethod(holder, "syncOrientationChrome");
+            View header = root.findViewWithTag("shittok_landscape_header");
+            View actions = root.findViewWithTag("shittok_landscape_actions");
+            View portraitRail = root.findViewWithTag("shittok_action_rail");
+            assertEquals(View.VISIBLE, header.getVisibility());
+            assertEquals(View.VISIBLE, actions.getVisibility());
+            assertEquals(View.GONE, ((View) portraitRail.getParent()).getVisibility());
+            capture(root, "shittok-landscape-controls", 740, 360);
+            root.measure(View.MeasureSpec.makeMeasureSpec(740, View.MeasureSpec.EXACTLY),
+                    View.MeasureSpec.makeMeasureSpec(360, View.MeasureSpec.EXACTLY));
+            root.layout(0, 0, 740, 360);
+            assertTrue(header.getBottom() < actions.getTop());
+            host.get().getResources().updateConfiguration(original,
+                    host.get().getResources().getDisplayMetrics());
+            ReflectionHelpers.setField(feed, "manualFullscreen", false);
+            ReflectionHelpers.callInstanceMethod(holder, "syncOrientationChrome");
+            assertEquals(View.GONE, header.getVisibility());
+            assertEquals(View.VISIBLE, ((View) portraitRail.getParent()).getVisibility());
+            ReflectionHelpers.setField(holder, "videoAspectRatio", 2f);
+            ReflectionHelpers.setField(holder, "horizontalVideo", true);
+            ReflectionHelpers.callInstanceMethod(holder, "syncOrientationChrome");
+            capture(root, "shittok-portrait-controls", 400, 900);
+            root.measure(View.MeasureSpec.makeMeasureSpec(400, View.MeasureSpec.EXACTLY),
+                    View.MeasureSpec.makeMeasureSpec(900, View.MeasureSpec.EXACTLY));
+            root.layout(0, 0, 400, 900);
+            FrameLayout.LayoutParams promptParams = (FrameLayout.LayoutParams)
+                    root.findViewWithTag("shittok_fullscreen").getLayoutParams();
+            assertTrue(promptParams.bottomMargin > BrowseUi.dp(host.get(), 142));
+            ChaosFeedView fresh = new ChaosFeedView(host.get(), item -> { });
+            try {
+                assertEquals(Boolean.FALSE, ReflectionHelpers.getField(fresh, "autoScrollEnabled"));
+            } finally {
+                fresh.close();
+            }
         } finally {
             feed.close();
             host.pause().stop().destroy();
