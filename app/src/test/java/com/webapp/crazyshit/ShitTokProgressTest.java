@@ -21,7 +21,7 @@ import static org.junit.Assert.*;
 import static org.robolectric.Shadows.shadowOf;
 
 @RunWith(RobolectricTestRunner.class)
-@Config(application = Application.class, sdk = 35, qualifiers = "land-w740dp-h360dp")
+@Config(application = Application.class, sdk = 35, qualifiers = "w740dp-h360dp-land")
 public class ShitTokProgressTest {
     @Test public void timesFollowPlaybackAndScrubTargetAndResetUnknownDuration() {
         ActivityController<Activity> host = Robolectric.buildActivity(Activity.class).setup();
