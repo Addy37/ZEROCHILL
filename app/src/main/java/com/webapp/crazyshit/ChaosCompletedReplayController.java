@@ -3,7 +3,9 @@ package com.webapp.crazyshit;
 import android.view.View;
 import android.view.ViewGroup;
 
+import androidx.annotation.OptIn;
 import androidx.media3.common.Player;
+import androidx.media3.common.util.UnstableApi;
 import androidx.media3.ui.PlayerView;
 import androidx.recyclerview.widget.RecyclerView;
 import androidx.viewpager2.widget.ViewPager2;
@@ -93,6 +95,7 @@ final class ChaosCompletedReplayController {
             pager = null;
         }
 
+        @OptIn(markerClass = UnstableApi.class)
         void restartIfCompleted(int position) {
             if (pager == null || pager.getChildCount() == 0
                     || !feed.canReplayCompletedPage(position)) return;

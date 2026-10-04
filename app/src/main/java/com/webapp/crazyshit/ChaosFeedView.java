@@ -29,6 +29,7 @@ import android.widget.SeekBar;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
+import androidx.core.widget.TextViewCompat;
 import androidx.media3.common.MediaItem;
 import androidx.media3.common.MimeTypes;
 import androidx.media3.common.PlaybackException;
@@ -2440,7 +2441,7 @@ public final class ChaosFeedView extends FrameLayout {
             landscapeLike.setCompoundDrawablesWithIntrinsicBounds(
                     0, videoLiked ? R.drawable.ic_action_heart_filled
                             : R.drawable.ic_action_heart_outline, 0, 0);
-            landscapeLike.setCompoundDrawableTintList(ColorStateList.valueOf(
+            TextViewCompat.setCompoundDrawableTintList(landscapeLike, ColorStateList.valueOf(
                     videoLiked ? UiPalette.PRIMARY : Color.WHITE));
             landscapeLike.setContentDescription(videoLiked ? "Unlike video" : "Like video");
             like.setEnabled(true);
@@ -2917,7 +2918,7 @@ public final class ChaosFeedView extends FrameLayout {
             int color = autoScrollEnabled ? UiPalette.PRIMARY : Color.WHITE;
             for (TextView button : new TextView[] { autoScroll, landscapeAutoScroll }) {
                 button.setContentDescription(description);
-                button.setCompoundDrawableTintList(ColorStateList.valueOf(color));
+                TextViewCompat.setCompoundDrawableTintList(button, ColorStateList.valueOf(color));
             }
         }
 
