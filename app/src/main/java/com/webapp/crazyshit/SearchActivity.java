@@ -671,7 +671,7 @@ public final class SearchActivity extends Activity {
         } else {
             progress.setVisibility(View.GONE);
         }
-        String unavailable = String.join(", ", errors.values());
+        String unavailable = unavailableForCurrentFilter();
         searchState.setVisibility(View.VISIBLE);
         searchState.setText(pendingSources > 0
                 ? "Searching · " + pendingSources + " sources remaining"
@@ -689,6 +689,34 @@ public final class SearchActivity extends Activity {
                 recycler.getLayoutManager().onRestoreInstanceState(restoredScroll);
                 restoredScroll = null;
             }
+        }
+    }
+
+    private String unavailableForCurrentFilter() {
+        ArrayList<String> unavailable = new ArrayList<>();
+        for (Map.Entry<Integer, String> error : errors.entrySet()) {
+            if (sourceVisibleForFilter(error.getKey())) unavailable.add(error.getValue());
+        }
+        return String.join(", ", unavailable);
+    }
+
+    private boolean sourceVisibleForFilter(int sourceId) {
+        switch (filter) {
+            case VIDEOS:
+                return sourceId == 0 || sourceId == 1;
+            case EFUKT:
+                return sourceId == 1 || sourceId == 3;
+            case BUNKR:
+                return sourceId == 4 || sourceId == 7;
+            case COLLECTIONS:
+                return sourceId == 2 || sourceId == 3 || sourceId == 4 || sourceId == 7;
+            case CATEGORIES:
+                return sourceId == 5;
+            case LIBRARY:
+                return sourceId == 6;
+            case ALL:
+            default:
+                return true;
         }
     }
 
