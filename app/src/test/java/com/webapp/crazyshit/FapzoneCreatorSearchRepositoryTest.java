@@ -70,6 +70,33 @@ public final class FapzoneCreatorSearchRepositoryTest {
         }
     }
 
+    @Test public void rejectsUnrelatedAndOpaqueCreatorFallbackResults() throws Exception {
+        Context context = RuntimeEnvironment.getApplication();
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        List<FapzoneCreatorSearchRepository.SourceSearch> sources = Collections.singletonList(
+                (ignoredContext, query, limit) -> Arrays.asList(
+                        creator("Send feedback", "OnlyHaven"),
+                        creator("39058172", "OnlyHaven"),
+                        creator("Sophie Rain", "OnlyHaven")
+                )
+        );
+        FapzoneCreatorSearchRepository repository =
+                new FapzoneCreatorSearchRepository(executor, sources);
+
+        try {
+            List<NativeContentItem> nonsense = repository.search(
+                    context, "fbdijdnd", 10);
+            assertTrue(nonsense.isEmpty());
+
+            List<NativeContentItem> matching = repository.search(
+                    context, "sophie", 10);
+            assertEquals(1, matching.size());
+            assertEquals("Sophie Rain", matching.get(0).title);
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
     private NativeContentItem creator(String name, String source) {
         return new NativeContentItem(
                 NativeContentItem.KIND_CREATOR,
