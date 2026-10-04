@@ -21,6 +21,7 @@ import org.robolectric.Robolectric;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.Shadows;
 import org.robolectric.annotation.Config;
+import org.robolectric.annotation.GraphicsMode;
 
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -110,7 +111,7 @@ public class ZeroChillControlsTest {
         return false;
     }
 
-    @Test public void refreshRetainsStateAndRendersBrandedIndicator() throws Exception {
+    @Test @GraphicsMode(GraphicsMode.Mode.NATIVE) public void refreshRetainsStateAndRendersBrandedIndicator() throws Exception {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
         ZeroChillRefreshLayout refresh = new ZeroChillRefreshLayout(activity);
         ImageView indicator = null;
@@ -131,6 +132,7 @@ public class ZeroChillControlsTest {
         indicator.layout(0, 0, 64, 64);
         Bitmap bitmap = Bitmap.createBitmap(64, 64, Bitmap.Config.ARGB_8888);
         indicator.draw(new Canvas(bitmap));
+        assertTrue(hasVisiblePixels(bitmap));
         File folder = new File("build/reports/visual-tests");
         assertTrue(folder.exists() || folder.mkdirs());
         try (FileOutputStream output = new FileOutputStream(new File(folder, "zerochill-refresh-indicator.png"))) {
@@ -162,7 +164,7 @@ public class ZeroChillControlsTest {
         ZeroChillToast.onPaused(next);
     }
 
-    @Test public void capturesBrandedDialogChoiceAndControls() throws Exception {
+    @Test @GraphicsMode(GraphicsMode.Mode.NATIVE) public void capturesBrandedDialogChoiceAndControls() throws Exception {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
         LinearLayout controls = new LinearLayout(activity);
         controls.setOrientation(LinearLayout.VERTICAL);
@@ -191,12 +193,22 @@ public class ZeroChillControlsTest {
         decor.layout(0, 0, width, Math.max(1, decor.getMeasuredHeight()));
         Bitmap bitmap = Bitmap.createBitmap(width, Math.max(1, decor.getHeight()), Bitmap.Config.ARGB_8888);
         decor.draw(new Canvas(bitmap));
+        assertTrue(hasVisiblePixels(bitmap));
         File folder = new File("build/reports/visual-tests");
         assertTrue(folder.exists() || folder.mkdirs());
         try (FileOutputStream output = new FileOutputStream(new File(folder, "zerochill-controls-dialog.png"))) {
             assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG, 100, output));
         }
         dialog.dismiss();
+    }
+
+    private boolean hasVisiblePixels(Bitmap bitmap) {
+        for (int y = 0; y < bitmap.getHeight(); y++) {
+            for (int x = 0; x < bitmap.getWidth(); x++) {
+                if (android.graphics.Color.alpha(bitmap.getPixel(x, y)) != 0) return true;
+            }
+        }
+        return false;
     }
 
     @Test public void transientReplacesMessageAndClearsOnPause() {

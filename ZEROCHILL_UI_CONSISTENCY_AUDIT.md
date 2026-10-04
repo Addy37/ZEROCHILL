@@ -139,7 +139,7 @@ Categories: 1 branded ZEROCHILL UI, 2 internal widget or type with custom appear
 | `Toast` | 1. Shared in-app transient component or its call site. | `ZeroChillSocialSettingsActivity.java`: 186, 241 |
 | `Toast` | 1. Shared in-app transient component or its call site. | `ZeroChillToast.java`: 24, 53, 59, 60, 63, 177 |
 
-Six `SwipeRefreshLayout` instances keep their gesture and callback behavior through `ZeroChillRefreshLayout` with glass/dot indicator. The MainActivity site-error actions use shared branded buttons. Input validation uses a branded error border, transient copy, and accessibility announcement while retaining `getError()` and clear-on-edit.
+Five `SwipeRefreshLayout` instances keep their gesture and callback behavior through `ZeroChillRefreshLayout` with glass/dot indicator. The MainActivity site-error actions use shared branded buttons. Input validation uses a branded error border, transient copy, and accessibility announcement while retaining `getError()` and clear-on-edit.
 
 No production XML layout contains an unstyled `<ProgressBar>`, `<Switch>`, `<EditText>`, or `<CheckBox>`. The circular loading sites use `ZeroChillProgressBar` three dots; three determinate horizontal progress bars retain real progress values with cyan fill. The only `new AlertDialog.Builder` remains the already branded `AccessNoticeDialog`; it preserves its noncancelable first-run decision and acceptance key.
 
