@@ -6,6 +6,7 @@ import androidx.benchmark.macro.FrameTimingMetric
 import androidx.benchmark.macro.MemoryUsageMetric
 import androidx.benchmark.macro.StartupMode
 import androidx.benchmark.macro.StartupTimingMetric
+import androidx.benchmark.macro.TraceSectionMetric
 import androidx.benchmark.macro.junit4.MacrobenchmarkRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.Rule
@@ -15,6 +16,16 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 @OptIn(ExperimentalMetricApi::class)
 class MainFlowsBenchmark {
+    private fun playbackMetrics() = listOf(
+        FrameTimingMetric(), MemoryUsageMetric(MemoryUsageMetric.Mode.Last),
+        TraceSectionMetric("zc.shittok.page_selected", TraceSectionMetric.Mode.Sum),
+        TraceSectionMetric("zc.shittok.prepare", TraceSectionMetric.Mode.Sum),
+        TraceSectionMetric("zc.shittok.detach", TraceSectionMetric.Mode.Sum),
+        TraceSectionMetric("zc.shittok.release", TraceSectionMetric.Mode.Sum),
+        TraceSectionMetric("zc.shittok.decoder_release", TraceSectionMetric.Mode.Sum),
+        TraceSectionMetric("zc.shittok.batch_fetch", TraceSectionMetric.Mode.Sum),
+        TraceSectionMetric("zc.shittok.resolve_bg", TraceSectionMetric.Mode.Sum)
+    )
     @get:Rule
     val benchmarkRule = MacrobenchmarkRule()
 
@@ -57,7 +68,7 @@ class MainFlowsBenchmark {
     @Test
     fun chaosLongSession() = benchmarkRule.measureRepeated(
         packageName = TARGET_PACKAGE,
-        metrics = listOf(FrameTimingMetric(), MemoryUsageMetric(MemoryUsageMetric.Mode.Last)),
+        metrics = playbackMetrics(),
         compilationMode = CompilationMode.None(),
         startupMode = StartupMode.WARM,
         iterations = 1,
@@ -81,7 +92,7 @@ class MainFlowsBenchmark {
     @Test
     fun chaosScroll() = benchmarkRule.measureRepeated(
         packageName = TARGET_PACKAGE,
-        metrics = listOf(FrameTimingMetric(), MemoryUsageMetric(MemoryUsageMetric.Mode.Last)),
+        metrics = playbackMetrics(),
         compilationMode = CompilationMode.None(),
         startupMode = StartupMode.WARM,
         iterations = 3,
