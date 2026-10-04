@@ -37,6 +37,9 @@ public class VisualRefreshTest {
         int w = BrowseUi.dp(root.getContext(), width), h = BrowseUi.dp(root.getContext(), height);
         root.measure(View.MeasureSpec.makeMeasureSpec(w, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(h, View.MeasureSpec.EXACTLY));
         root.layout(0, 0, w, h);
+        // Media-relative controls can request a follow-up layout from their size listener.
+        root.measure(View.MeasureSpec.makeMeasureSpec(w, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(h, View.MeasureSpec.EXACTLY));
+        root.layout(0, 0, w, h);
         Bitmap bitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
         root.draw(new Canvas(bitmap));
         File dir = new File("build/reports/visual-tests"); dir.mkdirs();
@@ -440,6 +443,11 @@ public class VisualRefreshTest {
             ReflectionHelpers.setField(holder, "horizontalVideo", true);
             ReflectionHelpers.callInstanceMethod(holder, "syncOrientationChrome");
             capture(root, "shittok-portrait-controls", 400, 900);
+            View fittedMedia = ReflectionHelpers.getField(holder, "mediaLayer");
+            int capturedVideoBottom = fittedMedia.getTop() + (fittedMedia.getHeight()
+                    + Math.min(fittedMedia.getHeight(), Math.round(fittedMedia.getWidth() / 2f))) / 2;
+            assertTrue(root.findViewWithTag("shittok_fullscreen").getTop() >= capturedVideoBottom
+                    + BrowseUi.dp(host.get(), 8));
             root.measure(View.MeasureSpec.makeMeasureSpec(400, View.MeasureSpec.EXACTLY),
                     View.MeasureSpec.makeMeasureSpec(900, View.MeasureSpec.EXACTLY));
             root.layout(0, 0, 400, 900);
