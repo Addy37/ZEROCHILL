@@ -3065,9 +3065,11 @@ public final class ChaosFeedView extends FrameLayout {
             elapsedTime.setVisibility(landscape ? View.VISIBLE : View.GONE);
             remainingTime.setVisibility(landscape ? View.VISIBLE : View.GONE);
             seekBar.setPadding(0, landscape ? 0 : dp(18), 0, 0);
-            // Reserve a media frame above the scrubber, rather than drawing controls over it.
+            // In landscape, let fitted media use the space behind the top chrome instead of
+            // shrinking the video by the full 58dp header height. The header remains layered
+            // above the media, while the media still ends exactly where the scrubber begins.
             FrameLayout.LayoutParams media = (FrameLayout.LayoutParams) mediaLayer.getLayoutParams();
-            media.topMargin = landscape ? dp(58) : 0;
+            media.topMargin = 0;
             media.bottomMargin = landscape ? safeBottom + dp(96) : (horizontalVideo ? dp(44) : 0);
             mediaLayer.setLayoutParams(media);
             updateFullscreenPromptPosition();
