@@ -188,6 +188,13 @@ jobs:
           gradle-version: '8.7'
           cache-provider: basic
 
+      - name: Run focused fullscreen regressions first
+        run: >-
+          gradle --no-daemon :app:testDebugUnitTest
+          --tests 'com.webapp.crazyshit.ShowsFullscreen*'
+          --tests 'com.webapp.crazyshit.ShitTokProgressTest'
+          --tests 'com.webapp.crazyshit.PhoneOrientationPolicyTest'
+
       - name: Run focused header profile hub regressions first
         run: >-
           gradle --no-daemon :app:testDebugUnitTest

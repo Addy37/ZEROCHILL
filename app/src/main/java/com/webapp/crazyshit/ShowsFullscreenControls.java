@@ -17,7 +17,7 @@ import androidx.media3.ui.TimeBar;
 /** Shows chrome uses ShitTok's timing and layout without owning playback or orientation. */
 @UnstableApi
 final class ShowsFullscreenControls {
-    private final PlayerView view;
+    private final PlayerControlView view;
     private final View chrome;
     private final PlayerControlView controller;
     private Player player;
@@ -33,13 +33,18 @@ final class ShowsFullscreenControls {
         }
     };
 
-    ShowsFullscreenControls(PlayerView view) {
+    ShowsFullscreenControls(PlayerView playerView) {
+        this((PlayerControlView) playerView.findViewById(androidx.media3.ui.R.id.exo_controller));
+        playerView.setControllerShowTimeoutMs(0);
+        playerView.setControllerHideOnTouch(false);
+    }
+
+    ShowsFullscreenControls(PlayerControlView view) {
         this.view = view;
         chrome = view.findViewById(R.id.shows_fullscreen_chrome);
-        controller = view.findViewById(androidx.media3.ui.R.id.exo_controller);
+        controller = view;
         controller.setAnimationEnabled(false);
-        view.setControllerShowTimeoutMs(0);
-        view.setControllerHideOnTouch(false);
+        controller.setShowTimeoutMs(0);
         view.findViewById(R.id.shows_top_scrim).setBackground(FullscreenPlayerStyle.topScrim());
         view.findViewById(R.id.shows_bottom_scrim).setBackground(FullscreenPlayerStyle.bottomScrim());
         controller.setProgressUpdateListener((position, buffered) -> {
@@ -72,6 +77,7 @@ final class ShowsFullscreenControls {
     }
 
     void bind(Player player) {
+        if (this.player != null) this.player.removeListener(listener);
         this.player = player;
         player.addListener(listener);
         syncPausedChrome();
@@ -84,7 +90,7 @@ final class ShowsFullscreenControls {
         visible = true;
         chrome.animate().cancel();
         chrome.setAlpha(1f);
-        view.showController();
+        view.show();
         syncPausedChrome();
         scheduleHide();
     }
@@ -94,7 +100,7 @@ final class ShowsFullscreenControls {
         visible = false;
         chrome.animate().cancel();
         chrome.animate().alpha(0f).setDuration(FullscreenPlayerStyle.FADE_MS)
-                .withEndAction(() -> { if (!visible) view.hideController(); }).start();
+                .withEndAction(() -> { if (!visible) view.hide(); }).start();
     }
 
     void suspend(boolean suspended) {
@@ -103,7 +109,7 @@ final class ShowsFullscreenControls {
             visible = false;
             view.removeCallbacks(autoHide);
             chrome.animate().cancel();
-            view.hideController();
+            view.hide();
         } else show();
     }
 
@@ -111,7 +117,20 @@ final class ShowsFullscreenControls {
         view.removeCallbacks(autoHide);
         chrome.animate().cancel();
         if (player != null) player.removeListener(listener);
+        controller.setPlayer(null);
         player = null;
+    }
+
+    void onVideoTap() {
+        if (!visible) { show(); return; }
+        if (player != null) {
+            if (player.isPlaying()) player.pause();
+            else {
+                if (player.getPlaybackState() == Player.STATE_ENDED) player.seekTo(0L);
+                player.play();
+            }
+        }
+        show();
     }
 
     private void scheduleHide() {

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="fullscreen_back">Back or minimize</string>
+    <string name="fullscreen_more">More video actions</string>
+    <string name="fullscreen_play_pause">Play or pause</string>
+    <string name="fullscreen_save">Save to Watch Later</string>
+    <string name="fullscreen_download">Download video</string>
+    <string name="fullscreen_share">Share video</string>
+    <string name="fullscreen_minimize">Minimize to browser</string>
+    <string name="fullscreen_remaining_zero">-0:00</string>
+    <string name="fullscreen_enter">Fullscreen</string>
+</resources>

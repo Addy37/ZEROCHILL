@@ -279,16 +279,7 @@ public class PlayerActivity extends Activity {
                     @Override
                     public boolean onSingleTapConfirmed(MotionEvent e) {
                         if (dragMinimize) return true;
-                        if (!fullscreenControls.isVisible()) {
-                            fullscreenControls.show();
-                        } else if (player != null) {
-                            if (player.isPlaying()) player.pause();
-                            else {
-                                if (player.getPlaybackState() == Player.STATE_ENDED) player.seekTo(0L);
-                                player.play();
-                            }
-                            fullscreenControls.show();
-                        }
+                        fullscreenControls.onVideoTap();
                         return true;
                     }
 
