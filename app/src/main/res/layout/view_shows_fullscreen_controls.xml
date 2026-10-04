@@ -59,6 +59,10 @@
             android:src="@drawable/ic_action_share" android:contentDescription="@string/fullscreen_share" />
         <ImageButton android:id="@+id/shows_like" style="@style/FullscreenIconButton"
             android:src="@drawable/ic_action_heart_outline" android:contentDescription="@string/fullscreen_like" />
+        <!-- Kept hidden while PlayerActivity migrates off the former bottom-row minimize ID. -->
+        <View android:id="@+id/shows_minimize"
+            android:layout_width="0dp" android:layout_height="0dp"
+            android:visibility="gone" android:importantForAccessibility="no" />
         <ImageButton android:id="@+id/shows_fullscreen_toggle" style="@style/FullscreenIconButton"
             android:visibility="gone" android:src="@drawable/ic_action_fullscreen"
             android:contentDescription="@string/fullscreen_enter" />
