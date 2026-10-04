@@ -9,6 +9,7 @@ on:
       - "build.gradle.kts"
       - "settings.gradle.kts"
       - ".github/workflows/performance.yml"
+      - "tools/run_performance_audit.sh"
 
 permissions:
   contents: read
@@ -31,6 +32,18 @@ jobs:
             task: :baselineprofile:connectedBenchmarkReleaseAndroidTest
           - flow: shows-scroll
             test: com.webapp.crazyshit.baselineprofile.MainFlowsBenchmark#showsScroll
+            rules: Macrobenchmark
+            task: :baselineprofile:connectedBenchmarkReleaseAndroidTest
+          - flow: warm-startup
+            test: com.webapp.crazyshit.baselineprofile.MainFlowsBenchmark#warmStartup
+            rules: Macrobenchmark
+            task: :baselineprofile:connectedBenchmarkReleaseAndroidTest
+          - flow: tab-switching
+            test: com.webapp.crazyshit.baselineprofile.MainFlowsBenchmark#retainedTabSwitching
+            rules: Macrobenchmark
+            task: :baselineprofile:connectedBenchmarkReleaseAndroidTest
+          - flow: chaos-long-session
+            test: com.webapp.crazyshit.baselineprofile.MainFlowsBenchmark#chaosLongSession
             rules: Macrobenchmark
             task: :baselineprofile:connectedBenchmarkReleaseAndroidTest
           - flow: shows-scroll-motion
@@ -86,8 +99,10 @@ jobs:
           profile: pixel_6
           disable-animations: ${{ matrix.flow != 'shows-scroll-motion' }}
           disk-size: 4096M
+          # The ten-minute trace processor exhausted the default emulator RAM.
+          ram-size: ${{ matrix.flow == 'chaos-long-session' && '4096M' || '2048M' }}
           script: >-
-            gradle --no-daemon ${{ matrix.task }}
+            bash tools/run_performance_audit.sh ${{ matrix.task }}
             "-Pandroid.testInstrumentationRunnerArguments.class=${{ matrix.test }}"
             "-Pandroid.testInstrumentationRunnerArguments.androidx.benchmark.enabledRules=${{ matrix.rules }}"
 
@@ -98,3 +113,22 @@ jobs:
             \( -name '*.json' -o -name '*baseline-prof.txt' -o -name '*startup-prof.txt' \) \
             -print -exec sh -c 'echo PERFORMANCE_FILE_BEGIN:$1; cat "$1"; echo PERFORMANCE_FILE_END:$1' _ {} \; \
             2>/dev/null || true
+
+      - name: Print device and harness diagnostics
+        if: always()
+        run: |
+          find baselineprofile/build/outputs -type f -name '*.txt' \
+            -exec sh -c 'echo "DIAGNOSTIC_FILE:$1"; tail -n 500 "$1"' _ {} \; \
+            2>/dev/null || true
+
+      - name: Preserve performance evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ZeroChill-performance-${{ matrix.flow }}
+          path: |
+            baselineprofile/build/outputs/connected_android_test_additional_output/
+            baselineprofile/build/outputs/final-pass-diagnostics/
+            baselineprofile/build/outputs/androidTest-results/
+          if-no-files-found: warn
+          retention-days: 7

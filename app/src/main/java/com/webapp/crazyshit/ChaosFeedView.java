@@ -13,6 +13,7 @@ import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
+import android.os.Trace;
 import android.view.Gravity;
 import android.view.HapticFeedbackConstants;
 import android.view.LayoutInflater;
@@ -229,6 +230,15 @@ public final class ChaosFeedView extends FrameLayout {
 
             @Override
             public void onPageSelected(int position) {
+                Trace.beginSection("zc.shittok.page_selected");
+                try {
+                    selectPage(position);
+                } finally {
+                    Trace.endSection();
+                }
+            }
+
+            private void selectPage(int position) {
                 cancelSwipePlayerMaintenance();
                 int previousPosition = selectedPosition;
                 boolean changed = position != previousPosition;
@@ -373,10 +383,13 @@ public final class ChaosFeedView extends FrameLayout {
 
     io.execute(() -> {
         List<NativeContentItem> mixed;
+        Trace.beginSection("zc.shittok.batch_fetch");
         try {
             mixed = sourceMixer.loadRandomBatch(activity);
         } catch (Exception ignored) {
             mixed = Collections.emptyList();
+        } finally {
+            Trace.endSection();
         }
 
         ArrayList<NativeContentItem> fresh = new ArrayList<>();
@@ -837,9 +850,12 @@ public final class ChaosFeedView extends FrameLayout {
 
         io.execute(() -> {
             CrazyShitRepository.StreamInfo stream = ChaosStartupPreloader.takeResolved(item.url);
+            Trace.beginSection("zc.shittok.resolve_bg");
             try {
                 if (stream == null) stream = resolvePlayable(item);
             } catch (Exception ignored) {
+            } finally {
+                Trace.endSection();
             }
             CrazyShitRepository.StreamInfo resolved = stream;
             activity.runOnUiThread(() -> {
@@ -856,7 +872,6 @@ public final class ChaosFeedView extends FrameLayout {
                     streamCache.put(item.url, resolved);
                 }
                 prepareVisible(position);
-                if (position == selectedPosition) playSelected();
             });
         });
     }
@@ -922,12 +937,9 @@ public final class ChaosFeedView extends FrameLayout {
     private void playSelected() {
         if (!active || !hostResumed) return;
         if (selectedPosition < 0 || selectedPosition >= items.size()) return;
+        // Cache hits prepare through resolveAt; async completion prepares through
+        // prepareVisible. Dispatching again here repeats the same player work.
         resolveAt(selectedPosition);
-        ChaosHolder holder = holderAt(selectedPosition);
-        if (holder == null) return;
-        NativeContentItem item = items.get(selectedPosition);
-        CrazyShitRepository.StreamInfo stream = streamCache.get(item.url);
-        if (stream != null) holder.prepare(stream, true);
     }
 
     private void pauseNonSelected(int selected) {
@@ -1052,9 +1064,12 @@ public final class ChaosFeedView extends FrameLayout {
 
         ExoPlayer detached = deferredPlayerReleases.pollFirst();
         if (detached != null) {
+            Trace.beginSection("zc.shittok.decoder_release");
             try {
                 detached.release();
             } catch (Exception ignored) {
+            } finally {
+                Trace.endSection();
             }
         } else {
             detachOneDistantPlayer(position);
@@ -1103,9 +1118,12 @@ public final class ChaosFeedView extends FrameLayout {
         removeCallbacks(playerReleaseMaintenanceRunnable);
         while (!deferredPlayerReleases.isEmpty()) {
             ExoPlayer player = deferredPlayerReleases.removeFirst();
+            Trace.beginSection("zc.shittok.decoder_release");
             try {
                 player.release();
             } catch (Exception ignored) {
+            } finally {
+                Trace.endSection();
             }
         }
     }
@@ -2582,6 +2600,15 @@ public final class ChaosFeedView extends FrameLayout {
         }
 
         void prepare(CrazyShitRepository.StreamInfo nextStream, boolean autoplay) {
+            Trace.beginSection("zc.shittok.prepare");
+            try {
+                prepareMeasured(nextStream, autoplay);
+            } finally {
+                Trace.endSection();
+            }
+        }
+
+        private void prepareMeasured(CrazyShitRepository.StreamInfo nextStream, boolean autoplay) {
             if (item == null || nextStream == null || nextStream.mediaUrl == null || nextStream.mediaUrl.isEmpty()) return;
             if (stream != null && stream.mediaUrl.equals(nextStream.mediaUrl) && player != null) {
                 PlaybackException currentError = player.getPlayerError();
@@ -3340,6 +3367,15 @@ public final class ChaosFeedView extends FrameLayout {
         }
 
         void detachPlayerForDeferredRelease() {
+            Trace.beginSection("zc.shittok.detach");
+            try {
+                detachMeasured();
+            } finally {
+                Trace.endSection();
+            }
+        }
+
+        private void detachMeasured() {
             root.removeCallbacks(hideControlsRunnable);
             root.removeCallbacks(skipFailedClipRunnable);
             root.removeCallbacks(progressTick);
@@ -3363,6 +3399,15 @@ public final class ChaosFeedView extends FrameLayout {
         }
 
         void releasePlayer() {
+            Trace.beginSection("zc.shittok.release");
+            try {
+                releaseMeasured();
+            } finally {
+                Trace.endSection();
+            }
+        }
+
+        private void releaseMeasured() {
             root.removeCallbacks(hideControlsRunnable);
             root.removeCallbacks(skipFailedClipRunnable);
             root.removeCallbacks(progressTick);
