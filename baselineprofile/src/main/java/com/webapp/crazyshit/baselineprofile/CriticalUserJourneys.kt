@@ -1,6 +1,7 @@
 package com.webapp.crazyshit.baselineprofile
 
 import android.os.SystemClock
+import android.util.Log
 import androidx.benchmark.macro.MacrobenchmarkScope
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.Until
@@ -139,7 +140,7 @@ internal fun MacrobenchmarkScope.scrollShows() {
     }
 }
 
-internal fun MacrobenchmarkScope.openAndScrollChaos() {
+internal fun MacrobenchmarkScope.openAndScrollChaos(swipes: Int = 5) {
     val shitTok = checkNotNull(awaitPrimaryTab("ShitTok tab", "ShitTok", 8_000L)) {
         "ShitTok tab was not reachable"
     }
@@ -148,10 +149,54 @@ internal fun MacrobenchmarkScope.openAndScrollChaos() {
     checkNotNull(device.wait(Until.findObject(By.desc("Play or pause video")), 12_000)) {
         "ShitTok player did not become ready"
     }
-    repeat(5) {
+    repeat(swipes) {
         swipeUp()
         device.waitForIdle(350)
     }
+}
+
+internal fun MacrobenchmarkScope.switchRetainedTabs() {
+    repeat(5) {
+        for (label in listOf("Shows", "OnlyFap", "Library", "ShitTok")) {
+            checkNotNull(awaitPrimaryTab("$label tab", label, 8_000L)) {
+                "$label tab was not reachable during repeated navigation"
+            }.click()
+            device.waitForIdle(350)
+            check(device.currentPackageName == TARGET_PACKAGE) {
+                "App left the foreground after selecting $label"
+            }
+        }
+    }
+}
+
+internal fun MacrobenchmarkScope.browseChaosLongSession() {
+    openAndScrollChaos(swipes = 0)
+    // Fifty paced swipes over ten minutes, followed by a rapid swipe burst.
+    // Sample process memory at fixed milestones, outside the swipe itself.
+    for (swipe in 0..50) {
+        if (swipe in listOf(0, 5, 10, 25, 50)) {
+            Log.i("ZeroChillBenchmark", "MEMORY_SWIPE_$swipe\n" +
+                device.executeShellCommand("dumpsys meminfo $TARGET_PACKAGE"))
+        }
+        if (swipe == 50) break
+        swipeUp()
+        SystemClock.sleep(12_000L)
+        check(device.currentPackageName == TARGET_PACKAGE) {
+            "App left the foreground at long-session swipe $swipe"
+        }
+    }
+    repeat(15) { swipeUp() }
+    device.waitForIdle(350)
+    pressHome()
+    SystemClock.sleep(1_000L)
+    launchApp()
+    checkNotNull(device.wait(Until.findObject(By.desc("Play or pause video")), 12_000)) {
+        "ShitTok controls did not return after background/foreground"
+    }
+    Log.i("ZeroChillBenchmark", "MEMORY_AFTER_RESUME\n" +
+        device.executeShellCommand("dumpsys meminfo $TARGET_PACKAGE"))
+    Log.i("ZeroChillBenchmark", "THERMAL_OBSERVATION\n" +
+        device.executeShellCommand("dumpsys thermalservice"))
 }
 
 internal fun MacrobenchmarkScope.search() {

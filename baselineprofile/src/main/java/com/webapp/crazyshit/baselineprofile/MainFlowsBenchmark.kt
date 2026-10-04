@@ -31,6 +31,42 @@ class MainFlowsBenchmark {
     }
 
     @Test
+    fun warmStartup() = benchmarkRule.measureRepeated(
+        packageName = TARGET_PACKAGE,
+        metrics = listOf(StartupTimingMetric(), MemoryUsageMetric(MemoryUsageMetric.Mode.Last)),
+        compilationMode = CompilationMode.None(),
+        startupMode = StartupMode.WARM,
+        iterations = 5,
+        setupBlock = { launchApp(); pressHome() }
+    ) {
+        launchApp()
+    }
+
+    @Test
+    fun retainedTabSwitching() = benchmarkRule.measureRepeated(
+        packageName = TARGET_PACKAGE,
+        metrics = listOf(FrameTimingMetric(), MemoryUsageMetric(MemoryUsageMetric.Mode.Last)),
+        compilationMode = CompilationMode.None(),
+        startupMode = StartupMode.WARM,
+        iterations = 3,
+        setupBlock = { launchApp() }
+    ) {
+        switchRetainedTabs()
+    }
+
+    @Test
+    fun chaosLongSession() = benchmarkRule.measureRepeated(
+        packageName = TARGET_PACKAGE,
+        metrics = listOf(FrameTimingMetric(), MemoryUsageMetric(MemoryUsageMetric.Mode.Last)),
+        compilationMode = CompilationMode.None(),
+        startupMode = StartupMode.WARM,
+        iterations = 1,
+        setupBlock = { launchApp() }
+    ) {
+        browseChaosLongSession()
+    }
+
+    @Test
     fun showsScroll() = benchmarkRule.measureRepeated(
         packageName = TARGET_PACKAGE,
         metrics = listOf(FrameTimingMetric(), MemoryUsageMetric(MemoryUsageMetric.Mode.Last)),

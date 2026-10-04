@@ -33,6 +33,18 @@ jobs:
             test: com.webapp.crazyshit.baselineprofile.MainFlowsBenchmark#showsScroll
             rules: Macrobenchmark
             task: :baselineprofile:connectedBenchmarkReleaseAndroidTest
+          - flow: warm-startup
+            test: com.webapp.crazyshit.baselineprofile.MainFlowsBenchmark#warmStartup
+            rules: Macrobenchmark
+            task: :baselineprofile:connectedBenchmarkReleaseAndroidTest
+          - flow: tab-switching
+            test: com.webapp.crazyshit.baselineprofile.MainFlowsBenchmark#retainedTabSwitching
+            rules: Macrobenchmark
+            task: :baselineprofile:connectedBenchmarkReleaseAndroidTest
+          - flow: chaos-long-session
+            test: com.webapp.crazyshit.baselineprofile.MainFlowsBenchmark#chaosLongSession
+            rules: Macrobenchmark
+            task: :baselineprofile:connectedBenchmarkReleaseAndroidTest
           - flow: shows-scroll-motion
             test: com.webapp.crazyshit.baselineprofile.MainFlowsBenchmark#showsScroll
             rules: Macrobenchmark
@@ -86,10 +98,17 @@ jobs:
           profile: pixel_6
           disable-animations: ${{ matrix.flow != 'shows-scroll-motion' }}
           disk-size: 4096M
-          script: >-
-            gradle --no-daemon ${{ matrix.task }}
-            "-Pandroid.testInstrumentationRunnerArguments.class=${{ matrix.test }}"
-            "-Pandroid.testInstrumentationRunnerArguments.androidx.benchmark.enabledRules=${{ matrix.rules }}"
+          script: |
+            mkdir -p baselineprofile/build/outputs/final-pass-diagnostics
+            adb logcat -c
+            set +e
+            gradle --no-daemon ${{ matrix.task }} "-Pandroid.testInstrumentationRunnerArguments.class=${{ matrix.test }}" "-Pandroid.testInstrumentationRunnerArguments.androidx.benchmark.enabledRules=${{ matrix.rules }}"
+            RESULT=$?
+            adb logcat -d -s ZeroChillBenchmark AndroidRuntime ActivityManager > baselineprofile/build/outputs/final-pass-diagnostics/logcat.txt 2>&1
+            adb shell dumpsys meminfo com.addy37.crazyshitunofficial > baselineprofile/build/outputs/final-pass-diagnostics/memory.txt 2>&1
+            adb shell dumpsys gfxinfo com.addy37.crazyshitunofficial > baselineprofile/build/outputs/final-pass-diagnostics/frames.txt 2>&1
+            adb shell dumpsys thermalservice > baselineprofile/build/outputs/final-pass-diagnostics/thermal.txt 2>&1
+            exit "$RESULT"
 
       - name: Print benchmark measurements
         if: always()
@@ -97,4 +116,11 @@ jobs:
           find baselineprofile/build/outputs -type f \
             \( -name '*.json' -o -name '*baseline-prof.txt' -o -name '*startup-prof.txt' \) \
             -print -exec sh -c 'echo PERFORMANCE_FILE_BEGIN:$1; cat "$1"; echo PERFORMANCE_FILE_END:$1' _ {} \; \
+            2>/dev/null || true
+
+      - name: Print device and harness diagnostics
+        if: always()
+        run: |
+          find baselineprofile/build/outputs -type f -name '*.txt' \
+            -exec sh -c 'echo "DIAGNOSTIC_FILE:$1"; tail -n 500 "$1"' _ {} \; \
             2>/dev/null || true
