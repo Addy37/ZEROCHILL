@@ -872,7 +872,6 @@ public final class ChaosFeedView extends FrameLayout {
                     streamCache.put(item.url, resolved);
                 }
                 prepareVisible(position);
-                if (position == selectedPosition) playSelected();
             });
         });
     }
@@ -938,12 +937,9 @@ public final class ChaosFeedView extends FrameLayout {
     private void playSelected() {
         if (!active || !hostResumed) return;
         if (selectedPosition < 0 || selectedPosition >= items.size()) return;
+        // Cache hits prepare through resolveAt; async completion prepares through
+        // prepareVisible. Dispatching again here repeats the same player work.
         resolveAt(selectedPosition);
-        ChaosHolder holder = holderAt(selectedPosition);
-        if (holder == null) return;
-        NativeContentItem item = items.get(selectedPosition);
-        CrazyShitRepository.StreamInfo stream = streamCache.get(item.url);
-        if (stream != null) holder.prepare(stream, true);
     }
 
     private void pauseNonSelected(int selected) {
