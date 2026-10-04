@@ -6,7 +6,7 @@
     <string name="fullscreen_save">Save to Watch Later</string>
     <string name="fullscreen_download">Download video</string>
     <string name="fullscreen_share">Share video</string>
-    <string name="fullscreen_minimize">Minimize to browser</string>
+    <string name="fullscreen_like">Like this video</string>
     <string name="fullscreen_remaining_zero">-0:00</string>
     <string name="fullscreen_enter">Fullscreen</string>
 </resources>

@@ -7,6 +7,7 @@ import android.graphics.Canvas;
 import android.os.Looper;
 import android.view.View;
 import android.widget.FrameLayout;
+import android.widget.ImageButton;
 import android.widget.TextView;
 import androidx.core.graphics.Insets;
 import androidx.core.view.WindowInsetsCompat;
@@ -91,6 +92,21 @@ public class ShowsFullscreenControlsTest {
         assertFalse(view.isControllerFullyVisible());
         controls.suspend(false);
         assertTrue(view.isControllerFullyVisible());
+        controls.release();
+        host.finish();
+    }
+
+    @Test public void likeControlMirrorsLikeStateAndEnabledState() {
+        Activity host = host();
+        PlayerView view = view(host);
+        ShowsFullscreenControls controls = new ShowsFullscreenControls(view);
+        ImageButton like = view.findViewById(R.id.shows_like);
+        controls.syncLiked(false, true);
+        assertTrue(like.isEnabled());
+        assertEquals("Like this video", like.getContentDescription().toString());
+        controls.syncLiked(true, false);
+        assertFalse(like.isEnabled());
+        assertEquals("Unlike this video", like.getContentDescription().toString());
         controls.release();
         host.finish();
     }

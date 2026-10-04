@@ -161,6 +161,14 @@ final class ShowsFullscreenControls {
         save.setContentDescription(saved ? "Remove from Watch Later" : "Save to Watch Later");
     }
 
+    void syncLiked(boolean liked, boolean enabled) {
+        ImageButton like = view.findViewById(R.id.shows_like);
+        like.setImageResource(liked ? R.drawable.ic_action_heart_filled : R.drawable.ic_action_heart_outline);
+        like.setColorFilter(liked ? UiPalette.PRIMARY : Color.WHITE);
+        like.setEnabled(enabled);
+        like.setContentDescription(liked ? "Unlike this video" : "Like this video");
+    }
+
     void applyInsets(WindowInsetsCompat insets) {
         Insets edges = insets == null ? Insets.NONE : insets.getInsets(
                 WindowInsetsCompat.Type.displayCutout() | WindowInsetsCompat.Type.systemBars());

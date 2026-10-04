@@ -57,8 +57,8 @@
             android:src="@drawable/ic_action_download" android:contentDescription="@string/fullscreen_download" />
         <ImageButton android:id="@+id/shows_share" style="@style/FullscreenIconButton"
             android:src="@drawable/ic_action_share" android:contentDescription="@string/fullscreen_share" />
-        <ImageButton android:id="@+id/shows_minimize" style="@style/FullscreenIconButton"
-            android:src="@drawable/ic_action_minimize" android:contentDescription="@string/fullscreen_minimize" />
+        <ImageButton android:id="@+id/shows_like" style="@style/FullscreenIconButton"
+            android:src="@drawable/ic_action_heart_outline" android:contentDescription="@string/fullscreen_like" />
         <ImageButton android:id="@+id/shows_fullscreen_toggle" style="@style/FullscreenIconButton"
             android:visibility="gone" android:src="@drawable/ic_action_fullscreen"
             android:contentDescription="@string/fullscreen_enter" />

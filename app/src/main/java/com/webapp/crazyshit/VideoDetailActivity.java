@@ -440,7 +440,9 @@ public class VideoDetailActivity extends Activity {
             haptic(v); downloadCurrentVideo(); fullscreenControls.show();
         });
         fullscreenOverlay.findViewById(R.id.shows_share).setOnClickListener(v -> { haptic(v); sharePage(); });
-        fullscreenOverlay.findViewById(R.id.shows_minimize).setOnClickListener(v -> { haptic(v); minimizeFromMenu(); });
+        fullscreenOverlay.findViewById(R.id.shows_like).setOnClickListener(v -> {
+            haptic(v); toggleVideoLike(); fullscreenControls.show();
+        });
         fullscreenOverlay.findViewById(R.id.shows_fullscreen_toggle).setOnClickListener(v -> {
             haptic(v); setRotatableFullscreen(!rotatableFullscreen);
         });
@@ -1720,25 +1722,32 @@ public class VideoDetailActivity extends Activity {
     }
 
     private void updateVideoLikeButton() {
-        if (videoLikeButton == null) return;
-        videoLikeButton.setCompoundDrawablesWithIntrinsicBounds(
-                0,
-                videoLiked ? R.drawable.ic_action_heart_filled : R.drawable.ic_action_heart_outline,
-                0,
-                0
-        );
-        videoLikeButton.setCompoundDrawableTintList(ColorStateList.valueOf(
-                videoLiked ? UiPalette.PRIMARY : Color.WHITE
-        ));
-        boolean showCount = videoLikeCount > 0;
-        videoLikeButton.setText(showCount ? String.valueOf(videoLikeCount) : " ");
-        videoLikeButton.setTextColor(showCount
-                ? (videoLiked ? UiPalette.PRIMARY : Color.rgb(238, 238, 242))
-                : Color.TRANSPARENT);
-        videoLikeButton.setEnabled(true);
-        videoLikeButton.setContentDescription(
-                videoLiked ? "Unlike this video" : "Like this video"
-        );
+        if (videoLikeButton != null) {
+            videoLikeButton.setCompoundDrawablesWithIntrinsicBounds(
+                    0,
+                    videoLiked ? R.drawable.ic_action_heart_filled : R.drawable.ic_action_heart_outline,
+                    0,
+                    0
+            );
+            videoLikeButton.setCompoundDrawableTintList(ColorStateList.valueOf(
+                    videoLiked ? UiPalette.PRIMARY : Color.WHITE
+            ));
+            boolean showCount = videoLikeCount > 0;
+            videoLikeButton.setText(showCount ? String.valueOf(videoLikeCount) : " ");
+            videoLikeButton.setTextColor(showCount
+                    ? (videoLiked ? UiPalette.PRIMARY : Color.rgb(238, 238, 242))
+                    : Color.TRANSPARENT);
+            videoLikeButton.setEnabled(true);
+            videoLikeButton.setContentDescription(
+                    videoLiked ? "Unlike this video" : "Like this video"
+            );
+        }
+        if (fullscreenControls != null) fullscreenControls.syncLiked(videoLiked, true);
+    }
+
+    private void setVideoLikeEnabled(boolean enabled) {
+        if (videoLikeButton != null) videoLikeButton.setEnabled(enabled);
+        if (fullscreenControls != null) fullscreenControls.syncLiked(videoLiked, enabled);
     }
 
     private void refreshCommentCount(boolean force) {
@@ -1813,11 +1822,11 @@ public class VideoDetailActivity extends Activity {
 
         String target = pageUrl;
         boolean wasLiked = videoLiked;
-        videoLikeButton.setEnabled(false);
+        setVideoLikeEnabled(false);
         ZeroChillSocialRepository.toggleVideoLike(this, target, wasLiked, (state, error) ->
                 runOnUiThread(() -> {
                     if (!target.equals(pageUrl)) return;
-                    videoLikeButton.setEnabled(true);
+                    setVideoLikeEnabled(true);
                     if (error != null || state == null) {
                         ZeroChillToast.makeText(
                                 this,
