@@ -140,6 +140,7 @@ public final class ChaosFeedView extends FrameLayout {
     private final ChaosSourceMixer sourceMixer = new ChaosSourceMixer(repository, random);
     private final ShitTokAspectPriority aspectPriority = new ShitTokAspectPriority();
     private final ShitTokSessionResume sessionResume = new ShitTokSessionResume();
+    private final ShitTokRenderDiagnostics renderDiagnostics;
 
     private ViewPager2 pager;
     private ChaosAdapter adapter;
@@ -176,6 +177,7 @@ public final class ChaosFeedView extends FrameLayout {
         super(activity);
         this.activity = activity;
         this.host = host;
+        this.renderDiagnostics = new ShitTokRenderDiagnostics(activity);
         setBackgroundColor(Color.BLACK);
         loadRecent();
         loadHidden();
@@ -194,7 +196,20 @@ public final class ChaosFeedView extends FrameLayout {
         addView(pager, new FrameLayout.LayoutParams(-1, -1));
 
         RecyclerView rv = pagerRecycler();
-        if (rv != null) rv.setItemViewCacheSize(3);
+        if (rv != null) {
+            rv.setItemViewCacheSize(3);
+            rv.addOnItemTouchListener(new RecyclerView.SimpleOnItemTouchListener() {
+                @Override
+                public boolean onInterceptTouchEvent(
+                        @NonNull RecyclerView recyclerView,
+                        @NonNull MotionEvent event
+                ) {
+                    renderDiagnostics.onPagerTouch(
+                            event, pager.getScrollState(), selectedPosition);
+                    return false;
+                }
+            });
+        }
 
         initialProgress = new ZeroChillProgressBar(activity);
         FrameLayout.LayoutParams pp = new FrameLayout.LayoutParams(dp(48), dp(48));
@@ -213,6 +228,7 @@ public final class ChaosFeedView extends FrameLayout {
         pager.registerOnPageChangeCallback(new ViewPager2.OnPageChangeCallback() {
             @Override
             public void onPageScrollStateChanged(int state) {
+                renderDiagnostics.onPagerState(state, selectedPosition);
                 if (state == ViewPager2.SCROLL_STATE_DRAGGING) {
                     userPaging = true;
                     cancelPendingAutoAdvance();
@@ -230,6 +246,10 @@ public final class ChaosFeedView extends FrameLayout {
 
             @Override
             public void onPageSelected(int position) {
+                long pageCallbackStartedNs = renderDiagnostics.nowNs();
+                renderDiagnostics.event(
+                        "PAGE_SELECTED", position,
+                        "from=" + selectedPosition + " items=" + items.size());
                 cancelSwipePlayerMaintenance();
                 int previousPosition = selectedPosition;
                 boolean changed = position != previousPosition;
@@ -261,6 +281,11 @@ public final class ChaosFeedView extends FrameLayout {
                 if (changed && pager.getScrollState() == ViewPager2.SCROLL_STATE_IDLE) {
                     scheduleSwipePlayerMaintenance(position);
                 }
+                renderDiagnostics.duration(
+                        "PAGE_CALLBACK",
+                        pageCallbackStartedNs,
+                        position,
+                        "changed=" + changed);
             }
         });
     }
@@ -350,6 +375,7 @@ public final class ChaosFeedView extends FrameLayout {
         cancelPendingAutoAdvance();
         resetCreatorSwipePreview();
         closed = true;
+        renderDiagnostics.close();
         poolLoading = false;
         active = false;
         hostResumed = false;
@@ -371,6 +397,11 @@ public final class ChaosFeedView extends FrameLayout {
     private void loadMorePool() {
     if (closed || poolLoading) return;
     poolLoading = true;
+    final int requestPosition = selectedPosition;
+    final int requestItems = items.size();
+    final long batchStartedNs = renderDiagnostics.nowNs();
+    renderDiagnostics.event(
+            "BATCH_REQUEST", requestPosition, "items=" + requestItems);
 
     io.execute(() -> {
         List<NativeContentItem> mixed;
@@ -390,9 +421,17 @@ public final class ChaosFeedView extends FrameLayout {
         List<NativeContentItem> prioritizedFresh = aspectPriority.order(fresh, random);
         List<NativeContentItem> prioritizedRecentFallback =
                 aspectPriority.order(recentFallback, random);
+        renderDiagnostics.duration(
+                "BATCH_FETCH",
+                batchStartedNs,
+                requestPosition,
+                "mixed=" + mixed.size()
+                        + " fresh=" + prioritizedFresh.size()
+                        + " fallback=" + prioritizedRecentFallback.size());
 
         activity.runOnUiThread(() -> {
             if (closed) return;
+            long batchUiStartedNs = renderDiagnostics.nowNs();
             poolLoading = false;
             int before = items.size();
             appendUnique(prioritizedFresh);
@@ -432,6 +471,11 @@ public final class ChaosFeedView extends FrameLayout {
                 autoAdvancePending = false;
                 autoAdvanceFrom = -1;
             }
+            renderDiagnostics.duration(
+                    "BATCH_UI_APPLY",
+                    batchUiStartedNs,
+                    selectedPosition,
+                    "added=" + added + " items=" + items.size());
         });
     });
 }
@@ -775,7 +819,13 @@ public final class ChaosFeedView extends FrameLayout {
 
     private void warmCreatorGalleries(int position) {
         if (closed || !active || !hostResumed || position < 0 || position >= items.size()) return;
+        long warmStartedNs = renderDiagnostics.nowNs();
         ShitTokCreatorGalleryPreloader.warm(activity, items.get(position));
+        renderDiagnostics.duration(
+                "CREATOR_WARM",
+                warmStartedNs,
+                position,
+                "selected=true");
 
         cancelCreatorWarmAhead();
         creatorWarmAheadPosition = position;
@@ -794,7 +844,13 @@ public final class ChaosFeedView extends FrameLayout {
         for (int next = position + 1; next < Math.min(items.size(), position + 8); next++) {
             NativeContentItem candidate = items.get(next);
             if (!ShitTokCreatorMetadata.hasCreator(candidate)) continue;
+            long warmStartedNs = renderDiagnostics.nowNs();
             ShitTokCreatorGalleryPreloader.warm(activity, candidate);
+            renderDiagnostics.duration(
+                    "CREATOR_WARM",
+                    warmStartedNs,
+                    next,
+                    "selected=false");
             break;
         }
     }
@@ -836,6 +892,9 @@ public final class ChaosFeedView extends FrameLayout {
             return;
         }
 
+        final long resolveStartedNs = renderDiagnostics.nowNs();
+        renderDiagnostics.event(
+                "RESOLVE_START", position, "selected=" + selectedPosition);
         io.execute(() -> {
             CrazyShitRepository.StreamInfo stream = ChaosStartupPreloader.takeResolved(item.url);
             try {
@@ -843,8 +902,16 @@ public final class ChaosFeedView extends FrameLayout {
             } catch (Exception ignored) {
             }
             CrazyShitRepository.StreamInfo resolved = stream;
+            renderDiagnostics.duration(
+                    "RESOLVE_BG",
+                    resolveStartedNs,
+                    position,
+                    "success=" + (resolved != null
+                            && resolved.mediaUrl != null
+                            && !resolved.mediaUrl.isEmpty()));
             activity.runOnUiThread(() -> {
                 if (closed) return;
+                long resolveUiStartedNs = renderDiagnostics.nowNs();
                 resolving.remove(item.url);
                 if (resolved == null || resolved.mediaUrl == null || resolved.mediaUrl.isEmpty()) {
                     if (shouldRetryResolution(item, position)) {
@@ -858,6 +925,11 @@ public final class ChaosFeedView extends FrameLayout {
                 }
                 prepareVisible(position);
                 if (position == selectedPosition) playSelected();
+                renderDiagnostics.duration(
+                        "RESOLVE_UI",
+                        resolveUiStartedNs,
+                        position,
+                        "selected=" + (position == selectedPosition));
             });
         });
     }
@@ -1053,10 +1125,16 @@ public final class ChaosFeedView extends FrameLayout {
 
         ExoPlayer detached = deferredPlayerReleases.pollFirst();
         if (detached != null) {
+            long releaseStartedNs = renderDiagnostics.nowNs();
             try {
                 detached.release();
             } catch (Exception ignored) {
             }
+            renderDiagnostics.duration(
+                    "PLAYER_RELEASE",
+                    releaseStartedNs,
+                    selectedPosition,
+                    "sync=false");
         } else {
             detachOneDistantPlayer(position);
         }
@@ -1104,10 +1182,16 @@ public final class ChaosFeedView extends FrameLayout {
         removeCallbacks(playerReleaseMaintenanceRunnable);
         while (!deferredPlayerReleases.isEmpty()) {
             ExoPlayer player = deferredPlayerReleases.removeFirst();
+            long releaseStartedNs = renderDiagnostics.nowNs();
             try {
                 player.release();
             } catch (Exception ignored) {
             }
+            renderDiagnostics.duration(
+                    "PLAYER_RELEASE",
+                    releaseStartedNs,
+                    selectedPosition,
+                    "sync=drain");
         }
     }
 
@@ -1461,6 +1545,34 @@ public final class ChaosFeedView extends FrameLayout {
                 .setNeutralButton("Share", (dialog, which) -> sharePlaybackReport(report))
                 .setNegativeButton("Close", null)
                 .show();
+    }
+
+    private void showRenderDiagnostics() {
+        String report = renderDiagnostics.report();
+        new AlertDialog.Builder(activity)
+                .setTitle("ShitTok render diagnostics")
+                .setMessage(report)
+                .setPositiveButton("Copy", (dialog, which) -> copyRenderDiagnostics(report))
+                .setNeutralButton("Reset", (dialog, which) -> {
+                    renderDiagnostics.reset();
+                    Toast.makeText(
+                            activity, "Render diagnostics reset.", Toast.LENGTH_SHORT).show();
+                })
+                .setNegativeButton("Close", null)
+                .show();
+    }
+
+    private void copyRenderDiagnostics(String report) {
+        ClipboardManager clipboard = (ClipboardManager) activity.getSystemService(
+                Context.CLIPBOARD_SERVICE
+        );
+        if (clipboard == null) {
+            Toast.makeText(activity, "Clipboard isn't available.", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        clipboard.setPrimaryClip(
+                ClipData.newPlainText("ZEROCHILL ShitTok render diagnostics", report));
+        Toast.makeText(activity, "Render diagnostics copied.", Toast.LENGTH_SHORT).show();
     }
 
     private void copyPlaybackReport(String report) {
@@ -2629,6 +2741,7 @@ public final class ChaosFeedView extends FrameLayout {
                 return;
             }
 
+            long playerPrepareStartedNs = renderDiagnostics.nowNs();
             releasePlayer();
             stream = nextStream;
             lastAttemptedStream = nextStream;
@@ -2726,6 +2839,10 @@ public final class ChaosFeedView extends FrameLayout {
                 public void onPlaybackStateChanged(int state) {
                     if (player != createdPlayer) return;
                     if (state == Player.STATE_READY) {
+                        renderDiagnostics.event(
+                                "PLAYER_READY",
+                                boundPosition,
+                                "selected=" + (boundPosition == selectedPosition));
                         RatingFeedbackPrompt.recordSuccessfulPlayback(activity, nextStream.mediaUrl);
                         failurePending = false;
                         root.removeCallbacks(skipFailedClipRunnable);
@@ -2794,6 +2911,11 @@ public final class ChaosFeedView extends FrameLayout {
                 }
             });
             createdPlayer.prepare();
+            renderDiagnostics.duration(
+                    "PLAYER_PREPARE",
+                    playerPrepareStartedNs,
+                    boundPosition,
+                    "autoplay=" + autoplay);
         }
 
         private void maybeCompleteStartupHandoff() {
@@ -2921,6 +3043,12 @@ public final class ChaosFeedView extends FrameLayout {
                                     "Report problem",
                                     "Tell us what went wrong",
                                     () -> showPlaybackReport(this)
+                            ),
+                            VideoActionSheet.action(
+                                    R.drawable.ic_action_report,
+                                    "Render diagnostics",
+                                    "Copy timing around ShitTok freezes",
+                                    ChaosFeedView.this::showRenderDiagnostics
                             )
                     )
             );
@@ -3357,6 +3485,7 @@ public final class ChaosFeedView extends FrameLayout {
         }
 
         void detachPlayerForDeferredRelease() {
+            long detachStartedNs = renderDiagnostics.nowNs();
             root.removeCallbacks(hideControlsRunnable);
             root.removeCallbacks(skipFailedClipRunnable);
             root.removeCallbacks(progressTick);
@@ -3377,9 +3506,16 @@ public final class ChaosFeedView extends FrameLayout {
             }
             playerHolders.remove(this);
             stream = null;
+            renderDiagnostics.duration(
+                    "PLAYER_DETACH",
+                    detachStartedNs,
+                    boundPosition,
+                    "queued=" + (detached != null));
         }
 
         void releasePlayer() {
+            long releaseStartedNs = renderDiagnostics.nowNs();
+            boolean hadPlayer = player != null;
             root.removeCallbacks(hideControlsRunnable);
             root.removeCallbacks(skipFailedClipRunnable);
             root.removeCallbacks(progressTick);
@@ -3398,6 +3534,13 @@ public final class ChaosFeedView extends FrameLayout {
             }
             playerHolders.remove(this);
             stream = null;
+            if (hadPlayer) {
+                renderDiagnostics.duration(
+                        "PLAYER_RELEASE",
+                        releaseStartedNs,
+                        boundPosition,
+                        "sync=true");
+            }
         }
     }
 }
