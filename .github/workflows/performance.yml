@@ -99,6 +99,8 @@ jobs:
           profile: pixel_6
           disable-animations: ${{ matrix.flow != 'shows-scroll-motion' }}
           disk-size: 4096M
+          # The ten-minute trace processor exhausted the default emulator RAM.
+          ram-size: ${{ matrix.flow == 'chaos-long-session' && '4096M' || '2048M' }}
           script: >-
             bash tools/run_performance_audit.sh ${{ matrix.task }}
             "-Pandroid.testInstrumentationRunnerArguments.class=${{ matrix.test }}"
