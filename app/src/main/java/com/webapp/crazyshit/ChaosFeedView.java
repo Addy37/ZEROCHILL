@@ -1669,6 +1669,8 @@ public final class ChaosFeedView extends FrameLayout {
         final LinearLayout actionRail;
         final LinearLayout landscapeHeader;
         final LinearLayout landscapeActions;
+        final View landscapeTopScrim;
+        final View landscapeBottomScrim;
         final TextView landscapeTitle;
         final TextView landscapeLike;
         final TextView landscapeSave;
@@ -1925,6 +1927,38 @@ public final class ChaosFeedView extends FrameLayout {
                 layoutPlaybackControls(landscapeFullscreen());
                 return insets;
             });
+
+            landscapeTopScrim = new View(activity);
+            landscapeTopScrim.setTag("shittok_landscape_top_scrim");
+            landscapeTopScrim.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+            GradientDrawable topScrimBackground = new GradientDrawable(
+                    GradientDrawable.Orientation.TOP_BOTTOM,
+                    new int[] {
+                            Color.argb(160, 0, 0, 0),
+                            Color.argb(78, 0, 0, 0),
+                            Color.TRANSPARENT
+                    });
+            landscapeTopScrim.setBackground(topScrimBackground);
+            FrameLayout.LayoutParams topScrimParams =
+                    new FrameLayout.LayoutParams(-1, dp(112), Gravity.TOP);
+            root.addView(landscapeTopScrim, topScrimParams);
+
+            landscapeBottomScrim = new View(activity);
+            landscapeBottomScrim.setTag("shittok_landscape_bottom_scrim");
+            landscapeBottomScrim.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+            GradientDrawable bottomScrimBackground = new GradientDrawable(
+                    GradientDrawable.Orientation.TOP_BOTTOM,
+                    new int[] {
+                            Color.TRANSPARENT,
+                            Color.argb(78, 0, 0, 0),
+                            Color.argb(170, 0, 0, 0)
+                    });
+            landscapeBottomScrim.setBackground(bottomScrimBackground);
+            FrameLayout.LayoutParams bottomScrimParams =
+                    new FrameLayout.LayoutParams(-1, dp(156), Gravity.BOTTOM);
+            root.addView(landscapeBottomScrim, bottomScrimParams);
+            landscapeTopScrim.setVisibility(View.GONE);
+            landscapeBottomScrim.setVisibility(View.GONE);
 
             landscapeHeader = new LinearLayout(activity);
             landscapeHeader.setGravity(Gravity.CENTER_VERTICAL);
@@ -3032,7 +3066,7 @@ public final class ChaosFeedView extends FrameLayout {
         private int landscapeBottomInset() {
             WindowInsetsCompat insets = ViewCompat.getRootWindowInsets(root);
             return insets == null ? 0 : insets.getInsets(
-                    WindowInsetsCompat.Type.systemBars() | WindowInsetsCompat.Type.systemGestures()
+                    WindowInsetsCompat.Type.mandatorySystemGestures()
                             | WindowInsetsCompat.Type.displayCutout()).bottom;
         }
 
@@ -3055,7 +3089,7 @@ public final class ChaosFeedView extends FrameLayout {
         }
 
         private void layoutPlaybackControls(boolean landscape) {
-            int safeBottom = landscape ? landscapeBottomInset() + dp(8) : 0;
+            int safeBottom = landscape ? landscapeBottomInset() + dp(4) : 0;
             FrameLayout.LayoutParams actions = (FrameLayout.LayoutParams) landscapeActions.getLayoutParams();
             actions.bottomMargin = safeBottom;
             landscapeActions.setLayoutParams(actions);
@@ -3082,6 +3116,8 @@ public final class ChaosFeedView extends FrameLayout {
                     ? View.VISIBLE : View.GONE);
             fullscreen.setVisibility(!landscape && horizontalVideo
                     ? View.VISIBLE : View.GONE);
+            landscapeTopScrim.setVisibility(landscape ? View.VISIBLE : View.GONE);
+            landscapeBottomScrim.setVisibility(landscape ? View.VISIBLE : View.GONE);
             landscapeHeader.setVisibility(landscape ? View.VISIBLE : View.GONE);
             landscapeActions.setVisibility(landscape ? View.VISIBLE : View.GONE);
         }
@@ -3094,6 +3130,8 @@ public final class ChaosFeedView extends FrameLayout {
             }
             root.removeCallbacks(hideControlsRunnable);
             lower.animate().cancel();
+            landscapeTopScrim.animate().cancel();
+            landscapeBottomScrim.animate().cancel();
             landscapeHeader.animate().cancel();
             landscapeActions.animate().cancel();
             progressRow.animate().cancel();
@@ -3103,6 +3141,8 @@ public final class ChaosFeedView extends FrameLayout {
             lower.setAlpha(1f);
             creatorAvatarControl.setAlpha(1f);
             fullscreen.setAlpha(1f);
+            landscapeTopScrim.setAlpha(1f);
+            landscapeBottomScrim.setAlpha(1f);
             landscapeHeader.setAlpha(1f);
             landscapeActions.setAlpha(1f);
 
@@ -3120,6 +3160,8 @@ public final class ChaosFeedView extends FrameLayout {
             }
             root.removeCallbacks(hideControlsRunnable);
             lower.animate().cancel();
+            landscapeTopScrim.animate().cancel();
+            landscapeBottomScrim.animate().cancel();
             landscapeHeader.animate().cancel();
             landscapeActions.animate().cancel();
             progressRow.animate().cancel();
@@ -3128,6 +3170,8 @@ public final class ChaosFeedView extends FrameLayout {
             lower.setAlpha(1f);
             creatorAvatarControl.setAlpha(1f);
             fullscreen.setAlpha(1f);
+            landscapeTopScrim.setAlpha(1f);
+            landscapeBottomScrim.setAlpha(1f);
             landscapeHeader.setAlpha(1f);
             landscapeActions.setAlpha(1f);
             syncPausedChrome();
@@ -3140,6 +3184,8 @@ public final class ChaosFeedView extends FrameLayout {
             applyViewportInset();
             root.removeCallbacks(hideControlsRunnable);
             lower.animate().cancel();
+            landscapeTopScrim.animate().cancel();
+            landscapeBottomScrim.animate().cancel();
             landscapeHeader.animate().cancel();
             landscapeActions.animate().cancel();
             progressRow.animate().cancel();
@@ -3149,12 +3195,16 @@ public final class ChaosFeedView extends FrameLayout {
                 lower.setAlpha(0f);
                 creatorAvatarControl.setAlpha(0f);
                 fullscreen.setAlpha(0f);
+                landscapeTopScrim.setAlpha(0f);
+                landscapeBottomScrim.setAlpha(0f);
                 landscapeHeader.setAlpha(0f);
                 landscapeActions.setAlpha(0f);
                 progressRow.setAlpha(0f);
                 lower.setVisibility(View.INVISIBLE);
                 creatorAvatarControl.setVisibility(View.INVISIBLE);
                 fullscreen.setVisibility(View.INVISIBLE);
+                landscapeTopScrim.setVisibility(View.INVISIBLE);
+                landscapeBottomScrim.setVisibility(View.INVISIBLE);
                 landscapeHeader.setVisibility(View.INVISIBLE);
                 landscapeActions.setVisibility(View.INVISIBLE);
                 pausePlayOverlay.setVisibility(View.GONE);
@@ -3166,6 +3216,8 @@ public final class ChaosFeedView extends FrameLayout {
             lower.setAlpha(1f);
             creatorAvatarControl.setAlpha(1f);
             fullscreen.setAlpha(1f);
+            landscapeTopScrim.setAlpha(1f);
+            landscapeBottomScrim.setAlpha(1f);
             landscapeHeader.setAlpha(1f);
             landscapeActions.setAlpha(1f);
             progressRow.setAlpha(1f);
@@ -3197,7 +3249,22 @@ public final class ChaosFeedView extends FrameLayout {
                     .start();
             creatorAvatarControl.animate().alpha(0f).setDuration(180L).start();
             fullscreen.animate().alpha(0f).setDuration(180L).start();
+            landscapeTopScrim.animate()
+                    .alpha(0f)
+                    .setDuration(180L)
+                    .withEndAction(() -> {
+                        if (!controlsVisible) landscapeTopScrim.setVisibility(View.INVISIBLE);
+                    })
+                    .start();
+            landscapeBottomScrim.animate()
+                    .alpha(0f)
+                    .setDuration(180L)
+                    .withEndAction(() -> {
+                        if (!controlsVisible) landscapeBottomScrim.setVisibility(View.INVISIBLE);
+                    })
+                    .start();
             landscapeActions.animate().alpha(0f).setDuration(180L).start();
+            progressRow.animate().alpha(0f).setDuration(180L).start();
             landscapeHeader.animate()
                     .alpha(0f)
                     .setDuration(180L)
