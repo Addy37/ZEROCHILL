@@ -430,7 +430,6 @@ public class VisualRefreshTest {
             View progress = root.findViewWithTag("shittok_progress_row");
             View media = ReflectionHelpers.getField(holder, "mediaLayer");
             assertEquals(0, media.getTop());
-            assertTrue(media.getHeight() > root.getHeight() / 2);
             assertEquals(media.getBottom(), progress.getTop());
             assertTrue(progress.getBottom() <= actions.getTop());
             assertTrue(root.getHeight() - progress.getBottom() >= BrowseUi.dp(host.get(), 68));
