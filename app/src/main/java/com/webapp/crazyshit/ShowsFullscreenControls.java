@@ -1,5 +1,6 @@
 package com.webapp.crazyshit;
 
+import android.content.Intent;
 import android.graphics.Color;
 import android.view.View;
 import android.widget.FrameLayout;
@@ -24,6 +25,9 @@ final class ShowsFullscreenControls {
     private boolean scrubbing;
     private boolean visible;
     private boolean suspended;
+    private boolean standaloneLiked;
+    private String standaloneLikeTarget = "";
+    private int standaloneLikeGeneration;
     private final Runnable autoHide = this::hide;
     private final Player.Listener listener = new Player.Listener() {
         @Override public void onEvents(Player player, Player.Events events) {
@@ -74,6 +78,9 @@ final class ShowsFullscreenControls {
             applyInsets(ViewCompat.getRootWindowInsets(view));
             ViewCompat.requestApplyInsets(view);
         });
+        if (view.getContext() instanceof PlayerActivity) {
+            bindStandaloneLike((PlayerActivity) view.getContext());
+        }
     }
 
     void bind(Player player) {
@@ -116,6 +123,7 @@ final class ShowsFullscreenControls {
     void release() {
         view.removeCallbacks(autoHide);
         chrome.animate().cancel();
+        standaloneLikeGeneration++;
         if (player != null) player.removeListener(listener);
         controller.setPlayer(null);
         player = null;
@@ -167,6 +175,54 @@ final class ShowsFullscreenControls {
         like.setColorFilter(liked ? UiPalette.PRIMARY : Color.WHITE);
         like.setEnabled(enabled);
         like.setContentDescription(liked ? "Unlike this video" : "Like this video");
+    }
+
+    private void bindStandaloneLike(PlayerActivity host) {
+        String target = host.getIntent().getStringExtra(PlayerActivity.EXTRA_PAGE_URL);
+        target = target == null ? "" : target.trim();
+        standaloneLikeTarget = target;
+        ImageButton like = view.findViewById(R.id.shows_like);
+        if (target.isEmpty()) {
+            syncLiked(false, false);
+            return;
+        }
+
+        syncLiked(false, false);
+        final String page = target;
+        int generation = ++standaloneLikeGeneration;
+        ZeroChillSocialRepository.videoLikeState(host, page, (state, error) ->
+                host.runOnUiThread(() -> {
+                    if (generation != standaloneLikeGeneration || !page.equals(standaloneLikeTarget)) return;
+                    if (error == null && state != null) standaloneLiked = state.liked;
+                    syncLiked(standaloneLiked, true);
+                })
+        );
+
+        like.setOnClickListener(v -> {
+            if (!ZeroChillAccountRepository.hasStoredSession(host)) {
+                host.startActivity(new Intent(host, ZeroChillAccountActivity.class));
+                return;
+            }
+            boolean wasLiked = standaloneLiked;
+            syncLiked(standaloneLiked, false);
+            ZeroChillSocialRepository.toggleVideoLike(host, page, wasLiked, (state, error) ->
+                    host.runOnUiThread(() -> {
+                        if (!page.equals(standaloneLikeTarget)) return;
+                        if (error != null || state == null) {
+                            syncLiked(standaloneLiked, true);
+                            ZeroChillToast.makeText(
+                                    host,
+                                    error == null ? "Unable to update the like." : error.getMessage(),
+                                    ZeroChillToast.LENGTH_LONG
+                            ).show();
+                            return;
+                        }
+                        standaloneLiked = state.liked;
+                        syncLiked(standaloneLiked, true);
+                        show();
+                    })
+            );
+        });
     }
 
     void applyInsets(WindowInsetsCompat insets) {
