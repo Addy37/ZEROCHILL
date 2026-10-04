@@ -4,7 +4,11 @@ import android.app.Application;
 import android.content.Intent;
 import android.os.Bundle;
 import android.widget.EditText;
+import android.widget.TextView;
 import androidx.recyclerview.widget.RecyclerView;
+
+import java.util.List;
+import java.util.Map;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.Robolectric;
@@ -29,6 +33,49 @@ public class SearchStateTest {
         assertTrue(recycler.getAdapter() instanceof OnlyFapCreatorSearchAdapter);
 
         controller.pause().stop().destroy();
+    }
+
+    @Test public void onlyFapFilterShowsOnlyRelevantFailuresAndCleanNoResults() {
+        ActivityController<SearchActivity> controller =
+                Robolectric.buildActivity(SearchActivity.class).create().start().resume();
+        try {
+            SearchActivity activity = controller.get();
+            @SuppressWarnings("unchecked")
+            List<TextView> filters = ReflectionHelpers.getField(activity, "filterViews");
+            TextView onlyFap = null;
+            for (TextView filter : filters) {
+                if ("OnlyFap".contentEquals(filter.getText())) {
+                    onlyFap = filter;
+                    break;
+                }
+            }
+            assertNotNull(onlyFap);
+            onlyFap.performClick();
+
+            ReflectionHelpers.setField(activity, "activeQuery", "fbdijdnd");
+            ReflectionHelpers.setField(activity, "pendingSources", 0);
+            @SuppressWarnings("unchecked")
+            Map<Integer, String> errors = ReflectionHelpers.getField(activity, "errors");
+            errors.put(0, "CrazyShit videos");
+            errors.put(1, "EFukt videos");
+            errors.put(3, "EFukt series");
+
+            ReflectionHelpers.callInstanceMethod(activity, "renderResults");
+
+            TextView searchState = ReflectionHelpers.getField(activity, "searchState");
+            TextView status = ReflectionHelpers.getField(activity, "status");
+            assertEquals("Search complete", searchState.getText().toString());
+            assertTrue(status.getText().toString().startsWith("No matches for “fbdijdnd”"));
+
+            errors.put(7, "OnlyFap creators");
+            ReflectionHelpers.callInstanceMethod(activity, "renderResults");
+            assertEquals("Unavailable: OnlyFap creators · Tap to retry",
+                    searchState.getText().toString());
+            assertTrue(status.getText().toString().startsWith(
+                    "Some sources could not be reached."));
+        } finally {
+            controller.pause().stop().destroy();
+        }
     }
 
     @Test public void restoringFapzoneSearchKeepsTextWithoutOpeningAnAlbum() {
