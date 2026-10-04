@@ -6,8 +6,12 @@ import android.content.ContextWrapper;
 import java.util.ArrayList;
 import android.content.Context;
 import android.os.Build;
+import android.graphics.Point;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowInsetsCompat;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.SystemClock;
 import android.view.Gravity;
 import android.view.View;
 import android.view.accessibility.AccessibilityManager;
@@ -27,6 +31,20 @@ final class ZeroChillToast {
     private static Activity visibleOwner;
     private static CharSequence visibleText;
     private static Runnable pendingRemoval;
+    private static Pending afterNavigation;
+
+    private static final class Pending {
+        final CharSequence message;
+        final int duration;
+        final int sourceIdentity;
+        final long expiresAt;
+        Pending(Activity source, CharSequence message, int duration) {
+            this.message = message;
+            this.duration = duration;
+            sourceIdentity = System.identityHashCode(source);
+            expiresAt = SystemClock.uptimeMillis() + 8000L;
+        }
+    }
 
     private final Context context;
     private final CharSequence message;
@@ -48,7 +66,24 @@ final class ZeroChillToast {
 
     void show() { MAIN.post(() -> display(context, message, duration)); }
 
-    static void onResumed(Activity activity) { resumed = new WeakReference<>(activity); }
+    static void onResumed(Activity activity) {
+        resumed = new WeakReference<>(activity);
+        Pending pending = afterNavigation;
+        if (pending != null) {
+            if (SystemClock.uptimeMillis() > pending.expiresAt) afterNavigation = null;
+            else if (System.identityHashCode(activity) != pending.sourceIdentity) {
+                afterNavigation = null;
+                MAIN.post(() -> display(activity, pending.message, pending.duration));
+            }
+        }
+    }
+
+    static void showAfterNavigation(Activity source, CharSequence message, int duration) {
+        if (source == null) return;
+        afterNavigation = new Pending(source,
+                message == null || message.length() == 0 ? "Something went wrong." : message,
+                duration);
+    }
 
     static void registerDialog(Dialog dialog) {
         for (int i = dialogs.size() - 1; i >= 0; i--) {
@@ -101,14 +136,33 @@ final class ZeroChillToast {
                 Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
         params.leftMargin = dp(activity, 20);
         params.rightMargin = dp(activity, 20);
-        boolean keyboardVisible = false;
-        if (Build.VERSION.SDK_INT >= 30 && host.getRootWindowInsets() != null) {
-            keyboardVisible = host.getRootWindowInsets().isVisible(
-                    android.view.WindowInsets.Type.ime());
+        int baseBottom = focusedDialog == null ? 88 : 72;
+        params.bottomMargin = dp(activity, baseBottom);
+        if (focusedDialog == null) {
+            final Activity owner = activity;
+            final FrameLayout container = host;
+            ViewCompat.setOnApplyWindowInsetsListener(view, (child, insets) -> {
+                int overlap = 0;
+                if (insets.isVisible(WindowInsetsCompat.Type.ime())) {
+                    Point screen = new Point();
+                    owner.getWindowManager().getDefaultDisplay().getRealSize(screen);
+                    int[] location = new int[2];
+                    container.getLocationOnScreen(location);
+                    int hostBottom = location[1] + container.getHeight();
+                    int keyboardTop = screen.y - insets.getInsets(WindowInsetsCompat.Type.ime()).bottom;
+                    overlap = Math.max(0, hostBottom - keyboardTop);
+                }
+                FrameLayout.LayoutParams layout = (FrameLayout.LayoutParams) child.getLayoutParams();
+                int margin = dp(owner, baseBottom) + overlap;
+                if (layout.bottomMargin != margin) {
+                    layout.bottomMargin = margin;
+                    child.setLayoutParams(layout);
+                }
+                return insets;
+            });
         }
-        params.bottomMargin = dp(activity, focusedDialog == null
-                ? (keyboardVisible ? 16 : 88) : 72);
         host.addView(view, params);
+        ViewCompat.requestApplyInsets(view);
         visible = view;
         visibleOwner = activity;
         visibleText = message;

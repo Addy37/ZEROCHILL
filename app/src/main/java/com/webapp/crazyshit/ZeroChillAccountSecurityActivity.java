@@ -108,7 +108,7 @@ public final class ZeroChillAccountSecurityActivity extends Activity {
                         if (failure != null) { showError(failure); return; }
                         password.setText("");
                         confirm.setText("");
-                        ZeroChillToast.makeText(this, "Password updated.", ZeroChillToast.LENGTH_SHORT).show();
+                        ZeroChillToast.showAfterNavigation(this, "Password updated.", ZeroChillToast.LENGTH_SHORT);
                         finish();
                     }));
         });
@@ -223,7 +223,7 @@ public final class ZeroChillAccountSecurityActivity extends Activity {
     private void expired() {
         if (isFinishing() || isDestroyed()) return;
         setBusy(false);
-        ZeroChillToast.makeText(this, "Sign in again to manage your account.", ZeroChillToast.LENGTH_LONG).show();
+        ZeroChillToast.showAfterNavigation(this, "Sign in again to manage your account.", ZeroChillToast.LENGTH_LONG);
         setResult(RESULT_OK);
         finish();
     }

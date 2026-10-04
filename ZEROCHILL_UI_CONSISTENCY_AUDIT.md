@@ -130,10 +130,10 @@ Categories: 1 branded ZEROCHILL UI, 2 internal widget or type with custom appear
 | `Toast` | 1. Shared in-app transient component or its call site. | `ZeroChillMessageActivity.java`: 238, 241, 286, 289, 333, 354, 427, 432, 435, 449, 452 |
 | `Toast` | 1. Shared in-app transient component or its call site. | `ZeroChillPublicProfileActivity.java`: 607, 616, 619, 637, 640 |
 | `Toast` | 1. Shared in-app transient component or its call site. | `ZeroChillSocialSettingsActivity.java`: 186, 241 |
-| `Toast` | 1. Shared in-app transient component or its call site. | `ZeroChillToast.java`: 20, 35, 41, 42, 45, 119 |
+| `Toast` | 1. Shared in-app transient component or its call site. | `ZeroChillToast.java`: 24, 53, 59, 60, 63, 177 |
 
 No production XML layout contains an unstyled `<ProgressBar>`, `<Switch>`, `<EditText>`, or `<CheckBox>`. The circular loading sites use `ZeroChillProgressBar` three dots; three determinate horizontal progress bars retain real progress values with cyan fill. The only `new AlertDialog.Builder` remains the already branded `AccessNoticeDialog`; it preserves its noncancelable first-run decision and acceptance key.
 
 Native/system behavior retained: keyboard and Autofill from editable fields; file/document picker for backup and avatar; share sheet; permission prompts; package installer. No application ID, preference key, Supabase API, persisted data, or playback changes are part of this pass.
 
-Validation: targeted Robolectric control behavior tests added. Local Android SDK/Gradle are unavailable in this workspace; CI build, unit tests, lint audit, and physical-device visual review remain pending.
+Validation: targeted Robolectric behavior tests and `zerochill-controls-dialog.png` render capture added; the existing build workflow uploads `app/build/reports/visual-tests/*.png`. Local Android SDK/Gradle are unavailable in this workspace; CI build, unit tests, lint audit, and physical-device visual review remain pending.

@@ -235,11 +235,11 @@ public final class ZeroChillMessageActivity extends Activity {
             if (generation != partnerRequestGeneration || !accountStillCurrent()
                     || isFinishing() || isDestroyed()) return;
             if (error != null || profile == null || profile.currentUser) {
-                ZeroChillToast.makeText(
+                ZeroChillToast.showAfterNavigation(
                         this,
                         error == null ? "This conversation is unavailable." : error.getMessage(),
                         ZeroChillToast.LENGTH_LONG
-                ).show();
+                );
                 finish();
                 return;
             }

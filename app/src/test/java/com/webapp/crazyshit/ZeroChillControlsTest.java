@@ -3,6 +3,11 @@ package com.webapp.crazyshit;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.app.Application;
+import android.graphics.Bitmap;
+import android.graphics.Canvas;
+import android.widget.LinearLayout;
+import java.io.File;
+import java.io.FileOutputStream;
 import android.graphics.drawable.Animatable;
 import android.os.Looper;
 import android.view.View;
@@ -102,6 +107,55 @@ public class ZeroChillControlsTest {
             if (child instanceof TextView && expected.contentEquals(((TextView) child).getText())) return true;
         }
         return false;
+    }
+
+    @Test public void navigationMessageTransfersOnlyToNextActivity() {
+        Activity first = Robolectric.buildActivity(Activity.class).setup().get();
+        ZeroChillToast.onResumed(first);
+        ZeroChillToast.showAfterNavigation(first, "Password updated.", ZeroChillToast.LENGTH_SHORT);
+        ZeroChillToast.onPaused(first);
+        Activity next = Robolectric.buildActivity(Activity.class).setup().get();
+        ZeroChillToast.onResumed(next);
+        Shadows.shadowOf(Looper.getMainLooper()).idle();
+        assertTrue(containsText(next.findViewById(android.R.id.content), "Password updated."));
+        ZeroChillToast.onPaused(next);
+    }
+
+    @Test public void capturesBrandedDialogChoiceAndControls() throws Exception {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        LinearLayout controls = new LinearLayout(activity);
+        controls.setOrientation(LinearLayout.VERTICAL);
+        controls.setPadding(24, 16, 24, 16);
+        ZeroChillEditText input = new ZeroChillEditText(activity);
+        input.setHint("Search ZeroChill");
+        controls.addView(input, new LinearLayout.LayoutParams(-1, 56));
+        ZeroChillSwitch toggle = new ZeroChillSwitch(activity);
+        toggle.setChecked(true);
+        controls.addView(toggle, new LinearLayout.LayoutParams(-2, 52));
+        ZeroChillProgressBar loader = new ZeroChillProgressBar(activity);
+        controls.addView(loader, new LinearLayout.LayoutParams(56, 42));
+        AlertDialog dialog = new ZeroChillDialog.Builder(activity).destructive()
+                .setTitle("ZEROCHILL controls")
+                .setMessage("Shared app-owned UI")
+                .setView(controls)
+                .setNegativeButton("Cancel", null)
+                .setPositiveButton("Remove", null)
+                .create();
+        dialog.show();
+        View decor = dialog.getWindow().getDecorView();
+        int width = 480;
+        int height = 500;
+        decor.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(height, View.MeasureSpec.AT_MOST));
+        decor.layout(0, 0, width, Math.max(1, decor.getMeasuredHeight()));
+        Bitmap bitmap = Bitmap.createBitmap(width, Math.max(1, decor.getHeight()), Bitmap.Config.ARGB_8888);
+        decor.draw(new Canvas(bitmap));
+        File folder = new File("build/reports/visual-tests");
+        assertTrue(folder.exists() || folder.mkdirs());
+        try (FileOutputStream output = new FileOutputStream(new File(folder, "zerochill-controls-dialog.png"))) {
+            assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG, 100, output));
+        }
+        dialog.dismiss();
     }
 
     @Test public void transientReplacesMessageAndClearsOnPause() {
