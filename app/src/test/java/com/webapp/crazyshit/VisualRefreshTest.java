@@ -37,7 +37,8 @@ public class VisualRefreshTest {
         int w = BrowseUi.dp(root.getContext(), width), h = BrowseUi.dp(root.getContext(), height);
         root.measure(View.MeasureSpec.makeMeasureSpec(w, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(h, View.MeasureSpec.EXACTLY));
         root.layout(0, 0, w, h);
-        // Media-relative controls can request a follow-up layout from their size listener.
+        // Detached renders lack ViewRoot's next traversal after a size-listener request.
+        root.forceLayout();
         root.measure(View.MeasureSpec.makeMeasureSpec(w, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(h, View.MeasureSpec.EXACTLY));
         root.layout(0, 0, w, h);
         Bitmap bitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
