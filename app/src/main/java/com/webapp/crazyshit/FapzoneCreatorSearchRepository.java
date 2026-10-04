@@ -81,7 +81,12 @@ final class FapzoneCreatorSearchRepository {
                 replies++;
                 List<NativeContentItem> items = reply.get();
                 successes++;
-                if (items != null) for (NativeContentItem item : items) add(groups, item);
+                if (items != null) {
+                    for (NativeContentItem item : items) {
+                        if (!matchesQuery(item, cleanQuery) || !hasUsableDisplayName(item)) continue;
+                        add(groups, item);
+                    }
+                }
                 if (listener != null && replies < requests.size() && !groups.isEmpty()) {
                     publish(listener, snapshot(groups, safeLimit), false);
                 }
@@ -182,6 +187,28 @@ final class FapzoneCreatorSearchRepository {
             ));
         }
         return result;
+    }
+
+    private boolean matchesQuery(NativeContentItem item, String query) {
+        if (item == null || !item.isCreator()) return false;
+        return CreatorNameMatcher.rank(item.title, query) != Integer.MAX_VALUE
+                || CreatorNameMatcher.rank(item.searchQuery, query) != Integer.MAX_VALUE;
+    }
+
+    private boolean hasUsableDisplayName(NativeContentItem item) {
+        if (item == null || item.title == null) return false;
+        String title = item.title.trim();
+        if (title.isEmpty()) return false;
+        String lower = title.toLowerCase(java.util.Locale.US);
+        if (lower.startsWith("http://") || lower.startsWith("https://") || lower.contains("/creators/")) {
+            return false;
+        }
+        String compact = CreatorNameMatcher.normalized(title).replace(" ", "");
+        if (compact.isEmpty()) return false;
+        for (int i = 0; i < compact.length(); i++) {
+            if (!Character.isDigit(compact.charAt(i))) return true;
+        }
+        return false;
     }
 
     private void add(Map<String, CreatorGroup> groups, NativeContentItem item) {
