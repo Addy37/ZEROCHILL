@@ -423,6 +423,13 @@ public class VisualRefreshTest {
                     View.MeasureSpec.makeMeasureSpec(360, View.MeasureSpec.EXACTLY));
             root.layout(0, 0, 740, 360);
             assertTrue(header.getBottom() < actions.getTop());
+            View progress = root.findViewWithTag("shittok_progress_row");
+            View media = ReflectionHelpers.getField(holder, "mediaLayer");
+            assertEquals(media.getBottom(), progress.getTop());
+            assertTrue(progress.getBottom() <= actions.getTop());
+            assertTrue(root.getHeight() - progress.getBottom() >= BrowseUi.dp(host.get(), 68));
+            assertEquals(View.VISIBLE, root.findViewWithTag("shittok_elapsed").getVisibility());
+            assertEquals(View.VISIBLE, root.findViewWithTag("shittok_remaining").getVisibility());
             host.get().getResources().updateConfiguration(original,
                     host.get().getResources().getDisplayMetrics());
             ReflectionHelpers.setField(feed, "manualFullscreen", false);
@@ -438,7 +445,12 @@ public class VisualRefreshTest {
             root.layout(0, 0, 400, 900);
             FrameLayout.LayoutParams promptParams = (FrameLayout.LayoutParams)
                     root.findViewWithTag("shittok_fullscreen").getLayoutParams();
-            assertTrue(promptParams.bottomMargin > BrowseUi.dp(host.get(), 142));
+            media = ReflectionHelpers.getField(holder, "mediaLayer");
+            int fittedHeight = Math.min(media.getHeight(), Math.round(media.getWidth() / 2f));
+            int videoBottom = media.getTop() + (media.getHeight() + fittedHeight) / 2;
+            assertTrue(promptParams.topMargin >= videoBottom + BrowseUi.dp(host.get(), 8));
+            assertEquals(View.GONE, root.findViewWithTag("shittok_elapsed").getVisibility());
+            assertEquals(View.GONE, root.findViewWithTag("shittok_remaining").getVisibility());
             ChaosFeedView fresh = new ChaosFeedView(host.get(), item -> { });
             try {
                 assertEquals(Boolean.FALSE, ReflectionHelpers.getField(fresh, "autoScrollEnabled"));
