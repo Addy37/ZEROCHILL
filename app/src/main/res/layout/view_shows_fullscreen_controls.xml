@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/shows_fullscreen_chrome"
+    android:layout_width="match_parent" android:layout_height="match_parent"
+    android:layoutDirection="ltr">
+    <View android:id="@+id/shows_top_scrim"
+        android:layout_width="match_parent" android:layout_height="112dp"
+        android:layout_gravity="top" android:importantForAccessibility="no" />
+    <View android:id="@+id/shows_bottom_scrim"
+        android:layout_width="match_parent" android:layout_height="156dp"
+        android:layout_gravity="bottom" android:importantForAccessibility="no" />
+    <LinearLayout android:id="@+id/player_top_controls"
+        android:layout_width="match_parent" android:layout_height="58dp"
+        android:layout_gravity="top" android:gravity="center_vertical"
+        android:paddingStart="10dp" android:paddingEnd="10dp"
+        android:paddingTop="5dp" android:paddingBottom="5dp">
+        <ImageButton android:id="@+id/player_back" style="@style/FullscreenIconButton"
+            android:src="@drawable/ic_player_back" android:contentDescription="Back or minimize" />
+        <TextView android:id="@+id/player_title" android:layout_width="0dp"
+            android:layout_height="48dp" android:layout_weight="1"
+            android:gravity="center_vertical" android:singleLine="true"
+            android:ellipsize="end" android:textColor="#FFFFFF" android:textSize="14sp" />
+        <ImageButton android:id="@+id/player_menu" style="@style/FullscreenIconButton"
+            android:src="@drawable/ic_more_overflow" android:contentDescription="More video actions" />
+    </LinearLayout>
+    <FrameLayout android:id="@id/exo_center_controls" android:layout_width="82dp"
+        android:layout_height="82dp" android:layout_gravity="center">
+        <ImageButton android:id="@id/exo_play_pause"
+            android:layout_width="match_parent" android:layout_height="match_parent"
+            android:background="@android:color/transparent" android:alpha="0.72"
+            android:src="@drawable/ic_shittok_play_overlay"
+            android:contentDescription="Play or pause" />
+    </FrameLayout>
+    <LinearLayout android:id="@+id/shows_progress_row"
+        android:layout_width="match_parent" android:layout_height="48dp"
+        android:layout_gravity="bottom" android:layout_marginBottom="52dp"
+        android:layout_marginStart="8dp" android:layout_marginEnd="8dp"
+        android:gravity="center_vertical">
+        <TextView android:id="@id/exo_position" style="@style/FullscreenTimeLabel" />
+        <androidx.media3.ui.DefaultTimeBar android:id="@id/exo_progress"
+            android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1"
+            app:bar_height="2dp" app:touch_target_height="48dp"
+            app:buffered_color="#66FFFFFF" app:unplayed_color="#96D2D2D7"
+            app:played_color="@color/app_primary" app:scrubber_color="@color/app_primary"
+            app:scrubber_enabled_size="10dp" app:scrubber_dragged_size="12dp"
+            app:scrubber_disabled_size="0dp" />
+        <TextView android:id="@+id/shows_remaining" style="@style/FullscreenTimeLabel" android:text="-0:00" />
+    </LinearLayout>
+    <LinearLayout android:id="@+id/shows_action_row"
+        android:layout_width="match_parent" android:layout_height="48dp"
+        android:layout_gravity="bottom" android:layout_marginBottom="4dp"
+        android:gravity="center_vertical" android:paddingStart="12dp" android:paddingEnd="12dp">
+        <ImageButton android:id="@+id/shows_save" style="@style/FullscreenIconButton"
+            android:src="@drawable/ic_action_save_outline" android:contentDescription="Save to Watch Later" />
+        <ImageButton android:id="@+id/shows_download" style="@style/FullscreenIconButton"
+            android:src="@drawable/ic_action_download" android:contentDescription="Download video" />
+        <ImageButton android:id="@+id/shows_share" style="@style/FullscreenIconButton"
+            android:src="@drawable/ic_action_share" android:contentDescription="Share video" />
+        <ImageButton android:id="@+id/shows_minimize" style="@style/FullscreenIconButton"
+            android:src="@drawable/ic_action_minimize" android:contentDescription="Minimize to browser" />
+    </LinearLayout>
+</FrameLayout>
