@@ -2399,10 +2399,12 @@ public final class ChaosFeedView extends FrameLayout {
             String target = item.url;
             boolean wasLiked = videoLiked;
             like.setEnabled(false);
+            landscapeLike.setEnabled(false);
             ZeroChillSocialRepository.toggleVideoLike(activity, target, wasLiked, (state, error) ->
                     activity.runOnUiThread(() -> {
                         if (item == null || !target.equals(item.url)) return;
                         like.setEnabled(true);
+                        landscapeLike.setEnabled(true);
                         if (error != null || state == null) {
                             ZeroChillToast.makeText(
                                     activity,
