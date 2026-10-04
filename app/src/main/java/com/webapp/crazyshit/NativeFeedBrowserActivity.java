@@ -20,10 +20,8 @@ import android.webkit.WebSettings;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
-import android.widget.PopupMenu;
 import android.widget.ProgressBar;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.coordinatorlayout.widget.CoordinatorLayout;
@@ -1339,10 +1337,10 @@ public final class NativeFeedBrowserActivity extends Activity {
                             empty.setVisibility(View.VISIBLE);
                         }
                         if (itemCount() > 0) {
-                            Toast.makeText(
+                            ZeroChillToast.makeText(
                                     this,
                                     "Couldn't load more right now.",
-                                    Toast.LENGTH_SHORT
+                                    ZeroChillToast.LENGTH_SHORT
                             ).show();
                         }
                     } else if (itemCount() == 0) {
@@ -1351,7 +1349,7 @@ public final class NativeFeedBrowserActivity extends Activity {
                                 : "Couldn't load this feed.\nTap to open the website.");
                         empty.setVisibility(View.VISIBLE);
                     } else {
-                        Toast.makeText(this, "Couldn't load more right now.", Toast.LENGTH_SHORT).show();
+                        ZeroChillToast.makeText(this, "Couldn't load more right now.", ZeroChillToast.LENGTH_SHORT).show();
                     }
                 });
             }
@@ -1365,7 +1363,7 @@ public final class NativeFeedBrowserActivity extends Activity {
             empty.setText(failure.userMessage() + "\nTap to try again.");
             empty.setVisibility(View.VISIBLE);
         } else {
-            Toast.makeText(this, failure.userMessage(), Toast.LENGTH_LONG).show();
+            ZeroChillToast.makeText(this, failure.userMessage(), ZeroChillToast.LENGTH_LONG).show();
         }
     }
 
@@ -1569,10 +1567,10 @@ public final class NativeFeedBrowserActivity extends Activity {
                 if (requestGeneration != generation || isFinishing()) return;
                 progress.setVisibility(View.GONE);
                 if (resolved == null || resolved.mediaUrl == null || resolved.mediaUrl.isEmpty()) {
-                    Toast.makeText(
+                    ZeroChillToast.makeText(
                             this,
                             "Couldn't resolve this video natively right now.",
-                            Toast.LENGTH_SHORT
+                            ZeroChillToast.LENGTH_SHORT
                     ).show();
                     return;
                 }
@@ -1622,13 +1620,13 @@ public final class NativeFeedBrowserActivity extends Activity {
             if (creatorTabsPager != null) {
                 creatorTabsPager.setCurrentItem(CREATOR_TAB_PICTURES, true);
             }
-            Toast.makeText(this, "Choose a picture for the avatar.", Toast.LENGTH_SHORT).show();
+            ZeroChillToast.makeText(this, "Choose a picture for the avatar.", ZeroChillToast.LENGTH_SHORT).show();
             return;
         }
         String imageUrl = value(item.imageUrl, "");
         if (imageUrl.isEmpty()) imageUrl = value(item.url, "");
         if (!isRemoteUrl(imageUrl)) {
-            Toast.makeText(this, "That picture cannot be used as an avatar.", Toast.LENGTH_SHORT)
+            ZeroChillToast.makeText(this, "That picture cannot be used as an avatar.", ZeroChillToast.LENGTH_SHORT)
                     .show();
             return;
         }
@@ -1733,7 +1731,7 @@ public final class NativeFeedBrowserActivity extends Activity {
 
     private void showItemMenu(NativeContentItem item, View anchor) {
         if (isBunkr()) {
-            PopupMenu menu = new PopupMenu(this, anchor);
+            ZeroChillMenu menu = new ZeroChillMenu(this, anchor);
             if (item.isVideo()) {
                 menu.getMenu().add(Menu.NONE, 1, 0, "Download video");
             }
@@ -1761,7 +1759,7 @@ public final class NativeFeedBrowserActivity extends Activity {
             showVideoItemMenu(item);
             return;
         }
-        PopupMenu menu = new PopupMenu(this, anchor);
+        ZeroChillMenu menu = new ZeroChillMenu(this, anchor);
         menu.getMenu().add(Menu.NONE, 2, 1, "Share");
         menu.getMenu().add(Menu.NONE, 3, 2, "Open source website");
         menu.setOnMenuItemClickListener(clicked -> {
@@ -1844,10 +1842,10 @@ public final class NativeFeedBrowserActivity extends Activity {
     private void toggleWatchLater(NativeContentItem item) {
         if (FavoriteStore.contains(this, item.url)) {
             FavoriteStore.remove(this, item.url);
-            Toast.makeText(this, "Removed from Watch Later.", Toast.LENGTH_SHORT).show();
+            ZeroChillToast.makeText(this, "Removed from Watch Later.", ZeroChillToast.LENGTH_SHORT).show();
         } else {
             FavoriteStore.add(this, item.title, item.url);
-            Toast.makeText(this, "Saved to Watch Later.", Toast.LENGTH_SHORT).show();
+            ZeroChillToast.makeText(this, "Saved to Watch Later.", ZeroChillToast.LENGTH_SHORT).show();
         }
     }
 
@@ -1860,7 +1858,7 @@ public final class NativeFeedBrowserActivity extends Activity {
     }
 
     private void showOptions(View anchor) {
-        PopupMenu menu = new PopupMenu(this, anchor);
+        ZeroChillMenu menu = new ZeroChillMenu(this, anchor);
         if (!isBunkr()) menu.getMenu().add(Menu.NONE, 1, 0, "View style");
         menu.getMenu().add(Menu.NONE, 2, 1, "Open website");
         menu.setOnMenuItemClickListener(item -> {
@@ -1880,7 +1878,7 @@ public final class NativeFeedBrowserActivity extends Activity {
     private void showViewStyleDialog() {
         String[] choices = {"Cards", "List", "Grid", "Posters"};
         int selected = viewMode();
-        new AlertDialog.Builder(this)
+        new ZeroChillDialog.Builder(this)
                 .setTitle("View style")
                 .setSingleChoiceItems(choices, selected, (dialog, which) -> {
                     getSharedPreferences("app_prefs", MODE_PRIVATE)

@@ -9,7 +9,6 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
@@ -67,10 +66,10 @@ final class WatchStatePolish {
             if (!pageUrl.equals(item.pageUrl)) continue;
             if (item.complete || item.positionMs < MIN_RESUME_MS) return;
             if (item.durationMs > 0L && item.positionMs >= (long) (item.durationMs * 0.95f)) return;
-            Toast.makeText(
+            ZeroChillToast.makeText(
                     activity,
                     "Resuming at " + formatTime(item.positionMs),
-                    Toast.LENGTH_SHORT
+                    ZeroChillToast.LENGTH_SHORT
             ).show();
             return;
         }

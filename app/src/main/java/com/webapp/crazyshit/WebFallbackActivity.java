@@ -23,7 +23,6 @@ import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import androidx.browser.customtabs.CustomTabsIntent;
 
@@ -123,7 +122,7 @@ public final class WebFallbackActivity extends Activity {
         webView.setBackgroundColor(Color.rgb(13, 13, 15));
         webContainer.addView(webView, new FrameLayout.LayoutParams(-1, -1));
 
-        progress = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
+        progress = new ZeroChillProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
         progress.setMax(100);
         progress.getProgressDrawable().setTint(UiPalette.PRIMARY);
         FrameLayout.LayoutParams progressParams = new FrameLayout.LayoutParams(-1, dp(3));
@@ -222,8 +221,8 @@ public final class WebFallbackActivity extends Activity {
                     return true;
                 } catch (ActivityNotFoundException e) {
                     fileCallback = null;
-                    Toast.makeText(WebFallbackActivity.this,
-                            "No file picker is available.", Toast.LENGTH_SHORT).show();
+                    ZeroChillToast.makeText(WebFallbackActivity.this,
+                            "No file picker is available.", ZeroChillToast.LENGTH_SHORT).show();
                     return false;
                 }
             }

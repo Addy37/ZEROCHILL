@@ -21,7 +21,6 @@ import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import androidx.core.content.ContextCompat;
 import androidx.core.graphics.Insets;
@@ -29,7 +28,6 @@ import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 
 import com.google.android.material.card.MaterialCardView;
-import com.google.android.material.materialswitch.MaterialSwitch;
 
 public class SettingsActivity extends Activity {
     public static final String EXTRA_CHECK_FOR_UPDATES = "check_for_updates";
@@ -51,10 +49,10 @@ public class SettingsActivity extends Activity {
             }
             if (intent != null
                     && intent.getBooleanExtra(NotificationCoordinator.EXTRA_MANUAL_CHECK, false)) {
-                Toast.makeText(
+                ZeroChillToast.makeText(
                         SettingsActivity.this,
                         "Creator update check finished.",
-                        Toast.LENGTH_SHORT
+                        ZeroChillToast.LENGTH_SHORT
                 ).show();
             }
         }
@@ -373,7 +371,7 @@ public class SettingsActivity extends Activity {
         LinearLayout copy = copy(title, subtitle);
         row.addView(copy, new LinearLayout.LayoutParams(0, -2, 1f));
 
-        MaterialSwitch toggle = new MaterialSwitch(this);
+        ZeroChillSwitch toggle = new ZeroChillSwitch(this);
         toggle.setChecked(prefs.getBoolean(key, defaultValue));
         toggle.setContentDescription(title);
         toggle.setMinWidth(dp(48));
@@ -509,16 +507,16 @@ public class SettingsActivity extends Activity {
             notificationStatusView.setText("Checking favorite creators…");
         }
         NotificationCoordinator.checkNow(this);
-        Toast.makeText(
+        ZeroChillToast.makeText(
                 this,
                 "Checking supported creator sources.",
-                Toast.LENGTH_SHORT
+                ZeroChillToast.LENGTH_SHORT
         ).show();
     }
 
     private void showBackupRestore() {
         String[] actions = {"Export backup", "Restore backup"};
-        new AlertDialog.Builder(this)
+        new ZeroChillDialog.Builder(this)
                 .setTitle("Backup & restore")
                 .setItems(actions, (dialog, which) -> {
                     if (which == 0) backup.exportFile();
@@ -530,7 +528,7 @@ public class SettingsActivity extends Activity {
 
     private void showManageLibraryData() {
         String[] actions = {"Clear watch history", "Clear Watch Later"};
-        new AlertDialog.Builder(this)
+        new ZeroChillDialog.Builder(this)
                 .setTitle("Manage history & Watch Later")
                 .setItems(actions, (dialog, which) -> {
                     if (which == 0) {
@@ -539,10 +537,10 @@ public class SettingsActivity extends Activity {
                                 "This removes watched and Continue Watching state from this device.",
                                 () -> {
                                     PlaybackHistoryStore.clear(this);
-                                    Toast.makeText(
+                                    ZeroChillToast.makeText(
                                             this,
                                             "Watch history cleared.",
-                                            Toast.LENGTH_SHORT
+                                            ZeroChillToast.LENGTH_SHORT
                                     ).show();
                                 }
                         );
@@ -552,10 +550,10 @@ public class SettingsActivity extends Activity {
                                 "This removes every item saved to Watch Later on this device.",
                                 () -> {
                                     FavoriteStore.clear(this);
-                                    Toast.makeText(
+                                    ZeroChillToast.makeText(
                                             this,
                                             "Watch Later cleared.",
-                                            Toast.LENGTH_SHORT
+                                            ZeroChillToast.LENGTH_SHORT
                                     ).show();
                                 }
                         );
@@ -574,13 +572,13 @@ public class SettingsActivity extends Activity {
                             value -> CookieManager.getInstance().flush()
                     );
                     WebStorage.getInstance().deleteAllData();
-                    Toast.makeText(this, "Site data cleared.", Toast.LENGTH_SHORT).show();
+                    ZeroChillToast.makeText(this, "Site data cleared.", ZeroChillToast.LENGTH_SHORT).show();
                 }
         );
     }
 
     private void confirmDestructive(String title, String message, Runnable action) {
-        new AlertDialog.Builder(this)
+        new ZeroChillDialog.Builder(this).destructive()
                 .setTitle(title)
                 .setMessage(message)
                 .setNegativeButton("Cancel", null)
@@ -589,7 +587,7 @@ public class SettingsActivity extends Activity {
     }
 
     private void showPerformanceDetails() {
-        new AlertDialog.Builder(this)
+        new ZeroChillDialog.Builder(this)
                 .setTitle("Performance details")
                 .setMessage(AppPerformance.summary())
                 .setPositiveButton("Close", null)
@@ -640,7 +638,7 @@ public class SettingsActivity extends Activity {
     }
 
     private void showSourceConfigDetails() {
-        new AlertDialog.Builder(this)
+        new ZeroChillDialog.Builder(this)
                 .setTitle("Source configuration")
                 .setMessage(sourceConfigDetails())
                 .setNeutralButton(
@@ -659,12 +657,12 @@ public class SettingsActivity extends Activity {
             if (sourceConfigStatusView != null) {
                 sourceConfigStatusView.setText(sourceConfigSummary());
             }
-            Toast.makeText(
+            ZeroChillToast.makeText(
                     this,
                     success
                             ? "Source configuration refreshed."
                             : "Source configuration refresh failed.",
-                    Toast.LENGTH_SHORT
+                    ZeroChillToast.LENGTH_SHORT
             ).show();
         });
     }
@@ -675,7 +673,7 @@ public class SettingsActivity extends Activity {
                 "Wi-Fi / unmetered only",
                 "Minimal"
         };
-        new AlertDialog.Builder(this)
+        new ZeroChillDialog.Builder(this)
                 .setTitle("ShitTok preloading")
                 .setSingleChoiceItems(
                         choices,
@@ -705,7 +703,7 @@ public class SettingsActivity extends Activity {
                 "Every 6 hours"
         };
 
-        new AlertDialog.Builder(this)
+        new ZeroChillDialog.Builder(this)
                 .setTitle("Creator update frequency")
                 .setSingleChoiceItems(choices, selected, (dialog, which) -> {
                     int hours = which == 2 ? 6 : which == 1 ? 3 : 1;

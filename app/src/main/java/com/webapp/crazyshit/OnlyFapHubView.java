@@ -20,7 +20,6 @@ import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.LinearLayoutManager;
@@ -1558,12 +1557,12 @@ final class OnlyFapHubView extends FrameLayout {
                 v.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
                 boolean saved = CreatorFavoriteStore.toggle(context, creator);
                 holder.favorite.setVisibility(saved ? View.VISIBLE : View.GONE);
-                Toast.makeText(
+                ZeroChillToast.makeText(
                         context,
                         saved
                                 ? creator.title + " added to favorites."
                                 : creator.title + " removed from favorites.",
-                        Toast.LENGTH_SHORT
+                        ZeroChillToast.LENGTH_SHORT
                 ).show();
                 return true;
             });

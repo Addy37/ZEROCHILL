@@ -11,7 +11,6 @@ import android.view.Gravity;
 import android.view.HapticFeedbackConstants;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.PopupMenu;
 import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
@@ -57,14 +56,14 @@ public final class CreatorsActivity extends Activity {
         header.addView(BrowseUi.action(this, "+", "Find creators", v -> startActivity(SearchActivity.createBunkrSearch(this))),
                 new LinearLayout.LayoutParams(dp(48), dp(48)));
         root.addView(header);
-        input = new EditText(this);
+        input = new ZeroChillEditText(this);
         input.setHint("Search your favorite creators");
         input.setHintTextColor(BrowseUi.MUTED);
         input.setTextColor(Color.WHITE);
         input.setTextSize(16);
         input.setSingleLine(true);
         input.setPadding(dp(14), 0, dp(14), 0);
-        input.setBackground(BrowseUi.rounded(this, BrowseUi.SURFACE, 14));
+        input.setBackgroundResource(R.drawable.zc_input_field);
         LinearLayout.LayoutParams inputParams = new LinearLayout.LayoutParams(-1, dp(50));
         inputParams.setMargins(dp(12), 0, dp(12), dp(8));
         root.addView(input, inputParams);
@@ -203,7 +202,7 @@ public final class CreatorsActivity extends Activity {
     }
 
     private void showMenu(View anchor, CreatorCatalog.FavoriteGroup group) {
-        PopupMenu menu = new PopupMenu(this, anchor);
+        ZeroChillMenu menu = new ZeroChillMenu(this, anchor);
         if (group.manual) {
             menu.getMenu().add("Merged creators").setOnMenuItemClickListener(item -> {
                 CreatorMergeSheet.showMembers(this, group.members);
@@ -561,7 +560,7 @@ public final class CreatorsActivity extends Activity {
                 zoom
         )) {
             render();
-            android.widget.Toast.makeText(this, "Avatar updated.", android.widget.Toast.LENGTH_SHORT)
+            ZeroChillToast.makeText(this, "Avatar updated.", ZeroChillToast.LENGTH_SHORT)
                     .show();
         }
     }

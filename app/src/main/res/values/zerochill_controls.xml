@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.ZeroChill.Dialog" parent="android:style/Theme.Material.Dialog.Alert">
+        <item name="android:windowBackground">@drawable/zc_glass_sheet</item>
+        <item name="android:listChoiceIndicatorSingle">@drawable/zc_choice_indicator</item>
+        <item name="android:listSelector">@color/zc_cyan_container</item>
+        <item name="android:colorAccent">@color/zc_cyan</item>
+        <item name="android:textColorPrimary">@color/zc_text_primary</item>
+        <item name="android:textColorSecondary">@color/zc_text_secondary</item>
+        <item name="android:buttonBarButtonStyle">@style/Widget.ZeroChill.DialogButton</item>
+        <item name="android:windowMinWidthMajor">87%</item>
+        <item name="android:windowMinWidthMinor">87%</item>
+    </style>
+    <style name="Widget.ZeroChill.DialogButton" parent="android:style/Widget.Material.Button.Borderless">
+        <item name="android:textColor">@color/zc_cyan</item>
+        <item name="android:background">@drawable/zc_glass_panel</item>
+        <item name="android:minHeight">48dp</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+    </style>
+</resources>

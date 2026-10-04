@@ -18,11 +18,9 @@ import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
-import android.widget.PopupMenu;
 import android.widget.ProgressBar;
 import android.widget.ScrollView;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import com.bumptech.glide.Glide;
 import com.google.android.material.bottomsheet.BottomSheetBehavior;
@@ -185,7 +183,7 @@ final class InlineCommentsDialog extends BottomSheetDialog {
         commentsContainer.setPadding(dp(14), dp(10), dp(14), dp(20));
         scrollView.addView(commentsContainer, new ScrollView.LayoutParams(-1, -2));
 
-        loading = new ProgressBar(activity);
+        loading = new ZeroChillProgressBar(activity);
         ZeroChillUi.styleProgress(loading);
         FrameLayout.LayoutParams loadingParams = new FrameLayout.LayoutParams(dp(42), dp(42));
         loadingParams.gravity = Gravity.CENTER;
@@ -215,7 +213,7 @@ final class InlineCommentsDialog extends BottomSheetDialog {
         row.setGravity(Gravity.CENTER_VERTICAL);
         composer.addView(row, new LinearLayout.LayoutParams(-1, -2));
 
-        composerInput = new EditText(activity);
+        composerInput = new ZeroChillEditText(activity);
         composerInput.setTextColor(Color.WHITE);
         composerInput.setHintTextColor(Color.rgb(150, 150, 160));
         composerInput.setTextSize(14);
@@ -277,7 +275,7 @@ final class InlineCommentsDialog extends BottomSheetDialog {
                     loading.setVisibility(View.GONE);
                     if (error != null) {
                         if (commentViews.isEmpty()) showMessage("Comments couldn't load. Tap to retry.");
-                        else Toast.makeText(activity, "Comments couldn't refresh.", Toast.LENGTH_SHORT).show();
+                        else ZeroChillToast.makeText(activity, "Comments couldn't refresh.", ZeroChillToast.LENGTH_SHORT).show();
                     } else {
                         render(comments == null ? new ArrayList<>() : comments);
                     }
@@ -530,7 +528,7 @@ final class InlineCommentsDialog extends BottomSheetDialog {
                 (liked, error) -> activity.runOnUiThread(() -> {
                     likesInFlight.remove(comment.id);
                     if (!isShowing() || !account.equals(ZeroChillSessionStore.currentUserId(activity))) return;
-                    if (error != null) Toast.makeText(activity, error.getMessage(), Toast.LENGTH_LONG).show();
+                    if (error != null) ZeroChillToast.makeText(activity, error.getMessage(), ZeroChillToast.LENGTH_LONG).show();
                     else {
                         ZeroChillSocialRepository.Comment current = commentStates.get(comment.id);
                         if (current == null || current.deleted()) return;
@@ -606,7 +604,7 @@ final class InlineCommentsDialog extends BottomSheetDialog {
                     composerInput.setEnabled(true);
                     if (!submittedAccount.equals(ZeroChillSessionStore.currentUserId(activity))) { loadComments(); return; }
                     if (error != null) {
-                        Toast.makeText(activity, error.getMessage(), Toast.LENGTH_LONG).show();
+                        ZeroChillToast.makeText(activity, error.getMessage(), ZeroChillToast.LENGTH_LONG).show();
                     } else {
                         cancelReply();
                         loadComments();
@@ -639,7 +637,7 @@ final class InlineCommentsDialog extends BottomSheetDialog {
 
     private void showCommentMenu(View anchor, ZeroChillSocialRepository.Comment comment) {
         if (posting || comment == null || comment.deleted() || !isOwner(comment)) return;
-        PopupMenu menu = new PopupMenu(activity, anchor);
+        ZeroChillMenu menu = new ZeroChillMenu(activity, anchor);
         menu.getMenu().add("Edit");
         menu.getMenu().add("Delete");
         menu.setOnMenuItemClickListener(item -> {
@@ -658,7 +656,7 @@ final class InlineCommentsDialog extends BottomSheetDialog {
 
     private void confirmDelete(ZeroChillSocialRepository.Comment comment) {
         if (!isOwner(comment) || comment.deleted()) return;
-        new AlertDialog.Builder(activity)
+        new ZeroChillDialog.Builder(activity)
                 .setTitle("Delete comment?")
                 .setMessage("Replies will stay in the conversation.")
                 .setNegativeButton("Cancel", null)
@@ -668,7 +666,7 @@ final class InlineCommentsDialog extends BottomSheetDialog {
                             comment.id,
                             (ok, error) -> activity.runOnUiThread(() -> {
                                 if (error != null) {
-                                    Toast.makeText(activity, error.getMessage(), Toast.LENGTH_LONG).show();
+                                    ZeroChillToast.makeText(activity, error.getMessage(), ZeroChillToast.LENGTH_LONG).show();
                                 } else {
                                     if (editTarget != null && comment.id.equals(editTarget.id)) {
                                         cancelReply();

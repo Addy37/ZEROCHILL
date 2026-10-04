@@ -22,7 +22,6 @@ import android.view.ViewGroup;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.DiffUtil;
@@ -292,7 +291,7 @@ public final class UpdateInboxActivity extends Activity {
 
     private void confirmDeleteNotification(UpdateInboxStore.Entry entry) {
         String account = ZeroChillSessionStore.currentUserId(this);
-        new AlertDialog.Builder(this)
+        new ZeroChillDialog.Builder(this).destructive()
                 .setTitle("Delete notification?")
                 .setMessage("Remove this notification from your local history?")
                 .setNegativeButton("Cancel", null)
@@ -305,7 +304,7 @@ public final class UpdateInboxActivity extends Activity {
     private void confirmClearAll() {
         if (UpdateInboxStore.all(this).isEmpty()) return;
         String account = ZeroChillSessionStore.currentUserId(this);
-        new AlertDialog.Builder(this)
+        new ZeroChillDialog.Builder(this).destructive()
                 .setTitle("Clear all notifications?")
                 .setMessage("Clear your local notification history for this account, plus creator and app updates? New notifications will still appear.")
                 .setNegativeButton("Cancel", null)
@@ -739,10 +738,10 @@ public final class UpdateInboxActivity extends Activity {
                         commentLikeRequests.remove(commentId);
                         if (isFinishing() || isDestroyed()) return;
                         if (error != null) {
-                            Toast.makeText(
+                            ZeroChillToast.makeText(
                                     UpdateInboxActivity.this,
                                     error.getMessage() == null ? "Unable to update the like." : error.getMessage(),
-                                    Toast.LENGTH_SHORT
+                                    ZeroChillToast.LENGTH_SHORT
                             ).show();
                         } else {
                             ZeroChillSocialRepository.Comment current = commentStates.get(commentId);

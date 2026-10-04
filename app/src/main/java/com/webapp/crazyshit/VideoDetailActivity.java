@@ -36,7 +36,6 @@ import android.widget.ProgressBar;
 import android.widget.ScrollView;
 import android.widget.SeekBar;
 import android.widget.TextView;
-import android.widget.Toast;
 import android.window.OnBackInvokedCallback;
 import android.window.OnBackInvokedDispatcher;
 
@@ -411,7 +410,7 @@ public class VideoDetailActivity extends Activity {
         startupPoster.setClickable(false);
         playerContainer.addView(startupPoster, new FrameLayout.LayoutParams(-1, -1));
 
-        startupPosterLoading = new ProgressBar(this);
+        startupPosterLoading = new ZeroChillProgressBar(this);
         startupPosterLoading.setClickable(false);
         if (startupPosterLoading.getIndeterminateDrawable() != null) {
             startupPosterLoading.getIndeterminateDrawable().setTint(UiPalette.PRIMARY);
@@ -515,7 +514,7 @@ public class VideoDetailActivity extends Activity {
         relatedContainer.setOrientation(LinearLayout.VERTICAL);
         detailsColumn.addView(relatedContainer, new LinearLayout.LayoutParams(-1, -2));
 
-        loading = new ProgressBar(this);
+        loading = new ZeroChillProgressBar(this);
         loading.setVisibility(View.GONE);
         FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(dp(52), dp(52));
         lp.gravity = Gravity.CENTER;
@@ -1294,10 +1293,10 @@ public class VideoDetailActivity extends Activity {
                 if (isFinishing() || requestGeneration != relatedPlayGeneration) return;
                 loading.setVisibility(View.GONE);
                 if (resolved == null || resolved.mediaUrl == null || resolved.mediaUrl.isEmpty()) {
-                    Toast.makeText(
+                    ZeroChillToast.makeText(
                             this,
                             "Couldn't resolve that related video natively right now.",
-                            Toast.LENGTH_SHORT
+                            ZeroChillToast.LENGTH_SHORT
                     ).show();
                     return;
                 }
@@ -1770,10 +1769,10 @@ public class VideoDetailActivity extends Activity {
                     if (!target.equals(pageUrl)) return;
                     videoLikeButton.setEnabled(true);
                     if (error != null || state == null) {
-                        Toast.makeText(
+                        ZeroChillToast.makeText(
                                 this,
                                 error == null ? "Unable to update the like." : error.getMessage(),
-                                Toast.LENGTH_LONG
+                                ZeroChillToast.LENGTH_LONG
                         ).show();
                         return;
                     }
@@ -1789,10 +1788,10 @@ public class VideoDetailActivity extends Activity {
         if (pageUrl.isEmpty()) return;
         if (FavoriteStore.contains(this, pageUrl)) {
             FavoriteStore.remove(this, pageUrl);
-            Toast.makeText(this, "Removed from Watch Later.", Toast.LENGTH_SHORT).show();
+            ZeroChillToast.makeText(this, "Removed from Watch Later.", ZeroChillToast.LENGTH_SHORT).show();
         } else {
             FavoriteStore.add(this, title, pageUrl);
-            Toast.makeText(this, "Saved to Watch Later.", Toast.LENGTH_SHORT).show();
+            ZeroChillToast.makeText(this, "Saved to Watch Later.", ZeroChillToast.LENGTH_SHORT).show();
         }
         updateWatchLaterButton();
     }
@@ -1938,7 +1937,7 @@ public class VideoDetailActivity extends Activity {
     private void showSpeedMenu() {
         String[] labels = {"0.5×", "0.75×", "1×", "1.25×", "1.5×", "2×"};
         float[] speeds = {0.5f, 0.75f, 1f, 1.25f, 1.5f, 2f};
-        new AlertDialog.Builder(this)
+        new ZeroChillDialog.Builder(this)
                 .setTitle("Playback speed")
                 .setItems(labels, (dialog, which) -> {
                     if (player != null) player.setPlaybackParameters(new PlaybackParameters(speeds[which]));
@@ -1953,7 +1952,7 @@ public class VideoDetailActivity extends Activity {
                 AspectRatioFrameLayout.RESIZE_MODE_FILL,
                 AspectRatioFrameLayout.RESIZE_MODE_ZOOM
         };
-        new AlertDialog.Builder(this)
+        new ZeroChillDialog.Builder(this)
                 .setTitle("Video size")
                 .setItems(labels, (dialog, which) -> {
                     resizeMode = modes[which];
@@ -1967,7 +1966,7 @@ public class VideoDetailActivity extends Activity {
         failureShown = true;
         dismissShowsLaunchCurtain(true);
         RatingFeedbackPrompt.recordPlaybackError(this);
-        new AlertDialog.Builder(this)
+        new ZeroChillDialog.Builder(this)
                 .setTitle("Couldn't play this stream")
                 .setMessage("The native player couldn't continue this video. You can open the normal webpage instead.")
                 .setNegativeButton("Close", null)

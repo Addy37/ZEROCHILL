@@ -28,8 +28,6 @@ import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 
-import com.google.android.material.checkbox.MaterialCheckBox;
-import com.google.android.material.materialswitch.MaterialSwitch;
 
 /** Full-screen first-run experience for genuinely new ZEROCHILL installs. */
 public final class StartupWizardActivity extends Activity {
@@ -282,18 +280,11 @@ public final class StartupWizardActivity extends Activity {
                 "ZEROCHILL is an independent application and is not affiliated with or endorsed by the websites and services it accesses."
         ), cardParams());
 
-        MaterialCheckBox confirm = new MaterialCheckBox(this);
+        ZeroChillCheckBox confirm = new ZeroChillCheckBox(this);
         confirm.setText("I confirm that I am 18 or older.");
         confirm.setTextColor(Color.WHITE);
         confirm.setTextSize(15f);
         confirm.setChecked(ageConfirmed);
-        confirm.setButtonTintList(new ColorStateList(
-                new int[][]{
-                        new int[]{android.R.attr.state_checked},
-                        new int[]{}
-                },
-                new int[]{UiPalette.PRIMARY, Color.rgb(104, 108, 116)}
-        ));
         confirm.setPadding(dp(2), dp(8), dp(2), dp(8));
         confirm.setOnCheckedChangeListener((button, checked) -> {
             ageConfirmed = checked;
@@ -832,7 +823,7 @@ public final class StartupWizardActivity extends Activity {
         copy.addView(detail, detailParams);
         card.addView(copy, new LinearLayout.LayoutParams(0, -2, 1f));
 
-        MaterialSwitch toggle = new MaterialSwitch(this);
+        ZeroChillSwitch toggle = new ZeroChillSwitch(this);
         toggle.setChecked(checked);
         toggle.setContentDescription(title);
         toggle.setOnCheckedChangeListener((button, value) -> {

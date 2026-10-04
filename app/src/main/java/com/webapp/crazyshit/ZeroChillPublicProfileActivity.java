@@ -18,7 +18,6 @@ import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.ScrollView;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import com.bumptech.glide.Glide;
 
@@ -110,7 +109,7 @@ public final class ZeroChillPublicProfileActivity extends Activity {
         content.setPadding(dp(22), dp(28), dp(22), dp(34));
         scroll.addView(content, new ScrollView.LayoutParams(-1, -2));
 
-        progress = new ProgressBar(this);
+        progress = new ZeroChillProgressBar(this);
         ZeroChillUi.styleProgress(progress);
         FrameLayout.LayoutParams loadingParams = new FrameLayout.LayoutParams(dp(42), dp(42));
         loadingParams.gravity = Gravity.CENTER;
@@ -591,7 +590,7 @@ public final class ZeroChillPublicProfileActivity extends Activity {
         String account = ZeroChillSessionStore.currentUserId(this);
         String target = currentProfile.userId;
         String username = SocialUi.name(currentProfile.displayName, currentProfile.username);
-        new AlertDialog.Builder(this)
+        new ZeroChillDialog.Builder(this).destructive()
                 .setTitle(block ? "Block " + username + "?" : "Unblock " + username + "?")
                 .setMessage(block
                         ? "You won't be able to message each other while blocked."
@@ -605,7 +604,7 @@ public final class ZeroChillPublicProfileActivity extends Activity {
                                 (value, error) -> runOnUiThread(() -> {
                                     if (!sameRequest(account, target)) return;
                                     if (error != null) {
-                                        Toast.makeText(this, error.getMessage(), Toast.LENGTH_LONG).show();
+                                        ZeroChillToast.makeText(this, error.getMessage(), ZeroChillToast.LENGTH_LONG).show();
                                         return;
                                     }
                                     blockedByMe = Boolean.TRUE.equals(value);
@@ -614,10 +613,10 @@ public final class ZeroChillPublicProfileActivity extends Activity {
                                     }
                                     if (sharedSection != null) sharedSection.removeAllViews();
                                     if (!blockedByMe) loadSharedCreators(account, target);
-                                    Toast.makeText(
+                                    ZeroChillToast.makeText(
                                             this,
                                             blockedByMe ? "User blocked." : "User unblocked.",
-                                            Toast.LENGTH_SHORT
+                                            ZeroChillToast.LENGTH_SHORT
                                     ).show();
                                 })
                         ))
@@ -627,7 +626,7 @@ public final class ZeroChillPublicProfileActivity extends Activity {
     private void showReportDialog() {
         if (currentProfile == null) return;
         String[] reasons = {"Spam", "Harassment", "Other"};
-        new AlertDialog.Builder(this)
+        new ZeroChillDialog.Builder(this)
                 .setTitle("Report " + SocialUi.name(currentProfile.displayName, currentProfile.username))
                 .setItems(reasons, (dialog, which) -> {
                     String reason = which == 0 ? "spam" : which == 1 ? "harassment" : "other";
@@ -635,10 +634,10 @@ public final class ZeroChillPublicProfileActivity extends Activity {
                             this,
                             currentProfile.userId,
                             reason,
-                            (ok, error) -> runOnUiThread(() -> Toast.makeText(
+                            (ok, error) -> runOnUiThread(() -> ZeroChillToast.makeText(
                                     this,
                                     error == null ? "Report submitted." : error.getMessage(),
-                                    error == null ? Toast.LENGTH_SHORT : Toast.LENGTH_LONG
+                                    error == null ? ZeroChillToast.LENGTH_SHORT : ZeroChillToast.LENGTH_LONG
                             ).show())
                     );
                 })

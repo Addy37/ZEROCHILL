@@ -8,7 +8,6 @@ import android.content.pm.PackageInfo;
 import android.net.Uri;
 import android.os.Build;
 import android.provider.Settings;
-import android.widget.Toast;
 
 import androidx.core.content.FileProvider;
 
@@ -57,7 +56,7 @@ final class AppUpdater {
     void check(boolean manual) {
         if (checking) {
             if (manual) {
-                Toast.makeText(activity, "Already checking for updates…", Toast.LENGTH_SHORT).show();
+                ZeroChillToast.makeText(activity, "Already checking for updates…", ZeroChillToast.LENGTH_SHORT).show();
             }
             return;
         }
@@ -71,7 +70,7 @@ final class AppUpdater {
         prefs.edit().putLong(key, now).apply();
 
         checking = true;
-        if (manual) Toast.makeText(activity, "Checking for updates…", Toast.LENGTH_SHORT).show();
+        if (manual) ZeroChillToast.makeText(activity, "Checking for updates…", ZeroChillToast.LENGTH_SHORT).show();
         io.execute(() -> {
             try {
                 ReleaseInfo release = betaChannel ? fetchLatestBeta() : fetchStable();
@@ -94,13 +93,13 @@ final class AppUpdater {
                     } else if (manual) {
                         if (betaChannel) {
                             String latest = release == null ? "not found" : release.version;
-                            Toast.makeText(
+                            ZeroChillToast.makeText(
                                     activity,
                                     "No newer beta found. Installed: " + current + " • Latest beta: " + latest,
-                                    Toast.LENGTH_LONG
+                                    ZeroChillToast.LENGTH_LONG
                             ).show();
                         } else {
-                            Toast.makeText(activity, "You're up to date.", Toast.LENGTH_SHORT).show();
+                            ZeroChillToast.makeText(activity, "You're up to date.", ZeroChillToast.LENGTH_SHORT).show();
                         }
                     }
                 });
@@ -108,10 +107,10 @@ final class AppUpdater {
                 activity.runOnUiThread(() -> {
                     checking = false;
                     if (manual) {
-                        Toast.makeText(
+                        ZeroChillToast.makeText(
                                 activity,
                                 "Couldn't check for updates right now.",
-                                Toast.LENGTH_SHORT
+                                ZeroChillToast.LENGTH_SHORT
                         ).show();
                     }
                 });
@@ -425,10 +424,10 @@ final class AppUpdater {
         if (Build.VERSION.SDK_INT >= 26 && !activity.getPackageManager().canRequestPackageInstalls()) {
             pendingInstall = apk;
             waitingForInstallPermission = true;
-            Toast.makeText(
+            ZeroChillToast.makeText(
                     activity,
                     "Allow updates from this app, then you'll return automatically.",
-                    Toast.LENGTH_LONG
+                    ZeroChillToast.LENGTH_LONG
             ).show();
             Intent settings = new Intent(
                     Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
@@ -454,7 +453,7 @@ final class AppUpdater {
             intent.putExtra(Intent.EXTRA_NOT_UNKNOWN_SOURCE, true);
             activity.startActivity(intent);
         } catch (Exception e) {
-            Toast.makeText(activity, "Couldn't open Android's installer.", Toast.LENGTH_LONG).show();
+            ZeroChillToast.makeText(activity, "Couldn't open Android's installer.", ZeroChillToast.LENGTH_LONG).show();
             if (activeRelease != null) {
                 card.showReady(
                         activeRelease.version,

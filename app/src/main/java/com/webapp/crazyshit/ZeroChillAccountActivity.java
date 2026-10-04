@@ -24,10 +24,8 @@ import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.ScrollView;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import com.bumptech.glide.Glide;
-import com.google.android.material.checkbox.MaterialCheckBox;
 
 
 /** First-party ZeroChill account entry point. Existing app use remains account-optional. */
@@ -197,16 +195,16 @@ public final class ZeroChillAccountActivity extends Activity {
                 (state, error) -> runOnUiThread(() -> {
                     showBusy(false);
                     if (error != null) {
-                        Toast.makeText(
+                        ZeroChillToast.makeText(
                                 this,
                                 error.getMessage() == null ? "Email confirmation failed." : error.getMessage(),
-                                Toast.LENGTH_LONG
+                                ZeroChillToast.LENGTH_LONG
                         ).show();
                         createMode = false;
                         showAuth();
                     } else if (state != null && state.signedIn) {
                         account = state;
-                        Toast.makeText(this, "Email verified.", Toast.LENGTH_SHORT).show();
+                        ZeroChillToast.makeText(this, "Email verified.", ZeroChillToast.LENGTH_SHORT).show();
                         showProfile(state);
                     } else {
                         showConfirmed();
@@ -264,7 +262,7 @@ public final class ZeroChillAccountActivity extends Activity {
         content.setPadding(dp(22), dp(24), dp(22), dp(34));
         scroll.addView(content, new ScrollView.LayoutParams(-1, -2));
 
-        progress = new ProgressBar(this);
+        progress = new ZeroChillProgressBar(this);
         ZeroChillUi.styleProgress(progress);
         FrameLayout.LayoutParams progressParams = new FrameLayout.LayoutParams(dp(42), dp(42));
         progressParams.gravity = Gravity.CENTER;
@@ -284,7 +282,7 @@ public final class ZeroChillAccountActivity extends Activity {
             showBusy(false);
             if (isFinishing() || isDestroyed()) return;
             if (error != null) {
-                Toast.makeText(this, error.getMessage() == null ? "Couldn't load your account." : error.getMessage(), Toast.LENGTH_LONG).show();
+                ZeroChillToast.makeText(this, error.getMessage() == null ? "Couldn't load your account." : error.getMessage(), ZeroChillToast.LENGTH_LONG).show();
                 if (account != null && account.signedIn) return;
                 if (ZeroChillAccountRepository.hasStoredSession(this)) {
                     showRetry();
@@ -375,8 +373,8 @@ public final class ZeroChillAccountActivity extends Activity {
                 : View.AUTOFILL_HINT_PASSWORD);
         panel.addView(password, fieldParams());
 
-        MaterialCheckBox adult = null;
-        MaterialCheckBox terms = null;
+        ZeroChillCheckBox adult = null;
+        ZeroChillCheckBox terms = null;
         if (createMode) {
             adult = check("I confirm that I am 18 or older.");
             terms = check("I agree to the Terms and Community Rules.");
@@ -385,8 +383,8 @@ public final class ZeroChillAccountActivity extends Activity {
         }
 
         final EditText usernameField = username;
-        final MaterialCheckBox adultCheck = adult;
-        final MaterialCheckBox termsCheck = terms;
+        final ZeroChillCheckBox adultCheck = adult;
+        final ZeroChillCheckBox termsCheck = terms;
 
         TextView submit = primaryButton(createMode ? "CREATE ACCOUNT" : "SIGN IN");
         LinearLayout.LayoutParams submitParams = new LinearLayout.LayoutParams(-1, dp(50));
@@ -402,7 +400,7 @@ public final class ZeroChillAccountActivity extends Activity {
                 if (validation.isEmpty()) validation = ZeroChillAccountValidation.username(usernameValue);
                 if (validation.isEmpty()) validation = ZeroChillAccountValidation.password(passwordValue);
                 if (!validation.isEmpty()) {
-                    Toast.makeText(this, validation, Toast.LENGTH_LONG).show();
+                    ZeroChillToast.makeText(this, validation, ZeroChillToast.LENGTH_LONG).show();
                     return;
                 }
                 setFormEnabled(false);
@@ -416,7 +414,7 @@ public final class ZeroChillAccountActivity extends Activity {
                         (state, error) -> runOnUiThread(() -> {
                             setFormEnabled(true);
                             if (error != null) {
-                                Toast.makeText(this, error.getMessage(), Toast.LENGTH_LONG).show();
+                                ZeroChillToast.makeText(this, error.getMessage(), ZeroChillToast.LENGTH_LONG).show();
                             } else if (state != null && state.pendingVerification) {
                                 showVerification(state.email);
                             } else if (state != null && state.signedIn) {
@@ -434,7 +432,7 @@ public final class ZeroChillAccountActivity extends Activity {
                         (state, error) -> runOnUiThread(() -> {
                             setFormEnabled(true);
                             if (error != null) {
-                                Toast.makeText(this, error.getMessage(), Toast.LENGTH_LONG).show();
+                                ZeroChillToast.makeText(this, error.getMessage(), ZeroChillToast.LENGTH_LONG).show();
                             } else if (state != null && state.signedIn) {
                                 account = state;
                                 showProfile(state);
@@ -721,7 +719,7 @@ public final class ZeroChillAccountActivity extends Activity {
                         if (!sameAccount(owner)) return;
                         save.setEnabled(true);
                         if (error != null) {
-                            Toast.makeText(this, error.getMessage(), Toast.LENGTH_LONG).show();
+                            ZeroChillToast.makeText(this, error.getMessage(), ZeroChillToast.LENGTH_LONG).show();
                         } else if (updated != null) {
                             account = updated;
                             hasDraft = false;
@@ -743,7 +741,7 @@ public final class ZeroChillAccountActivity extends Activity {
                             save.postDelayed(() -> {
                                 if (!isFinishing() && !isDestroyed()) save.setText("SAVE PROFILE");
                             }, 1200L);
-                            Toast.makeText(this, "Profile updated.", Toast.LENGTH_SHORT).show();
+                            ZeroChillToast.makeText(this, "Profile updated.", ZeroChillToast.LENGTH_SHORT).show();
                         }
                     }));
         });
@@ -890,22 +888,22 @@ public final class ZeroChillAccountActivity extends Activity {
                 if (!avatarOwnerCurrent(owner)) return;
                 showBusy(false);
                 if (error != null) {
-                    Toast.makeText(this, error.getMessage(), Toast.LENGTH_LONG).show();
+                    ZeroChillToast.makeText(this, error.getMessage(), ZeroChillToast.LENGTH_LONG).show();
                 } else {
                     AccountAvatarImages.changed(owner, updated.avatarPath);
                     UpdateInboxStore.refreshActorAvatar(this, owner, updated.avatarPath);
                     showProfile(updated);
-                    Toast.makeText(this, "Avatar updated.", Toast.LENGTH_SHORT).show();
+                    ZeroChillToast.makeText(this, "Avatar updated.", ZeroChillToast.LENGTH_SHORT).show();
                 }
             }));
         } catch (Exception error) {
             crop.delete();
-            Toast.makeText(this, "Couldn't read that crop.", Toast.LENGTH_LONG).show();
+            ZeroChillToast.makeText(this, "Couldn't read that crop.", ZeroChillToast.LENGTH_LONG).show();
         }
     }
 
     private EditText field(String hint, int inputType) {
-        EditText view = new EditText(this);
+        EditText view = new ZeroChillEditText(this);
         view.setHint(hint);
         view.setHintTextColor(ZeroChillUi.color(this, R.color.zc_text_muted));
         view.setTextColor(Color.rgb(242, 244, 247));
@@ -913,7 +911,7 @@ public final class ZeroChillAccountActivity extends Activity {
         view.setSingleLine(true);
         view.setInputType(inputType);
         view.setPadding(dp(15), 0, dp(15), 0);
-        view.setBackground(fieldBackground());
+        view.setBackgroundResource(R.drawable.zc_input_field);
         view.setSelectAllOnFocus(false);
         return view;
     }
@@ -924,18 +922,11 @@ public final class ZeroChillAccountActivity extends Activity {
         return params;
     }
 
-    private MaterialCheckBox check(String label) {
-        MaterialCheckBox view = new MaterialCheckBox(this);
+    private ZeroChillCheckBox check(String label) {
+        ZeroChillCheckBox view = new ZeroChillCheckBox(this);
         view.setText(label);
         view.setTextColor(ZeroChillUi.color(this, R.color.zc_text_secondary));
         view.setTextSize(12.5f);
-        view.setButtonTintList(new android.content.res.ColorStateList(
-                new int[][]{
-                        new int[]{android.R.attr.state_checked},
-                        new int[]{}
-                },
-                new int[]{UiPalette.PRIMARY, Color.rgb(98, 104, 112)}
-        ));
         view.setPadding(0, dp(6), 0, 0);
         return view;
     }

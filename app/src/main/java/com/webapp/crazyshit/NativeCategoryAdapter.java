@@ -19,7 +19,6 @@ import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
@@ -397,12 +396,12 @@ public final class NativeCategoryAdapter extends RecyclerView.Adapter<NativeCate
                                         ? "Long press to remove from favorites."
                                         : "Long press to add to favorites.")
                 );
-                Toast.makeText(
+                ZeroChillToast.makeText(
                         v.getContext(),
                         favorite
                                 ? current.title + " added to favorites."
                                 : current.title + " removed from favorites.",
-                        Toast.LENGTH_SHORT
+                        ZeroChillToast.LENGTH_SHORT
                 ).show();
                 return true;
             });

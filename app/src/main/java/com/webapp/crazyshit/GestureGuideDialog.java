@@ -171,7 +171,7 @@ final class GestureGuideDialog {
         addGesture(activity, content, "BACK", "Related video history",
                 "Swipe back to preview and return through the related videos you opened.");
 
-        AlertDialog dialog = new AlertDialog.Builder(activity)
+        AlertDialog dialog = new ZeroChillDialog.Builder(activity)
                 .setTitle("Gesture guide")
                 .setView(scroll)
                 .setPositiveButton("Got it", null)

@@ -15,7 +15,6 @@ import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import androidx.media3.common.MediaItem;
 import androidx.media3.common.MimeTypes;
@@ -202,7 +201,7 @@ public final class NativeMiniPlayer {
             card.post(progressTicker);
         } catch (Exception e) {
             stop();
-            Toast.makeText(activity, "Couldn't start the mini-player.", Toast.LENGTH_SHORT).show();
+            ZeroChillToast.makeText(activity, "Couldn't start the mini-player.", ZeroChillToast.LENGTH_SHORT).show();
         }
     }
 

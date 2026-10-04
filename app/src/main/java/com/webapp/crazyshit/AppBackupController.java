@@ -4,7 +4,6 @@ import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.Intent;
 import android.net.Uri;
-import android.widget.Toast;
 import org.json.JSONObject;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -61,7 +60,7 @@ final class AppBackupController {
         String summary = backup.optJSONArray("creators").length() + " creators and "
                 + backup.optJSONArray("watchLater").length() + " Watch Later items.\n\n"
                 + "Add these to your saved lists and apply the backed-up settings?";
-        new AlertDialog.Builder(activity).setTitle("Restore backup").setMessage(summary)
+        new ZeroChillDialog.Builder(activity).destructive().setTitle("Restore backup").setMessage(summary)
                 .setNegativeButton("Cancel", null).setPositiveButton("Restore", (dialog, which) -> IO.execute(() -> {
                     try {
                         AppBackupStore.restore(activity.getApplicationContext(), backup);
@@ -74,6 +73,6 @@ final class AppBackupController {
 
     private String message(Exception error) { return error.getMessage() == null ? "Invalid backup file." : error.getMessage(); }
     private void toast(String message) {
-        activity.runOnUiThread(() -> Toast.makeText(activity.getApplicationContext(), message, Toast.LENGTH_LONG).show());
+        activity.runOnUiThread(() -> ZeroChillToast.makeText(activity.getApplicationContext(), message, ZeroChillToast.LENGTH_LONG).show());
     }
 }

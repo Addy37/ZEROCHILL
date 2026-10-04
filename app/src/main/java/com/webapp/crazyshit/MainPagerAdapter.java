@@ -601,10 +601,10 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
             activity.runOnUiThread(() -> {
                 if (activity.isFinishing() || activity.isDestroyed()) return;
                 if (resolved == null || resolved.mediaUrl == null || resolved.mediaUrl.isEmpty()) {
-                    android.widget.Toast.makeText(
+                    ZeroChillToast.makeText(
                             activity,
                             "Couldn't resolve this video natively right now.",
-                            android.widget.Toast.LENGTH_SHORT
+                            ZeroChillToast.LENGTH_SHORT
                     ).show();
                     return;
                 }
@@ -688,10 +688,10 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
             activity.runOnUiThread(() -> {
                 if (activity.isFinishing() || activity.isDestroyed()) return;
                 if (resolved == null || resolved.mediaUrl == null || resolved.mediaUrl.isEmpty()) {
-                    android.widget.Toast.makeText(
+                    ZeroChillToast.makeText(
                             activity,
                             "Couldn't resume this video natively right now.",
-                            android.widget.Toast.LENGTH_SHORT
+                            ZeroChillToast.LENGTH_SHORT
                     ).show();
                     return;
                 }
@@ -997,10 +997,10 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                         if (!appendRequest) {
                             page.displayHomeSource = displayedSource;
                             if (page.homeSource == 1 && displayedSource != 1) {
-                                android.widget.Toast.makeText(activity,
+                                ZeroChillToast.makeText(activity,
                                         "CrazyShit unavailable • showing "
                                                 + (displayedSource == 3 ? "Kaotic" : "EFukt"),
-                                        android.widget.Toast.LENGTH_SHORT).show();
+                                        ZeroChillToast.LENGTH_SHORT).show();
                             }
                         }
                         if (appendRequest) page.feedAdapter.append(result);

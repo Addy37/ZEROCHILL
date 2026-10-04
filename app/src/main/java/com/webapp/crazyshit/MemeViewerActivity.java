@@ -100,7 +100,7 @@ public final class MemeViewerActivity extends Activity {
         image.setBackgroundColor(Color.BLACK);
         stage.addView(image, new FrameLayout.LayoutParams(-1, -1));
 
-        ProgressBar loading = new ProgressBar(this);
+        ProgressBar loading = new ZeroChillProgressBar(this);
         FrameLayout.LayoutParams loadingParams = new FrameLayout.LayoutParams(dp(48), dp(48));
         loadingParams.gravity = Gravity.CENTER;
         stage.addView(loading, loadingParams);

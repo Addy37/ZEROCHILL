@@ -11,7 +11,6 @@ import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
 
@@ -95,7 +94,7 @@ public final class FeedbackThreadActivity extends Activity {
         composeRow.setGravity(Gravity.BOTTOM);
         composeRow.setPadding(dp(12), dp(8), dp(12), dp(12));
 
-        composer = new EditText(this);
+        composer = new ZeroChillEditText(this);
         composer.setHint("Reply to ZEROCHILL…");
         composer.setHintTextColor(Color.rgb(115, 115, 124));
         composer.setTextColor(Color.WHITE);
@@ -103,7 +102,7 @@ public final class FeedbackThreadActivity extends Activity {
         composer.setMinLines(1);
         composer.setMaxLines(5);
         composer.setPadding(dp(14), dp(11), dp(14), dp(11));
-        composer.setBackground(rounded(SURFACE, 16));
+        composer.setBackgroundResource(R.drawable.zc_input_field);
         composer.setFilters(new InputFilter[]{new InputFilter.LengthFilter(2000)});
         composeRow.addView(composer, new LinearLayout.LayoutParams(0, -2, 1f));
 
@@ -126,10 +125,10 @@ public final class FeedbackThreadActivity extends Activity {
         FeedbackRepository.thread(this, feedbackId, (thread, error) -> runOnUiThread(() -> {
             refresh.setRefreshing(false);
             if (error != null || thread == null) {
-                Toast.makeText(
+                ZeroChillToast.makeText(
                         this,
                         error == null ? "Couldn't load conversation." : error.getMessage(),
-                        Toast.LENGTH_LONG
+                        ZeroChillToast.LENGTH_LONG
                 ).show();
                 return;
             }
@@ -225,7 +224,7 @@ public final class FeedbackThreadActivity extends Activity {
                     send.setEnabled(true);
                     send.setText("Send");
                     if (error != null) {
-                        Toast.makeText(this, error.getMessage(), Toast.LENGTH_LONG).show();
+                        ZeroChillToast.makeText(this, error.getMessage(), ZeroChillToast.LENGTH_LONG).show();
                         return;
                     }
                     composer.setText("");
