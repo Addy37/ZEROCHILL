@@ -59,6 +59,7 @@ public class PlayerActivity extends Activity {
 
     private ExoPlayer player;
     private PlayerView playerView;
+    private ShowsFullscreenControls fullscreenControls;
     private FrameLayout videoSurface;
     private View menuButton;
     private TextView titleView;
@@ -123,20 +124,21 @@ public class PlayerActivity extends Activity {
         root.addView(videoSurface, new FrameLayout.LayoutParams(-1, -1));
 
         playerView = (PlayerView) getLayoutInflater().inflate(
-                R.layout.view_polished_video_player_texture,
+                R.layout.view_shows_fullscreen_player,
                 videoSurface,
                 false
         );
         playerView.setBackgroundColor(Color.BLACK);
         playerView.setUseController(true);
         playerView.setControllerAutoShow(false);
-        playerView.setControllerHideOnTouch(true);
-        playerView.setControllerShowTimeoutMs(2600);
+        playerView.setControllerHideOnTouch(false);
+        playerView.setControllerShowTimeoutMs(0);
         playerView.setShowBuffering(PlayerView.SHOW_BUFFERING_WHEN_PLAYING);
         playerView.setKeepScreenOn(true);
         playerView.setResizeMode(resizeMode);
         videoSurface.addView(playerView, new FrameLayout.LayoutParams(-1, -1));
 
+        fullscreenControls = new ShowsFullscreenControls(playerView);
         View backButton = playerView.findViewById(R.id.player_back);
         titleView = playerView.findViewById(R.id.player_title);
         menuButton = playerView.findViewById(R.id.player_menu);
@@ -149,6 +151,25 @@ public class PlayerActivity extends Activity {
             haptic(v);
             showPlayerMenu();
         });
+
+        playerView.findViewById(R.id.shows_save).setOnClickListener(v -> {
+            toggleWatchLater();
+            fullscreenControls.show();
+        });
+        playerView.findViewById(R.id.shows_download).setOnClickListener(v -> {
+            haptic(v);
+            downloadCurrentVideo();
+            fullscreenControls.show();
+        });
+        playerView.findViewById(R.id.shows_share).setOnClickListener(v -> {
+            haptic(v);
+            sharePage();
+        });
+        playerView.findViewById(R.id.shows_minimize).setOnClickListener(v -> {
+            haptic(v);
+            minimizeToBrowser();
+        });
+        fullscreenControls.syncSaved(FavoriteStore.contains(this, pageUrl));
 
         gestureLabel = new TextView(this);
         gestureLabel.setTextColor(Color.WHITE);
@@ -165,7 +186,7 @@ public class PlayerActivity extends Activity {
 
         setContentView(root);
         configureGestures();
-        playerView.post(playerView::showController);
+        playerView.post(fullscreenControls::show);
     }
 
     private void buildPlayer() {
@@ -195,6 +216,7 @@ public class PlayerActivity extends Activity {
                 .setMediaSourceFactory(mediaSourceFactory)
                 .build();
         playerView.setPlayer(player);
+        fullscreenControls.bind(player);
 
         MediaItem.Builder item = new MediaItem.Builder().setUri(mediaUrl);
         String lower = mediaUrl.toLowerCase(Locale.US);
@@ -257,11 +279,7 @@ public class PlayerActivity extends Activity {
                     @Override
                     public boolean onSingleTapConfirmed(MotionEvent e) {
                         if (dragMinimize) return true;
-                        if (playerView.isControllerFullyVisible()) {
-                            playerView.hideController();
-                        } else {
-                            playerView.showController();
-                        }
+                        fullscreenControls.onVideoTap();
                         return true;
                     }
 
@@ -322,7 +340,7 @@ public class PlayerActivity extends Activity {
                                     getSharedPreferences("app_prefs", MODE_PRIVATE)
                                             .getBoolean("swipe_down_minimize", true)) {
                                 dragMinimize = true;
-                                playerView.hideController();
+                                fullscreenControls.hide();
                             }
                         }
                         if (!moved) return true;
@@ -411,7 +429,7 @@ public class PlayerActivity extends Activity {
                     .setDuration(180L)
                     .withEndAction(() -> {
                         dragMinimize = false;
-                        playerView.showController();
+                        fullscreenControls.show();
                     })
                     .start();
         }
@@ -548,6 +566,7 @@ public class PlayerActivity extends Activity {
             FavoriteStore.add(this, title, pageUrl);
             ZeroChillToast.makeText(this, "Saved to Watch Later.", ZeroChillToast.LENGTH_SHORT).show();
         }
+        fullscreenControls.syncSaved(FavoriteStore.contains(this, pageUrl));
         haptic(playerView);
     }
 
@@ -683,7 +702,9 @@ public class PlayerActivity extends Activity {
         }
         resetMinimizeTransform();
         if (gestureLabel != null) gestureLabel.setVisibility(View.GONE);
+        if (fullscreenControls != null) fullscreenControls.suspend(isInPictureInPictureMode);
         if (playerView != null) playerView.setUseController(!isInPictureInPictureMode);
+        if (!isInPictureInPictureMode && fullscreenControls != null) fullscreenControls.show();
     }
 
     private void configureBackHandling() {
@@ -839,6 +860,7 @@ public class PlayerActivity extends Activity {
         }
         savePosition();
         recordHistory(false);
+        if (fullscreenControls != null) fullscreenControls.release();
         if (playerView != null) playerView.setPlayer(null);
         if (player != null) {
             player.release();

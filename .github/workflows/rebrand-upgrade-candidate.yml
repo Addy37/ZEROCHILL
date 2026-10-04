@@ -143,6 +143,13 @@ jobs:
               raise SystemExit("Source did not return distinct deeper pages")
           PYTHON
 
+      - name: Run focused fullscreen regressions first
+        run: >-
+          gradle --no-daemon :app:testDebugUnitTest
+          --tests 'com.webapp.crazyshit.ShowsFullscreen*'
+          --tests 'com.webapp.crazyshit.ShitTokProgressTest'
+          --tests 'com.webapp.crazyshit.PhoneOrientationPolicyTest'
+
       - name: Run focused navigation and gallery regressions first
         run: >-
           gradle --no-daemon :app:testDebugUnitTest

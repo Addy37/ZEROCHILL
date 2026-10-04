@@ -17,6 +17,7 @@ import android.os.Bundle;
 import android.os.SystemClock;
 import android.text.TextUtils;
 import android.view.Gravity;
+import android.view.GestureDetector;
 import android.view.HapticFeedbackConstants;
 import android.view.MotionEvent;
 import android.view.TextureView;
@@ -52,6 +53,7 @@ import androidx.media3.exoplayer.ExoPlayer;
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory;
 import androidx.media3.ui.AspectRatioFrameLayout;
 import androidx.media3.ui.PlayerView;
+import androidx.media3.ui.PlayerControlView;
 
 import com.bumptech.glide.Glide;
 import com.bumptech.glide.load.engine.DiskCacheStrategy;
@@ -114,6 +116,9 @@ public class VideoDetailActivity extends Activity {
     private LinearLayout shell;
     private SwipeMinimizeFrameLayout playerContainer;
     private PlayerView playerView;
+    private PlayerControlView fullscreenOverlay;
+    private ShowsFullscreenControls fullscreenControls;
+    private boolean fullscreenChromeActive;
     private ScrollView detailsScroll;
     private LinearLayout detailsColumn;
     private LinearLayout relatedContainer;
@@ -364,7 +369,7 @@ public class VideoDetailActivity extends Activity {
             @Override
             public void onDrag(float distancePx, float progress) {
                 if (minimizing) return;
-                playerView.hideController();
+                hideVideoControls();
                 playerContainer.setPivotX(playerContainer.getWidth() / 2f);
 
                 float scale = 1f - (0.08f * progress);
@@ -419,6 +424,46 @@ public class VideoDetailActivity extends Activity {
                 new FrameLayout.LayoutParams(dp(38), dp(38), Gravity.CENTER);
         playerContainer.addView(startupPosterLoading, startupLoadingParams);
 
+        fullscreenOverlay = (PlayerControlView) getLayoutInflater().inflate(
+                R.layout.view_shows_fullscreen_overlay, playerContainer, false);
+        playerContainer.addView(fullscreenOverlay, new FrameLayout.LayoutParams(-1, -1));
+        fullscreenControls = new ShowsFullscreenControls(fullscreenOverlay);
+        fullscreenControls.suspend(true);
+        fullscreenOverlay.setVisibility(View.GONE);
+        ((TextView) fullscreenOverlay.findViewById(R.id.player_title)).setText(title);
+        fullscreenOverlay.findViewById(R.id.player_back).setOnClickListener(v -> { haptic(v); handleBack(); });
+        fullscreenOverlay.findViewById(R.id.player_menu).setOnClickListener(v -> { haptic(v); showPlayerMenu(); });
+        fullscreenOverlay.findViewById(R.id.shows_save).setOnClickListener(v -> {
+            haptic(v); toggleWatchLater(); fullscreenControls.show();
+        });
+        fullscreenOverlay.findViewById(R.id.shows_download).setOnClickListener(v -> {
+            haptic(v); downloadCurrentVideo(); fullscreenControls.show();
+        });
+        fullscreenOverlay.findViewById(R.id.shows_share).setOnClickListener(v -> { haptic(v); sharePage(); });
+        fullscreenOverlay.findViewById(R.id.shows_like).setOnClickListener(v -> {
+            haptic(v); toggleVideoLike(); fullscreenControls.show();
+        });
+        fullscreenOverlay.findViewById(R.id.shows_fullscreen_toggle).setOnClickListener(v -> {
+            haptic(v); setRotatableFullscreen(!rotatableFullscreen);
+        });
+        GestureDetector fullscreenTaps = new GestureDetector(this, new GestureDetector.SimpleOnGestureListener() {
+            @Override public boolean onDown(MotionEvent event) { return true; }
+            @Override public boolean onSingleTapConfirmed(MotionEvent event) {
+                fullscreenControls.onVideoTap();
+                return true;
+            }
+            @Override public boolean onDoubleTap(MotionEvent event) {
+                if (player != null) {
+                    long delta = event.getX() < playerView.getWidth() / 2f ? -10000L : 10000L;
+                    long target = Math.max(0L, player.getCurrentPosition() + delta);
+                    long duration = player.getDuration();
+                    player.seekTo(duration > 0 ? Math.min(duration, target) : target);
+                }
+                return true;
+            }
+        });
+        playerView.setOnTouchListener((v, event) -> fullscreenChromeActive && fullscreenTaps.onTouchEvent(event));
+
         View playerBack = playerView.findViewById(R.id.player_back);
         playerTitleView = playerView.findViewById(R.id.player_title);
         portraitFullscreenButton = playerView.findViewById(R.id.player_portrait_fullscreen);
@@ -444,7 +489,7 @@ public class VideoDetailActivity extends Activity {
         });
         updatePortraitFullscreenButton();
         applyPlayerChrome(getResources().getConfiguration().orientation);
-        playerView.hideController();
+        hideVideoControls();
 
         detailsScroll = new ScrollView(this);
         detailsScroll.setFillViewport(true);
@@ -769,7 +814,7 @@ public class VideoDetailActivity extends Activity {
                 .alpha(1f)
                 .setDuration(150L)
                 .setInterpolator(new DecelerateInterpolator())
-                .withEndAction(() -> playerView.showController())
+                .withEndAction(this::showVideoControls)
                 .start();
         if (detailsScroll != null) {
             detailsScroll.animate().cancel();
@@ -850,6 +895,10 @@ public class VideoDetailActivity extends Activity {
                 .setSeekForwardIncrementMs(10_000L)
                 .build();
         playerView.setPlayer(player);
+        if (fullscreenControls != null) {
+            fullscreenOverlay.setPlayer(player);
+            fullscreenControls.bind(player);
+        }
 
         MediaItem.Builder item = new MediaItem.Builder().setUri(mediaUrl);
         String lower = mediaUrl.toLowerCase();
@@ -1027,6 +1076,9 @@ public class VideoDetailActivity extends Activity {
     private void updateMetadataUi() {
         if (titleView != null) titleView.setText(title);
         if (playerTitleView != null) playerTitleView.setText(title);
+        if (fullscreenOverlay != null) {
+            ((TextView) fullscreenOverlay.findViewById(R.id.player_title)).setText(title);
+        }
         if (metaView != null) {
             ArrayList<String> parts = new ArrayList<>();
             if (!views.isEmpty()) parts.add(views + " views");
@@ -1670,25 +1722,32 @@ public class VideoDetailActivity extends Activity {
     }
 
     private void updateVideoLikeButton() {
-        if (videoLikeButton == null) return;
-        videoLikeButton.setCompoundDrawablesWithIntrinsicBounds(
-                0,
-                videoLiked ? R.drawable.ic_action_heart_filled : R.drawable.ic_action_heart_outline,
-                0,
-                0
-        );
-        videoLikeButton.setCompoundDrawableTintList(ColorStateList.valueOf(
-                videoLiked ? UiPalette.PRIMARY : Color.WHITE
-        ));
-        boolean showCount = videoLikeCount > 0;
-        videoLikeButton.setText(showCount ? String.valueOf(videoLikeCount) : " ");
-        videoLikeButton.setTextColor(showCount
-                ? (videoLiked ? UiPalette.PRIMARY : Color.rgb(238, 238, 242))
-                : Color.TRANSPARENT);
-        videoLikeButton.setEnabled(true);
-        videoLikeButton.setContentDescription(
-                videoLiked ? "Unlike this video" : "Like this video"
-        );
+        if (videoLikeButton != null) {
+            videoLikeButton.setCompoundDrawablesWithIntrinsicBounds(
+                    0,
+                    videoLiked ? R.drawable.ic_action_heart_filled : R.drawable.ic_action_heart_outline,
+                    0,
+                    0
+            );
+            videoLikeButton.setCompoundDrawableTintList(ColorStateList.valueOf(
+                    videoLiked ? UiPalette.PRIMARY : Color.WHITE
+            ));
+            boolean showCount = videoLikeCount > 0;
+            videoLikeButton.setText(showCount ? String.valueOf(videoLikeCount) : " ");
+            videoLikeButton.setTextColor(showCount
+                    ? (videoLiked ? UiPalette.PRIMARY : Color.rgb(238, 238, 242))
+                    : Color.TRANSPARENT);
+            videoLikeButton.setEnabled(true);
+            videoLikeButton.setContentDescription(
+                    videoLiked ? "Unlike this video" : "Like this video"
+            );
+        }
+        if (fullscreenControls != null) fullscreenControls.syncLiked(videoLiked, true);
+    }
+
+    private void setVideoLikeEnabled(boolean enabled) {
+        if (videoLikeButton != null) videoLikeButton.setEnabled(enabled);
+        if (fullscreenControls != null) fullscreenControls.syncLiked(videoLiked, enabled);
     }
 
     private void refreshCommentCount(boolean force) {
@@ -1763,11 +1822,11 @@ public class VideoDetailActivity extends Activity {
 
         String target = pageUrl;
         boolean wasLiked = videoLiked;
-        videoLikeButton.setEnabled(false);
+        setVideoLikeEnabled(false);
         ZeroChillSocialRepository.toggleVideoLike(this, target, wasLiked, (state, error) ->
                 runOnUiThread(() -> {
                     if (!target.equals(pageUrl)) return;
-                    videoLikeButton.setEnabled(true);
+                    setVideoLikeEnabled(true);
                     if (error != null || state == null) {
                         ZeroChillToast.makeText(
                                 this,
@@ -1794,6 +1853,7 @@ public class VideoDetailActivity extends Activity {
             ZeroChillToast.makeText(this, "Saved to Watch Later.", ZeroChillToast.LENGTH_SHORT).show();
         }
         updateWatchLaterButton();
+        if (fullscreenControls != null) fullscreenControls.syncSaved(FavoriteStore.contains(this, pageUrl));
     }
 
     private void sharePage() {
@@ -2023,10 +2083,38 @@ public class VideoDetailActivity extends Activity {
         playerContainer.setAlpha(1f);
         updatePortraitFullscreenButton();
         applyPlayerChrome(orientation);
+        syncFullscreenChrome(fullscreen, landscape);
         updateSwipeEnabled();
         updatePortraitProgress();
         if (canShowPortraitSeekBar()) showPortraitSeekBar();
         shell.requestApplyInsets();
+    }
+
+    private void syncFullscreenChrome(boolean fullscreen, boolean landscape) {
+        if (fullscreenControls == null) return;
+        boolean changed = fullscreenChromeActive != fullscreen;
+        fullscreenChromeActive = fullscreen;
+        playerView.setUseController(!fullscreen);
+        if (changed) fullscreenControls.suspend(!fullscreen);
+        if (!fullscreen) fullscreenOverlay.setVisibility(View.GONE);
+        if (fullscreen) {
+            ((TextView) fullscreenOverlay.findViewById(R.id.player_title)).setText(title);
+            fullscreenControls.syncSaved(FavoriteStore.contains(this, pageUrl));
+            View toggle = fullscreenOverlay.findViewById(R.id.shows_fullscreen_toggle);
+            toggle.setVisibility(!landscape && !portraitVideo ? View.VISIBLE : View.GONE);
+            fullscreenOverlay.post(() -> fullscreenControls.applyInsets(
+                    androidx.core.view.ViewCompat.getRootWindowInsets(fullscreenOverlay)));
+        }
+    }
+
+    private void showVideoControls() {
+        if (fullscreenChromeActive && fullscreenControls != null) fullscreenControls.show();
+        else if (playerView != null) playerView.showController();
+    }
+
+    private void hideVideoControls() {
+        if (fullscreenChromeActive && fullscreenControls != null) fullscreenControls.hide();
+        else if (playerView != null) playerView.hideController();
     }
 
     private void applyPlayerChrome(int orientation) {
@@ -2132,7 +2220,7 @@ public class VideoDetailActivity extends Activity {
             PhoneOrientationPolicy.exitFullscreenVideo(this);
         }
         applyOrientation(getResources().getConfiguration().orientation);
-        if (playerView != null) playerView.showController();
+        if (playerView != null) showVideoControls();
     }
 
     private void setRotatableFullscreen(boolean enabled) {
@@ -2159,7 +2247,7 @@ public class VideoDetailActivity extends Activity {
             PhoneOrientationPolicy.exitFullscreenVideo(this);
         }
         applyOrientation(getResources().getConfiguration().orientation);
-        if (playerView != null) playerView.showController();
+        if (playerView != null) showVideoControls();
     }
 
     private void onPhysicalOrientation(SensorMediaOrientationListener.Position position) {
@@ -2391,6 +2479,7 @@ public class VideoDetailActivity extends Activity {
     }
 
     private void releasePlayer() {
+        if (fullscreenControls != null) fullscreenControls.release();
         playbackRecovery.cancel();
         portraitSeekScrubbing = false;
         if (portraitSeekBar != null) portraitSeekBar.setProgress(0);

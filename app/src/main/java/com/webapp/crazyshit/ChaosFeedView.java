@@ -31,7 +31,6 @@ import android.widget.TextView;
 import androidx.annotation.NonNull;
 import androidx.core.widget.TextViewCompat;
 import androidx.core.view.ViewCompat;
-import androidx.core.view.WindowInsetsCompat;
 import androidx.media3.common.MediaItem;
 import androidx.media3.common.MimeTypes;
 import androidx.media3.common.PlaybackException;
@@ -1177,8 +1176,7 @@ public final class ChaosFeedView extends FrameLayout {
     }
 
     static String formatPlaybackTime(long millis) {
-        long seconds = Math.max(0L, millis) / 1000L;
-        return String.format(Locale.US, "%d:%02d", seconds / 60L, seconds % 60L);
+        return FullscreenPlayerStyle.time(millis);
     }
 
     private int portraitViewportBottomInset() {
@@ -1931,31 +1929,19 @@ public final class ChaosFeedView extends FrameLayout {
             landscapeTopScrim = new View(activity);
             landscapeTopScrim.setTag("shittok_landscape_top_scrim");
             landscapeTopScrim.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
-            GradientDrawable topScrimBackground = new GradientDrawable(
-                    GradientDrawable.Orientation.TOP_BOTTOM,
-                    new int[] {
-                            Color.argb(160, 0, 0, 0),
-                            Color.argb(78, 0, 0, 0),
-                            Color.TRANSPARENT
-                    });
+            GradientDrawable topScrimBackground = FullscreenPlayerStyle.topScrim();
             landscapeTopScrim.setBackground(topScrimBackground);
             FrameLayout.LayoutParams topScrimParams =
-                    new FrameLayout.LayoutParams(-1, dp(112), Gravity.TOP);
+                    new FrameLayout.LayoutParams(-1, dp(FullscreenPlayerStyle.TOP_SCRIM_DP), Gravity.TOP);
             root.addView(landscapeTopScrim, topScrimParams);
 
             landscapeBottomScrim = new View(activity);
             landscapeBottomScrim.setTag("shittok_landscape_bottom_scrim");
             landscapeBottomScrim.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
-            GradientDrawable bottomScrimBackground = new GradientDrawable(
-                    GradientDrawable.Orientation.TOP_BOTTOM,
-                    new int[] {
-                            Color.TRANSPARENT,
-                            Color.argb(78, 0, 0, 0),
-                            Color.argb(170, 0, 0, 0)
-                    });
+            GradientDrawable bottomScrimBackground = FullscreenPlayerStyle.bottomScrim();
             landscapeBottomScrim.setBackground(bottomScrimBackground);
             FrameLayout.LayoutParams bottomScrimParams =
-                    new FrameLayout.LayoutParams(-1, dp(156), Gravity.BOTTOM);
+                    new FrameLayout.LayoutParams(-1, dp(FullscreenPlayerStyle.BOTTOM_SCRIM_DP), Gravity.BOTTOM);
             root.addView(landscapeBottomScrim, bottomScrimParams);
             landscapeTopScrim.setVisibility(View.GONE);
             landscapeBottomScrim.setVisibility(View.GONE);
@@ -3064,10 +3050,7 @@ public final class ChaosFeedView extends FrameLayout {
         }
 
         private int landscapeBottomInset() {
-            WindowInsetsCompat insets = ViewCompat.getRootWindowInsets(root);
-            return insets == null ? 0 : insets.getInsets(
-                    WindowInsetsCompat.Type.mandatorySystemGestures()
-                            | WindowInsetsCompat.Type.displayCutout()).bottom;
+            return FullscreenPlayerStyle.bottomInset(root);
         }
 
         private void updateFullscreenPromptPosition() {
@@ -3149,7 +3132,7 @@ public final class ChaosFeedView extends FrameLayout {
             syncPausedChrome();
 
             if (!portrait() && player != null && player.isPlaying() && !scrubbing) {
-                root.postDelayed(hideControlsRunnable, 2200L);
+                root.postDelayed(hideControlsRunnable, FullscreenPlayerStyle.HIDE_DELAY_MS);
             }
         }
 
@@ -3176,7 +3159,7 @@ public final class ChaosFeedView extends FrameLayout {
             landscapeActions.setAlpha(1f);
             syncPausedChrome();
             if (autoHide && !scrubbing && !portrait()) {
-                root.postDelayed(hideControlsRunnable, 2200L);
+                root.postDelayed(hideControlsRunnable, FullscreenPlayerStyle.HIDE_DELAY_MS);
             }
         }
 
@@ -3224,7 +3207,7 @@ public final class ChaosFeedView extends FrameLayout {
             applyControlLayout();
             syncPausedChrome();
             if (!portrait() && player != null && player.isPlaying() && !scrubbing) {
-                root.postDelayed(hideControlsRunnable, 2200L);
+                root.postDelayed(hideControlsRunnable, FullscreenPlayerStyle.HIDE_DELAY_MS);
             }
         }
 
@@ -3242,32 +3225,32 @@ public final class ChaosFeedView extends FrameLayout {
             root.removeCallbacks(progressTick);
             lower.animate()
                     .alpha(0f)
-                    .setDuration(180L)
+                    .setDuration(FullscreenPlayerStyle.FADE_MS)
                     .withEndAction(() -> {
                         if (!controlsVisible) lower.setVisibility(View.INVISIBLE);
                     })
                     .start();
-            creatorAvatarControl.animate().alpha(0f).setDuration(180L).start();
-            fullscreen.animate().alpha(0f).setDuration(180L).start();
+            creatorAvatarControl.animate().alpha(0f).setDuration(FullscreenPlayerStyle.FADE_MS).start();
+            fullscreen.animate().alpha(0f).setDuration(FullscreenPlayerStyle.FADE_MS).start();
             landscapeTopScrim.animate()
                     .alpha(0f)
-                    .setDuration(180L)
+                    .setDuration(FullscreenPlayerStyle.FADE_MS)
                     .withEndAction(() -> {
                         if (!controlsVisible) landscapeTopScrim.setVisibility(View.INVISIBLE);
                     })
                     .start();
             landscapeBottomScrim.animate()
                     .alpha(0f)
-                    .setDuration(180L)
+                    .setDuration(FullscreenPlayerStyle.FADE_MS)
                     .withEndAction(() -> {
                         if (!controlsVisible) landscapeBottomScrim.setVisibility(View.INVISIBLE);
                     })
                     .start();
-            landscapeActions.animate().alpha(0f).setDuration(180L).start();
-            progressRow.animate().alpha(0f).setDuration(180L).start();
+            landscapeActions.animate().alpha(0f).setDuration(FullscreenPlayerStyle.FADE_MS).start();
+            progressRow.animate().alpha(0f).setDuration(FullscreenPlayerStyle.FADE_MS).start();
             landscapeHeader.animate()
                     .alpha(0f)
-                    .setDuration(180L)
+                    .setDuration(FullscreenPlayerStyle.FADE_MS)
                     .withEndAction(() -> {
                         if (!controlsVisible) {
                             landscapeHeader.setVisibility(View.INVISIBLE);
@@ -3297,7 +3280,7 @@ public final class ChaosFeedView extends FrameLayout {
         private void updateTimeLabels(long position, long duration) {
             long bounded = Math.max(0L, Math.min(position, duration));
             elapsedTime.setText(formatPlaybackTime(bounded));
-            remainingTime.setText("-" + formatPlaybackTime(Math.max(0L, duration - bounded)));
+            remainingTime.setText(FullscreenPlayerStyle.remaining(bounded, duration));
         }
 
         void showRetrying() {

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.media3.ui.PlayerView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent" android:layout_height="match_parent"
+    app:controller_layout_id="@layout/view_shows_fullscreen_controls"
+    app:animation_enabled="false"
+    app:play_icon="@drawable/ic_shittok_play_overlay"
+    app:pause_icon="@drawable/ic_player_pause"
+    app:surface_type="texture_view" />
