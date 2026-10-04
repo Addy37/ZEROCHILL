@@ -176,4 +176,35 @@ public class ShitTokAutoScrollIntegrationTest {
             host.pause().stop().destroy();
         }
     }
+
+    @Test public void togglingModeDoesNotCancelPendingFailedClipSkip() {
+        ActivityController<Activity> host = Robolectric.buildActivity(Activity.class).setup();
+        host.get().setTheme(R.style.Theme_CrazyShit);
+        ChaosFeedView feed = feed(host.get(), 1);
+        try {
+            androidx.viewpager2.widget.ViewPager2 pager = ReflectionHelpers.getField(feed, "pager");
+            RecyclerView recycler = (RecyclerView) pager.getChildAt(0);
+            RecyclerView.ViewHolder holder = recycler.findViewHolderForAdapterPosition(0);
+            assertNotNull(holder);
+            ReflectionHelpers.setField(holder, "failurePending", true);
+            request(feed, 0);
+            assertTrue(ReflectionHelpers.getField(feed, "autoAdvancePending"));
+            for (boolean enabled : new boolean[] { true, false }) {
+                ReflectionHelpers.callInstanceMethod(feed, "setAutoScrollEnabled",
+                        ReflectionHelpers.ClassParameter.from(boolean.class, enabled));
+                assertTrue(ReflectionHelpers.getField(feed, "autoAdvancePending"));
+            }
+            List<NativeContentItem> items = ReflectionHelpers.getField(feed, "items");
+            items.add(new NativeContentItem(NativeContentItem.KIND_MEDIA,
+                    "Next video", "https://example.invalid/video/next", "", "", "", ""));
+            RecyclerView.Adapter<?> adapter = ReflectionHelpers.getField(feed, "adapter");
+            adapter.notifyItemInserted(1);
+            ReflectionHelpers.callInstanceMethod(feed, "tryPendingAutoAdvance");
+            shadowOf(Looper.getMainLooper()).idle();
+            assertEquals(1, pager.getCurrentItem());
+        } finally {
+            feed.close();
+            host.pause().stop().destroy();
+        }
+    }
 }

@@ -709,9 +709,13 @@ public final class ChaosFeedView extends FrameLayout {
 
     private void setAutoScrollEnabled(boolean enabled) {
         if (autoScrollEnabled == enabled) return;
+        ChaosHolder selectedBeforeToggle = holderAt(selectedPosition);
+        boolean pendingFailedClip = autoAdvancePending && selectedBeforeToggle != null
+                && selectedBeforeToggle.failurePending;
         autoScrollEnabled = enabled;
         cancelPendingAutoAdvance();
         autoAdvanceIssuedFrom = -1;
+        if (pendingFailedClip) requestAutoAdvance(selectedPosition);
         RecyclerView rv = pagerRecycler();
         if (rv == null) return;
         for (int i = 0; i < rv.getChildCount(); i++) {
