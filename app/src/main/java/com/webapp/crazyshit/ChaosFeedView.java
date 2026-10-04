@@ -3055,7 +3055,7 @@ public final class ChaosFeedView extends FrameLayout {
         }
 
         private void layoutPlaybackControls(boolean landscape) {
-            int safeBottom = landscape ? landscapeBottomInset() + dp(20) : 0;
+            int safeBottom = landscape ? landscapeBottomInset() + dp(8) : 0;
             FrameLayout.LayoutParams actions = (FrameLayout.LayoutParams) landscapeActions.getLayoutParams();
             actions.bottomMargin = safeBottom;
             landscapeActions.setLayoutParams(actions);
@@ -3065,12 +3065,11 @@ public final class ChaosFeedView extends FrameLayout {
             elapsedTime.setVisibility(landscape ? View.VISIBLE : View.GONE);
             remainingTime.setVisibility(landscape ? View.VISIBLE : View.GONE);
             seekBar.setPadding(0, landscape ? 0 : dp(18), 0, 0);
-            // In landscape, let fitted media use the space behind the top chrome instead of
-            // shrinking the video by the full 58dp header height. The header remains layered
-            // above the media, while the media still ends exactly where the scrubber begins.
+            // True fullscreen keeps the landscape media edge-to-edge. Header, scrubber and
+            // actions are overlays so none of them reduce the fitted video viewport.
             FrameLayout.LayoutParams media = (FrameLayout.LayoutParams) mediaLayer.getLayoutParams();
             media.topMargin = 0;
-            media.bottomMargin = landscape ? safeBottom + dp(96) : (horizontalVideo ? dp(44) : 0);
+            media.bottomMargin = landscape ? 0 : (horizontalVideo ? dp(44) : 0);
             mediaLayer.setLayoutParams(media);
             updateFullscreenPromptPosition();
         }
