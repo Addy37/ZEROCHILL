@@ -42,20 +42,22 @@ final class ShowsFullscreenControls {
         view.setControllerHideOnTouch(false);
         view.findViewById(R.id.shows_top_scrim).setBackground(FullscreenPlayerStyle.topScrim());
         view.findViewById(R.id.shows_bottom_scrim).setBackground(FullscreenPlayerStyle.bottomScrim());
-        controller.setProgressUpdateListener((position, buffered) -> updateRemaining(position));
+        controller.setProgressUpdateListener((position, buffered) -> {
+            if (!scrubbing) updateTimes(position);
+        });
         TimeBar progress = view.findViewById(androidx.media3.ui.R.id.exo_progress);
         progress.addListener(new TimeBar.OnScrubListener() {
             @Override public void onScrubStart(TimeBar timeBar, long position) {
                 scrubbing = true;
                 show();
-                updateRemaining(position);
+                updateTimes(position);
             }
             @Override public void onScrubMove(TimeBar timeBar, long position) {
-                updateRemaining(position);
+                updateTimes(position);
             }
             @Override public void onScrubStop(TimeBar timeBar, long position, boolean canceled) {
                 scrubbing = false;
-                updateRemaining(canceled && player != null ? player.getCurrentPosition() : position);
+                updateTimes(canceled && player != null ? player.getCurrentPosition() : position);
                 scheduleHide();
             }
         });
@@ -125,8 +127,10 @@ final class ShowsFullscreenControls {
                 player != null && !player.isPlaying() ? View.VISIBLE : View.GONE);
     }
 
-    private void updateRemaining(long position) {
+    private void updateTimes(long position) {
         long duration = player == null ? 0L : Math.max(0L, player.getDuration());
+        TextView elapsed = view.findViewById(androidx.media3.ui.R.id.exo_position);
+        elapsed.setText(FullscreenPlayerStyle.time(position));
         TextView remaining = view.findViewById(R.id.shows_remaining);
         remaining.setText(FullscreenPlayerStyle.remaining(position, duration));
     }

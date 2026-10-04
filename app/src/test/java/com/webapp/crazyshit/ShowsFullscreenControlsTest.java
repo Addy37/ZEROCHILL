@@ -110,6 +110,11 @@ public class ShowsFullscreenControlsTest {
                 assertEquals(ratio, content.getWidth() / (float) content.getHeight(), 0.02f);
                 assertEquals(viewport[0], view.getWidth());
                 assertEquals(viewport[1], view.getHeight());
+                android.view.ViewGroup.MarginLayoutParams barParams = (android.view.ViewGroup.MarginLayoutParams)
+                        view.findViewById(androidx.media3.ui.R.id.exo_progress).getLayoutParams();
+                barParams.bottomMargin = 24;
+                view.findViewById(androidx.media3.ui.R.id.exo_progress).setLayoutParams(barParams);
+                assertEquals(0, barParams.bottomMargin);
                 View progress = view.findViewById(R.id.shows_progress_row);
                 View actions = view.findViewById(R.id.shows_action_row);
                 assertTrue(progress.getBottom() <= actions.getTop());
