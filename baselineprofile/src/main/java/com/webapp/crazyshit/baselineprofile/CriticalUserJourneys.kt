@@ -189,7 +189,12 @@ internal fun MacrobenchmarkScope.browseChaosLongSession() {
     device.waitForIdle(350)
     pressHome()
     SystemClock.sleep(1_000L)
-    launchApp()
+    // Resume the retained player without requiring navigation chrome: ShitTok
+    // fullscreen and clear-display modes intentionally hide the main shell.
+    startActivityAndWait()
+    check(device.currentPackageName == TARGET_PACKAGE) {
+        "App did not return to the foreground after long-session browsing"
+    }
     checkNotNull(device.wait(Until.findObject(By.desc("Play or pause video")), 12_000)) {
         "ShitTok controls did not return after background/foreground"
     }
