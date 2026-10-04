@@ -1,6 +1,8 @@
 package com.webapp.crazyshit;
 
+import android.annotation.SuppressLint;
 import android.content.Context;
+import android.view.Menu;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
 import android.view.Gravity;
@@ -14,6 +16,7 @@ import android.widget.TextView;
 import androidx.appcompat.view.menu.MenuBuilder;
 
 /** Compact anchored glass actions, with MenuItem callbacks retained for existing callers. */
+@SuppressLint("RestrictedApi") // MenuBuilder is the appcompat menu model; only this helper touches it.
 final class ZeroChillMenu {
     interface OnMenuItemClickListener { boolean onMenuItemClick(MenuItem item); }
 
@@ -34,7 +37,8 @@ final class ZeroChillMenu {
         });
     }
 
-    MenuBuilder getMenu() { return menu; }
+    Menu getMenu() { return menu; }
+    void dispatch(MenuItem item) { menu.performItemAction(item, 0); }
     void setOnMenuItemClickListener(OnMenuItemClickListener listener) { this.listener = listener; }
 
     void show() {
@@ -77,7 +81,7 @@ final class ZeroChillMenu {
             ZeroChillMotion.installPressFeedback(row);
             row.setOnClickListener(v -> {
                 popup.dismiss();
-                menu.performItemAction(item, 0);
+                dispatch(item);
             });
             rows.addView(row, new LinearLayout.LayoutParams(-1, -2));
         }

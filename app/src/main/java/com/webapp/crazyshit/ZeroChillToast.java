@@ -27,8 +27,8 @@ final class ZeroChillToast {
     private static final Handler MAIN = new Handler(Looper.getMainLooper());
     private static WeakReference<Activity> resumed = new WeakReference<>(null);
     private static final ArrayList<WeakReference<Dialog>> dialogs = new ArrayList<>();
-    private static View visible;
-    private static Activity visibleOwner;
+    private static WeakReference<View> visible = new WeakReference<>(null);
+    private static WeakReference<Activity> visibleOwner = new WeakReference<>(null);
     private static CharSequence visibleText;
     private static Runnable pendingRemoval;
     private static Pending afterNavigation;
@@ -94,7 +94,7 @@ final class ZeroChillToast {
 
     static void onPaused(Activity activity) {
         if (resumed.get() == activity) resumed.clear();
-        if (visibleOwner == activity) clear();
+        if (visibleOwner.get() == activity) clear();
     }
 
     private static void display(Context context, CharSequence message, int duration) {
@@ -118,7 +118,7 @@ final class ZeroChillToast {
                 ? activity.findViewById(android.R.id.content)
                 : focusedDialog.findViewById(android.R.id.content);
         if (host == null) return;
-        if (visibleOwner == activity && visible != null && visible.getParent() == host
+        if (visibleOwner.get() == activity && visible.get() != null && visible.get().getParent() == host
                 && message != null && message.equals(visibleText)) return;
         clear();
         TextView view = new TextView(activity);
@@ -163,8 +163,8 @@ final class ZeroChillToast {
         }
         host.addView(view, params);
         ViewCompat.requestApplyInsets(view);
-        visible = view;
-        visibleOwner = activity;
+        visible = new WeakReference<>(view);
+        visibleOwner = new WeakReference<>(activity);
         visibleText = message;
         int timeout = duration == LENGTH_LONG ? 4000 : 2400;
         AccessibilityManager accessibility = (AccessibilityManager) activity.getSystemService(Context.ACCESSIBILITY_SERVICE);
@@ -181,11 +181,12 @@ final class ZeroChillToast {
     private static void clear() {
         if (pendingRemoval != null) MAIN.removeCallbacks(pendingRemoval);
         pendingRemoval = null;
-        if (visible != null && visible.getParent() instanceof FrameLayout) {
-            ((FrameLayout) visible.getParent()).removeView(visible);
+        View messageView = visible.get();
+        if (messageView != null && messageView.getParent() instanceof FrameLayout) {
+            ((FrameLayout) messageView.getParent()).removeView(messageView);
         }
-        visible = null;
-        visibleOwner = null;
+        visible.clear();
+        visibleOwner.clear();
         visibleText = null;
     }
 

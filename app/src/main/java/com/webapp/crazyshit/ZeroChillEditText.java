@@ -5,10 +5,10 @@ import android.graphics.drawable.Drawable;
 import android.text.Editable;
 import android.text.TextWatcher;
 import android.os.Build;
-import android.widget.EditText;
+import androidx.appcompat.widget.AppCompatEditText;
 
 /** Shared visible field appearance; keeps Android input, selection, and Autofill behavior. */
-final class ZeroChillEditText extends EditText {
+final class ZeroChillEditText extends AppCompatEditText {
     private CharSequence errorText;
     private Drawable regularBackground;
     ZeroChillEditText(Context context) {

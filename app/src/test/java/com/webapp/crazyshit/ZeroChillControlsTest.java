@@ -77,7 +77,7 @@ public class ZeroChillControlsTest {
         AtomicInteger calls = new AtomicInteger();
         android.view.MenuItem item = menu.getMenu().add("Delete");
         menu.setOnMenuItemClickListener(clicked -> { calls.incrementAndGet(); return true; });
-        menu.getMenu().performItemAction(item, 0);
+        menu.dispatch(item);
         assertEquals(1, calls.get());
         ZeroChillSwitch toggle = new ZeroChillSwitch(activity);
         toggle.setChecked(true);
