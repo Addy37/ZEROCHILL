@@ -2,6 +2,7 @@ package com.webapp.crazyshit;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
 import android.app.Activity;
@@ -9,6 +10,7 @@ import android.app.Application;
 import android.os.Looper;
 
 import androidx.media3.exoplayer.ExoPlayer;
+import androidx.media3.common.Player;
 import androidx.recyclerview.widget.RecyclerView;
 
 import org.junit.Test;
@@ -129,6 +131,47 @@ public class ShitTokAutoScrollIntegrationTest {
             assertFalse(ReflectionHelpers.getField(feed, "autoAdvancePending"));
         } finally {
             // Prevent this synthetic holder's fake player from entering release paths.
+            feed.close();
+            host.pause().stop().destroy();
+        }
+    }
+
+    @Test public void turningOffPendingAutoScrollReplaysSelectedEndedClip() {
+        ActivityController<Activity> host = Robolectric.buildActivity(Activity.class).setup();
+        host.get().setTheme(R.style.Theme_CrazyShit);
+        ChaosFeedView feed = feed(host.get(), 2);
+        try {
+            androidx.viewpager2.widget.ViewPager2 pager = ReflectionHelpers.getField(feed, "pager");
+            RecyclerView recycler = (RecyclerView) pager.getChildAt(0);
+            RecyclerView.ViewHolder holder = recycler.findViewHolderForAdapterPosition(0);
+            assertNotNull(holder);
+            AtomicInteger seeks = new AtomicInteger();
+            AtomicInteger plays = new AtomicInteger();
+            ExoPlayer ended = (ExoPlayer) Proxy.newProxyInstance(
+                    ExoPlayer.class.getClassLoader(), new Class<?>[] { ExoPlayer.class },
+                    (proxy, method, args) -> {
+                        if ("getPlaybackState".equals(method.getName())) return Player.STATE_ENDED;
+                        if ("seekTo".equals(method.getName())) seeks.incrementAndGet();
+                        if ("play".equals(method.getName())) plays.incrementAndGet();
+                        if (method.getReturnType() == boolean.class) return false;
+                        if (method.getReturnType() == int.class) return 0;
+                        if (method.getReturnType() == long.class) return 0L;
+                        if (method.getReturnType() == float.class) return 0f;
+                        return null;
+                    });
+            ReflectionHelpers.setField(holder, "player", ended);
+            ReflectionHelpers.callInstanceMethod(feed, "setAutoScrollEnabled",
+                    ReflectionHelpers.ClassParameter.from(boolean.class, true));
+            request(feed, 0);
+            assertTrue(ReflectionHelpers.getField(feed, "autoAdvancePending"));
+            ReflectionHelpers.callInstanceMethod(feed, "setAutoScrollEnabled",
+                    ReflectionHelpers.ClassParameter.from(boolean.class, false));
+            assertFalse(ReflectionHelpers.getField(feed, "autoAdvancePending"));
+            assertEquals(1, seeks.get());
+            assertEquals(1, plays.get());
+            shadowOf(Looper.getMainLooper()).idle();
+            assertEquals(0, pager.getCurrentItem());
+        } finally {
             feed.close();
             host.pause().stop().destroy();
         }

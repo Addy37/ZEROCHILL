@@ -718,6 +718,13 @@ public final class ChaosFeedView extends FrameLayout {
             RecyclerView.ViewHolder raw = rv.getChildViewHolder(rv.getChildAt(i));
             if (raw instanceof ChaosHolder) ((ChaosHolder) raw).syncAutoScrollButtons();
         }
+        if (!enabled) {
+            ChaosHolder selected = holderAt(selectedPosition);
+            if (selected != null && selected.player != null
+                    && selected.player.getPlaybackState() == Player.STATE_ENDED) {
+                selected.handleCompletion(selected.player);
+            }
+        }
     }
 
     private void requestAutoAdvance(int fromPosition) {
