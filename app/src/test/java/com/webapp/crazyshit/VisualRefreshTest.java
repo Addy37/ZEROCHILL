@@ -419,8 +419,16 @@ public class VisualRefreshTest {
             View header = root.findViewWithTag("shittok_landscape_header");
             View actions = root.findViewWithTag("shittok_landscape_actions");
             View portraitRail = root.findViewWithTag("shittok_action_rail");
+            View topScrim = root.findViewWithTag("shittok_landscape_top_scrim");
+            View bottomScrim = root.findViewWithTag("shittok_landscape_bottom_scrim");
+            assertNotNull(topScrim);
+            assertNotNull(bottomScrim);
             assertEquals(View.VISIBLE, header.getVisibility());
             assertEquals(View.VISIBLE, actions.getVisibility());
+            assertEquals(View.VISIBLE, topScrim.getVisibility());
+            assertEquals(View.VISIBLE, bottomScrim.getVisibility());
+            assertTrue(topScrim.getBackground() instanceof android.graphics.drawable.GradientDrawable);
+            assertTrue(bottomScrim.getBackground() instanceof android.graphics.drawable.GradientDrawable);
             assertEquals(View.GONE, ((View) portraitRail.getParent()).getVisibility());
             capture(root, "shittok-landscape-controls", 740, 360);
             root.measure(View.MeasureSpec.makeMeasureSpec(740, View.MeasureSpec.EXACTLY),
@@ -435,7 +443,7 @@ public class VisualRefreshTest {
             assertTrue(progress.getBottom() <= actions.getTop());
             FrameLayout.LayoutParams actionParams =
                     (FrameLayout.LayoutParams) actions.getLayoutParams();
-            assertEquals(BrowseUi.dp(host.get(), 8), actionParams.bottomMargin);
+            assertEquals(BrowseUi.dp(host.get(), 4), actionParams.bottomMargin);
             assertEquals(View.VISIBLE, root.findViewWithTag("shittok_elapsed").getVisibility());
             assertEquals(View.VISIBLE, root.findViewWithTag("shittok_remaining").getVisibility());
             host.get().getResources().updateConfiguration(original,
@@ -443,6 +451,8 @@ public class VisualRefreshTest {
             ReflectionHelpers.setField(feed, "manualFullscreen", false);
             ReflectionHelpers.callInstanceMethod(holder, "syncOrientationChrome");
             assertEquals(View.GONE, header.getVisibility());
+            assertEquals(View.GONE, topScrim.getVisibility());
+            assertEquals(View.GONE, bottomScrim.getVisibility());
             assertEquals(View.VISIBLE, ((View) portraitRail.getParent()).getVisibility());
             ReflectionHelpers.setField(holder, "videoAspectRatio", 2f);
             ReflectionHelpers.setField(holder, "horizontalVideo", true);
