@@ -6,6 +6,7 @@ import android.app.Application;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.widget.LinearLayout;
+import android.widget.ImageView;
 import java.io.File;
 import java.io.FileOutputStream;
 import android.graphics.drawable.Animatable;
@@ -107,6 +108,46 @@ public class ZeroChillControlsTest {
             if (child instanceof TextView && expected.contentEquals(((TextView) child).getText())) return true;
         }
         return false;
+    }
+
+    @Test public void refreshRetainsStateAndRendersBrandedIndicator() throws Exception {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        ZeroChillRefreshLayout refresh = new ZeroChillRefreshLayout(activity);
+        ImageView indicator = null;
+        for (int i = 0; i < refresh.getChildCount(); i++) {
+            if (refresh.getChildAt(i) instanceof ImageView) {
+                indicator = (ImageView) refresh.getChildAt(i);
+                break;
+            }
+        }
+        assertNotNull(indicator);
+        assertTrue(indicator.getDrawable() instanceof ZeroChillDotsDrawable);
+        refresh.setRefreshing(true);
+        assertTrue(refresh.isRefreshing());
+        refresh.setRefreshing(false);
+        assertFalse(refresh.isRefreshing());
+        indicator.measure(View.MeasureSpec.makeMeasureSpec(64, View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(64, View.MeasureSpec.EXACTLY));
+        indicator.layout(0, 0, 64, 64);
+        Bitmap bitmap = Bitmap.createBitmap(64, 64, Bitmap.Config.ARGB_8888);
+        indicator.draw(new Canvas(bitmap));
+        File folder = new File("build/reports/visual-tests");
+        assertTrue(folder.exists() || folder.mkdirs());
+        try (FileOutputStream output = new FileOutputStream(new File(folder, "zerochill-refresh-indicator.png"))) {
+            assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG, 100, output));
+        }
+    }
+
+    @Test public void inputErrorIsBrandedAndClearsWhenEdited() {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        ZeroChillEditText input = new ZeroChillEditText(activity);
+        android.graphics.drawable.Drawable normal = input.getBackground();
+        input.setError("Type DELETE to confirm.");
+        assertEquals("Type DELETE to confirm.", input.getError().toString());
+        assertNotSame(normal, input.getBackground());
+        input.setText("D");
+        assertNull(input.getError());
+        assertSame(normal, input.getBackground());
     }
 
     @Test public void navigationMessageTransfersOnlyToNextActivity() {

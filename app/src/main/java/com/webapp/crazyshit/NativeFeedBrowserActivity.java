@@ -592,7 +592,7 @@ public final class NativeFeedBrowserActivity extends Activity {
             shell.addView(body, new LinearLayout.LayoutParams(-1, 0, 1f));
         }
 
-        refresh = new SwipeRefreshLayout(this);
+        refresh = new ZeroChillRefreshLayout(this);
         refresh.setColorSchemeColors(UiPalette.PRIMARY);
         refresh.setOnRefreshListener(this::reload);
         if (showDetailsMode) {

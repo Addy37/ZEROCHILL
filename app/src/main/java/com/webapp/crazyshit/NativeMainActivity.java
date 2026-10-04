@@ -290,7 +290,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         });
         shell.addView(primaryPager, new LinearLayout.LayoutParams(-1, 0, 1f));
 
-        swipeRefresh = new SwipeRefreshLayout(this);
+        swipeRefresh = new ZeroChillRefreshLayout(this);
         swipeRefresh.setColorSchemeColors(UiPalette.PRIMARY);
         swipeRefresh.setOnRefreshListener(this::refreshCurrentScreen);
         content.addView(swipeRefresh, new FrameLayout.LayoutParams(-1, -1));

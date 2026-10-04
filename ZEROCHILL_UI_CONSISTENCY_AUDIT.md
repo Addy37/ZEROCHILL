@@ -40,7 +40,7 @@ Categories: 1 branded ZEROCHILL UI, 2 internal widget or type with custom appear
 | `EditText` | 1. Shared branded input with native keyboard/Autofill. | `SearchActivity.java`: 270 |
 | `EditText` | 1. Shared branded input with native keyboard/Autofill. | `ZeroChillAccountActivity.java`: 906 |
 | `EditText` | 1. Shared branded input with native keyboard/Autofill. | `ZeroChillAccountSecurityActivity.java`: 129, 190 |
-| `EditText` | 1. Shared branded input with native keyboard/Autofill. | `ZeroChillEditText.java`: 5, 8, 9 |
+| `EditText` | 1. Shared branded input with native keyboard/Autofill. | `ZeroChillEditText.java`: 8, 11, 14 |
 | `EditText` | 1. Shared branded input with native keyboard/Autofill. | `ZeroChillMessageActivity.java`: 197 |
 | `EditText` | 2. Input type, parameter, or instanceof check; actual field uses branded input. | `CreatorSuggestionsController.java`: 7, 24, 45, 52, 58 |
 | `EditText` | 2. Input type, parameter, or instanceof check; actual field uses branded input. | `CreatorsActivity.java`: 14, 37 |
@@ -67,7 +67,7 @@ Categories: 1 branded ZEROCHILL UI, 2 internal widget or type with custom appear
 | `ProgressBar` | 1. Shared branded dots or cyan horizontal bar. | `ZeroChillAccountActivity.java`: 265 |
 | `ProgressBar` | 1. Shared branded dots or cyan horizontal bar. | `ZeroChillInboxActivity.java`: 166 |
 | `ProgressBar` | 1. Shared branded dots or cyan horizontal bar. | `ZeroChillMessageActivity.java`: 188 |
-| `ProgressBar` | 1. Shared branded dots or cyan horizontal bar. | `ZeroChillProgressBar.java`: 11, 14, 15, 21 |
+| `ProgressBar` | 1. Shared branded dots or cyan horizontal bar. | `ZeroChillProgressBar.java`: 4, 7, 8, 14 |
 | `ProgressBar` | 1. Shared branded dots or cyan horizontal bar. | `ZeroChillPublicProfileActivity.java`: 112 |
 | `ProgressBar` | 1. Shared branded dots or cyan horizontal bar. | `ZeroChillSocialSettingsActivity.java`: 88 |
 | `ProgressBar` | 2. ProgressBar type/style helper; instances use branded dots or cyan horizontal bars. | `BunkrGalleryActivity.java`: 21, 100 |
@@ -90,7 +90,13 @@ Categories: 1 branded ZEROCHILL UI, 2 internal widget or type with custom appear
 | `ProgressBar` | 2. ProgressBar type/style helper; instances use branded dots or cyan horizontal bars. | `ZeroChillMessageActivity.java`: 20, 82 |
 | `ProgressBar` | 2. ProgressBar type/style helper; instances use branded dots or cyan horizontal bars. | `ZeroChillPublicProfileActivity.java`: 18, 34 |
 | `ProgressBar` | 2. ProgressBar type/style helper; instances use branded dots or cyan horizontal bars. | `ZeroChillSocialSettingsActivity.java`: 13, 29 |
-| `ProgressBar` | 2. ProgressBar type/style helper; instances use branded dots or cyan horizontal bars. | `ZeroChillUi.java`: 15, 130 |
+| `ProgressBar` | 2. ProgressBar type/style helper; instances use branded dots or cyan horizontal bars. | `ZeroChillUi.java`: 15, 131 |
+| `SwipeRefreshLayout` | 1. Branded dot/glass refresh indicator with stock gesture contract. | `ZeroChillRefreshLayout.java`: 7, 10 |
+| `SwipeRefreshLayout` | 2. Refresh container type/layout params; instances use branded indicator. | `FeedbackThreadActivity.java`: 15, 37 |
+| `SwipeRefreshLayout` | 2. Refresh container type/layout params; instances use branded indicator. | `MainActivity.java`: 58, 112 |
+| `SwipeRefreshLayout` | 2. Refresh container type/layout params; instances use branded indicator. | `MainPagerAdapter.java`: 17, 870, 1423 |
+| `SwipeRefreshLayout` | 2. Refresh container type/layout params; instances use branded indicator. | `NativeFeedBrowserActivity.java`: 32, 114, 641, 673, 1055 |
+| `SwipeRefreshLayout` | 2. Refresh container type/layout params; instances use branded indicator. | `NativeMainActivity.java`: 39, 82, 303 |
 | `Switch` | 1. Shared branded switch, or semantic type backed by it. | `ZeroChillSocialSettingsActivity.java`: 15, 36, 252, 281 |
 | `Switch` | 1. Shared branded switch, or semantic type backed by it. | `ZeroChillSwitch.java`: 4, 7 |
 | `Toast` | 1. Shared in-app transient component or its call site. | `AppBackupController.java`: 76 |
@@ -106,7 +112,7 @@ Categories: 1 branded ZEROCHILL UI, 2 internal widget or type with custom appear
 | `Toast` | 1. Shared in-app transient component or its call site. | `FeedbackThreadActivity.java`: 128, 131, 227 |
 | `Toast` | 1. Shared in-app transient component or its call site. | `GalleryMediaDownloader.java`: 250 |
 | `Toast` | 1. Shared in-app transient component or its call site. | `InlineCommentsDialog.java`: 278, 531, 607, 669 |
-| `Toast` | 1. Shared in-app transient component or its call site. | `MainActivity.java`: 468, 524, 551, 553, 699, 701, 723, 725, 785, 787, 843, 845, 1082, 1084, 1101, 1159, 1161, 1163, 1165, 1310, 1312, 1370, 1372, 1378, 1381, 1500, 1502 |
+| `Toast` | 1. Shared in-app transient component or its call site. | `MainActivity.java`: 470, 526, 553, 555, 701, 703, 725, 727, 787, 789, 845, 847, 1084, 1086, 1103, 1161, 1163, 1165, 1167, 1312, 1314, 1372, 1374, 1380, 1383, 1502, 1504 |
 | `Toast` | 1. Shared in-app transient component or its call site. | `MainPagerAdapter.java`: 604, 607, 691, 694, 1000, 1003 |
 | `Toast` | 1. Shared in-app transient component or its call site. | `NativeCategoryAdapter.java`: 399, 404 |
 | `Toast` | 1. Shared in-app transient component or its call site. | `NativeFeedBrowserActivity.java`: 1340, 1343, 1352, 1366, 1570, 1573, 1623, 1629, 1845, 1848 |
@@ -126,11 +132,14 @@ Categories: 1 branded ZEROCHILL UI, 2 internal widget or type with custom appear
 | `Toast` | 1. Shared in-app transient component or its call site. | `ZeroChillAccountActivity.java`: 198, 201, 207, 285, 403, 417, 435, 722, 744, 891, 896, 901 |
 | `Toast` | 1. Shared in-app transient component or its call site. | `ZeroChillAccountSecurityActivity.java`: 111, 226, 232 |
 | `Toast` | 1. Shared in-app transient component or its call site. | `ZeroChillDialog.java`: 38 |
+| `Toast` | 1. Shared in-app transient component or its call site. | `ZeroChillEditText.java`: 49 |
 | `Toast` | 1. Shared in-app transient component or its call site. | `ZeroChillInboxActivity.java`: 219, 222, 477 |
 | `Toast` | 1. Shared in-app transient component or its call site. | `ZeroChillMessageActivity.java`: 238, 241, 286, 289, 333, 354, 427, 432, 435, 449, 452 |
 | `Toast` | 1. Shared in-app transient component or its call site. | `ZeroChillPublicProfileActivity.java`: 607, 616, 619, 637, 640 |
 | `Toast` | 1. Shared in-app transient component or its call site. | `ZeroChillSocialSettingsActivity.java`: 186, 241 |
 | `Toast` | 1. Shared in-app transient component or its call site. | `ZeroChillToast.java`: 24, 53, 59, 60, 63, 177 |
+
+Six `SwipeRefreshLayout` instances keep their gesture and callback behavior through `ZeroChillRefreshLayout` with glass/dot indicator. The MainActivity site-error actions use shared branded buttons. Input validation uses a branded error border, transient copy, and accessibility announcement while retaining `getError()` and clear-on-edit.
 
 No production XML layout contains an unstyled `<ProgressBar>`, `<Switch>`, `<EditText>`, or `<CheckBox>`. The circular loading sites use `ZeroChillProgressBar` three dots; three determinate horizontal progress bars retain real progress values with cyan fill. The only `new AlertDialog.Builder` remains the already branded `AccessNoticeDialog`; it preserves its noncancelable first-run decision and acceptance key.
 

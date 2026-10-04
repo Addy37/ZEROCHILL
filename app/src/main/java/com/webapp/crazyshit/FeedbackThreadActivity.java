@@ -75,7 +75,7 @@ public final class FeedbackThreadActivity extends Activity {
         header.addView(titles, new LinearLayout.LayoutParams(0, -2, 1f));
         root.addView(header);
 
-        refresh = new SwipeRefreshLayout(this);
+        refresh = new ZeroChillRefreshLayout(this);
         refresh.setColorSchemeColors(UiPalette.PRIMARY);
         refresh.setOnRefreshListener(this::loadThread);
 

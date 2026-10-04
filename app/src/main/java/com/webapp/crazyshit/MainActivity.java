@@ -188,7 +188,7 @@ public class MainActivity extends Activity {
         });
         root.addView(webFrame, match());
 
-        swipeRefresh = new SwipeRefreshLayout(this);
+        swipeRefresh = new ZeroChillRefreshLayout(this);
         swipeRefresh.setOnRefreshListener(() -> {
             errorView.setVisibility(View.GONE);
             probingNativeVideo = false;
@@ -336,6 +336,7 @@ public class MainActivity extends Activity {
 
         Button retry = new Button(this);
         retry.setText("Retry");
+        ZeroChillUi.styleActionButton(retry, true);
         retry.setOnClickListener(v -> {
             errorView.setVisibility(View.GONE);
             if (webView.getUrl() == null) webView.loadUrl(HOME); else webView.reload();
@@ -343,6 +344,7 @@ public class MainActivity extends Activity {
 
         Button browser = new Button(this);
         browser.setText("Open in browser");
+        ZeroChillUi.styleActionButton(browser, false);
         browser.setOnClickListener(v -> openExternal(Uri.parse(currentUrl())));
 
         box.addView(title);
