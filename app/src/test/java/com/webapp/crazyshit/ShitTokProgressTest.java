@@ -31,6 +31,7 @@ public class ShitTokProgressTest {
         try {
             RecyclerView.Adapter<?> adapter = ReflectionHelpers.getField(feed, "adapter");
             holder = adapter.onCreateViewHolder(new RecyclerView(host.get()), 0);
+            host.get().setContentView(holder.itemView);
             AtomicLong position = new AtomicLong(3000L);
             AtomicLong duration = new AtomicLong(28000L);
             ExoPlayer player = (ExoPlayer) Proxy.newProxyInstance(ExoPlayer.class.getClassLoader(),
