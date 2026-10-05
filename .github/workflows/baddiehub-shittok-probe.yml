@@ -1,0 +1,65 @@
+name: BaddieHub ShitTok Probe
+
+on:
+  pull_request:
+    branches:
+      - rebrand/zerochill
+    paths:
+      - tools/baddiehub_shittok_probe.py
+      - .github/workflows/baddiehub-shittok-probe.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    name: Probe recent portrait videos
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Install probe dependencies
+        run: |
+          python -m pip install --disable-pip-version-check requests beautifulsoup4
+          if ! command -v ffprobe >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y ffmpeg
+          fi
+
+      - name: Probe BaddieHub
+        run: |
+          python tools/baddiehub_shittok_probe.py \
+            --pages 3 \
+            --candidates 30 \
+            --resolved 18 \
+            --json-out baddiehub-probe.json
+
+      - name: Publish probe summary
+        if: always()
+        run: |
+          if [ -f baddiehub-probe.json ]; then
+            python - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import json
+          with open("baddiehub-probe.json", encoding="utf-8") as handle:
+              data = json.load(handle)
+          print("## BaddieHub ShitTok probe")
+          print()
+          print(f"- Candidate pages: {data['candidate_pages']}")
+          print(f"- Playable videos resolved: {data['resolved']}")
+          print(f"- Portrait videos: {data['portrait']}")
+          print(f"- Non-portrait videos: {data['nonportrait']}")
+          print(f"- Probe errors: {len(data['errors'])}")
+          PY
+          fi
+
+      - name: Upload probe metadata
+        if: always() && hashFiles('baddiehub-probe.json') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: baddiehub-shittok-probe
+          path: baddiehub-probe.json
+          if-no-files-found: error
+          retention-days: 3
