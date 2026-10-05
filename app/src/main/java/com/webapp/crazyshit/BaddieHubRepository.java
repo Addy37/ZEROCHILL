@@ -1,8 +1,8 @@
 package com.webapp.crazyshit;
 
 import android.media.MediaMetadataRetriever;
-import android.webkit.CookieManager;
 import android.util.Base64;
+import android.webkit.CookieManager;
 
 import org.jsoup.Connection;
 import org.jsoup.Jsoup;
@@ -23,6 +23,7 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Experimental ShitTok-only BaddieHub source.
@@ -45,12 +46,14 @@ final class BaddieHubRepository {
                     "(KHTML, like Gecko) Chrome/140.0 Mobile Safari/537.36";
     private static final int REQUEST_TIMEOUT_MS = 12_000;
     private static final int MAX_CANDIDATES = 18;
-    private static final int MAX_VALIDATION_STARTS = 10;
+    private static final int MAX_VALIDATION_STARTS = 8;
+    private static final int MAX_GLOBAL_VALIDATIONS = 8;
     private static final int MAX_RETURNED = 6;
     private static final long FIRST_RESULT_WAIT_MS = 850L;
     private static final long FAILURE_RETRY_MS = 60_000L;
 
     private static final ExecutorService VALIDATION_IO = Executors.newFixedThreadPool(4);
+    private static final AtomicInteger VALIDATION_PENDING = new AtomicInteger();
     private static final Map<String, NativeContentItem> PORTRAIT = new ConcurrentHashMap<>();
     private static final Map<String, String> MEDIA = new ConcurrentHashMap<>();
     private static final Set<String> NON_PORTRAIT = ConcurrentHashMap.newKeySet();
@@ -75,6 +78,14 @@ final class BaddieHubRepository {
             if (retry != null && retry > now) continue;
             if (started >= MAX_VALIDATION_STARTS) break;
             if (!IN_FLIGHT.add(candidate.pageUrl)) continue;
+
+            int pending = VALIDATION_PENDING.incrementAndGet();
+            if (pending > MAX_GLOBAL_VALIDATIONS) {
+                VALIDATION_PENDING.decrementAndGet();
+                IN_FLIGHT.remove(candidate.pageUrl);
+                break;
+            }
+
             started++;
             VALIDATION_IO.execute(() -> validate(candidate));
         }
@@ -188,6 +199,7 @@ final class BaddieHubRepository {
             retryLater(candidate.pageUrl);
         } finally {
             IN_FLIGHT.remove(candidate.pageUrl);
+            VALIDATION_PENDING.decrementAndGet();
         }
     }
 
@@ -239,7 +251,8 @@ final class BaddieHubRepository {
 
     private Resolved resolvePage(String pageUrl) throws IOException {
         Document page = fetch(pageUrl, BASE);
-        String title = clean(page.selectFirst("h1") == null ? "" : page.selectFirst("h1").text());
+        Element heading = page.selectFirst("h1");
+        String title = clean(heading == null ? "" : heading.text());
         if (title.isEmpty()) title = clean(page.title());
         for (Element frame : page.select("iframe[src]")) {
             String frameUrl = absolute(frame, "src", page.location());
@@ -358,8 +371,8 @@ final class BaddieHubRepository {
     }
 
     private static String stripQueryAndFragment(String value) {
-        int end = value == null ? 0 : value.length();
         if (value == null) return "";
+        int end = value.length();
         int query = value.indexOf('?');
         int fragment = value.indexOf('#');
         if (query >= 0) end = Math.min(end, query);
