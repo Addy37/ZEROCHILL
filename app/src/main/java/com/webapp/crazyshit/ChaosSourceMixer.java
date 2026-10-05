@@ -25,14 +25,16 @@ import java.util.concurrent.TimeUnit;
  */
 final class ChaosSourceMixer {
     private static final int MAX_SOURCE_PAGE = 8;
+    private static final int BADDIEHUB_MAX_PAGE = 3;
     private static final ExecutorService CRAZY_IO = Executors.newFixedThreadPool(2);
-    private static final ExecutorService SOURCE_IO = Executors.newFixedThreadPool(5);
+    private static final ExecutorService SOURCE_IO = Executors.newFixedThreadPool(6);
     private static final long MIX_BATCH_BUDGET_MS = 2_200L;
     private static final int BATCH_REGULAR = 1;
     private static final int BATCH_EFUKT = 2;
     private static final int BATCH_KAOTIC = 3;
     private static final int BATCH_FAPELLO = 5;
     private static final int BATCH_ONLY_HAVEN = 6;
+    private static final int BATCH_BADDIEHUB = 7;
     private static final int SOURCES_PER_BATCH = 3;
     private static final int REGULAR_ITEMS_PER_SOURCE = 4;
     private static final int SHIT_SHOW_PER_BATCH = 24;
@@ -43,6 +45,7 @@ final class ChaosSourceMixer {
     private static final int ONLY_HAVEN_ITEMS_PER_BATCH = 6;
     private static final int ONLY_HAVEN_ITEMS_PER_CREATOR = 3;
     private static final int ONLY_HAVEN_TRENDING_CREATORS = 30;
+    private static final int BADDIEHUB_ITEMS_PER_BATCH = 6;
     private static final String VIDEOS = CrazyShitRepository.BASE + "videos/";
     private static final String USER_UPLOADS = CrazyShitRepository.BASE + "submissions/";
 
@@ -53,6 +56,7 @@ final class ChaosSourceMixer {
     private final FapelloRepository fapello = new FapelloRepository();
     private final WebVideoSourceRepository webVideo = new WebVideoSourceRepository();
     private final OnlyHavenRepository onlyHaven = new OnlyHavenRepository();
+    private final BaddieHubRepository baddieHub = new BaddieHubRepository();
     private final ArrayList<NativeContentItem> efuktSeries = new ArrayList<>();
     private final ArrayDeque<NativeContentItem> efuktSeriesDeck = new ArrayDeque<>();
     private final ArrayList<OnlyHavenRepository.Creator> onlyHavenCreators = new ArrayList<>();
@@ -101,12 +105,15 @@ final class ChaosSourceMixer {
                 BATCH_FAPELLO, loadFapelloBatch(context))));
         work.add(completions.submit(() -> new SourceBatch(
                 BATCH_ONLY_HAVEN, loadOnlyHavenBatch(context))));
+        work.add(completions.submit(() -> new SourceBatch(
+                BATCH_BADDIEHUB, loadBaddieHubBatch())));
 
         ArrayList<NativeContentItem> regularItems = new ArrayList<>();
         ArrayList<NativeContentItem> efuktItems = new ArrayList<>();
         ArrayList<NativeContentItem> kaoticItems = new ArrayList<>();
         ArrayList<NativeContentItem> fapelloItems = new ArrayList<>();
         ArrayList<NativeContentItem> onlyHavenItems = new ArrayList<>();
+        ArrayList<NativeContentItem> baddieHubItems = new ArrayList<>();
 
         long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(MIX_BATCH_BUDGET_MS);
         int remainingWork = work.size();
@@ -136,6 +143,9 @@ final class ChaosSourceMixer {
                         case BATCH_ONLY_HAVEN:
                             onlyHavenItems.addAll(batch.items);
                             break;
+                        case BATCH_BADDIEHUB:
+                            baddieHubItems.addAll(batch.items);
+                            break;
                         default:
                             break;
                     }
@@ -156,6 +166,7 @@ final class ChaosSourceMixer {
         Collections.shuffle(kaoticItems, random);
         Collections.shuffle(fapelloItems, random);
         Collections.shuffle(onlyHavenItems, random);
+        Collections.shuffle(baddieHubItems, random);
 
         ArrayList<NativeContentItem> shitShowItems = new ArrayList<>();
         HashSet<String> regularUrls = new HashSet<>();
@@ -170,8 +181,10 @@ final class ChaosSourceMixer {
         }
         Collections.shuffle(shitShowItems, random);
 
-        return mixAvailable(kaoticItems, shitShowItems, fapelloItems,
-                onlyHavenItems, regularItems, efuktItems);
+        ArrayList<NativeContentItem> result = new ArrayList<>(mixAvailable(
+                kaoticItems, shitShowItems, fapelloItems, onlyHavenItems, regularItems, efuktItems));
+        addUpTo(result, baddieHubItems, BADDIEHUB_ITEMS_PER_BATCH);
+        return result;
     }
 
     static List<NativeContentItem> mixAvailable(
@@ -239,6 +252,19 @@ final class ChaosSourceMixer {
         }
     }
 
+    private List<NativeContentItem> loadBaddieHubBatch() {
+        try {
+            ArrayList<NativeContentItem> candidates = new ArrayList<>(
+                    baddieHub.fetchPortraitFeed(1 + random.nextInt(BADDIEHUB_MAX_PAGE))
+            );
+            candidates.removeIf(item -> item == null || !item.isVideo());
+            Collections.shuffle(candidates, random);
+            int take = Math.min(BADDIEHUB_ITEMS_PER_BATCH, candidates.size());
+            return new ArrayList<>(candidates.subList(0, take));
+        } catch (Exception ignored) {
+            return new ArrayList<>();
+        }
+    }
 
     private List<NativeContentItem> loadEfuktBatch(Context context) {
         ensureEfuktCatalog(context);
