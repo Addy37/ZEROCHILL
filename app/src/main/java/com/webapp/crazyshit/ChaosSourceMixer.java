@@ -45,7 +45,7 @@ final class ChaosSourceMixer {
     private static final int ONLY_HAVEN_ITEMS_PER_BATCH = 6;
     private static final int ONLY_HAVEN_ITEMS_PER_CREATOR = 3;
     private static final int ONLY_HAVEN_TRENDING_CREATORS = 30;
-    private static final int BADDIEHUB_ITEMS_PER_BATCH = 6;
+    private static final int BADDIEHUB_ITEMS_PER_BATCH = 7;
     private static final String VIDEOS = CrazyShitRepository.BASE + "videos/";
     private static final String USER_UPLOADS = CrazyShitRepository.BASE + "submissions/";
 
