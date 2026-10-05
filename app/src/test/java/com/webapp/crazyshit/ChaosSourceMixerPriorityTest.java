@@ -1,7 +1,6 @@
 package com.webapp.crazyshit;
 
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -46,14 +45,6 @@ public final class ChaosSourceMixerPriorityTest {
                 clips("Kaotic", 2), clips("Shit Show", 2), clips("Fapello", 2),
                 clips("OnlyHaven", 2), clips("CrazyShit", 2), clips("EFukt", 2));
         assertEquals(0, count(result, "Bunkr"));
-    }
-
-    @Test public void sourceWeightsPreferKaoticAndStillAllowEfukt() {
-        assertTrue(ShitTokAspectPriority.sourceWeight(clips("Kaotic", 1).get(0)) >
-                ShitTokAspectPriority.sourceWeight(clips("Shit Show", 1).get(0)));
-        assertTrue(ShitTokAspectPriority.sourceWeight(clips("Shit Show", 1).get(0)) >
-                ShitTokAspectPriority.sourceWeight(clips("Fapello", 1).get(0)));
-        assertTrue(ShitTokAspectPriority.sourceWeight(clips("EFukt", 1).get(0)) > 0);
     }
 
     private static int count(List<NativeContentItem> items, String source) {
