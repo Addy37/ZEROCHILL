@@ -1,19 +1,24 @@
 package com.webapp.crazyshit;
 
 import java.net.URI;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Random;
 
 /**
- * Applies a soft ShitTok feed preference without filtering any media.
+ * Keeps ShitTok source-diverse while still softly preferring portrait media inside each source.
  *
- * Priority order is portrait, 4:3-ish/square, then wide. Unknown items remain neutral until
- * existing player look-ahead teaches the session what a source or creator usually serves.
+ * Sources are first split into independent queues, each queue is ranked by portrait preference,
+ * then the queues are interleaved round-robin. A source that contributes a larger candidate pool
+ * therefore does not automatically dominate the visible feed. Unknown aspect ratios remain neutral
+ * until existing player look-ahead teaches the session what a source or creator usually serves.
  */
 final class ShitTokAspectPriority {
     static final int BUCKET_VERTICAL = 0;
@@ -42,19 +47,52 @@ final class ShitTokAspectPriority {
     }
 
     List<NativeContentItem> order(List<NativeContentItem> candidates, Random random) {
-        ArrayList<NativeContentItem> copy = new ArrayList<>();
-        if (candidates == null || candidates.isEmpty()) return copy;
+        ArrayList<NativeContentItem> result = new ArrayList<>();
+        if (candidates == null || candidates.isEmpty()) return result;
+
         Random rng = random == null ? new Random() : random;
-        ArrayList<RankedItem> ranked = new ArrayList<>(candidates.size());
+        LinkedHashMap<String, ArrayList<NativeContentItem>> grouped = new LinkedHashMap<>();
         for (NativeContentItem item : candidates) {
             if (item == null) continue;
-            double weight = weightFor(item) * sourceWeight(item);
-            double draw = Math.max(1.0e-9d, rng.nextDouble());
-            ranked.add(new RankedItem(item, -Math.log(draw) / Math.max(WIDE_WEIGHT, weight)));
+            grouped.computeIfAbsent(sourceKey(item), ignored -> new ArrayList<>()).add(item);
         }
-        ranked.sort(Comparator.comparingDouble(value -> value.score));
-        for (RankedItem item : ranked) copy.add(item.item);
-        return copy;
+
+        ArrayList<SourceQueue> active = new ArrayList<>();
+        for (Map.Entry<String, ArrayList<NativeContentItem>> entry : grouped.entrySet()) {
+            ArrayList<RankedItem> ranked = new ArrayList<>(entry.getValue().size());
+            for (NativeContentItem item : entry.getValue()) {
+                double weight = weightFor(item);
+                double draw = Math.max(1.0e-9d, rng.nextDouble());
+                ranked.add(new RankedItem(item, -Math.log(draw) / Math.max(WIDE_WEIGHT, weight)));
+            }
+            ranked.sort(Comparator.comparingDouble(value -> value.score));
+
+            ArrayDeque<NativeContentItem> queue = new ArrayDeque<>();
+            for (RankedItem item : ranked) queue.addLast(item.item);
+            if (!queue.isEmpty()) active.add(new SourceQueue(entry.getKey(), queue));
+        }
+
+        String lastSource = "";
+        while (!active.isEmpty()) {
+            Collections.shuffle(active, rng);
+            if (active.size() > 1 && active.get(0).key.equals(lastSource)) {
+                for (int i = 1; i < active.size(); i++) {
+                    if (!active.get(i).key.equals(lastSource)) {
+                        Collections.swap(active, 0, i);
+                        break;
+                    }
+                }
+            }
+
+            for (SourceQueue source : active) {
+                NativeContentItem item = source.items.pollFirst();
+                if (item == null) continue;
+                result.add(item);
+                lastSource = source.key;
+            }
+            active.removeIf(source -> source.items.isEmpty());
+        }
+        return result;
     }
 
     synchronized double weightFor(NativeContentItem item) {
@@ -68,16 +106,26 @@ final class ShitTokAspectPriority {
         return Math.max(WIDE_WEIGHT, Math.min(VERTICAL_WEIGHT, stats.weightTotal / stats.samples));
     }
 
-    static double sourceWeight(NativeContentItem item) {
-        if (item == null) return 1.0d;
-        String source = item.uploader == null ? "" : item.uploader.trim().toLowerCase(Locale.US);
-        if (source.equals("kaotic")) return 4.0d;
-        if (source.equals("shit show")) return 3.5d;
-        if (source.equals("bunkr") || source.equals("onlyhaven") ||
-                "Fapello".equalsIgnoreCase(item.description) ||
-                "OnlyFap".equalsIgnoreCase(item.description)) return 2.5d;
-        if (source.equals("efukt")) return 0.6d;
-        return 1.0d;
+    static String sourceKey(NativeContentItem item) {
+        if (item == null) return "unknown";
+
+        String uploader = item.uploader == null ? "" : item.uploader.trim().toLowerCase(Locale.US);
+        if (uploader.equals("kaotic")) return "kaotic";
+        if (uploader.equals("shit show")) return "shit-show";
+        if (uploader.equals("baddiehub")) return "baddiehub";
+        if (uploader.equals("onlyhaven")) return "onlyhaven";
+        if (uploader.equals("efukt")) return "efukt";
+        if (uploader.equals("bunkr")) return "bunkr";
+
+        String description = item.description == null ? "" : item.description.trim();
+        if ("Fapello".equalsIgnoreCase(description) || "OnlyFap".equalsIgnoreCase(description)) {
+            return "fapello";
+        }
+
+        String host = hostFor(item.url);
+        if (!host.isEmpty()) return host;
+        if (!uploader.isEmpty()) return "uploader:" + uploader;
+        return "unknown";
     }
 
     static int bucket(float aspectRatio) {
@@ -96,13 +144,7 @@ final class ShitTokAspectPriority {
 
     private static String groupKey(NativeContentItem item) {
         if (item == null) return "";
-        String host = "";
-        try {
-            URI uri = URI.create(item.url == null ? "" : item.url.trim());
-            host = uri.getHost() == null ? "" : uri.getHost().toLowerCase(Locale.US);
-            if (host.startsWith("www.")) host = host.substring(4);
-        } catch (Exception ignored) {
-        }
+        String host = hostFor(item.url);
 
         String creator = ShitTokCreatorMetadata.creatorName(item);
         if (creator != null && !creator.trim().isEmpty()) {
@@ -112,6 +154,17 @@ final class ShitTokAspectPriority {
 
         String uploader = item.uploader == null ? "" : item.uploader.trim().toLowerCase(Locale.US);
         return uploader;
+    }
+
+    private static String hostFor(String url) {
+        try {
+            URI uri = URI.create(url == null ? "" : url.trim());
+            String host = uri.getHost() == null ? "" : uri.getHost().toLowerCase(Locale.US);
+            if (host.startsWith("www.")) host = host.substring(4);
+            return host;
+        } catch (Exception ignored) {
+            return "";
+        }
     }
 
     private static final class Stats {
@@ -126,6 +179,16 @@ final class ShitTokAspectPriority {
         RankedItem(NativeContentItem item, double score) {
             this.item = item;
             this.score = score;
+        }
+    }
+
+    private static final class SourceQueue {
+        final String key;
+        final ArrayDeque<NativeContentItem> items;
+
+        SourceQueue(String key, ArrayDeque<NativeContentItem> items) {
+            this.key = key;
+            this.items = items;
         }
     }
 }
