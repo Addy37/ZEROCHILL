@@ -177,6 +177,13 @@ public class SettingsActivity extends Activity {
                 ChaosPreloadPolicy.summary(this),
                 this::showChaosPreloadChoices
         );
+        addAction(
+                playback,
+                "Blocked ShitTok creators",
+                "Unblock OnlyFap creators hidden from ShitTok.",
+                ShitTokBlockedCreatorStore.summary(this),
+                this::showBlockedShitTokCreators
+        );
 
         LinearLayout appearance = addGroup(root, "Appearance");
         addSwitch(
@@ -665,6 +672,38 @@ public class SettingsActivity extends Activity {
                     ZeroChillToast.LENGTH_SHORT
             ).show();
         });
+    }
+
+    private void showBlockedShitTokCreators() {
+        java.util.List<ShitTokBlockedCreatorStore.BlockedCreator> blocked =
+                ShitTokBlockedCreatorStore.all(this);
+        if (blocked.isEmpty()) {
+            ZeroChillToast.makeText(
+                    this,
+                    "No creators are blocked from ShitTok.",
+                    ZeroChillToast.LENGTH_SHORT
+            ).show();
+            return;
+        }
+
+        String[] labels = new String[blocked.size()];
+        for (int i = 0; i < blocked.size(); i++) labels[i] = blocked.get(i).label;
+        new ZeroChillDialog.Builder(this)
+                .setTitle("Blocked ShitTok creators")
+                .setItems(labels, (dialog, which) -> {
+                    if (which < 0 || which >= blocked.size()) return;
+                    ShitTokBlockedCreatorStore.BlockedCreator creator = blocked.get(which);
+                    ShitTokBlockedCreatorStore.unblock(this, creator.key);
+                    ZeroChillToast.makeText(
+                            this,
+                            "Unblocked " + creator.label + ".",
+                            ZeroChillToast.LENGTH_SHORT
+                    ).show();
+                    dialog.dismiss();
+                    recreate();
+                })
+                .setNegativeButton("Close", null)
+                .show();
     }
 
     private void showChaosPreloadChoices() {

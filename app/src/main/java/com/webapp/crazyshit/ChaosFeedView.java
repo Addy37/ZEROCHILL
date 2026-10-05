@@ -120,6 +120,7 @@ public final class ChaosFeedView extends FrameLayout {
     private final Deque<String> recentUrls = new ArrayDeque<>();
     private final Set<String> recentSet = new HashSet<>();
     private final LinkedHashSet<String> hiddenUrls = new LinkedHashSet<>();
+    private final Set<String> blockedCreatorKeys = new HashSet<>();
     private final Map<String, CrazyShitRepository.StreamInfo> streamCache =
             new LinkedHashMap<String, CrazyShitRepository.StreamInfo>(MAX_STREAM_CACHE, 0.75f, true) {
                 @Override
@@ -179,6 +180,7 @@ public final class ChaosFeedView extends FrameLayout {
         setBackgroundColor(Color.BLACK);
         loadRecent();
         loadHidden();
+        reloadBlockedCreatorKeys();
         chaosMuted = activity.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
                 .getBoolean(KEY_MUTED, false);
         buildUi();
@@ -300,6 +302,7 @@ public final class ChaosFeedView extends FrameLayout {
 
     public void onHostResume() {
         hostResumed = true;
+        reloadBlockedCreatorKeys();
         if (creatorGalleryHandoff) {
             creatorGalleryHandoff = false;
             resetCreatorSwipePreview();
@@ -331,6 +334,7 @@ public final class ChaosFeedView extends FrameLayout {
     }
 
     public void refresh() {
+    reloadBlockedCreatorKeys();
     cancelSwipePlayerMaintenance();
     cancelCreatorWarmAhead();
     resetCreatorSwipePreview();
@@ -395,7 +399,7 @@ public final class ChaosFeedView extends FrameLayout {
         ArrayList<NativeContentItem> fresh = new ArrayList<>();
         ArrayList<NativeContentItem> recentFallback = new ArrayList<>();
         for (NativeContentItem item : mixed) {
-            if (!isMedia(item) || hiddenUrls.contains(item.url)) continue;
+            if (!isMedia(item) || hiddenUrls.contains(item.url) || isBlockedCreator(item)) continue;
             if (recentSet.contains(item.url)) recentFallback.add(item);
             else fresh.add(item);
         }
@@ -703,6 +707,7 @@ public final class ChaosFeedView extends FrameLayout {
         if (candidates == null) return;
         for (NativeContentItem item : candidates) {
             if (!hasReservoirRoom(items.size(), selectedPosition)) break;
+            if (isBlockedCreator(item)) continue;
             if (!acceptUnique(item, hiddenUrls, sessionUrls)) continue;
             items.add(item);
             CrazyShitRepository.StreamInfo preloaded = ChaosStartupPreloader.takeResolved(item.url);
@@ -1295,6 +1300,31 @@ public final class ChaosFeedView extends FrameLayout {
                 .edit()
                 .putString(KEY_HIDDEN, array.toString())
                 .apply();
+    }
+
+    private void reloadBlockedCreatorKeys() {
+        blockedCreatorKeys.clear();
+        blockedCreatorKeys.addAll(ShitTokBlockedCreatorStore.keys(activity));
+    }
+
+    private boolean isBlockedCreator(NativeContentItem item) {
+        return ShitTokBlockedCreatorStore.isBlocked(blockedCreatorKeys, item);
+    }
+
+    private void blockCreatorFromChaos(NativeContentItem item) {
+        String creator = ShitTokCreatorMetadata.creatorName(item);
+        if (creator.isEmpty()) return;
+        String key = ShitTokBlockedCreatorStore.block(activity, item);
+        if (key.isEmpty()) return;
+        blockedCreatorKeys.add(key);
+        ZeroChillToast.makeText(
+                activity,
+                "Blocked " + creator + " from ShitTok.",
+                ZeroChillToast.LENGTH_SHORT
+        ).show();
+        // Re-deal the current in-memory pool so already queued clips from this creator
+        // disappear immediately. The source fetch policy itself is unchanged.
+        refresh();
     }
 
     private void hideFromChaos(NativeContentItem item) {
@@ -2882,6 +2912,47 @@ public final class ChaosFeedView extends FrameLayout {
             String savedLabel = FavoriteStore.contains(activity, item.url)
                     ? "Remove from Watch Later"
                     : "Watch Later";
+            String creator = ShitTokCreatorMetadata.creatorName(item);
+            VideoActionSheet.Section feedSection;
+            if (creator.isEmpty()) {
+                feedSection = VideoActionSheet.section(
+                        "FEED",
+                        VideoActionSheet.action(
+                                R.drawable.ic_action_hide,
+                                "Not interested",
+                                "Hide this clip from your ShitTok feed",
+                                () -> hideFromChaos(item)
+                        ),
+                        VideoActionSheet.action(
+                                R.drawable.ic_action_report,
+                                "Report problem",
+                                "Tell us what went wrong",
+                                () -> showPlaybackReport(this)
+                        )
+                );
+            } else {
+                feedSection = VideoActionSheet.section(
+                        "FEED",
+                        VideoActionSheet.action(
+                                R.drawable.ic_action_hide,
+                                "Not interested",
+                                "Hide this clip from your ShitTok feed",
+                                () -> hideFromChaos(item)
+                        ),
+                        VideoActionSheet.action(
+                                R.drawable.ic_action_hide,
+                                "Block creator from ShitTok",
+                                "Hide all " + creator + " clips from ShitTok only",
+                                () -> blockCreatorFromChaos(item)
+                        ),
+                        VideoActionSheet.action(
+                                R.drawable.ic_action_report,
+                                "Report problem",
+                                "Tell us what went wrong",
+                                () -> showPlaybackReport(this)
+                        )
+                );
+            }
             VideoActionSheet.showCompact(
                     activity,
                     item.title,
@@ -2921,21 +2992,7 @@ public final class ChaosFeedView extends FrameLayout {
                                     this::openCurrentDetails
                             )
                     ),
-                    VideoActionSheet.section(
-                            "FEED",
-                            VideoActionSheet.action(
-                                    R.drawable.ic_action_hide,
-                                    "Not interested",
-                                    "Hide this clip from your ShitTok feed",
-                                    () -> hideFromChaos(item)
-                            ),
-                            VideoActionSheet.action(
-                                    R.drawable.ic_action_report,
-                                    "Report problem",
-                                    "Tell us what went wrong",
-                                    () -> showPlaybackReport(this)
-                            )
-                    )
+                    feedSection
             );
         }
 
