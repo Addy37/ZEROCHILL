@@ -62,7 +62,7 @@ public final class ShitTokCreatorBlockQueueIntegrationTest {
         assertEquals(2, items.size());
         assertSame(earlier, items.get(0));
         assertSame(next, items.get(1));
-        assertEquals(1, (int) ReflectionHelpers.getField(feed, "selectedPosition"));
+        assertEquals(0, (int) ReflectionHelpers.getField(feed, "selectedPosition"));
         feed.close();
     }
 

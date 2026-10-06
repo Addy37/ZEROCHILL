@@ -1770,6 +1770,16 @@ public final class ChaosFeedView extends FrameLayout {
             }
             super.onViewDetachedFromWindow(holder);
         }
+
+        @Override
+        public void onViewAttachedToWindow(@NonNull ChaosHolder holder) {
+            int position = holder.getBindingAdapterPosition();
+            if (position != RecyclerView.NO_POSITION && position < items.size()
+                    && holder.item == items.get(position)) {
+                holder.boundPosition = position;
+            }
+            super.onViewAttachedToWindow(holder);
+        }
     }
 
     private final class ChaosHolder extends RecyclerView.ViewHolder {
