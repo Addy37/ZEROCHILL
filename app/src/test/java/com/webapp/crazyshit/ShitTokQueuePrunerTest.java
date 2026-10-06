@@ -22,7 +22,7 @@ public final class ShitTokQueuePrunerTest {
         );
         NativeContentItem next = media("Next", "Other", "https://example.com/next");
         ArrayList<NativeContentItem> queue = new ArrayList<>();
-        Collections.addAll(queue, earlier, selected, sameCreator, next);
+        Collections.addAll(queue, earlier, selected, next, sameCreator);
 
         ShitTokQueuePruner.Result result = ShitTokQueuePruner.removeBlockedCreators(
                 queue,
