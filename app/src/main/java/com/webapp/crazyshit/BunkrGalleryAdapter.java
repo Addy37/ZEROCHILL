@@ -230,15 +230,25 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         variantParams.gravity = Gravity.BOTTOM | Gravity.END;
         source.addView(sourceVariant, variantParams);
 
-        ImageView fresh = new ImageView(parent.getContext());
-        fresh.setImageResource(R.drawable.ic_new_content);
+        TextView fresh = new TextView(parent.getContext());
+        GradientDrawable freshBackground = new GradientDrawable();
+        freshBackground.setCornerRadius(dp(parent, 8));
+        freshBackground.setColor(UiPalette.PRIMARY);
+        freshBackground.setStroke(dp(parent, 1), Color.argb(190, 0, 0, 0));
+        fresh.setBackground(freshBackground);
         fresh.setContentDescription("New content");
-        fresh.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+        fresh.setGravity(Gravity.CENTER);
+        fresh.setIncludeFontPadding(false);
+        fresh.setText("NEW");
+        fresh.setTextColor(Color.BLACK);
+        fresh.setTextSize(10);
+        fresh.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        fresh.setLetterSpacing(0.06f);
         fresh.setVisibility(View.GONE);
         fresh.setElevation(dp(parent, 7));
         FrameLayout.LayoutParams freshParams = new FrameLayout.LayoutParams(
-                dp(parent, 26),
-                dp(parent, 26)
+                dp(parent, 48),
+                dp(parent, 24)
         );
         freshParams.gravity = Gravity.TOP | Gravity.END;
         freshParams.setMargins(0, dp(parent, 6), dp(parent, 6), 0);
@@ -403,7 +413,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         holder.source.setScaleX(scale);
         holder.source.setScaleY(scale);
 
-        holder.fresh.setPivotX(dp(holder.fresh, 26));
+        holder.fresh.setPivotX(dp(holder.fresh, 48));
         holder.fresh.setPivotY(0f);
         holder.fresh.setScaleX(scale);
         holder.fresh.setScaleY(scale);
@@ -576,7 +586,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         final FrameLayout source;
         final ImageView sourceIcon;
         final TextView sourceVariant;
-        final ImageView fresh;
+        final TextView fresh;
         final View play;
         final View morphPulse;
 
@@ -586,7 +596,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
                 FrameLayout source,
                 ImageView sourceIcon,
                 TextView sourceVariant,
-                ImageView fresh,
+                TextView fresh,
                 View play,
                 View morphPulse
         ) {
