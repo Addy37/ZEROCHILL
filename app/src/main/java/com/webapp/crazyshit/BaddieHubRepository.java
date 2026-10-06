@@ -44,6 +44,7 @@ final class BaddieHubRepository {
 
     private static final int MAX_CANDIDATES = 18;
     private static final int MAX_SHOWS_PAGE_ITEMS = 128;
+    private static final int MAX_RELATED_ITEMS = 24;
     private static final int MAX_VALIDATION_STARTS = 8;
     private static final int MAX_GLOBAL_VALIDATIONS = 8;
     private static final int MAX_RETURNED = 6;
@@ -58,6 +59,7 @@ final class BaddieHubRepository {
     private static final AtomicInteger VALIDATION_PENDING = new AtomicInteger();
     private static final Map<String, NativeContentItem> PORTRAIT = new ConcurrentHashMap<>();
     private static final Map<String, String> MEDIA = new ConcurrentHashMap<>();
+    private static final Map<String, List<NativeContentItem>> RELATED = new ConcurrentHashMap<>();
     private static final Set<String> NON_PORTRAIT = ConcurrentHashMap.newKeySet();
     private static final Set<String> IN_FLIGHT = ConcurrentHashMap.newKeySet();
     private static final Map<String, Long> RETRY_AFTER = new ConcurrentHashMap<>();
@@ -156,6 +158,17 @@ final class BaddieHubRepository {
         return toShowsItems(candidates);
     }
 
+    List<NativeContentItem> fetchRelated(Context context, String pageUrl) throws IOException {
+        SourceConfig.BaddieHub config = config(context);
+        if (!enabled(config) || !isBaddieHubUrl(pageUrl)) return new ArrayList<>();
+        String canonical = stripQueryAndFragment(pageUrl);
+        List<NativeContentItem> cached = RELATED.get(canonical);
+        if (cached != null) return new ArrayList<>(cached);
+
+        Document page = fetch(context, canonical, config.baseUrl, config);
+        return cacheRelated(canonical, page, config.cardLinksSelector);
+    }
+
     static String categoryPageUrl(
             SourceConfig.BaddieHub config,
             String categoryUrl,
@@ -180,6 +193,18 @@ final class BaddieHubRepository {
         ));
     }
 
+    static List<NativeContentItem> parseRelatedListing(
+            String html,
+            String location,
+            String selector,
+            String currentPageUrl
+    ) {
+        return relatedItems(
+                parseListing(Jsoup.parse(html, location), selector, MAX_RELATED_ITEMS + 1),
+                currentPageUrl
+        );
+    }
+
     private static List<NativeContentItem> toShowsItems(List<Candidate> candidates) {
         ArrayList<NativeContentItem> result = new ArrayList<>();
         for (Candidate candidate : candidates) {
@@ -196,6 +221,45 @@ final class BaddieHubRepository {
             ));
         }
         return result;
+    }
+
+    private static List<NativeContentItem> relatedItems(
+            List<Candidate> candidates,
+            String currentPageUrl
+    ) {
+        String current = stripQueryAndFragment(currentPageUrl);
+        ArrayList<NativeContentItem> result = new ArrayList<>();
+        for (Candidate candidate : candidates) {
+            if (candidate == null || candidate.pageUrl.equals(current)) continue;
+            result.add(new NativeContentItem(
+                    NativeContentItem.KIND_MEDIA,
+                    candidate.title.isEmpty() ? LABEL : candidate.title,
+                    candidate.pageUrl,
+                    candidate.imageUrl,
+                    "",
+                    LABEL,
+                    "",
+                    "",
+                    ""
+            ));
+            if (result.size() >= MAX_RELATED_ITEMS) break;
+        }
+        return result;
+    }
+
+    private static List<NativeContentItem> cacheRelated(
+            String pageUrl,
+            Document page,
+            String selector
+    ) {
+        String canonical = stripQueryAndFragment(pageUrl);
+        List<NativeContentItem> items = relatedItems(
+                parseListing(page, selector, MAX_RELATED_ITEMS + 1),
+                canonical
+        );
+        List<NativeContentItem> cached = Collections.unmodifiableList(new ArrayList<>(items));
+        RELATED.put(canonical, cached);
+        return new ArrayList<>(cached);
     }
 
     CrazyShitRepository.StreamInfo resolvePlayable(Context context, String pageUrl) throws IOException {
@@ -396,6 +460,7 @@ final class BaddieHubRepository {
     private Resolved resolvePage(Context context, String pageUrl) throws IOException {
         SourceConfig.BaddieHub config = config(context);
         Document page = fetch(context, pageUrl, config.baseUrl, config);
+        cacheRelated(pageUrl, page, config.cardLinksSelector);
         Element heading = page.selectFirst("h1");
         String title = clean(heading == null ? "" : heading.text());
         if (title.isEmpty()) title = clean(page.title());

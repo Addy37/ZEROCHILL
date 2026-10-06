@@ -32,8 +32,11 @@ final class ShowsFullscreenControls {
     private final Player.Listener listener = new Player.Listener() {
         @Override public void onEvents(Player player, Player.Events events) {
             syncPausedChrome();
-            if (!player.isPlaying() && !suspended) show();
-            else scheduleHide();
+            if (!suspended && !shouldAutoHide(player.getPlayWhenReady(), player.getPlaybackState())) {
+                show();
+            } else {
+                scheduleHide();
+            }
         }
     };
 
@@ -141,9 +144,14 @@ final class ShowsFullscreenControls {
         show();
     }
 
+    static boolean shouldAutoHide(boolean playWhenReady, int playbackState) {
+        return playWhenReady && playbackState != Player.STATE_ENDED;
+    }
+
     private void scheduleHide() {
         view.removeCallbacks(autoHide);
-        if (visible && !suspended && !scrubbing && player != null && player.isPlaying()) {
+        if (visible && !suspended && !scrubbing && player != null &&
+                shouldAutoHide(player.getPlayWhenReady(), player.getPlaybackState())) {
             view.postDelayed(autoHide, FullscreenPlayerStyle.HIDE_DELAY_MS);
         }
     }

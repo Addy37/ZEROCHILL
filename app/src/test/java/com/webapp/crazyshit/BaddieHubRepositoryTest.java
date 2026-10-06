@@ -65,4 +65,26 @@ public final class BaddieHubRepositoryTest {
                 "a[href]"
         ).size());
     }
+
+    @Test public void relatedListingUsesBaddieHubCardsAndExcludesCurrentVideo() {
+        String html = "<main>" +
+                "<a href='/current-video/'><img src='/current.jpg' alt='Current video'></a>" +
+                "<a href='/related-one/'><img src='/one.jpg' alt='Related one'></a>" +
+                "<a href='/related-two/'><img src='/two.jpg' alt='Related two'></a>" +
+                "<a href='https://crazyshit.com/cnt/medias/123/example/'>" +
+                "<img src='/wrong-source.jpg' alt='Wrong source'></a>" +
+                "</main>";
+
+        java.util.List<NativeContentItem> items = BaddieHubRepository.parseRelatedListing(
+                html,
+                "https://baddiehub.com/current-video/",
+                "a[href]",
+                "https://baddiehub.com/current-video/"
+        );
+
+        assertEquals(2, items.size());
+        assertEquals("https://baddiehub.com/related-one/", items.get(0).url);
+        assertEquals("https://baddiehub.com/related-two/", items.get(1).url);
+        assertEquals(BaddieHubRepository.LABEL, items.get(0).uploader);
+    }
 }
