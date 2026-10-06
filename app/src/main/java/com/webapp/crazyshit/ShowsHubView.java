@@ -78,12 +78,14 @@ final class ShowsHubView extends FrameLayout {
     private final Shelf efuktShelf;
     private final Shelf categoryShelf;
     private final Shelf kaoticCategoryShelf;
+    private final Shelf baddieHubCategoryShelf;
 
     private List<NativeContentItem> thisWeekItems = Collections.emptyList();
     private List<NativeContentItem> crazyItems = Collections.emptyList();
     private List<NativeContentItem> efuktItems = Collections.emptyList();
     private List<NativeContentItem> categoryItems = Collections.emptyList();
     private List<NativeContentItem> kaoticCategoryItems = Collections.emptyList();
+    private List<NativeContentItem> baddieHubCategoryItems = Collections.emptyList();
     private List<NativeContentItem> heroItems = Collections.emptyList();
     private NativeContentItem heroItem;
     private int heroIndex = -1;
@@ -325,6 +327,11 @@ final class ShowsHubView extends FrameLayout {
         efuktShelf = addShelf("EFukt Series", "Browse EFukt by series", false);
         categoryShelf = addShelf("CrazyShit Categories", "Jump into a type of content", false);
         kaoticCategoryShelf = addShelf("Kaotic Categories", "Browse Kaotic by category", false);
+        baddieHubCategoryShelf = addShelf(
+                "BaddieHub Categories",
+                "Browse BaddieHub by category",
+                false
+        );
 
         heroCard.setOnClickListener(v -> openHero());
         heroAction.setOnClickListener(v -> openHero());
@@ -337,6 +344,7 @@ final class ShowsHubView extends FrameLayout {
         efuktItems = Collections.emptyList();
         categoryItems = Collections.emptyList();
         kaoticCategoryItems = Collections.emptyList();
+        baddieHubCategoryItems = Collections.emptyList();
         heroHandler.removeCallbacksAndMessages(null);
         heroCard.animate().cancel();
         heroCard.setAlpha(1f);
@@ -349,11 +357,13 @@ final class ShowsHubView extends FrameLayout {
         efuktShelf.adapter.replace(Collections.emptyList());
         categoryShelf.adapter.replace(Collections.emptyList());
         kaoticCategoryShelf.adapter.replace(Collections.emptyList());
+        baddieHubCategoryShelf.adapter.replace(Collections.emptyList());
         thisWeekShelf.container.setVisibility(View.GONE);
         crazyShelf.container.setVisibility(View.GONE);
         efuktShelf.container.setVisibility(View.GONE);
         categoryShelf.container.setVisibility(View.GONE);
         kaoticCategoryShelf.container.setVisibility(View.GONE);
+        baddieHubCategoryShelf.container.setVisibility(View.GONE);
         loadingLabel.setText("Loading Shows…");
         loadingLabel.setVisibility(View.VISIBLE);
         heroSource.setText("FEATURED");
@@ -408,6 +418,15 @@ final class ShowsHubView extends FrameLayout {
         );
     }
 
+    void setBaddieHubCategories(List<NativeContentItem> items) {
+        baddieHubCategoryItems = safe(items);
+        baddieHubCategoryShelf.adapter.replace(baddieHubCategoryItems);
+        preloadShelfArtwork(baddieHubCategoryItems, 4);
+        baddieHubCategoryShelf.container.setVisibility(
+                baddieHubCategoryItems.isEmpty() ? View.GONE : View.VISIBLE
+        );
+    }
+
     void finishLoading() {
         loadingLabel.setVisibility(itemCount() == 0 ? View.VISIBLE : View.GONE);
         if (itemCount() == 0) {
@@ -426,6 +445,7 @@ final class ShowsHubView extends FrameLayout {
         saveRailState(out, "efukt", efuktShelf.rail);
         saveRailState(out, "categories", categoryShelf.rail);
         saveRailState(out, "kaotic_categories", kaoticCategoryShelf.rail);
+        saveRailState(out, "baddiehub_categories", baddieHubCategoryShelf.rail);
     }
 
     void restoreState(Bundle state) {
@@ -434,7 +454,8 @@ final class ShowsHubView extends FrameLayout {
 
     int itemCount() {
         return thisWeekItems.size() + crazyItems.size() + efuktItems.size()
-                + categoryItems.size() + kaoticCategoryItems.size();
+                + categoryItems.size() + kaoticCategoryItems.size()
+                + baddieHubCategoryItems.size();
     }
 
     void setNavigationScrollListener(View.OnScrollChangeListener listener) {
@@ -648,6 +669,7 @@ final class ShowsHubView extends FrameLayout {
         restoreRailState(state, "efukt", efuktShelf.rail);
         restoreRailState(state, "categories", categoryShelf.rail);
         restoreRailState(state, "kaotic_categories", kaoticCategoryShelf.rail);
+        restoreRailState(state, "baddiehub_categories", baddieHubCategoryShelf.rail);
 
         int y = Math.max(0, state.getInt("scroll_y", 0));
         scroll.post(() -> scroll.scrollTo(0, y));

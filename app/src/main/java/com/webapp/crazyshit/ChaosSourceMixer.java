@@ -106,7 +106,7 @@ final class ChaosSourceMixer {
         work.add(completions.submit(() -> new SourceBatch(
                 BATCH_ONLY_HAVEN, loadOnlyHavenBatch(context))));
         work.add(completions.submit(() -> new SourceBatch(
-                BATCH_BADDIEHUB, loadBaddieHubBatch())));
+                BATCH_BADDIEHUB, loadBaddieHubBatch(context))));
 
         ArrayList<NativeContentItem> regularItems = new ArrayList<>();
         ArrayList<NativeContentItem> efuktItems = new ArrayList<>();
@@ -252,10 +252,13 @@ final class ChaosSourceMixer {
         }
     }
 
-    private List<NativeContentItem> loadBaddieHubBatch() {
+    private List<NativeContentItem> loadBaddieHubBatch(Context context) {
         try {
             ArrayList<NativeContentItem> candidates = new ArrayList<>(
-                    baddieHub.fetchPortraitFeed(1 + random.nextInt(BADDIEHUB_MAX_PAGE))
+                    baddieHub.fetchPortraitFeed(
+                            context,
+                            1 + random.nextInt(BADDIEHUB_MAX_PAGE)
+                    )
             );
             candidates.removeIf(item -> item == null || !item.isVideo());
             Collections.shuffle(candidates, random);

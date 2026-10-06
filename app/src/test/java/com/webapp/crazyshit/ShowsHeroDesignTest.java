@@ -81,7 +81,8 @@ public class ShowsHeroDesignTest {
                 "crazyShelf",
                 "efuktShelf",
                 "categoryShelf",
-                "kaoticCategoryShelf"
+                "kaoticCategoryShelf",
+                "baddieHubCategoryShelf"
         };
         for (String fieldName : browseShelfFields) {
             RecyclerView rail = shelfRail(hub, fieldName);
