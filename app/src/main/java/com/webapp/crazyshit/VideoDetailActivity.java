@@ -106,6 +106,7 @@ public class VideoDetailActivity extends Activity {
     private final CrazyShitRepository repository = new CrazyShitRepository();
     private final EfuktRepository efuktRepository = new EfuktRepository();
     private final BunkrRepository bunkrRepository = new BunkrRepository();
+    private final BaddieHubRepository baddieHubRepository = new BaddieHubRepository();
     private final WebVideoSourceRepository webVideoSourceRepository = new WebVideoSourceRepository();
     private final Map<String, ImageView> relatedImages = new LinkedHashMap<>();
     private final Map<String, String> resolvedRelatedThumbnails = new LinkedHashMap<>();
@@ -1139,6 +1140,16 @@ public class VideoDetailActivity extends Activity {
                     }
                 } catch (Exception ignored) {
                 }
+            } else if (isBaddieHub()) {
+                try {
+                    List<NativeContentItem> baddie = baddieHubRepository.fetchRelated(this, excludeUrl);
+                    for (NativeContentItem item : baddie) {
+                        if (item != null && !item.isSection() && !item.url.equals(excludeUrl)) {
+                            merged.put(item.url, item);
+                        }
+                    }
+                } catch (Exception ignored) {
+                }
             } else {
                 try {
                     List<NativeContentItem> home = repository.fetchFeed(this, CrazyShitRepository.HOME, 1);
@@ -1983,6 +1994,11 @@ public class VideoDetailActivity extends Activity {
 
     private boolean isKaotic() {
         return "kaotic".equals(source) || WebVideoSourceRepository.isKaoticUrl(pageUrl);
+    }
+
+    private boolean isBaddieHub() {
+        return NativeFeedBrowserActivity.SOURCE_BADDIEHUB.equals(source) ||
+                BaddieHubRepository.isBaddieHubUrl(pageUrl);
     }
 
     private boolean supportsComments() {

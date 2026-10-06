@@ -188,6 +188,16 @@ jobs:
           gradle-version: '8.7'
           cache-provider: basic
 
+      - name: Run focused ShitTok block and BaddieHub Shows regressions first
+        run: >-
+          gradle --no-daemon :app:testDebugUnitTest
+          --tests 'com.webapp.crazyshit.ShitTokQueuePrunerTest'
+          --tests 'com.webapp.crazyshit.ShitTokCreatorBlockQueueIntegrationTest'
+          --tests 'com.webapp.crazyshit.BaddieHubRepositoryTest'
+          --tests 'com.webapp.crazyshit.RemoteSourceConfigManagerTest'
+          --tests 'com.webapp.crazyshit.ShowsHubStateTest'
+          --tests 'com.webapp.crazyshit.ShowsHeroDesignTest'
+
       - name: Run focused fullscreen regressions first
         run: >-
           gradle --no-daemon :app:testDebugUnitTest
@@ -353,4 +363,3 @@ jobs:
           path: ${{ steps.apk_lineage.outputs.release_apk }}
           if-no-files-found: error
           retention-days: 14
-

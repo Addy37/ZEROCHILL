@@ -79,6 +79,7 @@ public final class NativeFeedBrowserActivity extends Activity {
     public static final String SOURCE_CRAZYSHIT = "crazyshit";
     public static final String SOURCE_EFUKT = "efukt";
     public static final String SOURCE_KAOTIC = "kaotic";
+    public static final String SOURCE_BADDIEHUB = "baddiehub";
     public static final String SOURCE_BUNKR = "bunkr";
 
     private static final int REQUEST_CREATOR_AVATAR_CROP = 4107;
@@ -87,6 +88,7 @@ public final class NativeFeedBrowserActivity extends Activity {
     private final CrazyShitRepository repository = new CrazyShitRepository();
     private final EfuktRepository efuktRepository = new EfuktRepository();
     private final WebVideoSourceRepository webVideoRepository = new WebVideoSourceRepository();
+    private final BaddieHubRepository baddieHubRepository = new BaddieHubRepository();
     private final BunkrRepository bunkrRepository = new BunkrRepository();
     private final BunkrCreatorGalleryRepository creatorGalleryRepository =
             new BunkrCreatorGalleryRepository();
@@ -374,6 +376,7 @@ public final class NativeFeedBrowserActivity extends Activity {
             baseUrl = BunkrRepository.searchUrl(creatorQuery);
         } else if (BunkrRepository.isAlbumUrl(baseUrl)) source = SOURCE_BUNKR;
         else if (WebVideoSourceRepository.isKaoticUrl(baseUrl)) source = SOURCE_KAOTIC;
+        else if (BaddieHubRepository.isBaddieHubUrl(baseUrl)) source = SOURCE_BADDIEHUB;
         else if (EfuktRepository.isEfuktUrl(baseUrl)) source = SOURCE_EFUKT;
         restoredBrowserState = state;
         if (state != null) {
@@ -1253,6 +1256,8 @@ public final class NativeFeedBrowserActivity extends Activity {
                             baseUrl,
                             requestPage
                     );
+                } else if (isBaddieHub()) {
+                    result = baddieHubRepository.fetchCategory(this, baseUrl, requestPage);
                 } else {
                     result = repository.fetchFeed(this, baseUrl, requestPage);
                 }
@@ -2381,6 +2386,10 @@ public final class NativeFeedBrowserActivity extends Activity {
         return SOURCE_KAOTIC.equals(source) || WebVideoSourceRepository.isKaoticUrl(baseUrl);
     }
 
+    private boolean isBaddieHub() {
+        return SOURCE_BADDIEHUB.equals(source) || BaddieHubRepository.isBaddieHubUrl(baseUrl);
+    }
+
     private boolean isCreatorGallery() {
         return creatorQuery != null && !creatorQuery.isEmpty();
     }
@@ -2390,6 +2399,7 @@ public final class NativeFeedBrowserActivity extends Activity {
     }
 
     private String showSourceLabel() {
+        if (isBaddieHub()) return "BADDIEHUB CATEGORY";
         if (isKaotic()) return "KAOTIC CATEGORY";
         if (isEfukt()) return "EFUKT SERIES";
         if (NativeContentItem.KIND_CATEGORY.equals(showKind)) return "CRAZYSHIT CATEGORY";

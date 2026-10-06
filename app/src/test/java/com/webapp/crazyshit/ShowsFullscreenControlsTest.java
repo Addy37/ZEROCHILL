@@ -53,6 +53,8 @@ public class ShowsFullscreenControlsTest {
         return (Player) Proxy.newProxyInstance(Player.class.getClassLoader(),
                 new Class<?>[] { Player.class }, (proxy, method, args) -> {
                     if (method.getName().equals("isPlaying")) return playing.get();
+                    if (method.getName().equals("getPlayWhenReady")) return playing.get();
+                    if (method.getName().equals("getPlaybackState")) return Player.STATE_READY;
                     if (method.getName().equals("getDuration")) return 28000L;
                     if (method.getName().equals("getCurrentPosition")) return 3000L;
                     if (method.getReturnType() == boolean.class) return false;
@@ -94,6 +96,13 @@ public class ShowsFullscreenControlsTest {
         assertTrue(view.isControllerFullyVisible());
         controls.release();
         host.finish();
+    }
+
+    @Test public void autoplayChromeCanHideWhileBufferingButNotWhenPausedOrEnded() {
+        assertTrue(ShowsFullscreenControls.shouldAutoHide(true, Player.STATE_BUFFERING));
+        assertTrue(ShowsFullscreenControls.shouldAutoHide(true, Player.STATE_READY));
+        assertFalse(ShowsFullscreenControls.shouldAutoHide(false, Player.STATE_READY));
+        assertFalse(ShowsFullscreenControls.shouldAutoHide(true, Player.STATE_ENDED));
     }
 
     @Test public void likeControlMirrorsLikeStateAndEnabledState() {

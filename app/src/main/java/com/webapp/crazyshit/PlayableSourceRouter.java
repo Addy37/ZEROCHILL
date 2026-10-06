@@ -26,7 +26,7 @@ final class PlayableSourceRouter {
 
     static CrazyShitRepository.StreamInfo resolve(Context context, String pageUrl) throws IOException {
         if (BaddieHubRepository.isBaddieHubUrl(pageUrl)) {
-            return new BaddieHubRepository().resolvePlayable(pageUrl);
+            return new BaddieHubRepository().resolvePlayable(context, pageUrl);
         }
         if (WikiFeetRepository.isWikiFeetUrl(pageUrl)) {
             return new WikiFeetRepository().resolvePlayable(pageUrl);

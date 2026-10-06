@@ -79,6 +79,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
     private final BrowseRepository browseRepository = new BrowseRepository();
     private final EfuktRepository efuktRepository = new EfuktRepository();
     private final WebVideoSourceRepository webVideoRepository = new WebVideoSourceRepository();
+    private final BaddieHubRepository baddieHubRepository = new BaddieHubRepository();
     private final BunkrRepository bunkrRepository = new BunkrRepository();
     private final FapzoneCreatorRepository fapzoneCreatorRepository =
             new FapzoneCreatorRepository();
@@ -86,6 +87,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
             new FavoriteCreatorArtworkHydrator();
     private final BrowseArtworkResolver browseArtworkResolver;
     private final ExecutorService io = Executors.newFixedThreadPool(5);
+    private final ExecutorService baddieHubIo = Executors.newSingleThreadExecutor();
     private final Page[] pages = new Page[PAGE_ARRAY_COUNT];
     private final ChaosFeedView chaosView;
     private final LibraryHubView libraryView;
@@ -326,6 +328,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
             if (page.feedAdapter != null) page.feedAdapter.close();
         }
         io.shutdownNow();
+        baddieHubIo.shutdownNow();
     }
 
     static int pagerPositionForPage(int page) {
@@ -554,6 +557,8 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         if (item == null || item.url == null || item.url.isEmpty()) return;
         String source = WebVideoSourceRepository.isKaoticUrl(item.url)
                 ? NativeFeedBrowserActivity.SOURCE_KAOTIC
+                : BaddieHubRepository.isBaddieHubUrl(item.url)
+                ? NativeFeedBrowserActivity.SOURCE_BADDIEHUB
                 : EfuktRepository.isEfuktUrl(item.url)
                 ? NativeFeedBrowserActivity.SOURCE_EFUKT
                 : NativeFeedBrowserActivity.SOURCE_CRAZYSHIT;
@@ -614,6 +619,8 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                         : resolved.pageUrl;
                 String source = WebVideoSourceRepository.isKaoticUrl(resolvedPage)
                         ? NativeFeedBrowserActivity.SOURCE_KAOTIC
+                        : BaddieHubRepository.isBaddieHubUrl(resolvedPage)
+                        ? NativeFeedBrowserActivity.SOURCE_BADDIEHUB
                         : EfuktRepository.isEfuktUrl(resolvedPage)
                         ? NativeFeedBrowserActivity.SOURCE_EFUKT
                         : NativeFeedBrowserActivity.SOURCE_CRAZYSHIT;
@@ -699,6 +706,8 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                 String resolvedPage = resolved.pageUrl == null ? history.pageUrl : resolved.pageUrl;
                 String source = WebVideoSourceRepository.isKaoticUrl(resolvedPage)
                         ? NativeFeedBrowserActivity.SOURCE_KAOTIC
+                        : BaddieHubRepository.isBaddieHubUrl(resolvedPage)
+                        ? NativeFeedBrowserActivity.SOURCE_BADDIEHUB
                         : EfuktRepository.isEfuktUrl(resolvedPage)
                         ? NativeFeedBrowserActivity.SOURCE_EFUKT
                         : NativeFeedBrowserActivity.SOURCE_CRAZYSHIT;
@@ -1207,7 +1216,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         page.showsHub.clear();
 
         final int generation = page.generation;
-        AtomicInteger remaining = new AtomicInteger(4);
+        AtomicInteger remaining = new AtomicInteger(5);
 
         page.showsWeeklyTask = io.submit(() -> {
             List<NativeContentItem> result = java.util.Collections.emptyList();
@@ -1266,6 +1275,21 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
             activity.runOnUiThread(() -> {
                 if (generation == page.generation && page.showsHub != null) {
                     page.showsHub.setEfukt(items);
+                }
+            });
+            finishShowsHubSource(page, generation, remaining);
+        }));
+
+        page.showsHubTasks.add(baddieHubIo.submit(() -> {
+            List<NativeContentItem> result = java.util.Collections.emptyList();
+            try {
+                result = baddieHubRepository.fetchCategories(activity);
+            } catch (Exception ignored) {
+            }
+            final List<NativeContentItem> items = result;
+            activity.runOnUiThread(() -> {
+                if (generation == page.generation && page.showsHub != null) {
+                    page.showsHub.setBaddieHubCategories(items);
                 }
             });
             finishShowsHubSource(page, generation, remaining);

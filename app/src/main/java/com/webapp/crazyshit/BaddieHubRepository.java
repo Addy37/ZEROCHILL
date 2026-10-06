@@ -1,5 +1,6 @@
 package com.webapp.crazyshit;
 
+import android.content.Context;
 import android.media.MediaMetadataRetriever;
 import android.util.Base64;
 import android.webkit.CookieManager;
@@ -26,7 +27,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * Experimental ShitTok-only BaddieHub source.
+ * BaddieHub source shared by ShitTok and Shows.
  *
  * BaddieHub does not expose trustworthy media dimensions in its listing/player markup. Candidates
  * are therefore validated off the feed thread with MediaMetadataRetriever and are only published
@@ -34,34 +35,45 @@ import java.util.concurrent.atomic.AtomicInteger;
  * direct media URLs are cached for the process lifetime so normal ShitTok playback does not repeat
  * the metadata work.
  *
- * Source values remain compiled for this device-test pass. If the source is approved for release,
- * move the domain/routes/selectors/timeouts into the existing remote source configuration system.
+ * Shows consumes normal category listings without an aspect-ratio gate. ShitTok alone uses the
+ * asynchronous portrait validation below.
  */
 final class BaddieHubRepository {
     static final String LABEL = "BaddieHub";
+    private static final String KNOWN_GOOD_BASE = "https://baddiehub.com/";
 
-    private static final String BASE = "https://baddiehub.com/";
-    private static final String USER_AGENT =
-            "Mozilla/5.0 (Linux; Android 16) AppleWebKit/537.36 " +
-                    "(KHTML, like Gecko) Chrome/140.0 Mobile Safari/537.36";
-    private static final int REQUEST_TIMEOUT_MS = 12_000;
     private static final int MAX_CANDIDATES = 18;
+    private static final int MAX_SHOWS_PAGE_ITEMS = 128;
+    private static final int MAX_RELATED_ITEMS = 24;
     private static final int MAX_VALIDATION_STARTS = 8;
     private static final int MAX_GLOBAL_VALIDATIONS = 8;
     private static final int MAX_RETURNED = 6;
     private static final long FIRST_RESULT_WAIT_MS = 850L;
     private static final long FAILURE_RETRY_MS = 60_000L;
+    private static final int MAX_CATEGORY_DIRECTORY_PAGES = 4;
+
+    private static final SourceConfig.BaddieHub COMPILED_CONFIG =
+            SourceConfig.defaultBaddieHub();
 
     private static final ExecutorService VALIDATION_IO = Executors.newFixedThreadPool(4);
     private static final AtomicInteger VALIDATION_PENDING = new AtomicInteger();
     private static final Map<String, NativeContentItem> PORTRAIT = new ConcurrentHashMap<>();
     private static final Map<String, String> MEDIA = new ConcurrentHashMap<>();
+    private static final Map<String, List<NativeContentItem>> RELATED = new ConcurrentHashMap<>();
     private static final Set<String> NON_PORTRAIT = ConcurrentHashMap.newKeySet();
     private static final Set<String> IN_FLIGHT = ConcurrentHashMap.newKeySet();
     private static final Map<String, Long> RETRY_AFTER = new ConcurrentHashMap<>();
 
-    List<NativeContentItem> fetchPortraitFeed(int page) throws IOException {
-        List<Candidate> candidates = parseListing(fetch(listingUrl(page), BASE));
+    List<NativeContentItem> fetchPortraitFeed(Context context, int page) throws IOException {
+        SourceConfig.BaddieHub config = config(context);
+        if (!enabled(config)) return new ArrayList<>();
+        String listingUrl = routeUrl(config, page <= 1
+                ? config.listingFirstRoute : config.listingPageRoute, "", page);
+        List<Candidate> candidates = parseListing(
+                fetch(context, listingUrl, config.baseUrl, config),
+                config.cardLinksSelector,
+                MAX_CANDIDATES
+        );
         if (candidates.isEmpty()) return new ArrayList<>();
 
         ArrayList<NativeContentItem> ready = readyPortraits(candidates);
@@ -87,7 +99,7 @@ final class BaddieHubRepository {
             }
 
             started++;
-            VALIDATION_IO.execute(() -> validate(candidate));
+            VALIDATION_IO.execute(() -> validate(context, candidate));
         }
 
         // Keep the source inside the existing ShitTok refill budget. Fast CDN metadata can join
@@ -105,12 +117,157 @@ final class BaddieHubRepository {
         return first(ready, MAX_RETURNED);
     }
 
-    CrazyShitRepository.StreamInfo resolvePlayable(String pageUrl) throws IOException {
+    List<NativeContentItem> fetchCategories(Context context) throws IOException {
+        SourceConfig.BaddieHub config = config(context);
+        if (!enabled(config)) return new ArrayList<>();
+        LinkedHashMap<String, NativeContentItem> found = new LinkedHashMap<>();
+        IOException failure = null;
+        for (int page = 1; page <= MAX_CATEGORY_DIRECTORY_PAGES; page++) {
+            String route = page == 1 ? config.categoriesFirstRoute : config.categoriesPageRoute;
+            String url = routeUrl(config, route, "", page);
+            try {
+                Document document = fetch(context, url, config.baseUrl, config);
+                int before = found.size();
+                parseCategories(document, config, found);
+                if (page > 1 && found.size() == before) break;
+            } catch (IOException error) {
+                failure = error;
+                break;
+            }
+        }
+        if (found.isEmpty() && failure != null) throw failure;
+        return new ArrayList<>(found.values());
+    }
+
+    List<NativeContentItem> fetchCategory(
+            Context context,
+            String categoryUrl,
+            int page
+    ) throws IOException {
+        SourceConfig.BaddieHub config = config(context);
+        if (!enabled(config)) return new ArrayList<>();
+        String slug = categorySlug(categoryUrl, config);
+        if (slug.isEmpty()) return new ArrayList<>();
+        int safePage = Math.max(1, page);
+        String url = categoryPageUrl(config, categoryUrl, safePage);
+        List<Candidate> candidates = parseListing(
+                fetch(context, url, config.baseUrl, config),
+                config.cardLinksSelector,
+                MAX_SHOWS_PAGE_ITEMS
+        );
+        return toShowsItems(candidates);
+    }
+
+    List<NativeContentItem> fetchRelated(Context context, String pageUrl) throws IOException {
+        SourceConfig.BaddieHub config = config(context);
+        if (!enabled(config) || !isBaddieHubUrl(pageUrl)) return new ArrayList<>();
+        String canonical = stripQueryAndFragment(pageUrl);
+        List<NativeContentItem> cached = RELATED.get(canonical);
+        if (cached != null) return new ArrayList<>(cached);
+
+        Document page = fetch(context, canonical, config.baseUrl, config);
+        return cacheRelated(canonical, page, config.cardLinksSelector);
+    }
+
+    static String categoryPageUrl(
+            SourceConfig.BaddieHub config,
+            String categoryUrl,
+            int page
+    ) {
+        String slug = categorySlug(categoryUrl, config);
+        if (slug.isEmpty()) return "";
+        int safePage = Math.max(1, page);
+        String route = safePage == 1 ? config.categoryFirstRoute : config.categoryPageRoute;
+        return routeUrl(config, route, slug, safePage);
+    }
+
+    static List<NativeContentItem> parseShowsListing(
+            String html,
+            String location,
+            String selector
+    ) {
+        return toShowsItems(parseListing(
+                Jsoup.parse(html, location),
+                selector,
+                MAX_SHOWS_PAGE_ITEMS
+        ));
+    }
+
+    static List<NativeContentItem> parseRelatedListing(
+            String html,
+            String location,
+            String selector,
+            String currentPageUrl
+    ) {
+        return relatedItems(
+                parseListing(Jsoup.parse(html, location), selector, MAX_RELATED_ITEMS + 1),
+                currentPageUrl
+        );
+    }
+
+    private static List<NativeContentItem> toShowsItems(List<Candidate> candidates) {
+        ArrayList<NativeContentItem> result = new ArrayList<>();
+        for (Candidate candidate : candidates) {
+            result.add(new NativeContentItem(
+                    NativeContentItem.KIND_MEDIA,
+                    candidate.title.isEmpty() ? LABEL : candidate.title,
+                    candidate.pageUrl,
+                    candidate.imageUrl,
+                    "",
+                    LABEL,
+                    "",
+                    "",
+                    ""
+            ));
+        }
+        return result;
+    }
+
+    private static List<NativeContentItem> relatedItems(
+            List<Candidate> candidates,
+            String currentPageUrl
+    ) {
+        String current = stripQueryAndFragment(currentPageUrl);
+        ArrayList<NativeContentItem> result = new ArrayList<>();
+        for (Candidate candidate : candidates) {
+            if (candidate == null || candidate.pageUrl.equals(current)) continue;
+            result.add(new NativeContentItem(
+                    NativeContentItem.KIND_MEDIA,
+                    candidate.title.isEmpty() ? LABEL : candidate.title,
+                    candidate.pageUrl,
+                    candidate.imageUrl,
+                    "",
+                    LABEL,
+                    "",
+                    "",
+                    ""
+            ));
+            if (result.size() >= MAX_RELATED_ITEMS) break;
+        }
+        return result;
+    }
+
+    private static List<NativeContentItem> cacheRelated(
+            String pageUrl,
+            Document page,
+            String selector
+    ) {
+        String canonical = stripQueryAndFragment(pageUrl);
+        List<NativeContentItem> items = relatedItems(
+                parseListing(page, selector, MAX_RELATED_ITEMS + 1),
+                canonical
+        );
+        List<NativeContentItem> cached = Collections.unmodifiableList(new ArrayList<>(items));
+        RELATED.put(canonical, cached);
+        return new ArrayList<>(cached);
+    }
+
+    CrazyShitRepository.StreamInfo resolvePlayable(Context context, String pageUrl) throws IOException {
         if (!isBaddieHubUrl(pageUrl)) return null;
         String media = MEDIA.get(pageUrl);
         String title = "";
         if (media == null || media.isEmpty()) {
-            Resolved resolved = resolvePage(pageUrl);
+            Resolved resolved = resolvePage(context, pageUrl);
             media = resolved.mediaUrl;
             title = resolved.title;
             if (!media.isEmpty()) MEDIA.put(pageUrl, media);
@@ -131,9 +288,18 @@ final class BaddieHubRepository {
         if (value == null || value.trim().isEmpty()) return false;
         try {
             URI uri = URI.create(value.trim());
+            if (!"https".equalsIgnoreCase(uri.getScheme())) return false;
             String host = uri.getHost();
-            return host != null && (host.equalsIgnoreCase("baddiehub.com") ||
-                    host.equalsIgnoreCase("www.baddiehub.com"));
+            if (host == null) return false;
+            for (String base : configuredBases(config(null))) {
+                String configuredHost = URI.create(base).getHost();
+                if (configuredHost == null) continue;
+                if (host.equalsIgnoreCase(configuredHost)) return true;
+                String bareConfigured = configuredHost.replaceFirst("(?i)^www\\.", "");
+                String bareCandidate = host.replaceFirst("(?i)^www\\.", "");
+                if (bareCandidate.equalsIgnoreCase(bareConfigured)) return true;
+            }
+            return false;
         } catch (Exception ignored) {
             return false;
         }
@@ -150,14 +316,18 @@ final class BaddieHubRepository {
         return height > width;
     }
 
-    private void validate(Candidate candidate) {
+    private void validate(Context context, Candidate candidate) {
         try {
-            Resolved resolved = resolvePage(candidate.pageUrl);
+            Resolved resolved = resolvePage(context, candidate.pageUrl);
             if (resolved.mediaUrl.isEmpty()) {
                 retryLater(candidate.pageUrl);
                 return;
             }
-            Dimensions dimensions = mediaDimensions(resolved.mediaUrl, candidate.pageUrl);
+            Dimensions dimensions = mediaDimensions(
+                    resolved.mediaUrl,
+                    candidate.pageUrl,
+                    config(context).userAgent
+            );
             if (dimensions.width <= 0 || dimensions.height <= 0) {
                 retryLater(candidate.pageUrl);
                 return;
@@ -203,11 +373,11 @@ final class BaddieHubRepository {
         }
     }
 
-    private Dimensions mediaDimensions(String mediaUrl, String referer) {
+    private Dimensions mediaDimensions(String mediaUrl, String referer, String userAgent) {
         MediaMetadataRetriever retriever = new MediaMetadataRetriever();
         try {
             LinkedHashMap<String, String> headers = new LinkedHashMap<>();
-            headers.put("User-Agent", USER_AGENT);
+            headers.put("User-Agent", userAgent);
             headers.put("Referer", referer);
             retriever.setDataSource(mediaUrl, headers);
             int width = integer(retriever.extractMetadata(
@@ -227,10 +397,14 @@ final class BaddieHubRepository {
         }
     }
 
-    private List<Candidate> parseListing(Document document) {
+    private static List<Candidate> parseListing(
+            Document document,
+            String cardSelector,
+            int maxItems
+    ) {
         LinkedHashMap<String, Candidate> found = new LinkedHashMap<>();
         if (document == null) return new ArrayList<>();
-        for (Element anchor : document.select("a[href]")) {
+        for (Element anchor : document.select(cardSelector)) {
             String url = absolute(anchor, "href", document.location());
             if (!isVideoPage(url)) continue;
             Element image = anchor.selectFirst("img");
@@ -244,17 +418,58 @@ final class BaddieHubRepository {
             if (title.isEmpty()) title = slugTitle(canonical);
             String imageUrl = imageUrl(image, document.location());
             found.put(canonical, new Candidate(canonical, title, imageUrl));
-            if (found.size() >= MAX_CANDIDATES) break;
+            if (found.size() >= maxItems) break;
         }
         return new ArrayList<>(found.values());
     }
 
-    private Resolved resolvePage(String pageUrl) throws IOException {
-        Document page = fetch(pageUrl, BASE);
+    private void parseCategories(
+            Document document,
+            SourceConfig.BaddieHub config,
+            Map<String, NativeContentItem> found
+    ) {
+        if (document == null) return;
+        for (Element anchor : document.select(config.categoryLinksSelector)) {
+            String url = stripQueryAndFragment(absolute(anchor, "href", document.location()));
+            String slug = categorySlug(url, config);
+            if (slug.isEmpty()) continue;
+            Element image = anchor.selectFirst("img");
+            if (image == null && anchor.parent() != null) image = anchor.parent().selectFirst("img");
+            String title = clean(anchor.text());
+            if (title.isEmpty() && image != null) title = clean(image.attr("alt"));
+            if (title.isEmpty()) title = slugTitle(url);
+            NativeContentItem candidate = new NativeContentItem(
+                    NativeContentItem.KIND_CATEGORY,
+                    title,
+                    url,
+                    imageUrl(image, document.location()),
+                    "",
+                    LABEL,
+                    "",
+                    "BaddieHub category",
+                    ""
+            );
+            NativeContentItem existing = found.get(url);
+            if (existing == null || (clean(existing.imageUrl).isEmpty()
+                    && !clean(candidate.imageUrl).isEmpty())) {
+                found.put(url, candidate);
+            }
+        }
+    }
+
+    private Resolved resolvePage(Context context, String pageUrl) throws IOException {
+        SourceConfig.BaddieHub config = config(context);
+        Document page = fetch(context, pageUrl, config.baseUrl, config);
+        cacheRelated(pageUrl, page, config.cardLinksSelector);
         Element heading = page.selectFirst("h1");
         String title = clean(heading == null ? "" : heading.text());
         if (title.isEmpty()) title = clean(page.title());
-        for (Element frame : page.select("iframe[src]")) {
+        Element direct = page.selectFirst(config.playableVideoSelector);
+        if (direct != null) {
+            String media = absolute(direct, "src", page.location());
+            if (isDirectVideo(media)) return new Resolved(title, media, "");
+        }
+        for (Element frame : page.select(config.playableFrameSelector)) {
             String frameUrl = absolute(frame, "src", page.location());
             if (!frameUrl.contains("player-x.php") || !frameUrl.contains("q=")) continue;
             Resolved decoded = decodePlayer(frameUrl, title);
@@ -283,22 +498,42 @@ final class BaddieHubRepository {
         }
     }
 
-    private Document fetch(String url, String referer) throws IOException {
-        Connection connection = Jsoup.connect(url)
-                .userAgent(USER_AGENT)
-                .referrer(referer)
-                .timeout(REQUEST_TIMEOUT_MS)
-                .maxBodySize(8 * 1024 * 1024)
-                .followRedirects(true)
-                .ignoreHttpErrors(false)
-                .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
-                .header("Accept-Language", "en-US,en;q=0.9");
-        try {
-            String cookies = CookieManager.getInstance().getCookie(url);
-            if (cookies != null && !cookies.trim().isEmpty()) connection.header("Cookie", cookies);
-        } catch (Exception ignored) {
+    private Document fetch(
+            Context context,
+            String url,
+            String referer,
+            SourceConfig.BaddieHub config
+    ) throws IOException {
+        IOException last = null;
+        for (String candidateUrl : requestUrls(url, config)) {
+            for (int attempt = 0; attempt <= config.retryCount; attempt++) {
+                try {
+                    Connection connection = Jsoup.connect(candidateUrl)
+                            .userAgent(config.userAgent)
+                            .referrer(config.refererOverride.isEmpty()
+                                    ? referer : config.refererOverride)
+                            .timeout(config.requestTimeoutMs)
+                            .maxBodySize(8 * 1024 * 1024)
+                            .followRedirects(true)
+                            .ignoreHttpErrors(false)
+                            .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8");
+                    for (Map.Entry<String, String> header : config.requestHeaders.entrySet()) {
+                        connection.header(header.getKey(), header.getValue());
+                    }
+                    try {
+                        String cookies = CookieManager.getInstance().getCookie(candidateUrl);
+                        if (cookies != null && !cookies.trim().isEmpty()) {
+                            connection.header("Cookie", cookies);
+                        }
+                    } catch (Exception ignored) {
+                    }
+                    return connection.get();
+                } catch (IOException error) {
+                    last = error;
+                }
+            }
         }
-        return connection.get();
+        throw last == null ? new IOException("BaddieHub request failed") : last;
     }
 
     private ArrayList<NativeContentItem> readyPortraits(List<Candidate> candidates) {
@@ -326,13 +561,7 @@ final class BaddieHubRepository {
         RETRY_AFTER.put(pageUrl, System.currentTimeMillis() + FAILURE_RETRY_MS);
     }
 
-    private String listingUrl(int page) {
-        int safe = Math.max(1, page);
-        if (safe == 1) return BASE + "?filter=latest";
-        return BASE + "page/" + safe + "/?filter=latest";
-    }
-
-    private boolean isVideoPage(String value) {
+    private static boolean isVideoPage(String value) {
         if (!isBaddieHubUrl(value)) return false;
         try {
             URI uri = URI.create(value);
@@ -348,6 +577,86 @@ final class BaddieHubRepository {
         } catch (Exception ignored) {
             return false;
         }
+    }
+
+    static String categorySlug(String value) {
+        return categorySlug(value, config(null));
+    }
+
+    private static String categorySlug(String value, SourceConfig.BaddieHub config) {
+        if (!isBaddieHubUrl(value)) return "";
+        try {
+            String path = URI.create(value).getPath();
+            if (path == null) return "";
+            String[] parts = path.replaceAll("^/+|/+$", "").split("/");
+            String prefix = config.categoryFirstRoute.split("\\{slug\\}", 2)[0]
+                    .replaceAll("^/+|/+$", "");
+            String[] prefixParts = prefix.isEmpty() ? new String[0] : prefix.split("/");
+            if (parts.length != prefixParts.length + 1) return "";
+            for (int index = 0; index < prefixParts.length; index++) {
+                if (!parts[index].equalsIgnoreCase(prefixParts[index])) return "";
+            }
+            String slug = parts[parts.length - 1];
+            return slug.matches("[A-Za-z0-9_-]+") ? slug : "";
+        } catch (Exception ignored) {
+            return "";
+        }
+    }
+
+    private static SourceConfig.BaddieHub config(Context context) {
+        if (context != null) RemoteSourceConfigManager.initialize(context);
+        SourceConfig snapshot = RemoteSourceConfigManager.snapshotOrNull();
+        return snapshot == null || snapshot.baddieHub == null
+                ? COMPILED_CONFIG : snapshot.baddieHub;
+    }
+
+    private static List<String> configuredBases(SourceConfig.BaddieHub config) {
+        ArrayList<String> result = new ArrayList<>();
+        result.add(KNOWN_GOOD_BASE);
+        result.add(config.baseUrl);
+        SourceConfig snapshot = RemoteSourceConfigManager.snapshotOrNull();
+        if (snapshot == null || snapshot.fallbacksEnabled) result.addAll(config.fallbackDomains);
+        return result;
+    }
+
+    private static List<String> requestUrls(String value, SourceConfig.BaddieHub config) {
+        ArrayList<String> result = new ArrayList<>();
+        result.add(value);
+        try {
+            URI original = URI.create(value);
+            SourceConfig snapshot = RemoteSourceConfigManager.snapshotOrNull();
+            List<String> fallbacks = snapshot != null && !snapshot.fallbacksEnabled
+                    ? Collections.emptyList() : config.fallbackDomains;
+            for (String base : fallbacks) {
+                URI fallback = URI.create(base);
+                result.add(new URI(
+                        fallback.getScheme(),
+                        fallback.getAuthority(),
+                        original.getPath(),
+                        original.getQuery(),
+                        original.getFragment()
+                ).toString());
+            }
+        } catch (Exception ignored) {
+        }
+        return result;
+    }
+
+    private static boolean enabled(SourceConfig.BaddieHub config) {
+        SourceConfig snapshot = RemoteSourceConfigManager.snapshotOrNull();
+        return snapshot == null || !snapshot.sourceKillSwitchesEnabled || config.enabled;
+    }
+
+    private static String routeUrl(
+            SourceConfig.BaddieHub config,
+            String route,
+            String slug,
+            int page
+    ) {
+        String resolved = route
+                .replace("{slug}", slug == null ? "" : slug)
+                .replace("{page}", String.valueOf(Math.max(1, page)));
+        return URI.create(config.baseUrl).resolve(resolved).toString();
     }
 
     private static String queryValue(String rawQuery, String name) {
