@@ -1322,9 +1322,77 @@ public final class ChaosFeedView extends FrameLayout {
                 "Blocked " + creator + " from ShitTok.",
                 ZeroChillToast.LENGTH_SHORT
         ).show();
-        // Re-deal the current in-memory pool so already queued clips from this creator
-        // disappear immediately. The source fetch policy itself is unchanged.
-        refresh();
+        removeBlockedCreatorsFromQueue();
+    }
+
+    private void removeBlockedCreatorsFromQueue() {
+        ShitTokQueuePruner.Result result = ShitTokQueuePruner.removeBlockedCreators(
+                items,
+                blockedCreatorKeys,
+                selectedPosition
+        );
+        if (result.removed.isEmpty()) return;
+
+        cancelPendingAutoAdvance();
+        cancelSwipePlayerMaintenance();
+        cancelCreatorWarmAhead();
+        resetCreatorSwipePreview();
+
+        Set<String> removedUrls = new HashSet<>();
+        for (NativeContentItem removed : result.removed) {
+            if (removed != null && removed.url != null && !removed.url.isEmpty()) {
+                removedUrls.add(removed.url);
+            }
+        }
+        for (ChaosHolder holder : new ArrayList<>(playerHolders)) {
+            if (holder.item != null && removedUrls.contains(holder.item.url)) {
+                holder.releasePlayer();
+            }
+        }
+        if (result.selectedRemoved) {
+            sessionResume.clear();
+            exitManualFullscreen();
+        }
+
+        selectedPosition = result.targetPosition;
+        for (int index = result.removedPositions.size() - 1; index >= 0; index--) {
+            adapter.notifyItemRemoved(result.removedPositions.get(index));
+        }
+        syncHolderPositionsAfterQueuePrune();
+        if (items.isEmpty()) {
+            initialProgress.setVisibility(View.VISIBLE);
+            empty.setVisibility(View.GONE);
+            pager.setCurrentItem(0, false);
+            loadMorePool();
+            return;
+        }
+
+        initialProgress.setVisibility(View.GONE);
+        empty.setVisibility(View.GONE);
+        pager.setCurrentItem(selectedPosition, false);
+        markSeen(selectedPosition);
+        pauseNonSelected(selectedPosition);
+        resolveAhead(selectedPosition);
+        playSelected();
+        warmCreatorGalleries(selectedPosition);
+        if (items.size() - selectedPosition <= LOAD_AHEAD_AT) loadMorePool();
+    }
+
+    private void syncHolderPositionsAfterQueuePrune() {
+        Set<ChaosHolder> holders = Collections.newSetFromMap(new IdentityHashMap<>());
+        holders.addAll(playerHolders);
+        RecyclerView recycler = pagerRecycler();
+        if (recycler != null) {
+            for (int index = 0; index < recycler.getChildCount(); index++) {
+                RecyclerView.ViewHolder holder = recycler.getChildViewHolder(recycler.getChildAt(index));
+                if (holder instanceof ChaosHolder) holders.add((ChaosHolder) holder);
+            }
+        }
+        for (ChaosHolder holder : holders) {
+            if (holder.item == null) continue;
+            int position = items.indexOf(holder.item);
+            if (position >= 0) holder.boundPosition = position;
+        }
     }
 
     private void hideFromChaos(NativeContentItem item) {
