@@ -36,6 +36,8 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /** Dense mixed-media grid used for Bunkr albums. */
 final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter.Holder> {
@@ -43,6 +45,12 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
     private static final String USER_AGENT =
             "Mozilla/5.0 (Linux; Android 16) AppleWebKit/537.36 " +
             "(KHTML, like Gecko) Chrome/139.0 Mobile Safari/537.36";
+    private static final Pattern FAPELLO_POST_ID = Pattern.compile(
+            "(?i)/(?:new/)?([0-9]+)/?$"
+    );
+    private static final Pattern FAPELLO_MEDIA_POST_ID = Pattern.compile(
+            "(?i)(?:^|[_-])([0-9]{3,})(?:_[0-9]+px)?\\.(?:jpe?g|png|webp|avif|gif|bmp|heic|heif|mp4|webm|m4v|mov|m3u8|mpd)$"
+    );
 
     interface Listener {
         void onOpen(int position, NativeContentItem item, View transitionAnchor);
@@ -77,6 +85,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
 
     void replace(List<NativeContentItem> incoming, boolean preloadAhead) {
         items.clear();
+        addHighlightedFirst(incoming);
         addUnique(incoming);
         notifyDataSetChanged();
         if (preloadAhead) preloadRange(0, Math.min(items.size(), adaptiveAspectRatios ? 6 : 12));
@@ -87,6 +96,12 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
     }
 
     void append(List<NativeContentItem> incoming, boolean preloadAhead) {
+        if (containsNewHighlighted(incoming)) {
+            ArrayList<NativeContentItem> combined = new ArrayList<>(items);
+            if (incoming != null) combined.addAll(incoming);
+            replace(combined, preloadAhead);
+            return;
+        }
         int start = items.size();
         addUnique(incoming);
         int added = items.size() - start;
@@ -103,7 +118,13 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
                 if (url != null && !url.trim().isEmpty()) highlightedUrls.add(url.trim());
             }
         }
-        if (!items.isEmpty()) notifyDataSetChanged();
+        if (!items.isEmpty()) {
+            ArrayList<NativeContentItem> current = new ArrayList<>(items);
+            items.clear();
+            addHighlightedFirst(current);
+            addUnique(current);
+            notifyDataSetChanged();
+        }
     }
 
 
@@ -438,6 +459,29 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         return items.size();
     }
 
+    private void addHighlightedFirst(List<NativeContentItem> incoming) {
+        if (incoming == null || incoming.isEmpty() || highlightedUrls.isEmpty()) return;
+        for (String highlightedUrl : highlightedUrls) {
+            for (NativeContentItem candidate : incoming) {
+                if (candidate == null || candidate.url == null || candidate.url.isEmpty()) continue;
+                if (matchesFreshUrl(candidate, highlightedUrl) && indexOfUrl(candidate.url) < 0) {
+                    items.add(candidate);
+                    break;
+                }
+            }
+        }
+    }
+
+    private boolean containsNewHighlighted(List<NativeContentItem> incoming) {
+        if (incoming == null || incoming.isEmpty() || highlightedUrls.isEmpty()) return false;
+        for (NativeContentItem candidate : incoming) {
+            if (candidate == null || candidate.url == null || candidate.url.isEmpty() ||
+                    indexOfUrl(candidate.url) >= 0) continue;
+            if (isHighlighted(candidate)) return true;
+        }
+        return false;
+    }
+
     private void addUnique(List<NativeContentItem> incoming) {
         if (incoming == null) return;
         for (NativeContentItem candidate : incoming) {
@@ -543,17 +587,36 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
 
     private boolean isHighlighted(NativeContentItem item) {
         if (item == null || highlightedUrls.isEmpty()) return false;
-        String itemUrl = canonicalHighlightUrl(item.url);
-        String uploaderUrl = canonicalHighlightUrl(item.uploader);
         for (String raw : highlightedUrls) {
-            String highlighted = canonicalHighlightUrl(raw);
-            if (highlighted.isEmpty()) continue;
-            if (highlighted.equals(itemUrl) || highlighted.equals(uploaderUrl)) return true;
+            if (matchesFreshUrl(item, raw)) return true;
         }
         return false;
     }
 
-    private String canonicalHighlightUrl(String value) {
+    static boolean matchesFreshUrl(NativeContentItem item, String freshUrl) {
+        if (item == null) return false;
+        String highlighted = canonicalHighlightUrl(freshUrl);
+        if (highlighted.isEmpty()) return false;
+        String itemUrl = canonicalHighlightUrl(item.url);
+        String uploaderUrl = canonicalHighlightUrl(item.uploader);
+        if (highlighted.equals(itemUrl) || highlighted.equals(uploaderUrl)) return true;
+
+        String freshPostId = fapelloPostIdentity(freshUrl);
+        if (freshPostId.isEmpty()) return false;
+        return freshPostId.equals(fapelloPostIdentity(item.url)) ||
+                freshPostId.equals(fapelloPostIdentity(item.imageUrl));
+    }
+
+    private static String fapelloPostIdentity(String value) {
+        if (!FapelloRepository.isFapelloUrl(value)) return "";
+        String clean = canonicalHighlightUrl(value);
+        Matcher post = FAPELLO_POST_ID.matcher(clean);
+        if (post.find()) return post.group(1);
+        Matcher media = FAPELLO_MEDIA_POST_ID.matcher(clean);
+        return media.find() ? media.group(1) : "";
+    }
+
+    private static String canonicalHighlightUrl(String value) {
         if (value == null) return "";
         String clean = value.trim();
         int fragment = clean.indexOf('#');
