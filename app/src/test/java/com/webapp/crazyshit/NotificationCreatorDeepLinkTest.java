@@ -13,7 +13,9 @@ import java.util.Arrays;
 import java.util.List;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
 
 @RunWith(RobolectricTestRunner.class)
 @Config(application = Application.class, sdk = 35)
@@ -68,6 +70,49 @@ public class NotificationCreatorDeepLinkTest {
         assertEquals("old-2", ordered.get(2).url);
     }
 
+    @Test
+    public void freshBadgeMatchesSameFapelloPostAcrossRouteVariants() {
+        NativeContentItem galleryItem = mediaItem(
+                "https://fapello.com/video/week/32318226/",
+                "https://fapello.com/content/e/m/emily-rinaudo/100000/emily-rinaudo_32318226_300px.jpg"
+        );
+
+        assertTrue(BunkrGalleryAdapter.matchesFreshUrl(
+                galleryItem,
+                "https://fapello.com/video/emily-rinaudo/32318226/?from=popular"
+        ));
+        assertFalse(BunkrGalleryAdapter.matchesFreshUrl(
+                galleryItem,
+                "https://fapello.com/video/emily-rinaudo/32318227/"
+        ));
+    }
+
+    @Test
+    public void freshBadgeMatchesFapelloPostIdInDirectMediaUrl() {
+        NativeContentItem galleryItem = mediaItem(
+                "https://video.fapello.com/content/e/m/emily-rinaudo/emily-rinaudo_32318226.mp4",
+                "https://fapello.com/content/e/m/emily-rinaudo/100000/emily-rinaudo_32318226_300px.jpg"
+        );
+
+        assertTrue(BunkrGalleryAdapter.matchesFreshUrl(
+                galleryItem,
+                "https://fapello.com/video/new/32318226/"
+        ));
+    }
+
+    @Test
+    public void matchingNumericTailDoesNotCrossIntoUnrelatedSources() {
+        NativeContentItem galleryItem = mediaItem(
+                "https://example.com/video/week/32318226/",
+                "https://example.com/emily-rinaudo_32318226.jpg"
+        );
+
+        assertFalse(BunkrGalleryAdapter.matchesFreshUrl(
+                galleryItem,
+                "https://fapello.com/video/new/32318226/"
+        ));
+    }
+
     private static NativeContentItem item(String url) {
         return new NativeContentItem(
                 NativeContentItem.KIND_IMAGE,
@@ -76,6 +121,18 @@ public class NotificationCreatorDeepLinkTest {
                 "",
                 "",
                 "",
+                ""
+        );
+    }
+
+    private static NativeContentItem mediaItem(String url, String imageUrl) {
+        return new NativeContentItem(
+                NativeContentItem.KIND_MEDIA,
+                "fresh",
+                url,
+                imageUrl,
+                "",
+                "https://fapello.com/emily-rinaudo/",
                 ""
         );
     }
