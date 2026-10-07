@@ -2,6 +2,7 @@ package com.webapp.crazyshit;
 
 import android.app.Application;
 import android.content.Intent;
+import android.view.View;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -111,6 +112,43 @@ public class NotificationCreatorDeepLinkTest {
                 galleryItem,
                 "https://fapello.com/video/new/32318226/"
         ));
+    }
+
+    @Test
+    public void routeVariantFreshItemMovesToFrontOfCreatorGrid() {
+        Application app = RuntimeEnvironment.getApplication();
+        BunkrGalleryAdapter adapter = new BunkrGalleryAdapter(
+                app,
+                new BunkrGalleryAdapter.Listener() {
+                    @Override
+                    public void onOpen(
+                            int position,
+                            NativeContentItem item,
+                            View transitionAnchor
+                    ) {
+                    }
+
+                    @Override
+                    public void onLongPress(NativeContentItem item, View anchor) {
+                    }
+                }
+        );
+        NativeContentItem old = mediaItem(
+                "https://fapello.com/video/week/32318220/",
+                "https://fapello.com/content/e/m/emily-rinaudo/emily-rinaudo_32318220.jpg"
+        );
+        NativeContentItem fresh = mediaItem(
+                "https://fapello.com/video/week/32318226/",
+                "https://fapello.com/content/e/m/emily-rinaudo/emily-rinaudo_32318226.jpg"
+        );
+        adapter.setHighlightedUrls(Arrays.asList(
+                "https://fapello.com/video/emily-rinaudo/32318226/"
+        ));
+
+        adapter.replace(Arrays.asList(old, fresh), false);
+
+        assertEquals("https://fapello.com/video/week/32318226/", adapter.snapshot().get(0).url);
+        assertEquals("https://fapello.com/video/week/32318220/", adapter.snapshot().get(1).url);
     }
 
     private static NativeContentItem item(String url) {
