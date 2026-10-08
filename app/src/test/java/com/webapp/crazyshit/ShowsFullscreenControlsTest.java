@@ -155,6 +155,11 @@ public class ShowsFullscreenControlsTest {
             button.dispatchTouchEvent(down);
             shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(2600));
             assertTrue("Held HUD button " + id, controls.isVisible());
+            MotionEvent cancel = MotionEvent.obtain(0, 0, MotionEvent.ACTION_CANCEL, 1, 1, 0);
+            button.dispatchTouchEvent(cancel);
+            cancel.recycle();
+            // A normal tap still reaches the button action after a canceled hold.
+            button.dispatchTouchEvent(down);
             button.dispatchTouchEvent(up);
             down.recycle();
             up.recycle();
