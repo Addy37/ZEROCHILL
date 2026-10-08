@@ -291,6 +291,7 @@ public class PlayerActivity extends Activity {
                         long target = Math.max(0L, player.getCurrentPosition() + delta);
                         if (duration > 0L) target = Math.min(duration, target);
                         player.seekTo(target);
+                        fullscreenControls.show();
                         haptic(playerView);
                         showGesture(delta < 0 ? "−10 seconds" : "+10 seconds");
                         return true;
