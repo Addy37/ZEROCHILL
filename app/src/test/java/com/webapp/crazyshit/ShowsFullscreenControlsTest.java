@@ -13,7 +13,7 @@ import android.widget.TextView;
 import androidx.core.graphics.Insets;
 import androidx.core.view.WindowInsetsCompat;
 import androidx.media3.common.Player;
-import androidx.media3.common.util.FlagSet;
+import androidx.media3.common.FlagSet;
 import androidx.media3.ui.AspectRatioFrameLayout;
 import androidx.media3.ui.PlayerControlView;
 import androidx.media3.ui.PlayerView;
