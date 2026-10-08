@@ -19,14 +19,18 @@ import androidx.appcompat.app.AppCompatActivity;
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.card.MaterialCardView;
 
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-/** Aggregate-only product analytics. No per-install activity history is exposed here. */
+/** Aggregate-only product analytics. No per-install or per-account activity history is exposed here. */
 public final class AnalyticsActivity extends AppCompatActivity {
     private final ExecutorService network = Executors.newSingleThreadExecutor();
+    private final Set<String> expandedCards = new HashSet<>();
     private LinearLayout content;
     private TextView status;
     private ProgressBar progress;
@@ -51,7 +55,7 @@ public final class AnalyticsActivity extends AppCompatActivity {
         TextView eyebrow = label("AUDIENCE INSIGHTS");
         TextView title = text("Analytics", 26, Color.WHITE);
         title.setTypeface(null, Typeface.BOLD);
-        TextView detail = text("Aggregate usage, devices, and content interest",
+        TextView detail = text("Aggregate usage, social activity, devices, and content interest",
                 12, color(R.color.app_on_surface_variant));
         titles.addView(eyebrow);
         titles.addView(title);
@@ -126,19 +130,30 @@ public final class AnalyticsActivity extends AppCompatActivity {
         users.addView(metric("Month", dashboard.monthlyUsers), weighted());
         content.addView(card("ACTIVE USERS", "Anonymous active installs", users));
 
-        addRankingCard("TRENDING CREATORS", "Who users are opening most", dashboard.creators, true,
+        addReleaseCard(dashboard.releaseAdoption);
+        addSocialCards(dashboard.social);
+        addFavoriteCreatorCard(dashboard.favoriteCreators);
+
+        addRankingCard("creators", "TRENDING CREATORS", "Who users are opening most",
+                dashboard.creators, true,
                 "Creator interest will appear after users open OnlyFap creator galleries.");
-        addRankingCard("MOST USED SECTIONS", "Where users spend their time", dashboard.sections, false,
+        addRankingCard("sections", "MOST USED SECTIONS", "Where users spend their time",
+                dashboard.sections, false,
                 "Section usage will appear after analytics-enabled app sessions begin.");
-        addRankingCard("SOURCE INTEREST", "Which content sources attract attention", dashboard.sources, false,
+        addRankingCard("sources", "SOURCE INTEREST", "Which content sources attract attention",
+                dashboard.sources, false,
                 "Source usage will appear after users open source-specific content.");
-        addRankingCard("APP VERSIONS", "How quickly users adopt releases", dashboard.versions, false,
+        addRankingCard("versions", "APP VERSIONS", "How quickly users adopt releases",
+                dashboard.versions, false,
                 "Version adoption will appear after analytics-enabled users open the app.");
-        addDeviceCard("TOP DEVICES", "Phone models active this week", withoutEmulators(dashboard.deviceModels),
+        addDeviceCard("devices", "TOP DEVICES", "Phone models active this week",
+                withoutEmulators(dashboard.deviceModels),
                 "Device models will appear as users open the updated ZEROCHILL app.", true);
-        addDeviceCard("DEVICE BRANDS", "Active users by manufacturer", dashboard.deviceManufacturers,
+        addDeviceCard("brands", "DEVICE BRANDS", "Active users by manufacturer",
+                dashboard.deviceManufacturers,
                 "Device brands will appear as users open the updated ZEROCHILL app.", false);
-        addDeviceCard("ANDROID VERSIONS", "Android versions active this week", dashboard.androidVersions,
+        addDeviceCard("android", "ANDROID VERSIONS", "Android versions active this week",
+                dashboard.androidVersions,
                 "Android versions will appear as users open the updated ZEROCHILL app.", false);
 
         if (dashboard.dailyUsers == 0 && dashboard.weeklyUsers == 0 && dashboard.monthlyUsers == 0) {
@@ -150,7 +165,141 @@ public final class AnalyticsActivity extends AppCompatActivity {
         }
     }
 
+    private void addReleaseCard(AdminRepository.ReleaseAdoption release) {
+        if (release == null || release.version == null || release.version.trim().isEmpty()) return;
+        LinearLayout body = vertical(0);
+
+        TextView version = text("ZeroChill " + release.version, 18, Color.WHITE);
+        version.setTypeface(null, Typeface.BOLD);
+        body.addView(version);
+
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setPadding(0, dp(8), 0, 0);
+        row.addView(metricWithPercent("Today", release.usersToday, release.percentToday), weighted());
+        row.addView(metricWithPercent("Week", release.usersWeek, release.percentWeek), weighted());
+        row.addView(metricWithPercent("Month", release.usersMonth, release.percentMonth), weighted());
+        body.addView(row);
+
+        content.addView(card("LATEST RELEASE", "Adoption among active installs", body));
+    }
+
+    private void addSocialCards(AdminRepository.SocialSummary social) {
+        if (social == null) return;
+
+        LinearLayout snapshot = new LinearLayout(this);
+        snapshot.setOrientation(LinearLayout.HORIZONTAL);
+        snapshot.addView(metric("Accounts", social.accountsTotal), weighted());
+        snapshot.addView(metric("Social", social.socialUsersTotal), weighted());
+        snapshot.addView(metric("Messages", social.messagesTotal), weighted());
+        snapshot.addView(metric("Comments", social.commentsTotal), weighted());
+        content.addView(card("4.3 SOCIAL", "ZEROCHILL ID and social adoption", snapshot));
+
+        LinearLayout accounts = vertical(0);
+        accounts.addView(detailRow("New accounts today", social.accountsToday, "accounts"));
+        accounts.addView(detailRow("New accounts this week", social.accountsWeek, "accounts"));
+        accounts.addView(detailRow("Profiles with avatar", social.profilesWithAvatar, "accounts"));
+        accounts.addView(detailRow("Profiles with bio", social.profilesWithBio, "accounts"));
+        accounts.addView(detailRow("Accounts with creator favorites", social.creatorFavoriteAccounts, "accounts"));
+        content.addView(card("ACCOUNT ADOPTION", "How users are setting up ZEROCHILL ID", accounts));
+
+        LinearLayout activity = vertical(0);
+        activity.addView(detailRow("Comments", social.commentsTotal,
+                String.format(Locale.US, "%,d this week", social.commentsWeek)));
+        activity.addView(detailRow("Replies", social.repliesTotal,
+                String.format(Locale.US, "%,d this week", social.repliesWeek)));
+        activity.addView(detailRow("Video likes", social.videoLikesTotal,
+                String.format(Locale.US, "%,d this week", social.videoLikesWeek)));
+        activity.addView(detailRow("Comment likes", social.commentLikesTotal,
+                String.format(Locale.US, "%,d this week", social.commentLikesWeek)));
+        activity.addView(detailRow("Direct messages", social.messagesTotal,
+                String.format(Locale.US, "%,d today · %,d this week",
+                        social.messagesToday, social.messagesWeek)));
+        content.addView(card("SOCIAL ACTIVITY", "Current engagement across 4.3 social features", activity));
+
+        LinearLayout messaging = vertical(0);
+        messaging.addView(detailRow("Active conversations this week", social.conversationsWeek, "conversations"));
+        messaging.addView(detailRow("People messaging this week", social.messageSendersWeek, "senders"));
+        messaging.addView(detailRow("Read messages", social.messagesRead, formatPercent(social.messageReadRate) + " read rate"));
+        messaging.addView(detailRow("Unread messages", social.messagesUnread, "messages"));
+        messaging.addView(detailRow("Social users this week", social.socialUsersWeek,
+                String.format(Locale.US, "%,d today", social.socialUsersToday)));
+        content.addView(card("MESSAGING HEALTH", "Aggregate messaging and social reach", messaging));
+
+        LinearLayout preferences = vertical(0);
+        preferences.addView(detailRow("Creator favorites", social.creatorFavoritesTotal,
+                social.creatorFavoriteAccounts == 0
+                        ? "No favoriting accounts yet"
+                        : String.format(Locale.US, "%.1f average per favoriting account",
+                                social.averageFavoritesPerAccount)));
+        preferences.addView(detailRow("User blocks", social.blocksTotal, "blocks"));
+        preferences.addView(detailRow("Notification settings customized",
+                social.notificationPreferenceUsers, "accounts"));
+        preferences.addView(detailRow("DM alerts disabled", social.directMessagesDisabled, "accounts"));
+        preferences.addView(detailRow("Reply / like alerts disabled",
+                social.repliesDisabled + social.likesDisabled,
+                String.format(Locale.US, "%,d replies · %,d likes",
+                        social.repliesDisabled, social.likesDisabled)));
+        content.addView(card("PREFERENCES & SAFETY", "Aggregate controls only, never individual activity", preferences));
+    }
+
+    private void addFavoriteCreatorCard(List<AdminRepository.FavoriteCreatorRow> rows) {
+        LinearLayout body = vertical(0);
+        if (rows.isEmpty()) {
+            body.addView(text(
+                    "Favorites will appear after signed-in users save OnlyFap creators.",
+                    13, color(R.color.app_on_surface_variant)));
+        } else {
+            long max = Math.max(1L, rows.get(0).favoriteCount);
+            ArrayList<View> overflow = new ArrayList<>();
+            for (int index = 0; index < rows.size(); index++) {
+                AdminRepository.FavoriteCreatorRow row = rows.get(index);
+                LinearLayout block = vertical(0);
+                block.setPadding(0, dp(4), 0, dp(4));
+
+                LinearLayout line = new LinearLayout(this);
+                line.setGravity(Gravity.CENTER_VERTICAL);
+                TextView name = text((index + 1) + ". " + row.value,
+                        14, color(R.color.app_on_surface));
+                if (index < 3) name.setTypeface(null, Typeface.BOLD);
+                line.addView(name, new LinearLayout.LayoutParams(
+                        0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+
+                String countLabel = row.favoriteCount == 1
+                        ? "1 favorite"
+                        : String.format(Locale.US, "%,d favorites", row.favoriteCount);
+                TextView counts = text(countLabel, 10, color(R.color.app_on_surface_variant));
+                counts.setGravity(Gravity.END);
+                line.addView(counts);
+                block.addView(line);
+
+                ProgressBar bar = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
+                bar.setMax(1000);
+                bar.setProgress((int) Math.min(1000L, (row.favoriteCount * 1000L) / max));
+                bar.setProgressTintList(ColorStateList.valueOf(color(R.color.app_primary)));
+                bar.setProgressBackgroundTintList(ColorStateList.valueOf(color(R.color.app_surface_variant)));
+                LinearLayout.LayoutParams barParams = new LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT, dp(3));
+                barParams.setMargins(0, dp(3), 0, 0);
+                block.addView(bar, barParams);
+
+                if (index >= AnalyticsListPolicy.COLLAPSED_ROWS) {
+                    block.setVisibility(expandedCards.contains("favorite_creators")
+                            ? View.VISIBLE : View.GONE);
+                    overflow.add(block);
+                }
+                body.addView(block);
+            }
+            addExpandControl(body, "favorite_creators", rows.size(), overflow);
+        }
+        content.addView(card(
+                "FAVORITED CREATORS",
+                "Most saved by signed-in ZEROCHILL users",
+                body));
+    }
+
     private void addRankingCard(
+            String key,
             String title,
             String subtitle,
             List<AdminRepository.AnalyticsRow> rows,
@@ -161,9 +310,9 @@ public final class AnalyticsActivity extends AppCompatActivity {
         if (rows.isEmpty()) {
             body.addView(text(emptyText, 13, color(R.color.app_on_surface_variant)));
         } else {
-            int limit = Math.min(rows.size(), creator ? 12 : 8);
             long max = Math.max(1L, rows.get(0).uniqueUsers);
-            for (int index = 0; index < limit; index++) {
+            ArrayList<View> overflow = new ArrayList<>();
+            for (int index = 0; index < rows.size(); index++) {
                 AdminRepository.AnalyticsRow row = rows.get(index);
                 LinearLayout block = vertical(0);
                 block.setPadding(0, dp(4), 0, dp(4));
@@ -175,10 +324,8 @@ public final class AnalyticsActivity extends AppCompatActivity {
                 if (index < 3) name.setTypeface(null, Typeface.BOLD);
                 line.addView(name, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
 
-                String numbers = creator
-                        ? String.format(Locale.US, "%,d users · %,d opens", row.uniqueUsers, row.eventCount)
-                        : String.format(Locale.US, "%,d users · %,d opens", row.uniqueUsers, row.eventCount);
-                TextView counts = text(numbers, 10, color(R.color.app_on_surface_variant));
+                TextView counts = text(String.format(Locale.US, "%,d users · %,d opens",
+                        row.uniqueUsers, row.eventCount), 10, color(R.color.app_on_surface_variant));
                 counts.setGravity(Gravity.END);
                 line.addView(counts);
                 block.addView(line);
@@ -192,15 +339,21 @@ public final class AnalyticsActivity extends AppCompatActivity {
                         ViewGroup.LayoutParams.MATCH_PARENT, dp(3));
                 barParams.setMargins(0, dp(3), 0, 0);
                 block.addView(bar, barParams);
+
+                if (index >= AnalyticsListPolicy.COLLAPSED_ROWS) {
+                    block.setVisibility(expandedCards.contains(key) ? View.VISIBLE : View.GONE);
+                    overflow.add(block);
+                }
                 body.addView(block);
             }
+            addExpandControl(body, key, rows.size(), overflow);
         }
         content.addView(card(title, subtitle, body));
     }
 
     private List<AdminRepository.AnalyticsRow> withoutEmulators(
             List<AdminRepository.AnalyticsRow> rows) {
-        List<AdminRepository.AnalyticsRow> filtered = new java.util.ArrayList<>();
+        List<AdminRepository.AnalyticsRow> filtered = new ArrayList<>();
         for (AdminRepository.AnalyticsRow row : rows) {
             if (!isEmulatorDevice(row.value) && !isUnknownDevice(row.value)) filtered.add(row);
         }
@@ -255,14 +408,16 @@ public final class AnalyticsActivity extends AppCompatActivity {
         return raw.trim();
     }
 
-    private void addDeviceCard(String title, String subtitle,
+    private void addDeviceCard(String key, String title, String subtitle,
             List<AdminRepository.AnalyticsRow> rows, String emptyText, boolean friendlyModels) {
         LinearLayout body = vertical(0);
         if (rows.isEmpty()) {
             body.addView(text(emptyText, 13, color(R.color.app_on_surface_variant)));
         } else {
             long max = Math.max(1L, rows.get(0).uniqueUsers);
-            for (AdminRepository.AnalyticsRow row : rows) {
+            ArrayList<View> overflow = new ArrayList<>();
+            for (int index = 0; index < rows.size(); index++) {
+                AdminRepository.AnalyticsRow row = rows.get(index);
                 LinearLayout block = vertical(0);
                 block.setPadding(0, dp(4), 0, dp(4));
                 TextView name = text(friendlyModels ? friendlyDeviceName(row.value) : row.value,
@@ -282,10 +437,53 @@ public final class AnalyticsActivity extends AppCompatActivity {
                         ViewGroup.LayoutParams.MATCH_PARENT, dp(3));
                 params.setMargins(0, dp(3), 0, 0);
                 block.addView(bar, params);
+
+                if (index >= AnalyticsListPolicy.COLLAPSED_ROWS) {
+                    block.setVisibility(expandedCards.contains(key) ? View.VISIBLE : View.GONE);
+                    overflow.add(block);
+                }
                 body.addView(block);
             }
+            addExpandControl(body, key, rows.size(), overflow);
         }
         content.addView(card(title, subtitle, body));
+    }
+
+    private void addExpandControl(LinearLayout body, String key, int count, List<View> overflow) {
+        if (count <= AnalyticsListPolicy.COLLAPSED_ROWS || overflow.isEmpty()) return;
+        MaterialButton toggle = compactButton(AnalyticsListPolicy.toggleLabel(count, expandedCards.contains(key)));
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(38));
+        params.topMargin = dp(7);
+        body.addView(toggle, params);
+        toggle.setOnClickListener(v -> {
+            boolean expand = !expandedCards.contains(key);
+            if (expand) expandedCards.add(key);
+            else expandedCards.remove(key);
+            for (View row : overflow) row.setVisibility(expand ? View.VISIBLE : View.GONE);
+            toggle.setText(AnalyticsListPolicy.toggleLabel(count, expand));
+        });
+    }
+
+    private LinearLayout detailRow(String label, long value, String suffix) {
+        LinearLayout row = new LinearLayout(this);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(0, dp(5), 0, dp(5));
+
+        TextView name = text(label, 13, color(R.color.app_on_surface));
+        row.addView(name, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+
+        LinearLayout values = vertical(0);
+        values.setGravity(Gravity.END);
+        TextView number = text(String.format(Locale.US, "%,d", value), 14, Color.WHITE);
+        number.setTypeface(null, Typeface.BOLD);
+        number.setGravity(Gravity.END);
+        values.addView(number);
+        TextView detail = text(suffix, 9, color(R.color.app_on_surface_variant));
+        detail.setGravity(Gravity.END);
+        values.addView(detail);
+        row.addView(values);
+        return row;
     }
 
     private LinearLayout metric(String label, long value) {
@@ -299,6 +497,19 @@ public final class AnalyticsActivity extends AppCompatActivity {
         block.addView(number);
         block.addView(caption);
         return block;
+    }
+
+    private LinearLayout metricWithPercent(String label, long value, double percent) {
+        LinearLayout block = metric(label, value);
+        TextView rate = text(formatPercent(percent), 9, color(R.color.app_primary));
+        rate.setGravity(Gravity.CENTER);
+        block.addView(rate);
+        return block;
+    }
+
+    private String formatPercent(double value) {
+        if (!Double.isFinite(value)) value = 0d;
+        return String.format(Locale.US, "%.0f%%", Math.max(0d, Math.min(100d, value)));
     }
 
     private MaterialCardView card(String title, String subtitle, LinearLayout body) {
@@ -369,7 +580,8 @@ public final class AnalyticsActivity extends AppCompatActivity {
     }
 
     private LinearLayout.LayoutParams weighted() {
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
         params.setMargins(dp(2), 0, dp(2), 0);
         return params;
     }
@@ -415,7 +627,8 @@ public final class AnalyticsActivity extends AppCompatActivity {
         if (raw == null || raw.isEmpty()) return "Unknown";
         switch (raw.toLowerCase(Locale.US)) {
             case "home": return "Home";
-            case "collections": return "Collections";
+            case "collections": return "Shows";
+            case "library": return "Library";
             case "chaos": return "ShitTok";
             case "categories": return "Categories";
             case "search": return "Search";
@@ -425,9 +638,11 @@ public final class AnalyticsActivity extends AppCompatActivity {
             case "profile": return "Profile";
             case "creator_gallery": return "Creator galleries";
             case "crazyshit": return "CrazyShit source";
+            case "kaotic": return "Kaotic";
             case "efukt": return "EFukt";
             case "fapzone": return "OnlyFap";
             case "fapello": return "Fapello";
+            case "onlyhaven": return "OnlyHaven";
             case "bunkr": return "Bunkr";
             case "wikifeet": return "WikiFeet";
             case "wikifeetx": return "WikiFeet X";

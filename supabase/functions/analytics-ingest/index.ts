@@ -3,7 +3,7 @@ import { validAndroidVersion, validDeviceModel } from "./validation.ts";
 
 const allowedMetrics = new Set(["app_open", "app_version", "section", "source", "creator", "device_model", "device_manufacturer", "android_version"]);
 const allowedSections = new Set([
-  "home", "collections", "chaos", "categories", "search", "favorites",
+  "home", "collections", "library", "chaos", "categories", "search", "favorites",
   "downloads", "settings", "profile", "creator_gallery"
 ]);
 const allowedSources = new Set([
