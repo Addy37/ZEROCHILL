@@ -61,34 +61,22 @@ It is built around native Android UI, Media3 playback, quick source handling, fa
 <table>
 <tr>
 <td width="50%" valign="top">
-
-### 📱 ShitTok
-
-Vertical video with autoplay, preloading, history, creator actions, fullscreen playback, and creator blocking.
-
+<h3>📱 ShitTok</h3>
+<p>Vertical video with autoplay, preloading, history, creator actions, fullscreen playback, and creator blocking.</p>
 </td>
 <td width="50%" valign="top">
-
-### 😈 OnlyFap
-
-Creator browsing, search, mixed photo and video galleries, favorites, downloads, and creator updates.
-
+<h3>😈 OnlyFap</h3>
+<p>Creator browsing, search, mixed photo and video galleries, favorites, downloads, and creator updates.</p>
 </td>
 </tr>
 <tr>
 <td width="50%" valign="top">
-
-### 📺 Shows
-
-Source-based collections, categories, playback, history, resume support, and fullscreen controls.
-
+<h3>📺 Shows</h3>
+<p>Source-based collections, categories, playback, history, resume support, and fullscreen controls.</p>
 </td>
 <td width="50%" valign="top">
-
-### 🖤 Library
-
-Favorites, creator favorites, Watch Later, history, downloads, notifications, profiles, messages, and social activity.
-
+<h3>🖤 Library</h3>
+<p>Favorites, creator favorites, Watch Later, history, downloads, notifications, profiles, messages, and social activity.</p>
 </td>
 </tr>
 </table>
