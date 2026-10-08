@@ -2,7 +2,9 @@ package com.webapp.crazyshit;
 
 import android.content.Intent;
 import android.graphics.Color;
+import android.view.MotionEvent;
 import android.view.View;
+import android.view.ViewGroup;
 import android.widget.FrameLayout;
 import android.widget.ImageButton;
 import android.widget.TextView;
@@ -23,6 +25,7 @@ final class ShowsFullscreenControls {
     private final PlayerControlView controller;
     private Player player;
     private boolean scrubbing;
+    private boolean touchingControl;
     private boolean visible;
     private boolean suspended;
     private boolean standaloneLiked;
@@ -31,8 +34,11 @@ final class ShowsFullscreenControls {
     private final Runnable autoHide = this::hide;
     private final Player.Listener listener = new Player.Listener() {
         @Override public void onEvents(Player player, Player.Events events) {
+            if (player != ShowsFullscreenControls.this.player || suspended) return;
             syncPausedChrome();
-            if (!suspended && !shouldAutoHide(player.getPlayWhenReady(), player.getPlaybackState())) {
+            if (!events.containsAny(Player.EVENT_PLAY_WHEN_READY_CHANGED,
+                    Player.EVENT_PLAYBACK_STATE_CHANGED, Player.EVENT_POSITION_DISCONTINUITY)) return;
+            if (!shouldAutoHide(player.getPlayWhenReady(), player.getPlaybackState())) {
                 show();
             } else {
                 scheduleHide();
@@ -52,6 +58,7 @@ final class ShowsFullscreenControls {
         controller = view;
         controller.setAnimationEnabled(false);
         controller.setShowTimeoutMs(0);
+        observeControlTouches(chrome);
         view.findViewById(R.id.shows_top_scrim).setBackground(FullscreenPlayerStyle.topScrim());
         view.findViewById(R.id.shows_bottom_scrim).setBackground(FullscreenPlayerStyle.bottomScrim());
         controller.setProgressUpdateListener((position, buffered) -> {
@@ -87,10 +94,14 @@ final class ShowsFullscreenControls {
     }
 
     void bind(Player player) {
+        view.removeCallbacks(autoHide);
+        scrubbing = false;
+        touchingControl = false;
         if (this.player != null) this.player.removeListener(listener);
         this.player = player;
         player.addListener(listener);
         syncPausedChrome();
+        if (!suspended) show();
     }
 
     boolean isVisible() { return visible; }
@@ -116,6 +127,8 @@ final class ShowsFullscreenControls {
     void suspend(boolean suspended) {
         this.suspended = suspended;
         if (suspended) {
+            scrubbing = false;
+            touchingControl = false;
             visible = false;
             view.removeCallbacks(autoHide);
             chrome.animate().cancel();
@@ -126,6 +139,10 @@ final class ShowsFullscreenControls {
     void release() {
         view.removeCallbacks(autoHide);
         chrome.animate().cancel();
+        visible = false;
+        scrubbing = false;
+        touchingControl = false;
+        view.hide();
         standaloneLikeGeneration++;
         if (player != null) player.removeListener(listener);
         controller.setPlayer(null);
@@ -150,9 +167,30 @@ final class ShowsFullscreenControls {
 
     private void scheduleHide() {
         view.removeCallbacks(autoHide);
-        if (visible && !suspended && !scrubbing && player != null &&
+        if (visible && !suspended && !scrubbing && !touchingControl && player != null &&
                 shouldAutoHide(player.getPlayWhenReady(), player.getPlaybackState())) {
             view.postDelayed(autoHide, FullscreenPlayerStyle.HIDE_DELAY_MS);
+        }
+    }
+
+    private void observeControlTouches(View child) {
+        if (child instanceof ImageButton) {
+            child.setOnTouchListener((v, event) -> {
+                if (suspended || player == null) return false;
+                int action = event.getActionMasked();
+                if (action == MotionEvent.ACTION_DOWN) {
+                    touchingControl = true;
+                    show();
+                } else if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) {
+                    touchingControl = false;
+                    show();
+                }
+                // Observe without consuming: Media3 and the host still own each button action.
+                return false;
+            });
+        } else if (child instanceof ViewGroup) {
+            ViewGroup group = (ViewGroup) child;
+            for (int i = 0; i < group.getChildCount(); i++) observeControlTouches(group.getChildAt(i));
         }
     }
 

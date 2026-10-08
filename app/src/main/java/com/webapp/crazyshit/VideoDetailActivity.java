@@ -459,6 +459,7 @@ public class VideoDetailActivity extends Activity {
                     long target = Math.max(0L, player.getCurrentPosition() + delta);
                     long duration = player.getDuration();
                     player.seekTo(duration > 0 ? Math.min(duration, target) : target);
+                    fullscreenControls.show();
                 }
                 return true;
             }

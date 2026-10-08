@@ -5,6 +5,7 @@ import android.app.Application;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.os.Looper;
+import android.view.MotionEvent;
 import android.view.View;
 import android.widget.FrameLayout;
 import android.widget.ImageButton;
@@ -12,6 +13,7 @@ import android.widget.TextView;
 import androidx.core.graphics.Insets;
 import androidx.core.view.WindowInsetsCompat;
 import androidx.media3.common.Player;
+import androidx.media3.common.util.FlagSet;
 import androidx.media3.ui.AspectRatioFrameLayout;
 import androidx.media3.ui.PlayerControlView;
 import androidx.media3.ui.PlayerView;
@@ -103,6 +105,99 @@ public class ShowsFullscreenControlsTest {
         assertTrue(ShowsFullscreenControls.shouldAutoHide(true, Player.STATE_READY));
         assertFalse(ShowsFullscreenControls.shouldAutoHide(false, Player.STATE_READY));
         assertFalse(ShowsFullscreenControls.shouldAutoHide(true, Player.STATE_ENDED));
+    }
+
+    @Test public void idleHidesTapRestoresAndUnrelatedPlayerEventsDoNotExtendTimeout() {
+        Activity host = host();
+        PlayerView view = view(host);
+        ShowsFullscreenControls controls = new ShowsFullscreenControls(view);
+        Player player = player(new AtomicBoolean(true));
+        controls.bind(player);
+        assertTrue(controls.isVisible());
+        Player.Listener listener = ReflectionHelpers.getField(controls, "listener");
+        for (int i = 0; i < 5; i++) {
+            shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(500));
+            listener.onEvents(player, new Player.Events(new FlagSet.Builder()
+                    .add(Player.EVENT_MEDIA_METADATA_CHANGED).build()));
+        }
+        assertFalse(controls.isVisible());
+        assertFalse(view.isControllerFullyVisible());
+        controls.onVideoTap();
+        assertTrue(controls.isVisible());
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(2600));
+        assertFalse(controls.isVisible());
+        assertFalse(view.isControllerFullyVisible());
+        controls.release();
+        host.finish();
+    }
+
+    @Test public void everyHudButtonRestartsIdleTimerWithoutConsumingItsAction() {
+        Activity host = host();
+        PlayerView view = view(host);
+        ShowsFullscreenControls controls = new ShowsFullscreenControls(view);
+        controls.bind(player(new AtomicBoolean(true)));
+        for (int id : new int[] { R.id.player_back, R.id.player_menu, R.id.shows_save,
+                R.id.shows_download, R.id.shows_share, R.id.shows_like,
+                R.id.shows_fullscreen_toggle, androidx.media3.ui.R.id.exo_play_pause }) {
+            View button = view.findViewById(id);
+            button.setVisibility(View.VISIBLE);
+            AtomicBoolean clicked = new AtomicBoolean();
+            button.setOnClickListener(v -> clicked.set(true));
+            controls.show();
+            view.findViewById(androidx.media3.ui.R.id.exo_center_controls).setVisibility(View.VISIBLE);
+            layout(view, 800, 360);
+            shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(1800));
+            MotionEvent down = MotionEvent.obtain(0, 0, MotionEvent.ACTION_DOWN, 1, 1, 0);
+            MotionEvent up = MotionEvent.obtain(0, 0, MotionEvent.ACTION_UP, 1, 1, 0);
+            button.dispatchTouchEvent(down);
+            shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(2600));
+            assertTrue(controls.isVisible());
+            button.dispatchTouchEvent(up);
+            down.recycle();
+            up.recycle();
+            shadowOf(Looper.getMainLooper()).idle();
+            assertTrue(clicked.get());
+            shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(1800));
+            assertTrue(controls.isVisible());
+            shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(800));
+            assertFalse(controls.isVisible());
+        }
+        controls.release();
+        host.finish();
+    }
+
+    @Test public void seekResetsTimeoutAndExitReleaseAndRebindCancelOldTimers() {
+        Activity host = host();
+        PlayerView view = view(host);
+        ShowsFullscreenControls controls = new ShowsFullscreenControls(view);
+        Player oldPlayer = player(new AtomicBoolean(true));
+        controls.bind(oldPlayer);
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(1800));
+        Player.Listener listener = ReflectionHelpers.getField(controls, "listener");
+        listener.onEvents(oldPlayer, new Player.Events(new FlagSet.Builder()
+                .add(Player.EVENT_POSITION_DISCONTINUITY).build()));
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(1800));
+        assertTrue(controls.isVisible());
+        controls.suspend(true);
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(1000));
+        controls.suspend(false);
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(1800));
+        assertTrue(controls.isVisible());
+        controls.release();
+        Player nextPlayer = player(new AtomicBoolean(true));
+        controls.bind(nextPlayer);
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(1800));
+        assertTrue(controls.isVisible());
+        listener.onEvents(oldPlayer, new Player.Events(new FlagSet.Builder()
+                .add(Player.EVENT_POSITION_DISCONTINUITY).build()));
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(800));
+        assertFalse(controls.isVisible());
+        controls.release();
+        listener.onEvents(nextPlayer, new Player.Events(new FlagSet.Builder()
+                .add(Player.EVENT_PLAY_WHEN_READY_CHANGED).build()));
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(3000));
+        assertFalse(controls.isVisible());
+        host.finish();
     }
 
     @Test public void likeControlMirrorsLikeStateAndEnabledState() {
