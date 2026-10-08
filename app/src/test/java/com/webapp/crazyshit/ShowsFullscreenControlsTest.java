@@ -146,17 +146,20 @@ public class ShowsFullscreenControlsTest {
             controls.show();
             view.findViewById(androidx.media3.ui.R.id.exo_center_controls).setVisibility(View.VISIBLE);
             layout(view, 800, 360);
+            // The proxy only supplies timing state, so Media3 disables its playback button.
+            // Enable the fixture button to exercise the shared touch observer for each action.
+            button.setEnabled(true);
             shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(1800));
             MotionEvent down = MotionEvent.obtain(0, 0, MotionEvent.ACTION_DOWN, 1, 1, 0);
             MotionEvent up = MotionEvent.obtain(0, 0, MotionEvent.ACTION_UP, 1, 1, 0);
             button.dispatchTouchEvent(down);
             shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(2600));
-            assertTrue(controls.isVisible());
+            assertTrue("Held HUD button " + id, controls.isVisible());
             button.dispatchTouchEvent(up);
             down.recycle();
             up.recycle();
             shadowOf(Looper.getMainLooper()).idle();
-            assertTrue(clicked.get());
+            assertTrue("HUD click " + id, clicked.get());
             shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(1800));
             assertTrue(controls.isVisible());
             shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(800));
