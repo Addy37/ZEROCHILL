@@ -163,14 +163,15 @@ public final class CreatorsActivity extends Activity {
 
     private void openCreator(CreatorCatalog.FavoriteGroup group) {
         if (group == null || group.item == null) return;
-        UpdateInboxStore.markCreatorRead(this, creatorAliases(group));
+        List<String> aliases = creatorAliases(group);
+        ArrayList<String> freshUrls = UpdateInboxStore.unreadCreatorFreshUrls(this, aliases);
         BrowseUi.hideKeyboard(this, input);
         CreatorGallerySpec spec = CreatorGallerySpec.from(group);
         String sessionId = CreatorGalleryPreloader.sessionId(this, spec.cacheKey);
         if (sessionId.isEmpty() && spec.grouped) {
             sessionId = CreatorGalleryPreloader.composeInMemoryMergedSession(this, spec);
         }
-        startActivity(NativeFeedBrowserActivity.createCreatorGallery(
+        Intent intent = NativeFeedBrowserActivity.createCreatorGallery(
                 this,
                 spec.item.title,
                 spec.query,
@@ -180,7 +181,15 @@ public final class CreatorsActivity extends Activity {
                 spec.seedNames,
                 spec.seedUrls,
                 spec.seedImages
-        ));
+        );
+        if (!freshUrls.isEmpty()) {
+            intent.putStringArrayListExtra(
+                    NativeFeedBrowserActivity.EXTRA_NOTIFICATION_FRESH_URLS,
+                    freshUrls
+            );
+        }
+        UpdateInboxStore.markCreatorRead(this, aliases);
+        startActivity(intent);
     }
 
     private void confirmMerge(CreatorCatalog.FavoriteGroup source, CreatorCatalog.FavoriteGroup target) {
