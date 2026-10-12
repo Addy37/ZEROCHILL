@@ -91,8 +91,11 @@ public class ShitTokAutoScrollIntegrationTest {
         host.get().setTheme(R.style.Theme_CrazyShit);
         ChaosFeedView feed = feed(host.get(), 2);
         try {
-            RecyclerView.Adapter<?> adapter = ReflectionHelpers.getField(feed, "adapter");
-            RecyclerView.ViewHolder holder = adapter.onCreateViewHolder(new RecyclerView(host.get()), 0);
+            androidx.viewpager2.widget.ViewPager2 completionPager = ReflectionHelpers.getField(feed, "pager");
+            RecyclerView completionRecycler = (RecyclerView) completionPager.getChildAt(0);
+            RecyclerView.ViewHolder holder = completionRecycler.findViewHolderForAdapterPosition(0);
+            assertNotNull(holder);
+            ReflectionHelpers.setField(feed, "closed", false);
             AtomicInteger seeks = new AtomicInteger();
             AtomicInteger plays = new AtomicInteger();
             ExoPlayer player = (ExoPlayer) Proxy.newProxyInstance(
@@ -123,6 +126,7 @@ public class ShitTokAutoScrollIntegrationTest {
                     ReflectionHelpers.ClassParameter.from(ExoPlayer.class, player));
             assertTrue(ReflectionHelpers.getField(feed, "autoAdvancePending"));
             assertEquals(1, plays.get());
+            ReflectionHelpers.setField(feed, "closed", true); // Keep fixture navigation decoder/network-free.
             shadowOf(Looper.getMainLooper()).idle();
             androidx.viewpager2.widget.ViewPager2 pager = ReflectionHelpers.getField(feed, "pager");
             assertEquals(1, pager.getCurrentItem());
@@ -160,6 +164,7 @@ public class ShitTokAutoScrollIntegrationTest {
                         return null;
                     });
             ReflectionHelpers.setField(holder, "player", ended);
+            ReflectionHelpers.setField(feed, "closed", false);
             ReflectionHelpers.callInstanceMethod(feed, "setAutoScrollEnabled",
                     ReflectionHelpers.ClassParameter.from(boolean.class, true));
             request(feed, 0);
@@ -169,6 +174,7 @@ public class ShitTokAutoScrollIntegrationTest {
             assertFalse(ReflectionHelpers.getField(feed, "autoAdvancePending"));
             assertEquals(1, seeks.get());
             assertEquals(1, plays.get());
+            ReflectionHelpers.setField(feed, "closed", true);
             shadowOf(Looper.getMainLooper()).idle();
             assertEquals(0, pager.getCurrentItem());
         } finally {
