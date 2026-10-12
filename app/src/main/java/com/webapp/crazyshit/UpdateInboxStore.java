@@ -353,15 +353,40 @@ final class UpdateInboxStore {
             Context context,
             java.util.Collection<String> creatorNames
     ) {
-        LinkedHashSet<String> wanted = normalizedCreatorNames(creatorNames);
-        if (wanted.isEmpty()) return 0;
-        int count = 0;
+        return unreadCreatorContentCount(unreadCreatorContentCounts(context), creatorNames);
+    }
+
+    /** One inbox decode per Favorites render/update cycle, rather than per card bind. */
+    static java.util.Map<String, Integer> unreadCreatorContentCounts(Context context) {
+        java.util.Map<String, Integer> counts = new java.util.HashMap<>();
         for (Entry entry : all(context)) {
             if (entry.read || !CATEGORY_ONLYFAP.equals(entry.category)) continue;
-            if (!wanted.contains(CreatorNameMatcher.normalized(entry.creatorName))) continue;
-            count += Math.max(1, entry.count);
+            String name = CreatorNameMatcher.normalized(entry.creatorName);
+            if (!name.isEmpty()) counts.merge(name, Math.max(1, entry.count), Integer::sum);
         }
+        return counts;
+    }
+
+    static int unreadCreatorContentCount(
+            java.util.Map<String, Integer> counts,
+            java.util.Collection<String> creatorNames
+    ) {
+        LinkedHashSet<String> wanted = normalizedCreatorNames(creatorNames);
+        int count = 0;
+        for (String name : wanted) count += counts.getOrDefault(name, 0);
         return count;
+    }
+
+    static void registerChangeListener(Context context,
+            SharedPreferences.OnSharedPreferenceChangeListener listener) {
+        context.getApplicationContext().getSharedPreferences(PREFS, 0)
+                .registerOnSharedPreferenceChangeListener(listener);
+    }
+
+    static void unregisterChangeListener(Context context,
+            SharedPreferences.OnSharedPreferenceChangeListener listener) {
+        context.getApplicationContext().getSharedPreferences(PREFS, 0)
+                .unregisterOnSharedPreferenceChangeListener(listener);
     }
 
     static void markCreatorRead(
