@@ -21,6 +21,8 @@ import static org.robolectric.util.ReflectionHelpers.ClassParameter.from;
 @Config(application = Application.class, sdk = 35, qualifiers = "w400dp-h800dp-xhdpi")
 public class ShitTokSettledSwipeTest {
     private CrazyShitRepository.StreamInfo cacheSelected(ShitTokAudioOwnershipTest.Fixture f) {
+        // Fixture.close() shuts down source IO before reopening only the playback gates.
+        ReflectionHelpers.setField(f.feed, "poolLoading", true);
         List<NativeContentItem> items = ReflectionHelpers.getField(f.feed, "items");
         CrazyShitRepository.StreamInfo stream = new CrazyShitRepository.StreamInfo(
                 "https://example.invalid/clip.mp4", items.get(0).url, "Fixture");
@@ -108,6 +110,21 @@ public class ShitTokSettledSwipeTest {
             state(f, ViewPager2.SCROLL_STATE_IDLE);
             assertEquals(0, f.selectedPlayer.plays);
             assertEquals(0f, f.selectedPlayer.volume, 0f);
+        }
+    }
+
+    @Test public void seenBookkeepingWaitsForTheSettledVideo() {
+        try (ShitTokAudioOwnershipTest.Fixture f = new ShitTokAudioOwnershipTest.Fixture()) {
+            cacheSelected(f);
+            state(f, ViewPager2.SCROLL_STATE_DRAGGING);
+            ReflectionHelpers.setField(f.feed, "settledSelectionPending", true);
+            ReflectionHelpers.callInstanceMethod(f.feed, "settleSelectedPage");
+            Set<String> seen = ReflectionHelpers.getField(f.feed, "recentSet");
+            assertTrue(seen.isEmpty());
+            state(f, ViewPager2.SCROLL_STATE_IDLE);
+            assertEquals(1, seen.size());
+            assertTrue(seen.contains("https://example.invalid/clip-0"));
+            assertFalse(ReflectionHelpers.getField(f.feed, "settledSelectionPending"));
         }
     }
 }
