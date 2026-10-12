@@ -5,7 +5,7 @@ plugins {
 
 android {
     namespace = "com.webapp.crazyshit"
-    compileSdk = 35
+    compileSdk = 36
 
     buildFeatures {
         buildConfig = true

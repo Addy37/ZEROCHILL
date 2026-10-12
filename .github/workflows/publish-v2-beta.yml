@@ -52,15 +52,15 @@ jobs:
         if: env.SKIP_BETA != 'true'
         uses: android-actions/setup-android@v4
 
-      - name: Install Android API 35
+      - name: Install Android APIs 35 and 36
         if: env.SKIP_BETA != 'true'
-        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+        run: sdkmanager "platforms;android-35" "platforms;android-36" "build-tools;35.0.0"
 
-      - name: Set up Gradle 8.7
+      - name: Set up Gradle 8.11.1
         if: env.SKIP_BETA != 'true'
         uses: gradle/actions/setup-gradle@v6
         with:
-          gradle-version: '8.7'
+          gradle-version: '8.11.1'
           cache-provider: basic
 
       - name: Restore persistent signing key
