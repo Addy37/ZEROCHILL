@@ -2,6 +2,8 @@ package com.webapp.crazyshit;
 
 import android.app.Activity;
 import android.content.Intent;
+import android.content.SharedPreferences;
+import android.graphics.drawable.Drawable;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
 import android.os.Bundle;
@@ -22,6 +24,11 @@ import androidx.recyclerview.widget.ItemTouchHelper;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.bumptech.glide.Glide;
+import com.bumptech.glide.Priority;
+import com.bumptech.glide.RequestBuilder;
+import com.bumptech.glide.load.resource.bitmap.DownsampleStrategy;
+import com.bumptech.glide.request.target.CustomTarget;
+import com.bumptech.glide.request.transition.Transition;
 import com.bumptech.glide.load.model.GlideUrl;
 import com.bumptech.glide.load.model.LazyHeaders;
 import com.google.android.material.card.MaterialCardView;
@@ -29,6 +36,7 @@ import com.google.android.material.card.MaterialCardView;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.HashMap;
 
 /** All starred creators, including favorites saved before the creator catalog existed. */
 public final class CreatorsActivity extends Activity {
@@ -42,6 +50,35 @@ public final class CreatorsActivity extends Activity {
     private ItemTouchHelper dragHelper;
     private CreatorGridAdapter.Holder dragged, hovered;
     private ArrayList<String> pendingAvatarKeys;
+    private boolean badgesDirty;
+    private boolean stopped;
+    private int scrollDirection = 1;
+    private boolean prefetchPosted;
+    private final Runnable avatarPrefetch = () -> {
+        prefetchPosted = false;
+        if (!stopped && adapter != null) adapter.prefetchAvatars(scrollDirection);
+    };
+    private final Runnable badgeRefresh = () -> {
+        if (!badgesDirty || stopped
+                || recycler.getScrollState() != RecyclerView.SCROLL_STATE_IDLE) return;
+        if (recycler.isComputingLayout()) {
+            recycler.postOnAnimation(this.badgeRefresh);
+            return;
+        }
+        badgesDirty = false;
+        adapter.refreshBadges();
+    };
+    private final SharedPreferences.OnSharedPreferenceChangeListener inboxListener = (prefs, key) -> {
+        badgesDirty = true;
+        recycler.removeCallbacks(badgeRefresh);
+        recycler.post(badgeRefresh);
+    };
+
+    private void scheduleAvatarPrefetch() {
+        if (stopped || prefetchPosted) return;
+        prefetchPosted = true;
+        recycler.postOnAnimation(avatarPrefetch);
+    }
 
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
@@ -75,12 +112,28 @@ public final class CreatorsActivity extends Activity {
         empty.setPadding(dp(24), dp(32), dp(24), dp(24));
         root.addView(empty);
         recycler = new RecyclerView(this);
-        recycler.setLayoutManager(new GridLayoutManager(this, 3));
+        GridLayoutManager grid = new GridLayoutManager(this, 3);
+        grid.setInitialPrefetchItemCount(6);
+        recycler.setLayoutManager(grid);
+        // The grid fills a weighted, fixed viewport; item count does not size the RecyclerView.
+        recycler.setHasFixedSize(true);
+        recycler.setItemViewCacheSize(6);
+        recycler.getRecycledViewPool().setMaxRecycledViews(0, 12);
         recycler.setItemAnimator(null);
         recycler.setClipToPadding(false);
         recycler.setPadding(dp(8), dp(2), dp(8), dp(20));
         adapter = new CreatorGridAdapter();
         recycler.setAdapter(adapter);
+        recycler.addOnScrollListener(new RecyclerView.OnScrollListener() {
+            @Override public void onScrolled(RecyclerView view, int dx, int dy) {
+                if (dy != 0) scrollDirection = dy > 0 ? 1 : -1;
+                scheduleAvatarPrefetch();
+            }
+            @Override public void onScrollStateChanged(RecyclerView view, int state) {
+                scheduleAvatarPrefetch();
+                if (state == RecyclerView.SCROLL_STATE_IDLE) view.post(badgeRefresh);
+            }
+        });
         dragHelper = new ItemTouchHelper(new ItemTouchHelper.SimpleCallback(
                 ItemTouchHelper.UP | ItemTouchHelper.DOWN | ItemTouchHelper.LEFT | ItemTouchHelper.RIGHT, 0) {
             @Override public boolean isLongPressDragEnabled() { return true; }
@@ -291,25 +344,105 @@ public final class CreatorsActivity extends Activity {
         return aliases;
     }
 
-    private int creatorUpdateCount(CreatorCatalog.FavoriteGroup group) {
-        return UpdateInboxStore.unreadCreatorContentCount(this, creatorAliases(group));
-    }
-
     private final class CreatorGridAdapter
             extends RecyclerView.Adapter<CreatorGridAdapter.Holder> {
-        private final List<CreatorCatalog.FavoriteGroup> items = new ArrayList<>();
-        private List<CreatorAvatarOverrideStore.Override> avatarOverrides = new ArrayList<>();
+        private final List<Card> cards = new ArrayList<>();
+        private final Map<Integer, CustomTarget<Drawable>> prefetchTargets = new HashMap<>();
+        private final int avatarSide = dp(86);
+
+        final class Card {
+            final CreatorCatalog.FavoriteGroup group;
+            final List<String> aliases;
+            final CreatorAvatarOverrideStore.Override avatarOverride;
+            final GlideUrl avatarUrl;
+            final int decodeSide;
+            int unread;
+
+            Card(CreatorCatalog.FavoriteGroup group,
+                    List<CreatorAvatarOverrideStore.Override> overrides, Map<String, Integer> counts) {
+                this.group = group;
+                aliases = creatorAliases(group);
+                avatarOverride = group.customAvatar
+                        ? CreatorAvatarOverrideStore.find(overrides, group.relationshipKeys) : null;
+                // Retain the full aspect ratio for focus/zoom. Decode only the pixels the crop needs.
+                decodeSide = Math.round(avatarSide * (avatarOverride == null ? 1f : avatarOverride.zoom));
+                NativeContentItem item = group.item;
+                avatarUrl = item.imageUrl.isEmpty() ? null : new GlideUrl(item.imageUrl,
+                        new LazyHeaders.Builder()
+                                .addHeader("Referer", item.uploader.isEmpty() ? item.url : item.uploader)
+                                .addHeader("User-Agent",
+                                        "Mozilla/5.0 (Linux; Android 16) AppleWebKit/537.36 Chrome/139.0 Mobile Safari/537.36")
+                                .build());
+                unread = UpdateInboxStore.unreadCreatorContentCount(counts, aliases);
+            }
+        }
 
         void replace(List<CreatorCatalog.FavoriteGroup> next) {
-            items.clear();
-            items.addAll(next);
-            avatarOverrides = CreatorAvatarOverrideStore.load(CreatorsActivity.this);
+            clearPrefetch();
+            cards.clear();
+            List<CreatorAvatarOverrideStore.Override> overrides =
+                    CreatorAvatarOverrideStore.load(CreatorsActivity.this);
+            Map<String, Integer> counts = UpdateInboxStore.unreadCreatorContentCounts(CreatorsActivity.this);
+            for (CreatorCatalog.FavoriteGroup group : next) cards.add(new Card(group, overrides, counts));
+            badgesDirty = false;
             notifyDataSetChanged();
+            scheduleAvatarPrefetch();
+        }
+
+        void refreshBadges() {
+            Map<String, Integer> counts = UpdateInboxStore.unreadCreatorContentCounts(CreatorsActivity.this);
+            for (int i = 0; i < cards.size(); i++) {
+                Card card = cards.get(i);
+                int unread = UpdateInboxStore.unreadCreatorContentCount(counts, card.aliases);
+                if (card.unread != unread) {
+                    card.unread = unread;
+                    notifyItemChanged(i, "badges");
+                }
+            }
+        }
+
+        private RequestBuilder<Drawable> avatarRequest(Card card) {
+            return Glide.with(CreatorsActivity.this).load(card.avatarUrl)
+                    .override(card.decodeSide, card.decodeSide)
+                    .downsample(AVATAR_DOWNSAMPLE)
+                    .dontTransform()
+                    .dontAnimate();
+        }
+
+        void prefetchAvatars(int direction) {
+            GridLayoutManager grid = (GridLayoutManager) recycler.getLayoutManager();
+            if (grid == null) return;
+            int first = grid.findFirstVisibleItemPosition();
+            int last = grid.findLastVisibleItemPosition();
+            int[] upcoming = avatarPrefetchPositions(first, last, cards.size(), grid.getSpanCount(), direction);
+            java.util.Set<Integer> wanted = new java.util.HashSet<>();
+            for (int position : upcoming) wanted.add(position);
+            // Cancel requests that are now behind the user, including on direction reversals.
+            for (int position : new ArrayList<>(prefetchTargets.keySet())) {
+                if (!wanted.contains(position)) Glide.with(CreatorsActivity.this)
+                        .clear(prefetchTargets.remove(position));
+            }
+            for (int position : upcoming) {
+                Card card = cards.get(position);
+                if (card.avatarUrl == null || prefetchTargets.containsKey(position)) continue;
+                CustomTarget<Drawable> target = new CustomTarget<Drawable>(card.decodeSide, card.decodeSide) {
+                    @Override public void onResourceReady(Drawable drawable, Transition<? super Drawable> transition) { }
+                    @Override public void onLoadCleared(Drawable placeholder) { }
+                };
+                prefetchTargets.put(position, target);
+                avatarRequest(card).priority(Priority.LOW).into(target);
+            }
+        }
+
+        void clearPrefetch() {
+            for (CustomTarget<Drawable> target : prefetchTargets.values())
+                Glide.with(CreatorsActivity.this).clear(target);
+            prefetchTargets.clear();
         }
 
         @Override
         public int getItemCount() {
-            return items.size();
+            return cards.size();
         }
 
         @Override
@@ -383,7 +516,8 @@ public final class CreatorsActivity extends Activity {
 
         @Override
         public void onBindViewHolder(Holder holder, int position) {
-            CreatorCatalog.FavoriteGroup group = items.get(position);
+            Card card = cards.get(position);
+            CreatorCatalog.FavoriteGroup group = card.group;
             NativeContentItem item = group.item;
             holder.bound = group;
             holder.name.setText(item.title);
@@ -392,7 +526,35 @@ public final class CreatorsActivity extends Activity {
                     group,
                     () -> CreatorMergeUi.showMembers(CreatorsActivity.this, group)
             );
-            int unread = creatorUpdateCount(group);
+            bindBadges(holder, card);
+
+            holder.itemView.setOnClickListener(v -> openCreator(group));
+            holder.more.setContentDescription("Creator options for " + item.title);
+            holder.more.setOnClickListener(v -> showMenu(v, group));
+
+            Glide.with(holder.avatar).clear(holder.avatar);
+            CreatorAvatarOverrideStore.Override avatarOverride = card.avatarOverride;
+            if (avatarOverride != null) {
+                holder.avatar.setAvatarCrop(avatarOverride.focusX, avatarOverride.focusY, avatarOverride.zoom);
+            } else {
+                holder.avatar.clearAvatarCrop();
+            }
+            if (card.avatarUrl != null) {
+                // MaterialCardView clips the original drawable to a circle. No bitmap circle/crop copy.
+                avatarRequest(card)
+                        .priority(Priority.HIGH)
+                        .transition(ThumbnailFades.avatar())
+                        .placeholder(holder.placeholder)
+                        .error(R.drawable.ic_more_account)
+                        .into(holder.avatar);
+            } else {
+                holder.avatar.setImageResource(R.drawable.ic_more_account);
+            }
+        }
+
+        private void bindBadges(Holder holder, Card card) {
+            NativeContentItem item = card.group.item;
+            int unread = card.unread;
             if (unread > 0) {
                 holder.updateBadge.setText(unread > 99 ? "99+" : String.valueOf(unread));
                 holder.updateBadge.setContentDescription(
@@ -411,89 +573,12 @@ public final class CreatorsActivity extends Activity {
                             : "Open " + item.title
             );
 
-            holder.itemView.setOnClickListener(v -> openCreator(group));
-            holder.more.setContentDescription("Creator options for " + item.title);
-            holder.more.setOnClickListener(v -> showMenu(v, group));
-
-            Glide.with(holder.avatar).clear(holder.avatar);
-            CreatorAvatarOverrideStore.Override avatarOverride = group.customAvatar
-                    ? CreatorAvatarOverrideStore.find(avatarOverrides, group.relationshipKeys)
-                    : null;
-            if (avatarOverride != null) {
-                holder.avatar.setAvatarCrop(
-                        avatarOverride.focusX,
-                        avatarOverride.focusY,
-                        avatarOverride.zoom
-                );
-            } else {
-                holder.avatar.clearAvatarCrop();
-            }
-            holder.avatar.setImageDrawable(new ColorDrawable(Color.rgb(19, 23, 27)));
-            if (!item.imageUrl.isEmpty()) {
-                GlideUrl url = new GlideUrl(
-                        item.imageUrl,
-                        new LazyHeaders.Builder()
-                                .addHeader(
-                                        "Referer",
-                                        item.uploader.isEmpty() ? item.url : item.uploader
-                                )
-                                .addHeader(
-                                        "User-Agent",
-                                        "Mozilla/5.0 (Linux; Android 16) AppleWebKit/537.36 Chrome/139.0 Mobile Safari/537.36"
-                                )
-                                .build()
-                );
-                if (avatarOverride != null) {
-                    Glide.with(holder.avatar)
-                            .load(url)
-                            .dontAnimate()
-                            .transition(ThumbnailFades.avatar())
-                            .placeholder(new ColorDrawable(Color.rgb(19, 23, 27)))
-                            .error(R.drawable.ic_more_account)
-                            .into(holder.avatar);
-                } else {
-                    com.bumptech.glide.RequestBuilder<android.graphics.drawable.Drawable> network =
-                            Glide.with(holder.avatar)
-                                    .load(url)
-                                    .circleCrop()
-                                    .dontAnimate()
-                                    .transition(ThumbnailFades.avatar())
-                                    .placeholder(new ColorDrawable(Color.rgb(19, 23, 27)))
-                                    .error(R.drawable.ic_more_account);
-                    Glide.with(holder.avatar)
-                            .load(url)
-                            .onlyRetrieveFromCache(true)
-                            .circleCrop()
-                            .dontAnimate()
-                            .transition(ThumbnailFades.avatar())
-                            .placeholder(new ColorDrawable(Color.rgb(19, 23, 27)))
-                            .error(network)
-                            .into(holder.avatar);
-                }
-            } else {
-                holder.avatar.setImageResource(R.drawable.ic_more_account);
-            }
         }
 
         @Override
-        public void onViewAttachedToWindow(Holder holder) {
-            super.onViewAttachedToWindow(holder);
-            CreatorCatalog.FavoriteGroup group = holder.bound;
-            if (group == null || group.members.size() < 2) return;
-            CreatorGalleryPreloader.warm(
-                    CreatorsActivity.this,
-                    CreatorGallerySpec.from(group),
-                    CreatorGalleryPreloader.PRIORITY_NORMAL
-            );
-        }
-
-        @Override
-        public void onViewDetachedFromWindow(Holder holder) {
-            CreatorCatalog.FavoriteGroup group = holder.bound;
-            if (group != null && group.members.size() > 1) {
-                CreatorGalleryPreloader.cancelQueued(CreatorGallerySpec.from(group));
-            }
-            super.onViewDetachedFromWindow(holder);
+        public void onBindViewHolder(Holder holder, int position, List<Object> payloads) {
+            if (!payloads.isEmpty()) bindBadges(holder, cards.get(position));
+            else onBindViewHolder(holder, position);
         }
 
         @Override
@@ -509,6 +594,7 @@ public final class CreatorsActivity extends Activity {
             final TextView updateBadge;
             final TextView mergeBadge;
             final TextView more;
+            final ColorDrawable placeholder = new ColorDrawable(Color.rgb(19, 23, 27));
             CreatorCatalog.FavoriteGroup bound;
 
             Holder(
@@ -565,7 +651,45 @@ public final class CreatorsActivity extends Activity {
         }
     }
 
-    @Override protected void onResume() { super.onResume(); render(); }
+    @Override protected void onResume() {
+        super.onResume();
+        stopped = false;
+        UpdateInboxStore.registerChangeListener(this, inboxListener);
+        render();
+    }
+    @Override protected void onStop() {
+        stopped = true;
+        UpdateInboxStore.unregisterChangeListener(this, inboxListener);
+        recycler.removeCallbacks(avatarPrefetch);
+        recycler.removeCallbacks(badgeRefresh);
+        prefetchPosted = false;
+        adapter.clearPrefetch();
+        super.onStop();
+    }
+
+    /** Two rows ahead of the viewport, never the entire favorite catalog. */
+    static int[] avatarPrefetchPositions(int first, int last, int count, int spans, int direction) {
+        if (first < 0 || last < first || count <= 0 || spans <= 0) return new int[0];
+        int start = direction >= 0 ? last + 1 : first - 1;
+        int step = direction >= 0 ? 1 : -1;
+        ArrayList<Integer> positions = new ArrayList<>();
+        for (int position = start; position >= 0 && position < count && positions.size() < spans * 2;
+                position += step) positions.add(position);
+        int[] result = new int[positions.size()];
+        for (int i = 0; i < result.length; i++) result[i] = positions.get(i);
+        return result;
+    }
+
+    static final DownsampleStrategy AVATAR_DOWNSAMPLE = new DownsampleStrategy() {
+        @Override public float getScaleFactor(int sourceWidth, int sourceHeight, int width, int height) {
+            return Math.min(1f, DownsampleStrategy.CENTER_OUTSIDE
+                    .getScaleFactor(sourceWidth, sourceHeight, width, height));
+        }
+        @Override public SampleSizeRounding getSampleSizeRounding(
+                int sourceWidth, int sourceHeight, int width, int height) {
+            return SampleSizeRounding.QUALITY;
+        }
+    };
     @Override protected void onSaveInstanceState(Bundle state) {
         state.putString("query", input.getText().toString());
         state.putParcelable("scroll", recycler.getLayoutManager().onSaveInstanceState());

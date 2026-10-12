@@ -179,14 +179,22 @@ jobs:
         with:
           packages: platform-tools
 
-      - name: Install Android API 35
-        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+      - name: Install Android APIs 35 and 36
+        run: sdkmanager "platforms;android-35" "platforms;android-36" "build-tools;35.0.0"
 
-      - name: Set up Gradle 8.7
+      - name: Set up Gradle 8.11.1
         uses: gradle/actions/setup-gradle@v6
         with:
-          gradle-version: '8.7'
+          gradle-version: '8.11.1'
           cache-provider: basic
+
+      - name: Run focused Favorite Creators cache-first regressions
+        run: >-
+          gradle --no-daemon :app:testDebugUnitTest
+          --tests 'com.webapp.crazyshit.FavoriteCreatorsScrollTest'
+          --tests 'com.webapp.crazyshit.CreatorMergedGalleryHotPathTest'
+          --tests 'com.webapp.crazyshit.CreatorAvatarOverrideTest'
+          --tests 'com.webapp.crazyshit.UpdateInboxStoreTest'
 
       - name: Run focused ShitTok block and BaddieHub Shows regressions first
         run: >-

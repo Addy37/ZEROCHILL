@@ -5,7 +5,7 @@ plugins {
 
 android {
     namespace = "com.webapp.crazyshit"
-    compileSdk = 35
+    compileSdk = 36
 
     buildFeatures {
         buildConfig = true
@@ -122,7 +122,7 @@ dependencies {
 
     baselineProfile(project(":baselineprofile"))
 
-    val media3Version = "1.9.4"
+    val media3Version = "1.11.1"
     implementation("androidx.media3:media3-exoplayer:$media3Version")
     implementation("androidx.media3:media3-exoplayer-hls:$media3Version")
     implementation("androidx.media3:media3-exoplayer-dash:$media3Version")
