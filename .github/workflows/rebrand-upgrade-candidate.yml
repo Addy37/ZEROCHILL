@@ -143,6 +143,15 @@ jobs:
               raise SystemExit("Source did not return distinct deeper pages")
           PYTHON
 
+      - name: Run focused ShitTok audio ownership regressions
+        run: >-
+          gradle --no-daemon :app:testDebugUnitTest
+          --tests 'com.webapp.crazyshit.ShitTokAudioOwnershipTest'
+          --tests 'com.webapp.crazyshit.ShitTokSelectedPreparationTest'
+          --tests 'com.webapp.crazyshit.ShitTokSwipeStartTest'
+          --tests 'com.webapp.crazyshit.ShitTokAutoScrollIntegrationTest'
+          --tests 'com.webapp.crazyshit.ShitTokSessionResumeTest'
+
       - name: Run focused Favorite Creators cache-first regressions
         run: >-
           gradle --no-daemon :app:testDebugUnitTest
