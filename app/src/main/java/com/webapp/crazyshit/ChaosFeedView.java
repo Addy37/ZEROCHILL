@@ -165,11 +165,10 @@ public final class ChaosFeedView extends FrameLayout {
     private int consecutiveDryLoads;
     private int selectedPosition;
     private boolean userPaging;
-    private int creatorWarmAheadPosition = -1;
+    private boolean settledSelectionPending;
     private int maintenancePosition = -1;
     private boolean maintenanceResolveIssued;
     private final Runnable saveRecentRunnable = this::saveRecentNow;
-    private final Runnable creatorWarmAheadRunnable = this::warmNextCreatorGallery;
     private final Runnable playerPrepareMaintenanceRunnable = this::runDeferredPrepareMaintenance;
     private final Runnable playerReleaseMaintenanceRunnable = this::runDeferredReleaseMaintenance;
 
@@ -215,19 +214,7 @@ public final class ChaosFeedView extends FrameLayout {
         pager.registerOnPageChangeCallback(new ViewPager2.OnPageChangeCallback() {
             @Override
             public void onPageScrollStateChanged(int state) {
-                if (state == ViewPager2.SCROLL_STATE_DRAGGING) {
-                    userPaging = true;
-                    cancelPendingAutoAdvance();
-                    cancelSwipePlayerMaintenance();
-                } else if (state == ViewPager2.SCROLL_STATE_IDLE) {
-                    userPaging = false;
-                    scheduleSwipePlayerMaintenance(selectedPosition);
-                    ChaosHolder holder = holderAt(selectedPosition);
-                    if (holder != null && holder.player != null
-                            && holder.player.getPlaybackState() == Player.STATE_ENDED) {
-                        holder.handleCompletion(holder.player);
-                    }
-                }
+                handlePagerScrollState(state);
             }
 
             @Override
@@ -261,19 +248,51 @@ public final class ChaosFeedView extends FrameLayout {
                             active && userPaging
                     );
                 }
-                markSeen(position);
+                settledSelectionPending = true;
                 pauseNonSelected(position);
-                playSelected();
-                warmCreatorGalleries(position);
-                ChaosHolder holder = holderAt(position);
-                if (holder != null) holder.showControlsTemporarily();
-                refreshSelectedLikeStateLater(position);
-                if (items.size() - position <= LOAD_AHEAD_AT) loadMorePool();
-                if (changed && pager.getScrollState() == ViewPager2.SCROLL_STATE_IDLE) {
+                if (!isPaging()) {
+                    settleSelectedPage();
                     scheduleSwipePlayerMaintenance(position);
                 }
             }
         });
+    }
+
+    private boolean isPaging() {
+        return userPaging || (pager != null && pager.getScrollState() != ViewPager2.SCROLL_STATE_IDLE);
+    }
+
+    private void handlePagerScrollState(int state) {
+        userPaging = state != ViewPager2.SCROLL_STATE_IDLE;
+        if (userPaging) {
+            if (state == ViewPager2.SCROLL_STATE_DRAGGING) cancelPendingAutoAdvance();
+            cancelSwipePlayerMaintenance();
+            // Revoke audio immediately without history/chrome work or decoder teardown.
+            for (ChaosHolder holder : playerHolders) silencePlayer(holder.player);
+            RecyclerView rv = pagerRecycler();
+            if (rv != null) for (int i = 0; i < rv.getChildCount(); i++) {
+                RecyclerView.ViewHolder raw = rv.getChildViewHolder(rv.getChildAt(i));
+                if (raw instanceof ChaosHolder && !playerHolders.contains(raw))
+                    silencePlayer(((ChaosHolder) raw).player);
+            }
+        } else {
+            settleSelectedPage();
+            scheduleSwipePlayerMaintenance(selectedPosition);
+        }
+    }
+
+    private void settleSelectedPage() {
+        if (closed || !active || !hostResumed || isPaging()) return;
+        pauseNonSelected(selectedPosition);
+        ChaosHolder holder = holderAt(selectedPosition);
+        // A canceled swipe must retain the user's explicit pause.
+        if (holder == null || !holder.userPaused) playSelected();
+        if (!settledSelectionPending) return;
+        settledSelectionPending = false;
+        markSeen(selectedPosition);
+        if (holder != null) holder.showControlsTemporarily();
+        refreshSelectedLikeStateLater(selectedPosition);
+        if (items.size() - selectedPosition <= LOAD_AHEAD_AT) loadMorePool();
     }
 
     public void setActive(boolean value) {
@@ -282,7 +301,6 @@ public final class ChaosFeedView extends FrameLayout {
             pager.setUserInputEnabled(true);
             resolveAhead(selectedPosition);
             playSelected();
-            warmCreatorGalleries(selectedPosition);
             syncVisibleChrome();
             refreshSelectedLikeStateLater(selectedPosition);
         } else {
@@ -319,7 +337,6 @@ public final class ChaosFeedView extends FrameLayout {
         hostResumed = false;
         cancelPendingAutoAdvance();
         cancelSwipePlayerMaintenance();
-        cancelCreatorWarmAhead();
         if (!creatorGalleryHandoff) resetCreatorSwipePreview();
         pauseAll();
         rememberSelectedPosition();
@@ -336,7 +353,6 @@ public final class ChaosFeedView extends FrameLayout {
     public void refresh() {
     reloadBlockedCreatorKeys();
     cancelSwipePlayerMaintenance();
-    cancelCreatorWarmAhead();
     resetCreatorSwipePreview();
     pauseAll();
     sessionResume.clear();
@@ -369,7 +385,6 @@ public final class ChaosFeedView extends FrameLayout {
         exitManualFullscreen();
         if (commentsDialog != null && commentsDialog.isShowing()) commentsDialog.dismiss();
         cancelSwipePlayerMaintenance();
-        cancelCreatorWarmAhead();
         pauseAll();
         sessionResume.clear();
         releaseAllPlayers();
@@ -432,7 +447,6 @@ public final class ChaosFeedView extends FrameLayout {
                 empty.setVisibility(View.GONE);
                 resolveAhead(selectedPosition);
                 if (active && hostResumed) playSelected();
-                warmCreatorGalleries(selectedPosition);
                 tryPendingAutoAdvance();
             }
 
@@ -790,32 +804,6 @@ public final class ChaosFeedView extends FrameLayout {
         }
     }
 
-    private void warmCreatorGalleries(int position) {
-        if (closed || !active || !hostResumed || position < 0 || position >= items.size()) return;
-        ShitTokCreatorGalleryPreloader.warm(activity, items.get(position));
-
-        cancelCreatorWarmAhead();
-        creatorWarmAheadPosition = position;
-        postDelayed(creatorWarmAheadRunnable, 700L);
-    }
-
-    private void cancelCreatorWarmAhead() {
-        removeCallbacks(creatorWarmAheadRunnable);
-        creatorWarmAheadPosition = -1;
-    }
-
-    private void warmNextCreatorGallery() {
-        int position = creatorWarmAheadPosition;
-        creatorWarmAheadPosition = -1;
-        if (closed || !active || !hostResumed || selectedPosition != position) return;
-        for (int next = position + 1; next < Math.min(items.size(), position + 8); next++) {
-            NativeContentItem candidate = items.get(next);
-            if (!ShitTokCreatorMetadata.hasCreator(candidate)) continue;
-            ShitTokCreatorGalleryPreloader.warm(activity, candidate);
-            break;
-        }
-    }
-
     private void resolveAhead(int position) {
         if (!hostResumed) return;
         int ahead = ChaosPreloadPolicy.aheadCount(activity);
@@ -833,7 +821,7 @@ public final class ChaosFeedView extends FrameLayout {
     }
 
     private void resolveAt(int position) {
-        if (closed) return;
+        if (closed || isPaging()) return;
         if (position < 0 || position >= items.size()) return;
         NativeContentItem item = items.get(position);
         if (streamCache.containsKey(item.url)) {
@@ -918,8 +906,7 @@ public final class ChaosFeedView extends FrameLayout {
     }
 
     private void prepareVisible(int position) {
-        if (!active || !hostResumed) return;
-        if (userPaging && position != selectedPosition) return;
+        if (!active || !hostResumed || isPaging()) return;
         ChaosHolder holder = holderAt(position);
         if (holder == null || position < 0 || position >= items.size()) return;
         NativeContentItem item = items.get(position);
@@ -940,7 +927,7 @@ public final class ChaosFeedView extends FrameLayout {
     }
 
     private void playSelected() {
-        if (!active || !hostResumed) return;
+        if (!active || !hostResumed || isPaging()) return;
         if (selectedPosition < 0 || selectedPosition >= items.size()) return;
         // Cache hits prepare through resolveAt; async completion prepares through
         // prepareVisible. Dispatching again here repeats the same player work.
@@ -952,14 +939,19 @@ public final class ChaosFeedView extends FrameLayout {
         // RecyclerView children omit cached/detached holders that still own a player.
         // Pause the registry too, and use holder identity rather than a stale position.
         for (ChaosHolder holder : new ArrayList<>(playerHolders)) {
-            if (holder != owner) holder.pauseAndRecord();
+            if (holder != owner) {
+                if (isPaging()) silencePlayer(holder.player);
+                else holder.pauseAndRecord();
+            }
         }
         RecyclerView rv = pagerRecycler();
         if (rv == null) return;
         for (int i = 0; i < rv.getChildCount(); i++) {
             RecyclerView.ViewHolder raw = rv.getChildViewHolder(rv.getChildAt(i));
-            if (raw instanceof ChaosHolder && raw != owner && !playerHolders.contains(raw))
-                ((ChaosHolder) raw).pauseAndRecord();
+            if (raw instanceof ChaosHolder && raw != owner && !playerHolders.contains(raw)) {
+                if (isPaging()) silencePlayer(((ChaosHolder) raw).player);
+                else ((ChaosHolder) raw).pauseAndRecord();
+            }
         }
     }
 
@@ -1190,9 +1182,9 @@ public final class ChaosFeedView extends FrameLayout {
     }
 
     private void refreshSelectedLikeStateLater(int position) {
-        if (pager == null || !active || !hostResumed) return;
+        if (pager == null || !active || !hostResumed || isPaging()) return;
         pager.postDelayed(() -> {
-            if (!active || !hostResumed || position != selectedPosition) return;
+            if (!active || !hostResumed || isPaging() || position != selectedPosition) return;
             ChaosHolder holder = holderAt(position);
             if (holder != null) {
                 holder.refreshVideoLikeState();
@@ -1347,7 +1339,6 @@ public final class ChaosFeedView extends FrameLayout {
 
         cancelPendingAutoAdvance();
         cancelSwipePlayerMaintenance();
-        cancelCreatorWarmAhead();
         resetCreatorSwipePreview();
 
         Set<String> removedUrls = new HashSet<>();
@@ -1386,7 +1377,6 @@ public final class ChaosFeedView extends FrameLayout {
         pauseNonSelected(selectedPosition);
         resolveAhead(selectedPosition);
         playSelected();
-        warmCreatorGalleries(selectedPosition);
         if (items.size() - selectedPosition <= LOAD_AHEAD_AT) loadMorePool();
     }
 
@@ -1755,7 +1745,7 @@ public final class ChaosFeedView extends FrameLayout {
         public void onBindViewHolder(@NonNull ChaosHolder holder, int position) {
             holder.bind(items.get(position), position);
             CrazyShitRepository.StreamInfo stream = streamCache.get(items.get(position).url);
-            if (stream != null && active && hostResumed && position == selectedPosition) {
+            if (stream != null && active && hostResumed && !isPaging() && position == selectedPosition) {
                 holder.prepare(stream, true);
             } else if (stream != null && active && hostResumed &&
                     shouldPreparePlayer(position, selectedPosition)) {
@@ -2732,6 +2722,7 @@ public final class ChaosFeedView extends FrameLayout {
         }
 
         private void prepareMeasured(CrazyShitRepository.StreamInfo nextStream, boolean autoplay) {
+            if (isPaging()) return;
             if (item == null || nextStream == null || nextStream.mediaUrl == null || nextStream.mediaUrl.isEmpty()) return;
             if (stream != null && stream.mediaUrl.equals(nextStream.mediaUrl) && player != null) {
                 PlaybackException currentError = player.getPlayerError();
@@ -3137,7 +3128,7 @@ public final class ChaosFeedView extends FrameLayout {
         }
 
         private boolean ownsPlayback() {
-            return !closed && active && hostResumed && item != null
+            return !closed && active && hostResumed && !isPaging() && item != null
                     && boundPosition == selectedPosition && boundPosition >= 0
                     && boundPosition < items.size()
                     && item.url.equals(items.get(boundPosition).url)
