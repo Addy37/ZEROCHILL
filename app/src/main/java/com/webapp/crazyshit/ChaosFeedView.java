@@ -165,6 +165,7 @@ public final class ChaosFeedView extends FrameLayout {
     private int consecutiveDryLoads;
     private int selectedPosition;
     private boolean userPaging;
+    private boolean userDragInProgress;
     private boolean settledSelectionPending;
     private int maintenancePosition = -1;
     private boolean maintenanceResolveIssued;
@@ -245,7 +246,7 @@ public final class ChaosFeedView extends FrameLayout {
                     host.onVerticalPageChanged(
                             position > previousPosition ? 1 : -1,
                             position == 0,
-                            active && userPaging
+                            active && userDragInProgress
                     );
                 }
                 settledSelectionPending = true;
@@ -263,6 +264,8 @@ public final class ChaosFeedView extends FrameLayout {
     }
 
     private void handlePagerScrollState(int state) {
+        if (state == ViewPager2.SCROLL_STATE_DRAGGING) userDragInProgress = true;
+        else if (state == ViewPager2.SCROLL_STATE_IDLE) userDragInProgress = false;
         userPaging = state != ViewPager2.SCROLL_STATE_IDLE;
         if (userPaging) {
             if (state == ViewPager2.SCROLL_STATE_DRAGGING) cancelPendingAutoAdvance();

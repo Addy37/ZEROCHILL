@@ -127,4 +127,18 @@ public class ShitTokSettledSwipeTest {
             assertFalse(ReflectionHelpers.getField(f.feed, "settledSelectionPending"));
         }
     }
+
+    @Test public void programmaticSettlingDoesNotBecomeUserNavigation() {
+        try (ShitTokAudioOwnershipTest.Fixture f = new ShitTokAudioOwnershipTest.Fixture()) {
+            cacheSelected(f);
+            state(f, ViewPager2.SCROLL_STATE_SETTLING);
+            assertTrue(ReflectionHelpers.getField(f.feed, "userPaging"));
+            assertFalse(ReflectionHelpers.getField(f.feed, "userDragInProgress"));
+            state(f, ViewPager2.SCROLL_STATE_DRAGGING);
+            state(f, ViewPager2.SCROLL_STATE_SETTLING);
+            assertTrue(ReflectionHelpers.getField(f.feed, "userDragInProgress"));
+            state(f, ViewPager2.SCROLL_STATE_IDLE);
+            assertFalse(ReflectionHelpers.getField(f.feed, "userDragInProgress"));
+        }
+    }
 }
