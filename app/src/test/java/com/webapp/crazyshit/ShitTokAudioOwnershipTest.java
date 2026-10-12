@@ -189,7 +189,7 @@ public class ShitTokAudioOwnershipTest {
         try (Fixture f = new Fixture()) {
             ReflectionHelpers.callInstanceMethod(f.offscreen, "detachPlayerForDeferredRelease");
             Deque<ExoPlayer> releases = ReflectionHelpers.getField(f.feed, "deferredPlayerReleases");
-            assertTrue(releases.contains(f.offscreenPlayer.player));
+            assertSame(f.offscreenPlayer.player, releases.peekLast());
             assertEquals(0f, f.offscreenPlayer.volume, 0f);
             assertFalse(f.offscreenPlayer.readyToPlay);
             assertNull(ReflectionHelpers.getField(f.offscreen, "player"));
