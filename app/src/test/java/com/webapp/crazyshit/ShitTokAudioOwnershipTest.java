@@ -37,6 +37,7 @@ public class ShitTokAudioOwnershipTest {
     static final class FakePlayer {
         int plays, pauses, positionReads, seeks;
         int state = Player.STATE_READY;
+        androidx.media3.exoplayer.ExoPlaybackException error;
         float volume = 1f;
         boolean readyToPlay = true;
         boolean failPosition;
@@ -59,6 +60,7 @@ public class ShitTokAudioOwnershipTest {
                         case "getPlayWhenReady": return readyToPlay;
                         case "isPlaying": return readyToPlay;
                         case "getPlaybackState": return state;
+                        case "getPlayerError": return error;
                         case "seekTo": seeks++; state=Player.STATE_READY; return null;
                         case "getCurrentPosition":
                             positionReads++;

@@ -71,4 +71,41 @@ public class ShitTokIdleUiTest {
         }
     }
 
+    @Test public void postedPlayerUiWaitsForIdleAndRejectsRetiredOwner() {
+        try(ShitTokAudioOwnershipTest.Fixture f=new ShitTokAudioOwnershipTest.Fixture()) {
+            ShitTokPlaybackOwner owner=ReflectionHelpers.getField(f.feed,"playbackOwner");
+            String url="https://example.invalid/clip-0";
+            java.util.concurrent.atomic.AtomicInteger calls=new java.util.concurrent.atomic.AtomicInteger();
+            int token=owner.token(url);
+            ReflectionHelpers.callInstanceMethod(f.feed,"handlePagerScrollState",from(int.class,ViewPager2.SCROLL_STATE_DRAGGING));
+            ReflectionHelpers.callInstanceMethod(f.selected,"postOwnerUi",from(androidx.media3.exoplayer.ExoPlayer.class,f.selectedPlayer.player),
+                from(String.class,url),from(int.class,token),from(Runnable.class,(Runnable)calls::incrementAndGet));
+            org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();assertEquals(0,calls.get());
+            ReflectionHelpers.callInstanceMethod(f.feed,"handlePagerScrollState",from(int.class,ViewPager2.SCROLL_STATE_IDLE));
+            assertEquals(1,calls.get());
+            ReflectionHelpers.callInstanceMethod(f.selected,"postOwnerUi",from(androidx.media3.exoplayer.ExoPlayer.class,f.selectedPlayer.player),
+                from(String.class,url),from(int.class,token),from(Runnable.class,(Runnable)calls::incrementAndGet));
+            owner.release();
+            org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();assertEquals(1,calls.get());
+        }
+    }
+
+    @Test public void playerErrorDuringPagingWaitsAndDoesNotTurnIntoWrongItemRetry() {
+        try(ShitTokAudioOwnershipTest.Fixture f=new ShitTokAudioOwnershipTest.Fixture()) {
+            ReflectionHelpers.callInstanceMethod(f.feed,"playSelected");
+            androidx.media3.common.Player.Listener listener=ReflectionHelpers.getField(f.selected,"uiPlayerListener");
+            assertNotNull(listener);
+            ReflectionHelpers.callInstanceMethod(f.feed,"handlePagerScrollState",from(int.class,ViewPager2.SCROLL_STATE_DRAGGING));
+            f.selectedPlayer.error=androidx.media3.exoplayer.ExoPlaybackException.createForSource(
+                new java.io.IOException("fixture source failure"),androidx.media3.common.PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS);
+            listener.onPlayerError(f.selectedPlayer.error);
+            org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
+            assertFalse(ReflectionHelpers.getField(f.selected,"retryAttempted"));
+            ReflectionHelpers.callInstanceMethod(f.feed,"handlePagerScrollState",from(int.class,ViewPager2.SCROLL_STATE_IDLE));
+            assertTrue(ReflectionHelpers.getField(f.selected,"retryAttempted"));
+            org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
+            assertSame(f.selectedPlayer.error,ReflectionHelpers.getField(f.selected,"lastPlaybackError"));
+        }
+    }
+
 }
