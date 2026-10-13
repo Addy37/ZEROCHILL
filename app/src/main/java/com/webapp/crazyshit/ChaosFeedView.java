@@ -2795,54 +2795,84 @@ public final class ChaosFeedView extends FrameLayout {
             ExoPlayer createdPlayer = player;
             final String listenerUrl = item.url;
             final int listenerToken = attachedToken;
-                                postOwnerUi(createdPlayer, listenerUrl, listenerToken, () -> {
+            uiPlayerListener = new Player.Listener() {
+                @Override
+                public void onVideoSizeChanged(VideoSize videoSize) {
+                    if (!validUiCallback(createdPlayer, listenerUrl, listenerToken)
+                            || videoSize.width <= 0 || videoSize.height <= 0) return;
+                    postOwnerUi(createdPlayer, listenerUrl, listenerToken, () -> {
                         float width = videoSize.width * Math.max(0.01f, videoSize.pixelWidthHeightRatio);
-                        float height = videoSize.height;
-                        videoAspectRatio = width / Math.max(1f, height);
+                        videoAspectRatio = width / Math.max(1f, videoSize.height);
                         horizontalVideo = shouldOfferLandscapeFullscreen(videoAspectRatio);
                         updateFullscreenPromptPosition();
                         if (!aspectSampleRecorded) {
-                        aspectSampleRecorded = true;
-                        aspectPriority.record(item, videoAspectRatio);
+                            aspectSampleRecorded = true;
+                            aspectPriority.record(item, videoAspectRatio);
                         }
-                        postOwnerUi(createdPlayer, listenerUrl, listenerToken, ChaosHolder.this::syncOrientationChrome);
+                        syncOrientationChrome();
                     });
+                }
+
+                @Override
+                public void onPlaybackStateChanged(int state) {
+                    if (!validUiCallback(createdPlayer, listenerUrl, listenerToken)) return;
                     postOwnerUi(createdPlayer, listenerUrl, listenerToken, () -> {
                         if (createdPlayer.getPlaybackState() != state) return;
                         if (state == Player.STATE_READY) {
-                        RatingFeedbackPrompt.recordSuccessfulPlayback(activity, nextStream.mediaUrl);
-                        failurePending = false;
-                        root.removeCallbacks(skipFailedClipRunnable);
-                        loading.setVisibility(View.GONE);
-                        failure.setVisibility(View.GONE);
-                        poster.setVisibility(View.GONE);
-                        updateProgress();
-                        maybeCompleteStartupHandoff();
-                        preloadReadyComments(item, boundPosition);
+                            RatingFeedbackPrompt.recordSuccessfulPlayback(activity, nextStream.mediaUrl);
+                            failurePending = false;
+                            root.removeCallbacks(skipFailedClipRunnable);
+                            loading.setVisibility(View.GONE);
+                            failure.setVisibility(View.GONE);
+                            poster.setVisibility(View.GONE);
+                            updateProgress();
+                            maybeCompleteStartupHandoff();
+                            preloadReadyComments(item, boundPosition);
                         } else if (state == Player.STATE_ENDED) {
-                        if (boundPosition == selectedPosition) sessionResume.clear();
-                        loading.setVisibility(View.GONE);
-                        seekBar.setProgress(1000);
-                        updateProgress();
-                        if (item != null) {
-                            try {
-                                long duration = Math.max(0L, createdPlayer.getDuration());
-                                PlaybackHistoryStore.record(
-                                        activity,
-                                        item.title,
-                                        item.url,
-                                        duration,
-                                        duration,
-                                        true
-                                );
-                            } catch (Exception ignored) {
+                            if (boundPosition == selectedPosition) sessionResume.clear();
+                            loading.setVisibility(View.GONE);
+                            seekBar.setProgress(1000);
+                            updateProgress();
+                            if (item != null) {
+                                try {
+                                    long duration = Math.max(0L, createdPlayer.getDuration());
+                                    PlaybackHistoryStore.record(activity, item.title, item.url,
+                                            duration, duration, true);
+                                } catch (Exception ignored) { }
                             }
-                        }
-                        handleCompletion(createdPlayer);
+                            handleCompletion(createdPlayer);
                         }
                     });
+                }
+
+                @Override
+                public void onIsPlayingChanged(boolean isPlaying) {
+                    if (!validUiCallback(createdPlayer, listenerUrl, listenerToken) || isPaging()) return;
+                    if (isPlaying && !ownsPlayback()) {
+                        silencePlayer(createdPlayer);
+                        return;
+                    }
+                    if (isPlaying) {
+                        playbackSuspended = false;
+                        userPaused = false;
+                        everStarted = true;
+                        hidePausedChrome();
+                        showControlsTemporarily();
+                    } else {
+                        updateProgress();
+                        if (userPaused) {
+                            if (!scrubbing) showControlsPersistent();
+                            syncPausedChrome();
+                        } else hidePausedChrome();
+                    }
+                }
+
+                @Override
+                public void onPlayerError(PlaybackException error) {
+                    if (!validUiCallback(createdPlayer, listenerUrl, listenerToken)) return;
                     postOwnerUi(createdPlayer, listenerUrl, listenerToken, () -> {
-                        if (createdPlayer.getPlayerError() != error || (lastPlaybackError == error && retryAttempted)) return;
+                        if (createdPlayer.getPlayerError() != error
+                                || (lastPlaybackError == error && retryAttempted)) return;
                         if (playbackOwner.recoverDecoder(createdPlayer, error)) return;
                         loading.setVisibility(View.GONE);
                         userPaused = false;
@@ -2850,14 +2880,14 @@ public final class ChaosFeedView extends FrameLayout {
                         lastPlaybackError = error;
                         lastFailureStage = "Player error";
                         if (!retryAttempted) {
-                        retryAttempted = true;
-                        postOwnerUi(createdPlayer, listenerUrl, listenerToken, () -> {
-                            if (createdPlayer.getPlayerError() == error) retryPlayback(ChaosHolder.this, error);
-                        });
-                        } else {
-                        showPlayerFailureAndSkip(error, lastFailureStage);
-                        }
+                            retryAttempted = true;
+                            postOwnerUi(createdPlayer, listenerUrl, listenerToken, () -> {
+                                if (createdPlayer.getPlayerError() == error) retryPlayback(ChaosHolder.this, error);
+                            });
+                        } else showPlayerFailureAndSkip(error, lastFailureStage);
                     });
+                }
+            };
             createdPlayer.addListener(uiPlayerListener);
             if (createdPlayer.getPlaybackState() == Player.STATE_READY) {
                 loading.setVisibility(View.GONE);
