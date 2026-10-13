@@ -241,6 +241,13 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
             }
 
             @Override
+            public void onChaosTemporaryPinchChanged(boolean pinching) {
+                // Alpha preserves the fitted viewport and shell insets during the gesture.
+                if (topBar != null) topBar.setAlpha(pinching ? 0f : 1f);
+                if (bottomNavigation != null) bottomNavigation.setAlpha(pinching ? 0f : 1f);
+            }
+
+            @Override
             public void onNavigationScroll(int sourcePage, int dy, boolean atTop, boolean userDriven) {
                 if (navigationMotion != null) {
                     navigationMotion.onScroll(sourcePage, dy, atTop, userDriven);

@@ -78,6 +78,9 @@ public final class ChaosFeedView extends FrameLayout {
         default void onClearDisplayChanged(boolean clear) {
         }
 
+        default void onTemporaryPinchChanged(boolean pinching) {
+        }
+
         default void onVerticalPageChanged(int direction, boolean atTop, boolean userDriven) {
         }
     }
@@ -157,6 +160,7 @@ public final class ChaosFeedView extends FrameLayout {
     private boolean chaosMuted;
     private boolean manualFullscreen;
     private boolean clearDisplay;
+    private ChaosHolder pinchingHolder;
     private int autoAdvanceFrom = -1;
     private int consecutiveDryLoads;
     private int selectedPosition;
@@ -248,6 +252,7 @@ public final class ChaosFeedView extends FrameLayout {
                 cancelSwipePlayerMaintenance();
                 int previousPosition = selectedPosition;
                 boolean changed = position != previousPosition;
+                if (changed) resetTemporaryPinch();
                 if (changed) maintenancePosition = position;
                 if (changed) autoAdvanceIssuedFrom = -1;
 
@@ -283,6 +288,7 @@ public final class ChaosFeedView extends FrameLayout {
         if (state == ViewPager2.SCROLL_STATE_DRAGGING) userDragInProgress = true;
         else if (state == ViewPager2.SCROLL_STATE_IDLE) userDragInProgress = false;
         userPaging = state != ViewPager2.SCROLL_STATE_IDLE;
+        if (userPaging) resetTemporaryPinch();
         ShitTokPoolDiagnostics.record("pager", "state=" + state + " selected=" + selectedPosition);
         playbackOwner.permission(false, chaosMuted);
         if (userPaging) {
@@ -356,6 +362,7 @@ public final class ChaosFeedView extends FrameLayout {
     }
 
     public void setActive(boolean value) {
+        if (!value) resetTemporaryPinch();
         active = value;
         if (value && hostResumed) frameDiagnostics.start(activity); else frameDiagnostics.stop();
         playbackOwner.permission(value && hostResumed && !isPaging() && !closed, chaosMuted);
@@ -399,6 +406,7 @@ public final class ChaosFeedView extends FrameLayout {
     }
 
     public void onHostPause() {
+        resetTemporaryPinch();
         hostResumed = false;
         frameDiagnostics.stop();
         playbackOwner.permission(false, chaosMuted);
@@ -412,6 +420,7 @@ public final class ChaosFeedView extends FrameLayout {
     }
 
     public void onConfigurationChanged() {
+        resetTemporaryPinch();
         resetCreatorSwipePreview();
         if (commentsDialog != null && commentsDialog.isShowing()) commentsDialog.dismiss();
         syncVisibleChrome();
@@ -419,6 +428,7 @@ public final class ChaosFeedView extends FrameLayout {
 
     public void refresh() {
     if (isPaging()) { deferUiApply(this::refresh); return; }
+    resetTemporaryPinch();
     feedGeneration++;
     deferredUiApplies.clear();
     playbackOwner.clearSession();
@@ -450,6 +460,7 @@ public final class ChaosFeedView extends FrameLayout {
 }
 
     public void close() {
+        resetTemporaryPinch();
         cancelPendingAutoAdvance();
         resetCreatorSwipePreview();
         closed = true;
@@ -867,6 +878,7 @@ public final class ChaosFeedView extends FrameLayout {
             pager.post(() -> {
                 if (generation != autoAdvanceGeneration || !autoAdvancePending
                         || !active || !hostResumed || selectedPosition != fromPosition) return;
+                if (pinchingHolder != null) return;
                 if (fromPosition + 1 >= items.size()) return;
                 cancelPendingAutoAdvance();
                 autoAdvanceIssuedFrom = fromPosition;
@@ -879,7 +891,7 @@ public final class ChaosFeedView extends FrameLayout {
     }
 
     private void tryPendingAutoAdvance() {
-        if (!autoAdvancePending) return;
+        if (!autoAdvancePending || pinchingHolder != null) return;
         int fromPosition = autoAdvanceFrom;
         if (!active || !hostResumed || selectedPosition != fromPosition) {
             autoAdvancePending = false;
@@ -1479,6 +1491,7 @@ public final class ChaosFeedView extends FrameLayout {
     }
 
     private void enterManualFullscreen(ChaosHolder holder) {
+        resetTemporaryPinch();
         if (manualFullscreen || holder == null || !holder.horizontalVideo) return;
         manualFullscreen = true;
         PhoneOrientationPolicy.enterSensorFullscreen(activity);
@@ -1486,6 +1499,7 @@ public final class ChaosFeedView extends FrameLayout {
     }
 
     private void exitManualFullscreen() {
+        resetTemporaryPinch();
         if (!manualFullscreen) return;
         manualFullscreen = false;
         PhoneOrientationPolicy.exitFullscreenVideo(activity);
@@ -1493,6 +1507,10 @@ public final class ChaosFeedView extends FrameLayout {
     }
 
     boolean exitSensorFullscreenForBack() {
+        if (pinchingHolder != null) {
+            resetTemporaryPinch();
+            return true;
+        }
         if (clearDisplay) {
             setClearDisplay(false);
             return true;
@@ -1527,6 +1545,10 @@ public final class ChaosFeedView extends FrameLayout {
                 ((ChaosHolder) raw).applyClearDisplay(clear);
             }
         }
+    }
+
+    private void resetTemporaryPinch() {
+        if (pinchingHolder != null) pinchingHolder.pinch.reset();
     }
 
     private void setChaosMuted(boolean muted) {
@@ -1673,6 +1695,7 @@ public final class ChaosFeedView extends FrameLayout {
     }
 
     private void openInlineComments(NativeContentItem item) {
+        resetTemporaryPinch();
         if (item == null || item.url == null || item.url.isEmpty()) return;
         SocialContentContextStore.remember(activity, item);
         if (commentsDialog != null && commentsDialog.isShowing()) return;
@@ -1828,6 +1851,7 @@ public final class ChaosFeedView extends FrameLayout {
 
     private final class ChaosHolder extends RecyclerView.ViewHolder {
         final FrameLayout root;
+        final ShitTokDynamicPinchController pinch;
         final FrameLayout mediaLayer;
         final PlayerView playerView;
         final ImageView poster;
@@ -1904,7 +1928,7 @@ public final class ChaosFeedView extends FrameLayout {
             requestAutoAdvance(boundPosition);
         };
         ChaosHolder(ViewGroup parent) {
-            super(new FrameLayout(parent.getContext()));
+            super(new ShitTokDynamicPinchController.TouchFrame(parent.getContext()));
             root = (FrameLayout) itemView;
             root.setLayoutParams(new RecyclerView.LayoutParams(-1, -1));
             root.setBackgroundColor(Color.BLACK);
@@ -2208,6 +2232,42 @@ public final class ChaosFeedView extends FrameLayout {
             progressRow.setVisibility(View.INVISIBLE);
             root.addView(progressRow, seekParams);
 
+            // Media3's fitted content frame contains the existing TextureView. Leave
+            // PlayerView, touch coordinates, buffering UI and app controls unscaled.
+            pinch = new ShitTokDynamicPinchController(
+                    (ShitTokDynamicPinchController.TouchFrame) root,
+                    playerView.findViewById(androidx.media3.ui.R.id.exo_content_frame),
+                    () -> active && hostResumed && !closed && !isPaging() && !scrubbing
+                            && !clearDisplay && (commentsDialog == null || !commentsDialog.isShowing())
+                            && player != null && player.isPlaying() && ownsPlayback()
+                            && playbackOwner.isAttached(item.url, playerView),
+                    pinching -> {
+                        if (pinching) {
+                            pinchingHolder = this;
+                            creatorSwipeTracking = false;
+                            cancelCreatorSwipePreview(root);
+                            ShitTokTransitionSnapshotStore.remove(creatorSwipeTransitionToken);
+                            creatorSwipeTransitionToken = "";
+                            root.removeCallbacks(hideControlsRunnable);
+                            root.removeCallbacks(progressTick);
+                            pager.setUserInputEnabled(false);
+                        } else {
+                            if (pinchingHolder == this) pinchingHolder = null;
+                            pager.setUserInputEnabled(true);
+                            showControlsTemporarily();
+                            // Resume a completion-driven advance only after fingers let go.
+                            pager.post(ChaosFeedView.this::tryPendingAutoAdvance);
+                        }
+                        host.onTemporaryPinchChanged(pinching);
+                    },
+                    lower, creatorAvatarControl, fullscreen, landscapeTopScrim,
+                    landscapeBottomScrim, landscapeHeader, landscapeActions, progressRow,
+                    pausePlayOverlay, poster, loading, failure,
+                    playerView.findViewById(androidx.media3.ui.R.id.exo_subtitles),
+                    playerView.findViewById(androidx.media3.ui.R.id.exo_artwork),
+                    playerView.findViewById(androidx.media3.ui.R.id.exo_buffering),
+                    playerView.findViewById(androidx.media3.ui.R.id.exo_error_message));
+
             playerView.setOnClickListener(v -> {
                 haptic(v);
                 if (clearDisplay) {
@@ -2246,9 +2306,12 @@ public final class ChaosFeedView extends FrameLayout {
 
             playerView.setLongClickable(false);
             playerView.setOnTouchListener((v, event) -> {
+                // Let View clear its pressed/click state on the synthetic child cancel.
+                if (pinch.ownsTouchSequence()) return event.getActionMasked() != MotionEvent.ACTION_CANCEL;
                 int action = event.getActionMasked();
 
                 if (action == MotionEvent.ACTION_DOWN) {
+                    pinch.videoTouchStarted();
                     creatorSwipeDownX = event.getX();
                     creatorSwipeDownY = event.getY();
                     creatorSwipeTracking = false;
@@ -2924,6 +2987,7 @@ public final class ChaosFeedView extends FrameLayout {
         }
 
         void detachLease() {
+            pinch.reset();
             if (player != null) {
                 if (uiPlayerListener != null) player.removeListener(uiPlayerListener);
                 if (item != null) playbackOwner.detach(item.url, playerView);
@@ -2974,6 +3038,7 @@ public final class ChaosFeedView extends FrameLayout {
         }
 
         private void openCreatorGallery(boolean seamless, String transitionToken) {
+            pinch.reset();
             if (item == null) return;
             String creator = ShitTokCreatorMetadata.creatorName(item);
             if (creator.isEmpty()) return;
@@ -3184,6 +3249,7 @@ public final class ChaosFeedView extends FrameLayout {
         }
 
         private void syncPausedChrome() {
+            if (pinch.isActive()) return;
             boolean show = shouldShowPausedChrome(userPaused, clearDisplay);
             pausePlayOverlay.animate().cancel();
             if (show) {
@@ -3209,6 +3275,7 @@ public final class ChaosFeedView extends FrameLayout {
         }
 
         private void hidePausedChrome() {
+            if (pinch.isActive()) return;
             pausePlayOverlay.animate().cancel();
             pausePlayOverlay.setVisibility(View.GONE);
             progressRow.animate().cancel();
@@ -3312,6 +3379,7 @@ public final class ChaosFeedView extends FrameLayout {
         }
 
         void syncOrientationChrome() {
+            if (pinch.isActive()) return;
             applyViewportInset();
             if (clearDisplay) {
                 applyClearDisplay(true);
@@ -3343,6 +3411,7 @@ public final class ChaosFeedView extends FrameLayout {
         }
 
         private void showControls(boolean autoHide) {
+            if (pinch.isActive()) return;
             if (clearDisplay) {
                 applyClearDisplay(true);
                 return;
@@ -3418,6 +3487,7 @@ public final class ChaosFeedView extends FrameLayout {
         }
 
         private void hideControlsNow() {
+            if (pinch.isActive()) return;
             if (portrait()) {
                 controlsVisible = true;
                 applyControlLayout();
@@ -3530,6 +3600,7 @@ public final class ChaosFeedView extends FrameLayout {
         }
 
         void pauseAndRecord() {
+            pinch.reset();
             ExoPlayer paused = player;
             if (paused == null) return;
             // History reads/recording must never prevent the outgoing player from stopping.

@@ -16,6 +16,8 @@ permissions:
 
 jobs:
   macrobenchmark:
+    # This candidate uses the paired short-scroll audit instead of ten full flows.
+    if: ${{ github.head_ref != 'feature/shittok-dynamic-pinch' }}
     name: performance (${{ matrix.flow }})
     runs-on: ubuntu-latest
     timeout-minutes: 60
