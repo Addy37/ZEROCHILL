@@ -533,13 +533,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
 
     private boolean isHighlighted(NativeContentItem item) {
         if (item == null || highlightedUrls.isEmpty()) return false;
-        String itemUrl = canonicalHighlightUrl(item.url);
-        String uploaderUrl = canonicalHighlightUrl(item.uploader);
-        for (String raw : highlightedUrls) {
-            String highlighted = canonicalHighlightUrl(raw);
-            if (highlighted.isEmpty()) continue;
-            if (highlighted.equals(itemUrl) || highlighted.equals(uploaderUrl)) return true;
-        }
+        for (String raw : highlightedUrls) if (CreatorUpdateIdentity.matches(item, raw)) return true;
         return false;
     }
 

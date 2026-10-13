@@ -81,6 +81,8 @@ public class ShitTokSettledSwipeTest {
         try (ShitTokAudioOwnershipTest.Fixture f = new ShitTokAudioOwnershipTest.Fixture()) {
             cacheSelected(f);
             ReflectionHelpers.setField(f.selected, "userPaused", true);
+            ShitTokPlaybackOwner owner = ReflectionHelpers.getField(f.feed, "playbackOwner");
+            owner.setUserPaused("https://example.invalid/clip-0", true);
             state(f, ViewPager2.SCROLL_STATE_DRAGGING);
             state(f, ViewPager2.SCROLL_STATE_IDLE);
             assertTrue(ReflectionHelpers.getField(f.selected, "userPaused"));

@@ -111,7 +111,7 @@ public class ShitTokSwipeStartTest {
 
     private static final class Harness {
         final Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
-        final ChaosFeedView feed = new ChaosFeedView(activity, item -> { });
+        final ChaosFeedView feed = new ChaosFeedView(activity, item -> { }, false);
         final ViewPager2 pager = ReflectionHelpers.getField(feed, "pager");
         final int slop = ViewConfiguration.get(activity).getScaledTouchSlop();
         final int pagingSlop = ViewConfiguration.get(activity).getScaledPagingTouchSlop();

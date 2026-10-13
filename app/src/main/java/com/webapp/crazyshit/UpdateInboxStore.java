@@ -41,12 +41,18 @@ final class UpdateInboxStore {
             ArrayList<Entry> incoming = buildEntries(context.getApplicationContext(), alerts);
             CleanupState cleanup = new CleanupState(context);
             incoming.removeIf(cleanup::contains);
+            for (Entry entry : incoming) {
+                entry.children.removeIf(child -> cleanup.fingerprints.contains("|item:" + child.id));
+                entry.refreshCreatorState();
+            }
+            incoming.removeIf(entry -> CATEGORY_ONLYFAP.equals(entry.category) && entry.children.isEmpty());
             if (incoming.isEmpty()) return;
 
             ArrayList<Entry> existing = readLocked(context);
             pruneNonFavoriteContent(context, existing);
             ArrayList<Entry> combined = new ArrayList<>(incoming);
             combined.addAll(existing);
+            mergeCreatorHistory(combined);
             dedupeAndTrim(combined);
             writeLocked(context, combined);
         }
@@ -188,11 +194,15 @@ final class UpdateInboxStore {
             if (!clean(accountId).equals(ZeroChillSessionStore.currentUserId(context))) return false;
             ArrayList<Entry> entries = readLocked(context);
             pruneNonFavoriteContent(context, entries);
-            for (int i = 0; i < entries.size(); i++) {
-                Entry entry = entries.get(i);
-                if (!clean(id).equals(entry.id) || !visibleTo(entry, accountId)) continue;
-                rememberDeletedLocked(context, Collections.singletonList(entry));
-                entries.remove(i);
+            for (Entry grouped : groupCreators(context, entries)) {
+                if (!clean(id).equals(grouped.id) || !visibleTo(grouped, accountId)) continue;
+                ArrayList<Entry> removed = new ArrayList<>();
+                entries.removeIf(entry -> {
+                    if (!grouped.backingIds.contains(entry.id) && !grouped.id.equals(entry.id)) return false;
+                    removed.add(entry);
+                    return true;
+                });
+                rememberDeletedLocked(context, removed);
                 writeLocked(context, entries);
                 return true;
             }
@@ -288,6 +298,12 @@ final class UpdateInboxStore {
         ArrayList<Entry> deleted = readDeletedLocked(context);
         JSONObject cutoffs = readCutoffsLocked(context);
         deleted.addAll(removed);
+        for (Entry entry : removed) for (CreatorItem child : entry.children) {
+            Entry marker = new Entry();
+            marker.fingerprint = "item:" + child.id;
+            marker.timestamp = entry.timestamp;
+            deleted.add(marker);
+        }
         while (deleted.size() > MAX_DELETED) {
             Entry oldest = deleted.remove(0);
             // Compact excessive social markers into an account cutoff. Existing unremoved rows
@@ -329,7 +345,7 @@ final class UpdateInboxStore {
                 }
                 visible.add(entry);
             }
-            return visible;
+            return groupCreators(context, visible);
         }
     }
 
@@ -357,12 +373,22 @@ final class UpdateInboxStore {
     }
 
     /** One inbox decode per Favorites render/update cycle, rather than per card bind. */
+    private static final class CreatorCounts extends java.util.HashMap<String, Integer> {
+        final java.util.Map<String, String> groups = new java.util.HashMap<>();
+    }
+
     static java.util.Map<String, Integer> unreadCreatorContentCounts(Context context) {
-        java.util.Map<String, Integer> counts = new java.util.HashMap<>();
+        CreatorCounts counts = new CreatorCounts();
         for (Entry entry : all(context)) {
             if (entry.read || !CATEGORY_ONLYFAP.equals(entry.category)) continue;
-            String name = CreatorNameMatcher.normalized(entry.creatorName);
-            if (!name.isEmpty()) counts.merge(name, Math.max(1, entry.count), Integer::sum);
+            String group = CreatorNameMatcher.normalized(entry.creatorName);
+            LinkedHashSet<String> aliases = normalizedCreatorNames(entry.creatorAliases);
+            aliases.add(group);
+            for (String name : aliases) {
+                if (name.isEmpty()) continue;
+                counts.put(name, entry.unreadItems());
+                counts.groups.put(name, group);
+            }
         }
         return counts;
     }
@@ -372,8 +398,13 @@ final class UpdateInboxStore {
             java.util.Collection<String> creatorNames
     ) {
         LinkedHashSet<String> wanted = normalizedCreatorNames(creatorNames);
+        LinkedHashSet<String> counted = new LinkedHashSet<>();
         int count = 0;
-        for (String name : wanted) count += counts.getOrDefault(name, 0);
+        for (String name : wanted) {
+            String group = counts instanceof CreatorCounts
+                    ? ((CreatorCounts) counts).groups.getOrDefault(name, name) : name;
+            if (counted.add(group)) count += counts.getOrDefault(name, 0);
+        }
         return count;
     }
 
@@ -389,6 +420,105 @@ final class UpdateInboxStore {
                 .unregisterOnSharedPreferenceChangeListener(listener);
     }
 
+    static void markCreatorItemRead(Context context, String itemId) {
+        synchronized (LOCK) {
+            ArrayList<Entry> entries = readLocked(context);
+            boolean changed = false;
+            for (Entry entry : entries) {
+                boolean entryChanged = false;
+                for (CreatorItem child : entry.children) {
+                    if (child.id.equals(itemId) && !child.read) {
+                        child.read = true;
+                        entryChanged = true;
+                        changed = true;
+                    }
+                }
+                if (entryChanged) entry.refreshCreatorState();
+            }
+            if (changed) writeLocked(context, entries);
+        }
+    }
+
+    static CreatorCatalog.FavoriteGroup favoriteGroup(Context context, String creator) {
+        String wanted = CreatorNameMatcher.normalized(creator);
+        for (CreatorCatalog.FavoriteGroup group : CreatorCatalog.favoriteGroups(context)) {
+            if (wanted.equals(CreatorNameMatcher.normalized(group.item.title))
+                    || CreatorIdentity.sameReviewedIdentity(group.item.title, creator)) return group;
+            for (NativeContentItem member : group.members.values()) {
+                if (wanted.equals(CreatorNameMatcher.normalized(member.title))
+                        || wanted.equals(CreatorNameMatcher.normalized(member.searchQuery))) return group;
+            }
+            for (String key : group.relationshipKeys)
+                if (wanted.equals(CreatorNameMatcher.normalized(key))) return group;
+        }
+        return null;
+    }
+
+    /** Coalesce batches without dropping older children or resetting their read state. */
+    private static void mergeCreatorHistory(ArrayList<Entry> entries) {
+        LinkedHashMap<String, Entry> creators = new LinkedHashMap<>();
+        java.util.Iterator<Entry> iterator = entries.iterator();
+        while (iterator.hasNext()) {
+            Entry entry = iterator.next();
+            if (!CATEGORY_ONLYFAP.equals(entry.category)) continue;
+            String key = CreatorNameMatcher.normalized(entry.creatorName);
+            Entry grouped = creators.get(key);
+            if (grouped == null) { creators.put(key, entry); continue; }
+            grouped.mergeChildren(entry);
+            iterator.remove();
+        }
+    }
+
+    /** Display grouping follows current aliases and the user's selected name/artwork. */
+    private static List<Entry> groupCreators(Context context, List<Entry> entries) {
+        ArrayList<Entry> result = new ArrayList<>();
+        LinkedHashMap<String, Entry> creators = new LinkedHashMap<>();
+        List<CreatorCatalog.FavoriteGroup> favorites = CreatorCatalog.favoriteGroups(context);
+        for (Entry entry : entries) {
+            if (!CATEGORY_ONLYFAP.equals(entry.category)) { result.add(entry); continue; }
+            CreatorCatalog.FavoriteGroup favorite = null;
+            String wanted = CreatorNameMatcher.normalized(entry.creatorName);
+            for (CreatorCatalog.FavoriteGroup group : favorites) {
+                boolean matches = wanted.equals(CreatorNameMatcher.normalized(group.item.title))
+                        || CreatorIdentity.sameReviewedIdentity(group.item.title, entry.creatorName);
+                for (NativeContentItem member : group.members.values()) matches |=
+                        wanted.equals(CreatorNameMatcher.normalized(member.title))
+                        || wanted.equals(CreatorNameMatcher.normalized(member.searchQuery));
+                for (String alias : group.relationshipKeys) matches |=
+                        wanted.equals(CreatorNameMatcher.normalized(alias));
+                if (matches) { favorite = group; break; }
+            }
+            String name = favorite == null ? entry.creatorName : favorite.item.title;
+            String key = CreatorNameMatcher.normalized(name);
+            Entry grouped = creators.get(key);
+            if (grouped == null) {
+                try { grouped = Entry.decode(entry.encode()); }
+                catch (Exception ignored) { grouped = entry; }
+                grouped.backingIds.add(entry.id);
+                grouped.creatorAliases.add(entry.creatorName);
+                grouped.creatorName = name;
+                grouped.title = name;
+                if (favorite != null) {
+                    grouped.avatarUrl = favorite.item.imageUrl;
+                    grouped.avatarReferer = favorite.item.uploader.isEmpty() ? favorite.item.url : favorite.item.uploader;
+                    for (NativeContentItem member : favorite.members.values()) {
+                        grouped.creatorAliases.add(member.title);
+                        grouped.creatorAliases.add(member.searchQuery);
+                    }
+                    grouped.creatorAliases.addAll(favorite.relationshipKeys);
+                }
+                creators.put(key, grouped);
+                result.add(grouped);
+            } else {
+                grouped.backingIds.add(entry.id);
+                grouped.mergeChildren(entry);
+            }
+            grouped.creatorAliases.add(entry.creatorName);
+            grouped.refreshCreatorState();
+        }
+        return result;
+    }
+
     static void markCreatorRead(
             Context context,
             java.util.Collection<String> creatorNames
@@ -401,6 +531,7 @@ final class UpdateInboxStore {
             for (Entry entry : entries) {
                 if (entry.read || !CATEGORY_ONLYFAP.equals(entry.category)) continue;
                 if (!wanted.contains(CreatorNameMatcher.normalized(entry.creatorName))) continue;
+                entry.markChildrenRead();
                 entry.read = true;
                 changed = true;
             }
@@ -415,6 +546,7 @@ final class UpdateInboxStore {
             boolean changed = false;
             for (Entry entry : entries) {
                 if (id.equals(entry.id) && !entry.read) {
+                    entry.markChildrenRead();
                     entry.read = true;
                     changed = true;
                     break;
@@ -435,6 +567,7 @@ final class UpdateInboxStore {
                     continue;
                 }
                 if (!entry.read) {
+                    entry.markChildrenRead();
                     entry.read = true;
                     changed = true;
                 }
@@ -461,7 +594,8 @@ final class UpdateInboxStore {
                 if (item == null || item.url == null || item.url.trim().isEmpty()) continue;
                 NotificationCoordinator.ExperienceItem wrapped =
                         new NotificationCoordinator.ExperienceItem(sourceKey, item);
-                String creator = NotificationCoordinator.onlyFapCreatorName(wrapped);
+                String creator = alert.creatorName.isEmpty()
+                        ? NotificationCoordinator.onlyFapCreatorName(wrapped) : alert.creatorName;
                 if (creator.isEmpty() || !isFavoriteCreator(context, creator)) continue;
 
                 String key = CreatorNameMatcher.normalized(creator);
@@ -497,6 +631,10 @@ final class UpdateInboxStore {
                 : entry.count == 1 ? "New content" : entry.count + " new items";
         entry.freshUrls.addAll(acc.urls);
         entry.items.addAll(acc.items);
+        for (SourceItem source : acc.sourceItems) {
+            entry.children.add(new CreatorItem(source.sourceKey, acc.name, source.item, timestamp, false));
+        }
+        entry.refreshCreatorState();
         applyCreatorMetadata(context, entry, acc);
         entry.fingerprint = fingerprint(entry.category, entry.creatorName, entry.freshUrls);
         entry.id = entry.fingerprint + ":" + timestamp;
@@ -595,7 +733,8 @@ final class UpdateInboxStore {
     }
 
     private static boolean isOnlyFapSource(String key) {
-        return "fapello".equals(key) || "bunkr".equals(key) || "onlyhaven".equals(key);
+        return "fapello".equals(key) || "bunkr".equals(key) || "onlyhaven".equals(key)
+                || "wikifeet".equals(key) || "wikifeetx".equals(key);
     }
 
     static boolean isFavoriteCreator(Context context, String creatorName) {
@@ -603,7 +742,8 @@ final class UpdateInboxStore {
         String wanted = CreatorNameMatcher.normalized(creatorName);
         if (wanted.isEmpty()) return false;
         for (String favorite : CreatorFavoriteStore.names(context)) {
-            if (wanted.equals(CreatorNameMatcher.normalized(favorite))) return true;
+            if (wanted.equals(CreatorNameMatcher.normalized(favorite))
+                    || CreatorIdentity.sameReviewedIdentity(favorite, creatorName)) return true;
         }
         return false;
     }
@@ -661,6 +801,9 @@ final class UpdateInboxStore {
     }
 
     static final class Entry {
+        // Transient flattened UI child. It never becomes a top-level persisted entry.
+        CreatorItem creatorItem;
+        Entry creatorParent;
         String id = "";
         String fingerprint = "";
         String category = "";
@@ -684,10 +827,15 @@ final class UpdateInboxStore {
         int count;
         int videoCount;
         boolean read;
+        final ArrayList<CreatorItem> children = new ArrayList<>();
+        final LinkedHashSet<String> backingIds = new LinkedHashSet<>();
+        final LinkedHashSet<String> creatorAliases = new LinkedHashSet<>();
         final ArrayList<String> freshUrls = new ArrayList<>();
         final ArrayList<NativeContentItem> items = new ArrayList<>();
 
         JSONObject encode() throws Exception {
+            JSONArray childValues = new JSONArray();
+            for (CreatorItem child : children) childValues.put(child.encode());
             JSONObject value = new JSONObject()
                     .put("id", id)
                     .put("fingerprint", fingerprint)
@@ -713,7 +861,8 @@ final class UpdateInboxStore {
                     .put("videoCount", videoCount)
                     .put("read", read)
                     .put("freshUrls", new JSONArray(freshUrls))
-                    .put("items", ContentItemCodec.encodeList(items, 1));
+                    .put("items", ContentItemCodec.encodeList(items, MAX_ENTRIES))
+                    .put("creatorItems", childValues);
             return value;
         }
 
@@ -757,7 +906,32 @@ final class UpdateInboxStore {
                     if (!url.isEmpty()) entry.freshUrls.add(url);
                 }
             }
-            entry.items.addAll(ContentItemCodec.decodeList(value.optJSONArray("items"), 1));
+            entry.items.addAll(ContentItemCodec.decodeList(value.optJSONArray("items"), MAX_ENTRIES));
+            JSONArray children = value.optJSONArray("creatorItems");
+            if (children != null) for (int i = 0; i < Math.min(children.length(), MAX_ENTRIES); i++) {
+                CreatorItem child = CreatorItem.decode(children.optJSONObject(i));
+                if (child != null) entry.children.add(child);
+            }
+            if (CATEGORY_ONLYFAP.equals(entry.category) && children == null) {
+                // Old snapshots kept only one item. Recover remaining URLs as actionable rows.
+                LinkedHashSet<String> known = new LinkedHashSet<>();
+                for (NativeContentItem item : entry.items) {
+                    CreatorItem child = new CreatorItem(CreatorUpdateIdentity.source(item),
+                            entry.creatorName, item, entry.timestamp, entry.read);
+                    if (known.add(child.id)) entry.children.add(child);
+                }
+                for (String url : entry.freshUrls) {
+                    String kind = legacyItemKind(url, entry.videoCount == entry.count && entry.count > 0);
+                    String thumbnail = kind.equals(NativeContentItem.KIND_IMAGE)
+                            && url.matches("(?i).*\\.(?:jpg|jpeg|png|webp|gif|avif)(?:[?#].*)?$") ? url : "";
+                    NativeContentItem item = new NativeContentItem(kind,
+                            "Content", url, thumbnail, "", "", "");
+                    CreatorItem child = new CreatorItem(CreatorUpdateIdentity.source(item),
+                            entry.creatorName, item, entry.timestamp, entry.read);
+                    if (known.add(child.id)) entry.children.add(child);
+                }
+            }
+            entry.refreshCreatorState();
             if (entry.fingerprint.isEmpty()) {
                 entry.fingerprint = fingerprint(entry.category, entry.title, entry.freshUrls);
             }
@@ -765,8 +939,91 @@ final class UpdateInboxStore {
             return entry;
         }
 
+        int unreadItems() {
+            int count = 0;
+            for (CreatorItem child : children) if (!child.read) count++;
+            return children.isEmpty() ? (read ? 0 : Math.max(1, this.count)) : count;
+        }
+
+        void markChildrenRead() { for (CreatorItem child : children) child.read = true; }
+
+        void refreshCreatorState() {
+            if (!CATEGORY_ONLYFAP.equals(category) || children.isEmpty()) return;
+            children.sort((a, b) -> Long.compare(b.timestamp, a.timestamp));
+            count = children.size();
+            videoCount = 0;
+            freshUrls.clear();
+            items.clear();
+            for (CreatorItem child : children) {
+                items.add(child.item);
+                freshUrls.add(child.item.url);
+                if (child.item.isVideo()) videoCount++;
+            }
+            read = unreadItems() == 0;
+            int unread = unreadItems();
+            subtitle = unread == 0 ? "All items read" : unread + (unread == 1 ? " new item" : " new items");
+        }
+
+        void mergeChildren(Entry other) {
+            for (CreatorItem child : other.children) {
+                CreatorItem existing = null;
+                for (CreatorItem current : children) if (current.id.equals(child.id)
+                        || CreatorUpdateIdentity.canonical(current.item.url).equals(CreatorUpdateIdentity.canonical(child.item.url))) {
+                    existing = current; break;
+                }
+                if (existing == null) children.add(child);
+                else {
+                    existing.read |= child.read;
+                    existing.item = existing.item.merge(child.item);
+                }
+            }
+            while (children.size() > MAX_ENTRIES) children.remove(children.size() - 1);
+            refreshCreatorState();
+        }
+
         NativeContentItem firstItem() {
-            return items.isEmpty() ? null : items.get(0);
+            return children.isEmpty() ? (items.isEmpty() ? null : items.get(0)) : children.get(0).item;
+        }
+    }
+
+    private static String legacyItemKind(String url, boolean allVideos) {
+        if (url.matches("(?i).*\\.(?:jpg|jpeg|png|webp|gif|avif)(?:[?#].*)?$")) return NativeContentItem.KIND_IMAGE;
+        if (allVideos || url.matches("(?i).*\\.(?:mp4|webm|m4v|mov|m3u8|mpd)(?:[?#].*)?$"))
+            return NativeContentItem.KIND_MEDIA;
+        if (FapelloRepository.isPostUrl(url)) {
+            try { return new java.net.URI(url).getPath().startsWith("/video/")
+                    ? NativeContentItem.KIND_MEDIA : NativeContentItem.KIND_IMAGE; }
+            catch (Exception ignored) { }
+        }
+        // Legacy profile/album markers lack media type. Keep their original focused-gallery route.
+        return NativeContentItem.KIND_SERIES;
+    }
+
+    static final class CreatorItem {
+        final String id;
+        final String sourceKey;
+        final String creatorName;
+        NativeContentItem item;
+        final long timestamp;
+        boolean read;
+
+        CreatorItem(String source, String creator, NativeContentItem item, long timestamp, boolean read) {
+            sourceKey = source;
+            creatorName = creator;
+            this.item = item;
+            id = CreatorUpdateIdentity.key(source, item);
+            this.timestamp = timestamp;
+            this.read = read;
+        }
+        JSONObject encode() throws Exception {
+            return new JSONObject().put("source", sourceKey).put("creator", creatorName)
+                    .put("content", ContentItemCodec.encode(item)).put("timestamp", timestamp).put("read", read);
+        }
+        static CreatorItem decode(JSONObject value) {
+            if (value == null || value.optJSONObject("content") == null) return null;
+            return new CreatorItem(value.optString("source"), value.optString("creator"),
+                    ContentItemCodec.decode(value.optJSONObject("content")), value.optLong("timestamp"),
+                    value.optBoolean("read"));
         }
     }
 
@@ -782,6 +1039,9 @@ final class UpdateInboxStore {
         }
 
         void add(String sourceKey, NativeContentItem item) {
+            String identity = CreatorUpdateIdentity.key(sourceKey, item);
+            for (SourceItem existing : sourceItems)
+                if (identity.equals(CreatorUpdateIdentity.key(existing.sourceKey, existing.item))) return;
             items.add(item);
             sourceItems.add(new SourceItem(sourceKey, item));
             if (!urls.contains(item.url.trim())) urls.add(item.url.trim());
