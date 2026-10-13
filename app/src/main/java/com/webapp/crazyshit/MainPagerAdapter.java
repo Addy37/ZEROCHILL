@@ -61,6 +61,9 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         default void onChaosClearDisplayChanged(boolean clear) {
         }
 
+        default void onChaosTemporaryPinchChanged(boolean pinching) {
+        }
+
         default void onNavigationScroll(int sourcePage, int dy, boolean atTop, boolean userDriven) {
         }
     }
@@ -112,6 +115,11 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
             @Override
             public void onClearDisplayChanged(boolean clear) {
                 host.onChaosClearDisplayChanged(clear);
+            }
+
+            @Override
+            public void onTemporaryPinchChanged(boolean pinching) {
+                host.onChaosTemporaryPinchChanged(pinching);
             }
 
             @Override
