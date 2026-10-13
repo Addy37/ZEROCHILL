@@ -1,7 +1,8 @@
-# ZeroChill 4.3.6
+# ZeroChill 4.3.7
 
-- Fixed Shows fullscreen controls so the 2.2-second HUD idle timer resets from user interaction instead of unrelated player events.
-- Button taps, holds, scrubbing, and double-tap seek now keep or restore fullscreen controls consistently before they auto-hide again.
-- Fullscreen exit and player replacement now clear pending HUD timer and interaction state to prevent stale control behavior.
-- Added regression coverage across Shows playback routes and the shared fullscreen controller.
-- No changes to application ID, signing identity, persisted data, backend, Supabase, remote config, playback quality, buffering, preload, cache, or source routing.
+- Rebuilt ShitTok playback around AndroidX Media3 1.11.1 PlayerPool with a bounded three-player architecture for much smoother vertical swiping and faster player handoff.
+- Fixed stray and overlapping ShitTok audio by centralizing playback ownership and allowing audio only for the selected, settled, visible player.
+- Deferred refill, adapter, social-counter, and related UI work until scrolling is idle to reduce swipe hitching.
+- Removed automatic creator-gallery warming from the ShitTok queue. Creator galleries now warm only after explicit creator interaction.
+- Improved Favorite Creator update handling with grouped creator cards, exact unread items, individual read state, and merged-creator support.
+- Preserved the existing application ID, production signing identity, user data, favorites, history, downloads, source routing, remote config, Supabase schema, and account security boundaries.
