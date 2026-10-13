@@ -56,4 +56,19 @@ public class ShitTokIdleUiTest {
             assertSame(f.offscreenPlayer.player,owner.player("https://example.invalid/clip-1"));
         }
     }
+    @Test public void lateCachedSourceWakesSameSelectedOwnerWithoutWakingDifferentPage() {
+        try(ShitTokAudioOwnershipTest.Fixture f=new ShitTokAudioOwnershipTest.Fixture()) {
+            ReflectionHelpers.callInstanceMethod(f.feed,"wakeSelectedFromCache",from(String.class,"https://example.invalid/clip-2"));
+            org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
+            assertEquals(0,f.selectedPlayer.plays);
+            ReflectionHelpers.callInstanceMethod(f.feed,"wakeSelectedFromCache",from(String.class,"https://example.invalid/clip-0"));
+            org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
+            assertEquals(1,f.selectedPlayer.plays);
+            ReflectionHelpers.callInstanceMethod(f.feed,"handlePagerScrollState",from(int.class,ViewPager2.SCROLL_STATE_DRAGGING));
+            ReflectionHelpers.callInstanceMethod(f.feed,"wakeSelectedFromCache",from(String.class,"https://example.invalid/clip-0"));
+            org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
+            assertEquals(1,f.selectedPlayer.plays);
+        }
+    }
+
 }

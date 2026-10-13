@@ -959,7 +959,10 @@ public final class ChaosFeedView extends FrameLayout {
                     streamCache.put(item.url, resolved);
                 }
                 if (playbackOwner.accepts(item.url, leaseToken)) prepareVisible(indexOfUrl(item.url));
-                else ShitTokPoolDiagnostics.record("staleResolution", item.url);
+                else {
+                    ShitTokPoolDiagnostics.record("staleResolution", item.url);
+                    wakeSelectedFromCache(item.url);
+                }
             });
         });
     }
@@ -968,6 +971,16 @@ public final class ChaosFeedView extends FrameLayout {
             throws Exception {
         if (item == null || item.url == null || item.url.isEmpty()) return null;
         return PlayableSourceRouter.resolve(activity, item);
+    }
+
+    /** A retired request cannot bind a new lease. The current owner may independently
+     * consume the URL cache on the next UI turn, after a quick return to that same item. */
+    private void wakeSelectedFromCache(String url) {
+        pager.post(() -> {
+            if (closed || !active || !hostResumed || isPaging() || selectedPosition >= items.size()) return;
+            if (!url.equals(items.get(selectedPosition).url)) return;
+            playSelected();
+        });
     }
 
     private boolean shouldRetryResolution(NativeContentItem item, int position) {
