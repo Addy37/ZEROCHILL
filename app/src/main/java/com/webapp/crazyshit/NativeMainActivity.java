@@ -288,11 +288,18 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
             }
 
             @Override
+            public void onPageScrollStateChanged(int state) {
+                primaryPagerAdapter.onPrimaryMotionChanged(state == ViewPager2.SCROLL_STATE_IDLE);
+            }
+
+            @Override
             public void onPageSelected(int position) {
                 if (bottomNavigation != null) {
                     bottomNavigation.setPagerPosition(position);
                 }
                 showPagerChrome(MainPagerAdapter.pageForPagerPosition(position));
+                primaryPagerAdapter.onPrimaryMotionChanged(
+                        primaryPager.getScrollState() == ViewPager2.SCROLL_STATE_IDLE);
             }
         });
         shell.addView(primaryPager, new LinearLayout.LayoutParams(-1, 0, 1f));
@@ -548,11 +555,24 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         if (primaryPager == null) return;
         int pagerPosition = MainPagerAdapter.pagerPositionForPage(position);
         if (pagerPosition < 0) return;
-        showPagerChrome(position);
+        if (primaryPager.getCurrentItem() == pagerPosition &&
+                primaryPager.getVisibility() == View.VISIBLE) {
+            showPagerChrome(position);
+            return;
+        }
+        primaryPagerAdapter.onPrimaryMotionChanged(false);
+        int navId = position == MainPagerAdapter.PAGE_SERIES ? NAV_SERIES
+                : position == MainPagerAdapter.PAGE_CHAOS ? NAV_CHAOS
+                : position == MainPagerAdapter.PAGE_ONLYFAP ? NAV_ONLYFAP : NAV_LIBRARY;
+        selectNavSilently(navId);
         primaryPager.setCurrentItem(
                 pagerPosition,
                 smooth && ZeroChillMotion.animationsEnabled(this)
         );
+        // Same-page taps do not dispatch onPageSelected. Keep their activation idempotent.
+        showPagerChrome(position);
+        primaryPagerAdapter.onPrimaryMotionChanged(
+                primaryPager.getScrollState() == ViewPager2.SCROLL_STATE_IDLE);
     }
 
     private void showPagerChrome(int position) {

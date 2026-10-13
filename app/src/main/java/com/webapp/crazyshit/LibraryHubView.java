@@ -2,6 +2,8 @@ package com.webapp.crazyshit;
 
 import android.app.Activity;
 import android.content.Intent;
+import android.content.SharedPreferences;
+import android.view.ViewGroup;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.GradientDrawable;
@@ -53,8 +55,21 @@ final class LibraryHubView extends ScrollView {
     private final java.util.Set<String> requestedThumbnails = new java.util.HashSet<>();
     private final RenderedThumbnailResolver[] thumbnailResolvers;
     private final ShowsContinueFrameStore.Listener frameListener = this::onContinueFrameUpdated;
+    private LinearLayout mediaContent;
+    private final java.util.concurrent.ExecutorService refreshIo =
+            java.util.concurrent.Executors.newSingleThreadExecutor();
+    private final List<SharedPreferences> observedPreferences = new ArrayList<>();
+    private final SharedPreferences.OnSharedPreferenceChangeListener invalidation = (prefs, key) -> {
+        this.revision++;
+        if (this.active) scheduleRefresh();
+    };
+    private PrimaryTabWorkQueue.Scheduler work = (key, task) -> post(task);
+    private boolean active;
+    private boolean loading;
+    private int revision;
+    private Snapshot displayed;
     private int resolverCursor;
-    private boolean closed;
+    private volatile boolean closed;
 
     LibraryHubView(Activity activity, Listener listener) {
         super(activity);
@@ -79,62 +94,152 @@ final class LibraryHubView extends ScrollView {
                 new RenderedThumbnailResolver(activity, this::onThumbnailResolved)
         };
         ShowsContinueFrameStore.addListener(frameListener);
-        refresh();
+        mediaContent = new LinearLayout(activity);
+        mediaContent.setOrientation(LinearLayout.VERTICAL);
+        content.addView(mediaContent, new LinearLayout.LayoutParams(-1, -2));
+        addGlobalEmptyState();
+        for (String name : new String[] {"playback_history", "watch_later", "creator_favorites",
+                "creator_catalog_v1", "creator_avatar_overrides_v1", "manual_creator_merges_v1",
+                "native_video_downloads", "zerochill_account_secure_state", "popular_creator_feed_v3",
+                "popular_creator_feed_v2", "onlyfap_trending_v4", "fapzone_creator_feed_v3_1",
+                "fapzone_creator_feed_v3_2", "fapzone_creator_feed_v3_3", "fapzone_creator_feed_v1_1",
+                "fapzone_creator_feed_v1_2", "fapzone_creator_feed_v1_3"}) {
+            SharedPreferences prefs = activity.getSharedPreferences(name, Activity.MODE_PRIVATE);
+            observedPreferences.add(prefs);
+            prefs.registerOnSharedPreferenceChangeListener(invalidation);
+        }
     }
 
+    void setWorkScheduler(PrimaryTabWorkQueue.Scheduler scheduler) { work = scheduler; }
+
+    private void scheduleRefresh() { work.schedule("library-refresh", this::refresh); }
+
     void refresh() {
-        if (closed) return;
+        if (closed || !active || loading) return;
+        loading = true;
+        final int requestedRevision = revision;
+        final Snapshot previous = displayed;
+        refreshIo.execute(() -> {
+            Snapshot snapshot = new Snapshot(activity, observedPreferences, previous);
+            if (closed) return;
+            post(() -> work.schedule("library-publish", () -> {
+                loading = false;
+                if (closed) return;
+                if (requestedRevision != revision) {
+                    if (active) scheduleRefresh();
+                    return;
+                }
+                if (displayed != null && displayed.sameData(snapshot)) return;
+                android.os.Trace.beginSection("ZeroChill.Library.publish");
+                try { render(snapshot); } finally { android.os.Trace.endSection(); }
+                displayed = snapshot;
+            }));
+        });
+    }
+
+    private void render(Snapshot snapshot) {
         int scrollY = getScrollY();
-        if (content.getChildCount() > 1) {
-            content.removeViews(1, content.getChildCount() - 1);
+        Map<String, Integer> railPositions = new HashMap<>();
+        for (int i = 0; i < mediaContent.getChildCount(); i++) {
+            View section = mediaContent.getChildAt(i);
+            if (section instanceof ViewGroup && ((ViewGroup) section).getChildCount() > 1) {
+                View rail = ((ViewGroup) section).getChildAt(1);
+                railPositions.put(String.valueOf(section.getTag()), rail.getScrollX());
+            }
         }
-        socialHub.refresh();
+        LinearLayout previous = mediaContent;
+        mediaContent = new LinearLayout(activity);
+        mediaContent.setOrientation(LinearLayout.VERTICAL);
         thumbnailTargets.clear();
-        requestedThumbnails.clear();
-
-        List<PlaybackHistoryStore.Item> history = PlaybackHistoryStore.load(activity);
-        List<PlaybackHistoryStore.Item> continueItems = PlaybackHistoryStore.continueWatching(activity);
-        List<CreatorCatalog.FavoriteGroup> creators = CreatorCatalog.favoriteGroups(activity);
-        List<FavoriteStore.Item> watchLater = FavoriteStore.load(activity);
-        List<VideoDownloadStore.Entry> downloads = VideoDownloadStore.entries(activity);
-
+        // Keep pending resolution deduplicated, plus already resolved artwork.
+        List<PlaybackHistoryStore.Item> history = snapshot.history;
         Map<String, PlaybackHistoryStore.Item> historyByUrl = new HashMap<>();
         for (PlaybackHistoryStore.Item item : history) {
             if (item != null && item.pageUrl != null && !item.pageUrl.isEmpty()) {
                 historyByUrl.put(item.pageUrl, item);
             }
         }
+        if (!snapshot.continueItems.isEmpty()) addContinueSection(snapshot.continueItems);
+        if (!snapshot.creators.isEmpty()) addCreatorSection(snapshot.creators, snapshot.avatars);
+        if (!snapshot.watchLater.isEmpty()) addWatchLaterSection(snapshot.watchLater, historyByUrl);
+        if (!snapshot.downloads.isEmpty()) addDownloadsSection(snapshot.downloads);
+        if (!history.isEmpty()) addHistorySection(history);
+        if (mediaContent.getChildCount() == 0) addGlobalEmptyState();
+        content.removeView(previous);
+        content.addView(mediaContent, new LinearLayout.LayoutParams(-1, -2));
+        clearImages(previous);
+        resolvedThumbnails.keySet().retainAll(thumbnailTargets.keySet());
+        requestedThumbnails.retainAll(thumbnailTargets.keySet());
+        post(() -> {
+            if (closed) return;
+            scrollTo(0, Math.min(scrollY, Math.max(0, content.getHeight() - getHeight())));
+            for (int i = 0; i < mediaContent.getChildCount(); i++) {
+                View section = mediaContent.getChildAt(i);
+                Integer x = railPositions.get(String.valueOf(section.getTag()));
+                if (x != null && section instanceof ViewGroup &&
+                        ((ViewGroup) section).getChildCount() > 1) {
+                    ((ViewGroup) section).getChildAt(1).scrollTo(x, 0);
+                }
+            }
+        });
+    }
 
-        int sections = 0;
-        if (!continueItems.isEmpty()) {
-            addContinueSection(continueItems);
-            sections++;
+    private void clearImages(View view) {
+        if (view instanceof ImageView) Glide.with(view).clear(view);
+        if (view instanceof ViewGroup) {
+            ViewGroup group = (ViewGroup) view;
+            for (int i = 0; i < group.getChildCount(); i++) clearImages(group.getChildAt(i));
         }
-        if (!creators.isEmpty()) {
-            addCreatorSection(creators);
-            sections++;
-        }
-        if (!watchLater.isEmpty()) {
-            addWatchLaterSection(watchLater, historyByUrl);
-            sections++;
-        }
-        if (!downloads.isEmpty()) {
-            addDownloadsSection(downloads);
-            sections++;
-        }
-        if (!history.isEmpty()) {
-            addHistorySection(history);
-            sections++;
-        }
+    }
 
-        if (sections == 0) addGlobalEmptyState();
+    private static final class Snapshot {
+        final List<Map<String, ?>> inputs = new ArrayList<>();
+        final List<PlaybackHistoryStore.Item> history;
+        final List<PlaybackHistoryStore.Item> continueItems;
+        final List<CreatorCatalog.FavoriteGroup> creators;
+        final List<CreatorAvatarOverrideStore.Override> avatars;
+        final List<FavoriteStore.Item> watchLater;
+        final List<VideoDownloadStore.Entry> downloads;
+        final String downloadState;
 
-        post(() -> scrollTo(0, Math.min(scrollY, Math.max(0, content.getHeight() - getHeight()))));
+        Snapshot(Activity activity, List<SharedPreferences> preferences, Snapshot previous) {
+            for (SharedPreferences prefs : preferences) inputs.add(prefs.getAll());
+            downloads = VideoDownloadStore.entries(activity);
+            StringBuilder state = new StringBuilder();
+            for (VideoDownloadStore.Entry entry : downloads) {
+                state.append(entry.id).append(':').append(entry.status).append(':')
+                        .append(entry.downloadedBytes).append(':').append(entry.totalBytes)
+                        .append(':').append(entry.localUri).append(':').append(entry.reason).append(';');
+            }
+            downloadState = state.toString();
+            if (previous != null && inputs.equals(previous.inputs)) {
+                history = previous.history;
+                continueItems = previous.continueItems;
+                creators = previous.creators;
+                avatars = previous.avatars;
+                watchLater = previous.watchLater;
+            } else {
+                history = PlaybackHistoryStore.load(activity);
+                continueItems = PlaybackHistoryStore.continueWatching(activity);
+                creators = CreatorCatalog.favoriteGroups(activity);
+                avatars = CreatorAvatarOverrideStore.load(activity);
+                watchLater = FavoriteStore.load(activity);
+            }
+        }
+        boolean sameData(Snapshot other) {
+            return inputs.equals(other.inputs) && downloadState.equals(other.downloadState);
+        }
     }
 
     void close() {
         if (closed) return;
         closed = true;
+        active = false;
+        refreshIo.shutdownNow();
+        for (SharedPreferences prefs : observedPreferences) {
+            prefs.unregisterOnSharedPreferenceChangeListener(invalidation);
+        }
+        clearImages(mediaContent);
         ShowsContinueFrameStore.removeListener(frameListener);
         socialHub.close();
         for (RenderedThumbnailResolver resolver : thumbnailResolvers) {
@@ -145,7 +250,11 @@ final class LibraryHubView extends ScrollView {
     }
 
     void setSocialActive(boolean active) {
+        if (closed || this.active == active) return;
+        this.active = active;
         socialHub.setActive(active);
+        // DownloadManager can change without a preference write. Check once on settled entry.
+        if (active) scheduleRefresh();
     }
 
     private void addContinueSection(List<PlaybackHistoryStore.Item> items) {
@@ -214,20 +323,17 @@ final class LibraryHubView extends ScrollView {
         return card;
     }
 
-    private void addCreatorSection(List<CreatorCatalog.FavoriteGroup> creators) {
+    private void addCreatorSection(List<CreatorCatalog.FavoriteGroup> creators,
+            List<CreatorAvatarOverrideStore.Override> avatarOverrides) {
         LinearLayout rail = addSectionShell(
                 "Favorite Creators",
                 "Your saved creators",
                 "View all",
                 () -> activity.startActivity(new Intent(activity, CreatorsActivity.class))
         );
-        List<CreatorAvatarOverrideStore.Override> avatarOverrides =
-                CreatorAvatarOverrideStore.load(activity);
-
         int count = Math.min(14, creators.size());
         for (int i = 0; i < count; i++) {
             CreatorCatalog.FavoriteGroup group = creators.get(i);
-            CreatorGalleryPreloader.warm(activity, group.item);
             rail.addView(
                     creatorCard(group, avatarOverrides),
                     creatorRailParams(i == count - 1)
@@ -460,6 +566,7 @@ final class LibraryHubView extends ScrollView {
     ) {
         LinearLayout section = new LinearLayout(activity);
         section.setOrientation(LinearLayout.VERTICAL);
+        section.setTag(title);
 
         LinearLayout headingRow = new LinearLayout(activity);
         headingRow.setOrientation(LinearLayout.HORIZONTAL);
@@ -515,7 +622,7 @@ final class LibraryHubView extends ScrollView {
 
         LinearLayout.LayoutParams sectionParams = new LinearLayout.LayoutParams(-1, -2);
         sectionParams.setMargins(0, 0, 0, dp(25));
-        content.addView(section, sectionParams);
+        mediaContent.addView(section, sectionParams);
         return rail;
     }
 
@@ -548,7 +655,7 @@ final class LibraryHubView extends ScrollView {
         bodyParams.setMargins(dp(18), dp(8), dp(18), 0);
         empty.addView(body, bodyParams);
 
-        content.addView(empty, new LinearLayout.LayoutParams(-1, -2));
+        mediaContent.addView(empty, new LinearLayout.LayoutParams(-1, -2));
     }
 
     private MaterialCardView mediaCard(int radiusDp) {
@@ -661,6 +768,11 @@ final class LibraryHubView extends ScrollView {
     private void onThumbnailResolved(String pageUrl, String thumbnailUrl) {
         if (closed || clean(pageUrl).isEmpty() || clean(thumbnailUrl).isEmpty()) return;
         resolvedThumbnails.put(pageUrl, thumbnailUrl);
+        work.schedule("thumbnail:" + pageUrl, () -> applyResolvedThumbnail(pageUrl, thumbnailUrl));
+    }
+
+    private void applyResolvedThumbnail(String pageUrl, String thumbnailUrl) {
+        if (closed) return;
         List<ImageView> targets = thumbnailTargets.get(pageUrl);
         if (targets == null) return;
         for (ImageView image : new ArrayList<>(targets)) {
@@ -670,14 +782,11 @@ final class LibraryHubView extends ScrollView {
 
     private void onContinueFrameUpdated(String pageUrl) {
         if (closed || pageUrl == null || pageUrl.isEmpty()) return;
-        File frame = ShowsContinueFrameStore.find(activity, pageUrl);
-        if (frame == null) return;
-        List<ImageView> targets = thumbnailTargets.get(pageUrl);
-        if (targets == null) return;
-        String uri = frame.toURI().toString();
-        for (ImageView image : new ArrayList<>(targets)) {
-            loadResolvedImage(image, uri, pageUrl);
-        }
+        work.schedule("thumbnail:" + pageUrl, () -> {
+            if (closed) return;
+            File frame = ShowsContinueFrameStore.find(activity, pageUrl);
+            if (frame != null) applyResolvedThumbnail(pageUrl, frame.toURI().toString());
+        });
     }
 
     private void loadResolvedImage(ImageView image, String source, String pageUrl) {

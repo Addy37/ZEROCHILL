@@ -379,7 +379,6 @@ final class ShowsHubView extends FrameLayout {
     void setThisWeek(List<NativeContentItem> items) {
         thisWeekItems = safe(items);
         thisWeekShelf.adapter.replace(thisWeekItems);
-        preloadShelfArtwork(thisWeekItems, 5);
         thisWeekShelf.container.setVisibility(
                 thisWeekItems.isEmpty() ? View.GONE : View.VISIBLE
         );
@@ -389,7 +388,6 @@ final class ShowsHubView extends FrameLayout {
     void setCrazyShit(List<NativeContentItem> items) {
         crazyItems = safe(items);
         crazyShelf.adapter.replace(crazyItems);
-        preloadShelfArtwork(crazyItems, 4);
         crazyShelf.container.setVisibility(crazyItems.isEmpty() ? View.GONE : View.VISIBLE);
         rebuildHeroCandidates();
     }
@@ -397,7 +395,6 @@ final class ShowsHubView extends FrameLayout {
     void setEfukt(List<NativeContentItem> items) {
         efuktItems = safe(items);
         efuktShelf.adapter.replace(efuktItems);
-        preloadShelfArtwork(efuktItems, 4);
         efuktShelf.container.setVisibility(efuktItems.isEmpty() ? View.GONE : View.VISIBLE);
         rebuildHeroCandidates();
     }
@@ -405,14 +402,12 @@ final class ShowsHubView extends FrameLayout {
     void setCategories(List<NativeContentItem> items) {
         categoryItems = safe(items);
         categoryShelf.adapter.replace(categoryItems);
-        preloadShelfArtwork(categoryItems, 4);
         categoryShelf.container.setVisibility(categoryItems.isEmpty() ? View.GONE : View.VISIBLE);
     }
 
     void setKaoticCategories(List<NativeContentItem> items) {
         kaoticCategoryItems = safe(items);
         kaoticCategoryShelf.adapter.replace(kaoticCategoryItems);
-        preloadShelfArtwork(kaoticCategoryItems, 4);
         kaoticCategoryShelf.container.setVisibility(
                 kaoticCategoryItems.isEmpty() ? View.GONE : View.VISIBLE
         );
@@ -421,7 +416,6 @@ final class ShowsHubView extends FrameLayout {
     void setBaddieHubCategories(List<NativeContentItem> items) {
         baddieHubCategoryItems = safe(items);
         baddieHubCategoryShelf.adapter.replace(baddieHubCategoryItems);
-        preloadShelfArtwork(baddieHubCategoryItems, 4);
         baddieHubCategoryShelf.container.setVisibility(
                 baddieHubCategoryItems.isEmpty() ? View.GONE : View.VISIBLE
         );
@@ -608,12 +602,6 @@ final class ShowsHubView extends FrameLayout {
         preloadArtwork(heroItems.get((heroIndex + 1) % heroItems.size()));
     }
 
-    private void preloadShelfArtwork(List<NativeContentItem> items, int limit) {
-        if (items == null || items.isEmpty() || limit <= 0) return;
-        int count = Math.min(limit, items.size());
-        for (int index = 0; index < count; index++) preloadArtwork(items.get(index));
-    }
-
     private void preloadArtwork(NativeContentItem item) {
         if (item == null || EmbeddedBrowseArtwork.has(getContext(), item.url)) return;
         String imageUrl = item.imageUrl == null ? "" : item.imageUrl.trim();
@@ -627,7 +615,7 @@ final class ShowsHubView extends FrameLayout {
         Glide.with(this)
                 .load(new GlideUrl(imageUrl, headers.build()))
                 .diskCacheStrategy(DiskCacheStrategy.ALL)
-                .preload();
+                .preload(dp(360), dp(220));
     }
 
     private void saveRailState(Bundle out, String key, RecyclerView rail) {
@@ -1159,18 +1147,6 @@ final class ShowsHubView extends FrameLayout {
                 if (clickListener != null) clickListener.onOpen(item);
             });
             loadArtwork(holder.image, item, false);
-        }
-
-        @Override
-        public void onViewAttachedToWindow(@NonNull RailHolder holder) {
-            super.onViewAttachedToWindow(holder);
-            int position = holder.getBindingAdapterPosition();
-            if (position < 0 || position >= items.size()) return;
-            NativeContentItem item = items.get(position);
-            preloadArtwork(item);
-            if (prewarmCollections && prewarmListener != null) {
-                prewarmListener.onPrewarm(item);
-            }
         }
 
         @Override
