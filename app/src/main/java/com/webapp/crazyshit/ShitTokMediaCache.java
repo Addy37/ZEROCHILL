@@ -44,6 +44,14 @@ final class ShitTokMediaCache {
 
     static DataSource.Factory wrap(Context context, DataSource.Factory upstream) {
         return new CacheDataSource.Factory()
+                .setEventListener(new CacheDataSource.EventListener() {
+                    @Override public void onCachedBytesRead(long cacheSizeBytes, long cachedBytesRead) {
+                        ShitTokPoolDiagnostics.record("cacheHit", "bytes=" + cachedBytesRead);
+                    }
+                    @Override public void onCacheIgnored(int reason) {
+                        ShitTokPoolDiagnostics.record("cacheIgnored", "reason=" + reason);
+                    }
+                })
                 .setCache(get(context))
                 .setUpstreamDataSourceFactory(upstream)
                 .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR);

@@ -31,7 +31,7 @@ public final class ShitTokCreatorBlockQueueIntegrationTest {
 
     @Test
     public void creatorBlockUsesTargetedRemovalsAndPreservesEarlierQueueItem() {
-        ChaosFeedView feed = new ChaosFeedView(activity, item -> { });
+        ChaosFeedView feed = new ChaosFeedView(activity, item -> { }, false);
         ArrayList<NativeContentItem> items = ReflectionHelpers.getField(feed, "items");
         NativeContentItem earlier = media("Earlier", "Other", "https://example.com/earlier");
         NativeContentItem selected = media(

@@ -10,13 +10,13 @@ import java.util.Set;
 
 public final class ShitTokPreloadPolicyTest {
     @Test
-    public void playerWindow_preparesCurrentAndNextTwo() {
+    public void playerWindow_preparesCurrentNextAndPrevious() {
         int selected = 10;
 
         assertTrue(ChaosFeedView.shouldPreparePlayer(10, selected));
         assertTrue(ChaosFeedView.shouldPreparePlayer(11, selected));
-        assertTrue(ChaosFeedView.shouldPreparePlayer(12, selected));
-        assertFalse(ChaosFeedView.shouldPreparePlayer(9, selected));
+        assertFalse(ChaosFeedView.shouldPreparePlayer(12, selected));
+        assertTrue(ChaosFeedView.shouldPreparePlayer(9, selected));
         assertFalse(ChaosFeedView.shouldPreparePlayer(13, selected));
     }
 
@@ -30,9 +30,9 @@ public final class ShitTokPreloadPolicyTest {
     }
 
     @Test
-    public void warmPlayerBuilds_waitForIdleAndOnlyTargetForwardWindow() {
+    public void warmPlayerBuilds_waitForIdleAndTargetNeighbors() {
         assertTrue(ChaosFeedView.shouldQueueWarmPlayer(true, true, false, true, 11, 10));
-        assertTrue(ChaosFeedView.shouldQueueWarmPlayer(true, true, false, true, 12, 10));
+        assertTrue(ChaosFeedView.shouldQueueWarmPlayer(true, true, false, true, 9, 10));
         assertFalse(ChaosFeedView.shouldQueueWarmPlayer(true, true, true, true, 11, 10));
         assertFalse(ChaosFeedView.shouldQueueWarmPlayer(true, true, false, false, 11, 10));
         assertFalse(ChaosFeedView.shouldQueueWarmPlayer(true, true, false, true, 10, 10));

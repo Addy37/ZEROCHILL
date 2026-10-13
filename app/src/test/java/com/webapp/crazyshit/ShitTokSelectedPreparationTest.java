@@ -31,7 +31,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class ShitTokSelectedPreparationTest {
     @Test public void cachedSelectionDispatchesOnceAndRespectsHostState() {
         ActivityController<Activity> host = Robolectric.buildActivity(Activity.class).setup();
-        ChaosFeedView feed = new ChaosFeedView(host.get(), item -> { });
+        ChaosFeedView feed = new ChaosFeedView(host.get(), item -> { }, false);
         Object holder = null;
         try {
             // Stop source work before installing a fixture. The selected stream is cached.
@@ -54,37 +54,28 @@ public class ShitTokSelectedPreparationTest {
             Map<String, CrazyShitRepository.StreamInfo> cache =
                     ReflectionHelpers.getField(feed, "streamCache");
             cache.put(item.url, stream);
-            AtomicInteger plays = new AtomicInteger();
-            ExoPlayer player = (ExoPlayer) Proxy.newProxyInstance(ExoPlayer.class.getClassLoader(),
-                    new Class<?>[] { ExoPlayer.class }, (proxy, method, args) -> {
-                        if ("play".equals(method.getName())) plays.incrementAndGet();
-                        if ("getPlaybackState".equals(method.getName())) return Player.STATE_READY;
-                        if ("getCurrentPosition".equals(method.getName())) return 12_000L;
-                        if ("getDuration".equals(method.getName())) return 60_000L;
-                        if ("isPlaying".equals(method.getName())) return true;
-                        if (method.getReturnType() == boolean.class) return false;
-                        if (method.getReturnType() == int.class) return 0;
-                        if (method.getReturnType() == long.class) return 0L;
-                        if (method.getReturnType() == float.class) return 0f;
-                        return null;
-                    });
-            ReflectionHelpers.setField(holder, "player", player);
-            ReflectionHelpers.setField(holder, "stream", stream);
+            ShitTokAudioOwnershipTest.FakePlayer fake = new ShitTokAudioOwnershipTest.FakePlayer();
+            ShitTokPlaybackOwner owner = ReflectionHelpers.getField(feed, "playbackOwner");
+            owner.setPlayerFactoryForTest(() -> fake.player);
             ReflectionHelpers.setField(feed, "closed", false);
             ReflectionHelpers.setField(feed, "active", true);
             ReflectionHelpers.setField(feed, "hostResumed", true);
+            owner.permission(true, false);
+            owner.select(item.url, null, null, false);
+            owner.source(item.url, stream, owner.token(item.url));
+            int initiallyPlayed = fake.plays;
             for (int i = 0; i < 100; i++) {
                 ReflectionHelpers.callInstanceMethod(feed, "playSelected");
             }
-            System.out.println("SELECTED_PLAYER_DISPATCHES selections=100 playCalls=" + plays.get());
-            assertEquals(100, plays.get());
+            System.out.println("SELECTED_PLAYER_DISPATCHES selections=100 playCalls=" + (fake.plays - initiallyPlayed));
+            assertEquals("Cached same-page dispatch must not restart the retained player", 0, fake.plays - initiallyPlayed);
             ReflectionHelpers.setField(feed, "active", false);
             ReflectionHelpers.callInstanceMethod(feed, "playSelected");
-            assertEquals(100, plays.get());
+            assertEquals("Cached same-page dispatch must not restart the retained player", 0, fake.plays - initiallyPlayed);
             ReflectionHelpers.setField(feed, "active", true);
             ReflectionHelpers.setField(feed, "hostResumed", false);
             ReflectionHelpers.callInstanceMethod(feed, "playSelected");
-            assertEquals(100, plays.get());
+            assertEquals("Cached same-page dispatch must not restart the retained player", 0, fake.plays - initiallyPlayed);
         } finally {
             if (holder != null) ReflectionHelpers.setField(holder, "player", null);
             feed.close();

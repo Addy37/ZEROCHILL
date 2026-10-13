@@ -22,7 +22,10 @@ class MainFlowsBenchmark {
         TraceSectionMetric("zc.shittok.prepare", TraceSectionMetric.Mode.Sum),
         TraceSectionMetric("zc.shittok.detach", TraceSectionMetric.Mode.Sum),
         TraceSectionMetric("zc.shittok.release", TraceSectionMetric.Mode.Sum),
-        TraceSectionMetric("zc.shittok.decoder_release", TraceSectionMetric.Mode.Sum),
+        TraceSectionMetric("zc.shittok.pool_select", TraceSectionMetric.Mode.Sum),
+        TraceSectionMetric("zc.shittok.holder_bind", TraceSectionMetric.Mode.Sum),
+        TraceSectionMetric("zc.shittok.surface_handoff", TraceSectionMetric.Mode.Sum),
+        TraceSectionMetric("zc.shittok.refill_apply", TraceSectionMetric.Mode.Sum),
         TraceSectionMetric("zc.shittok.batch_fetch", TraceSectionMetric.Mode.Sum),
         TraceSectionMetric("zc.shittok.resolve_bg", TraceSectionMetric.Mode.Sum)
     )

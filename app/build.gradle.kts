@@ -1,5 +1,6 @@
 plugins {
     id("com.android.application")
+    id("org.jetbrains.kotlin.android")
     id("androidx.baselineprofile")
 }
 
@@ -18,6 +19,7 @@ android {
         targetSdk = 35
         versionCode = System.getenv("APP_VERSION_CODE")?.toIntOrNull() ?: 3_001_000
         versionName = System.getenv("APP_VERSION_NAME") ?: "3.1.0"
+        buildConfigField("boolean", "SHITTOK_POOL_DIAGNOSTICS", System.getenv("SHITTOK_POOL_DIAGNOSTICS") ?: "false")
         buildConfigField(
             "String",
             "FEEDBACK_ENDPOINT",
@@ -103,6 +105,8 @@ android {
     }
 }
 
+kotlin { jvmToolchain(17) }
+
 dependencies {
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.json:json:20240303")
@@ -124,6 +128,7 @@ dependencies {
 
     val media3Version = "1.11.1"
     implementation("androidx.media3:media3-exoplayer:$media3Version")
+    implementation("androidx.media3:media3-common-ktx:$media3Version")
     implementation("androidx.media3:media3-exoplayer-hls:$media3Version")
     implementation("androidx.media3:media3-exoplayer-dash:$media3Version")
     implementation("androidx.media3:media3-ui:$media3Version")

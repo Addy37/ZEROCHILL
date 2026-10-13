@@ -61,6 +61,7 @@ public final class UpdateInboxActivity extends Activity {
     private TextView markAll;
     private TextView clearAll;
     private String activeFilter = FILTER_ALL;
+    private final CreatorNotificationRows creatorRows = new CreatorNotificationRows();
     private SharedPreferences inboxPreferences;
     private boolean observing;
     private boolean socialLoading;
@@ -78,6 +79,7 @@ public final class UpdateInboxActivity extends Activity {
     @Override
     protected void onCreate(Bundle state) {
         super.onCreate(state);
+        if (state != null) creatorRows.restore(state.getStringArrayList("expanded_creator_notifications"));
         if (state != null) activeFilter = state.getString("filter", FILTER_ALL);
         buildUi();
         render();
@@ -123,6 +125,7 @@ public final class UpdateInboxActivity extends Activity {
 
     @Override
     protected void onSaveInstanceState(Bundle state) {
+        state.putStringArrayList("expanded_creator_notifications", creatorRows.expandedKeys());
         state.putString("filter", activeFilter);
         super.onSaveInstanceState(state);
     }
@@ -215,6 +218,11 @@ public final class UpdateInboxActivity extends Activity {
             private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
             @Override public boolean onMove(RecyclerView list, RecyclerView.ViewHolder source,
                     RecyclerView.ViewHolder target) { return false; }
+            @Override public int getSwipeDirs(RecyclerView list, RecyclerView.ViewHolder holder) {
+                int position = holder.getBindingAdapterPosition();
+                return position >= 0 && position < adapter.items.size()
+                        && adapter.items.get(position).creatorItem != null ? 0 : super.getSwipeDirs(list, holder);
+            }
             @Override public void onSwiped(RecyclerView.ViewHolder holder, int direction) {
                 int position = holder.getBindingAdapterPosition();
                 if (position == RecyclerView.NO_POSITION || position >= adapter.items.size()) return;
@@ -336,6 +344,16 @@ public final class UpdateInboxActivity extends Activity {
     }
 
     private void open(UpdateInboxStore.Entry entry) {
+        if (entry.creatorItem != null) {
+            UpdateInboxStore.markCreatorItemRead(this, entry.creatorItem.id);
+            render();
+            startActivity(CreatorNotificationNavigator.itemIntent(this, entry.creatorParent, entry.creatorItem));
+            return;
+        }
+        if (UpdateInboxStore.CATEGORY_ONLYFAP.equals(entry.category)) {
+            adapter.toggleCreator(entry);
+            return;
+        }
         if (UpdateInboxStore.CATEGORY_SOCIAL.equals(entry.category)
                 && entry.pageUrl != null && !entry.pageUrl.trim().isEmpty()) {
             openSocial(entry, false);
@@ -348,24 +366,6 @@ public final class UpdateInboxActivity extends Activity {
         if (UpdateInboxStore.CATEGORY_APP.equals(entry.category)) {
             Intent intent = new Intent(this, SettingsActivity.class);
             intent.putExtra(SettingsActivity.EXTRA_CHECK_FOR_UPDATES, true);
-            startActivity(intent);
-            return;
-        }
-
-        if (UpdateInboxStore.CATEGORY_ONLYFAP.equals(entry.category) &&
-                entry.creatorName != null && !entry.creatorName.trim().isEmpty()) {
-            Intent intent = NativeFeedBrowserActivity.createCreatorGallery(
-                    this,
-                    entry.creatorName,
-                    entry.creatorName,
-                    FapelloRepository.isModelUrl(entry.fapelloProfileUrl)
-                            ? entry.fapelloProfileUrl
-                            : ""
-            );
-            intent.putStringArrayListExtra(
-                    NativeFeedBrowserActivity.EXTRA_NOTIFICATION_FRESH_URLS,
-                    new ArrayList<>(entry.freshUrls)
-            );
             startActivity(intent);
             return;
         }
@@ -435,7 +435,15 @@ public final class UpdateInboxActivity extends Activity {
         private final Set<String> artworkChecked = new HashSet<>();
         private String loadedAccount = "";
 
+        void toggleCreator(UpdateInboxStore.Entry entry) {
+            applyRows(creatorRows.toggle(entry));
+        }
+
         void replace(List<UpdateInboxStore.Entry> next) {
+            applyRows(creatorRows.replace(next));
+        }
+
+        private void applyRows(List<UpdateInboxStore.Entry> next) {
             String account = ZeroChillSessionStore.currentUserId(UpdateInboxActivity.this);
             if (!account.equals(loadedAccount)) {
                 loadedAccount = account;
@@ -602,7 +610,8 @@ public final class UpdateInboxActivity extends Activity {
             boolean replyNotification = social
                     && ZeroChillSocialRepository.SocialActivity.TYPE_REPLY.equals(entry.socialType);
 
-            String section = sectionLabel(position);
+            String section = entry.creatorItem == null ? sectionLabel(position) : "";
+            holder.row.setPadding(dp(entry.creatorItem == null ? 10 : 28), dp(12), dp(7), dp(12));
             holder.section.setText(section);
             holder.section.setVisibility(section.isEmpty() ? View.GONE : View.VISIBLE);
 
@@ -613,8 +622,18 @@ public final class UpdateInboxActivity extends Activity {
             holder.actions.setVisibility(replyNotification ? View.VISIBLE : View.GONE);
             holder.reply.setVisibility(replyNotification ? View.VISIBLE : View.GONE);
             holder.like.setVisibility(replyNotification ? View.VISIBLE : View.GONE);
+            holder.reply.setText("Reply");
             holder.reply.setOnClickListener(v -> openSocial(entry, true));
             bindSocialLike(holder, entry, replyNotification);
+            if (UpdateInboxStore.CATEGORY_ONLYFAP.equals(entry.category)) {
+                holder.actions.setVisibility(View.VISIBLE);
+                holder.reply.setVisibility(View.VISIBLE);
+                holder.like.setVisibility(View.GONE);
+                boolean expanded = creatorRows.isExpanded(entry);
+                holder.reply.setText(expanded ? "Collapse ▴" : "Expand ▾");
+                holder.reply.setContentDescription((expanded ? "Collapse " : "Expand ") + entry.title + " items");
+                holder.reply.setOnClickListener(v -> toggleCreator(entry));
+            }
 
             boolean becameRead = holder.itemView.isAttachedToWindow()
                     && entry.read && entry.id.equals(holder.boundId)
@@ -638,11 +657,17 @@ public final class UpdateInboxActivity extends Activity {
             );
             holder.row.setOnClickListener(v -> open(entry));
             holder.row.setOnLongClickListener(v -> {
-                confirmDeleteNotification(entry);
+                confirmDeleteNotification(entry.creatorParent == null ? entry : entry.creatorParent);
                 return true;
             });
 
-            bindAvatar(holder.avatar, entry);
+            if (entry.creatorItem != null) {
+                NativeContentItem item = entry.creatorItem.item;
+                Glide.with(holder.avatar).clear(holder.avatar);
+                holder.avatar.setImageResource(R.drawable.ic_zerochill_devil);
+                loadImage(holder.avatar, item.imageUrl, item.uploader.startsWith("http") ? item.uploader : item.url,
+                        R.drawable.ic_zerochill_devil, false);
+            } else bindAvatar(holder.avatar, entry);
             bindThumbnail(holder, entry);
         }
 
@@ -839,10 +864,6 @@ public final class UpdateInboxActivity extends Activity {
 
         private String detailText(UpdateInboxStore.Entry entry) {
             String detail = entry.subtitle == null ? "" : entry.subtitle.trim();
-            if (UpdateInboxStore.CATEGORY_ONLYFAP.equals(entry.category)) {
-                if (!detail.isEmpty()) detail += "  ·  ";
-                detail += "Tap to see marked new items";
-            }
             return detail;
         }
 
@@ -888,7 +909,7 @@ public final class UpdateInboxActivity extends Activity {
             String referer = first == null ? "" :
                     (first.uploader == null || first.uploader.trim().isEmpty()
                             ? first.url : first.uploader);
-            boolean show = imageUrl != null && !imageUrl.trim().isEmpty();
+            boolean show = entry.creatorItem == null && imageUrl != null && !imageUrl.trim().isEmpty();
             if (!show && UpdateInboxStore.CATEGORY_SOCIAL.equals(entry.category)) {
                 requestLocalSocialArtwork(entry);
             }
@@ -896,7 +917,8 @@ public final class UpdateInboxActivity extends Activity {
             holder.thumbnail.setVisibility(show ? View.VISIBLE : View.GONE);
             holder.thumbnail.setClickable(show);
             holder.thumbnail.setFocusable(show);
-            holder.thumbnail.setContentDescription(show ? "Open video and conversation" : null);
+            holder.thumbnail.setContentDescription(show ? UpdateInboxStore.CATEGORY_ONLYFAP.equals(entry.category)
+                    ? "Expand creator items" : "Open video and conversation" : null);
             holder.thumbnail.setOnClickListener(show ? v -> open(entry) : null);
             LinearLayout.LayoutParams params = (LinearLayout.LayoutParams) holder.trailing.getLayoutParams();
             params.width = dp(show ? 52 : 14);

@@ -19,6 +19,7 @@ jobs:
       SUPABASE_PUBLISHABLE_KEY: ${{ secrets.FEEDBACK_ANON_KEY }}
       # CI/test artifacts must never write to production analytics.
       ANALYTICS_ENDPOINT: ""
+      SHITTOK_POOL_DIAGNOSTICS: "true"
 
     steps:
       - name: Check out project
@@ -187,6 +188,16 @@ jobs:
         with:
           gradle-version: '8.11.1'
           cache-provider: basic
+
+      - name: Run focused ShitTok swipe and audio regressions
+        run: >-
+          gradle --no-daemon :app:testDebugUnitTest
+          --tests 'com.webapp.crazyshit.ShitTokAudioOwnershipTest'
+          --tests 'com.webapp.crazyshit.ShitTokSettledSwipeTest'
+          --tests 'com.webapp.crazyshit.ShitTokSelectedPreparationTest'
+          --tests 'com.webapp.crazyshit.ShitTokSwipeStartTest'
+          --tests 'com.webapp.crazyshit.ShitTokAutoScrollIntegrationTest'
+          --tests 'com.webapp.crazyshit.ShitTokSessionResumeTest'
 
       - name: Run focused Favorite Creators cache-first regressions
         run: >-

@@ -221,7 +221,7 @@ final class NotificationCoordinator {
         android.widget.TextView body = new android.widget.TextView(activity);
         body.setText(
                 "Allow Android notifications for important ZEROCHILL app updates. "
-                        + "Fresh source activity stays inside More → Updates."
+                        + "Favorite Creator activity stays in Library → Notifications."
         );
         body.setTextColor(android.graphics.Color.rgb(184, 190, 198));
         body.setTextSize(14f);
@@ -1131,8 +1131,14 @@ final class NotificationCoordinator {
         final String key;
         final String source;
         final List<NativeContentItem> items;
+        final String creatorName;
 
         SourceAlert(String key, String source, List<NativeContentItem> items) {
+            this(key, source, items, "");
+        }
+
+        SourceAlert(String key, String source, List<NativeContentItem> items, String creatorName) {
+            this.creatorName = creatorName == null ? "" : creatorName.trim();
             this.key = key == null ? "source" : key.trim().toLowerCase(java.util.Locale.US);
             this.source = source == null ? "ZEROCHILL" : source;
             this.items = items == null ? new ArrayList<>() : items;

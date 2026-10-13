@@ -54,6 +54,8 @@ public final class BunkrGalleryActivity extends Activity {
     public static final String EXTRA_CREATOR_QUERY = "bunkr_gallery_creator_query";
     public static final String EXTRA_FAPELLO_PROFILE_URL = "bunkr_gallery_fapello_profile_url";
     public static final String EXTRA_MEDIA_FILTER = "bunkr_gallery_media_filter";
+    static final String EXTRA_NOTIFICATION_GALLERY_FALLBACK = "notification_gallery_fallback";
+    private boolean notificationFallbackOpened;
     public static final String EXTRA_INITIAL_URL = "bunkr_gallery_initial_url";
     public static final String EXTRA_INITIAL_POSITION = "bunkr_gallery_initial_position";
     public static final String EXTRA_SHARED_ELEMENT_NAME = "bunkr_gallery_shared_element_name";
@@ -168,7 +170,19 @@ public final class BunkrGalleryActivity extends Activity {
         } else initializeGallery(snapshot);
     }
 
+    private boolean openNotificationFallback(String failedUrl) {
+        if (notificationFallbackOpened || isFinishing() || !initialUrl.equals(failedUrl)) return false;
+        Intent fallback = getIntent().getParcelableExtra(EXTRA_NOTIFICATION_GALLERY_FALLBACK);
+        if (fallback == null) return false;
+        notificationFallbackOpened = true;
+        releasePlayer();
+        startActivity(fallback);
+        finish();
+        return true;
+    }
+
     private void initializeGallery(BunkrGallerySessionStore.Snapshot snapshot) {
+        if ((snapshot == null || snapshot.items.isEmpty()) && openNotificationFallback(initialUrl)) return;
         if (snapshot == null) {
             sessionId = isCreatorGallery()
                     ? BunkrGallerySessionStore.createCreator(albumTitle, albumUrl, creatorQuery)
@@ -223,6 +237,7 @@ public final class BunkrGalleryActivity extends Activity {
                     @Override
                     public void onResolvedImageFailed(int position, NativeContentItem item) {
                         BunkrGallerySessionStore.clearResolvedUrl(sessionId, item.url);
+                        if (pager.getCurrentItem() == position) openNotificationFallback(item.url);
                     }
 
                     @Override
@@ -826,7 +841,8 @@ public final class BunkrGalleryActivity extends Activity {
                     if (requestGeneration != generation || isFinishing()) return;
                     resolvingMedia.remove(item.url);
                     adapter.setLoading(position, false);
-                    if (pager.getCurrentItem() == position) adapter.setFailed(position, true);
+                    if (pager.getCurrentItem() == position && !openNotificationFallback(item.url))
+                        adapter.setFailed(position, true);
                 });
             }
         });
@@ -895,6 +911,7 @@ public final class BunkrGalleryActivity extends Activity {
                     resolvingMedia.remove(item.url);
                     if (pendingVideoPosition == position && pager.getCurrentItem() == position) {
                         pendingVideoPosition = -1;
+                        if (openNotificationFallback(item.url)) return;
                         adapter.setFailed(position, true);
                         ZeroChillToast.makeText(this, "Couldn't play this video.", ZeroChillToast.LENGTH_SHORT).show();
                     }
@@ -954,6 +971,7 @@ public final class BunkrGalleryActivity extends Activity {
                 runOnUiThread(() -> {
                     if (requestGeneration != generation || isFinishing()) return;
                     adapter.setLoading(position, false);
+                    if (pager.getCurrentItem() == position && openNotificationFallback(item.url)) return;
                     adapter.setFailed(position, true);
                     ZeroChillToast.makeText(this, "Couldn't play this video.", ZeroChillToast.LENGTH_SHORT).show();
                 });
@@ -1023,10 +1041,12 @@ public final class BunkrGalleryActivity extends Activity {
                     player.setPlayWhenReady(recovered.playWhenReady && recoveryResumed);
                 }, () -> {
                     RatingFeedbackPrompt.recordPlaybackError(BunkrGalleryActivity.this);
+                    if (openNotificationFallback(item.url)) return;
                     releasePlayer(); adapter.setFailed(position, true);
                     ZeroChillToast.makeText(BunkrGalleryActivity.this, "Couldn't refresh this video. Tap it to retry.", ZeroChillToast.LENGTH_SHORT).show();
                 })) return;
                 RatingFeedbackPrompt.recordPlaybackError(BunkrGalleryActivity.this);
+                if (openNotificationFallback(item.url)) return;
                 releasePlayer();
                 adapter.setFailed(position, true);
                 ZeroChillToast.makeText(BunkrGalleryActivity.this, "Couldn't continue this video. Tap it to retry.", ZeroChillToast.LENGTH_SHORT).show();

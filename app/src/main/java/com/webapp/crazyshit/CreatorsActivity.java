@@ -216,7 +216,6 @@ public final class CreatorsActivity extends Activity {
 
     private void openCreator(CreatorCatalog.FavoriteGroup group) {
         if (group == null || group.item == null) return;
-        UpdateInboxStore.markCreatorRead(this, creatorAliases(group));
         BrowseUi.hideKeyboard(this, input);
         CreatorGallerySpec spec = CreatorGallerySpec.from(group);
         String sessionId = CreatorGalleryPreloader.sessionId(this, spec.cacheKey);
@@ -556,7 +555,7 @@ public final class CreatorsActivity extends Activity {
             NativeContentItem item = card.group.item;
             int unread = card.unread;
             if (unread > 0) {
-                holder.updateBadge.setText(unread > 99 ? "99+" : String.valueOf(unread));
+                holder.updateBadge.setText(unread > 9 ? "9+" : String.valueOf(unread));
                 holder.updateBadge.setContentDescription(
                         unread + (unread == 1 ? " new item from " : " new items from ") + item.title
                 );

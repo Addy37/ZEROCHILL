@@ -1444,7 +1444,7 @@ public final class NativeFeedBrowserActivity extends Activity {
             if (freshUrl == null || freshUrl.trim().isEmpty()) continue;
             for (NativeContentItem item : items) {
                 if (item == null || item.url == null) continue;
-                if (freshUrl.trim().equals(item.url) && added.add(item.url)) {
+                if (CreatorUpdateIdentity.matches(item, freshUrl) && added.add(item.url)) {
                     prioritized.add(item);
                     break;
                 }
@@ -1461,10 +1461,10 @@ public final class NativeFeedBrowserActivity extends Activity {
         if (!notificationFreshPendingFocus || items == null || items.isEmpty()) return;
         boolean found = false;
         for (NativeContentItem item : items) {
-            if (item != null && notificationFreshUrlSet.contains(item.url)) {
-                found = true;
-                break;
+            for (String fresh : notificationFreshUrlSet) {
+                if (CreatorUpdateIdentity.matches(item, fresh)) { found = true; break; }
             }
+            if (found) break;
         }
         if (!found) return;
         notificationFreshPendingFocus = false;

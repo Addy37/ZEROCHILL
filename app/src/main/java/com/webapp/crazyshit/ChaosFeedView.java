@@ -32,16 +32,11 @@ import android.widget.TextView;
 import androidx.annotation.NonNull;
 import androidx.core.widget.TextViewCompat;
 import androidx.core.view.ViewCompat;
-import androidx.media3.common.MediaItem;
-import androidx.media3.common.MimeTypes;
 import androidx.media3.common.PlaybackException;
 import androidx.media3.common.Player;
 import androidx.media3.common.VideoSize;
 import androidx.media3.common.util.UnstableApi;
-import androidx.media3.datasource.DefaultHttpDataSource;
-import androidx.media3.exoplayer.DefaultLoadControl;
 import androidx.media3.exoplayer.ExoPlayer;
-import androidx.media3.exoplayer.source.DefaultMediaSourceFactory;
 import androidx.media3.ui.AspectRatioFrameLayout;
 import androidx.media3.ui.PlayerView;
 import androidx.recyclerview.widget.RecyclerView;
@@ -101,17 +96,11 @@ public final class ChaosFeedView extends FrameLayout {
     private static final long FAILED_CLIP_SKIP_DELAY_MS = 1200L;
     private static final long SWIPE_PREPARE_IDLE_DELAY_MS = 60L;
     private static final long SWIPE_PREPARE_STAGGER_MS = 120L;
-    private static final long SWIPE_RELEASE_IDLE_DELAY_MS = 360L;
-    private static final long SWIPE_RELEASE_STAGGER_MS = 120L;
-    private static final int SHITTOK_MAX_VIDEO_WIDTH = 1920;
-    private static final int SHITTOK_MAX_VIDEO_HEIGHT = 1080;
-    private static final int SHITTOK_MAX_VIDEO_BITRATE = 8_000_000;
-    private static final int NEXT_PRELOAD_MIN_BUFFER_MS = 2_500;
-    private static final int NEXT_PRELOAD_MAX_BUFFER_MS = 6_000;
     private static final String SITE = "https://crazyshit.com/";
     private static final ExecutorService RECENT_PERSIST_IO = Executors.newSingleThreadExecutor();
 
     private final Activity activity;
+    private final boolean sourceRequestsEnabled;
     private final Host host;
     private final CrazyShitRepository repository = new CrazyShitRepository();
     private final ExecutorService io = Executors.newFixedThreadPool(6);
@@ -130,12 +119,19 @@ public final class ChaosFeedView extends FrameLayout {
                     return size() > MAX_STREAM_CACHE;
                 }
             };
+    private final Map<String, NativeContentItem> creatorIdentityCache = new HashMap<>();
+    private final Map<String, Boolean> creatorFavoriteCache = new HashMap<>();
     private final Set<String> resolving = new HashSet<>();
     private final Set<String> unplayable = new HashSet<>();
     private final Set<String> resolveRetried = new HashSet<>();
     private final Set<ChaosHolder> playerHolders =
             Collections.newSetFromMap(new IdentityHashMap<>());
-    private final Deque<ExoPlayer> deferredPlayerReleases = new ArrayDeque<>();
+    private ShitTokPlaybackOwner playbackOwner;
+    private final ShitTokFrameDiagnostics frameDiagnostics = new ShitTokFrameDiagnostics();
+    private final Deque<Runnable> deferredUiApplies = new ArrayDeque<>();
+    private int feedGeneration;
+    private int plannedPosition = -1;
+    private String plannedUrl = "";
     private final Deque<Integer> pendingWarmPreparePositions = new ArrayDeque<>();
     private final Random random = new Random();
     private final ChaosSourceMixer sourceMixer = new ChaosSourceMixer(repository, random);
@@ -165,16 +161,21 @@ public final class ChaosFeedView extends FrameLayout {
     private int consecutiveDryLoads;
     private int selectedPosition;
     private boolean userPaging;
-    private int creatorWarmAheadPosition = -1;
+    private boolean userDragInProgress;
+    private boolean settledSelectionPending;
     private int maintenancePosition = -1;
     private boolean maintenanceResolveIssued;
     private final Runnable saveRecentRunnable = this::saveRecentNow;
-    private final Runnable creatorWarmAheadRunnable = this::warmNextCreatorGallery;
     private final Runnable playerPrepareMaintenanceRunnable = this::runDeferredPrepareMaintenance;
-    private final Runnable playerReleaseMaintenanceRunnable = this::runDeferredReleaseMaintenance;
+
 
     public ChaosFeedView(Activity activity, Host host) {
+        this(activity, host, true);
+    }
+
+    ChaosFeedView(Activity activity, Host host, boolean sourceRequestsEnabled) {
         super(activity);
+        this.sourceRequestsEnabled = sourceRequestsEnabled;
         this.activity = activity;
         this.host = host;
         setBackgroundColor(Color.BLACK);
@@ -183,6 +184,21 @@ public final class ChaosFeedView extends FrameLayout {
         reloadBlockedCreatorKeys();
         chaosMuted = activity.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
                 .getBoolean(KEY_MUTED, false);
+        playbackOwner = new ShitTokPlaybackOwner(activity.getApplicationContext(), new ShitTokPlaybackOwner.Callbacks() {
+            @Override public void onLeaseChanged(String url) {
+                if (closed || isPaging()) return;
+                for (ChaosHolder holder : new ArrayList<>(playerHolders)) {
+                    if (holder.item != null && url.equals(holder.item.url) && holderAt(holder.boundPosition) == holder) holder.attachLease();
+                }
+                int position = indexOfUrl(url);
+                if (position >= 0) prepareVisible(position);
+            }
+            @Override public void onLeaseRetired(String url) {
+                for (ChaosHolder holder : new ArrayList<>(playerHolders)) {
+                    if (holder.item != null && url.equals(holder.item.url)) holder.detachLease();
+                }
+            }
+        });
         buildUi();
         loadMorePool();
     }
@@ -190,7 +206,7 @@ public final class ChaosFeedView extends FrameLayout {
     private void buildUi() {
         pager = new ViewPager2(activity);
         pager.setOrientation(ViewPager2.ORIENTATION_VERTICAL);
-        pager.setOffscreenPageLimit(3);
+        pager.setOffscreenPageLimit(1);
         adapter = new ChaosAdapter();
         pager.setAdapter(adapter);
         addView(pager, new FrameLayout.LayoutParams(-1, -1));
@@ -215,19 +231,7 @@ public final class ChaosFeedView extends FrameLayout {
         pager.registerOnPageChangeCallback(new ViewPager2.OnPageChangeCallback() {
             @Override
             public void onPageScrollStateChanged(int state) {
-                if (state == ViewPager2.SCROLL_STATE_DRAGGING) {
-                    userPaging = true;
-                    cancelPendingAutoAdvance();
-                    cancelSwipePlayerMaintenance();
-                } else if (state == ViewPager2.SCROLL_STATE_IDLE) {
-                    userPaging = false;
-                    scheduleSwipePlayerMaintenance(selectedPosition);
-                    ChaosHolder holder = holderAt(selectedPosition);
-                    if (holder != null && holder.player != null
-                            && holder.player.getPlaybackState() == Player.STATE_ENDED) {
-                        holder.handleCompletion(holder.player);
-                    }
-                }
+                handlePagerScrollState(state);
             }
 
             @Override
@@ -258,31 +262,108 @@ public final class ChaosFeedView extends FrameLayout {
                     host.onVerticalPageChanged(
                             position > previousPosition ? 1 : -1,
                             position == 0,
-                            active && userPaging
+                            active && userDragInProgress
                     );
                 }
-                markSeen(position);
+                settledSelectionPending = true;
                 pauseNonSelected(position);
-                playSelected();
-                warmCreatorGalleries(position);
-                ChaosHolder holder = holderAt(position);
-                if (holder != null) holder.showControlsTemporarily();
-                refreshSelectedLikeStateLater(position);
-                if (items.size() - position <= LOAD_AHEAD_AT) loadMorePool();
-                if (changed && pager.getScrollState() == ViewPager2.SCROLL_STATE_IDLE) {
+                if (!isPaging()) {
+                    settleSelectedPage();
                     scheduleSwipePlayerMaintenance(position);
                 }
             }
         });
     }
 
+    private boolean isPaging() {
+        return userPaging || (pager != null && pager.getScrollState() != ViewPager2.SCROLL_STATE_IDLE);
+    }
+
+    private void handlePagerScrollState(int state) {
+        if (state == ViewPager2.SCROLL_STATE_DRAGGING) userDragInProgress = true;
+        else if (state == ViewPager2.SCROLL_STATE_IDLE) userDragInProgress = false;
+        userPaging = state != ViewPager2.SCROLL_STATE_IDLE;
+        ShitTokPoolDiagnostics.record("pager", "state=" + state + " selected=" + selectedPosition);
+        playbackOwner.permission(false, chaosMuted);
+        if (userPaging) {
+            if (state == ViewPager2.SCROLL_STATE_DRAGGING) cancelPendingAutoAdvance();
+            cancelSwipePlayerMaintenance();
+            // Revoke audio immediately without history/chrome work or decoder teardown.
+            for (ChaosHolder holder : playerHolders) silencePlayer(holder.player);
+            RecyclerView rv = pagerRecycler();
+            if (rv != null) for (int i = 0; i < rv.getChildCount(); i++) {
+                RecyclerView.ViewHolder raw = rv.getChildViewHolder(rv.getChildAt(i));
+                if (raw instanceof ChaosHolder && !playerHolders.contains(raw))
+                    silencePlayer(((ChaosHolder) raw).player);
+            }
+        } else {
+            applyDeferredUi();
+            settleSelectedPage();
+            scheduleSwipePlayerMaintenance(selectedPosition);
+        }
+    }
+
+    private int indexOfUrl(String url) {
+        for (int i = 0; i < items.size(); i++) if (url.equals(items.get(i).url)) return i;
+        return -1;
+    }
+
+    private void reconcilePlaybackWindow() {
+        if (closed || !active || !hostResumed || isPaging() || selectedPosition >= items.size()) return;
+        String url = items.get(selectedPosition).url;
+        playbackOwner.select(url,
+                selectedPosition + 1 < items.size() ? items.get(selectedPosition + 1).url : null,
+                selectedPosition > 0 ? items.get(selectedPosition - 1).url : null,
+                ChaosPreloadPolicy.allowsLookAhead(activity));
+        playbackOwner.permission(true, chaosMuted);
+        plannedPosition = selectedPosition;
+        plannedUrl = url;
+    }
+
+    private void deferUiApply(Runnable apply) {
+        if (closed) return;
+        if (isPaging()) deferredUiApplies.addLast(apply);
+        else apply.run();
+    }
+
+    private void applyDeferredUi() {
+        if (closed || isPaging()) return;
+        while (!deferredUiApplies.isEmpty() && !isPaging()) {
+            long started = android.os.SystemClock.elapsedRealtime();
+            Trace.beginSection("zc.shittok.refill_apply");
+            try { deferredUiApplies.removeFirst().run(); } finally { Trace.endSection(); }
+            ShitTokPoolDiagnostics.record("refillApply", "ms=" + (android.os.SystemClock.elapsedRealtime()-started));
+        }
+    }
+
+    public String playbackDiagnostics() {
+        return playbackOwner.summary() + "\n" + frameDiagnostics.summary() + "\n" + ShitTokPoolDiagnostics.report();
+    }
+
+    private void settleSelectedPage() {
+        if (closed || !active || !hostResumed || isPaging()) return;
+        reconcilePlaybackWindow();
+        pauseNonSelected(selectedPosition);
+        ChaosHolder holder = holderAt(selectedPosition);
+        // A canceled swipe must retain the user's explicit pause.
+        if (holder == null || !holder.userPaused) playSelected();
+        if (!settledSelectionPending) return;
+        settledSelectionPending = false;
+        markSeen(selectedPosition);
+        if (holder != null) holder.showControlsTemporarily();
+        refreshSelectedLikeStateLater(selectedPosition);
+        if (items.size() - selectedPosition <= LOAD_AHEAD_AT) loadMorePool();
+    }
+
     public void setActive(boolean value) {
         active = value;
+        if (value && hostResumed) frameDiagnostics.start(activity); else frameDiagnostics.stop();
+        playbackOwner.permission(value && hostResumed && !isPaging() && !closed, chaosMuted);
         if (active && hostResumed) {
             pager.setUserInputEnabled(true);
+            reconcilePlaybackWindow();
             resolveAhead(selectedPosition);
             playSelected();
-            warmCreatorGalleries(selectedPosition);
             syncVisibleChrome();
             refreshSelectedLikeStateLater(selectedPosition);
         } else {
@@ -302,12 +383,14 @@ public final class ChaosFeedView extends FrameLayout {
 
     public void onHostResume() {
         hostResumed = true;
+        if (active) frameDiagnostics.start(activity);
         reloadBlockedCreatorKeys();
         if (creatorGalleryHandoff) {
             creatorGalleryHandoff = false;
             resetCreatorSwipePreview();
         }
         if (active) {
+            reconcilePlaybackWindow();
             resolveAhead(selectedPosition);
             playSelected();
             syncVisibleChrome();
@@ -317,13 +400,14 @@ public final class ChaosFeedView extends FrameLayout {
 
     public void onHostPause() {
         hostResumed = false;
+        frameDiagnostics.stop();
+        playbackOwner.permission(false, chaosMuted);
         cancelPendingAutoAdvance();
         cancelSwipePlayerMaintenance();
-        cancelCreatorWarmAhead();
         if (!creatorGalleryHandoff) resetCreatorSwipePreview();
         pauseAll();
         rememberSelectedPosition();
-        if (!creatorGalleryHandoff) releaseAllPlayers();
+        releaseAllPlayers();
         flushRecent();
     }
 
@@ -334,9 +418,13 @@ public final class ChaosFeedView extends FrameLayout {
     }
 
     public void refresh() {
+    if (isPaging()) { deferUiApply(this::refresh); return; }
+    feedGeneration++;
+    deferredUiApplies.clear();
+    playbackOwner.clearSession();
+    plannedPosition = -1;
     reloadBlockedCreatorKeys();
     cancelSwipePlayerMaintenance();
-    cancelCreatorWarmAhead();
     resetCreatorSwipePreview();
     pauseAll();
     sessionResume.clear();
@@ -345,6 +433,8 @@ public final class ChaosFeedView extends FrameLayout {
     poolLoading = false;
     cancelPendingAutoAdvance();
     streamCache.clear();
+    creatorIdentityCache.clear();
+    creatorFavoriteCache.clear();
     resolving.clear();
     unplayable.clear();
     resolveRetried.clear();
@@ -363,13 +453,15 @@ public final class ChaosFeedView extends FrameLayout {
         cancelPendingAutoAdvance();
         resetCreatorSwipePreview();
         closed = true;
+        frameDiagnostics.stop();
+        feedGeneration++;
+        deferredUiApplies.clear();
         poolLoading = false;
         active = false;
         hostResumed = false;
         exitManualFullscreen();
         if (commentsDialog != null && commentsDialog.isShowing()) commentsDialog.dismiss();
         cancelSwipePlayerMaintenance();
-        cancelCreatorWarmAhead();
         pauseAll();
         sessionResume.clear();
         releaseAllPlayers();
@@ -382,8 +474,9 @@ public final class ChaosFeedView extends FrameLayout {
     }
 
     private void loadMorePool() {
-    if (closed || poolLoading) return;
+    if (closed || poolLoading || !sourceRequestsEnabled) return;
     poolLoading = true;
+    final int batchGeneration = feedGeneration;
 
     io.execute(() -> {
         List<NativeContentItem> mixed;
@@ -407,8 +500,8 @@ public final class ChaosFeedView extends FrameLayout {
         List<NativeContentItem> prioritizedRecentFallback =
                 aspectPriority.order(recentFallback, random);
 
-        activity.runOnUiThread(() -> {
-            if (closed) return;
+        activity.runOnUiThread(() -> deferUiApply(() -> {
+            if (closed || batchGeneration != feedGeneration) return;
             poolLoading = false;
             int before = items.size();
             appendUnique(prioritizedFresh);
@@ -427,12 +520,14 @@ public final class ChaosFeedView extends FrameLayout {
             if (added > 0 && freshAdded == 0) consecutiveDryLoads = 0;
 
             if (added > 0) {
+                long mutationAt = android.os.SystemClock.elapsedRealtime();
                 adapter.notifyItemRangeInserted(before, added);
+                ShitTokPoolDiagnostics.record("adapterInsert", "count=" + added + " ms=" + (android.os.SystemClock.elapsedRealtime()-mutationAt));
                 initialProgress.setVisibility(View.GONE);
                 empty.setVisibility(View.GONE);
+                reconcilePlaybackWindow();
                 resolveAhead(selectedPosition);
                 if (active && hostResumed) playSelected();
-                warmCreatorGalleries(selectedPosition);
                 tryPendingAutoAdvance();
             }
 
@@ -448,12 +543,12 @@ public final class ChaosFeedView extends FrameLayout {
                 autoAdvancePending = false;
                 autoAdvanceFrom = -1;
             }
-        });
+        }));
     });
 }
 
     static boolean shouldPreparePlayer(int position, int selectedPosition) {
-        return position >= selectedPosition && position <= selectedPosition + 2;
+        return position >= selectedPosition - 1 && position <= selectedPosition + 1;
     }
 
     static boolean shouldWarmOffTab(boolean hostResumed, int remainingItems) {
@@ -710,9 +805,16 @@ public final class ChaosFeedView extends FrameLayout {
             if (isBlockedCreator(item)) continue;
             if (!acceptUnique(item, hiddenUrls, sessionUrls)) continue;
             items.add(item);
+            cacheCreatorMetadata(item);
             CrazyShitRepository.StreamInfo preloaded = ChaosStartupPreloader.takeResolved(item.url);
             if (preloaded != null) streamCache.put(item.url, preloaded);
         }
+    }
+
+    private void cacheCreatorMetadata(NativeContentItem media) {
+        NativeContentItem identity = ShitTokCreatorMetadata.creatorIdentity(activity, media);
+        creatorIdentityCache.put(media.url, identity);
+        creatorFavoriteCache.put(media.url, identity != null && CreatorFavoriteStore.contains(activity, identity));
     }
 
     static boolean acceptUnique(NativeContentItem item, Set<String> hidden,
@@ -790,50 +892,25 @@ public final class ChaosFeedView extends FrameLayout {
         }
     }
 
-    private void warmCreatorGalleries(int position) {
-        if (closed || !active || !hostResumed || position < 0 || position >= items.size()) return;
-        ShitTokCreatorGalleryPreloader.warm(activity, items.get(position));
-
-        cancelCreatorWarmAhead();
-        creatorWarmAheadPosition = position;
-        postDelayed(creatorWarmAheadRunnable, 700L);
-    }
-
-    private void cancelCreatorWarmAhead() {
-        removeCallbacks(creatorWarmAheadRunnable);
-        creatorWarmAheadPosition = -1;
-    }
-
-    private void warmNextCreatorGallery() {
-        int position = creatorWarmAheadPosition;
-        creatorWarmAheadPosition = -1;
-        if (closed || !active || !hostResumed || selectedPosition != position) return;
-        for (int next = position + 1; next < Math.min(items.size(), position + 8); next++) {
-            NativeContentItem candidate = items.get(next);
-            if (!ShitTokCreatorMetadata.hasCreator(candidate)) continue;
-            ShitTokCreatorGalleryPreloader.warm(activity, candidate);
-            break;
-        }
-    }
-
     private void resolveAhead(int position) {
         if (!hostResumed) return;
-        int ahead = ChaosPreloadPolicy.aheadCount(activity);
+        int ahead = ChaosPreloadPolicy.allowsLookAhead(activity) ? 2 : 0;
         if (!active) ahead = Math.min(ahead, 2);
         for (int offset = 0; offset <= ahead; offset++) {
             resolveAt(position + offset);
         }
         if (ahead > 0 && position > 0) resolveAt(position - 1);
+        if (ahead > 0 && position > 1) resolveAt(position - 2);
     }
 
     private boolean shouldResolvePosition(int position) {
         if (position == selectedPosition) return true;
         if (!ChaosPreloadPolicy.allowsLookAhead(activity)) return false;
-        return position >= selectedPosition - 1 && position <= selectedPosition + 3;
+        return position >= selectedPosition - 2 && position <= selectedPosition + 2;
     }
 
     private void resolveAt(int position) {
-        if (closed) return;
+        if (closed || isPaging()) return;
         if (position < 0 || position >= items.size()) return;
         NativeContentItem item = items.get(position);
         if (streamCache.containsKey(item.url)) {
@@ -852,7 +929,11 @@ public final class ChaosFeedView extends FrameLayout {
             prepareVisible(position);
             return;
         }
+        if (!sourceRequestsEnabled) { resolving.remove(item.url); return; }
 
+        final int resolutionGeneration = feedGeneration;
+        final int leaseToken = playbackOwner.token(item.url);
+        ShitTokPoolDiagnostics.record("sourceStart", item.url);
         io.execute(() -> {
             CrazyShitRepository.StreamInfo stream = ChaosStartupPreloader.takeResolved(item.url);
             Trace.beginSection("zc.shittok.resolve_bg");
@@ -864,8 +945,9 @@ public final class ChaosFeedView extends FrameLayout {
             }
             CrazyShitRepository.StreamInfo resolved = stream;
             activity.runOnUiThread(() -> {
-                if (closed) return;
+                if (closed || resolutionGeneration != feedGeneration) return;
                 resolving.remove(item.url);
+                ShitTokPoolDiagnostics.record("sourceEnd", item.url);
                 if (resolved == null || resolved.mediaUrl == null || resolved.mediaUrl.isEmpty()) {
                     if (shouldRetryResolution(item, position)) {
                         scheduleResolutionRetry(item, position);
@@ -876,7 +958,11 @@ public final class ChaosFeedView extends FrameLayout {
                     unplayable.remove(item.url);
                     streamCache.put(item.url, resolved);
                 }
-                prepareVisible(position);
+                if (playbackOwner.accepts(item.url, leaseToken)) prepareVisible(indexOfUrl(item.url));
+                else {
+                    ShitTokPoolDiagnostics.record("staleResolution", item.url);
+                    wakeSelectedFromCache(item.url);
+                }
             });
         });
     }
@@ -887,9 +973,19 @@ public final class ChaosFeedView extends FrameLayout {
         return PlayableSourceRouter.resolve(activity, item);
     }
 
+    /** A retired request cannot bind a new lease. The current owner may independently
+     * consume the URL cache on the next UI turn, after a quick return to that same item. */
+    private void wakeSelectedFromCache(String url) {
+        pager.post(() -> {
+            if (closed || !active || !hostResumed || isPaging() || selectedPosition >= items.size()) return;
+            if (!url.equals(items.get(selectedPosition).url)) return;
+            playSelected();
+        });
+    }
+
     private boolean shouldRetryResolution(NativeContentItem item, int position) {
         if (item == null || item.url == null || item.url.isEmpty()) return false;
-        if (!active || !hostResumed || position != selectedPosition) return false;
+        if (!active || !hostResumed || isPaging() || position != selectedPosition) return false;
         if (position < 0 || position >= items.size()) return false;
         if (!item.url.equals(items.get(position).url)) return false;
         return resolveRetried.add(item.url);
@@ -918,44 +1014,56 @@ public final class ChaosFeedView extends FrameLayout {
     }
 
     private void prepareVisible(int position) {
-        if (!active || !hostResumed) return;
-        if (userPaging && position != selectedPosition) return;
-        ChaosHolder holder = holderAt(position);
-        if (holder == null || position < 0 || position >= items.size()) return;
+        if (!active || !hostResumed || isPaging() || closed || position < 0 || position >= items.size()) return;
         NativeContentItem item = items.get(position);
         CrazyShitRepository.StreamInfo stream = streamCache.get(item.url);
-        if (stream != null) {
-            holder.noteResolutionRetryIfNeeded(resolveRetried.contains(item.url));
+        if (stream != null && shouldPreparePlayer(position, selectedPosition)) {
             if (position == selectedPosition) {
-                holder.prepare(stream, true);
-            } else if (shouldPreparePlayer(position, selectedPosition)
-                    && ChaosPreloadPolicy.allowsLookAhead(activity)) {
-                queueWarmPrepare(position);
-            } else {
-                holder.detachPlayerForDeferredRelease();
-            }
+                playbackOwner.source(item.url, stream, playbackOwner.token(item.url));
+                ChaosHolder holder = holderAt(position);
+                if (holder != null) holder.prepare(stream, true);
+            } else queueWarmPrepare(position);
         } else if (unplayable.contains(item.url)) {
-            holder.showResolutionFailureAndSkip(resolveRetried.contains(item.url));
+            ChaosHolder holder = holderAt(position);
+            if (holder != null) holder.showResolutionFailureAndSkip(resolveRetried.contains(item.url));
         }
     }
 
     private void playSelected() {
-        if (!active || !hostResumed) return;
+        if (!active || !hostResumed || isPaging()) return;
         if (selectedPosition < 0 || selectedPosition >= items.size()) return;
+        if (plannedPosition != selectedPosition || !items.get(selectedPosition).url.equals(plannedUrl)) reconcilePlaybackWindow();
         // Cache hits prepare through resolveAt; async completion prepares through
         // prepareVisible. Dispatching again here repeats the same player work.
         resolveAt(selectedPosition);
     }
 
     private void pauseNonSelected(int selected) {
+        ChaosHolder owner = holderAt(selected);
+        // RecyclerView children omit cached/detached holders that still own a player.
+        // Pause the registry too, and use holder identity rather than a stale position.
+        for (ChaosHolder holder : new ArrayList<>(playerHolders)) {
+            if (holder != owner) {
+                if (isPaging()) silencePlayer(holder.player);
+                else holder.pauseAndRecord();
+            }
+        }
         RecyclerView rv = pagerRecycler();
         if (rv == null) return;
         for (int i = 0; i < rv.getChildCount(); i++) {
             RecyclerView.ViewHolder raw = rv.getChildViewHolder(rv.getChildAt(i));
-            if (!(raw instanceof ChaosHolder)) continue;
-            ChaosHolder holder = (ChaosHolder) raw;
-            if (holder.getBindingAdapterPosition() != selected) holder.pauseAndRecord();
+            if (raw instanceof ChaosHolder && raw != owner && !playerHolders.contains(raw)) {
+                if (isPaging()) silencePlayer(((ChaosHolder) raw).player);
+                else ((ChaosHolder) raw).pauseAndRecord();
+            }
         }
+    }
+
+    /** Silence is immediate; decoder teardown remains on the existing deferred path. */
+    private static void silencePlayer(ExoPlayer player) {
+        if (player == null) return;
+        try { player.setVolume(0f); } catch (Exception ignored) { }
+        try { player.pause(); } catch (Exception ignored) { }
     }
 
     static boolean shouldRunSwipeMaintenance(
@@ -979,12 +1087,12 @@ public final class ChaosFeedView extends FrameLayout {
             return;
         }
         postDelayed(playerPrepareMaintenanceRunnable, SWIPE_PREPARE_IDLE_DELAY_MS);
-        postDelayed(playerReleaseMaintenanceRunnable, SWIPE_RELEASE_IDLE_DELAY_MS);
+
     }
 
     private void cancelSwipePlayerMaintenance() {
         removeCallbacks(playerPrepareMaintenanceRunnable);
-        removeCallbacks(playerReleaseMaintenanceRunnable);
+
         pendingWarmPreparePositions.clear();
         maintenanceResolveIssued = false;
     }
@@ -998,7 +1106,7 @@ public final class ChaosFeedView extends FrameLayout {
             int selectedPosition
     ) {
         return active && hostResumed && !userPaging && allowsLookAhead &&
-                position > selectedPosition && shouldPreparePlayer(position, selectedPosition);
+                position != selectedPosition && shouldPreparePlayer(position, selectedPosition);
     }
 
     private void queueWarmPrepare(int position) {
@@ -1036,7 +1144,7 @@ public final class ChaosFeedView extends FrameLayout {
         Integer target = null;
         while (!pendingWarmPreparePositions.isEmpty()) {
             int candidate = pendingWarmPreparePositions.removeFirst();
-            if (candidate > selectedPosition &&
+            if (candidate != selectedPosition &&
                     shouldPreparePlayer(candidate, selectedPosition)) {
                 target = candidate;
                 break;
@@ -1044,12 +1152,13 @@ public final class ChaosFeedView extends FrameLayout {
         }
         if (target == null) return;
 
-        ChaosHolder holder = holderAt(target);
-        if (holder != null && target < items.size()) {
+        if (target < items.size()) {
             NativeContentItem item = items.get(target);
             CrazyShitRepository.StreamInfo stream = streamCache.get(item.url);
-            if (stream != null && holder.player == null) {
-                holder.prepare(stream, false);
+            if (stream != null) {
+                playbackOwner.source(item.url, stream, playbackOwner.token(item.url));
+                ChaosHolder holder = holderAt(target);
+                if (holder != null) holder.prepare(stream, false);
             }
         }
 
@@ -1057,79 +1166,6 @@ public final class ChaosFeedView extends FrameLayout {
                 shouldRunSwipeMaintenance(
                         active, hostResumed, userPaging, position, selectedPosition)) {
             postDelayed(playerPrepareMaintenanceRunnable, SWIPE_PREPARE_STAGGER_MS);
-        }
-    }
-
-    private void runDeferredReleaseMaintenance() {
-        int position = maintenancePosition;
-        if (!shouldRunSwipeMaintenance(
-                active, hostResumed, userPaging, position, selectedPosition)) {
-            return;
-        }
-
-        ExoPlayer detached = deferredPlayerReleases.pollFirst();
-        if (detached != null) {
-            Trace.beginSection("zc.shittok.decoder_release");
-            try {
-                detached.release();
-            } catch (Exception ignored) {
-            } finally {
-                Trace.endSection();
-            }
-        } else {
-            detachOneDistantPlayer(position);
-        }
-
-        if ((!deferredPlayerReleases.isEmpty() || hasDistantPlayer(position)) &&
-                shouldRunSwipeMaintenance(
-                        active, hostResumed, userPaging, position, selectedPosition)) {
-            postDelayed(playerReleaseMaintenanceRunnable, SWIPE_RELEASE_STAGGER_MS);
-        }
-    }
-
-    private boolean hasDistantPlayer(int selected) {
-        for (ChaosHolder holder : playerHolders) {
-            int position = holder.boundPosition;
-            if (position < 0 || !shouldPreparePlayer(position, selected)) return true;
-        }
-        return false;
-    }
-
-    private boolean detachOneDistantPlayer(int selected) {
-        // Detach a stale holder first. The expensive ExoPlayer.release() happens on a later
-        // idle slice so RecyclerView recycling and decoder teardown do not stack on one frame.
-        for (ChaosHolder holder : new ArrayList<>(playerHolders)) {
-            int position = holder.boundPosition;
-            if (position < 0 || !shouldPreparePlayer(position, selected)) {
-                holder.detachPlayerForDeferredRelease();
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private void enqueueDeferredPlayerRelease(ExoPlayer player) {
-        if (player == null) return;
-        deferredPlayerReleases.addLast(player);
-        if (active && hostResumed && !userPaging &&
-                pager.getScrollState() == ViewPager2.SCROLL_STATE_IDLE) {
-            maintenancePosition = selectedPosition;
-            removeCallbacks(playerReleaseMaintenanceRunnable);
-            postDelayed(playerReleaseMaintenanceRunnable, SWIPE_RELEASE_IDLE_DELAY_MS);
-        }
-    }
-
-    private void drainDeferredPlayerReleasesNow() {
-        removeCallbacks(playerReleaseMaintenanceRunnable);
-        while (!deferredPlayerReleases.isEmpty()) {
-            ExoPlayer player = deferredPlayerReleases.removeFirst();
-            Trace.beginSection("zc.shittok.decoder_release");
-            try {
-                player.release();
-            } catch (Exception ignored) {
-            } finally {
-                Trace.endSection();
-            }
         }
     }
 
@@ -1154,6 +1190,7 @@ public final class ChaosFeedView extends FrameLayout {
                     holder.player == null || selectedPosition >= items.size() ||
                     !holder.item.url.equals(items.get(selectedPosition).url)) continue;
             try {
+                playbackOwner.remember(holder.item.url, holder.player.getCurrentPosition());
                 sessionResume.remember(holder.item.url, holder.player.getCurrentPosition(),
                         holder.player.getDuration());
             } catch (Exception ignored) {
@@ -1174,13 +1211,14 @@ public final class ChaosFeedView extends FrameLayout {
                 if (raw instanceof ChaosHolder) ((ChaosHolder) raw).releasePlayer();
             }
         }
-        drainDeferredPlayerReleasesNow();
+        playbackOwner.release();
+        plannedPosition = -1;
     }
 
     private void refreshSelectedLikeStateLater(int position) {
-        if (pager == null || !active || !hostResumed) return;
+        if (pager == null || !active || !hostResumed || isPaging()) return;
         pager.postDelayed(() -> {
-            if (!active || !hostResumed || position != selectedPosition) return;
+            if (!active || !hostResumed || isPaging() || position != selectedPosition) return;
             ChaosHolder holder = holderAt(position);
             if (holder != null) {
                 holder.refreshVideoLikeState();
@@ -1326,16 +1364,18 @@ public final class ChaosFeedView extends FrameLayout {
     }
 
     private void removeBlockedCreatorsFromQueue() {
+        if (isPaging()) { deferUiApply(this::removeBlockedCreatorsFromQueue); return; }
         ShitTokQueuePruner.Result result = ShitTokQueuePruner.removeBlockedCreators(
                 items,
                 blockedCreatorKeys,
                 selectedPosition
         );
         if (result.removed.isEmpty()) return;
+        playbackOwner.revokeAudio();
+        plannedPosition = -1;
 
         cancelPendingAutoAdvance();
         cancelSwipePlayerMaintenance();
-        cancelCreatorWarmAhead();
         resetCreatorSwipePreview();
 
         Set<String> removedUrls = new HashSet<>();
@@ -1374,7 +1414,6 @@ public final class ChaosFeedView extends FrameLayout {
         pauseNonSelected(selectedPosition);
         resolveAhead(selectedPosition);
         playSelected();
-        warmCreatorGalleries(selectedPosition);
         if (items.size() - selectedPosition <= LOAD_AHEAD_AT) loadMorePool();
     }
 
@@ -1396,6 +1435,7 @@ public final class ChaosFeedView extends FrameLayout {
     }
 
     private void hideFromChaos(NativeContentItem item) {
+        if (isPaging()) { deferUiApply(() -> hideFromChaos(item)); return; }
         if (item == null || item.url == null || item.url.isEmpty()) return;
         hiddenUrls.remove(item.url);
         hiddenUrls.add(item.url);
@@ -1513,7 +1553,7 @@ public final class ChaosFeedView extends FrameLayout {
     }
 
     private void retryPlayback(ChaosHolder holder, PlaybackException originalError) {
-        if (closed) return;
+        if (closed || !sourceRequestsEnabled) return;
         if (holder == null || holder.item == null || holder.item.url.isEmpty()) return;
         NativeContentItem retryItem = holder.item;
         String pageUrl = retryItem.url;
@@ -1521,6 +1561,9 @@ public final class ChaosFeedView extends FrameLayout {
 
         holder.showRetrying();
         holder.releasePlayer();
+        playbackOwner.invalidateSource(pageUrl);
+        final int retryGeneration = feedGeneration;
+        final int retryToken = playbackOwner.token(pageUrl);
         streamCache.remove(pageUrl);
         unplayable.remove(pageUrl);
         resolveRetried.add(pageUrl);
@@ -1534,7 +1577,7 @@ public final class ChaosFeedView extends FrameLayout {
             }
             CrazyShitRepository.StreamInfo resolved = refreshed;
             activity.runOnUiThread(() -> {
-                if (closed) return;
+                if (closed || retryGeneration != feedGeneration) return;
                 resolving.remove(pageUrl);
                 boolean valid = resolved != null
                         && resolved.mediaUrl != null
@@ -1546,7 +1589,7 @@ public final class ChaosFeedView extends FrameLayout {
                     unplayable.add(pageUrl);
                 }
 
-                if (!holder.isBoundTo(pageUrl, position)) {
+                if (!playbackOwner.accepts(pageUrl, retryToken) || isPaging() || !holder.isBoundTo(pageUrl, position)) {
                     prepareVisible(position);
                     return;
                 }
@@ -1554,6 +1597,7 @@ public final class ChaosFeedView extends FrameLayout {
                     holder.showPlayerFailureAndSkip(originalError, "Fresh stream lookup failed");
                     return;
                 }
+                playbackOwner.source(pageUrl, resolved, retryToken);
                 holder.prepare(resolved, active && hostResumed && position == selectedPosition);
             });
         });
@@ -1561,13 +1605,14 @@ public final class ChaosFeedView extends FrameLayout {
 
     private void showPlaybackReport(ChaosHolder holder) {
         if (holder == null || holder.item == null) return;
+        ShitTokPoolDiagnostics.setEnabled(true);
         String report = ChaosPlaybackDiagnostics.build(
                 holder.item,
                 holder.diagnosticStream(),
                 holder.lastPlaybackError,
                 holder.lastFailureStage,
                 holder.retryAttempted
-        );
+        ) + "\n\n" + playbackDiagnostics();
         new ZeroChillDialog.Builder(activity)
                 .setTitle("Playback report")
                 .setMessage(report)
@@ -1741,33 +1786,28 @@ public final class ChaosFeedView extends FrameLayout {
 
         @Override
         public void onBindViewHolder(@NonNull ChaosHolder holder, int position) {
-            holder.bind(items.get(position), position);
-            CrazyShitRepository.StreamInfo stream = streamCache.get(items.get(position).url);
-            if (stream != null && active && hostResumed && position == selectedPosition) {
-                holder.prepare(stream, true);
-            } else if (stream != null && active && hostResumed &&
-                    shouldPreparePlayer(position, selectedPosition)) {
-                queueWarmPrepare(position);
-            } else if (shouldResolvePosition(position)) {
-                resolveAt(position);
-            }
+            long at = android.os.SystemClock.elapsedRealtime();
+            Trace.beginSection("zc.shittok.holder_bind");
+            try { holder.bind(items.get(position), position); holder.attachLease(); }
+            finally { Trace.endSection(); }
+            ShitTokPoolDiagnostics.record("holderBind", "ms=" + (android.os.SystemClock.elapsedRealtime()-at));
+            ShitTokPoolDiagnostics.record("bind", "position=" + position);
+            if (!closed && active && hostResumed && !isPaging()) pager.post(() -> {
+                if (!closed && active && hostResumed && !isPaging()) playSelected();
+            });
         }
 
         @Override
         public void onViewRecycled(@NonNull ChaosHolder holder) {
-            holder.pauseAndRecord();
-            holder.detachPlayerForDeferredRelease();
+            holder.detachLease();
+            playerHolders.remove(holder);
+            ShitTokPoolDiagnostics.record("recycle", "position=" + holder.boundPosition);
             super.onViewRecycled(holder);
         }
 
         @Override
         public void onViewDetachedFromWindow(@NonNull ChaosHolder holder) {
-            holder.pauseAndRecord();
-            int position = holder.getBindingAdapterPosition();
-            if (!active || position == RecyclerView.NO_POSITION ||
-                    Math.abs(position - selectedPosition) > 1) {
-                holder.detachPlayerForDeferredRelease();
-            }
+            holder.detachLease();
             super.onViewDetachedFromWindow(holder);
         }
 
@@ -1779,6 +1819,10 @@ public final class ChaosFeedView extends FrameLayout {
                 holder.boundPosition = position;
             }
             super.onViewAttachedToWindow(holder);
+            holder.attachLease();
+            if (position == selectedPosition && active && hostResumed && !closed && !isPaging()) pager.post(() -> {
+                if (!closed && !isPaging()) playSelected();
+            });
         }
     }
 
@@ -1825,6 +1869,8 @@ public final class ChaosFeedView extends FrameLayout {
             }
         };
         ExoPlayer player;
+        Player.Listener uiPlayerListener;
+        int attachedToken = -1;
         NativeContentItem item;
         NativeContentItem creatorIdentity;
         CrazyShitRepository.StreamInfo stream;
@@ -1836,6 +1882,7 @@ public final class ChaosFeedView extends FrameLayout {
         boolean userPaused;
         boolean scrubbing;
         boolean everStarted;
+        boolean playbackSuspended;
         boolean retryAttempted;
         boolean failurePending;
         boolean horizontalVideo;
@@ -2177,6 +2224,7 @@ public final class ChaosFeedView extends FrameLayout {
                 }
                 if (player.isPlaying()) {
                     userPaused = true;
+                    playbackOwner.setUserPaused(item.url, true);
                     cancelPendingAutoAdvance();
                     player.pause();
                     updateProgress();
@@ -2184,12 +2232,13 @@ public final class ChaosFeedView extends FrameLayout {
                     syncPausedChrome();
                 } else {
                     userPaused = false;
+                    playbackOwner.setUserPaused(item.url, false);
                     hidePausedChrome();
                     everStarted = true;
                     if (player.getPlaybackState() == Player.STATE_ENDED) {
                         handleCompletion(player);
                     } else {
-                        player.play();
+                        playOwnedPlayer();
                     }
                     showControlsTemporarily();
                 }
@@ -2409,7 +2458,9 @@ public final class ChaosFeedView extends FrameLayout {
             Glide.with(creatorAvatar).clear(creatorAvatar);
             creatorAvatar.setImageResource(R.drawable.ic_more_account);
             creatorIdentity = creatorClip
-                    ? ShitTokCreatorMetadata.creatorIdentity(activity, media)
+                    ? (creatorIdentityCache.containsKey(media.url)
+                            ? creatorIdentityCache.get(media.url)
+                            : ShitTokCreatorMetadata.creatorIdentity(isPaging() ? null : activity, media))
                     : null;
             if (creatorIdentity == null) {
                 creatorAvatarControl.setVisibility(View.GONE);
@@ -2445,7 +2496,12 @@ public final class ChaosFeedView extends FrameLayout {
 
         private void refreshCreatorFavoriteBadge() {
             if (creatorIdentity == null) return;
-            boolean favorite = CreatorFavoriteStore.contains(activity, creatorIdentity);
+            boolean favorite;
+            if (isPaging() && item != null) favorite = Boolean.TRUE.equals(creatorFavoriteCache.get(item.url));
+            else {
+                favorite = CreatorFavoriteStore.contains(activity, creatorIdentity);
+                if (item != null) creatorFavoriteCache.put(item.url, favorite);
+            }
             creatorFavoriteBadge.setText(favorite ? "✓" : "+");
             creatorFavoriteBadge.setTextSize(favorite ? 13 : 16);
             creatorFavoriteBadge.setClickable(!favorite);
@@ -2459,8 +2515,8 @@ public final class ChaosFeedView extends FrameLayout {
         }
 
         void bind(NativeContentItem next, int position) {
-            pauseAndRecord();
-            detachPlayerForDeferredRelease();
+            detachLease();
+            playerHolders.add(this);
             root.removeCallbacks(skipFailedClipRunnable);
             root.removeCallbacks(progressTick);
             mediaLayer.animate().cancel();
@@ -2474,6 +2530,7 @@ public final class ChaosFeedView extends FrameLayout {
             lastFailureStage = "";
             boundPosition = position;
             everStarted = false;
+            playbackSuspended = false;
             controlsVisible = true;
             userPaused = false;
             scrubbing = false;
@@ -2555,7 +2612,7 @@ public final class ChaosFeedView extends FrameLayout {
             String target = item.url;
             int generation = ++videoLikeRequestGeneration;
             ZeroChillSocialRepository.videoLikeState(activity, target, (state, error) ->
-                    activity.runOnUiThread(() -> {
+                    activity.runOnUiThread(() -> deferUiApply(() -> {
                         if (generation != videoLikeRequestGeneration
                                 || item == null
                                 || !target.equals(item.url)
@@ -2566,7 +2623,7 @@ public final class ChaosFeedView extends FrameLayout {
                         videoLiked = state.liked;
                         videoLikeCount = state.count;
                         updateVideoLikeButton();
-                    })
+                    }))
             );
         }
 
@@ -2634,7 +2691,7 @@ public final class ChaosFeedView extends FrameLayout {
             String target = item.url;
             int generation = ++commentCountRequestGeneration;
             ZeroChillSocialRepository.loadComments(activity, target, (loaded, error) ->
-                    activity.runOnUiThread(() -> {
+                    activity.runOnUiThread(() -> deferUiApply(() -> {
                         if (generation != commentCountRequestGeneration
                                 || item == null
                                 || !target.equals(item.url)
@@ -2644,7 +2701,7 @@ public final class ChaosFeedView extends FrameLayout {
                         }
                         commentCount = visibleCommentCount(loaded);
                         updateCommentButton();
-                    })
+                    }))
             );
         }
 
@@ -2717,172 +2774,86 @@ public final class ChaosFeedView extends FrameLayout {
         }
 
         private void prepareMeasured(CrazyShitRepository.StreamInfo nextStream, boolean autoplay) {
+            if (isPaging()) return;
             if (item == null || nextStream == null || nextStream.mediaUrl == null || nextStream.mediaUrl.isEmpty()) return;
-            if (stream != null && stream.mediaUrl.equals(nextStream.mediaUrl) && player != null) {
-                PlaybackException currentError = player.getPlayerError();
-                if (currentError != null) {
-                    lastPlaybackError = currentError;
-                    lastFailureStage = "Player stopped before ready";
-                    if (!retryAttempted) {
-                        retryAttempted = true;
-                        retryPlayback(this, currentError);
-                    } else {
-                        showPlayerFailureAndSkip(currentError, lastFailureStage);
-                    }
-                    return;
-                }
-                loading.setVisibility(View.GONE);
-                applyMuteState();
-                userPaused = false;
-                hidePausedChrome();
-                if (autoplay) {
-                    everStarted = true;
-                    if (player.getPlaybackState() == Player.STATE_ENDED) {
-                        handleCompletion(player);
-                    } else {
-                        player.play();
-                    }
-                } else {
-                    player.pause();
-                }
-                maybeCompleteStartupHandoff();
-                preloadReadyComments(item, boundPosition);
-                return;
-            }
-
-            releasePlayer();
+            attachLease();
+            if (player == null) return;
             stream = nextStream;
             lastAttemptedStream = nextStream;
-            DefaultHttpDataSource.Factory http = new DefaultHttpDataSource.Factory();
-            try {
-                http.setUserAgent(WebSettings.getDefaultUserAgent(activity));
-            } catch (Exception ignored) {
-            }
-
-            Map<String, String> headers = new HashMap<>();
-            try {
-                headers.putAll(ShitShowPlayableResolver.playbackHeaders(nextStream.mediaUrl));
-            } catch (Exception ignored) {
-            }
-            if (nextStream.pageUrl != null && !nextStream.pageUrl.isEmpty()) {
-                putHeaderIfMissing(headers, "Referer", nextStream.requestReferer);
-                try {
-                    Uri page = Uri.parse(nextStream.pageUrl);
-                    if (page.getScheme() != null && page.getHost() != null) {
-                        putHeaderIfMissing(headers, "Origin", page.getScheme() + "://" + page.getHost());
-                    }
-                } catch (Exception ignored) {
+            userPaused = playbackOwner.isUserPaused(item.url);
+            if (uiPlayerListener != null) {
+                if (autoplay && !userPaused && ownsPlayback()) {
+                    if (player.getPlaybackState() == Player.STATE_ENDED) handleCompletion(player);
+                    else playOwnedPlayer();
                 }
-            }
-            try {
-                String cookies = CookieManager.getInstance().getCookie(nextStream.mediaUrl);
-                if ((cookies == null || cookies.isEmpty()) && nextStream.pageUrl != null) {
-                    cookies = CookieManager.getInstance().getCookie(nextStream.pageUrl);
+                if (player.getPlaybackState() == Player.STATE_READY) {
+                    loading.setVisibility(View.GONE);
+                    poster.setVisibility(View.GONE);
                 }
-                if (cookies != null && !cookies.isEmpty()) putHeaderIfMissing(headers, "Cookie", cookies);
-            } catch (Exception ignored) {
+                return;
             }
-            if (!headers.isEmpty()) http.setDefaultRequestProperties(headers);
-
-            DefaultMediaSourceFactory sourceFactory = new DefaultMediaSourceFactory(activity)
-                    .setDataSourceFactory(ShitTokMediaCache.wrap(activity, http));
-            ExoPlayer.Builder playerBuilder = new ExoPlayer.Builder(activity)
-                    .setMediaSourceFactory(sourceFactory);
-            if (!autoplay) {
-                playerBuilder.setLoadControl(
-                        new DefaultLoadControl.Builder()
-                                .setBufferDurationsMs(
-                                        NEXT_PRELOAD_MIN_BUFFER_MS,
-                                        NEXT_PRELOAD_MAX_BUFFER_MS,
-                                        350,
-                                        1_000
-                                )
-                                .setPrioritizeTimeOverSizeThresholds(true)
-                                .build()
-                );
-            }
-            player = playerBuilder.build();
-            playerHolders.add(this);
             ExoPlayer createdPlayer = player;
-            player.setRepeatMode(Player.REPEAT_MODE_OFF);
-            player.setVolume(chaosMuted ? 0f : 1f);
-            player.setTrackSelectionParameters(
-                    player.getTrackSelectionParameters()
-                            .buildUpon()
-                            .setMaxVideoSize(SHITTOK_MAX_VIDEO_WIDTH, SHITTOK_MAX_VIDEO_HEIGHT)
-                            .setMaxVideoBitrate(SHITTOK_MAX_VIDEO_BITRATE)
-                            .build()
-            );
-            playerView.setPlayer(player);
-
-            MediaItem.Builder media = new MediaItem.Builder().setUri(nextStream.mediaUrl);
-            String lowerUrl = nextStream.mediaUrl.toLowerCase(Locale.US);
-            if (lowerUrl.contains(".m3u8")) media.setMimeType(MimeTypes.APPLICATION_M3U8);
-            else if (lowerUrl.contains(".mpd")) media.setMimeType(MimeTypes.APPLICATION_MPD);
-            else if (lowerUrl.contains(".mp4") || lowerUrl.contains(".m4v")) media.setMimeType(MimeTypes.VIDEO_MP4);
-            player.setMediaItem(media.build());
-            if (autoplay && boundPosition == selectedPosition) {
-                long resumePosition = sessionResume.positionFor(item.url);
-                if (resumePosition > 0L) player.seekTo(resumePosition);
-            }
-            player.setPlayWhenReady(autoplay);
-            if (autoplay) everStarted = true;
-            player.addListener(new Player.Listener() {
+            final String listenerUrl = item.url;
+            final int listenerToken = attachedToken;
+            uiPlayerListener = new Player.Listener() {
                 @Override
                 public void onVideoSizeChanged(VideoSize videoSize) {
-                    if (player != createdPlayer || videoSize.width <= 0 || videoSize.height <= 0) return;
-                    float width = videoSize.width * Math.max(0.01f, videoSize.pixelWidthHeightRatio);
-                    float height = videoSize.height;
-                    videoAspectRatio = width / Math.max(1f, height);
-                    horizontalVideo = shouldOfferLandscapeFullscreen(videoAspectRatio);
-                    updateFullscreenPromptPosition();
-                    if (!aspectSampleRecorded) {
-                        aspectSampleRecorded = true;
-                        aspectPriority.record(item, videoAspectRatio);
-                    }
-                    root.post(ChaosHolder.this::syncOrientationChrome);
+                    if (!validUiCallback(createdPlayer, listenerUrl, listenerToken)
+                            || videoSize.width <= 0 || videoSize.height <= 0) return;
+                    postOwnerUi(createdPlayer, listenerUrl, listenerToken, () -> {
+                        float width = videoSize.width * Math.max(0.01f, videoSize.pixelWidthHeightRatio);
+                        videoAspectRatio = width / Math.max(1f, videoSize.height);
+                        horizontalVideo = shouldOfferLandscapeFullscreen(videoAspectRatio);
+                        updateFullscreenPromptPosition();
+                        if (!aspectSampleRecorded) {
+                            aspectSampleRecorded = true;
+                            aspectPriority.record(item, videoAspectRatio);
+                        }
+                        syncOrientationChrome();
+                    });
                 }
 
                 @Override
                 public void onPlaybackStateChanged(int state) {
-                    if (player != createdPlayer) return;
-                    if (state == Player.STATE_READY) {
-                        RatingFeedbackPrompt.recordSuccessfulPlayback(activity, nextStream.mediaUrl);
-                        failurePending = false;
-                        root.removeCallbacks(skipFailedClipRunnable);
-                        loading.setVisibility(View.GONE);
-                        failure.setVisibility(View.GONE);
-                        poster.setVisibility(View.GONE);
-                        updateProgress();
-                        maybeCompleteStartupHandoff();
-                        preloadReadyComments(item, boundPosition);
-                    } else if (state == Player.STATE_ENDED) {
-                        if (boundPosition == selectedPosition) sessionResume.clear();
-                        loading.setVisibility(View.GONE);
-                        seekBar.setProgress(1000);
-                        updateProgress();
-                        if (item != null) {
-                            try {
-                                long duration = Math.max(0L, createdPlayer.getDuration());
-                                PlaybackHistoryStore.record(
-                                        activity,
-                                        item.title,
-                                        item.url,
-                                        duration,
-                                        duration,
-                                        true
-                                );
-                            } catch (Exception ignored) {
+                    if (!validUiCallback(createdPlayer, listenerUrl, listenerToken)) return;
+                    postOwnerUi(createdPlayer, listenerUrl, listenerToken, () -> {
+                        if (createdPlayer.getPlaybackState() != state) return;
+                        if (state == Player.STATE_READY) {
+                            RatingFeedbackPrompt.recordSuccessfulPlayback(activity, nextStream.mediaUrl);
+                            failurePending = false;
+                            root.removeCallbacks(skipFailedClipRunnable);
+                            loading.setVisibility(View.GONE);
+                            failure.setVisibility(View.GONE);
+                            poster.setVisibility(View.GONE);
+                            updateProgress();
+                            maybeCompleteStartupHandoff();
+                            preloadReadyComments(item, boundPosition);
+                        } else if (state == Player.STATE_ENDED) {
+                            if (boundPosition == selectedPosition) sessionResume.clear();
+                            loading.setVisibility(View.GONE);
+                            seekBar.setProgress(1000);
+                            updateProgress();
+                            if (item != null) {
+                                try {
+                                    long duration = Math.max(0L, createdPlayer.getDuration());
+                                    PlaybackHistoryStore.record(activity, item.title, item.url,
+                                            duration, duration, true);
+                                } catch (Exception ignored) { }
                             }
+                            handleCompletion(createdPlayer);
                         }
-                        handleCompletion(createdPlayer);
-                    }
+                    });
                 }
 
                 @Override
                 public void onIsPlayingChanged(boolean isPlaying) {
-                    if (player != createdPlayer) return;
+                    if (!validUiCallback(createdPlayer, listenerUrl, listenerToken) || isPaging()) return;
+                    if (isPlaying && !ownsPlayback()) {
+                        silencePlayer(createdPlayer);
+                        return;
+                    }
                     if (isPlaying) {
+                        playbackSuspended = false;
                         userPaused = false;
                         everStarted = true;
                         hidePausedChrome();
@@ -2892,29 +2863,77 @@ public final class ChaosFeedView extends FrameLayout {
                         if (userPaused) {
                             if (!scrubbing) showControlsPersistent();
                             syncPausedChrome();
-                        } else {
-                            hidePausedChrome();
-                        }
+                        } else hidePausedChrome();
                     }
                 }
 
                 @Override
                 public void onPlayerError(PlaybackException error) {
-                    if (player != createdPlayer) return;
-                    loading.setVisibility(View.GONE);
-                    userPaused = false;
-                    hidePausedChrome();
-                    lastPlaybackError = error;
-                    lastFailureStage = "Player error";
-                    if (!retryAttempted) {
-                        retryAttempted = true;
-                        root.post(() -> retryPlayback(ChaosHolder.this, error));
-                    } else {
-                        showPlayerFailureAndSkip(error, lastFailureStage);
-                    }
+                    if (!validUiCallback(createdPlayer, listenerUrl, listenerToken)) return;
+                    postOwnerUi(createdPlayer, listenerUrl, listenerToken, () -> {
+                        if (createdPlayer.getPlayerError() != error
+                                || (lastPlaybackError == error && retryAttempted)) return;
+                        if (playbackOwner.recoverDecoder(createdPlayer, error)) return;
+                        loading.setVisibility(View.GONE);
+                        userPaused = false;
+                        hidePausedChrome();
+                        lastPlaybackError = error;
+                        lastFailureStage = "Player error";
+                        if (!retryAttempted) {
+                            retryAttempted = true;
+                            postOwnerUi(createdPlayer, listenerUrl, listenerToken, () -> {
+                                if (createdPlayer.getPlayerError() == error) retryPlayback(ChaosHolder.this, error);
+                            });
+                        } else showPlayerFailureAndSkip(error, lastFailureStage);
+                    });
                 }
-            });
-            createdPlayer.prepare();
+            };
+            createdPlayer.addListener(uiPlayerListener);
+            if (createdPlayer.getPlaybackState() == Player.STATE_READY) {
+                loading.setVisibility(View.GONE);
+                poster.setVisibility(View.GONE);
+                androidx.media3.common.VideoSize size = createdPlayer.getVideoSize();
+                uiPlayerListener.onVideoSizeChanged(size);
+                uiPlayerListener.onPlaybackStateChanged(Player.STATE_READY);
+            }
+            if (autoplay && !userPaused && ownsPlayback()) playOwnedPlayer();
+        }
+
+        private boolean validUiCallback(ExoPlayer expected, String url, int token) {
+            return player == expected && item != null && item.url.equals(url)
+                    && playbackOwner.accepts(url, token) && holderAt(boundPosition) == this
+                    && playbackOwner.isAttached(url, playerView);
+        }
+
+        private void postOwnerUi(ExoPlayer expected, String url, int token, Runnable action) {
+            root.post(() -> deferUiApply(() -> {
+                if (validUiCallback(expected, url, token)) action.run();
+            }));
+        }
+
+        void attachLease() {
+            if (item == null || closed || isPaging() || holderAt(boundPosition) != this) return;
+            ExoPlayer acquired = playbackOwner.player(item.url);
+            if (acquired == null) return;
+            if (player != acquired) {
+                detachLease();
+                player = acquired;
+                attachedToken = playbackOwner.token(item.url);
+            }
+            playbackOwner.attach(item.url, playerView);
+        }
+
+        void detachLease() {
+            if (player != null) {
+                if (uiPlayerListener != null) player.removeListener(uiPlayerListener);
+                if (item != null) playbackOwner.detach(item.url, playerView);
+                else playerView.setPlayer(null);
+            }
+            player = null;
+            uiPlayerListener = null;
+            attachedToken = -1;
+            stream = null;
+            root.removeCallbacks(progressTick);
         }
 
         private void maybeCompleteStartupHandoff() {
@@ -3111,12 +3130,37 @@ public final class ChaosFeedView extends FrameLayout {
             host.openDetails(item);
         }
 
+        private boolean ownsPlayback() {
+            return !closed && active && hostResumed && !isPaging() && item != null
+                    && boundPosition == selectedPosition && boundPosition >= 0
+                    && boundPosition < items.size()
+                    && item.url.equals(items.get(boundPosition).url)
+                    && holderAt(boundPosition) == this;
+        }
+
+        private void playOwnedPlayer() {
+            if (player == null) return;
+            if (!ownsPlayback()) {
+                silencePlayer(player);
+                return;
+            }
+            pauseNonSelected(boundPosition);
+            playbackSuspended = false;
+            playbackOwner.permission(true, chaosMuted);
+            playbackOwner.requestPlay(item.url);
+        }
+
         void applyMuteState() {
-            if (player != null) player.setVolume(chaosMuted ? 0f : 1f);
+            playbackOwner.permission(active && hostResumed && !closed && !isPaging(), chaosMuted);
+            if (player != null && !ownsPlayback()) silencePlayer(player);
         }
 
         void handleCompletion(ExoPlayer completedPlayer) {
             if (player != completedPlayer || failurePending) return;
+            if (!ownsPlayback()) {
+                silencePlayer(completedPlayer);
+                return;
+            }
             ShitTokAutoScrollPolicy.Completion decision = ShitTokAutoScrollPolicy.onCompleted(
                     active, hostResumed, boundPosition == selectedPosition, userPaused,
                     autoScrollEnabled, userPaging);
@@ -3124,7 +3168,7 @@ public final class ChaosFeedView extends FrameLayout {
                 requestAutoAdvance(boundPosition);
             } else if (decision == ShitTokAutoScrollPolicy.Completion.LOOP) {
                 completedPlayer.seekTo(0L);
-                completedPlayer.play();
+                playOwnedPlayer();
             }
         }
 
@@ -3486,8 +3530,14 @@ public final class ChaosFeedView extends FrameLayout {
         }
 
         void pauseAndRecord() {
-            if (player == null || item == null) return;
-            userPaused = false;
+            ExoPlayer paused = player;
+            if (paused == null) return;
+            // History reads/recording must never prevent the outgoing player from stopping.
+            silencePlayer(paused);
+            // Repeated ownership checks should not rescan history or restart chrome animations.
+            if (playbackSuspended) return;
+            playbackSuspended = true;
+            if (item == null || isPaging()) return;
             hidePausedChrome();
             try {
                 long position = Math.max(0L, player.getCurrentPosition());
@@ -3496,71 +3546,18 @@ public final class ChaosFeedView extends FrameLayout {
                     PlaybackHistoryStore.record(
                             activity, item.title, item.url, position, duration, false);
                 }
-                player.pause();
             } catch (Exception ignored) {
             }
         }
 
-        void detachPlayerForDeferredRelease() {
-            Trace.beginSection("zc.shittok.detach");
-            try {
-                detachMeasured();
-            } finally {
-                Trace.endSection();
-            }
-        }
-
-        private void detachMeasured() {
-            root.removeCallbacks(hideControlsRunnable);
-            root.removeCallbacks(skipFailedClipRunnable);
-            root.removeCallbacks(progressTick);
-            failurePending = false;
-            if (scrubbing) {
-                scrubbing = false;
-                pager.setUserInputEnabled(true);
-            }
-            ExoPlayer detached = player;
-            if (detached != null) {
-                try {
-                    detached.pause();
-                    playerView.setPlayer(null);
-                } catch (Exception ignored) {
-                }
-                player = null;
-                enqueueDeferredPlayerRelease(detached);
-            }
-            playerHolders.remove(this);
-            stream = null;
-        }
-
         void releasePlayer() {
-            Trace.beginSection("zc.shittok.release");
-            try {
-                releaseMeasured();
-            } finally {
-                Trace.endSection();
-            }
-        }
-
-        private void releaseMeasured() {
             root.removeCallbacks(hideControlsRunnable);
             root.removeCallbacks(skipFailedClipRunnable);
             root.removeCallbacks(progressTick);
             failurePending = false;
-            if (scrubbing) {
-                scrubbing = false;
-                pager.setUserInputEnabled(true);
-            }
-            if (player != null) {
-                try {
-                    playerView.setPlayer(null);
-                    player.release();
-                } catch (Exception ignored) {
-                }
-                player = null;
-            }
-            playerHolders.remove(this);
-            stream = null;
+            if (scrubbing) { scrubbing = false; pager.setUserInputEnabled(true); }
+            detachLease();
         }
+
     }
 }

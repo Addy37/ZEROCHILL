@@ -24,6 +24,7 @@ jobs:
       SUPABASE_PUBLISHABLE_KEY: ${{ secrets.FEEDBACK_ANON_KEY }}
       # Signed betas and emulator upgrade checks must not pollute production analytics.
       ANALYTICS_ENDPOINT: ""
+      SHITTOK_POOL_DIAGNOSTICS: "true"
 
     steps:
       - name: Check out project
@@ -142,6 +143,16 @@ jobs:
           if not different or pages["new", 5] == pages["new", 6]:
               raise SystemExit("Source did not return distinct deeper pages")
           PYTHON
+
+      - name: Run focused ShitTok swipe and audio regressions
+        run: >-
+          gradle --no-daemon :app:testDebugUnitTest
+          --tests 'com.webapp.crazyshit.ShitTokAudioOwnershipTest'
+          --tests 'com.webapp.crazyshit.ShitTokSettledSwipeTest'
+          --tests 'com.webapp.crazyshit.ShitTokSelectedPreparationTest'
+          --tests 'com.webapp.crazyshit.ShitTokSwipeStartTest'
+          --tests 'com.webapp.crazyshit.ShitTokAutoScrollIntegrationTest'
+          --tests 'com.webapp.crazyshit.ShitTokSessionResumeTest'
 
       - name: Run focused Favorite Creators cache-first regressions
         run: >-

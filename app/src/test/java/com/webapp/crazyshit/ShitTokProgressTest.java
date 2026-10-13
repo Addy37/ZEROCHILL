@@ -26,7 +26,7 @@ public class ShitTokProgressTest {
     @Test public void timesFollowPlaybackAndScrubTargetAndResetUnknownDuration() {
         ActivityController<Activity> host = Robolectric.buildActivity(Activity.class).setup();
         host.get().setTheme(R.style.Theme_CrazyShit);
-        ChaosFeedView feed = new ChaosFeedView(host.get(), item -> { });
+        ChaosFeedView feed = new ChaosFeedView(host.get(), item -> { }, false);
         RecyclerView.ViewHolder holder = null;
         try {
             RecyclerView.Adapter<?> adapter = ReflectionHelpers.getField(feed, "adapter");
