@@ -189,6 +189,14 @@ jobs:
           gradle-version: '8.11.1'
           cache-provider: basic
 
+      - name: Run focused notification entry regressions
+        run: >-
+          gradle --no-daemon :app:testDebugUnitTest
+          --tests 'com.webapp.crazyshit.NotificationCenterUiTest'
+          --tests 'com.webapp.crazyshit.NotificationEntryLatencyTest'
+          --tests 'com.webapp.crazyshit.CreatorNotificationsTest'
+          --tests 'com.webapp.crazyshit.UpdateInboxStoreTest'
+
       - name: Run focused primary-tab activation regressions
         run: >-
           gradle --no-daemon :app:testDebugUnitTest

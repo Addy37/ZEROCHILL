@@ -39,10 +39,12 @@ public class NotificationCenterUiTest {
     @Test public void emptyHistoryAndZeroUnreadRemainCleanAcrossRecreation() throws Exception {
         ActivityController<UpdateInboxActivity> controller = Robolectric.buildActivity(UpdateInboxActivity.class).setup();
         UpdateInboxActivity activity = controller.get();
+        NotificationInboxTestIdle.await(activity);
         assertEquals("You're caught up", text(activity, "count").getText().toString());
         assertEquals(View.INVISIBLE, text(activity, "markAll").getVisibility());
         assertTrue(text(activity, "empty").getText().toString().startsWith("No notifications yet"));
         controller.recreate();
+        NotificationInboxTestIdle.await(controller.get());
         assertEquals(View.VISIBLE, text(controller.get(), "empty").getVisibility());
         controller.pause().stop().destroy();
     }
@@ -50,6 +52,7 @@ public class NotificationCenterUiTest {
     @Test public void newestFirstReadAllAndAppActionReuseExistingHistory() throws Exception {
         ActivityController<UpdateInboxActivity> controller = Robolectric.buildActivity(UpdateInboxActivity.class).setup();
         UpdateInboxActivity activity = controller.get();
+        NotificationInboxTestIdle.await(activity);
         UpdateInboxStore.recordAppUpdate(activity, "4.2.2", "ZeroChill 4.2.2", false);
         UpdateInboxStore.recordAppUpdate(activity, "4.2.3", "ZeroChill 4.2.3", false);
         render(activity);
@@ -57,6 +60,7 @@ public class NotificationCenterUiTest {
         assertEquals("2 unread notifications", text(activity, "count").getText().toString());
         assertEquals("4.2.3", UpdateInboxStore.all(activity).get(0).appVersion);
         text(activity, "markAll").performClick();
+        NotificationInboxTestIdle.await(activity);
         assertEquals(0, UpdateInboxStore.unreadCount(activity));
         assertEquals(View.INVISIBLE, text(activity, "markAll").getVisibility());
         Method open = UpdateInboxActivity.class.getDeclaredMethod("open", UpdateInboxStore.Entry.class);
@@ -71,6 +75,7 @@ public class NotificationCenterUiTest {
     @Test public void historyRowsClipAvatarsAndConstrainLongCopy() throws Exception {
         ActivityController<UpdateInboxActivity> controller = Robolectric.buildActivity(UpdateInboxActivity.class).setup();
         UpdateInboxActivity activity = controller.get();
+        NotificationInboxTestIdle.await(activity);
         UpdateInboxStore.recordAppUpdate(activity, "4.2.2", new String(new char[500]).replace('\0', 'W'), false);
         render(activity);
         RecyclerView recycler = (RecyclerView) value(activity, "recycler");
@@ -88,6 +93,7 @@ public class NotificationCenterUiTest {
         android.widget.FrameLayout trailing = (android.widget.FrameLayout) row.getChildAt(2);
         assertEquals(View.VISIBLE, trailing.getChildAt(1).getVisibility());
         row.performClick();
+        NotificationInboxTestIdle.await(activity);
         assertTrue(UpdateInboxStore.all(activity).get(0).read);
         adapter.bindViewHolder(holder, 0);
         Shadows.shadowOf(android.os.Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(200));
@@ -98,17 +104,19 @@ public class NotificationCenterUiTest {
     @Test public void foregroundHistoryRefreshesWithoutRestartAndStopsObservingWhenPaused() throws Exception {
         ActivityController<UpdateInboxActivity> controller = Robolectric.buildActivity(UpdateInboxActivity.class).setup();
         UpdateInboxActivity activity = controller.get();
+        NotificationInboxTestIdle.await(activity);
         UpdateInboxStore.recordAppUpdate(activity, "4.2.2", "ZeroChill 4.2.2", false);
-        Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
+        NotificationInboxTestIdle.await(activity);
         assertEquals("1 unread notification", text(activity, "count").getText().toString());
         UpdateInboxStore.markAllRead(activity);
-        Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
+        NotificationInboxTestIdle.await(activity);
         assertEquals("You're caught up", text(activity, "count").getText().toString());
         controller.pause();
         UpdateInboxStore.recordAppUpdate(activity, "4.2.3", "ZeroChill 4.2.3", false);
-        Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
+        NotificationInboxTestIdle.await(activity);
         assertEquals("You're caught up", text(activity, "count").getText().toString());
         controller.resume();
+        NotificationInboxTestIdle.await(activity);
         assertEquals("1 unread notification", text(activity, "count").getText().toString());
         controller.pause().stop().destroy();
     }
@@ -116,6 +124,7 @@ public class NotificationCenterUiTest {
     @Test public void cachedSocialNamesAreCleanAndLikesUseTheWholeRow() throws Exception {
         ActivityController<UpdateInboxActivity> controller = Robolectric.buildActivity(UpdateInboxActivity.class).setup();
         UpdateInboxActivity activity = controller.get();
+        NotificationInboxTestIdle.await(activity);
         UpdateInboxStore.Entry entry = new UpdateInboxStore.Entry();
         entry.id = "social:like";
         entry.category = UpdateInboxStore.CATEGORY_SOCIAL;
@@ -128,6 +137,7 @@ public class NotificationCenterUiTest {
         Method replace = adapter.getClass().getDeclaredMethod("replace", java.util.List.class);
         replace.setAccessible(true);
         replace.invoke(adapter, Collections.singletonList(entry));
+        NotificationInboxTestIdle.await(activity);
         RecyclerView.Adapter rows = (RecyclerView.Adapter) adapter;
         RecyclerView.ViewHolder holder = rows.createViewHolder(recycler, 0);
         rows.bindViewHolder(holder, 0);
@@ -144,6 +154,7 @@ public class NotificationCenterUiTest {
     @Test public void replyActionsHaveGenerousTouchTargetsAndFilterStateSurvivesRefresh() throws Exception {
         ActivityController<UpdateInboxActivity> controller = Robolectric.buildActivity(UpdateInboxActivity.class).setup();
         UpdateInboxActivity activity = controller.get();
+        NotificationInboxTestIdle.await(activity);
         UpdateInboxStore.Entry entry = new UpdateInboxStore.Entry();
         entry.id = "social:reply";
         entry.category = UpdateInboxStore.CATEGORY_SOCIAL;
@@ -154,6 +165,7 @@ public class NotificationCenterUiTest {
         Method replace = adapter.getClass().getDeclaredMethod("replace", java.util.List.class);
         replace.setAccessible(true);
         replace.invoke(adapter, Collections.singletonList(entry));
+        NotificationInboxTestIdle.await(activity);
         RecyclerView.Adapter rows = (RecyclerView.Adapter) adapter;
         RecyclerView.ViewHolder holder = rows.createViewHolder(recycler, 0);
         rows.bindViewHolder(holder, 0);
@@ -179,6 +191,7 @@ public class NotificationCenterUiTest {
     @Test public void socialRowsReuseLocallyCapturedVideoThumbnailWithoutStoredEntryArtwork() throws Exception {
         ActivityController<UpdateInboxActivity> controller = Robolectric.buildActivity(UpdateInboxActivity.class).setup();
         UpdateInboxActivity activity = controller.get();
+        NotificationInboxTestIdle.await(activity);
         String pageUrl = "https://crazyshit.com/video/thumbnail-test";
         SocialContentContextStore.remember(
                 activity,
@@ -204,6 +217,7 @@ public class NotificationCenterUiTest {
         Method replace = adapter.getClass().getDeclaredMethod("replace", java.util.List.class);
         replace.setAccessible(true);
         replace.invoke(adapter, Collections.singletonList(entry));
+        NotificationInboxTestIdle.await(activity);
         RecyclerView.Adapter rows = (RecyclerView.Adapter) adapter;
         RecyclerView.ViewHolder holder = rows.createViewHolder(recycler, 0);
         rows.bindViewHolder(holder, 0);
@@ -246,6 +260,7 @@ public class NotificationCenterUiTest {
     public void renderDenseActivityFeedAtNarrowPhoneWidth() throws Exception {
         ActivityController<UpdateInboxActivity> controller = Robolectric.buildActivity(UpdateInboxActivity.class).setup();
         UpdateInboxActivity activity = controller.get();
+        NotificationInboxTestIdle.await(activity);
         activity.getSharedPreferences("app_prefs", Context.MODE_PRIVATE).edit().putBoolean("immersive_motion_enabled", false).commit();
         java.util.ArrayList<UpdateInboxStore.Entry> entries = new java.util.ArrayList<>();
         for (int i=0;i<5;i++) {
@@ -258,6 +273,7 @@ public class NotificationCenterUiTest {
         }
         Object adapter = value(activity,"adapter");
         Method replace = adapter.getClass().getDeclaredMethod("replace",java.util.List.class); replace.setAccessible(true); replace.invoke(adapter,entries);
+        NotificationInboxTestIdle.await(activity);
         text(activity,"count").setText("3 unread notifications");
         text(activity,"empty").setVisibility(View.GONE);
         ((RecyclerView) value(activity,"recycler")).setItemAnimator(null);
@@ -276,20 +292,22 @@ public class NotificationCenterUiTest {
     @Test public void clearAllRequiresConfirmationAndCancelPreservesReadAll() throws Exception {
         ActivityController<UpdateInboxActivity> controller = Robolectric.buildActivity(UpdateInboxActivity.class).setup();
         UpdateInboxActivity activity = controller.get();
+        NotificationInboxTestIdle.await(activity);
         UpdateInboxStore.recordAppUpdate(activity, "4.3.2", "ZeroChill", false);
         render(activity);
         text(activity, "clearAll").performClick();
         android.app.AlertDialog cancelled = org.robolectric.shadows.ShadowAlertDialog.getLatestAlertDialog();
         cancelled.getButton(android.content.DialogInterface.BUTTON_NEGATIVE).performClick();
-        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
+        NotificationInboxTestIdle.await(activity);
         assertEquals(1, UpdateInboxStore.unreadCount(activity));
         text(activity, "markAll").performClick();
+        NotificationInboxTestIdle.await(activity);
         assertEquals(0, UpdateInboxStore.unreadCount(activity));
         assertEquals(1, UpdateInboxStore.all(activity).size());
         text(activity, "clearAll").performClick();
         org.robolectric.shadows.ShadowAlertDialog.getLatestAlertDialog()
                 .getButton(android.content.DialogInterface.BUTTON_POSITIVE).performClick();
-        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
+        NotificationInboxTestIdle.await(activity);
         assertTrue(UpdateInboxStore.all(activity).isEmpty());
         assertEquals(View.INVISIBLE, text(activity, "clearAll").getVisibility());
         UpdateInboxStore.recordAppUpdate(activity, "4.3.3", "ZeroChill", false);
@@ -301,6 +319,7 @@ public class NotificationCenterUiTest {
     @Test public void longPressExposesDeleteAndUpdatesUnreadImmediately() throws Exception {
         ActivityController<UpdateInboxActivity> controller = Robolectric.buildActivity(UpdateInboxActivity.class).setup();
         UpdateInboxActivity activity = controller.get();
+        NotificationInboxTestIdle.await(activity);
         UpdateInboxStore.recordAppUpdate(activity, "4.3.2", "ZeroChill", false);
         render(activity);
         RecyclerView recycler = (RecyclerView) value(activity, "recycler");
@@ -312,7 +331,7 @@ public class NotificationCenterUiTest {
         assertTrue(row.performLongClick());
         org.robolectric.shadows.ShadowAlertDialog.getLatestAlertDialog()
                 .getButton(android.content.DialogInterface.BUTTON_POSITIVE).performClick();
-        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
+        NotificationInboxTestIdle.await(activity);
         assertEquals(0, UpdateInboxStore.unreadCount(activity));
         assertEquals(0, adapter.getItemCount());
         assertEquals("You're caught up", text(activity, "count").getText().toString());
@@ -323,6 +342,7 @@ public class NotificationCenterUiTest {
         Method method = UpdateInboxActivity.class.getDeclaredMethod("render");
         method.setAccessible(true);
         method.invoke(activity);
+        NotificationInboxTestIdle.await(activity);
     }
     private TextView text(Object target, String name) throws Exception { return (TextView) value(target, name); }
     private Object value(Object target, String name) throws Exception {
