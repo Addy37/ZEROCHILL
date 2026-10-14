@@ -191,6 +191,7 @@ public class CreatorNotificationsTest {
         ActivityController<UpdateInboxActivity> controller = Robolectric.buildActivity(UpdateInboxActivity.class).setup();
         try {
             UpdateInboxActivity activity = controller.get();
+            NotificationInboxTestIdle.await(activity);
             RecyclerView recycler = (RecyclerView) field(activity, "recycler");
             RecyclerView.Adapter adapter = recycler.getAdapter();
             assertEquals(1, adapter.getItemCount());
@@ -198,6 +199,7 @@ public class CreatorNotificationsTest {
             adapter.bindViewHolder(holder, 0);
             LinearLayout row = (LinearLayout) ((LinearLayout) holder.itemView).getChildAt(1);
             assertTrue(row.performClick());
+            NotificationInboxTestIdle.await(activity);
             assertEquals(5, adapter.getItemCount());
             assertEquals(4, group().unreadItems());
             RecyclerView.ViewHolder child = adapter.createViewHolder(recycler, 0);
@@ -213,6 +215,7 @@ public class CreatorNotificationsTest {
                     fallback.getStringArrayListExtra(NativeFeedBrowserActivity.EXTRA_NOTIFICATION_FRESH_URLS));
             assertEquals(1, BunkrGallerySessionStore.snapshot(intent.getStringExtra(BunkrGalleryActivity.EXTRA_SESSION_ID)).items.size());
             controller.recreate();
+            NotificationInboxTestIdle.await(controller.get());
             assertEquals(5, ((RecyclerView) field(controller.get(), "recycler")).getAdapter().getItemCount());
             assertEquals(3, group().unreadItems());
         } finally { controller.pause().stop().destroy(); }

@@ -25,6 +25,9 @@ import android.widget.TextView;
 
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.DiffUtil;
+import androidx.recyclerview.widget.AsyncListDiffer;
+import androidx.recyclerview.widget.AsyncDifferConfig;
+import androidx.recyclerview.widget.AdapterListUpdateCallback;
 import androidx.recyclerview.widget.DefaultItemAnimator;
 import androidx.recyclerview.widget.RecyclerView;
 import androidx.recyclerview.widget.ItemTouchHelper;
@@ -64,9 +67,16 @@ public final class UpdateInboxActivity extends Activity {
     private final CreatorNotificationRows creatorRows = new CreatorNotificationRows();
     private SharedPreferences inboxPreferences;
     private boolean observing;
-    private boolean socialLoading;
     private final ExecutorService artworkIo = Executors.newSingleThreadExecutor();
-    private int socialGeneration;
+    private final ExecutorService historyIo = Executors.newSingleThreadExecutor();
+    private List<UpdateInboxStore.Entry> history = java.util.Collections.emptyList();
+    private String historyAccount = "";
+    private int historyGeneration;
+    private boolean historyReady;
+    private boolean historyLoading;
+    private boolean historyPending;
+    private boolean refreshAvatarsPending;
+    private final Runnable loadHistory = this::loadHistory;
     private final Runnable refreshHistory = () -> {
         if (observing && !isFinishing() && !isDestroyed()) render();
     };
@@ -79,10 +89,11 @@ public final class UpdateInboxActivity extends Activity {
     @Override
     protected void onCreate(Bundle state) {
         super.onCreate(state);
+        historyAccount = ZeroChillSessionStore.currentUserId(this);
         if (state != null) creatorRows.restore(state.getStringArrayList("expanded_creator_notifications"));
         if (state != null) activeFilter = state.getString("filter", FILTER_ALL);
         buildUi();
-        render();
+        showLoading();
     }
 
     @Override
@@ -92,34 +103,46 @@ public final class UpdateInboxActivity extends Activity {
         observing = true;
         inboxPreferences.registerOnSharedPreferenceChangeListener(inboxListener);
         if (adapter != null) adapter.invalidateSocialLikeStates();
+        String owner = ZeroChillSessionStore.currentUserId(this);
+        if (!historyAccount.equals(owner)) {
+            history = java.util.Collections.emptyList();
+            historyReady = false;
+            adapter.clearAccount();
+            showLoading();
+        }
+        refreshAvatarsPending = true;
         render();
-        refreshSocialActivity();
-        refreshStoredAvatars();
     }
 
-    private void refreshStoredAvatars() {
-        String owner = ZeroChillSessionStore.currentUserId(this);
+    private void refreshStoredAvatars(String owner, List<UpdateInboxStore.Entry> entries) {
         if (owner.isEmpty()) return;
         java.util.LinkedHashSet<String> ids = new java.util.LinkedHashSet<>();
-        for (UpdateInboxStore.Entry entry : UpdateInboxStore.allForAccount(this, owner)) {
+        for (UpdateInboxStore.Entry entry : entries) {
             if (UpdateInboxStore.CATEGORY_SOCIAL.equals(entry.category) && !entry.actorId.isEmpty()) ids.add(entry.actorId);
         }
         if (ids.isEmpty()) return;
         ZeroChillSocialRepository.loadAvatarProfiles(this, new ArrayList<>(ids), (profiles, error) -> runOnUiThread(() -> {
             if (error != null || profiles == null || isFinishing() || isDestroyed()
                     || !owner.equals(ZeroChillSessionStore.currentUserId(this))) return;
-            for (ZeroChillSocialRepository.PublicProfile profile : profiles.values())
-                UpdateInboxStore.refreshActorAvatar(this, profile.userId, profile.avatarPath);
+            historyIo.execute(() -> {
+                if (!owner.equals(ZeroChillSessionStore.currentUserId(getApplicationContext()))) return;
+                for (ZeroChillSocialRepository.PublicProfile profile : profiles.values())
+                    UpdateInboxStore.refreshActorAvatar(getApplicationContext(), profile.userId, profile.avatarPath);
+            });
         }));
     }
 
     @Override
     protected void onPause() {
         observing = false;
+        historyGeneration++;
         if (inboxPreferences != null) {
             inboxPreferences.unregisterOnSharedPreferenceChangeListener(inboxListener);
         }
-        if (recycler != null) recycler.removeCallbacks(refreshHistory);
+        if (recycler != null) {
+            recycler.removeCallbacks(refreshHistory);
+            recycler.removeCallbacks(loadHistory);
+        }
         super.onPause();
     }
 
@@ -132,6 +155,8 @@ public final class UpdateInboxActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        historyGeneration++;
+        historyIo.shutdownNow();
         artworkIo.shutdownNow();
         super.onDestroy();
     }
@@ -220,13 +245,13 @@ public final class UpdateInboxActivity extends Activity {
                     RecyclerView.ViewHolder target) { return false; }
             @Override public int getSwipeDirs(RecyclerView list, RecyclerView.ViewHolder holder) {
                 int position = holder.getBindingAdapterPosition();
-                return position >= 0 && position < adapter.items.size()
-                        && adapter.items.get(position).creatorItem != null ? 0 : super.getSwipeDirs(list, holder);
+                return position >= 0 && position < adapter.items().size()
+                        && adapter.items().get(position).creatorItem != null ? 0 : super.getSwipeDirs(list, holder);
             }
             @Override public void onSwiped(RecyclerView.ViewHolder holder, int direction) {
                 int position = holder.getBindingAdapterPosition();
-                if (position == RecyclerView.NO_POSITION || position >= adapter.items.size()) return;
-                UpdateInboxStore.Entry entry = adapter.items.get(position);
+                if (position == RecyclerView.NO_POSITION || position >= adapter.items().size()) return;
+                UpdateInboxStore.Entry entry = adapter.items().get(position);
                 deleteNotification(entry);
             }
             @Override public void onChildDraw(Canvas canvas, RecyclerView list, RecyclerView.ViewHolder holder,
@@ -254,7 +279,8 @@ public final class UpdateInboxActivity extends Activity {
         TextView view = BrowseUi.action(this, label, label + " notifications", v -> {
             if (activeFilter.equals(filter)) return;
             activeFilter = filter;
-            render();
+            if (historyReady) publishHistory();
+            else showLoading();
         });
         view.setTextSize(12);
         view.setMinHeight(dp(44));
@@ -269,22 +295,74 @@ public final class UpdateInboxActivity extends Activity {
         return params;
     }
 
-    private void render() {
-        int unread = UpdateInboxStore.unreadCount(this);
-        List<UpdateInboxStore.Entry> items = UpdateInboxStore.filtered(this, activeFilter);
-        adapter.replace(items);
+    private void showLoading() {
+        count.setText("Loading notifications…");
+        markAll.setVisibility(View.INVISIBLE);
+        clearAll.setVisibility(View.INVISIBLE);
+        empty.setVisibility(View.GONE);
+        styleFilters();
+    }
 
+    /** Let the destination draw before decoding/grouping the persistent inbox. */
+    private void render() {
+        if (!observing || isFinishing() || isDestroyed()) return;
+        historyGeneration++;
+        historyPending = true;
+        recycler.removeCallbacks(loadHistory);
+        recycler.postOnAnimation(loadHistory);
+    }
+
+    private void loadHistory() {
+        if (!observing || historyLoading || !historyPending || isFinishing() || isDestroyed()) return;
+        historyPending = false;
+        historyLoading = true;
+        int generation = historyGeneration;
+        String owner = ZeroChillSessionStore.currentUserId(this);
+        Context app = getApplicationContext();
+        historyIo.execute(() -> {
+            List<UpdateInboxStore.Entry> snapshot = UpdateInboxStore.allForAccount(app, owner);
+            runOnUiThread(() -> {
+                historyLoading = false;
+                if (!observing || isFinishing() || isDestroyed()) return;
+                if (generation != historyGeneration || !owner.equals(ZeroChillSessionStore.currentUserId(this))) {
+                    historyPending = true;
+                    recycler.postOnAnimation(loadHistory);
+                    return;
+                }
+                history = snapshot;
+                historyReady = true;
+                historyAccount = owner;
+                publishHistory();
+                if (refreshAvatarsPending) {
+                    refreshAvatarsPending = false;
+                    refreshSocialActivity();
+                    refreshStoredAvatars(owner, snapshot);
+                }
+            });
+        });
+    }
+
+    private void publishHistory() {
+        int unread = 0;
+        List<UpdateInboxStore.Entry> items = new ArrayList<>();
+        for (UpdateInboxStore.Entry entry : history) {
+            if (!entry.read) unread++;
+            if (activeFilter.isEmpty() || activeFilter.equals(entry.category)) items.add(entry);
+        }
+        adapter.replace(items);
         count.setText(unread == 0
                 ? "You're caught up"
                 : unread + (unread == 1 ? " unread notification" : " unread notifications"));
         markAll.setVisibility(unread == 0 ? View.INVISIBLE : View.VISIBLE);
-        clearAll.setVisibility(UpdateInboxStore.all(this).isEmpty() ? View.INVISIBLE : View.VISIBLE);
-
+        clearAll.setVisibility(history.isEmpty() ? View.INVISIBLE : View.VISIBLE);
         empty.setVisibility(items.isEmpty() ? View.VISIBLE : View.GONE);
-        empty.setText(UpdateInboxStore.all(this).isEmpty()
+        empty.setText(history.isEmpty()
                 ? "No notifications yet\n\nReplies, comment likes, creator activity, and app updates will appear here."
                 : "No notifications in this section.");
+        styleFilters();
+    }
 
+    private void styleFilters() {
         styleFilter(allFilter, FILTER_ALL.equals(activeFilter));
         styleFilter(socialFilter, FILTER_SOCIAL.equals(activeFilter));
         styleFilter(creatorsFilter, FILTER_CREATORS.equals(activeFilter));
@@ -310,7 +388,7 @@ public final class UpdateInboxActivity extends Activity {
     }
 
     private void confirmClearAll() {
-        if (UpdateInboxStore.all(this).isEmpty()) return;
+        if (history.isEmpty()) return;
         String account = ZeroChillSessionStore.currentUserId(this);
         new ZeroChillDialog.Builder(this).destructive()
                 .setTitle("Clear all notifications?")
@@ -427,7 +505,26 @@ public final class UpdateInboxActivity extends Activity {
     }
 
     private final class UpdateAdapter extends RecyclerView.Adapter<UpdateAdapter.Holder> {
-        private final ArrayList<UpdateInboxStore.Entry> items = new ArrayList<>();
+        private final AsyncListDiffer<UpdateInboxStore.Entry> differ = new AsyncListDiffer<>(new AdapterListUpdateCallback(this),
+                new AsyncDifferConfig.Builder<>(new DiffUtil.ItemCallback<UpdateInboxStore.Entry>() {
+                    @Override public boolean areItemsTheSame(UpdateInboxStore.Entry old, UpdateInboxStore.Entry next) {
+                        return old.id.equals(next.id);
+                    }
+                    @Override public boolean areContentsTheSame(UpdateInboxStore.Entry old, UpdateInboxStore.Entry next) {
+                        try { return old.encode().toString().equals(next.encode().toString()); }
+                        catch (Exception ignored) { return false; }
+                    }
+                }).setBackgroundThreadExecutor(historyIo).build());
+
+        private List<UpdateInboxStore.Entry> items() { return differ.getCurrentList(); }
+
+        void clearAccount() {
+            differ.submitList(null);
+            creatorRows.restore(java.util.Collections.emptyList());
+            commentStates.clear();
+            commentPagesLoading.clear();
+            commentLikeRequests.clear();
+        }
         private final Map<String, ZeroChillSocialRepository.Comment> commentStates = new HashMap<>();
         private final Set<String> commentPagesLoading = new HashSet<>();
         private final Set<String> commentLikeRequests = new HashSet<>();
@@ -451,38 +548,21 @@ public final class UpdateInboxActivity extends Activity {
                 commentPagesLoading.clear();
                 commentLikeRequests.clear();
             }
-            ArrayList<UpdateInboxStore.Entry> previous = new ArrayList<>(items);
+            int previousSize = items().size();
             ArrayList<UpdateInboxStore.Entry> incoming = new ArrayList<>();
             if (next != null) incoming.addAll(next);
-            DiffUtil.DiffResult changes = DiffUtil.calculateDiff(new DiffUtil.Callback() {
-                @Override public int getOldListSize() { return previous.size(); }
-                @Override public int getNewListSize() { return incoming.size(); }
-                @Override public boolean areItemsTheSame(int oldPosition, int newPosition) {
-                    return previous.get(oldPosition).id.equals(incoming.get(newPosition).id);
-                }
-                @Override public boolean areContentsTheSame(int oldPosition, int newPosition) {
-                    try {
-                        return previous.get(oldPosition).encode().toString()
-                                .equals(incoming.get(newPosition).encode().toString());
-                    } catch (Exception ignored) {
-                        return false;
-                    }
-                }
+            differ.submitList(incoming, () -> {
+                if (isFinishing() || isDestroyed()) return;
+                if (previousSize != items().size() && !items().isEmpty())
+                    notifyItemRangeChanged(0, items().size(), "section-heading");
             });
-            items.clear();
-            items.addAll(incoming);
-            changes.dispatchUpdatesTo(this);
-            // A removed first row can expose a new Today/Yesterday section heading.
-            if (previous.size() != incoming.size() && !items.isEmpty()) {
-                notifyItemRangeChanged(0, items.size(), "section-heading");
-            }
         }
 
-        @Override public int getItemCount() { return items.size(); }
+        @Override public int getItemCount() { return items().size(); }
 
         void invalidateSocialLikeStates() {
             commentStates.clear();
-            if (!items.isEmpty()) notifyItemRangeChanged(0, items.size(), "social-like");
+            if (!items().isEmpty()) notifyItemRangeChanged(0, items().size(), "social-like");
         }
 
         @Override
@@ -605,7 +685,7 @@ public final class UpdateInboxActivity extends Activity {
 
         @Override
         public void onBindViewHolder(Holder holder, int position) {
-            UpdateInboxStore.Entry entry = items.get(position);
+            UpdateInboxStore.Entry entry = items().get(position);
             boolean social = UpdateInboxStore.CATEGORY_SOCIAL.equals(entry.category);
             boolean replyNotification = social
                     && ZeroChillSocialRepository.SocialActivity.TYPE_REPLY.equals(entry.socialType);
@@ -741,7 +821,7 @@ public final class UpdateInboxActivity extends Activity {
                                 commentStates.put(comment.id, comment);
                             }
                         }
-                        if (!items.isEmpty()) notifyItemRangeChanged(0, items.size(), "social-like");
+                        if (!items().isEmpty()) notifyItemRangeChanged(0, items().size(), "social-like");
                     })
             );
         }
@@ -784,8 +864,8 @@ public final class UpdateInboxActivity extends Activity {
         }
 
         private int indexOf(String id) {
-            for (int i = 0; i < items.size(); i++) {
-                if (items.get(i).id.equals(id)) return i;
+            for (int i = 0; i < items().size(); i++) {
+                if (items().get(i).id.equals(id)) return i;
             }
             return -1;
         }
@@ -808,10 +888,10 @@ public final class UpdateInboxActivity extends Activity {
         }
 
         private String sectionLabel(int position) {
-            if (items.size() < 4 || position < 0 || position >= items.size()) return "";
-            UpdateInboxStore.Entry current = items.get(position);
+            if (items().size() < 4 || position < 0 || position >= items().size()) return "";
+            UpdateInboxStore.Entry current = items().get(position);
             if (position == 0) return current.read ? "Earlier" : "New";
-            UpdateInboxStore.Entry previous = items.get(position - 1);
+            UpdateInboxStore.Entry previous = items().get(position - 1);
             if (current.read && !previous.read) return "Earlier";
             return "";
         }
@@ -944,8 +1024,8 @@ public final class UpdateInboxActivity extends Activity {
                     artworkLookups.remove(key);
                     artworkChecked.add(key);
                     if (isFinishing() || isDestroyed() || recovered == null) return;
-                    for (int i = 0; i < items.size(); i++) {
-                        UpdateInboxStore.Entry candidate = items.get(i);
+                    for (int i = 0; i < items().size(); i++) {
+                        UpdateInboxStore.Entry candidate = items().get(i);
                         if (candidate != null
                                 && key.equals(ZeroChillSocialRepository.contentKey(candidate.pageUrl))) {
                             notifyItemChanged(i, "artwork");

@@ -21,7 +21,7 @@ final class CreatorNotificationRows {
         return rows();
     }
     ArrayList<String> expandedKeys() { return new ArrayList<>(expanded); }
-    void restore(List<String> keys) { if (keys != null) expanded.addAll(keys); }
+    void restore(List<String> keys) { expanded.clear(); if (keys != null) expanded.addAll(keys); }
     private String key(UpdateInboxStore.Entry entry) {
         return "creator:" + CreatorNameMatcher.normalized(entry.creatorName);
     }
