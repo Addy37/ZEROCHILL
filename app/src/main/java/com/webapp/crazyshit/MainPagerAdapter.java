@@ -66,6 +66,9 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
 
         default void onNavigationScroll(int sourcePage, int dy, boolean atTop, boolean userDriven) {
         }
+
+        default void onPrimarySettled(int page) {
+        }
     }
 
     private enum PageKind {
@@ -94,11 +97,15 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
     private final Page[] pages = new Page[PAGE_ARRAY_COUNT];
     private final ChaosFeedView chaosView;
     private final LibraryHubView libraryView;
-    private boolean librarySelected;
+    private int primaryPage = -1;
+    private boolean hostResumed = true;
+    private boolean primarySettled;
+    private final PrimaryTabWorkQueue primaryWork;
 
     public MainPagerAdapter(Activity activity, Host host) {
         this.activity = activity;
         this.host = host;
+        primaryWork = new PrimaryTabWorkQueue(activity.getWindow().getDecorView());
         this.browseArtworkResolver = new BrowseArtworkResolver(activity);
         setHasStableIds(true);
 
@@ -152,6 +159,9 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                 ));
             }
         });
+        libraryView.setWorkScheduler((key, task) -> primaryWork.submit(PAGE_LIBRARY, key, task));
+        pages[PAGE_ONLYFAP].onlyFapHub.setWorkScheduler(
+                (key, task) -> primaryWork.submit(PAGE_ONLYFAP, key, task));
         libraryView.setOnScrollChangeListener((v, scrollX, scrollY, oldScrollX, oldScrollY) ->
                 host.onNavigationScroll(PAGE_LIBRARY, scrollY - oldScrollY, scrollY <= dp(4), true));
 
@@ -224,57 +234,62 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
     }
 
     public void setPrimaryActive(int position) {
+        if (primaryPage == position) return;
+        primaryPage = position;
+        primaryWork.select(position);
+        // Playback/audio ownership still changes immediately through the approved path.
         chaosView.setActive(position == PAGE_CHAOS);
-        librarySelected = position == PAGE_LIBRARY;
-        libraryView.setSocialActive(librarySelected);
-        Page shows = pageAt(PAGE_SERIES);
-        if (shows != null && shows.showsHub != null) {
-            shows.showsHub.setActive(position == PAGE_SERIES);
-        }
-        Page onlyFap = pageAt(PAGE_ONLYFAP);
-        if (onlyFap != null && onlyFap.onlyFapHub != null) {
-            onlyFap.onlyFapHub.setActive(position == PAGE_ONLYFAP);
-        }
-        if (position == PAGE_CHAOS) return;
-        if (position == PAGE_LIBRARY) {
-            libraryView.refresh();
-            return;
-        }
-        Page page = pageAt(position);
-        if (page == null) return;
-        if (page.kind == PageKind.ONLYFAP && page.onlyFapHub != null) {
-            if (page.itemCount() == 0 && !page.loading && !page.endReached) {
-                loadOnlyFapHub(page);
-            } else if (OnlyFapRefreshPolicy.shouldRefresh(
-                    page.onlyFapLastLoadedElapsedMs,
-                    android.os.SystemClock.elapsedRealtime(),
-                    page.loading
-            )) {
-                refresh(page.index);
+        deactivateHubs();
+        schedulePrimaryRefresh();
+    }
+
+    public void onPrimaryMotionChanged(boolean settled) {
+        if (primarySettled == settled) return;
+        primarySettled = settled;
+        primaryWork.setSettled(settled);
+        if (!settled) deactivateHubs();
+        else schedulePrimaryRefresh();
+    }
+
+    private void deactivateHubs() {
+        libraryView.setSocialActive(false);
+        pages[PAGE_SERIES].showsHub.setActive(false);
+        pages[PAGE_ONLYFAP].onlyFapHub.setActive(false);
+    }
+
+    private void schedulePrimaryRefresh() {
+        final int position = primaryPage;
+        primaryWork.submit(position, "activation", () -> {
+            if (!hostResumed || activity.isFinishing() || activity.isDestroyed()) return;
+            host.onPrimarySettled(position);
+            if (position == PAGE_LIBRARY) {
+                libraryView.setSocialActive(true);
+            } else if (position == PAGE_SERIES) {
+                pages[PAGE_SERIES].showsHub.setActive(true);
+                pages[PAGE_SERIES].showsHub.refreshContinueWatching();
+            } else if (position == PAGE_ONLYFAP) {
+                pages[PAGE_ONLYFAP].onlyFapHub.setActive(true);
             }
-            return;
-        }
-        if (page.itemCount() == 0 && !page.loading && !page.endReached) {
-            load(page, false);
-        }
+            if (position == PAGE_CHAOS || position == PAGE_LIBRARY) return;
+            Page page = pageAt(position);
+            if (page == null) return;
+            if (page.kind == PageKind.ONLYFAP && OnlyFapRefreshPolicy.shouldRefresh(
+                    page.onlyFapLastLoadedElapsedMs,
+                    android.os.SystemClock.elapsedRealtime(), page.loading)) {
+                // Keep the existing hero and shelves while stale listings refresh.
+                page.generation++;
+                loadOnlyFapHub(page);
+            } else if (page.itemCount() == 0 && !page.loading && !page.endReached) {
+                load(page, false);
+            }
+        });
     }
 
     public void onHostResume() {
+        hostResumed = true;
         chaosView.onHostResume();
-        Page profilePage = pageAt(PAGE_ONLYFAP);
-        if (profilePage != null && profilePage.onlyFapHub != null) profilePage.onlyFapHub.setProfileActive(true);
-        Page onlyFap = pageAt(PAGE_ONLYFAP);
-        if (onlyFap != null && onlyFap.onlyFapHub != null) {
-            onlyFap.onlyFapHub.refreshFavorites();
-        } else if (onlyFap != null && onlyFap.browseAdapter != null) {
-            onlyFap.browseAdapter.notifyDataSetChanged();
-        }
-        Page home = pageAt(PAGE_HOME);
-        if (home != null && home.feedAdapter != null) home.feedAdapter.refreshPlaybackState();
-        Page shows = pageAt(PAGE_SERIES);
-        if (shows != null && shows.showsHub != null) shows.showsHub.refreshContinueWatching();
-        libraryView.refresh();
-        libraryView.setSocialActive(librarySelected);
+        primaryWork.setResumed(true);
+        schedulePrimaryRefresh();
     }
 
     public void saveState(android.os.Bundle out) {
@@ -307,6 +322,9 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
     }
 
     public void onHostPause() {
+        hostResumed = false;
+        primaryWork.setResumed(false);
+        deactivateHubs();
         chaosView.onHostPause();
         Page profilePage = pageAt(PAGE_ONLYFAP);
         if (profilePage != null && profilePage.onlyFapHub != null) profilePage.onlyFapHub.setProfileActive(false);
@@ -322,6 +340,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
     }
 
     public void close() {
+        primaryWork.close();
         chaosView.close();
         libraryView.close();
         browseArtworkResolver.close();
@@ -1066,6 +1085,15 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         });
     }
 
+    private void postPrimaryResult(Page page, int generation, String key, Runnable task) {
+        activity.runOnUiThread(() -> {
+            if (generation != page.generation || activity.isFinishing() || activity.isDestroyed()) return;
+            primaryWork.submit(page.index, key, () -> {
+                if (generation == page.generation) task.run();
+            });
+        });
+    }
+
     private void loadOnlyFapHub(Page page) {
         if (page == null || page.onlyFapHub == null || page.loading) return;
         cancelOnlyFapHubTasks(page);
@@ -1073,15 +1101,14 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         page.endReached = false;
         page.empty.setVisibility(View.GONE);
         page.progress.setVisibility(View.GONE);
-        page.onlyFapHub.clear();
-        page.onlyFapHub.refreshFavorites();
 
+        page.onlyFapHub.beginRefresh();
         final int generation = page.generation;
         page.onlyFapFavoriteArtworkTask = io.submit(() ->
                 favoriteCreatorArtworkHydrator.hydrate(
                         activity,
                         10,
-                        () -> activity.runOnUiThread(() -> {
+                        () -> postPrimaryResult(page, generation, "favorites", () -> {
                             if (generation == page.generation && page.onlyFapHub != null) {
                                 page.onlyFapHub.refreshFavorites();
                             }
@@ -1113,7 +1140,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                         finalShelves.get(FapzoneCreatorRepository.MODE_POPULAR));
                 if (Thread.currentThread().isInterrupted()) return;
                 if (!items.isEmpty()) CreatorCatalog.remember(activity, items);
-                activity.runOnUiThread(() -> {
+                postPrimaryResult(page, generation, "discover", () -> {
                     if (generation == page.generation && page.onlyFapHub != null) {
                         page.onlyFapHub.setTrending(items);
                     }
@@ -1144,7 +1171,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                     finalShelves.put(mode, new java.util.ArrayList<>(result));
                     if (!result.isEmpty()) CreatorCatalog.remember(activity, result);
                     final List<NativeContentItem> items = result;
-                    activity.runOnUiThread(() -> {
+                    postPrimaryResult(page, generation, "shelf-" + mode, () -> {
                         if (generation != page.generation || page.onlyFapHub == null) return;
                         applyOnlyFapShelf(page.onlyFapHub, mode, items);
                     });
@@ -1163,7 +1190,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
             List<NativeContentItem> items
     ) {
         if (items == null || items.isEmpty()) return;
-        activity.runOnUiThread(() -> {
+        postPrimaryResult(page, generation, "shelf-" + mode, () -> {
             if (generation != page.generation || page.onlyFapHub == null) return;
             applyOnlyFapShelf(page.onlyFapHub, mode, items);
         });
@@ -1192,7 +1219,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
             AtomicInteger remaining
     ) {
         if (remaining.decrementAndGet() != 0) return;
-        activity.runOnUiThread(() -> {
+        postPrimaryResult(page, generation, "onlyfap-finished", () -> {
             if (generation != page.generation) return;
             page.loading = false;
             page.endReached = true;
@@ -1251,7 +1278,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                     weeklyCandidates,
                     System.currentTimeMillis()
             );
-            activity.runOnUiThread(() -> {
+            postPrimaryResult(page, generation, "weekly", () -> {
                 if (generation == page.generation && page.showsHub != null) {
                     page.showsHub.setThisWeek(items);
                 }
@@ -1265,7 +1292,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
             } catch (Exception ignored) {
             }
             final List<NativeContentItem> items = result;
-            activity.runOnUiThread(() -> {
+            postPrimaryResult(page, generation, "crazyshit", () -> {
                 if (generation == page.generation && page.showsHub != null) {
                     page.showsHub.setCrazyShit(items);
                 }
@@ -1280,7 +1307,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
             } catch (Exception ignored) {
             }
             final List<NativeContentItem> items = result;
-            activity.runOnUiThread(() -> {
+            postPrimaryResult(page, generation, "efukt", () -> {
                 if (generation == page.generation && page.showsHub != null) {
                     page.showsHub.setEfukt(items);
                 }
@@ -1295,7 +1322,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
             } catch (Exception ignored) {
             }
             final List<NativeContentItem> items = result;
-            activity.runOnUiThread(() -> {
+            postPrimaryResult(page, generation, "baddiehub", () -> {
                 if (generation == page.generation && page.showsHub != null) {
                     page.showsHub.setBaddieHubCategories(items);
                 }
@@ -1310,7 +1337,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
             } catch (Exception ignored) {
             }
             final List<NativeContentItem> items = result;
-            activity.runOnUiThread(() -> {
+            postPrimaryResult(page, generation, "categories", () -> {
                 if (generation == page.generation && page.showsHub != null) {
                     page.showsHub.setCategories(items);
                 }
@@ -1328,7 +1355,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
             } catch (Exception ignored) {
             }
             final List<NativeContentItem> items = result;
-            activity.runOnUiThread(() -> {
+            postPrimaryResult(page, generation, "kaotic", () -> {
                 if (generation == page.generation && page.showsHub != null) {
                     page.showsHub.setKaoticCategories(items);
                 }
@@ -1347,7 +1374,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                 System.currentTimeMillis()
         );
         if (weekly.isEmpty()) return;
-        activity.runOnUiThread(() -> {
+        postPrimaryResult(page, generation, "weekly", () -> {
             if (generation != page.generation || page.showsHub == null) return;
             page.showsHub.setThisWeek(weekly);
         });
@@ -1355,7 +1382,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
 
     private void finishShowsHubSource(Page page, int generation, AtomicInteger remaining) {
         if (remaining.decrementAndGet() != 0) return;
-        activity.runOnUiThread(() -> {
+        postPrimaryResult(page, generation, "shows-finished", () -> {
             if (generation != page.generation) return;
             page.loading = false;
             page.endReached = true;

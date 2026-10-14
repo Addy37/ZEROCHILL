@@ -248,6 +248,11 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
             }
 
             @Override
+            public void onPrimarySettled(int page) {
+                if (page == MainPagerAdapter.PAGE_LIBRARY) markLibraryUpdatesSeen();
+            }
+
+            @Override
             public void onNavigationScroll(int sourcePage, int dy, boolean atTop, boolean userDriven) {
                 if (navigationMotion != null) {
                     navigationMotion.onScroll(sourcePage, dy, atTop, userDriven);
@@ -288,11 +293,18 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
             }
 
             @Override
+            public void onPageScrollStateChanged(int state) {
+                primaryPagerAdapter.onPrimaryMotionChanged(state == ViewPager2.SCROLL_STATE_IDLE);
+            }
+
+            @Override
             public void onPageSelected(int position) {
                 if (bottomNavigation != null) {
                     bottomNavigation.setPagerPosition(position);
                 }
                 showPagerChrome(MainPagerAdapter.pageForPagerPosition(position));
+                primaryPagerAdapter.onPrimaryMotionChanged(
+                        primaryPager.getScrollState() == ViewPager2.SCROLL_STATE_IDLE);
             }
         });
         shell.addView(primaryPager, new LinearLayout.LayoutParams(-1, 0, 1f));
@@ -548,11 +560,26 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         if (primaryPager == null) return;
         int pagerPosition = MainPagerAdapter.pagerPositionForPage(position);
         if (pagerPosition < 0) return;
-        showPagerChrome(position);
+        if (primaryPager.getCurrentItem() == pagerPosition &&
+                primaryPager.getVisibility() == View.VISIBLE) {
+            showPagerChrome(position);
+            primaryPagerAdapter.onPrimaryMotionChanged(
+                    primaryPager.getScrollState() == ViewPager2.SCROLL_STATE_IDLE);
+            return;
+        }
+        primaryPagerAdapter.onPrimaryMotionChanged(false);
+        int navId = position == MainPagerAdapter.PAGE_SERIES ? NAV_SERIES
+                : position == MainPagerAdapter.PAGE_CHAOS ? NAV_CHAOS
+                : position == MainPagerAdapter.PAGE_ONLYFAP ? NAV_ONLYFAP : NAV_LIBRARY;
+        selectNavSilently(navId);
         primaryPager.setCurrentItem(
                 pagerPosition,
                 smooth && ZeroChillMotion.animationsEnabled(this)
         );
+        // Chrome also restores the pager when returning from legacy secondary screens.
+        showPagerChrome(position);
+        primaryPagerAdapter.onPrimaryMotionChanged(
+                primaryPager.getScrollState() == ViewPager2.SCROLL_STATE_IDLE);
     }
 
     private void showPagerChrome(int position) {
@@ -594,7 +621,6 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
             feedBaseUrl = CrazyShitRepository.HOME;
             feedTitle = "Library";
             selectNavSilently(NAV_LIBRARY);
-            markLibraryUpdatesSeen();
         } else {
             screen = Screen.HOME;
             feedBaseUrl = CrazyShitRepository.HOME;

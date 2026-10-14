@@ -85,15 +85,17 @@ public class OnlyFapFavoriteAvatarTest {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
         OnlyFapHubView hub = hub(activity);
         activity.setContentView(hub);
+        loadFavorites(hub);
 
         LinearLayout rail = favoriteRail(hub);
         assertEquals(1, rail.getChildCount());
         View placeholderCard = rail.getChildAt(0);
 
-        hub.close();
+        hub.setActive(false);
         NativeContentItem resolved = creator("Anna", "https://cdn.example.com/anna.jpg");
         CreatorCatalog.remember(context, Collections.singletonList(resolved));
         hub.setNewCreators(Collections.singletonList(resolved));
+        loadFavorites(hub);
 
         assertEquals(1, rail.getChildCount());
         assertNotSame(placeholderCard, rail.getChildAt(0));
@@ -101,6 +103,7 @@ public class OnlyFapFavoriteAvatarTest {
                 "https://cdn.example.com/anna.jpg",
                 CreatorCatalog.favoriteGroups(context).get(0).item.imageUrl
         );
+        hub.close();
     }
 
     @Test
@@ -123,6 +126,7 @@ public class OnlyFapFavoriteAvatarTest {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
         OnlyFapHubView hub = hub(activity);
         activity.setContentView(hub);
+        loadFavorites(hub);
 
         CreatorAvatarImageView image = findAvatar(favoriteRail(hub));
         assertNotNull(image);
@@ -175,6 +179,7 @@ public class OnlyFapFavoriteAvatarTest {
             @Override public void onViewAllFavorites() { }
         });
         activity.setContentView(hub);
+        loadFavorites(hub);
 
         LinearLayout rail = favoriteRail(hub);
         assertEquals(1, rail.getChildCount());
@@ -187,6 +192,24 @@ public class OnlyFapFavoriteAvatarTest {
         assertEquals(2, spec.seedUrls.size());
 
         hub.close();
+    }
+
+    private void loadFavorites(OnlyFapHubView hub) {
+        // Test favorite publication without starting unrelated hero network discovery.
+        java.util.Map<String, Runnable> work = new java.util.HashMap<>();
+        hub.setWorkScheduler(work::put);
+        org.robolectric.util.ReflectionHelpers.setField(hub, "active", true);
+        hub.refreshFavorites();
+        try {
+            java.util.concurrent.ExecutorService io = org.robolectric.util.ReflectionHelpers
+                    .getField(hub, "heroIo");
+            io.submit(() -> {}).get(5, java.util.concurrent.TimeUnit.SECONDS);
+            org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
+            org.robolectric.util.ReflectionHelpers.setField(hub, "active", false);
+            Runnable publish = work.remove("favorite-publish");
+            assertNotNull(publish);
+            publish.run();
+        } catch (Exception e) { throw new AssertionError(e); }
     }
 
     private OnlyFapHubView hub(Activity activity) {
