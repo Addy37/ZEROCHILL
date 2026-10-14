@@ -240,7 +240,7 @@ final class LibraryHubView extends ScrollView {
     }
 
     private static final class Snapshot {
-        final List<Map<String, ?>> inputs = new ArrayList<>();
+        final List<String> inputs = new ArrayList<>();
         final List<PlaybackHistoryStore.Item> history;
         final List<PlaybackHistoryStore.Item> continueItems;
         final List<CreatorCatalog.FavoriteGroup> creators;
@@ -250,8 +250,8 @@ final class LibraryHubView extends ScrollView {
         final String downloadState;
 
         Snapshot(Activity activity, List<SharedPreferences> preferences, Snapshot previous) {
-            for (SharedPreferences prefs : preferences) inputs.add(prefs.getAll());
-            downloads = VideoDownloadStore.entries(activity);
+            for (SharedPreferences prefs : preferences) inputs.add(PreferenceSnapshot.key(prefs));
+            downloads = first(VideoDownloadStore.entries(activity), 10);
             StringBuilder state = new StringBuilder();
             for (VideoDownloadStore.Entry entry : downloads) {
                 state.append(entry.id).append(':').append(entry.status).append(':')
@@ -267,12 +267,22 @@ final class LibraryHubView extends ScrollView {
                 watchLater = previous.watchLater;
             } else {
                 history = PlaybackHistoryStore.load(activity);
-                continueItems = PlaybackHistoryStore.continueWatching(activity);
-                creators = CreatorCatalog.favoriteGroups(activity);
-                avatars = CreatorAvatarOverrideStore.load(activity);
-                watchLater = FavoriteStore.load(activity);
+                continueItems = first(PlaybackHistoryStore.continueWatching(activity), 10);
+                creators = first(CreatorCatalog.favoriteGroups(activity), 14);
+                List<CreatorAvatarOverrideStore.Override> allAvatars = CreatorAvatarOverrideStore.load(activity);
+                avatars = new ArrayList<>();
+                for (CreatorCatalog.FavoriteGroup creator : creators) {
+                    CreatorAvatarOverrideStore.Override avatar =
+                            CreatorAvatarOverrideStore.find(allAvatars, creator.relationshipKeys);
+                    if (avatar != null) avatars.add(avatar);
+                }
+                watchLater = first(FavoriteStore.load(activity), 10);
             }
         }
+        private static <T> List<T> first(List<T> items, int limit) {
+            return new ArrayList<>(items.subList(0, Math.min(items.size(), limit)));
+        }
+
         boolean sameData(Snapshot other) {
             return inputs.equals(other.inputs) && downloadState.equals(other.downloadState);
         }

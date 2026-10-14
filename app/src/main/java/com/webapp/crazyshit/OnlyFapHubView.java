@@ -129,7 +129,7 @@ final class OnlyFapHubView extends FrameLayout {
     private boolean heroSelectionLoading;
     private boolean favoritesLoading;
     private boolean favoritesDirty = true;
-    private List<java.util.Map<String, ?>> favoriteInputs;
+    private List<String> favoriteInputs;
     private final List<android.content.SharedPreferences> favoritePreferences = new ArrayList<>();
     private final android.content.SharedPreferences.OnSharedPreferenceChangeListener favoriteInvalidation =
             (prefs, key) -> {
@@ -510,9 +510,9 @@ final class OnlyFapHubView extends FrameLayout {
         favoritesLoading = true;
         favoritesDirty = false;
         heroIo.execute(() -> {
-            List<java.util.Map<String, ?>> inputs = new ArrayList<>();
+            List<String> inputs = new ArrayList<>();
             for (android.content.SharedPreferences prefs : favoritePreferences) {
-                inputs.add(prefs.getAll());
+                inputs.add(PreferenceSnapshot.key(prefs));
             }
             List<CreatorCatalog.FavoriteGroup> favorites = CreatorCatalog.favoriteGroups(getContext());
             List<CreatorAvatarOverrideStore.Override> avatars = CreatorAvatarOverrideStore.load(getContext());

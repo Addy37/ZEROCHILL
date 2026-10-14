@@ -118,6 +118,22 @@ public class PrimaryTabLibraryTest {
         } finally { library.close(); }
     }
 
+    @Test public void snapshotRetainsOnlyDisplayedSavedVideosWithoutTrimmingTheStore() throws Exception {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        for (int i = 0; i < 25; i++) FavoriteStore.add(activity, "Saved " + i, "https://example.com/saved/" + i);
+        LibraryHubView library = new LibraryHubView(activity, null);
+        activity.setContentView(library);
+        Map<String, Runnable> work = new LinkedHashMap<>();
+        library.setWorkScheduler(work::put);
+        try {
+            library.setSocialActive(true);
+            refresh(library, work);
+            Object snapshot = ReflectionHelpers.getField(library, "displayed");
+            assertEquals(10, ((java.util.List<?>) ReflectionHelpers.getField(snapshot, "watchLater")).size());
+            assertEquals(25, FavoriteStore.load(activity).size());
+        } finally { library.close(); }
+    }
+
     private void refresh(LibraryHubView library, Map<String, Runnable> work) throws Exception {
         Runnable refresh = work.remove("library-refresh");
         if (refresh != null) refresh.run();

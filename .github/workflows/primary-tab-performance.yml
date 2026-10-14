@@ -1,6 +1,7 @@
 name: Primary Tab Activation Comparison
 
 on:
+  workflow_dispatch:
   pull_request:
     branches: [ rebrand/zerochill ]
     paths: [ 'app/**', '.github/workflows/primary-tab-performance.yml' ]
@@ -10,17 +11,18 @@ permissions:
 
 jobs:
   tab-comparison:
-    if: ${{ github.head_ref == 'feature/primary-tab-activation' }}
+    # A baseline emulator failure must not auto-repeat on every follow-up commit.
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.head_ref == 'feature/primary-tab-activation' && github.event.action == 'opened') }}
     runs-on: ubuntu-latest
     timeout-minutes: 40
     env:
       ANALYTICS_ENDPOINT: ""
       BASE_SHA: 3f1b919e8c915c83b21017c456a5287274730bf1
-      CANDIDATE_SHA: ${{ github.event.pull_request.head.sha }}
+      CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
       - uses: actions/checkout@v6
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 0
       - uses: actions/setup-java@v5
         with:
