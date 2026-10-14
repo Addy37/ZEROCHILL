@@ -1,30 +1,57 @@
 #!/usr/bin/env bash
 set -euo pipefail
-git merge-base --is-ancestor "$BASE_SHA" "$CANDIDATE_SHA"
 comparison="$RUNNER_TEMP/primary-tab-comparison"
+phase="${1:-measure}"
 mkdir -p "$comparison"
-# Keep the driver/probe outside the tree while switching to the approved baseline.
-cp tools/install_primary_tab_probe.py "$comparison/install_probe.py"
+if [[ "$phase" == build ]]; then
+  git merge-base --is-ancestor "$BASE_SHA" "$CANDIDATE_SHA"
+  cp tools/install_primary_tab_probe.py "$comparison/install_probe.py"
+  for label in approved candidate; do
+    sha="$BASE_SHA"
+    if [[ "$label" == candidate ]]; then sha="$CANDIDATE_SHA"; fi
+    git checkout --detach "$sha"
+    python3 "$comparison/install_probe.py"
+    destination="$comparison/$label"
+    mkdir -p "$destination/apk"
+    printf '%s\n' "$sha" > "$destination/source-commit.txt"
+    gradle --no-daemon --max-workers=2 -Pkotlin.compiler.execution.strategy=in-process \
+      :app:assembleBenchmarkRelease :baselineprofile:assembleBenchmarkRelease
+    cp app/build/outputs/apk/benchmarkRelease/*.apk "$destination/apk/app.apk"
+    cp baselineprofile/build/outputs/apk/benchmarkRelease/*.apk "$destination/apk/benchmark.apk"
+    git restore app/src/main/java/com/webapp/crazyshit/NativeMainActivity.java
+  done
+  git checkout --detach "$CANDIDATE_SHA"
+  exit 0
+fi
+
+# Both APK pairs are built before booting the emulator. Keep compilation memory
+# separate from the device and run instrumentation directly, as Android documents.
 for label in approved candidate; do
-  sha="$BASE_SHA"
-  if [[ "$label" == candidate ]]; then sha="$CANDIDATE_SHA"; fi
-  git checkout --detach "$sha"
-  python3 "$comparison/install_probe.py"
-  adb shell pm clear com.addy37.crazyshitunofficial >/dev/null 2>&1 || true
   destination="$comparison/$label"
-  mkdir -p "$destination"
-  printf '%s\n' "$sha" > "$destination/source-commit.txt"
+  adb install -r "$destination/apk/app.apk"
+  adb install -r "$destination/apk/benchmark.apk"
+  instrumentation="$(adb shell pm list instrumentation | awk '$1 ~ /crazyshit.baselineprofile/ {sub(/^instrumentation:/,"",$1);print $1;exit}')"
+  test_package="${instrumentation%%/*}"
+  test -n "$instrumentation"
+  adb shell pm clear com.addy37.crazyshitunofficial >/dev/null
+  adb shell pm clear "$test_package" >/dev/null
+  adb logcat -c
   result=0
-  bash tools/run_performance_audit.sh :baselineprofile:connectedBenchmarkReleaseAndroidTest \
-    '-Pandroid.testInstrumentationRunnerArguments.class=com.webapp.crazyshit.baselineprofile.MainFlowsBenchmark#retainedTabSwitching' \
-    '-Pandroid.testInstrumentationRunnerArguments.androidx.benchmark.enabledRules=Macrobenchmark' || result=$?
-  cp -a baselineprofile/build/outputs/. "$destination/" || true
-  timeout --kill-after=5s 15s adb logcat -d -s ZeroChillTabProbe > "$destination/tab-timings.txt" || true
+  timeout --kill-after=10s 720s adb shell am instrument -w -r \
+    -e class 'com.webapp.crazyshit.baselineprofile.MainFlowsBenchmark#retainedTabSwitching' \
+    -e androidx.benchmark.enabledRules Macrobenchmark \
+    -e androidx.benchmark.suppressErrors EMULATOR \
+    "$instrumentation" \
+    | tee "$destination/instrumentation.txt" || result=$?
+  timeout --kill-after=5s 15s adb logcat -d -s ZeroChillTabProbe AndroidRuntime > "$destination/tab-timings.txt" || true
+  timeout --kill-after=5s 15s adb shell dumpsys meminfo com.addy37.crazyshitunofficial > "$destination/memory.txt" || true
+  timeout --kill-after=5s 15s adb shell dumpsys gfxinfo com.addy37.crazyshitunofficial > "$destination/frames.txt" || true
+  timeout --kill-after=5s 15s adb devices -l > "$destination/devices.txt" || true
+  timeout --kill-after=5s 30s adb pull "/sdcard/Android/media/$test_package/" "$destination/device-output" || true
+  if ! grep -qF 'OK (1 test)' "$destination/instrumentation.txt"; then result=1; fi
   printf '%s\n' "$result" > "$destination/exit-code.txt"
-  git restore app/src/main/java/com/webapp/crazyshit/NativeMainActivity.java
   if [[ "$result" != 0 ]]; then exit "$result"; fi
 done
-git checkout --detach "$CANDIDATE_SHA"
 python3 - "$comparison" <<'PY'
 import json, pathlib, re, statistics, sys
 for label in ('approved', 'candidate'):

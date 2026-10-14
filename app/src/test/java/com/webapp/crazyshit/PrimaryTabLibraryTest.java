@@ -94,6 +94,9 @@ public class PrimaryTabLibraryTest {
             assertEquals(scroll, library.getScrollY());
             refresh(library, work);
             assertEquals(scroll, library.getScrollY());
+            View originalMedia = ReflectionHelpers.getField(library, "mediaContent");
+            View creatorsRail = originalMedia.findViewWithTag("Favorite Creators");
+            View downloadsRail = originalMedia.findViewWithTag("Downloads");
             PlaybackHistoryStore.record(activity, "Watch one", "https://example.com/watch",
                     "https://cdn.example.com/poster.jpg", 120_000, 180_000, false, true);
             PlaybackHistoryStore.awaitPendingWritesForTests();
@@ -102,6 +105,11 @@ public class PrimaryTabLibraryTest {
             Object updated = ReflectionHelpers.getField(library, "displayed");
             java.util.List<PlaybackHistoryStore.Item> continued = ReflectionHelpers.getField(updated, "continueItems");
             assertEquals(120_000, continued.get(0).positionMs);
+            View updatedMedia = ReflectionHelpers.getField(library, "mediaContent");
+            assertSame("History updates must keep creator image targets", creatorsRail,
+                    updatedMedia.findViewWithTag("Favorite Creators"));
+            assertSame("History updates must keep download image targets", downloadsRail,
+                    updatedMedia.findViewWithTag("Downloads"));
             CreatorFavoriteStore.toggle(activity, creator);
             shadowOf(Looper.getMainLooper()).idle();
             refresh(library, work);

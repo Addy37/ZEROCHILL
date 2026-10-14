@@ -56,6 +56,7 @@ final class LibraryHubView extends ScrollView {
     private final RenderedThumbnailResolver[] thumbnailResolvers;
     private final ShowsContinueFrameStore.Listener frameListener = this::onContinueFrameUpdated;
     private LinearLayout mediaContent;
+    private final Map<String, SectionState> sectionStates = new HashMap<>();
     private final java.util.concurrent.ExecutorService refreshIo =
             java.util.concurrent.Executors.newSingleThreadExecutor();
     private final List<SharedPreferences> observedPreferences = new ArrayList<>();
@@ -150,8 +151,7 @@ final class LibraryHubView extends ScrollView {
         LinearLayout previous = mediaContent;
         mediaContent = new LinearLayout(activity);
         mediaContent.setOrientation(LinearLayout.VERTICAL);
-        thumbnailTargets.clear();
-        // Keep pending resolution deduplicated, plus already resolved artwork.
+        // Unchanged rails keep their existing views, image requests and horizontal position.
         List<PlaybackHistoryStore.Item> history = snapshot.history;
         Map<String, PlaybackHistoryStore.Item> historyByUrl = new HashMap<>();
         for (PlaybackHistoryStore.Item item : history) {
@@ -159,15 +159,32 @@ final class LibraryHubView extends ScrollView {
                 historyByUrl.put(item.pageUrl, item);
             }
         }
-        if (!snapshot.continueItems.isEmpty()) addContinueSection(snapshot.continueItems);
-        if (!snapshot.creators.isEmpty()) addCreatorSection(snapshot.creators, snapshot.avatars);
-        if (!snapshot.watchLater.isEmpty()) addWatchLaterSection(snapshot.watchLater, historyByUrl);
-        if (!snapshot.downloads.isEmpty()) addDownloadsSection(snapshot.downloads);
-        if (!history.isEmpty()) addHistorySection(history);
-        if (mediaContent.getChildCount() == 0) addGlobalEmptyState();
+        retainSection("continue", snapshot.inputs.get(0), () -> {
+            if (!snapshot.continueItems.isEmpty()) addContinueSection(snapshot.continueItems);
+        });
+        List<Object> creatorState = new ArrayList<>(snapshot.inputs.subList(2, 6));
+        creatorState.addAll(snapshot.inputs.subList(8, snapshot.inputs.size()));
+        retainSection("creators", creatorState, () -> {
+            if (!snapshot.creators.isEmpty()) addCreatorSection(snapshot.creators, snapshot.avatars);
+        });
+        retainSection("watch-later", java.util.Arrays.asList(snapshot.inputs.get(0), snapshot.inputs.get(1)), () -> {
+            if (!snapshot.watchLater.isEmpty()) addWatchLaterSection(snapshot.watchLater, historyByUrl);
+        });
+        retainSection("downloads", java.util.Arrays.asList(snapshot.inputs.get(6), snapshot.downloadState), () -> {
+            if (!snapshot.downloads.isEmpty()) addDownloadsSection(snapshot.downloads);
+        });
+        retainSection("history", snapshot.inputs.get(0), () -> {
+            if (!history.isEmpty()) addHistorySection(history);
+        });
+        if (mediaContent.getChildCount() == 0) retainSection("empty", true, this::addGlobalEmptyState);
+        else sectionStates.remove("empty");
         content.removeView(previous);
         content.addView(mediaContent, new LinearLayout.LayoutParams(-1, -2));
         clearImages(previous);
+        for (List<ImageView> targets : thumbnailTargets.values()) {
+            targets.removeIf(image -> !belongsToMediaContent(image));
+        }
+        thumbnailTargets.values().removeIf(List::isEmpty);
         resolvedThumbnails.keySet().retainAll(thumbnailTargets.keySet());
         requestedThumbnails.retainAll(thumbnailTargets.keySet());
         post(() -> {
@@ -182,6 +199,36 @@ final class LibraryHubView extends ScrollView {
                 }
             }
         });
+    }
+
+    private void retainSection(String key, Object state, Runnable build) {
+        SectionState previous = sectionStates.get(key);
+        if (previous != null && previous.state.equals(state)) {
+            if (previous.view != null) {
+                ((ViewGroup) previous.view.getParent()).removeView(previous.view);
+                mediaContent.addView(previous.view);
+            }
+            return;
+        }
+        int before = mediaContent.getChildCount();
+        build.run();
+        View view = mediaContent.getChildCount() > before ? mediaContent.getChildAt(before) : null;
+        sectionStates.put(key, new SectionState(state, view));
+    }
+
+    private boolean belongsToMediaContent(View view) {
+        android.view.ViewParent parent = view.getParent();
+        while (parent != null) {
+            if (parent == mediaContent) return true;
+            parent = parent.getParent();
+        }
+        return false;
+    }
+
+    private static final class SectionState {
+        final Object state;
+        final View view;
+        SectionState(Object state, View view) { this.state = state; this.view = view; }
     }
 
     private void clearImages(View view) {
@@ -247,6 +294,7 @@ final class LibraryHubView extends ScrollView {
         }
         thumbnailTargets.clear();
         requestedThumbnails.clear();
+        sectionStates.clear();
     }
 
     void setSocialActive(boolean active) {
