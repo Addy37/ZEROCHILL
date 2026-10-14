@@ -21,9 +21,10 @@ import static org.junit.Assert.*;
 import static org.robolectric.Shadows.shadowOf;
 
 @RunWith(RobolectricTestRunner.class)
-@Config(application = Application.class, sdk = 35)
+@Config(application = Application.class, sdk = 35, shadows = UpdateInboxStoreTest.Sessions.class)
 public class NotificationEntryLatencyTest {
     @Before public void clear() {
+        UpdateInboxStoreTest.Sessions.account = "";
         RuntimeEnvironment.getApplication().getSharedPreferences("zerochill_update_inbox_v1", 0)
                 .edit().clear().commit();
         RuntimeEnvironment.getApplication().getSharedPreferences("zerochill_account_secure_state", 0)
@@ -46,6 +47,9 @@ public class NotificationEntryLatencyTest {
             shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(32));
             assertEquals(0, recycler.getAdapter().getItemCount());
             assertEquals("Loading notifications…", ((TextView) ReflectionHelpers.getField(activity, "count")).getText().toString());
+            ((TextView) ReflectionHelpers.getField(activity, "socialFilter")).performClick();
+            assertEquals("Loading notifications…", ((TextView) ReflectionHelpers.getField(activity, "count")).getText().toString());
+            ((TextView) ReflectionHelpers.getField(activity, "allFilter")).performClick();
             release.countDown();
             NotificationInboxTestIdle.await(activity);
             assertEquals(80, recycler.getAdapter().getItemCount());
@@ -74,4 +78,35 @@ public class NotificationEntryLatencyTest {
             assertEquals("2 unread notifications", ((TextView) ReflectionHelpers.getField(activity, "count")).getText().toString());
         } finally { release.countDown(); controller.pause().stop().destroy(); }
     }
+    @Test public void oldAccountSnapshotCannotReplaceCurrentAccountHistory() throws Exception {
+        Application app = RuntimeEnvironment.getApplication();
+        org.json.JSONArray entries = new org.json.JSONArray();
+        for (String account : new String[] {"account-a", "account-b"}) {
+            UpdateInboxStore.Entry entry = new UpdateInboxStore.Entry();
+            entry.id = account;
+            entry.accountId = account;
+            entry.category = UpdateInboxStore.CATEGORY_SOCIAL;
+            entry.title = account;
+            entries.put(entry.encode());
+        }
+        app.getSharedPreferences("zerochill_update_inbox_v1", 0).edit().putString("entries", entries.toString()).commit();
+        UpdateInboxStoreTest.Sessions.account = "account-a";
+        ActivityController<UpdateInboxActivity> controller = Robolectric.buildActivity(UpdateInboxActivity.class).create();
+        UpdateInboxActivity activity = controller.get();
+        ExecutorService worker = ReflectionHelpers.getField(activity, "historyIo");
+        CountDownLatch release = new CountDownLatch(1);
+        worker.execute(() -> { try { release.await(); } catch (InterruptedException ignored) { Thread.currentThread().interrupt(); } });
+        try {
+            controller.start().resume().visible();
+            shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(32));
+            UpdateInboxStoreTest.Sessions.account = "account-b";
+            release.countDown();
+            NotificationInboxTestIdle.await(activity);
+            assertEquals("account-b", ReflectionHelpers.getField(activity, "historyAccount"));
+            java.util.List<UpdateInboxStore.Entry> history = ReflectionHelpers.getField(activity, "history");
+            assertEquals(1, history.size());
+            assertEquals("account-b", history.get(0).id);
+        } finally { release.countDown(); controller.pause().stop().destroy(); }
+    }
+
 }

@@ -27,6 +27,7 @@ import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.DiffUtil;
 import androidx.recyclerview.widget.AsyncListDiffer;
 import androidx.recyclerview.widget.AsyncDifferConfig;
+import androidx.recyclerview.widget.AdapterListUpdateCallback;
 import androidx.recyclerview.widget.DefaultItemAnimator;
 import androidx.recyclerview.widget.RecyclerView;
 import androidx.recyclerview.widget.ItemTouchHelper;
@@ -71,6 +72,7 @@ public final class UpdateInboxActivity extends Activity {
     private List<UpdateInboxStore.Entry> history = java.util.Collections.emptyList();
     private String historyAccount = "";
     private int historyGeneration;
+    private boolean historyReady;
     private boolean historyLoading;
     private boolean historyPending;
     private boolean refreshAvatarsPending;
@@ -104,6 +106,7 @@ public final class UpdateInboxActivity extends Activity {
         String owner = ZeroChillSessionStore.currentUserId(this);
         if (!historyAccount.equals(owner)) {
             history = java.util.Collections.emptyList();
+            historyReady = false;
             adapter.clearAccount();
             showLoading();
         }
@@ -276,7 +279,8 @@ public final class UpdateInboxActivity extends Activity {
         TextView view = BrowseUi.action(this, label, label + " notifications", v -> {
             if (activeFilter.equals(filter)) return;
             activeFilter = filter;
-            publishHistory();
+            if (historyReady) publishHistory();
+            else showLoading();
         });
         view.setTextSize(12);
         view.setMinHeight(dp(44));
@@ -326,6 +330,7 @@ public final class UpdateInboxActivity extends Activity {
                     return;
                 }
                 history = snapshot;
+                historyReady = true;
                 historyAccount = owner;
                 publishHistory();
                 if (refreshAvatarsPending) {
@@ -500,7 +505,7 @@ public final class UpdateInboxActivity extends Activity {
     }
 
     private final class UpdateAdapter extends RecyclerView.Adapter<UpdateAdapter.Holder> {
-        private final AsyncListDiffer<UpdateInboxStore.Entry> differ = new AsyncListDiffer<>(this,
+        private final AsyncListDiffer<UpdateInboxStore.Entry> differ = new AsyncListDiffer<>(new AdapterListUpdateCallback(this),
                 new AsyncDifferConfig.Builder<>(new DiffUtil.ItemCallback<UpdateInboxStore.Entry>() {
                     @Override public boolean areItemsTheSame(UpdateInboxStore.Entry old, UpdateInboxStore.Entry next) {
                         return old.id.equals(next.id);
