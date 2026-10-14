@@ -4,11 +4,15 @@ This file identifies the current approved ZEROCHILL product baseline for test AP
 
 - Source-of-truth branch: `rebrand/zerochill`
 - Integration branch: `integration/zerochill-current`
-- Approved product baseline commit: `02215d6f6f5207e946823fb875f540845b9e3bf5`
-- Latest production release source commit: `02215d6f6f5207e946823fb875f540845b9e3bf5`
-- Device-tested APK source commit: `644edcd16dbdc7b8d3ae0bb7a039a89f09e9ad60`
-- Latest release PR: #277
-- Approval date: 2026-10-04
+- Approved product baseline commit: `ec1dda86914b719ff968aca3fed0ce9d9f4d8685`
+- Production release source: resolve tag `v4.3.8` for the exact release metadata commit
+- Device-tested APK source commit: `2fd5f0c22af2d4b589d16b94d78e4458dd151914`
+- Latest approved feature PR: #293
+- Approval date: 2026-10-13
+
+ZeroChill v4.3.8 contains the device-approved temporary ShitTok pinch from PR #291, primary-tab activation cleanup from PR #292, and notification-entry fix from PR #293. The complete approved functional baseline is `ec1dda86`; release metadata adds version 4.3.8 and plain-language notes without changing the approved application code. The final device-tested candidate `2fd5f0c2` passed 576 debug and 576 release tests with one skipped in each, both APK builds, production signing/package verification, and an Android 15 in-place upgrade from stable 4.3.7 to preview 4.3.8. The user approved publication on October 13. The release workflow rebuilds, verifies, and publishes the stable APK with version code `4003008`, the existing application ID and signing identity, and a checksum. Use tag `v4.3.8` and its successful publication run as the authoritative stable release source and checksum. No data migration, backend, Supabase, or remote-config change is required. Lint remains an audit with 291 errors and 385 warnings; the new warning concerns translating the loading text. No quantitative performance improvement is claimed from the failed emulator comparisons. Keep `integration/zerochill-current` synchronized with the stable release source after successful publication.
+
+Previous stable release: v4.3.7, source `d46516d8b9319d32a926bff9e13332841e0d094f`, published October 12 in the user's timezone. Its production APK checksum is `7750e56e57c93aaa5cb58090ed88ca0ed326a657b3841444b9fc47f97aed8799`.
 
 ZeroChill v4.3.4 was published from `02215d6` after release PR #277. This release includes the device-approved app-wide ZEROCHILL UI consistency polish from PR #271, optional ShitTok Auto Scroll and cleaner fullscreen controls from PR #272, the landscape timed scrubber and fullscreen spacing/readability polish from PR #273, Search no-results/fallback cleanup from PR #274, Shows fullscreen parity with ShitTok from PR #275, and the final performance/stability pass from PR #276. The ShitTok optimization removed duplicate selected-video preparation, reducing the controlled cached-selection dispatch count from 200 to 100 per 100 selections without changing persisted playback behavior. Build Android APK #1811 and Signed Upgrade Candidate #683 passed before publication. The production release workflow #119 ran `:app:testReleaseUnitTest :app:assembleRelease`, rebuilt and signed `ZeroChill.apk`, verified package `com.addy37.crazyshitunofficial`, production signing certificate SHA-256 `04abf84b3d468cbb1a562dea83b0007e686b2e56018cce911223963faea51356`, version code `4003004`, and upgrade compatibility from v4.3.3, then published tag `v4.3.4` with `SHA256SUMS.txt`. The published APK SHA-256 is `d86d81c8ba2588f8dc9c05a963187ebd5f8f7782af1d8dbf03630c28c8d20938`. The final long ShitTok benchmark passed and nine of ten final performance/profile jobs passed; `shows-scroll-motion` lost its CI emulator rather than recording an app crash or ANR. The release was physically approved on the OnePlus 13 / Android 16. No Supabase migration, backend security-boundary change, or remote-config/content-source change was required for this release. The previous v4.3.3 release source is preserved at `checkpoint/zerochill-approved-323cc13`.
 
