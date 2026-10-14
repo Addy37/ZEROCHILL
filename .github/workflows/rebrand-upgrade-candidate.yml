@@ -144,6 +144,13 @@ jobs:
               raise SystemExit("Source did not return distinct deeper pages")
           PYTHON
 
+      - name: Run focused primary-tab activation regressions
+        run: >-
+          gradle --no-daemon :app:testDebugUnitTest
+          --tests 'com.webapp.crazyshit.PrimaryTab*'
+          --tests 'com.webapp.crazyshit.PreferenceSnapshotTest'
+          --tests 'com.webapp.crazyshit.OnlyFapFavoriteAvatarTest'
+
       - name: Run focused ShitTok swipe and audio regressions
         run: >-
           gradle --no-daemon :app:testDebugUnitTest

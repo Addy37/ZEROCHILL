@@ -29,10 +29,10 @@ public class PrimaryTabNavigationTest {
             MainPagerAdapter adapter = ReflectionHelpers.getField(activity, "primaryPagerAdapter");
             LibraryHubView library = ReflectionHelpers.getField(adapter, "libraryView");
             // No idle between taps: the event handler itself must select the target immediately.
-            for (int id : new int[] {1, 2, 3, 6, 1, 6, 2, 6, 6}) {
+            for (int id : new int[] {2, 4, 3, 6, 2, 6, 4, 6, 6}) {
                 nav.setSelectedItemId(id);
-                int expected = id == 1 ? 0 : id == 2 ? 1 : id == 3 ? 2 : 3;
-                assertEquals(expected, pager.getCurrentItem());
+                int expected = id == 2 ? 0 : id == 4 ? 1 : id == 3 ? 2 : 3;
+                assertEquals("Navigation ID " + id, expected, pager.getCurrentItem());
                 assertEquals(View.VISIBLE, pager.getVisibility());
                 assertEquals(id, nav.getSelectedItemId());
                 assertFalse("Tap dispatch must not read or rebuild Library",
