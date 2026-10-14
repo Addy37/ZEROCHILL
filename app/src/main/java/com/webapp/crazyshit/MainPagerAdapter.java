@@ -66,6 +66,9 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
 
         default void onNavigationScroll(int sourcePage, int dy, boolean atTop, boolean userDriven) {
         }
+
+        default void onPrimarySettled(int page) {
+        }
     }
 
     private enum PageKind {
@@ -96,6 +99,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
     private final LibraryHubView libraryView;
     private int primaryPage = -1;
     private boolean hostResumed = true;
+    private boolean primarySettled;
     private final PrimaryTabWorkQueue primaryWork;
 
     public MainPagerAdapter(Activity activity, Host host) {
@@ -240,6 +244,8 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
     }
 
     public void onPrimaryMotionChanged(boolean settled) {
+        if (primarySettled == settled) return;
+        primarySettled = settled;
         primaryWork.setSettled(settled);
         if (!settled) deactivateHubs();
         else schedulePrimaryRefresh();
@@ -255,6 +261,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         final int position = primaryPage;
         primaryWork.submit(position, "activation", () -> {
             if (!hostResumed || activity.isFinishing() || activity.isDestroyed()) return;
+            host.onPrimarySettled(position);
             if (position == PAGE_LIBRARY) {
                 libraryView.setSocialActive(true);
             } else if (position == PAGE_SERIES) {
@@ -1078,6 +1085,15 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         });
     }
 
+    private void postPrimaryResult(Page page, int generation, String key, Runnable task) {
+        activity.runOnUiThread(() -> {
+            if (generation != page.generation || activity.isFinishing() || activity.isDestroyed()) return;
+            primaryWork.submit(page.index, key, () -> {
+                if (generation == page.generation) task.run();
+            });
+        });
+    }
+
     private void loadOnlyFapHub(Page page) {
         if (page == null || page.onlyFapHub == null || page.loading) return;
         cancelOnlyFapHubTasks(page);
@@ -1092,11 +1108,11 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                 favoriteCreatorArtworkHydrator.hydrate(
                         activity,
                         10,
-                        () -> activity.runOnUiThread(() -> primaryWork.submit(page.index, "favorites", () -> {
+                        () -> postPrimaryResult(page, generation, "favorites", () -> {
                             if (generation == page.generation && page.onlyFapHub != null) {
                                 page.onlyFapHub.refreshFavorites();
                             }
-                        }))
+                        })
                 )
         );
         AtomicInteger remaining = new AtomicInteger(2);
@@ -1124,11 +1140,11 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                         finalShelves.get(FapzoneCreatorRepository.MODE_POPULAR));
                 if (Thread.currentThread().isInterrupted()) return;
                 if (!items.isEmpty()) CreatorCatalog.remember(activity, items);
-                activity.runOnUiThread(() -> primaryWork.submit(page.index, "discover", () -> {
+                postPrimaryResult(page, generation, "discover", () -> {
                     if (generation == page.generation && page.onlyFapHub != null) {
                         page.onlyFapHub.setTrending(items);
                     }
-                }));
+                });
             } catch (InterruptedException interrupted) {
                 Thread.currentThread().interrupt();
             } finally {
@@ -1155,10 +1171,10 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                     finalShelves.put(mode, new java.util.ArrayList<>(result));
                     if (!result.isEmpty()) CreatorCatalog.remember(activity, result);
                     final List<NativeContentItem> items = result;
-                    activity.runOnUiThread(() -> primaryWork.submit(page.index, "shelf-" + mode, () -> {
+                    postPrimaryResult(page, generation, "shelf-" + mode, () -> {
                         if (generation != page.generation || page.onlyFapHub == null) return;
                         applyOnlyFapShelf(page.onlyFapHub, mode, items);
-                    }));
+                    });
                 }
             } finally {
                 regularShelvesReady.countDown();
@@ -1174,10 +1190,10 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
             List<NativeContentItem> items
     ) {
         if (items == null || items.isEmpty()) return;
-        activity.runOnUiThread(() -> primaryWork.submit(page.index, "shelf-" + mode, () -> {
+        postPrimaryResult(page, generation, "shelf-" + mode, () -> {
             if (generation != page.generation || page.onlyFapHub == null) return;
             applyOnlyFapShelf(page.onlyFapHub, mode, items);
-        }));
+        });
     }
 
     private void applyOnlyFapShelf(
@@ -1203,14 +1219,14 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
             AtomicInteger remaining
     ) {
         if (remaining.decrementAndGet() != 0) return;
-        activity.runOnUiThread(() -> primaryWork.submit(page.index, "onlyfap-finished", () -> {
+        postPrimaryResult(page, generation, "onlyfap-finished", () -> {
             if (generation != page.generation) return;
             page.loading = false;
             page.endReached = true;
             page.onlyFapLastLoadedElapsedMs = android.os.SystemClock.elapsedRealtime();
             page.onlyFapHubTasks.clear();
             if (page.onlyFapHub != null) page.onlyFapHub.finishLoading();
-        }));
+        });
     }
 
     private void cancelOnlyFapHubTasks(Page page) {
@@ -1262,11 +1278,11 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                     weeklyCandidates,
                     System.currentTimeMillis()
             );
-            activity.runOnUiThread(() -> primaryWork.submit(page.index, "weekly", () -> {
+            postPrimaryResult(page, generation, "weekly", () -> {
                 if (generation == page.generation && page.showsHub != null) {
                     page.showsHub.setThisWeek(items);
                 }
-            }));
+            });
         });
 
         page.showsHubTasks.add(io.submit(() -> {
@@ -1276,11 +1292,11 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
             } catch (Exception ignored) {
             }
             final List<NativeContentItem> items = result;
-            activity.runOnUiThread(() -> primaryWork.submit(page.index, "crazyshit", () -> {
+            postPrimaryResult(page, generation, "crazyshit", () -> {
                 if (generation == page.generation && page.showsHub != null) {
                     page.showsHub.setCrazyShit(items);
                 }
-            }));
+            });
             finishShowsHubSource(page, generation, remaining);
         }));
 
@@ -1291,11 +1307,11 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
             } catch (Exception ignored) {
             }
             final List<NativeContentItem> items = result;
-            activity.runOnUiThread(() -> primaryWork.submit(page.index, "efukt", () -> {
+            postPrimaryResult(page, generation, "efukt", () -> {
                 if (generation == page.generation && page.showsHub != null) {
                     page.showsHub.setEfukt(items);
                 }
-            }));
+            });
             finishShowsHubSource(page, generation, remaining);
         }));
 
@@ -1306,11 +1322,11 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
             } catch (Exception ignored) {
             }
             final List<NativeContentItem> items = result;
-            activity.runOnUiThread(() -> primaryWork.submit(page.index, "baddiehub", () -> {
+            postPrimaryResult(page, generation, "baddiehub", () -> {
                 if (generation == page.generation && page.showsHub != null) {
                     page.showsHub.setBaddieHubCategories(items);
                 }
-            }));
+            });
             finishShowsHubSource(page, generation, remaining);
         }));
 
@@ -1321,11 +1337,11 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
             } catch (Exception ignored) {
             }
             final List<NativeContentItem> items = result;
-            activity.runOnUiThread(() -> primaryWork.submit(page.index, "categories", () -> {
+            postPrimaryResult(page, generation, "categories", () -> {
                 if (generation == page.generation && page.showsHub != null) {
                     page.showsHub.setCategories(items);
                 }
-            }));
+            });
             finishShowsHubSource(page, generation, remaining);
         }));
 
@@ -1339,11 +1355,11 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
             } catch (Exception ignored) {
             }
             final List<NativeContentItem> items = result;
-            activity.runOnUiThread(() -> primaryWork.submit(page.index, "kaotic", () -> {
+            postPrimaryResult(page, generation, "kaotic", () -> {
                 if (generation == page.generation && page.showsHub != null) {
                     page.showsHub.setKaoticCategories(items);
                 }
-            }));
+            });
             finishShowsHubSource(page, generation, remaining);
         }));
     }
@@ -1358,21 +1374,21 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                 System.currentTimeMillis()
         );
         if (weekly.isEmpty()) return;
-        activity.runOnUiThread(() -> primaryWork.submit(page.index, "weekly", () -> {
+        postPrimaryResult(page, generation, "weekly", () -> {
             if (generation != page.generation || page.showsHub == null) return;
             page.showsHub.setThisWeek(weekly);
-        }));
+        });
     }
 
     private void finishShowsHubSource(Page page, int generation, AtomicInteger remaining) {
         if (remaining.decrementAndGet() != 0) return;
-        activity.runOnUiThread(() -> primaryWork.submit(page.index, "shows-finished", () -> {
+        postPrimaryResult(page, generation, "shows-finished", () -> {
             if (generation != page.generation) return;
             page.loading = false;
             page.endReached = true;
             page.showsHubTasks.clear();
             if (page.showsHub != null) page.showsHub.finishLoading();
-        }));
+        });
     }
 
     private void cancelShowsHubTasks(Page page) {

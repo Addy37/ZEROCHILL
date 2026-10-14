@@ -766,7 +766,8 @@ final class LibraryHubView extends ScrollView {
     }
 
     private void onThumbnailResolved(String pageUrl, String thumbnailUrl) {
-        if (closed || clean(pageUrl).isEmpty() || clean(thumbnailUrl).isEmpty()) return;
+        if (closed || clean(pageUrl).isEmpty() || clean(thumbnailUrl).isEmpty() ||
+                !thumbnailTargets.containsKey(pageUrl)) return;
         resolvedThumbnails.put(pageUrl, thumbnailUrl);
         work.schedule("thumbnail:" + pageUrl, () -> applyResolvedThumbnail(pageUrl, thumbnailUrl));
     }
@@ -781,7 +782,8 @@ final class LibraryHubView extends ScrollView {
     }
 
     private void onContinueFrameUpdated(String pageUrl) {
-        if (closed || pageUrl == null || pageUrl.isEmpty()) return;
+        if (closed || pageUrl == null || pageUrl.isEmpty() ||
+                !thumbnailTargets.containsKey(pageUrl)) return;
         work.schedule("thumbnail:" + pageUrl, () -> {
             if (closed) return;
             File frame = ShowsContinueFrameStore.find(activity, pageUrl);

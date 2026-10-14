@@ -130,6 +130,12 @@ final class OnlyFapHubView extends FrameLayout {
     private boolean favoritesLoading;
     private boolean favoritesDirty = true;
     private List<java.util.Map<String, ?>> favoriteInputs;
+    private final List<android.content.SharedPreferences> favoritePreferences = new ArrayList<>();
+    private final android.content.SharedPreferences.OnSharedPreferenceChangeListener favoriteInvalidation =
+            (prefs, key) -> {
+                this.favoritesDirty = true;
+                if (this.active) work.schedule("favorite-refresh", this::refreshFavorites);
+            };
 
     void setWorkScheduler(PrimaryTabWorkQueue.Scheduler scheduler) { work = scheduler; }
     private volatile boolean closed;
@@ -396,6 +402,13 @@ final class OnlyFapHubView extends FrameLayout {
         heroCard.setOnClickListener(v -> openHero());
         heroAction.setOnClickListener(v -> openHero());
 
+        for (String name : new String[] {"creator_favorites", "creator_catalog_v1",
+                "creator_avatar_overrides_v1", "manual_creator_merges_v1"}) {
+            android.content.SharedPreferences prefs =
+                    context.getSharedPreferences(name, Context.MODE_PRIVATE);
+            favoritePreferences.add(prefs);
+            prefs.registerOnSharedPreferenceChangeListener(favoriteInvalidation);
+        }
         refreshFavorites();
     }
 
@@ -498,9 +511,8 @@ final class OnlyFapHubView extends FrameLayout {
         favoritesDirty = false;
         heroIo.execute(() -> {
             List<java.util.Map<String, ?>> inputs = new ArrayList<>();
-            for (String name : new String[] {"creator_favorites", "creator_catalog_v1",
-                    "creator_avatar_overrides_v1", "manual_creator_merges_v1"}) {
-                inputs.add(getContext().getSharedPreferences(name, Context.MODE_PRIVATE).getAll());
+            for (android.content.SharedPreferences prefs : favoritePreferences) {
+                inputs.add(prefs.getAll());
             }
             List<CreatorCatalog.FavoriteGroup> favorites = CreatorCatalog.favoriteGroups(getContext());
             List<CreatorAvatarOverrideStore.Override> avatars = CreatorAvatarOverrideStore.load(getContext());
@@ -589,6 +601,9 @@ final class OnlyFapHubView extends FrameLayout {
         active = false;
         heroHandler.removeCallbacksAndMessages(null);
         heroRefreshHandler.removeCallbacksAndMessages(null);
+        for (android.content.SharedPreferences prefs : favoritePreferences) {
+            prefs.unregisterOnSharedPreferenceChangeListener(favoriteInvalidation);
+        }
         heroIo.shutdownNow();
         heroDiscoveryIo.shutdownNow();
         Glide.with(heroImage).clear(heroImage);
@@ -1430,7 +1445,7 @@ final class OnlyFapHubView extends FrameLayout {
             extends RecyclerView.Adapter<CreatorPortraitAdapter.Holder> {
         private final Listener listener;
         private final List<NativeContentItem> items = new ArrayList<>();
-        private volatile boolean closed;
+        private boolean closed;
 
         CreatorPortraitAdapter(Listener listener) {
             this.listener = listener;

@@ -55,6 +55,61 @@ public class PrimaryTabLibraryTest {
         } finally { library.close(); }
     }
 
+    @Test public void populatedSnapshotKeepsHistoryCreatorsAndDownloadsAndUpdatesProgress() throws Exception {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        PlaybackHistoryStore.resetForTests();
+        PlaybackHistoryStore.record(activity, "Watch one", "https://example.com/watch",
+                "https://cdn.example.com/poster.jpg", 60_000, 180_000, false, true);
+        PlaybackHistoryStore.awaitPendingWritesForTests();
+        NativeContentItem creator = new NativeContentItem(NativeContentItem.KIND_CREATOR,
+                "Creator One", "https://fapello.com/creator-one/", "https://cdn.example.com/creator.jpg",
+                "", "", "", "", "Creator One");
+        CreatorCatalog.remember(activity, java.util.Collections.singletonList(creator));
+        CreatorFavoriteStore.toggle(activity, creator);
+        VideoDownloadStore.Entry download = new VideoDownloadStore.Entry(-1, "Offline one",
+                "https://example.com/download", "https://cdn.example.com/download.jpg", "", "video/mp4",
+                1, android.app.DownloadManager.STATUS_SUCCESSFUL, 10, 10, "file:///test.mp4", 0);
+        java.lang.reflect.Method save = VideoDownloadStore.class.getDeclaredMethod("saveMetadata",
+                android.content.Context.class, VideoDownloadStore.Entry.class);
+        save.setAccessible(true);
+        save.invoke(null, activity, download);
+        LibraryHubView library = new LibraryHubView(activity, null);
+        activity.setContentView(library);
+        Map<String, Runnable> work = new LinkedHashMap<>();
+        library.setWorkScheduler(work::put);
+        try {
+            library.setSocialActive(true);
+            refresh(library, work);
+            Object snapshot = ReflectionHelpers.getField(library, "displayed");
+            assertEquals(1, ((java.util.List<?>) ReflectionHelpers.getField(snapshot, "continueItems")).size());
+            assertEquals(1, ((java.util.List<?>) ReflectionHelpers.getField(snapshot, "creators")).size());
+            assertEquals(1, ((java.util.List<?>) ReflectionHelpers.getField(snapshot, "downloads")).size());
+            library.measure(View.MeasureSpec.makeMeasureSpec(500, View.MeasureSpec.EXACTLY),
+                    View.MeasureSpec.makeMeasureSpec(400, View.MeasureSpec.EXACTLY));
+            library.layout(0, 0, 500, 400);
+            library.scrollTo(0, 150);
+            int scroll = library.getScrollY();
+            library.setSocialActive(false);
+            library.setSocialActive(true);
+            assertEquals(scroll, library.getScrollY());
+            refresh(library, work);
+            assertEquals(scroll, library.getScrollY());
+            PlaybackHistoryStore.record(activity, "Watch one", "https://example.com/watch",
+                    "https://cdn.example.com/poster.jpg", 120_000, 180_000, false, true);
+            PlaybackHistoryStore.awaitPendingWritesForTests();
+            shadowOf(Looper.getMainLooper()).idle();
+            refresh(library, work);
+            Object updated = ReflectionHelpers.getField(library, "displayed");
+            java.util.List<PlaybackHistoryStore.Item> continued = ReflectionHelpers.getField(updated, "continueItems");
+            assertEquals(120_000, continued.get(0).positionMs);
+            CreatorFavoriteStore.toggle(activity, creator);
+            shadowOf(Looper.getMainLooper()).idle();
+            refresh(library, work);
+            assertTrue(((java.util.List<?>) ReflectionHelpers.getField(
+                    ReflectionHelpers.getField(library, "displayed"), "creators")).isEmpty());
+        } finally { library.close(); }
+    }
+
     private void refresh(LibraryHubView library, Map<String, Runnable> work) throws Exception {
         Runnable refresh = work.remove("library-refresh");
         if (refresh != null) refresh.run();

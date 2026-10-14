@@ -248,6 +248,11 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
             }
 
             @Override
+            public void onPrimarySettled(int page) {
+                if (page == MainPagerAdapter.PAGE_LIBRARY) markLibraryUpdatesSeen();
+            }
+
+            @Override
             public void onNavigationScroll(int sourcePage, int dy, boolean atTop, boolean userDriven) {
                 if (navigationMotion != null) {
                     navigationMotion.onScroll(sourcePage, dy, atTop, userDriven);
@@ -558,6 +563,8 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         if (primaryPager.getCurrentItem() == pagerPosition &&
                 primaryPager.getVisibility() == View.VISIBLE) {
             showPagerChrome(position);
+            primaryPagerAdapter.onPrimaryMotionChanged(
+                    primaryPager.getScrollState() == ViewPager2.SCROLL_STATE_IDLE);
             return;
         }
         primaryPagerAdapter.onPrimaryMotionChanged(false);
@@ -569,7 +576,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
                 pagerPosition,
                 smooth && ZeroChillMotion.animationsEnabled(this)
         );
-        // Same-page taps do not dispatch onPageSelected. Keep their activation idempotent.
+        // Chrome also restores the pager when returning from legacy secondary screens.
         showPagerChrome(position);
         primaryPagerAdapter.onPrimaryMotionChanged(
                 primaryPager.getScrollState() == ViewPager2.SCROLL_STATE_IDLE);
@@ -614,7 +621,6 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
             feedBaseUrl = CrazyShitRepository.HOME;
             feedTitle = "Library";
             selectNavSilently(NAV_LIBRARY);
-            markLibraryUpdatesSeen();
         } else {
             screen = Screen.HOME;
             feedBaseUrl = CrazyShitRepository.HOME;
