@@ -64,6 +64,16 @@ final class BaddieHubRepository {
     private static final Set<String> IN_FLIGHT = ConcurrentHashMap.newKeySet();
     private static final Map<String, Long> RETRY_AFTER = new ConcurrentHashMap<>();
 
+    /** ShitTok's shared bounded admission gate verifies these before creating visible pages. */
+    List<NativeContentItem> fetchShitTokCandidates(Context context, int page) throws IOException {
+        SourceConfig.BaddieHub config = config(context);
+        if (!enabled(config)) return new ArrayList<>();
+        String listingUrl = routeUrl(config, page <= 1
+                ? config.listingFirstRoute : config.listingPageRoute, "", page);
+        return relatedItems(parseListing(fetch(context, listingUrl, config.baseUrl, config),
+                config.cardLinksSelector, MAX_CANDIDATES), "");
+    }
+
     List<NativeContentItem> fetchPortraitFeed(Context context, int page) throws IOException {
         SourceConfig.BaddieHub config = config(context);
         if (!enabled(config)) return new ArrayList<>();

@@ -5,13 +5,9 @@ import android.content.Context
 import android.net.Uri
 import android.os.SystemClock
 import android.os.Trace
-import android.webkit.CookieManager
-import android.webkit.WebSettings
 import androidx.media3.common.*
-import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.*
 import androidx.media3.exoplayer.analytics.PlayerId
-import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.source.MediaSource
 import androidx.media3.exoplayer.source.preload.DefaultPreloadManager
 import androidx.media3.exoplayer.upstream.DefaultAllocator
@@ -32,6 +28,13 @@ class ShitTokPlaybackOwner(context: Context, private val callbacks: Callbacks) {
     private var manager: DefaultPreloadManager? = null
     private var builder: DefaultPreloadManager.Builder? = null
     private val control = PoolLoadControl()
+    private val protection = ShitTokBufferProtection()
+    @Volatile private var speculativeAllowed = true
+    private var speculationNotification: Job? = null
+    private var speculationListener: java.util.function.Consumer<Boolean>? = null
+    fun setSpeculationListener(listener: java.util.function.Consumer<Boolean>) { speculationListener = listener }
+    private var healthCheck: Job? = null
+    private var bandwidthEstimate = -1L
     private val leases = linkedMapOf<String, Lease>()
     private val positions = linkedMapOf<String, Long>()
     private val paused = mutableSetOf<String>()
@@ -59,7 +62,7 @@ class ShitTokPlaybackOwner(context: Context, private val callbacks: Callbacks) {
         if (pool != null) return
         if (testFactory == null) {
             builder = DefaultPreloadManager.Builder(app) { rank ->
-                if (control.networkPaused || control.currentNeedsBuffer || kotlin.math.abs(rank) <= 1)
+                if (control.networkPaused || control.currentNeedsBuffer || control.starving || kotlin.math.abs(rank) <= 1)
                     DefaultPreloadManager.PreloadStatus.PRELOAD_STATUS_NOT_PRELOADED
                 else DefaultPreloadManager.PreloadStatus.specifiedRangeLoaded(0, 1_000)
             }.setLoadControl(control)
@@ -74,6 +77,13 @@ class ShitTokPlaybackOwner(context: Context, private val callbacks: Callbacks) {
                 player.repeatMode = Player.REPEAT_MODE_OFF
                 player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()
                     .setMaxVideoSize(1920, 1080).setMaxVideoBitrate(8_000_000).build()
+                player.addAnalyticsListener(object : androidx.media3.exoplayer.analytics.AnalyticsListener {
+                    override fun onBandwidthEstimate(eventTime: androidx.media3.exoplayer.analytics.AnalyticsListener.EventTime,
+                        totalLoadTimeMs: Int, totalBytesLoaded: Long, bitrateEstimate: Long) {
+                        if (leases.values.any { it.player === player && selected != null && leases[selected]?.player === player })
+                            bandwidthEstimate = bitrateEstimate
+                    }
+                })
                 ShitTokPoolDiagnostics.record("create", "created=$created capacity=3")
             }
         }
@@ -89,6 +99,13 @@ class ShitTokPlaybackOwner(context: Context, private val callbacks: Callbacks) {
             .distinct().take(preparedLimit)
         if (selected == current && window == wanted && pool != null) { syncAudio(); return }
         revokeAudio()
+        if (selected != current) {
+            bandwidthEstimate = -1L
+            protection.select(current)
+            control.starving = false
+            control.recoveryTargetUs = 0L
+            control.recoveryDeadlineMs = 0L
+        }
         selected = current
         window = wanted
         planCount++
@@ -102,6 +119,8 @@ class ShitTokPlaybackOwner(context: Context, private val callbacks: Callbacks) {
         control.currentId = current
         acquisition = scope.launch(start = CoroutineStart.UNDISPATCHED) {
             wanted.forEach { url ->
+                // Current acquisition stays immediate. Only real starvation defers neighbor creation.
+                while (url != selected && control.starving) delay(120)
                 if (url !in leases) {
                     val at = SystemClock.elapsedRealtime()
                     val player = owner.acquire()
@@ -115,13 +134,24 @@ class ShitTokPlaybackOwner(context: Context, private val callbacks: Callbacks) {
                             if (!owns(url, player, generation)) return
                             updateBufferPriority()
                             if (state == Player.STATE_READY) ShitTokPoolDiagnostics.record("ready", url)
-                            if (url == selected && state == Player.STATE_READY && permitted) flushWaitingSources()
+                            if (url == selected && state == Player.STATE_READY && allowsSpeculativeWork()) flushWaitingSources()
                         }
                         override fun onRenderedFirstFrame() {
                             if (owns(url, player, generation)) ShitTokPoolDiagnostics.record("firstFrame", url)
                         }
                         override fun onIsPlayingChanged(isPlaying: Boolean) {
                             if (isPlaying && (!owns(url, player, generation) || !canPlay(url))) silence(player)
+                        }
+                        override fun onEvents(observed: Player, events: Player.Events) {
+                            if (owns(url, player, generation)) observeSelected(url, player)
+                        }
+                        override fun onPositionDiscontinuity(oldPosition: Player.PositionInfo,
+                            newPosition: Player.PositionInfo, reason: Int) {
+                            if (url == selected && owns(url, player, generation) &&
+                                (reason == Player.DISCONTINUITY_REASON_SEEK || reason == Player.DISCONTINUITY_REASON_SEEK_ADJUSTMENT)) {
+                                protection.interrupt(SystemClock.elapsedRealtime(), true)
+                                publishProtection()
+                            }
                         }
                         override fun onPlayerError(error: PlaybackException) {
                             if (owns(url, player, generation)) scope.launch {
@@ -155,7 +185,9 @@ class ShitTokPlaybackOwner(context: Context, private val callbacks: Callbacks) {
         control.networkPaused = !permitted
         syncAudio()
         manager?.invalidate()
-        if (permitted && !control.currentNeedsBuffer) flushWaitingSources()
+        if (!permitted) { protection.interrupt(SystemClock.elapsedRealtime(), false); publishProtection() }
+        ensureHealthCheck()
+        if (allowsSpeculativeWork()) flushWaitingSources()
         if (permitted) waitingErrors.toMap().forEach { (player, error) ->
             waitingErrors.remove(player)
             recoverDecoder(player, error)
@@ -182,6 +214,43 @@ class ShitTokPlaybackOwner(context: Context, private val callbacks: Callbacks) {
         val current = selected?.let { leases[it] }
         control.currentNeedsBuffer = current == null || current.stream == null ||
             current.player.playbackState == Player.STATE_BUFFERING || current.player.playbackState == Player.STATE_IDLE
+        publishProtection()
+    }
+    fun allowsSpeculativeWork(): Boolean = speculativeAllowed
+    fun isStarvationProtected(): Boolean = protection.isProtected()
+    private fun observeSelected(url: String, player: ExoPlayer) {
+        if (url != selected) return
+        protection.observe(SystemClock.elapsedRealtime(), player.playbackState, player.isPlaying,
+            player.playWhenReady, canPlay(url), url in paused, player.playerError != null,
+            player.currentPosition, player.totalBufferedDuration)
+        updateBufferPriority()
+        ensureHealthCheck()
+    }
+    private fun publishProtection() {
+        control.starving = protection.isProtected()
+        control.recoveryTargetUs = protection.recoveryTargetMs() * 1_000L
+        control.recoveryDeadlineMs = protection.recoveryDeadlineMs()
+        val allowed = permitted && !control.currentNeedsBuffer && !control.starving
+        if (speculativeAllowed == allowed) return
+        speculativeAllowed = allowed
+        // Publish after the ownership transaction, outside RecyclerView's selection callback.
+        speculationNotification?.cancel()
+        speculationNotification = scope.launch {
+            yield()
+            speculationListener?.accept(speculativeAllowed)
+            manager?.invalidate()
+            if (speculativeAllowed) flushWaitingSources()
+        }
+    }
+    private fun ensureHealthCheck() {
+        if (!permitted) { healthCheck?.cancel(); healthCheck = null; return }
+        if (healthCheck?.isActive == true) return
+        healthCheck = scope.launch {
+            while (permitted) {
+                delay(500)
+                selected?.let { url -> leases[url]?.let { observeSelected(url, it.player) } }
+            }
+        }
     }
     fun attach(url: String, view: PlayerView): ExoPlayer? {
         val lease = leases[url] ?: return null
@@ -207,7 +276,7 @@ class ShitTokPlaybackOwner(context: Context, private val callbacks: Callbacks) {
             ShitTokPoolDiagnostics.record("staleSource", url); return false
         }
         if (lease.stream?.mediaUrl == stream.mediaUrl) { syncAudio(); return true }
-        if (url != selected && control.currentNeedsBuffer) {
+        if (url != selected && !allowsSpeculativeWork()) {
             waitingSources[url] = stream to token
             ShitTokPoolDiagnostics.record("neighborDeferred", url)
             return true
@@ -216,7 +285,7 @@ class ShitTokPlaybackOwner(context: Context, private val callbacks: Callbacks) {
         revokeAudio()
         if (lease.stream != null) runCatching { remember(url, lease.player.currentPosition) }
         removeSource(url)
-        val mediaSource = createSource(url, stream)
+        val mediaSource = ShitTokMediaSources.create(app, url, stream)
         sources[url] = mediaSource
         lease.stream = stream
         lease.player.setMediaSource(mediaSource, positions[url] ?: 0L)
@@ -281,6 +350,8 @@ class ShitTokPlaybackOwner(context: Context, private val callbacks: Callbacks) {
     private fun removeSource(url: String) { sources.remove(url)?.let { manager?.remove(it.mediaItem) } }
     fun release() {
         permission(false, muted)
+        healthCheck?.cancel(); healthCheck = null
+        speculationNotification?.cancel(); speculationNotification = null
         acquisition?.cancel(); epoch++
         leases.keys.toList().forEach { retire(it) }
         pool?.release(); pool = null
@@ -288,35 +359,18 @@ class ShitTokPlaybackOwner(context: Context, private val callbacks: Callbacks) {
         window = emptyList()
         ShitTokPoolDiagnostics.record("release", "leases=0")
     }
-    fun clearSession() { release(); positions.clear(); paused.clear(); selected = null }
+    fun clearSession() { release(); positions.clear(); paused.clear(); selected = null; protection.select("") }
     fun close() { release(); scope.cancel() }
     fun summary(): String = "capacity=3 preparedLimit=$preparedLimit created=$created acquired=${leases.size} " +
         "selected=$selected assignments=${leases.keys} plans=$planCount audible=${leases.values.count { it.player.playWhenReady && it.player.volume>0f }} " +
-        leases.entries.joinToString { "${it.key}:buffer=${it.value.player.totalBufferedDuration}" }
+        leases.entries.joinToString { "${it.key}:buffer=${it.value.player.totalBufferedDuration}" } +
+        "\n" + protection.summary(SystemClock.elapsedRealtime()) +
+        " speculativeWarming=$speculativeAllowed warmingSuppressedByStarvation=${protection.isProtected()}" +
+        " bandwidthEstimate=$bandwidthEstimate" + selected?.let { url ->
+            leases[url]?.stream?.let { " pageHost=${Uri.parse(it.pageUrl).host} mediaHost=${Uri.parse(it.mediaUrl).host}" +
+                " format=${if(it.mediaUrl.contains(".m3u8", true) || it.mediaUrl.contains(".mpd", true)) "adaptive" else "direct"}" }
+        }.orEmpty()
 
-    private fun createSource(url: String, stream: CrazyShitRepository.StreamInfo): MediaSource {
-        val http = DefaultHttpDataSource.Factory()
-        runCatching { http.setUserAgent(WebSettings.getDefaultUserAgent(app)) }
-        val headers = hashMapOf<String, String>()
-        runCatching { headers.putAll(ShitShowPlayableResolver.playbackHeaders(stream.mediaUrl)) }
-        fun put(name: String, value: String?) {
-            if (!value.isNullOrEmpty() && headers.keys.none { it.equals(name, true) }) headers[name] = value
-        }
-        if (!stream.pageUrl.isNullOrEmpty()) {
-            put("Referer", stream.requestReferer)
-            runCatching { val page = Uri.parse(stream.pageUrl); if(page.scheme!=null && page.host!=null) put("Origin", "${page.scheme}://${page.host}") }
-        }
-        runCatching { put("Cookie", CookieManager.getInstance().getCookie(stream.mediaUrl)
-            .takeUnless { it.isNullOrEmpty() } ?: CookieManager.getInstance().getCookie(stream.pageUrl)) }
-        http.setDefaultRequestProperties(headers)
-        val media = MediaItem.Builder().setMediaId(url).setUri(stream.mediaUrl)
-        val lower = stream.mediaUrl.lowercase()
-        when { lower.contains(".m3u8") -> media.setMimeType(MimeTypes.APPLICATION_M3U8)
-            lower.contains(".mpd") -> media.setMimeType(MimeTypes.APPLICATION_MPD)
-            lower.contains(".mp4") || lower.contains(".m4v") -> media.setMimeType(MimeTypes.VIDEO_MP4) }
-        return DefaultMediaSourceFactory(app).setDataSourceFactory(ShitTokMediaCache.wrap(app, http))
-            .createMediaSource(media.build())
-    }
     private fun silence(player: ExoPlayer) {
         if (player.volume != 0f) player.volume = 0f
         if (player.playWhenReady) player.pause()
@@ -331,17 +385,30 @@ class ShitTokPlaybackOwner(context: Context, private val callbacks: Callbacks) {
         @Volatile var currentId: String? = null
         @Volatile var networkPaused = false
         @Volatile var currentNeedsBuffer = true
+        @Volatile var starving = false
+        @Volatile var recoveryTargetUs = 0L
+        @Volatile var recoveryDeadlineMs = 0L
         private val loading = ConcurrentHashMap<PlayerId, Boolean>()
         override fun shouldContinueLoading(parameters: LoadControl.Parameters): Boolean {
             val normal = super.shouldContinueLoading(parameters)
             if (networkPaused) return false
             val id = if (parameters.timeline.isEmpty) null else parameters.timeline.getWindow(0, Timeline.Window()).mediaItem.mediaId
             if (id == currentId) return normal
-            if (currentNeedsBuffer) return false
+            if (currentNeedsBuffer || starving) return false
             val buffered = parameters.bufferedDurationUs
             val next = if (loading[parameters.playerId] == true) buffered < 6_000_000 else buffered < 2_500_000
             loading[parameters.playerId] = next
             return next
+        }
+        override fun shouldStartPlayback(parameters: LoadControl.Parameters): Boolean {
+            val normal = super.shouldStartPlayback(parameters)
+            val id = if (parameters.timeline.isEmpty) null else parameters.timeline.getWindow(0, Timeline.Window()).mediaItem.mediaId
+            if (id != currentId || !parameters.rebuffering) return normal
+            // Supported LoadControl hook, no player rebuild, pause toggle, or position reset.
+            val target = if (parameters.targetLiveOffsetUs != C.TIME_UNSET)
+                minOf(recoveryTargetUs, parameters.targetLiveOffsetUs / 2) else recoveryTargetUs
+            return ShitTokBufferProtection.mayResume(normal, parameters.bufferedDurationUs,
+                parameters.playbackSpeed, target, recoveryDeadlineMs, SystemClock.elapsedRealtime())
         }
         override fun onStopped(playerId: PlayerId) { super.onStopped(playerId); loading.remove(playerId) }
         override fun onReleased(playerId: PlayerId) { super.onReleased(playerId); loading.remove(playerId) }

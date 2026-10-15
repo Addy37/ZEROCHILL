@@ -43,11 +43,22 @@ final class ShitShowTapSource {
     private final Set<String> seenStoryUrls = new HashSet<>();
 
     private boolean warming;
+    private volatile boolean playbackProtected;
     private WebView webView;
     private long harvestStartedAt;
 
     void prewarm(Context context) {
-        if (cachedCount() < 8) warm(context);
+        if (!playbackProtected && cachedCount() < 8) warm(context);
+    }
+
+    void setPlaybackProtected(boolean value) {
+        if (playbackProtected == value) return;
+        playbackProtected = value;
+        if (value) main.post(() -> {
+            if (!playbackProtected) return;
+            // Keep harvested metadata, but release the hidden page's competing media requests.
+            finishHarvest(webView);
+        });
     }
 
     List<NativeContentItem> takeReadyBatch(int maxItems) {
@@ -109,7 +120,7 @@ final class ShitShowTapSource {
     }
 
     private void startHarvest(Activity activity) {
-        if (activity.isFinishing() || activity.isDestroyed()) {
+        if (playbackProtected || activity.isFinishing() || activity.isDestroyed()) {
             setWarming(false);
             return;
         }

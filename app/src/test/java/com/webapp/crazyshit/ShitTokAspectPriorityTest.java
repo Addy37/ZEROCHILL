@@ -13,13 +13,13 @@ import java.util.Random;
 
 public class ShitTokAspectPriorityTest {
     @Test
-    public void bucketUsesPortraitThenStandardThenWideOrder() {
+    public void bucketDistinguishesPortraitSquareLandscapeAndUnknown() {
         assertEquals(
                 ShitTokAspectPriority.BUCKET_VERTICAL,
                 ShitTokAspectPriority.bucket(9f / 16f)
         );
         assertEquals(
-                ShitTokAspectPriority.BUCKET_STANDARD,
+                ShitTokAspectPriority.BUCKET_WIDE,
                 ShitTokAspectPriority.bucket(4f / 3f)
         );
         assertEquals(
@@ -37,26 +37,25 @@ public class ShitTokAspectPriorityTest {
     }
 
     @Test
-    public void orderSoftlyPrefersVerticalThenStandardThenWideWithinSource() {
+    public void orderRejectsLandscapeAndUnknownWhileKeepingPortraitAndSquare() {
         ShitTokAspectPriority priority = new ShitTokAspectPriority();
         NativeContentItem wide = item(
                 "wide", 16f / 9f, "https://same.example/wide", "", ""
         );
         NativeContentItem standard = item(
-                "standard", 4f / 3f, "https://same.example/standard", "", ""
+                "standard", 1f, "https://same.example/standard", "", ""
         );
         NativeContentItem vertical = item(
                 "vertical", 9f / 16f, "https://same.example/vertical", "", ""
         );
 
         List<NativeContentItem> ordered = priority.order(
-                Arrays.asList(wide, standard, vertical),
+                Arrays.asList(wide, standard, vertical, item("unknown", 0f, "https://same.example/unknown", "", "")),
                 new FixedRandom()
         );
 
-        assertEquals("vertical", ordered.get(0).title);
-        assertEquals("standard", ordered.get(1).title);
-        assertEquals("wide", ordered.get(2).title);
+        assertEquals(2, ordered.size());
+        for (NativeContentItem accepted : ordered) assertTrue(accepted.aspectRatioHint <= 1f);
     }
 
     @Test
@@ -123,17 +122,14 @@ public class ShitTokAspectPriorityTest {
     }
 
     @Test
-    public void existingPlayerSamplesTeachUnknownItemsFromSameSource() {
+    public void playerSamplesNeverAdmitOtherItemsFromTheSameSource() {
         ShitTokAspectPriority priority = new ShitTokAspectPriority();
-        NativeContentItem first = item("one", 0f, "https://source.example/one", "", "");
-        NativeContentItem second = item("two", 0f, "https://source.example/two", "", "");
-        NativeContentItem future = item("future", 0f, "https://source.example/future", "", "");
-        NativeContentItem unknown = item("unknown", 0f, "https://other.example/future", "", "");
-
-        priority.record(first, 9f / 16f);
-        priority.record(second, 3f / 4f);
-
-        assertTrue(priority.weightFor(future) > priority.weightFor(unknown));
+        NativeContentItem observed = item("observed", 0f, "https://source.example/one", "", "");
+        NativeContentItem other = item("unknown", 0f, "https://source.example/two", "", "");
+        priority.record(observed, 9f / 16f);
+        assertEquals(1, priority.order(Arrays.asList(observed, other), new Random(1)).size());
+        priority.record(observed, 16f / 9f);
+        assertTrue(priority.order(Arrays.asList(observed, other), new Random(1)).isEmpty());
     }
 
     private static int countSource(List<NativeContentItem> items, String source) {
