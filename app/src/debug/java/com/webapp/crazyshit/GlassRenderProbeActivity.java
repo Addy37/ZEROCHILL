@@ -45,7 +45,9 @@ public final class GlassRenderProbeActivity extends Activity {
         for(int i=0;i<4;i++) nav.getMenu().add(0,ids[i],i,labels[i]).setIcon(icons[i]);
         nav.getMenu().findItem(4).setChecked(true); nav.setPagerPosition(1);
         nav.setOnItemSelectedListener(item -> {for(int i=0;i<4;i++)if(ids[i]==item.getItemId())nav.setPagerPosition(i);return true;});
-        shell.addView(nav,new LinearLayout.LayoutParams(-1,dp(64)));
+        LinearLayout.LayoutParams floating = new LinearLayout.LayoutParams(-1,dp(64));
+        floating.setMargins(dp(10),-dp(70),dp(10),dp(6));
+        shell.addView(nav,floating);
         StableBottomNavigationController.styleBar(nav); nav.reapplyCurrentGeometry();
         setContentView(shell);
         alive = true; start = SystemClock.uptimeMillis();
