@@ -14,7 +14,7 @@ final class UiPalette {
     static final int RAISED = Color.rgb(25, 28, 33);
     static final int FLOATING = Color.rgb(32, 36, 42);
     static final int TEXT_PRIMARY = Color.rgb(245, 247, 250);
-    static final int TEXT_SECONDARY = Color.rgb(185, 193, 204);
+    static final int TEXT_SECONDARY = Color.rgb(184, 192, 204);
     static final int TEXT_MUTED = Color.rgb(146, 157, 172);
     static final int DIVIDER = Color.rgb(41, 48, 57);
     static final int DESTRUCTIVE = Color.rgb(255, 156, 156);
