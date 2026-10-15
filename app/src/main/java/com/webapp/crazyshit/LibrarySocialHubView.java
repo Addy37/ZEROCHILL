@@ -174,10 +174,11 @@ final class LibrarySocialHubView extends LinearLayout {
 
     private MaterialCardView card(String title, String subtitle, int iconResource) {
         MaterialCardView card = new MaterialCardView(activity);
+        ZeroChillUi.styleMaterialCard(card, R.dimen.zc_radius_medium);
         card.setCardBackgroundColor(UiPalette.SURFACE);
         card.setRadius(dp(16));
         card.setStrokeColor(UiPalette.DIVIDER);
-        card.setStrokeWidth(dp(1));
+        card.setStrokeWidth(0);
         card.setCardElevation(0);
         card.setClickable(true);
         card.setFocusable(true);

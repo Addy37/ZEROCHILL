@@ -205,7 +205,7 @@ final class ShowsHubView extends FrameLayout {
         heroBar.setPadding(dp(20), dp(5), dp(20), 0);
 
         TextView heroBrand = text("Shows", 28f, Color.WHITE);
-        heroBrand.setTypeface(null, android.graphics.Typeface.BOLD);
+        ZeroChillTypography.apply(heroBrand, ZeroChillTypography.Role.DISPLAY);
         heroBrand.setSingleLine(true);
         heroBrand.setShadowLayer(dp(8), 0f, dp(2), Color.argb(150, 0, 0, 0));
         heroBar.addView(heroBrand, new LinearLayout.LayoutParams(-1, dp(58)));
@@ -228,11 +228,11 @@ final class ShowsHubView extends FrameLayout {
         heroFrame.addView(heroCopy,
                 new FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM));
 
-        heroSource = text("", 11f, UiPalette.PRIMARY);
+        heroSource = text("", 12f, UiPalette.TEXT_SECONDARY);
         heroSource.setVisibility(View.GONE);
         heroCopy.addView(heroSource);
 
-        heroTitle = text("A new way to browse Shows", 29f, Color.WHITE);
+        heroTitle = text("Shows", 29f, Color.WHITE);
         heroTitle.setTypeface(null, android.graphics.Typeface.BOLD);
         heroTitle.setGravity(Gravity.CENTER);
         heroTitle.setTextAlignment(TEXT_ALIGNMENT_CENTER);
@@ -301,7 +301,7 @@ final class ShowsHubView extends FrameLayout {
 
         body = new LinearLayout(context);
         body.setOrientation(LinearLayout.VERTICAL);
-        body.setPadding(dp(12), dp(4), dp(12), 0);
+        body.setPadding(dp(16), dp(12), dp(16), 0);
         content.addView(body, new LinearLayout.LayoutParams(-1, -2));
 
         loadingLabel = text(
@@ -367,7 +367,7 @@ final class ShowsHubView extends FrameLayout {
         loadingLabel.setText("Loading Shows…");
         loadingLabel.setVisibility(View.VISIBLE);
         heroSource.setText("FEATURED");
-        heroTitle.setText("A new way to browse Shows");
+        heroTitle.setText("Shows");
         heroHint.setText("CrazyShit, EFukt and Kaotic together in one media hub.");
         heroAction.setVisibility(View.GONE);
         Glide.with(heroBackdrop).clear(heroBackdrop);
@@ -702,7 +702,7 @@ final class ShowsHubView extends FrameLayout {
         heading.setPadding(dp(3), 0, dp(3), dp(9));
 
         TextView titleView = text("Continue Watching", 19f, Color.WHITE);
-        titleView.setTypeface(null, android.graphics.Typeface.BOLD);
+        ZeroChillTypography.apply(titleView, ZeroChillTypography.Role.SECTION);
         titleView.setBackground(null);
         titleView.setPadding(0, 0, 0, 0);
         heading.addView(titleView, new LinearLayout.LayoutParams(-2, -2));
@@ -741,7 +741,7 @@ final class ShowsHubView extends FrameLayout {
         LinearLayout block = new LinearLayout(getContext());
         block.setOrientation(LinearLayout.VERTICAL);
         LinearLayout.LayoutParams blockParams = new LinearLayout.LayoutParams(-1, -2);
-        blockParams.setMargins(0, 0, 0, dp(18));
+        blockParams.setMargins(0, 0, 0, dp(24));
         body.addView(block, blockParams);
 
         LinearLayout heading = new LinearLayout(getContext());
@@ -749,7 +749,7 @@ final class ShowsHubView extends FrameLayout {
         heading.setPadding(dp(3), 0, dp(3), dp(10));
 
         TextView titleView = text(title, 19f, Color.WHITE);
-        titleView.setTypeface(null, android.graphics.Typeface.BOLD);
+        ZeroChillTypography.apply(titleView, ZeroChillTypography.Role.SECTION);
         heading.addView(titleView);
 
         TextView subtitleView = text(

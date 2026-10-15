@@ -484,7 +484,7 @@ public class SettingsActivity extends Activity {
         if (subtitle != null && !subtitle.trim().isEmpty()) {
             TextView sub = text(
                     subtitle.trim(),
-                    10.5f,
+                    12f,
                     Color.rgb(148, 148, 158)
             );
             sub.setLineSpacing(0f, 1.02f);

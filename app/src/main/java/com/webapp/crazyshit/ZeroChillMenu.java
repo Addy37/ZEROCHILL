@@ -52,8 +52,8 @@ final class ZeroChillMenu {
         scroll.setFillViewport(true);
         scroll.addView(rows);
         int maxHeight = Math.min(dp(352), context.getResources().getDisplayMetrics().heightPixels - dp(96));
-        PopupWindow popup = new PopupWindow(scroll, dp(224), -2, true);
-        popup.setHeight(Math.min(maxHeight, dp(12) + menu.size() * dp(48)));
+        int width = Math.min(dp(264), context.getResources().getDisplayMetrics().widthPixels - dp(32));
+        PopupWindow popup = new PopupWindow(scroll, width, -2, true);
         popup.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
         popup.setOutsideTouchable(true);
         View.OnAttachStateChangeListener attachment = new View.OnAttachStateChangeListener() {
@@ -73,6 +73,7 @@ final class ZeroChillMenu {
                     item.isEnabled() ? R.color.zc_text_primary : R.color.zc_text_muted));
             row.setGravity(Gravity.CENTER_VERTICAL);
             row.setMinHeight(dp(48));
+            row.setBackgroundResource(R.drawable.zc_dialog_action);
             row.setPadding(dp(14), 0, dp(14), 0);
             row.setContentDescription(item.getTitle());
             row.setEnabled(item.isEnabled());
@@ -85,6 +86,9 @@ final class ZeroChillMenu {
             });
             rows.addView(row, new LinearLayout.LayoutParams(-1, -2));
         }
+        rows.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
+        popup.setHeight(Math.min(maxHeight, rows.getMeasuredHeight()));
         popup.showAsDropDown(anchor, 0, dp(4), Gravity.END);
     }
 

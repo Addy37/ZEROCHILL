@@ -19,7 +19,7 @@ final class CreatorMergeUi {
 
     static TextView badge(Context context) {
         TextView badge = new TextView(context);
-        badge.setTextColor(Color.BLACK);
+        badge.setTextColor(UiPalette.TEXT_SECONDARY);
         badge.setTextSize(10f);
         badge.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         badge.setGravity(Gravity.CENTER);
@@ -33,9 +33,9 @@ final class CreatorMergeUi {
                 0,
                 0
         );
-        badge.setCompoundDrawableTintList(ColorStateList.valueOf(Color.BLACK));
+        badge.setCompoundDrawableTintList(ColorStateList.valueOf(UiPalette.TEXT_SECONDARY));
         badge.setCompoundDrawablePadding(dp(context, 3));
-        badge.setBackground(BrowseUi.rounded(context, UiPalette.PRIMARY, 10));
+        badge.setBackground(BrowseUi.rounded(context, UiPalette.RAISED, 10));
         badge.setVisibility(View.GONE);
         badge.setFocusable(true);
         badge.setClickable(true);

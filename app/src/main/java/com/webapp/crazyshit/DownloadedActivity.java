@@ -285,7 +285,7 @@ public final class DownloadedActivity extends Activity {
         ZeroChillMotion.installPressFeedback(wrapper);
 
         MaterialCardView card = new MaterialCardView(this);
-        card.setCardBackgroundColor(Color.rgb(18, 18, 21));
+        card.setCardBackgroundColor(UiPalette.SURFACE);
         card.setRadius(dp(16));
         card.setCardElevation(0f);
         card.setStrokeWidth(0);
@@ -352,7 +352,7 @@ public final class DownloadedActivity extends Activity {
 
         wrapper.addView(card, new LinearLayout.LayoutParams(-1, dp(102)));
 
-        TextView details = text(detailText(entry), 10, Color.rgb(137, 137, 147), false);
+        TextView details = text(detailText(entry), 12, UiPalette.TEXT_MUTED, false);
         details.setMaxLines(1);
         details.setEllipsize(TextUtils.TruncateAt.END);
         LinearLayout.LayoutParams detailParams = new LinearLayout.LayoutParams(-1, -2);
@@ -473,9 +473,9 @@ public final class DownloadedActivity extends Activity {
 
         ImageView icon = new ImageView(this);
         icon.setImageResource(R.drawable.ic_action_download);
-        icon.setColorFilter(UiPalette.PRIMARY);
+        icon.setColorFilter(UiPalette.TEXT_SECONDARY);
         icon.setPadding(dp(12), dp(12), dp(12), dp(12));
-        icon.setBackground(circle(UiPalette.PRIMARY_CONTAINER));
+        icon.setBackground(circle(UiPalette.RAISED));
         empty.addView(icon, new LinearLayout.LayoutParams(dp(54), dp(54)));
 
         TextView title = text("No downloads yet", 18, Color.WHITE, true);
@@ -486,7 +486,7 @@ public final class DownloadedActivity extends Activity {
         TextView body = text(
                 "Use Download from any video menu to save a clip for offline playback.",
                 12,
-                Color.rgb(166, 166, 176),
+                UiPalette.TEXT_SECONDARY,
                 false
         );
         body.setGravity(Gravity.CENTER);

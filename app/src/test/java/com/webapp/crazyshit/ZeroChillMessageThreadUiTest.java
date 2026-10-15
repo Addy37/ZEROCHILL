@@ -71,7 +71,7 @@ public class ZeroChillMessageThreadUiTest {
         assertEquals(Gravity.LEFT, row.getGravity() & Gravity.HORIZONTAL_GRAVITY_MASK);
         assertEquals(View.INVISIBLE, avatar.getVisibility());
         assertEquals(View.GONE, time.getVisibility());
-        assertEquals(Color.rgb(35, 38, 45), ((GradientDrawable) bubble.getBackground()).getColor().getDefaultColor());
+        assertEquals(UiPalette.SURFACE, ((GradientDrawable) bubble.getBackground()).getColor().getDefaultColor());
         int firstGap = ((RecyclerView.LayoutParams) row.getLayoutParams()).topMargin;
         adapter.bindViewHolder(holder, 1);
         assertEquals(View.VISIBLE, avatar.getVisibility());
@@ -81,7 +81,7 @@ public class ZeroChillMessageThreadUiTest {
         adapter.bindViewHolder(holder, 2);
         assertEquals(Gravity.RIGHT, row.getGravity() & Gravity.HORIZONTAL_GRAVITY_MASK);
         assertEquals(View.GONE, avatar.getVisibility());
-        assertEquals(Color.rgb(8, 146, 208), ((GradientDrawable) bubble.getBackground()).getColor().getDefaultColor());
+        assertEquals(UiPalette.FLOATING, ((GradientDrawable) bubble.getBackground()).getColor().getDefaultColor());
         assertEquals(Color.WHITE, body.getCurrentTextColor());
         assertEquals(View.GONE, time.getVisibility());
         adapter.bindViewHolder(holder, 3);
@@ -195,7 +195,7 @@ public class ZeroChillMessageThreadUiTest {
         String value = "  this looks the same chatgpt\nsecond line  ";
         composer.setText(value);
         composer.requestFocus();
-        LinearLayout root = (LinearLayout) recycler.getParent();
+        LinearLayout root = (LinearLayout) recycler.getParent().getParent();
         layout(root, 420, recycler, composer); // keyboard-sized window
         invoke(activity, "sendMessage");
         assertEquals(value, sent[1]);
@@ -338,6 +338,36 @@ public class ZeroChillMessageThreadUiTest {
         assertComplete(row, (TextView) field(holder, "body"), "incoming");
     }
 
+    @Test public void initialFailureHasMountedLoaderAndRetryRetainsConversation() throws Exception {
+        ZeroChillMessageActivity activity = shell();
+        RecyclerView recycler = (RecyclerView) field(activity, "recycler");
+        View progress = (View) field(activity, "progress");
+        View state = (View) field(activity, "threadState");
+        View retry = (View) field(activity, "retryThread");
+        java.util.ArrayList<ZeroChillSocialRepository.Callback<java.util.List<ZeroChillSocialRepository.DirectMessage>>> requests = new java.util.ArrayList<>();
+        setField(activity, "threadLoader", (ZeroChillMessageActivity.ThreadLoader)
+                (context, partner, callback) -> requests.add(callback));
+        Method load = activity.getClass().getDeclaredMethod("loadThread", boolean.class);
+        load.setAccessible(true);
+        load.invoke(activity, true);
+        assertNotNull(progress.getParent());
+        assertEquals(View.VISIBLE, progress.getVisibility());
+        requests.get(0).complete(null, new java.io.IOException("offline"));
+        assertEquals(View.GONE, progress.getVisibility());
+        assertEquals(View.VISIBLE, state.getVisibility());
+        assertEquals(View.VISIBLE, retry.getVisibility());
+        retry.performClick();
+        assertEquals(2, requests.size());
+        assertEquals(View.GONE, state.getVisibility());
+        requests.get(1).complete(Arrays.asList(message("me", "2026-09-30T12:00:00Z", "Retained")), null);
+        assertEquals(View.GONE, state.getVisibility());
+        load.invoke(activity, true);
+        assertEquals(View.GONE, progress.getVisibility());
+        requests.get(2).complete(null, new java.io.IOException("offline"));
+        assertEquals(View.GONE, state.getVisibility());
+        assertEquals(1, recycler.getAdapter().getItemCount());
+    }
+
     private ZeroChillSocialRepository.DirectMessage readMessage(String sender, String time, String value) throws Exception {
         return new ZeroChillSocialRepository.DirectMessage(new JSONObject().put("id", time)
                 .put("sender_id", sender).put("body", value).put("created_at", time)
@@ -360,7 +390,7 @@ public class ZeroChillMessageThreadUiTest {
         ZeroChillMessageActivity activity = shell();
         RecyclerView recycler = (RecyclerView) field(activity, "recycler");
         EditText composer = (EditText) field(activity, "composer");
-        LinearLayout root = (LinearLayout) recycler.getParent();
+        LinearLayout root = (LinearLayout) recycler.getParent().getParent();
         int fullHeight = layout(root, 800, recycler, composer);
         composer.setText("Typing with the keyboard open");
         composer.requestFocus();
@@ -377,7 +407,7 @@ public class ZeroChillMessageThreadUiTest {
         root.layout(0, 0, 360, height);
         View compose = (View) composer.getParent();
         assertTrue(compose.getBottom() <= height);
-        assertTrue(recycler.getBottom() <= compose.getTop());
+        assertTrue(((View) recycler.getParent()).getBottom() <= compose.getTop());
         assertTrue(composer.getBottom() <= compose.getHeight());
         return recycler.getHeight();
     }

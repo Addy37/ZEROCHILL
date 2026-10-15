@@ -433,7 +433,7 @@ public final class StartupWizardActivity extends Activity {
         card.setOrientation(LinearLayout.VERTICAL);
         card.setPadding(dp(15), dp(14), dp(15), dp(14));
         card.setBackground(panelBackground(17));
-        TextView label = text(eyebrow, 10.5f, UiPalette.PRIMARY, true);
+        TextView label = text(eyebrow, 12f, UiPalette.TEXT_SECONDARY, true);
         label.setLetterSpacing(0.09f);
         card.addView(label);
     }
@@ -753,7 +753,7 @@ public final class StartupWizardActivity extends Activity {
         LinearLayout card = cardRow();
         ImageView icon = new ImageView(this);
         icon.setImageResource(iconRes);
-        icon.setColorFilter(UiPalette.PRIMARY);
+        icon.setColorFilter(UiPalette.TEXT_SECONDARY);
         icon.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
         card.addView(icon, new LinearLayout.LayoutParams(dp(48), dp(48)));
 
@@ -772,9 +772,9 @@ public final class StartupWizardActivity extends Activity {
 
     private View controlCard(String badge, String title, String body) {
         LinearLayout card = cardRow();
-        TextView badgeView = text(badge, badge.length() > 3 ? 10f : 17f, UiPalette.ON_PRIMARY, true);
+        TextView badgeView = text(badge, badge.length() > 3 ? 12f : 17f, UiPalette.TEXT_PRIMARY, true);
         badgeView.setGravity(Gravity.CENTER);
-        badgeView.setBackground(pill(UiPalette.PRIMARY));
+        badgeView.setBackground(pill(UiPalette.RAISED));
         card.addView(badgeView, new LinearLayout.LayoutParams(dp(58), dp(40)));
 
         LinearLayout copy = new LinearLayout(this);
@@ -795,7 +795,7 @@ public final class StartupWizardActivity extends Activity {
         card.setOrientation(LinearLayout.VERTICAL);
         card.setPadding(dp(15), dp(14), dp(15), dp(14));
         card.setBackground(panelBackground(17));
-        TextView labelView = text(label, 10.5f, UiPalette.PRIMARY, true);
+        TextView labelView = text(label, 12f, UiPalette.TEXT_SECONDARY, true);
         labelView.setLetterSpacing(0.08f);
         card.addView(labelView);
         TextView bodyView = text(body, 13f, color(R.color.zc_text_secondary), false);
@@ -845,7 +845,7 @@ public final class StartupWizardActivity extends Activity {
     }
 
     private void addEyebrow(LinearLayout column, String value) {
-        TextView eyebrow = text(value, 10.5f, UiPalette.PRIMARY, true);
+        TextView eyebrow = text(value, 12f, UiPalette.TEXT_SECONDARY, true);
         eyebrow.setLetterSpacing(0.11f);
         column.addView(eyebrow);
     }
@@ -908,9 +908,9 @@ public final class StartupWizardActivity extends Activity {
 
     private GradientDrawable panelBackground(int radius) {
         GradientDrawable background = new GradientDrawable();
-        background.setColor(Color.argb(220, 12, 14, 18));
+        background.setColor(UiPalette.SURFACE);
         background.setCornerRadius(dp(radius));
-        background.setStroke(dp(1), Color.rgb(45, 57, 66));
+        background.setStroke(dp(1), UiPalette.DIVIDER);
         return background;
     }
 

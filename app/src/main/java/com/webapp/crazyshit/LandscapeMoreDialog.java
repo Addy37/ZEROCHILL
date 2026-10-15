@@ -172,7 +172,8 @@ final class LandscapeMoreDialog {
                 .alpha(1f)
                 .scaleX(1f)
                 .scaleY(1f)
-                .setDuration(150L)
+                .setDuration(ZeroChillMotion.duration(activity, ZeroChillMotion.QUICK_MS))
+                .setInterpolator(ZeroChillMotion.EASE_OUT)
                 .start();
     }
 
