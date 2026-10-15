@@ -26,6 +26,7 @@ public class ShitTokPlayerPoolTest {
         float volume;
         long position;
         PlaybackException error;
+        TrackSelectionParameters parameters = TrackSelectionParameters.DEFAULT_WITHOUT_CONTEXT;
         MediaItem media;
         final List<Player.Listener> listeners = new ArrayList<>();
         final ExoPlayer player = (ExoPlayer) Proxy.newProxyInstance(ExoPlayer.class.getClassLoader(),
@@ -34,7 +35,8 @@ public class ShitTokPlayerPoolTest {
                     case "hashCode": return System.identityHashCode(proxy);
                     case "equals": return proxy == args[0];
                     case "getApplicationLooper": return Looper.getMainLooper();
-                    case "getTrackSelectionParameters": return TrackSelectionParameters.DEFAULT_WITHOUT_CONTEXT;
+                    case "getTrackSelectionParameters": return parameters;
+                    case "setTrackSelectionParameters": parameters = (TrackSelectionParameters) args[0]; return null;
                     case "getCurrentTimeline": return Timeline.EMPTY;
                     case "getCurrentTracks": return Tracks.EMPTY;
                     case "getMediaMetadata": return MediaMetadata.EMPTY;

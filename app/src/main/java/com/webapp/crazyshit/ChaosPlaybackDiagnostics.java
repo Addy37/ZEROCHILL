@@ -6,7 +6,6 @@ import android.os.Build;
 import androidx.media3.common.PlaybackException;
 import androidx.media3.datasource.HttpDataSource;
 
-import java.util.Locale;
 
 /** Builds a small playback report without cookies, headers, or private stream URLs. */
 final class ChaosPlaybackDiagnostics {
@@ -21,12 +20,10 @@ final class ChaosPlaybackDiagnostics {
             boolean retryAttempted
     ) {
         String pageUrl = item == null ? "" : clean(item.url);
-        String source = pageUrl.toLowerCase(Locale.US).contains("/shitshow/")
-                ? "Shit Show via ShitTok"
-                : "CrazyShit site feed via ShitTok";
+        String source = ShitTokAspectPriority.sourceKey(item) + " via ShitTok";
 
         StringBuilder report = new StringBuilder();
-        report.append("CrazyShit playback report\n");
+        report.append("ZEROCHILL ShitTok playback report\n");
         report.append("App: ").append(BuildConfig.VERSION_NAME).append("\n");
         report.append("Device: ")
                 .append(clean(Build.MANUFACTURER))

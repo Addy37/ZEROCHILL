@@ -144,6 +144,17 @@ jobs:
               raise SystemExit("Source did not return distinct deeper pages")
           PYTHON
 
+      - name: Run ShitTok buffering and orientation regressions first
+        run: >-
+          gradle --no-daemon :app:testDebugUnitTest
+          --tests 'com.webapp.crazyshit.ShitTokBuffer*'
+          --tests 'com.webapp.crazyshit.ShitTokOrientation*'
+          --tests 'com.webapp.crazyshit.ShitTokAspectPriorityTest'
+          --tests 'com.webapp.crazyshit.ShitTokAudioOwnershipTest'
+          --tests 'com.webapp.crazyshit.ShitTokPlayerPoolTest'
+          --tests 'com.webapp.crazyshit.ShitTokSettledSwipeTest'
+          --tests 'com.webapp.crazyshit.ShitTokDynamicPinchTest'
+
       - name: Run focused notification entry regressions
         run: >-
           gradle --no-daemon :app:testDebugUnitTest

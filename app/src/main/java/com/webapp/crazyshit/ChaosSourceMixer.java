@@ -76,6 +76,10 @@ final class ChaosSourceMixer {
         this.random = random;
     }
 
+    void setPlaybackProtected(boolean value) {
+        shitShow.setPlaybackProtected(value);
+    }
+
     List<NativeContentItem> loadRandomBatch(Context context) {
         // Cold-start optimization: warm Shit Show immediately, but let the first Chaos request
         // return a small starter queue instead of waiting for the full mixed catalog.
@@ -84,10 +88,10 @@ final class ChaosSourceMixer {
             starterPending = false;
 
             List<NativeContentItem> preloaded = ChaosStartupPreloader.takeStarter();
-            if (!preloaded.isEmpty()) return preloaded;
+            if (!preloaded.isEmpty()) return withKnownStarter(preloaded);
 
             List<NativeContentItem> starter = loadStarterBatch(context);
-            if (!starter.isEmpty()) return starter;
+            if (!starter.isEmpty()) return withKnownStarter(starter);
         }
 
         // Full refills race independent sources together. A slow or dead provider gets the same
@@ -242,6 +246,13 @@ final class ChaosSourceMixer {
         if (onlyHavenCreators.isEmpty()) onlyHavenCatalogAttempted = false;
     }
 
+    private List<NativeContentItem> withKnownStarter(List<NativeContentItem> starter) {
+        // Reuse video dimensions already harvested during the starter race. No new wait or probe.
+        ArrayList<NativeContentItem> combined = new ArrayList<>(shitShow.takeReadyBatch(6));
+        combined.addAll(starter);
+        return combined;
+    }
+
     private List<NativeContentItem> loadStarterBatch(Context context) {
         try {
             return ChaosStarterSources.first(ChaosStarterSources.live(context, repository, random),
@@ -255,7 +266,7 @@ final class ChaosSourceMixer {
     private List<NativeContentItem> loadBaddieHubBatch(Context context) {
         try {
             ArrayList<NativeContentItem> candidates = new ArrayList<>(
-                    baddieHub.fetchPortraitFeed(
+                    baddieHub.fetchShitTokCandidates(
                             context,
                             1 + random.nextInt(BADDIEHUB_MAX_PAGE)
                     )
