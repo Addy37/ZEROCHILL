@@ -212,6 +212,7 @@ public final class ZeroChillInboxActivity extends Activity {
         final int generation = ++requestGeneration;
         final String user = ZeroChillSessionStore.currentUserId(this);
         progress.setVisibility(adapter.getItemCount() == 0 ? View.VISIBLE : View.GONE);
+        if (adapter.getItemCount() == 0) empty.setVisibility(View.GONE);
         inboxLoader.load(this, (items, error) -> runOnUiThread(() -> {
             if (isFinishing() || isDestroyed() || generation != requestGeneration
                     || !user.equals(ZeroChillSessionStore.currentUserId(this))) return;

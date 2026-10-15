@@ -344,7 +344,7 @@ public class ZeroChillMessageThreadUiTest {
         View progress = (View) field(activity, "progress");
         View state = (View) field(activity, "threadState");
         View retry = (View) field(activity, "retryThread");
-        java.util.ArrayList<ZeroChillSocialRepository.Callback<java.util.List<ZeroChillSocialRepository.DirectMessage>>> requests = new java.util.ArrayList<>();
+        java.util.ArrayList<ZeroChillSocialRepository.Callback<java.util.ArrayList<ZeroChillSocialRepository.DirectMessage>>> requests = new java.util.ArrayList<>();
         setField(activity, "threadLoader", (ZeroChillMessageActivity.ThreadLoader)
                 (context, partner, callback) -> requests.add(callback));
         Method load = activity.getClass().getDeclaredMethod("loadThread", boolean.class);
@@ -359,7 +359,7 @@ public class ZeroChillMessageThreadUiTest {
         retry.performClick();
         assertEquals(2, requests.size());
         assertEquals(View.GONE, state.getVisibility());
-        requests.get(1).complete(Arrays.asList(message("me", "2026-09-30T12:00:00Z", "Retained")), null);
+        requests.get(1).complete(new java.util.ArrayList<>(Arrays.asList(message("me", "2026-09-30T12:00:00Z", "Retained"))), null);
         assertEquals(View.GONE, state.getVisibility());
         load.invoke(activity, true);
         assertEquals(View.GONE, progress.getVisibility());

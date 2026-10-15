@@ -703,7 +703,7 @@ public final class ZeroChillMessageActivity extends Activity {
             holder.bubble.animate().cancel();
             boolean settled = item.id.equals(holder.boundId) && holder.wasPending && !item.pending;
             holder.bubble.setAlpha(item.pending || settled ? 0.82f : 1f);
-            if (settled) holder.bubble.animate().alpha(1f).setDuration(140L).start();
+            if (settled) holder.bubble.animate().alpha(1f).setDuration(ZeroChillMotion.duration(ZeroChillMessageActivity.this, ZeroChillMotion.QUICK_MS)).start();
             holder.boundId = item.id;
             holder.wasPending = item.pending;
             holder.time.setTextColor(incoming ? UiPalette.TEXT_MUTED : UiPalette.TEXT_SECONDARY);

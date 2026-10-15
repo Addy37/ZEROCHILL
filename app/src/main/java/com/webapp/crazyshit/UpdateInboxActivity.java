@@ -411,14 +411,7 @@ public final class UpdateInboxActivity extends Activity {
                 selected ? UiPalette.PRIMARY : UiPalette.SURFACE,
                 13
         ), 0, dp(5), 0, dp(5)));
-        Boolean oldSelection = (Boolean) view.getTag();
-        if (oldSelection == null) {
-            view.setScaleX(1f);
-            view.setScaleY(1f);
-        } else if (oldSelection != selected) {
-            ZeroChillMotion.animateSelection(view, selected);
-        }
-        view.setTag(selected);
+        view.setSelected(selected);
     }
 
     private void open(UpdateInboxStore.Entry entry) {
