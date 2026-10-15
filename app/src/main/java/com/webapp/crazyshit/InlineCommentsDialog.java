@@ -141,7 +141,7 @@ final class InlineCommentsDialog extends BottomSheetDialog {
     private View buildContent() {
         LinearLayout shell = new LinearLayout(activity);
         shell.setOrientation(LinearLayout.VERTICAL);
-        shell.setBackground(roundedTop(Color.rgb(13, 17, 21), 24));
+        shell.setBackground(roundedTop(UiPalette.FLOATING, 24));
 
         View handle = new View(activity);
         handle.setBackground(roundRect(Color.rgb(88, 88, 96), 3));
@@ -197,13 +197,13 @@ final class InlineCommentsDialog extends BottomSheetDialog {
         LinearLayout composer = new LinearLayout(activity);
         composer.setOrientation(LinearLayout.VERTICAL);
         composer.setPadding(dp(12), dp(9), dp(12), dp(10));
-        composer.setBackgroundColor(Color.rgb(16, 21, 27));
+        composer.setBackgroundColor(UiPalette.SURFACE);
 
         replyContext = text("", 12, UiPalette.PRIMARY, false);
         replyContext.setPadding(dp(6), 0, dp(6), 0);
         replyContext.setVisibility(View.GONE);
         replyContext.setOnClickListener(v -> { if (!posting) cancelReply(); });
-        replyContext.setMinimumHeight(dp(36));
+        replyContext.setMinimumHeight(dp(48));
         replyContext.setGravity(Gravity.CENTER_VERTICAL);
         replyContext.setContentDescription("Comment mode. Tap to cancel");
         ZeroChillMotion.installPressFeedback(replyContext);
@@ -224,7 +224,7 @@ final class InlineCommentsDialog extends BottomSheetDialog {
                 | InputType.TYPE_TEXT_FLAG_MULTI_LINE);
         composerInput.setImeOptions(EditorInfo.IME_ACTION_SEND);
         composerInput.setPadding(dp(16), dp(12), dp(14), dp(12));
-        composerInput.setBackground(roundRect(Color.rgb(27, 34, 42), 22));
+        composerInput.setBackground(roundRect(UiPalette.RAISED, 16));
         composerInput.setOnFocusChangeListener((v, focused) -> {
             if (focused && !ZeroChillAccountRepository.hasStoredSession(activity)) {
                 composerInput.clearFocus();
@@ -238,13 +238,13 @@ final class InlineCommentsDialog extends BottomSheetDialog {
         });
         row.addView(composerInput, new LinearLayout.LayoutParams(0, -2, 1f));
 
-        TextView send = text("↑", 23, Color.WHITE, true);
+        TextView send = text("↑", 23, UiPalette.ON_PRIMARY, true);
         send.setGravity(Gravity.CENTER);
         send.setBackground(circle(UiPalette.PRIMARY));
         send.setContentDescription("Post comment");
         ZeroChillMotion.installPressFeedback(send);
         send.setOnClickListener(v -> submit());
-        LinearLayout.LayoutParams sendParams = new LinearLayout.LayoutParams(dp(44), dp(44));
+        LinearLayout.LayoutParams sendParams = new LinearLayout.LayoutParams(dp(48), dp(48));
         sendParams.setMargins(dp(8), 0, 0, 0);
         row.addView(send, sendParams);
 
@@ -425,7 +425,7 @@ final class InlineCommentsDialog extends BottomSheetDialog {
         } else {
             avatar.setImageResource(R.drawable.ic_more_account);
             avatar.setPadding(dp(9), dp(9), dp(9), dp(9));
-            avatar.setColorFilter(UiPalette.PRIMARY);
+            avatar.setColorFilter(UiPalette.TEXT_SECONDARY);
         }
         avatar.setClickable(true);
         avatar.setFocusable(true);
@@ -459,7 +459,7 @@ final class InlineCommentsDialog extends BottomSheetDialog {
             menu.setContentDescription("Comment options");
             ZeroChillMotion.installPressFeedback(menu);
             menu.setOnClickListener(v -> showCommentMenu(v, commentStates.get(comment.id)));
-            nameRow.addView(menu, new LinearLayout.LayoutParams(dp(44), dp(36)));
+            nameRow.addView(menu, new LinearLayout.LayoutParams(dp(48), dp(48)));
         }
 
         TextView copy = text(
@@ -476,7 +476,7 @@ final class InlineCommentsDialog extends BottomSheetDialog {
         body.addView(copy);
 
         TextView metadata = text(SocialUi.relativeTime(comment.createdAt)
-                + (comment.edited() ? "  ·  Edited" : ""), 10, Color.rgb(126, 140, 153), false);
+                + (comment.edited() ? "  ·  Edited" : ""), 12, UiPalette.TEXT_MUTED, false);
         metadata.setPadding(0, 0, 0, dp(2));
         body.addView(metadata);
         if (comment.deleted()) return row;
@@ -485,9 +485,9 @@ final class InlineCommentsDialog extends BottomSheetDialog {
         actions.setGravity(Gravity.CENTER_VERTICAL);
         body.addView(actions);
 
-        TextView reply = text("Reply", 11, Color.rgb(170, 170, 180), true);
+        TextView reply = text("Reply", 13, UiPalette.TEXT_SECONDARY, true);
         reply.setPadding(0, dp(7), dp(18), dp(7));
-        reply.setMinimumHeight(dp(36));
+        reply.setMinimumHeight(dp(48));
         reply.setGravity(Gravity.CENTER_VERTICAL);
         ZeroChillMotion.installPressFeedback(reply);
         reply.setOnClickListener(v -> startReply(commentStates.get(comment.id)));
@@ -500,8 +500,8 @@ final class InlineCommentsDialog extends BottomSheetDialog {
                 true
         );
         like.setPadding(dp(8), dp(7), dp(10), dp(7));
-        like.setMinimumWidth(dp(44));
-        like.setMinimumHeight(dp(36));
+        like.setMinimumWidth(dp(48));
+        like.setMinimumHeight(dp(48));
         like.setGravity(Gravity.CENTER);
         ZeroChillMotion.installPressFeedback(like);
         like.setOnClickListener(v -> toggleLike(commentStates.get(comment.id)));

@@ -176,10 +176,10 @@ public final class UpdateInboxActivity extends Activity {
         LinearLayout titles = new LinearLayout(this);
         titles.setOrientation(LinearLayout.VERTICAL);
         titles.setPadding(dp(12), 0, dp(8), 0);
-        TextView title = BrowseUi.text(this, "Notifications", 22, Color.WHITE);
+        TextView title = BrowseUi.text(this, "Notifications", 24, UiPalette.TEXT_PRIMARY);
         title.setTypeface(null, android.graphics.Typeface.BOLD);
         titles.addView(title);
-        count = BrowseUi.text(this, "", 11, BrowseUi.MUTED);
+        count = BrowseUi.text(this, "", 12, BrowseUi.MUTED);
         titles.addView(count);
         header.addView(titles, new LinearLayout.LayoutParams(0, -2, 1f));
 
@@ -283,7 +283,7 @@ public final class UpdateInboxActivity extends Activity {
             else showLoading();
         });
         view.setTextSize(12);
-        view.setMinHeight(dp(44));
+        view.setMinHeight(dp(48));
         view.setPadding(dp(4), 0, dp(4), 0);
         ZeroChillMotion.installPressFeedback(view);
         return view;
@@ -405,10 +405,10 @@ public final class UpdateInboxActivity extends Activity {
     }
 
     private void styleFilter(TextView view, boolean selected) {
-        view.setTextColor(selected ? Color.WHITE : BrowseUi.MUTED);
+        view.setTextColor(selected ? UiPalette.ON_PRIMARY : UiPalette.TEXT_SECONDARY);
         view.setBackground(new InsetDrawable(BrowseUi.rounded(
                 this,
-                selected ? UiPalette.PRIMARY : Color.rgb(24, 27, 32),
+                selected ? UiPalette.PRIMARY : UiPalette.SURFACE,
                 13
         ), 0, dp(5), 0, dp(5)));
         Boolean oldSelection = (Boolean) view.getTag();
@@ -583,7 +583,7 @@ public final class UpdateInboxActivity extends Activity {
             row.setOrientation(LinearLayout.HORIZONTAL);
             row.setGravity(Gravity.TOP);
             row.setPadding(dp(10), dp(12), dp(7), dp(12));
-            row.setBackground(BrowseUi.rounded(UpdateInboxActivity.this, Color.rgb(17, 20, 24), 14));
+            row.setBackground(BrowseUi.rounded(UpdateInboxActivity.this, UiPalette.SURFACE, 14));
             row.setFocusable(true);
             row.setClickable(true);
             ZeroChillMotion.installPressFeedback(row);
@@ -620,7 +620,7 @@ public final class UpdateInboxActivity extends Activity {
 
             TextView reply = actionPill("Reply");
             TextView like = actionPill("");
-            like.setMinWidth(dp(58));
+            like.setMinWidth(dp(48));
             like.setPadding(dp(12), 0, dp(12), 0);
             like.setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_action_heart_outline, 0, 0, 0);
             like.setCompoundDrawableTintList(android.content.res.ColorStateList.valueOf(Color.WHITE));
@@ -648,7 +648,7 @@ public final class UpdateInboxActivity extends Activity {
             trailing.addView(unread, dotParams);
 
             View divider = new View(UpdateInboxActivity.this);
-            divider.setBackgroundColor(Color.rgb(23, 27, 31));
+            divider.setBackgroundColor(UiPalette.DIVIDER);
             LinearLayout.LayoutParams dividerParams = new LinearLayout.LayoutParams(-1, dp(1));
             dividerParams.setMargins(dp(60), 0, 0, 0);
             shell.addView(divider, dividerParams);
@@ -661,17 +661,17 @@ public final class UpdateInboxActivity extends Activity {
             TextView view = BrowseUi.text(UpdateInboxActivity.this, label, 12, Color.rgb(220, 220, 226));
             view.setGravity(Gravity.CENTER);
             view.setTypeface(null, android.graphics.Typeface.BOLD);
-            view.setMinWidth(dp(74));
+            view.setMinWidth(dp(64));
             view.setPadding(dp(14), 0, dp(14), 0);
             view.setBackground(new InsetDrawable(BrowseUi.rounded(
-                    UpdateInboxActivity.this, Color.rgb(37, 43, 51), 12
+                    UpdateInboxActivity.this, UiPalette.RAISED, 12
             ), 0, dp(4), 0, dp(4)));
             ZeroChillMotion.installPressFeedback(view);
             return view;
         }
 
         private LinearLayout.LayoutParams actionPillParams() {
-            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-2, dp(44));
+            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-2, dp(48));
             params.setMargins(0, 0, dp(4), 0);
             return params;
         }

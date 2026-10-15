@@ -15,6 +15,7 @@ import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.EditText;
+import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
@@ -80,6 +81,9 @@ public final class ZeroChillMessageActivity extends Activity {
     private RecyclerView recycler;
     private MessageAdapter adapter;
     private ProgressBar progress;
+    private LinearLayout threadState;
+    private TextView threadStateText;
+    private TextView retryThread;
     private EditText composer;
     private ImageView send;
 
@@ -141,13 +145,13 @@ public final class ZeroChillMessageActivity extends Activity {
         back.setContentDescription("Back");
         back.setOnClickListener(v -> finish());
         ZeroChillMotion.installPressFeedback(back);
-        header.addView(back, new LinearLayout.LayoutParams(dp(44), dp(48)));
+        header.addView(back, new LinearLayout.LayoutParams(dp(48), dp(48)));
 
         avatar = new ImageView(this);
         avatar.setScaleType(ImageView.ScaleType.CENTER_CROP);
         avatar.setImageResource(R.drawable.ic_more_account);
         avatar.setPadding(dp(8), dp(8), dp(8), dp(8));
-        avatar.setColorFilter(UiPalette.PRIMARY);
+        avatar.setColorFilter(UiPalette.TEXT_SECONDARY);
         avatar.setOnClickListener(v -> openProfile());
         header.addView(avatar, new LinearLayout.LayoutParams(dp(40), dp(40)));
 
@@ -159,7 +163,7 @@ public final class ZeroChillMessageActivity extends Activity {
         title.setSingleLine(true);
         title.setEllipsize(TextUtils.TruncateAt.END);
         labels.addView(title);
-        subtitle = text("ZEROCHILL DM", 10, ZeroChillUi.color(this, R.color.zc_text_muted), false);
+        subtitle = text("ZEROCHILL DM", 11, ZeroChillUi.color(this, R.color.zc_text_muted), false);
         labels.addView(subtitle);
         header.addView(labels, new LinearLayout.LayoutParams(0, -2, 1f));
 
@@ -170,7 +174,7 @@ public final class ZeroChillMessageActivity extends Activity {
         more.setContentDescription("Conversation options");
         more.setOnClickListener(this::showOptions);
         ZeroChillMotion.installPressFeedback(more);
-        header.addView(more, new LinearLayout.LayoutParams(dp(44), dp(44)));
+        header.addView(more, new LinearLayout.LayoutParams(dp(48), dp(48)));
 
         root.addView(header, new LinearLayout.LayoutParams(-1, dp(58)));
 
@@ -183,11 +187,32 @@ public final class ZeroChillMessageActivity extends Activity {
         recycler.setPadding(dp(12), dp(10), dp(12), dp(12));
         adapter = new MessageAdapter();
         recycler.setAdapter(adapter);
-        root.addView(recycler, new LinearLayout.LayoutParams(-1, 0, 1f));
+        FrameLayout threadBody = new FrameLayout(this);
+        threadBody.addView(recycler, new FrameLayout.LayoutParams(-1, -1));
+        root.addView(threadBody, new LinearLayout.LayoutParams(-1, 0, 1f));
 
         progress = new ZeroChillProgressBar(this);
         ZeroChillUi.styleProgress(progress);
-        progress.setVisibility(View.GONE);
+        progress.setVisibility(View.VISIBLE);
+        threadBody.addView(progress, new FrameLayout.LayoutParams(dp(48), dp(48), Gravity.CENTER));
+
+        threadState = new LinearLayout(this);
+        threadState.setOrientation(LinearLayout.VERTICAL);
+        threadState.setGravity(Gravity.CENTER);
+        threadState.setPadding(dp(24), dp(24), dp(24), dp(24));
+        threadState.setVisibility(View.GONE);
+        threadStateText = text("", 14, UiPalette.TEXT_SECONDARY, false);
+        threadStateText.setGravity(Gravity.CENTER);
+        threadStateText.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
+        threadState.addView(threadStateText, new LinearLayout.LayoutParams(-1, -2));
+        retryThread = text("Try again", 14, UiPalette.TEXT_PRIMARY, true);
+        ZeroChillUi.styleAction(retryThread, false);
+        retryThread.setPadding(dp(16), 0, dp(16), 0);
+        retryThread.setOnClickListener(v -> loadThread(true));
+        LinearLayout.LayoutParams retryParams = new LinearLayout.LayoutParams(-2, dp(48));
+        retryParams.topMargin = dp(16);
+        threadState.addView(retryThread, retryParams);
+        threadBody.addView(threadState, new FrameLayout.LayoutParams(-1, -2, Gravity.CENTER));
 
         LinearLayout compose = new LinearLayout(this);
         compose.setGravity(Gravity.BOTTOM | Gravity.CENTER_VERTICAL);
@@ -255,7 +280,7 @@ public final class ZeroChillMessageActivity extends Activity {
             if (url.isEmpty()) {
                 avatar.setImageResource(R.drawable.ic_more_account);
                 avatar.setPadding(dp(8), dp(8), dp(8), dp(8));
-                avatar.setColorFilter(UiPalette.PRIMARY);
+                avatar.setColorFilter(UiPalette.TEXT_SECONDARY);
             } else {
                 avatar.setPadding(0, 0, 0, 0);
                 avatar.clearColorFilter();
@@ -273,7 +298,10 @@ public final class ZeroChillMessageActivity extends Activity {
         }
         loading = true;
         long revisionAtStart = threadRevision;
-        if (showLoading) progress.setVisibility(View.VISIBLE);
+        if (showLoading && adapter.getItemCount() == 0) {
+            threadState.setVisibility(View.GONE);
+            progress.setVisibility(View.VISIBLE);
+        }
         threadLoader.load(this, partnerId, (items, error) ->
                 runOnUiThread(() -> {
                     if (!accountStillCurrent() || isFinishing() || isDestroyed()) return;
@@ -283,11 +311,11 @@ public final class ZeroChillMessageActivity extends Activity {
                     boolean rerun = refreshQueued || stale;
                     refreshQueued = false;
                     if (error != null || items == null) {
-                        if (showLoading) ZeroChillToast.makeText(
-                                this,
-                                error == null ? "Couldn't load messages." : error.getMessage(),
-                                ZeroChillToast.LENGTH_LONG
-                        ).show();
+                        if (adapter.getItemCount() == 0) {
+                            showThreadState("Couldn't load messages. Check your connection and try again.", true);
+                        } else if (showLoading) {
+                            ZeroChillToast.makeText(this, "Couldn't refresh messages.", ZeroChillToast.LENGTH_LONG).show();
+                        }
                         if (rerun) loadThread(false);
                         return;
                     }
@@ -298,6 +326,8 @@ public final class ZeroChillMessageActivity extends Activity {
                     String newest = items.isEmpty() ? "" : items.get(items.size() - 1).id;
                     boolean changed = !newest.equals(lastMessageId) || adapter.getItemCount() != items.size();
                     adapter.replace(items);
+                    if (adapter.getItemCount() == 0) showThreadState("No messages yet. Send a message to start the conversation.", false);
+                    else threadState.setVisibility(View.GONE);
                     lastMessageId = newest;
                     if (changed && !items.isEmpty()) {
                         recycler.scrollToPosition(items.size() - 1);
@@ -323,6 +353,16 @@ public final class ZeroChillMessageActivity extends Activity {
         );
     }
 
+    private void showThreadState(String message, boolean retry) {
+        if (adapter.getItemCount() > 0) {
+            threadState.setVisibility(View.GONE);
+            return;
+        }
+        if (!message.contentEquals(threadStateText.getText())) threadStateText.setText(message);
+        retryThread.setVisibility(retry ? View.VISIBLE : View.GONE);
+        threadState.setVisibility(View.VISIBLE);
+    }
+
     private boolean accountStillCurrent() {
         return renderedUser.isEmpty() || renderedUser.equals(ZeroChillSessionStore.currentUserId(this));
     }
@@ -338,6 +378,8 @@ public final class ZeroChillMessageActivity extends Activity {
         String clientId = UUID.randomUUID().toString();
         threadRevision++;
         adapter.upsert(new ZeroChillSocialRepository.DirectMessage(clientId, partnerId, value));
+        threadState.setVisibility(View.GONE);
+        progress.setVisibility(View.GONE);
         recycler.scrollToPosition(adapter.getItemCount() - 1);
         sending = true;
         send.setEnabled(false);
@@ -591,7 +633,7 @@ public final class ZeroChillMessageActivity extends Activity {
             // wrapped lines. Measure both dimensions from the text in the first pass.
             bubble.addView(body, new LinearLayout.LayoutParams(-2, -2));
 
-            TextView time = text("", 10, Color.rgb(166, 172, 184), false);
+            TextView time = text("", 12, UiPalette.TEXT_MUTED, false);
             time.setPadding(0, dp(4), 0, 0);
             LinearLayout.LayoutParams timeParams = new LinearLayout.LayoutParams(-2, -2);
             timeParams.gravity = Gravity.END;
@@ -600,7 +642,7 @@ public final class ZeroChillMessageActivity extends Activity {
             LinearLayout messageColumn = new LinearLayout(ZeroChillMessageActivity.this);
             messageColumn.setOrientation(LinearLayout.VERTICAL);
             messageColumn.addView(bubble, new LinearLayout.LayoutParams(-2, -2));
-            TextView status = text("", 10, ZeroChillUi.color(ZeroChillMessageActivity.this, R.color.zc_text_muted), false);
+            TextView status = text("", 12, ZeroChillUi.color(ZeroChillMessageActivity.this, R.color.zc_text_muted), false);
             status.setPadding(dp(12), dp(3), dp(12), 0);
             LinearLayout.LayoutParams statusParams = new LinearLayout.LayoutParams(-2, -2);
             statusParams.gravity = Gravity.END;
@@ -633,7 +675,7 @@ public final class ZeroChillMessageActivity extends Activity {
                 if (url.isEmpty()) {
                     holder.senderAvatar.setImageResource(R.drawable.ic_more_account);
                     holder.senderAvatar.setPadding(dp(6), dp(6), dp(6), dp(6));
-                    holder.senderAvatar.setColorFilter(UiPalette.PRIMARY);
+                    holder.senderAvatar.setColorFilter(UiPalette.TEXT_SECONDARY);
                 } else {
                     AccountAvatarImages.bind(holder.senderAvatar, partnerId, partner.avatarPath);
                 }
@@ -664,7 +706,7 @@ public final class ZeroChillMessageActivity extends Activity {
             if (settled) holder.bubble.animate().alpha(1f).setDuration(140L).start();
             holder.boundId = item.id;
             holder.wasPending = item.pending;
-            holder.time.setTextColor(incoming ? Color.rgb(166, 172, 184) : Color.rgb(226, 240, 255));
+            holder.time.setTextColor(incoming ? UiPalette.TEXT_MUTED : UiPalette.TEXT_SECONDARY);
             holder.itemView.setContentDescription((incoming ? "From " : "You: ") + item.body);
             holder.itemView.setOnLongClickListener(v -> {
                 if (incoming) showReportDialog(item.id);
@@ -694,7 +736,7 @@ public final class ZeroChillMessageActivity extends Activity {
 
     private GradientDrawable messageBubble(boolean mine, boolean joinsPrevious, boolean joinsNext) {
         GradientDrawable background = new GradientDrawable();
-        background.setColor(mine ? Color.rgb(8, 146, 208) : Color.rgb(35, 38, 45));
+        background.setColor(mine ? UiPalette.FLOATING : UiPalette.SURFACE);
         float round = dp(22);
         float joined = dp(7);
         float top = joinsPrevious ? joined : round;
@@ -707,9 +749,9 @@ public final class ZeroChillMessageActivity extends Activity {
 
     private GradientDrawable inputBackground() {
         GradientDrawable background = new GradientDrawable();
-        background.setColor(Color.rgb(18, 21, 26));
+        background.setColor(UiPalette.SURFACE);
         background.setCornerRadius(dp(17));
-        background.setStroke(dp(1), Color.rgb(45, 54, 64));
+        background.setStroke(dp(1), UiPalette.DIVIDER);
         return background;
     }
 

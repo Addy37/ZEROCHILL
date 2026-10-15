@@ -1,8 +1,5 @@
 package com.webapp.crazyshit;
 
-import android.animation.AnimatorSet;
-import android.animation.ObjectAnimator;
-import android.animation.ValueAnimator;
 import android.app.Activity;
 import android.content.Intent;
 import android.graphics.Color;
@@ -16,7 +13,6 @@ import android.text.Editable;
 import android.text.TextWatcher;
 import android.view.Gravity;
 import android.view.View;
-import android.view.animation.LinearInterpolator;
 import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
@@ -26,7 +22,6 @@ import android.widget.ScrollView;
 import android.widget.TextView;
 
 import com.bumptech.glide.Glide;
-
 
 /** First-party ZeroChill account entry point. Existing app use remains account-optional. */
 public final class ZeroChillAccountActivity extends Activity {
@@ -42,9 +37,6 @@ public final class ZeroChillAccountActivity extends Activity {
 
     private LinearLayout content;
     private ProgressBar progress;
-    private FrameLayout accountRoot;
-    private View ambientGlow;
-    private AnimatorSet ambientAnimator;
     private boolean createMode;
     private ZeroChillAccountRepository.AccountState account;
     private TextView identityPrimary;
@@ -117,18 +109,6 @@ public final class ZeroChillAccountActivity extends Activity {
         buildShell();
         ResponsiveFitmentController.applySoon(this);
         if (!handleAuthRedirect(getIntent())) loadAccount();
-    }
-
-    @Override
-    protected void onStart() {
-        super.onStart();
-        if (accountRoot != null) accountRoot.post(this::startAmbientMotion);
-    }
-
-    @Override
-    protected void onStop() {
-        stopAmbientMotion();
-        super.onStop();
     }
 
     @Override
@@ -217,8 +197,6 @@ public final class ZeroChillAccountActivity extends Activity {
     private void buildShell() {
         FrameLayout root = new FrameLayout(this);
         root.setBackgroundColor(Color.BLACK);
-        accountRoot = root;
-        ambientGlow = addAmbientGlow(root, dp(320));
 
         LinearLayout shell = new LinearLayout(this);
         shell.setOrientation(LinearLayout.VERTICAL);
@@ -230,23 +208,24 @@ public final class ZeroChillAccountActivity extends Activity {
         top.setPadding(dp(10), dp(3), dp(14), dp(3));
         top.setBackground(headerBackground());
         top.setElevation(0f);
-        shell.addView(top, new LinearLayout.LayoutParams(-1, dp(58)));
+        top.setMinimumHeight(dp(58));
+        shell.addView(top, new LinearLayout.LayoutParams(-1, -2));
 
         TextView back = text("‹", 31, Color.WHITE, false);
         back.setGravity(Gravity.CENTER);
         back.setContentDescription("Back");
         back.setOnClickListener(v -> finish());
         ZeroChillMotion.installPressFeedback(back);
-        top.addView(back, new LinearLayout.LayoutParams(dp(44), dp(44)));
+        top.addView(back, new LinearLayout.LayoutParams(dp(48), dp(48)));
 
         LinearLayout titles = new LinearLayout(this);
         titles.setOrientation(LinearLayout.VERTICAL);
         titles.setPadding(dp(6), 0, 0, 0);
         top.addView(titles, new LinearLayout.LayoutParams(0, -2, 1f));
 
-        TextView title = text("Account", 19, Color.WHITE, true);
+        TextView title = text("Account", 24, Color.WHITE, true);
         titles.addView(title);
-        TextView subtitle = text("ZEROCHILL ID", 9,
+        TextView subtitle = text("ZEROCHILL ID", 11,
                 ZeroChillUi.color(this, R.color.zc_text_muted), true);
         subtitle.setLetterSpacing(0.10f);
         titles.addView(subtitle);
@@ -333,7 +312,7 @@ public final class ZeroChillAccountActivity extends Activity {
 
         LinearLayout tabs = new LinearLayout(this);
         tabs.setOrientation(LinearLayout.HORIZONTAL);
-        panel.addView(tabs, new LinearLayout.LayoutParams(-1, dp(42)));
+        panel.addView(tabs, new LinearLayout.LayoutParams(-1, dp(48)));
 
         TextView signInTab = tab("SIGN IN", !createMode);
         TextView createTab = tab("CREATE ACCOUNT", createMode);
@@ -447,7 +426,7 @@ public final class ZeroChillAccountActivity extends Activity {
         privacyCard.setGravity(Gravity.CENTER_VERTICAL);
         privacyCard.setPadding(dp(13), dp(11), dp(13), dp(11));
         privacyCard.setBackground(panelBackground(16));
-        TextView lock = text("◆", 10, UiPalette.PRIMARY, true);
+        TextView lock = text("◆", 12, UiPalette.TEXT_MUTED, true);
         lock.setGravity(Gravity.TOP);
         privacyCard.addView(lock, new LinearLayout.LayoutParams(dp(24), -2));
         TextView privacy = text(
@@ -546,7 +525,7 @@ public final class ZeroChillAccountActivity extends Activity {
         hero.setBackground(panelBackground(20));
 
         FrameLayout avatarHalo = new FrameLayout(this);
-        avatarHalo.setBackground(circle(UiPalette.PRIMARY_CONTAINER));
+        avatarHalo.setBackground(circle(UiPalette.RAISED));
         avatarHalo.setPadding(dp(3), dp(3), dp(3), dp(3));
 
         ImageView avatar = new ImageView(this);
@@ -565,7 +544,7 @@ public final class ZeroChillAccountActivity extends Activity {
         } else {
             avatar.setImageResource(R.drawable.ic_more_account);
             avatar.setPadding(dp(20), dp(20), dp(20), dp(20));
-            avatar.setColorFilter(UiPalette.PRIMARY);
+            avatar.setColorFilter(UiPalette.TEXT_SECONDARY);
         }
         avatarHalo.addView(avatar, new FrameLayout.LayoutParams(-1, -1));
         hero.addView(avatarHalo, new LinearLayout.LayoutParams(dp(82), dp(82)));
@@ -587,7 +566,7 @@ public final class ZeroChillAccountActivity extends Activity {
             TextView display = text(
                     SocialUi.cleanName(state.username),
                     13,
-                    UiPalette.PRIMARY,
+                    UiPalette.TEXT_SECONDARY,
                     true
             );
             LinearLayout.LayoutParams displayParams = new LinearLayout.LayoutParams(-1, -2);
@@ -613,7 +592,7 @@ public final class ZeroChillAccountActivity extends Activity {
         identity.addView(profileBio, profileBioParams);
         TextView publicLink = text("View public profile  ›", 12, UiPalette.PRIMARY, true);
         publicLink.setGravity(Gravity.CENTER_VERTICAL);
-        publicLink.setMinHeight(dp(42));
+        publicLink.setMinHeight(dp(48));
         publicLink.setContentDescription("View public profile");
         publicLink.setOnClickListener(v -> {
             Intent intent = new Intent(this, ZeroChillPublicProfileActivity.class);
@@ -630,7 +609,7 @@ public final class ZeroChillAccountActivity extends Activity {
 
         LinearLayout actions = new LinearLayout(this);
         actions.setOrientation(LinearLayout.HORIZONTAL);
-        LinearLayout.LayoutParams actionsParams = new LinearLayout.LayoutParams(-1, dp(44));
+        LinearLayout.LayoutParams actionsParams = new LinearLayout.LayoutParams(-1, dp(48));
         actionsParams.topMargin = dp(9);
         content.addView(actions, actionsParams);
 
@@ -654,7 +633,7 @@ public final class ZeroChillAccountActivity extends Activity {
         });
         editProfile.setText(editingProfile ? "CLOSE EDITOR" : "EDIT PROFILE");
 
-        TextView section = text("PROFILE", 10, UiPalette.PRIMARY, true);
+        TextView section = text("PROFILE", 12, UiPalette.TEXT_MUTED, true);
         section.setLetterSpacing(0.11f);
         LinearLayout.LayoutParams sectionParams = new LinearLayout.LayoutParams(-1, -2);
         sectionParams.topMargin = dp(24);
@@ -773,7 +752,7 @@ public final class ZeroChillAccountActivity extends Activity {
                 showAuth();
             }));
         });
-        LinearLayout.LayoutParams signOutParams = new LinearLayout.LayoutParams(-1, dp(44));
+        LinearLayout.LayoutParams signOutParams = new LinearLayout.LayoutParams(-1, dp(48));
         signOutParams.topMargin = dp(16);
         content.addView(signOut, signOutParams);
 
@@ -799,7 +778,7 @@ public final class ZeroChillAccountActivity extends Activity {
     }
 
     private void section(String title) {
-        TextView heading = text(title, 10, UiPalette.PRIMARY, true);
+        TextView heading = text(title, 12, UiPalette.TEXT_MUTED, true);
         heading.setLetterSpacing(0.11f);
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, -2);
         params.topMargin = dp(25);
@@ -816,7 +795,7 @@ public final class ZeroChillAccountActivity extends Activity {
         row.setBackground(panelBackground(14));
         ImageView symbol = new ImageView(this);
         symbol.setImageResource(iconRes);
-        symbol.setColorFilter(UiPalette.PRIMARY);
+        symbol.setColorFilter(UiPalette.TEXT_SECONDARY);
         symbol.setPadding(dp(4), dp(4), dp(4), dp(4));
         row.addView(symbol, new LinearLayout.LayoutParams(dp(28), dp(28)));
         TextView title = text(label, 14, Color.WHITE, true);
@@ -946,25 +925,21 @@ public final class ZeroChillAccountActivity extends Activity {
     }
 
     private TextView primaryButton(String label) {
-        TextView view = text(label, 12, UiPalette.ON_PRIMARY, true);
-        view.setGravity(Gravity.CENTER);
-        view.setLetterSpacing(0.06f);
-        view.setBackground(primaryButtonBackground());
+        TextView view = text(label, 14, UiPalette.TEXT_PRIMARY, true);
+        ZeroChillUi.styleAction(view, true);
         ZeroChillMotion.installPressFeedback(view);
         return view;
     }
 
     private TextView secondaryButton(String label) {
-        TextView view = text(label, 11, UiPalette.PRIMARY, true);
-        view.setGravity(Gravity.CENTER);
-        view.setLetterSpacing(0.05f);
-        view.setBackground(secondaryButtonBackground());
+        TextView view = text(label, 14, UiPalette.TEXT_PRIMARY, true);
+        ZeroChillUi.styleAction(view, false);
         ZeroChillMotion.installPressFeedback(view);
         return view;
     }
 
     private void addEyebrow(LinearLayout parent, String value) {
-        TextView eyebrow = text(value, 10, UiPalette.PRIMARY, true);
+        TextView eyebrow = text(value, 12, UiPalette.TEXT_MUTED, true);
         eyebrow.setLetterSpacing(0.12f);
         parent.addView(eyebrow);
     }
@@ -989,58 +964,34 @@ public final class ZeroChillAccountActivity extends Activity {
     }
 
     private GradientDrawable fieldBackground() {
-        GradientDrawable background = new GradientDrawable(
-                GradientDrawable.Orientation.TL_BR,
-                new int[]{Color.argb(238, 18, 21, 26), Color.argb(238, 9, 11, 15)}
-        );
+        GradientDrawable background = new GradientDrawable();
+        background.setColor(UiPalette.SURFACE);
         background.setCornerRadius(dp(15));
-        background.setStroke(dp(1), Color.rgb(43, 56, 66));
+        background.setStroke(dp(1), UiPalette.DIVIDER);
         return background;
     }
 
     private GradientDrawable panelBackground(int radiusDp) {
-        GradientDrawable background = new GradientDrawable(
-                GradientDrawable.Orientation.TL_BR,
-                new int[]{Color.argb(235, 18, 21, 26), Color.argb(235, 8, 10, 14)}
-        );
+        GradientDrawable background = new GradientDrawable();
+        background.setColor(UiPalette.SURFACE);
         background.setCornerRadius(dp(radiusDp));
-        background.setStroke(dp(1), Color.rgb(43, 57, 66));
+        background.setStroke(dp(1), UiPalette.DIVIDER);
         return background;
     }
 
     private GradientDrawable selectedTabBackground() {
-        GradientDrawable background = new GradientDrawable(
-                GradientDrawable.Orientation.TL_BR,
-                new int[]{Color.argb(210, 6, 45, 66), Color.argb(180, 5, 31, 47)}
-        );
-        background.setCornerRadius(dp(14));
-        background.setStroke(dp(1), Color.rgb(24, 163, 222));
+        GradientDrawable background = new GradientDrawable();
+        background.setColor(UiPalette.PRIMARY_CONTAINER);
+        background.setCornerRadius(dp(12));
+        background.setStroke(dp(1), UiPalette.PRIMARY);
         return background;
     }
 
     private GradientDrawable quietTabBackground() {
         GradientDrawable background = new GradientDrawable();
-        background.setColor(Color.argb(125, 10, 11, 14));
-        background.setCornerRadius(dp(14));
-        background.setStroke(dp(1), Color.rgb(42, 46, 53));
-        return background;
-    }
-
-    private GradientDrawable primaryButtonBackground() {
-        GradientDrawable background = new GradientDrawable(
-                GradientDrawable.Orientation.LEFT_RIGHT,
-                new int[]{Color.rgb(8, 146, 208), Color.rgb(35, 174, 229)}
-        );
-        background.setCornerRadius(dp(17));
-        background.setStroke(dp(1), Color.rgb(80, 198, 244));
-        return background;
-    }
-
-    private GradientDrawable secondaryButtonBackground() {
-        GradientDrawable background = new GradientDrawable();
-        background.setColor(Color.argb(180, 11, 13, 17));
-        background.setCornerRadius(dp(15));
-        background.setStroke(dp(1), Color.rgb(43, 52, 60));
+        background.setColor(UiPalette.SURFACE);
+        background.setCornerRadius(dp(12));
+        background.setStroke(dp(1), UiPalette.DIVIDER);
         return background;
     }
 
@@ -1051,92 +1002,9 @@ public final class ZeroChillAccountActivity extends Activity {
         return background;
     }
 
-    private View addAmbientGlow(FrameLayout parent, int size) {
-        View glow = new View(this);
-        GradientDrawable background = new GradientDrawable();
-        background.setShape(GradientDrawable.OVAL);
-        background.setGradientType(GradientDrawable.RADIAL_GRADIENT);
-        background.setGradientRadius(size * 0.31f);
-        background.setColors(new int[]{
-                Color.argb(52, 8, 146, 208),
-                Color.argb(18, 8, 146, 208),
-                Color.argb(4, 8, 146, 208),
-                Color.TRANSPARENT
-        });
-        glow.setBackground(background);
-        glow.setAlpha(0.62f);
-        parent.addView(glow, new FrameLayout.LayoutParams(size, size));
-        return glow;
-    }
-
-    private void startAmbientMotion() {
-        if (accountRoot == null || ambientGlow == null || !ZeroChillMotion.animationsEnabled(this)) return;
-        int width = accountRoot.getWidth();
-        int height = accountRoot.getHeight();
-        if (width <= 0 || height <= 0) return;
-
-        stopAmbientMotion();
-
-        float startX = -ambientGlow.getWidth() * 0.42f;
-        float endX = Math.max(startX, width - ambientGlow.getWidth() * 0.58f);
-        float startY = Math.max(0f, height * 0.16f);
-        float endY = Math.max(startY, height * 0.70f - ambientGlow.getHeight() * 0.5f);
-
-        ambientGlow.setTranslationX(startX);
-        ambientGlow.setTranslationY(startY);
-
-        ObjectAnimator driftX = ObjectAnimator.ofFloat(
-                ambientGlow,
-                View.TRANSLATION_X,
-                startX,
-                endX
-        );
-        driftX.setDuration(15_000L);
-        driftX.setRepeatCount(ValueAnimator.INFINITE);
-        driftX.setRepeatMode(ValueAnimator.REVERSE);
-        driftX.setInterpolator(new LinearInterpolator());
-
-        ObjectAnimator driftY = ObjectAnimator.ofFloat(
-                ambientGlow,
-                View.TRANSLATION_Y,
-                startY,
-                endY
-        );
-        driftY.setDuration(19_000L);
-        driftY.setRepeatCount(ValueAnimator.INFINITE);
-        driftY.setRepeatMode(ValueAnimator.REVERSE);
-        driftY.setInterpolator(new LinearInterpolator());
-
-        ObjectAnimator breathe = ObjectAnimator.ofFloat(
-                ambientGlow,
-                View.ALPHA,
-                0.42f,
-                0.72f
-        );
-        breathe.setDuration(8_000L);
-        breathe.setRepeatCount(ValueAnimator.INFINITE);
-        breathe.setRepeatMode(ValueAnimator.REVERSE);
-        breathe.setInterpolator(new LinearInterpolator());
-
-        ambientAnimator = new AnimatorSet();
-        ambientAnimator.playTogether(driftX, driftY, breathe);
-        ambientAnimator.start();
-    }
-
-    private void stopAmbientMotion() {
-        if (ambientAnimator == null) return;
-        ambientAnimator.cancel();
-        ambientAnimator = null;
-    }
-
     private GradientDrawable headerBackground() {
-        GradientDrawable background = new GradientDrawable(
-                GradientDrawable.Orientation.TOP_BOTTOM,
-                new int[]{
-                        Color.argb(246, 0, 0, 0),
-                        Color.argb(238, 12, 15, 20)
-                }
-        );
+        GradientDrawable background = new GradientDrawable();
+        background.setColor(UiPalette.BACKGROUND);
         return background;
     }
 
