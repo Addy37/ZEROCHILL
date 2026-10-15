@@ -613,11 +613,11 @@ public final class ZeroChillAccountActivity extends Activity {
         actionsParams.topMargin = dp(9);
         content.addView(actions, actionsParams);
 
-        TextView changeAvatar = secondaryButton("CHANGE AVATAR");
+        TextView changeAvatar = secondaryButton("Change avatar");
         changeAvatar.setOnClickListener(v -> chooseAvatar());
         actions.addView(changeAvatar, new LinearLayout.LayoutParams(0, -1, 1f));
 
-        TextView editProfile = secondaryButton("EDIT PROFILE");
+        TextView editProfile = secondaryButton("Edit profile");
         LinearLayout.LayoutParams editParams = new LinearLayout.LayoutParams(0, -1, 1f);
         editParams.setMarginStart(dp(8));
         actions.addView(editProfile, editParams);
@@ -629,9 +629,9 @@ public final class ZeroChillAccountActivity extends Activity {
         editProfile.setOnClickListener(v -> {
             editingProfile = !editingProfile;
             editor.setVisibility(editingProfile ? View.VISIBLE : View.GONE);
-            editProfile.setText(editingProfile ? "CLOSE EDITOR" : "EDIT PROFILE");
+            editProfile.setText(editingProfile ? "Close editor" : "Edit profile");
         });
-        editProfile.setText(editingProfile ? "CLOSE EDITOR" : "EDIT PROFILE");
+        editProfile.setText(editingProfile ? "Close editor" : "Edit profile");
 
         TextView section = text("PROFILE", 12, UiPalette.TEXT_MUTED, true);
         section.setLetterSpacing(0.11f);
@@ -683,7 +683,7 @@ public final class ZeroChillAccountActivity extends Activity {
             @Override public void afterTextChanged(Editable s) {}
         });
 
-        TextView save = primaryButton("SAVE PROFILE");
+        TextView save = primaryButton("Save profile");
         LinearLayout.LayoutParams saveParams = new LinearLayout.LayoutParams(-1, dp(48));
         saveParams.topMargin = dp(10);
         editor.addView(save, saveParams);
@@ -712,13 +712,13 @@ public final class ZeroChillAccountActivity extends Activity {
                             }
                             profileBio.setText(updated.bio);
                             profileBio.setVisibility(updated.bio.isEmpty() ? View.GONE : View.VISIBLE);
-                            save.setText("SAVED");
+                            save.setText("Saved");
                             if (ZeroChillMotion.animationsEnabled(this)) {
                                 save.setAlpha(0.6f);
                                 save.animate().alpha(1f).setDuration(ZeroChillMotion.QUICK_MS).start();
                             }
                             save.postDelayed(() -> {
-                                if (!isFinishing() && !isDestroyed()) save.setText("SAVE PROFILE");
+                                if (!isFinishing() && !isDestroyed()) save.setText("Save profile");
                             }, 1200L);
                             ZeroChillToast.makeText(this, "Profile updated.", ZeroChillToast.LENGTH_SHORT).show();
                         }

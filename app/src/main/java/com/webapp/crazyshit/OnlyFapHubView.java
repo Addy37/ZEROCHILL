@@ -264,7 +264,7 @@ final class OnlyFapHubView extends FrameLayout {
         heroCopy.addView(heroTitle, heroTitleParams);
 
         heroHint = text(
-                "Featured galleries appear here as creator artwork becomes available.",
+                "Your next favorite creator.",
                 13f,
                 ZeroChillUi.color(context, R.color.zc_text_secondary)
         );
@@ -452,7 +452,7 @@ final class OnlyFapHubView extends FrameLayout {
         heroIndex = -1;
         heroDots.setVisibility(View.GONE);
         heroTitle.setText("Discover creators");
-        heroHint.setText("Featured galleries appear here as creator artwork becomes available.");
+        heroHint.setText("Your next favorite creator.");
         heroAction.setVisibility(View.GONE);
         loadingLabel.setText("Loading creators…");
         loadingLabel.setVisibility(View.VISIBLE);

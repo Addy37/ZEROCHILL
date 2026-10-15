@@ -325,6 +325,8 @@ final class LibrarySocialHubView extends LinearLayout {
             }
         }
         messageName.setText(name);
+        messagePreview.setSingleLine(latest != null);
+        messagePreview.setMaxLines(latest == null ? 2 : 1);
         messagePreview.setText(preview);
         messagePreview.setTextColor(latest != null && latest.unreadCount > 0
                 ? Color.WHITE : BrowseUi.MUTED);

@@ -581,7 +581,7 @@ public final class UpdateInboxActivity extends Activity {
             row.setClickable(true);
             ZeroChillMotion.installPressFeedback(row);
             LinearLayout.LayoutParams rowParams = new LinearLayout.LayoutParams(-1, -2);
-            rowParams.setMargins(0, dp(3), 0, dp(3));
+            rowParams.setMargins(0, dp(4), 0, dp(4));
             shell.addView(row, rowParams);
 
             ImageView avatar = new ImageView(UpdateInboxActivity.this);
@@ -639,12 +639,6 @@ public final class UpdateInboxActivity extends Activity {
                     new android.widget.FrameLayout.LayoutParams(dp(9), dp(9), Gravity.TOP | Gravity.END);
             dotParams.setMargins(0, dp(1), dp(1), 0);
             trailing.addView(unread, dotParams);
-
-            View divider = new View(UpdateInboxActivity.this);
-            divider.setBackgroundColor(UiPalette.DIVIDER);
-            LinearLayout.LayoutParams dividerParams = new LinearLayout.LayoutParams(-1, dp(1));
-            dividerParams.setMargins(dp(60), 0, 0, 0);
-            shell.addView(divider, dividerParams);
 
             return new Holder(shell, row, section, avatar, title, subtitle, actions, reply, like,
                     trailing, thumbnail, unread);

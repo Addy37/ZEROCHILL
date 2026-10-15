@@ -53,7 +53,7 @@ public class ProfileAvatarFlowTest {
     }
     @Test public void pickerSelectionOpensEditorAndCancelNeverUploads() throws Exception {
         ZeroChillAccountActivity activity=create();
-        find(activity.getWindow().getDecorView(),"CHANGE AVATAR").performClick();
+        find(activity.getWindow().getDecorView(),"Change avatar").performClick();
         assertEquals(Intent.ACTION_OPEN_DOCUMENT,Shadows.shadowOf(activity).getNextStartedActivity().getAction());
         activity.onActivityResult(6401,Activity.RESULT_OK,new Intent().setData(Uri.parse("content://test/picked")));
         Intent editor=Shadows.shadowOf(activity).getNextStartedActivity();
@@ -64,7 +64,7 @@ public class ProfileAvatarFlowTest {
     }
     @Test public void savedCropUpdatesAccountImmediatelyAndFailureKeepsOldAvatar() throws Exception {
         ZeroChillAccountActivity activity=create();
-        find(activity.getWindow().getDecorView(),"CHANGE AVATAR").performClick();
+        find(activity.getWindow().getDecorView(),"Change avatar").performClick();
         activity.onActivityResult(6403,Activity.RESULT_OK,crop(activity));
         Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
         assertEquals(1,uploads); assertEquals(OWNER+"/avatar-new.jpg",account(activity).avatarPath);
@@ -75,7 +75,7 @@ public class ProfileAvatarFlowTest {
     }
     @Test public void switchingAccountDuringPickerCannotUploadForOtherUser() throws Exception {
         ZeroChillAccountActivity activity=create();
-        find(activity.getWindow().getDecorView(),"CHANGE AVATAR").performClick();
+        find(activity.getWindow().getDecorView(),"Change avatar").performClick();
         user="00000000-0000-0000-0000-000000000002";
         activity.onActivityResult(6403,Activity.RESULT_OK,crop(activity));
         assertEquals(0,uploads);assertEquals(OWNER+"/avatar.jpg",account(activity).avatarPath);

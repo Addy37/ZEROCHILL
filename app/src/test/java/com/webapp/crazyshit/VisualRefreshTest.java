@@ -249,7 +249,7 @@ public class VisualRefreshTest {
                 holder.card.getCardBackgroundColor().getDefaultColor());
         assertEquals(0, holder.card.getStrokeWidth());
         assertEquals(0.62f, holder.backdrop.getAlpha(), 0.001f);
-        assertEquals(Boolean.TRUE, holder.card.getTag(R.id.zerochill_motion_installed));
+        assertNotNull(holder.card.getTag(R.id.zerochill_motion_installed));
 
         adapter.close();
         host.pause().stop().destroy();

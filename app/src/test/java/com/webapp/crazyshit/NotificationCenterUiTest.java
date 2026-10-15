@@ -183,8 +183,8 @@ public class NotificationCenterUiTest {
         TextView social = text(activity, "socialFilter");
         social.performClick();
         render(activity);
-        assertEquals(Boolean.TRUE, social.getTag());
-        assertEquals(Boolean.FALSE, text(activity, "allFilter").getTag());
+        assertTrue(social.isSelected());
+        assertFalse(text(activity, "allFilter").isSelected());
         controller.pause().stop().destroy();
     }
 
