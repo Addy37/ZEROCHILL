@@ -36,6 +36,7 @@ final class ZeroChillDialog {
         @Override public AlertDialog create() {
             AlertDialog dialog = super.create();
             ZeroChillToast.registerDialog(dialog);
+            ZeroChillFloatingWindow.install(dialog.getWindow());
             return dialog;
         }
 

@@ -105,6 +105,12 @@ android {
     }
 }
 
+// Native Robolectric surface fixtures share a JVM with the complete regression suite.
+// Budget test memory explicitly; this does not change the application's heap or APK.
+tasks.withType<org.gradle.api.tasks.testing.Test>().configureEach {
+    maxHeapSize = "1g"
+}
+
 kotlin { jvmToolchain(17) }
 
 dependencies {

@@ -60,7 +60,7 @@ final class ZeroChillUi {
     }
 
     static Drawable navigationGlass(Context context) {
-        return ContextCompat.getDrawable(context, R.drawable.zc_glass_navigation);
+        return new LiquidGlassDrawable(context, LiquidGlassDrawable.Material.NAVIGATION);
     }
 
     static Drawable sourceRailGlass(Context context) {
@@ -68,7 +68,7 @@ final class ZeroChillUi {
     }
 
     static Drawable sheetGlass(Context context) {
-        return ContextCompat.getDrawable(context, R.drawable.zc_glass_sheet);
+        return new LiquidGlassDrawable(context, LiquidGlassDrawable.Material.FLOATING);
     }
 
     static Drawable panelGlass(Context context) {
@@ -98,10 +98,14 @@ final class ZeroChillUi {
     }
 
     static SpannableString sectionTitle(Context context, String title, int accentStart, int accentEnd) {
+        return sectionTitle(context, title, accentStart, accentEnd, color(context, R.color.zc_cyan));
+    }
+
+    static SpannableString sectionTitle(Context context, String title, int accentStart, int accentEnd, int accent) {
         SpannableString styled = new SpannableString(title);
         styled.setSpan(new ForegroundColorSpan(color(context, R.color.zc_text_primary)),
                 0, title.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-        styled.setSpan(new ForegroundColorSpan(color(context, R.color.zc_cyan)),
+        styled.setSpan(new ForegroundColorSpan(accent),
                 accentStart, accentEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
         return styled;
     }
@@ -174,7 +178,7 @@ final class ZeroChillUi {
         Context context = chip.getContext();
         chip.setTextColor(color(context, selected ? R.color.zc_cyan : R.color.zc_text_secondary));
         chip.setBackground(selected
-                ? ContextCompat.getDrawable(context, R.drawable.zc_source_rail_selected_glass)
+                ? new LiquidGlassDrawable(context, LiquidGlassDrawable.Material.LENS)
                 : rounded(
                         context,
                         Color.TRANSPARENT,

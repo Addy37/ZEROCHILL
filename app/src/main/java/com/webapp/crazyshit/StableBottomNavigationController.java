@@ -49,8 +49,8 @@ final class StableBottomNavigationController {
                 new int[] {android.R.attr.state_checked},
                 new int[] {}
         };
-        int active = ZeroChillUi.color(context, R.color.zc_cyan);
-        int inactive = ZeroChillUi.color(context, R.color.zc_text_secondary);
+        int active = ZeroChillUi.color(context, R.color.zc_glass_selected_ink);
+        int inactive = ZeroChillUi.color(context, R.color.zc_glass_unselected_ink);
         ColorStateList colors = nav instanceof ZeroChillBottomNavigationView
                 ? ColorStateList.valueOf(inactive)
                 : new ColorStateList(states, new int[] {active, inactive});
@@ -240,9 +240,16 @@ final class StableBottomNavigationController {
             topBar.setBackgroundColor(ZeroChillUi.background(activity));
             topBar.setElevation(0f);
             if (title != null) {
-                title.setTextSize(22f);
+                title.setTextSize(28f);
+                title.setLetterSpacing(-.035f);
+                title.setTypeface(android.graphics.Typeface.create("sans-serif-black", android.graphics.Typeface.NORMAL));
             }
-            if (subtitle != null) subtitle.setVisibility(View.GONE);
+            if (subtitle != null) {
+                subtitle.setText(ZeroChillUi.sectionTitle(activity, "ZEROCHILL", 4, 9));
+                subtitle.setTextSize(9f);
+                subtitle.setLetterSpacing(.16f);
+                subtitle.setVisibility(View.VISIBLE);
+            }
         }
 
         private void applyGeometry() {
@@ -297,7 +304,8 @@ final class StableBottomNavigationController {
                     item.setLayoutParams(itemParams);
                 }
                 item.setAlpha(1f);
-                ZeroChillMotion.installPressFeedback(item);
+                // The material owns press response; glyphs remain physically still.
+                item.setOnTouchListener(null);
             }
         }
 

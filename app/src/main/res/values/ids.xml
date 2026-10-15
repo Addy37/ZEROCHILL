@@ -2,4 +2,5 @@
 <resources>
     <item name="zerochill_motion_installed" type="id" />
     <item name="zerochill_surface_styled" type="id" />
+    <item name="zerochill_liquid_surface" type="id" />
 </resources>

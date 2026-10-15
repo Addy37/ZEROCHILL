@@ -35,4 +35,7 @@
     <color name="zc_success">#87CAA9</color>
     <color name="zc_ripple">#24FFFFFF</color>
     <color name="zc_disabled">#69727E</color>
+    <!-- Reflected ink on glass keeps legibility over a white media backdrop. -->
+    <color name="zc_glass_selected_ink">#8ADEFF</color>
+    <color name="zc_glass_unselected_ink">#D0D8E2</color>
 </resources>

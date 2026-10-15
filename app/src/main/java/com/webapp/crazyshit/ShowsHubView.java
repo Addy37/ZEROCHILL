@@ -136,7 +136,7 @@ final class ShowsHubView extends FrameLayout {
         heroCard.setContentDescription("Shows featured title");
         ZeroChillMotion.installPressFeedback(heroCard);
 
-        FrameLayout heroFrame = new FrameLayout(context);
+        FrostedOverlayLayout heroFrame = new FrostedOverlayLayout(context);
         heroCard.addView(heroFrame, new MaterialCardView.LayoutParams(-1, -1));
 
         heroBackdrop = new ImageView(context);
@@ -208,13 +208,26 @@ final class ShowsHubView extends FrameLayout {
         ZeroChillTypography.apply(heroBrand, ZeroChillTypography.Role.DISPLAY);
         heroBrand.setSingleLine(true);
         heroBrand.setShadowLayer(dp(8), 0f, dp(2), Color.argb(150, 0, 0, 0));
-        heroBar.addView(heroBrand, new LinearLayout.LayoutParams(-1, dp(58)));
+        LinearLayout heroIdentity = new LinearLayout(context);
+        heroIdentity.setOrientation(LinearLayout.VERTICAL);
+        heroIdentity.setGravity(Gravity.CENTER_VERTICAL);
+        TextView heroWordmark = text("ZEROCHILL", 9f, UiPalette.TEXT_SECONDARY);
+        heroWordmark.setLetterSpacing(.18f);
+        heroIdentity.addView(heroWordmark);
+        heroBrand.setTextSize(32);
+        androidx.core.widget.TextViewCompat.setAutoSizeTextTypeUniformWithConfiguration(heroBrand, 18, 32, 1, android.util.TypedValue.COMPLEX_UNIT_SP);
+        heroBrand.setTypeface(android.graphics.Typeface.create("sans-serif-black", android.graphics.Typeface.NORMAL));
+        heroBrand.setLetterSpacing(-.035f);
+        heroIdentity.addView(heroBrand);
+        heroBar.addView(heroIdentity, new LinearLayout.LayoutParams(-1, dp(58)));
 
-        heroFrame.addView(heroBar, new FrameLayout.LayoutParams(
-                -1,
-                dp(64),
-                Gravity.TOP
-        ));
+        heroBar.setBackground(new LiquidGlassDrawable(context, LiquidGlassDrawable.Material.NAVIGATION));
+        heroBar.setTag(R.id.zerochill_liquid_surface, Boolean.TRUE);
+        heroBar.setPadding(dp(18), 0, dp(10), 0);
+        heroFrame.setFrostedOverlay(heroBar);
+        FrameLayout.LayoutParams glassHeader = new FrameLayout.LayoutParams(-1, dp(64), Gravity.TOP);
+        glassHeader.setMargins(dp(12), dp(10), dp(12), 0);
+        heroFrame.addView(heroBar, glassHeader);
 
         heroDots = text("", 13f, Color.WHITE);
         heroDots.setGravity(Gravity.CENTER);
@@ -264,7 +277,7 @@ final class ShowsHubView extends FrameLayout {
         actionBackground.setColor(Color.argb(205, 15, 18, 22));
         actionBackground.setCornerRadius(dp(20));
         actionBackground.setStroke(dp(1), Color.argb(80, 255, 255, 255));
-        heroAction.setBackground(actionBackground);
+        heroAction.setBackground(new LiquidGlassDrawable(context, LiquidGlassDrawable.Material.LENS));
         heroAction.setContentDescription("Open featured show");
         LinearLayout.LayoutParams heroActionParams =
                 new LinearLayout.LayoutParams(dp(128), dp(40));
@@ -702,7 +715,7 @@ final class ShowsHubView extends FrameLayout {
         heading.setPadding(dp(3), 0, dp(3), dp(9));
 
         TextView titleView = text("Continue Watching", 19f, Color.WHITE);
-        ZeroChillTypography.apply(titleView, ZeroChillTypography.Role.SECTION);
+        ZeroChillChrome.section(titleView);
         titleView.setBackground(null);
         titleView.setPadding(0, 0, 0, 0);
         heading.addView(titleView, new LinearLayout.LayoutParams(-2, -2));
@@ -749,7 +762,7 @@ final class ShowsHubView extends FrameLayout {
         heading.setPadding(dp(3), 0, dp(3), dp(10));
 
         TextView titleView = text(title, 19f, Color.WHITE);
-        ZeroChillTypography.apply(titleView, ZeroChillTypography.Role.SECTION);
+        ZeroChillChrome.section(titleView);
         heading.addView(titleView);
 
         TextView subtitleView = text(

@@ -150,8 +150,8 @@ public final class ZeroChillPublicProfileActivity extends Activity {
         LinearLayout card = new LinearLayout(this);
         card.setOrientation(LinearLayout.VERTICAL);
         card.setGravity(Gravity.CENTER_HORIZONTAL);
-        card.setPadding(dp(18), dp(18), dp(18), dp(17));
-        card.setBackground(panelBackground());
+        card.setPadding(dp(22), dp(30), dp(22), dp(28));
+        card.setBackground(ZeroChillChrome.identitySurface(this));
         LinearLayout.LayoutParams cardParams = new LinearLayout.LayoutParams(-1, -2);
         cardParams.topMargin = dp(10);
         content.addView(card, cardParams);

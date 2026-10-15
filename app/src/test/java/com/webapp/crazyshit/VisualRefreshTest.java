@@ -130,7 +130,8 @@ public class VisualRefreshTest {
         TextView headerTitle = ReflectionHelpers.getField(main, "headerTitle");
         TextView headerSubtitle = ReflectionHelpers.getField(main, "headerSubtitle");
         assertEquals("OnlyFap", headerTitle.getText().toString());
-        assertEquals(View.GONE, headerSubtitle.getVisibility());
+        assertEquals(View.VISIBLE, headerSubtitle.getVisibility());
+        assertEquals("ZEROCHILL", headerSubtitle.getText().toString());
         LinearLayout shell = ReflectionHelpers.getField(main, "shell");
         assertTrue(shell instanceof FrostedNavigationLayout);
         View topBar = shell.getChildAt(0);
@@ -185,7 +186,7 @@ public class VisualRefreshTest {
         android.view.ViewGroup navMenu = (android.view.ViewGroup) nav.getChildAt(0);
         assertFalse(navMenu.getClipChildren());
         assertFalse(navMenu.getClipToPadding());
-        assertEquals(main.getColor(R.color.zc_text_secondary),
+        assertEquals(main.getColor(R.color.zc_glass_unselected_ink),
                 nav.getItemIconTintList().getColorForState(new int[] {android.R.attr.state_checked}, Color.WHITE));
         assertTrue(nav.isItemActiveIndicatorEnabled());
         assertTrue(nav instanceof ZeroChillBottomNavigationView);

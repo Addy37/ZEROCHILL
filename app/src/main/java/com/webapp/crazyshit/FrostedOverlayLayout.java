@@ -41,6 +41,11 @@ final class FrostedOverlayLayout extends FrameLayout {
         return frostedOverlay;
     }
 
+    @Override protected void onDetachedFromWindow() {
+        backdropRenderer.release();
+        super.onDetachedFromWindow();
+    }
+
     @Override
     protected void dispatchDraw(Canvas canvas) {
         if (backdropRenderer.draw(

@@ -169,7 +169,7 @@ final class OnlyFapHubView extends FrameLayout {
         heroCard.setContentDescription("OnlyFap featured creator");
         ZeroChillMotion.installPressFeedback(heroCard);
 
-        FrameLayout heroFrame = new FrameLayout(context);
+        FrostedOverlayLayout heroFrame = new FrostedOverlayLayout(context);
         heroCard.addView(heroFrame, new MaterialCardView.LayoutParams(-1, -1));
 
         heroImage = new ImageView(context);
@@ -198,16 +198,29 @@ final class OnlyFapHubView extends FrameLayout {
         heroBar.setPadding(dp(20), dp(5), dp(12), 0);
 
         TextView heroBrand = text("OnlyFap", 28f, Color.WHITE);
-        heroBrand.setText(ZeroChillUi.sectionTitle(context, "OnlyFap", 4, 7));
+        heroBrand.setText(ZeroChillUi.sectionTitle(context, "OnlyFap", 4, 7,
+                ZeroChillUi.color(context, R.color.zc_glass_selected_ink)));
         ZeroChillTypography.apply(heroBrand, ZeroChillTypography.Role.DISPLAY);
         heroBrand.setSingleLine(true);
         heroBrand.setShadowLayer(dp(8), 0f, dp(2), Color.argb(150, 0, 0, 0));
-        heroBar.addView(heroBrand, new LinearLayout.LayoutParams(0, dp(58), 1f));
+        LinearLayout heroIdentity = new LinearLayout(context);
+        heroIdentity.setOrientation(LinearLayout.VERTICAL);
+        heroIdentity.setGravity(Gravity.CENTER_VERTICAL);
+        TextView heroWordmark = text("ZEROCHILL", 9f, UiPalette.TEXT_SECONDARY);
+        heroWordmark.setLetterSpacing(.18f);
+        heroIdentity.addView(heroWordmark);
+        heroBrand.setTextSize(32);
+        androidx.core.widget.TextViewCompat.setAutoSizeTextTypeUniformWithConfiguration(heroBrand, 18, 32, 1, android.util.TypedValue.COMPLEX_UNIT_SP);
+        heroBrand.setTypeface(android.graphics.Typeface.create("sans-serif-black", android.graphics.Typeface.NORMAL));
+        heroBrand.setLetterSpacing(-.035f);
+        heroIdentity.addView(heroBrand);
+        heroBar.addView(heroIdentity, new LinearLayout.LayoutParams(0, dp(58), 1f));
 
         ImageView heroSearch = new ImageView(context);
         heroSearch.setImageResource(R.drawable.ic_nav_search);
         heroSearch.setPadding(dp(10), dp(10), dp(10), dp(10));
         heroSearch.setColorFilter(Color.WHITE);
+
         heroSearch.setClickable(true);
         heroSearch.setFocusable(true);
         heroSearch.setContentDescription("Search OnlyFap creators");
@@ -224,6 +237,7 @@ final class OnlyFapHubView extends FrameLayout {
         heroMore.setImageResource(R.drawable.ic_more_overflow);
         heroMore.setPadding(dp(10), dp(10), dp(10), dp(10));
         heroMore.setColorFilter(Color.WHITE);
+
         heroMore.setClickable(true);
         heroMore.setFocusable(true);
         heroMore.setContentDescription("OnlyFap More");
@@ -234,11 +248,13 @@ final class OnlyFapHubView extends FrameLayout {
         heroMoreParams.setMarginStart(dp(2));
         heroBar.addView(heroMore, heroMoreParams);
 
-        heroFrame.addView(heroBar, new FrameLayout.LayoutParams(
-                -1,
-                dp(64),
-                Gravity.TOP
-        ));
+        heroBar.setBackground(new LiquidGlassDrawable(context, LiquidGlassDrawable.Material.NAVIGATION));
+        heroBar.setTag(R.id.zerochill_liquid_surface, Boolean.TRUE);
+        heroBar.setPadding(dp(18), 0, dp(10), 0);
+        heroFrame.setFrostedOverlay(heroBar);
+        FrameLayout.LayoutParams glassHeader = new FrameLayout.LayoutParams(-1, dp(64), Gravity.TOP);
+        glassHeader.setMargins(dp(12), dp(10), dp(12), 0);
+        heroFrame.addView(heroBar, glassHeader);
 
         heroDots = text("", 13f, Color.WHITE);
         heroDots.setGravity(Gravity.CENTER);
@@ -621,7 +637,7 @@ final class OnlyFapHubView extends FrameLayout {
         section.setVisibility(View.GONE);
 
         TextView titleView = text(title, 19f, Color.WHITE);
-        ZeroChillTypography.apply(titleView, ZeroChillTypography.Role.SECTION);
+        ZeroChillChrome.section(titleView);
         section.addView(titleView);
 
         TextView subtitleView = text(

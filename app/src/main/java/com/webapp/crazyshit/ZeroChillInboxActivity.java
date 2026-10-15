@@ -126,6 +126,7 @@ public final class ZeroChillInboxActivity extends Activity {
 
         LinearLayout header = new LinearLayout(this);
         header.setGravity(Gravity.CENTER_VERTICAL);
+        ZeroChillChrome.header(header);
         header.setPadding(dp(10), dp(4), dp(14), dp(4));
 
         TextView back = BrowseUi.action(this, "‹", "Back", v -> {
@@ -139,7 +140,7 @@ public final class ZeroChillInboxActivity extends Activity {
         labels.setOrientation(LinearLayout.VERTICAL);
         labels.setPadding(dp(8), 0, 0, 0);
         title = BrowseUi.text(this, "Messages", 24, UiPalette.TEXT_PRIMARY);
-        title.setTypeface(null, android.graphics.Typeface.BOLD);
+        ZeroChillChrome.section(title);
         title.setSingleLine(true);
         title.setEllipsize(TextUtils.TruncateAt.END);
         labels.addView(title);

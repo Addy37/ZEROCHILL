@@ -1,0 +1,60 @@
+name: Glass renderer visual probe
+on:
+  pull_request:
+    branches: [ rebrand/zerochill ]
+    paths:
+      - 'app/src/main/java/com/webapp/crazyshit/*Glass*'
+      - 'app/src/main/java/com/webapp/crazyshit/Frosted*'
+      - 'app/src/debug/**'
+      - '.github/workflows/glass-render-probe.yml'
+      - 'tools/capture_glass_probe.py'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      ANALYTICS_ENDPOINT: ""
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v4
+      - run: sdkmanager "platforms;android-35" "platforms;android-36" "build-tools;35.0.0"
+      - uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: '8.11.1'
+      - run: gradle --no-daemon :app:assembleDebug
+      - name: Build baseline with identical debug fixture
+        run: |
+          git fetch origin 91afd759bf32790cf43dc39ca97e06f98bd178ba
+          git worktree add /tmp/zerochill-glass-baseline 91afd759bf32790cf43dc39ca97e06f98bd178ba
+          cp -R app/src/debug /tmp/zerochill-glass-baseline/app/src/
+          gradle --no-daemon -p /tmp/zerochill-glass-baseline :app:assembleDebug
+          cp /tmp/zerochill-glass-baseline/app/build/outputs/apk/debug/app-debug.apk /tmp/glass-baseline.apk
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Capture live GPU refraction and frame pacing
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: false
+          script: |
+            GLASS_PROBE_APK=/tmp/glass-baseline.apk GLASS_PROBE_OUTPUT=glass-probe-output/baseline python3 tools/capture_glass_probe.py
+            GLASS_PROBE_REQUIRE_REFRACTION=true GLASS_PROBE_OUTPUT=glass-probe-output/candidate python3 tools/capture_glass_probe.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: glass-render-probe
+          path: glass-probe-output/

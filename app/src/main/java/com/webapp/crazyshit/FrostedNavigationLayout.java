@@ -54,6 +54,11 @@ final class FrostedNavigationLayout extends LinearLayout {
         return insets.replaceSystemWindowInsets(0, 0, 0, 0);
     }
 
+    @Override protected void onDetachedFromWindow() {
+        backdropRenderer.release();
+        super.onDetachedFromWindow();
+    }
+
     @Override
     protected void dispatchDraw(Canvas canvas) {
         if (backdropRenderer.draw(

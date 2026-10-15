@@ -1,0 +1,1 @@
+Copyright 2025 Kyant. Portions of LiquidGlassShader.java adapt AndroidLiquidGlass under Apache-2.0. Changes: Android View coordinates, uniform pill radius, moving selection lens, zero-safe normals and no dispersion. See AndroidLiquidGlass-Apache-2.0.txt. https://github.com/Kyant0/AndroidLiquidGlass/tree/65ab177e90e5c1d8c62e70cf7755841982da65f6

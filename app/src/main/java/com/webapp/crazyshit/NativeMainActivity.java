@@ -484,7 +484,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         headerSubtitle.setText(R.string.zerochill_tagline);
         ZeroChillUi.styleSecondary(headerSubtitle);
         headerSubtitle.setTextSize(11);
-        labels.addView(headerSubtitle);
+        labels.addView(headerSubtitle, 0);
         headerSubtitle.setVisibility(View.GONE);
         bar.addView(labels, new LinearLayout.LayoutParams(0, -2, 1f));
 

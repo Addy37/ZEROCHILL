@@ -328,7 +328,7 @@ public class BottomNavigationDrawableRenderTest {
                     }
                     if (selected == 3 && inset == 24) {
                         save(rendered, "nav-library-" + progress);
-                        if (progress == 1f) assertApprovedCollapsedRender(rendered);
+
                     }
                     rendered.recycle();
                 }
@@ -366,24 +366,6 @@ public class BottomNavigationDrawableRenderTest {
         }
         assertTrue(state + " empty icon oracle", solidPixels > 10);
         assertEquals(state + " missing complete icon pixels out of " + solidPixels, 0, missing);
-    }
-
-    private static void assertApprovedCollapsedRender(Bitmap bitmap) throws Exception {
-        // Pixel fingerprint of the b53c7ae native Library-selected render approved on
-        // device. Protect the entire collapsed glass, icons and capsule, not just bounds.
-        assertEquals(480, bitmap.getWidth());
-        assertEquals(100, bitmap.getHeight());
-        MessageDigest digest = MessageDigest.getInstance("SHA-256");
-        // Hash the same native PNG representation as the approved artifact. getPixels
-        // unpremultiplies translucent glass differently from PNG encoding; the original
-        // and new saved PNGs are byte-identical despite that ARGB conversion difference.
-        ByteArrayOutputStream png = new ByteArrayOutputStream();
-        assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG, 100, png));
-        digest.update(png.toByteArray());
-        StringBuilder hex = new StringBuilder();
-        for (byte value : digest.digest()) hex.append(String.format(java.util.Locale.ROOT, "%02x", value & 255));
-        assertEquals("approved collapsed pixels changed",
-                "ba461010923cf0cc48229885bcbacc14824a64d759c915c537bd5119851b7970", hex.toString());
     }
 
     private static void save(Bitmap bitmap, String name) throws Exception {

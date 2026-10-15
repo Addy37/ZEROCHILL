@@ -166,6 +166,7 @@ public final class UpdateInboxActivity extends Activity {
 
         LinearLayout header = new LinearLayout(this);
         header.setGravity(Gravity.CENTER_VERTICAL);
+        ZeroChillChrome.header(header);
         header.setPadding(dp(12), dp(8), dp(12), dp(4));
 
         header.addView(
@@ -177,7 +178,7 @@ public final class UpdateInboxActivity extends Activity {
         titles.setOrientation(LinearLayout.VERTICAL);
         titles.setPadding(dp(12), 0, dp(8), 0);
         TextView title = BrowseUi.text(this, "Notifications", 24, UiPalette.TEXT_PRIMARY);
-        title.setTypeface(null, android.graphics.Typeface.BOLD);
+        ZeroChillChrome.section(title);
         titles.addView(title);
         count = BrowseUi.text(this, "", 12, BrowseUi.MUTED);
         titles.addView(count);
