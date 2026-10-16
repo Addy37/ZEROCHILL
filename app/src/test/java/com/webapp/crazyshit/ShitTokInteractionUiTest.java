@@ -187,7 +187,7 @@ public class ShitTokInteractionUiTest {
             assertNull(ReflectionHelpers.getField(f.selected, "scrubPreview"));
         }
     }
-    @Test public void timeOnlyScrubSeeksAndTransitionCancelsPreviewAndRestoresPaging() {
+    @Test public void timeOnlyScrubPreviewsAndTransitionCancelsWithoutSeeking() {
         try (ShitTokAudioOwnershipTest.Fixture f = fixture()) {
             ReflectionHelpers.setField(f.selected, "stream", null); // Unavailable preview is optional.
             SeekBar bar = ReflectionHelpers.getField(f.selected, "seekBar");
@@ -198,8 +198,8 @@ public class ShitTokInteractionUiTest {
             bar.setProgress(500); listener.onProgressChanged(bar, 500, true);
             View card = root(f.selected).findViewWithTag("shittok_scrub_preview");
             assertEquals(View.VISIBLE, card.getVisibility());
-            assertEquals(1, f.selectedPlayer.seeks);
-            assertEquals("0:30 / 1:00", ((TextView) ((android.view.ViewGroup) card).getChildAt(1)).getText());
+            assertEquals(0, f.selectedPlayer.seeks);
+            assertEquals("0:30 / 1:00", ((TextView) ((android.view.ViewGroup) card).getChildAt(1)).getText().toString());
             ReflectionHelpers.callInstanceMethod(f.selected, "syncOrientationChrome");
             assertTrue(ReflectionHelpers.getField(f.selected, "scrubbing"));
             assertFalse(pager.isUserInputEnabled());

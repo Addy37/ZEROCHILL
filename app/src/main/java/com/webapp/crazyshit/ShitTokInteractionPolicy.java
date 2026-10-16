@@ -6,7 +6,7 @@ final class ShitTokInteractionPolicy {
     static final long PREVIEW_INTERVAL_MS = 100L;
     static final long PREVIEW_TIMEOUT_MS = 1_500L;
     static final int PREVIEW_CACHE_SIZE = 4;
-    static final int PREVIEW_WIDTH_PX = 320, PREVIEW_HEIGHT_PX = 180;
+    static final int PREVIEW_WIDTH_PX = 180, PREVIEW_HEIGHT_PX = 320;
 
     private ShitTokInteractionPolicy() {}
 

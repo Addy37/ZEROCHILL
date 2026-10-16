@@ -32,7 +32,9 @@ FrameExtractor. The app does not construct an ExoPlayer or request a player leas
 Media3 internally owns a private extraction player/decoder. Its asynchronous
 cleanup is separate from the existing three-player playback pool.
 See [Media3 1.11.1 extraction internals](https://github.com/androidx/media/blob/1.11.1/libraries/inspector_frame/src/main/java/androidx/media3/inspector/frame/FrameExtractorInternal.java).
-Extraction uses CLOSEST_SYNC and a Presentation fit within 320 by 180 pixels.
+Extraction uses CLOSEST_SYNC and a 180 by 320 pixel Presentation with aspect-preserving
+center cropping. This replaces the original 320 by 180 letterboxed output without
+changing pixel count, request cadence, cache limits or extractor ownership.
 The source is the holder's already resolved StreamInfo, via ShitTokMediaSources:
 the same media identity, User-Agent, Referer, Origin, cookies and request metadata.
 It reuses the existing compressed-media cache; no preview files or thumbnail disk
@@ -58,6 +60,37 @@ extractor after cancellation. Media3 schedules decoder release asynchronously;
 an already blocked read may take up to its read timeout to unwind. Seeking never
 depends on a thumbnail result.
 
+## Portrait and release-only scrub refinement
+
+Device feedback from the initial candidate identified excessive preview padding
+and live main-player seeking during dragging. The thumbnail now has a portrait
+112 by 196dp rounded border, a 108 by 192dp image area, 2dp padding and center crop.
+The timestamp sits below the thumbnail on a transparent row, with current time
+white and the separator/total duration secondary gray. Edge clamping and time-only
+fallback remain. Wide source frames crop at their sides rather than stretch.
+
+Scrub start records the current position and playback intent, then pauses the
+main player. Drag movement updates a pending destination, time labels and the
+existing preview extractor only. Release commits one bounded seek and restores
+playback only when it was active beforehand. ACTION_CANCEL discards the pending
+destination before SeekBar's default stop callback. The original position remains
+unchanged. Ownership refresh cannot restart a player during the drag; lifecycle
+cleanup never resumes a detached or outgoing player. User pause preference stays
+unchanged. Non-drag keyboard/accessibility progress changes still commit directly.
+
+Refinement validation on October 16, 2026:
+
+- Smallest first run: 12 tests passed across ShitTokScrubInteractionTest and
+  ShitTokScrubPreviewTest, zero failures/errors/skips.
+- Affected run: 36 tests passed, zero failures/errors/skips, across
+  ShitTokScrubInteractionTest (now four tests, including real pointer UP/CANCEL),
+  ShitTokInteractionUiTest, ShitTokProgressTest, ShitTokInteractionPolicyTest,
+  ShitTokDynamicPinchTest and ShitTokSwipeStartTest.
+- `:app:assembleDebug` passed. No broad local suites or lint were run for this
+  refinement. Tests used the cached offline toolchain and disabled backend access.
+- No new dependency, signing, package, persistence, backend or source configuration
+  changes. Physical-device visual/codec/performance acceptance is still required.
+
 ## Validation scope
 
 Focused tests cover threshold/time mapping/clamping, idle extraction exclusion,
@@ -65,7 +98,9 @@ bounded cache, latest-target coalescing, cadence, cancellation, stale results,
 failure/timeout fallback, real-holder gestures, favorite add-only behavior,
 optimistic failure recovery, explicit controls, progress visibility and paging
 restoration. Fake extractors and players do not prove device codec/network speed.
-The results below are local. GitHub CI has not run for this feature branch.
+The original local results below describe the first implementation. The initial
+`f3d4623` signed candidate subsequently passed production-certificate/package/version
+checks and Android 15 in-place upgrade CI before device testing.
 
 Local validation completed on October 16, 2026:
 

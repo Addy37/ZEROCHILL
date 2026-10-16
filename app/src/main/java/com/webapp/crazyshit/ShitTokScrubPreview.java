@@ -55,7 +55,7 @@ final class ShitTokScrubPreview {
                 .setSeekParameters(SeekParameters.CLOSEST_SYNC)
                 .setEffects(Collections.singletonList(Presentation.createForWidthAndHeight(
                         ShitTokInteractionPolicy.PREVIEW_WIDTH_PX,
-                        ShitTokInteractionPolicy.PREVIEW_HEIGHT_PX, Presentation.LAYOUT_SCALE_TO_FIT)))
+                        ShitTokInteractionPolicy.PREVIEW_HEIGHT_PX, Presentation.LAYOUT_SCALE_TO_FIT_WITH_CROP)))
                 .build();
         return new Extractor() {
             @Override public ListenableFuture<Bitmap> frame(long positionMs) {

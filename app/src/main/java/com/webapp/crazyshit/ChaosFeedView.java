@@ -2304,6 +2304,9 @@ public final class ChaosFeedView extends FrameLayout {
         boolean controlsVisible = true;
         boolean userPaused;
         boolean scrubbing;
+        ExoPlayer scrubPlayer;
+        long scrubStartPosition, pendingScrubPosition;
+        boolean scrubWasPlaying;
         boolean everStarted;
         boolean playbackSuspended;
         boolean retryAttempted;
@@ -2883,13 +2886,21 @@ public final class ChaosFeedView extends FrameLayout {
                     if (duration <= 0L) return;
                     long target = ShitTokInteractionPolicy.targetTime(duration, progress, bar.getMax());
                     updateTimeLabels(target, duration);
-                    if (scrubbing) showScrubPreview(target, duration);
-                    player.seekTo(target);
+                    if (scrubbing) {
+                        pendingScrubPosition = target;
+                        showScrubPreview(target, duration);
+                    } else player.seekTo(target); // Keyboard/accessibility adjustments commit directly.
                 }
 
                 @Override
                 public void onStartTrackingTouch(SeekBar bar) {
+                    if (player == null || player.getDuration() <= 0L) return;
+                    scrubPlayer = player;
+                    scrubStartPosition = Math.max(0L, player.getCurrentPosition());
+                    pendingScrubPosition = scrubStartPosition;
+                    scrubWasPlaying = player.getPlayWhenReady();
                     scrubbing = true;
+                    player.pause();
                     pager.setUserInputEnabled(false);
                     ViewParentCompat.disallow(bar, true);
                     showControlsPersistent();
@@ -2898,11 +2909,20 @@ public final class ChaosFeedView extends FrameLayout {
 
                 @Override
                 public void onStopTrackingTouch(SeekBar bar) {
-                    endScrubPreview();
+                    endScrubPreview(true, true);
                     updateProgress();
                     if (player != null && player.isPlaying()) showControlsTemporarily();
                     else showControlsPersistent();
                 }
+            });
+            // SeekBar invokes onStopTrackingTouch for ACTION_CANCEL too. Cancel first so
+            // its normal callback cannot commit a destination the user did not release on.
+            seekBar.setOnTouchListener((view, event) -> {
+                if (event.getActionMasked() == MotionEvent.ACTION_CANCEL) {
+                    endScrubPreview(false, true);
+                    updateProgress();
+                }
+                return false;
             });
         }
 
@@ -2923,8 +2943,7 @@ public final class ChaosFeedView extends FrameLayout {
                                 && boundPosition == capturedPosition && feedGeneration == capturedGeneration
                                 && attachedToken == token);
             }
-            showScrubPreview(ShitTokInteractionPolicy.targetTime(player.getDuration(),
-                    seekBar.getProgress(), seekBar.getMax()), player.getDuration());
+            showScrubPreview(pendingScrubPosition, player.getDuration());
         }
 
         private void showScrubPreview(long target, long duration) {
@@ -2932,19 +2951,24 @@ public final class ChaosFeedView extends FrameLayout {
             if (scrubPreview != null) scrubPreview.request(Math.min(target, Math.max(0L, duration - 1L)));
         }
 
-        private void endScrubPreview() {
-            boolean wasScrubbing = scrubbing;
+        private void endScrubPreview(boolean commit, boolean restorePlayback) {
+            if (!scrubbing) return;
+            ExoPlayer scrubbed = scrubPlayer;
+            scrubPlayer = null;
             scrubbing = false;
             if (scrubPreview != null) scrubPreview.end();
             scrubPreviewView.hide();
-            if (wasScrubbing) {
-                ViewParentCompat.disallow(seekBar, false);
-                pager.setUserInputEnabled(true);
+            ViewParentCompat.disallow(seekBar, false);
+            pager.setUserInputEnabled(true);
+            if (scrubbed != null && scrubbed == player && ownsPlayback()) {
+                if (commit) scrubbed.seekTo(Math.max(0L,
+                        Math.min(pendingScrubPosition, Math.max(0L, scrubbed.getDuration()))));
+                if (restorePlayback && scrubWasPlaying) scrubbed.play();
             }
         }
 
         private void cancelInteractionUi() {
-            if (scrubbing) endScrubPreview();
+            if (scrubbing) endScrubPreview(false, true);
             if (videoTaps != null) videoTaps.cancel();
             root.removeCallbacks(hideHeart);
             if (heartOverlay != null) {
@@ -3552,6 +3576,7 @@ public final class ChaosFeedView extends FrameLayout {
         }
 
         void detachLease() {
+            endScrubPreview(false, false);
             cancelInteractionUi();
             pinch.reset();
             if (player != null) {
@@ -3772,6 +3797,7 @@ public final class ChaosFeedView extends FrameLayout {
 
         private void playOwnedPlayer() {
             if (player == null) return;
+            if (scrubbing) return;
             if (!ownsPlayback()) {
                 silencePlayer(player);
                 return;
@@ -4204,6 +4230,7 @@ public final class ChaosFeedView extends FrameLayout {
         }
 
         void pauseAndRecord() {
+            endScrubPreview(false, false);
             cancelInteractionUi();
             pinch.reset();
             ExoPlayer paused = player;
@@ -4231,7 +4258,6 @@ public final class ChaosFeedView extends FrameLayout {
             root.removeCallbacks(skipFailedClipRunnable);
             root.removeCallbacks(progressTick);
             failurePending = false;
-            if (scrubbing) { scrubbing = false; pager.setUserInputEnabled(true); }
             detachLease();
         }
 
