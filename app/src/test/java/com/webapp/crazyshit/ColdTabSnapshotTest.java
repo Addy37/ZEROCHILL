@@ -1,0 +1,171 @@
+package com.webapp.crazyshit;
+
+import android.app.Activity;
+import android.app.Application;
+import android.graphics.Bitmap;
+import android.graphics.Color;
+import android.widget.FrameLayout;
+import android.widget.ImageView;
+import android.widget.ScrollView;
+
+import com.bumptech.glide.request.Request;
+import com.bumptech.glide.request.target.DrawableImageViewTarget;
+
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.robolectric.Robolectric;
+import org.robolectric.RobolectricTestRunner;
+import org.robolectric.annotation.Config;
+import org.robolectric.shadows.ShadowLooper;
+import org.robolectric.shadows.ShadowSystemClock;
+import org.robolectric.util.ReflectionHelpers;
+
+import java.io.File;
+import java.lang.reflect.Proxy;
+import java.nio.file.Files;
+import java.time.Duration;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.TimeUnit;
+
+import static org.junit.Assert.*;
+
+@RunWith(RobolectricTestRunner.class)
+@Config(application = Application.class, sdk = 28)
+public class ColdTabSnapshotTest {
+    @Test public void missingCorruptAndOversizedFilesFallBack() throws Exception {
+        File file = new File(Files.createTempDirectory("snapshot").toFile(), "tab.jpg");
+        assertNull(ColdTabSnapshot.read(file));
+        Files.write(file.toPath(), new byte[] {1, 2, 3});
+        assertNull(ColdTabSnapshot.read(file));
+        Files.write(file.toPath(), new byte[32_769]);
+        assertNull(ColdTabSnapshot.read(file));
+        Bitmap large = Bitmap.createBitmap(129, 1, Bitmap.Config.ARGB_8888);
+        ColdTabSnapshot.write(file, large);
+        large.recycle();
+        assertNull(ColdTabSnapshot.read(file));
+    }
+
+    @Test public void compressedSnapshotSurvivesNewReaderAndReplacesOldFile() throws Exception {
+        File file = new File(Files.createTempDirectory("snapshot").toFile(), "tab.jpg");
+        Bitmap bitmap = Bitmap.createBitmap(64, 128, Bitmap.Config.ARGB_8888);
+        bitmap.eraseColor(Color.BLUE);
+        ColdTabSnapshot.write(file, bitmap);
+        Bitmap first = ColdTabSnapshot.read(new File(file.getAbsolutePath()));
+        assertNotNull(first);
+        assertEquals(128, first.getHeight());
+        first.recycle();
+        bitmap.eraseColor(Color.RED);
+        ColdTabSnapshot.write(file, bitmap);
+        bitmap.recycle();
+        Bitmap replaced = ColdTabSnapshot.read(file);
+        assertNotNull(replaced);
+        assertTrue(Color.red(replaced.getPixel(20, 20)) > 200);
+        assertTrue(file.length() < 32_768);
+        replaced.recycle();
+        assertEquals(1, file.getParentFile().list().length);
+    }
+
+    @Test public void failedWriteKeepsLastGoodSnapshot() throws Exception {
+        File file = new File(Files.createTempDirectory("snapshot").toFile(), "tab.jpg");
+        Bitmap bitmap = Bitmap.createBitmap(16, 16, Bitmap.Config.ARGB_8888);
+        ColdTabSnapshot.write(file, bitmap);
+        bitmap.recycle();
+        ColdTabSnapshot.write(file, bitmap);
+        Bitmap saved = ColdTabSnapshot.read(file);
+        assertNotNull(saved);
+        saved.recycle();
+    }
+
+    @Test public void blurIsBoundedAndWorksBeforeApi31() {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        FrameLayout view = new FrameLayout(activity);
+        view.setBackgroundColor(Color.WHITE);
+        view.layout(0, 0, 1080, 2400);
+        Bitmap bitmap = GalleryPreviewBlur.snapshot(view, view::draw);
+        assertEquals(128, bitmap.getHeight());
+        assertTrue(bitmap.getWidth() <= 128);
+        bitmap.recycle();
+    }
+
+    @Test public void coldCoverFadesAfterArtworkAndDoesNotReturnOnWarmRecreation() throws Exception {
+        Fixture f = new Fixture("test-ready", true);
+        Bitmap saved = Bitmap.createBitmap(64, 128, Bitmap.Config.ARGB_8888);
+        saved.eraseColor(Color.BLUE);
+        ColdTabSnapshot.write(f.file, saved);
+        saved.recycle();
+        f.install();
+        drainIo();
+        assertEquals(2, f.root.getChildCount());
+        ColdTabSnapshot controller = f.controller;
+        controller.onPreDraw();
+        ShadowSystemClock.advanceBy(Duration.ofMillis(600));
+        controller.onPreDraw();
+        ImageView cover = (ImageView) f.root.getChildAt(1);
+        assertEquals(450, cover.animate().getDuration());
+        ShadowLooper.idleMainLooper(1, TimeUnit.SECONDS);
+        assertEquals(1, f.root.getChildCount());
+        drainIo();
+        assertNotNull(ColdTabSnapshot.read(f.file));
+        Fixture warm = new Fixture("test-ready", true);
+        warm.install();
+        drainIo();
+        assertEquals(1, warm.root.getChildCount());
+    }
+
+    @Test public void noSnapshotKeepsLiveUiAndFailureRemovesExistingCover() throws Exception {
+        Fixture first = new Fixture("test-missing", false);
+        first.file.delete();
+        first.install();
+        drainIo();
+        assertEquals(1, first.root.getChildCount());
+        Fixture failed = new Fixture("test-failure", false);
+        Bitmap bitmap = Bitmap.createBitmap(16, 16, Bitmap.Config.ARGB_8888);
+        ColdTabSnapshot.write(failed.file, bitmap);
+        bitmap.recycle();
+        failed.install();
+        drainIo();
+        ColdTabSnapshot controller = failed.controller;
+        controller.onPreDraw();
+        ShadowSystemClock.advanceBy(Duration.ofSeconds(16));
+        controller.onPreDraw();
+        assertEquals(1, failed.root.getChildCount());
+    }
+
+    private static void drainIo() throws Exception {
+        ExecutorService io = ReflectionHelpers.getStaticField(ColdTabSnapshot.class, "IO");
+        io.submit(() -> { }).get(5, TimeUnit.SECONDS);
+        ShadowLooper.idleMainLooper();
+    }
+
+    private static final class Fixture {
+        final Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        final FrameLayout root = new FrameLayout(activity);
+        final ScrollView live = new ScrollView(activity);
+        final ImageView hero = new ImageView(activity);
+        final String tab;
+        final boolean ready;
+        final File file;
+        ColdTabSnapshot controller;
+        Fixture(String tab, boolean ready) {
+            this.tab = tab;
+            this.ready = ready;
+            file = new File(activity.getNoBackupFilesDir(), "cold-tab-" + tab + ".jpg");
+            root.addView(live, new FrameLayout.LayoutParams(-1, -1));
+            live.addView(hero, new ScrollView.LayoutParams(-1, 600));
+            hero.setImageDrawable(new android.graphics.drawable.ColorDrawable(Color.BLUE));
+            Request request = (Request) Proxy.newProxyInstance(Request.class.getClassLoader(),
+                    new Class<?>[] {Request.class}, (proxy, method, args) -> {
+                        if (method.getReturnType() == boolean.class) return method.getName().equals("isComplete");
+                        return null;
+                    });
+            new DrawableImageViewTarget(hero).setRequest(request);
+        }
+        void install() {
+            controller = ColdTabSnapshot.install(root, live, hero, tab, () -> ready);
+            activity.setContentView(root);
+            root.measure(android.view.View.MeasureSpec.makeMeasureSpec(400, 1073741824),
+                    android.view.View.MeasureSpec.makeMeasureSpec(800, 1073741824));
+            root.layout(0, 0, 400, 800);
+        }
+    }
+}
