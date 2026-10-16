@@ -204,6 +204,14 @@ public class CreatorPlayerQolTest {
         ReflectionHelpers.setField(activity, "player", actual);
         ReflectionHelpers.setField(activity, "adapter", adapter);
         ReflectionHelpers.setField(activity, "videoSizeKnown", true);
+        Settings.System.putInt(activity.getContentResolver(), Settings.System.ACCELEROMETER_ROTATION, 0);
+        PhoneOrientationPolicy.applyBrowsingOrientation(activity);
+        ReflectionHelpers.callInstanceMethod(activity, "onVideoDimensions", ReflectionHelpers.ClassParameter.from(
+                androidx.media3.common.VideoSize.class, new androidx.media3.common.VideoSize(720, 1280)));
+        assertEquals(ActivityInfo.SCREEN_ORIENTATION_USER, activity.getRequestedOrientation());
+        ReflectionHelpers.callInstanceMethod(activity, "onVideoDimensions", ReflectionHelpers.ClassParameter.from(
+                androidx.media3.common.VideoSize.class, new androidx.media3.common.VideoSize(1920, 1080)));
+        assertEquals(ActivityInfo.SCREEN_ORIENTATION_USER, activity.getRequestedOrientation());
         Settings.System.putInt(activity.getContentResolver(), Settings.System.ACCELEROMETER_ROTATION, 1);
         for (SensorMediaOrientationListener.Position position : SensorMediaOrientationListener.Position.values()) {
             ReflectionHelpers.callInstanceMethod(activity, "onVideoOrientation", ReflectionHelpers.ClassParameter.from(

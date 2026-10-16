@@ -1006,7 +1006,10 @@ public final class BunkrGalleryActivity extends Activity {
         player = new ExoPlayer.Builder(this).setMediaSourceFactory(mediaSourceFactory).build();
         activeVideoPosition = position;
         videoSizeKnown = false;
-        if (PhoneOrientationPolicy.isPhoneSized(this)) PhoneOrientationPolicy.enterPortraitFullscreen(this);
+        if (PhoneOrientationPolicy.isPhoneSized(this)
+                && ShowsPlaybackOrientationPolicy.autoRotateEnabled(this)
+                && getResources().getConfiguration().orientation != Configuration.ORIENTATION_LANDSCAPE)
+            PhoneOrientationPolicy.enterPortraitFullscreen(this);
         adapter.activateVideo(position, player);
 
         MediaItem.Builder media = new MediaItem.Builder().setUri(mediaUrl);
@@ -1109,7 +1112,9 @@ public final class BunkrGalleryActivity extends Activity {
         videoSizeKnown = true;
         if (portraitVideo) {
             manualVideoFullscreen = sensorVideoFullscreen = false;
-            if (PhoneOrientationPolicy.isPhoneSized(this)) PhoneOrientationPolicy.enterPortraitFullscreen(this);
+            if (PhoneOrientationPolicy.isPhoneSized(this)
+                    && ShowsPlaybackOrientationPolicy.autoRotateEnabled(this))
+                PhoneOrientationPolicy.enterPortraitFullscreen(this);
         }
         // Quality switches keep the same orientation choice, including a manual exit.
         if (eligibilityChanged && videoOrientationListener != null) videoOrientationListener.redispatch();
