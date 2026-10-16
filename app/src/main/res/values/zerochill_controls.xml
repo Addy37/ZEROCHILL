@@ -2,7 +2,6 @@
 <resources>
     <style name="Theme.ZeroChill.Dialog" parent="android:style/Theme.Material.Dialog.Alert">
         <item name="android:windowBackground">@drawable/zc_glass_sheet</item>
-        <item name="android:windowIsTranslucent">true</item>
         <item name="android:listChoiceIndicatorSingle">@drawable/zc_choice_indicator</item>
         <item name="android:listSelector">@color/zc_cyan_container</item>
         <item name="android:colorAccent">@color/zc_cyan</item>

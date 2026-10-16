@@ -4,6 +4,9 @@ on:
     branches: [ rebrand/zerochill ]
     paths:
       - 'app/src/main/java/com/webapp/crazyshit/*Glass*'
+      - 'app/src/main/java/com/webapp/crazyshit/glass/**'
+      - 'app/src/main/java/com/webapp/crazyshit/*Navigation*'
+      - 'app/src/main/java/com/webapp/crazyshit/ViewPageBackdrop.kt'
       - 'app/src/main/java/com/webapp/crazyshit/Frosted*'
       - 'app/src/debug/**'
       - '.github/workflows/glass-render-probe.yml'
@@ -31,13 +34,6 @@ jobs:
         with:
           gradle-version: '8.11.1'
       - run: gradle --no-daemon :app:assembleDebug
-      - name: Build baseline with identical debug fixture
-        run: |
-          git fetch origin 91afd759bf32790cf43dc39ca97e06f98bd178ba
-          git worktree add /tmp/zerochill-glass-baseline 91afd759bf32790cf43dc39ca97e06f98bd178ba
-          cp -R app/src/debug /tmp/zerochill-glass-baseline/app/src/
-          gradle --no-daemon -p /tmp/zerochill-glass-baseline :app:assembleDebug
-          cp /tmp/zerochill-glass-baseline/app/build/outputs/apk/debug/app-debug.apk /tmp/glass-baseline.apk
       - name: Enable KVM
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
@@ -51,8 +47,7 @@ jobs:
           profile: pixel_6
           disable-animations: false
           script: |
-            GLASS_PROBE_APK=/tmp/glass-baseline.apk GLASS_PROBE_OUTPUT=glass-probe-output/baseline python3 tools/capture_glass_probe.py
-            GLASS_PROBE_REQUIRE_REFRACTION=true GLASS_PROBE_OUTPUT=glass-probe-output/candidate python3 tools/capture_glass_probe.py
+            GLASS_PROBE_REQUIRE_REFRACTION=true GLASS_PROBE_OUTPUT=glass-probe-output/square-stack python3 tools/capture_glass_probe.py
       - uses: actions/upload-artifact@v4
         if: always()
         with:

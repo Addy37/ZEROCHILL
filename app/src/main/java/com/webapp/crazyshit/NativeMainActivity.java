@@ -484,7 +484,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         headerSubtitle.setText(R.string.zerochill_tagline);
         ZeroChillUi.styleSecondary(headerSubtitle);
         headerSubtitle.setTextSize(11);
-        labels.addView(headerSubtitle, 0);
+        labels.addView(headerSubtitle);
         headerSubtitle.setVisibility(View.GONE);
         bar.addView(labels, new LinearLayout.LayoutParams(0, -2, 1f));
 
@@ -1247,6 +1247,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     private void refreshLibraryUpdateIndicator() {
         if (bottomNavigation == null) return;
         int unread = UpdateInboxStore.unreadCount(this);
+        bottomNavigation.setLibraryUnread(unread > 0);
         if (unread <= 0) {
             bottomNavigation.removeBadge(NAV_LIBRARY);
             return;

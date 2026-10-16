@@ -38,11 +38,19 @@ public class ZeroChillFoundationTest {
         Drawable navigation = ZeroChillUi.navigationGlass(activity);
         Drawable panel = ZeroChillUi.panelGlass(activity);
         assertNotNull(navigation);
-        assertEquals(android.graphics.PixelFormat.TRANSLUCENT, navigation.getOpacity());
+        assertTrue(navigation instanceof LayerDrawable);
+        assertEquals(3, ((LayerDrawable) navigation).getNumberOfLayers());
         Drawable sourceRail = ZeroChillUi.sourceRailGlass(activity);
         assertNotNull(sourceRail);
         assertTrue(sourceRail instanceof GradientDrawable);
         assertEquals(UiPalette.SURFACE, ((GradientDrawable) sourceRail).getColor().getDefaultColor());
+        Drawable outerNavigationGlass = ((LayerDrawable) navigation).getDrawable(0);
+        assertTrue(outerNavigationGlass instanceof GradientDrawable);
+        int[] navigationColors = ((GradientDrawable) outerNavigationGlass).getColors();
+        assertNotNull(navigationColors);
+        for (int navigationColor : navigationColors) {
+            assertTrue(Color.alpha(navigationColor) <= 0x78);
+        }
         assertNotNull(panel);
         activity.finish();
     }
@@ -61,7 +69,7 @@ public class ZeroChillFoundationTest {
         ZeroChillUi.styleSourceRailChip(sourceChip, true);
         assertTrue(sourceChip.isSelected());
         assertEquals(activity.getColor(R.color.zc_cyan), sourceChip.getCurrentTextColor());
-        assertEquals(android.graphics.PixelFormat.TRANSLUCENT, sourceChip.getBackground().getOpacity());
+        assertTrue(sourceChip.getBackground() instanceof GradientDrawable);
 
         Drawable selectedNavigation = activity.getDrawable(R.drawable.zc_nav_selected_glass);
         Drawable shitTokRail = activity.getDrawable(R.drawable.zc_shittok_control_rail);

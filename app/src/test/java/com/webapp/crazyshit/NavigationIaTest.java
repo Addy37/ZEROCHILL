@@ -277,9 +277,9 @@ public class NavigationIaTest {
         android.view.ViewGroup.MarginLayoutParams expanded =
                 (android.view.ViewGroup.MarginLayoutParams) nav.getLayoutParams();
         assertFalse(nav.isCollapsedForTest());
-        assertEquals(activity.getResources().getDimensionPixelSize(R.dimen.zc_bottom_nav_height),
+        assertEquals(Math.round(61 * activity.getResources().getDisplayMetrics().density),
                 expanded.height);
-        assertEquals(Math.round(10 * activity.getResources().getDisplayMetrics().density),
+        assertEquals(Math.round(16 * activity.getResources().getDisplayMetrics().density),
                 expanded.leftMargin);
         assertEquals(expanded.leftMargin, expanded.rightMargin);
         assertEquals(
@@ -308,8 +308,7 @@ public class NavigationIaTest {
         int baselineNavBottomPadding = nav.getPaddingBottom();
         int baselineNavTopPadding = nav.getPaddingTop();
         assertEquals(0, baselineNavTopPadding);
-        assertEquals(activity.getResources().getDimensionPixelSize(
-                R.dimen.zc_nav_reference_gesture_inset), baselineNavBottomPadding);
+        assertEquals(0, baselineNavBottomPadding);
         float density = activity.getResources().getDisplayMetrics().density;
         int statusInset = Math.round(24 * density);
         int navigationInset = Math.round(48 * density);
@@ -376,16 +375,16 @@ public class NavigationIaTest {
         android.widget.LinearLayout.LayoutParams params =
                 (android.widget.LinearLayout.LayoutParams) nav.getLayoutParams();
         float density = activity.getResources().getDisplayMetrics().density;
-        int expanded = activity.getResources().getDimensionPixelSize(R.dimen.zc_bottom_nav_height);
+        int expanded = Math.round(61 * density);
         int compact = Math.round(50 * density);
         int height = Math.round(expanded + (compact - expanded) * progress);
         assertEquals(height, params.height);
-        assertEquals(Math.round(Math.round(10 * density) +
-                (Math.round(60 * density) - Math.round(10 * density)) * progress),
+        assertEquals(Math.round(Math.round(16 * density) +
+                (Math.round(60 * density) - Math.round(16 * density)) * progress),
                 params.leftMargin);
         assertEquals(params.leftMargin, params.rightMargin);
-        assertEquals(-height - Math.round(6 * density), params.topMargin);
-        assertEquals(Math.round(6 * density), params.bottomMargin);
+        assertEquals(-height - Math.round(8 * density), params.topMargin);
+        assertEquals(Math.round(8 * density), params.bottomMargin);
     }
 
     @Test public void primaryTabsDragFromSelectedBottomCapsule() {
@@ -409,66 +408,16 @@ public class NavigationIaTest {
                 MainPagerAdapter.pageForPagerPosition(pager.getCurrentItem())
         );
 
-        View chaos = nav.findViewById(4);
-        View onlyFap = nav.findViewById(3);
-        assertNotNull(chaos);
-        assertNotNull(onlyFap);
-        assertNull(nav.findViewById(1));
-
-        android.graphics.Rect chaosRect = new android.graphics.Rect();
-        android.graphics.Rect onlyFapRect = new android.graphics.Rect();
-        chaos.getDrawingRect(chaosRect);
-        onlyFap.getDrawingRect(onlyFapRect);
-        nav.offsetDescendantRectToMyCoords(chaos, chaosRect);
-        nav.offsetDescendantRectToMyCoords(onlyFap, onlyFapRect);
-
-        float downX = chaosRect.exactCenterX();
-        float downY = chaosRect.exactCenterY();
-        float targetX = onlyFapRect.exactCenterX();
-        long downTime = android.os.SystemClock.uptimeMillis();
-
-        nav.dispatchTouchEvent(android.view.MotionEvent.obtain(
-                downTime, downTime,
-                android.view.MotionEvent.ACTION_DOWN,
-                downX, downY, 0
-        ));
-        nav.dispatchTouchEvent(android.view.MotionEvent.obtain(
-                downTime, downTime + 16L,
-                android.view.MotionEvent.ACTION_MOVE,
-                downX + ((targetX - downX) * 0.65f), downY, 0
-        ));
-        nav.dispatchTouchEvent(android.view.MotionEvent.obtain(
-                downTime, downTime + 32L,
-                android.view.MotionEvent.ACTION_UP,
-                targetX, downY, 0
-        ));
+        assertTrue(nav.startSquareDrag());
+        nav.dragSquareBy(.8f);
+        nav.endSquareDrag(false);
         shadowOf(android.os.Looper.getMainLooper()).idle();
-
-        assertEquals(
-                MainPagerAdapter.PAGE_ONLYFAP,
-                MainPagerAdapter.pageForPagerPosition(pager.getCurrentItem())
-        );
-        assertEquals(2f, nav.pagerPositionForTest(), 0.01f);
-
+        assertEquals(MainPagerAdapter.PAGE_ONLYFAP,
+                MainPagerAdapter.pageForPagerPosition(pager.getCurrentItem()));
         nav.setCollapsed(true, false);
-        shadowOf(android.os.Looper.getMainLooper()).idle();
-        View library = nav.findViewById(6);
-        onlyFap.getDrawingRect(onlyFapRect);
-        library.getDrawingRect(chaosRect);
-        nav.offsetDescendantRectToMyCoords(onlyFap, onlyFapRect);
-        nav.offsetDescendantRectToMyCoords(library, chaosRect);
-        downX = onlyFapRect.exactCenterX();
-        downY = onlyFapRect.exactCenterY();
-        targetX = chaosRect.exactCenterX();
-        downTime = android.os.SystemClock.uptimeMillis();
-        nav.dispatchTouchEvent(android.view.MotionEvent.obtain(
-                downTime, downTime, android.view.MotionEvent.ACTION_DOWN, downX, downY, 0));
-        nav.dispatchTouchEvent(android.view.MotionEvent.obtain(
-                downTime, downTime + 16L, android.view.MotionEvent.ACTION_MOVE,
-                downX + ((targetX - downX) * 0.65f), downY, 0));
-        nav.dispatchTouchEvent(android.view.MotionEvent.obtain(
-                downTime, downTime + 32L, android.view.MotionEvent.ACTION_UP,
-                targetX, downY, 0));
+        assertTrue(nav.startSquareDrag());
+        nav.dragSquareBy(.8f);
+        nav.endSquareDrag(false);
         shadowOf(android.os.Looper.getMainLooper()).idle();
         assertEquals(MainPagerAdapter.PAGE_LIBRARY,
                 MainPagerAdapter.pageForPagerPosition(pager.getCurrentItem()));
@@ -494,21 +443,10 @@ public class NavigationIaTest {
             nav.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
                     View.MeasureSpec.makeMeasureSpec(height, View.MeasureSpec.EXACTLY));
             nav.layout(0, 0, width, height);
-            for (int id : new int[]{2, 4, 3, 6}) {
-                View item = nav.findViewById(id);
-                View container = item.findViewById(
-                        com.google.android.material.R.id.navigation_bar_item_icon_container);
-                assertNotNull(container);
-                ImageView icon = findIcon(container);
-                assertNotNull(icon);
-                Rect iconBounds = new Rect(0, 0, icon.getWidth(), icon.getHeight());
-                nav.offsetDescendantRectToMyCoords(icon, iconBounds);
-                iconBounds.offset(0, Math.round(container.getTranslationY()));
-                assertTrue("icon top at " + progress, iconBounds.top >= 0);
-                assertTrue("icon bottom at " + progress, iconBounds.bottom <= height);
-                assertEquals(0f, icon.getTranslationY(), 0.01f);
-            }
-            nav.draw(new Canvas(Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)));
+            View compose = nav.getChildAt(nav.getChildCount() - 1);
+            assertTrue(compose instanceof androidx.compose.ui.platform.ComposeView);
+            assertEquals(width, compose.getMeasuredWidth());
+            assertEquals(height, compose.getMeasuredHeight());
             RectF capsule = nav.selectedCapsuleBoundsForTest();
             assertTrue("capsule top at " + progress, capsule.top >= 0);
             assertTrue("capsule bottom at " + progress, capsule.bottom <= height);

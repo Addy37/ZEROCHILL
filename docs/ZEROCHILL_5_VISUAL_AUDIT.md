@@ -1,10 +1,5 @@
 # ZEROCHILL 5.0 visual candidate
 
-**Physical review rejected the initial candidate at `13a32ab9`: the visible change
-was too subtle.** The KEEP/FLATTEN decisions below describe that initial pass, not
-acceptance of its visual direction. The correction implementation and current
-material decisions are tracked in [ZEROCHILL_5_LIQUID_GLASS.md](ZEROCHILL_5_LIQUID_GLASS.md).
-
 ## Baseline and scope
 
 Audited before implementation on `rebrand/zerochill` at

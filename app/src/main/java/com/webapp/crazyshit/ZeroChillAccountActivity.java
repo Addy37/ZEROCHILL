@@ -521,8 +521,8 @@ public final class ZeroChillAccountActivity extends Activity {
         LinearLayout hero = new LinearLayout(this);
         hero.setOrientation(LinearLayout.HORIZONTAL);
         hero.setGravity(Gravity.CENTER_VERTICAL);
-        hero.setPadding(dp(22), dp(30), dp(22), dp(30));
-        hero.setBackground(ZeroChillChrome.identitySurface(this));
+        hero.setPadding(dp(15), dp(15), dp(15), dp(15));
+        hero.setBackground(panelBackground(20));
 
         FrameLayout avatarHalo = new FrameLayout(this);
         avatarHalo.setBackground(circle(UiPalette.RAISED));
@@ -547,7 +547,7 @@ public final class ZeroChillAccountActivity extends Activity {
             avatar.setColorFilter(UiPalette.TEXT_SECONDARY);
         }
         avatarHalo.addView(avatar, new FrameLayout.LayoutParams(-1, -1));
-        hero.addView(avatarHalo, new LinearLayout.LayoutParams(dp(100), dp(100)));
+        hero.addView(avatarHalo, new LinearLayout.LayoutParams(dp(82), dp(82)));
 
         LinearLayout identity = new LinearLayout(this);
         identity.setOrientation(LinearLayout.VERTICAL);
@@ -555,7 +555,7 @@ public final class ZeroChillAccountActivity extends Activity {
 
         TextView username = text(
                 SocialUi.name(state.displayName, state.username),
-                26,
+                21,
                 Color.WHITE,
                 true
         );

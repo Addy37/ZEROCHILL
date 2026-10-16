@@ -138,7 +138,6 @@ public final class ZeroChillMessageActivity extends Activity {
 
         LinearLayout header = new LinearLayout(this);
         header.setGravity(Gravity.CENTER_VERTICAL);
-        ZeroChillChrome.header(header);
         header.setPadding(dp(8), dp(4), dp(8), dp(4));
 
         TextView back = text("‹", 31, Color.WHITE, false);

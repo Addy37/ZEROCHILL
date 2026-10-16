@@ -1,125 +1,108 @@
-# ZEROCHILL 5.0 correction candidate
+# Astra UI restoration and Square navbar
 
-## Acceptance
+Physical acceptance remains open. This correction follows the October 15 product
+decision: restore non-navbar visuals to `13a32ab9ed2ab2a4934504493de49e4c6f40d775`
+and reuse Square's navbar stack at `5189ba37500b3985d53a1f6f985d01053c536338`.
+PR #295 stays draft and unmerged. No release or production publication is authorized.
 
-The physical-device review of PR #295 at `13a32ab9` failed: the user could barely
-see a difference. Its palette, typography, readable messages, retained refresh
-content, retry handling, static skeletons, motion gates and legacy-override
-protections remain useful and are retained. Its deliberately unchanged navigation,
-flat identity panels and opaque shared dialog treatment are replaced here.
+## Source and scope
 
-The visual gate precedes full validation. Software fixture renders show layout,
-material finishing and hierarchy; they do not exercise the hardware RenderEffect
-chain. The dedicated `Glass renderer visual probe` workflow renders the same fixture
-through both the approved 4.x renderer and candidate on API 35, with moving and
-static backgrounds and both system navigation modes. Its logs must demonstrate
-that the refractive tier actually ran. Synthetic frames do not establish playback
-performance or physical-device smoothness.
+The rejected source was `f6655ce7bf2c17f24146700da5aa2d908688f30f`, based on
+`rebrand/zerochill` at `91afd759`. Non-navbar production Java/resources modified
+since Astra are restored byte-for-byte, except `NativeMainActivity` adds an unread
+badge handoff to the navbar. This restores Shows/OnlyFap headers, Library/social
+cards, account/profile, inbox/messages, dialogs and floating utility chrome.
+`FrostedOverlayLayout`, `FrostedBackdropRenderer` and `ZeroChillUi` return to Astra.
+The rejected `LiquidGlassShader`, `LiquidGlassDrawable`, `ZeroChillChrome` and
+`ZeroChillFloatingWindow` are removed. Pale selected ink `#8ADEFF` is removed.
 
-## References and licensing
+## Direct reuse
 
-| Reference | Inspected revision | Used |
-| --- | --- | --- |
-| [Lelonio/Square](https://github.com/Lelonio/Square) | `5189ba37500b3985d53a1f6f985d01053c536338` | Read `ui/glass`, `LiquidBottomTab`, floating/shared-bounds navigation, geometric fold, capture, configurable effects and lower-cost modes. Engineering reference only. No Square-authored GPL code copied. |
-| [Kyant0/AndroidLiquidGlass](https://github.com/Kyant0/AndroidLiquidGlass) | `65ab177e90e5c1d8c62e70cf7755841982da65f6` | Apache-2.0 SDF/refraction shader adapted from `backdrop/internal/Shaders.kt`. Read layer capture, lens pipeline, tab catalog, moving selection, highlights and press interaction. Full license retained under `licenses/`, copyright/change notice in the Java source, attribution in NOTICE.md and license/notice copies packaged in APK assets. |
-| [elyesmansour/compose-floating-tab-bar](https://github.com/elyesmansour/compose-floating-tab-bar) | `88ad99a98e2c44f42da69e0c4f9c16fd381e59ca` | Apache-2.0 shared-bounds/inline-expanded transition reference. No source copied. Existing ZEROCHILL collapse geometry remains the implementation. |
+`glass/` contains Square's actual `LiquidBottomTabs`, `LiquidBottomTab`,
+`DampedDragAnimation`, `InteractiveHighlight`, pointer inspector, frame coroutine,
+`GlassEffect`, complete non-catalog backdrop stack, and continuous capsule shapes.
+The DrawBackdrop nodes, AGSL shaders, RuntimeShader cache, lens, blur, color controls,
+highlights, shadows, inner shadows and selected-content replica are reused.
+No published backdrop AAR or separately approximated View shader replaces them.
+Source headers and packaged third-party notices/licenses are retained.
 
-No Compose dependency or bridge is added. The reusable primitive is a native
-cropped backdrop renderer plus shared optical finishing, not duplicated fake
-blur drawables. Ordinary information cards stay solid.
+SquareApp's actual expanded control uses a 61dp row, 16dp side margins, 8dp bottom
+clearance above real system insets, 26dp icons, 9sp bold labels/11sp line height,
+2dp icon-label gap, 4dp selector inset, white 12% film and black 50% selector wash
+in dark mode. These values are used here. Its geometric wrapper captures the shell
+as a sibling before selector drawing; that ordering is reproduced in the bridge.
+Its music player/search slots and branding are not imported.
 
-## Rendering
+## Adaptation and architecture
 
-- The existing parent records content once as a RenderNode display list, excluding
-  the floating overlay. This includes the existing TextureView media hierarchy;
-  no player surface, ownership, warmup, handoff or lifecycle code changes.
-- Effects rasterize only a padded crop around the visible floating surface. There
-  are no CPU screenshots or full-screen blur bitmaps on the scroll path.
-- API 33+ uses a 6dp blur and the adapted boundary-displacement shader. The outer
-  capsule and selected lens share one content sample. The lens adds optical scaling
-  and stronger edge displacement under pressure. No chromatic fringing.
-- Uniform/effect state is cached while geometry and pressure stay unchanged.
-  RenderEffect snapshots uniforms, so geometry changes rebuild the effect; normal
-  scrolling reuses it. RenderNodes, paths and rectangles are reused. There is no
-  continuous animation loop in production.
-- API 31/32 and low-RAM devices use the cropped blur path; older devices/software
-  canvases use the same neutral optical finishing without live refraction.
-  Unsupported shader/render failures log and degrade without breaking navigation.
-- Hidden/zero-alpha overlays skip capture/effects, including ShitTok pinch clear-display. Detached hosts discard display lists.
-- Selected destination updates immediately. A separate 240ms visual lens follows
-  taps; pager drag follows directly. Reduced motion snaps to the same final state.
-  Press feedback deforms the material, keeping glyph geometry steady.
-- Shows and OnlyFap share the same cropped renderer for their floating hero header.
-  Their content geometry and data/hero/gallery scheduling remain intact.
-- Bounded AlertDialogs use compositor background blur when supported/enabled and
-  the same shared optical finish, with opaque fallback. Listener registration
-  follows decor attachment. Menus/action sheets share the finish but do not claim
-  refractive capture. Native dialog callbacks, focus, Back and IME remain owners.
+The Java BottomNavigationView remains only as the existing menu/selection API.
+Its Material hierarchy is hidden and replaced by one navbar-local ComposeView.
+`SquareNavigationBridge` provides ZEROCHILL icons, labels, #0892D0 selected ink,
+Astra #B8C0CC inactive ink, Library unread dot, and lifecycle/saved-state owners.
+The existing android.app.Activity, screens, ViewPager2, refresh/warmup pipeline,
+player ownership and data remain intact. No Compose screen migration occurs.
+The Compose compiler plugin matches Kotlin 2.2.10. Compose BOM 2026.06.01 (the
+pinned Square BOM) supplies UI, foundation, animation and Material3. No icons
+library, third-party binary renderer, or new media dependency is added.
 
-## Visual changes
+`FrostedNavigationLayout` records real child View display lists once on page
+invalidation, excluding navigation, then composites that recording to the screen.
+`ViewPageBackdrop` supplies that same RenderNode to Square's cropped effect layers,
+using window coordinates and the same inverse layer transformation as LayerBackdrop.
+No PixelCopy, CPU bitmap screenshot, synthetic production backdrop, or recursive
+capture of the navbar is used. A changed page advances a draw-only revision.
+Navbar springs do not request page recordings. Detach discards the page display
+list; foreground return marks it dirty. Hidden or alpha-zero navigation skips
+capture, preserving ShitTok pinch's clear display.
 
-- Signature neutral liquid navigation with a moving embedded lens, replacing the
-  dark cyan-outlined container/selected capsule. Cyan remains selected ink.
-- Floating editorial headers over Shows and OnlyFap media, stronger solid section
-  hierarchy, no media tile resize or player change.
-- Branded personal Library masthead and distinct solid communication groups.
-- Cut near-black identity covers with a stationary etched existing mascot for
-  account/profile, rather than flat utility cards or ambient cyan glow.
-- Consistent dimensional message/notification headers and shared floating dialog
-  material, retaining PR #295's message legibility and state fixes.
+Existing media player XML uses TextureView, including ShitTok and Shows fullscreen.
+TextureView participates in hardware View display lists. A separately composited
+SurfaceView is outside this bridge and would need its own capture integration;
+none of the existing primary player surfaces is converted to SurfaceView here.
 
-## Compatibility boundaries
+Square's drag animation remains the optical owner. Optional hooks feed existing
+ViewPager fake-drag callbacks after touch slop, and report cancellation. External
+fractional pager progress synchronizes the selector without feeding navigation
+back into itself. ZEROCHILL's existing four-icon collapse, 50dp compact endpoint,
+60dp compact side margins and scroll-driven target ownership are retained.
+Only expanded proportions and the old synthetic Material inset are replaced.
 
-No application ID, package migration, signing identity, persisted key, database,
-account/authentication, download/history/favorite/backup, source/parser, backend,
-Supabase or remote-config changes. Release metadata is not advanced. Signed APKs
-come from the existing upgrade-candidate workflow. Debug renderer fixtures are
-excluded from release APKs. PR #295 stays draft and unmerged.
+API 33+ supports AGSL spatial refraction and selector dispersion; API 31/32 supports
+blur/color processing without AGSL; older versions use the non-refractive film.
+Square's low-RAM shell guard is retained. Fallback appearance is not full refraction.
+No app-owned always-running animation or repeated shader compilation is added.
 
-## Validation
+## Validation tools
 
-Results and limitations are appended after the visual gate and final builds.
+Robolectric checks protect retained selection, fake-drag, collapse ownership,
+background return, system clearance and branding. Old Material pixel fingerprints
+are replaced because they describe a renderer the product explicitly rejected.
+They are not evidence of optical parity.
 
-## Local validation and review status (October 15)
+The debug-only probe uses the real navbar over moving high-contrast geometry,
+actual production ShowsHubView cards/text/artwork ImageViews, and the existing
+Media3 TextureView layout with a local test video. It compares the same shell
+with lens enabled and lens disabled, records motion with both navigation modes,
+expanded/collapsed states, a held drag/release, and background return. The debug
+video and Activity are excluded from release. `capture_glass_probe.py` retains
+recordings, frame statistics, memory and shader logs. No emulator result approves
+physical parity or production media performance.
 
-- The broad suite passed on `81918397`: 630 tests per debug/release variant,
-  zero failures/errors, one skipped per variant. Final material-only adjustments
-  use separate focused navigation, shader, contrast and native-render checks.
-- The default test worker exhausted its Java heap. The app module now allocates
-  1 GiB only to Gradle test JVMs. This is not an application heap change or a
-  device-memory clearance. Existing offline test isolation was used locally.
-- Old assertions tied to the retired XML material were updated. Complete vector
-  glyph pixels, screenshot-calibrated geometry, inset/collapse bounds and native
-  layout checks remain. The old 4.x full-material PNG fingerprint was removed
-  because the user explicitly required replacing that material.
-- An initial DEX assembly reported duplicate generated `coordinatorlayout.R`
-  output. A clean rebuild of identical source succeeded for both APK variants;
-  no dependency was changed to mask the stale build output.
-- A bright-backdrop check found that primary cyan and a white lens wash could
-  reduce control legibility. Reflected selected/inactive ink roles and a darker
-  neutral lens replace that combination. The native contrast test checks at
-  least 4.5:1 through glyph areas over white, black, gray and colored backgrounds.
-  Primary brand cyan remains #0892D0 elsewhere.
-- Local debug/release builds use preview version code `4003009` and name
-  `4.3.9-zerochill-preview` (debug adds `-dev`). They use the local test signing
-  key. They are not production-signed upgrade candidates and are not offered for
-  installation over stable. Embedded source metadata and in-place upgrade
-  verification remain the responsibility of the existing signed workflow.
-- Production glass over TextureView video, actual frame pacing/GPU workload,
-  device memory/allocations, physical Back/IME/rotation, real system navigation,
-  large text and physical acceptance remain pending. No 60 fps or regression
-  clearance is claimed. Full lintDebug was not rerun.
-- Automatic approval review rejected the feature-branch push as publishing under
-  the user's restriction. Commits remain local. Remote PR #295 stays draft at
-  `13a32ab9`; no merge, tag, release or publication occurred. Approval is needed
-  to push the existing branch and run the hardware/signed-upgrade workflows.
+Results are recorded after execution. Final acceptance belongs to the maintainer
+comparing the signed upgrade candidate and Square on the physical device.
 
-Final source/render results are included in the accompanying correction review.
+## Compatibility
 
-Final runtime source: `70c45ba0` (later checkpoint changes are documentation/CI only).
-The final focused debug/release runs each passed 27 tests with zero failures,
-errors or skips. Both APK variants assembled successfully; a separate final
-assembly confirmation also passed. Package/version and certificate were inspected
-in the release APK. The certificate is the local Android Debug certificate,
-not the production key. Packaged Apache license/notice assets were verified and
-the debug-only renderer probe was confirmed absent from release DEX files.
+No application ID, signing identity, persisted settings, storage schema, account,
+authentication, favorite/history/download/backup, content source, Supabase, backend,
+remote configuration, release metadata or data migration changes.
+
+## Current execution checkpoint
+
+The local focused navigation run passed 28 tests; two remaining assertions still
+expected the deliberately replaced 64dp/16dp Material geometry. Those assertions
+were updated to Square's 61dp shell and zero navbar-local system gutter, and both
+passed in the final focused rerun. `:app:assembleDebug` passed. The bridge's wrapped
+Context and window-level lifecycle-owner integration faults found by these tests
+were corrected before this checkpoint. Broader CI, release/signing checks and GPU
+evidence remain pending; no physical acceptance is claimed.

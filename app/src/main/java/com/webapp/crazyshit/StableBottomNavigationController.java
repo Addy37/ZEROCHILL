@@ -33,6 +33,15 @@ final class StableBottomNavigationController {
     /** Shared ZeroChill floating-glass portrait navigation styling. */
     static void styleBar(BottomNavigationView nav) {
         if (nav == null) return;
+        if (nav instanceof ZeroChillBottomNavigationView) {
+            nav.setBackground(null);
+            nav.setElevation(0f);
+            if (nav.getParent() instanceof FrostedNavigationLayout) {
+                ((FrostedNavigationLayout) nav.getParent()).setFrostedNavigationView(nav);
+            }
+            ((ZeroChillBottomNavigationView) nav).refreshItemColors();
+            return;
+        }
         Context context = nav.getContext();
         nav.setBackground(ZeroChillUi.navigationGlass(context));
         nav.setBackgroundTintList(null);
@@ -49,8 +58,8 @@ final class StableBottomNavigationController {
                 new int[] {android.R.attr.state_checked},
                 new int[] {}
         };
-        int active = ZeroChillUi.color(context, R.color.zc_glass_selected_ink);
-        int inactive = ZeroChillUi.color(context, R.color.zc_glass_unselected_ink);
+        int active = ZeroChillUi.color(context, R.color.zc_cyan);
+        int inactive = ZeroChillUi.color(context, R.color.zc_text_secondary);
         ColorStateList colors = nav instanceof ZeroChillBottomNavigationView
                 ? ColorStateList.valueOf(inactive)
                 : new ColorStateList(states, new int[] {active, inactive});
@@ -240,16 +249,9 @@ final class StableBottomNavigationController {
             topBar.setBackgroundColor(ZeroChillUi.background(activity));
             topBar.setElevation(0f);
             if (title != null) {
-                title.setTextSize(28f);
-                title.setLetterSpacing(-.035f);
-                title.setTypeface(android.graphics.Typeface.create("sans-serif-black", android.graphics.Typeface.NORMAL));
+                title.setTextSize(22f);
             }
-            if (subtitle != null) {
-                subtitle.setText(ZeroChillUi.sectionTitle(activity, "ZEROCHILL", 4, 9));
-                subtitle.setTextSize(9f);
-                subtitle.setLetterSpacing(.16f);
-                subtitle.setVisibility(View.VISIBLE);
-            }
+            if (subtitle != null) subtitle.setVisibility(View.GONE);
         }
 
         private void applyGeometry() {
@@ -304,8 +306,7 @@ final class StableBottomNavigationController {
                     item.setLayoutParams(itemParams);
                 }
                 item.setAlpha(1f);
-                // The material owns press response; glyphs remain physically still.
-                item.setOnTouchListener(null);
+                ZeroChillMotion.installPressFeedback(item);
             }
         }
 

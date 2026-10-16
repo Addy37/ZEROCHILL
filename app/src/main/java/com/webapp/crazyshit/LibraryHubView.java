@@ -87,10 +87,6 @@ final class LibraryHubView extends ScrollView {
         content.setOrientation(LinearLayout.VERTICAL);
         content.setPadding(dp(16), dp(16), dp(16), dp(32));
         addView(content, new ScrollView.LayoutParams(-1, -2));
-        LinearLayout identity = ZeroChillChrome.masthead(activity, "Your Library", "Saved. Followed. Connected.");
-        LinearLayout.LayoutParams identityParams = new LinearLayout.LayoutParams(-1, -2);
-        identityParams.bottomMargin = dp(26);
-        content.addView(identity, identityParams);
         socialHub = new LibrarySocialHubView(activity);
         content.addView(socialHub, new LinearLayout.LayoutParams(-1, -2));
 
@@ -640,7 +636,7 @@ final class LibraryHubView extends ScrollView {
 
         TextView heading = text(title, 20f,
                 ZeroChillUi.color(activity, R.color.zc_text_primary));
-        ZeroChillChrome.section(heading);
+        ZeroChillTypography.apply(heading, ZeroChillTypography.Role.SECTION);
         heading.setContentDescription(title);
         copy.addView(heading);
 
