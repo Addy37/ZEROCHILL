@@ -12,6 +12,7 @@ package com.webapp.crazyshit.glass.backdrop.highlight
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Outline
 import androidx.compose.ui.graphics.Paint
+import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.PaintingStyle
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawOutline
@@ -163,12 +164,12 @@ internal class HighlightNode(
         paint.blur(highlight.blurRadius.toPx())
         if (isRuntimeShaderSupported()) {
             val shader =
-                with(highlight.style) {
+                if (drawContext.canvas.nativeCanvas.isHardwareAccelerated) with(highlight.style) {
                     createShader(
                         shape = shapeProvider.shape,
                         runtimeShaderCache = runtimeShaderCache
                     )
-                }
+                } else null
             paint.setRuntimeShader(shader)
         }
     }

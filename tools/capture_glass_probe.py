@@ -20,9 +20,12 @@ def node_bounds(label):
     tree = ET.fromstring(adb('shell', 'cat', '/sdcard/glass-ui.xml').stdout)
     node = next(n for n in tree.iter('node') if n.get('text') == label or n.get('content-desc') == label)
     return list(map(int, re.findall(r'\d+', node.get('bounds'))))
-def record(name, seconds=8):
+def record(name, seconds=8, interaction=None):
     adb('shell', 'dumpsys', 'gfxinfo', package, 'reset')
-    adb('shell', 'screenrecord', '--time-limit', str(seconds), '/sdcard/glass-motion.mp4')
+    capture = subprocess.Popen(['adb', 'shell', 'screenrecord', '--time-limit', str(seconds), '/sdcard/glass-motion.mp4'])
+    time.sleep(.6)
+    if interaction is not None: interaction()
+    if capture.wait(timeout=seconds+20) != 0: raise RuntimeError('screenrecord failed')
     adb('pull', '/sdcard/glass-motion.mp4', str(out / (name + '.mp4')))
     (out / (name + '-gfxinfo.txt')).write_bytes(adb('shell', 'dumpsys', 'gfxinfo', package, 'framestats').stdout)
 adb('install', '-r', os.getenv('GLASS_PROBE_APK', 'app/build/outputs/apk/debug/app-debug.apk'))
@@ -34,16 +37,19 @@ for overlay, name in [('com.android.internal.systemui.navbar.gestural', 'gesture
                       ('com.android.internal.systemui.navbar.threebutton', 'buttons')]:
     adb('shell', 'cmd', 'overlay', 'enable-exclusive', '--category', overlay)
     for collapsed in [False, True]:
-        start(2, moving=True, collapsed=collapsed)
+        start(2, moving=False, collapsed=collapsed)
         suffix = name + ('-collapsed' if collapsed else '-expanded')
         screenshot(suffix)
         # A full selector drag includes hold, velocity deformation and release spring.
+        interaction = None
         if not collapsed:
             x1,y1,x2,y2 = node_bounds('ShitTok')
             a1,b1,a2,b2 = node_bounds('Library')
-            adb('shell', 'input', 'swipe', str((x1+x2)//2), str((y1+y2)//2),
-                str((a1+a2)//2), str((b1+b2)//2), '1400')
-        record(suffix)
+            def interaction():
+                adb('shell', 'input', 'swipe', str((x1+x2)//2), str((y1+y2)//2),
+                    str((a1+a2)//2), str((b1+b2)//2), '1400')
+        start(2, moving=True, collapsed=collapsed)
+        record(suffix, interaction=interaction)
         # Background/foreground uses the same instance and recorded page lifecycle.
         adb('shell', 'input', 'keyevent', 'KEYCODE_HOME'); time.sleep(.3)
         adb('shell', 'am', 'start', '-W', '-n', activity); time.sleep(.5)

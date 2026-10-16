@@ -106,3 +106,14 @@ passed in the final focused rerun. `:app:assembleDebug` passed. The bridge's wra
 Context and window-level lifecycle-owner integration faults found by these tests
 were corrected before this checkpoint. Broader CI, release/signing checks and GPU
 evidence remain pending; no physical acceptance is claimed.
+
+A broader run reached 621 debug tests with one software-canvas failure and one
+skip. RuntimeShader paints now check the actual Canvas hardware capability; the
+hardware shader path is unchanged. The native software render regression then
+passed after replacing its remaining retired Material-menu geometry assertions.
+External pager synchronization also suppresses redundant navigation redispatch,
+with a focused regression case. The GPU recorder now starts before its held drag,
+and obtains accessibility bounds while the page is stationary.
+
+Local CPU-emulator startup failed before producing usable GPU evidence. This is
+not a refraction clearance; the connected CI emulator is the GPU validation path.

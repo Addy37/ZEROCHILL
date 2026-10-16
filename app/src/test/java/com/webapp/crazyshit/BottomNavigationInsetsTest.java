@@ -88,6 +88,18 @@ public class BottomNavigationInsetsTest {
         assertArrayEquals(new int[]{1,1,1}, calls);
         controller.pause().stop().destroy();
     }
+    @Test public void externalPagerProgressDoesNotRedispatchNavigation() {
+        ActivityController<NativeMainActivity> controller = createActivity();
+        ZeroChillBottomNavigationView nav = ReflectionHelpers.getField(controller.get(), "bottomNavigation");
+        final int[] selections = {0};
+        nav.setOnItemSelectedListener(item -> { selections[0]++; return true; });
+        nav.setPagerPosition(2f);
+        shadowOf(android.os.Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(800));
+        assertEquals(0, selections[0]);
+        nav.selectSquareTab(0);
+        assertEquals(1, selections[0]);
+        controller.pause().stop().destroy();
+    }
     static ActivityController<NativeMainActivity> createActivity() {
         org.robolectric.RuntimeEnvironment.getApplication().getSharedPreferences("app_prefs", 0)
                 .edit().putBoolean("access_notice_2_8_3_accepted", true).apply();

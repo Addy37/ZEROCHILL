@@ -21,6 +21,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ShaderBrush
+import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.util.fastCoerceIn
 import com.webapp.crazyshit.glass.backdrop.RuntimeShader
@@ -71,7 +72,7 @@ half4 main(float2 coord) {
         Modifier.drawWithContent {
             val progress = pressProgressAnimation.value
             if (progress > 0f) {
-                if (shader != null) {
+                if (shader != null && drawContext.canvas.nativeCanvas.isHardwareAccelerated) {
                     drawRect(
                         Color.White.copy(0.08f * progress),
                         blendMode = BlendMode.Plus

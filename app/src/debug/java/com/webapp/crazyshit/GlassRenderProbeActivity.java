@@ -27,7 +27,7 @@ public final class GlassRenderProbeActivity extends Activity {
                 backdrop.phase = phase;
                 backdrop.invalidate();
             }
-            if (++frame % 90 == 0) nav.setPagerPosition((frame / 90) % 4);
+            frame++;
             handler.postDelayed(this, 16);
         }
     };

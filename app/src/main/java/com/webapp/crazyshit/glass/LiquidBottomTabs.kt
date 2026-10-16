@@ -253,7 +253,9 @@ fun LiquidBottomTabs(
                 .drop(1)
                 .collectLatest { index ->
                     dampedDragAnimation.animateToValue(index.toFloat())
-                    onTabSelected(index)
+                    // External pager selection already dispatched navigation. Do not
+                    // feed its visual synchronization back into the activation queue.
+                    if (index != selectedTabIndex()) onTabSelected(index)
                 }
         }
 

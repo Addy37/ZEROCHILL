@@ -170,24 +170,14 @@ public class VisualRefreshTest {
                 MainPagerAdapter.PAGE_ONLYFAP,
                 MainPagerAdapter.pageForPagerPosition(viewPager.getCurrentItem())
         );
-        assertEquals(main.getResources().getDimensionPixelSize(R.dimen.zc_bottom_nav_height),
-                nav.getLayoutParams().height);
+        assertEquals(BrowseUi.dp(main, 61), nav.getLayoutParams().height);
         assertSame(nav, ((FrostedNavigationLayout) shell).frostedNavigationViewForTest());
         assertEquals(BrowseUi.dp(main, 20),
                 main.getResources().getDimensionPixelSize(R.dimen.zc_navigation_blur_radius));
-        assertEquals(main.getResources().getDimensionPixelSize(R.dimen.zc_nav_indicator_height),
-                nav.getItemActiveIndicatorHeight());
-        assertEquals(Color.TRANSPARENT,
-                nav.getItemActiveIndicatorColor().getDefaultColor());
+        assertTrue(nav.getChildAt(nav.getChildCount() - 1) instanceof androidx.compose.ui.platform.ComposeView);
         assertFalse(nav.getClipChildren());
         assertFalse(nav.getClipToPadding());
-        assertTrue(nav.getChildAt(0) instanceof android.view.ViewGroup);
-        android.view.ViewGroup navMenu = (android.view.ViewGroup) nav.getChildAt(0);
-        assertFalse(navMenu.getClipChildren());
-        assertFalse(navMenu.getClipToPadding());
-        assertEquals(main.getColor(R.color.zc_text_secondary),
-                nav.getItemIconTintList().getColorForState(new int[] {android.R.attr.state_checked}, Color.WHITE));
-        assertTrue(nav.isItemActiveIndicatorEnabled());
+        assertEquals(View.GONE, nav.getChildAt(0).getVisibility());
         assertTrue(nav instanceof ZeroChillBottomNavigationView);
         assertEquals(
                 MainPagerAdapter.pagerPositionForPage(MainPagerAdapter.PAGE_ONLYFAP),
@@ -198,16 +188,10 @@ public class VisualRefreshTest {
         Bitmap navBitmap = Bitmap.createBitmap(nav.getWidth(), nav.getHeight(), Bitmap.Config.ARGB_8888);
         nav.draw(new Canvas(navBitmap));
         navBitmap.recycle();
-        android.graphics.RectF capsule = ReflectionHelpers.getField(slidingNav, "indicatorRect");
-        View showsTab = nav.findViewById(2);
-        View shitTokTab = nav.findViewById(4);
-        assertEquals((showsTab.getWidth() + shitTokTab.getWidth()) / 2f - BrowseUi.dp(main, 8),
-                capsule.width(), 1f);
-        // v4.3.1 anchors the selected glass to Material's item bounds rather than
-        // forcing its center to the navbar midpoint.
-        assertTrue(capsule.top >= BrowseUi.dp(main, 3));
-        assertTrue(capsule.bottom > capsule.top);
-        assertTrue(capsule.bottom <= nav.getHeight() - BrowseUi.dp(main, 3));
+        android.graphics.RectF capsule = slidingNav.selectedCapsuleBoundsForTest();
+        assertEquals((nav.getWidth() - BrowseUi.dp(main, 8)) / 4f, capsule.width(), 1f);
+        assertEquals(BrowseUi.dp(main, 4), capsule.top, 1f);
+        assertEquals(nav.getHeight() - BrowseUi.dp(main, 4), capsule.bottom, 1f);
         assertEquals(0.5f, slidingNav.pagerPositionForTest(), 0.001f);
         slidingNav.setPagerPosition(0f);
         assertEquals(4, nav.getMenu().size());
@@ -218,16 +202,8 @@ public class VisualRefreshTest {
         assertEquals("Library", nav.getMenu().findItem(6).getTitle());
         assertNull(nav.getMenu().findItem(5));
         assertEquals(0, nav.getPaddingTop());
-        assertEquals(main.getResources().getDimensionPixelSize(
-                R.dimen.zc_nav_reference_gesture_inset), nav.getPaddingBottom());
-        for (int id : new int[] {2, 4, 3, 6}) {
-            View tab = nav.findViewById(id);
-            assertTrue("Tab " + id + " width=" + tab.getWidth() + " nav=" + nav.getWidth(), tab.getWidth() >= BrowseUi.dp(main, 48));
-            // Expanded geometry matches the v4.3.1 Material reference inset.
-            assertEquals(nav.getHeight() - nav.getPaddingTop() - nav.getPaddingBottom(),
-                    tab.getHeight());
-            assertEquals(0, Math.round(tab.getTranslationY()));
-        }
+        assertEquals(0, nav.getPaddingBottom());
+        assertTrue((nav.getWidth() - BrowseUi.dp(main, 8)) / 4f >= BrowseUi.dp(main, 48));
         prefs.edit().putInt("native_view_home", NativeFeedAdapter.VIEW_GRID).apply();
         FeedViewStyleController.prepareVisualRefresh(main);
         assertEquals(NativeFeedAdapter.VIEW_GRID, prefs.getInt("native_view_home", -1));
