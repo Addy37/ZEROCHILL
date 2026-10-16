@@ -98,7 +98,8 @@ public final class ChaosFeedView extends FrameLayout {
     private int physicalTailHits;
     private final long initializedAt = android.os.SystemClock.elapsedRealtime();
     private boolean firstCandidate, firstAdmitted;
-    private volatile int activeAdmissions;
+    private volatile int activeAdmissions, inventoryCandidateCount;
+    private final java.util.concurrent.atomic.AtomicInteger inventoryResolutions = new java.util.concurrent.atomic.AtomicInteger();
     private final Runnable recoveryRunnable = () -> { consecutiveDryLoads = 0; requestContinuity(); };
     private static final int MAX_QUEUED_AHEAD = 24;
     private static final int MAX_STREAM_CACHE = 32;
@@ -181,6 +182,7 @@ public final class ChaosFeedView extends FrameLayout {
     private void cancelInventoryBatch() {
         if (inventoryBatch != null) inventoryBatch.cancel();
         inventoryBatch = null;
+        activeAdmissions = inventoryCandidateCount = 0;
         poolLoading = false;
     }
     private volatile boolean closed;
@@ -414,7 +416,8 @@ public final class ChaosFeedView extends FrameLayout {
         ShitTokPoolDiagnostics.record("runway", "reason=" + reason + " selected=" + selectedPosition
                 + " queued=" + items.size() + " usable=" + usable + " desired=" + desiredRunway()
                 + " rapid=" + runway.rapid(now) + " unresolved=" + resolving.size()
-                + " admissionQueue=" + orientationPending.size() + " activeAdmissions=" + activeAdmissions
+                + " admissionQueue=" + (orientationPending.size() + inventoryCandidateCount) + " activeAdmissions=" + activeAdmissions
+                + " activeResolutions=" + (resolving.size() + inventoryResolutions.get())
                 + " dry=" + consecutiveDryLoads + " rejected=" + (unplayable.size() + orientationAdmission.rejectedCount())
                 + " belowMs=" + (belowRunwayMs + (belowRunwayAt == 0 ? 0 : now - belowRunwayAt))
                 + " tailHits=" + physicalTailHits);
@@ -792,8 +795,12 @@ public final class ChaosFeedView extends FrameLayout {
                 item -> {
                     CrazyShitRepository.StreamInfo startup = ChaosStartupPreloader.takeResolved(item.url);
                     long at = android.os.SystemClock.elapsedRealtime();
+                    inventoryResolutions.incrementAndGet();
                     try { return startup != null ? startup : resolvePlayable(item); }
-                    finally { ShitTokPoolDiagnostics.record("inventoryResolve", "ms=" + (android.os.SystemClock.elapsedRealtime() - at)); }
+                    finally {
+                        inventoryResolutions.decrementAndGet();
+                        ShitTokPoolDiagnostics.record("inventoryResolve", "ms=" + (android.os.SystemClock.elapsedRealtime() - at));
+                    }
                 }, () -> !work.cancelled && batchGeneration == feedGeneration && mayVerifyOrientation(), admissionLimit, partial ->
                     activity.runOnUiThread(() -> deferUiApply(() -> {
                         if (closed || work.cancelled || inventoryBatch != work || batchGeneration != feedGeneration) return;
@@ -822,12 +829,15 @@ public final class ChaosFeedView extends FrameLayout {
                         if (active && hostResumed) playSelected();
                         tryPendingAutoAdvance();
                         requestContinuity();
-                    })), count -> { if (inventoryBatch == work) activeAdmissions = count; });
+                    })), count -> {
+                    if (inventoryBatch == work) { activeAdmissions = count; inventoryCandidateCount = candidates.size(); }
+                });
         ArrayList<NativeContentItem> leftovers = new ArrayList<>(verified.remaining);
         synchronized (candidates) {
             acceptingCandidates.set(false);
             candidates.drainTo(leftovers);
         }
+        if (inventoryBatch == work) inventoryCandidateCount = 0;
         harvest.cancel(true);
         List<NativeContentItem> prioritizedFresh = new ArrayList<>();
         List<NativeContentItem> prioritizedRecentFallback = new ArrayList<>();
