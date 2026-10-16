@@ -65,7 +65,7 @@ public class ShitTokProgressTest {
             androidx.viewpager2.widget.ViewPager2 pager = ReflectionHelpers.getField(feed, "pager");
             assertFalse(pager.isUserInputEnabled());
             listener.onProgressChanged(bar, 500, true);
-            assertEquals(14000L, position.get());
+            assertEquals(4000L, position.get());
             assertEquals("0:14", elapsed.getText().toString());
             assertEquals("-0:14", remaining.getText().toString());
             listener.onStopTrackingTouch(bar);

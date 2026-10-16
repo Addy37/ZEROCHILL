@@ -1935,6 +1935,8 @@ public final class ChaosFeedView extends FrameLayout {
 
     private void resetTemporaryPinch() {
         if (pinchingHolder != null) pinchingHolder.pinch.reset();
+        // These existing UI transition boundaries also invalidate optional interaction work.
+        for (ChaosHolder holder : playerHolders) holder.cancelInteractionUi();
     }
 
     private void setChaosMuted(boolean muted) {
@@ -2270,11 +2272,21 @@ public final class ChaosFeedView extends FrameLayout {
         final LinearLayout progressRow;
         final TextView elapsedTime;
         final TextView remainingTime;
+        final ShitTokScrubPreviewView scrubPreviewView;
+        ShitTokScrubPreview scrubPreview;
+        ShitTokVideoTaps videoTaps;
+        ImageView heartOverlay;
+        private final Runnable hideHeart = () -> {
+            if (heartOverlay != null) heartOverlay.setVisibility(View.GONE);
+        };
+        private Boolean progressInteractive;
+        private long displayedSecond = Long.MIN_VALUE, displayedRemainingSecond = Long.MIN_VALUE;
         private final Runnable progressTick = new Runnable() {
             @Override public void run() {
                 if (!active || !hostResumed || boundPosition != selectedPosition
-                        || player == null || !player.isPlaying() || !controlsVisible
-                        || clearDisplay || !landscapeFullscreen()) return;
+                        || player == null || !player.isPlaying() || scrubbing
+                        || clearDisplay || pinch.isActive()
+                        || progressRow.getVisibility() != View.VISIBLE) return;
                 updateProgress();
                 root.postDelayed(this, 250L);
             }
@@ -2292,6 +2304,9 @@ public final class ChaosFeedView extends FrameLayout {
         boolean controlsVisible = true;
         boolean userPaused;
         boolean scrubbing;
+        ExoPlayer scrubPlayer;
+        long scrubStartPosition, pendingScrubPosition;
+        boolean scrubWasPlaying;
         boolean everStarted;
         boolean playbackSuspended;
         boolean retryAttempted;
@@ -2299,6 +2314,7 @@ public final class ChaosFeedView extends FrameLayout {
         boolean horizontalVideo;
         boolean aspectSampleRecorded;
         boolean videoLiked;
+        boolean videoLikePending;
         int videoLikeCount;
         int videoLikeRequestGeneration;
         int commentCount;
@@ -2617,7 +2633,18 @@ public final class ChaosFeedView extends FrameLayout {
             FrameLayout.LayoutParams seekParams = new FrameLayout.LayoutParams(-1, dp(48), Gravity.BOTTOM);
             seekParams.setMargins(dp(8), 0, dp(8), dp(1));
             progressRow.setVisibility(View.INVISIBLE);
-            root.addView(progressRow, seekParams);
+            // Explicit controls keep touch priority where their bounds meet the hit row.
+            root.addView(progressRow, root.indexOfChild(lower), seekParams);
+            scrubPreviewView = new ShitTokScrubPreviewView(activity);
+            root.addView(scrubPreviewView,
+                    new FrameLayout.LayoutParams(dp(152), -2, Gravity.TOP | Gravity.LEFT));
+            root.addOnAttachStateChangeListener(new View.OnAttachStateChangeListener() {
+                @Override public void onViewAttachedToWindow(View v) {}
+                @Override public void onViewDetachedFromWindow(View v) { cancelInteractionUi(); }
+            });
+            root.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> {
+                if (r - l != or - ol || b - t != ob - ot) cancelInteractionUi();
+            });
 
             // Media3's fitted content frame contains the existing TextureView. Leave
             // PlayerView, touch coordinates, buffering UI and app controls unscaled.
@@ -2630,6 +2657,7 @@ public final class ChaosFeedView extends FrameLayout {
                             && playbackOwner.isAttached(item.url, playerView),
                     pinching -> {
                         if (pinching) {
+                            cancelInteractionUi();
                             pinchingHolder = this;
                             creatorSwipeTracking = false;
                             cancelCreatorSwipePreview(root);
@@ -2692,10 +2720,18 @@ public final class ChaosFeedView extends FrameLayout {
             });
 
             playerView.setLongClickable(false);
+            videoTaps = new ShitTokVideoTaps(activity, () -> item,
+                    () -> ownsPlayback() && !scrubbing && !pinch.ownsTouchSequence()
+                            && !creatorSwipeTracking,
+                    () -> playerView.performClick(), this::favoriteFromDoubleTap);
             playerView.setOnTouchListener((v, event) -> {
                 // Let View clear its pressed/click state on the synthetic child cancel.
-                if (pinch.ownsTouchSequence()) return event.getActionMasked() != MotionEvent.ACTION_CANCEL;
+                if (pinch.ownsTouchSequence()) {
+                    videoTaps.cancel();
+                    return event.getActionMasked() != MotionEvent.ACTION_CANCEL;
+                }
                 int action = event.getActionMasked();
+                videoTaps.touch(event, item);
 
                 if (action == MotionEvent.ACTION_DOWN) {
                     pinch.videoTouchStarted();
@@ -2711,7 +2747,7 @@ public final class ChaosFeedView extends FrameLayout {
                     creatorSwipeTransitionToken = "";
                     pager.setUserInputEnabled(true);
                     ViewParentCompat.disallow(v, false);
-                    return false;
+                    return true;
                 }
 
                 if (action == MotionEvent.ACTION_MOVE && !manualFullscreen) {
@@ -2721,6 +2757,7 @@ public final class ChaosFeedView extends FrameLayout {
                     if (!creator.isEmpty() && dx < -dp(14)
                             && Math.abs(dx) > Math.abs(dy) * 1.20f) {
                         if (!creatorSwipeTracking) {
+                            videoTaps.cancel();
                             creatorSwipeTracking = true;
                             View sourceSurface = creatorSwipeSourceView();
                             creatorSwipeTransitionToken =
@@ -2773,7 +2810,9 @@ public final class ChaosFeedView extends FrameLayout {
                     pager.setUserInputEnabled(true);
                     ViewParentCompat.disallow(v, false);
                 }
-                return false;
+                // GestureDetector confirms a single tap only after ruling out a double tap.
+                // Parent interception remains available for ordinary vertical paging.
+                return true;
             });
 
             View.OnLongClickListener menuLongPress = v -> {
@@ -2845,27 +2884,138 @@ public final class ChaosFeedView extends FrameLayout {
                     if (!fromUser || player == null) return;
                     long duration = player.getDuration();
                     if (duration <= 0L) return;
-                    long target = (duration * progress) / 1000L;
+                    long target = ShitTokInteractionPolicy.targetTime(duration, progress, bar.getMax());
                     updateTimeLabels(target, duration);
-                    player.seekTo(target);
+                    if (scrubbing) {
+                        pendingScrubPosition = target;
+                        showScrubPreview(target, duration);
+                    } else player.seekTo(target); // Keyboard/accessibility adjustments commit directly.
                 }
 
                 @Override
                 public void onStartTrackingTouch(SeekBar bar) {
+                    if (player == null || player.getDuration() <= 0L) return;
+                    scrubPlayer = player;
+                    scrubStartPosition = Math.max(0L, player.getCurrentPosition());
+                    pendingScrubPosition = scrubStartPosition;
+                    scrubWasPlaying = player.getPlayWhenReady();
                     scrubbing = true;
+                    player.pause();
                     pager.setUserInputEnabled(false);
+                    ViewParentCompat.disallow(bar, true);
                     showControlsPersistent();
+                    beginScrubPreview();
                 }
 
                 @Override
                 public void onStopTrackingTouch(SeekBar bar) {
-                    scrubbing = false;
-                    pager.setUserInputEnabled(true);
+                    endScrubPreview(true, true);
                     updateProgress();
                     if (player != null && player.isPlaying()) showControlsTemporarily();
                     else showControlsPersistent();
                 }
             });
+            // SeekBar invokes onStopTrackingTouch for ACTION_CANCEL too. Cancel first so
+            // its normal callback cannot commit a destination the user did not release on.
+            seekBar.setOnTouchListener((view, event) -> {
+                if (event.getActionMasked() == MotionEvent.ACTION_CANCEL) {
+                    endScrubPreview(false, true);
+                    updateProgress();
+                }
+                return false;
+            });
+        }
+
+        private void beginScrubPreview() {
+            if (videoTaps != null) videoTaps.cancel();
+            if (player == null || player.getDuration() <= 0L) return;
+            NativeContentItem capturedItem = item;
+            CrazyShitRepository.StreamInfo capturedStream = stream;
+            int capturedPosition = boundPosition, capturedGeneration = feedGeneration, token = attachedToken;
+            if (capturedItem != null && capturedStream != null && ownsPlayback()) {
+                if (scrubPreview == null) scrubPreview = new ShitTokScrubPreview(bitmap -> {
+                    scrubPreviewView.frame(bitmap);
+                    if (scrubbing) scrubPreviewView.position(root, seekBar);
+                });
+                scrubPreview.begin(capturedItem.url + "\n" + capturedStream.mediaUrl,
+                        () -> ShitTokScrubPreview.media3(activity, capturedItem.url, capturedStream),
+                        () -> scrubbing && ownsPlayback() && item == capturedItem && stream == capturedStream
+                                && boundPosition == capturedPosition && feedGeneration == capturedGeneration
+                                && attachedToken == token);
+            }
+            showScrubPreview(pendingScrubPosition, player.getDuration());
+        }
+
+        private void showScrubPreview(long target, long duration) {
+            scrubPreviewView.show(root, seekBar, target, duration);
+            if (scrubPreview != null) scrubPreview.request(Math.min(target, Math.max(0L, duration - 1L)));
+        }
+
+        private void endScrubPreview(boolean commit, boolean restorePlayback) {
+            if (!scrubbing) return;
+            ExoPlayer scrubbed = scrubPlayer;
+            scrubPlayer = null;
+            scrubbing = false;
+            if (scrubPreview != null) scrubPreview.end();
+            scrubPreviewView.hide();
+            ViewParentCompat.disallow(seekBar, false);
+            pager.setUserInputEnabled(true);
+            if (scrubbed != null && scrubbed == player && ownsPlayback()) {
+                if (commit) scrubbed.seekTo(Math.max(0L,
+                        Math.min(pendingScrubPosition, Math.max(0L, scrubbed.getDuration()))));
+                if (restorePlayback && scrubWasPlaying) scrubbed.play();
+            }
+        }
+
+        private void cancelInteractionUi() {
+            if (scrubbing) endScrubPreview(false, true);
+            if (videoTaps != null) videoTaps.cancel();
+            root.removeCallbacks(hideHeart);
+            if (heartOverlay != null) {
+                heartOverlay.animate().withEndAction(null).cancel();
+                heartOverlay.setVisibility(View.GONE);
+            }
+        }
+
+        private void favoriteFromDoubleTap(float x, float y) {
+            if (!ownsPlayback() || scrubbing || pinch.ownsTouchSequence()) return;
+            if (!ZeroChillAccountRepository.hasStoredSession(activity)) {
+                // Keep playback running. The explicit heart button retains its sign-in route.
+                ZeroChillToast.makeText(activity, "Sign in to like videos.", ZeroChillToast.LENGTH_SHORT).show();
+                return;
+            }
+            if (!videoLiked && like.isEnabled()) changeVideoLike(true);
+            showHeart(x, y);
+        }
+
+        private void showHeart(float x, float y) {
+            if (heartOverlay == null) {
+                heartOverlay = new ImageView(activity);
+                heartOverlay.setImageResource(R.drawable.ic_action_heart_filled);
+                heartOverlay.setImageTintList(ColorStateList.valueOf(UiPalette.PRIMARY));
+                heartOverlay.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+                heartOverlay.setTag("shittok_double_tap_heart");
+                root.addView(heartOverlay, new FrameLayout.LayoutParams(dp(88), dp(88)));
+            }
+            android.graphics.Rect video = new android.graphics.Rect(0, 0, playerView.getWidth(), playerView.getHeight());
+            root.offsetDescendantRectToMyCoords(playerView, video);
+            heartOverlay.animate().withEndAction(null).cancel();
+            root.removeCallbacks(hideHeart);
+            heartOverlay.setTranslationX(Math.max(0f, Math.min(root.getWidth() - dp(88), video.left + x - dp(44))));
+            heartOverlay.setTranslationY(Math.max(0f, Math.min(root.getHeight() - root.getPaddingBottom() - dp(88),
+                    video.top + y - dp(44))));
+            heartOverlay.setAlpha(1f);
+            heartOverlay.setScaleX(.65f);
+            heartOverlay.setScaleY(.65f);
+            heartOverlay.setVisibility(View.VISIBLE);
+            haptic(playerView);
+            if (!android.animation.ValueAnimator.areAnimatorsEnabled()) {
+                root.postDelayed(hideHeart, 140L);
+                return;
+            }
+            heartOverlay.animate().scaleX(1.12f).scaleY(1.12f).setDuration(110L)
+                    .withEndAction(() -> heartOverlay.animate().alpha(0f).scaleX(1f).scaleY(1f)
+                            .translationYBy(-dp(20)).setDuration(320L).withEndAction(hideHeart).start()).start();
         }
 
         private TextView textIconActionButton(int icon, String description, String tag) {
@@ -2990,6 +3140,7 @@ public final class ChaosFeedView extends FrameLayout {
             aspectSampleRecorded = false;
             videoAspectRatio = 0f;
             videoLiked = false;
+            videoLikePending = false;
             videoLikeCount = 0;
             videoLikeRequestGeneration++;
             updateVideoLikeButton();
@@ -3059,6 +3210,7 @@ public final class ChaosFeedView extends FrameLayout {
 
         void refreshVideoLikeState() {
             if (item == null || item.url == null || item.url.trim().isEmpty()) return;
+            if (videoLikePending) return;
             String target = item.url;
             int generation = ++videoLikeRequestGeneration;
             ZeroChillSocialRepository.videoLikeState(activity, target, (state, error) ->
@@ -3078,7 +3230,12 @@ public final class ChaosFeedView extends FrameLayout {
         }
 
         private void toggleVideoLike() {
+            changeVideoLike(false);
+        }
+
+        private void changeVideoLike(boolean favoriteOnly) {
             if (item == null || item.url == null || item.url.trim().isEmpty()) return;
+            if (!like.isEnabled() || (favoriteOnly && videoLiked)) return;
             if (!ZeroChillAccountRepository.hasStoredSession(activity)) {
                 activity.startActivity(new Intent(activity, ZeroChillAccountActivity.class));
                 return;
@@ -3086,14 +3243,28 @@ public final class ChaosFeedView extends FrameLayout {
 
             String target = item.url;
             boolean wasLiked = videoLiked;
+            int oldCount = videoLikeCount;
+            int request = ++videoLikeRequestGeneration;
+            if (favoriteOnly) {
+                videoLiked = true;
+                videoLikeCount++;
+                updateVideoLikeButton();
+            }
+            videoLikePending = true;
             like.setEnabled(false);
             landscapeLike.setEnabled(false);
             ZeroChillSocialRepository.toggleVideoLike(activity, target, wasLiked, (state, error) ->
                     activity.runOnUiThread(() -> {
-                        if (item == null || !target.equals(item.url)) return;
+                        if (request != videoLikeRequestGeneration || item == null || !target.equals(item.url)) return;
+                        videoLikePending = false;
                         like.setEnabled(true);
                         landscapeLike.setEnabled(true);
                         if (error != null || state == null) {
+                            if (favoriteOnly) {
+                                videoLiked = wasLiked;
+                                videoLikeCount = oldCount;
+                                updateVideoLikeButton();
+                            }
                             ZeroChillToast.makeText(
                                     activity,
                                     error == null ? "Unable to update the like." : error.getMessage(),
@@ -3131,8 +3302,8 @@ public final class ChaosFeedView extends FrameLayout {
             TextViewCompat.setCompoundDrawableTintList(landscapeLike, ColorStateList.valueOf(
                     videoLiked ? UiPalette.PRIMARY : Color.WHITE));
             landscapeLike.setContentDescription(videoLiked ? "Unlike video" : "Like video");
-            like.setEnabled(true);
-            landscapeLike.setEnabled(true);
+            like.setEnabled(!videoLikePending);
+            landscapeLike.setEnabled(!videoLikePending);
         }
 
         void refreshCommentCount() {
@@ -3228,6 +3399,7 @@ public final class ChaosFeedView extends FrameLayout {
             if (item == null || nextStream == null || nextStream.mediaUrl == null || nextStream.mediaUrl.isEmpty()) return;
             attachLease();
             if (player == null) return;
+            if (stream != nextStream) cancelInteractionUi();
             stream = nextStream;
             lastAttemptedStream = nextStream;
             userPaused = playbackOwner.isUserPaused(item.url);
@@ -3404,6 +3576,8 @@ public final class ChaosFeedView extends FrameLayout {
         }
 
         void detachLease() {
+            endScrubPreview(false, false);
+            cancelInteractionUi();
             pinch.reset();
             if (player != null) {
                 if (uiPlayerListener != null) player.removeListener(uiPlayerListener);
@@ -3623,6 +3797,7 @@ public final class ChaosFeedView extends FrameLayout {
 
         private void playOwnedPlayer() {
             if (player == null) return;
+            if (scrubbing) return;
             if (!ownsPlayback()) {
                 silencePlayer(player);
                 return;
@@ -3684,12 +3859,9 @@ public final class ChaosFeedView extends FrameLayout {
             } else {
                 pausePlayOverlay.setVisibility(View.GONE);
             }
-            boolean showSeek = show || landscapeFullscreen();
-            progressRow.setVisibility(showSeek ? View.VISIBLE : View.INVISIBLE);
-            progressRow.setAlpha(showSeek ? 1f : 0f);
+            syncProgressChrome(player == null ? 0L : player.getDuration());
             updateProgress();
-            root.removeCallbacks(progressTick);
-            if (showSeek && !clearDisplay && controlsVisible) root.post(progressTick);
+            restartProgressTick();
         }
 
         private void hidePausedChrome() {
@@ -3697,9 +3869,38 @@ public final class ChaosFeedView extends FrameLayout {
             pausePlayOverlay.animate().cancel();
             pausePlayOverlay.setVisibility(View.GONE);
             progressRow.animate().cancel();
-            boolean showSeek = landscapeFullscreen() && controlsVisible && !clearDisplay;
-            progressRow.setAlpha(showSeek ? 1f : 0f);
-            progressRow.setVisibility(showSeek ? View.VISIBLE : View.INVISIBLE);
+            syncProgressChrome(player == null ? 0L : player.getDuration());
+            restartProgressTick();
+        }
+
+        private void syncProgressChrome(long duration) {
+            boolean interactive = scrubbing || shouldShowPausedChrome(userPaused, clearDisplay)
+                    || (landscapeFullscreen() && controlsVisible);
+            boolean visible = !clearDisplay && !pinch.isActive()
+                    && (interactive || ShitTokInteractionPolicy.persistentProgress(duration));
+            progressRow.setVisibility(visible ? View.VISIBLE : View.INVISIBLE);
+            progressRow.setAlpha(visible ? 1f : 0f);
+            int timeVisibility = landscapeFullscreen()
+                    ? (interactive ? View.VISIBLE : View.INVISIBLE) : View.GONE;
+            elapsedTime.setVisibility(timeVisibility);
+            remainingTime.setVisibility(timeVisibility);
+            if (progressInteractive == null || progressInteractive != interactive) {
+                progressInteractive = interactive;
+                // The view keeps its 48dp touch target while only the track becomes thinner.
+                if (android.os.Build.VERSION.SDK_INT >= 29) {
+                    seekBar.setMinHeight(dp(interactive ? 4 : 2));
+                    seekBar.setMaxHeight(dp(interactive ? 4 : 2));
+                }
+                if (seekBar.getThumb() != null) seekBar.getThumb().mutate().setAlpha(interactive ? 255 : 0);
+                seekBar.setAlpha(interactive ? 1f : .62f);
+            }
+        }
+
+        private void restartProgressTick() {
+            root.removeCallbacks(progressTick);
+            if (active && hostResumed && boundPosition == selectedPosition && !clearDisplay
+                    && !scrubbing && player != null && player.isPlaying()
+                    && progressRow.getVisibility() == View.VISIBLE) root.postDelayed(progressTick, 250L);
         }
 
         void showControlsTemporarily() {
@@ -3857,6 +4058,7 @@ public final class ChaosFeedView extends FrameLayout {
         }
 
         void applyClearDisplay(boolean clear) {
+            if (clear) cancelInteractionUi();
             applyViewportInset();
             root.removeCallbacks(hideControlsRunnable);
             lower.animate().cancel();
@@ -3917,6 +4119,8 @@ public final class ChaosFeedView extends FrameLayout {
             if (scrubbing || player == null || !player.isPlaying()) return;
             controlsVisible = false;
             root.removeCallbacks(progressTick);
+            syncProgressChrome(player.getDuration());
+            restartProgressTick();
             lower.animate()
                     .alpha(0f)
                     .setDuration(FullscreenPlayerStyle.FADE_MS)
@@ -3941,7 +4145,6 @@ public final class ChaosFeedView extends FrameLayout {
                     })
                     .start();
             landscapeActions.animate().alpha(0f).setDuration(FullscreenPlayerStyle.FADE_MS).start();
-            progressRow.animate().alpha(0f).setDuration(FullscreenPlayerStyle.FADE_MS).start();
             landscapeHeader.animate()
                     .alpha(0f)
                     .setDuration(FullscreenPlayerStyle.FADE_MS)
@@ -3949,7 +4152,6 @@ public final class ChaosFeedView extends FrameLayout {
                         if (!controlsVisible) {
                             landscapeHeader.setVisibility(View.INVISIBLE);
                             landscapeActions.setVisibility(View.INVISIBLE);
-                            progressRow.setVisibility(View.INVISIBLE);
                         }
                     })
                     .start();
@@ -3958,6 +4160,7 @@ public final class ChaosFeedView extends FrameLayout {
         private void updateProgress() {
             if (player == null || scrubbing) return;
             long duration = player.getDuration();
+            syncProgressChrome(duration);
             long position = Math.max(0L, player.getCurrentPosition());
             if (duration <= 0L) {
                 seekBar.setEnabled(false);
@@ -3973,6 +4176,10 @@ public final class ChaosFeedView extends FrameLayout {
 
         private void updateTimeLabels(long position, long duration) {
             long bounded = Math.max(0L, Math.min(position, duration));
+            long second = bounded / 1000L, remainingSecond = Math.max(0L, duration - bounded) / 1000L;
+            if (displayedSecond == second && displayedRemainingSecond == remainingSecond) return;
+            displayedSecond = second;
+            displayedRemainingSecond = remainingSecond;
             elapsedTime.setText(formatPlaybackTime(bounded));
             remainingTime.setText(FullscreenPlayerStyle.remaining(bounded, duration));
         }
@@ -4023,6 +4230,8 @@ public final class ChaosFeedView extends FrameLayout {
         }
 
         void pauseAndRecord() {
+            endScrubPreview(false, false);
+            cancelInteractionUi();
             pinch.reset();
             ExoPlayer paused = player;
             if (paused == null) return;
@@ -4049,7 +4258,6 @@ public final class ChaosFeedView extends FrameLayout {
             root.removeCallbacks(skipFailedClipRunnable);
             root.removeCallbacks(progressTick);
             failurePending = false;
-            if (scrubbing) { scrubbing = false; pager.setUserInputEnabled(true); }
             detachLease();
         }
 

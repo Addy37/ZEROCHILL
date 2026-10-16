@@ -193,6 +193,15 @@ jobs:
           gradle-version: '8.11.1'
           cache-provider: basic
 
+      - name: Verify ShitTok interaction boundaries
+        run: >-
+          gradle --no-daemon :app:testDebugUnitTest
+          --tests com.webapp.crazyshit.ShitTokInteractionPolicyTest
+          --tests com.webapp.crazyshit.ShitTokScrubPreviewTest
+          --tests com.webapp.crazyshit.ShitTokInteractionUiTest
+          --tests com.webapp.crazyshit.ShitTokProgressTest
+          --tests com.webapp.crazyshit.ShitTokDynamicPinchTest
+
       - name: Verify ShitTok continuity without weakening rebuffer protection
         run: >-
           gradle --no-daemon :app:testDebugUnitTest
