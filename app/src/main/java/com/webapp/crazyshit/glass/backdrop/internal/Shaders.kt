@@ -56,6 +56,18 @@ float2 gradSdRoundedRect(float2 coord, float2 halfSize, float radius) {
     }
 }"""
 
+// ZEROCHILL addition: inverse optical mapping of the live input, not a scaled
+// page/layer. The squared elliptical dome has zero slope at its boundary, so
+// center magnification joins Square's perimeter refraction without a seam.
+@Language("AGSL")
+private const val CenterLens = """
+float2 magnifiedCoord(float2 coord, float2 centeredCoord, float2 halfSize, float magnification) {
+    float2 normalized = centeredCoord / halfSize;
+    float dome = max(1.0 - dot(normalized, normalized), 0.0);
+    float scale = 1.0 + (magnification - 1.0) * dome * dome;
+    return coord + centeredCoord * (1.0 / scale - 1.0);
+}"""
+
 @Language("AGSL")
 internal const val RoundedRectRefractionShaderString = """
 uniform shader content;
@@ -66,8 +78,10 @@ uniform float4 cornerRadii;
 uniform float refractionHeight;
 uniform float refractionAmount;
 uniform float depthEffect;
+uniform float magnification;
 
 $RoundedRectSDF
+$CenterLens
 
 float circleMap(float x) {
     return 1.0 - sqrt(1.0 - x * x);
@@ -78,9 +92,10 @@ half4 main(float2 coord) {
     float2 centeredCoord = (coord + offset) - halfSize;
     float radius = radiusAt(coord, cornerRadii);
 
+    float2 lensCoord = magnifiedCoord(coord, centeredCoord, halfSize, magnification);
     float sd = sdRoundedRect(centeredCoord, halfSize, radius);
     if (-sd >= refractionHeight) {
-        return content.eval(coord);
+        return content.eval(lensCoord);
     }
     sd = min(sd, 0.0);
 
@@ -88,7 +103,7 @@ half4 main(float2 coord) {
     float gradRadius = min(radius * 1.5, min(halfSize.x, halfSize.y));
     float2 grad = normalize(gradSdRoundedRect(centeredCoord, halfSize, gradRadius) + depthEffect * normalize(centeredCoord));
 
-    float2 refractedCoord = coord + d * grad;
+    float2 refractedCoord = lensCoord + d * grad;
     return content.eval(refractedCoord);
 }"""
 
@@ -102,9 +117,11 @@ uniform float4 cornerRadii;
 uniform float refractionHeight;
 uniform float refractionAmount;
 uniform float depthEffect;
+uniform float magnification;
 uniform float chromaticAberration;
 
 $RoundedRectSDF
+$CenterLens
 
 float circleMap(float x) {
     return 1.0 - sqrt(1.0 - x * x);
@@ -115,9 +132,10 @@ half4 main(float2 coord) {
     float2 centeredCoord = (coord + offset) - halfSize;
     float radius = radiusAt(coord, cornerRadii);
 
+    float2 lensCoord = magnifiedCoord(coord, centeredCoord, halfSize, magnification);
     float sd = sdRoundedRect(centeredCoord, halfSize, radius);
     if (-sd >= refractionHeight) {
-        return content.eval(coord);
+        return content.eval(lensCoord);
     }
     sd = min(sd, 0.0);
 
@@ -125,7 +143,7 @@ half4 main(float2 coord) {
     float gradRadius = min(radius * 1.5, min(halfSize.x, halfSize.y));
     float2 grad = normalize(gradSdRoundedRect(centeredCoord, halfSize, gradRadius) + depthEffect * normalize(centeredCoord));
 
-    float2 refractedCoord = coord + d * grad;
+    float2 refractedCoord = lensCoord + d * grad;
     float dispersionIntensity = chromaticAberration * ((centeredCoord.x * centeredCoord.y) / (halfSize.x * halfSize.y));
     float2 dispersedCoord = d * grad * dispersionIntensity;
 

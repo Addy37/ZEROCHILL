@@ -251,6 +251,16 @@ jobs:
           --tests 'com.webapp.crazyshit.OnlyFapDiscoverLifecycleTest'
           --tests 'com.webapp.crazyshit.FapelloRepositoryTest'
 
+      - name: Focused glass optics and navigation regressions
+        if: ${{ github.event.pull_request.number == 295 }}
+        run: >-
+          gradle --no-daemon :app:testDebugUnitTest
+          --tests 'com.webapp.crazyshit.glass.backdrop.ClearGlassLensTest'
+          --tests 'com.webapp.crazyshit.BottomNavigation*'
+          --tests 'com.webapp.crazyshit.NavigationIaTest'
+          --tests 'com.webapp.crazyshit.PrimaryTabNavigationTest'
+          --tests 'com.webapp.crazyshit.NavigationMotionControllerTest'
+
       - name: Build signed upgrade candidate
         # The visual candidate runs complete suites once instead of repeatedly
         # starting Gradle for overlapping filters. Signing/upgrade gates remain.

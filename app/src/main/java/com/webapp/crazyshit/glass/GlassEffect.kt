@@ -56,6 +56,8 @@ data class GlassEffectConfig(
     val lensHeight: Float = 0.4f,
     /** 0..1, mapped to 0..[LENS_MAX_DP] dp of lens refraction amount. 0.6 = 60%. */
     val lensAmount: Float = 0.6f,
+    /** Local optical thickening; 1 keeps Square's original edge-only lens. */
+    val centerMagnification: Float = 1f,
     val chromaticAberration: Boolean = false,
     val depthEffect: Boolean = false,
     /**
@@ -592,6 +594,7 @@ fun Modifier.liquidGlass(
         lensAmountPx,
         config.depthEffect,
         config.chromaticAberration,
+        config.centerMagnification,
     ) {
         {
             if (saturation != 1f) {
@@ -628,6 +631,7 @@ fun Modifier.liquidGlass(
                     refractionAmount = lensAmountPx.coerceAtMost(reach),
                     depthEffect = config.depthEffect,
                     chromaticAberration = config.chromaticAberration,
+                    magnification = config.centerMagnification,
                 )
             }
         }

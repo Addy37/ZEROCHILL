@@ -371,13 +371,30 @@ fun LiquidBottomTabs(
                 child.placeRelative((width - expandedWidth) / 2, (height - expandedHeight) / 2)
             }
         }
+        val lensConfig = LocalGlassEffectConfig.current
+        val lensEnabled = lensConfig.lensHeight > 0f && lensConfig.lensAmount > 0f
+        // Keep the original selected-ink optics and all placement/drag springs.
         val slotLens: BackdropEffectScope.() -> Unit = {
-            val progress = dampedDragAnimation.pressProgress
-            lens(
-                10f.dp.toPx() * progress,
-                14f.dp.toPx() * progress,
-                chromaticAberration = true
-            )
+            if (lensEnabled) {
+                val progress = dampedDragAnimation.pressProgress
+                lens(
+                    10f.dp.toPx() * progress,
+                    14f.dp.toPx() * progress,
+                    chromaticAberration = true
+                )
+            }
+        }
+        // The live page stays a thicker lens even after release. Magnification
+        // affects only that input, so ZEROCHILL's glyph sizes remain unchanged.
+        val dropletLens: BackdropEffectScope.() -> Unit = {
+            if (lensEnabled) {
+                val progress = dampedDragAnimation.pressProgress.coerceIn(0f, 1f)
+                lens(
+                    (8f + 3f * progress).dp.toPx(),
+                    (12f + 4f * progress).dp.toPx(),
+                    magnification = 1.08f + .04f * progress,
+                )
+            }
         }
 
         val pressedBackdrop = remember(backdrop, surfaceBackdrop, dampedDragAnimation) {
@@ -408,8 +425,7 @@ fun LiquidBottomTabs(
             }
         }
 
-        // The slot: the page through it, frosted and filmed the way the tabs'
-        // copy used to bring it, then the wash, the rim and the shadow.
+        // Clear live page, restrained wash, then the original rim and shadows.
         Box(
             slotPlacement
                 .then(interactiveHighlight.gestureModifier)
@@ -422,8 +438,9 @@ fun LiquidBottomTabs(
                     shape = { ContinuousCapsule() },
                     effects = {
                         vibrancy()
-                        blur(8f.dp.toPx() * (1f - dampedDragAnimation.pressProgress.coerceIn(0f, 1f)))
-                        slotLens()
+                        val progress = dampedDragAnimation.pressProgress.coerceIn(0f, 1f)
+                        blur((1f - .75f * progress).dp.toPx())
+                        dropletLens()
                     },
                     highlight = {
                         val progress = dampedDragAnimation.pressProgress
@@ -455,7 +472,7 @@ fun LiquidBottomTabs(
 
         // LOCAL CHANGE: the lit tab, over its slot rather than under the wash.
         //
-        // Bent by the same lens and stretched by the same drag, so while a
+        // With Square's original ink refraction and the same drag, so while a
         // finger is on the bar it still reads as one piece of glass; no rim or
         // shadow of its own, those belong to the slot. Nothing takes touches
         // here, so the slot underneath still gets them.

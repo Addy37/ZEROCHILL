@@ -95,13 +95,19 @@ internal class SquareNavigationBridge(private val nav: ZeroChillBottomNavigation
         val externalPosition = remember { { position.floatValue } }
         val shell = rememberLayerBackdrop()
         val config = remember {
+            val clearGlass = GlassEffectConfig(
+                blurRadius = .7f,
+                surfaceOpacity = .16f,
+                lensHeight = .44f,
+                centerMagnification = 1.025f,
+            )
             if (BuildConfig.DEBUG && activity.intent.getBooleanExtra("probe_no_lens", false))
-                GlassEffectConfig(lensHeight = 0f, lensAmount = 0f)
-            else GlassEffectConfig()
+                clearGlass.copy(lensHeight = 0f, lensAmount = 0f, centerMagnification = 1f)
+            else clearGlass
         }
         val shape = remember { RoundedCornerShape(50) }
         val height = (61f - 11f * collapse.floatValue).dp
-        val film = Color.White.copy(alpha = .12f)
+        val film = Color.White.copy(alpha = .04f)
         CompositionLocalProvider(
             LocalAppBackdrop provides page,
             LocalGlassEffectConfig provides config,
@@ -120,7 +126,7 @@ internal class SquareNavigationBridge(private val nav: ZeroChillBottomNavigation
                     tabsCount = 4,
                     accentColor = SelectedInk,
                     containerColor = film,
-                    indicatorColor = Color.Black.copy(alpha = .5f),
+                    indicatorColor = Color.Black.copy(alpha = .10f),
                     height = height,
                     lensDepth = 24.dp,
                     drawContainer = false,

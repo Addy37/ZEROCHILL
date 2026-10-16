@@ -25,7 +25,9 @@ fun BackdropEffectScope.lens(
     @FloatRange(from = 0.0) refractionHeight: Float,
     @FloatRange(from = 0.0) refractionAmount: Float,
     depthEffect: Boolean = false,
-    chromaticAberration: Boolean = false
+    chromaticAberration: Boolean = false,
+    // Local center bulge, with a smooth falloff to the unchanged perimeter.
+    @FloatRange(from = 1.0, to = 1.2) magnification: Float = 1f,
 ) {
     if (!isRuntimeShaderSupported()) return
     if (refractionHeight <= 0f || refractionAmount <= 0f) return
@@ -56,6 +58,7 @@ fun BackdropEffectScope.lens(
                 setFloatUniform("refractionHeight", refractionHeight)
                 setFloatUniform("refractionAmount", -refractionAmount)
                 setFloatUniform("depthEffect", if (depthEffect) 1f else 0f)
+                setFloatUniform("magnification", magnification.coerceIn(1f, 1.2f))
                 if (chromaticAberration) {
                     setFloatUniform("chromaticAberration", 1f)
                 }
