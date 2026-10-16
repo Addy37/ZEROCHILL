@@ -211,7 +211,8 @@ public class ShitTokDynamicPinchTest {
             touch(root, MotionEvent.ACTION_UP, 200, 500);
             touch(root, MotionEvent.ACTION_DOWN, 300, 500);
             touch(root, MotionEvent.ACTION_UP, 300, 500);
-            org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
+            org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idleFor(
+                    java.time.Duration.ofMillis(android.view.ViewConfiguration.getDoubleTapTimeout() + 1L));
             assertTrue(owner.isUserPaused("https://example.invalid/clip-0"));
         }
     }

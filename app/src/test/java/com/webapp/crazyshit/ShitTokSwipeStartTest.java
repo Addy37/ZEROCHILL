@@ -47,10 +47,15 @@ public class ShitTokSwipeStartTest {
 
     @Test public void smallTapMovementDoesNotStartPaging() {
         Harness h = new Harness();
+        // Confirmed taps require a current visible feed; source requests stay disabled.
+        ReflectionHelpers.setField(h.feed, "closed", false);
+        ReflectionHelpers.setField(h.feed, "active", true);
+        ReflectionHelpers.setField(h.feed, "hostResumed", true);
         h.event(0, 0, MotionEvent.ACTION_DOWN, 400, 700);
         h.event(0, 16, MotionEvent.ACTION_MOVE, 400, 700 - h.slop / 2f);
         h.event(0, 40, MotionEvent.ACTION_UP, 400, 700 - h.slop / 2f);
-        shadowOf(android.os.Looper.getMainLooper()).idle();
+        shadowOf(android.os.Looper.getMainLooper()).idleFor(
+                java.time.Duration.ofMillis(android.view.ViewConfiguration.getDoubleTapTimeout() + 1L));
         assertEquals(-1, h.dragAt);
         assertEquals(1, h.clicks);
         h.finish();
