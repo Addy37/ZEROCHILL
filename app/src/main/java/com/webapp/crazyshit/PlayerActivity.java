@@ -269,6 +269,8 @@ public class PlayerActivity extends Activity {
     }
 
     private void configureGestures() {
+        FullscreenVideoGestures seekGestures = new FullscreenVideoGestures(
+                playerView, () -> player, fullscreenControls, () -> !dragMinimize);
         final GestureDetector detector = new GestureDetector(this,
                 new GestureDetector.SimpleOnGestureListener() {
                     @Override
@@ -286,14 +288,8 @@ public class PlayerActivity extends Activity {
                     @Override
                     public boolean onDoubleTap(MotionEvent e) {
                         if (player == null || dragMinimize) return true;
-                        long delta = e.getX() < playerView.getWidth() / 2f ? -10_000L : 10_000L;
-                        long duration = player.getDuration();
-                        long target = Math.max(0L, player.getCurrentPosition() + delta);
-                        if (duration > 0L) target = Math.min(duration, target);
-                        player.seekTo(target);
-                        fullscreenControls.show();
+                        seekGestures.seek(e.getX() >= playerView.getWidth() / 2f);
                         haptic(playerView);
-                        showGesture(delta < 0 ? "−10 seconds" : "+10 seconds");
                         return true;
                     }
                 });

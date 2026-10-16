@@ -109,6 +109,7 @@ public final class NativeFeedBrowserActivity extends Activity {
     private ViewPager2 creatorTabsPager;
     private TabLayout creatorTabs;
     private CreatorProfileHeader creatorProfile;
+    private FrameLayout compactCreatorFavorite;
     private AppBarLayout creatorAppBar;
     private ShowDetailsHeader showDetailsHeader;
     private AppBarLayout showDetailsAppBar;
@@ -447,14 +448,17 @@ public final class NativeFeedBrowserActivity extends Activity {
         LinearLayout top = new LinearLayout(this);
         top.setOrientation(LinearLayout.HORIZONTAL);
         top.setGravity(Gravity.CENTER_VERTICAL);
-        top.setPadding(dp(8), dp(6), dp(8), dp(6));
+        // Match the immersive controller's final 56dp bar before its delayed passes.
+        int actionHeight = dp(isCreatorGallery() ? 48 : 52);
+        int verticalPadding = dp(isCreatorGallery() ? 4 : 6);
+        top.setPadding(dp(8), verticalPadding, dp(8), verticalPadding);
         top.setBackgroundColor(Color.BLACK);
 
         TextView back = text("‹", 34, Color.WHITE);
         back.setGravity(Gravity.CENTER);
         back.setContentDescription("Back");
         back.setOnClickListener(v -> finishToShitTok());
-        top.addView(back, new LinearLayout.LayoutParams(dp(48), dp(52)));
+        top.addView(back, new LinearLayout.LayoutParams(dp(48), actionHeight));
 
         TextView heading = text(isCreatorGallery() ? "OnlyFap" : showDetailsMode ? "Shows" : title, 20, Color.WHITE);
         heading.setTypeface(null, android.graphics.Typeface.BOLD);
@@ -462,12 +466,19 @@ public final class NativeFeedBrowserActivity extends Activity {
         heading.setEllipsize(android.text.TextUtils.TruncateAt.END);
         top.addView(heading, new LinearLayout.LayoutParams(0, -2, 1f));
 
+        if (isCreatorGallery()) {
+            compactCreatorFavorite = new FrameLayout(this);
+            compactCreatorFavorite.setTag("creator_favorite_compact");
+            compactCreatorFavorite.setVisibility(View.GONE);
+            top.addView(compactCreatorFavorite, new LinearLayout.LayoutParams(dp(48), actionHeight));
+        }
+
         TextView options = text("⋮", 28, Color.rgb(220, 220, 226));
         options.setGravity(Gravity.CENTER);
         options.setContentDescription("Feed options");
         options.setOnClickListener(this::showOptions);
-        top.addView(options, new LinearLayout.LayoutParams(dp(48), dp(52)));
-        shell.addView(top, new LinearLayout.LayoutParams(-1, dp(64)));
+        top.addView(options, new LinearLayout.LayoutParams(dp(48), actionHeight));
+        shell.addView(top, new LinearLayout.LayoutParams(-1, dp(isCreatorGallery() ? 56 : 64)));
 
         FrameLayout body = new FrameLayout(this);
         if (isCreatorGallery()) {
@@ -491,6 +502,7 @@ public final class NativeFeedBrowserActivity extends Activity {
                     baseUrl,
                     creatorGalleryCacheKey
             );
+            creatorProfile.bindCompactFavorite(compactCreatorFavorite);
             AppBarLayout.LayoutParams profileParams =
                     new AppBarLayout.LayoutParams(-1, dp(184));
             profileParams.setScrollFlags(
@@ -537,6 +549,16 @@ public final class NativeFeedBrowserActivity extends Activity {
                         Math.abs(verticalOffset) / (float) Math.max(1, dp(184))
                 );
                 creatorProfile.setAlpha(1f - progress);
+                boolean showFavorite = creatorProfile.isFavoriteOffscreen(verticalOffset);
+                if (showFavorite && compactCreatorFavorite.getVisibility() != View.VISIBLE) {
+                    compactCreatorFavorite.setVisibility(View.VISIBLE);
+                    compactCreatorFavorite.setAlpha(0f);
+                    compactCreatorFavorite.animate().alpha(1f).setDuration(
+                            ZeroChillMotion.animationsEnabled(this) ? ZeroChillMotion.QUICK_MS : 0).start();
+                } else if (!showFavorite) {
+                    compactCreatorFavorite.animate().cancel();
+                    compactCreatorFavorite.setVisibility(View.GONE);
+                }
             });
 
             CoordinatorLayout.LayoutParams bodyParams =

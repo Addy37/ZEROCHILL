@@ -24,19 +24,17 @@
         <ImageButton android:id="@+id/player_menu" style="@style/FullscreenIconButton"
             android:src="@drawable/ic_more_overflow" android:contentDescription="@string/fullscreen_more" />
     </LinearLayout>
-    <FrameLayout android:id="@id/exo_center_controls" android:layout_width="82dp"
-        android:layout_height="82dp" android:layout_gravity="center">
-        <ImageButton android:id="@id/exo_play_pause"
-            android:layout_width="match_parent" android:layout_height="match_parent"
-            android:background="@android:color/transparent" android:alpha="0.72"
-            android:src="@drawable/ic_shittok_play_overlay"
-            android:contentDescription="@string/fullscreen_play_pause" />
-    </FrameLayout>
     <LinearLayout android:id="@+id/shows_progress_row"
         android:layout_width="match_parent" android:layout_height="48dp"
         android:layout_gravity="bottom" android:layout_marginBottom="52dp"
         android:layout_marginStart="8dp" android:layout_marginEnd="8dp"
         android:gravity="center_vertical">
+        <FrameLayout android:id="@id/exo_center_controls"
+            android:layout_width="48dp" android:layout_height="48dp">
+            <ImageButton android:id="@id/exo_play_pause" style="@style/FullscreenIconButton"
+                android:src="@drawable/ic_player_play"
+                android:contentDescription="@string/fullscreen_play_pause" />
+        </FrameLayout>
         <TextView android:id="@id/exo_position" style="@style/FullscreenTimeLabel" />
         <com.webapp.crazyshit.FullscreenTimeBar android:id="@id/exo_progress"
             android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1"
@@ -59,6 +57,9 @@
             android:src="@drawable/ic_action_share" android:contentDescription="@string/fullscreen_share" />
         <ImageButton android:id="@+id/shows_like" style="@style/FullscreenIconButton"
             android:src="@drawable/ic_action_heart_outline" android:contentDescription="@string/fullscreen_like" />
+        <ImageButton android:id="@id/exo_settings" style="@style/FullscreenIconButton"
+            android:src="@drawable/exo_styled_controls_settings" android:visibility="gone"
+            android:contentDescription="@string/exo_controls_settings_description" />
         <!-- Kept hidden while PlayerActivity migrates off the former bottom-row minimize ID. -->
         <View android:id="@+id/shows_minimize"
             android:layout_width="0dp" android:layout_height="0dp"

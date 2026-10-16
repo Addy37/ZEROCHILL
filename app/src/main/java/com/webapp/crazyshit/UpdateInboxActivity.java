@@ -23,7 +23,7 @@ import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
-import androidx.recyclerview.widget.LinearLayoutManager;
+import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.DiffUtil;
 import androidx.recyclerview.widget.AsyncListDiffer;
 import androidx.recyclerview.widget.AsyncDifferConfig;
@@ -220,7 +220,35 @@ public final class UpdateInboxActivity extends Activity {
         root.addView(empty);
 
         recycler = new RecyclerView(this);
-        recycler.setLayoutManager(new LinearLayoutManager(this));
+        GridLayoutManager grid = new GridLayoutManager(this, creatorGridColumns(
+                getResources().getConfiguration().screenWidthDp));
+        grid.setSpanSizeLookup(new GridLayoutManager.SpanSizeLookup() {
+            @Override public int getSpanSize(int position) {
+                return adapter != null && adapter.getItemViewType(position) == 1 ? 1 : grid.getSpanCount();
+            }
+        });
+        recycler.setLayoutManager(grid);
+        recycler.addOnLayoutChangeListener((v, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) -> {
+            int columns = creatorGridColumns(Math.round((right - left)
+                    / getResources().getDisplayMetrics().density));
+            if (columns != grid.getSpanCount()) {
+                grid.setSpanCount(columns);
+                recycler.invalidateItemDecorations();
+            }
+        });
+        recycler.addItemDecoration(new RecyclerView.ItemDecoration() {
+            @Override public void getItemOffsets(android.graphics.Rect out, View child,
+                    RecyclerView parent, RecyclerView.State state) {
+                int position = parent.getChildAdapterPosition(child);
+                if (position < 0 || position >= adapter.getItemCount() || adapter.getItemViewType(position) != 1) return;
+                int columns = grid.getSpanCount();
+                int column = grid.getSpanSizeLookup().getSpanIndex(position, columns);
+                int total = dp(32) + dp(8) * (columns - 1);
+                out.left = dp(16) + (dp(8) - dp(32)) * column / columns;
+                out.right = total / columns - out.left;
+                out.bottom = dp(8);
+            }
+        });
         recycler.setPadding(0, dp(4), 0, dp(16));
         recycler.setClipToPadding(false);
         DefaultItemAnimator itemAnimator = new DefaultItemAnimator();
@@ -414,15 +442,27 @@ public final class UpdateInboxActivity extends Activity {
         view.setSelected(selected);
     }
 
+    static int creatorGridColumns(int widthDp) {
+        return widthDp < 320 ? 2 : Math.max(3, Math.min(6, (widthDp - 24) / 120));
+    }
+
+    private void openCreator(UpdateInboxStore.Entry entry) {
+        startActivity(CreatorNotificationNavigator.gallery(this, entry, entry.creatorName, null));
+    }
+
+    private void openCreatorItem(UpdateInboxStore.Entry parent, UpdateInboxStore.CreatorItem item) {
+        UpdateInboxStore.markCreatorItemRead(this, item.id);
+        render();
+        startActivity(CreatorNotificationNavigator.itemIntent(this, parent, item));
+    }
+
     private void open(UpdateInboxStore.Entry entry) {
         if (entry.creatorItem != null) {
-            UpdateInboxStore.markCreatorItemRead(this, entry.creatorItem.id);
-            render();
-            startActivity(CreatorNotificationNavigator.itemIntent(this, entry.creatorParent, entry.creatorItem));
+            openCreatorItem(entry.creatorParent, entry.creatorItem);
             return;
         }
         if (UpdateInboxStore.CATEGORY_ONLYFAP.equals(entry.category)) {
-            adapter.toggleCreator(entry);
+            openCreator(entry);
             return;
         }
         if (UpdateInboxStore.CATEGORY_SOCIAL.equals(entry.category)
@@ -552,6 +592,9 @@ public final class UpdateInboxActivity extends Activity {
         }
 
         @Override public int getItemCount() { return items().size(); }
+        @Override public int getItemViewType(int position) {
+            return items().get(position).creatorItem == null ? 0 : 1;
+        }
 
         void invalidateSocialLikeStates() {
             commentStates.clear();
@@ -560,6 +603,7 @@ public final class UpdateInboxActivity extends Activity {
 
         @Override
         public Holder onCreateViewHolder(ViewGroup parent, int viewType) {
+            if (viewType == 1) return createMediaTile();
             LinearLayout shell = new LinearLayout(UpdateInboxActivity.this);
             shell.setOrientation(LinearLayout.VERTICAL);
             shell.setPadding(dp(10), 0, dp(10), 0);
@@ -644,6 +688,56 @@ public final class UpdateInboxActivity extends Activity {
                     trailing, thumbnail, unread);
         }
 
+        private Holder createMediaTile() {
+            android.widget.FrameLayout tile = new android.widget.FrameLayout(UpdateInboxActivity.this) {
+                @Override protected void onMeasure(int widthSpec, int heightSpec) {
+                    int width = View.MeasureSpec.getSize(widthSpec);
+                    super.onMeasure(widthSpec, View.MeasureSpec.makeMeasureSpec(
+                            Math.round(width * 1.25f), View.MeasureSpec.EXACTLY));
+                }
+            };
+            tile.setLayoutParams(new RecyclerView.LayoutParams(-1, -2));
+            tile.setBackground(BrowseUi.rounded(UpdateInboxActivity.this, UiPalette.SURFACE, 12));
+            tile.setClipToOutline(true);
+            tile.setFocusable(true);
+            ZeroChillMotion.installPressFeedback(tile);
+            ImageView image = new ImageView(UpdateInboxActivity.this);
+            image.setScaleType(ImageView.ScaleType.CENTER_CROP);
+            image.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+            tile.addView(image, new android.widget.FrameLayout.LayoutParams(-1, -1));
+            View unread = new View(UpdateInboxActivity.this);
+            unread.setBackground(circle(UiPalette.PRIMARY));
+            unread.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+            android.widget.FrameLayout.LayoutParams dot = new android.widget.FrameLayout.LayoutParams(
+                    dp(8), dp(8), Gravity.TOP | Gravity.END);
+            dot.setMargins(dp(8), dp(8), dp(8), dp(8));
+            tile.addView(unread, dot);
+            TextView video = BrowseUi.text(UpdateInboxActivity.this, "▶", 12, Color.WHITE);
+            video.setGravity(Gravity.CENTER);
+            video.setBackground(BrowseUi.rounded(UpdateInboxActivity.this, Color.argb(190, 0, 0, 0), 8));
+            video.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+            android.widget.FrameLayout.LayoutParams badge = new android.widget.FrameLayout.LayoutParams(
+                    dp(26), dp(24), Gravity.BOTTOM | Gravity.START);
+            badge.setMargins(dp(7), dp(7), dp(7), dp(7));
+            tile.addView(video, badge);
+            return new Holder(tile, image, unread, video);
+        }
+
+        private void bindMediaTile(Holder holder, UpdateInboxStore.Entry entry) {
+            NativeContentItem item = entry.creatorItem.item;
+            holder.boundId = entry.id;
+            holder.unread.setVisibility(entry.read ? View.INVISIBLE : View.VISIBLE);
+            holder.videoBadge.setVisibility(item.isVideo() ? View.VISIBLE : View.GONE);
+            holder.itemView.setContentDescription((item.isVideo() ? "Video" : "Photo")
+                    + " by " + entry.creatorItem.creatorName + ". " + item.title
+                    + (entry.read ? ". Read." : ". Unread."));
+            holder.itemView.setOnClickListener(v -> open(entry));
+            Glide.with(holder.avatar).clear(holder.avatar);
+            holder.avatar.setImageResource(R.drawable.ic_zerochill_devil);
+            String referer = item.uploader.startsWith("http") ? item.uploader : item.url;
+            loadImage(holder.avatar, item.imageUrl, referer, R.drawable.ic_zerochill_devil, false);
+        }
+
         private TextView actionPill(String label) {
             TextView view = BrowseUi.text(UpdateInboxActivity.this, label, 12, Color.rgb(220, 220, 226));
             view.setGravity(Gravity.CENTER);
@@ -673,6 +767,20 @@ public final class UpdateInboxActivity extends Activity {
         @Override
         public void onBindViewHolder(Holder holder, int position) {
             UpdateInboxStore.Entry entry = items().get(position);
+            if (entry.creatorItem != null) {
+                bindMediaTile(holder, entry);
+                return;
+            }
+            boolean creatorGroup = UpdateInboxStore.CATEGORY_ONLYFAP.equals(entry.category);
+            holder.avatar.setOnClickListener(creatorGroup ? v -> openCreator(entry) : null);
+            holder.avatar.setFocusable(creatorGroup);
+            holder.avatar.setClickable(creatorGroup);
+            holder.avatar.setContentDescription(creatorGroup ? "Open " + entry.title + " creator gallery" : null);
+            holder.title.setOnClickListener(creatorGroup ? v -> openCreator(entry) : null);
+            holder.title.setFocusable(creatorGroup);
+            holder.title.setClickable(creatorGroup);
+            holder.title.setMinHeight(creatorGroup ? dp(48) : 0);
+            holder.title.setContentDescription(creatorGroup ? "Open " + entry.title + " creator gallery" : null);
             boolean social = UpdateInboxStore.CATEGORY_SOCIAL.equals(entry.category);
             boolean replyNotification = social
                     && ZeroChillSocialRepository.SocialActivity.TYPE_REPLY.equals(entry.socialType);
@@ -690,6 +798,8 @@ public final class UpdateInboxActivity extends Activity {
             holder.reply.setVisibility(replyNotification ? View.VISIBLE : View.GONE);
             holder.like.setVisibility(replyNotification ? View.VISIBLE : View.GONE);
             holder.reply.setText("Reply");
+            holder.reply.setContentDescription("Reply to comment");
+            androidx.core.view.ViewCompat.setStateDescription(holder.reply, null);
             holder.reply.setOnClickListener(v -> openSocial(entry, true));
             bindSocialLike(holder, entry, replyNotification);
             if (UpdateInboxStore.CATEGORY_ONLYFAP.equals(entry.category)) {
@@ -700,6 +810,7 @@ public final class UpdateInboxActivity extends Activity {
                 holder.reply.setText(expanded ? "Collapse ▴" : "Expand ▾");
                 holder.reply.setContentDescription((expanded ? "Collapse " : "Expand ") + entry.title + " items");
                 holder.reply.setOnClickListener(v -> toggleCreator(entry));
+                androidx.core.view.ViewCompat.setStateDescription(holder.reply, expanded ? "Expanded" : "Collapsed");
             }
 
             boolean becameRead = holder.itemView.isAttachedToWindow()
@@ -722,7 +833,10 @@ public final class UpdateInboxActivity extends Activity {
                     styledTitle(entry).toString() + ". " + entry.subtitle
                             + (entry.read ? ". Read." : ". Unread notification.")
             );
-            holder.row.setOnClickListener(v -> open(entry));
+            holder.row.setOnClickListener(creatorGroup ? null : v -> open(entry));
+            holder.row.setClickable(!creatorGroup);
+            holder.row.setFocusable(!creatorGroup);
+            if (creatorGroup) holder.row.setContentDescription(null);
             holder.row.setOnLongClickListener(v -> {
                 confirmDeleteNotification(entry.creatorParent == null ? entry : entry.creatorParent);
                 return true;
@@ -985,8 +1099,12 @@ public final class UpdateInboxActivity extends Activity {
             holder.thumbnail.setClickable(show);
             holder.thumbnail.setFocusable(show);
             holder.thumbnail.setContentDescription(show ? UpdateInboxStore.CATEGORY_ONLYFAP.equals(entry.category)
-                    ? "Expand creator items" : "Open video and conversation" : null);
-            holder.thumbnail.setOnClickListener(show ? v -> open(entry) : null);
+                    ? "Open latest creator item" : "Open video and conversation" : null);
+            holder.thumbnail.setOnClickListener(show ? v -> {
+                if (UpdateInboxStore.CATEGORY_ONLYFAP.equals(entry.category) && !entry.children.isEmpty())
+                    openCreatorItem(entry, entry.children.get(0));
+                else open(entry);
+            } : null);
             LinearLayout.LayoutParams params = (LinearLayout.LayoutParams) holder.trailing.getLayoutParams();
             params.width = dp(show ? 52 : 14);
             holder.trailing.setLayoutParams(params);
@@ -1051,7 +1169,7 @@ public final class UpdateInboxActivity extends Activity {
         @Override
         public void onViewRecycled(Holder holder) {
             Glide.with(holder.avatar).clear(holder.avatar);
-            Glide.with(holder.thumbnail).clear(holder.thumbnail);
+            if (holder.thumbnail != null) Glide.with(holder.thumbnail).clear(holder.thumbnail);
             super.onViewRecycled(holder);
         }
 
@@ -1080,6 +1198,16 @@ public final class UpdateInboxActivity extends Activity {
             final ImageView thumbnail;
             final View unread;
             String boundId;
+            TextView videoBadge;
+
+            Holder(android.widget.FrameLayout tile, ImageView image, View unread, TextView video) {
+                super(tile);
+                this.avatar = image;
+                this.unread = unread;
+                this.videoBadge = video;
+                row = null; section = null; title = null; subtitle = null; actions = null;
+                reply = null; like = null; trailing = null; thumbnail = null;
+            }
 
             Holder(
                     LinearLayout shell,

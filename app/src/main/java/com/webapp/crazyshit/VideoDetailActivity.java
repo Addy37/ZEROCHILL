@@ -17,7 +17,6 @@ import android.os.Bundle;
 import android.os.SystemClock;
 import android.text.TextUtils;
 import android.view.Gravity;
-import android.view.GestureDetector;
 import android.view.HapticFeedbackConstants;
 import android.view.MotionEvent;
 import android.view.TextureView;
@@ -119,6 +118,7 @@ public class VideoDetailActivity extends Activity {
     private PlayerView playerView;
     private PlayerControlView fullscreenOverlay;
     private ShowsFullscreenControls fullscreenControls;
+    private FullscreenVideoGestures fullscreenGestures;
     private boolean fullscreenChromeActive;
     private ScrollView detailsScroll;
     private LinearLayout detailsColumn;
@@ -186,6 +186,7 @@ public class VideoDetailActivity extends Activity {
     private boolean portraitFullscreen;
     private boolean rotatableFullscreen;
     private boolean sensorFullscreen;
+    private boolean videoSizeKnown;
     private SensorMediaOrientationListener orientationListener;
     private int thumbnailResolverCursor;
     private int relatedLoadGeneration;
@@ -447,24 +448,9 @@ public class VideoDetailActivity extends Activity {
         fullscreenOverlay.findViewById(R.id.shows_fullscreen_toggle).setOnClickListener(v -> {
             haptic(v); setRotatableFullscreen(!rotatableFullscreen);
         });
-        GestureDetector fullscreenTaps = new GestureDetector(this, new GestureDetector.SimpleOnGestureListener() {
-            @Override public boolean onDown(MotionEvent event) { return true; }
-            @Override public boolean onSingleTapConfirmed(MotionEvent event) {
-                fullscreenControls.onVideoTap();
-                return true;
-            }
-            @Override public boolean onDoubleTap(MotionEvent event) {
-                if (player != null) {
-                    long delta = event.getX() < playerView.getWidth() / 2f ? -10000L : 10000L;
-                    long target = Math.max(0L, player.getCurrentPosition() + delta);
-                    long duration = player.getDuration();
-                    player.seekTo(duration > 0 ? Math.min(duration, target) : target);
-                    fullscreenControls.show();
-                }
-                return true;
-            }
-        });
-        playerView.setOnTouchListener((v, event) -> fullscreenChromeActive && fullscreenTaps.onTouchEvent(event));
+        fullscreenGestures = new FullscreenVideoGestures(
+                playerView, () -> player, fullscreenControls, () -> fullscreenChromeActive);
+        playerView.setOnTouchListener(fullscreenGestures);
 
         View playerBack = playerView.findViewById(R.id.player_back);
         playerTitleView = playerView.findViewById(R.id.player_title);
@@ -862,6 +848,7 @@ public class VideoDetailActivity extends Activity {
     }
 
     private void buildPlayer(long startPosition) {
+        videoSizeKnown = false;
         portraitVideo = false;
         if (portraitFullscreen) setPortraitFullscreen(false);
         else updatePortraitFullscreenButton();
@@ -946,6 +933,8 @@ public class VideoDetailActivity extends Activity {
             @Override
             public void onVideoSizeChanged(VideoSize videoSize) {
                 if (videoSize == null || videoSize.width <= 0 || videoSize.height <= 0) return;
+                boolean firstVideoSize = !videoSizeKnown;
+                videoSizeKnown = true;
                 boolean isPortrait = isPortraitVideoSize(
                         videoSize.width,
                         videoSize.height,
@@ -972,7 +961,10 @@ public class VideoDetailActivity extends Activity {
                     maybeDismissShowsLaunchCurtain();
                     return;
                 }
-                if (portraitVideo == isPortrait) return;
+                if (portraitVideo == isPortrait) {
+                    if (firstVideoSize && orientationListener != null) orientationListener.redispatch();
+                    return;
+                }
                 portraitVideo = isPortrait;
                 if (portraitVideo) {
                     if (sensorFullscreen || rotatableFullscreen) {
@@ -990,6 +982,7 @@ public class VideoDetailActivity extends Activity {
                 } else {
                     updatePortraitFullscreenButton();
                 }
+                if (orientationListener != null) orientationListener.redispatch();
             }
         });
         player.prepare();
@@ -2113,7 +2106,10 @@ public class VideoDetailActivity extends Activity {
         fullscreenChromeActive = fullscreen;
         playerView.setUseController(!fullscreen);
         if (changed) fullscreenControls.suspend(!fullscreen);
-        if (!fullscreen) fullscreenOverlay.setVisibility(View.GONE);
+        if (!fullscreen) {
+            fullscreenOverlay.setVisibility(View.GONE);
+            if (fullscreenGestures != null) fullscreenGestures.cancel();
+        }
         if (fullscreen) {
             ((TextView) fullscreenOverlay.findViewById(R.id.player_title)).setText(title);
             fullscreenControls.syncSaved(FavoriteStore.contains(this, pageUrl));
@@ -2269,6 +2265,7 @@ public class VideoDetailActivity extends Activity {
 
     private void onPhysicalOrientation(SensorMediaOrientationListener.Position position) {
         if (socialEntry && activeComments != null && activeComments.isShowing()) return;
+        if (player == null || !videoSizeKnown || !ShowsPlaybackOrientationPolicy.autoRotateEnabled(this)) return;
         if (!ShowsPlaybackOrientationPolicy.shouldAutoRotateFromSensor(
                 manualLandscapeFullscreen,
                 showsOrigin,
@@ -2496,6 +2493,7 @@ public class VideoDetailActivity extends Activity {
     }
 
     private void releasePlayer() {
+        if (fullscreenGestures != null) fullscreenGestures.cancel();
         if (fullscreenControls != null) fullscreenControls.release();
         playbackRecovery.cancel();
         portraitSeekScrubbing = false;

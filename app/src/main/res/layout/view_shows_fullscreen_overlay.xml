@@ -4,5 +4,5 @@
     android:layout_width="match_parent" android:layout_height="match_parent"
     app:controller_layout_id="@layout/view_shows_fullscreen_controls"
     app:animation_enabled="false" app:show_timeout="0"
-    app:play_icon="@drawable/ic_shittok_play_overlay"
+    app:play_icon="@drawable/ic_player_play"
     app:pause_icon="@drawable/ic_player_pause" />

@@ -53,6 +53,10 @@ final class BunkrGalleryPagerAdapter
 
         void onResolvedImageFailed(int position, NativeContentItem item);
 
+        default void onVideoBack() { }
+        default void onVideoMenu(View anchor) { }
+        default void onVideoFullscreen() { }
+
         default void onSharedElementReady(View target) {
         }
     }
@@ -72,6 +76,7 @@ final class BunkrGalleryPagerAdapter
     private RecyclerView attachedList;
     private int activeVideoPosition = RecyclerView.NO_POSITION;
     private Player activePlayer;
+    private boolean videoFullscreen;
     private String sharedElementUrl = "";
     private String sharedElementName = "";
     private boolean sharedElementDelivered;
@@ -112,6 +117,17 @@ final class BunkrGalleryPagerAdapter
         int added = items.size() - start;
         if (added > 0) notifyItemRangeInserted(start, added);
         return added;
+    }
+
+    void toggleVideoControls(int position) {
+        RecyclerView.ViewHolder raw = attachedList == null ? null : attachedList.findViewHolderForAdapterPosition(position);
+        if (raw instanceof Holder) ((Holder) raw).controls.onVideoTap();
+    }
+
+    void setVideoFullscreen(boolean fullscreen) {
+        if (videoFullscreen == fullscreen) return;
+        videoFullscreen = fullscreen;
+        if (activeVideoPosition != RecyclerView.NO_POSITION) notifyItemChanged(activeVideoPosition, STATE_PAYLOAD);
     }
 
     NativeContentItem itemAt(int position) {
@@ -259,6 +275,8 @@ final class BunkrGalleryPagerAdapter
         activePlayer = null;
         holder.reveal.cancelAndSettle();
         holder.reveal.showPoster();
+        holder.controls.release();
+        holder.gestures.cancel();
         holder.playerView.setPlayer(null);
         holder.playerView.setVisibility(View.GONE);
         holder.play.setVisibility(View.GONE);
@@ -282,13 +300,25 @@ final class BunkrGalleryPagerAdapter
 
         // TextureView keeps video in the same composition as the loading poster.
         PlayerView playerView = (PlayerView) LayoutInflater.from(parent.getContext())
-                .inflate(R.layout.view_video_player_texture, root, false);
+                .inflate(R.layout.view_shows_fullscreen_player, root, false);
         playerView.setBackgroundColor(Color.BLACK);
         playerView.setResizeMode(AspectRatioFrameLayout.RESIZE_MODE_FIT);
         playerView.setUseController(true);
+        playerView.setControllerAutoShow(false);
         playerView.setShowBuffering(PlayerView.SHOW_BUFFERING_NEVER);
         playerView.setVisibility(View.GONE);
         root.addView(playerView, new FrameLayout.LayoutParams(-1, -1));
+        ShowsFullscreenControls controls = new ShowsFullscreenControls(playerView);
+        FullscreenVideoGestures gestures = new FullscreenVideoGestures(
+                playerView, playerView::getPlayer, controls, () -> playerView.getPlayer() != null);
+        playerView.setOnTouchListener(gestures);
+        for (int id : new int[] { R.id.shows_save, R.id.shows_share, R.id.shows_like })
+            playerView.findViewById(id).setVisibility(View.GONE);
+        playerView.findViewById(androidx.media3.ui.R.id.exo_settings).setVisibility(View.VISIBLE);
+        playerView.findViewById(R.id.shows_fullscreen_toggle).setVisibility(View.VISIBLE);
+        playerView.findViewById(R.id.shows_fullscreen_toggle).setOnClickListener(v -> listener.onVideoFullscreen());
+        playerView.findViewById(R.id.player_back).setOnClickListener(v -> listener.onVideoBack());
+        playerView.findViewById(R.id.player_menu).setOnClickListener(listener::onVideoMenu);
         root.addView(image, new FrameLayout.LayoutParams(-1, -1));
 
         TextView play = new TextView(parent.getContext());
@@ -322,7 +352,7 @@ final class BunkrGalleryPagerAdapter
         failure.setVisibility(View.GONE);
         root.addView(failure, new FrameLayout.LayoutParams(-1, -1));
 
-        return new Holder(root, image, playerView, play, loadingDots, failure);
+        return new Holder(root, image, playerView, play, loadingDots, failure, controls, gestures);
     }
 
     @Override
@@ -470,6 +500,9 @@ final class BunkrGalleryPagerAdapter
         holder.image.setOnClickListener(openItem);
         holder.image.setOnLongClickListener(downloadItem);
         holder.playerView.setOnLongClickListener(downloadItem);
+        holder.playerView.findViewById(R.id.shows_download).setOnClickListener(v -> downloadItem.onLongClick(v));
+        ((TextView) holder.playerView.findViewById(R.id.player_title)).setText(
+                item.title + " · " + (position + 1) + " of " + items.size());
         holder.play.setOnClickListener(openItem);
         holder.failure.setOnClickListener(openItem);
     }
@@ -486,9 +519,19 @@ final class BunkrGalleryPagerAdapter
         if (item == null || !item.url.equals(holder.boundUrl)) return;
         boolean active = item.isVideo() && position == activeVideoPosition && activePlayer != null;
         if (holder.playerView.getPlayer() != (active ? activePlayer : null)) {
+            holder.controls.release();
+            holder.gestures.cancel();
             holder.playerView.setPlayer(active ? activePlayer : null);
+            if (active) holder.controls.bind(activePlayer);
         }
         holder.playerView.setVisibility(active ? View.VISIBLE : View.GONE);
+        android.widget.ImageButton fullscreen = holder.playerView.findViewById(R.id.shows_fullscreen_toggle);
+        androidx.media3.common.VideoSize size = active ? activePlayer.getVideoSize() : null;
+        boolean landscapeVideo = size != null && size.width > 0 && size.height > 0
+                && size.width * size.pixelWidthHeightRatio >= size.height;
+        fullscreen.setVisibility(landscapeVideo ? View.VISIBLE : View.GONE);
+        fullscreen.setImageResource(videoFullscreen ? R.drawable.ic_action_fullscreen_exit : R.drawable.ic_action_fullscreen);
+        fullscreen.setContentDescription(videoFullscreen ? "Exit fullscreen" : "Fullscreen");
         if (active && activeVideoFrameRendered) {
             if (!activeVideoBuffering || holder.reveal.isVideoRevealed()) {
                 holder.reveal.revealVideo(!revealsStopped);
@@ -544,6 +587,8 @@ final class BunkrGalleryPagerAdapter
         holder.requestedImageUrl = "";
         holder.imageLoading = false;
         GalleryMediaTransition.clearName(holder.image);
+        holder.controls.release();
+        holder.gestures.cancel();
         holder.playerView.setPlayer(null);
         holder.itemView.setOnLongClickListener(null);
         holder.image.setOnClickListener(null);
@@ -597,6 +642,8 @@ final class BunkrGalleryPagerAdapter
     static final class Holder extends RecyclerView.ViewHolder {
         final ZoomableImageView image;
         final PlayerView playerView;
+        final ShowsFullscreenControls controls;
+        final FullscreenVideoGestures gestures;
         final TextView play;
         final GalleryVideoLoadingView loadingDots;
         final TextView failure;
@@ -612,11 +659,15 @@ final class BunkrGalleryPagerAdapter
                 PlayerView playerView,
                 TextView play,
                 GalleryVideoLoadingView loadingDots,
-                TextView failure
+                TextView failure,
+                ShowsFullscreenControls controls,
+                FullscreenVideoGestures gestures
         ) {
             super(root);
             this.image = image;
             this.playerView = playerView;
+            this.controls = controls;
+            this.gestures = gestures;
             this.play = play;
             this.loadingDots = loadingDots;
             this.failure = failure;

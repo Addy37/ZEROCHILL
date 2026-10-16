@@ -28,6 +28,12 @@ final class CreatorProfileHeader extends LinearLayout {
     private final ImageView banner;
     private final ExecutorService heroIo = Executors.newSingleThreadExecutor();
     private boolean detached;
+    private FrameLayout compactFavorite;
+    private ImageView compactAvatar;
+    private TextView compactFavoriteBadge;
+    private android.content.SharedPreferences favoritePreferences;
+    private final android.content.SharedPreferences.OnSharedPreferenceChangeListener favoriteListener =
+            (prefs, key) -> refresh();
 
     CreatorProfileHeader(Context context, String title, String query, String url) {
         this(context, title, query, url, "");
@@ -142,8 +148,7 @@ final class CreatorProfileHeader extends LinearLayout {
         identity.addView(labels, new LayoutParams(0, -2, 1f));
 
         favorite = BrowseUi.action(context, "", "Favorite creator", v -> {
-            CreatorFavoriteStore.toggle(context, creator);
-            refresh();
+            toggleFavorite();
         });
         favorite.setTextSize(13);
         favorite.setTag("creator_favorite");
@@ -155,15 +160,7 @@ final class CreatorProfileHeader extends LinearLayout {
 
         addView(hero, new LayoutParams(-1, dp(184)));
 
-        if (!creator.imageUrl.isEmpty()) {
-            Glide.with(avatar)
-                    .load(withReferer(creator.imageUrl, creator.url))
-                    .circleCrop()
-                    .transition(ThumbnailFades.avatar())
-                    .placeholder(R.drawable.ic_more_account)
-                    .error(R.drawable.ic_more_account)
-                    .into(avatar);
-        }
+        loadAvatar(avatar);
 
         loadOnlyHavenHero(query);
         refresh();
@@ -209,6 +206,89 @@ final class CreatorProfileHeader extends LinearLayout {
         return new GlideUrl(imageUrl, headers.build());
     }
 
+    private void loadAvatar(ImageView avatar) {
+        if (creator.imageUrl.isEmpty()) return;
+        Glide.with(avatar)
+                .load(withReferer(creator.imageUrl, creator.url))
+                .circleCrop()
+                .transition(ThumbnailFades.avatar())
+                .placeholder(R.drawable.ic_more_account)
+                .error(R.drawable.ic_more_account)
+                .into(avatar);
+    }
+
+    void bindCompactFavorite(FrameLayout action) {
+        compactFavorite = action;
+        action.setFocusable(true);
+        action.setAccessibilityDelegate(new View.AccessibilityDelegate() {
+            @Override public void onInitializeAccessibilityNodeInfo(
+                    View host, android.view.accessibility.AccessibilityNodeInfo info) {
+                super.onInitializeAccessibilityNodeInfo(host, info);
+                info.setClassName(android.widget.ToggleButton.class.getName());
+                info.setCheckable(true);
+                info.setChecked(host.isSelected());
+            }
+        });
+
+        // Keep the complete photo and corner badge inside a centered 40dp cluster.
+        FrameLayout cluster = new FrameLayout(getContext());
+        action.addView(cluster, new FrameLayout.LayoutParams(dp(40), dp(40), Gravity.CENTER));
+        FrameLayout ring = new FrameLayout(getContext());
+        ring.setTag("creator_favorite_ring");
+        GradientDrawable outline = BrowseUi.rounded(getContext(), Color.BLACK, 18);
+        outline.setStroke(dp(1), UiPalette.PRIMARY);
+        ring.setBackground(outline);
+        ring.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);
+        FrameLayout.LayoutParams ringParams =
+                new FrameLayout.LayoutParams(dp(36), dp(36), Gravity.TOP | Gravity.START);
+        cluster.addView(ring, ringParams);
+
+        compactAvatar = new ImageView(getContext());
+        compactAvatar.setTag("creator_favorite_avatar");
+        compactAvatar.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        compactAvatar.setBackground(BrowseUi.rounded(getContext(), BrowseUi.SURFACE, 16));
+        compactAvatar.setClipToOutline(true);
+        compactAvatar.setImageResource(R.drawable.ic_more_account);
+        ring.addView(compactAvatar, new FrameLayout.LayoutParams(dp(32), dp(32), Gravity.CENTER));
+        loadAvatar(compactAvatar);
+
+        compactFavoriteBadge = BrowseUi.text(getContext(), "+", 13, UiPalette.ON_PRIMARY);
+        // A decorative icon, not body text: keep its glyph inside the badge at large font sizes.
+        compactFavoriteBadge.setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX, dp(12));
+        compactFavoriteBadge.setIncludeFontPadding(false);
+        compactFavoriteBadge.setTag("creator_favorite_badge");
+        compactFavoriteBadge.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        compactFavoriteBadge.setGravity(Gravity.CENTER);
+        GradientDrawable badge = BrowseUi.rounded(getContext(), UiPalette.PRIMARY, 8);
+        badge.setStroke(dp(1), Color.BLACK);
+        compactFavoriteBadge.setBackground(badge);
+        compactFavoriteBadge.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
+        cluster.addView(compactFavoriteBadge,
+                new FrameLayout.LayoutParams(dp(16), dp(16), Gravity.BOTTOM | Gravity.END));
+        ZeroChillMotion.installPressFeedback(action);
+        action.setOnClickListener(v -> toggleFavorite());
+        refresh();
+    }
+
+    void toggleFavorite() {
+        CreatorFavoriteStore.toggle(getContext(), creator);
+        refresh();
+    }
+
+    boolean isFavoriteOffscreen(int verticalOffset) {
+        android.graphics.Rect bounds = new android.graphics.Rect();
+        favorite.getDrawingRect(bounds);
+        offsetDescendantRectToMyCoords(favorite, bounds);
+        return favorite.getHeight() > 0 && bounds.bottom + verticalOffset <= 0;
+    }
+
+    @Override protected void onAttachedToWindow() {
+        super.onAttachedToWindow();
+        favoritePreferences = getContext().getSharedPreferences("creator_favorites", Context.MODE_PRIVATE);
+        favoritePreferences.registerOnSharedPreferenceChangeListener(favoriteListener);
+        refresh();
+    }
+
     void refresh() {
         boolean saved = CreatorFavoriteStore.contains(getContext(), creator);
         favorite.setText(saved ? "★  Favorited" : "☆  Favorite");
@@ -218,15 +298,22 @@ final class CreatorProfileHeader extends LinearLayout {
                 saved ? UiPalette.PRIMARY : Color.argb(190, 20, 24, 29),
                 23
         ));
-        favorite.setContentDescription(
-                (saved ? "Unfavorite " : "Favorite ") + creator.title
-        );
+        String description = (saved ? "Unfavorite " : "Favorite ") + creator.title;
+        favorite.setContentDescription(description);
+        favorite.setSelected(saved);
+        if (compactFavorite != null) {
+            compactFavoriteBadge.setText(saved ? "✓" : "+");
+            compactFavorite.setContentDescription(description);
+            compactFavorite.setSelected(saved);
+        }
     }
 
     @Override
     protected void onDetachedFromWindow() {
         detached = true;
+        if (favoritePreferences != null) favoritePreferences.unregisterOnSharedPreferenceChangeListener(favoriteListener);
         heroIo.shutdownNow();
+        if (compactAvatar != null) Glide.with(compactAvatar).clear(compactAvatar);
         Glide.with(banner).clear(banner);
         super.onDetachedFromWindow();
     }

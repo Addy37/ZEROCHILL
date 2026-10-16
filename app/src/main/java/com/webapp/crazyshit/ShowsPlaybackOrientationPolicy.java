@@ -2,7 +2,7 @@ package com.webapp.crazyshit;
 
 import android.content.Intent;
 
-/** Keeps Shows landscape playback portrait until the user explicitly requests fullscreen. */
+/** Shows manual fullscreen remains available; automatic fullscreen follows the user's rotation setting. */
 final class ShowsPlaybackOrientationPolicy {
     static final String EXTRA_MANUAL_LANDSCAPE_FULLSCREEN =
             "manual_landscape_fullscreen";
@@ -21,7 +21,12 @@ final class ShowsPlaybackOrientationPolicy {
             boolean showsOrigin,
             boolean portraitVideo
     ) {
-        return !manualLandscapeFullscreen && !showsOrigin && !portraitVideo;
+        return !showsOrigin && !portraitVideo;
+    }
+
+    static boolean autoRotateEnabled(android.content.Context context) {
+        return android.provider.Settings.System.getInt(context.getContentResolver(),
+                android.provider.Settings.System.ACCELEROMETER_ROTATION, 0) == 1;
     }
 
     static boolean shouldForceLandscapeOnFullscreen(
