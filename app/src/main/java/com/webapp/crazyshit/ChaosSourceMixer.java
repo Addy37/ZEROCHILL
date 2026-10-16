@@ -28,6 +28,7 @@ final class ChaosSourceMixer {
     private static final int BADDIEHUB_MAX_PAGE = 3;
     private static final ExecutorService CRAZY_IO = Executors.newFixedThreadPool(2);
     private static final ExecutorService SOURCE_IO = Executors.newFixedThreadPool(6);
+    private static final ExecutorService CONTINUITY_SOURCE_IO = Executors.newFixedThreadPool(2);
     private static final long MIX_BATCH_BUDGET_MS = 2_200L;
     private static final int BATCH_REGULAR = 1;
     private static final int BATCH_EFUKT = 2;
@@ -81,6 +82,10 @@ final class ChaosSourceMixer {
     }
 
     List<NativeContentItem> loadRandomBatch(Context context) {
+        return loadRandomBatch(context, false);
+    }
+
+    List<NativeContentItem> loadRandomBatch(Context context, boolean continuityOnly) {
         // Cold-start optimization: warm Shit Show immediately, but let the first Chaos request
         // return a small starter queue instead of waiting for the full mixed catalog.
         shitShow.prewarm(context);
@@ -97,20 +102,23 @@ final class ChaosSourceMixer {
         // Full refills race independent sources together. A slow or dead provider gets the same
         // bounded batch window as every other provider instead of serially delaying ShitTok.
         ExecutorCompletionService<SourceBatch> completions =
-                new ExecutorCompletionService<>(SOURCE_IO);
+                new ExecutorCompletionService<>(continuityOnly ? CONTINUITY_SOURCE_IO : SOURCE_IO);
         ArrayList<Future<SourceBatch>> work = new ArrayList<>();
-        work.add(completions.submit(() -> new SourceBatch(
-                BATCH_REGULAR, loadRegularBatch(context))));
-        work.add(completions.submit(() -> new SourceBatch(
-                BATCH_EFUKT, loadEfuktBatch(context))));
-        work.add(completions.submit(() -> new SourceBatch(
-                BATCH_KAOTIC, loadKaoticBatch(context))));
-        work.add(completions.submit(() -> new SourceBatch(
-                BATCH_FAPELLO, loadFapelloBatch(context))));
-        work.add(completions.submit(() -> new SourceBatch(
-                BATCH_ONLY_HAVEN, loadOnlyHavenBatch(context))));
-        work.add(completions.submit(() -> new SourceBatch(
-                BATCH_BADDIEHUB, loadBaddieHubBatch(context))));
+        ArrayList<java.util.concurrent.Callable<SourceBatch>> requests = new ArrayList<>();
+        requests.add(() -> new SourceBatch(
+                BATCH_REGULAR, loadRegularBatch(context)));
+        requests.add(() -> new SourceBatch(
+                BATCH_EFUKT, loadEfuktBatch(context)));
+        requests.add(() -> new SourceBatch(
+                BATCH_KAOTIC, loadKaoticBatch(context)));
+        requests.add(() -> new SourceBatch(
+                BATCH_FAPELLO, loadFapelloBatch(context)));
+        requests.add(() -> new SourceBatch(
+                BATCH_ONLY_HAVEN, loadOnlyHavenBatch(context)));
+        requests.add(() -> new SourceBatch(
+                BATCH_BADDIEHUB, loadBaddieHubBatch(context)));
+        if (continuityOnly) Collections.shuffle(requests, random);
+        for (java.util.concurrent.Callable<SourceBatch> request : requests) work.add(completions.submit(request));
 
         ArrayList<NativeContentItem> regularItems = new ArrayList<>();
         ArrayList<NativeContentItem> efuktItems = new ArrayList<>();

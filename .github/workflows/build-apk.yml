@@ -189,6 +189,14 @@ jobs:
           gradle-version: '8.11.1'
           cache-provider: basic
 
+      - name: Verify ShitTok continuity without weakening rebuffer protection
+        run: >-
+          gradle --no-daemon :app:testDebugUnitTest
+          --tests com.webapp.crazyshit.ShitTokContinuityTest
+          --tests com.webapp.crazyshit.ShitTokBufferOwnerTest
+          --tests com.webapp.crazyshit.ShitTokBufferLoadControlTest
+          --tests com.webapp.crazyshit.ShitTokOrientationAdmissionTest
+
       - name: Run ShitTok buffering and orientation regressions first
         run: >-
           gradle --no-daemon :app:testDebugUnitTest

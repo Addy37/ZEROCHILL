@@ -64,6 +64,11 @@ final class ShitTokOrientationAdmission {
 
     Result admit(List<NativeContentItem> candidates, Resolver resolver, BooleanSupplier allowedWork,
                  Random random, Consumer<Result> onVerified) {
+        return admit(candidates, resolver, allowedWork, random, Integer.MAX_VALUE, false, onVerified);
+    }
+
+    Result admit(List<NativeContentItem> candidates, Resolver resolver, BooleanSupplier allowedWork,
+                 Random random, int maxItems, boolean requireStreams, Consumer<Result> onVerified) {
         List<NativeContentItem> ordered = candidateOrder(candidates, random);
         ArrayList<NativeContentItem> admitted = new ArrayList<>();
         ArrayList<NativeContentItem> remaining = new ArrayList<>();
@@ -72,6 +77,7 @@ final class ShitTokOrientationAdmission {
         int probes = 0;
         boolean deferred = false;
         for (NativeContentItem item : ordered) {
+            if (admitted.size() >= maxItems) { remaining.add(item); continue; }
             Entry known;
             synchronized (cache) { known = cache.get(item.url); }
             if (trustedHint(item)) {
@@ -80,10 +86,16 @@ final class ShitTokOrientationAdmission {
                         && Float.compare(known.aspect, item.aspectRatioHint) == 0 ? known.stream : null;
                 Entry hint = new Entry(item.aspectRatioHint, reusable, 0L, "metadata");
                 synchronized (cache) { cache.put(item.url, hint); }
-                if (ShitTokOrientation.eligible(hint.aspect)) accept(item, hint, admitted, streams, onVerified);
-                continue;
+                if (!ShitTokOrientation.eligible(hint.aspect)) continue;
+                if (!requireStreams || reusable != null) {
+                    accept(item, hint, admitted, streams, onVerified);
+                    continue;
+                }
+                // Trusted dimensions avoid the probe, but continuity still needs a playable URL.
+                known = hint;
             }
-            if (known != null && (known.aspect > 0f || known.retryAt > clock.getAsLong())) {
+            if (known != null && (known.aspect > 0f || known.retryAt > clock.getAsLong())
+                    && (!requireStreams || known.stream != null || !ShitTokOrientation.eligible(known.aspect))) {
                 if (ShitTokOrientation.eligible(known.aspect))
                     accept(item, known, admitted, streams, onVerified);
                 continue;
@@ -99,12 +111,13 @@ final class ShitTokOrientationAdmission {
             }
             probes++;
             CrazyShitRepository.StreamInfo stream = known != null && known.provenance.equals("pending") ? known.stream : null;
-            float aspect = 0f;
+            float aspect = known != null && ShitTokOrientation.eligible(known.aspect) ? known.aspect : 0f;
             try {
                 if (stream == null) stream = resolver.resolve(item);
                 if (!allowedWork.getAsBoolean() || Thread.currentThread().isInterrupted()) throw new Deferred();
-                if (stream != null && stream.mediaUrl != null && !stream.mediaUrl.isEmpty())
-                    aspect = probe.inspect(stream, allowedWork);
+                if (stream != null && stream.mediaUrl != null && !stream.mediaUrl.isEmpty()) {
+                    if (!(aspect > 0f)) aspect = probe.inspect(stream, allowedWork);
+                } else aspect = 0f;
             } catch (Exception failure) {
                 if (!allowedWork.getAsBoolean() || Thread.currentThread().isInterrupted() || deferred(failure)) {
                     deferred = true;
@@ -115,6 +128,7 @@ final class ShitTokOrientationAdmission {
                     continue;
                 }
                 // A failed item cannot prevent other sources from filling the feed.
+                aspect = 0f;
             }
             if (!(aspect > 0f) || !Float.isFinite(aspect)) aspect = 0f;
             String provenance = stream != null && stream.mediaUrl != null
