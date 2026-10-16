@@ -48,6 +48,7 @@ public class CreatorPlayerQolTest {
                         case "addListener": listeners.add((Player.Listener) args[0]); return null;
                         case "removeListener": listeners.remove(args[0]); return null;
                         case "getApplicationLooper": return Looper.getMainLooper();
+                        case "getCurrentMediaItem": return androidx.media3.common.MediaItem.fromUri("https://example.test/video.mp4");
                         case "getCurrentTimeline": return androidx.media3.common.Timeline.EMPTY;
                         case "getCurrentTracks": return androidx.media3.common.Tracks.EMPTY;
                         case "getMediaMetadata": return androidx.media3.common.MediaMetadata.EMPTY;
