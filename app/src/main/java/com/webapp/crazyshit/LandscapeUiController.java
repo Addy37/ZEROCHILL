@@ -260,7 +260,7 @@ final class LandscapeUiController {
             Drawable top = drawables.length > 1 ? drawables[1] : null;
             if (top != null) top.setTint(color);
             button.setBackground(railPill(activity, checked));
-            ZeroChillMotion.animateSelection(button, checked);
+            button.setSelected(checked);
         }
     }
 

@@ -85,7 +85,7 @@ final class LibraryHubView extends ScrollView {
 
         content = new LinearLayout(activity);
         content.setOrientation(LinearLayout.VERTICAL);
-        content.setPadding(dp(12), dp(18), dp(12), dp(36));
+        content.setPadding(dp(16), dp(16), dp(16), dp(32));
         addView(content, new ScrollView.LayoutParams(-1, -2));
         socialHub = new LibrarySocialHubView(activity);
         content.addView(socialHub, new LinearLayout.LayoutParams(-1, -2));
@@ -517,7 +517,7 @@ final class LibraryHubView extends ScrollView {
         frame.addView(shade, new FrameLayout.LayoutParams(-1, -1));
 
         TextView status = pill(VideoDownloadStore.statusText(entry));
-        status.setTextSize(9.5f);
+        status.setTextSize(11f);
         FrameLayout.LayoutParams statusParams =
                 new FrameLayout.LayoutParams(-2, dp(26), Gravity.TOP | Gravity.END);
         statusParams.setMargins(0, dp(8), dp(8), 0);
@@ -634,13 +634,13 @@ final class LibraryHubView extends ScrollView {
         LinearLayout copy = new LinearLayout(activity);
         copy.setOrientation(LinearLayout.VERTICAL);
 
-        TextView heading = text(title, 21f,
+        TextView heading = text(title, 20f,
                 ZeroChillUi.color(activity, R.color.zc_text_primary));
-        heading.setTypeface(null, android.graphics.Typeface.BOLD);
+        ZeroChillTypography.apply(heading, ZeroChillTypography.Role.SECTION);
         heading.setContentDescription(title);
         copy.addView(heading);
 
-        TextView hint = text(subtitle, 11.5f,
+        TextView hint = text(subtitle, 13f,
                 ZeroChillUi.color(activity, R.color.zc_text_muted));
         LinearLayout.LayoutParams hintParams = new LinearLayout.LayoutParams(-1, -2);
         hintParams.topMargin = dp(2);
@@ -648,7 +648,7 @@ final class LibraryHubView extends ScrollView {
 
         headingRow.addView(copy, new LinearLayout.LayoutParams(0, -2, 1f));
 
-        TextView viewAll = text(actionLabel, 11.5f, UiPalette.PRIMARY);
+        TextView viewAll = text(actionLabel, 13f, UiPalette.TEXT_SECONDARY);
         viewAll.setTypeface(null, android.graphics.Typeface.BOLD);
         viewAll.setGravity(Gravity.CENTER);
         viewAll.setPadding(dp(12), dp(10), dp(8), dp(10));
@@ -657,7 +657,7 @@ final class LibraryHubView extends ScrollView {
         viewAll.setContentDescription(actionLabel + " " + title);
         ZeroChillMotion.installPressFeedback(viewAll);
         viewAll.setOnClickListener(v -> action.run());
-        headingRow.addView(viewAll, new LinearLayout.LayoutParams(-2, dp(42)));
+        headingRow.addView(viewAll, new LinearLayout.LayoutParams(-2, dp(48)));
 
         section.addView(headingRow, new LinearLayout.LayoutParams(-1, -2));
 
@@ -675,11 +675,11 @@ final class LibraryHubView extends ScrollView {
         scroll.addView(rail, new HorizontalScrollView.LayoutParams(-2, -2));
 
         LinearLayout.LayoutParams railParams = new LinearLayout.LayoutParams(-1, -2);
-        railParams.topMargin = dp(10);
+        railParams.topMargin = dp(12);
         section.addView(scroll, railParams);
 
         LinearLayout.LayoutParams sectionParams = new LinearLayout.LayoutParams(-1, -2);
-        sectionParams.setMargins(0, 0, 0, dp(25));
+        sectionParams.setMargins(0, 0, 0, dp(24));
         mediaContent.addView(section, sectionParams);
         return rail;
     }
@@ -690,7 +690,7 @@ final class LibraryHubView extends ScrollView {
         empty.setGravity(Gravity.CENTER);
         empty.setPadding(dp(26), dp(54), dp(26), dp(42));
 
-        TextView icon = text("♡", 36f, UiPalette.PRIMARY);
+        TextView icon = text("♡", 36f, UiPalette.TEXT_MUTED);
         icon.setGravity(Gravity.CENTER);
         empty.addView(icon, new LinearLayout.LayoutParams(dp(60), dp(60)));
 
@@ -912,7 +912,7 @@ final class LibraryHubView extends ScrollView {
     }
 
     private TextView pill(String value) {
-        TextView badge = text(value, 10.5f, Color.WHITE);
+        TextView badge = text(value, 12f, Color.WHITE);
         badge.setTypeface(null, android.graphics.Typeface.BOLD);
         badge.setGravity(Gravity.CENTER);
         badge.setPadding(dp(9), 0, dp(9), 0);

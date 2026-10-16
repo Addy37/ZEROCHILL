@@ -256,7 +256,7 @@ public class FavoritesActivity extends Activity {
         ZeroChillMotion.installPressFeedback(wrapper);
 
         MaterialCardView card = new MaterialCardView(this);
-        card.setCardBackgroundColor(Color.rgb(18, 18, 21));
+        card.setCardBackgroundColor(UiPalette.SURFACE);
         card.setRadius(dp(16));
         card.setCardElevation(0f);
         card.setStrokeWidth(0);
@@ -319,7 +319,7 @@ public class FavoritesActivity extends Activity {
                     .format(new Date(item.lastWatched))
                     : "Watched";
         }
-        TextView detail = text(meta, 10, Color.rgb(145, 145, 155));
+        TextView detail = text(meta, 12, UiPalette.TEXT_MUTED);
         detail.setMaxLines(1);
         detail.setEllipsize(TextUtils.TruncateAt.END);
         LinearLayout.LayoutParams detailParams = new LinearLayout.LayoutParams(-1, -2);
@@ -378,7 +378,7 @@ public class FavoritesActivity extends Activity {
         ZeroChillMotion.installPressFeedback(wrapper);
 
         MaterialCardView card = new MaterialCardView(this);
-        card.setCardBackgroundColor(Color.rgb(18, 18, 21));
+        card.setCardBackgroundColor(UiPalette.SURFACE);
         card.setRadius(dp(16));
         card.setCardElevation(0f);
         card.setStrokeWidth(0);
@@ -413,7 +413,7 @@ public class FavoritesActivity extends Activity {
                 ? "Saved " + DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT)
                 .format(new Date(item.savedAt))
                 : "Saved";
-        TextView saved = text(date, 10, Color.rgb(145, 145, 155));
+        TextView saved = text(date, 12, UiPalette.TEXT_MUTED);
         saved.setMaxLines(1);
         saved.setEllipsize(TextUtils.TruncateAt.END);
         LinearLayout.LayoutParams savedParams = new LinearLayout.LayoutParams(-1, -2);
@@ -502,11 +502,11 @@ public class FavoritesActivity extends Activity {
 
     private FrameLayout makeThumbnail(String pageUrl) {
         FrameLayout media = new FrameLayout(this);
-        media.setBackgroundColor(Color.rgb(18, 18, 21));
+        media.setBackgroundColor(UiPalette.SURFACE);
 
         ImageView image = new ImageView(this);
         image.setScaleType(ImageView.ScaleType.CENTER_CROP);
-        image.setBackgroundColor(Color.rgb(18, 18, 21));
+        image.setBackgroundColor(UiPalette.SURFACE);
         media.addView(image, new FrameLayout.LayoutParams(-1, -1));
 
         TextView play = text("▶", 20, Color.WHITE);
@@ -553,8 +553,8 @@ public class FavoritesActivity extends Activity {
                     .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
                     .dontAnimate()
                     .transition(ThumbnailFades.thumbnail())
-                    .placeholder(new ColorDrawable(Color.rgb(18, 18, 21)))
-                    .error(new ColorDrawable(Color.rgb(18, 18, 21)))
+                    .placeholder(new ColorDrawable(UiPalette.SURFACE))
+                    .error(new ColorDrawable(UiPalette.SURFACE))
                     .into(image);
         } catch (Exception ignored) {
         }
@@ -601,7 +601,7 @@ public class FavoritesActivity extends Activity {
         TextView title = text(titleValue, 20, Color.WHITE);
         title.setGravity(Gravity.CENTER);
         title.setTypeface(null, android.graphics.Typeface.BOLD);
-        TextView body = text(bodyValue, 14, Color.rgb(170, 170, 180));
+        TextView body = text(bodyValue, 14, UiPalette.TEXT_SECONDARY);
         body.setGravity(Gravity.CENTER);
         body.setPadding(0, dp(8), 0, 0);
         empty.addView(title);

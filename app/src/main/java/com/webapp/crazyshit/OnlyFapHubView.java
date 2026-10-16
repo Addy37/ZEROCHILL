@@ -199,7 +199,7 @@ final class OnlyFapHubView extends FrameLayout {
 
         TextView heroBrand = text("OnlyFap", 28f, Color.WHITE);
         heroBrand.setText(ZeroChillUi.sectionTitle(context, "OnlyFap", 4, 7));
-        heroBrand.setTypeface(null, android.graphics.Typeface.BOLD);
+        ZeroChillTypography.apply(heroBrand, ZeroChillTypography.Role.DISPLAY);
         heroBrand.setSingleLine(true);
         heroBrand.setShadowLayer(dp(8), 0f, dp(2), Color.argb(150, 0, 0, 0));
         heroBar.addView(heroBrand, new LinearLayout.LayoutParams(0, dp(58), 1f));
@@ -213,11 +213,11 @@ final class OnlyFapHubView extends FrameLayout {
         heroSearch.setContentDescription("Search OnlyFap creators");
         heroSearch.setOnClickListener(v -> listener.onSearch());
         ZeroChillMotion.installPressFeedback(heroSearch);
-        heroBar.addView(heroSearch, new LinearLayout.LayoutParams(dp(44), dp(48)));
+        heroBar.addView(heroSearch, new LinearLayout.LayoutParams(dp(48), dp(48)));
 
         if (context instanceof android.app.Activity) {
             profileAvatar = new HeaderProfileAvatar((android.app.Activity) context);
-            heroBar.addView(profileAvatar, new LinearLayout.LayoutParams(dp(44), dp(48)));
+            heroBar.addView(profileAvatar, new LinearLayout.LayoutParams(dp(48), dp(48)));
         }
 
         ImageView heroMore = new ImageView(context);
@@ -230,7 +230,7 @@ final class OnlyFapHubView extends FrameLayout {
         heroMore.setOnClickListener(v -> listener.onMore(v));
         ZeroChillMotion.installPressFeedback(heroMore);
         LinearLayout.LayoutParams heroMoreParams =
-                new LinearLayout.LayoutParams(dp(44), dp(48));
+                new LinearLayout.LayoutParams(dp(48), dp(48));
         heroMoreParams.setMarginStart(dp(2));
         heroBar.addView(heroMore, heroMoreParams);
 
@@ -264,7 +264,7 @@ final class OnlyFapHubView extends FrameLayout {
         heroCopy.addView(heroTitle, heroTitleParams);
 
         heroHint = text(
-                "Featured galleries appear here as creator artwork becomes available.",
+                "Your next favorite creator.",
                 13f,
                 ZeroChillUi.color(context, R.color.zc_text_secondary)
         );
@@ -314,7 +314,7 @@ final class OnlyFapHubView extends FrameLayout {
 
         body = new LinearLayout(context);
         body.setOrientation(LinearLayout.VERTICAL);
-        body.setPadding(dp(12), dp(4), dp(12), 0);
+        body.setPadding(dp(16), dp(12), dp(16), 0);
         content.addView(body, new LinearLayout.LayoutParams(-1, -2));
 
         favoritesSection = new LinearLayout(context);
@@ -326,11 +326,13 @@ final class OnlyFapHubView extends FrameLayout {
         favoriteHeading.setGravity(Gravity.CENTER_VERTICAL);
 
         TextView favoriteTitle = text("Favorite Creators", 19f, Color.WHITE);
-        favoriteTitle.setTypeface(null, android.graphics.Typeface.BOLD);
+        ZeroChillTypography.apply(favoriteTitle, ZeroChillTypography.Role.SECTION);
         favoriteHeading.addView(favoriteTitle, new LinearLayout.LayoutParams(0, -2, 1f));
 
-        TextView favoriteAll = text("View all", 12.5f, UiPalette.PRIMARY);
+        TextView favoriteAll = text("View all", 13f, UiPalette.TEXT_SECONDARY);
         favoriteAll.setGravity(Gravity.CENTER);
+        favoriteAll.setMinHeight(dp(48));
+        favoriteAll.setMinWidth(dp(48));
         favoriteAll.setPadding(dp(10), dp(6), dp(4), dp(6));
         favoriteAll.setClickable(true);
         favoriteAll.setFocusable(true);
@@ -450,7 +452,7 @@ final class OnlyFapHubView extends FrameLayout {
         heroIndex = -1;
         heroDots.setVisibility(View.GONE);
         heroTitle.setText("Discover creators");
-        heroHint.setText("Featured galleries appear here as creator artwork becomes available.");
+        heroHint.setText("Your next favorite creator.");
         heroAction.setVisibility(View.GONE);
         loadingLabel.setText("Loading creators…");
         loadingLabel.setVisibility(View.VISIBLE);
@@ -619,7 +621,7 @@ final class OnlyFapHubView extends FrameLayout {
         section.setVisibility(View.GONE);
 
         TextView titleView = text(title, 19f, Color.WHITE);
-        titleView.setTypeface(null, android.graphics.Typeface.BOLD);
+        ZeroChillTypography.apply(titleView, ZeroChillTypography.Role.SECTION);
         section.addView(titleView);
 
         TextView subtitleView = text(
@@ -1576,7 +1578,7 @@ final class OnlyFapHubView extends FrameLayout {
             hint.setText("Open gallery");
             hint.setTextColor(
                     ZeroChillUi.color(context, R.color.zc_text_secondary));
-            hint.setTextSize(10.5f);
+            hint.setTextSize(12f);
             LinearLayout.LayoutParams hintParams =
                     new LinearLayout.LayoutParams(-1, -2);
             hintParams.topMargin = BrowseUi.dp(context, 2);

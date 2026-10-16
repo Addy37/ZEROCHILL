@@ -63,7 +63,7 @@ public class ZeroChillPublicProfileUiTest {
 
         View message = find(activity.getWindow().getDecorView(), "MESSAGE");
         assertNotNull(message);
-        assertEquals(dp(activity, 44), message.getLayoutParams().height);
+        assertEquals(dp(activity, 48), message.getLayoutParams().height);
 
         ImageView avatar = (ImageView) findType(activity.getWindow().getDecorView(), ImageView.class);
         assertNotNull(avatar);

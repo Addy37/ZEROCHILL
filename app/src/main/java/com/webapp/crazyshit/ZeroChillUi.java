@@ -5,6 +5,7 @@ import android.content.Context;
 import android.content.res.ColorStateList;
 import android.graphics.Color;
 import android.graphics.drawable.Drawable;
+import android.graphics.drawable.RippleDrawable;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Build;
 import android.text.SpannableString;
@@ -87,20 +88,13 @@ final class ZeroChillUi {
     static void styleTopBar(View bar) {
         if (bar == null) return;
         Context context = bar.getContext();
-        boolean glow = context.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
-                .getBoolean("ambient_feed_glow", true);
-        bar.setBackground(ContextCompat.getDrawable(
-                context,
-                glow ? R.drawable.zc_glass_top_bar : R.drawable.zc_glass_top_bar_plain
-        ));
-        bar.setElevation(dimension(context, R.dimen.zc_elevation_low));
+        bar.setBackgroundColor(background(context));
+        bar.setElevation(0f);
     }
 
     static void styleTitle(TextView view) {
         if (view == null) return;
-        view.setTextColor(color(view.getContext(), R.color.zc_text_primary));
-        view.setTextSize(22f);
-        view.setTypeface(null, android.graphics.Typeface.BOLD);
+        ZeroChillTypography.apply(view, ZeroChillTypography.Role.TITLE);
     }
 
     static SpannableString sectionTitle(Context context, String title, int accentStart, int accentEnd) {
@@ -136,13 +130,28 @@ final class ZeroChillUi {
 
     static void styleActionButton(Button button, boolean primary) {
         if (button == null) return;
-        Context context = button.getContext();
         button.setAllCaps(false);
-        button.setTextColor(color(context, primary ? R.color.zc_text_primary : R.color.zc_cyan));
         button.setBackgroundTintList(null);
-        button.setBackground(primary ? sheetGlass(context) : panelGlass(context));
-        button.setMinHeight(dimension(context, R.dimen.zc_touch_target));
-        ZeroChillMotion.installPressFeedback(button);
+        styleAction(button, primary);
+    }
+
+    static Drawable actionSurface(Context context, boolean primary) {
+        Drawable fill = rounded(context, primary ? UiPalette.PRIMARY : UiPalette.RAISED,
+                Color.TRANSPARENT, R.dimen.zc_radius_small);
+        Drawable mask = rounded(context, Color.WHITE, Color.TRANSPARENT, R.dimen.zc_radius_small);
+        return new RippleDrawable(ColorStateList.valueOf(color(context, R.color.zc_ripple)), fill, mask);
+    }
+
+    static void styleAction(TextView action, boolean primary) {
+        ZeroChillTypography.apply(action, ZeroChillTypography.Role.BODY);
+        action.setTypeface(android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL));
+        action.setTextColor(new ColorStateList(new int[][] { new int[] {-android.R.attr.state_enabled}, new int[] {} },
+                new int[] { color(action.getContext(), R.color.zc_disabled), primary ? UiPalette.ON_PRIMARY : UiPalette.TEXT_PRIMARY }));
+        action.setBackground(actionSurface(action.getContext(), primary));
+        action.setMinHeight(dimension(action.getContext(), R.dimen.zc_touch_target));
+        action.setMinWidth(dimension(action.getContext(), R.dimen.zc_touch_target));
+        action.setGravity(android.view.Gravity.CENTER);
+        ZeroChillMotion.installPressFeedback(action);
     }
 
     static void styleChip(TextView chip, boolean selected) {
@@ -150,17 +159,14 @@ final class ZeroChillUi {
         Context context = chip.getContext();
         int fill = selected
                 ? color(context, R.color.zc_cyan_container)
-                : color(context, R.color.zc_surface_glass_strong);
-        int stroke = selected
-                ? color(context, R.color.zc_cyan)
-                : color(context, R.color.zc_divider);
+                : color(context, R.color.zc_surface);
+        int stroke = Color.TRANSPARENT;
         chip.setTextColor(selected
                 ? color(context, R.color.zc_cyan)
                 : color(context, R.color.zc_text_secondary));
         chip.setBackground(rounded(context, fill, stroke, R.dimen.zc_radius_pill));
         chip.setSelected(selected);
         ZeroChillMotion.installPressFeedback(chip);
-        ZeroChillMotion.animateSelection(chip, selected);
     }
 
     static void styleSourceRailChip(TextView chip, boolean selected) {
@@ -171,19 +177,19 @@ final class ZeroChillUi {
                 ? ContextCompat.getDrawable(context, R.drawable.zc_source_rail_selected_glass)
                 : rounded(
                         context,
-                        Color.argb(48, 17, 23, 30),
-                        color(context, R.color.zc_divider),
+                        Color.TRANSPARENT,
+                        Color.TRANSPARENT,
                         R.dimen.zc_radius_pill
                 ));
         chip.setSelected(selected);
         ZeroChillMotion.installPressFeedback(chip);
-        ZeroChillMotion.animateSelection(chip, selected);
     }
 
     static void styleCard(View card) {
         if (card == null) return;
         card.setBackground(glass(card.getContext()));
-        card.setElevation(dimension(card.getContext(), R.dimen.zc_elevation_low));
+        card.setElevation(0f);
+        card.setTag(R.id.zerochill_surface_styled, Boolean.TRUE);
         ZeroChillMotion.installPressFeedback(card);
     }
 
@@ -192,10 +198,11 @@ final class ZeroChillUi {
         Context context = card.getContext();
         card.setCardBackgroundColor(color(context, R.color.zc_surface_glass));
         card.setRadius(dimension(context, radiusResource));
-        card.setCardElevation(dimension(context, R.dimen.zc_elevation_low));
-        card.setStrokeWidth(dimension(context, R.dimen.zc_stroke));
+        card.setCardElevation(0f);
+        card.setTag(R.id.zerochill_surface_styled, Boolean.TRUE);
+        card.setStrokeWidth(0);
         card.setStrokeColor(color(context, R.color.zc_edge));
-        card.setRippleColor(ColorStateList.valueOf(color(context, R.color.zc_cyan_container)));
+        card.setRippleColor(ColorStateList.valueOf(color(context, R.color.zc_ripple)));
     }
 
     static void styleMediaCard(MaterialCardView card, int radiusResource) {

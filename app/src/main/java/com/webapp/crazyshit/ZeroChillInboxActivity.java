@@ -138,12 +138,12 @@ public final class ZeroChillInboxActivity extends Activity {
         LinearLayout labels = new LinearLayout(this);
         labels.setOrientation(LinearLayout.VERTICAL);
         labels.setPadding(dp(8), 0, 0, 0);
-        title = BrowseUi.text(this, "Messages", 21, Color.WHITE);
+        title = BrowseUi.text(this, "Messages", 24, UiPalette.TEXT_PRIMARY);
         title.setTypeface(null, android.graphics.Typeface.BOLD);
         title.setSingleLine(true);
         title.setEllipsize(TextUtils.TruncateAt.END);
         labels.addView(title);
-        status = BrowseUi.text(this, "ZEROCHILL DMs", 10, BrowseUi.MUTED);
+        status = BrowseUi.text(this, "ZEROCHILL DMs", 11, BrowseUi.MUTED);
         status.setLetterSpacing(0.08f);
         status.setSingleLine(true);
         status.setEllipsize(TextUtils.TruncateAt.END);
@@ -161,7 +161,8 @@ public final class ZeroChillInboxActivity extends Activity {
         selectionActions.addView(deleteAction);
         selectionActions.addView(cancelAction);
         header.addView(selectionActions, new LinearLayout.LayoutParams(-2, dp(48)));
-        root.addView(header, new LinearLayout.LayoutParams(-1, dp(58)));
+        header.setMinimumHeight(dp(58));
+        root.addView(header, new LinearLayout.LayoutParams(-1, -2));
 
         progress = new ZeroChillProgressBar(this);
         ZeroChillUi.styleProgress(progress);
@@ -211,16 +212,21 @@ public final class ZeroChillInboxActivity extends Activity {
         final int generation = ++requestGeneration;
         final String user = ZeroChillSessionStore.currentUserId(this);
         progress.setVisibility(adapter.getItemCount() == 0 ? View.VISIBLE : View.GONE);
+        if (adapter.getItemCount() == 0) empty.setVisibility(View.GONE);
         inboxLoader.load(this, (items, error) -> runOnUiThread(() -> {
             if (isFinishing() || isDestroyed() || generation != requestGeneration
                     || !user.equals(ZeroChillSessionStore.currentUserId(this))) return;
             progress.setVisibility(View.GONE);
             if (error != null || items == null) {
-                ZeroChillToast.makeText(
-                        this,
-                        error == null ? "Couldn't load messages." : error.getMessage(),
-                        ZeroChillToast.LENGTH_LONG
-                ).show();
+                if (adapter.getItemCount() == 0) {
+                    empty.setText("Couldn't load messages.\n\nTap to try again.");
+                    empty.setVisibility(View.VISIBLE);
+                    empty.setOnClickListener(v -> loadInbox());
+                    empty.setFocusable(true);
+                    empty.setContentDescription("Couldn't load messages. Try again");
+                } else {
+                    ZeroChillToast.makeText(this, "Couldn't refresh messages.", ZeroChillToast.LENGTH_LONG).show();
+                }
                 return;
             }
             adapter.replace(items);
@@ -233,6 +239,11 @@ public final class ZeroChillInboxActivity extends Activity {
         for (ZeroChillSocialRepository.Conversation item : adapter.items) unreadCount += item.unreadCount;
         ZeroChillMessageBadgeStore.setUnreadCount(this, unreadCount);
         updateSelectionUi();
+        empty.setText("No conversations yet.\n\nOpen a ZEROCHILL profile and tap Message to start one.");
+        empty.setOnClickListener(null);
+        empty.setClickable(false);
+        empty.setFocusable(false);
+        empty.setContentDescription(null);
         empty.setVisibility(adapter.items.isEmpty() ? View.VISIBLE : View.GONE);
         recycler.setVisibility(adapter.items.isEmpty() ? View.GONE : View.VISIBLE);
     }
@@ -480,10 +491,10 @@ public final class ZeroChillInboxActivity extends Activity {
     }
 
     private Drawable conversationBackground(boolean selected) {
-        if (!selected) return ZeroChillUi.panelGlass(this);
+        if (!selected) return ZeroChillUi.rounded(this, UiPalette.SURFACE, UiPalette.DIVIDER, R.dimen.zc_radius_large);
         return ZeroChillUi.rounded(
                 this,
-                Color.rgb(6, 15, 20),
+                UiPalette.RAISED,
                 UiPalette.PRIMARY,
                 R.dimen.zc_radius_large
         );
@@ -534,7 +545,7 @@ public final class ZeroChillInboxActivity extends Activity {
             row.setOrientation(LinearLayout.HORIZONTAL);
             row.setGravity(Gravity.CENTER_VERTICAL);
             row.setPadding(dp(12), dp(10), dp(10), dp(10));
-            row.setBackground(ZeroChillUi.panelGlass(ZeroChillInboxActivity.this));
+            row.setBackground(conversationBackground(false));
             row.setClickable(true);
             row.setFocusable(true);
             RecyclerView.LayoutParams params = new RecyclerView.LayoutParams(-1, -2);
@@ -561,12 +572,12 @@ public final class ZeroChillInboxActivity extends Activity {
             preview.setPadding(0, dp(3), 0, 0);
             labels.addView(preview);
 
-            TextView time = BrowseUi.text(ZeroChillInboxActivity.this, "", 10, BrowseUi.MUTED);
+            TextView time = BrowseUi.text(ZeroChillInboxActivity.this, "", 12, BrowseUi.MUTED);
             time.setPadding(0, dp(3), 0, 0);
             labels.addView(time);
             row.addView(labels, new LinearLayout.LayoutParams(0, -2, 1f));
 
-            TextView unread = BrowseUi.text(ZeroChillInboxActivity.this, "", 10, Color.WHITE);
+            TextView unread = BrowseUi.text(ZeroChillInboxActivity.this, "", 12, UiPalette.ON_PRIMARY);
             unread.setTypeface(null, android.graphics.Typeface.BOLD);
             unread.setGravity(Gravity.CENTER);
             unread.setMinWidth(dp(24));
@@ -593,13 +604,11 @@ public final class ZeroChillInboxActivity extends Activity {
         public void onBindViewHolder(Holder holder, int position) {
             ZeroChillSocialRepository.Conversation item = items.get(position);
             ZeroChillSocialRepository.PublicProfile profile = item.profile;
-            String label = profile.displayName.isEmpty()
-                    ? "@" + profile.username
-                    : profile.displayName;
+            String label = SocialUi.name(profile.displayName, profile.username);
             boolean selecting = selectionMode();
             boolean selected = selectedPartners.contains(profile.userId);
             holder.name.setText(label);
-            holder.preview.setText("@" + profile.username + "  ·  " + item.lastMessage.body);
+            holder.preview.setText(item.lastMessage.body);
             holder.time.setText(formatTime(item.lastMessage.createdAt));
             holder.unread.setVisibility(!selecting && item.unreadCount > 0 ? View.VISIBLE : View.GONE);
             holder.unread.setText(item.unreadCount > 99 ? "99+" : String.valueOf(item.unreadCount));
@@ -608,7 +617,7 @@ public final class ZeroChillInboxActivity extends Activity {
             holder.selection.setTextColor(selected ? Color.BLACK : UiPalette.PRIMARY);
             holder.selection.setBackground(selectionMarkBackground(selected));
             holder.itemView.setBackground(conversationBackground(selected));
-            holder.itemView.setAlpha(selecting ? (selected ? 1f : 0.84f) : (item.unreadCount > 0 ? 1f : 0.82f));
+            holder.itemView.setAlpha(1f);
             holder.itemView.setContentDescription(selecting
                     ? label + (selected ? ". Selected. Tap to deselect." : ". Tap to select.")
                     : label + ". " + item.lastMessage.body
@@ -629,7 +638,7 @@ public final class ZeroChillInboxActivity extends Activity {
             if (avatarUrl.isEmpty()) {
                 holder.avatar.setImageResource(R.drawable.ic_more_account);
                 holder.avatar.setPadding(dp(12), dp(12), dp(12), dp(12));
-                holder.avatar.setColorFilter(UiPalette.PRIMARY);
+                holder.avatar.setColorFilter(UiPalette.TEXT_SECONDARY);
             } else {
                 holder.avatar.setPadding(0, 0, 0, 0);
                 holder.avatar.clearColorFilter();

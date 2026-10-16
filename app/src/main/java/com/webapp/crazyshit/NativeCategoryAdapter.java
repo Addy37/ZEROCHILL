@@ -302,7 +302,7 @@ public final class NativeCategoryAdapter extends RecyclerView.Adapter<NativeCate
         description.setTextColor(creatorCard
                 ? Color.rgb(188, 188, 198)
                 : Color.rgb(210, 210, 218));
-        description.setTextSize(creatorCard ? 10.5f : 11f);
+        description.setTextSize(12f);
         description.setMaxLines(creatorCard ? 1 : 5);
         description.setEllipsize(TextUtils.TruncateAt.END);
         description.setVisibility(View.GONE);
@@ -418,18 +418,8 @@ public final class NativeCategoryAdapter extends RecyclerView.Adapter<NativeCate
 
         GradientDrawable rankBackground = new GradientDrawable();
         rankBackground.setCornerRadius(dp(holder.card, 15));
-        if (rank == 1) {
-            rankBackground.setColor(UiPalette.PRIMARY);
-            holder.rank.setTextColor(Color.BLACK);
-        } else {
-            rankBackground.setColor(ZeroChillUi.color(
-                    holder.card.getContext(), R.color.zc_surface_glass_strong));
-            rankBackground.setStroke(
-                    dp(holder.card, 1),
-                    ZeroChillUi.color(holder.card.getContext(), R.color.zc_cyan_dim)
-            );
-            holder.rank.setTextColor(UiPalette.PRIMARY);
-        }
+        rankBackground.setColor(UiPalette.RAISED);
+        holder.rank.setTextColor(UiPalette.TEXT_SECONDARY);
         holder.rank.setBackground(rankBackground);
     }
 

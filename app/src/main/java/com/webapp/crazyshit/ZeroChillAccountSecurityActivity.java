@@ -37,13 +37,21 @@ public final class ZeroChillAccountSecurityActivity extends Activity {
         LinearLayout shell = new LinearLayout(this);
         shell.setOrientation(LinearLayout.VERTICAL);
         shell.setBackgroundColor(Color.BLACK);
-        TextView header = label("‹     " + ("email".equals(mode) ? "Change email" :
-                "password".equals(mode) ? "Change password" : "Delete account"), 19, Color.WHITE);
+        LinearLayout header = new LinearLayout(this);
         header.setGravity(Gravity.CENTER_VERTICAL);
-        header.setPadding(dp(18), 0, dp(18), 0);
-        header.setOnClickListener(v -> finish());
-        ZeroChillMotion.installPressFeedback(header);
-        shell.addView(header, new LinearLayout.LayoutParams(-1, dp(56)));
+        header.setPadding(dp(8), 0, dp(16), 0);
+        TextView back = label("‹", 31, UiPalette.TEXT_PRIMARY);
+        back.setGravity(Gravity.CENTER);
+        back.setContentDescription("Back");
+        back.setOnClickListener(v -> finish());
+        ZeroChillMotion.installPressFeedback(back);
+        header.addView(back, new LinearLayout.LayoutParams(dp(48), dp(48)));
+        TextView title = label("email".equals(mode) ? "Change email" :
+                "password".equals(mode) ? "Change password" : "Delete account", 24, UiPalette.TEXT_PRIMARY);
+        title.setPadding(dp(8), dp(8), 0, dp(8));
+        title.setTypeface(null, android.graphics.Typeface.BOLD);
+        header.addView(title, new LinearLayout.LayoutParams(0, -2, 1f));
+        shell.addView(header, new LinearLayout.LayoutParams(-1, -2));
         ScrollView scroll = new ScrollView(this);
         scroll.setFillViewport(true);
         shell.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
@@ -172,7 +180,7 @@ public final class ZeroChillAccountSecurityActivity extends Activity {
     }
 
     private void heading(String value) {
-        TextView heading = label(value, 12, UiPalette.PRIMARY);
+        TextView heading = label(value, 12, UiPalette.TEXT_MUTED);
         heading.setLetterSpacing(0.1f);
         content.addView(heading);
     }
@@ -203,9 +211,9 @@ public final class ZeroChillAccountSecurityActivity extends Activity {
     }
 
     private void button(String label, Runnable click) {
-        action = label(label, 12, Color.WHITE);
-        action.setGravity(Gravity.CENTER);
-        action.setBackgroundColor("delete".equals(mode) ? Color.rgb(135, 42, 50) : UiPalette.PRIMARY);
+        action = label(label, 14, UiPalette.ON_PRIMARY);
+        ZeroChillUi.styleAction(action, !"delete".equals(mode));
+        if ("delete".equals(mode)) action.setTextColor(UiPalette.DESTRUCTIVE);
         action.setMinHeight(dp(52));
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, -2);
         params.topMargin = dp(12);

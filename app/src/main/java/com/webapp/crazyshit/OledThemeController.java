@@ -61,7 +61,7 @@ final class OledThemeController {
 
         if (view instanceof MaterialCardView) {
             MaterialCardView card = (MaterialCardView) view;
-            if (!NativeFeedAdapter.STYLE_TAG.equals(card.getTag())) {
+            if (!NativeFeedAdapter.STYLE_TAG.equals(card.getTag()) && card.getTag(R.id.zerochill_surface_styled) == null) {
                 card.setCardBackgroundColor(OLED_CARD);
                 if (card.getStrokeWidth() > 0) card.setStrokeColor(OLED_STROKE);
             }

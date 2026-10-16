@@ -173,9 +173,9 @@ public class NotificationCenterUiTest {
         android.widget.LinearLayout labels = (android.widget.LinearLayout) row.getChildAt(1);
         android.widget.LinearLayout actions = (android.widget.LinearLayout) labels.getChildAt(2);
         assertEquals(View.VISIBLE, actions.getVisibility());
-        assertEquals(44, Math.round(actions.getChildAt(0).getLayoutParams().height
+        assertEquals(48, Math.round(actions.getChildAt(0).getLayoutParams().height
                 / activity.getResources().getDisplayMetrics().density));
-        assertEquals(44, Math.round(actions.getChildAt(1).getLayoutParams().height
+        assertEquals(48, Math.round(actions.getChildAt(1).getLayoutParams().height
                 / activity.getResources().getDisplayMetrics().density));
         TextView inlineLike = (TextView) actions.getChildAt(1);
         assertNotEquals("View", inlineLike.getText().toString());
@@ -183,8 +183,8 @@ public class NotificationCenterUiTest {
         TextView social = text(activity, "socialFilter");
         social.performClick();
         render(activity);
-        assertEquals(Boolean.TRUE, social.getTag());
-        assertEquals(Boolean.FALSE, text(activity, "allFilter").getTag());
+        assertTrue(social.isSelected());
+        assertFalse(text(activity, "allFilter").isSelected());
         controller.pause().stop().destroy();
     }
 

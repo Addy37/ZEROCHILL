@@ -11,25 +11,13 @@ import android.widget.LinearLayout;
 /** Lightweight animated feed skeleton used while native tabs are fetching content. */
 final class SkeletonLoaderView extends LinearLayout {
     private boolean running;
-    private boolean bright;
-    private final Runnable pulse = new Runnable() {
-        @Override
-        public void run() {
-            if (!running) return;
-            bright = !bright;
-            animate().cancel();
-            animate().alpha(bright ? 0.88f : 0.48f).setDuration(620L).withEndAction(() -> {
-                if (running) postDelayed(this, 80L);
-            }).start();
-        }
-    };
-
     SkeletonLoaderView(Context context) {
         super(context);
         setOrientation(VERTICAL);
         setPadding(dp(12), dp(8), dp(12), dp(18));
         setGravity(Gravity.TOP);
-        setBackgroundColor(Color.rgb(13, 13, 15));
+        setBackgroundColor(ZeroChillUi.background(context));
+        setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);
         for (int i = 0; i < 3; i++) addView(card());
         setVisibility(GONE);
     }
@@ -37,22 +25,17 @@ final class SkeletonLoaderView extends LinearLayout {
     void start() {
         if (running) return;
         running = true;
-        bright = false;
-        setAlpha(0.48f);
+        animate().cancel();
+        setAlpha(1f);
         setVisibility(VISIBLE);
         bringToFront();
-        removeCallbacks(pulse);
-        post(pulse);
     }
 
     void stop() {
         running = false;
-        removeCallbacks(pulse);
         animate().cancel();
-        animate().alpha(0f).setDuration(150L).withEndAction(() -> {
-            setVisibility(GONE);
-            setAlpha(1f);
-        }).start();
+        setVisibility(GONE);
+        setAlpha(1f);
     }
 
     private View card() {

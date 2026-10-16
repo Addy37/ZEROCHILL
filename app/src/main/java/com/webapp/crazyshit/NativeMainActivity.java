@@ -1247,6 +1247,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     private void refreshLibraryUpdateIndicator() {
         if (bottomNavigation == null) return;
         int unread = UpdateInboxStore.unreadCount(this);
+        bottomNavigation.setLibraryUnread(unread > 0);
         if (unread <= 0) {
             bottomNavigation.removeBadge(NAV_LIBRARY);
             return;

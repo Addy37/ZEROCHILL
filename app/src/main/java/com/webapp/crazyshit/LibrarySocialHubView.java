@@ -102,9 +102,9 @@ final class LibrarySocialHubView extends LinearLayout {
         setOrientation(VERTICAL);
         setPadding(dp(2), 0, dp(2), 0);
 
-        TextView heading = label(title, 11, UiPalette.PRIMARY);
+        TextView heading = label(title, 12, UiPalette.TEXT_MUTED);
         heading.setTypeface(null, android.graphics.Typeface.BOLD);
-        heading.setLetterSpacing(0.15f);
+        heading.setLetterSpacing(0.06f);
         LayoutParams headingParams = new LayoutParams(-1, -2);
         headingParams.setMargins(dp(8), 0, 0, dp(9));
         addView(heading, headingParams);
@@ -122,7 +122,7 @@ final class LibrarySocialHubView extends LinearLayout {
 
         messageAvatar = new ImageView(activity);
         messageAvatar.setScaleType(ImageView.ScaleType.CENTER_CROP);
-        messageAvatar.setBackground(BrowseUi.rounded(activity, Color.rgb(29, 36, 42), 22));
+        messageAvatar.setBackground(BrowseUi.rounded(activity, UiPalette.RAISED, 22));
         messageAvatar.setOutlineProvider(new android.view.ViewOutlineProvider() {
             @Override public void getOutline(View view, android.graphics.Outline outline) {
                 outline.setOval(0, 0, view.getWidth(), view.getHeight());
@@ -141,15 +141,15 @@ final class LibrarySocialHubView extends LinearLayout {
         singleLine(messageName);
         messageName.setTypeface(null, android.graphics.Typeface.BOLD);
         nameRow.addView(messageName, new LayoutParams(0, -2, 1));
-        messageTime = label("", 10, BrowseUi.MUTED);
+        messageTime = label("", 12, BrowseUi.MUTED);
         nameRow.addView(messageTime, new LayoutParams(-2, -2));
-        messagePreview = label("Your DMs will appear here", 11, BrowseUi.MUTED);
+        messagePreview = label("Your DMs will appear here", 13, BrowseUi.MUTED);
         singleLine(messagePreview);
         messageCopy.addView(messagePreview, new LayoutParams(-1, -2));
         messages.setContentDescription("Messages. No unread messages.");
         messages.setOnClickListener(v -> activity.startActivity(new Intent(activity, ZeroChillInboxActivity.class)));
         LayoutParams messagesParams = new LayoutParams(-1, -2);
-        messagesParams.bottomMargin = dp(7);
+        messagesParams.bottomMargin = dp(8);
         addView(messages, messagesParams);
 
         MaterialCardView notifications = card("Notifications", "Recent activity", R.drawable.ic_more_update);
@@ -161,12 +161,12 @@ final class LibrarySocialHubView extends LinearLayout {
         LayoutParams previewParams = new LayoutParams(-1, -2);
         previewParams.topMargin = dp(6);
         notificationDetails.addView(notificationPreview, previewParams);
-        notificationTime = label("", 10, BrowseUi.MUTED);
+        notificationTime = label("", 12, BrowseUi.MUTED);
         notificationDetails.addView(notificationTime, new LayoutParams(-1, -2));
         notifications.setOnClickListener(v -> activity.startActivity(new Intent(activity, UpdateInboxActivity.class)));
         addView(notifications, new LayoutParams(-1, -2));
 
-        LayoutParams bottomSpace = new LayoutParams(1, dp(22));
+        LayoutParams bottomSpace = new LayoutParams(1, dp(24));
         addView(new View(activity), bottomSpace);
         refreshNotifications();
         showMessages(null, 0);
@@ -174,10 +174,11 @@ final class LibrarySocialHubView extends LinearLayout {
 
     private MaterialCardView card(String title, String subtitle, int iconResource) {
         MaterialCardView card = new MaterialCardView(activity);
-        card.setCardBackgroundColor(Color.rgb(20, 25, 30));
-        card.setRadius(dp(19));
-        card.setStrokeColor(Color.argb(70, 8, 146, 208));
-        card.setStrokeWidth(dp(1));
+        ZeroChillUi.styleMaterialCard(card, R.dimen.zc_radius_medium);
+        card.setCardBackgroundColor(UiPalette.SURFACE);
+        card.setRadius(dp(16));
+        card.setStrokeColor(UiPalette.DIVIDER);
+        card.setStrokeWidth(0);
         card.setCardElevation(0);
         card.setClickable(true);
         card.setFocusable(true);
@@ -185,12 +186,12 @@ final class LibrarySocialHubView extends LinearLayout {
         LinearLayout row = new LinearLayout(activity);
         row.setOrientation(HORIZONTAL);
         row.setGravity(Gravity.TOP);
-        row.setPadding(dp(13), dp(11), dp(13), dp(11));
+        row.setPadding(dp(16), dp(12), dp(16), dp(12));
         ImageView symbol = new ImageView(activity);
         symbol.setImageResource(iconResource);
-        symbol.setColorFilter(UiPalette.PRIMARY);
+        symbol.setColorFilter(UiPalette.TEXT_SECONDARY);
         symbol.setPadding(dp(8), dp(8), dp(8), dp(8));
-        symbol.setBackground(BrowseUi.rounded(activity, Color.rgb(28, 45, 55), 13));
+        symbol.setBackground(BrowseUi.rounded(activity, UiPalette.RAISED, 13));
         row.addView(symbol, new LayoutParams(dp(35), dp(35)));
         LinearLayout details = new LinearLayout(activity);
         details.setOrientation(VERTICAL);
@@ -199,10 +200,10 @@ final class LibrarySocialHubView extends LinearLayout {
         titleView.setTypeface(null, android.graphics.Typeface.BOLD);
         singleLine(titleView);
         details.addView(titleView);
-        TextView subtitleView = label(subtitle, 10, BrowseUi.MUTED);
+        TextView subtitleView = label(subtitle, 12, BrowseUi.MUTED);
         details.addView(subtitleView);
         row.addView(details, new LayoutParams(0, -2, 1));
-        TextView badge = label("", 10, Color.WHITE);
+        TextView badge = label("", 12, UiPalette.ON_PRIMARY);
         badge.setTypeface(null, android.graphics.Typeface.BOLD);
         badge.setGravity(Gravity.CENTER);
         badge.setMinWidth(dp(24));
@@ -315,7 +316,7 @@ final class LibrarySocialHubView extends LinearLayout {
             boundAvatarUrl = avatarUrl;
             Glide.with(messageAvatar).clear(messageAvatar);
             messageAvatar.setImageResource(R.drawable.ic_more_account);
-            messageAvatar.setColorFilter(UiPalette.PRIMARY);
+            messageAvatar.setColorFilter(UiPalette.TEXT_SECONDARY);
             messageAvatar.setPadding(dp(9), dp(9), dp(9), dp(9));
             if (!avatarUrl.isEmpty()) {
                 messageAvatar.clearColorFilter();
@@ -324,6 +325,8 @@ final class LibrarySocialHubView extends LinearLayout {
             }
         }
         messageName.setText(name);
+        messagePreview.setSingleLine(latest != null);
+        messagePreview.setMaxLines(latest == null ? 2 : 1);
         messagePreview.setText(preview);
         messagePreview.setTextColor(latest != null && latest.unreadCount > 0
                 ? Color.WHITE : BrowseUi.MUTED);

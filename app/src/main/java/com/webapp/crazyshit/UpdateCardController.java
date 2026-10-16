@@ -47,9 +47,9 @@ final class UpdateCardController {
 
         card = new MaterialCardView(activity);
         ZeroChillUi.styleMaterialCard(card, R.dimen.zc_radius_medium);
-        card.setStrokeColor(UiPalette.PRIMARY);
+        card.setStrokeColor(UiPalette.DIVIDER);
         card.setStrokeWidth(dp(1));
-        card.setCardElevation(dp(12));
+        card.setCardElevation(dp(4));
         card.setClickable(true);
         card.setFocusable(true);
         card.setTag("zerochill_update_card");
@@ -72,13 +72,13 @@ final class UpdateCardController {
 
         LinearLayout titles = new LinearLayout(activity);
         titles.setOrientation(LinearLayout.VERTICAL);
-        eyebrow = text("ZEROCHILL UPDATE", 8, UiPalette.PRIMARY);
+        eyebrow = text("ZEROCHILL UPDATE", 11, UiPalette.TEXT_MUTED);
         eyebrow.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         eyebrow.setLetterSpacing(0.08f);
         title = text("", 14, Color.WHITE);
         title.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
-        body = text("", 10, Color.rgb(184, 190, 198));
-        body.setSingleLine(true);
+        body = text("", 13, UiPalette.TEXT_SECONDARY);
+        body.setMaxLines(2);
         body.setEllipsize(android.text.TextUtils.TruncateAt.END);
         titles.addView(eyebrow);
         titles.addView(title);
@@ -112,7 +112,7 @@ final class UpdateCardController {
         primary = button(true);
         actions.addView(secondary);
         LinearLayout.LayoutParams primaryParams =
-                new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(28));
+                new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(48));
         primaryParams.leftMargin = dp(6);
         actions.addView(primary, primaryParams);
         content.addView(actions);
@@ -305,15 +305,15 @@ final class UpdateCardController {
     private MaterialButton button(boolean emphasized) {
         MaterialButton button = new MaterialButton(activity);
         button.setAllCaps(false);
-        button.setTextSize(10);
+        button.setTextSize(13);
         button.setMinWidth(0);
-        button.setMinHeight(dp(28));
+        button.setMinHeight(dp(48));
         button.setInsetTop(0);
         button.setInsetBottom(0);
-        button.setCornerRadius(dp(9));
+        button.setCornerRadius(dp(12));
         button.setPadding(dp(10), 0, dp(10), 0);
         LinearLayout.LayoutParams params =
-                new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(28));
+                new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(48));
         button.setLayoutParams(params);
         if (emphasized) primaryStyle(button);
         return button;

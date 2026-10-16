@@ -294,7 +294,7 @@ final class VideoActionSheet {
         header.setPadding(dp(activity, 2), 0, 0, dp(activity, 10));
 
         ImageView logo = icon(activity, R.drawable.ic_player_more, 42, 10);
-        logo.setBackground(circle(UiPalette.PRIMARY_CONTAINER));
+        logo.setBackground(circle(UiPalette.RAISED));
         header.addView(logo, new LinearLayout.LayoutParams(dp(activity, 42), dp(activity, 42)));
 
         LinearLayout labels = new LinearLayout(activity);
@@ -367,7 +367,7 @@ final class VideoActionSheet {
         selectableForeground(activity, row);
 
         ImageView icon = icon(activity, action.iconRes, 40, 9);
-        icon.setBackground(circle(UiPalette.PRIMARY_CONTAINER));
+        icon.setBackground(circle(UiPalette.RAISED));
         row.addView(icon, new LinearLayout.LayoutParams(dp(activity, 40), dp(activity, 40)));
 
         LinearLayout labels = new LinearLayout(activity);
@@ -398,7 +398,7 @@ final class VideoActionSheet {
     private static ImageView icon(Activity activity, int res, int sizeDp, int paddingDp) {
         ImageView view = new ImageView(activity);
         view.setImageResource(res);
-        view.setImageTintList(ColorStateList.valueOf(UiPalette.PRIMARY));
+        view.setImageTintList(ColorStateList.valueOf(UiPalette.TEXT_SECONDARY));
         view.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
         view.setPadding(dp(activity, paddingDp), dp(activity, paddingDp),
                 dp(activity, paddingDp), dp(activity, paddingDp));

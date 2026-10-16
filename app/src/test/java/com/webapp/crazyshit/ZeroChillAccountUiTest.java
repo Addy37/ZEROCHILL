@@ -125,9 +125,9 @@ public class ZeroChillAccountUiTest {
         assertTrue(content.indexOfChild(find(root, "SIGN OUT")) > content.indexOfChild(hub));
         View editor = (View) findDescription(root, "Display name").getParent();
         assertEquals(View.GONE, editor.getVisibility());
-        find(root, "EDIT PROFILE").performClick();
+        find(root, "Edit profile").performClick();
         assertEquals(View.VISIBLE, editor.getVisibility());
-        find(root, "CLOSE EDITOR").performClick();
+        find(root, "Close editor").performClick();
         assertEquals(View.GONE, editor.getVisibility());
         messages.performClick();
         assertEquals(ZeroChillInboxActivity.class.getName(), Shadows.shadowOf(activity)
@@ -156,7 +156,7 @@ public class ZeroChillAccountUiTest {
     @Test public void draftSurvivesRecreationForSameUser() throws Exception {
         ZeroChillAccountActivity before = create(null);
         render(before);
-        find(before.getWindow().getDecorView(), "EDIT PROFILE").performClick();
+        find(before.getWindow().getDecorView(), "Edit profile").performClick();
         ((EditText) findDescription(before.getWindow().getDecorView(), "Display name")).setText("Draft name");
         ((EditText) findDescription(before.getWindow().getDecorView(), "Bio")).setText("Draft bio");
         Bundle state = new Bundle();
@@ -194,7 +194,7 @@ public class ZeroChillAccountUiTest {
             assertTrue(image.compress(Bitmap.CompressFormat.PNG, 100, out));
         }
         image.recycle();
-        assertNotNull(find(root, "CHANGE AVATAR"));
+        assertNotNull(find(root, "Change avatar"));
     }
 
     private static ZeroChillAccountActivity create(Bundle state) {

@@ -20,9 +20,9 @@ final class VideoDetailTransitionPolish {
 
         window.setAllowEnterTransitionOverlap(true);
         window.setAllowReturnTransitionOverlap(true);
-        window.setEnterTransition(new Fade(Fade.IN).setDuration(120L));
-        window.setReturnTransition(new Fade(Fade.OUT).setDuration(130L));
-        window.setExitTransition(new Fade(Fade.OUT).setDuration(110L));
-        window.setReenterTransition(new Fade(Fade.IN).setDuration(150L));
+        window.setEnterTransition(new Fade(Fade.IN).setDuration(ZeroChillMotion.duration(activity, ZeroChillMotion.QUICK_MS)));
+        window.setReturnTransition(new Fade(Fade.OUT).setDuration(ZeroChillMotion.duration(activity, ZeroChillMotion.QUICK_MS)));
+        window.setExitTransition(new Fade(Fade.OUT).setDuration(ZeroChillMotion.duration(activity, ZeroChillMotion.QUICK_MS)));
+        window.setReenterTransition(new Fade(Fade.IN).setDuration(ZeroChillMotion.duration(activity, ZeroChillMotion.QUICK_MS)));
     }
 }

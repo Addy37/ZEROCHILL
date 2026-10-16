@@ -24,4 +24,5 @@
     <dimen name="zc_rail_width">68dp</dimen>
     <dimen name="zc_elevation_low">2dp</dimen>
     <dimen name="zc_elevation_navigation">8dp</dimen>
+    <dimen name="zc_space_xxl">32dp</dimen>
 </resources>

@@ -33,6 +33,15 @@ final class StableBottomNavigationController {
     /** Shared ZeroChill floating-glass portrait navigation styling. */
     static void styleBar(BottomNavigationView nav) {
         if (nav == null) return;
+        if (nav instanceof ZeroChillBottomNavigationView) {
+            nav.setBackground(null);
+            nav.setElevation(0f);
+            if (nav.getParent() instanceof FrostedNavigationLayout) {
+                ((FrostedNavigationLayout) nav.getParent()).setFrostedNavigationView(nav);
+            }
+            ((ZeroChillBottomNavigationView) nav).refreshItemColors();
+            return;
+        }
         Context context = nav.getContext();
         nav.setBackground(ZeroChillUi.navigationGlass(context));
         nav.setBackgroundTintList(null);

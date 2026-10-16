@@ -142,11 +142,11 @@ final class OnlyFapCreatorSearchAdapter
 
         TextView badge = new TextView(context);
         badge.setText("OnlyFap");
-        badge.setTextColor(Color.BLACK);
+        badge.setTextColor(UiPalette.TEXT_SECONDARY);
         badge.setTextSize(10.5f);
         badge.setTypeface(null, android.graphics.Typeface.BOLD);
         badge.setGravity(Gravity.CENTER);
-        badge.setBackground(BrowseUi.rounded(context, UiPalette.PRIMARY, 8));
+        badge.setBackground(BrowseUi.rounded(context, UiPalette.RAISED, 8));
         LinearLayout.LayoutParams badgeParams =
                 new LinearLayout.LayoutParams(-2, dp(context, 20));
         badgeParams.bottomMargin = dp(context, 4);
@@ -162,14 +162,14 @@ final class OnlyFapCreatorSearchAdapter
 
         TextView handle = new TextView(context);
         handle.setTextColor(ZeroChillUi.color(context, R.color.zc_text_muted));
-        handle.setTextSize(11.5f);
+        handle.setTextSize(12f);
         handle.setSingleLine(true);
         handle.setEllipsize(TextUtils.TruncateAt.END);
         copy.addView(handle, new LinearLayout.LayoutParams(-1, -2));
 
         TextView meta = new TextView(context);
         meta.setTextColor(ZeroChillUi.color(context, R.color.zc_text_secondary));
-        meta.setTextSize(11f);
+        meta.setTextSize(12f);
         meta.setMaxLines(2);
         meta.setEllipsize(TextUtils.TruncateAt.END);
         LinearLayout.LayoutParams metaParams = new LinearLayout.LayoutParams(-1, -2);

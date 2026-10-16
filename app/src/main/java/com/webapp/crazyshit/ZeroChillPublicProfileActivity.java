@@ -81,22 +81,23 @@ public final class ZeroChillPublicProfileActivity extends Activity {
         top.setGravity(Gravity.CENTER_VERTICAL);
         top.setPadding(dp(10), dp(3), dp(14), dp(3));
         top.setBackground(headerBackground());
-        shell.addView(top, new LinearLayout.LayoutParams(-1, dp(58)));
+        top.setMinimumHeight(dp(58));
+        shell.addView(top, new LinearLayout.LayoutParams(-1, -2));
 
         TextView back = text("‹", 31, Color.WHITE, false);
         back.setGravity(Gravity.CENTER);
         back.setContentDescription("Back");
         back.setOnClickListener(v -> finish());
         ZeroChillMotion.installPressFeedback(back);
-        top.addView(back, new LinearLayout.LayoutParams(dp(44), dp(44)));
+        top.addView(back, new LinearLayout.LayoutParams(dp(48), dp(48)));
 
         LinearLayout titles = new LinearLayout(this);
         titles.setOrientation(LinearLayout.VERTICAL);
         titles.setPadding(dp(6), 0, 0, 0);
         top.addView(titles, new LinearLayout.LayoutParams(0, -2, 1f));
 
-        titles.addView(text("Profile", 19, Color.WHITE, true));
-        TextView subtitle = text("ZEROCHILL ID", 9, ZeroChillUi.color(this, R.color.zc_text_muted), true);
+        titles.addView(text("Profile", 24, Color.WHITE, true));
+        TextView subtitle = text("ZEROCHILL ID", 11, ZeroChillUi.color(this, R.color.zc_text_muted), true);
         subtitle.setLetterSpacing(0.10f);
         titles.addView(subtitle);
 
@@ -142,7 +143,7 @@ public final class ZeroChillPublicProfileActivity extends Activity {
         sharedSection = null;
         content.removeAllViews();
 
-        TextView eyebrow = text("ZEROCHILL MEMBER", 10, UiPalette.PRIMARY, true);
+        TextView eyebrow = text("ZEROCHILL MEMBER", 12, UiPalette.TEXT_MUTED, true);
         eyebrow.setLetterSpacing(0.12f);
         content.addView(eyebrow);
 
@@ -156,7 +157,7 @@ public final class ZeroChillPublicProfileActivity extends Activity {
         content.addView(card, cardParams);
 
         FrameLayout halo = new FrameLayout(this);
-        halo.setBackground(circle(UiPalette.PRIMARY_CONTAINER));
+        halo.setBackground(circle(UiPalette.RAISED));
         halo.setPadding(dp(3), dp(3), dp(3), dp(3));
         card.addView(halo, new LinearLayout.LayoutParams(dp(96), dp(96)));
 
@@ -174,7 +175,7 @@ public final class ZeroChillPublicProfileActivity extends Activity {
         if (avatarUrl.isEmpty()) {
             avatar.setImageResource(R.drawable.ic_more_account);
             avatar.setPadding(dp(28), dp(28), dp(28), dp(28));
-            avatar.setColorFilter(UiPalette.PRIMARY);
+            avatar.setColorFilter(UiPalette.TEXT_SECONDARY);
         } else {
             AccountAvatarImages.bind(avatar, profile.userId, profile.avatarPath);
         }
@@ -188,7 +189,7 @@ public final class ZeroChillPublicProfileActivity extends Activity {
         }
 
         TextView username = text(SocialUi.cleanName(profile.username), profile.displayName.isEmpty() ? 23 : 14,
-                profile.displayName.isEmpty() ? Color.WHITE : UiPalette.PRIMARY, true);
+                profile.displayName.isEmpty() ? UiPalette.TEXT_PRIMARY : UiPalette.TEXT_SECONDARY, true);
         LinearLayout.LayoutParams userParams = new LinearLayout.LayoutParams(-2, -2);
         userParams.topMargin = dp(profile.displayName.isEmpty() ? 12 : 2);
         card.addView(username, userParams);
@@ -202,7 +203,7 @@ public final class ZeroChillPublicProfileActivity extends Activity {
             card.addView(bio, bioParams);
         }
 
-        TextView joined = text(joinedLabel(profile.createdAt), 11,
+        TextView joined = text(joinedLabel(profile.createdAt), 12,
                 ZeroChillUi.color(this, R.color.zc_text_muted), false);
         LinearLayout.LayoutParams joinedParams = new LinearLayout.LayoutParams(-2, -2);
         joinedParams.topMargin = dp(7);
@@ -220,13 +221,13 @@ public final class ZeroChillPublicProfileActivity extends Activity {
         } else {
             TextView message = button("MESSAGE");
             message.setOnClickListener(v -> openMessage(profile));
-            LinearLayout.LayoutParams messageParams = new LinearLayout.LayoutParams(-1, dp(44));
+            LinearLayout.LayoutParams messageParams = new LinearLayout.LayoutParams(-1, dp(48));
             messageParams.topMargin = dp(14);
             content.addView(message, messageParams);
 
             LinearLayout actions = new LinearLayout(this);
             actions.setOrientation(LinearLayout.HORIZONTAL);
-            LinearLayout.LayoutParams actionsParams = new LinearLayout.LayoutParams(-1, dp(44));
+            LinearLayout.LayoutParams actionsParams = new LinearLayout.LayoutParams(-1, dp(48));
             actionsParams.topMargin = dp(8);
             content.addView(actions, actionsParams);
 
@@ -251,7 +252,7 @@ public final class ZeroChillPublicProfileActivity extends Activity {
             note.setOrientation(LinearLayout.VERTICAL);
             note.setPadding(dp(15), dp(13), dp(15), dp(13));
             note.setBackground(panelBackground());
-            TextView label = text("SOCIAL IDENTITY", 10, UiPalette.PRIMARY, true);
+            TextView label = text("SOCIAL IDENTITY", 12, UiPalette.TEXT_MUTED, true);
             label.setLetterSpacing(0.08f);
             note.addView(label);
             TextView body = text(
@@ -322,7 +323,7 @@ public final class ZeroChillPublicProfileActivity extends Activity {
                     if (error != null || shared == null || shared.isEmpty()) return;
                     sharedSection.setPadding(dp(15), dp(14), dp(15), dp(16));
                     sharedSection.setBackground(panelBackground());
-                    TextView label = text("SHARED WITH YOU", 10, UiPalette.PRIMARY, true);
+                    TextView label = text("SHARED WITH YOU", 12, UiPalette.TEXT_MUTED, true);
                     label.setLetterSpacing(0.08f);
                     sharedSection.addView(label);
                     TextView title = text("Shared creators", 15, Color.WHITE, true);
@@ -432,7 +433,7 @@ public final class ZeroChillPublicProfileActivity extends Activity {
 
             ImageView avatar = new ImageView(this);
             bindSharedCreatorAvatar(avatar, creator);
-            row.addView(avatar, new LinearLayout.LayoutParams(dp(44), dp(44)));
+            row.addView(avatar, new LinearLayout.LayoutParams(dp(48), dp(48)));
 
             LinearLayout labels = new LinearLayout(this);
             labels.setOrientation(LinearLayout.VERTICAL);
@@ -455,7 +456,7 @@ public final class ZeroChillPublicProfileActivity extends Activity {
             hintParams.topMargin = dp(2);
             labels.addView(hint, hintParams);
 
-            TextView chevron = text("›", 28, UiPalette.PRIMARY, false);
+            TextView chevron = text("›", 28, UiPalette.TEXT_MUTED, false);
             chevron.setGravity(Gravity.CENTER);
             row.addView(chevron, new LinearLayout.LayoutParams(dp(32), dp(44)));
 
@@ -472,7 +473,7 @@ public final class ZeroChillPublicProfileActivity extends Activity {
 
         TextView close = secondaryButton("CLOSE");
         close.setOnClickListener(v -> dialog.dismiss());
-        LinearLayout.LayoutParams closeParams = new LinearLayout.LayoutParams(-1, dp(44));
+        LinearLayout.LayoutParams closeParams = new LinearLayout.LayoutParams(-1, dp(48));
         closeParams.topMargin = dp(6);
         sheet.addView(close, closeParams);
 
@@ -528,7 +529,7 @@ public final class ZeroChillPublicProfileActivity extends Activity {
         if (metadata == null || metadata.imageUrl == null || metadata.imageUrl.trim().isEmpty()) {
             avatar.setImageResource(R.drawable.ic_more_account);
             avatar.setPadding(dp(11), dp(11), dp(11), dp(11));
-            avatar.setColorFilter(UiPalette.PRIMARY);
+            avatar.setColorFilter(UiPalette.TEXT_SECONDARY);
             return;
         }
 
@@ -550,22 +551,18 @@ public final class ZeroChillPublicProfileActivity extends Activity {
     }
 
     private GradientDrawable sharedSheetBackground() {
-        GradientDrawable background = new GradientDrawable(
-                GradientDrawable.Orientation.TL_BR,
-                new int[]{Color.rgb(18, 23, 29), Color.rgb(6, 9, 13)}
-        );
-        background.setCornerRadius(dp(26));
-        background.setStroke(dp(1), Color.rgb(42, 67, 80));
+        GradientDrawable background = new GradientDrawable();
+        background.setColor(UiPalette.FLOATING);
+        background.setCornerRadius(dp(24));
+        background.setStroke(dp(1), UiPalette.DIVIDER);
         return background;
     }
 
     private GradientDrawable sharedCreatorRowBackground() {
-        GradientDrawable background = new GradientDrawable(
-                GradientDrawable.Orientation.TL_BR,
-                new int[]{Color.argb(245, 17, 21, 26), Color.argb(245, 9, 12, 16)}
-        );
+        GradientDrawable background = new GradientDrawable();
+        background.setColor(UiPalette.SURFACE);
         background.setCornerRadius(dp(16));
-        background.setStroke(dp(1), Color.rgb(38, 50, 58));
+        background.setStroke(dp(1), UiPalette.DIVIDER);
         return background;
     }
 
@@ -645,29 +642,15 @@ public final class ZeroChillPublicProfileActivity extends Activity {
     }
 
     private TextView button(String label) {
-        TextView view = text(label, 12, Color.rgb(5, 19, 28), true);
-        view.setGravity(Gravity.CENTER);
-        view.setLetterSpacing(0.06f);
-        GradientDrawable background = new GradientDrawable(
-                GradientDrawable.Orientation.LEFT_RIGHT,
-                new int[]{Color.rgb(8, 146, 208), Color.rgb(35, 174, 229)}
-        );
-        background.setCornerRadius(dp(17));
-        background.setStroke(dp(1), Color.rgb(80, 198, 244));
-        view.setBackground(background);
+        TextView view = text(label, 14, UiPalette.TEXT_PRIMARY, true);
+        ZeroChillUi.styleAction(view, true);
         ZeroChillMotion.installPressFeedback(view);
         return view;
     }
 
     private TextView secondaryButton(String label) {
-        TextView view = text(label, 11, UiPalette.PRIMARY, true);
-        view.setGravity(Gravity.CENTER);
-        view.setLetterSpacing(0.05f);
-        GradientDrawable background = new GradientDrawable();
-        background.setColor(Color.argb(180, 11, 13, 17));
-        background.setCornerRadius(dp(15));
-        background.setStroke(dp(1), Color.rgb(43, 52, 60));
-        view.setBackground(background);
+        TextView view = text(label, 14, UiPalette.TEXT_PRIMARY, true);
+        ZeroChillUi.styleAction(view, false);
         ZeroChillMotion.installPressFeedback(view);
         return view;
     }
@@ -698,19 +681,16 @@ public final class ZeroChillPublicProfileActivity extends Activity {
     }
 
     private GradientDrawable headerBackground() {
-        return new GradientDrawable(
-                GradientDrawable.Orientation.TOP_BOTTOM,
-                new int[]{Color.argb(246, 0, 0, 0), Color.argb(238, 12, 15, 20)}
-        );
+        GradientDrawable background = new GradientDrawable();
+        background.setColor(UiPalette.BACKGROUND);
+        return background;
     }
 
     private GradientDrawable panelBackground() {
-        GradientDrawable background = new GradientDrawable(
-                GradientDrawable.Orientation.TL_BR,
-                new int[]{Color.argb(235, 18, 21, 26), Color.argb(235, 8, 10, 14)}
-        );
-        background.setCornerRadius(dp(20));
-        background.setStroke(dp(1), Color.rgb(43, 57, 66));
+        GradientDrawable background = new GradientDrawable();
+        background.setColor(UiPalette.SURFACE);
+        background.setCornerRadius(dp(16));
+        background.setStroke(dp(1), UiPalette.DIVIDER);
         return background;
     }
 
