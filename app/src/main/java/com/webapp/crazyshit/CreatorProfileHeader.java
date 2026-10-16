@@ -28,6 +28,10 @@ final class CreatorProfileHeader extends LinearLayout {
     private final ImageView banner;
     private final ExecutorService heroIo = Executors.newSingleThreadExecutor();
     private boolean detached;
+    private TextView compactFavorite;
+    private android.content.SharedPreferences favoritePreferences;
+    private final android.content.SharedPreferences.OnSharedPreferenceChangeListener favoriteListener =
+            (prefs, key) -> refresh();
 
     CreatorProfileHeader(Context context, String title, String query, String url) {
         this(context, title, query, url, "");
@@ -142,8 +146,7 @@ final class CreatorProfileHeader extends LinearLayout {
         identity.addView(labels, new LayoutParams(0, -2, 1f));
 
         favorite = BrowseUi.action(context, "", "Favorite creator", v -> {
-            CreatorFavoriteStore.toggle(context, creator);
-            refresh();
+            toggleFavorite();
         });
         favorite.setTextSize(13);
         favorite.setTag("creator_favorite");
@@ -209,6 +212,31 @@ final class CreatorProfileHeader extends LinearLayout {
         return new GlideUrl(imageUrl, headers.build());
     }
 
+    void bindCompactFavorite(TextView action) {
+        compactFavorite = action;
+        action.setOnClickListener(v -> toggleFavorite());
+        refresh();
+    }
+
+    void toggleFavorite() {
+        CreatorFavoriteStore.toggle(getContext(), creator);
+        refresh();
+    }
+
+    boolean isFavoriteOffscreen(int verticalOffset) {
+        android.graphics.Rect bounds = new android.graphics.Rect();
+        favorite.getDrawingRect(bounds);
+        offsetDescendantRectToMyCoords(favorite, bounds);
+        return favorite.getHeight() > 0 && bounds.bottom + verticalOffset <= 0;
+    }
+
+    @Override protected void onAttachedToWindow() {
+        super.onAttachedToWindow();
+        favoritePreferences = getContext().getSharedPreferences("creator_favorites", Context.MODE_PRIVATE);
+        favoritePreferences.registerOnSharedPreferenceChangeListener(favoriteListener);
+        refresh();
+    }
+
     void refresh() {
         boolean saved = CreatorFavoriteStore.contains(getContext(), creator);
         favorite.setText(saved ? "★  Favorited" : "☆  Favorite");
@@ -218,14 +246,21 @@ final class CreatorProfileHeader extends LinearLayout {
                 saved ? UiPalette.PRIMARY : Color.argb(190, 20, 24, 29),
                 23
         ));
-        favorite.setContentDescription(
-                (saved ? "Unfavorite " : "Favorite ") + creator.title
-        );
+        String description = (saved ? "Unfavorite " : "Favorite ") + creator.title;
+        favorite.setContentDescription(description);
+        favorite.setSelected(saved);
+        if (compactFavorite != null) {
+            compactFavorite.setText(saved ? "★" : "☆");
+            compactFavorite.setTextColor(saved ? UiPalette.PRIMARY : Color.WHITE);
+            compactFavorite.setContentDescription(description);
+            compactFavorite.setSelected(saved);
+        }
     }
 
     @Override
     protected void onDetachedFromWindow() {
         detached = true;
+        if (favoritePreferences != null) favoritePreferences.unregisterOnSharedPreferenceChangeListener(favoriteListener);
         heroIo.shutdownNow();
         Glide.with(banner).clear(banner);
         super.onDetachedFromWindow();

@@ -151,14 +151,7 @@ final class ShowsFullscreenControls {
 
     void onVideoTap() {
         if (!visible) { show(); return; }
-        if (player != null) {
-            if (player.isPlaying()) player.pause();
-            else {
-                if (player.getPlaybackState() == Player.STATE_ENDED) player.seekTo(0L);
-                player.play();
-            }
-        }
-        show();
+        hide();
     }
 
     static boolean shouldAutoHide(boolean playWhenReady, int playbackState) {
@@ -195,9 +188,8 @@ final class ShowsFullscreenControls {
     }
 
     private void syncPausedChrome() {
-        // Like ShitTok, playback has no permanent center pause button obscuring the video.
-        view.findViewById(androidx.media3.ui.R.id.exo_center_controls).setVisibility(
-                player != null && !player.isPlaying() ? View.VISIBLE : View.GONE);
+        // Transport playback stays beside the timeline in either playback state.
+        view.findViewById(androidx.media3.ui.R.id.exo_center_controls).setVisibility(View.VISIBLE);
     }
 
     private void updateTimes(long position) {

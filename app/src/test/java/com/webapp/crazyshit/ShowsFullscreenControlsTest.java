@@ -74,7 +74,7 @@ public class ShowsFullscreenControlsTest {
         AtomicBoolean playing = new AtomicBoolean(true);
         controls.bind(player(playing));
         controls.show();
-        assertEquals(View.GONE, view.findViewById(androidx.media3.ui.R.id.exo_center_controls).getVisibility());
+        assertEquals(View.VISIBLE, view.findViewById(androidx.media3.ui.R.id.exo_center_controls).getVisibility());
         TimeBar bar = view.findViewById(androidx.media3.ui.R.id.exo_progress);
         Set<TimeBar.OnScrubListener> listeners = ReflectionHelpers.getField(bar, "listeners");
         for (TimeBar.OnScrubListener listener : listeners) listener.onScrubStart(bar, 14000L);

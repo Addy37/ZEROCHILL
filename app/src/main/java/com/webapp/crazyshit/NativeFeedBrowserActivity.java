@@ -109,6 +109,7 @@ public final class NativeFeedBrowserActivity extends Activity {
     private ViewPager2 creatorTabsPager;
     private TabLayout creatorTabs;
     private CreatorProfileHeader creatorProfile;
+    private TextView compactCreatorFavorite;
     private AppBarLayout creatorAppBar;
     private ShowDetailsHeader showDetailsHeader;
     private AppBarLayout showDetailsAppBar;
@@ -462,6 +463,14 @@ public final class NativeFeedBrowserActivity extends Activity {
         heading.setEllipsize(android.text.TextUtils.TruncateAt.END);
         top.addView(heading, new LinearLayout.LayoutParams(0, -2, 1f));
 
+        if (isCreatorGallery()) {
+            compactCreatorFavorite = BrowseUi.action(this, "☆", "Favorite creator", null);
+            compactCreatorFavorite.setTextSize(26);
+            compactCreatorFavorite.setTag("creator_favorite_compact");
+            compactCreatorFavorite.setVisibility(View.GONE);
+            top.addView(compactCreatorFavorite, new LinearLayout.LayoutParams(dp(48), dp(52)));
+        }
+
         TextView options = text("⋮", 28, Color.rgb(220, 220, 226));
         options.setGravity(Gravity.CENTER);
         options.setContentDescription("Feed options");
@@ -491,6 +500,7 @@ public final class NativeFeedBrowserActivity extends Activity {
                     baseUrl,
                     creatorGalleryCacheKey
             );
+            creatorProfile.bindCompactFavorite(compactCreatorFavorite);
             AppBarLayout.LayoutParams profileParams =
                     new AppBarLayout.LayoutParams(-1, dp(184));
             profileParams.setScrollFlags(
@@ -537,6 +547,16 @@ public final class NativeFeedBrowserActivity extends Activity {
                         Math.abs(verticalOffset) / (float) Math.max(1, dp(184))
                 );
                 creatorProfile.setAlpha(1f - progress);
+                boolean showFavorite = creatorProfile.isFavoriteOffscreen(verticalOffset);
+                if (showFavorite && compactCreatorFavorite.getVisibility() != View.VISIBLE) {
+                    compactCreatorFavorite.setVisibility(View.VISIBLE);
+                    compactCreatorFavorite.setAlpha(0f);
+                    compactCreatorFavorite.animate().alpha(1f).setDuration(
+                            ZeroChillMotion.animationsEnabled(this) ? ZeroChillMotion.QUICK_MS : 0).start();
+                } else if (!showFavorite) {
+                    compactCreatorFavorite.animate().cancel();
+                    compactCreatorFavorite.setVisibility(View.GONE);
+                }
             });
 
             CoordinatorLayout.LayoutParams bodyParams =

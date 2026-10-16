@@ -86,6 +86,10 @@ final class SensorMediaOrientationListener implements SensorEventListener {
         orientationListener.enable();
     }
 
+    void redispatch() {
+        if (enabled && stablePosition != null && !isFlat()) callback.onPositionChanged(stablePosition);
+    }
+
     void disable() {
         if (!enabled) return;
         enabled = false;

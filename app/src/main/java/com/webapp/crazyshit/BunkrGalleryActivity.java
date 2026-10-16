@@ -103,6 +103,11 @@ public final class BunkrGalleryActivity extends Activity {
     private boolean chromeVisible = true;
     private boolean restoreChromeAfterLandscape;
     private boolean landscapeFullscreen;
+    private boolean manualVideoFullscreen;
+    private boolean sensorVideoFullscreen;
+    private boolean videoSizeKnown;
+    private boolean portraitVideo;
+    private SensorMediaOrientationListener videoOrientationListener;
     private View viewerBackdrop;
     private boolean returningToGallery;
     private ExoPlayer player;
@@ -126,6 +131,7 @@ public final class BunkrGalleryActivity extends Activity {
     protected void onCreate(Bundle state) {
         super.onCreate(state);
         PhoneOrientationPolicy.applyBrowsingOrientation(this);
+        videoOrientationListener = new SensorMediaOrientationListener(this, this::onVideoOrientation);
         GalleryMediaTransition.requestWindowFeature(this);
         getWindow().setStatusBarColor(Color.BLACK);
         getWindow().setNavigationBarColor(Color.BLACK);
@@ -239,6 +245,10 @@ public final class BunkrGalleryActivity extends Activity {
                         BunkrGallerySessionStore.clearResolvedUrl(sessionId, item.url);
                         if (pager.getCurrentItem() == position) openNotificationFallback(item.url);
                     }
+
+                    @Override public void onVideoBack() { onBackPressed(); }
+                    @Override public void onVideoMenu(View anchor) { showMenu(anchor); }
+                    @Override public void onVideoFullscreen() { toggleVideoFullscreen(); }
 
                     @Override
                     public void onSharedElementReady(View target) {
@@ -922,7 +932,7 @@ public final class BunkrGalleryActivity extends Activity {
 
     private void playVideo(int position, NativeContentItem item) {
         if (activeVideoPosition == position && player != null) {
-            if (player.isPlaying()) player.pause(); else player.play();
+            adapter.toggleVideoControls(position);
             return;
         }
         playbackRecovery.reset();
@@ -995,6 +1005,8 @@ public final class BunkrGalleryActivity extends Activity {
                         ? GalleryVideoCache.factory(this, httpFactory) : httpFactory);
         player = new ExoPlayer.Builder(this).setMediaSourceFactory(mediaSourceFactory).build();
         activeVideoPosition = position;
+        videoSizeKnown = false;
+        if (PhoneOrientationPolicy.isPhoneSized(this)) PhoneOrientationPolicy.enterPortraitFullscreen(this);
         adapter.activateVideo(position, player);
 
         MediaItem.Builder media = new MediaItem.Builder().setUri(mediaUrl);
@@ -1005,6 +1017,19 @@ public final class BunkrGalleryActivity extends Activity {
         playbackRecovery.bind(player, item.url);
         ExoPlayer startedPlayer = player;
         player.addListener(new Player.Listener() {
+            @Override public void onVideoSizeChanged(androidx.media3.common.VideoSize size) {
+                if (player != startedPlayer || size.width <= 0 || size.height <= 0) return;
+                portraitVideo = VideoDetailActivity.isPortraitVideoSize(
+                        size.width, size.height, size.pixelWidthHeightRatio);
+                videoSizeKnown = true;
+                if (portraitVideo) {
+                    manualVideoFullscreen = sensorVideoFullscreen = false;
+                    if (PhoneOrientationPolicy.isPhoneSized(BunkrGalleryActivity.this))
+                        PhoneOrientationPolicy.enterPortraitFullscreen(BunkrGalleryActivity.this);
+                }
+                if (videoOrientationListener != null) videoOrientationListener.redispatch();
+            }
+
             @Override
             public void onRenderedFirstFrame() {
                 if (player != startedPlayer || returningToGallery || isFinishing()) return;
@@ -1084,7 +1109,33 @@ public final class BunkrGalleryActivity extends Activity {
         return httpFactory;
     }
 
+    private void toggleVideoFullscreen() {
+        if (player == null || !videoSizeKnown || portraitVideo) return;
+        manualVideoFullscreen = !(manualVideoFullscreen || sensorVideoFullscreen);
+        sensorVideoFullscreen = false;
+        if (manualVideoFullscreen) PhoneOrientationPolicy.enterSensorFullscreen(this);
+        else PhoneOrientationPolicy.enterPortraitFullscreen(this);
+        adapter.setVideoFullscreen(manualVideoFullscreen);
+    }
+
+    private void onVideoOrientation(SensorMediaOrientationListener.Position position) {
+        if (player == null || !videoSizeKnown || portraitVideo
+                || !ShowsPlaybackOrientationPolicy.autoRotateEnabled(this)) return;
+        if (position == SensorMediaOrientationListener.Position.LANDSCAPE) {
+            sensorVideoFullscreen = true;
+            PhoneOrientationPolicy.enterSensorFullscreen(this);
+        } else if (sensorVideoFullscreen || manualVideoFullscreen) {
+            sensorVideoFullscreen = manualVideoFullscreen = false;
+            PhoneOrientationPolicy.enterPortraitFullscreen(this);
+        }
+        adapter.setVideoFullscreen(sensorVideoFullscreen || manualVideoFullscreen);
+    }
+
     private void releasePlayer() {
+        if (player != null) {
+            manualVideoFullscreen = sensorVideoFullscreen = videoSizeKnown = false;
+            PhoneOrientationPolicy.applyBrowsingOrientation(this);
+        }
         playbackRecovery.cancel();
         if (player != null) {
             player.release();
@@ -1139,6 +1190,7 @@ public final class BunkrGalleryActivity extends Activity {
     public void onConfigurationChanged(Configuration newConfig) {
         super.onConfigurationChanged(newConfig);
         applyViewerOrientation(newConfig.orientation);
+        if (adapter != null) adapter.setVideoFullscreen(newConfig.orientation == Configuration.ORIENTATION_LANDSCAPE);
     }
 
     private void applyViewerOrientation(int orientation) {
@@ -1287,6 +1339,7 @@ public final class BunkrGalleryActivity extends Activity {
     protected void onResume() {
         super.onResume();
         recoveryResumed = true;
+        if (videoOrientationListener != null) videoOrientationListener.enable();
     }
 
     @Override protected void onSaveInstanceState(Bundle state) {
@@ -1303,6 +1356,7 @@ public final class BunkrGalleryActivity extends Activity {
 
     @Override
     protected void onPause() {
+        if (videoOrientationListener != null) videoOrientationListener.disable();
         recoveryResumed = false;
         BunkrGallerySessionStore.persist(this, sessionId);
         releasePlayer();
@@ -1311,6 +1365,7 @@ public final class BunkrGalleryActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        if (videoOrientationListener != null) videoOrientationListener.disable();
         generation++;
         if (adapter != null) adapter.stopReveals();
         releasePlayer();
