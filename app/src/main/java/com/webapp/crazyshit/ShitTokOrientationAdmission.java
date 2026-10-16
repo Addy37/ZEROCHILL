@@ -142,6 +142,69 @@ final class ShitTokOrientationAdmission {
         return new Result(admitted, streams, remaining, deferred);
     }
 
+    // Three metadata/URL lanes only. These workers never allocate an ExoPlayer or media buffer.
+    private final java.util.concurrent.ThreadPoolExecutor inventoryIo =
+            new java.util.concurrent.ThreadPoolExecutor(3, 3, 0L, java.util.concurrent.TimeUnit.MILLISECONDS,
+                    new java.util.concurrent.ArrayBlockingQueue<>(3));
+    private final java.util.concurrent.atomic.AtomicInteger rejectedCount = new java.util.concurrent.atomic.AtomicInteger();
+    int rejectedCount() { return rejectedCount.get(); }
+
+    Result admitConcurrent(java.util.concurrent.BlockingQueue<NativeContentItem> candidates,
+            BooleanSupplier productionDone, Resolver resolver, BooleanSupplier allowedWork,
+            int maxItems, Consumer<Result> onVerified, java.util.function.IntConsumer activeCount) {
+        java.util.concurrent.CompletionService<Result> completed =
+                new java.util.concurrent.ExecutorCompletionService<>(inventoryIo);
+        Map<java.util.concurrent.Future<Result>, NativeContentItem> active = new LinkedHashMap<>();
+        ArrayList<NativeContentItem> admitted = new ArrayList<>(), remaining = new ArrayList<>();
+        Map<String, CrazyShitRepository.StreamInfo> streams = new LinkedHashMap<>();
+        long started = clock.getAsLong();
+        int attempts = 0;
+        try {
+            while (allowedWork.getAsBoolean() && !Thread.currentThread().isInterrupted()
+                    && admitted.size() < maxItems && clock.getAsLong() - started < BATCH_MILLIS) {
+                while (active.size() < 3 && attempts < 24 && admitted.size() + active.size() < maxItems) {
+                    NativeContentItem item = candidates.poll();
+                    if (item == null) break;
+                    attempts++;
+                    try {
+                        active.put(completed.submit(() -> admit(Collections.singletonList(item), resolver,
+                                allowedWork, new Random(0), 1, true, null)), item);
+                    } catch (java.util.concurrent.RejectedExecutionException busy) {
+                        remaining.add(item);
+                        attempts = 24; // Old interrupted IO still owns the three slots. Retry in a later batch.
+                        break;
+                    }
+                }
+                activeCount.accept(active.size());
+                if (active.isEmpty() && (productionDone.getAsBoolean() && candidates.isEmpty() || attempts >= 24)) break;
+                java.util.concurrent.Future<Result> done = completed.poll(25, java.util.concurrent.TimeUnit.MILLISECONDS);
+                if (done == null) continue;
+                NativeContentItem item = active.remove(done);
+                Result result;
+                try { result = done.get(); }
+                catch (java.util.concurrent.ExecutionException failure) { continue; }
+                if (!allowedWork.getAsBoolean()) { remaining.add(item); break; }
+                if (result.items.isEmpty() && result.remaining.isEmpty()) rejectedCount.incrementAndGet();
+                admitted.addAll(result.items);
+                streams.putAll(result.streams);
+                remaining.addAll(result.remaining);
+                if (onVerified != null && !result.items.isEmpty()) onVerified.accept(result);
+            }
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+        } finally {
+            for (Map.Entry<java.util.concurrent.Future<Result>, NativeContentItem> task : active.entrySet()) {
+                task.getKey().cancel(true);
+                remaining.add(task.getValue());
+            }
+            inventoryIo.purge();
+            activeCount.accept(0);
+        }
+        return new Result(admitted, streams, remaining, !allowedWork.getAsBoolean());
+    }
+
+    void close() { inventoryIo.shutdownNow(); }
+
     String describe(String url) {
         synchronized (cache) {
             Entry entry = cache.get(url);

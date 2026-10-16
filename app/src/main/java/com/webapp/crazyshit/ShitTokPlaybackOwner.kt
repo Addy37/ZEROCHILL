@@ -54,6 +54,9 @@ class ShitTokPlaybackOwner(context: Context, private val callbacks: Callbacks) {
     private var muted = false
     private var preparedLimit = 3
     private var created = 0
+    private val initializedAt = SystemClock.elapsedRealtime()
+    private var firstPrepare = false
+    private var firstFrame = false
     private var planCount = 0
     private var testFactory: PlayerFactory? = null
     private data class Lease(val player: ExoPlayer, val token: Int,
@@ -143,7 +146,13 @@ class ShitTokPlaybackOwner(context: Context, private val callbacks: Callbacks) {
                             if (url == selected && state == Player.STATE_READY) flushWaitingSources()
                         }
                         override fun onRenderedFirstFrame() {
-                            if (owns(url, player, generation)) ShitTokPoolDiagnostics.record("firstFrame", url)
+                            if (owns(url, player, generation)) {
+                                ShitTokPoolDiagnostics.record("firstFrame", url)
+                                if (url == selected && !firstFrame) {
+                                    firstFrame = true
+                                    AppPerformance.record("ShitTok first rendered frame", SystemClock.elapsedRealtime() - initializedAt)
+                                }
+                            }
                         }
                         override fun onIsPlayingChanged(isPlaying: Boolean) {
                             if (isPlaying && (!owns(url, player, generation) || !canPlay(url))) silence(player)
@@ -311,6 +320,10 @@ class ShitTokPlaybackOwner(context: Context, private val callbacks: Callbacks) {
         lease.stream = stream
         lease.player.setMediaSource(mediaSource, positions[url] ?: 0L)
         ShitTokPoolDiagnostics.record("prepare", "url=$url role=${if(url==selected) "current" else "neighbor"}")
+        if (url == selected && !firstPrepare) {
+            firstPrepare = true
+            AppPerformance.record("ShitTok first player prepare", SystemClock.elapsedRealtime() - initializedAt)
+        }
         lease.player.prepare()
         callbacks.onLeaseChanged(url)
         syncAudio()

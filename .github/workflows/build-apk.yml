@@ -193,6 +193,10 @@ jobs:
         run: >-
           gradle --no-daemon :app:testDebugUnitTest
           --tests com.webapp.crazyshit.ShitTokContinuityTest
+          --tests com.webapp.crazyshit.ShitTokRunwayPolicyTest
+          --tests com.webapp.crazyshit.ShitTokInventoryAdmissionTest
+          --tests com.webapp.crazyshit.ShitTokLoadingStateTest
+          --tests com.webapp.crazyshit.ChaosStarterSourcesTest
           --tests com.webapp.crazyshit.ShitTokBufferOwnerTest
           --tests com.webapp.crazyshit.ShitTokBufferLoadControlTest
           --tests com.webapp.crazyshit.ShitTokOrientationAdmissionTest

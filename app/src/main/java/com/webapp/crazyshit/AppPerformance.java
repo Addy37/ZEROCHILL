@@ -20,7 +20,9 @@ final class AppPerformance {
     private static long frames, slowFrames;
     private static boolean firstDraw;
     private AppPerformance() { }
-    static void begin() { }
+    static void begin() {
+        record("Application entry from process start", SystemClock.elapsedRealtime() - android.os.Process.getStartElapsedRealtime());
+    }
 
     static synchronized void record(String label, long milliseconds) {
         if (milliseconds < 0) return;
@@ -36,7 +38,16 @@ final class AppPerformance {
         }
         if (activity instanceof NativeMainActivity && !firstDraw) {
             firstDraw = true;
-            activity.getWindow().getDecorView().postOnAnimation(() -> record("Main screen first draw", SystemClock.elapsedRealtime() - STARTED));
+            android.view.View decor = activity.getWindow().getDecorView();
+            decor.getViewTreeObserver().addOnDrawListener(new android.view.ViewTreeObserver.OnDrawListener() {
+                boolean recorded;
+                @Override public void onDraw() {
+                    if (recorded) return;
+                    recorded = true;
+                    record("Main screen first draw", SystemClock.elapsedRealtime() - STARTED);
+                    decor.post(() -> decor.getViewTreeObserver().removeOnDrawListener(this));
+                }
+            });
         }
         float rate = activity.getWindowManager().getDefaultDisplay().getRefreshRate();
         long budget = (long) (1_000_000_000d / Math.max(30, rate));

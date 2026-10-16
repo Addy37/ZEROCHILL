@@ -28,7 +28,7 @@ final class ChaosSourceMixer {
     private static final int BADDIEHUB_MAX_PAGE = 3;
     private static final ExecutorService CRAZY_IO = Executors.newFixedThreadPool(2);
     private static final ExecutorService SOURCE_IO = Executors.newFixedThreadPool(6);
-    private static final ExecutorService CONTINUITY_SOURCE_IO = Executors.newFixedThreadPool(2);
+    private static final ExecutorService CONTINUITY_SOURCE_IO = Executors.newFixedThreadPool(3);
     private static final long MIX_BATCH_BUDGET_MS = 2_200L;
     private static final int BATCH_REGULAR = 1;
     private static final int BATCH_EFUKT = 2;
@@ -86,6 +86,11 @@ final class ChaosSourceMixer {
     }
 
     List<NativeContentItem> loadRandomBatch(Context context, boolean continuityOnly) {
+        return loadRandomBatch(context, continuityOnly, null);
+    }
+
+    List<NativeContentItem> loadRandomBatch(Context context, boolean continuityOnly,
+            java.util.function.Consumer<List<NativeContentItem>> onCandidates) {
         // Cold-start optimization: warm Shit Show immediately, but let the first Chaos request
         // return a small starter queue instead of waiting for the full mixed catalog.
         shitShow.prewarm(context);
@@ -93,10 +98,18 @@ final class ChaosSourceMixer {
             starterPending = false;
 
             List<NativeContentItem> preloaded = ChaosStartupPreloader.takeStarter();
-            if (!preloaded.isEmpty()) return withKnownStarter(preloaded);
+            if (!preloaded.isEmpty()) {
+                List<NativeContentItem> ready = withKnownStarter(preloaded);
+                if (onCandidates != null) onCandidates.accept(ready);
+                return ready;
+            }
 
-            List<NativeContentItem> starter = loadStarterBatch(context);
-            if (!starter.isEmpty()) return withKnownStarter(starter);
+            List<NativeContentItem> starter = loadStarterBatch(context, onCandidates);
+            if (!starter.isEmpty()) {
+                List<NativeContentItem> ready = withKnownStarter(starter);
+                if (onCandidates != null) onCandidates.accept(ready);
+                return ready;
+            }
         }
 
         // Full refills race independent sources together. A slow or dead provider gets the same
@@ -139,6 +152,13 @@ final class ChaosSourceMixer {
                 try {
                     SourceBatch batch = completed.get();
                     if (batch == null || batch.items == null) continue;
+                    // Start admission as each provider completes. Slow catalogs cannot hold
+                    // already available candidates behind the mixed-batch deadline.
+                    if (onCandidates != null) {
+                        int cap = batch.source == BATCH_EFUKT ? 1
+                                : batch.source == BATCH_REGULAR ? 6 : batch.items.size();
+                        onCandidates.accept(batch.items.subList(0, Math.min(cap, batch.items.size())));
+                    }
                     switch (batch.source) {
                         case BATCH_REGULAR:
                             regularItems.addAll(batch.items);
@@ -192,6 +212,7 @@ final class ChaosSourceMixer {
             shitShowItems.add(item);
         }
         Collections.shuffle(shitShowItems, random);
+        if (onCandidates != null) onCandidates.accept(shitShowItems);
 
         ArrayList<NativeContentItem> result = new ArrayList<>(mixAvailable(
                 kaoticItems, shitShowItems, fapelloItems, onlyHavenItems, regularItems, efuktItems));
@@ -261,10 +282,11 @@ final class ChaosSourceMixer {
         return combined;
     }
 
-    private List<NativeContentItem> loadStarterBatch(Context context) {
+    private List<NativeContentItem> loadStarterBatch(Context context,
+            java.util.function.Consumer<List<NativeContentItem>> onCandidates) {
         try {
             return ChaosStarterSources.first(ChaosStarterSources.live(context, repository, random),
-                    random, ChaosStarterSources.STARTUP_MILLIS);
+                    random, ChaosStarterSources.STARTUP_MILLIS, onCandidates);
         } catch (InterruptedException interrupted) {
             Thread.currentThread().interrupt();
             return new ArrayList<>();

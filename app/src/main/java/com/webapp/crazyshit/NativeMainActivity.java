@@ -120,6 +120,8 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     @Override
     protected void onCreate(Bundle state) {
         super.onCreate(state);
+        long activityStartedAt = android.os.SystemClock.elapsedRealtime();
+        android.os.Trace.beginSection("zc.startup.main_activity");
         NotificationCoordinator.clearContentNotifications(this);
         if (state != null) restoredPrimaryPage = state.getInt("primary_page", -1);
         ZeroChillUi.applySystemBars(this);
@@ -136,6 +138,8 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         } else {
             startAppContent();
         }
+        android.os.Trace.endSection();
+        AppPerformance.record("Main activity creation", android.os.SystemClock.elapsedRealtime() - activityStartedAt);
     }
 
     private void startAppContent() {

@@ -44,6 +44,11 @@ public class ShitTokContinuityTest {
         final Deque<Runnable> tasks = new ArrayDeque<>();
         boolean stopped;
         public void execute(Runnable task) { tasks.addLast(task); }
+        @Override public java.util.concurrent.Future<?> submit(Runnable task) {
+            java.util.concurrent.FutureTask<Void> future = new java.util.concurrent.FutureTask<>(task, null);
+            future.run();
+            return future;
+        }
         public void shutdown() { stopped = true; }
         public List<Runnable> shutdownNow() { stopped = true; tasks.clear(); return Collections.emptyList(); }
         public boolean isShutdown() { return stopped; }
@@ -83,6 +88,7 @@ public class ShitTokContinuityTest {
             Deque<NativeContentItem> pending = ReflectionHelpers.getField(feed, "orientationPending");
             Map<String, CrazyShitRepository.StreamInfo> startup = ReflectionHelpers.getStaticField(ChaosStartupPreloader.class, "RESOLVED");
             for (String name : names) { NativeContentItem i = item(name); pending.add(i); startup.put(i.url, stream(i)); }
+            ((ShitTokOrientationAdmission) ReflectionHelpers.getField(feed, "orientationAdmission")).close();
             ReflectionHelpers.setField(feed, "orientationAdmission", new ShitTokOrientationAdmission((s, allowed) -> .5f, () -> 0L));
             ReflectionHelpers.setField(feed, "sourceRequestsEnabled", true);
         }
@@ -93,19 +99,20 @@ public class ShitTokContinuityTest {
             host.close();
         }
     }
-    @Test public void starvingThinPagerPublishesTwoResolvedNextPagesAndHoldsDeepWork() {
+    @Test public void starvingThinPagerBuildsSixResolvedNextPagesWithoutExtraPlayers() {
         for (int readyAhead = 0; readyAhead <= 1; readyAhead++) try (Fixture f = new Fixture()) {
             if (readyAhead == 1) {
                 NativeContentItem next = item("existing");
                 ReflectionHelpers.callInstanceMethod(f.feed, "appendUnique", from(List.class, Collections.singletonList(next)));
                 f.cache.put(next.url, stream(next));
             }
-            f.candidates("one", "two", "deep");
+            f.candidates("one", "two", "three", "four", "five", "six", "deep");
             call(f.feed, "requestContinuity"); call(f.feed, "maintainContinuity");
             assertEquals(1, f.io.tasks.size());
             f.io.tasks.removeFirst().run();
-            assertEquals(2, (int) ReflectionHelpers.callInstanceMethod(f.feed, "usableUpcomingCount"));
-            assertEquals(3, f.items.size());
+            org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
+            assertEquals(6, (int) ReflectionHelpers.callInstanceMethod(f.feed, "usableUpcomingCount"));
+            assertEquals(7, f.items.size());
             assertFalse(f.owner.allowsSpeculativeWork());
             assertEquals(0, f.engines.stream().skip(1).mapToInt(e -> e.prepares).sum());
             call(f.feed, "loadMorePool");
@@ -129,6 +136,7 @@ public class ShitTokContinuityTest {
             assertEquals(1, f.io.tasks.size());
             assertFalse(f.owner.allowsSpeculativeWork());
             f.io.tasks.removeFirst().run();
+            org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
             assertEquals(2, (int) ReflectionHelpers.callInstanceMethod(f.feed, "usableUpcomingCount"));
         }
         assertFalse(ChaosFeedView.isForwardContinuityDrag(100, -50, 16));
@@ -143,9 +151,10 @@ public class ShitTokContinuityTest {
             }, () -> 0L));
             call(f.feed, "maintainContinuity");
             f.io.tasks.removeFirst().run();
-            assertEquals(3, probes.get());
-            assertEquals(2, (int) ReflectionHelpers.callInstanceMethod(f.feed, "usableUpcomingCount"));
-            assertEquals(3, f.items.size());
+            org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
+            assertEquals(4, probes.get());
+            assertEquals(3, (int) ReflectionHelpers.callInstanceMethod(f.feed, "usableUpcomingCount"));
+            assertEquals(4, f.items.size());
             assertFalse(f.owner.allowsSpeculativeWork());
         }
     }
@@ -156,6 +165,7 @@ public class ShitTokContinuityTest {
             call(f.feed, "wakeForwardContinuity");
             assertEquals(1, f.io.tasks.size());
             f.io.tasks.removeFirst().run();
+            org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
             assertEquals(1, f.items.size());
             assertFalse(((Deque<?>) ReflectionHelpers.getField(f.feed, "deferredUiApplies")).isEmpty());
             ReflectionHelpers.callInstanceMethod(f.feed, "handlePagerScrollState", from(int.class, ViewPager2.SCROLL_STATE_IDLE));
@@ -182,6 +192,7 @@ public class ShitTokContinuityTest {
             f.candidates("one"); call(f.feed, "loadMorePool");
             ReflectionHelpers.setField(f.feed, "feedGeneration", 1);
             f.io.tasks.removeFirst().run();
+            org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
             assertEquals(1, f.items.size());
             ReflectionHelpers.setField(f.feed, "active", false);
             assertFalse((boolean) ReflectionHelpers.callInstanceMethod(f.feed, "mayVerifyOrientation"));
@@ -190,6 +201,58 @@ public class ShitTokContinuityTest {
             assertFalse((boolean) ReflectionHelpers.callInstanceMethod(f.feed, "mayVerifyOrientation"));
         }
     }
+    @Test public void dryBatchesRetryWithoutLeavingAndHiddenFeedCancelsRecovery() {
+        try (Fixture f = new Fixture()) {
+            f.host.get().setContentView(f.feed); // View.postDelayed runs only after attachment.
+            ReflectionHelpers.setField(f.feed, "consecutiveDryLoads", 4);
+            call(f.feed, "maintainContinuity");
+            org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idleFor(java.time.Duration.ofSeconds(6));
+            assertEquals(0, (int)ReflectionHelpers.getField(f.feed, "consecutiveDryLoads"));
+            ReflectionHelpers.setField(f.feed, "consecutiveDryLoads", 4);
+            call(f.feed, "maintainContinuity");
+            f.feed.setActive(false);
+            org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idleFor(java.time.Duration.ofSeconds(6));
+            assertEquals(4, (int)ReflectionHelpers.getField(f.feed, "consecutiveDryLoads"));
+        }
+    }
+
+    @Test public void coldFeedDoesNotHarvestBeforeInitialUiDrawAndReturnKeepsQueue() {
+        try (Fixture f = new Fixture()) {
+            f.candidates("starter", "next");
+            ReflectionHelpers.setField(f.feed, "initialUiDrawn", false);
+            call(f.feed, "loadMorePool");
+            assertTrue(f.io.tasks.isEmpty());
+            ReflectionHelpers.setField(f.feed, "initialUiDrawn", true);
+            call(f.feed, "loadMorePool");
+            assertEquals(1, f.io.tasks.size());
+            f.io.tasks.removeFirst().run();
+            org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
+            int retained = f.items.size();
+            f.feed.setActive(false); f.feed.setActive(true);
+            assertEquals(retained, f.items.size());
+            assertTrue((boolean)ReflectionHelpers.getField(f.feed, "initialUiDrawn"));
+        }
+    }
+
+    @Test public void rapidSelectionsRaisePressureBeforeTailAndDecayAfterPause() {
+        try (Fixture f = new Fixture()) {
+            ShitTokRunwayPolicy policy = ReflectionHelpers.getField(f.feed, "runway");
+            long now = android.os.SystemClock.elapsedRealtime();
+            policy.forward(now); policy.forward(now + 50);
+            assertEquals(10, (int) ReflectionHelpers.callInstanceMethod(f.feed, "desiredRunway"));
+            f.candidates("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11");
+            ReflectionHelpers.setField(f.feed, "userPaging", true);
+            call(f.feed, "maintainContinuity");
+            assertEquals(1, f.io.tasks.size());
+            f.io.tasks.removeFirst().run();
+            org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
+            assertEquals(1, f.items.size());
+            ReflectionHelpers.callInstanceMethod(f.feed, "handlePagerScrollState", from(int.class, ViewPager2.SCROLL_STATE_IDLE));
+            assertEquals(10, (int) ReflectionHelpers.callInstanceMethod(f.feed, "usableUpcomingCount"));
+            assertEquals(0, f.engines.stream().skip(1).mapToInt(e -> e.prepares).sum());
+        }
+    }
+
     private static void touch(ChaosFeedView feed, int action, float x, float y) {
         MotionEvent event = MotionEvent.obtain(0L, 10L, action, x, y, 0);
         try { feed.dispatchTouchEvent(event); } finally { event.recycle(); }

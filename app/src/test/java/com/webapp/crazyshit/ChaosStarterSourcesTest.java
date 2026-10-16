@@ -34,6 +34,23 @@ public class ChaosStarterSourcesTest {
         }
     }
 
+    @Test public void streamingStarterDoesNotWaitForSecondarySourcesOrSixCandidates() throws Exception {
+        CountDownLatch early = new CountDownLatch(1);
+        java.util.concurrent.atomic.AtomicBoolean sawFast = new java.util.concurrent.atomic.AtomicBoolean();
+        ChaosStarterSources.first(source -> {
+            if (source != ChaosStarterSources.KAOTIC) {
+                if (!early.await(2, TimeUnit.SECONDS)) throw new AssertionError("starter blocked on slow source");
+                return Collections.emptyList();
+            }
+            return Collections.singletonList(media("https://kaotic.com/fast"));
+        }, new Random(1), 2500, candidates -> {
+            if (candidates.stream().anyMatch(item -> item.url.endsWith("fast"))) {
+                sawFast.set(true); early.countDown();
+            }
+        });
+        assertTrue(sawFast.get());
+    }
+
     @Test public void efuktWorksWhenCrazyShitAndKaoticFail() throws Exception {
         List<NativeContentItem> queue = ChaosStarterSources.first(source -> {
             if (source == ChaosStarterSources.EFUKT) return Collections.singletonList(media("https://efukt.com/one"));

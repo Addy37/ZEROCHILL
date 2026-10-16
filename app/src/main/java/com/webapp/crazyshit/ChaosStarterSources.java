@@ -39,6 +39,11 @@ final class ChaosStarterSources {
 
     static List<NativeContentItem> first(Loader loader, Random random, long budgetMillis)
             throws InterruptedException {
+        return first(loader, random, budgetMillis, null);
+    }
+
+    static List<NativeContentItem> first(Loader loader, Random random, long budgetMillis,
+            java.util.function.Consumer<List<NativeContentItem>> onCandidates) throws InterruptedException {
         CompletionService<StarterBatch> completions = new ExecutorCompletionService<>(IO);
         ArrayList<Future<?>> requests = new ArrayList<>();
         for (int source : new int[]{CRAZYSHIT, KAOTIC, EFUKT}) {
@@ -65,7 +70,12 @@ final class ChaosStarterSources {
                             target.putIfAbsent(item.url, item);
                         }
                     }
-                    if (playable.size() >= ChaosStartupPreloader.STARTER_ITEMS) break;
+                    if (onCandidates != null) {
+                        ArrayList<NativeContentItem> early = new ArrayList<>(target.values());
+                        Collections.shuffle(early, random);
+                        int limit = batch.source == EFUKT ? 1 : ChaosStartupPreloader.STARTER_ITEMS;
+                        onCandidates.accept(new ArrayList<>(early.subList(0, Math.min(limit, early.size()))));
+                    } else if (!playable.isEmpty()) break;
                 } catch (java.util.concurrent.ExecutionException ignored) {
                     // The other two feeds may still be usable.
                 }
