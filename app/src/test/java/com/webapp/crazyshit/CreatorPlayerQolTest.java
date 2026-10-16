@@ -36,6 +36,7 @@ import static org.robolectric.Shadows.shadowOf;
 @Config(application = Application.class, sdk = 35, qualifiers = "w360dp-h800dp-port-mdpi")
 public class CreatorPlayerQolTest {
     private Player player(AtomicBoolean playing, AtomicLong position) {
+        ArrayList<Player.Listener> listeners = new ArrayList<>();
         return (Player) Proxy.newProxyInstance(Player.class.getClassLoader(), new Class<?>[] {Player.class},
                 (proxy, method, args) -> {
                     switch (method.getName()) {
@@ -44,8 +45,19 @@ public class CreatorPlayerQolTest {
                         case "getDuration": return 60_000L;
                         case "getCurrentPosition": return position.get();
                         case "seekTo": position.set((long) args[args.length - 1]); return null;
-                        case "play": playing.set(true); return null;
-                        case "pause": playing.set(false); return null;
+                        case "addListener": listeners.add((Player.Listener) args[0]); return null;
+                        case "removeListener": listeners.remove(args[0]); return null;
+                        case "getApplicationLooper": return Looper.getMainLooper();
+                        case "getCurrentTimeline": return androidx.media3.common.Timeline.EMPTY;
+                        case "getCurrentTracks": return androidx.media3.common.Tracks.EMPTY;
+                        case "getMediaMetadata": return androidx.media3.common.MediaMetadata.EMPTY;
+                        case "getPlaybackParameters": return androidx.media3.common.PlaybackParameters.DEFAULT;
+                        case "play": case "pause":
+                            playing.set(method.getName().equals("play"));
+                            for (Player.Listener listener : new ArrayList<>(listeners))
+                                listener.onEvents((Player) proxy, new Player.Events(new androidx.media3.common.FlagSet.Builder()
+                                        .add(Player.EVENT_PLAY_WHEN_READY_CHANGED).build()));
+                            return null;
                         case "isCommandAvailable": return true;
                         case "getAvailableCommands": return new Player.Commands.Builder().addAllCommands().build();
                     }
@@ -85,6 +97,30 @@ public class CreatorPlayerQolTest {
         position.set(3000L); gestures.seek(false); assertEquals(0L, position.get());
         position.set(59_000L); gestures.seek(true); assertEquals(60_000L, position.get());
         controls.release(); gestures.cancel(); host.finish();
+    }
+
+    @Test public void transportButtonPausesAndPlaysAndPausedChromeDoesNotExpire() {
+        Activity host = Robolectric.buildActivity(Activity.class).setup().get();
+        host.setTheme(R.style.Theme_CrazyShit);
+        PlayerView surface = (PlayerView) host.getLayoutInflater().inflate(R.layout.view_shows_fullscreen_player, null);
+        host.setContentView(surface);
+        ShowsFullscreenControls controls = new ShowsFullscreenControls(surface);
+        AtomicBoolean playing = new AtomicBoolean(true);
+        Player player = player(playing, new AtomicLong(30_000L));
+        androidx.media3.ui.PlayerControlView controller = surface.findViewById(androidx.media3.ui.R.id.exo_controller);
+        controller.setPlayer(player);
+        controls.bind(player);
+        View transport = surface.findViewById(androidx.media3.ui.R.id.exo_play_pause);
+        assertTrue(transport.isEnabled());
+        transport.performClick();
+        assertFalse(playing.get());
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(5));
+        assertTrue(controls.isVisible());
+        transport.performClick();
+        assertTrue(playing.get());
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(3));
+        assertFalse(controls.isVisible());
+        controls.release(); host.finish();
     }
 
     @Test public void parentCanInterceptOnlyFapDragAndCanceledDoubleTapDoesNotSeek() {
@@ -191,6 +227,26 @@ public class CreatorPlayerQolTest {
                 SensorMediaOrientationListener.Position.class, SensorMediaOrientationListener.Position.LANDSCAPE));
         assertEquals(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT, activity.getRequestedOrientation());
         actual.release(); PhoneOrientationPolicy.onActivityDestroyed(activity);
+    }
+
+    @Test public void repeatedLandscapeDimensionsDoNotUndoOnlyFapManualFullscreen() {
+        BunkrGalleryActivity activity = Robolectric.buildActivity(BunkrGalleryActivity.class).get();
+        ReflectionHelpers.setField(activity, "videoSizeKnown", true);
+        ReflectionHelpers.setField(activity, "manualVideoFullscreen", true);
+        java.util.concurrent.atomic.AtomicInteger rechecks = new java.util.concurrent.atomic.AtomicInteger();
+        SensorMediaOrientationListener sensor = new SensorMediaOrientationListener(activity, p -> rechecks.incrementAndGet());
+        ReflectionHelpers.setField(sensor, "enabled", true);
+        ReflectionHelpers.setField(sensor, "stablePosition", SensorMediaOrientationListener.Position.PORTRAIT);
+        ReflectionHelpers.setField(activity, "videoOrientationListener", sensor);
+        ReflectionHelpers.callInstanceMethod(activity, "onVideoDimensions", ReflectionHelpers.ClassParameter.from(
+                androidx.media3.common.VideoSize.class, new androidx.media3.common.VideoSize(1280, 720)));
+        assertEquals(0, rechecks.get());
+        assertTrue(ReflectionHelpers.<Boolean>getField(activity, "manualVideoFullscreen"));
+        ReflectionHelpers.setField(activity, "videoSizeKnown", false);
+        ReflectionHelpers.callInstanceMethod(activity, "onVideoDimensions", ReflectionHelpers.ClassParameter.from(
+                androidx.media3.common.VideoSize.class, new androidx.media3.common.VideoSize(1920, 1080)));
+        assertEquals(1, rechecks.get());
+        sensor.disable();
     }
 
     @Test public void compactFavoriteUsesHeaderStateAndPersistsAcrossHeaderCreation() {

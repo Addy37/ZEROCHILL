@@ -933,6 +933,7 @@ public class VideoDetailActivity extends Activity {
             @Override
             public void onVideoSizeChanged(VideoSize videoSize) {
                 if (videoSize == null || videoSize.width <= 0 || videoSize.height <= 0) return;
+                boolean firstVideoSize = !videoSizeKnown;
                 videoSizeKnown = true;
                 boolean isPortrait = isPortraitVideoSize(
                         videoSize.width,
@@ -961,7 +962,7 @@ public class VideoDetailActivity extends Activity {
                     return;
                 }
                 if (portraitVideo == isPortrait) {
-                    if (orientationListener != null) orientationListener.redispatch();
+                    if (firstVideoSize && orientationListener != null) orientationListener.redispatch();
                     return;
                 }
                 portraitVideo = isPortrait;

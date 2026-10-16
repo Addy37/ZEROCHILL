@@ -57,6 +57,10 @@ final class FullscreenVideoGestures implements View.OnTouchListener {
                 if (enabled.getAsBoolean()) surface.performLongClick();
             }
         });
+        ViewCompat.addAccessibilityAction(surface, "Show or hide video controls", (v, args) -> {
+            if (!enabled.getAsBoolean()) return false;
+            controls.onVideoTap(); return true;
+        });
         ViewCompat.addAccessibilityAction(surface, "Rewind 10 seconds", (v, args) -> {
             if (!enabled.getAsBoolean()) return false;
             seek(false); return true;

@@ -1019,15 +1019,7 @@ public final class BunkrGalleryActivity extends Activity {
         player.addListener(new Player.Listener() {
             @Override public void onVideoSizeChanged(androidx.media3.common.VideoSize size) {
                 if (player != startedPlayer || size.width <= 0 || size.height <= 0) return;
-                portraitVideo = VideoDetailActivity.isPortraitVideoSize(
-                        size.width, size.height, size.pixelWidthHeightRatio);
-                videoSizeKnown = true;
-                if (portraitVideo) {
-                    manualVideoFullscreen = sensorVideoFullscreen = false;
-                    if (PhoneOrientationPolicy.isPhoneSized(BunkrGalleryActivity.this))
-                        PhoneOrientationPolicy.enterPortraitFullscreen(BunkrGalleryActivity.this);
-                }
-                if (videoOrientationListener != null) videoOrientationListener.redispatch();
+                onVideoDimensions(size);
             }
 
             @Override
@@ -1107,6 +1099,20 @@ public final class BunkrGalleryActivity extends Activity {
         }
         if (!headers.isEmpty()) httpFactory.setDefaultRequestProperties(headers);
         return httpFactory;
+    }
+
+    private void onVideoDimensions(androidx.media3.common.VideoSize size) {
+        boolean portrait = VideoDetailActivity.isPortraitVideoSize(
+                size.width, size.height, size.pixelWidthHeightRatio);
+        boolean eligibilityChanged = !videoSizeKnown || portraitVideo != portrait;
+        portraitVideo = portrait;
+        videoSizeKnown = true;
+        if (portraitVideo) {
+            manualVideoFullscreen = sensorVideoFullscreen = false;
+            if (PhoneOrientationPolicy.isPhoneSized(this)) PhoneOrientationPolicy.enterPortraitFullscreen(this);
+        }
+        // Quality switches keep the same orientation choice, including a manual exit.
+        if (eligibilityChanged && videoOrientationListener != null) videoOrientationListener.redispatch();
     }
 
     private void toggleVideoFullscreen() {

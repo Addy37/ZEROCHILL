@@ -798,6 +798,7 @@ public final class UpdateInboxActivity extends Activity {
             holder.reply.setVisibility(replyNotification ? View.VISIBLE : View.GONE);
             holder.like.setVisibility(replyNotification ? View.VISIBLE : View.GONE);
             holder.reply.setText("Reply");
+            holder.reply.setContentDescription("Reply to comment");
             androidx.core.view.ViewCompat.setStateDescription(holder.reply, null);
             holder.reply.setOnClickListener(v -> openSocial(entry, true));
             bindSocialLike(holder, entry, replyNotification);
