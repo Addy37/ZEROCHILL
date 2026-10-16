@@ -4,10 +4,12 @@ import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.graphics.Rect;
+import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.text.SpannableString;
 import android.text.Spanned;
 import android.text.style.ForegroundColorSpan;
+import android.text.style.RelativeSizeSpan;
 import android.view.Gravity;
 import android.view.View;
 import android.widget.FrameLayout;
@@ -23,6 +25,7 @@ final class ShitTokScrubPreviewView extends LinearLayout {
     private final TextView time;
     private final Rect track = new Rect();
     private boolean hadFrame;
+    private long shownSecond = Long.MIN_VALUE, shownDurationSecond = Long.MIN_VALUE;
 
     ShitTokScrubPreviewView(Context context) {
         super(context);
@@ -46,10 +49,13 @@ final class ShitTokScrubPreviewView extends LinearLayout {
         thumbnail.addView(image, new FrameLayout.LayoutParams(-1, -1));
         time = new TextView(context);
         time.setTextColor(Color.WHITE);
-        time.setTextSize(12);
+        time.setTextSize(18);
+        time.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
+        time.setSingleLine(true);
+        time.setMinHeight(dp(32));
         time.setGravity(Gravity.CENTER);
         time.setShadowLayer(dp(2), 0, dp(1), Color.BLACK);
-        LinearLayout.LayoutParams timeParams = new LinearLayout.LayoutParams(-1, dp(28));
+        LinearLayout.LayoutParams timeParams = new LinearLayout.LayoutParams(-1, -2);
         timeParams.topMargin = dp(4);
         addView(time, timeParams);
         setVisibility(GONE);
@@ -64,19 +70,27 @@ final class ShitTokScrubPreviewView extends LinearLayout {
     }
 
     void show(FrameLayout root, SeekBar bar, long targetMs, long durationMs) {
-        String current = ChaosFeedView.formatPlaybackTime(targetMs);
-        SpannableString label = new SpannableString(current + " / "
-                + ChaosFeedView.formatPlaybackTime(durationMs));
-        label.setSpan(new ForegroundColorSpan(Color.rgb(170, 178, 188)), current.length(),
-                label.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-        time.setText(label);
+        long second = Math.max(0L, targetMs) / 1000L;
+        long durationSecond = Math.max(0L, durationMs) / 1000L;
+        if (second != shownSecond || durationSecond != shownDurationSecond) {
+            shownSecond = second;
+            shownDurationSecond = durationSecond;
+            String current = ChaosFeedView.formatPlaybackTime(targetMs);
+            SpannableString label = new SpannableString(current + " / "
+                    + ChaosFeedView.formatPlaybackTime(durationMs));
+            label.setSpan(new ForegroundColorSpan(Color.rgb(170, 178, 188)), current.length(),
+                    label.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            label.setSpan(new RelativeSizeSpan(0.89f), current.length(), label.length(),
+                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            time.setText(label);
+        }
         setVisibility(VISIBLE);
         position(root, bar);
     }
 
     void position(FrameLayout root, SeekBar bar) {
         if (getVisibility() != VISIBLE || root.getWidth() <= 0) return;
-        int width = Math.max(1, Math.min(dp(152), root.getWidth() - dp(16)));
+        int width = Math.max(1, Math.min(dp(176), root.getWidth() - dp(16)));
         measure(MeasureSpec.makeMeasureSpec(width, MeasureSpec.EXACTLY),
                 MeasureSpec.makeMeasureSpec(root.getHeight(), MeasureSpec.AT_MOST));
         track.set(0, 0, bar.getWidth(), bar.getHeight());

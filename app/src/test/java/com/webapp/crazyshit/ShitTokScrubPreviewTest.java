@@ -70,6 +70,22 @@ public class ShitTokScrubPreviewTest {
         preview.request(1000); preview.request(2000); preview.request(9000);
         idle(0); assertEquals(List.of(9000L), extractor.requests);
     }
+    @Test public void cacheMissKeepsLastFrameUntilLatestCompletesButFailureClearsIt() {
+        begin("A"); preview.request(1000); idle(0);
+        Bitmap first = bitmap(); extractor.results.get(0).set(first); idle(0);
+        preview.request(2000); idle(100);
+        assertSame(first, last());
+        preview.request(3000);
+        extractor.results.get(1).set(bitmap()); idle(0);
+        assertSame("superseded completion must not flash", first, last());
+        idle(100);
+        Bitmap latest = bitmap(); extractor.results.get(2).set(latest); idle(0);
+        assertSame(latest, last());
+        preview.request(4000); idle(100);
+        assertSame(latest, last());
+        extractor.results.get(3).setException(new IllegalStateException("offline")); idle(0);
+        assertNull("failure must retain the time-only fallback", last());
+    }
     @Test public void cacheIsSmallAndClearsAtEndOfDrag() {
         begin("A");
         for (int i = 0; i < 6; i++) {

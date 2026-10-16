@@ -113,7 +113,10 @@ final class ShitTokScrubPreview {
         long next = Math.max(0L, positionMs) / 1_000L * 1_000L;
         if (target == next) return;
         target = next;
-        render.accept(cache.get(target));
+        // Keep the last completed image while the destination loads. Clearing on
+        // each cache miss makes the thumbnail blink during an otherwise smooth drag.
+        Bitmap cached = cache.get(target);
+        if (cached != null) render.accept(cached);
         schedule();
     }
 

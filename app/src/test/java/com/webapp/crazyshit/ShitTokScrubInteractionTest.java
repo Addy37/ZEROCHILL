@@ -107,6 +107,10 @@ public class ShitTokScrubInteractionTest {
             assertTrue(thumbnail.getHeight() > thumbnail.getWidth());
             assertTrue(time.getTop() >= thumbnail.getBottom());
             assertEquals("0:30 / 1:00", time.getText().toString());
+            assertEquals(18f, time.getTextSize() / time.getResources().getDisplayMetrics().scaledDensity, .01f);
+            CharSequence label = time.getText();
+            card.show((FrameLayout) ShitTokInteractionUiTest.root(f.selected), bar, 30_500L, 60_000L);
+            assertSame("sub-second moves must not rebuild the timestamp", label, time.getText());
             assertNull(card.getBackground());
             assertNotNull(thumbnail.getBackground());
             assertEquals(ImageView.ScaleType.CENTER_CROP, ((ImageView) thumbnail.getChildAt(0)).getScaleType());

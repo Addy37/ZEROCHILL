@@ -141,3 +141,22 @@ ShitTokPlaybackOwner, ShitTokRunwayPolicy, source mixing, preload/admission,
 orientation policy, startup and loading ownership are unchanged. No application
 ID, signing configuration, data format, database migration, backend, Supabase,
 remote configuration or endpoint change is required.
+
+## Timestamp and preview stability follow-up
+
+Recording 12367 showed the preview blinking between successful frame updates.
+Cache misses now keep the last completed image visible while the latest target
+loads. Superseded completions still cannot replace it. Errors, cancellation and
+session end still clear the image, preserving fallback and stale-session guards.
+The timestamp is now 18sp medium weight; duration is smaller and gray. Its row
+allows natural font height, and text is rebuilt only when the displayed second
+or duration changes. Thumbnail size, extraction cadence and seek-on-release
+behavior are unchanged.
+
+Validation: 27 tests passed, zero failures/errors/skips, across
+ShitTokScrubPreviewTest, ShitTokScrubInteractionTest, ShitTokInteractionUiTest
+and ShitTokProgressTest. Debug APK assembly passed. No broad suites or lint ran.
+Tests cover holding the last image through misses, rejecting superseded frames,
+clearing on failure, font size and avoiding redundant timestamp updates.
+Device retesting is pending; keyframe/network extraction still determines how
+quickly a new preview image becomes available.
