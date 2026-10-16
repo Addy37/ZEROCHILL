@@ -60,7 +60,11 @@ jobs:
           grep -q 'applicationIdSuffix = ".dev"' app/build.gradle.kts
           grep -q 'applicationId = "com.addy37.crazyshitadmin"' feedbackadmin/build.gradle.kts
           grep -q 'android:label="ZeroChill Admin"' feedbackadmin/src/main/AndroidManifest.xml
-          grep -q 'LayoutInflater.from(activity).inflate(R.layout.activity_splash' app/src/main/java/com/webapp/crazyshit/ChaosStartupOverlayController.java
+          grep -q 'setContentView(R.layout.activity_splash)' app/src/main/java/com/webapp/crazyshit/SplashActivity.java
+          if grep -q -E 'MAX_OVERLAY_MS|content.addView\(overlay' app/src/main/java/com/webapp/crazyshit/ChaosStartupOverlayController.java; then
+            echo 'ShitTok must not cover the shell while waiting for media.'
+            exit 1
+          fi
           grep -q 'android:windowSplashScreenAnimatedIcon">@drawable/ic_zerochill_devil' app/src/main/res/values-v31/themes.xml
           grep -q 'android:windowSplashScreenAnimatedIcon">@drawable/splash_system_icon_transparent' app/src/main/res/values-v31/themes.xml
           grep -A5 'android:text="ZERO"' app/src/main/res/layout/activity_splash.xml | grep -q 'android:textColor="#F3F4F6"'
@@ -188,6 +192,18 @@ jobs:
         with:
           gradle-version: '8.11.1'
           cache-provider: basic
+
+      - name: Verify ShitTok continuity without weakening rebuffer protection
+        run: >-
+          gradle --no-daemon :app:testDebugUnitTest
+          --tests com.webapp.crazyshit.ShitTokContinuityTest
+          --tests com.webapp.crazyshit.ShitTokRunwayPolicyTest
+          --tests com.webapp.crazyshit.ShitTokInventoryAdmissionTest
+          --tests com.webapp.crazyshit.ShitTokLoadingStateTest
+          --tests com.webapp.crazyshit.ChaosStarterSourcesTest
+          --tests com.webapp.crazyshit.ShitTokBufferOwnerTest
+          --tests com.webapp.crazyshit.ShitTokBufferLoadControlTest
+          --tests com.webapp.crazyshit.ShitTokOrientationAdmissionTest
 
       - name: Run ShitTok buffering and orientation regressions first
         run: >-

@@ -64,6 +64,45 @@ public class ShitTokBufferOwnerTest {
             assertEquals(1, h.audible());
         }
     }
+    @Test public void continuityWarmsOnlyNextDuringReadyRecoveryAndNeverDuplicatesPreparation() {
+        try (ShitTokPlayerPoolTest.Harness h = new ShitTokPlayerPoolTest.Harness()) {
+            h.select(1); h.prepare(1); h.attach(1);
+            ShitTokPlayerPoolTest.Engine current = h.engine(1), next = h.engine(2), previous = h.engine(0);
+            state(current, Player.STATE_READY);
+            state(current, Player.STATE_BUFFERING);
+            h.owner.setContinuityNext(ShitTokPlayerPoolTest.id(2));
+            h.prepare(2); h.prepare(0);
+            assertEquals(0, next.prepares); assertEquals(0, previous.prepares);
+            int currentPrepares = current.prepares, currentPauses = current.pauses;
+            state(current, Player.STATE_READY);
+            assertFalse(h.owner.allowsSpeculativeWork());
+            assertEquals(1, next.prepares); assertEquals(0, previous.prepares);
+            for (int i = 0; i < 10; i++) h.prepare(2);
+            assertEquals(1, next.prepares); assertEquals(1, next.sourceAssignments);
+            assertEquals(currentPrepares, current.prepares);
+            assertEquals(currentPauses, current.pauses);
+            assertEquals(1, h.audible());
+            h.owner.permission(false, false);
+            assertFalse(h.owner.allowsContinuityPreparation(ShitTokPlayerPoolTest.id(2)));
+        }
+    }
+    @Test public void failedImmediateNextNotifiesContinuityEvenWithoutAnAttachedHolder() {
+        try (ShitTokPlayerPoolTest.Harness h = new ShitTokPlayerPoolTest.Harness()) {
+            h.select(1); h.prepare(1); h.attach(1);
+            java.util.List<String> failures = new java.util.ArrayList<>();
+            h.owner.setContinuityFailureListener(failures::add);
+            h.owner.setContinuityNext(ShitTokPlayerPoolTest.id(2));
+            h.prepare(2);
+            ShitTokPlayerPoolTest.Engine next = h.engine(2);
+            androidx.media3.exoplayer.ExoPlaybackException error =
+                    androidx.media3.exoplayer.ExoPlaybackException.createForSource(
+                            new java.io.IOException("unavailable"), androidx.media3.common.PlaybackException.ERROR_CODE_IO_UNSPECIFIED);
+            next.error = error;
+            for (Player.Listener listener : new ArrayList<>(next.listeners)) listener.onPlayerError(error);
+            assertEquals(java.util.Collections.singletonList(ShitTokPlayerPoolTest.id(2)), failures);
+            assertEquals(1, h.audible());
+        }
+    }
     @Test public void pauseAndPagingDoNotCountAsStarvationAndSelectionResetsProtection() {
         try (ShitTokPlayerPoolTest.Harness h = new ShitTokPlayerPoolTest.Harness()) {
             h.select(0); h.prepare(0); h.attach(0);

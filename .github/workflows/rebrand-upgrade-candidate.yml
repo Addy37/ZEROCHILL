@@ -144,6 +144,30 @@ jobs:
               raise SystemExit("Source did not return distinct deeper pages")
           PYTHON
 
+      - name: Verify ShitTok splash does not wait for media
+        run: |
+          grep -q 'setContentView(R.layout.activity_splash)' app/src/main/java/com/webapp/crazyshit/SplashActivity.java
+          if grep -q -E 'MAX_OVERLAY_MS|content.addView\(overlay' app/src/main/java/com/webapp/crazyshit/ChaosStartupOverlayController.java; then
+            echo 'ShitTok must not cover the shell while waiting for media.'
+            exit 1
+          fi
+          if grep -q -E 'ChaosStartupPreloader.start|ChaosStartupPreloader.isReady' app/src/main/java/com/webapp/crazyshit/SplashActivity.java; then
+            echo 'ShitTok source readiness must not hold the splash.'
+            exit 1
+          fi
+
+      - name: Verify ShitTok continuity without weakening rebuffer protection
+        run: >-
+          gradle --no-daemon :app:testDebugUnitTest
+          --tests com.webapp.crazyshit.ShitTokContinuityTest
+          --tests com.webapp.crazyshit.ShitTokRunwayPolicyTest
+          --tests com.webapp.crazyshit.ShitTokInventoryAdmissionTest
+          --tests com.webapp.crazyshit.ShitTokLoadingStateTest
+          --tests com.webapp.crazyshit.ChaosStarterSourcesTest
+          --tests com.webapp.crazyshit.ShitTokBufferOwnerTest
+          --tests com.webapp.crazyshit.ShitTokBufferLoadControlTest
+          --tests com.webapp.crazyshit.ShitTokOrientationAdmissionTest
+
       - name: Run ShitTok buffering and orientation regressions first
         if: ${{ github.event.pull_request.number != 295 }}
         run: >-

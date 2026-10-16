@@ -64,6 +64,11 @@ final class ShitTokOrientationAdmission {
 
     Result admit(List<NativeContentItem> candidates, Resolver resolver, BooleanSupplier allowedWork,
                  Random random, Consumer<Result> onVerified) {
+        return admit(candidates, resolver, allowedWork, random, Integer.MAX_VALUE, false, onVerified);
+    }
+
+    Result admit(List<NativeContentItem> candidates, Resolver resolver, BooleanSupplier allowedWork,
+                 Random random, int maxItems, boolean requireStreams, Consumer<Result> onVerified) {
         List<NativeContentItem> ordered = candidateOrder(candidates, random);
         ArrayList<NativeContentItem> admitted = new ArrayList<>();
         ArrayList<NativeContentItem> remaining = new ArrayList<>();
@@ -72,6 +77,7 @@ final class ShitTokOrientationAdmission {
         int probes = 0;
         boolean deferred = false;
         for (NativeContentItem item : ordered) {
+            if (admitted.size() >= maxItems) { remaining.add(item); continue; }
             Entry known;
             synchronized (cache) { known = cache.get(item.url); }
             if (trustedHint(item)) {
@@ -80,10 +86,16 @@ final class ShitTokOrientationAdmission {
                         && Float.compare(known.aspect, item.aspectRatioHint) == 0 ? known.stream : null;
                 Entry hint = new Entry(item.aspectRatioHint, reusable, 0L, "metadata");
                 synchronized (cache) { cache.put(item.url, hint); }
-                if (ShitTokOrientation.eligible(hint.aspect)) accept(item, hint, admitted, streams, onVerified);
-                continue;
+                if (!ShitTokOrientation.eligible(hint.aspect)) continue;
+                if (!requireStreams || reusable != null) {
+                    accept(item, hint, admitted, streams, onVerified);
+                    continue;
+                }
+                // Trusted dimensions avoid the probe, but continuity still needs a playable URL.
+                known = hint;
             }
-            if (known != null && (known.aspect > 0f || known.retryAt > clock.getAsLong())) {
+            if (known != null && (known.aspect > 0f || known.retryAt > clock.getAsLong())
+                    && (!requireStreams || known.stream != null || !ShitTokOrientation.eligible(known.aspect))) {
                 if (ShitTokOrientation.eligible(known.aspect))
                     accept(item, known, admitted, streams, onVerified);
                 continue;
@@ -99,12 +111,13 @@ final class ShitTokOrientationAdmission {
             }
             probes++;
             CrazyShitRepository.StreamInfo stream = known != null && known.provenance.equals("pending") ? known.stream : null;
-            float aspect = 0f;
+            float aspect = known != null && ShitTokOrientation.eligible(known.aspect) ? known.aspect : 0f;
             try {
                 if (stream == null) stream = resolver.resolve(item);
                 if (!allowedWork.getAsBoolean() || Thread.currentThread().isInterrupted()) throw new Deferred();
-                if (stream != null && stream.mediaUrl != null && !stream.mediaUrl.isEmpty())
-                    aspect = probe.inspect(stream, allowedWork);
+                if (stream != null && stream.mediaUrl != null && !stream.mediaUrl.isEmpty()) {
+                    if (!(aspect > 0f)) aspect = probe.inspect(stream, allowedWork);
+                } else aspect = 0f;
             } catch (Exception failure) {
                 if (!allowedWork.getAsBoolean() || Thread.currentThread().isInterrupted() || deferred(failure)) {
                     deferred = true;
@@ -115,6 +128,7 @@ final class ShitTokOrientationAdmission {
                     continue;
                 }
                 // A failed item cannot prevent other sources from filling the feed.
+                aspect = 0f;
             }
             if (!(aspect > 0f) || !Float.isFinite(aspect)) aspect = 0f;
             String provenance = stream != null && stream.mediaUrl != null
@@ -127,6 +141,69 @@ final class ShitTokOrientationAdmission {
         }
         return new Result(admitted, streams, remaining, deferred);
     }
+
+    // Three metadata/URL lanes only. These workers never allocate an ExoPlayer or media buffer.
+    private final java.util.concurrent.ThreadPoolExecutor inventoryIo =
+            new java.util.concurrent.ThreadPoolExecutor(3, 3, 0L, java.util.concurrent.TimeUnit.MILLISECONDS,
+                    new java.util.concurrent.ArrayBlockingQueue<>(3));
+    private final java.util.concurrent.atomic.AtomicInteger rejectedCount = new java.util.concurrent.atomic.AtomicInteger();
+    int rejectedCount() { return rejectedCount.get(); }
+
+    Result admitConcurrent(java.util.concurrent.BlockingQueue<NativeContentItem> candidates,
+            BooleanSupplier productionDone, Resolver resolver, BooleanSupplier allowedWork,
+            int maxItems, Consumer<Result> onVerified, java.util.function.IntConsumer activeCount) {
+        java.util.concurrent.CompletionService<Result> completed =
+                new java.util.concurrent.ExecutorCompletionService<>(inventoryIo);
+        Map<java.util.concurrent.Future<Result>, NativeContentItem> active = new LinkedHashMap<>();
+        ArrayList<NativeContentItem> admitted = new ArrayList<>(), remaining = new ArrayList<>();
+        Map<String, CrazyShitRepository.StreamInfo> streams = new LinkedHashMap<>();
+        long started = clock.getAsLong();
+        int attempts = 0;
+        try {
+            while (allowedWork.getAsBoolean() && !Thread.currentThread().isInterrupted()
+                    && admitted.size() < maxItems && clock.getAsLong() - started < BATCH_MILLIS) {
+                while (active.size() < 3 && attempts < 24 && admitted.size() + active.size() < maxItems) {
+                    NativeContentItem item = candidates.poll();
+                    if (item == null) break;
+                    attempts++;
+                    try {
+                        active.put(completed.submit(() -> admit(Collections.singletonList(item), resolver,
+                                allowedWork, new Random(0), 1, true, null)), item);
+                    } catch (java.util.concurrent.RejectedExecutionException busy) {
+                        remaining.add(item);
+                        attempts = 24; // Old interrupted IO still owns the three slots. Retry in a later batch.
+                        break;
+                    }
+                }
+                activeCount.accept(active.size());
+                if (active.isEmpty() && (productionDone.getAsBoolean() && candidates.isEmpty() || attempts >= 24)) break;
+                java.util.concurrent.Future<Result> done = completed.poll(25, java.util.concurrent.TimeUnit.MILLISECONDS);
+                if (done == null) continue;
+                NativeContentItem item = active.remove(done);
+                Result result;
+                try { result = done.get(); }
+                catch (java.util.concurrent.ExecutionException failure) { continue; }
+                if (!allowedWork.getAsBoolean()) { remaining.add(item); break; }
+                if (result.items.isEmpty() && result.remaining.isEmpty()) rejectedCount.incrementAndGet();
+                admitted.addAll(result.items);
+                streams.putAll(result.streams);
+                remaining.addAll(result.remaining);
+                if (onVerified != null && !result.items.isEmpty()) onVerified.accept(result);
+            }
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+        } finally {
+            for (Map.Entry<java.util.concurrent.Future<Result>, NativeContentItem> task : active.entrySet()) {
+                task.getKey().cancel(true);
+                remaining.add(task.getValue());
+            }
+            inventoryIo.purge();
+            activeCount.accept(0);
+        }
+        return new Result(admitted, streams, remaining, !allowedWork.getAsBoolean());
+    }
+
+    void close() { inventoryIo.shutdownNow(); }
 
     String describe(String url) {
         synchronized (cache) {

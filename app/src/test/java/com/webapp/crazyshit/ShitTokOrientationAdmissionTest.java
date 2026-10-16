@@ -12,6 +12,40 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
 public class ShitTokOrientationAdmissionTest {
+    @Test public void continuitySkipsFailedAndLandscapeCandidatesAndStopsAtSmallPlayableBudget() {
+        AtomicInteger resolves = new AtomicInteger();
+        AtomicInteger probes = new AtomicInteger();
+        ShitTokOrientationAdmission gate = new ShitTokOrientationAdmission((stream, allowed) ->
+                probes.incrementAndGet() == 1 ? 1.5f : .5f, () -> 0L);
+        List<NativeContentItem> candidates = new ArrayList<>();
+        for (String name : Arrays.asList("bad", "wide", "a", "b", "c", "d"))
+            candidates.add(item(name, "Kaotic", 0f));
+        ShitTokOrientationAdmission.Result result = gate.admit(candidates, candidate -> {
+            if (resolves.incrementAndGet() == 1) throw new java.io.IOException("failed");
+            return stream(candidate);
+        }, () -> true, new Random(2), 2, true, null);
+        assertEquals(2, result.items.size()); assertEquals(2, result.streams.size());
+        assertEquals(4, resolves.get());
+        assertEquals(3, probes.get());
+        assertFalse(result.remaining.isEmpty());
+    }
+    @Test public void continuityResolvesTrustedHintsBeforePublishingAndHealthyAdmissionStillReusesThem() {
+        AtomicInteger resolves = new AtomicInteger();
+        NativeContentItem hint = item("hint", "Shit Show", .5f);
+        ShitTokOrientationAdmission gate = new ShitTokOrientationAdmission((stream, allowed) -> {
+            throw new AssertionError("trusted metadata needs no probe");
+        }, () -> 0L);
+        assertTrue(gate.admit(Collections.singletonList(hint), candidate -> null,
+                () -> false, new Random(1), 1, true, null).items.isEmpty());
+        ShitTokOrientationAdmission.Result ready = gate.admit(Collections.singletonList(hint), candidate -> {
+            resolves.incrementAndGet(); return stream(candidate);
+        }, () -> true, new Random(1), 1, true, partial -> assertEquals(1, partial.streams.size()));
+        assertEquals(1, ready.items.size());
+        gate.admit(Collections.singletonList(hint), candidate -> {
+            resolves.incrementAndGet(); return stream(candidate);
+        }, () -> true, new Random(1));
+        assertEquals(1, resolves.get());
+    }
     @Test public void trustedHintsPublishBeforeNetworkAndPreserveFields() {
         AtomicInteger probes = new AtomicInteger();
         ShitTokOrientationAdmission gate = gate(probes, new AtomicLong(), .5f);

@@ -42,6 +42,25 @@ public class ShitTokBufferLoadControlTest {
             control.onReleased(PlayerId.UNSET);
         }
     }
+    @Test public void continuityLoadingHasShortCapAndCannotCompeteWithBufferingCurrent() {
+        try (ShitTokPlayerPoolTest.Harness h = new ShitTokPlayerPoolTest.Harness()) {
+            LoadControl control = ReflectionHelpers.getField(h.owner, "control");
+            control.onPrepared(PlayerId.UNSET);
+            ReflectionHelpers.setField(control, "currentId", "current");
+            ReflectionHelpers.setField(control, "continuityId", "next");
+            ReflectionHelpers.setField(control, "starving", true);
+            ReflectionHelpers.setField(control, "currentNeedsBuffer", true);
+            assertTrue(control.shouldContinueLoading(sample("current", 0, true)));
+            assertFalse(control.shouldContinueLoading(sample("next", 0, false)));
+            ReflectionHelpers.setField(control, "currentNeedsBuffer", false);
+            assertTrue(control.shouldContinueLoading(sample("next", 0, false)));
+            assertFalse(control.shouldContinueLoading(sample("next", 750_000L, false)));
+            assertFalse(control.shouldContinueLoading(sample("previous", 0, false)));
+            ReflectionHelpers.setField(control, "networkPaused", true);
+            assertFalse(control.shouldContinueLoading(sample("next", 0, false)));
+            control.onReleased(PlayerId.UNSET);
+        }
+    }
     @Test public void realMedia3ResumeHookKeepsStartupFastAndBoundsRecoveryWait() {
         try (ShitTokPlayerPoolTest.Harness h = new ShitTokPlayerPoolTest.Harness()) {
             LoadControl control = ReflectionHelpers.getField(h.owner, "control");

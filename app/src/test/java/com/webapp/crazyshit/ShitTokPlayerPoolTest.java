@@ -20,7 +20,7 @@ import static org.junit.Assert.*;
 @Config(application = Application.class, sdk = 35)
 public class ShitTokPlayerPoolTest {
     static class Engine {
-        int prepares, releases, sourceAssignments, stops;
+        int prepares, releases, sourceAssignments, stops, pauses;
         int state = Player.STATE_READY;
         boolean play;
         float volume;
@@ -47,7 +47,7 @@ public class ShitTokPlayerPoolTest {
                     case "getPlayerError": return error;
                     case "getPlayWhenReady": case "isPlaying": return play;
                     case "play": play=true; return null;
-                    case "pause": play=false; return null;
+                    case "pause": pauses++; play=false; return null;
                     case "setPlayWhenReady": play=(Boolean)args[0];return null;
                     case "getVolume": return volume;
                     case "setVolume": volume=(Float)args[0];return null;

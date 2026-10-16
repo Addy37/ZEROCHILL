@@ -41,7 +41,7 @@ import java.util.function.LongSupplier;
 final class ShitTokOrientationProbe implements ShitTokOrientationAdmission.Probe {
     static final long MAX_BYTES = 768 * 1024;
     static final long MAX_MILLIS = 1800;
-    private static final Semaphore SINGLE_PROBE = new Semaphore(1);
+    private static final Semaphore PROBE_SLOTS = new Semaphore(3);
     private final Context context;
 
     ShitTokOrientationProbe(Context context) {
@@ -51,7 +51,7 @@ final class ShitTokOrientationProbe implements ShitTokOrientationAdmission.Probe
 
     @Override public float inspect(CrazyShitRepository.StreamInfo stream, BooleanSupplier allowed)
             throws Exception {
-        if (!SINGLE_PROBE.tryAcquire()) throw new ShitTokOrientationAdmission.Deferred();
+        if (!PROBE_SLOTS.tryAcquire()) throw new ShitTokOrientationAdmission.Deferred();
         try {
             Budget budget = new Budget(allowed);
             budget.check();
@@ -62,7 +62,7 @@ final class ShitTokOrientationProbe implements ShitTokOrientationAdmission.Probe
             if (path.endsWith(".mpd")) return dash(factory, stream.mediaUrl, budget);
             return progressive(factory, stream.mediaUrl, budget);
         } finally {
-            SINGLE_PROBE.release();
+            PROBE_SLOTS.release();
         }
     }
 

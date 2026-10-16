@@ -15,6 +15,8 @@ public final class CrazyShitApplication extends Application {
     public void onCreate() {
         super.onCreate();
         AppPerformance.begin();
+        long initializationAt = android.os.SystemClock.elapsedRealtime();
+        android.os.Trace.beginSection("zc.startup.application");
 
         SharedPreferences appPrefs = getSharedPreferences("app_prefs", MODE_PRIVATE);
         StartupWizardPolicy.markFreshStorageIfEmpty(appPrefs);
@@ -97,6 +99,8 @@ public final class CrazyShitApplication extends Application {
                 UiFoundationCoordinator.onActivityDestroyed(activity);
             }
         });
+        android.os.Trace.endSection();
+        AppPerformance.record("Application initialization", android.os.SystemClock.elapsedRealtime() - initializationAt);
     }
 
     private void migratePreferences(SharedPreferences appPrefs) {

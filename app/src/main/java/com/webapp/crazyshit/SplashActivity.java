@@ -13,8 +13,6 @@ import android.view.View;
 /** One short in-app reveal following the black Android 12+ launch window. */
 public final class SplashActivity extends Activity {
     private static final long MIN_SPLASH_MS = 960L;
-    private static final long MAX_SPLASH_MS = 1_100L;
-    private static final long READY_POLL_MS = 40L;
     private static final int[] REVEAL_LAYERS = {
             R.id.splashHorns, R.id.splashFace, R.id.splashOutline, R.id.splashXEye,
             R.id.splashAngryEye, R.id.splashTeeth, R.id.splashTongue,
@@ -44,10 +42,7 @@ public final class SplashActivity extends Activity {
         getWindow().setNavigationBarColor(Color.BLACK);
         setContentView(R.layout.activity_splash);
 
-        if (chaosHandoff) {
-            ChaosStartupHandoff.begin();
-            ChaosStartupPreloader.start(this);
-        }
+        // Source work belongs to the feed after the shell starts. Avoid a duplicate starter race.
         animateSplash();
         handler.postDelayed(readinessRunnable, MIN_SPLASH_MS);
     }
@@ -80,14 +75,7 @@ public final class SplashActivity extends Activity {
 
     private void checkReadyToLaunch() {
         if (leaving) return;
-        long elapsed = SystemClock.uptimeMillis() - splashStartedAt;
-        boolean ready = !chaosHandoff || ChaosStartupPreloader.isReady();
-        if (elapsed >= MIN_SPLASH_MS && (ready || elapsed >= MAX_SPLASH_MS)) {
-            launchApp();
-            return;
-        }
-        handler.postDelayed(readinessRunnable,
-                Math.min(READY_POLL_MS, Math.max(1L, MAX_SPLASH_MS - elapsed)));
+        launchApp();
     }
 
     private void launchApp() {
@@ -101,15 +89,13 @@ public final class SplashActivity extends Activity {
                 this,
                 startupWizard ? StartupWizardActivity.class : NativeMainActivity.class
         );
-        if (chaosHandoff) {
-            intent.putExtra(ChaosStartupOverlayController.EXTRA_STARTUP_HANDOFF, true);
-        }
         if (AppShortcuts.isShortcutAction(launchAction)) {
             intent.setAction(launchAction);
             if (!startupWizard) {
                 intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
             }
         }
+        AppPerformance.record("Splash visible", SystemClock.uptimeMillis() - splashStartedAt);
         startActivity(intent);
         overridePendingTransition(0, 0);
         finish();

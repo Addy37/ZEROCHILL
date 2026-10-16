@@ -33,6 +33,8 @@ class ShitTokPlaybackOwner(context: Context, private val callbacks: Callbacks) {
     private var speculationNotification: Job? = null
     private var speculationListener: java.util.function.Consumer<Boolean>? = null
     fun setSpeculationListener(listener: java.util.function.Consumer<Boolean>) { speculationListener = listener }
+    private var continuityFailureListener: java.util.function.Consumer<String>? = null
+    fun setContinuityFailureListener(listener: java.util.function.Consumer<String>) { continuityFailureListener = listener }
     private var healthCheck: Job? = null
     private var bandwidthEstimate = -1L
     private val leases = linkedMapOf<String, Lease>()
@@ -46,10 +48,15 @@ class ShitTokPlaybackOwner(context: Context, private val callbacks: Callbacks) {
     private var epoch = 0
     private var window = emptyList<String>()
     private var selected: String? = null
+    private var immediateNext: String? = null
+    private var continuityReady = false
     private var permitted = false
     private var muted = false
     private var preparedLimit = 3
     private var created = 0
+    private val initializedAt = SystemClock.elapsedRealtime()
+    private var firstPrepare = false
+    private var firstFrame = false
     private var planCount = 0
     private var testFactory: PlayerFactory? = null
     private data class Lease(val player: ExoPlayer, val token: Int,
@@ -107,6 +114,8 @@ class ShitTokPlaybackOwner(context: Context, private val callbacks: Callbacks) {
             control.recoveryDeadlineMs = 0L
         }
         selected = current
+        immediateNext = next
+        if (control.continuityId != next) control.continuityId = null
         window = wanted
         planCount++
         start()
@@ -120,7 +129,7 @@ class ShitTokPlaybackOwner(context: Context, private val callbacks: Callbacks) {
         acquisition = scope.launch(start = CoroutineStart.UNDISPATCHED) {
             wanted.forEach { url ->
                 // Current acquisition stays immediate. Only real starvation defers neighbor creation.
-                while (url != selected && control.starving) delay(120)
+                while (url != selected && control.starving && !allowsContinuityPreparation(url)) delay(120)
                 if (url !in leases) {
                     val at = SystemClock.elapsedRealtime()
                     val player = owner.acquire()
@@ -134,10 +143,16 @@ class ShitTokPlaybackOwner(context: Context, private val callbacks: Callbacks) {
                             if (!owns(url, player, generation)) return
                             updateBufferPriority()
                             if (state == Player.STATE_READY) ShitTokPoolDiagnostics.record("ready", url)
-                            if (url == selected && state == Player.STATE_READY && allowsSpeculativeWork()) flushWaitingSources()
+                            if (url == selected && state == Player.STATE_READY) flushWaitingSources()
                         }
                         override fun onRenderedFirstFrame() {
-                            if (owns(url, player, generation)) ShitTokPoolDiagnostics.record("firstFrame", url)
+                            if (owns(url, player, generation)) {
+                                ShitTokPoolDiagnostics.record("firstFrame", url)
+                                if (url == selected && !firstFrame) {
+                                    firstFrame = true
+                                    AppPerformance.record("ShitTok first rendered frame", SystemClock.elapsedRealtime() - initializedAt)
+                                }
+                            }
                         }
                         override fun onIsPlayingChanged(isPlaying: Boolean) {
                             if (isPlaying && (!owns(url, player, generation) || !canPlay(url))) silence(player)
@@ -155,7 +170,10 @@ class ShitTokPlaybackOwner(context: Context, private val callbacks: Callbacks) {
                         }
                         override fun onPlayerError(error: PlaybackException) {
                             if (owns(url, player, generation)) scope.launch {
-                                if (owns(url, player, generation)) recoverDecoder(player, error)
+                                if (owns(url, player, generation) && !recoverDecoder(player, error)
+                                    && url != selected && url == control.continuityId) {
+                                    continuityFailureListener?.accept(url)
+                                }
                             }
                         }
                     }.also { listeners[player] = it })
@@ -218,6 +236,15 @@ class ShitTokPlaybackOwner(context: Context, private val callbacks: Callbacks) {
     }
     fun allowsSpeculativeWork(): Boolean = speculativeAllowed
     fun isStarvationProtected(): Boolean = protection.isProtected()
+    /** Only the feed's immediate next URL gets the recovery exception, never the previous/deep window. */
+    fun setContinuityNext(url: String?) {
+        val next = url?.takeIf { it == immediateNext && it in window && it != selected }
+        if (control.continuityId == next) return
+        control.continuityId = next
+        flushWaitingSources()
+    }
+    fun allowsContinuityPreparation(url: String): Boolean =
+        permitted && !control.currentNeedsBuffer && url == control.continuityId && url == immediateNext
     private fun observeSelected(url: String, player: ExoPlayer) {
         if (url != selected) return
         protection.observe(SystemClock.elapsedRealtime(), player.playbackState, player.isPlaying,
@@ -231,15 +258,17 @@ class ShitTokPlaybackOwner(context: Context, private val callbacks: Callbacks) {
         control.recoveryTargetUs = protection.recoveryTargetMs() * 1_000L
         control.recoveryDeadlineMs = protection.recoveryDeadlineMs()
         val allowed = permitted && !control.currentNeedsBuffer && !control.starving
-        if (speculativeAllowed == allowed) return
+        val nextReady = permitted && !control.currentNeedsBuffer
+        if (speculativeAllowed == allowed && continuityReady == nextReady) return
         speculativeAllowed = allowed
+        continuityReady = nextReady
         // Publish after the ownership transaction, outside RecyclerView's selection callback.
         speculationNotification?.cancel()
         speculationNotification = scope.launch {
             yield()
             speculationListener?.accept(speculativeAllowed)
             manager?.invalidate()
-            if (speculativeAllowed) flushWaitingSources()
+            flushWaitingSources()
         }
     }
     private fun ensureHealthCheck() {
@@ -276,13 +305,14 @@ class ShitTokPlaybackOwner(context: Context, private val callbacks: Callbacks) {
             ShitTokPoolDiagnostics.record("staleSource", url); return false
         }
         if (lease.stream?.mediaUrl == stream.mediaUrl) { syncAudio(); return true }
-        if (url != selected && !allowsSpeculativeWork()) {
+        if (url != selected && !allowsSpeculativeWork() && !allowsContinuityPreparation(url)) {
             waitingSources[url] = stream to token
             ShitTokPoolDiagnostics.record("neighborDeferred", url)
             return true
         }
         waitingSources.remove(url)
-        revokeAudio()
+        // Warming a silent next lease must not pause/restart the recovering current player.
+        if (url != selected && allowsContinuityPreparation(url)) silence(lease.player) else revokeAudio()
         if (lease.stream != null) runCatching { remember(url, lease.player.currentPosition) }
         removeSource(url)
         val mediaSource = ShitTokMediaSources.create(app, url, stream)
@@ -290,6 +320,10 @@ class ShitTokPlaybackOwner(context: Context, private val callbacks: Callbacks) {
         lease.stream = stream
         lease.player.setMediaSource(mediaSource, positions[url] ?: 0L)
         ShitTokPoolDiagnostics.record("prepare", "url=$url role=${if(url==selected) "current" else "neighbor"}")
+        if (url == selected && !firstPrepare) {
+            firstPrepare = true
+            AppPerformance.record("ShitTok first player prepare", SystemClock.elapsedRealtime() - initializedAt)
+        }
         lease.player.prepare()
         callbacks.onLeaseChanged(url)
         syncAudio()
@@ -297,6 +331,7 @@ class ShitTokPlaybackOwner(context: Context, private val callbacks: Callbacks) {
     }
     private fun flushWaitingSources() {
         waitingSources.toMap().forEach { (url, value) ->
+            if (url != selected && !allowsSpeculativeWork() && !allowsContinuityPreparation(url)) return@forEach
             waitingSources.remove(url)
             if (accepts(url, value.second)) source(url, value.first, value.second)
         }
@@ -357,6 +392,8 @@ class ShitTokPlaybackOwner(context: Context, private val callbacks: Callbacks) {
         pool?.release(); pool = null
         manager?.release(); manager = null; builder = null; sources.clear(); waitingSources.clear()
         window = emptyList()
+        immediateNext = null
+        control.continuityId = null
         ShitTokPoolDiagnostics.record("release", "leases=0")
     }
     fun clearSession() { release(); positions.clear(); paused.clear(); selected = null; protection.select("") }
@@ -383,6 +420,7 @@ class ShitTokPlaybackOwner(context: Context, private val callbacks: Callbacks) {
         DEFAULT_BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MS, DEFAULT_BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MS,
         DEFAULT_TARGET_BUFFER_BYTES, true, true, 0, false) {
         @Volatile var currentId: String? = null
+        @Volatile var continuityId: String? = null
         @Volatile var networkPaused = false
         @Volatile var currentNeedsBuffer = true
         @Volatile var starving = false
@@ -394,7 +432,10 @@ class ShitTokPlaybackOwner(context: Context, private val callbacks: Callbacks) {
             if (networkPaused) return false
             val id = if (parameters.timeline.isEmpty) null else parameters.timeline.getWindow(0, Timeline.Window()).mediaItem.mediaId
             if (id == currentId) return normal
-            if (currentNeedsBuffer || starving) return false
+            if (currentNeedsBuffer) return false
+            // A READY recovering current retains its recovery target. Give only the immediate
+            // next clip a short startup buffer; every other neighbor remains blocked.
+            if (starving) return id == continuityId && parameters.bufferedDurationUs < 750_000L
             val buffered = parameters.bufferedDurationUs
             val next = if (loading[parameters.playerId] == true) buffered < 6_000_000 else buffered < 2_500_000
             loading[parameters.playerId] = next

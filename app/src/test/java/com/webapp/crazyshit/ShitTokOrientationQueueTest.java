@@ -44,9 +44,11 @@ public class ShitTokOrientationQueueTest {
             ReflectionHelpers.setField(f.feed, "orientationWorkAllowed", true);
             ShitTokPlaybackOwner owner = ReflectionHelpers.getField(f.feed, "playbackOwner");
             owner.permission(false, false);
+            ReflectionHelpers.setField(f.feed, "active", false);
             boolean allowed = ReflectionHelpers.callInstanceMethod(f.feed, "mayVerifyOrientation");
             assertFalse(allowed);
             assertFalse(ChaosFeedView.shouldRefillVerifiedPool(2, 0, false, true, allowed));
+            ReflectionHelpers.setField(f.feed, "active", true);
             owner.permission(true, false);
             allowed = ReflectionHelpers.callInstanceMethod(f.feed, "mayVerifyOrientation");
             assertTrue(allowed);
