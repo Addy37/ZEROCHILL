@@ -16,6 +16,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import org.robolectric.util.ReflectionHelpers
 import org.robolectric.annotation.GraphicsMode
 
 /** Native Skia verifies the real AGSL mapping, not hardware/device appearance. */
@@ -81,7 +82,12 @@ class ClearGlassLensTest {
     private fun pixel(shader: RuntimeShader, x: Int, y: Int): Int {
         val bitmap = Bitmap.createBitmap(120, 60, Bitmap.Config.ARGB_8888)
         return try {
-            Canvas(bitmap).drawPaint(Paint().apply { this.shader = shader })
+            val canvas = Canvas(bitmap)
+            // Test-only: let native Skia evaluate AGSL on the CPU. Android's
+            // Canvas guard otherwise rejects RuntimeShader before reaching it.
+            // This verifies sampling math, not GPU/device rendering support.
+            ReflectionHelpers.setField(canvas, "mAllowHwFeaturesInSwMode", true)
+            canvas.drawPaint(Paint().apply { this.shader = shader })
             bitmap.getPixel(x, y)
         } finally { bitmap.recycle() }
     }
