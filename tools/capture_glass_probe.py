@@ -1,23 +1,35 @@
 """GPU evidence through the real navbar: optical A/B, production Shows views, TextureView.
 Emulator timings describe this fixture only, never physical-device parity.
 """
-import os, pathlib, re, subprocess, time, xml.etree.ElementTree as ET
+import atexit, os, pathlib, re, subprocess, time, xml.etree.ElementTree as ET
 out = pathlib.Path(os.getenv('GLASS_PROBE_OUTPUT', 'glass-probe-output')); out.mkdir(exist_ok=True, parents=True)
 package = 'com.addy37.crazyshitunofficial.dev'
 activity = package + '/com.webapp.crazyshit.GlassRenderProbeActivity'
 def adb(*args, check=True):
-    return subprocess.run(['adb', *args], check=check, capture_output=True)
+    return subprocess.run(['adb', *args], check=check, capture_output=True, timeout=35)
+@atexit.register
+def preserve_failure_diagnostics():
+    for name, args in [('logcat.txt', ('logcat','-d','-v','threadtime')),
+                       ('activity-top.txt', ('shell','dumpsys','activity','top')),
+                       ('window.txt', ('shell','dumpsys','window','windows'))]:
+        try: (out / name).write_bytes(adb(*args, check=False).stdout)
+        except Exception as error: (out / (name + '.error')).write_text(str(error))
 def screenshot(name):
     (out / (name + '.png')).write_bytes(adb('exec-out', 'screencap', '-p').stdout)
 def start(mode=0, moving=False, collapsed=False, no_lens=False):
     adb('shell', 'am', 'force-stop', package)
-    adb('shell', 'am', 'start', '-W', '-n', activity, '--ei', 'mode', str(mode),
+    launched = adb('shell', 'am', 'start', '-W', '-n', activity, '--ei', 'mode', str(mode),
         '--ez', 'moving', str(moving).lower(), '--ez', 'collapsed', str(collapsed).lower(),
         '--ez', 'probe_no_lens', str(no_lens).lower())
+    with (out / 'launches.txt').open('ab') as log: log.write(launched.stdout + launched.stderr)
+    if b'Error' in launched.stdout or b'Error' in launched.stderr:
+        raise RuntimeError('Probe Activity did not launch')
     time.sleep(1.5)
 def node_bounds(label):
     adb('shell', 'uiautomator', 'dump', '/sdcard/glass-ui.xml')
-    tree = ET.fromstring(adb('shell', 'cat', '/sdcard/glass-ui.xml').stdout)
+    xml = adb('shell', 'cat', '/sdcard/glass-ui.xml').stdout
+    (out / 'last-ui.xml').write_bytes(xml)
+    tree = ET.fromstring(xml)
     node = next(n for n in tree.iter('node') if n.get('text') == label or n.get('content-desc') == label)
     return list(map(int, re.findall(r'\d+', node.get('bounds'))))
 def record(name, seconds=8, interaction=None):
@@ -30,6 +42,14 @@ def record(name, seconds=8, interaction=None):
     (out / (name + '-gfxinfo.txt')).write_bytes(adb('shell', 'dumpsys', 'gfxinfo', package, 'framestats').stdout)
 adb('install', '-r', os.getenv('GLASS_PROBE_APK', 'app/build/outputs/apk/debug/app-debug.apk'))
 adb('logcat', '-c')
+# Fresh API 35 images can leave Quickstep's boot-time ANR over every Activity.
+# Stop only the emulator launcher, keeping all app failures visible in diagnostics.
+for launcher in ['com.android.launcher3', 'com.google.android.apps.nexuslauncher']:
+    adb('shell', 'am', 'force-stop', launcher, check=False)
+adb('shell', 'wm', 'size', '720x1600')
+adb('shell', 'wm', 'density', '320')
+adb('shell', 'input', 'keyevent', 'KEYCODE_WAKEUP')
+adb('shell', 'input', 'keyevent', '82')
 # Identical static content, film, blur, geometry. Only shell lens strength changes.
 for no_lens, label in [(True, 'blur-control'), (False, 'refractive')]:
     start(no_lens=no_lens); screenshot(label)
