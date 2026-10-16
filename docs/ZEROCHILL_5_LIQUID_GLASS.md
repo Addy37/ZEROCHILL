@@ -117,3 +117,10 @@ and obtains accessibility bounds while the page is stationary.
 
 Local CPU-emulator startup failed before producing usable GPU evidence. This is
 not a refraction clearance; the connected CI emulator is the GPU validation path.
+
+Final hierarchy review found the legacy parent clipped each child to its resting
+bounds, which cuts off Square's enlarged press selector and shadow. Navigation is
+now allowed to protrude; page children retain explicit clipping to their original
+bounds. PR #295's signed workflow runs complete debug/release suites once instead
+of separate overlapping filters; signing identity, version, source metadata and
+in-place upgrade gates are unchanged. Other PR/dispatch behavior is unchanged.

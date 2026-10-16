@@ -16,10 +16,12 @@ final class FrostedNavigationLayout extends LinearLayout {
 
     FrostedNavigationLayout(Context context) {
         super(context);
+        setClipChildren(false); // Square's pressed selector and shadow exceed the shell.
     }
 
     FrostedNavigationLayout(Context context, AttributeSet attrs) {
         super(context, attrs);
+        setClipChildren(false);
     }
 
     void setFrostedNavigationView(View navigationView) {
@@ -65,7 +67,10 @@ final class FrostedNavigationLayout extends LinearLayout {
                 return;
             }
         }
-        super.dispatchDraw(canvas);
+        drawContentChildren(canvas, navigationView, getDrawingTime());
+        if (navigationView != null && navigationView.getVisibility() == VISIBLE) {
+            drawChild(canvas, navigationView, getDrawingTime());
+        }
     }
 
     @Override public void onDescendantInvalidated(View child, View target) {
@@ -93,7 +98,12 @@ final class FrostedNavigationLayout extends LinearLayout {
         for (int index = 0; index < getChildCount(); index++) {
             View child = getChildAt(index);
             if (child != navigation && child.getVisibility() != View.GONE) {
+                // Keep Astra's content clipping while allowing only navigation to
+                // protrude. Disabling clipping for every page would change its UI.
+                int checkpoint = canvas.save();
+                canvas.clipRect(child.getLeft(), child.getTop(), child.getRight(), child.getBottom());
                 drawChild(canvas, child, drawingTime);
+                canvas.restoreToCount(checkpoint);
             }
         }
     }

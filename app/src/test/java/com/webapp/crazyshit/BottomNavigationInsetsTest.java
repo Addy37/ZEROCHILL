@@ -24,6 +24,7 @@ public class BottomNavigationInsetsTest {
         NativeMainActivity activity = controller.get();
         FrostedNavigationLayout shell = ReflectionHelpers.getField(activity, "shell");
         ZeroChillBottomNavigationView nav = ReflectionHelpers.getField(activity, "bottomNavigation");
+        assertFalse("Square's pressed selector must protrude beyond its resting shell", shell.getClipChildren());
         for (float fold : new float[]{0f, .5f, 1f, 0f}) {
             nav.setCollapseProgressForTest(fold);
             shell.dispatchApplyWindowInsets(systemInsets(activity, 24));
