@@ -109,7 +109,7 @@ public final class NativeFeedBrowserActivity extends Activity {
     private ViewPager2 creatorTabsPager;
     private TabLayout creatorTabs;
     private CreatorProfileHeader creatorProfile;
-    private TextView compactCreatorFavorite;
+    private FrameLayout compactCreatorFavorite;
     private AppBarLayout creatorAppBar;
     private ShowDetailsHeader showDetailsHeader;
     private AppBarLayout showDetailsAppBar;
@@ -464,8 +464,7 @@ public final class NativeFeedBrowserActivity extends Activity {
         top.addView(heading, new LinearLayout.LayoutParams(0, -2, 1f));
 
         if (isCreatorGallery()) {
-            compactCreatorFavorite = BrowseUi.action(this, "☆", "Favorite creator", null);
-            compactCreatorFavorite.setTextSize(26);
+            compactCreatorFavorite = new FrameLayout(this);
             compactCreatorFavorite.setTag("creator_favorite_compact");
             compactCreatorFavorite.setVisibility(View.GONE);
             top.addView(compactCreatorFavorite, new LinearLayout.LayoutParams(dp(48), dp(52)));

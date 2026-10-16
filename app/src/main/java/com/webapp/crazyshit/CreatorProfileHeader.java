@@ -28,7 +28,9 @@ final class CreatorProfileHeader extends LinearLayout {
     private final ImageView banner;
     private final ExecutorService heroIo = Executors.newSingleThreadExecutor();
     private boolean detached;
-    private TextView compactFavorite;
+    private FrameLayout compactFavorite;
+    private ImageView compactAvatar;
+    private TextView compactFavoriteBadge;
     private android.content.SharedPreferences favoritePreferences;
     private final android.content.SharedPreferences.OnSharedPreferenceChangeListener favoriteListener =
             (prefs, key) -> refresh();
@@ -158,15 +160,7 @@ final class CreatorProfileHeader extends LinearLayout {
 
         addView(hero, new LayoutParams(-1, dp(184)));
 
-        if (!creator.imageUrl.isEmpty()) {
-            Glide.with(avatar)
-                    .load(withReferer(creator.imageUrl, creator.url))
-                    .circleCrop()
-                    .transition(ThumbnailFades.avatar())
-                    .placeholder(R.drawable.ic_more_account)
-                    .error(R.drawable.ic_more_account)
-                    .into(avatar);
-        }
+        loadAvatar(avatar);
 
         loadOnlyHavenHero(query);
         refresh();
@@ -212,8 +206,61 @@ final class CreatorProfileHeader extends LinearLayout {
         return new GlideUrl(imageUrl, headers.build());
     }
 
-    void bindCompactFavorite(TextView action) {
+    private void loadAvatar(ImageView avatar) {
+        if (creator.imageUrl.isEmpty()) return;
+        Glide.with(avatar)
+                .load(withReferer(creator.imageUrl, creator.url))
+                .circleCrop()
+                .transition(ThumbnailFades.avatar())
+                .placeholder(R.drawable.ic_more_account)
+                .error(R.drawable.ic_more_account)
+                .into(avatar);
+    }
+
+    void bindCompactFavorite(FrameLayout action) {
         compactFavorite = action;
+        action.setFocusable(true);
+        action.setAccessibilityDelegate(new View.AccessibilityDelegate() {
+            @Override public void onInitializeAccessibilityNodeInfo(
+                    View host, android.view.accessibility.AccessibilityNodeInfo info) {
+                super.onInitializeAccessibilityNodeInfo(host, info);
+                info.setClassName(android.widget.ToggleButton.class.getName());
+                info.setCheckable(true);
+                info.setChecked(host.isSelected());
+            }
+        });
+
+        // The ShitTok creator-photo treatment, sized for the existing 48 x 52dp action.
+        FrameLayout ring = new FrameLayout(getContext());
+        GradientDrawable outline = BrowseUi.rounded(getContext(), Color.BLACK, 20);
+        outline.setStroke(dp(2), UiPalette.PRIMARY);
+        ring.setBackground(outline);
+        ring.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);
+        FrameLayout.LayoutParams ringParams =
+                new FrameLayout.LayoutParams(dp(40), dp(40), Gravity.TOP | Gravity.CENTER_HORIZONTAL);
+        ringParams.topMargin = dp(2);
+        action.addView(ring, ringParams);
+
+        compactAvatar = new ImageView(getContext());
+        compactAvatar.setTag("creator_favorite_avatar");
+        compactAvatar.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        compactAvatar.setBackground(BrowseUi.rounded(getContext(), BrowseUi.SURFACE, 17));
+        compactAvatar.setClipToOutline(true);
+        compactAvatar.setImageResource(R.drawable.ic_more_account);
+        ring.addView(compactAvatar, new FrameLayout.LayoutParams(dp(34), dp(34), Gravity.CENTER));
+        loadAvatar(compactAvatar);
+
+        compactFavoriteBadge = BrowseUi.text(getContext(), "+", 13, UiPalette.ON_PRIMARY);
+        compactFavoriteBadge.setTag("creator_favorite_badge");
+        compactFavoriteBadge.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        compactFavoriteBadge.setGravity(Gravity.CENTER);
+        GradientDrawable badge = BrowseUi.rounded(getContext(), UiPalette.PRIMARY, 9);
+        badge.setStroke(dp(2), Color.BLACK);
+        compactFavoriteBadge.setBackground(badge);
+        compactFavoriteBadge.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
+        action.addView(compactFavoriteBadge,
+                new FrameLayout.LayoutParams(dp(18), dp(18), Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL));
+        ZeroChillMotion.installPressFeedback(action);
         action.setOnClickListener(v -> toggleFavorite());
         refresh();
     }
@@ -250,8 +297,7 @@ final class CreatorProfileHeader extends LinearLayout {
         favorite.setContentDescription(description);
         favorite.setSelected(saved);
         if (compactFavorite != null) {
-            compactFavorite.setText(saved ? "★" : "☆");
-            compactFavorite.setTextColor(saved ? UiPalette.PRIMARY : Color.WHITE);
+            compactFavoriteBadge.setText(saved ? "✓" : "+");
             compactFavorite.setContentDescription(description);
             compactFavorite.setSelected(saved);
         }
@@ -262,6 +308,7 @@ final class CreatorProfileHeader extends LinearLayout {
         detached = true;
         if (favoritePreferences != null) favoritePreferences.unregisterOnSharedPreferenceChangeListener(favoriteListener);
         heroIo.shutdownNow();
+        if (compactAvatar != null) Glide.with(compactAvatar).clear(compactAvatar);
         Glide.with(banner).clear(banner);
         super.onDetachedFromWindow();
     }
