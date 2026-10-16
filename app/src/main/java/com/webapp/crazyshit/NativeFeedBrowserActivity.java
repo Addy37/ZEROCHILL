@@ -448,14 +448,17 @@ public final class NativeFeedBrowserActivity extends Activity {
         LinearLayout top = new LinearLayout(this);
         top.setOrientation(LinearLayout.HORIZONTAL);
         top.setGravity(Gravity.CENTER_VERTICAL);
-        top.setPadding(dp(8), dp(6), dp(8), dp(6));
+        // Match the immersive controller's final 56dp bar before its delayed passes.
+        int actionHeight = dp(isCreatorGallery() ? 48 : 52);
+        int verticalPadding = dp(isCreatorGallery() ? 4 : 6);
+        top.setPadding(dp(8), verticalPadding, dp(8), verticalPadding);
         top.setBackgroundColor(Color.BLACK);
 
         TextView back = text("‹", 34, Color.WHITE);
         back.setGravity(Gravity.CENTER);
         back.setContentDescription("Back");
         back.setOnClickListener(v -> finishToShitTok());
-        top.addView(back, new LinearLayout.LayoutParams(dp(48), dp(52)));
+        top.addView(back, new LinearLayout.LayoutParams(dp(48), actionHeight));
 
         TextView heading = text(isCreatorGallery() ? "OnlyFap" : showDetailsMode ? "Shows" : title, 20, Color.WHITE);
         heading.setTypeface(null, android.graphics.Typeface.BOLD);
@@ -467,15 +470,15 @@ public final class NativeFeedBrowserActivity extends Activity {
             compactCreatorFavorite = new FrameLayout(this);
             compactCreatorFavorite.setTag("creator_favorite_compact");
             compactCreatorFavorite.setVisibility(View.GONE);
-            top.addView(compactCreatorFavorite, new LinearLayout.LayoutParams(dp(48), dp(52)));
+            top.addView(compactCreatorFavorite, new LinearLayout.LayoutParams(dp(48), actionHeight));
         }
 
         TextView options = text("⋮", 28, Color.rgb(220, 220, 226));
         options.setGravity(Gravity.CENTER);
         options.setContentDescription("Feed options");
         options.setOnClickListener(this::showOptions);
-        top.addView(options, new LinearLayout.LayoutParams(dp(48), dp(52)));
-        shell.addView(top, new LinearLayout.LayoutParams(-1, dp(64)));
+        top.addView(options, new LinearLayout.LayoutParams(dp(48), actionHeight));
+        shell.addView(top, new LinearLayout.LayoutParams(-1, dp(isCreatorGallery() ? 56 : 64)));
 
         FrameLayout body = new FrameLayout(this);
         if (isCreatorGallery()) {

@@ -230,36 +230,41 @@ final class CreatorProfileHeader extends LinearLayout {
             }
         });
 
-        // The ShitTok creator-photo treatment, sized for the existing 48 x 52dp action.
+        // Keep the complete photo and corner badge inside a centered 40dp cluster.
+        FrameLayout cluster = new FrameLayout(getContext());
+        action.addView(cluster, new FrameLayout.LayoutParams(dp(40), dp(40), Gravity.CENTER));
         FrameLayout ring = new FrameLayout(getContext());
-        GradientDrawable outline = BrowseUi.rounded(getContext(), Color.BLACK, 20);
-        outline.setStroke(dp(2), UiPalette.PRIMARY);
+        ring.setTag("creator_favorite_ring");
+        GradientDrawable outline = BrowseUi.rounded(getContext(), Color.BLACK, 18);
+        outline.setStroke(dp(1), UiPalette.PRIMARY);
         ring.setBackground(outline);
         ring.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);
         FrameLayout.LayoutParams ringParams =
-                new FrameLayout.LayoutParams(dp(40), dp(40), Gravity.TOP | Gravity.CENTER_HORIZONTAL);
-        ringParams.topMargin = dp(2);
-        action.addView(ring, ringParams);
+                new FrameLayout.LayoutParams(dp(36), dp(36), Gravity.TOP | Gravity.START);
+        cluster.addView(ring, ringParams);
 
         compactAvatar = new ImageView(getContext());
         compactAvatar.setTag("creator_favorite_avatar");
         compactAvatar.setScaleType(ImageView.ScaleType.CENTER_CROP);
-        compactAvatar.setBackground(BrowseUi.rounded(getContext(), BrowseUi.SURFACE, 17));
+        compactAvatar.setBackground(BrowseUi.rounded(getContext(), BrowseUi.SURFACE, 16));
         compactAvatar.setClipToOutline(true);
         compactAvatar.setImageResource(R.drawable.ic_more_account);
-        ring.addView(compactAvatar, new FrameLayout.LayoutParams(dp(34), dp(34), Gravity.CENTER));
+        ring.addView(compactAvatar, new FrameLayout.LayoutParams(dp(32), dp(32), Gravity.CENTER));
         loadAvatar(compactAvatar);
 
         compactFavoriteBadge = BrowseUi.text(getContext(), "+", 13, UiPalette.ON_PRIMARY);
+        // A decorative icon, not body text: keep its glyph inside the badge at large font sizes.
+        compactFavoriteBadge.setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX, dp(12));
+        compactFavoriteBadge.setIncludeFontPadding(false);
         compactFavoriteBadge.setTag("creator_favorite_badge");
         compactFavoriteBadge.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         compactFavoriteBadge.setGravity(Gravity.CENTER);
-        GradientDrawable badge = BrowseUi.rounded(getContext(), UiPalette.PRIMARY, 9);
-        badge.setStroke(dp(2), Color.BLACK);
+        GradientDrawable badge = BrowseUi.rounded(getContext(), UiPalette.PRIMARY, 8);
+        badge.setStroke(dp(1), Color.BLACK);
         compactFavoriteBadge.setBackground(badge);
         compactFavoriteBadge.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
-        action.addView(compactFavoriteBadge,
-                new FrameLayout.LayoutParams(dp(18), dp(18), Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL));
+        cluster.addView(compactFavoriteBadge,
+                new FrameLayout.LayoutParams(dp(16), dp(16), Gravity.BOTTOM | Gravity.END));
         ZeroChillMotion.installPressFeedback(action);
         action.setOnClickListener(v -> toggleFavorite());
         refresh();

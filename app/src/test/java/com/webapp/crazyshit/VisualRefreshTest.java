@@ -484,6 +484,41 @@ public class VisualRefreshTest {
         BunkrGalleryAdapter adapter = ReflectionHelpers.getField(screen.get(), "bunkrGalleryAdapter");
         assertEquals(8, adapter.getItemCount());
         assertEquals(Integer.valueOf(2), ReflectionHelpers.getField(screen.get(), "creatorGalleryColumns"));
+
+        // Exercise the real delayed 56dp header normalization and collapsed app bar.
+        OledImmersiveUiController.attachBrowser(screen.get());
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(500));
+        com.google.android.material.appbar.AppBarLayout appBar =
+                ReflectionHelpers.getField(screen.get(), "creatorAppBar");
+        appBar.setExpanded(false, false);
+        capture(root, "creator-gallery-avatar", 411, 891);
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(300));
+        View action = root.findViewWithTag("creator_favorite_compact");
+        for (int width : new int[] {320, 411, 600}) {
+            capture(root, "creator-gallery-avatar-" + width, width, 891);
+            assertEquals(View.VISIBLE, action.getVisibility());
+            assertTrue(action.getWidth() >= BrowseUi.dp(screen.get(), 48));
+            assertTrue(action.getHeight() >= BrowseUi.dp(screen.get(), 48));
+            android.view.ViewGroup bar = (android.view.ViewGroup) action.getParent();
+            assertTrue(action.getTop() >= bar.getPaddingTop());
+            assertTrue(action.getBottom() <= bar.getHeight() - bar.getPaddingBottom());
+            for (String tag : new String[] {"creator_favorite_ring", "creator_favorite_avatar", "creator_favorite_badge"}) {
+                View part = action.findViewWithTag(tag);
+                android.graphics.Rect bounds = new android.graphics.Rect();
+                part.getDrawingRect(bounds);
+                ((android.view.ViewGroup) action).offsetDescendantRectToMyCoords(part, bounds);
+                int inset = BrowseUi.dp(screen.get(), 4);
+                assertTrue(tag, bounds.left >= inset && bounds.top >= inset);
+                assertTrue(tag, bounds.right <= action.getWidth() - inset
+                        && bounds.bottom <= action.getHeight() - inset);
+            }
+        }
+        if (!action.isSelected()) action.performClick();
+        assertTrue(action.isSelected());
+        capture(root, "creator-gallery-avatar-selected", 411, 891);
+        appBar.setExpanded(true, false);
+        capture(root, "creator-gallery-avatar-expanded", 411, 891);
+        assertEquals(View.GONE, action.getVisibility());
         screen.pause().stop().destroy();
     }
 
