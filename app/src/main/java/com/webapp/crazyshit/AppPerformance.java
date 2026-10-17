@@ -24,6 +24,25 @@ final class AppPerformance {
         record("Application entry from process start", SystemClock.elapsedRealtime() - android.os.Process.getStartElapsedRealtime());
     }
 
+    private static final java.util.Set<String> STARTUP_EVENTS = new java.util.HashSet<>();
+
+    static synchronized void startup(String event) {
+        if (!STARTUP_EVENTS.add(event)) return;
+        long elapsed = SystemClock.elapsedRealtime() - android.os.Process.getStartElapsedRealtime();
+        record("Process -> " + event, elapsed);
+        android.os.Trace.beginSection("zc.startup." + event);
+        android.os.Trace.endSection();
+        if (ShitTokPoolDiagnostics.isEnabled())
+            android.util.Log.i("ZeroChillStartup", event + " processMs=" + elapsed);
+    }
+
+    static void startupCost(String phase, long startedAt) {
+        long elapsed = SystemClock.elapsedRealtime() - startedAt;
+        record("Startup " + phase, elapsed);
+        if (ShitTokPoolDiagnostics.isEnabled())
+            android.util.Log.i("ZeroChillStartup", phase + " durationMs=" + elapsed);
+    }
+
     static synchronized void record(String label, long milliseconds) {
         if (milliseconds < 0) return;
         long[] totals = TIMINGS.computeIfAbsent(label, key -> new long[3]);

@@ -167,13 +167,17 @@ class ShitTokPlaybackOwner(context: Context, private val callbacks: Callbacks) {
                             if (state == Player.STATE_IDLE || state == Player.STATE_ENDED) endSpeedBoost(player)
                             updateBufferPriority()
                             if (state == Player.STATE_READY) ShitTokPoolDiagnostics.record("ready", url)
-                            if (url == selected && state == Player.STATE_READY) flushWaitingSources()
+                            if (url == selected && state == Player.STATE_READY) {
+                                AppPerformance.startup("ready")
+                                flushWaitingSources()
+                            }
                         }
                         override fun onRenderedFirstFrame() {
                             if (owns(url, player, generation)) {
                                 ShitTokPoolDiagnostics.record("firstFrame", url)
                                 if (url == selected && !firstFrame) {
                                     firstFrame = true
+                                    AppPerformance.startup("frame")
                                     AppPerformance.record("ShitTok first rendered frame", SystemClock.elapsedRealtime() - initializedAt)
                                 }
                             }
@@ -354,6 +358,7 @@ class ShitTokPlaybackOwner(context: Context, private val callbacks: Callbacks) {
         ShitTokPoolDiagnostics.record("prepare", "url=$url role=${if(url==selected) "current" else "neighbor"}")
         if (url == selected && !firstPrepare) {
             firstPrepare = true
+            AppPerformance.startup("prepare")
             AppPerformance.record("ShitTok first player prepare", SystemClock.elapsedRealtime() - initializedAt)
         }
         lease.player.prepare()

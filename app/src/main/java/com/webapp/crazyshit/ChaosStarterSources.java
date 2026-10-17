@@ -30,10 +30,16 @@ final class ChaosStarterSources {
                 CrazyShitRepository.BASE + "videos/", CrazyShitRepository.BASE + "submissions/"};
         String url = urls[random.nextInt(urls.length)];
         return source -> {
-            if (source == CRAZYSHIT) return crazyShit.fetchFeed(context, url, 1);
-            if (source == KAOTIC) return new WebVideoSourceRepository().fetchFeed(
-                    context, WebVideoSourceRepository.Source.KAOTIC, 1);
-            return new EfuktRepository().fetchLatest(context);
+            AppPerformance.startup("source_request");
+            long at = android.os.SystemClock.elapsedRealtime();
+            try {
+                if (source == CRAZYSHIT) return crazyShit.fetchFeed(context, url, 1);
+                if (source == KAOTIC) return new WebVideoSourceRepository().fetchFeed(
+                        context, WebVideoSourceRepository.Source.KAOTIC, 1);
+                return new EfuktRepository().fetchLatest(context);
+            } finally {
+                AppPerformance.startupCost("starter_listing_" + source, at);
+            }
         };
     }
 

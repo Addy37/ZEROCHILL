@@ -780,6 +780,7 @@ public final class ChaosFeedView extends FrameLayout {
                 if (candidates.offer(item)) activity.runOnUiThread(() -> {
                     if (closed || work.cancelled || inventoryBatch != work || batchGeneration != feedGeneration || firstCandidate) return;
                     firstCandidate = true;
+                    AppPerformance.startup("candidate");
                     AppPerformance.record("ShitTok first candidate", android.os.SystemClock.elapsedRealtime() - initializedAt);
                 });
             } }
@@ -805,7 +806,12 @@ public final class ChaosFeedView extends FrameLayout {
                     CrazyShitRepository.StreamInfo startup = ChaosStartupPreloader.takeResolved(item.url);
                     long at = android.os.SystemClock.elapsedRealtime();
                     inventoryResolutions.incrementAndGet();
-                    try { return startup != null ? startup : resolvePlayable(item); }
+                    try {
+                        AppPerformance.startup("resolve_begin");
+                        CrazyShitRepository.StreamInfo resolved = startup != null ? startup : resolvePlayable(item);
+                        if (resolved != null) AppPerformance.startup("resolved");
+                        return resolved;
+                    }
                     finally {
                         inventoryResolutions.decrementAndGet();
                         ShitTokPoolDiagnostics.record("inventoryResolve", "ms=" + (android.os.SystemClock.elapsedRealtime() - at));
@@ -815,6 +821,7 @@ public final class ChaosFeedView extends FrameLayout {
                         if (closed || work.cancelled || inventoryBatch != work || batchGeneration != feedGeneration) return;
                         if (!firstAdmitted) {
                             firstAdmitted = true;
+                            AppPerformance.startup("admitted");
                             AppPerformance.record("ShitTok first admitted / resolved", android.os.SystemClock.elapsedRealtime() - initializedAt);
                         }
                         if (!items.isEmpty() && (!continuityBatch || usableUpcomingCount() >= desiredRunway())) return;

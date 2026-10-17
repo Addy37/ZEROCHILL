@@ -33,6 +33,7 @@ public final class SplashActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         splashStartedAt = SystemClock.uptimeMillis();
+        AppPerformance.startup("splash");
         launchAction = getIntent() == null ? null : getIntent().getAction();
         startupWizard = StartupWizardPolicy.shouldShow(this);
         chaosHandoff = !startupWizard

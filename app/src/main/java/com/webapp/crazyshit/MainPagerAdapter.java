@@ -108,12 +108,21 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         this.activity = activity;
         this.host = host;
         primaryWork = new PrimaryTabWorkQueue(activity.getWindow().getDecorView());
+        long stageAt = android.os.SystemClock.elapsedRealtime();
         this.browseArtworkResolver = new BrowseArtworkResolver(activity);
+        AppPerformance.startupCost("artwork_resolver", stageAt);
         setHasStableIds(true);
 
+        stageAt = android.os.SystemClock.elapsedRealtime();
         pages[PAGE_HOME] = buildFeedPage(PAGE_HOME, "native_view_home", CrazyShitRepository.HOME);
+        AppPerformance.startupCost("home_shell", stageAt);
+        stageAt = android.os.SystemClock.elapsedRealtime();
         pages[PAGE_SERIES] = buildBrowsePage(PAGE_SERIES, PageKind.SERIES);
+        AppPerformance.startupCost("shows_shell", stageAt);
+        stageAt = android.os.SystemClock.elapsedRealtime();
         pages[PAGE_ONLYFAP] = buildBrowsePage(PAGE_ONLYFAP, PageKind.ONLYFAP);
+        AppPerformance.startupCost("onlyfap_shell", stageAt);
+        stageAt = android.os.SystemClock.elapsedRealtime();
 
         chaosView = new ChaosFeedView(activity, new ChaosFeedView.Host() {
             @Override
@@ -136,7 +145,19 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                 host.onNavigationScroll(PAGE_CHAOS, direction * dp(24), atTop, userDriven);
             }
         });
+        AppPerformance.startupCost("shittok_shell", stageAt);
+        chaosView.getViewTreeObserver().addOnDrawListener(
+                new android.view.ViewTreeObserver.OnDrawListener() {
+                    private boolean recorded;
+                    @Override public void onDraw() {
+                        if (recorded || !chaosView.isShown()) return;
+                        recorded = true;
+                        AppPerformance.startup("shell");
+                        chaosView.post(() -> chaosView.getViewTreeObserver().removeOnDrawListener(this));
+                    }
+                });
         chaosView.setActive(false);
+        stageAt = android.os.SystemClock.elapsedRealtime();
         libraryView = new LibraryHubView(activity, new LibraryHubView.Listener() {
             @Override
             public void onOpenWatchLater(NativeContentItem item) {
@@ -161,6 +182,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                 ));
             }
         });
+        AppPerformance.startupCost("library_shell", stageAt);
         libraryView.setWorkScheduler((key, task) -> primaryWork.submit(PAGE_LIBRARY, key, task));
         pages[PAGE_ONLYFAP].onlyFapHub.setWorkScheduler(
                 (key, task) -> primaryWork.submit(PAGE_ONLYFAP, key, task));
