@@ -158,6 +158,31 @@ public class ColdTabSnapshotTest {
         captured.recycle();
     }
 
+    @Test public void scrollingFadesCoverWithoutCapturingScrolledContent() throws Exception {
+        Fixture f = new Fixture("test-scroll-fade", false);
+        Bitmap seed = Bitmap.createBitmap(16, 32, Bitmap.Config.ARGB_8888);
+        ColdTabSnapshot.write(f.file, seed);
+        seed.recycle();
+        byte[] before = Files.readAllBytes(f.file.toPath());
+        f.hero.setLayoutParams(new ScrollView.LayoutParams(-1, 1600));
+        f.install();
+        drainIo();
+        f.live.scrollTo(0, 100);
+        assertTrue(f.live.getScrollY() > 0);
+        ShadowSystemClock.advanceBy(Duration.ofMillis(200));
+        f.controller.onPreDraw();
+        assertEquals(2, f.root.getChildCount());
+        ImageView cover = (ImageView) f.root.getChildAt(1);
+        assertEquals(180, cover.animate().getDuration());
+        assertFalse(cover.isClickable());
+        ReflectionHelpers.callInstanceMethod(f.controller, "capture");
+        ShadowLooper.idleMainLooper(250, TimeUnit.MILLISECONDS);
+        drainIo();
+        assertEquals(1, f.root.getChildCount());
+        assertFalse(ReflectionHelpers.getField(f.controller, "done"));
+        assertArrayEquals(before, Files.readAllBytes(f.file.toPath()));
+    }
+
     @Test public void smootherSnapshotResolutionPersists() throws Exception {
         File file = new File(Files.createTempDirectory("snapshot").toFile(), "tab.jpg");
         Bitmap bitmap = Bitmap.createBitmap(256, 512, Bitmap.Config.ARGB_8888);

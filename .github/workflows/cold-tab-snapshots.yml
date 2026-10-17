@@ -21,6 +21,9 @@ jobs:
         run: >-
           gradle --no-daemon :app:testDebugUnitTest
           --tests 'com.webapp.crazyshit.ColdTabSnapshotTest'
+          --tests 'com.webapp.crazyshit.OnlyFapHeroStartupTest'
+          --tests 'com.webapp.crazyshit.OnlyFapHeroRotationTest'
+          --tests 'com.webapp.crazyshit.OnlyFapHeroPolicyTest'
           --tests 'com.webapp.crazyshit.OnlyFapDiscoverLifecycleTest'
           --tests 'com.webapp.crazyshit.ShowsHubStateTest'
           --tests 'com.webapp.crazyshit.GalleryMediaRevealTest.blurSnapshotKeepsPreviewBlurSeparateFromSharpFullImage'

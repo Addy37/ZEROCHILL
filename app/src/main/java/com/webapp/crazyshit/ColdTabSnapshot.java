@@ -41,6 +41,7 @@ final class ColdTabSnapshot implements ViewTreeObserver.OnPreDrawListener,
     private ImageView cover;
     private Bitmap pixels;
     private boolean done;
+    private boolean coverFading;
     private long started;
     private long readySince;
     private long nextCheck;
@@ -102,7 +103,7 @@ final class ColdTabSnapshot implements ViewTreeObserver.OnPreDrawListener,
         // A failure must expose the normal loader/error UI rather than cover it forever.
         if (now - started >= MAX_WAIT_MS) removeCover();
         if (live.getScrollY() != 0) {
-            removeCover();
+            fadeCoverForInteraction();
             readySince = 0;
             return true;
         }
@@ -210,12 +211,20 @@ final class ColdTabSnapshot implements ViewTreeObserver.OnPreDrawListener,
         } else revealed.run();
     }
 
+    private void fadeCoverForInteraction() {
+        if (cover == null || coverFading) return;
+        coverFading = true;
+        cover.animate().alpha(0f).setDuration(180).withEndAction(this::removeCover).start();
+    }
+
     private void removeCover() {
         if (cover != null) {
+            cover.animate().cancel();
             cover.setImageDrawable(null);
             root.removeView(cover);
             cover = null;
         }
+        coverFading = false;
         if (pixels != null) {
             pixels.recycle();
             pixels = null;
