@@ -29,6 +29,7 @@ final class SearchGlassLayout extends FrameLayout {
     private final Outline resultOutline = new Outline();
     private final Rect resultRect = new Rect();
     private int imeBottom;
+    private int systemBottom;
     private int imeAnimations;
     private WindowInsetsCompat appliedInsets;
     private WindowInsetsAnimationCompat.Callback insetAnimation;
@@ -65,6 +66,7 @@ final class SearchGlassLayout extends FrameLayout {
                 | WindowInsetsCompat.Type.displayCutout());
         // onApply receives the END inset before the keyboard animation starts.
         // Defer that bottom extent and follow the actual inset on each progress frame.
+        systemBottom = safe.bottom;
         if (updateIme) imeBottom = insets.getInsets(WindowInsetsCompat.Type.ime()).bottom;
         setPadding(safe.left, safe.top, safe.right, Math.max(safe.bottom, imeBottom));
         dirty = true;
@@ -133,7 +135,9 @@ final class SearchGlassLayout extends FrameLayout {
     }
 
     private int resultHeight(int windowHeight, int desired) {
-        int bottomGap = dp(imeBottom > 0 ? 8 : 12);
+        // Close the 4dp gap difference continuously as IME crosses the nav inset.
+        // Switching gaps on visibility alone would briefly expand the pane.
+        int bottomGap = dp(12) - Math.min(dp(4), Math.max(0, imeBottom - systemBottom));
         return Math.max(0, Math.min(windowHeight - getPaddingTop() - getPaddingBottom()
                 - dp(76) - bottomGap, desired));
     }

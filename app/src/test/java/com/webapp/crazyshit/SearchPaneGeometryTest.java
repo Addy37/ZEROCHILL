@@ -75,12 +75,12 @@ public class SearchPaneGeometryTest {
         callback.onPrepare(animation);
         ViewCompat.dispatchApplyWindowInsets(shell, insets(300)); layout(shell);
         assertEquals(initialHeight, pane.getHeight());
-        for (int bottom : new int[]{0, 60, 160, 300, 300, 300}) {
+        for (int bottom : new int[]{0, 1, 20, 21, 24, 60, 160, 300, 300, 300}) {
             callback.onProgress(insets(bottom), Collections.singletonList(animation));
             layout(shell);
             assertEquals(top, pane.getTop()); assertEquals(pillTop, pill.getTop());
             assertAligned(pane, rows);
-            int gap = BrowseUi.dp(host.get(), bottom > 0 ? 8 : 12);
+            int gap = BrowseUi.dp(host.get(), 12) - Math.min(BrowseUi.dp(host.get(), 4), Math.max(0, bottom - 20));
             assertEquals(800 - Math.max(20, bottom) - gap, pane.getBottom());
             assertEquals(initialHeight - pane.getHeight(), Math.max(20, bottom) - 20 + gap - BrowseUi.dp(host.get(), 12));
             assertTrue(rows.getClipToOutline());
@@ -92,7 +92,7 @@ public class SearchPaneGeometryTest {
         panel.close(); owner.close(); host.pause().stop().destroy();
     }
 
-    @Test public void lastCreatorAndFooterStayReachableWithInternalBottomSpaceAndIme() {
+    @Test public void lastCreatorAndFooterStayReachableWithInternalBottomSpaceAndIme() throws Exception {
         var host = Robolectric.buildActivity(Activity.class).create().start().resume().visible();
         SearchGlassOwner owner = new SearchGlassOwner(host.get());
         SearchPanel panel = new SearchPanel(host.get(), new Intent(), true, () -> {});
@@ -105,6 +105,14 @@ public class SearchPaneGeometryTest {
         for (int i = 0; i < 20; i++) creators.add(CreatorCatalog.fromModel(
                 new FapelloRepository.Model("Creator " + i, "https://fapello.com/test-" + i + "/", "")));
         adapter.replace(creators);
+        // Creator diffs commit asynchronously onto the main thread.
+        long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(3);
+        while (adapter.getItemCount() != 20 && System.nanoTime() < deadline) {
+            Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
+            Thread.sleep(10);
+        }
+        assertEquals(20, adapter.getItemCount());
+        Shadows.shadowOf(android.os.Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(200));
         TextView footer = ReflectionHelpers.getField(controller, "searchAll");
         footer.setVisibility(View.VISIBLE);
         RecyclerView list = ReflectionHelpers.getField(controller, "recycler");
