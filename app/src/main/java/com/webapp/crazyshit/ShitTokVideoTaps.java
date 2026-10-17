@@ -18,6 +18,7 @@ final class ShitTokVideoTaps {
     private final int slop;
     private float downX, downY;
     private boolean holding;
+    private boolean doubleTapSequence;
 
     ShitTokVideoTaps(Context context, Supplier<Object> identity, BooleanSupplier eligible,
             Runnable singleTap, DoubleTap doubleTap) {
@@ -32,7 +33,7 @@ final class ShitTokVideoTaps {
         detector = new GestureDetector(context, new GestureDetector.SimpleOnGestureListener() {
             private boolean current() { return item != null && item == identity.get() && eligible.getAsBoolean(); }
             @Override public void onLongPress(MotionEvent e) {
-                if (current()) holding = ShitTokVideoTaps.this.beginHold.getAsBoolean();
+                if (!doubleTapSequence && current()) holding = ShitTokVideoTaps.this.beginHold.getAsBoolean();
             }
             @Override public boolean onDown(MotionEvent e) { return true; }
             @Override public boolean onSingleTapConfirmed(MotionEvent e) {
@@ -41,8 +42,10 @@ final class ShitTokVideoTaps {
             }
             @Override public boolean onDoubleTap(MotionEvent e) { return current(); }
             @Override public boolean onDoubleTapEvent(MotionEvent e) {
-                if (e.getActionMasked() == MotionEvent.ACTION_DOWN && current())
+                if (e.getActionMasked() == MotionEvent.ACTION_DOWN && current()) {
+                    doubleTapSequence = true;
                     doubleTap.favorite(e.getX(), e.getY());
+                }
                 return true;
             }
         });
@@ -58,6 +61,7 @@ final class ShitTokVideoTaps {
         if (event.getActionMasked() == MotionEvent.ACTION_DOWN) {
             if (item != identity) cancel();
             item = identity;
+            doubleTapSequence = false;
             downX = event.getX(); downY = event.getY();
         }
         detector.onTouchEvent(event);

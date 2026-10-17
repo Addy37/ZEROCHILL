@@ -79,6 +79,16 @@ public class ShitTokSpeedMuteTest {
             }
         }
     }
+    @Test public void secondTapHeldAfterDoubleTapNeverBoosts() {
+        try (var f = ShitTokInteractionUiTest.fixture()) {
+            View video = video(f);
+            ShitTokInteractionUiTest.tap(video, 300, 400);
+            ShitTokInteractionUiTest.idle(60);
+            long down = down(f); waitForHold();
+            assertEquals(1f, f.selectedPlayer.speed.speed, 0f);
+            ShitTokInteractionUiTest.event(video, down, MotionEvent.ACTION_UP, 300, 400);
+        }
+    }
     @Test public void pausedVideoNeverBoostsOrStarts() {
         try (var f = ShitTokInteractionUiTest.fixture()) {
             ShitTokPlaybackOwner pausedOwner = ReflectionHelpers.getField(f.feed, "playbackOwner");
