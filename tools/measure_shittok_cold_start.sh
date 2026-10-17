@@ -1,8 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
+# A lost emulator must not turn three short samples into a twenty-minute wait.
+adb_binary="$(command -v adb)"
+adb() { timeout --kill-after=2s 12s "$adb_binary" "$@"; }
 package=com.addy37.crazyshitunofficial.dev
 output="${1:?output directory}"
 mkdir -p "$output"
+trap 'result=$?; if (( result != 0 )); then echo "Measurement command failed: $result" > "$output/harness-failure.txt"; timeout --kill-after=1s 3s "$adb_binary" devices -l > "$output/devices.txt" 2>&1 || true; fi' EXIT
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 adb shell am force-stop "$package"
 # Seed only onboarding completion in a disposable CI install. Preserve caches across cold processes.

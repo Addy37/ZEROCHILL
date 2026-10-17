@@ -12,7 +12,7 @@ jobs:
   measure:
     if: ${{ github.head_ref == 'feature/shittok-deep-source-exploration' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 12
     env:
       ANALYTICS_ENDPOINT: ''
       SHITTOK_POOL_DIAGNOSTICS: 'true'
@@ -50,6 +50,8 @@ jobs:
           api-level: 35
           arch: x86_64
           profile: pixel_6
+          ram-size: 4096M
+          emulator-boot-timeout: 180
           disable-animations: false
           script: bash tools/measure_shittok_cold_start.sh startup-evidence
       - uses: actions/upload-artifact@v4
