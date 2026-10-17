@@ -413,8 +413,17 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         if (pageView.getParent() instanceof ViewGroup) {
             ((ViewGroup) pageView.getParent()).removeView(pageView);
         }
+        holder.container.setClipChildren(pageIndex == PAGE_ONLYFAP);
+        holder.container.setClipToPadding(pageIndex == PAGE_ONLYFAP);
+        if (pageIndex == PAGE_SERIES) ((ViewGroup) pageView).setClipChildren(false);
         holder.container.removeAllViews();
-        holder.container.addView(pageView, new FrameLayout.LayoutParams(-1, -1));
+        FrameLayout.LayoutParams pageParams = new FrameLayout.LayoutParams(-1, -1);
+        if (pageIndex == PAGE_LIBRARY) {
+            int header = ZeroChillUi.dimension(activity, R.dimen.zc_top_bar_height);
+            pageParams.topMargin = -header;
+            pageView.setPadding(0, header, 0, 0);
+        }
+        holder.container.addView(pageView, pageParams);
     }
 
     private Page buildFeedPage(int index, String prefKey, String baseUrl) {

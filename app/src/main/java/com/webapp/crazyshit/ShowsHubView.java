@@ -119,7 +119,13 @@ final class ShowsHubView extends FrameLayout {
         scroll.setFillViewport(true);
         scroll.setClipToPadding(false);
         scroll.setVerticalScrollBarEnabled(false);
-        addView(scroll, new FrameLayout.LayoutParams(-1, -1));
+        // Grow only the scroll drawing area; padding preserves origin and scroll range.
+        setClipChildren(false);
+        int header = ZeroChillUi.dimension(context, R.dimen.zc_top_bar_height);
+        scroll.setPadding(0, header, 0, 0);
+        FrameLayout.LayoutParams scrollParams = new FrameLayout.LayoutParams(-1, -1);
+        scrollParams.topMargin = -header;
+        addView(scroll, scrollParams);
 
         content = new LinearLayout(context);
         content.setOrientation(LinearLayout.VERTICAL);
