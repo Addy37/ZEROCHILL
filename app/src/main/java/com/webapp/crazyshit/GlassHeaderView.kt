@@ -20,7 +20,9 @@ import androidx.compose.ui.unit.dp
 import com.webapp.crazyshit.glass.*
 
 /** Native controls stay above a single pane sampling the navbar's live page recording. */
-internal class GlassHeaderView(private val activity: Activity, private val controls: View) : FrameLayout(activity) {
+internal class GlassHeaderView @JvmOverloads constructor(
+    private val activity: Activity, private val controls: View, private val cornerRadius: Float = 0f
+) : FrameLayout(activity) {
     private val glass = ComposeView(activity).apply {
         importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO
         setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnDetachedFromWindow)
@@ -28,6 +30,15 @@ internal class GlassHeaderView(private val activity: Activity, private val contr
     private var backdrop by mutableStateOf<ViewPageBackdrop?>(null)
 
     init {
+        if (cornerRadius > 0f) {
+            outlineProvider = object : android.view.ViewOutlineProvider() {
+                override fun getOutline(view: View, outline: android.graphics.Outline) {
+                    outline.setRoundRect(0, 0, view.width, view.height,
+                        cornerRadius * resources.displayMetrics.density)
+                }
+            }
+            clipToOutline = true
+        }
         setBackgroundColor(android.graphics.Color.TRANSPARENT)
         contentDescription = controls.contentDescription
         controls.contentDescription = null
@@ -60,14 +71,16 @@ internal class GlassHeaderView(private val activity: Activity, private val contr
         post {
             if (!isAttachedToWindow) return@post
             glass.setContent {
-                val config = remember { headerGlassConfig(activity) }
-                val shape = remember { RoundedCornerShape(0.dp) }
+                val config = remember { headerGlassConfig(activity).let {
+                    if (cornerRadius > 0f) it.copy(lensSideEdges = true) else it
+                } }
+                val shape = remember { RoundedCornerShape(cornerRadius.dp) }
                 backdrop?.let { page ->
                     CompositionLocalProvider(LocalAppBackdrop provides page,
                         LocalGlassEffectConfig provides config) {
                         Box(Modifier.fillMaxSize().clipToBounds()
                             // Full-width geometry has no illuminated floating-card rim.
-                            .liquidGlass(config, shape, highlightAlpha = 0f))
+                            .liquidGlass(config, shape, highlightAlpha = if (cornerRadius > 0f) config.highlightOpacity else 0f))
                     }
                 }
             }

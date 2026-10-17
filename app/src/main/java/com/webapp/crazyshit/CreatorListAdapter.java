@@ -34,6 +34,8 @@ final class CreatorListAdapter extends RecyclerView.Adapter<CreatorListAdapter.H
     private List<NativeContentItem> items = new ArrayList<>();
     private Set<String> favorites;
     private int replaceGeneration;
+    private boolean floating;
+    void setFloating(boolean value) { floating = value; }
 
     CreatorListAdapter(Context context, Consumer<NativeContentItem> open, Runnable favoriteChanged) {
         this.context = context;
@@ -86,9 +88,11 @@ final class CreatorListAdapter extends RecyclerView.Adapter<CreatorListAdapter.H
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
         row.setPadding(dp(12), dp(8), dp(8), dp(8));
-        row.setBackground(BrowseUi.rounded(context, BrowseUi.SURFACE, 16));
+        if (floating) row.setBackground(new SearchResultDivider(context));
+        else row.setBackground(BrowseUi.rounded(context, BrowseUi.SURFACE, 16));
         RecyclerView.LayoutParams params = new RecyclerView.LayoutParams(-1, -2);
-        params.setMargins(dp(12), dp(3), dp(12), dp(3));
+        params.setMargins(floating ? 0 : dp(12), floating ? 0 : dp(3), floating ? 0 : dp(12), floating ? 0 : dp(3));
+        if (floating) params.height = dp(72);
         row.setLayoutParams(params);
         ImageView avatar = new ImageView(context);
         avatar.setScaleType(ImageView.ScaleType.CENTER_CROP);
@@ -100,7 +104,7 @@ final class CreatorListAdapter extends RecyclerView.Adapter<CreatorListAdapter.H
         labels.setPadding(dp(12), 0, dp(4), 0);
         labels.setOrientation(LinearLayout.VERTICAL);
         TextView name = BrowseUi.text(context, "", 16, Color.WHITE);
-        name.setMaxLines(2);
+        name.setMaxLines(floating ? 1 : 2);
         name.setEllipsize(TextUtils.TruncateAt.END);
         labels.addView(name);
         TextView subtitle = BrowseUi.text(context, "Open gallery", 12, BrowseUi.MUTED);

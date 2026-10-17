@@ -2,6 +2,9 @@ name: Spotlight search focused validation
 on:
   push:
     branches: [feature/spotlight-glass-search]
+concurrency:
+  group: spotlight-search-${{ github.ref }}
+  cancel-in-progress: true
 permissions:
   contents: read
 jobs:
@@ -21,6 +24,8 @@ jobs:
         run: >-
           gradle --no-daemon :app:testDebugUnitTest
           --tests 'com.webapp.crazyshit.SearchOverlayTest'
+          --tests 'com.webapp.crazyshit.SearchFloatingPresentationTest'
+          --tests 'com.webapp.crazyshit.CreatorSuggestionsTest'
           --tests 'com.webapp.crazyshit.SearchStateTest'
           --tests 'com.webapp.crazyshit.LibrarySearchTest'
           --tests 'com.webapp.crazyshit.GlassHeaderLayoutTest'
@@ -39,3 +44,4 @@ jobs:
           path: |
             app/build/reports/tests/testDebugUnitTest
             app/build/outputs/apk/debug/*.apk
+            app/build/reports/visual-tests/*.png

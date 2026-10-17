@@ -52,12 +52,17 @@ final class SearchPanel {
     private boolean closing;
     private android.animation.ValueAnimator morphAnimator;
     private GlassHeaderView header;
-    private FrostedNavigationLayout shell;
+    private SearchGlassLayout shell;
+    private LinearLayout resultsControls;
+    private GlassHeaderView resultSurface, favoriteSurface;
+    private android.animation.ValueAnimator resultsAnimator;
+    private float morphProgress;
+    private boolean resultShown;
     private ViewPageBackdrop emptyBackdrop;
 
     void setEmptyBackdrop(ViewPageBackdrop backdrop) {
         emptyBackdrop = backdrop;
-        updateContentVisibility();
+        shell.setUnderlay(backdrop);
     }
 
     SearchPanel(Activity activity, Intent intent, boolean overlay, Runnable dismiss) {
@@ -164,10 +169,9 @@ final class SearchPanel {
     }
 
     private void buildUi() {
-        shell = new FrostedNavigationLayout(activity);
+        shell = new SearchGlassLayout(activity);
         shell.setClickable(true);
-        shell.setOrientation(LinearLayout.VERTICAL);
-        shell.setBackgroundColor(Color.TRANSPARENT);
+        shell.setOnClickListener(v -> dismiss.run());
         androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(shell, (v, insets) -> {
             androidx.core.graphics.Insets safe = insets.getInsets(
                     androidx.core.view.WindowInsetsCompat.Type.systemBars()
@@ -179,43 +183,28 @@ final class SearchPanel {
         headerControls = new LinearLayout(activity);
         headerControls.setOrientation(LinearLayout.VERTICAL);
         headerControls.addView(buildSearchRow(), new LinearLayout.LayoutParams(-1, dp(56)));
-        if (!bunkrOnly) {
-            filterBar = buildFilters();
-            headerControls.addView(filterBar, new LinearLayout.LayoutParams(-1, dp(52)));
-        }
-        searchState = BrowseUi.text(activity, "", 12, BrowseUi.MUTED);
-        searchState.setPadding(dp(16), dp(4), dp(16), dp(4));
-        searchState.setVisibility(View.GONE);
-        searchState.setOnClickListener(v -> {
-            if (activeQuery.isEmpty()) return;
-            if (bunkrOnly) startOnlyFapSearch(activeQuery);
-            else startGlobalSearch(activeQuery, false);
-        });
-        headerControls.addView(searchState);
-        header = new GlassHeaderView(activity, headerControls);
-        headerControls.setLayoutParams(new FrameLayout.LayoutParams(-1, -2));
-        shell.setFrostedHeaderView(header);
-        shell.addView(header, new LinearLayout.LayoutParams(-1, -2));
+        header = new GlassHeaderView(activity, headerControls, 28f);
+        View favorites = searchAction("★", "Favorite creators", v ->
+                activity.startActivity(new Intent(activity, CreatorsActivity.class)));
+        favoriteSurface = new GlassHeaderView(activity, favorites, 24f);
+        resultSurface = new GlassHeaderView(activity, new FrameLayout(activity), 24f);
+        resultsControls = new LinearLayout(activity);
+        resultsControls.setOrientation(LinearLayout.VERTICAL);
+        resultsControls.setClipChildren(false);
+        resultsControls.setClipToPadding(false);
+        resultsControls.setOnClickListener(v -> {});
+        shell.install(header, favoriteSurface, resultSurface, resultsControls);
+
         content = new FrameLayout(activity);
+        content.setClipChildren(false);
+        content.setClipToPadding(false);
         content.setClickable(true);
-        LinearLayout.LayoutParams body = new LinearLayout.LayoutParams(-1, 0, 1f);
-        shell.addView(content, body);
-        headerControls.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> {
-            int height = b - t;
-            LinearLayout.LayoutParams params = (LinearLayout.LayoutParams) content.getLayoutParams();
-            if (params.topMargin != -height) {
-                params.topMargin = -height;
-                content.setLayoutParams(params);
-                recycler.setPadding(0, height + dp(4), 0, dp(22));
-                status.setPadding(0, height, 0, 0);
-                suggestionPanel.setPadding(0, height, 0, 0);
-            }
-        });
+        resultsControls.addView(content, new LinearLayout.LayoutParams(-1, 0, 1f));
         recycler = new RecyclerView(activity);
         recycler.setLayoutManager(new LinearLayoutManager(activity));
-        recycler.setBackgroundColor(ZeroChillUi.background(activity));
+        recycler.setBackgroundColor(Color.TRANSPARENT);
         recycler.setClipToPadding(false);
-        recycler.setPadding(0, dp(56), 0, dp(22));
+        recycler.setPadding(0, dp(68), 0, dp(4));
         recycler.setItemAnimator(null);
         if (bunkrOnly) {
             onlyFapAdapter = new OnlyFapCreatorSearchAdapter(this::openCreator);
@@ -224,25 +213,44 @@ final class SearchPanel {
             adapter = new GlobalSearchAdapter(this::openResult);
             recycler.setAdapter(adapter);
         }
-        content.addView(recycler, new FrameLayout.LayoutParams(-1, -1));
-
-        status = new TextView(activity);
-        ZeroChillUi.styleEmpty(status);
-        status.setText(bunkrOnly
-                ? "Search OnlyFap creators\nOnlyHaven, Bunkr, Fapello, WikiFeet and WikiFeet X open in one gallery"
-                : "Search CrazyShit, EFukt, OnlyFap, Collections, Categories and your Library");
-        content.addView(status, new FrameLayout.LayoutParams(-1, -1));
-
+        FrameLayout.LayoutParams listParams = new FrameLayout.LayoutParams(-1, -1);
+        listParams.topMargin = -dp(68);
+        content.addView(recycler, listParams);
+        recycler.getAdapter().registerAdapterDataObserver(new RecyclerView.AdapterDataObserver() {
+            @Override public void onChanged() { updateResultSize(); }
+            @Override public void onItemRangeInserted(int start, int count) { updateResultSize(); }
+            @Override public void onItemRangeRemoved(int start, int count) { updateResultSize(); }
+        });
+        status = BrowseUi.text(activity, "", 12, BrowseUi.MUTED);
+        status.setGravity(Gravity.TOP | Gravity.CENTER_HORIZONTAL);
+        status.setPadding(dp(12), dp(14), dp(12), dp(8));
+        status.setText(bunkrOnly ? "Search OnlyFap creators" : "Search creators or videos");
+        content.addView(status, new FrameLayout.LayoutParams(-1, -2));
         progress = new ZeroChillLoadingView(activity, null, true);
         progress.setVisibility(View.GONE);
-        FrameLayout.LayoutParams progressParams = new FrameLayout.LayoutParams(dp(72), dp(72));
-        progressParams.gravity = Gravity.CENTER;
+        FrameLayout.LayoutParams progressParams = new FrameLayout.LayoutParams(dp(28), dp(28), Gravity.TOP | Gravity.CENTER_HORIZONTAL);
+        progressParams.topMargin = dp(12);
         content.addView(progress, progressParams);
-
         suggestionPanel = new LinearLayout(activity);
+        suggestionPanel.setClipChildren(false);
+        suggestionPanel.setClipToPadding(false);
         content.addView(suggestionPanel, new FrameLayout.LayoutParams(-1, -1));
         suggestions = new CreatorSuggestionsController(activity, input, suggestionPanel, this::openCreator);
+        suggestions.setFloatingPresentation(this::updateResultSize);
         suggestions.setSearchAction(this::runSearch);
+        if (!bunkrOnly) {
+            filterBar = buildFilters();
+            resultsControls.addView(filterBar, new LinearLayout.LayoutParams(-1, dp(44)));
+        }
+        searchState = BrowseUi.text(activity, "", 11, BrowseUi.MUTED);
+        searchState.setPadding(dp(14), dp(4), dp(14), dp(8));
+        searchState.setVisibility(View.GONE);
+        searchState.setOnClickListener(v -> {
+            if (activeQuery.isEmpty()) return;
+            if (bunkrOnly) startOnlyFapSearch(activeQuery);
+            else startGlobalSearch(activeQuery, false);
+        });
+        resultsControls.addView(searchState);
         suggestions.setVisibilityListener(showing -> {
             if (filterBar != null) filterBar.setVisibility(showing ? View.GONE : View.VISIBLE);
             updateContentVisibility();
@@ -253,24 +261,55 @@ final class SearchPanel {
 
     private LinearLayout suggestionPanel;
 
+    private void updateResultSize() {
+        if (shell == null || recycler == null || suggestions == null) return;
+        int count = suggestions.isShowing() ? suggestions.resultCount()
+                : recycler.getAdapter().getItemCount();
+        shell.setResultCount(!suggestions.isShowing() && count == 0 ? 1 : count);
+    }
+
     private void updateContentVisibility() {
-        if (content == null || input == null) return;
-        boolean show = !overlay || input.length() > 0 || !activeQuery.isEmpty();
-        content.setVisibility(show ? View.VISIBLE : View.INVISIBLE);
-        header.setPageBackdrop(!show && emptyBackdrop != null
-                ? emptyBackdrop : shell.pageBackdropForOverlay());
+        if (content == null || input == null || resultsControls == null || closing) return;
+        boolean show = input.length() > 0;
+        updateResultSize();
+        if (show) content.setVisibility(View.VISIBLE);
+        if (show == resultShown) {
+            if (!show) { content.setVisibility(View.INVISIBLE); resultSurface.setVisibility(View.INVISIBLE); resultsControls.setVisibility(View.INVISIBLE); resultSurface.setAlpha(0f); resultsControls.setAlpha(0f); }
+            return;
+        }
+        resultShown = show;
+        if (resultsAnimator != null) resultsAnimator.cancel();
+        resultSurface.setVisibility(View.VISIBLE);
+        resultsControls.setVisibility(View.VISIBLE);
+        resultsAnimator = android.animation.ValueAnimator.ofFloat(resultSurface.getAlpha(), show ? 1f : 0f);
+        resultsAnimator.setDuration(ZeroChillMotion.animationsEnabled(activity) ? 180L : 0L);
+        resultsAnimator.addUpdateListener(a -> {
+            float amount = (float) a.getAnimatedValue();
+            resultSurface.setAlpha(amount); resultsControls.setAlpha(amount);
+            float rise = dp(8) * (1f - amount);
+            resultSurface.setTranslationY(rise); resultsControls.setTranslationY(rise);
+        });
+        resultsAnimator.addListener(new android.animation.AnimatorListenerAdapter() {
+            @Override public void onAnimationEnd(android.animation.Animator a) {
+                if (!resultShown) { content.setVisibility(View.INVISIBLE); resultSurface.setVisibility(View.INVISIBLE); resultsControls.setVisibility(View.INVISIBLE); }
+            }
+        });
+        resultsAnimator.start();
     }
 
     private View buildSearchRow() {
         LinearLayout row = new LinearLayout(activity);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setPadding(dp(8), dp(4), dp(8), dp(4));
+        row.setPadding(dp(4), dp(4), dp(4), dp(4));
         searchIcon = new ImageView(activity);
         searchIcon.setImageResource(R.drawable.ic_nav_search);
         searchIcon.setColorFilter(Color.WHITE);
         searchIcon.setPadding(dp(10), dp(10), dp(10), dp(10));
-        searchIcon.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        searchIcon.setContentDescription("Close search");
+        searchIcon.setClickable(true);
+        searchIcon.setFocusable(true);
+        searchIcon.setOnClickListener(v -> dismiss.run());
         row.addView(searchIcon, new LinearLayout.LayoutParams(dp(44), dp(48)));
 
         input = new ZeroChillEditText(activity);
@@ -279,12 +318,13 @@ final class SearchPanel {
         input.setTextColor(ZeroChillUi.color(activity, R.color.zc_text_primary));
         input.setTextSize(16f);
         input.setSingleLine(true);
+        input.setMinWidth(0);
         input.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
         input.setContentDescription(bunkrOnly
                 ? "Search OnlyFap creators"
                 : "Search creators, albums and videos");
         input.setImeOptions(EditorInfo.IME_ACTION_SEARCH);
-        input.setPadding(dp(14), 0, dp(14), 0);
+        input.setPadding(dp(4), 0, dp(4), 0);
         input.setBackgroundColor(Color.TRANSPARENT);
         input.setOnEditorActionListener((v, actionId, event) -> {
             if (actionId == EditorInfo.IME_ACTION_SEARCH) {
@@ -303,12 +343,6 @@ final class SearchPanel {
             clear.setVisibility(value.isEmpty() ? View.GONE : View.VISIBLE);
             updateContentVisibility();
         }));
-        row.addView(searchAction("‹", "Close search", v -> dismiss.run()),
-                new LinearLayout.LayoutParams(dp(44), dp(48)));
-        row.addView(searchAction("★", "Favorite creators", v ->
-                activity.startActivity(new Intent(activity, CreatorsActivity.class))),
-                new LinearLayout.LayoutParams(dp(44), dp(48)));
-
         return row;
     }
 
@@ -326,7 +360,7 @@ final class SearchPanel {
         LinearLayout row = new LinearLayout(activity);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setPadding(dp(10), dp(5), dp(10), dp(7));
+        row.setPadding(dp(10), dp(4), dp(10), dp(4));
         scroll.addView(row, new HorizontalScrollView.LayoutParams(-2, -1));
 
         addFilter(row, "All", Filter.ALL);
@@ -858,51 +892,47 @@ final class SearchPanel {
     void morph(View source, boolean expanding, Runnable finished) {
         if (closing && expanding) return;
         closing = !expanding;
-        if (morphAnimator != null) {
-            morphAnimator.removeAllListeners();
-            morphAnimator.cancel();
+        if (morphAnimator != null) { morphAnimator.removeAllListeners(); morphAnimator.cancel(); }
+        if (!expanding) {
+            BrowseUi.hideKeyboard(activity, input);
+            if (resultsAnimator != null) { resultsAnimator.removeAllListeners(); resultsAnimator.cancel(); }
         }
-        if (!expanding) BrowseUi.hideKeyboard(activity, input);
-        if (expanding) header.setAlpha(0f);
+        if (expanding && morphProgress == 0f) { header.setAlpha(0f); favoriteSurface.setAlpha(0f); }
         afterLayout(() -> {
             if (destroyed) return;
             header.setAlpha(1f);
-            int[] sourcePosition = new int[2];
-            int[] headerPosition = new int[2];
-            int[] iconPosition = new int[2];
-            source.getLocationInWindow(sourcePosition);
-            headerControls.getLocationInWindow(headerPosition);
-            searchIcon.getLocationInWindow(iconPosition);
-            float offset = sourcePosition[0] - (iconPosition[0] - searchIcon.getTranslationX());
-            float offsetY = sourcePosition[1] - (iconPosition[1] - searchIcon.getTranslationY());
-            int left = sourcePosition[0] - headerPosition[0];
-            int right = left + source.getWidth();
-            int height = headerControls.getHeight();
-            android.animation.ValueAnimator animator = android.animation.ValueAnimator.ofFloat(
-                    expanding ? 0f : 1f, expanding ? 1f : 0f);
-            morphAnimator = animator;
-            animator.setDuration(ZeroChillMotion.animationsEnabled(activity) ? 240L : 0L);
-            animator.setInterpolator(new android.view.animation.DecelerateInterpolator());
-            animator.addUpdateListener(a -> {
-                float amount = (float) a.getAnimatedValue();
-                header.setClipBounds(new android.graphics.Rect(
-                        Math.round(left * (1f - amount)), 0,
-                        Math.round(right + (headerControls.getWidth() - right) * amount), height));
-                searchIcon.setTranslationX(offset * (1f - amount));
-                searchIcon.setTranslationY(offsetY * (1f - amount));
-                input.setAlpha(amount);
-                clear.setAlpha(amount);
-                if (filterBar != null) filterBar.setAlpha(amount);
-                content.setAlpha(amount);
+            int[] start = new int[2], root = new int[2];
+            source.getLocationInWindow(start); view.getLocationInWindow(root);
+            float targetX = shell.getPaddingLeft() + dp(14);
+            float targetY = shell.getPaddingTop() + dp(8);
+            float targetWidth = shell.getWidth() - shell.getPaddingLeft() - shell.getPaddingRight() - dp(88);
+            float originX = start[0] - root[0], originY = start[1] - root[1];
+            float originWidth = Math.max(dp(44), source.getWidth());
+            float originHeight = Math.max(dp(48), source.getHeight());
+            morphAnimator = android.animation.ValueAnimator.ofFloat(morphProgress, expanding ? 1f : 0f);
+            morphAnimator.setDuration(ZeroChillMotion.animationsEnabled(activity)
+                    ? Math.round(260L * Math.abs((expanding ? 1f : 0f) - morphProgress)) : 0L);
+            morphAnimator.setInterpolator(new android.view.animation.DecelerateInterpolator(1.6f));
+            morphAnimator.addUpdateListener(a -> {
+                float amount = (float) a.getAnimatedValue(); morphProgress = amount;
+                float width = originWidth + (targetWidth - originWidth) * amount;
+                float height = originHeight + (dp(56) - originHeight) * amount;
+                float left = originX + (targetX - originX) * amount;
+                float top = originY + (targetY - originY) * amount;
+                shell.setPillBounds(new android.graphics.RectF(left, top, left + width, top + height));
+                searchIcon.setTranslationX(-dp(4) * (1f - amount));
+                searchIcon.setTranslationY(-dp(4) * (1f - amount));
+                input.setAlpha(amount); clear.setAlpha(amount);
+                favoriteSurface.setAlpha(amount);
+                if (!expanding) { resultsControls.setAlpha(amount); resultSurface.setAlpha(amount); }
             });
-            animator.addListener(new android.animation.AnimatorListenerAdapter() {
-                @Override public void onAnimationEnd(android.animation.Animator animation) {
-                    header.setClipBounds(null);
-                    if (expanding && !closing) focus();
+            morphAnimator.addListener(new android.animation.AnimatorListenerAdapter() {
+                @Override public void onAnimationEnd(android.animation.Animator a) {
+                    if (expanding && !closing) { shell.setPillBounds(null); focus(); }
                     finished.run();
                 }
             });
-            animator.start();
+            morphAnimator.start();
         });
     }
 
@@ -949,6 +979,7 @@ final class SearchPanel {
     void close() {
         destroyed = true;
         if (morphAnimator != null) { morphAnimator.removeAllListeners(); morphAnimator.cancel(); }
+        if (resultsAnimator != null) { resultsAnimator.removeAllListeners(); resultsAnimator.cancel(); }
         generation++;
         if (suggestions != null) suggestions.close();
         if (adapter != null) adapter.close();

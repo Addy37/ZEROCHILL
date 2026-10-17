@@ -27,6 +27,8 @@ final class CreatorSuggestionsController {
     private final CreatorListAdapter adapter;
     private final TextView searchAll;
     private Runnable searchAction;
+    private boolean floating;
+    private RecyclerView recycler;
     private java.util.function.Consumer<Boolean> visibilityChanged;
     private final Handler main = new Handler(Looper.getMainLooper());
     private final ExecutorService io = Executors.newFixedThreadPool(2);
@@ -64,7 +66,7 @@ final class CreatorSuggestionsController {
         hint = BrowseUi.text(activity, "Type at least 2 characters to find creators", 13, BrowseUi.MUTED);
         hint.setPadding(dp(16), dp(8), dp(16), dp(8));
         panel.addView(hint);
-        RecyclerView recycler = new RecyclerView(activity);
+        recycler = new RecyclerView(activity);
         recycler.setLayoutManager(new LinearLayoutManager(activity));
         recycler.setItemAnimator(null);
         adapter = new CreatorListAdapter(activity, open, this::refreshLocal);
@@ -83,6 +85,33 @@ final class CreatorSuggestionsController {
         input.setOnFocusChangeListener((v, focused) -> { if (focused) show(input.getText().toString()); });
     }
 
+    void setFloatingPresentation(Runnable changed) {
+        floating = true;
+        panel.setBackgroundColor(android.graphics.Color.TRANSPARENT);
+        adapter.setFloating(true);
+        panel.removeView(hint);
+        panel.addView(hint, 1);
+        hint.setTextSize(11f);
+        hint.setPadding(dp(12), dp(4), dp(12), dp(4));
+        searchAll.setBackgroundColor(android.graphics.Color.TRANSPARENT);
+        searchAll.setTextSize(13f);
+        LinearLayout.LayoutParams action = new LinearLayout.LayoutParams(-1, dp(48));
+        action.setMargins(dp(8), 0, dp(8), 0);
+        searchAll.setLayoutParams(action);
+        recycler.setClipToPadding(false);
+        recycler.setPadding(0, dp(68), 0, 0);
+        LinearLayout.LayoutParams list = (LinearLayout.LayoutParams) recycler.getLayoutParams();
+        list.topMargin = -dp(68);
+        recycler.setLayoutParams(list);
+        adapter.registerAdapterDataObserver(new RecyclerView.AdapterDataObserver() {
+            @Override public void onChanged() { changed.run(); }
+            @Override public void onItemRangeInserted(int start, int count) { changed.run(); }
+            @Override public void onItemRangeRemoved(int start, int count) { changed.run(); }
+        });
+    }
+
+    int resultCount() { return adapter.getItemCount(); }
+
     void show(String value) {
         if (closed) return;
         active = true;
@@ -91,7 +120,7 @@ final class CreatorSuggestionsController {
         cancel();
         String query = value.trim();
         searchAll.setVisibility(query.length() >= 2 ? View.VISIBLE : View.GONE);
-        searchAll.setText("Search all results for " + query + "  ›");
+        searchAll.setText(floating ? "Search all results  ›" : "Search all results for " + query + "  ›");
         searchAll.setMaxLines(1);
         searchAll.setEllipsize(android.text.TextUtils.TruncateAt.END);
         int token = generation;
