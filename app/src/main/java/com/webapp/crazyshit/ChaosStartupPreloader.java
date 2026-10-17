@@ -90,7 +90,8 @@ final class ChaosStartupPreloader {
     }
 
     private static void publish(Context app, List<NativeContentItem> items) {
-        publish(app, items, 2);
+        // One early candidate per source leaves all three admission lanes useful to the race.
+        publish(app, items, 1);
     }
 
     private static void publish(Context app, List<NativeContentItem> items, int limit) {

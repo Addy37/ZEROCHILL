@@ -151,7 +151,7 @@ jobs:
             echo 'ShitTok must not cover the shell while waiting for media.'
             exit 1
           fi
-          if grep -q -E 'ChaosStartupPreloader.start|ChaosStartupPreloader.isReady' app/src/main/java/com/webapp/crazyshit/SplashActivity.java; then
+          if grep -q -E 'ChaosStartupPreloader.isReady|ChaosStartupPreloader.collect|ChaosStartupPreloader.resolveForFeed' app/src/main/java/com/webapp/crazyshit/SplashActivity.java; then
             echo 'ShitTok source readiness must not hold the splash.'
             exit 1
           fi

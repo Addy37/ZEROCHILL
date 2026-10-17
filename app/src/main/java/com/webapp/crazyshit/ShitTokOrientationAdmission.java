@@ -135,6 +135,7 @@ final class ShitTokOrientationAdmission {
                     }
                 } else aspect = 0f;
             } catch (Exception failure) {
+                event("candidate_error", item, "type=" + failure.getClass().getSimpleName());
                 if (!allowedWork.getAsBoolean() || Thread.currentThread().isInterrupted() || deferred(failure)) {
                     deferred = true;
                     if (stream != null) synchronized (cache) {

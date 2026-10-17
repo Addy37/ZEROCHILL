@@ -110,8 +110,9 @@ final class ChaosSourceMixer {
         ArrayList<java.util.concurrent.Callable<SourceBatch>> requests = new ArrayList<>();
         requests.add(() -> new SourceBatch(
                 BATCH_REGULAR, loadRegularBatch(context)));
-        if (explorationAllowed) requests.add(() -> new SourceBatch(
-                BATCH_EFUKT, loadEfuktBatch(context)));
+        // eFukt remains a bounded startup fallback; its directory expansion waits for first frame.
+        requests.add(() -> new SourceBatch(BATCH_EFUKT,
+                explorationAllowed ? loadEfuktBatch(context) : efukt.fetchLatest(context)));
         requests.add(() -> new SourceBatch(
                 BATCH_KAOTIC, loadKaoticBatch(context)));
         requests.add(() -> new SourceBatch(

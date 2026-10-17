@@ -24,7 +24,7 @@ public class ChaosStarterSourcesTest {
                     release.await(5, TimeUnit.SECONDS);
                     throw new IOException("offline");
                 }
-                if (source == ChaosStarterSources.EFUKT) throw new IOException("offline");
+                if (source == ChaosStarterSources.FAPELLO) throw new IOException("offline");
                 return Arrays.asList(media("https://kaotic.com/one"), media("https://kaotic.com/two"));
             }, new Random(1), 800);
             assertEquals(2, queue.size());
@@ -51,26 +51,33 @@ public class ChaosStarterSourcesTest {
         assertTrue(sawFast.get());
     }
 
-    @Test public void efuktWorksWhenCrazyShitAndKaoticFail() throws Exception {
+    @Test public void fapelloWorksWhenCrazyShitAndKaoticFail() throws Exception {
         List<NativeContentItem> queue = ChaosStarterSources.first(source -> {
-            if (source == ChaosStarterSources.EFUKT) return Collections.singletonList(media("https://efukt.com/one"));
+            if (source == ChaosStarterSources.FAPELLO) return Collections.singletonList(media("https://fapello.com/one"));
             throw new IOException("offline");
         }, new Random(2), 800);
-        assertEquals("https://efukt.com/one", queue.get(0).url);
+        assertEquals("https://fapello.com/one", queue.get(0).url);
     }
 
-    @Test public void earlyEfuktBatchWaitsForPreferredHealthySource() throws Exception {
-        List<NativeContentItem> queue = ChaosStarterSources.first(source -> {
-            if (source == ChaosStarterSources.EFUKT) return Arrays.asList(
-                    media("https://efukt.com/one"), media("https://efukt.com/two"));
-            if (source == ChaosStarterSources.KAOTIC) {
-                Thread.sleep(80);
-                return Arrays.asList(media("https://kaotic.com/one"),
-                        media("https://kaotic.com/two"));
+    @Test public void firstSuccessfulFapelloDoesNotWaitForOtherListings() throws Exception {
+        CountDownLatch early = new CountDownLatch(1);
+        ChaosStarterSources.first(source -> {
+            if (source != ChaosStarterSources.FAPELLO) {
+                assertTrue("portrait listing must progress without the general feeds", early.await(1, TimeUnit.SECONDS));
+                return Collections.emptyList();
             }
-            return Collections.emptyList();
-        }, new Random(3), 800);
-        assertEquals(4, queue.size());
-        assertTrue(queue.stream().anyMatch(item -> item.url.contains("kaotic.com")));
+            return Collections.singletonList(media("https://fapello.com/fast/video/"));
+        }, new Random(1), 1500, items -> { if (!items.isEmpty()) early.countDown(); });
+        assertEquals(0, early.getCount());
+    }
+
+    @Test public void eachStreamingCallbackContainsOnlyTheProviderThatJustFinished() throws Exception {
+        java.util.Set<String> emitted = new java.util.HashSet<>();
+        ChaosStarterSources.first(source -> Collections.singletonList(media("https://fixture.invalid/" + source)),
+                new Random(1), 1000, items -> {
+                    assertEquals(1, items.size());
+                    assertTrue("a later source must not re-emit and reshuffle earlier candidates", emitted.add(items.get(0).url));
+                });
+        assertEquals(3, emitted.size());
     }
 }

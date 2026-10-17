@@ -1196,7 +1196,9 @@ public final class ChaosFeedView extends FrameLayout {
             if (!acceptUnique(item, hiddenUrls, sessionUrls)) continue;
             items.add(item);
             verifiedQueueEmpty = false;
+            AppPerformance.startupItem("metadata_start", item.url, "");
             cacheCreatorMetadata(item);
+            AppPerformance.startupItem("metadata_end", item.url, "");
             CrazyShitRepository.StreamInfo preloaded = ChaosStartupPreloader.takeResolved(item.url);
             if (preloaded != null) streamCache.put(item.url, preloaded);
         }
