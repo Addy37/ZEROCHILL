@@ -45,6 +45,8 @@ public class SearchOverlayTest {
                 .setInsets(android.view.WindowInsets.Type.statusBars(),
                         android.graphics.Insets.of(0, statusBar, 0, 0))
                 .setVisible(android.view.WindowInsets.Type.statusBars(), true).build();
+        // Keep framework traversals consistent with this window's simulated status bar.
+        root.setOnApplyWindowInsetsListener((v, insets) -> initialInsets);
         android.widget.ImageView origin = new android.widget.ImageView(activity) {
             @Override public android.view.WindowInsets getRootWindowInsets() { return initialInsets; }
         };
@@ -55,6 +57,7 @@ public class SearchOverlayTest {
         root.measure(View.MeasureSpec.makeMeasureSpec(400, View.MeasureSpec.EXACTLY),
                 View.MeasureSpec.makeMeasureSpec(800, View.MeasureSpec.EXACTLY));
         root.layout(0, 0, 400, 800);
+        panel.view.setPadding(0, 0, 0, 0); // Simulate an overlay awaiting its first inset dispatch.
         panel.morph(origin, true, () -> {});
         // The overlay has not received a system inset dispatch of its own yet.
         assertEquals(statusBar, panel.view.getPaddingTop());
