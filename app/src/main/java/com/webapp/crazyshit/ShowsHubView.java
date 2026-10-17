@@ -336,6 +336,8 @@ final class ShowsHubView extends FrameLayout {
         heroCard.setOnClickListener(v -> openHero());
         heroAction.setOnClickListener(v -> openHero());
         refreshContinueWatching();
+        ColdTabSnapshot.install(this, scroll, heroImage, "shows",
+                () -> heroItem != null && itemCount() > 0);
     }
 
     void clear() {
