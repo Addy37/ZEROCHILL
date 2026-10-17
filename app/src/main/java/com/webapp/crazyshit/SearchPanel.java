@@ -904,6 +904,13 @@ final class SearchPanel {
             if (resultsAnimator != null) { resultsAnimator.removeAllListeners(); resultsAnimator.cancel(); }
         }
         if (expanding && morphProgress == 0f) { header.setAlpha(0f); favoriteSurface.setAlpha(0f); }
+        if (expanding) {
+            // A newly attached overlay may not receive insets until the IME opens.
+            // Seed it from the already-mounted control before measuring the morph.
+            androidx.core.view.WindowInsetsCompat insets =
+                    androidx.core.view.ViewCompat.getRootWindowInsets(source);
+            if (insets != null) androidx.core.view.ViewCompat.dispatchApplyWindowInsets(view, insets);
+        }
         afterLayout(() -> {
             if (destroyed) return;
             header.setAlpha(1f);

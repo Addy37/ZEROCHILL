@@ -40,18 +40,41 @@ public class SearchOverlayTest {
         SearchPanel panel = new SearchPanel(activity, new Intent(), true, () -> dismissed[0] = true);
         panel.create(null);
         root.addView(panel.view);
-        android.widget.ImageView origin = new android.widget.ImageView(activity);
+        int statusBar = BrowseUi.dp(activity, 24);
+        android.view.WindowInsets initialInsets = new android.view.WindowInsets.Builder()
+                .setInsets(android.view.WindowInsets.Type.statusBars(),
+                        android.graphics.Insets.of(0, statusBar, 0, 0))
+                .setVisible(android.view.WindowInsets.Type.statusBars(), true).build();
+        android.widget.ImageView origin = new android.widget.ImageView(activity) {
+            @Override public android.view.WindowInsets getRootWindowInsets() { return initialInsets; }
+        };
         FrameLayout.LayoutParams originBounds = new FrameLayout.LayoutParams(44, 48,
                 android.view.Gravity.TOP | android.view.Gravity.RIGHT);
+        originBounds.topMargin = statusBar;
         root.addView(origin, originBounds);
         root.measure(View.MeasureSpec.makeMeasureSpec(400, View.MeasureSpec.EXACTLY),
                 View.MeasureSpec.makeMeasureSpec(800, View.MeasureSpec.EXACTLY));
         root.layout(0, 0, 400, 800);
         panel.morph(origin, true, () -> {});
+        // The overlay has not received a system inset dispatch of its own yet.
+        assertEquals(statusBar, panel.view.getPaddingTop());
+        root.measure(View.MeasureSpec.makeMeasureSpec(400, View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(800, View.MeasureSpec.EXACTLY));
+        root.layout(0, 0, 400, 800);
         org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idleFor(
                 java.time.Duration.ofMillis(300));
         View header = ReflectionHelpers.getField(panel, "header");
         assertTrue(header.getHeight() > 0 && header.getHeight() < 200);
+        int settledTop = statusBar + BrowseUi.dp(activity, 8);
+        assertEquals(settledTop, header.getTop());
+        // The later IME inset dispatch must not change the settled pill's origin.
+        panel.view.dispatchApplyWindowInsets(new android.view.WindowInsets.Builder(initialInsets)
+                .setInsets(android.view.WindowInsets.Type.ime(), android.graphics.Insets.of(0, 0, 0, 300))
+                .setVisible(android.view.WindowInsets.Type.ime(), true).build());
+        root.measure(View.MeasureSpec.makeMeasureSpec(400, View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(800, View.MeasureSpec.EXACTLY));
+        root.layout(0, 0, 400, 800);
+        assertEquals(settledTop, header.getTop());
         View icon = ReflectionHelpers.getField(panel, "searchIcon");
         assertEquals(0f, icon.getTranslationX(), 0.01f);
         assertNull(header.getClipBounds());
