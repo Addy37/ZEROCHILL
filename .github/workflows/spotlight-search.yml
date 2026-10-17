@@ -2,6 +2,14 @@ name: Spotlight search focused validation
 on:
   push:
     branches: [feature/spotlight-glass-search]
+  pull_request:
+    branches: [rebrand/zerochill]
+    paths:
+      - 'app/src/main/java/com/webapp/crazyshit/Search*'
+      - 'app/src/main/java/com/webapp/crazyshit/CreatorSuggestionsController.java'
+      - 'app/src/test/java/com/webapp/crazyshit/Search*'
+      - 'baselineprofile/src/main/java/com/webapp/crazyshit/baselineprofile/SearchImeSmokeBenchmark.kt'
+      - '.github/workflows/spotlight-search.yml'
 concurrency:
   group: spotlight-search-${{ github.ref }}
   cancel-in-progress: true
@@ -9,9 +17,12 @@ permissions:
   contents: read
 jobs:
   focused:
+    if: ${{ github.head_ref == 'feature/spotlight-glass-search' || github.ref_name == 'feature/spotlight-glass-search' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
@@ -48,12 +59,15 @@ jobs:
             app/build/reports/visual-tests/*.png
 
   search-ime-smoke:
+    if: ${{ github.head_ref == 'feature/spotlight-glass-search' || github.ref_name == 'feature/spotlight-glass-search' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
       ANALYTICS_ENDPOINT: ""
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
