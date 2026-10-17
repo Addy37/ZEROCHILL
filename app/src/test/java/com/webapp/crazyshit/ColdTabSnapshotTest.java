@@ -32,6 +32,8 @@ import static org.junit.Assert.*;
 @RunWith(RobolectricTestRunner.class)
 @Config(application = Application.class, sdk = 28)
 public class ColdTabSnapshotTest {
+    // Exercise the real decoder; legacy Robolectric accepts junk bytes as synthetic images.
+    @org.robolectric.annotation.GraphicsMode(org.robolectric.annotation.GraphicsMode.Mode.NATIVE)
     @Test public void missingCorruptAndOversizedFilesFallBack() throws Exception {
         File file = new File(Files.createTempDirectory("snapshot").toFile(), "tab.jpg");
         assertNull(ColdTabSnapshot.read(file));
