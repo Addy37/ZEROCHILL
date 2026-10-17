@@ -1950,6 +1950,7 @@ public final class ChaosFeedView extends FrameLayout {
 
     private void setChaosMuted(boolean muted) {
         chaosMuted = muted;
+        playbackOwner.setMuted(muted);
         activity.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
                 .edit()
                 .putBoolean(KEY_MUTED, muted)
@@ -2266,6 +2267,8 @@ public final class ChaosFeedView extends FrameLayout {
         final TextView landscapeSave;
         final TextView landscapeComments;
         final TextView landscapeAutoScroll;
+        final TextView mute, landscapeMute;
+        ImageView speedBadge;
         final TextView autoScroll;
         final TextView fullscreen;
         final FrameLayout creatorAvatarControl;
@@ -2460,7 +2463,7 @@ public final class ChaosFeedView extends FrameLayout {
 
             FrameLayout.LayoutParams floatingCreatorParams = new FrameLayout.LayoutParams(
                     dp(52), dp(60), Gravity.BOTTOM | Gravity.END);
-            floatingCreatorParams.setMargins(0, 0, dp(13), dp(290));
+            floatingCreatorParams.setMargins(0, 0, dp(13), dp(340));
             root.addView(creatorAvatarControl, floatingCreatorParams);
 
             like = textIconActionButton(
@@ -2493,6 +2496,9 @@ public final class ChaosFeedView extends FrameLayout {
                     "shittok_auto_scroll"
             );
             actionRail.addView(autoScroll, actionParams());
+
+            mute = muteButton("shittok_mute");
+            actionRail.addView(mute, actionParams());
 
             TextView more = textIconActionButton(
                     R.drawable.ic_more_overflow,
@@ -2589,8 +2595,9 @@ public final class ChaosFeedView extends FrameLayout {
                     "Save to Watch Later", "shittok_landscape_save");
             landscapeAutoScroll = textIconActionButton(R.drawable.ic_shittok_auto_scroll,
                     "Auto Scroll off. Tap to turn on", "shittok_landscape_auto_scroll");
+            landscapeMute = muteButton("shittok_landscape_mute");
             for (TextView action : new TextView[] { landscapeLike, landscapeComments,
-                    landscapeSave, landscapeAutoScroll }) {
+                    landscapeSave, landscapeAutoScroll, landscapeMute }) {
                 landscapeActions.addView(action,
                         new LinearLayout.LayoutParams(dp(48), dp(48)));
             }
@@ -2732,7 +2739,10 @@ public final class ChaosFeedView extends FrameLayout {
             videoTaps = new ShitTokVideoTaps(activity, () -> item,
                     () -> ownsPlayback() && !scrubbing && !pinch.ownsTouchSequence()
                             && !creatorSwipeTracking,
-                    () -> playerView.performClick(), this::favoriteFromDoubleTap);
+                    () -> playerView.performClick(), this::favoriteFromDoubleTap,
+                    this::beginSpeedBoost, () -> {
+                        if (player != null) playbackOwner.endSpeedBoost(player);
+                    });
             playerView.setOnTouchListener((v, event) -> {
                 // Let View clear its pressed/click state on the synthetic child cancel.
                 if (pinch.ownsTouchSequence()) {
@@ -2903,6 +2913,7 @@ public final class ChaosFeedView extends FrameLayout {
 
                 @Override
                 public void onStartTrackingTouch(SeekBar bar) {
+                    if (videoTaps != null) videoTaps.cancel();
                     if (player == null || player.getDuration() <= 0L) return;
                     scrubPlayer = player;
                     scrubStartPosition = Math.max(0L, player.getCurrentPosition());
@@ -2977,6 +2988,11 @@ public final class ChaosFeedView extends FrameLayout {
         }
 
         private void cancelInteractionUi() {
+            if (player != null) playbackOwner.endSpeedBoost(player);
+            if (speedBadge != null) {
+                speedBadge.animate().withEndAction(null).cancel();
+                speedBadge.setVisibility(View.GONE);
+            }
             if (scrubbing) endScrubPreview(false, true);
             if (videoTaps != null) videoTaps.cancel();
             root.removeCallbacks(hideHeart);
@@ -3025,6 +3041,64 @@ public final class ChaosFeedView extends FrameLayout {
             heartOverlay.animate().scaleX(1.12f).scaleY(1.12f).setDuration(110L)
                     .withEndAction(() -> heartOverlay.animate().alpha(0f).scaleX(1f).scaleY(1f)
                             .translationYBy(-dp(20)).setDuration(320L).withEndAction(hideHeart).start()).start();
+        }
+
+        private boolean beginSpeedBoost() {
+            if (!ownsPlayback() || scrubbing || pinch.ownsTouchSequence() || creatorSwipeTracking
+                    || player == null || !playbackOwner.isAttached(item.url, playerView)) return false;
+            if (!playbackOwner.beginSpeedBoost(item.url, player, () -> showSpeedBadge(false))) return false;
+            showSpeedBadge(true);
+            playerView.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS);
+            return true;
+        }
+
+        private void showSpeedBadge(boolean visible) {
+            if (visible && speedBadge == null) {
+                speedBadge = new ImageView(activity);
+                speedBadge.setTag("shittok_speed_badge");
+                speedBadge.setImageResource(R.drawable.ic_shittok_fast_forward);
+                speedBadge.setImageTintList(ColorStateList.valueOf(Color.WHITE));
+                speedBadge.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+                speedBadge.setClickable(false);
+                speedBadge.setFocusable(false);
+                speedBadge.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+                FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(dp(56), dp(40), Gravity.TOP | Gravity.CENTER_HORIZONTAL);
+                params.topMargin = Math.max(dp(76), root.getHeight() / 4);
+                root.addView(speedBadge, params);
+            }
+            if (speedBadge == null) return;
+            speedBadge.animate().withEndAction(null).cancel();
+            if (visible) {
+                FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) speedBadge.getLayoutParams();
+                params.topMargin = Math.max(dp(76), root.getHeight() / 4);
+                speedBadge.setLayoutParams(params);
+                speedBadge.setAlpha(0f);
+                speedBadge.setScaleX(.94f); speedBadge.setScaleY(.94f);
+                speedBadge.setVisibility(View.VISIBLE);
+                speedBadge.animate().alpha(1f).scaleX(1f).scaleY(1f).setDuration(100).start();
+            } else {
+                speedBadge.animate().alpha(0f).setDuration(70)
+                        .withEndAction(() -> speedBadge.setVisibility(View.GONE)).start();
+            }
+        }
+
+        private TextView muteButton(String tag) {
+            TextView button = textIconActionButton(R.drawable.ic_shittok_volume_on, "Mute video", tag);
+            button.setFocusable(true);
+            button.setOnClickListener(v -> {
+                haptic(v);
+                setChaosMuted(!chaosMuted);
+                showControlsTemporarily();
+            });
+            return button;
+        }
+
+        private void syncMuteButtons() {
+            for (TextView button : new TextView[] { mute, landscapeMute }) {
+                button.setCompoundDrawablesWithIntrinsicBounds(0, chaosMuted
+                        ? R.drawable.ic_shittok_volume_off : R.drawable.ic_shittok_volume_on, 0, 0);
+                button.setContentDescription(chaosMuted ? "Unmute video" : "Mute video");
+            }
         }
 
         private TextView textIconActionButton(int icon, String description, String tag) {
@@ -3582,6 +3656,7 @@ public final class ChaosFeedView extends FrameLayout {
                 attachedToken = playbackOwner.token(item.url);
             }
             playbackOwner.attach(item.url, playerView);
+            syncMuteButtons();
         }
 
         void detachLease() {
@@ -3818,6 +3893,7 @@ public final class ChaosFeedView extends FrameLayout {
         }
 
         void applyMuteState() {
+            syncMuteButtons();
             playbackOwner.permission(active && hostResumed && !closed && !isPaging(), chaosMuted);
             if (player != null && !ownsPlayback()) silencePlayer(player);
         }
