@@ -15,13 +15,17 @@ printf '%s\n' '<?xml version="1.0" encoding="utf-8"?><map><boolean name="startup
 for sample in 1 2 3; do
   adb shell am force-stop "$package"
   adb logcat -c
+  # Stream before launch so a later ADB failure cannot truncate the only phase evidence.
+  timeout --kill-after=2s 50s "$adb_binary" logcat -v threadtime -s ZeroChillStartup:I AndroidRuntime:E > "$output/sample-$sample.txt" 2>&1 &
+  log_pid=$!
   adb shell am start -W -n "$package/com.webapp.crazyshit.SplashActivity" > "$output/launch-$sample.txt"
   deadline=$((SECONDS + 40))
   while (( SECONDS < deadline )); do
-    adb logcat -d -s ZeroChillStartup:I AndroidRuntime:E > "$output/sample-$sample.txt"
     if grep -q 'frame processMs=' "$output/sample-$sample.txt"; then break; fi
     sleep 1
   done
+  kill "$log_pid" 2>/dev/null || true
+  wait "$log_pid" 2>/dev/null || true
   cat "$output/sample-$sample.txt"
   if ! grep -q 'frame processMs=' "$output/sample-$sample.txt"; then
     echo "No rendered frame within 40 seconds" | tee "$output/missing-frame-$sample.txt"

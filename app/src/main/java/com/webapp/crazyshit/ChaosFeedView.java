@@ -525,6 +525,7 @@ public final class ChaosFeedView extends FrameLayout {
     private void reconcilePlaybackWindow() {
         if (closed || !active || !hostResumed || isPaging() || selectedPosition >= items.size()) return;
         String url = items.get(selectedPosition).url;
+        AppPerformance.startupItem("owner_select", url, "");
         playbackOwner.select(url,
                 selectedPosition + 1 < items.size() ? items.get(selectedPosition + 1).url : null,
                 selectedPosition > 0 ? items.get(selectedPosition - 1).url : null,
@@ -777,6 +778,7 @@ public final class ChaosFeedView extends FrameLayout {
                 if (!isMedia(item) || hiddenSnapshot.contains(item.url) || sessionSnapshot.contains(item.url)
                         || ShitTokBlockedCreatorStore.isBlocked(blockedSnapshot, item)
                         || !offered.add(item.url)) continue;
+                AppPerformance.startupItem("candidate_offered", item.url, "recent=" + recentSnapshot.contains(item.url));
                 if (candidates.offer(item)) activity.runOnUiThread(() -> {
                     if (closed || work.cancelled || inventoryBatch != work || batchGeneration != feedGeneration || firstCandidate) return;
                     firstCandidate = true;
@@ -828,6 +830,7 @@ public final class ChaosFeedView extends FrameLayout {
                         streamCache.putAll(partial.streams);
                         ArrayList<NativeContentItem> newItems = new ArrayList<>();
                         for (NativeContentItem item : partial.items) {
+                            AppPerformance.startupItem("admission_ui", item.url, "recent=" + recentSnapshot.contains(item.url));
                             if (!recentSnapshot.contains(item.url) || consecutiveDryLoads >= 3)
                                 newItems.add(item);
                         }
@@ -1422,6 +1425,7 @@ public final class ChaosFeedView extends FrameLayout {
         if (!active || !hostResumed || isPaging() || closed || position < 0 || position >= items.size()) return;
         NativeContentItem item = items.get(position);
         CrazyShitRepository.StreamInfo stream = streamCache.get(item.url);
+        if (position == selectedPosition) AppPerformance.startupItem("feed_prepare", item.url, "cached=" + (stream != null));
         if (stream != null && shouldPreparePlayer(position, selectedPosition)) {
             if (position == selectedPosition) {
                 playbackOwner.source(item.url, stream, playbackOwner.token(item.url));

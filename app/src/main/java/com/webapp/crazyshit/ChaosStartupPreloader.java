@@ -63,6 +63,7 @@ final class ChaosStartupPreloader {
                     READY.clear();
                     done = finished || !started || System.nanoTime() >= deadline;
                 }
+                for (NativeContentItem item : next) AppPerformance.startupItem("handoff_consumed", item.url, "");
                 result.addAll(next);
                 if (onCandidates != null && !next.isEmpty()) onCandidates.accept(next);
                 if (done) return result;
@@ -81,7 +82,10 @@ final class ChaosStartupPreloader {
             throws Exception {
         FutureTask<CrazyShitRepository.StreamInfo> pending;
         synchronized (LOCK) { pending = item.url.equals(resolvingUrl) ? resolution : null; }
-        if (pending != null) return pending.get(ChaosStarterSources.STARTUP_MILLIS, TimeUnit.MILLISECONDS);
+        if (pending != null) {
+            AppPerformance.startupItem("join_preload", item.url, "done=" + pending.isDone());
+            return pending.get(ChaosStarterSources.STARTUP_MILLIS, TimeUnit.MILLISECONDS);
+        }
         return PlayableSourceRouter.resolve(context, item);
     }
 
@@ -101,7 +105,9 @@ final class ChaosStartupPreloader {
                     resolvingUrl = item.url;
                     resolution = new FutureTask<>(() -> {
                         AppPerformance.startup("resolve_begin");
+                        AppPerformance.startupItem("preload_resolve_start", item.url, "");
                         CrazyShitRepository.StreamInfo stream = PlayableSourceRouter.resolve(app, item);
+                        AppPerformance.startupItem("preload_resolve_end", item.url, "playable=" + (stream != null));
                         if (stream != null) {
                             AppPerformance.startup("resolved");
                             synchronized (LOCK) { RESOLVED.put(item.url, stream); }
@@ -110,6 +116,7 @@ final class ChaosStartupPreloader {
                     });
                     firstTask = resolution;
                 }
+                AppPerformance.startupItem("handoff_published", item.url, "source=" + ShitTokAspectPriority.sourceKey(item));
                 READY.add(item);
                 added++;
             }

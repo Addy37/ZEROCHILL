@@ -41,6 +41,11 @@ final class ShitTokOrientationAdmission {
         }
     }
 
+    interface Observer { void event(String phase, NativeContentItem item, String detail); }
+    private final Observer observer;
+    private void event(String phase, NativeContentItem item, String detail) {
+        if (observer != null) observer.event(phase, item, detail);
+    }
     private final Probe probe;
     private final LongSupplier clock;
     private final LinkedHashMap<String, Entry> cache = new LinkedHashMap<String, Entry>(64, .75f, true) {
@@ -50,11 +55,16 @@ final class ShitTokOrientationAdmission {
     };
 
     ShitTokOrientationAdmission(Context context) {
-        this(new ShitTokOrientationProbe(context), () -> System.nanoTime() / 1_000_000L);
+        this(new ShitTokOrientationProbe(context), () -> System.nanoTime() / 1_000_000L,
+                (phase, item, detail) -> AppPerformance.startupItem(phase, item.url, detail));
     }
     ShitTokOrientationAdmission(Probe probe, LongSupplier clock) {
+        this(probe, clock, null);
+    }
+    ShitTokOrientationAdmission(Probe probe, LongSupplier clock, Observer observer) {
         this.probe = probe;
         this.clock = clock;
+        this.observer = observer;
     }
 
     Result admit(List<NativeContentItem> candidates, Resolver resolver,
@@ -113,10 +123,16 @@ final class ShitTokOrientationAdmission {
             CrazyShitRepository.StreamInfo stream = known != null && known.provenance.equals("pending") ? known.stream : null;
             float aspect = known != null && ShitTokOrientation.eligible(known.aspect) ? known.aspect : 0f;
             try {
+                event("resolve_start", item, "source=" + ShitTokAspectPriority.sourceKey(item));
                 if (stream == null) stream = resolver.resolve(item);
+                event("resolve_end", item, "playable=" + (stream != null));
                 if (!allowedWork.getAsBoolean() || Thread.currentThread().isInterrupted()) throw new Deferred();
                 if (stream != null && stream.mediaUrl != null && !stream.mediaUrl.isEmpty()) {
-                    if (!(aspect > 0f)) aspect = probe.inspect(stream, allowedWork);
+                    if (!(aspect > 0f)) {
+                        event("probe_start", item, "");
+                        aspect = probe.inspect(stream, allowedWork);
+                        event("probe_end", item, "aspect=" + aspect);
+                    }
                 } else aspect = 0f;
             } catch (Exception failure) {
                 if (!allowedWork.getAsBoolean() || Thread.currentThread().isInterrupted() || deferred(failure)) {
@@ -137,6 +153,7 @@ final class ShitTokOrientationAdmission {
             Entry result = new Entry(aspect, stream,
                     aspect > 0f ? 0L : clock.getAsLong() + UNKNOWN_COOLDOWN_MS, provenance);
             synchronized (cache) { cache.put(item.url, result); }
+            event(ShitTokOrientation.eligible(aspect) ? "verified" : "rejected", item, "aspect=" + aspect);
             if (ShitTokOrientation.eligible(aspect)) accept(item, result, admitted, streams, onVerified);
         }
         return new Result(admitted, streams, remaining, deferred);
