@@ -108,6 +108,7 @@ final class CreatorListAdapter extends RecyclerView.Adapter<CreatorListAdapter.H
         name.setEllipsize(TextUtils.TruncateAt.END);
         labels.addView(name);
         TextView subtitle = BrowseUi.text(context, "Open gallery", 12, BrowseUi.MUTED);
+        if (floating) { subtitle.setMaxLines(1); subtitle.setEllipsize(TextUtils.TruncateAt.END); }
         labels.addView(subtitle);
         row.addView(labels, new LinearLayout.LayoutParams(0, -2, 1));
         TextView star = BrowseUi.action(context, "☆", "Favorite creator", v -> { });

@@ -79,8 +79,8 @@ internal class GlassHeaderView @JvmOverloads constructor(
                     CompositionLocalProvider(LocalAppBackdrop provides page,
                         LocalGlassEffectConfig provides config) {
                         Box(Modifier.fillMaxSize().clipToBounds()
-                            // Full-width geometry has no illuminated floating-card rim.
-                            .liquidGlass(config, shape, highlightAlpha = if (cornerRadius > 0f) config.highlightOpacity else 0f))
+                            // Floating capsules share the navbar rim; full-width headers keep none.
+                            .liquidGlass(config, shape, highlightAlpha = if (cornerRadius > 0f) .3f else 0f))
                     }
                 }
             }

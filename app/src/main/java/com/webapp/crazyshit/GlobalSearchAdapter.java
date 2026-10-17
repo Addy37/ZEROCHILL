@@ -186,7 +186,7 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
         LinearLayout text = new LinearLayout(parent.getContext());
         text.setOrientation(LinearLayout.VERTICAL);
         text.setGravity(Gravity.CENTER_VERTICAL);
-        text.setPadding(dp(parent, 13), dp(parent, landscape ? 7 : 9), dp(parent, 13), dp(parent, landscape ? 7 : 9));
+        text.setPadding(dp(parent, 12), 0, dp(parent, 8), 0);
         row.addView(text, new LinearLayout.LayoutParams(0, -1, 1f));
 
         TextView title = new TextView(parent.getContext());
@@ -200,7 +200,7 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
         TextView meta = new TextView(parent.getContext());
         meta.setTextColor(Color.rgb(174, 174, 184));
         meta.setTextSize(landscape ? 12f : 12.5f);
-        meta.setMaxLines(2);
+        meta.setMaxLines(1);
         meta.setEllipsize(android.text.TextUtils.TruncateAt.END);
         LinearLayout.LayoutParams metaParams = new LinearLayout.LayoutParams(-1, -2);
         metaParams.topMargin = dp(parent, 5);

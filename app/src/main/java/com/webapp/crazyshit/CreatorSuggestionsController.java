@@ -100,9 +100,17 @@ final class CreatorSuggestionsController {
         searchAll.setLayoutParams(action);
         recycler.setClipToPadding(false);
         recycler.setPadding(0, dp(68), 0, 0);
-        LinearLayout.LayoutParams list = (LinearLayout.LayoutParams) recycler.getLayoutParams();
+        // A weighted LinearLayout discards a negative top margin when measuring
+        // its first child. Put the scroll gutter in a FrameLayout instead, so
+        // rows can pass under the pill without colliding with the footer.
+        panel.removeView(recycler);
+        android.widget.FrameLayout slot = new android.widget.FrameLayout(activity);
+        slot.setClipChildren(false);
+        slot.setClipToPadding(false);
+        panel.addView(slot, 0, new LinearLayout.LayoutParams(-1, 0, 1f));
+        android.widget.FrameLayout.LayoutParams list = new android.widget.FrameLayout.LayoutParams(-1, -1);
         list.topMargin = -dp(68);
-        recycler.setLayoutParams(list);
+        slot.addView(recycler, list);
         adapter.registerAdapterDataObserver(new RecyclerView.AdapterDataObserver() {
             @Override public void onChanged() { changed.run(); }
             @Override public void onItemRangeInserted(int start, int count) { changed.run(); }

@@ -542,6 +542,8 @@ public class VisualRefreshTest {
         shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(220));
         capture(root, "creator-search", 411, 891);
         capture(root, "creator-search-keyboard-space", 360, 380);
+        RecyclerView suggestionList = ReflectionHelpers.getField(suggestions, "recycler");
+        assertTrue(suggestionList.getHeight() - suggestionList.getPaddingTop() >= BrowseUi.dp(screen.get(), 72));
         TextView action = ReflectionHelpers.getField(suggestions, "searchAll");
         assertEquals(View.VISIBLE, action.getVisibility());
         assertTrue(action.getHeight() >= BrowseUi.dp(screen.get(), 48));
