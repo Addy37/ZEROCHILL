@@ -484,6 +484,12 @@ final class OnlyFapHubView extends FrameLayout {
         newItems = safe(items);
         newShelf.adapter.replace(newItems);
         newShelf.container.setVisibility(newItems.isEmpty() ? View.GONE : View.VISIBLE);
+        if (active && heroItem == null && startupHero == null) {
+            for (NativeContentItem creator : newItems) {
+                loadStartupThumbnail(creator);
+                if (startupHero != null) break;
+            }
+        }
         refreshFavorites();
     }
 

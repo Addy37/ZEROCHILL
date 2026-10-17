@@ -132,6 +132,15 @@ public class OnlyFapHeroStartupTest {
         assertNull(ReflectionHelpers.getField(hub, "heroItem"));
     }
 
+    @Test public void newlyKnownThumbnailCanShowBeforeFirstValidatedHeroExists() throws Exception {
+        NativeContentItem known = creator("Known", "known", "https://cdn.example.com/known-thumb.jpg");
+        hub.setNewCreators(Collections.singletonList(known));
+        await(() -> title().equals("Known"));
+        assertNull(ReflectionHelpers.getField(hub, "heroItem"));
+        assertTrue(((List<?>) ReflectionHelpers.getField(hub, "heroItems")).isEmpty());
+        assertNull(OnlyFapHeroMemory.read(activity));
+    }
+
     @Test public void staleOrCorruptMetadataIsIgnoredAndForgetDoesNotEraseNewerHero() {
         NativeContentItem creator = creator("Saved", "saved", IMAGE);
         OnlyFapHeroMemory.remember(activity, creator, IMAGE, creator.url);
