@@ -789,9 +789,11 @@ final class OnlyFapHubView extends FrameLayout {
             NativeContentItem fallback) {
         if (closed || heroItem != null || !startupAllowed(candidate)) return;
         startupHero = candidate;
+        Drawable previous = heroImage.getDrawable();
         Glide.with(heroImage).load(remoteImage(candidate.currentImageUrl(), candidate.currentReferer()))
                 .centerCrop().diskCacheStrategy(DiskCacheStrategy.ALL)
                 .onlyRetrieveFromCache(cacheOnly).transition(ThumbnailFades.hero())
+                .placeholder(previous).error(previous)
                 .listener(new RequestListener<Drawable>() {
                     @Override public boolean onLoadFailed(GlideException error, Object model,
                             Target<Drawable> target, boolean first) {
@@ -809,7 +811,10 @@ final class OnlyFapHubView extends FrameLayout {
                     }
                     @Override public boolean onResourceReady(Drawable resource, Object model,
                             Target<Drawable> target, DataSource source, boolean first) {
-                        if (heroItem != null || startupHero != candidate || !startupAllowed(candidate)) return true;
+                        if (heroItem != null || startupHero != candidate || !startupAllowed(candidate)) {
+                            if (startupHero == candidate) startupHero = null;
+                            return true;
+                        }
                         showStartupCopy(candidate);
                         return false;
                     }
