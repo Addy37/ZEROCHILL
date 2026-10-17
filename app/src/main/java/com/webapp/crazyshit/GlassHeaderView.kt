@@ -25,13 +25,16 @@ internal class GlassHeaderView(private val activity: Activity, controls: View) :
     private var backdrop: ViewPageBackdrop? = null
 
     init {
-        setBackgroundColor(ZeroChillUi.background(activity))
+        setBackgroundColor(android.graphics.Color.TRANSPARENT)
         addView(glass, LayoutParams(-1, -1))
         controls.setBackgroundColor(android.graphics.Color.TRANSPARENT)
         addView(controls, LayoutParams(-1, -1))
     }
 
-    fun setGlassEnabled(enabled: Boolean) { glass.visibility = if (enabled) VISIBLE else GONE }
+    fun setGlassEnabled(enabled: Boolean) {
+        glass.visibility = if (enabled) VISIBLE else GONE
+        setBackgroundColor(if (enabled) android.graphics.Color.TRANSPARENT else ZeroChillUi.background(activity))
+    }
 
     fun setPageBackdrop(page: ViewPageBackdrop) { backdrop = page }
 
