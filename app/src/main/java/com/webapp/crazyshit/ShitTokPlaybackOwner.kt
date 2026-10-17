@@ -52,6 +52,29 @@ class ShitTokPlaybackOwner(context: Context, private val callbacks: Callbacks) {
     private var continuityReady = false
     private var permitted = false
     private var muted = false
+    private data class SpeedBoost(val player: ExoPlayer, val previous: PlaybackParameters, val ended: Runnable)
+    private var speedBoost: SpeedBoost? = null
+
+    /** Temporary interaction on the current attached lease, without changing playback intent. */
+    fun beginSpeedBoost(url: String, expected: ExoPlayer, ended: Runnable): Boolean {
+        if (speedBoost != null || !canPlay(url) || leases[url]?.player !== expected ||
+            leases[url]?.stream == null || !expected.isPlaying || expected.playerError != null) return false
+        speedBoost = SpeedBoost(expected, expected.playbackParameters, ended)
+        expected.setPlaybackSpeed(2f)
+        return true
+    }
+    fun endSpeedBoost(expected: ExoPlayer) {
+        if (speedBoost?.player === expected) endSpeedBoost()
+    }
+    private fun endSpeedBoost() {
+        val boost = speedBoost ?: return
+        speedBoost = null
+        try { boost.player.playbackParameters = boost.previous } finally { boost.ended.run() }
+    }
+    fun setMuted(value: Boolean) {
+        muted = value
+        leases.forEach { (url, lease) -> lease.player.volume = if (canPlay(url) && !value) 1f else 0f }
+    }
     private var preparedLimit = 3
     private var created = 0
     private val initializedAt = SystemClock.elapsedRealtime()
@@ -141,6 +164,7 @@ class ShitTokPlaybackOwner(context: Context, private val callbacks: Callbacks) {
                     player.addListener(object : Player.Listener {
                         override fun onPlaybackStateChanged(state: Int) {
                             if (!owns(url, player, generation)) return
+                            if (state == Player.STATE_IDLE || state == Player.STATE_ENDED) endSpeedBoost(player)
                             updateBufferPriority()
                             if (state == Player.STATE_READY) ShitTokPoolDiagnostics.record("ready", url)
                             if (url == selected && state == Player.STATE_READY) flushWaitingSources()
@@ -169,6 +193,7 @@ class ShitTokPlaybackOwner(context: Context, private val callbacks: Callbacks) {
                             }
                         }
                         override fun onPlayerError(error: PlaybackException) {
+                            endSpeedBoost(player)
                             if (owns(url, player, generation)) scope.launch {
                                 if (owns(url, player, generation) && !recoverDecoder(player, error)
                                     && url != selected && url == control.continuityId) {
@@ -290,6 +315,7 @@ class ShitTokPlaybackOwner(context: Context, private val callbacks: Callbacks) {
             lease.view = view
             ShitTokPoolDiagnostics.record("surface", url)
         }
+        lease.player.volume = if (canPlay(url) && !muted) 1f else 0f
         return lease.player
     }
     fun detach(url: String, view: PlayerView) {
@@ -409,6 +435,7 @@ class ShitTokPlaybackOwner(context: Context, private val callbacks: Callbacks) {
         }.orEmpty()
 
     private fun silence(player: ExoPlayer) {
+        endSpeedBoost(player)
         if (player.volume != 0f) player.volume = 0f
         if (player.playWhenReady) player.pause()
     }

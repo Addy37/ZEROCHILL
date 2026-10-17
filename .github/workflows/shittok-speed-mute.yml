@@ -1,0 +1,53 @@
+name: ShitTok speed and mute validation
+on:
+  pull_request:
+    branches: [rebrand/zerochill]
+    paths:
+      - 'app/src/main/java/com/webapp/crazyshit/ChaosFeedView.java'
+      - 'app/src/main/java/com/webapp/crazyshit/ShitTok*'
+      - 'app/src/test/java/com/webapp/crazyshit/ShitTok*'
+      - '.github/workflows/shittok-speed-mute.yml'
+permissions:
+  contents: read
+concurrency:
+  group: shittok-speed-mute-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  focused:
+    if: ${{ github.head_ref == 'feature/shittok-speed-mute' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v4
+      - uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: '8.11.1'
+      - name: Focused ShitTok interactions and ownership
+        run: >-
+          gradle --no-daemon :app:testDebugUnitTest
+          --tests 'com.webapp.crazyshit.ShitTokSpeedMuteTest'
+          --tests 'com.webapp.crazyshit.ShitTokAudioOwnershipTest'
+          --tests 'com.webapp.crazyshit.ShitTokScrubInteractionTest'
+          --tests 'com.webapp.crazyshit.ShitTokScrubPreviewTest'
+          --tests 'com.webapp.crazyshit.ShitTokInteractionUiTest'
+          --tests 'com.webapp.crazyshit.ShitTokDynamicPinchTest'
+          --tests 'com.webapp.crazyshit.ShitTokProgressTest'
+          --tests 'com.webapp.crazyshit.ShitTokAutoScrollIntegrationTest'
+          --tests 'com.webapp.crazyshit.ShitTokSettledSwipeTest'
+          --tests 'com.webapp.crazyshit.ShitTokPlayerPoolTest'
+      - name: Full debug suite and APK
+        run: gradle --no-daemon :app:testDebugUnitTest :app:assembleDebug
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: shittok-speed-mute-validation
+          path: |
+            app/build/test-results/testDebugUnitTest
+            app/build/reports/tests/testDebugUnitTest
+            app/build/outputs/apk/debug/*.apk

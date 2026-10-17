@@ -39,6 +39,7 @@ public class ShitTokAudioOwnershipTest {
         int state = Player.STATE_READY;
         androidx.media3.exoplayer.ExoPlaybackException error;
         float volume = 1f;
+        androidx.media3.common.PlaybackParameters speed = new androidx.media3.common.PlaybackParameters(1f);
         boolean readyToPlay = true;
         boolean failPosition;
         final ExoPlayer player = (ExoPlayer) Proxy.newProxyInstance(ExoPlayer.class.getClassLoader(),
@@ -55,6 +56,9 @@ public class ShitTokAudioOwnershipTest {
                         case "equals": return proxy == args[0];
                         case "hashCode": return System.identityHashCode(proxy);
                         case "pause": pauses++; readyToPlay = false; return null;
+                        case "getPlaybackParameters": return speed;
+                        case "setPlaybackSpeed": speed = speed.withSpeed((Float) args[0]); return null;
+                        case "setPlaybackParameters": speed = (androidx.media3.common.PlaybackParameters) args[0]; return null;
                         case "setVolume": volume = (Float) args[0]; return null;
                         case "getVolume": return volume;
                         case "getPlayWhenReady": return readyToPlay;

@@ -4,6 +4,7 @@ import android.content.Context;
 import android.os.SystemClock;
 import android.view.GestureDetector;
 import android.view.MotionEvent;
+import android.view.ViewConfiguration;
 import java.util.function.BooleanSupplier;
 import java.util.function.Supplier;
 
@@ -12,11 +13,27 @@ final class ShitTokVideoTaps {
     interface DoubleTap { void favorite(float x, float y); }
     private final GestureDetector detector;
     private Object item;
+    private final BooleanSupplier beginHold;
+    private final Runnable endHold;
+    private final int slop;
+    private float downX, downY;
+    private boolean holding;
 
     ShitTokVideoTaps(Context context, Supplier<Object> identity, BooleanSupplier eligible,
             Runnable singleTap, DoubleTap doubleTap) {
+        this(context, identity, eligible, singleTap, doubleTap, () -> false, () -> {});
+    }
+
+    ShitTokVideoTaps(Context context, Supplier<Object> identity, BooleanSupplier eligible,
+            Runnable singleTap, DoubleTap doubleTap, BooleanSupplier beginHold, Runnable endHold) {
+        this.beginHold = beginHold;
+        this.endHold = endHold;
+        slop = ViewConfiguration.get(context).getScaledTouchSlop();
         detector = new GestureDetector(context, new GestureDetector.SimpleOnGestureListener() {
             private boolean current() { return item != null && item == identity.get() && eligible.getAsBoolean(); }
+            @Override public void onLongPress(MotionEvent e) {
+                if (current()) holding = ShitTokVideoTaps.this.beginHold.getAsBoolean();
+            }
             @Override public boolean onDown(MotionEvent e) { return true; }
             @Override public boolean onSingleTapConfirmed(MotionEvent e) {
                 if (current()) singleTap.run();
@@ -29,19 +46,33 @@ final class ShitTokVideoTaps {
                 return true;
             }
         });
-        detector.setIsLongpressEnabled(false);
+        detector.setIsLongpressEnabled(true);
     }
 
     void touch(MotionEvent event, Object identity) {
+        if (event.getActionMasked() == MotionEvent.ACTION_MOVE && item != null
+                && Math.hypot(event.getX() - downX, event.getY() - downY) > slop) {
+            cancel(); return;
+        }
         if (event.getPointerCount() > 1) { cancel(); return; }
         if (event.getActionMasked() == MotionEvent.ACTION_DOWN) {
             if (item != identity) cancel();
             item = identity;
+            downX = event.getX(); downY = event.getY();
         }
         detector.onTouchEvent(event);
+        if (event.getActionMasked() == MotionEvent.ACTION_UP
+                || event.getActionMasked() == MotionEvent.ACTION_CANCEL) finishHold();
+    }
+
+    private void finishHold() {
+        if (!holding) return;
+        holding = false;
+        endHold.run();
     }
 
     void cancel() {
+        finishHold();
         if (item == null) return;
         item = null;
         long now = SystemClock.uptimeMillis();
