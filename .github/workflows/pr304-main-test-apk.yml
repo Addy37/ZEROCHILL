@@ -1,0 +1,159 @@
+name: PR304 Main Install APK
+
+on:
+  push:
+    branches: [ feature/shittok-deep-source-exploration ]
+    paths:
+      - '.github/workflows/pr304-main-test-apk.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      FEEDBACK_ENDPOINT: ${{ secrets.FEEDBACK_ENDPOINT }}
+      FEEDBACK_ANON_KEY: ${{ secrets.FEEDBACK_ANON_KEY }}
+      SOURCE_CONFIG_ENDPOINT: https://fketutffusxgjxjlckci.supabase.co/functions/v1/app-config
+      SUPABASE_PUBLISHABLE_KEY: ${{ secrets.FEEDBACK_ANON_KEY }}
+      ANALYTICS_ENDPOINT: ""
+      SHITTOK_POOL_DIAGNOSTICS: "true"
+
+    steps:
+      - name: Check out PR branch
+        uses: actions/checkout@v6
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v4
+        with:
+          packages: platform-tools
+
+      - name: Install Android APIs 35 and 36
+        run: sdkmanager "platforms;android-35" "platforms;android-36" "build-tools;35.0.0"
+
+      - name: Set up Gradle 8.11.1
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: '8.11.1'
+          cache-provider: basic
+
+      - name: Resolve preview version above latest stable
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          LATEST_TAG="$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName --jq .tagName)"
+          LATEST_VERSION="${LATEST_TAG#v}"
+          python3 - "$LATEST_VERSION" <<'PY'
+          import os, re, sys
+          match = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)", sys.argv[1])
+          if not match:
+              raise SystemExit(f"Latest stable tag is not major.minor.patch: {sys.argv[1]}")
+          major, minor, patch = map(int, match.groups())
+          patch += 1
+          if patch >= 1000:
+              patch = 0
+              minor += 1
+          if minor >= 1000:
+              minor = 0
+              major += 1
+          code = major * 1_000_000 + minor * 1000 + patch
+          name = f"{major}.{minor}.{patch}-zerochill-preview"
+          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as output:
+              output.write(f"APP_VERSION_CODE={code}\n")
+              output.write(f"APP_VERSION_NAME={name}\n")
+              output.write(f"LATEST_STABLE_VERSION={sys.argv[1]}\n")
+          print(f"Main-install candidate: {name} ({code})")
+          PY
+
+      - name: Restore production signing key
+        env:
+          SIGNING_BUNDLE: ${{ secrets.ANDROID_SIGNING_BUNDLE }}
+        run: |
+          python3 - <<'PY'
+          import base64, json, os, pathlib, sys
+          raw = os.environ.get("SIGNING_BUNDLE", "").replace("\r", "").replace("\n", "")
+          if not raw:
+              sys.exit("Missing repository secret: ANDROID_SIGNING_BUNDLE")
+          data = json.loads(raw)
+          required = ["keystore_base64", "store_password", "key_alias", "key_password"]
+          missing = [key for key in required if not data.get(key)]
+          if missing:
+              sys.exit("Signing bundle is missing: " + ", ".join(missing))
+          for key in ("store_password", "key_alias", "key_password"):
+              print(f"::add-mask::{data[key]}")
+          keystore = pathlib.Path(os.environ["RUNNER_TEMP"]) / "zerochill-pr304-main.jks"
+          keystore.write_bytes(base64.b64decode(data["keystore_base64"]))
+          keystore.chmod(0o600)
+          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as output:
+              output.write(f"ANDROID_KEYSTORE_PATH={keystore}\n")
+              output.write(f"ANDROID_KEYSTORE_PASSWORD={data['store_password']}\n")
+              output.write(f"ANDROID_KEY_ALIAS={data['key_alias']}\n")
+              output.write(f"ANDROID_KEY_PASSWORD={data['key_password']}\n")
+          PY
+
+      - name: Embed source lineage
+        run: |
+          python3 - <<'PY'
+          import json, pathlib, subprocess
+          pathlib.Path('app/src/main/assets/zerochill-build.json').write_text(json.dumps({
+              'source_commit': subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip(),
+              'source_branch': 'feature/shittok-deep-source-exploration'
+          }))
+          PY
+
+      - name: Build production-signed main APK
+        run: gradle --no-daemon :app:assembleRelease
+
+      - name: Verify package, version and signing identity
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          SOURCE_SHA="$(git rev-parse HEAD)"
+          APK="ZEROCHILL-PR304-${SOURCE_SHA:0:7}-main-install.apk"
+          cp app/build/outputs/apk/release/app-release.apk "$APK"
+
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$APK"
+          BADGING="$("$ANDROID_HOME/build-tools/35.0.0/aapt2" dump badging "$APK")"
+          printf '%s\n' "$BADGING" | grep "package: name='com.addy37.crazyshitunofficial'"
+          CANDIDATE_CODE="$(printf '%s\n' "$BADGING" | sed -n "s/.*versionCode='\([0-9]*\)'.*/\1/p" | head -n 1)"
+          test "$CANDIDATE_CODE" = "$APP_VERSION_CODE"
+
+          mkdir -p "$RUNNER_TEMP/latest-stable"
+          if ! gh release download --repo "$GITHUB_REPOSITORY" --pattern 'ZeroChill.apk' --dir "$RUNNER_TEMP/latest-stable"; then
+            if ! gh release download --repo "$GITHUB_REPOSITORY" --pattern 'ZeroFilter.apk' --dir "$RUNNER_TEMP/latest-stable"; then
+              gh release download --repo "$GITHUB_REPOSITORY" --pattern 'CrazyShit.apk' --dir "$RUNNER_TEMP/latest-stable"
+            fi
+          fi
+          STABLE_APK="$(find "$RUNNER_TEMP/latest-stable" -maxdepth 1 -type f -name '*.apk' | head -n 1)"
+          test -n "$STABLE_APK"
+          STABLE_BADGING="$("$ANDROID_HOME/build-tools/35.0.0/aapt2" dump badging "$STABLE_APK")"
+          STABLE_CODE="$(printf '%s\n' "$STABLE_BADGING" | sed -n "s/.*versionCode='\([0-9]*\)'.*/\1/p" | head -n 1)"
+          test "$CANDIDATE_CODE" -gt "$STABLE_CODE"
+
+          CANDIDATE_CERT="$("$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$APK" | awk -F': ' '/Signer #1 certificate SHA-256 digest/ {print $2; exit}')"
+          STABLE_CERT="$("$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$STABLE_APK" | awk -F': ' '/Signer #1 certificate SHA-256 digest/ {print $2; exit}')"
+          test -n "$CANDIDATE_CERT"
+          test "$CANDIDATE_CERT" = "$STABLE_CERT"
+          sha256sum "$APK" > SHA256SUMS-pr304-main.txt
+          echo "APK_NAME=$APK" >> "$GITHUB_ENV"
+          echo "Verified main package, higher version code, and production signing certificate against stable $LATEST_STABLE_VERSION."
+
+      - name: Upload main-install APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: ZEROCHILL-PR304-main-install
+          path: |
+            ${{ env.APK_NAME }}
+            SHA256SUMS-pr304-main.txt
+          if-no-files-found: error
+          retention-days: 14
