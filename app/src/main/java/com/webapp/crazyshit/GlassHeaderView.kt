@@ -21,7 +21,8 @@ import com.webapp.crazyshit.glass.*
 
 /** Native controls stay above a single pane sampling the navbar's live page recording. */
 internal class GlassHeaderView @JvmOverloads constructor(
-    private val activity: Activity, private val controls: View, private val cornerRadius: Float = 0f
+    private val activity: Activity, private val controls: View, private val cornerRadius: Float = 0f,
+    private val resultsSurface: Boolean = false
 ) : FrameLayout(activity) {
     private val glass = ComposeView(activity).apply {
         importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO
@@ -71,7 +72,8 @@ internal class GlassHeaderView @JvmOverloads constructor(
         post {
             if (!isAttachedToWindow) return@post
             glass.setContent {
-                val config = remember { headerGlassConfig(activity).let {
+                val config = remember { (if (resultsSurface) searchResultsGlassConfig(activity)
+                    else headerGlassConfig(activity)).let {
                     if (cornerRadius > 0f) it.copy(lensSideEdges = true) else it
                 } }
                 val shape = remember { RoundedCornerShape(cornerRadius.dp) }
@@ -91,3 +93,7 @@ internal class GlassHeaderView @JvmOverloads constructor(
 /** Black adds no light on an empty OLED header; only the live backdrop reveals the pane. */
 internal fun headerGlassConfig(activity: Activity): GlassEffectConfig =
     navigationGlassConfig(activity).copy(surfaceTintColor = Color.Black, lensSideEdges = false)
+
+/** Soften busy page artwork behind result text without adding another blur layer. */
+internal fun searchResultsGlassConfig(activity: Activity): GlassEffectConfig =
+    headerGlassConfig(activity).copy(blurRadius = 12f, surfaceOpacity = .40f)

@@ -188,7 +188,7 @@ final class SearchPanel {
         View favorites = searchAction("★", "Favorite creators", v ->
                 activity.startActivity(new Intent(activity, CreatorsActivity.class)));
         favoriteSurface = new GlassHeaderView(activity, favorites, 24f);
-        resultSurface = new GlassHeaderView(activity, new FrameLayout(activity), 24f);
+        resultSurface = new GlassHeaderView(activity, new FrameLayout(activity), 24f, true);
         resultsControls = new LinearLayout(activity);
         resultsControls.setOrientation(LinearLayout.VERTICAL);
         resultsControls.setClipChildren(false);
