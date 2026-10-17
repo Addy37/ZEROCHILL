@@ -117,6 +117,8 @@ public class OnlyFapHeroStartupTest {
                 ReflectionHelpers.ClassParameter.from(List.class, validated));
         await(() -> ReflectionHelpers.getField(hub, "startupHero") == null
                 && title().equals("Fresh") && OnlyFapHeroMemory.read(activity).imageUrl.equals(FRESH));
+        assertTrue(((ImageView) ReflectionHelpers.getField(hub, "heroImage")).getDrawable()
+                instanceof android.graphics.drawable.TransitionDrawable);
         ReflectionHelpers.callInstanceMethod(hub, "openHero");
         assertEquals(fresh.url, opened.url);
         assertEquals(1, ((List<?>) ReflectionHelpers.getField(hub, "heroItems")).size());

@@ -416,7 +416,7 @@ final class OnlyFapHubView extends FrameLayout {
         }
         refreshFavorites();
         ColdTabSnapshot.install(this, scroll, heroImage, "onlyfap",
-                () -> shelvesFinished && heroItem != null);
+                () -> shelvesFinished && (heroItem != null || startupHero != null));
     }
 
     void beginRefresh() {
