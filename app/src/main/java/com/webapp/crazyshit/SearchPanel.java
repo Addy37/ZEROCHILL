@@ -173,14 +173,7 @@ final class SearchPanel {
         shell = new SearchGlassLayout(activity);
         shell.setClickable(true);
         shell.setOnClickListener(v -> dismiss.run());
-        androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(shell, (v, insets) -> {
-            androidx.core.graphics.Insets safe = insets.getInsets(
-                    androidx.core.view.WindowInsetsCompat.Type.systemBars()
-                    | androidx.core.view.WindowInsetsCompat.Type.displayCutout()
-                    | androidx.core.view.WindowInsetsCompat.Type.ime());
-            v.setPadding(safe.left, safe.top, safe.right, safe.bottom);
-            return insets;
-        });
+        shell.installInsets();
         headerControls = new LinearLayout(activity);
         headerControls.setOrientation(LinearLayout.VERTICAL);
         headerControls.addView(buildSearchRow(), new LinearLayout.LayoutParams(-1, dp(56)));
@@ -191,18 +184,19 @@ final class SearchPanel {
         resultSurface = new GlassHeaderView(activity, new FrameLayout(activity), 24f, true);
         resultsControls = new LinearLayout(activity);
         resultsControls.setOrientation(LinearLayout.VERTICAL);
-        resultsControls.setClipChildren(false);
+        resultsControls.setClipChildren(true);
+        resultsControls.setPadding(0, 0, 0, dp(14));
         resultsControls.setClipToPadding(false);
         resultsControls.setOnClickListener(v -> {});
         shell.install(header, favoriteSurface, resultSurface, resultsControls);
 
         content = new FrameLayout(activity);
-        content.setClipChildren(false);
+        content.setClipChildren(true);
         content.setClipToPadding(false);
         content.setClickable(true);
         resultsControls.addView(content, new LinearLayout.LayoutParams(-1, 0, 1f));
         resultLayer = new FrameLayout(activity);
-        resultLayer.setClipChildren(false);
+        resultLayer.setClipChildren(true);
         resultLayer.setClipToPadding(false);
         content.addView(resultLayer, new FrameLayout.LayoutParams(-1, -1));
         recycler = new RecyclerView(activity);
@@ -237,7 +231,7 @@ final class SearchPanel {
         progressParams.topMargin = dp(12);
         resultLayer.addView(progress, progressParams);
         suggestionPanel = new LinearLayout(activity);
-        suggestionPanel.setClipChildren(false);
+        suggestionPanel.setClipChildren(true);
         suggestionPanel.setClipToPadding(false);
         content.addView(suggestionPanel, new FrameLayout.LayoutParams(-1, -1));
         suggestions = new CreatorSuggestionsController(activity, input, suggestionPanel, this::openCreator);

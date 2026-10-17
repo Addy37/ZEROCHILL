@@ -105,7 +105,7 @@ final class CreatorSuggestionsController {
         // rows can pass under the pill without colliding with the footer.
         panel.removeView(recycler);
         android.widget.FrameLayout slot = new android.widget.FrameLayout(activity);
-        slot.setClipChildren(false);
+        slot.setClipChildren(true);
         slot.setClipToPadding(false);
         panel.addView(slot, 0, new LinearLayout.LayoutParams(-1, 0, 1f));
         android.widget.FrameLayout.LayoutParams list = new android.widget.FrameLayout.LayoutParams(-1, -1);

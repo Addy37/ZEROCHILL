@@ -3,6 +3,11 @@ package com.webapp.crazyshit;
 import android.app.Activity;
 import android.graphics.Canvas;
 import android.graphics.Path;
+import android.graphics.Outline;
+import android.graphics.Rect;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowInsetsCompat;
+import androidx.core.view.WindowInsetsAnimationCompat;
 import android.graphics.RectF;
 import android.view.View;
 import android.widget.FrameLayout;
@@ -21,6 +26,50 @@ final class SearchGlassLayout extends FrameLayout {
     private android.animation.ValueAnimator heightAnimator;
     private int animatedHeight;
     private final Path rowClip = new Path();
+    private final Outline resultOutline = new Outline();
+    private final Rect resultRect = new Rect();
+    private int imeBottom;
+    private int imeAnimations;
+    private WindowInsetsCompat appliedInsets;
+    private WindowInsetsAnimationCompat.Callback insetAnimation;
+
+    void installInsets() {
+        ViewCompat.setOnApplyWindowInsetsListener(this, (view, insets) -> {
+            appliedInsets = insets;
+            applyInsets(insets, imeAnimations == 0);
+            return insets;
+        });
+        insetAnimation = new WindowInsetsAnimationCompat.Callback(
+                WindowInsetsAnimationCompat.Callback.DISPATCH_MODE_CONTINUE_ON_SUBTREE) {
+            @Override public void onPrepare(WindowInsetsAnimationCompat animation) {
+                if ((animation.getTypeMask() & WindowInsetsCompat.Type.ime()) != 0) imeAnimations++;
+            }
+
+            @Override public WindowInsetsCompat onProgress(WindowInsetsCompat insets,
+                    java.util.List<WindowInsetsAnimationCompat> running) {
+                applyInsets(insets, true);
+                return insets;
+            }
+
+            @Override public void onEnd(WindowInsetsAnimationCompat animation) {
+                if ((animation.getTypeMask() & WindowInsetsCompat.Type.ime()) == 0) return;
+                imeAnimations = Math.max(0, imeAnimations - 1);
+                if (imeAnimations == 0 && appliedInsets != null) applyInsets(appliedInsets, true);
+            }
+        };
+        ViewCompat.setWindowInsetsAnimationCallback(this, insetAnimation);
+    }
+
+    private void applyInsets(WindowInsetsCompat insets, boolean updateIme) {
+        androidx.core.graphics.Insets safe = insets.getInsets(WindowInsetsCompat.Type.systemBars()
+                | WindowInsetsCompat.Type.displayCutout());
+        // onApply receives the END inset before the keyboard animation starts.
+        // Defer that bottom extent and follow the actual inset on each progress frame.
+        if (updateIme) imeBottom = insets.getInsets(WindowInsetsCompat.Type.ime()).bottom;
+        setPadding(safe.left, safe.top, safe.right, Math.max(safe.bottom, imeBottom));
+        dirty = true;
+        requestLayout();
+    }
 
     SearchGlassLayout(Activity activity) {
         super(activity);
@@ -32,6 +81,10 @@ final class SearchGlassLayout extends FrameLayout {
                  GlassHeaderView results, View rows) {
         this.pill = pill; this.favorites = favorites; this.results = results; this.rows = rows;
         addView(results); addView(rows); addView(pill); addView(favorites);
+        // Share the glass outline itself, including its radius and current size.
+        // This clips the complete native subtree on the hardware rendering path.
+        rows.setOutlineProvider(results.getOutlineProvider());
+        rows.setClipToOutline(true);
         pill.setPageBackdrop(page);
         favorites.setPageBackdrop(page);
         results.setPageBackdrop(empty);
@@ -64,9 +117,8 @@ final class SearchGlassLayout extends FrameLayout {
 
     @Override protected void onMeasure(int widthSpec, int heightSpec) {
         int width = MeasureSpec.getSize(widthSpec) - getPaddingLeft() - getPaddingRight();
-        int available = MeasureSpec.getSize(heightSpec) - getPaddingTop() - getPaddingBottom();
-        int height = Math.max(0, Math.min(available - dp(88),
-                heightAnimator != null && heightAnimator.isRunning() ? animatedHeight : dp(96 + resultCount * 76)));
+        int height = resultHeight(MeasureSpec.getSize(heightSpec),
+                heightAnimator != null && heightAnimator.isRunning() ? animatedHeight : dp(96 + resultCount * 76));
         if (pillBounds == null) place(pill, width - dp(88), dp(56), dp(14), dp(8));
         else place(pill, Math.round(pillBounds.width()), Math.round(pillBounds.height()),
                 Math.round(pillBounds.left) - getPaddingLeft(), Math.round(pillBounds.top) - getPaddingTop());
@@ -77,8 +129,13 @@ final class SearchGlassLayout extends FrameLayout {
     }
 
     private int resultHeight() {
-        return Math.max(0, Math.min(getHeight() - getPaddingTop() - getPaddingBottom() - dp(88),
-                dp(96 + resultCount * 76)));
+        return resultHeight(getHeight(), dp(96 + resultCount * 76));
+    }
+
+    private int resultHeight(int windowHeight, int desired) {
+        int bottomGap = dp(imeBottom > 0 ? 8 : 12);
+        return Math.max(0, Math.min(windowHeight - getPaddingTop() - getPaddingBottom()
+                - dp(76) - bottomGap, desired));
     }
 
     void setPillBounds(RectF bounds) {
@@ -105,7 +162,10 @@ final class SearchGlassLayout extends FrameLayout {
 
     @Override protected void onLayout(boolean changed, int l, int t, int r, int b) {
         super.onLayout(changed, l, t, r, b);
-        if (changed) dirty = true;
+        // Child sizes can change while this full-window layout keeps the same bounds.
+        rows.invalidateOutline();
+        results.invalidateOutline();
+        dirty = true;
     }
 
     @Override protected void dispatchDraw(Canvas canvas) {
@@ -130,10 +190,11 @@ final class SearchGlassLayout extends FrameLayout {
         if (rows.getVisibility() != VISIBLE) return;
         int checkpoint = canvas.save();
         rowClip.reset();
-        // The list's inset scroll gutter reaches behind the pill, while its
-        // background pane starts below it. Only real rows enter the glass.
-        rowClip.addRoundRect(new RectF(rows.getLeft(), getPaddingTop() + dp(8),
-                rows.getRight(), rows.getBottom()), dp(24), dp(24), Path.Direction.CW);
+        results.getOutlineProvider().getOutline(results, resultOutline);
+        if (!resultOutline.getRect(resultRect)) { canvas.restoreToCount(checkpoint); return; }
+        RectF bounds = new RectF(resultRect);
+        bounds.offset(results.getX(), results.getY());
+        rowClip.addRoundRect(bounds, resultOutline.getRadius(), resultOutline.getRadius(), Path.Direction.CW);
         canvas.clipPath(rowClip);
         drawChild(canvas, rows, getDrawingTime());
         canvas.restoreToCount(checkpoint);
