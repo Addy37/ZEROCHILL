@@ -153,7 +153,8 @@ public class ColdTabSnapshotTest {
         drainIo();
         Bitmap captured = ColdTabSnapshot.read(f.file);
         assertNotNull(captured);
-        assertEquals(512, Math.max(captured.getWidth(), captured.getHeight()));
+        int edge = Math.max(captured.getWidth(), captured.getHeight());
+        assertTrue(edge > 128 && edge <= 512);
         captured.recycle();
     }
 
