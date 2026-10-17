@@ -751,7 +751,7 @@ public final class BunkrGalleryActivity extends Activity {
         if (adapter.isFailed(position)) {
             adapter.setFailed(position, false);
             if (item.isVideo()) playVideo(position, item);
-            else resolvePhoto(position);
+            else resolvePhoto(position, false, false);
             return;
         }
         if (item.isVideo()) playVideo(position, item);
@@ -785,6 +785,10 @@ public final class BunkrGalleryActivity extends Activity {
     }
 
     private void resolvePhoto(int position, boolean prefetch) {
+        resolvePhoto(position, prefetch, true);
+    }
+
+    private void resolvePhoto(int position, boolean prefetch, boolean useListingOriginal) {
         NativeContentItem item = adapter.itemAt(position);
         if (item == null || !item.isImage()) return;
         if (!adapter.resolvedUrl(position).isEmpty()) {
@@ -795,7 +799,8 @@ public final class BunkrGalleryActivity extends Activity {
             if (!prefetch) adapter.setLoading(position, true);
             return;
         }
-        String directPhoto = FapelloRepository.photoUrlFromItem(item);
+        // An explicit retry asks the primary source again if the listing original failed.
+        String directPhoto = useListingOriginal ? FapelloRepository.photoUrlFromItem(item) : "";
         if (directPhoto.isEmpty() && isOnlyHavenDirectImage(item)) directPhoto = item.url;
         if (!directPhoto.isEmpty()) {
             adapter.setResolvedUrl(position, directPhoto);
