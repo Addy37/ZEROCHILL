@@ -48,7 +48,7 @@ final class SearchGlassLayout extends FrameLayout {
         if (resultCount == count) return;
         resultCount = count;
         if (heightAnimator != null) { heightAnimator.removeAllListeners(); heightAnimator.cancel(); }
-        if (getHeight() > 0 && ZeroChillMotion.animationsEnabled(getContext())) {
+        if (getHeight() > 0 && rows.getVisibility() == VISIBLE && ZeroChillMotion.animationsEnabled(getContext())) {
             heightAnimator = android.animation.ValueAnimator.ofInt(rows.getHeight(), resultHeight());
             heightAnimator.setDuration(180L);
             heightAnimator.setInterpolator(new android.view.animation.DecelerateInterpolator());
@@ -65,8 +65,8 @@ final class SearchGlassLayout extends FrameLayout {
     @Override protected void onMeasure(int widthSpec, int heightSpec) {
         int width = MeasureSpec.getSize(widthSpec) - getPaddingLeft() - getPaddingRight();
         int available = MeasureSpec.getSize(heightSpec) - getPaddingTop() - getPaddingBottom();
-        int height = heightAnimator != null && heightAnimator.isRunning() ? animatedHeight
-                : Math.max(0, Math.min(available - dp(88), dp(96 + resultCount * 76)));
+        int height = Math.max(0, Math.min(available - dp(88),
+                heightAnimator != null && heightAnimator.isRunning() ? animatedHeight : dp(96 + resultCount * 76)));
         if (pillBounds == null) place(pill, width - dp(88), dp(56), dp(14), dp(8));
         else place(pill, Math.round(pillBounds.width()), Math.round(pillBounds.height()),
                 Math.round(pillBounds.left) - getPaddingLeft(), Math.round(pillBounds.top) - getPaddingTop());
@@ -83,6 +83,14 @@ final class SearchGlassLayout extends FrameLayout {
 
     void setPillBounds(RectF bounds) {
         pillBounds = bounds;
+        if (bounds != null) {
+            // Apply the first animation frame before drawing, including a morph
+            // started from OnPreDraw. No full-width capsule may flash first.
+            pill.measure(MeasureSpec.makeMeasureSpec(Math.max(0, Math.round(bounds.width())), MeasureSpec.EXACTLY),
+                    MeasureSpec.makeMeasureSpec(Math.max(0, Math.round(bounds.height())), MeasureSpec.EXACTLY));
+            pill.layout(Math.round(bounds.left), Math.round(bounds.top), Math.round(bounds.right), Math.round(bounds.bottom));
+            pill.invalidateOutline();
+        }
         requestLayout();
     }
 

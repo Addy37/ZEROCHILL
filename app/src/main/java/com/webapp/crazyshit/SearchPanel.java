@@ -46,6 +46,7 @@ final class SearchPanel {
     View view;
     EditText field() { return input; }
     private FrameLayout content;
+    private FrameLayout resultLayer;
     private LinearLayout headerControls;
     private View clear;
     private ImageView searchIcon;
@@ -200,6 +201,10 @@ final class SearchPanel {
         content.setClipToPadding(false);
         content.setClickable(true);
         resultsControls.addView(content, new LinearLayout.LayoutParams(-1, 0, 1f));
+        resultLayer = new FrameLayout(activity);
+        resultLayer.setClipChildren(false);
+        resultLayer.setClipToPadding(false);
+        content.addView(resultLayer, new FrameLayout.LayoutParams(-1, -1));
         recycler = new RecyclerView(activity);
         recycler.setLayoutManager(new LinearLayoutManager(activity));
         recycler.setBackgroundColor(Color.TRANSPARENT);
@@ -215,7 +220,7 @@ final class SearchPanel {
         }
         FrameLayout.LayoutParams listParams = new FrameLayout.LayoutParams(-1, -1);
         listParams.topMargin = -dp(68);
-        content.addView(recycler, listParams);
+        resultLayer.addView(recycler, listParams);
         recycler.getAdapter().registerAdapterDataObserver(new RecyclerView.AdapterDataObserver() {
             @Override public void onChanged() { updateResultSize(); }
             @Override public void onItemRangeInserted(int start, int count) { updateResultSize(); }
@@ -225,12 +230,12 @@ final class SearchPanel {
         status.setGravity(Gravity.TOP | Gravity.CENTER_HORIZONTAL);
         status.setPadding(dp(12), dp(14), dp(12), dp(8));
         status.setText(bunkrOnly ? "Search OnlyFap creators" : "Search creators or videos");
-        content.addView(status, new FrameLayout.LayoutParams(-1, -2));
+        resultLayer.addView(status, new FrameLayout.LayoutParams(-1, -2));
         progress = new ZeroChillLoadingView(activity, null, true);
         progress.setVisibility(View.GONE);
         FrameLayout.LayoutParams progressParams = new FrameLayout.LayoutParams(dp(28), dp(28), Gravity.TOP | Gravity.CENTER_HORIZONTAL);
         progressParams.topMargin = dp(12);
-        content.addView(progress, progressParams);
+        resultLayer.addView(progress, progressParams);
         suggestionPanel = new LinearLayout(activity);
         suggestionPanel.setClipChildren(false);
         suggestionPanel.setClipToPadding(false);
@@ -252,6 +257,7 @@ final class SearchPanel {
         });
         resultsControls.addView(searchState);
         suggestions.setVisibilityListener(showing -> {
+            resultLayer.setVisibility(showing ? View.INVISIBLE : View.VISIBLE);
             if (filterBar != null) filterBar.setVisibility(showing ? View.GONE : View.VISIBLE);
             updateContentVisibility();
         });
