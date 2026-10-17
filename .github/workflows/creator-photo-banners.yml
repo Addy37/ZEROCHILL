@@ -1,0 +1,35 @@
+name: Creator photo and banner validation
+on:
+  push:
+    branches: [fix/creator-photo-routing-banners]
+permissions:
+  contents: read
+jobs:
+  focused:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v4
+      - uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: '8.11.1'
+      - name: Focused notification and banner regression tests
+        run: >-
+          gradle --no-daemon :app:testDebugUnitTest
+          --tests 'com.webapp.crazyshit.CreatorNotificationsTest'
+          --tests 'com.webapp.crazyshit.NotificationCreatorDeepLinkTest'
+          --tests 'com.webapp.crazyshit.OnlyHavenCreatorHeaderTest'
+          --tests 'com.webapp.crazyshit.OnlyHavenTrendingTest'
+      - name: Debug build
+        run: gradle --no-daemon :app:assembleDebug
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: creator-photo-banner-validation
+          path: |
+            app/build/reports/tests/testDebugUnitTest
+            app/build/outputs/apk/debug/*.apk

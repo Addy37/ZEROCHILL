@@ -282,6 +282,38 @@ public class CreatorNotificationsTest {
         assertTrue(state.getBoolean("seen_initialized_" + first.get(1).watchKey, false));
     }
 
+    @Test public void photoThumbnailOwnsNavigationEvenAfterViewerFailure() throws Exception {
+        NativeContentItem photo = new NativeContentItem(NativeContentItem.KIND_IMAGE, "Photo",
+                "https://fapello.com/creator-one/101/", "https://img.example/101.jpg",
+                "", "Creator One", "", "Fapello");
+        record(photo);
+        ActivityController<UpdateInboxActivity> inbox = Robolectric.buildActivity(UpdateInboxActivity.class).setup();
+        try {
+            UpdateInboxActivity activity = inbox.get();
+            NotificationInboxTestIdle.await(activity);
+            RecyclerView recycler = (RecyclerView) field(activity, "recycler");
+            RecyclerView.Adapter adapter = recycler.getAdapter();
+            RecyclerView.ViewHolder holder = adapter.createViewHolder(recycler, adapter.getItemViewType(0));
+            adapter.bindViewHolder(holder, 0);
+            assertTrue(((android.view.View) field(holder, "thumbnail")).performClick());
+            Intent intent = Shadows.shadowOf(activity).getNextStartedActivity();
+            assertEquals(BunkrGalleryActivity.class.getName(), intent.getComponent().getClassName());
+            assertFalse(intent.hasExtra(BunkrGalleryActivity.EXTRA_NOTIFICATION_GALLERY_FALLBACK));
+            assertNull(Shadows.shadowOf(activity).getNextStartedActivity());
+            BunkrGalleryActivity viewer = Robolectric.buildActivity(BunkrGalleryActivity.class, intent).get();
+            org.robolectric.util.ReflectionHelpers.setField(viewer, "initialUrl", photo.url);
+            java.lang.reflect.Method fallback = BunkrGalleryActivity.class.getDeclaredMethod("openNotificationFallback", String.class);
+            fallback.setAccessible(true);
+            assertFalse((boolean) fallback.invoke(viewer, photo.url));
+            assertFalse((boolean) fallback.invoke(viewer, photo.url));
+            assertNull(Shadows.shadowOf(viewer).getNextStartedActivity());
+            assertFalse(viewer.isFinishing());
+            ((android.view.View) field(holder, "avatar")).performClick();
+            assertEquals(NativeFeedBrowserActivity.class.getName(),
+                    Shadows.shadowOf(activity).getNextStartedActivity().getComponent().getClassName());
+        } finally { inbox.pause().stop().destroy(); }
+    }
+
     @Test public void notificationViewerFailureReturnsOnlyOnceToTheFocusedGallery() throws Exception {
         record(item("Creator One", 101));
         ActivityController<UpdateInboxActivity> inbox = Robolectric.buildActivity(UpdateInboxActivity.class).setup();

@@ -39,7 +39,11 @@ final class CreatorNotificationNavigator {
         intent.putExtra(BunkrGalleryActivity.EXTRA_TITLE, parent.title);
         intent.putExtra(BunkrGalleryActivity.EXTRA_ALBUM_URL, child.item.url);
         intent.putExtra(BunkrGalleryActivity.EXTRA_INITIAL_URL, child.item.url);
-        intent.putExtra(BunkrGalleryActivity.EXTRA_NOTIFICATION_GALLERY_FALLBACK, fallback);
+        // A photo owns this navigation, including resolution/load failures and retries.
+        // Videos retain their existing gallery recovery path.
+        if (!child.item.isImage()) {
+            intent.putExtra(BunkrGalleryActivity.EXTRA_NOTIFICATION_GALLERY_FALLBACK, fallback);
+        }
         return intent;
     }
 }
