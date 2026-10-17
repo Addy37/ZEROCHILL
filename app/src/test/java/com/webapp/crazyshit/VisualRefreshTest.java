@@ -315,7 +315,7 @@ public class VisualRefreshTest {
         host.pause().stop().destroy();
     }
 
-    @Test public void shitTokActionsFloatWithoutVolumeOrShare() {
+    @Test public void shitTokActionsFloatWithMuteWithoutShare() {
         ActivityController<Activity> host = Robolectric.buildActivity(Activity.class).setup();
         host.get().setTheme(R.style.Theme_CrazyShit);
         ChaosFeedView feed = new ChaosFeedView(host.get(), item -> { }, false);
@@ -328,10 +328,10 @@ public class VisualRefreshTest {
             View actionRail = root.findViewWithTag("shittok_action_rail");
             assertNotNull(actionRail);
             assertNull(root.findViewWithTag("shittok_playback_rail"));
-            assertNull(root.findViewWithTag("shittok_mute"));
+            assertNotNull(root.findViewWithTag("shittok_mute"));
             assertNull(root.findViewWithTag("shittok_share"));
             assertNull(actionRail.getBackground());
-            assertEquals(5, ((ViewGroup) actionRail).getChildCount());
+            assertEquals(6, ((ViewGroup) actionRail).getChildCount());
 
             for (String tag : new String[] {
                     "shittok_like",
@@ -339,6 +339,8 @@ public class VisualRefreshTest {
                     "shittok_comments",
                     "shittok_auto_scroll",
                     "shittok_more",
+                    "shittok_mute",
+                    "shittok_landscape_mute",
                     "shittok_landscape_like",
                     "shittok_landscape_comments",
                     "shittok_landscape_save",

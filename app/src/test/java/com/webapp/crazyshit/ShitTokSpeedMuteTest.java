@@ -81,7 +81,10 @@ public class ShitTokSpeedMuteTest {
     }
     @Test public void pausedVideoNeverBoostsOrStarts() {
         try (var f = ShitTokInteractionUiTest.fixture()) {
-            f.selectedPlayer.readyToPlay = false;
+            ShitTokPlaybackOwner pausedOwner = ReflectionHelpers.getField(f.feed, "playbackOwner");
+            String pausedUrl = ((NativeContentItem) ReflectionHelpers.getField(f.selected, "item")).url;
+            ReflectionHelpers.setField(f.selected, "userPaused", true);
+            pausedOwner.setUserPaused(pausedUrl, true);
             int plays = f.selectedPlayer.plays;
             long down = down(f); waitForHold();
             assertEquals(1f, f.selectedPlayer.speed.speed, 0f);
@@ -162,18 +165,29 @@ public class ShitTokSpeedMuteTest {
             assertTrue(f.host.get().getSharedPreferences(prefs, Context.MODE_PRIVATE).getBoolean("muted", false));
             assertEquals(0f, f.selectedPlayer.volume, 0f);
             assertEquals("Unmute video", mute.getContentDescription());
-            ShitTokPlaybackOwner owner = ReflectionHelpers.getField(f.feed, "playbackOwner");
-            String url = "https://example.invalid/clip-1";
-            owner.select(url, null, null, false);
-            androidx.media3.ui.PlayerView view = new androidx.media3.ui.PlayerView(f.host.get());
-            ExoPlayer attached = owner.attach(url, view);
-            assertNotNull(attached);
-            assertEquals(0f, attached.getVolume(), 0f);
-            owner.source(url, new CrazyShitRepository.StreamInfo("https://example.invalid/new.mp4", url, "New"), owner.token(url));
-            assertEquals(0f, attached.getVolume(), 0f);
+            // A fresh owner reads the persisted choice before attaching its first active lease.
+            ShitTokPlaybackOwner owner = new ShitTokPlaybackOwner(f.host.get(), new ShitTokPlaybackOwner.Callbacks() {
+                @Override public void onLeaseChanged(String url) {}
+                @Override public void onLeaseRetired(String url) {}
+            });
+            try {
+                ShitTokAudioOwnershipTest.FakePlayer fresh = new ShitTokAudioOwnershipTest.FakePlayer();
+                owner.setPlayerFactoryForTest(() -> fresh.player);
+                owner.permission(true, f.host.get().getSharedPreferences(prefs, Context.MODE_PRIVATE).getBoolean("muted", false));
+                String url = "https://example.invalid/fresh";
+                owner.select(url, null, null, false);
+                androidx.media3.ui.PlayerView view = new androidx.media3.ui.PlayerView(f.host.get());
+                ExoPlayer attached = owner.attach(url, view);
+                assertNotNull(attached);
+                assertEquals(0f, attached.getVolume(), 0f);
+                owner.source(url, new CrazyShitRepository.StreamInfo("https://example.invalid/new.mp4", url, "New"), owner.token(url));
+                assertEquals(0f, attached.getVolume(), 0f);
+                owner.setMuted(false);
+                assertEquals(1f, attached.getVolume(), 0f);
+            } finally { owner.close(); }
             mute.performClick();
             assertFalse(f.host.get().getSharedPreferences(prefs, Context.MODE_PRIVATE).getBoolean("muted", true));
-            assertEquals(1f, attached.getVolume(), 0f);
+            assertEquals(1f, f.selectedPlayer.volume, 0f);
             assertEquals("Mute video", mute.getContentDescription());
         }
     }
