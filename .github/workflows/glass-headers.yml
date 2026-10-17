@@ -21,6 +21,9 @@ jobs:
         run: >-
           gradle --no-daemon :app:testDebugUnitTest
           --tests 'com.webapp.crazyshit.GlassHeaderLayoutTest'
+          --tests 'com.webapp.crazyshit.HeaderGlassMaterialTest'
+          --tests 'com.webapp.crazyshit.VisualRefreshTest'
+          --tests 'com.webapp.crazyshit.NavigationIaTest'
           --tests 'com.webapp.crazyshit.BottomNavigationInsetsTest'
           --tests 'com.webapp.crazyshit.ShowsHubStateTest'
           --tests 'com.webapp.crazyshit.PrimaryTabNavigationTest'
