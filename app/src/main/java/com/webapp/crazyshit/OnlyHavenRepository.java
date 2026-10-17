@@ -450,7 +450,7 @@ final class OnlyHavenRepository {
         if (row.has("hasHeader") && !row.optBoolean("hasHeader")) return "";
         try {
             byte[] metadata = java.util.Base64.getDecoder().decode(hash);
-            if (metadata.length < 5 || metadata.length > 64) return "";
+            if (metadata.length < 12 || metadata.length > 64) return "";
         } catch (IllegalArgumentException invalid) { return ""; }
         return imageBase(config) + "creator/" + urlToken(service) + "/" + urlToken(id) + "/header.webp";
     }
