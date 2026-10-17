@@ -39,9 +39,9 @@ public class ColdTabSnapshotTest {
         assertNull(ColdTabSnapshot.read(file));
         Files.write(file.toPath(), new byte[] {1, 2, 3});
         assertNull(ColdTabSnapshot.read(file));
-        Files.write(file.toPath(), new byte[32_769]);
+        Files.write(file.toPath(), new byte[262_145]);
         assertNull(ColdTabSnapshot.read(file));
-        Bitmap large = Bitmap.createBitmap(129, 1, Bitmap.Config.ARGB_8888);
+        Bitmap large = Bitmap.createBitmap(513, 1, Bitmap.Config.ARGB_8888);
         ColdTabSnapshot.write(file, large);
         large.recycle();
         assertNull(ColdTabSnapshot.read(file));
@@ -133,6 +133,43 @@ public class ColdTabSnapshotTest {
         assertEquals(1, failed.root.getChildCount());
     }
 
+    @Test public void leavingBeforeHeroReadinessStillCapturesAfterReturning() throws Exception {
+        Fixture f = new Fixture("test-return", false);
+        f.file.delete();
+        f.install();
+        drainIo();
+        f.controller.onPreDraw();
+        f.activity.setContentView(new FrameLayout(f.activity));
+        f.ready = true;
+        f.activity.setContentView(f.root);
+        f.root.layout(0, 0, 400, 800);
+        ShadowSystemClock.advanceBy(Duration.ofMillis(200));
+        f.controller.onPreDraw();
+        ShadowSystemClock.advanceBy(Duration.ofMillis(600));
+        f.controller.onPreDraw();
+        assertTrue(ReflectionHelpers.getField(f.controller, "done"));
+        assertEquals(1, f.root.getChildCount());
+        ShadowLooper.idleMainLooper(1, TimeUnit.SECONDS);
+        drainIo();
+        Bitmap captured = ColdTabSnapshot.read(f.file);
+        assertNotNull(captured);
+        assertEquals(512, Math.max(captured.getWidth(), captured.getHeight()));
+        captured.recycle();
+    }
+
+    @Test public void smootherSnapshotResolutionPersists() throws Exception {
+        File file = new File(Files.createTempDirectory("snapshot").toFile(), "tab.jpg");
+        Bitmap bitmap = Bitmap.createBitmap(256, 512, Bitmap.Config.ARGB_8888);
+        bitmap.eraseColor(Color.BLUE);
+        GalleryPreviewBlur.soften(bitmap, 6);
+        ColdTabSnapshot.write(file, bitmap);
+        bitmap.recycle();
+        Bitmap saved = ColdTabSnapshot.read(file);
+        assertNotNull(saved);
+        assertEquals(512, saved.getHeight());
+        saved.recycle();
+    }
+
     private static void drainIo() throws Exception {
         ExecutorService io = ReflectionHelpers.getStaticField(ColdTabSnapshot.class, "IO");
         io.submit(() -> { }).get(5, TimeUnit.SECONDS);
@@ -145,7 +182,7 @@ public class ColdTabSnapshotTest {
         final ScrollView live = new ScrollView(activity);
         final ImageView hero = new ImageView(activity);
         final String tab;
-        final boolean ready;
+        boolean ready;
         final File file;
         ColdTabSnapshot controller;
         Fixture(String tab, boolean ready) {

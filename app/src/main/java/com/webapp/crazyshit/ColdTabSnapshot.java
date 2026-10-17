@@ -30,6 +30,7 @@ final class ColdTabSnapshot implements ViewTreeObserver.OnPreDrawListener,
         View.OnAttachStateChangeListener {
     private static final Set<String> STARTED = new HashSet<>();
     private static final ExecutorService IO = Executors.newSingleThreadExecutor();
+    private static final int MAX_EDGE = 512;
     private static final long FADE_MS = 450;
     private static final long MAX_WAIT_MS = 15_000;
     private final FrameLayout root;
@@ -79,18 +80,30 @@ final class ColdTabSnapshot implements ViewTreeObserver.OnPreDrawListener,
         root.getViewTreeObserver().addOnPreDrawListener(this);
     }
 
-    @Override public void onViewDetachedFromWindow(View view) { finish(false); }
+    @Override public void onViewDetachedFromWindow(View view) {
+        if (root.getViewTreeObserver().isAlive()) {
+            root.getViewTreeObserver().removeOnPreDrawListener(this);
+        }
+        removeCover();
+        readySince = 0;
+        // Pager recycling must not cancel a future capture after returning to this tab.
+    }
 
     @Override public boolean onPreDraw() {
         if (done || !root.isShown() || root.getWidth() == 0 || root.getHeight() == 0) return true;
+        if (!root.getGlobalVisibleRect(new Rect())) {
+            readySince = 0;
+            return true;
+        }
         long now = SystemClock.uptimeMillis();
         if (now < nextCheck) return true;
         nextCheck = now + 100;
         if (started == 0) started = now;
         // A failure must expose the normal loader/error UI rather than cover it forever.
         if (now - started >= MAX_WAIT_MS) removeCover();
-        if (now - started >= 60_000 || live.getScrollY() != 0) {
-            finish(false);
+        if (live.getScrollY() != 0) {
+            removeCover();
+            readySince = 0;
             return true;
         }
         Request heroRequest = new DrawableImageViewTarget(hero).getRequest();
@@ -101,7 +114,7 @@ final class ColdTabSnapshot implements ViewTreeObserver.OnPreDrawListener,
         // Let existing image transitions finish and the first visible rails bind.
         if (readySince != 0 && now - readySince >= 500) {
             finish(true);
-        } else root.postInvalidateDelayed(100);
+        } else if (cover != null || readySince != 0) root.postInvalidateDelayed(100);
         return true;
     }
 
@@ -133,7 +146,7 @@ final class ColdTabSnapshot implements ViewTreeObserver.OnPreDrawListener,
             }
             if (android.os.Build.VERSION.SDK_INT >= 26 && context instanceof android.app.Activity) {
                 int width = live.getWidth(), height = live.getHeight();
-                float scale = Math.min(1f, 128f / Math.max(width, height));
+                float scale = Math.min(1f, (float) MAX_EDGE / Math.max(width, height));
                 Bitmap raw = Bitmap.createBitmap(Math.max(1, Math.round(width * scale)),
                         Math.max(1, Math.round(height * scale)), Bitmap.Config.ARGB_8888);
                 int[] position = new int[2];
@@ -144,30 +157,39 @@ final class ColdTabSnapshot implements ViewTreeObserver.OnPreDrawListener,
                 try {
                     android.view.PixelCopy.request(((android.app.Activity) context).getWindow(),
                         area, raw, result -> {
-                            try {
-                                if (result == android.view.PixelCopy.SUCCESS) {
-                                    saveBlurred(GalleryPreviewBlur.snapshot(live, canvas ->
-                                            canvas.drawBitmap(raw, null, new Rect(0, 0, width, height), null)));
-                                }
-                            } catch (RuntimeException | OutOfMemoryError ignored) {
-                                // Capture failure never changes live UI.
-                            } finally { raw.recycle(); }
+                            if (result == android.view.PixelCopy.SUCCESS) saveSnapshot(raw);
+                            else raw.recycle();
                         }, new android.os.Handler(android.os.Looper.getMainLooper()));
                 } catch (RuntimeException | OutOfMemoryError failure) {
                     raw.recycle();
                     throw failure;
                 }
-            } else saveBlurred(GalleryPreviewBlur.snapshot(live, live::draw));
+            } else {
+                float scale = Math.min(1f, (float) MAX_EDGE / Math.max(live.getWidth(), live.getHeight()));
+                Bitmap raw = Bitmap.createBitmap(Math.max(1, Math.round(live.getWidth() * scale)),
+                        Math.max(1, Math.round(live.getHeight() * scale)), Bitmap.Config.ARGB_8888);
+                try {
+                    Canvas canvas = new Canvas(raw);
+                    canvas.scale(scale, scale);
+                    live.draw(canvas);
+                    saveSnapshot(raw);
+                } catch (RuntimeException | OutOfMemoryError failure) {
+                    raw.recycle();
+                    throw failure;
+                }
+            }
         } catch (RuntimeException | OutOfMemoryError ignored) { /* Keep the normal UI. */ }
     }
 
-    private void saveBlurred(Bitmap bitmap) {
-        if (bitmap == null) return;
-        // Store only softened, darkened pixels, including on Android before API 31.
-        new Canvas(bitmap).drawColor(Color.argb(55, 0, 0, 0));
+    private void saveSnapshot(Bitmap bitmap) {
         IO.execute(() -> {
-            write(file, bitmap);
-            bitmap.recycle();
+            try {
+                GalleryPreviewBlur.soften(bitmap, 6);
+                new Canvas(bitmap).drawColor(Color.argb(45, 0, 0, 0));
+                write(file, bitmap);
+            } catch (RuntimeException | OutOfMemoryError ignored) {
+                // Decorative failure leaves live content and any previous file untouched.
+            } finally { bitmap.recycle(); }
         });
     }
 
@@ -204,12 +226,12 @@ final class ColdTabSnapshot implements ViewTreeObserver.OnPreDrawListener,
         try {
             AtomicFile atomic = new AtomicFile(file);
             try (java.io.FileInputStream input = atomic.openRead()) {
-                if (input.getChannel().size() > 32_768) return null;
+                if (input.getChannel().size() > 262_144) return null;
                 BitmapFactory.Options bounds = new BitmapFactory.Options();
                 bounds.inJustDecodeBounds = true;
                 BitmapFactory.decodeStream(input, null, bounds);
                 if (bounds.outWidth <= 0 || bounds.outHeight <= 0
-                        || bounds.outWidth > 128 || bounds.outHeight > 128) return null;
+                        || bounds.outWidth > MAX_EDGE || bounds.outHeight > MAX_EDGE) return null;
             }
             try (java.io.FileInputStream input = atomic.openRead()) {
                 return BitmapFactory.decodeStream(input);
@@ -222,7 +244,7 @@ final class ColdTabSnapshot implements ViewTreeObserver.OnPreDrawListener,
         FileOutputStream output = null;
         try {
             output = atomic.startWrite();
-            if (!bitmap.compress(Bitmap.CompressFormat.JPEG, 65, output)) {
+            if (!bitmap.compress(Bitmap.CompressFormat.JPEG, 82, output)) {
                 throw new java.io.IOException("Snapshot compression failed");
             }
             atomic.finishWrite(output);

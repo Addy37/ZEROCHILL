@@ -23,6 +23,8 @@ jobs:
           --tests 'com.webapp.crazyshit.ColdTabSnapshotTest'
           --tests 'com.webapp.crazyshit.OnlyFapDiscoverLifecycleTest'
           --tests 'com.webapp.crazyshit.ShowsHubStateTest'
+          --tests 'com.webapp.crazyshit.GalleryMediaRevealTest.blurSnapshotKeepsPreviewBlurSeparateFromSharpFullImage'
+          --tests 'com.webapp.crazyshit.GalleryMediaRevealTest.olderAndroidBlurSoftensOwnedSnapshotWithoutModifyingSourcePixels'
       - name: Debug build
         run: gradle --no-daemon :app:assembleDebug
       - uses: actions/upload-artifact@v4
