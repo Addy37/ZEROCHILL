@@ -527,9 +527,9 @@ public class VisualRefreshTest {
     @Test public void searchResultsLeaveRoomForTheKeyboardAndOpenTheCreator() throws Exception {
         ActivityController<SearchActivity> screen = Robolectric.buildActivity(SearchActivity.class).create().start().resume();
         CreatorCatalog.remember(screen.get(), Collections.singletonList(creator()));
-        EditText input = ReflectionHelpers.getField(screen.get(), "input");
+        EditText input = ReflectionHelpers.getField(screen.get().panel, "input");
         input.setText("Alex");
-        CreatorSuggestionsController suggestions = ReflectionHelpers.getField(screen.get(), "suggestions");
+        CreatorSuggestionsController suggestions = ReflectionHelpers.getField(screen.get().panel, "suggestions");
         suggestions.refreshLocal();
         CreatorListAdapter adapter = ReflectionHelpers.getField(suggestions, "adapter");
         long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(3);

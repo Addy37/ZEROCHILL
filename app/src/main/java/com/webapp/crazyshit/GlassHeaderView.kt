@@ -8,6 +8,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -17,12 +20,12 @@ import androidx.compose.ui.unit.dp
 import com.webapp.crazyshit.glass.*
 
 /** Native controls stay above a single pane sampling the navbar's live page recording. */
-internal class GlassHeaderView(private val activity: Activity, controls: View) : FrameLayout(activity) {
+internal class GlassHeaderView(private val activity: Activity, private val controls: View) : FrameLayout(activity) {
     private val glass = ComposeView(activity).apply {
         importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO
         setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnDetachedFromWindow)
     }
-    private var backdrop: ViewPageBackdrop? = null
+    private var backdrop by mutableStateOf<ViewPageBackdrop?>(null)
 
     init {
         setBackgroundColor(android.graphics.Color.TRANSPARENT)
@@ -31,6 +34,17 @@ internal class GlassHeaderView(private val activity: Activity, controls: View) :
         addView(glass, LayoutParams(-1, -1))
         controls.setBackgroundColor(android.graphics.Color.TRANSPARENT)
         addView(controls, LayoutParams(-1, -1))
+    }
+
+    override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+        if (View.MeasureSpec.getMode(heightMeasureSpec) != View.MeasureSpec.EXACTLY) {
+            // Search wraps its native controls; the fill-sized Compose pane must not
+            // choose the height of the whole available window.
+            controls.measure(widthMeasureSpec,
+                View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED))
+            super.onMeasure(widthMeasureSpec, View.MeasureSpec.makeMeasureSpec(
+                controls.measuredHeight, View.MeasureSpec.EXACTLY))
+        } else super.onMeasure(widthMeasureSpec, heightMeasureSpec)
     }
 
     fun setGlassEnabled(enabled: Boolean) {

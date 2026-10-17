@@ -169,7 +169,7 @@ internal class SquareNavigationBridge(private val nav: ZeroChillBottomNavigation
 }
 
 /** A navbar-local lifecycle for the existing android.app.Activity host. */
-private class NavOwner(private val activity: Activity) : SavedStateRegistryOwner,
+internal class NavOwner(private val activity: Activity) : SavedStateRegistryOwner,
     Application.ActivityLifecycleCallbacks {
     override val lifecycle = LifecycleRegistry(this)
     private val state = SavedStateRegistryController.create(this)
