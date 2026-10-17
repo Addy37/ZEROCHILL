@@ -544,7 +544,7 @@ public class VisualRefreshTest {
         TextView action = ReflectionHelpers.getField(suggestions, "searchAll");
         assertEquals(View.VISIBLE, action.getVisibility());
         assertTrue(action.getHeight() >= BrowseUi.dp(screen.get(), 48));
-        assertEquals(View.GONE, ((View) ReflectionHelpers.getField(screen.get(), "filterBar")).getVisibility());
+        assertEquals(View.GONE, ((View) ReflectionHelpers.getField(screen.get().panel, "filterBar")).getVisibility());
         CreatorListAdapter.Holder row = adapter.onCreateViewHolder(new RecyclerView(screen.get()), 0);
         adapter.onBindViewHolder(row, 0); row.itemView.performClick();
         assertEquals(NativeFeedBrowserActivity.class.getName(), shadowOf(screen.get()).getNextStartedActivity().getComponent().getClassName());
