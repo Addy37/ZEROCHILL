@@ -31,6 +31,7 @@ final class OnlyHavenRepository {
         final String name;
         final String url;
         final String imageUrl;
+        final String headerImageUrl;
         final int postCount;
         final int dmCount;
 
@@ -47,6 +48,12 @@ final class OnlyHavenRepository {
                 int postCount,
                 int dmCount
         ) {
+            this(service, id, name, url, imageUrl, postCount, dmCount, "");
+        }
+
+        Creator(String service, String id, String name, String url, String imageUrl,
+                int postCount, int dmCount, String headerImageUrl) {
+            this.headerImageUrl = cleanStatic(headerImageUrl);
             this.service = cleanStatic(service);
             this.id = cleanStatic(id);
             this.name = cleanStatic(name);
@@ -233,7 +240,7 @@ final class OnlyHavenRepository {
                 String key = service.toLowerCase(Locale.US) + ":" + id.toLowerCase(Locale.US);
                 result.putIfAbsent(
                         key,
-                        new Creator(service, id, name, url, image, postCount, dmCount)
+                        new Creator(service, id, name, url, image, postCount, dmCount, creatorHeaderImage(config, row))
                 );
             }
             return new ArrayList<>(result.values());
@@ -431,50 +438,17 @@ final class OnlyHavenRepository {
         return "";
     }
 
-    String creatorHeaderUrl(Creator creator) throws IOException {
-        if (creator == null || clean(creator.service).isEmpty() || clean(creator.id).isEmpty()) {
-            return "";
-        }
-        return creatorHeaderUrl(config(), creator);
+    String creatorHeaderUrl(Creator creator) {
+        return creator == null ? "" : creator.headerImageUrl;
     }
 
-    String creatorHeaderUrl(SourceConfig.OnlyHaven config, Creator creator) throws IOException {
-        String prefix = imageBase(config) + "creator/" + urlToken(creator.service) + "/";
-        String url = prefix + urlToken(creator.id) + "/header.webp";
-        byte[] header = fetchHeaderImage(config, url, false);
-        // The CDN can return a successful site placeholder for an absent header.
-        // Compare actual content, not dimensions, creator names, or a fixed asset hash.
-        // This reserved non-creator key uses the same configured CDN and route.
-        byte[] missing = fetchHeaderImage(config,
-                prefix + "__zerochill_missing_creator_header__/header.webp", true);
-        return isCreatorHeader(header, missing) ? url : "";
-    }
-
-    static boolean isCreatorHeader(byte[] header, byte[] missing) {
-        return header != null && header.length > 0
-                && (missing == null || !java.util.Arrays.equals(header, missing));
-    }
-
-    private byte[] fetchHeaderImage(SourceConfig.OnlyHaven config, String url, boolean probe)
-            throws IOException {
-        Connection connection = Jsoup.connect(url)
-                .userAgent(config.userAgent)
-                .referrer(config.refererOverride.isEmpty() ? config.baseUrl : config.refererOverride)
-                .timeout(config.requestTimeoutMs)
-                .maxBodySize(4 * 1024 * 1024)
-                .followRedirects(true)
-                .ignoreContentType(true)
-                .ignoreHttpErrors(true);
-        for (Map.Entry<String, String> header : config.requestHeaders.entrySet()) {
-            connection.header(header.getKey(), header.getValue());
-        }
-        Connection.Response response = connection.execute();
-        if (probe && (response.statusCode() == 404 || response.statusCode() == 410)) return null;
-        String type = response.contentType();
-        if (response.statusCode() != 200 || type == null || !type.startsWith("image/")) {
-            throw new IOException("OnlyHaven header image unavailable");
-        }
-        return response.bodyAsBytes();
+    private String creatorHeaderImage(SourceConfig.OnlyHaven config, JSONObject row) {
+        // Only an explicit content-addressed header from creator metadata is evidence
+        // of custom artwork. The per-creator CDN endpoint also serves site placeholders.
+        String hash = firstJsonText(row, "headerThumbhash", "header_thumbhash");
+        if (!hash.matches("[a-zA-Z0-9_-]{16,128}")) return "";
+        if (row.has("hasHeader") && !row.optBoolean("hasHeader")) return "";
+        return imageBase(config) + "thumbnail/" + hash + "/preview.webp";
     }
 
     private String imageBase(SourceConfig.OnlyHaven config) {
