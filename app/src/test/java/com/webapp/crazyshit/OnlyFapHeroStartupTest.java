@@ -93,7 +93,10 @@ public class OnlyFapHeroStartupTest {
         ReflectionHelpers.setField(hub, "heroSelectionLoading", true);
     }
 
-    @After public void close() { if (hub != null) hub.close(); }
+    @After public void close() {
+        if (hub != null) hub.close();
+        Glide.tearDown(); // Do not leak the fake image loader into other tests.
+    }
 
     @Test public void rememberedHeroDisplaysFromGlideCacheBeforeDiscoveryAndFreshReplacesIt() throws Exception {
         NativeContentItem previous = creator("Previous", "previous", IMAGE);
