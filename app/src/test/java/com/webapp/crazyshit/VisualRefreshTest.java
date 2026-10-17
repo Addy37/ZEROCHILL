@@ -134,6 +134,8 @@ public class VisualRefreshTest {
         LinearLayout shell = ReflectionHelpers.getField(main, "shell");
         assertTrue(shell instanceof FrostedNavigationLayout);
         View topBar = shell.getChildAt(0);
+        assertTrue(topBar instanceof GlassHeaderView);
+        topBar = ((android.view.ViewGroup) topBar).getChildAt(1);
         assertTrue(topBar instanceof LinearLayout);
         assertEquals(4, ((LinearLayout) topBar).getChildCount());
         View search = ((LinearLayout) topBar).getChildAt(1);

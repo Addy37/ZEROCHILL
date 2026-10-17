@@ -8,11 +8,21 @@ import android.view.View;
 import android.view.WindowInsets;
 import android.widget.LinearLayout;
 
-/** Records the live View page once, excluding the Compose navbar that samples it. */
+/** Records the live page once, excluding both glass surfaces that sample it. */
 final class FrostedNavigationLayout extends LinearLayout {
     private final ViewPageBackdrop pageBackdrop = new ViewPageBackdrop(this);
     private boolean pageDirty = true;
     private View navigationView;
+    private GlassHeaderView headerView;
+    private View headerUnderlayView;
+
+    void setFrostedHeaderView(GlassHeaderView header) {
+        headerView = header;
+        header.setPageBackdrop(pageBackdrop);
+        pageDirty = true;
+    }
+
+    void setHeaderUnderlayView(View content) { headerUnderlayView = content; }
 
     FrostedNavigationLayout(Context context) {
         super(context);
@@ -63,18 +73,20 @@ final class FrostedNavigationLayout extends LinearLayout {
                 });
             }
             if (pageBackdrop.drawPage(canvas)) {
+                drawHeader(canvas);
                 drawChild(canvas, navigationView, getDrawingTime());
                 return;
             }
         }
         drawContentChildren(canvas, navigationView, getDrawingTime());
+        drawHeader(canvas);
         if (navigationView != null && navigationView.getVisibility() == VISIBLE) {
             drawChild(canvas, navigationView, getDrawingTime());
         }
     }
 
     @Override public void onDescendantInvalidated(View child, View target) {
-        if (child != navigationView) pageDirty = true;
+        if (child != navigationView && child != headerView) pageDirty = true;
         super.onDescendantInvalidated(child, target);
     }
 
@@ -94,14 +106,22 @@ final class FrostedNavigationLayout extends LinearLayout {
         super.onDetachedFromWindow();
     }
 
+    private void drawHeader(Canvas canvas) {
+        if (headerView != null && headerView.getVisibility() == VISIBLE) {
+            drawChild(canvas, headerView, getDrawingTime());
+        }
+    }
+
     private void drawContentChildren(Canvas canvas, View navigation, long drawingTime) {
         for (int index = 0; index < getChildCount(); index++) {
             View child = getChildAt(index);
-            if (child != navigation && child.getVisibility() != View.GONE) {
-                // Keep Astra's content clipping while allowing only navigation to
-                // protrude. Disabling clipping for every page would change its UI.
+            if (child != navigation && child != headerView && child.getVisibility() != View.GONE) {
+                // Only primary content may draw upward into the pinned header slot.
+                // Keep the existing side/bottom clipping and system inset boundary.
                 int checkpoint = canvas.save();
-                canvas.clipRect(child.getLeft(), child.getTop(), child.getRight(), child.getBottom());
+                int top = child == headerUnderlayView && headerView != null
+                        && headerView.getVisibility() == VISIBLE ? headerView.getTop() : child.getTop();
+                canvas.clipRect(child.getLeft(), top, child.getRight(), child.getBottom());
                 drawChild(canvas, child, drawingTime);
                 canvas.restoreToCount(checkpoint);
             }

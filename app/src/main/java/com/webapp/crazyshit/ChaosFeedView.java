@@ -271,13 +271,22 @@ public final class ChaosFeedView extends FrameLayout {
     private void buildUi() {
         pager = new ViewPager2(activity);
         pager.setOrientation(ViewPager2.ORIENTATION_VERTICAL);
+        // Let outgoing/incoming pages draw beneath the pinned header without resizing
+        // the paging viewport or touching media fitting and playback ownership.
+        setClipChildren(false);
+        pager.setClipChildren(false);
+        pager.setClipToPadding(false);
         pager.setOffscreenPageLimit(1);
         adapter = new ChaosAdapter();
         pager.setAdapter(adapter);
         addView(pager, new FrameLayout.LayoutParams(-1, -1));
 
         RecyclerView rv = pagerRecycler();
-        if (rv != null) rv.setItemViewCacheSize(3);
+        if (rv != null) {
+            rv.setItemViewCacheSize(3);
+            rv.setClipChildren(false);
+            rv.setClipToPadding(false);
+        }
 
         initialProgress = new ZeroChillProgressBar(activity);
         FrameLayout.LayoutParams pp = new FrameLayout.LayoutParams(dp(48), dp(48));

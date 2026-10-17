@@ -95,15 +95,7 @@ internal class SquareNavigationBridge(private val nav: ZeroChillBottomNavigation
         val externalPosition = remember { { position.floatValue } }
         val shell = rememberLayerBackdrop()
         val config = remember {
-            val clearGlass = GlassEffectConfig(
-                blurRadius = .7f,
-                surfaceOpacity = .16f,
-                lensHeight = .44f,
-                centerMagnification = 1.025f,
-            )
-            if (BuildConfig.DEBUG && activity.intent.getBooleanExtra("probe_no_lens", false))
-                clearGlass.copy(lensHeight = 0f, lensAmount = 0f, centerMagnification = 1f)
-            else clearGlass
+            navigationGlassConfig(activity)
         }
         val shape = remember { RoundedCornerShape(50) }
         val height = (61f - 11f * collapse.floatValue).dp
@@ -199,4 +191,17 @@ private class NavOwner(private val activity: Activity) : SavedStateRegistryOwner
         activity.application.unregisterActivityLifecycleCallbacks(this)
         lifecycle.currentState = Lifecycle.State.DESTROYED
     }
+}
+
+/** One material definition for the navigation shell and pinned primary header. */
+internal fun navigationGlassConfig(activity: Activity): GlassEffectConfig {
+    val clearGlass = GlassEffectConfig(
+        blurRadius = .7f,
+        surfaceOpacity = .16f,
+        lensHeight = .44f,
+        centerMagnification = 1.025f,
+    )
+    return if (BuildConfig.DEBUG && activity.intent.getBooleanExtra("probe_no_lens", false))
+        clearGlass.copy(lensHeight = 0f, lensAmount = 0f, centerMagnification = 1f)
+    else clearGlass
 }

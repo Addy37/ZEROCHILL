@@ -58,6 +58,8 @@ data class GlassEffectConfig(
     val lensAmount: Float = 0.6f,
     /** Local optical thickening; 1 keeps Square's original edge-only lens. */
     val centerMagnification: Float = 1f,
+    /** Full-width headers have no exposed left/right glass edges. */
+    val lensSideEdges: Boolean = true,
     val chromaticAberration: Boolean = false,
     val depthEffect: Boolean = false,
     /**
@@ -595,6 +597,7 @@ fun Modifier.liquidGlass(
         config.depthEffect,
         config.chromaticAberration,
         config.centerMagnification,
+        config.lensSideEdges,
     ) {
         {
             if (saturation != 1f) {
@@ -632,6 +635,7 @@ fun Modifier.liquidGlass(
                     depthEffect = config.depthEffect,
                     chromaticAberration = config.chromaticAberration,
                     magnification = config.centerMagnification,
+                    sideEdges = config.lensSideEdges,
                 )
             }
         }

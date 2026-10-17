@@ -79,6 +79,7 @@ uniform float refractionHeight;
 uniform float refractionAmount;
 uniform float depthEffect;
 uniform float magnification;
+uniform float sideEdges;
 
 $RoundedRectSDF
 $CenterLens
@@ -93,7 +94,10 @@ half4 main(float2 coord) {
     float radius = radiusAt(coord, cornerRadii);
 
     float2 lensCoord = magnifiedCoord(coord, centeredCoord, halfSize, magnification);
-    float sd = sdRoundedRect(centeredCoord, halfSize, radius);
+    // A screen-wide pane continues beyond the display sides. Only its horizontal
+    // edges bend light; sampling outward at x=0/width creates stretched side bands.
+    float sd = sideEdges > 0.5 ? sdRoundedRect(centeredCoord, halfSize, radius)
+        : abs(centeredCoord.y) - halfSize.y;
     if (-sd >= refractionHeight) {
         return content.eval(lensCoord);
     }
@@ -101,7 +105,9 @@ half4 main(float2 coord) {
 
     float d = circleMap(1.0 - -sd / refractionHeight) * refractionAmount;
     float gradRadius = min(radius * 1.5, min(halfSize.x, halfSize.y));
-    float2 grad = normalize(gradSdRoundedRect(centeredCoord, halfSize, gradRadius) + depthEffect * normalize(centeredCoord));
+    float2 grad = sideEdges > 0.5
+        ? normalize(gradSdRoundedRect(centeredCoord, halfSize, gradRadius) + depthEffect * normalize(centeredCoord))
+        : float2(0.0, sign(centeredCoord.y));
 
     float2 refractedCoord = lensCoord + d * grad;
     return content.eval(refractedCoord);
@@ -118,6 +124,7 @@ uniform float refractionHeight;
 uniform float refractionAmount;
 uniform float depthEffect;
 uniform float magnification;
+uniform float sideEdges;
 uniform float chromaticAberration;
 
 $RoundedRectSDF
@@ -133,7 +140,10 @@ half4 main(float2 coord) {
     float radius = radiusAt(coord, cornerRadii);
 
     float2 lensCoord = magnifiedCoord(coord, centeredCoord, halfSize, magnification);
-    float sd = sdRoundedRect(centeredCoord, halfSize, radius);
+    // A screen-wide pane continues beyond the display sides. Only its horizontal
+    // edges bend light; sampling outward at x=0/width creates stretched side bands.
+    float sd = sideEdges > 0.5 ? sdRoundedRect(centeredCoord, halfSize, radius)
+        : abs(centeredCoord.y) - halfSize.y;
     if (-sd >= refractionHeight) {
         return content.eval(lensCoord);
     }
@@ -141,7 +151,9 @@ half4 main(float2 coord) {
 
     float d = circleMap(1.0 - -sd / refractionHeight) * refractionAmount;
     float gradRadius = min(radius * 1.5, min(halfSize.x, halfSize.y));
-    float2 grad = normalize(gradSdRoundedRect(centeredCoord, halfSize, gradRadius) + depthEffect * normalize(centeredCoord));
+    float2 grad = sideEdges > 0.5
+        ? normalize(gradSdRoundedRect(centeredCoord, halfSize, gradRadius) + depthEffect * normalize(centeredCoord))
+        : float2(0.0, sign(centeredCoord.y));
 
     float2 refractedCoord = lensCoord + d * grad;
     float dispersionIntensity = chromaticAberration * ((centeredCoord.x * centeredCoord.y) / (halfSize.x * halfSize.y));

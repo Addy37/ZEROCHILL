@@ -246,7 +246,10 @@ final class StableBottomNavigationController {
             TextView title = field(activity, "headerTitle", TextView.class);
             TextView subtitle = field(activity, "headerSubtitle", TextView.class);
 
-            topBar.setBackgroundColor(ZeroChillUi.background(activity));
+            // The live header owns its material and platform fallback background.
+            if (!(topBar instanceof GlassHeaderView)) {
+                topBar.setBackgroundColor(ZeroChillUi.background(activity));
+            }
             topBar.setElevation(0f);
             if (title != null) {
                 title.setTextSize(22f);

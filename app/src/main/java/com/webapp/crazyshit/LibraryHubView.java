@@ -189,7 +189,7 @@ final class LibraryHubView extends ScrollView {
         requestedThumbnails.retainAll(thumbnailTargets.keySet());
         post(() -> {
             if (closed) return;
-            scrollTo(0, Math.min(scrollY, Math.max(0, content.getHeight() - getHeight())));
+            scrollTo(0, Math.min(scrollY, Math.max(0, content.getHeight() + getPaddingTop() + getPaddingBottom() - getHeight())));
             for (int i = 0; i < mediaContent.getChildCount(); i++) {
                 View section = mediaContent.getChildAt(i);
                 Integer x = railPositions.get(String.valueOf(section.getTag()));

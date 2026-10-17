@@ -19,6 +19,7 @@ import android.view.HapticFeedbackConstants;
 import android.view.Menu;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.ViewGroup;
 import android.view.ViewConfiguration;
 import android.view.WindowInsets;
 import android.webkit.CookieManager;
@@ -199,7 +200,8 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         });
         overlayRoot.addView(shell, new FrameLayout.LayoutParams(-1, -1));
 
-        topBar = buildTopBar();
+        topBar = new GlassHeaderView(this, buildTopBar());
+        ((FrostedNavigationLayout) shell).setFrostedHeaderView((GlassHeaderView) topBar);
         shell.addView(topBar, new LinearLayout.LayoutParams(
                 -1,
                 ZeroChillUi.dimension(this, R.dimen.zc_top_bar_height)
@@ -266,6 +268,11 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
 
         primaryPager = new ViewPager2(this);
         primaryPager.setOrientation(ViewPager2.ORIENTATION_HORIZONTAL);
+        primaryPager.setClipChildren(false);
+        primaryPager.setClipToPadding(false);
+        ((ViewGroup) primaryPager.getChildAt(0)).setClipChildren(false);
+        ((ViewGroup) primaryPager.getChildAt(0)).setClipToPadding(false);
+        ((FrostedNavigationLayout) shell).setHeaderUnderlayView(primaryPager);
         // Content gestures belong to content. Primary tab swipes are handled only by the
         // bottom navigation pill so shelves, galleries and scrubbers never fight the pager.
         primaryPager.setUserInputEnabled(false);
@@ -587,6 +594,8 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     }
 
     private void showPagerChrome(int position) {
+        ((GlassHeaderView) topBar).setGlassEnabled(position == MainPagerAdapter.PAGE_SERIES
+                || position == MainPagerAdapter.PAGE_CHAOS || position == MainPagerAdapter.PAGE_LIBRARY);
         // Preserve the current compact/expanded nav state across tab switches.
         // Vertical content movement, not primary-tab selection, owns this animation.
         if (navigationMotion != null) navigationMotion.setActivePage(position);
@@ -810,6 +819,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     }
 
     private void showLegacyContent() {
+        ((GlassHeaderView) topBar).setGlassEnabled(false);
         exitChaosFullscreenChrome();
         if (navigationMotion != null) navigationMotion.setActivePage(MainPagerAdapter.PAGE_HOME);
         if (primaryPager != null) {

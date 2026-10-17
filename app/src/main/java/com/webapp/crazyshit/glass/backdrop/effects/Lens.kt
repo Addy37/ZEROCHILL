@@ -28,6 +28,7 @@ fun BackdropEffectScope.lens(
     chromaticAberration: Boolean = false,
     // Local center bulge, with a smooth falloff to the unchanged perimeter.
     @FloatRange(from = 1.0, to = 1.2) magnification: Float = 1f,
+    sideEdges: Boolean = true,
 ) {
     if (!isRuntimeShaderSupported()) return
     if (refractionHeight <= 0f || refractionAmount <= 0f) return
@@ -52,6 +53,7 @@ fun BackdropEffectScope.lens(
                     )
                 }
             shader.apply {
+                setFloatUniform("sideEdges", if (sideEdges) 1f else 0f)
                 setFloatUniform("size", size.width, size.height)
                 setFloatUniform("offset", -padding, -padding)
                 setFloatUniform("cornerRadii", cornerRadii)
