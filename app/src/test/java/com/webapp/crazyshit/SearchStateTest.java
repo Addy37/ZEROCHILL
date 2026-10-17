@@ -29,7 +29,7 @@ public class SearchStateTest {
         ActivityController<SearchActivity> controller =
                 Robolectric.buildActivity(SearchActivity.class, intent).create().start().resume();
 
-        RecyclerView recycler = ReflectionHelpers.getField(controller.get(), "recycler");
+        RecyclerView recycler = ReflectionHelpers.getField(controller.get().panel, "recycler");
         assertTrue(recycler.getAdapter() instanceof OnlyFapCreatorSearchAdapter);
 
         controller.pause().stop().destroy();
@@ -39,7 +39,7 @@ public class SearchStateTest {
         ActivityController<SearchActivity> controller =
                 Robolectric.buildActivity(SearchActivity.class).create().start().resume();
         try {
-            SearchActivity activity = controller.get();
+            SearchPanel activity = controller.get().panel;
             @SuppressWarnings("unchecked")
             List<TextView> filters = ReflectionHelpers.getField(activity, "filterViews");
             TextView onlyFap = null;
@@ -81,12 +81,12 @@ public class SearchStateTest {
     @Test public void restoringFapzoneSearchKeepsTextWithoutOpeningAnAlbum() {
         Intent intent = new Intent(RuntimeEnvironment.getApplication(), SearchActivity.class).putExtra("scope", "bunkr");
         ActivityController<SearchActivity> original = Robolectric.buildActivity(SearchActivity.class, intent).create().start().resume();
-        EditText input = ReflectionHelpers.getField(original.get(), "input");
+        EditText input = ReflectionHelpers.getField(original.get().panel, "input");
         input.setText("ann");
         Bundle state = new Bundle();
         original.pause().saveInstanceState(state).stop().destroy();
         ActivityController<SearchActivity> restored = Robolectric.buildActivity(SearchActivity.class, intent).create(state).start().resume();
-        assertEquals("ann", ((EditText) ReflectionHelpers.getField(restored.get(), "input")).getText().toString());
+        assertEquals("ann", ((EditText) ReflectionHelpers.getField(restored.get().panel, "input")).getText().toString());
         assertNull(shadowOf(restored.get()).getNextStartedActivity());
         restored.pause().stop().destroy();
     }

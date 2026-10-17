@@ -13,6 +13,19 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(application = Application::class, sdk = [35])
 class HeaderGlassMaterialTest {
+    @Test fun resultsSoftenTheBackdropWithoutChangingOtherGlassOptics() {
+        val controller = Robolectric.buildActivity(Activity::class.java).setup()
+        val activity = controller.get()
+        val header = headerGlassConfig(activity)
+        val results = searchResultsGlassConfig(activity)
+        assertEquals(12f, results.blurRadius)
+        assertEquals(.40f, results.surfaceOpacity)
+        assertEquals(Color.Black, results.surfaceTintColor)
+        assertEquals(header, results.copy(blurRadius = header.blurRadius,
+            surfaceOpacity = header.surfaceOpacity))
+        controller.pause().stop().destroy()
+    }
+
     @Test fun headerUsesBlackFilmWithoutChangingNavbarOptics() {
         val controller = Robolectric.buildActivity(Activity::class.java).setup()
         val activity = controller.get()

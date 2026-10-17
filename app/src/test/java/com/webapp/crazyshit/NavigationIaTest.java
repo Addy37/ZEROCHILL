@@ -183,8 +183,10 @@ public class NavigationIaTest {
 
         search.performClick();
         Intent searchIntent = shadowOf(activity).getNextStartedActivity();
-        assertEquals(SearchActivity.class.getName(),
-                searchIntent.getComponent().getClassName());
+        assertNull(searchIntent);
+        SearchPanel panel = ReflectionHelpers.getField(activity, "searchPanel");
+        assertNotNull(panel);
+        assertEquals("Search creators", panel.field().getHint().toString());
 
         android.widget.TextView title = ReflectionHelpers.getField(activity, "headerTitle");
         assertEquals("OnlyFap", title.getText().toString());

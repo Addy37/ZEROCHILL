@@ -525,11 +525,11 @@ public class VisualRefreshTest {
     }
 
     @Test public void searchResultsLeaveRoomForTheKeyboardAndOpenTheCreator() throws Exception {
-        ActivityController<SearchActivity> screen = Robolectric.buildActivity(SearchActivity.class).create().start().resume();
+        ActivityController<SearchActivity> screen = Robolectric.buildActivity(SearchActivity.class).create().start().resume().visible();
         CreatorCatalog.remember(screen.get(), Collections.singletonList(creator()));
-        EditText input = ReflectionHelpers.getField(screen.get(), "input");
+        EditText input = ReflectionHelpers.getField(screen.get().panel, "input");
         input.setText("Alex");
-        CreatorSuggestionsController suggestions = ReflectionHelpers.getField(screen.get(), "suggestions");
+        CreatorSuggestionsController suggestions = ReflectionHelpers.getField(screen.get().panel, "suggestions");
         suggestions.refreshLocal();
         CreatorListAdapter adapter = ReflectionHelpers.getField(suggestions, "adapter");
         long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(3);
@@ -539,12 +539,15 @@ public class VisualRefreshTest {
         }
         assertEquals(1, adapter.getItemCount());
         View root = ((android.view.ViewGroup) screen.get().findViewById(android.R.id.content)).getChildAt(0);
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(220));
         capture(root, "creator-search", 411, 891);
         capture(root, "creator-search-keyboard-space", 360, 380);
+        RecyclerView suggestionList = ReflectionHelpers.getField(suggestions, "recycler");
+        assertTrue(suggestionList.getHeight() - suggestionList.getPaddingTop() >= BrowseUi.dp(screen.get(), 72));
         TextView action = ReflectionHelpers.getField(suggestions, "searchAll");
         assertEquals(View.VISIBLE, action.getVisibility());
         assertTrue(action.getHeight() >= BrowseUi.dp(screen.get(), 48));
-        assertEquals(View.GONE, ((View) ReflectionHelpers.getField(screen.get(), "filterBar")).getVisibility());
+        assertEquals(View.GONE, ((View) ReflectionHelpers.getField(screen.get().panel, "filterBar")).getVisibility());
         CreatorListAdapter.Holder row = adapter.onCreateViewHolder(new RecyclerView(screen.get()), 0);
         adapter.onBindViewHolder(row, 0); row.itemView.performClick();
         assertEquals(NativeFeedBrowserActivity.class.getName(), shadowOf(screen.get()).getNextStartedActivity().getComponent().getClassName());

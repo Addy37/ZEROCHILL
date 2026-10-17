@@ -202,7 +202,7 @@ public class OnlyFapFavoriteAvatarTest {
         hub.refreshFavorites();
         try {
             java.util.concurrent.ExecutorService io = org.robolectric.util.ReflectionHelpers
-                    .getField(hub, "heroIo");
+                    .getField(hub, "metadataIo");
             io.submit(() -> {}).get(5, java.util.concurrent.TimeUnit.SECONDS);
             org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
             org.robolectric.util.ReflectionHelpers.setField(hub, "active", false);

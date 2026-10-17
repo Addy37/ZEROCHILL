@@ -19,6 +19,7 @@ import com.webapp.crazyshit.glass.backdrop.internal.InverseLayerScope
 class ViewPageBackdrop(private val source: View) : Backdrop {
     private val node = if (Build.VERSION.SDK_INT >= 29) RenderNode("ZEROCHILL page backdrop") else null
     private val location = IntArray(2)
+    private val targetLocation = IntArray(2)
     private val inverse = InverseLayerScope()
     private val revision = mutableIntStateOf(0)
     private var recorded = false
@@ -40,6 +41,18 @@ class ViewPageBackdrop(private val source: View) : Backdrop {
         if (!canvas.isHardwareAccelerated || !recorded) return false
         node?.let { canvas.drawRenderNode(it) }
         return true
+    }
+
+    /** Reuse the recorded native page in another overlay's window coordinates. */
+    fun drawPageInto(canvas: Canvas, target: View): Boolean {
+        source.getLocationInWindow(location)
+        target.getLocationInWindow(targetLocation)
+        val checkpoint = canvas.save()
+        canvas.translate((location[0] - targetLocation[0]).toFloat(),
+            (location[1] - targetLocation[1]).toFloat())
+        val drawn = drawPage(canvas)
+        canvas.restoreToCount(checkpoint)
+        return drawn
     }
 
     override val isCoordinatesDependent = true

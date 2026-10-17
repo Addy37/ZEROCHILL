@@ -22,6 +22,8 @@ final class FrostedNavigationLayout extends LinearLayout {
         pageDirty = true;
     }
 
+    ViewPageBackdrop pageBackdropForOverlay() { return pageBackdrop; }
+
     void setHeaderUnderlayView(View content) { headerUnderlayView = content; }
 
     FrostedNavigationLayout(Context context) {
@@ -62,8 +64,9 @@ final class FrostedNavigationLayout extends LinearLayout {
     @Override
     protected void dispatchDraw(Canvas canvas) {
         if (Build.VERSION.SDK_INT >= 29 && canvas.isHardwareAccelerated() &&
-                navigationView != null && navigationView.getVisibility() == VISIBLE &&
-                navigationView.getAlpha() > 0f && getWindowVisibility() == VISIBLE &&
+                ((navigationView != null && navigationView.getVisibility() == VISIBLE &&
+                navigationView.getAlpha() > 0f) ||
+                (headerView != null && headerView.getVisibility() == VISIBLE)) && getWindowVisibility() == VISIBLE &&
                 getWidth() > 0 && getHeight() > 0) {
             if (pageDirty) {
                 pageDirty = false;
@@ -74,7 +77,8 @@ final class FrostedNavigationLayout extends LinearLayout {
             }
             if (pageBackdrop.drawPage(canvas)) {
                 drawHeader(canvas);
-                drawChild(canvas, navigationView, getDrawingTime());
+                if (navigationView != null && navigationView.getVisibility() == VISIBLE)
+                    drawChild(canvas, navigationView, getDrawingTime());
                 return;
             }
         }

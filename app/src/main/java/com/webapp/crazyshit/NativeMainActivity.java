@@ -133,6 +133,9 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         }
         appUpdater = new AppUpdater(this);
         configureBack();
+        if (state != null && state.containsKey("search_panel")) {
+            overlayRoot.post(() -> openContextualSearch(state.getBundle("search_panel")));
+        }
 
         if (!AccessNoticeDialog.isAccepted(this)) {
             AccessNoticeDialog.show(this, this::startAppContent);
@@ -234,6 +237,10 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
             @Override
             public void onOpenComments(NativeContentItem item) {
                 openComments(item);
+            }
+
+            @Override public void onSearch(View anchor) {
+                openContextualSearchFrom(anchor);
             }
 
             @Override
@@ -500,6 +507,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         bar.addView(labels, new LinearLayout.LayoutParams(0, -2, 1f));
 
         ImageView search = new ImageView(this);
+        headerSearchControl = search;
         search.setImageResource(R.drawable.ic_nav_search);
         search.setPadding(dp(10), dp(10), dp(10), dp(10));
         search.setContentDescription("Search");
@@ -553,11 +561,75 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
                 currentPrimaryPage() == MainPagerAdapter.PAGE_ONLYFAP;
     }
 
+    private SearchPanel searchPanel;
+    private View headerSearchControl;
+    private boolean searchClosing;
+    private View searchOrigin;
+    private View searchOriginBar;
+    private int searchSoftInputMode;
+
     void openContextualSearch() {
+        openContextualSearch((Bundle) null);
+    }
+
+    private void openContextualSearchFrom(View anchor) {
+        searchOrigin = anchor;
+        openContextualSearch((Bundle) null);
+    }
+
+    private View visibleSearchControl(View root) {
+        if (root.isShown() && "Search OnlyFap creators".contentEquals(
+                root.getContentDescription() == null ? "" : root.getContentDescription())) return root;
+        if (root instanceof android.view.ViewGroup) {
+            android.view.ViewGroup group = (android.view.ViewGroup) root;
+            for (int i = 0; i < group.getChildCount(); i++) {
+                View found = visibleSearchControl(group.getChildAt(i));
+                if (found != null) return found;
+            }
+        }
+        return null;
+    }
+
+    private void openContextualSearch(Bundle restored) {
+        if (searchPanel != null) return;
         Intent intent = isOnlyFapSearchContext()
                 ? SearchActivity.createBunkrSearch(this)
                 : new Intent(this, SearchActivity.class);
-        startActivity(intent);
+        if (searchOrigin == null) searchOrigin = isOnlyFapSearchContext()
+                ? visibleSearchControl(shell) : headerSearchControl;
+        if (searchOrigin == null) searchOrigin = headerSearchControl;
+        searchOriginBar = (View) searchOrigin.getParent();
+        searchSoftInputMode = getWindow().getAttributes().softInputMode;
+        getWindow().setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING);
+        searchPanel = new SearchPanel(this, intent, true, this::closeSearch);
+        if (restored != null) intent.putExtra("scope", restored.getString("scope", ""));
+        searchPanel.create(restored);
+        searchPanel.setEmptyBackdrop(((FrostedNavigationLayout) shell).pageBackdropForOverlay());
+        overlayRoot.addView(searchPanel.view, new FrameLayout.LayoutParams(-1, -1));
+        shell.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);
+        topBar.setAlpha(0f);
+        searchOriginBar.setAlpha(0f);
+        if (primaryPagerAdapter != null) primaryPagerAdapter.onHostPause();
+        searchPanel.morph(searchOrigin, true, () -> {});
+    }
+
+    private void closeSearch() {
+        if (searchPanel == null || searchClosing) return;
+        searchClosing = true;
+        SearchPanel closing = searchPanel;
+        closing.morph(searchOrigin, false, () -> {
+            overlayRoot.removeView(closing.view);
+            closing.close();
+            searchPanel = null;
+            searchClosing = false;
+            topBar.setAlpha(1f);
+            searchOriginBar.setAlpha(1f);
+            searchOrigin = null;
+            searchOriginBar = null;
+            shell.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_AUTO);
+            getWindow().setSoftInputMode(searchSoftInputMode);
+            if (primaryPagerAdapter != null) primaryPagerAdapter.onHostResume();
+        });
     }
 
     private int currentPrimaryPage() {
@@ -1237,6 +1309,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     }
 
     private void handleBackNavigation() {
+        if (searchPanel != null) { searchPanel.back(); return; }
         if (screen == Screen.CHAOS && primaryPagerAdapter != null
                 && primaryPagerAdapter.exitChaosFullscreenForBack()) {
             return;
@@ -1349,6 +1422,12 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     }
 
     @Override protected void onSaveInstanceState(Bundle state) {
+        if (searchPanel != null) {
+            Bundle searchState = new Bundle();
+            searchState.putString("scope", isOnlyFapSearchContext() ? "bunkr" : "");
+            searchPanel.save(searchState);
+            state.putBundle("search_panel", searchState);
+        }
         if (primaryPager != null) state.putInt("primary_page", currentPrimaryPage());
         if (primaryPagerAdapter != null) primaryPagerAdapter.saveState(state);
         super.onSaveInstanceState(state);
@@ -1368,7 +1447,8 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         super.onResume();
         if (headerProfileAvatar != null) headerProfileAvatar.resume();
         if (miniPlayer != null) miniPlayer.onResume();
-        if (primaryPagerAdapter != null) primaryPagerAdapter.onHostResume();
+        if (searchPanel != null) searchPanel.resume();
+        if (primaryPagerAdapter != null && searchPanel == null) primaryPagerAdapter.onHostResume();
         if (appUpdater != null) {
             appUpdater.onHostResume();
         }
@@ -1384,6 +1464,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
 
     @Override
     protected void onDestroy() {
+        if (searchPanel != null) searchPanel.close();
         if (headerProfileAvatar != null) headerProfileAvatar.close();
         if (miniPlayer != null) miniPlayer.stop();
         if (primaryPagerAdapter != null) primaryPagerAdapter.close();
