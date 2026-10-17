@@ -239,6 +239,10 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
                 openComments(item);
             }
 
+            @Override public void onSearch(View anchor) {
+                openContextualSearchFrom(anchor);
+            }
+
             @Override
             public void onOpenMore(View anchor) {
                 showMoreSheet(anchor);
@@ -560,10 +564,30 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     private SearchPanel searchPanel;
     private View headerSearchControl;
     private boolean searchClosing;
+    private View searchOrigin;
+    private View searchOriginBar;
     private int searchSoftInputMode;
 
     void openContextualSearch() {
-        openContextualSearch(null);
+        openContextualSearch((Bundle) null);
+    }
+
+    private void openContextualSearchFrom(View anchor) {
+        searchOrigin = anchor;
+        openContextualSearch((Bundle) null);
+    }
+
+    private View visibleSearchControl(View root) {
+        if (root.isShown() && "Search OnlyFap creators".contentEquals(
+                root.getContentDescription() == null ? "" : root.getContentDescription())) return root;
+        if (root instanceof android.view.ViewGroup) {
+            android.view.ViewGroup group = (android.view.ViewGroup) root;
+            for (int i = 0; i < group.getChildCount(); i++) {
+                View found = visibleSearchControl(group.getChildAt(i));
+                if (found != null) return found;
+            }
+        }
+        return null;
     }
 
     private void openContextualSearch(Bundle restored) {
@@ -571,6 +595,10 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         Intent intent = isOnlyFapSearchContext()
                 ? SearchActivity.createBunkrSearch(this)
                 : new Intent(this, SearchActivity.class);
+        if (searchOrigin == null) searchOrigin = isOnlyFapSearchContext()
+                ? visibleSearchControl(shell) : headerSearchControl;
+        if (searchOrigin == null) searchOrigin = headerSearchControl;
+        searchOriginBar = (View) searchOrigin.getParent();
         searchSoftInputMode = getWindow().getAttributes().softInputMode;
         getWindow().setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING);
         searchPanel = new SearchPanel(this, intent, true, this::closeSearch);
@@ -580,20 +608,24 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         overlayRoot.addView(searchPanel.view, new FrameLayout.LayoutParams(-1, -1));
         shell.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);
         topBar.setAlpha(0f);
+        searchOriginBar.setAlpha(0f);
         if (primaryPagerAdapter != null) primaryPagerAdapter.onHostPause();
-        searchPanel.morph(headerSearchControl, true, () -> {});
+        searchPanel.morph(searchOrigin, true, () -> {});
     }
 
     private void closeSearch() {
         if (searchPanel == null || searchClosing) return;
         searchClosing = true;
         SearchPanel closing = searchPanel;
-        closing.morph(headerSearchControl, false, () -> {
+        closing.morph(searchOrigin, false, () -> {
             overlayRoot.removeView(closing.view);
             closing.close();
             searchPanel = null;
             searchClosing = false;
             topBar.setAlpha(1f);
+            searchOriginBar.setAlpha(1f);
+            searchOrigin = null;
+            searchOriginBar = null;
             shell.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_AUTO);
             getWindow().setSoftInputMode(searchSoftInputMode);
             if (primaryPagerAdapter != null) primaryPagerAdapter.onHostResume();

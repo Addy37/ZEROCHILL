@@ -853,6 +853,7 @@ final class SearchPanel {
             headerControls.getLocationInWindow(headerPosition);
             searchIcon.getLocationInWindow(iconPosition);
             float offset = sourcePosition[0] - (iconPosition[0] - searchIcon.getTranslationX());
+            float offsetY = sourcePosition[1] - (iconPosition[1] - searchIcon.getTranslationY());
             int left = sourcePosition[0] - headerPosition[0];
             int right = left + source.getWidth();
             int height = headerControls.getHeight();
@@ -867,6 +868,7 @@ final class SearchPanel {
                         Math.round(left * (1f - amount)), 0,
                         Math.round(right + (headerControls.getWidth() - right) * amount), height));
                 searchIcon.setTranslationX(offset * (1f - amount));
+                searchIcon.setTranslationY(offsetY * (1f - amount));
                 input.setAlpha(amount);
                 clear.setAlpha(amount);
                 if (filterBar != null) filterBar.setAlpha(amount);

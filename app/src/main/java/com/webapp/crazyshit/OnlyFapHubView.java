@@ -64,6 +64,8 @@ final class OnlyFapHubView extends FrameLayout {
 
         void onSearch();
 
+        default void onSearch(View anchor) { onSearch(); }
+
         default void onMore() {
         }
 
@@ -214,7 +216,7 @@ final class OnlyFapHubView extends FrameLayout {
         heroSearch.setClickable(true);
         heroSearch.setFocusable(true);
         heroSearch.setContentDescription("Search OnlyFap creators");
-        heroSearch.setOnClickListener(v -> listener.onSearch());
+        heroSearch.setOnClickListener(v -> listener.onSearch(v));
         ZeroChillMotion.installPressFeedback(heroSearch);
         heroBar.addView(heroSearch, new LinearLayout.LayoutParams(dp(48), dp(48)));
 
