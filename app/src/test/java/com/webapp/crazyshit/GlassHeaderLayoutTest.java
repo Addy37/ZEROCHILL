@@ -37,10 +37,14 @@ public class GlassHeaderLayoutTest {
                 }
                 assertNotNull(hub);
                 scroll = (ScrollView) hub.getChildAt(0);
+                ((ViewGroup) scroll.getChildAt(0)).addView(new View(activity),
+                        new ViewGroup.LayoutParams(1, 2000));
                 layout(frame);
                 assertEquals(-header, scroll.getTop());
             } else {
                 scroll = (ScrollView) page;
+                ((ViewGroup) scroll.getChildAt(0)).addView(new View(activity),
+                        new ViewGroup.LayoutParams(1, 2000));
                 layout(frame);
                 assertEquals(-header, page.getTop());
             }
