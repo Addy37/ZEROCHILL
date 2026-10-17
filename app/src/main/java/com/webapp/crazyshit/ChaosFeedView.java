@@ -2988,6 +2988,11 @@ public final class ChaosFeedView extends FrameLayout {
         }
 
         private void cancelInteractionUi() {
+            if (player != null) playbackOwner.endSpeedBoost(player);
+            if (speedBadge != null) {
+                speedBadge.animate().withEndAction(null).cancel();
+                speedBadge.setVisibility(View.GONE);
+            }
             if (scrubbing) endScrubPreview(false, true);
             if (videoTaps != null) videoTaps.cancel();
             root.removeCallbacks(hideHeart);

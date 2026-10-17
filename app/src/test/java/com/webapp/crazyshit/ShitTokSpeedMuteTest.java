@@ -61,12 +61,19 @@ public class ShitTokSpeedMuteTest {
         for (boolean active : new boolean[] {false, true}) {
             for (boolean horizontal : new boolean[] {false, true}) {
                 try (var f = ShitTokInteractionUiTest.fixture()) {
+                    if (horizontal) {
+                        NativeContentItem original = ReflectionHelpers.getField(f.selected, "item");
+                        NativeContentItem creator = new NativeContentItem(NativeContentItem.KIND_MEDIA,
+                                "Fixture creator", original.url, "", "", "", "", "OnlyHaven", "OnlyHaven");
+                        ReflectionHelpers.setField(f.selected, "item", creator);
+                    }
                     long down = down(f);
                     if (active) { waitForHold(); boosted(f); }
                     ShitTokInteractionUiTest.event(video(f), down, MotionEvent.ACTION_MOVE,
                             horizontal ? 160 : 300, horizontal ? 400 : 250);
                     waitForHold();
                     assertEquals(1f, f.selectedPlayer.speed.speed, 0f);
+                    if (horizontal) assertTrue(ReflectionHelpers.getField(f.selected, "creatorSwipeTracking"));
                     ShitTokInteractionUiTest.event(video(f), down, MotionEvent.ACTION_CANCEL, 160, 250);
                 }
             }

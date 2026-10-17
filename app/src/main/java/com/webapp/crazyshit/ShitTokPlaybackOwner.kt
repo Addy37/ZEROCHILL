@@ -178,6 +178,12 @@ class ShitTokPlaybackOwner(context: Context, private val callbacks: Callbacks) {
                                 }
                             }
                         }
+                        override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
+                            if (!playWhenReady) endSpeedBoost(player)
+                        }
+                        override fun onPlaybackSuppressionReasonChanged(reason: Int) {
+                            if (reason != Player.PLAYBACK_SUPPRESSION_REASON_NONE) endSpeedBoost(player)
+                        }
                         override fun onIsPlayingChanged(isPlaying: Boolean) {
                             if (isPlaying && (!owns(url, player, generation) || !canPlay(url))) silence(player)
                         }
