@@ -22,8 +22,9 @@ import static org.junit.Assert.*;
 public class SearchPaneGeometryTest {
     @Test @GraphicsMode(GraphicsMode.Mode.NATIVE)
     public void overflowingContentIsClippedToGlassOutlineIncludingTranslatedCorners() {
-        var host = Robolectric.buildActivity(Activity.class).create();
+        var host = Robolectric.buildActivity(Activity.class).create().start().resume().visible();
         Activity activity = host.get();
+        SearchGlassOwner owner = new SearchGlassOwner(activity);
         SearchGlassLayout shell = new SearchGlassLayout(activity);
         GlassHeaderView pane = new GlassHeaderView(activity, new FrameLayout(activity), 24f, true);
         View overflowing = new View(activity) {
@@ -35,6 +36,7 @@ public class SearchPaneGeometryTest {
         shell.install(new GlassHeaderView(activity, new FrameLayout(activity), 28f),
                 new GlassHeaderView(activity, new FrameLayout(activity), 24f), pane, overflowing);
         shell.installInsets();
+        activity.setContentView(shell);
         shell.setResultCount(20);
         for (int ime : new int[]{0, 160, 300}) {
             ViewCompat.dispatchApplyWindowInsets(shell, insets(ime));
@@ -52,13 +54,15 @@ public class SearchPaneGeometryTest {
             assertNotEquals(Color.MAGENTA, image.getPixel(pane.getLeft() + pane.getWidth()/2, pane.getTop() - 2));
             image.recycle();
         }
-        host.destroy();
+        owner.close(); host.pause().stop().destroy();
     }
 
     @Test public void imeAnimationContractsBottomWithoutMovingAnchorOrApplyingEndInsetEarly() {
-        var host = Robolectric.buildActivity(Activity.class).create();
+        var host = Robolectric.buildActivity(Activity.class).create().start().resume().visible();
+        SearchGlassOwner owner = new SearchGlassOwner(host.get());
         SearchPanel panel = new SearchPanel(host.get(), new Intent(), true, () -> {});
         panel.create(null);
+        host.get().setContentView(panel.view);
         SearchGlassLayout shell = (SearchGlassLayout) panel.view;
         shell.setResultCount(20);
         ViewCompat.dispatchApplyWindowInsets(shell, insets(0)); layout(shell);
@@ -85,13 +89,15 @@ public class SearchPaneGeometryTest {
         assertEquals(top, pane.getTop()); assertAligned(pane, rows);
         ViewCompat.dispatchApplyWindowInsets(shell, insets(0)); layout(shell);
         assertEquals(initialHeight, pane.getHeight());
-        panel.close(); host.destroy();
+        panel.close(); owner.close(); host.pause().stop().destroy();
     }
 
     @Test public void lastCreatorAndFooterStayReachableWithInternalBottomSpaceAndIme() {
-        var host = Robolectric.buildActivity(Activity.class).create();
+        var host = Robolectric.buildActivity(Activity.class).create().start().resume().visible();
+        SearchGlassOwner owner = new SearchGlassOwner(host.get());
         SearchPanel panel = new SearchPanel(host.get(), new Intent(), true, () -> {});
         panel.create(null);
+        host.get().setContentView(panel.view);
         panel.field().setText("a"); // No live lookup is needed for this layout fixture.
         CreatorSuggestionsController controller = ReflectionHelpers.getField(panel, "suggestions");
         CreatorListAdapter adapter = ReflectionHelpers.getField(controller, "adapter");
@@ -124,7 +130,7 @@ public class SearchPaneGeometryTest {
             assertTrue(slot.getClipChildren());
             assertEquals(slot.getHeight(), list.getBottom());
         }
-        panel.close(); host.destroy();
+        panel.close(); owner.close(); host.pause().stop().destroy();
     }
 
     private static WindowInsetsCompat insets(int ime) {
