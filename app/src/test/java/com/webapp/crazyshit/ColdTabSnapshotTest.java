@@ -164,6 +164,7 @@ public class ColdTabSnapshotTest {
         ColdTabSnapshot.write(f.file, seed);
         seed.recycle();
         byte[] before = Files.readAllBytes(f.file.toPath());
+        f.hero.setMinimumHeight(1600);
         f.hero.setLayoutParams(new ScrollView.LayoutParams(-1, 1600));
         f.install();
         drainIo();
