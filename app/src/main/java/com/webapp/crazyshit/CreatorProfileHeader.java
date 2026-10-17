@@ -178,6 +178,7 @@ final class CreatorProfileHeader extends LinearLayout {
                         repository.searchCreators(appContext, cleanQuery, 6);
                 if (matches == null) return;
                 for (OnlyHavenRepository.Creator match : matches) {
+                    if (!OnlyHavenRepository.matchesHeaderCreator(cleanQuery, match)) continue;
                     if (creator.imageUrl.isEmpty()) post(() -> showHero(match.imageUrl, match.url));
                     String heroUrl = repository.creatorHeaderUrl(match);
                     if (heroUrl.isEmpty()) return;

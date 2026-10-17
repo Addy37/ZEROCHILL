@@ -68,6 +68,7 @@ public class GalleryNotificationMediaTest {
                 resolved ? Collections.singletonMap("https://fapello.com/creator/6620/", full) : Collections.emptyMap());
         ViewPager2 pager = new ViewPager2(activity);
         pager.setAdapter(adapter);
+        ((RecyclerView) pager.getChildAt(0)).setItemAnimator(null);
         activity.setContentView(pager);
         pager.measure(View.MeasureSpec.makeMeasureSpec(400, View.MeasureSpec.EXACTLY),
                 View.MeasureSpec.makeMeasureSpec(800, View.MeasureSpec.EXACTLY));

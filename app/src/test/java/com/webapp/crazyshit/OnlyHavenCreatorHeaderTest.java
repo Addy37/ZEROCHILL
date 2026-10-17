@@ -13,9 +13,17 @@ public class OnlyHavenCreatorHeaderTest {
         return repository.creatorHeaderUrl(creators.get(0));
     }
 
-    @Test public void genuineContentAddressedHeaderUsesConfiguredImageBase() throws Exception {
-        assertEquals("https://configured.example/thumbnail/0123456789abcdef0123456789abcdef/preview.webp",
-                header("\"headerThumbhash\":\"0123456789abcdef0123456789abcdef\""));
+    @Test public void genuineMetadataBackedHeaderUsesConfiguredImageBase() throws Exception {
+        assertEquals("https://configured.example/creator/onlyfans/creator/header.webp",
+                header("\"headerThumbhash\":\"U+gFCYJFOtmEd/mICIgFVig=\""));
+    }
+
+    @Test public void unrelatedSearchSuggestionCannotBecomeCreatorBanner() {
+        OnlyHavenRepository.Creator unrelated = new OnlyHavenRepository.Creator(
+                "onlyfans", "123", "Goth Egg", "", "");
+        assertFalse(OnlyHavenRepository.matchesHeaderCreator("Adryelli Rot", unrelated));
+        assertFalse(OnlyHavenRepository.matchesHeaderCreator("afknaty", unrelated));
+        assertTrue(OnlyHavenRepository.matchesHeaderCreator("Goth Egg", unrelated));
     }
 
     @Test public void absentHeaderNeverSynthesizesTheGenericCdnEndpoint() throws Exception {
@@ -24,7 +32,7 @@ public class OnlyHavenCreatorHeaderTest {
     }
 
     @Test public void explicitMissingHeaderRejectsEvenAHash() throws Exception {
-        assertEquals("", header("\"hasHeader\":false,\"headerThumbhash\":\"0123456789abcdef0123456789abcdef\""));
+        assertEquals("", header("\"hasHeader\":false,\"headerThumbhash\":\"U+gFCYJFOtmEd/mICIgFVig=\""));
     }
 
     @Test public void unknownOrGenericMetadataKeepsCreatorArtworkFallback() throws Exception {

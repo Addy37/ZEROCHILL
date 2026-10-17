@@ -240,7 +240,7 @@ final class OnlyHavenRepository {
                 String key = service.toLowerCase(Locale.US) + ":" + id.toLowerCase(Locale.US);
                 result.putIfAbsent(
                         key,
-                        new Creator(service, id, name, url, image, postCount, dmCount, creatorHeaderImage(config, row))
+                        new Creator(service, id, name, url, image, postCount, dmCount, creatorHeaderImage(config, row, service, id))
                 );
             }
             return new ArrayList<>(result.values());
@@ -442,13 +442,24 @@ final class OnlyHavenRepository {
         return creator == null ? "" : creator.headerImageUrl;
     }
 
-    private String creatorHeaderImage(SourceConfig.OnlyHaven config, JSONObject row) {
-        // Only an explicit content-addressed header from creator metadata is evidence
-        // of custom artwork. The per-creator CDN endpoint also serves site placeholders.
+    private String creatorHeaderImage(SourceConfig.OnlyHaven config, JSONObject row,
+            String service, String id) {
+        // ThumbHash is Base64 image metadata, not an asset path. Its presence is
+        // evidence of a custom header; unknown/HTML-only records keep the avatar.
         String hash = firstJsonText(row, "headerThumbhash", "header_thumbhash");
-        if (!hash.matches("[a-zA-Z0-9_-]{16,128}")) return "";
         if (row.has("hasHeader") && !row.optBoolean("hasHeader")) return "";
-        return imageBase(config) + "thumbnail/" + hash + "/preview.webp";
+        try {
+            byte[] metadata = java.util.Base64.getDecoder().decode(hash);
+            if (metadata.length < 5 || metadata.length > 64) return "";
+        } catch (IllegalArgumentException invalid) { return ""; }
+        return imageBase(config) + "creator/" + urlToken(service) + "/" + urlToken(id) + "/header.webp";
+    }
+
+    static boolean matchesHeaderCreator(String query, Creator creator) {
+        String wanted = CreatorNameMatcher.normalized(query);
+        return !wanted.isEmpty() && creator != null
+                && (wanted.equals(CreatorNameMatcher.normalized(creator.name))
+                || wanted.equals(CreatorNameMatcher.normalized(creator.id)));
     }
 
     private String imageBase(SourceConfig.OnlyHaven config) {
