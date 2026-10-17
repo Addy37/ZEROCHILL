@@ -1,7 +1,9 @@
 package com.webapp.crazyshit;
 
-import com.sun.net.httpserver.HttpServer;
-import java.net.InetSocketAddress;
+import java.net.ServerSocket;
+import java.net.Socket;
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import org.junit.After;
 import org.junit.Before;
@@ -10,27 +12,45 @@ import static org.junit.Assert.*;
 
 /** Exercise the real repository HTTP path against a CDN with a successful missing-image response. */
 public class OnlyHavenCreatorHeaderTest {
-    private HttpServer server;
+    private ServerSocket server;
+    private Thread worker;
     private String base;
-    private int missingStatus = 200;
-    private String candidate = "creator artwork";
-    private String missing = "site placeholder";
+    private volatile int missingStatus = 200;
+    private volatile String candidate = "creator artwork";
+    private volatile String missing = "site placeholder";
 
     @Before public void start() throws Exception {
-        server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
-        server.createContext("/creator/", exchange -> {
-            boolean probe = exchange.getRequestURI().getPath().contains("__zerochill_missing_creator_header__");
-            byte[] body = (probe ? missing : candidate).getBytes(StandardCharsets.UTF_8);
-            exchange.getResponseHeaders().set("Content-Type", "image/webp");
-            exchange.sendResponseHeaders(probe ? missingStatus : 200, body.length);
-            exchange.getResponseBody().write(body);
-            exchange.close();
+        server = new ServerSocket(0, 10, java.net.InetAddress.getByName("127.0.0.1"));
+        worker = new Thread(() -> {
+            while (!server.isClosed()) {
+                try (Socket socket = server.accept()) {
+                    socket.setSoTimeout(2000);
+                    BufferedReader reader = new BufferedReader(new InputStreamReader(socket.getInputStream(), StandardCharsets.US_ASCII));
+                    String request = reader.readLine();
+                    String line;
+                    while ((line = reader.readLine()) != null && !line.isEmpty()) { }
+                    boolean probe = request.contains("__zerochill_missing_creator_header__");
+                    byte[] body = (probe ? missing : candidate).getBytes(StandardCharsets.UTF_8);
+                    int status = probe ? missingStatus : 200;
+                    String headers = "HTTP/1.1 " + status + " Test\r\nContent-Type: image/webp\r\n"
+                            + "Content-Length: " + body.length + "\r\nConnection: close\r\n\r\n";
+                    socket.getOutputStream().write(headers.getBytes(StandardCharsets.US_ASCII));
+                    socket.getOutputStream().write(body);
+                    socket.getOutputStream().flush();
+                } catch (java.io.IOException error) {
+                    if (!server.isClosed()) throw new AssertionError(error);
+                }
+            }
         });
-        server.start();
-        base = "http://127.0.0.1:" + server.getAddress().getPort() + "/";
+        worker.setDaemon(true);
+        worker.start();
+        base = "http://127.0.0.1:" + server.getLocalPort() + "/";
     }
 
-    @After public void stop() { server.stop(0); }
+    @After public void stop() throws Exception {
+        server.close();
+        worker.join(3000);
+    }
 
     private String header() throws Exception {
         return new OnlyHavenRepository().creatorHeaderUrl(OnlyHavenTrendingTest.config(base),
