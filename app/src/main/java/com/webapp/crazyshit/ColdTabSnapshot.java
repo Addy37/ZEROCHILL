@@ -68,7 +68,7 @@ final class ColdTabSnapshot implements ViewTreeObserver.OnPreDrawListener,
                 cover = new ImageView(root.getContext());
                 cover.setScaleType(ImageView.ScaleType.FIT_XY);
                 cover.setImageBitmap(saved);
-                cover.setClickable(true);
+                cover.setClickable(false);
                 cover.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
                 root.addView(cover, new FrameLayout.LayoutParams(-1, -1));
             });
@@ -88,7 +88,8 @@ final class ColdTabSnapshot implements ViewTreeObserver.OnPreDrawListener,
         nextCheck = now + 100;
         if (started == 0) started = now;
         // A failure must expose the normal loader/error UI rather than cover it forever.
-        if (now - started >= MAX_WAIT_MS || live.getScrollY() != 0) {
+        if (now - started >= MAX_WAIT_MS) removeCover();
+        if (now - started >= 60_000 || live.getScrollY() != 0) {
             finish(false);
             return true;
         }
@@ -111,7 +112,7 @@ final class ColdTabSnapshot implements ViewTreeObserver.OnPreDrawListener,
                 || !view.getGlobalVisibleRect(bounds) || !Rect.intersects(bounds, viewport)) return true;
         if (view instanceof ImageView) {
             Request request = new DrawableImageViewTarget((ImageView) view).getRequest();
-            if (request != null && !request.isComplete() && !request.isFailed()) return false;
+            if (request != null && request.isRunning()) return false;
         }
         if (view instanceof ViewGroup) {
             ViewGroup group = (ViewGroup) view;
@@ -140,7 +141,8 @@ final class ColdTabSnapshot implements ViewTreeObserver.OnPreDrawListener,
                 Rect area = new Rect();
                 live.getLocalVisibleRect(area);
                 area.offset(position[0], position[1]);
-                android.view.PixelCopy.request(((android.app.Activity) context).getWindow(),
+                try {
+                    android.view.PixelCopy.request(((android.app.Activity) context).getWindow(),
                         area, raw, result -> {
                             try {
                                 if (result == android.view.PixelCopy.SUCCESS) {
@@ -151,6 +153,10 @@ final class ColdTabSnapshot implements ViewTreeObserver.OnPreDrawListener,
                                 // Capture failure never changes live UI.
                             } finally { raw.recycle(); }
                         }, new android.os.Handler(android.os.Looper.getMainLooper()));
+                } catch (RuntimeException | OutOfMemoryError failure) {
+                    raw.recycle();
+                    throw failure;
+                }
             } else saveBlurred(GalleryPreviewBlur.snapshot(live, live::draw));
         } catch (RuntimeException | OutOfMemoryError ignored) { /* Keep the normal UI. */ }
     }
