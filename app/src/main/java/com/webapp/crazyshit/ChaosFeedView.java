@@ -2268,7 +2268,7 @@ public final class ChaosFeedView extends FrameLayout {
         final TextView landscapeComments;
         final TextView landscapeAutoScroll;
         final TextView mute, landscapeMute;
-        TextView speedBadge;
+        ImageView speedBadge;
         final TextView autoScroll;
         final TextView fullscreen;
         final FrameLayout creatorAvatarControl;
@@ -3054,24 +3054,15 @@ public final class ChaosFeedView extends FrameLayout {
 
         private void showSpeedBadge(boolean visible) {
             if (visible && speedBadge == null) {
-                speedBadge = new TextView(activity);
+                speedBadge = new ImageView(activity);
                 speedBadge.setTag("shittok_speed_badge");
-                speedBadge.setText("2×");
-                speedBadge.setTextColor(Color.WHITE);
-                speedBadge.setTextSize(16);
-                speedBadge.setTypeface(null, android.graphics.Typeface.BOLD);
-                speedBadge.setGravity(Gravity.CENTER);
-                speedBadge.setPadding(dp(14), dp(7), dp(14), dp(7));
-                speedBadge.setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_shittok_fast_forward, 0, 0, 0);
-                speedBadge.setCompoundDrawablePadding(dp(6));
-                speedBadge.setCompoundDrawableTintList(ColorStateList.valueOf(UiPalette.PRIMARY));
+                speedBadge.setImageResource(R.drawable.ic_shittok_fast_forward);
+                speedBadge.setImageTintList(ColorStateList.valueOf(Color.WHITE));
+                speedBadge.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+                speedBadge.setClickable(false);
+                speedBadge.setFocusable(false);
                 speedBadge.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
-                GradientDrawable background = new GradientDrawable();
-                background.setColor(Color.argb(205, 9, 13, 20));
-                background.setCornerRadius(dp(20));
-                background.setStroke(dp(1), Color.argb(45, 210, 225, 235));
-                speedBadge.setBackground(background);
-                FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(-2, -2, Gravity.TOP | Gravity.CENTER_HORIZONTAL);
+                FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(dp(56), dp(40), Gravity.TOP | Gravity.CENTER_HORIZONTAL);
                 params.topMargin = Math.max(dp(76), root.getHeight() / 4);
                 root.addView(speedBadge, params);
             }
@@ -3092,9 +3083,8 @@ public final class ChaosFeedView extends FrameLayout {
         }
 
         private TextView muteButton(String tag) {
-            TextView button = textIconActionButton(R.drawable.ic_action_volume_on, "Mute video", tag);
+            TextView button = textIconActionButton(R.drawable.ic_shittok_volume_on, "Mute video", tag);
             button.setFocusable(true);
-            button.setBackground(circleDrawable(Color.argb(160, 9, 13, 20), Color.TRANSPARENT, 0));
             button.setOnClickListener(v -> {
                 haptic(v);
                 setChaosMuted(!chaosMuted);
@@ -3106,7 +3096,7 @@ public final class ChaosFeedView extends FrameLayout {
         private void syncMuteButtons() {
             for (TextView button : new TextView[] { mute, landscapeMute }) {
                 button.setCompoundDrawablesWithIntrinsicBounds(0, chaosMuted
-                        ? R.drawable.ic_action_volume_off : R.drawable.ic_action_volume_on, 0, 0);
+                        ? R.drawable.ic_shittok_volume_off : R.drawable.ic_shittok_volume_on, 0, 0);
                 button.setContentDescription(chaosMuted ? "Unmute video" : "Mute video");
             }
         }
