@@ -22,7 +22,7 @@ import static org.junit.Assert.*;
 @Config(application = Application.class, sdk = 35)
 public class SearchOverlayTest {
     @Test public void activationTypingClearAndBackPreserveUnderlyingView() {
-        ActivityController<Activity> host = Robolectric.buildActivity(Activity.class).create().start().resume();
+        ActivityController<Activity> host = Robolectric.buildActivity(Activity.class).create().start().resume().visible();
         Activity activity = host.get();
         SearchGlassOwner owner = new SearchGlassOwner(activity);
         FrameLayout root = new FrameLayout(activity);
@@ -40,6 +40,21 @@ public class SearchOverlayTest {
         SearchPanel panel = new SearchPanel(activity, new Intent(), true, () -> dismissed[0] = true);
         panel.create(null);
         root.addView(panel.view);
+        android.widget.ImageView origin = new android.widget.ImageView(activity);
+        FrameLayout.LayoutParams originBounds = new FrameLayout.LayoutParams(44, 48,
+                android.view.Gravity.TOP | android.view.Gravity.RIGHT);
+        root.addView(origin, originBounds);
+        root.measure(View.MeasureSpec.makeMeasureSpec(400, View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(800, View.MeasureSpec.EXACTLY));
+        root.layout(0, 0, 400, 800);
+        panel.morph(origin, true, () -> {});
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idleFor(
+                java.time.Duration.ofMillis(300));
+        View header = ReflectionHelpers.getField(panel, "header");
+        assertTrue(header.getHeight() > 0 && header.getHeight() < 200);
+        View icon = ReflectionHelpers.getField(panel, "searchIcon");
+        assertEquals(0f, icon.getTranslationX(), 0.01f);
+        assertNull(header.getClipBounds());
         assertSame(underlying, root.getChildAt(0));
         assertTrue(panel.field().hasFocus());
         View content = ReflectionHelpers.getField(panel, "content");
@@ -54,6 +69,11 @@ public class SearchOverlayTest {
         assertFalse(dismissed[0]);
         panel.back();
         assertTrue(dismissed[0]);
+        boolean[] collapsed = {false};
+        panel.morph(origin, false, () -> collapsed[0] = true);
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idleFor(
+                java.time.Duration.ofMillis(300));
+        assertTrue(collapsed[0]);
         root.removeView(panel.view);
         panel.close();
         assertEquals(350, underlying.getScrollY());
