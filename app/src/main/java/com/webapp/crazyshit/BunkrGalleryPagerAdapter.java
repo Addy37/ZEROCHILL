@@ -180,8 +180,9 @@ final class BunkrGalleryPagerAdapter
 
     void setResolvedUrl(int position, String mediaUrl) {
         NativeContentItem item = itemAt(position);
-        if (item == null || mediaUrl == null || mediaUrl.isEmpty()) return;
-        resolvedUrls.put(item.url, mediaUrl);
+        if (item == null || mediaUrl == null) return;
+        if (mediaUrl.isEmpty()) resolvedUrls.remove(item.url);
+        else resolvedUrls.put(item.url, mediaUrl);
         loading.remove(item.url);
         failed.remove(item.url);
         notifyItemChanged(position);

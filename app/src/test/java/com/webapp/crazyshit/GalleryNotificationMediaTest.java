@@ -139,6 +139,20 @@ public class GalleryNotificationMediaTest {
         assertTrue(adapter.isFailed(0)); // Tap retries resolution without discarding the preview.
     }
 
+    @Test public void videoErrorClearsStaleStreamBeforeLocalRetry() throws Exception {
+        setup(false);
+        NativeContentItem video = new NativeContentItem(NativeContentItem.KIND_MEDIA, "Video",
+                "https://fapello.com/video/creator/1/", preview, "", "https://fapello.com/creator/", "");
+        adapter.replace(Collections.singletonList(video), Collections.singletonMap(video.url, "expired-stream"));
+        adapter.setResolvedUrl(0, "");
+        adapter.setFailed(0, true);
+        assertEquals("", adapter.resolvedUrl(0));
+        assertTrue(adapter.isFailed(0));
+        adapter.setFailed(0, false);
+        assertEquals("", adapter.resolvedUrl(0));
+        assertNull(Shadows.shadowOf(activity).getNextStartedActivity());
+    }
+
     @Test public void knownFapelloPhotoUsesExistingDirectOriginalAndPreservesItemFields() throws Exception {
         NativeContentItem photo = new NativeContentItem(NativeContentItem.KIND_IMAGE, "Photo",
                 "https://fapello.com/sydney-sweeney/6620/", "https://cdn.fapello.com/content/s/s/sydney-sweeney_6620_300px.jpg",
