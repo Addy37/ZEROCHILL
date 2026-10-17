@@ -735,7 +735,7 @@ public final class ChaosFeedView extends FrameLayout {
 
     private void loadMorePool() {
     if (!initialUiDrawn) { refillDeferred = true; return; }
-    if (closed || (!items.isEmpty() && (!active || !hostResumed)) || poolLoading || !sourceRequestsEnabled || !hasReservoirRoom(items.size(), selectedPosition)) return;
+    if (closed || !active || !hostResumed || poolLoading || !sourceRequestsEnabled || !hasReservoirRoom(items.size(), selectedPosition)) return;
     continuityWorkNeeded = needsContinuity();
     boolean continuity = active && hostResumed && continuityWorkNeeded;
     if (!items.isEmpty() && !continuityWorkNeeded) return;
@@ -1375,7 +1375,7 @@ public final class ChaosFeedView extends FrameLayout {
     private CrazyShitRepository.StreamInfo resolvePlayable(NativeContentItem item)
             throws Exception {
         if (item == null || item.url == null || item.url.isEmpty()) return null;
-        return PlayableSourceRouter.resolve(activity, item);
+        return ChaosStartupPreloader.resolveForFeed(activity.getApplicationContext(), item);
     }
 
     /** A retired request cannot bind a new lease. The current owner may independently
@@ -3534,6 +3534,7 @@ public final class ChaosFeedView extends FrameLayout {
                     postOwnerUi(createdPlayer, listenerUrl, listenerToken, () -> {
                         if (boundPosition != selectedPosition) return;
                         syncLoading();
+                        sourceMixer.onFirstFrame();
                         ShitTokPoolDiagnostics.record("selectedFrame", "position=" + boundPosition);
                     });
                 }

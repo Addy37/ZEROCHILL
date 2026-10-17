@@ -1,108 +1,139 @@
 package com.webapp.crazyshit;
 
 import android.content.Context;
-
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Random;
+import java.util.Set;
+import java.util.concurrent.FutureTask;
+import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
 
-/**
- * One-shot process startup cache used to overlap the splash animation with useful Chaos work.
- * A small regular-video starter queue is exposed as soon as one feed page arrives, then the first
- * item's playable page is resolved during the remaining splash time and handed to Chaos when ready.
- * Shit Show
- * keeps its proven WebView warmup path once native Chaos exists.
- */
+/** One process-scoped metadata pipeline shared by splash and the first feed harvest. No player. */
 final class ChaosStartupPreloader {
     static final int STARTER_ITEMS = 6;
     private static final Object LOCK = new Object();
     private static final ArrayList<NativeContentItem> READY = new ArrayList<>();
-    private static final java.util.HashMap<String, CrazyShitRepository.StreamInfo> RESOLVED =
-            new java.util.HashMap<>();
+    private static final HashMap<String, CrazyShitRepository.StreamInfo> RESOLVED = new HashMap<>();
+    private static final Set<String> published = new HashSet<>();
+    private static boolean started, finished, claimed;
+    private static long deadline;
+    private static String resolvingUrl;
+    private static FutureTask<CrazyShitRepository.StreamInfo> resolution;
 
-    private static boolean started;
-    private static boolean finished;
-
-    private ChaosStartupPreloader() {
-    }
+    private ChaosStartupPreloader() { }
 
     static void start(Context context) {
         if (context == null) return;
+        Context app = context.getApplicationContext();
+        if (app == null) return; // Never retain a splash Activity in process-scoped work.
         synchronized (LOCK) {
             if (started) return;
             started = true;
+            deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(ChaosStarterSources.STARTUP_MILLIS);
         }
-
-        Context appContext = context.getApplicationContext();
-        Context safeContext = appContext != null ? appContext : context;
-        Thread worker = new Thread(() -> load(safeContext), "ChaosStartupPreload");
+        AppPerformance.startup("preload");
+        Thread worker = new Thread(() -> load(app), "ChaosStartupPreload");
         worker.setDaemon(true);
         worker.start();
     }
 
-    static boolean isReady() {
+    /** Background-only. Transfer partial results as they arrive, including an in-flight splash race. */
+    static List<NativeContentItem> collect(Context context, Consumer<List<NativeContentItem>> onCandidates)
+            throws InterruptedException {
+        start(context);
         synchronized (LOCK) {
-            // NativeMainActivity can begin underneath the matching wordmark as soon as the first
-            // item exists. The resolver is allowed to keep warming in parallel while the handoff
-            // overlay waits for Media3's actual first rendered frame.
-            return finished || !READY.isEmpty();
+            if (claimed) return new ArrayList<>();
+            claimed = true;
         }
-    }
-
-    static List<NativeContentItem> takeStarter() {
-        synchronized (LOCK) {
-            if (READY.isEmpty()) return new ArrayList<>();
-            ArrayList<NativeContentItem> result = new ArrayList<>(READY);
-            READY.clear();
-            return result;
+        ArrayList<NativeContentItem> result = new ArrayList<>();
+        try {
+            for (;;) {
+                List<NativeContentItem> next;
+                boolean done;
+                synchronized (LOCK) {
+                    while (READY.isEmpty() && !finished && started) {
+                        long left = deadline - System.nanoTime();
+                        if (left <= 0) break;
+                        TimeUnit.NANOSECONDS.timedWait(LOCK, left);
+                    }
+                    next = new ArrayList<>(READY);
+                    READY.clear();
+                    done = finished || !started || System.nanoTime() >= deadline;
+                }
+                result.addAll(next);
+                if (onCandidates != null && !next.isEmpty()) onCandidates.accept(next);
+                if (done) return result;
+            }
+        } finally {
+            synchronized (LOCK) { claimed = false; }
         }
     }
 
     static CrazyShitRepository.StreamInfo takeResolved(String pageUrl) {
-        if (pageUrl == null || pageUrl.isEmpty()) return null;
+        synchronized (LOCK) { return RESOLVED.remove(pageUrl); }
+    }
+
+    /** Join the splash resolver instead of fetching the same page twice. Other candidates proceed. */
+    static CrazyShitRepository.StreamInfo resolveForFeed(Context context, NativeContentItem item)
+            throws Exception {
+        FutureTask<CrazyShitRepository.StreamInfo> pending;
+        synchronized (LOCK) { pending = item.url.equals(resolvingUrl) ? resolution : null; }
+        if (pending != null) return pending.get(ChaosStarterSources.STARTUP_MILLIS, TimeUnit.MILLISECONDS);
+        return PlayableSourceRouter.resolve(context, item);
+    }
+
+    private static void publish(Context app, List<NativeContentItem> items) {
+        publish(app, items, 2);
+    }
+
+    private static void publish(Context app, List<NativeContentItem> items, int limit) {
+        FutureTask<CrazyShitRepository.StreamInfo> firstTask = null;
         synchronized (LOCK) {
-            return RESOLVED.remove(pageUrl);
+            int added = 0;
+            for (NativeContentItem item : items) {
+                // Reserve fallback room for each of the three racing sources.
+                if (published.size() >= STARTER_ITEMS || added >= limit) break;
+                if (!published.add(item.url)) continue;
+                if (resolution == null) {
+                    resolvingUrl = item.url;
+                    resolution = new FutureTask<>(() -> {
+                        AppPerformance.startup("resolve_begin");
+                        CrazyShitRepository.StreamInfo stream = PlayableSourceRouter.resolve(app, item);
+                        if (stream != null) {
+                            AppPerformance.startup("resolved");
+                            synchronized (LOCK) { RESOLVED.put(item.url, stream); }
+                        }
+                        return stream;
+                    });
+                    firstTask = resolution;
+                }
+                READY.add(item);
+                added++;
+            }
+            LOCK.notifyAll();
+        }
+        if (firstTask != null) {
+            Thread resolver = new Thread(firstTask, "ChaosStartupResolve");
+            resolver.setDaemon(true);
+            resolver.start();
         }
     }
 
-    private static void load(Context context) {
-        CrazyShitRepository repository = new CrazyShitRepository();
-        NativeContentItem first = null;
+    private static void load(Context app) {
         try {
             Random random = new Random();
-            List<NativeContentItem> starterItems = ChaosStarterSources.first(
-                    ChaosStarterSources.live(context, repository, random),
-                    random, ChaosStarterSources.STARTUP_MILLIS);
-            if (!starterItems.isEmpty()) {
-                first = starterItems.get(0);
-                synchronized (LOCK) {
-                    READY.clear();
-                    READY.addAll(starterItems);
-                }
-            }
-
-            // Warm the exact first clip while the branded intro is still on screen. The native
-            // feed keeps the original story/page URL and resolves it normally if the handoff is
-            // not ready, so comments, sharing, history, and Shit Show routing stay unchanged.
-            if (first != null) {
-                try {
-                    CrazyShitRepository.StreamInfo stream =
-                            PlayableSourceRouter.resolve(context, first);
-                    if (stream != null) {
-                        synchronized (LOCK) {
-                            RESOLVED.put(first.url, stream);
-                        }
-                    }
-                } catch (Exception ignored) {
-                }
-            }
+            List<NativeContentItem> rest = ChaosStarterSources.first(
+                    ChaosStarterSources.live(app, new CrazyShitRepository(), random),
+                    random, ChaosStarterSources.STARTUP_MILLIS, batch -> publish(app, batch));
+            // If other providers failed, retain the winning source's remaining cheap fallbacks.
+            publish(app, rest, STARTER_ITEMS);
         } catch (InterruptedException interrupted) {
             Thread.currentThread().interrupt();
         } finally {
-            synchronized (LOCK) {
-                finished = true;
-                LOCK.notifyAll();
-            }
+            synchronized (LOCK) { finished = true; LOCK.notifyAll(); }
         }
     }
 }
