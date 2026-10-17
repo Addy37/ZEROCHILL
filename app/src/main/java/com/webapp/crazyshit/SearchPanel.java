@@ -294,7 +294,7 @@ final class SearchPanel {
             return false;
         });
         row.addView(input, new LinearLayout.LayoutParams(0, -1, 1f));
-        clear = BrowseUi.action(activity, "×", "Clear search", v -> {
+        clear = searchAction("×", "Clear search", v -> {
             input.setText(""); focus();
         });
         clear.setVisibility(View.GONE);
@@ -303,13 +303,21 @@ final class SearchPanel {
             clear.setVisibility(value.isEmpty() ? View.GONE : View.VISIBLE);
             updateContentVisibility();
         }));
-        row.addView(BrowseUi.action(activity, "‹", "Close search", v -> dismiss.run()),
+        row.addView(searchAction("‹", "Close search", v -> dismiss.run()),
                 new LinearLayout.LayoutParams(dp(44), dp(48)));
-        row.addView(BrowseUi.action(activity, "★", "Favorite creators", v ->
+        row.addView(searchAction("★", "Favorite creators", v ->
                 activity.startActivity(new Intent(activity, CreatorsActivity.class))),
                 new LinearLayout.LayoutParams(dp(44), dp(48)));
 
         return row;
+    }
+
+    private TextView searchAction(String label, String description, View.OnClickListener listener) {
+        TextView action = BrowseUi.action(activity, label, description, listener);
+        action.setBackgroundColor(Color.TRANSPARENT);
+        action.setTextSize(22f);
+        action.setPadding(0, 0, 0, 0);
+        return action;
     }
 
     private View buildFilters() {
@@ -836,6 +844,17 @@ final class SearchPanel {
         return true;
     }
 
+    private void afterLayout(Runnable action) {
+        if (view.getWidth() > 0 && view.getHeight() > 0) { action.run(); return; }
+        view.getViewTreeObserver().addOnPreDrawListener(new android.view.ViewTreeObserver.OnPreDrawListener() {
+            @Override public boolean onPreDraw() {
+                view.getViewTreeObserver().removeOnPreDrawListener(this);
+                action.run();
+                return true;
+            }
+        });
+    }
+
     void morph(View source, boolean expanding, Runnable finished) {
         if (closing && expanding) return;
         closing = !expanding;
@@ -844,8 +863,10 @@ final class SearchPanel {
             morphAnimator.cancel();
         }
         if (!expanding) BrowseUi.hideKeyboard(activity, input);
-        view.post(() -> {
+        if (expanding) header.setAlpha(0f);
+        afterLayout(() -> {
             if (destroyed) return;
+            header.setAlpha(1f);
             int[] sourcePosition = new int[2];
             int[] headerPosition = new int[2];
             int[] iconPosition = new int[2];
