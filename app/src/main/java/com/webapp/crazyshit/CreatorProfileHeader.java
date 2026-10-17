@@ -161,6 +161,7 @@ final class CreatorProfileHeader extends LinearLayout {
         addView(hero, new LayoutParams(-1, dp(184)));
 
         loadAvatar(avatar);
+        showHero(creator.imageUrl, creator.url);
 
         loadOnlyHavenHero(query);
         refresh();
@@ -177,8 +178,10 @@ final class CreatorProfileHeader extends LinearLayout {
                         repository.searchCreators(appContext, cleanQuery, 6);
                 if (matches == null) return;
                 for (OnlyHavenRepository.Creator match : matches) {
+                    if (!OnlyHavenRepository.matchesHeaderCreator(cleanQuery, match)) continue;
+                    if (creator.imageUrl.isEmpty()) post(() -> showHero(match.imageUrl, match.url));
                     String heroUrl = repository.creatorHeaderUrl(match);
-                    if (heroUrl.isEmpty()) continue;
+                    if (heroUrl.isEmpty()) return;
                     post(() -> showHero(heroUrl, match.url));
                     return;
                 }
@@ -194,7 +197,10 @@ final class CreatorProfileHeader extends LinearLayout {
                 .centerCrop()
                 .transition(ThumbnailFades.hero())
                 .placeholder(new ColorDrawable(Color.rgb(13, 15, 18)))
-                .error(new ColorDrawable(Color.rgb(13, 15, 18)))
+                .error(Glide.with(banner)
+                        .load(creator.imageUrl.isEmpty() ? null : withReferer(creator.imageUrl, creator.url))
+                        .centerCrop()
+                        .error(new ColorDrawable(Color.rgb(13, 15, 18))))
                 .into(banner);
     }
 

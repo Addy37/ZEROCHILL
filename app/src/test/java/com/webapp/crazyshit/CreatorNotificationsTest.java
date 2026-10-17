@@ -211,9 +211,7 @@ public class CreatorNotificationsTest {
             assertEquals(BunkrGalleryActivity.class.getName(), intent.getComponent().getClassName());
             assertEquals(item("Creator One", 101).url, intent.getStringExtra(BunkrGalleryActivity.EXTRA_INITIAL_URL));
             assertEquals(3, group().unreadItems());
-            Intent fallback = intent.getParcelableExtra(BunkrGalleryActivity.EXTRA_NOTIFICATION_GALLERY_FALLBACK);
-            assertEquals(Collections.singletonList(item("Creator One", 101).url),
-                    fallback.getStringArrayListExtra(NativeFeedBrowserActivity.EXTRA_NOTIFICATION_FRESH_URLS));
+            assertFalse(intent.hasExtra(BunkrGalleryActivity.EXTRA_NOTIFICATION_GALLERY_FALLBACK));
             assertEquals(1, BunkrGallerySessionStore.snapshot(intent.getStringExtra(BunkrGalleryActivity.EXTRA_SESSION_ID)).items.size());
             controller.recreate();
             NotificationInboxTestIdle.await(controller.get());
@@ -222,7 +220,7 @@ public class CreatorNotificationsTest {
         } finally { controller.pause().stop().destroy(); }
     }
 
-    @Test public void unavailableContentUsesCreatorGalleryAndSystemAlertsDoNotFanOut() {
+    @Test public void unavailableMediaStaysInViewerAndSystemAlertsDoNotFanOut() {
         record(item("Creator One", 101));
         UpdateInboxStore.Entry parent = group();
         UpdateInboxStore.CreatorItem removed = new UpdateInboxStore.CreatorItem("fapello", "Creator One",
@@ -230,7 +228,7 @@ public class CreatorNotificationsTest {
         ActivityController<UpdateInboxActivity> controller = Robolectric.buildActivity(UpdateInboxActivity.class).setup();
         try {
             Intent fallback = CreatorNotificationNavigator.itemIntent(controller.get(), parent, removed);
-            assertEquals(NativeFeedBrowserActivity.class.getName(), fallback.getComponent().getClassName());
+            assertEquals(BunkrGalleryActivity.class.getName(), fallback.getComponent().getClassName());
             NotificationCoordinator.showNewVideoNotifications(app, Collections.singletonList(
                     new NotificationCoordinator.SourceAlert("fapello", "Fapello", Arrays.asList(
                             item("Creator One", 102), item("Creator One", 103)))));
@@ -282,27 +280,49 @@ public class CreatorNotificationsTest {
         assertTrue(state.getBoolean("seen_initialized_" + first.get(1).watchKey, false));
     }
 
-    @Test public void notificationViewerFailureReturnsOnlyOnceToTheFocusedGallery() throws Exception {
-        record(item("Creator One", 101));
+    @Test public void photoThumbnailOwnsNavigationEvenAfterViewerFailure() throws Exception {
+        NativeContentItem photo = new NativeContentItem(NativeContentItem.KIND_IMAGE, "Photo",
+                "https://fapello.com/creator-one/101/", "https://img.example/101.jpg",
+                "", "Creator One", "", "Fapello");
+        record(photo);
         ActivityController<UpdateInboxActivity> inbox = Robolectric.buildActivity(UpdateInboxActivity.class).setup();
-        ActivityController<BunkrGalleryActivity> viewer = null;
+        try {
+            UpdateInboxActivity activity = inbox.get();
+            NotificationInboxTestIdle.await(activity);
+            RecyclerView recycler = (RecyclerView) field(activity, "recycler");
+            RecyclerView.Adapter adapter = recycler.getAdapter();
+            RecyclerView.ViewHolder holder = adapter.createViewHolder(recycler, adapter.getItemViewType(0));
+            adapter.bindViewHolder(holder, 0);
+            assertTrue(((android.view.View) field(holder, "thumbnail")).performClick());
+            Intent intent = Shadows.shadowOf(activity).getNextStartedActivity();
+            assertEquals(BunkrGalleryActivity.class.getName(), intent.getComponent().getClassName());
+            assertFalse(intent.hasExtra(BunkrGalleryActivity.EXTRA_NOTIFICATION_GALLERY_FALLBACK));
+            assertNull(Shadows.shadowOf(activity).getNextStartedActivity());
+            BunkrGalleryActivity viewer = Robolectric.buildActivity(BunkrGalleryActivity.class, intent).get();
+            assertNull(Shadows.shadowOf(viewer).getNextStartedActivity());
+            assertFalse(viewer.isFinishing());
+            ((android.view.View) field(holder, "avatar")).performClick();
+            assertEquals(NativeFeedBrowserActivity.class.getName(),
+                    Shadows.shadowOf(activity).getNextStartedActivity().getComponent().getClassName());
+        } finally { inbox.pause().stop().destroy(); }
+    }
+
+    @Test public void videoNotificationHasExactItemAndNoAutomaticGalleryRecovery() throws Exception {
+        NativeContentItem video = item("Creator One", 101);
+        record(video);
+        ActivityController<UpdateInboxActivity> inbox = Robolectric.buildActivity(UpdateInboxActivity.class).setup();
         try {
             Intent intent = CreatorNotificationNavigator.itemIntent(inbox.get(), group(), group().children.get(0));
-            // Test the fallback without launching network/player work from the viewer.
-            viewer = Robolectric.buildActivity(BunkrGalleryActivity.class, intent);
-            BunkrGalleryActivity activity = viewer.get();
-            Field initial = BunkrGalleryActivity.class.getDeclaredField("initialUrl");
-            initial.setAccessible(true);
-            initial.set(activity, item("Creator One", 101).url);
-            java.lang.reflect.Method fallback = BunkrGalleryActivity.class.getDeclaredMethod("openNotificationFallback", String.class);
-            fallback.setAccessible(true);
-            assertFalse((boolean) fallback.invoke(activity, item("Creator One", 102).url));
-            assertTrue((boolean) fallback.invoke(activity, item("Creator One", 101).url));
-            Intent gallery = Shadows.shadowOf(activity).getNextStartedActivity();
-            assertEquals(NativeFeedBrowserActivity.class.getName(), gallery.getComponent().getClassName());
-            assertEquals(Collections.singletonList(item("Creator One", 101).url),
-                    gallery.getStringArrayListExtra(NativeFeedBrowserActivity.EXTRA_NOTIFICATION_FRESH_URLS));
-            assertFalse((boolean) fallback.invoke(activity, item("Creator One", 101).url));
+            assertEquals(BunkrGalleryActivity.class.getName(), intent.getComponent().getClassName());
+            assertEquals(video.url, intent.getStringExtra(BunkrGalleryActivity.EXTRA_INITIAL_URL));
+            assertFalse(intent.hasExtra(BunkrGalleryActivity.EXTRA_NOTIFICATION_GALLERY_FALLBACK));
+            NativeContentItem stored = BunkrGallerySessionStore.snapshot(
+                    intent.getStringExtra(BunkrGalleryActivity.EXTRA_SESSION_ID)).items.get(0);
+            NativeContentItem restored = ContentItemCodec.decode(ContentItemCodec.encode(stored));
+            assertEquals(video.url, restored.url);
+            assertEquals(video.imageUrl, restored.imageUrl);
+            assertEquals(video.uploader, restored.uploader);
+            assertEquals(video.kind, restored.kind);
         } finally { inbox.pause().stop().destroy(); }
     }
 

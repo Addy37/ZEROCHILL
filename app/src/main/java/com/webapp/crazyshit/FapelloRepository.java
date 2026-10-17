@@ -1242,6 +1242,19 @@ final class FapelloRepository {
                 .replace(".th.", ".");
     }
 
+    /** A listing photo already carries its media identity; a post-page fetch is optional. */
+    static String photoUrlFromItem(NativeContentItem item) {
+        if (item == null || !item.isImage() || !isFapelloUrl(item.url)) return "";
+        String image = isPhotoUrl(item.url) ? item.url : item.imageUrl;
+        if (!isFapelloUrl(image) || !isPhotoUrl(image)) return "";
+        String original = originalUrlFromPreview(image);
+        return original.isEmpty() ? image : original;
+    }
+
+    private static boolean isPhotoUrl(String url) {
+        return url != null && url.matches("(?i)^https://[^?#]+\\.(?:jpg|jpeg|png|webp|avif)(?:[?#].*)?$");
+    }
+
     static String originalUrlFromPreview(String previewUrl) {
         if (previewUrl == null || !isFapelloUrl(previewUrl)) return "";
         String clean = previewUrl.trim();

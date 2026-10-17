@@ -5,7 +5,7 @@ import android.content.Intent;
 import java.util.ArrayList;
 import java.util.Collections;
 
-/** Exact-item viewer routing, with a gallery fallback carrying only the tapped item's focus. */
+/** Exact-item viewer routing. Creator galleries are explicit profile actions only. */
 final class CreatorNotificationNavigator {
     private CreatorNotificationNavigator() { }
 
@@ -29,7 +29,7 @@ final class CreatorNotificationNavigator {
 
     static Intent itemIntent(Activity activity, UpdateInboxStore.Entry parent, UpdateInboxStore.CreatorItem child) {
         Intent fallback = gallery(activity, parent, child.creatorName, child.item.url);
-        if (child.item.url.isEmpty() || !(child.item.isImage() || child.item.isVideo())) return fallback;
+        if (!(child.item.isImage() || child.item.isVideo())) return fallback;
         // A separate bounded snapshot avoids changing a cached full creator gallery.
         String session = BunkrGallerySessionStore.create(parent.title, child.item.url);
         BunkrGallerySessionStore.replace(session, Collections.singletonList(child.item), 1, true);
@@ -39,7 +39,6 @@ final class CreatorNotificationNavigator {
         intent.putExtra(BunkrGalleryActivity.EXTRA_TITLE, parent.title);
         intent.putExtra(BunkrGalleryActivity.EXTRA_ALBUM_URL, child.item.url);
         intent.putExtra(BunkrGalleryActivity.EXTRA_INITIAL_URL, child.item.url);
-        intent.putExtra(BunkrGalleryActivity.EXTRA_NOTIFICATION_GALLERY_FALLBACK, fallback);
         return intent;
     }
 }

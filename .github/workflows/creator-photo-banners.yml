@@ -1,0 +1,57 @@
+name: Creator photo and banner validation
+on:
+  push:
+    branches: [fix/creator-photo-routing-banners]
+permissions:
+  contents: read
+jobs:
+  focused:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v4
+      - uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: '8.11.1'
+      - name: Inspect reported creator header metadata
+        continue-on-error: true
+        run: |
+          python3 - <<'PYTHON'
+          import json, urllib.request, urllib.parse
+          config = json.load(open('app/src/main/assets/source_config_defaults.json'))['sources']['onlyhaven']
+          for query in ('adryelli', 'afknaty', 'goth egg'):
+              route = config['routes']['creatorSearchApi'].replace('{query}', urllib.parse.quote(query)).replace('{limit}', '2').replace('{offset}', '0')
+              headers = dict(config.get('requestHeaders', {}))
+              headers['User-Agent'] = config['userAgent']
+              headers['Referer'] = config.get('refererOverride') or config['baseUrl']
+              try:
+                  with urllib.request.urlopen(urllib.request.Request(config['baseUrl'] + route, headers=headers), timeout=config['requestTimeoutMs']/1000) as response:
+                      data = json.load(response)
+                  rows = data if isinstance(data, list) else next((data[k] for k in ('creators','items','results','data') if isinstance(data.get(k), list)), [])
+                  for row in rows:
+                      print(query, 'keys=', sorted(row.keys()), 'header_metadata=', {k:v for k,v in row.items() if 'header' in k.lower() or 'banner' in k.lower()})
+              except Exception as error:
+                  print(query, type(error).__name__, str(error))
+          PYTHON
+      - name: Focused notification and banner regression tests
+        run: >-
+          gradle --no-daemon :app:testDebugUnitTest
+          --tests 'com.webapp.crazyshit.CreatorNotificationsTest'
+          --tests 'com.webapp.crazyshit.NotificationCreatorDeepLinkTest'
+          --tests 'com.webapp.crazyshit.OnlyHavenCreatorHeaderTest'
+          --tests 'com.webapp.crazyshit.OnlyHavenTrendingTest'
+          --tests 'com.webapp.crazyshit.GalleryNotificationMediaTest'
+          --tests 'com.webapp.crazyshit.GalleryViewerLifecycleTest'
+      - name: Debug build
+        run: gradle --no-daemon :app:assembleDebug
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: creator-photo-banner-validation
+          path: |
+            app/build/reports/tests/testDebugUnitTest
+            app/build/outputs/apk/debug/*.apk

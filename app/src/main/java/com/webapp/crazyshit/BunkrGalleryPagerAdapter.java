@@ -68,6 +68,7 @@ final class BunkrGalleryPagerAdapter
     private final Set<String> preloadedImages = new HashSet<>();
     private final Set<String> loading = new HashSet<>();
     private final Set<String> failed = new HashSet<>();
+    private final Set<String> retryImages = new HashSet<>();
     private static final Object STATE_PAYLOAD = new Object();
     private boolean activeVideoFrameRendered;
     private boolean activeVideoBuffering;
@@ -102,6 +103,7 @@ final class BunkrGalleryPagerAdapter
         if (resolved != null) resolvedUrls.putAll(resolved);
         loading.clear();
         failed.clear();
+        retryImages.clear();
         activeVideoPosition = RecyclerView.NO_POSITION;
         activePlayer = null;
         notifyDataSetChanged();
@@ -171,15 +173,16 @@ final class BunkrGalleryPagerAdapter
             loading.remove(item.url);
             failed.add(item.url);
         } else {
-            failed.remove(item.url);
+            if (failed.remove(item.url)) retryImages.add(item.url);
         }
-        notifyItemChanged(position, STATE_PAYLOAD);
+        notifyItemChanged(position, value ? STATE_PAYLOAD : null);
     }
 
     void setResolvedUrl(int position, String mediaUrl) {
         NativeContentItem item = itemAt(position);
-        if (item == null || mediaUrl == null || mediaUrl.isEmpty()) return;
-        resolvedUrls.put(item.url, mediaUrl);
+        if (item == null || mediaUrl == null) return;
+        if (mediaUrl.isEmpty()) resolvedUrls.remove(item.url);
+        else resolvedUrls.put(item.url, mediaUrl);
         loading.remove(item.url);
         failed.remove(item.url);
         notifyItemChanged(position);
@@ -364,6 +367,7 @@ final class BunkrGalleryPagerAdapter
             holder.boundUrl = item.url;
             holder.requestedImageUrl = "";
             holder.imageLoading = false;
+            holder.hasUsableImage = false;
             holder.image.resetZoom();
             holder.reveal.showPoster();
         }
@@ -375,7 +379,8 @@ final class BunkrGalleryPagerAdapter
         // The thumbnail owns the shared expansion. Upgrade it once Android finishes.
         String preview = item.isVideo() || resolved.isEmpty() || opening ? value(item.imageUrl) : resolved;
         boolean activeVideo = item.isVideo() && position == activeVideoPosition && activePlayer != null;
-        if (!activeVideo && (!sameItem || !preview.equals(holder.requestedImageUrl))) {
+        boolean retryImage = retryImages.remove(item.url);
+        if (!activeVideo && (!sameItem || retryImage || !preview.equals(holder.requestedImageUrl))) {
             holder.requestedImageUrl = preview;
             int request = ++holder.imageRequest;
             holder.imageLoading = !preview.isEmpty();
@@ -412,20 +417,20 @@ final class BunkrGalleryPagerAdapter
                                         updateState(holder, holder.getBindingAdapterPosition());
                                     }
                                 });
-                                if (!item.isImage() || resolved.isEmpty()) return false;
-                                holder.itemView.post(() -> {
+                                if (item.isImage()) holder.itemView.post(() -> {
                                     int current = holder.getBindingAdapterPosition();
                                     if (holder.imageRequest != request || revealsStopped ||
                                             current == RecyclerView.NO_POSITION || current >= items.size() ||
-                                            !item.url.equals(items.get(current).url) ||
-                                            !resolved.equals(resolvedUrls.get(item.url))) return;
-                                    resolvedUrls.remove(item.url);
-                                    loading.remove(item.url);
-                                    failed.add(item.url);
-                                    listener.onResolvedImageFailed(current, item);
-                                    notifyItemChanged(current);
+                                            !item.url.equals(items.get(current).url)) return;
+                                    if (!resolved.isEmpty() && resolved.equals(resolvedUrls.get(item.url))) {
+                                        resolvedUrls.remove(item.url);
+                                        listener.onResolvedImageFailed(current, item);
+                                    }
+                                    setFailed(current, true);
+                                    updateState(holder, current);
                                 });
-                                return false;
+                                // Glide must not replace a successful thumbnail/owned snapshot with black.
+                                return item.isImage() && holder.hasUsableImage;
                             }
 
                             @Override
@@ -438,6 +443,11 @@ final class BunkrGalleryPagerAdapter
                             ) {
                                 if (holder.imageRequest != request || !item.url.equals(holder.boundUrl)) return true;
                                 holder.imageLoading = false;
+                                holder.hasUsableImage = true;
+                                if (item.isImage() && !resolved.isEmpty() && preview.equals(resolved)) {
+                                    failed.remove(item.url);
+                                    loading.remove(item.url);
+                                }
                                 holder.itemView.post(() -> {
                                     if (holder.imageRequest == request) {
                                         updateState(holder, holder.getBindingAdapterPosition());
@@ -452,7 +462,20 @@ final class BunkrGalleryPagerAdapter
                     imageRequest = imageRequest.thumbnail(Glide.with(holder.image)
                             .load(withHeaders(item.imageUrl, imageReferer(item)))
                             .disallowHardwareConfig()
-                            .fitCenter().diskCacheStrategy(DiskCacheStrategy.ALL).dontAnimate());
+                            .fitCenter().diskCacheStrategy(DiskCacheStrategy.ALL).dontAnimate()
+                            .listener(new RequestListener<Drawable>() {
+                                @Override public boolean onLoadFailed(GlideException error, Object model,
+                                        Target<Drawable> target, boolean first) { return false; }
+                                @Override public boolean onResourceReady(Drawable resource, Object model,
+                                        Target<Drawable> target, DataSource source, boolean first) {
+                                    if (holder.imageRequest != request || !item.url.equals(holder.boundUrl)) return true;
+                                    holder.hasUsableImage = true;
+                                    holder.itemView.post(() -> {
+                                        if (holder.imageRequest == request) updateState(holder, holder.getBindingAdapterPosition());
+                                    });
+                                    return false;
+                                }
+                            }));
                 }
                 imageRequest.into(holder.image);
             }
@@ -537,7 +560,8 @@ final class BunkrGalleryPagerAdapter
                 holder.reveal.revealVideo(!revealsStopped);
             }
         } else holder.reveal.showPoster();
-        boolean showFailure = failed.contains(item.url) && !active;
+        boolean showFailure = failed.contains(item.url) && !active
+                && !(item.isImage() && holder.hasUsableImage);
         holder.failure.setVisibility(showFailure ? View.VISIBLE : View.GONE);
         boolean openingPreview = sharedElementOpening && item.url.equals(sharedElementUrl)
                 && (item.isVideo() || resolvedUrl(position).isEmpty()
@@ -586,6 +610,7 @@ final class BunkrGalleryPagerAdapter
         holder.boundUrl = "";
         holder.requestedImageUrl = "";
         holder.imageLoading = false;
+        holder.hasUsableImage = false;
         GalleryMediaTransition.clearName(holder.image);
         holder.controls.release();
         holder.gestures.cancel();
@@ -612,6 +637,16 @@ final class BunkrGalleryPagerAdapter
                 .addHeader("Referer", pageUrl == null
                         ? BunkrRepository.DEFAULT_PAGE_ORIGIN + "/" : pageUrl)
                 .addHeader("Accept", "image/avif,image/webp,image/apng,image/*,*/*;q=0.8");
+        SourceConfig sourceConfig = RemoteSourceConfigManager.snapshotOrNull();
+        if (sourceConfig != null && (FapelloRepository.isFapelloUrl(url)
+                || FapelloRepository.isFapelloUrl(pageUrl))) {
+            SourceConfig.Fapello config = sourceConfig.fapello;
+            headers.setHeader("User-Agent", config.userAgent);
+            if (!config.refererOverride.isEmpty()) headers.setHeader("Referer", config.refererOverride);
+            for (Map.Entry<String, String> header : config.requestHeaders.entrySet()) {
+                headers.setHeader(header.getKey(), header.getValue());
+            }
+        }
         try {
             String cookies = CookieManager.getInstance().getCookie(url);
             if ((cookies == null || cookies.isEmpty()) && pageUrl != null) {
@@ -652,6 +687,7 @@ final class BunkrGalleryPagerAdapter
         String requestedImageUrl = "";
         int imageRequest;
         boolean imageLoading;
+        boolean hasUsableImage;
 
         Holder(
                 View root,
