@@ -821,11 +821,6 @@ public final class ChaosFeedView extends FrameLayout {
                 }, () -> !work.cancelled && batchGeneration == feedGeneration && mayVerifyOrientation(), admissionLimit, partial ->
                     activity.runOnUiThread(() -> deferUiApply(() -> {
                         if (closed || work.cancelled || inventoryBatch != work || batchGeneration != feedGeneration) return;
-                        if (!firstAdmitted) {
-                            firstAdmitted = true;
-                            AppPerformance.startup("admitted");
-                            AppPerformance.record("ShitTok first admitted / resolved", android.os.SystemClock.elapsedRealtime() - initializedAt);
-                        }
                         if (!items.isEmpty() && (!continuityBatch || usableUpcomingCount() >= desiredRunway())) return;
                         streamCache.putAll(partial.streams);
                         ArrayList<NativeContentItem> newItems = new ArrayList<>();
@@ -840,6 +835,7 @@ public final class ChaosFeedView extends FrameLayout {
                         for (int i = before; i < items.size(); i++)
                             if (!recentSnapshot.contains(items.get(i).url)) publishedFresh[0]++;
                         if (added == 0) return;
+                        recordFirstAdmission();
                         adapter.notifyItemRangeInserted(before, added);
                         initialProgress.setVisibility(View.GONE);
                         empty.setVisibility(View.GONE);
@@ -893,6 +889,7 @@ public final class ChaosFeedView extends FrameLayout {
             if (added > 0 && freshAdded == 0) consecutiveDryLoads = 0;
 
             if (added > 0) {
+                recordFirstAdmission();
                 long mutationAt = android.os.SystemClock.elapsedRealtime();
                 adapter.notifyItemRangeInserted(before, added);
                 ShitTokPoolDiagnostics.record("adapterInsert", "count=" + added + " ms=" + (android.os.SystemClock.elapsedRealtime()-mutationAt));
@@ -923,6 +920,13 @@ public final class ChaosFeedView extends FrameLayout {
         }));
     });
 }
+
+    private void recordFirstAdmission() {
+        if (firstAdmitted) return;
+        firstAdmitted = true;
+        AppPerformance.startup("admitted");
+        AppPerformance.record("ShitTok first admitted / resolved", android.os.SystemClock.elapsedRealtime() - initializedAt);
+    }
 
     private boolean mayVerifyOrientation() {
         return !closed && hostResumed && (verifiedQueueEmpty

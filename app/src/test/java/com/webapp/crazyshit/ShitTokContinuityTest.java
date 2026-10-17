@@ -99,6 +99,24 @@ public class ShitTokContinuityTest {
             host.close();
         }
     }
+    @Test public void discardedRecentCandidateDoesNotClaimFirstFeedAdmission() {
+        try (Fixture f = new Fixture()) {
+            Set<String> recent = ReflectionHelpers.getField(f.feed, "recentSet");
+            recent.add(item("watched").url);
+            f.candidates("watched");
+            call(f.feed, "loadMorePool");
+            f.io.tasks.removeFirst().run();
+            org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
+            assertEquals(1, f.items.size());
+            assertFalse((boolean) ReflectionHelpers.getField(f.feed, "firstAdmitted"));
+            f.candidates("fresh");
+            call(f.feed, "loadMorePool");
+            f.io.tasks.removeFirst().run();
+            org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
+            assertEquals(2, f.items.size());
+            assertTrue((boolean) ReflectionHelpers.getField(f.feed, "firstAdmitted"));
+        }
+    }
     @Test public void starvingThinPagerBuildsSixResolvedNextPagesWithoutExtraPlayers() {
         for (int readyAhead = 0; readyAhead <= 1; readyAhead++) try (Fixture f = new Fixture()) {
             if (readyAhead == 1) {
