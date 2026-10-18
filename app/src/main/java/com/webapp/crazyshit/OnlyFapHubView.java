@@ -104,6 +104,15 @@ final class OnlyFapHubView extends FrameLayout {
     private final CreatorShelf newShelf;
     private final CreatorShelf hotShelf;
     private final CreatorShelf popularShelf;
+    private final ColdTabSnapshot coldSnapshot;
+    private long openStartedAt = -1;
+    private boolean openedBefore;
+    private String openTimingLabel;
+    private boolean openDrawRecorded, openUsableRecorded, openFinishedRecorded;
+    private final android.view.ViewTreeObserver.OnPreDrawListener openDrawListener = () -> {
+        recordOpenProgress();
+        return true;
+    };
 
     private final Handler heroHandler = new Handler(Looper.getMainLooper());
     private final Handler heroRefreshHandler = new Handler(Looper.getMainLooper());
@@ -417,8 +426,52 @@ final class OnlyFapHubView extends FrameLayout {
             prefs.registerOnSharedPreferenceChangeListener(favoriteInvalidation);
         }
         refreshFavorites();
-        ColdTabSnapshot.install(this, scroll, heroImage, "onlyfap",
-                () -> shelvesFinished && (heroItem != null || startupHero != null));
+        coldSnapshot = ColdTabSnapshot.install(this, scroll, heroImage, "onlyfap",
+                () -> shelvesFinished && (heroItem != null || startupHero != null),
+                this::isUsableContentReady);
+    }
+
+    void onOpenRequested() {
+        if (openStartedAt >= 0) return;
+        openStartedAt = android.os.SystemClock.elapsedRealtime();
+        openTimingLabel = openedBefore ? "OnlyFap return" : "OnlyFap first open";
+        openedBefore = true;
+        openDrawRecorded = openUsableRecorded = openFinishedRecorded = false;
+        getViewTreeObserver().removeOnPreDrawListener(openDrawListener);
+        getViewTreeObserver().addOnPreDrawListener(openDrawListener);
+    }
+
+    void onOpenCancelled() {
+        openStartedAt = -1;
+        if (getViewTreeObserver().isAlive())
+            getViewTreeObserver().removeOnPreDrawListener(openDrawListener);
+    }
+
+    private boolean isUsableContentReady() {
+        com.bumptech.glide.request.Request request =
+                new com.bumptech.glide.request.target.DrawableImageViewTarget(heroImage).getRequest();
+        return (heroItem != null || startupHero != null) && request != null && request.isComplete()
+                && (favoritesRail.getChildCount() > 0 || itemCount() > 0);
+    }
+
+    private void recordOpenProgress() {
+        if (openStartedAt < 0 || closed || !isShown()
+                || !getGlobalVisibleRect(new android.graphics.Rect())) return;
+        long elapsed = android.os.SystemClock.elapsedRealtime() - openStartedAt;
+        if (!openDrawRecorded) {
+            openDrawRecorded = true;
+            AppPerformance.record(openTimingLabel + " -> screen drawn", elapsed);
+        }
+        if (!openUsableRecorded && isUsableContentReady()
+                && (coldSnapshot == null || !coldSnapshot.isCoverVisible())) {
+            openUsableRecorded = true;
+            AppPerformance.record(openTimingLabel + " -> usable content", elapsed);
+        }
+        if (!openFinishedRecorded && shelvesFinished) {
+            openFinishedRecorded = true;
+            AppPerformance.record(openTimingLabel + " -> all shelves finished", elapsed);
+        }
+        if (openUsableRecorded && openFinishedRecorded) onOpenCancelled();
     }
 
     void beginRefresh() {
@@ -617,6 +670,7 @@ final class OnlyFapHubView extends FrameLayout {
     }
 
     void close() {
+        onOpenCancelled();
         if (profileAvatar != null) profileAvatar.close();
         closed = true;
         active = false;

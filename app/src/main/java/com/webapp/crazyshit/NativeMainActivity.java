@@ -651,6 +651,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
                     primaryPager.getScrollState() == ViewPager2.SCROLL_STATE_IDLE);
             return;
         }
+        primaryPagerAdapter.onPrimaryRequested(position);
         primaryPagerAdapter.onPrimaryMotionChanged(false);
         int navId = position == MainPagerAdapter.PAGE_SERIES ? NAV_SERIES
                 : position == MainPagerAdapter.PAGE_CHAOS ? NAV_CHAOS

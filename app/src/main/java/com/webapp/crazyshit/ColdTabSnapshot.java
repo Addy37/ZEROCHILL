@@ -37,32 +37,41 @@ final class ColdTabSnapshot implements ViewTreeObserver.OnPreDrawListener,
     private final ScrollView live;
     private final ImageView hero;
     private final BooleanSupplier loaded;
+    private final BooleanSupplier usable;
     private final File file;
     private ImageView cover;
     private Bitmap pixels;
     private boolean done;
     private boolean coverFading;
+    private boolean released;
     private long started;
     private long readySince;
     private long nextCheck;
 
     static ColdTabSnapshot install(FrameLayout root, ScrollView live, ImageView hero,
             String tab, BooleanSupplier loaded) {
-        return STARTED.add(tab) ? new ColdTabSnapshot(root, live, hero, tab, loaded) : null;
+        return install(root, live, hero, tab, loaded, null);
+    }
+
+    /** Reveal usable live content early; keep the stronger gate for saving a new snapshot. */
+    static ColdTabSnapshot install(FrameLayout root, ScrollView live, ImageView hero,
+            String tab, BooleanSupplier loaded, BooleanSupplier usable) {
+        return STARTED.add(tab) ? new ColdTabSnapshot(root, live, hero, tab, loaded, usable) : null;
     }
 
     private ColdTabSnapshot(FrameLayout root, ScrollView live, ImageView hero,
-            String tab, BooleanSupplier loaded) {
+            String tab, BooleanSupplier loaded, BooleanSupplier usable) {
         this.root = root;
         this.live = live;
         this.hero = hero;
         this.loaded = loaded;
+        this.usable = usable;
         file = new File(root.getContext().getNoBackupFilesDir(), "cold-tab-" + tab + ".jpg");
         root.addOnAttachStateChangeListener(this);
         IO.execute(() -> {
             Bitmap saved = read(file);
             root.post(() -> {
-                if (done || saved == null) {
+                if (done || released || saved == null) {
                     if (saved != null) saved.recycle();
                     return;
                 }
@@ -108,16 +117,23 @@ final class ColdTabSnapshot implements ViewTreeObserver.OnPreDrawListener,
             return true;
         }
         Request heroRequest = new DrawableImageViewTarget(hero).getRequest();
+        if (!released && usable != null && usable.getAsBoolean()
+                && heroRequest != null && heroRequest.isComplete()) {
+            released = true;
+            fadeCoverForInteraction();
+        }
         boolean ready = loaded.getAsBoolean() && heroRequest != null
                 && heroRequest.isComplete() && visibleImagesSettled(live);
         if (!ready) readySince = 0;
         else if (readySince == 0) readySince = now;
         // Let existing image transitions finish and the first visible rails bind.
-        if (readySince != 0 && now - readySince >= 500) {
+        if (readySince != 0 && now - readySince >= 500 && !coverFading) {
             finish(true);
         } else if (cover != null || readySince != 0) root.postInvalidateDelayed(100);
         return true;
     }
+
+    boolean isCoverVisible() { return cover != null; }
 
     private boolean visibleImagesSettled(View view) {
         Rect bounds = new Rect();
