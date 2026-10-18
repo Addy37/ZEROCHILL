@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
-# Disposable debug install only. 180 aggressive flicks, about 90 seconds, no macrobenchmark.
+# Disposable debug install only. Up to 180 flicks in 90 seconds, no macrobenchmark.
 adb_binary="$(command -v adb)"
 adb() { timeout --kill-after=2s 12s "$adb_binary" "$@"; }
 output="${1:?output directory}"
@@ -18,9 +18,13 @@ width="${size%x*}"; height="${size#*x}"
 python3 - "$width" "$height" > "$output/flicks.sh" <<'PY'
 import sys
 w, h = map(int, sys.argv[1:])
-for i in range(180):
-    print(f'input touchscreen swipe {w//2} {h*3//4} {w//2} {h//4} 100')
-    print('sleep 0.25')
+print('deadline=$(( $(date +%s) + 90 ))')
+print('for n in $(seq 1 180); do')
+print('  [ "$(date +%s)" -lt "$deadline" ] || break')
+print(f'  input touchscreen swipe {w//2} {h*3//4} {w//2} {h//4} 100')
+print('  echo "flick=$n"')
+print('  sleep 0.25')
+print('done')
 PY
 adb push "$output/flicks.sh" /data/local/tmp/zerochill-flicks.sh
 timeout --kill-after=2s 105s "$adb_binary" shell sh /data/local/tmp/zerochill-flicks.sh > "$output/gestures.txt" 2>&1
@@ -34,7 +38,8 @@ import json, pathlib, re, sys
 root = pathlib.Path(sys.argv[1]); raw = (root / 'inventory.txt').read_text()
 samples = [dict(re.findall(r'(\w+)=(-?\d+)', line)) for line in raw.splitlines() if 'ShitTokInventory' in line]
 samples = [{k: int(v) for k, v in s.items()} for s in samples if 'usable' in s]
-report = {'observed_samples': len(samples), 'emulator_only': True, 'physical_smoothness': 'not measured'}
+report = {'observed_samples': len(samples), 'emulator_only': True, 'physical_smoothness': 'not measured',
+          'attempted_swipes': len(re.findall(r'flick=\d+', (root / 'gestures.txt').read_text()))}
 if samples:
     report.update(last=samples[-1], minimum_observed_usable=min(s['usable'] for s in samples),
                   highest_selected=max(s['selected'] for s in samples))

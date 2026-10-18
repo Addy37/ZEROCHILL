@@ -56,12 +56,13 @@ jobs:
           sudo udevadm trigger --name-match=kvm
       - uses: ReactiveCircus/android-emulator-runner@v2
         with:
-          api-level: 33
+          api-level: 35
           arch: x86_64
           profile: pixel_6
           ram-size: 4096M
           emulator-boot-timeout: 180
           disable-animations: false
+          emulator-options: -no-window -gpu swiftshader -no-snapshot -noaudio -no-boot-anim -feature -Vulkan
           script: |
             bash tools/measure_shittok_cold_start.sh startup-evidence
             bash tools/stress_shittok_runway.sh runway-evidence
