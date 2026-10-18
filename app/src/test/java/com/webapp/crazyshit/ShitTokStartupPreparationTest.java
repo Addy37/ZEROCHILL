@@ -118,4 +118,16 @@ public class ShitTokStartupPreparationTest {
         race.offer(clip("old")); race.close(); worker.next(); race.offer(clip("new"));
         assertTrue(worker.tasks.isEmpty()); assertFalse(race.portraitReady(clip("old").url));
     }
+
+    @Test public void leavingStartupStopsSpeculativeWorkWithoutPoisoningFutureFeedAdmission() throws Exception {
+        Queue worker = new Queue();
+        ShitTokStartupPreparation race = new ShitTokStartupPreparation(worker,
+                item -> { fail("A hidden or paused feed must not start speculative resolution"); return null; },
+                (source, allowed) -> 0f, () -> 0L);
+        try {
+            race.offer(clip("queued")); race.stopSpeculation(); worker.next();
+            ShitTokStartupPreparation.Prepared result = race.take(clip("queued").url);
+            assertFalse(result.attempted); assertNull(result.aspect);
+        } finally { race.close(); }
+    }
 }

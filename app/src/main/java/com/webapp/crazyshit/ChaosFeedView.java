@@ -681,6 +681,7 @@ public final class ChaosFeedView extends FrameLayout {
     }
 
     public void onHostPause() {
+        ChaosStartupPreloader.stopPreparation();
         if (active) { recordRunway("hostPause"); pauseRunwayClock(); }
         resetTemporaryPinch();
         hostResumed = false;

@@ -53,6 +53,15 @@ public class ChaosStartupPreloaderTest {
         } finally { gate.close(); }
     }
 
+    @Test public void cachedFirstStreamHandoffRetiresItsLegacyResolver() {
+        NativeContentItem item = clip("cached-first");
+        CrazyShitRepository.StreamInfo stream = new CrazyShitRepository.StreamInfo(item.url + ".mp4", item.url, item.title);
+        Map<String, CrazyShitRepository.StreamInfo> resolved = ReflectionHelpers.getStaticField(ChaosStartupPreloader.class, "RESOLVED");
+        set("resolvingUrl", item.url); resolved.put(item.url, stream);
+        assertSame(stream, ChaosStartupPreloader.takeResolved(item.url));
+        assertTrue((boolean) ReflectionHelpers.getStaticField(ChaosStartupPreloader.class, "resolutionHandedOff"));
+    }
+
     @Test public void fairEarlySlotChoosesFreshCandidateBeforeWaitingForOtherProviders() {
         ShitTokSeenStore store = ShitTokSeenStore.get(RuntimeEnvironment.getApplication());
         store.watch(clip("watched").url, null);
@@ -85,6 +94,7 @@ public class ChaosStartupPreloaderTest {
             set("preparation", null);
             set("deadline", System.nanoTime() + TimeUnit.SECONDS.toNanos(2));
             set("resolvingUrl", "unused");
+            set("resolutionHandedOff", false);
             // Prevent real network work when the fixture publishes listing results.
             set("resolution", new FutureTask<CrazyShitRepository.StreamInfo>(() -> null));
         }
@@ -187,7 +197,8 @@ public class ChaosStartupPreloaderTest {
         set("resolvingUrl", item.url); set("resolution", task);
         task.run();
         assertSame(stream, ChaosStartupPreloader.resolveForFeed(RuntimeEnvironment.getApplication(), item));
-        assertSame(stream, ChaosStartupPreloader.resolveForFeed(RuntimeEnvironment.getApplication(), item));
+        assertTrue("The feed must retire the shared URL so playback retries can resolve fresh media",
+                (boolean) ReflectionHelpers.getStaticField(ChaosStartupPreloader.class, "resolutionHandedOff"));
         assertEquals(1, calls.get());
     }
     @Test public void handoffReservesSpaceForOtherSourceFallbacks() throws Exception {

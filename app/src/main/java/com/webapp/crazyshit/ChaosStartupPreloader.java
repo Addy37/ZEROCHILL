@@ -23,6 +23,7 @@ final class ChaosStartupPreloader {
     private static long deadline;
     private static String resolvingUrl;
     private static FutureTask<CrazyShitRepository.StreamInfo> resolution;
+    private static boolean resolutionHandedOff;
     private static ShitTokStartupPreparation preparation;
 
     private ChaosStartupPreloader() { }
@@ -88,7 +89,10 @@ final class ChaosStartupPreloader {
     static CrazyShitRepository.StreamInfo takeResolved(String pageUrl) {
         synchronized (LOCK) {
             CrazyShitRepository.StreamInfo stream = RESOLVED.remove(pageUrl);
-            if (stream != null && preparation != null) preparation.streamHandedOff(pageUrl);
+            if (stream != null) {
+                if (pageUrl.equals(resolvingUrl)) resolutionHandedOff = true;
+                if (preparation != null) preparation.streamHandedOff(pageUrl);
+            }
             return stream;
         }
     }
@@ -99,14 +103,27 @@ final class ChaosStartupPreloader {
         ShitTokStartupPreparation early;
         synchronized (LOCK) { early = preparation; }
         ShitTokStartupPreparation.Prepared prepared = early == null ? null : early.take(item.url);
-        if (prepared != null && prepared.attempted) return prepared.stream;
-        return resolveListing(context, item);
+        if (prepared != null && prepared.attempted) {
+            synchronized (LOCK) { if (item.url.equals(resolvingUrl)) resolutionHandedOff = true; }
+            return prepared.stream;
+        }
+        FutureTask<CrazyShitRepository.StreamInfo> pending;
+        synchronized (LOCK) {
+            pending = !resolutionHandedOff && item.url.equals(resolvingUrl) ? resolution : null;
+            if (pending != null) resolutionHandedOff = true;
+        }
+        if (pending != null) return pending.get(ChaosStarterSources.STARTUP_MILLIS, TimeUnit.MILLISECONDS);
+        return PlayableSourceRouter.resolve(context, item);
     }
 
     static Float preparedAspect(String pageUrl, CrazyShitRepository.StreamInfo stream) throws Exception {
         ShitTokStartupPreparation early;
         synchronized (LOCK) { early = preparation; }
         return early == null ? null : early.aspect(pageUrl, stream);
+    }
+
+    static void stopPreparation() {
+        synchronized (LOCK) { if (preparation != null) preparation.stopSpeculation(); }
     }
 
     private static CrazyShitRepository.StreamInfo resolveListing(Context context, NativeContentItem item)

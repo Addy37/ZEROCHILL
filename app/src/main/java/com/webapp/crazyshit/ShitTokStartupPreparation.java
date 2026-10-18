@@ -30,7 +30,7 @@ final class ShitTokStartupPreparation {
     private final long deadline;
     private final Map<String, FutureTask<Prepared>> tasks = new LinkedHashMap<>();
     private final java.util.Set<String> handedOff = new java.util.HashSet<>();
-    private volatile boolean portraitFound, closed;
+    private volatile boolean portraitFound, stopped, closed;
 
     ShitTokStartupPreparation(ShitTokOrientationAdmission.Resolver resolver,
             ShitTokOrientationAdmission.Probe probe) {
@@ -62,7 +62,7 @@ final class ShitTokStartupPreparation {
         }
     }
 
-    private boolean allowed() { return !closed && !portraitFound && clock.getAsLong() < deadline; }
+    private boolean allowed() { return !closed && !stopped && !portraitFound && clock.getAsLong() < deadline; }
 
     private Prepared prepare(NativeContentItem item) {
         if (!allowed()) return new Prepared(null, null, false);
@@ -105,7 +105,7 @@ final class ShitTokStartupPreparation {
 
     Float aspect(String pageUrl, CrazyShitRepository.StreamInfo stream) throws Exception {
         Prepared prepared = await(pageUrl);
-        return prepared != null && prepared.stream != null && stream != null
+        return prepared != null && prepared.stream != null && prepared.stream.mediaUrl != null && stream != null
                 && prepared.stream.mediaUrl.equals(stream.mediaUrl) ? prepared.aspect : null;
     }
 
@@ -128,4 +128,6 @@ final class ShitTokStartupPreparation {
     void finishOffers() {
         if (worker instanceof ExecutorService) ((ExecutorService) worker).shutdown();
     }
+
+    void stopSpeculation() { stopped = true; }
 }
