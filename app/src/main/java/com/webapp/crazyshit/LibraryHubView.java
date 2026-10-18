@@ -892,7 +892,7 @@ final class LibraryHubView extends ScrollView {
         }
     }
 
-    private Object remoteImage(String imageUrl, String pageUrl) {
+    static Object remoteImage(String imageUrl, String pageUrl) {
         LazyHeaders.Builder headers = new LazyHeaders.Builder()
                 .addHeader("User-Agent", USER_AGENT);
         if (pageUrl != null && !pageUrl.isEmpty()) headers.addHeader("Referer", pageUrl);
@@ -971,9 +971,14 @@ final class LibraryHubView extends ScrollView {
 
     private LinearLayout.LayoutParams creatorRailParams(boolean last) {
         LinearLayout.LayoutParams params =
-                new LinearLayout.LayoutParams(dp(104), dp(182));
+                new LinearLayout.LayoutParams(dp(104), creatorCardHeight());
         params.setMarginEnd(last ? 0 : dp(5));
         return params;
+    }
+
+    private int creatorCardHeight() {
+        TextView title = text("", 12.5f, UiPalette.TEXT_PRIMARY);
+        return dp(142 + 7 + 4) + title.getLineHeight() * 2;
     }
 
     private TextView text(String value, float size, int color) {

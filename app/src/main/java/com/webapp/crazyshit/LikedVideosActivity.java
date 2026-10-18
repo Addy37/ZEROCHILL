@@ -85,6 +85,7 @@ public final class LikedVideosActivity extends Activity {
     }
 
     private void checkAccount() {
+        if (isFinishing() || isDestroyed()) return;
         String current = ZeroChillSessionStore.currentUserId(this);
         if (owner.equals(current)) return;
         generation++;
@@ -185,7 +186,7 @@ public final class LikedVideosActivity extends Activity {
             holder.itemView.setContentDescription("Play liked video " + item.title);
             Glide.with(holder.image).clear(holder.image);
             holder.image.setImageResource(R.drawable.ic_more_account);
-            if (!item.imageUrl.isEmpty()) Glide.with(holder.image).load(item.imageUrl).centerCrop()
+            if (!item.imageUrl.isEmpty()) Glide.with(holder.image).load(LibraryHubView.remoteImage(item.imageUrl, item.url)).centerCrop()
                     .transition(ThumbnailFades.thumbnail()).into(holder.image);
             holder.itemView.setOnClickListener(v -> {
                 Intent result = new Intent().putExtra(FavoritesActivity.EXTRA_SELECTED_URL, item.url)
