@@ -1,0 +1,1 @@
+CI-only marker to trigger production-signed ZEROCHILL 5.0 upgrade candidate validation from the approved combined branch. This file is test-only and is not part of app runtime behavior.
