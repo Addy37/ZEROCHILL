@@ -278,7 +278,7 @@ public class FavoritesActivity extends Activity {
         titleParams.setMargins(dp(10), 0, dp(34), dp(11));
         media.addView(title, titleParams);
 
-        if (continueOnly && item.durationMs > 0L) {
+        if (!item.complete && item.durationMs > 0L) {
             long remainingMs = Math.max(0L, item.durationMs - item.positionMs);
             TextView remaining = overlayPill(formatTime(remainingMs) + " left");
             FrameLayout.LayoutParams remainingParams =
@@ -315,7 +315,7 @@ public class FavoritesActivity extends Activity {
                     : formatTime(item.positionMs) + " watched";
         } else {
             meta = item.lastWatched > 0L
-                    ? "Watched " + DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT)
+                    ? (item.complete ? "Watched " : "Resume · ") + DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT)
                     .format(new Date(item.lastWatched))
                     : "Watched";
         }

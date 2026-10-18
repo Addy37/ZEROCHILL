@@ -109,7 +109,7 @@ public class PrimaryTabLibraryTest {
             library.setSocialActive(true);
             refresh(library, work);
             Object snapshot = ReflectionHelpers.getField(library, "displayed");
-            assertEquals(1, ((java.util.List<?>) ReflectionHelpers.getField(snapshot, "continueItems")).size());
+            assertEquals(1, ((java.util.List<?>) ReflectionHelpers.getField(snapshot, "history")).size());
             assertEquals(1, ((java.util.List<?>) ReflectionHelpers.getField(snapshot, "creators")).size());
             assertEquals(1, ((java.util.List<?>) ReflectionHelpers.getField(snapshot, "downloads")).size());
             library.measure(View.MeasureSpec.makeMeasureSpec(500, View.MeasureSpec.EXACTLY),
@@ -131,7 +131,7 @@ public class PrimaryTabLibraryTest {
             shadowOf(Looper.getMainLooper()).idle();
             refresh(library, work);
             Object updated = ReflectionHelpers.getField(library, "displayed");
-            java.util.List<PlaybackHistoryStore.Item> continued = ReflectionHelpers.getField(updated, "continueItems");
+            java.util.List<PlaybackHistoryStore.Item> continued = ReflectionHelpers.getField(updated, "history");
             assertEquals(120_000, continued.get(0).positionMs);
             View updatedMedia = ReflectionHelpers.getField(library, "mediaContent");
             assertSame("History updates must keep creator image targets", creatorsRail,

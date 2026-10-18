@@ -44,6 +44,12 @@ public class ShitTokInteractionUiTest {
                 ZeroChillSocialRepository.Callback<ZeroChillSocialRepository.VideoLikeState> callback) {
             callback.complete(new ZeroChillSocialRepository.VideoLikeState(0, false), null);
         }
+        @Implementation protected static void toggleVideoLike(Context context, NativeContentItem item, boolean liked,
+                ZeroChillSocialRepository.Callback<ZeroChillSocialRepository.VideoLikeState> callback) {
+            assertNotNull("Library metadata must come from the current native item", item);
+            assertFalse(item.url.isEmpty());
+            toggleVideoLike(context, item.url, liked, callback);
+        }
         @Implementation protected static void toggleVideoLike(Context context, String url, boolean liked,
                 ZeroChillSocialRepository.Callback<ZeroChillSocialRepository.VideoLikeState> callback) {
             assertFalse("double tap must never issue an unlike", liked);

@@ -31,6 +31,7 @@ final class HeaderProfileAvatar extends FrameLayout {
     private String path = "";
     private String attemptedOwner = "";
     private boolean active;
+    private boolean profileInContent;
     private int generation;
 
     HeaderProfileAvatar(Activity activity) {
@@ -81,6 +82,11 @@ final class HeaderProfileAvatar extends FrameLayout {
         handler.removeCallbacks(render);
     }
 
+    void setProfileInContent(boolean value) {
+        profileInContent = value;
+        setVisibility(value || owner.isEmpty() || !owner.equals(session.current(activity)) ? GONE : VISIBLE);
+    }
+
     void close() {
         pause();
         generation++;
@@ -113,7 +119,7 @@ final class HeaderProfileAvatar extends FrameLayout {
             AccountAvatarImages.bind(image, owner, path);
         }
         setContentDescription("Your profile" + (known ? ": " + cache.getString("name", "") : ""));
-        setVisibility(VISIBLE);
+        setVisibility(profileInContent ? GONE : VISIBLE);
         // Older installs have no derived profile cache. Hydrate once for this account/view.
         // Normal sign-in, profile save and upload already publish the same cache.
         if (!known && !owner.equals(attemptedOwner)) {

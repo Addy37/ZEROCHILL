@@ -1147,6 +1147,7 @@ final class ZeroChillSocialRepository {
 
     static void videoLikeState(Context context, String pageUrl, Callback<VideoLikeState> callback) {
         NETWORK.execute(() -> {
+            final String requestedOwner = ZeroChillSessionStore.currentUserId(context);
             try {
                 String key = contentKey(pageUrl);
                 Response response = request(
@@ -1171,6 +1172,7 @@ final class ZeroChillSocialRepository {
                     if (mine.equals(rows.getJSONObject(i).optString("user_id"))) liked = true;
                 }
                 if (liked) ShitTokSeenStore.get(context).heart(pageUrl, null);
+                if (requestedOwner.equals(mine)) SocialContentContextStore.confirmLike(context, mine, pageUrl, liked);
                 callback.complete(new VideoLikeState(rows.length(), liked), null);
             } catch (Exception error) {
                 callback.complete(null, error);
@@ -1184,6 +1186,16 @@ final class ZeroChillSocialRepository {
             boolean currentlyLiked,
             Callback<VideoLikeState> callback
     ) {
+        toggleVideoLike(context, pageUrl, currentlyLiked, null, callback);
+    }
+
+    static void toggleVideoLike(Context context, NativeContentItem item, boolean currentlyLiked,
+            Callback<VideoLikeState> callback) {
+        toggleVideoLike(context, item.url, currentlyLiked, item, callback);
+    }
+
+    private static void toggleVideoLike(Context context, String pageUrl, boolean currentlyLiked,
+            NativeContentItem metadata, Callback<VideoLikeState> callback) {
         NETWORK.execute(() -> {
             try {
                 String token = ZeroChillAccountRepository.accessTokenBlocking(context);
@@ -1213,10 +1225,32 @@ final class ZeroChillSocialRepository {
                 }
                 if (!response.ok()) throw error(response, "Unable to update the video like.");
                 if (!currentlyLiked) ShitTokSeenStore.get(context).heart(pageUrl, null);
+                if (metadata != null && userId.equals(ZeroChillSessionStore.currentUserId(context)))
+                    SocialContentContextStore.remember(context, metadata);
+                SocialContentContextStore.confirmLike(context, userId, pageUrl, !currentlyLiked);
                 videoLikeState(context, pageUrl, callback);
             } catch (Exception error) {
                 callback.complete(null, error);
             }
+        });
+    }
+
+    /** Explicit Library action only. Existing table and account ownership, no new backend. */
+    static void loadLikedVideoPage(Context context, int offset, Callback<SocialContentContextStore.LikedPage> callback) {
+        final String owner = ZeroChillSessionStore.currentUserId(context);
+        NETWORK.execute(() -> {
+            try {
+                if (owner.isEmpty()) throw new IllegalStateException("Sign in to view liked videos.");
+                String token = ZeroChillAccountRepository.accessTokenBlocking(context);
+                if (!owner.equals(ZeroChillSessionStore.currentUserId(context)))
+                    throw new IllegalStateException("Account changed while loading likes.");
+                Response response = request("GET", "/rest/v1/video_likes?select=content_key,created_at&user_id=eq."
+                        + encode(owner) + "&order=created_at.desc,content_key.asc&limit=100&offset=" + Math.max(0, offset),
+                        token, null, null, null);
+                if (!response.ok()) throw error(response, "Unable to load liked videos.");
+                JSONArray rows = response.body.isEmpty() ? new JSONArray() : new JSONArray(response.body);
+                callback.complete(SocialContentContextStore.cacheLikedPage(context, owner, rows, offset), null);
+            } catch (Exception error) { callback.complete(null, error); }
         });
     }
 
