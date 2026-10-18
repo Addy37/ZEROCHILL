@@ -71,7 +71,7 @@ public class ShowsHeroDesignTest {
     }
 
     @Test
-    public void keepsContinueWatchingLandscapeAndBrowseShelvesCompactPortrait() throws Exception {
+    public void keepsContinueWatchingAndBaddiePortraitWhileShowsUseTwoRows() throws Exception {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
         ShowsHubView hub = new ShowsHubView(activity, item -> { }, item -> { }, item -> { });
         activity.setContentView(hub);
@@ -81,19 +81,27 @@ public class ShowsHeroDesignTest {
                 "crazyShelf",
                 "efuktShelf",
                 "categoryShelf",
-                "kaoticCategoryShelf",
-                "baddieHubCategoryShelf"
+                "kaoticCategoryShelf"
         };
         for (String fieldName : browseShelfFields) {
             RecyclerView rail = shelfRail(hub, fieldName);
             RecyclerView.ViewHolder holder =
                     rail.getAdapter().createViewHolder(rail, rail.getAdapter().getItemViewType(0));
-            assertEquals(dp(activity, 128), holder.itemView.getLayoutParams().width);
-            assertEquals(dp(activity, 178), holder.itemView.getLayoutParams().height);
-            assertEquals(dp(activity, 194), rail.getLayoutParams().height);
-            assertTrue(holder.itemView.getLayoutParams().height
-                    > holder.itemView.getLayoutParams().width);
+            assertEquals(dp(activity, 160), holder.itemView.getLayoutParams().width);
+            androidx.recyclerview.widget.GridLayoutManager manager =
+                    (androidx.recyclerview.widget.GridLayoutManager) rail.getLayoutManager();
+            assertEquals(2, manager.getSpanCount());
+            assertEquals(RecyclerView.HORIZONTAL, manager.getOrientation());
+            assertTrue(!manager.canScrollVertically());
         }
+
+        RecyclerView baddie = shelfRail(hub, "baddieHubCategoryShelf");
+        RecyclerView.ViewHolder baddieHolder = baddie.getAdapter().createViewHolder(baddie, 0);
+        assertEquals(dp(activity, 128), baddieHolder.itemView.getLayoutParams().width);
+        assertEquals(dp(activity, 178), baddieHolder.itemView.getLayoutParams().height);
+        assertEquals(dp(activity, 194), baddie.getLayoutParams().height);
+        assertTrue(!(baddie.getLayoutManager()
+                instanceof androidx.recyclerview.widget.GridLayoutManager));
 
         RecyclerView continueRail = shelfRail(hub, "continueShelf");
         RecyclerView.ViewHolder continueHolder = continueRail.getAdapter().createViewHolder(
