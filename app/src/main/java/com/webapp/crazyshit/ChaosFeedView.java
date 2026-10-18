@@ -96,6 +96,7 @@ public final class ChaosFeedView extends FrameLayout {
     private final ShitTokRunwayPolicy runway = new ShitTokRunwayPolicy();
     private long belowRunwayAt, belowRunwayMs;
     private int physicalTailHits;
+    private long admissionApplyCount, admissionApplyTotalMs, admissionApplyMaxMs;
     private final long initializedAt = android.os.SystemClock.elapsedRealtime();
     private boolean firstCandidate, firstAdmitted;
     private volatile int activeAdmissions, inventoryCandidateCount;
@@ -143,7 +144,7 @@ public final class ChaosFeedView extends FrameLayout {
                     return size() > MAX_STREAM_CACHE;
                 }
             };
-    private final Map<String, NativeContentItem> creatorIdentityCache = new HashMap<>();
+    private final ShitTokCreatorMetadataLoader creatorMetadata;
     private final Map<String, Boolean> creatorFavoriteCache = new HashMap<>();
     private final Set<String> resolving = new HashSet<>();
     private final Set<String> unplayable = new HashSet<>();
@@ -227,6 +228,9 @@ public final class ChaosFeedView extends FrameLayout {
         this.sourceRequestsEnabled = sourceRequestsEnabled;
         this.activity = activity;
         this.host = host;
+        android.os.Handler metadataUi = new android.os.Handler(android.os.Looper.getMainLooper());
+        creatorMetadata = new ShitTokCreatorMetadataLoader(activity.getApplicationContext(),
+                task -> metadataUi.post(task), this::onCreatorMetadataReady);
         setBackgroundColor(Color.BLACK);
         seenStore = ShitTokSeenStore.get(activity);
         loadRecent();
@@ -459,7 +463,9 @@ public final class ChaosFeedView extends FrameLayout {
                 + " unplayable=" + orientationAdmission.unplayableRejectedCount()
                 + " activeFetches=" + sourceMixer.activeFetches() + " providers=" + sourceMixer.providerSummary()
                 + " dryRefills=" + dryRefillCount + " refills=" + refillCount
-                + " refillAvgMs=" + (refillCount == 0 ? 0 : refillTotalMs / refillCount) + " refillMaxMs=" + refillMaxMs;
+                + " refillAvgMs=" + (refillCount == 0 ? 0 : refillTotalMs / refillCount) + " refillMaxMs=" + refillMaxMs
+                + " applyAvgMs=" + (admissionApplyCount == 0 ? 0 : admissionApplyTotalMs / admissionApplyCount)
+                + " applyMaxMs=" + admissionApplyMaxMs + " creatorMetadataBacklog=" + creatorMetadata.backlog();
         ShitTokPoolDiagnostics.record("runway", detail);
         ShitTokPoolDiagnostics.snapshot("Uptime ms: " + now + "\n" + detail + "\n" + frameDiagnostics.summary()
                 + "\nSeen identities: " + seenStore.seenSize() + " / " + ShitTokSeenStore.SEEN_LIMIT
@@ -726,7 +732,7 @@ public final class ChaosFeedView extends FrameLayout {
     orientationPending.clear();
     refillDeferred = false;
     streamCache.clear();
-    creatorIdentityCache.clear();
+    creatorMetadata.clear();
     creatorFavoriteCache.clear();
     resolving.clear();
     unplayable.clear();
@@ -770,6 +776,7 @@ public final class ChaosFeedView extends FrameLayout {
             ((ViewGroup) creatorSwipePreview.getParent()).removeView(creatorSwipePreview);
         }
         orientationAdmission.close();
+        creatorMetadata.close();
         io.shutdownNow();
     }
 
@@ -907,7 +914,7 @@ public final class ChaosFeedView extends FrameLayout {
                 }, () -> !work.cancelled && batchGeneration == feedGeneration && mayVerifyOrientation(),
                 () -> Math.min(MAX_QUEUED_AHEAD, admissionLimit + Math.max(0, selectedPosition - batchPosition)
                         + Math.max(0, desiredRunway() - batchTarget)), partial ->
-                    activity.runOnUiThread(() -> deferUiApply(() -> {
+                    activity.runOnUiThread(() -> deferUiApply(() -> timedAdmissionApply("partial", () -> {
                         if (closed || work.cancelled || inventoryBatch != work || batchGeneration != feedGeneration) return;
                         if (!items.isEmpty() && (!continuityBatch || usableUpcomingCount() >= desiredRunway())) return;
                         streamCache.putAll(partial.streams);
@@ -932,7 +939,7 @@ public final class ChaosFeedView extends FrameLayout {
                         if (active && hostResumed) playSelected();
                         tryPendingAutoAdvance();
                         requestContinuity();
-                    })), count -> {
+                    }))), count -> {
                     if (inventoryBatch == work) { activeAdmissions = count; inventoryCandidateCount = candidates.size(); }
                 });
         ArrayList<NativeContentItem> leftovers = new ArrayList<>(verified.remaining);
@@ -944,7 +951,7 @@ public final class ChaosFeedView extends FrameLayout {
         harvest.cancel(true);
         List<NativeContentItem> prioritizedFresh = aspectPriority.order(verified.items, random);
 
-        activity.runOnUiThread(() -> deferUiApply(() -> {
+        activity.runOnUiThread(() -> deferUiApply(() -> timedAdmissionApply("final", () -> {
             if (closed || work.cancelled || inventoryBatch != work || batchGeneration != feedGeneration) return;
             poolLoading = false;
             long duration = android.os.SystemClock.elapsedRealtime() - batchStartedAt;
@@ -996,7 +1003,7 @@ public final class ChaosFeedView extends FrameLayout {
                 autoAdvancePending = false;
                 autoAdvanceFrom = -1;
             }
-        }));
+        })));
     });
 }
 
@@ -1308,9 +1315,34 @@ public final class ChaosFeedView extends FrameLayout {
     }
 
     private void cacheCreatorMetadata(NativeContentItem media) {
-        NativeContentItem identity = ShitTokCreatorMetadata.creatorIdentity(activity, media);
-        creatorIdentityCache.put(media.url, identity);
+        NativeContentItem identity = creatorMetadata.identity(media);
         creatorFavoriteCache.put(media.url, identity != null && CreatorFavoriteStore.contains(activity, identity));
+    }
+
+    private void onCreatorMetadataReady(String url) {
+        final int generation = feedGeneration;
+        deferUiApply(() -> {
+            if (closed || generation != feedGeneration) return;
+            // Refresh only creator chrome. Never bind a card, detach a lease or prepare a player.
+            for (ChaosHolder holder : playerHolders) {
+                if (holder.item != null && url.equals(holder.item.url))
+                    holder.bindCreatorAvatar(holder.item, true);
+            }
+        });
+    }
+
+    private void timedAdmissionApply(String phase, Runnable apply) {
+        long started = android.os.SystemClock.elapsedRealtime();
+        Trace.beginSection("zc.shittok.admission_apply");
+        try { apply.run(); }
+        finally {
+            Trace.endSection();
+            long duration = android.os.SystemClock.elapsedRealtime() - started;
+            admissionApplyCount++;
+            admissionApplyTotalMs += duration;
+            admissionApplyMaxMs = Math.max(admissionApplyMaxMs, duration);
+            ShitTokPoolDiagnostics.record("admissionApply", "phase=" + phase + " ms=" + duration);
+        }
     }
 
     static boolean acceptUnique(NativeContentItem item, Set<String> hidden,
@@ -3266,9 +3298,7 @@ public final class ChaosFeedView extends FrameLayout {
             Glide.with(creatorAvatar).clear(creatorAvatar);
             creatorAvatar.setImageResource(R.drawable.ic_more_account);
             creatorIdentity = creatorClip
-                    ? (creatorIdentityCache.containsKey(media.url)
-                            ? creatorIdentityCache.get(media.url)
-                            : ShitTokCreatorMetadata.creatorIdentity(isPaging() ? null : activity, media))
+                    ? creatorMetadata.identity(media)
                     : null;
             if (creatorIdentity == null) {
                 creatorAvatarControl.setVisibility(View.GONE);
