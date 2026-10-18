@@ -118,17 +118,17 @@ final class ChaosSourceMixer {
         // eFukt remains a bounded startup fallback; its directory expansion waits for first frame.
         requests.add(() -> new SourceBatch(BATCH_EFUKT,
                 explorationAllowed ? loadEfuktBatch(context) : efukt.fetchLatest(context)));
-        // Before first frame this is still Kaotic page 1. After first frame the same worker slot
-        // rotates through Kaotic, TheYNC and ItemFix so expansion cannot add startup contention.
+        // Before first frame this is still Kaotic page 1. Normal post-frame refills rotate through
+        // Kaotic, TheYNC and ItemFix without adding a worker. Continuity refills stay on Kaotic.
         requests.add(() -> new SourceBatch(
-                BATCH_KAOTIC, loadWebVideoBatch(context)));
+                BATCH_KAOTIC, loadWebVideoBatch(context, explorationAllowed && !continuityOnly)));
         requests.add(() -> new SourceBatch(
                 BATCH_FAPELLO, loadFapelloBatch(context)));
-        // Bunkr shares the existing post-first-frame exploration slot with OnlyHaven. This keeps
-        // flaky album work isolated to one already-bounded provider task instead of adding a new
-        // worker that could compete with the sources responsible for continuity.
+        // Bunkr shares the existing post-first-frame exploration slot with OnlyHaven. Continuity
+        // refills keep the previous OnlyHaven path so flaky album work cannot compete with rescue.
         if (explorationAllowed) requests.add(() -> new SourceBatch(
-                BATCH_ONLY_HAVEN, loadPostFrameExpansionBatch(context)));
+                BATCH_ONLY_HAVEN, continuityOnly
+                        ? loadOnlyHavenBatch(context) : loadPostFrameExpansionBatch(context)));
         requests.add(() -> new SourceBatch(
                 BATCH_BADDIEHUB, loadBaddieHubBatch(context)));
         if (continuityOnly) Collections.shuffle(requests, random);
@@ -381,10 +381,10 @@ final class ChaosSourceMixer {
         }
     }
 
-    private List<NativeContentItem> loadWebVideoBatch(Context context) {
+    private List<NativeContentItem> loadWebVideoBatch(Context context, boolean allowExpandedSources) {
         try {
             WebVideoSourceRepository.Source source = webVideoSourceForExploration(
-                    explorationAllowed, random.nextInt(4));
+                    allowExpandedSources, random.nextInt(4));
             int maxPage = source == WebVideoSourceRepository.Source.KAOTIC
                     ? MAX_SOURCE_PAGE : EXPANDED_WEB_MAX_PAGE;
             ArrayList<NativeContentItem> candidates = new ArrayList<>(
