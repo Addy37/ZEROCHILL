@@ -177,6 +177,42 @@ public class OnlyFapHeroStartupTest {
         assertNull(ReflectionHelpers.getField(hub, "heroItem"));
     }
 
+    @Test public void cachedHeroAndFirstShelfAreUsableWithoutWaitingForDiscover() throws Exception {
+        NativeContentItem previous = creator("Previous", "previous", IMAGE);
+        OnlyFapHeroMemory.remember(activity, previous, IMAGE, previous.url);
+        warm(IMAGE, previous.url);
+        ReflectionHelpers.callInstanceMethod(hub, "requestStartupHero");
+        await(() -> title().equals("Previous"));
+        assertFalse(ReflectionHelpers.callInstanceMethod(hub, "isUsableContentReady"));
+        hub.setNewCreators(Collections.singletonList(creator("New", "new", FRESH)));
+        assertTrue(ReflectionHelpers.callInstanceMethod(hub, "isUsableContentReady"));
+        assertFalse(ReflectionHelpers.getField(hub, "shelvesFinished"));
+        ReflectionHelpers.callInstanceMethod(hub, "openHero");
+        assertEquals(previous.url, opened.url);
+    }
+
+    @Test public void firstAndReturnOpenTimingsDistinguishUsableContentFromFinishedShelves() throws Exception {
+        NativeContentItem previous = creator("Previous", "previous", IMAGE);
+        OnlyFapHeroMemory.remember(activity, previous, IMAGE, previous.url);
+        warm(IMAGE, previous.url);
+        ReflectionHelpers.callInstanceMethod(hub, "requestStartupHero");
+        await(() -> title().equals("Previous"));
+        hub.setNewCreators(Collections.singletonList(creator("New", "new", FRESH)));
+        hub.onOpenRequested();
+        ReflectionHelpers.callInstanceMethod(hub, "recordOpenProgress");
+        assertTrue(AppPerformance.summary().contains("OnlyFap first open -> screen drawn"));
+        assertTrue(AppPerformance.summary().contains("OnlyFap first open -> usable content"));
+        assertFalse(AppPerformance.summary().contains("OnlyFap first open -> all shelves finished"));
+        hub.onOpenCancelled();
+        assertEquals(-1L, (long) ReflectionHelpers.getField(hub, "openStartedAt"));
+        hub.onOpenRequested();
+        ReflectionHelpers.setField(hub, "shelvesFinished", true);
+        ReflectionHelpers.callInstanceMethod(hub, "recordOpenProgress");
+        assertTrue(AppPerformance.summary().contains("OnlyFap return -> usable content"));
+        assertTrue(AppPerformance.summary().contains("OnlyFap return -> all shelves finished"));
+        assertEquals(-1L, (long) ReflectionHelpers.getField(hub, "openStartedAt"));
+    }
+
     private void warm(String image, String referer) throws Exception {
         GlideUrl model = ReflectionHelpers.callInstanceMethod(hub, "remoteImage",
                 ReflectionHelpers.ClassParameter.from(String.class, image),

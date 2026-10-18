@@ -193,6 +193,72 @@ public class ColdTabSnapshotTest {
         saved.recycle();
     }
 
+    @Test public void usableContentRevealsBeforeSlowShelvesWithoutSavingPartialSnapshot() throws Exception {
+        Fixture f = new Fixture("test-progressive", false);
+        Bitmap bitmap = Bitmap.createBitmap(16, 32, Bitmap.Config.ARGB_8888);
+        ColdTabSnapshot.write(f.file, bitmap);
+        bitmap.recycle();
+        byte[] previous = Files.readAllBytes(f.file.toPath());
+        f.progressive = true;
+        f.install();
+        drainIo();
+        assertEquals(2, f.root.getChildCount());
+        f.controller.onPreDraw();
+        assertTrue(f.controller.isCoverVisible());
+        f.usable = true;
+        ShadowSystemClock.advanceBy(Duration.ofMillis(200));
+        f.controller.onPreDraw();
+        ShadowLooper.idleMainLooper(250, TimeUnit.MILLISECONDS);
+        drainIo();
+        assertFalse(f.controller.isCoverVisible());
+        assertFalse(ReflectionHelpers.getField(f.controller, "done"));
+        assertArrayEquals(previous, Files.readAllBytes(f.file.toPath()));
+        f.ready = true;
+        ShadowSystemClock.advanceBy(Duration.ofMillis(200));
+        f.controller.onPreDraw();
+        ShadowSystemClock.advanceBy(Duration.ofMillis(600));
+        f.controller.onPreDraw();
+        assertTrue(ReflectionHelpers.getField(f.controller, "done"));
+        ShadowLooper.idleMainLooper(1, TimeUnit.SECONDS);
+        drainIo();
+        Bitmap captured = ColdTabSnapshot.read(f.file);
+        assertNotNull(captured);
+        assertTrue(captured.getHeight() > 32);
+        captured.recycle();
+    }
+
+    @Test public void earlyRevealWaitsForACompletedHeroImageRequest() throws Exception {
+        Fixture f = new Fixture("test-progressive-hero", false);
+        Bitmap bitmap = Bitmap.createBitmap(16, 32, Bitmap.Config.ARGB_8888);
+        ColdTabSnapshot.write(f.file, bitmap);
+        bitmap.recycle();
+        f.progressive = true;
+        f.usable = true;
+        new DrawableImageViewTarget(f.hero).setRequest(null);
+        f.install();
+        drainIo();
+        f.controller.onPreDraw();
+        ShadowLooper.idleMainLooper(1, TimeUnit.SECONDS);
+        assertTrue(f.controller.isCoverVisible());
+        assertFalse(ReflectionHelpers.getField(f.controller, "done"));
+    }
+
+    @Test public void lateSnapshotReadCannotCoverAlreadyUsableContent() throws Exception {
+        Fixture f = new Fixture("test-progressive-late-read", false);
+        Bitmap bitmap = Bitmap.createBitmap(16, 32, Bitmap.Config.ARGB_8888);
+        ColdTabSnapshot.write(f.file, bitmap);
+        bitmap.recycle();
+        f.progressive = true;
+        f.usable = true;
+        f.install();
+        // The read result is posted to the main queue; release before dispatching it.
+        f.controller.onPreDraw();
+        drainIo();
+        assertFalse(f.controller.isCoverVisible());
+        assertEquals(1, f.root.getChildCount());
+        assertFalse(ReflectionHelpers.getField(f.controller, "done"));
+    }
+
     private static void drainIo() throws Exception {
         ExecutorService io = ReflectionHelpers.getStaticField(ColdTabSnapshot.class, "IO");
         io.submit(() -> { }).get(5, TimeUnit.SECONDS);
@@ -206,6 +272,8 @@ public class ColdTabSnapshotTest {
         final ImageView hero = new ImageView(activity);
         final String tab;
         boolean ready;
+        boolean usable;
+        boolean progressive;
         final File file;
         ColdTabSnapshot controller;
         Fixture(String tab, boolean ready) {
@@ -223,7 +291,9 @@ public class ColdTabSnapshotTest {
             new DrawableImageViewTarget(hero).setRequest(request);
         }
         void install() {
-            controller = ColdTabSnapshot.install(root, live, hero, tab, () -> ready);
+            controller = progressive
+                    ? ColdTabSnapshot.install(root, live, hero, tab, () -> ready, () -> usable)
+                    : ColdTabSnapshot.install(root, live, hero, tab, () -> ready);
             activity.setContentView(root);
             root.measure(android.view.View.MeasureSpec.makeMeasureSpec(400, 1073741824),
                     android.view.View.MeasureSpec.makeMeasureSpec(800, 1073741824));

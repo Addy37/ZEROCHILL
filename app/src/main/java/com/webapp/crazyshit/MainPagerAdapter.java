@@ -257,9 +257,16 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         load(page, false);
     }
 
+    void onPrimaryRequested(int position) {
+        if (position == PAGE_ONLYFAP && primaryPage != PAGE_ONLYFAP)
+            pages[PAGE_ONLYFAP].onlyFapHub.onOpenRequested();
+    }
+
     public void setPrimaryActive(int position) {
         if (primaryPage == position) return;
         primaryPage = position;
+        if (position == PAGE_ONLYFAP) pages[PAGE_ONLYFAP].onlyFapHub.onOpenRequested();
+        else pages[PAGE_ONLYFAP].onlyFapHub.onOpenCancelled();
         if (position != PAGE_CHAOS) ChaosStartupPreloader.stopPreparation();
         primaryWork.select(position);
         // Playback/audio ownership still changes immediately through the approved path.
@@ -312,6 +319,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
 
     public void onHostResume() {
         hostResumed = true;
+        if (primaryPage == PAGE_ONLYFAP) pages[PAGE_ONLYFAP].onlyFapHub.onOpenRequested();
         chaosView.onHostResume();
         primaryWork.setResumed(true);
         schedulePrimaryRefresh();
@@ -348,6 +356,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
 
     public void onHostPause() {
         hostResumed = false;
+        pages[PAGE_ONLYFAP].onlyFapHub.onOpenCancelled();
         primaryWork.setResumed(false);
         deactivateHubs();
         chaosView.onHostPause();

@@ -17,7 +17,7 @@ permissions:
 jobs:
   cancel-superseded-matrix:
     # This focused follow-up must not launch the general ten-flow benchmark.
-    if: ${{ github.head_ref == 'fix/shittok-async-creator-metadata' || github.head_ref == 'fix/shittok-startup-handoff' }}
+    if: ${{ github.head_ref == 'fix/shittok-async-creator-metadata' || github.head_ref == 'fix/shittok-startup-handoff' || github.head_ref == 'fix/onlyfap-first-open' }}
     runs-on: ubuntu-latest
     permissions:
       actions: write
@@ -37,7 +37,7 @@ jobs:
           done
   macrobenchmark:
     # This candidate uses the paired short-scroll audit instead of ten full flows.
-    if: ${{ github.head_ref != 'feature/shittok-dynamic-pinch' && github.head_ref != 'feature/primary-tab-activation' && github.head_ref != 'fix/notification-entry-latency' && github.head_ref != 'feature/spotlight-glass-search' && github.head_ref != 'feature/shittok-speed-mute' && github.head_ref != 'feature/shittok-deep-source-exploration' && github.head_ref != 'fix/shittok-async-creator-metadata' && github.head_ref != 'fix/shittok-startup-handoff' }}
+    if: ${{ github.head_ref != 'feature/shittok-dynamic-pinch' && github.head_ref != 'feature/primary-tab-activation' && github.head_ref != 'fix/notification-entry-latency' && github.head_ref != 'feature/spotlight-glass-search' && github.head_ref != 'feature/shittok-speed-mute' && github.head_ref != 'feature/shittok-deep-source-exploration' && github.head_ref != 'fix/shittok-async-creator-metadata' && github.head_ref != 'fix/shittok-startup-handoff' && github.head_ref != 'fix/onlyfap-first-open' }}
     name: performance (${{ matrix.flow }})
     runs-on: ubuntu-latest
     timeout-minutes: 60
