@@ -68,6 +68,19 @@ public class PhoneContentGridLayoutTest {
         showsRail.findViewHolderForAdapterPosition(1).itemView.performClick();
         assertSame(showsItems.get(1), clicked.get(0));
         render(showsRail, "shows-grid-" + widthDp);
+
+        shows.setBaddieHubCategories(showsItems);
+        RecyclerView baddieRail = rail(shows, "baddieHubCategoryShelf");
+        layout(baddieRail, dp(activity, widthDp));
+        checkGrid(baddieRail);
+        RecyclerView.ViewHolder baddieHolder =
+                baddieRail.findViewHolderForAdapterPosition(0);
+        ImageView baddieImage = ReflectionHelpers.getField(baddieHolder, "image");
+        assertEquals(dp(activity, 128), baddieHolder.itemView.getWidth());
+        assertEquals(dp(activity, 178), baddieHolder.itemView.getHeight());
+        assertEquals(baddieHolder.itemView.getWidth(), baddieImage.getWidth());
+        assertEquals(baddieHolder.itemView.getHeight(), baddieImage.getHeight());
+        render(baddieRail, "baddie-grid-" + widthDp);
         shows.setActive(false);
 
         OnlyFapHubView only = new OnlyFapHubView(activity, new OnlyFapHubView.Listener() {
@@ -91,7 +104,9 @@ public class PhoneContentGridLayoutTest {
             assertEquals(216f / 148f,
                     holder.itemView.getHeight() / (float) holder.itemView.getWidth(), 0.01f);
             // The copy container contains only the creator name, with no helper label.
-            assertEquals(1, ((android.view.ViewGroup) title.getParent()).getChildCount());
+            android.view.ViewGroup copy = (android.view.ViewGroup) title.getParent();
+            assertEquals(1, copy.getChildCount());
+            assertEquals(dp(activity, 4), copy.getPaddingBottom());
         }
         onlyRail.findViewHolderForAdapterPosition(1).itemView.performClick();
         assertSame(creators.get(1), clicked.get(1));
@@ -125,6 +140,9 @@ public class PhoneContentGridLayoutTest {
         ImageView image = ReflectionHelpers.getField(holder, "image");
         TextView title = ReflectionHelpers.getField(holder, "title");
         checkTitle(title);
+        assertEquals(13.5f,
+                title.getTextSize() / title.getResources().getDisplayMetrics().scaledDensity,
+                0.01f);
         assertEquals(16f / 9f, image.getWidth() / (float) image.getHeight(), 0.02f);
         assertTrue(title.getTop() >= image.getBottom());
         assertTrue(title.getHeight() >= title.getLineHeight() * 2);
