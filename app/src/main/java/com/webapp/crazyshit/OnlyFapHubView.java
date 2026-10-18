@@ -1735,7 +1735,7 @@ final class OnlyFapHubView extends FrameLayout {
                     BrowseUi.dp(context, 12),
                     BrowseUi.dp(context, 8),
                     BrowseUi.dp(context, 12),
-                    BrowseUi.dp(context, 10)
+                    BrowseUi.dp(context, 4)
             );
             FrameLayout.LayoutParams copyParams =
                     new FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM);
