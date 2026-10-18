@@ -668,6 +668,9 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     }
 
     private void showPagerChrome(int position) {
+        // Library already presents the current account in its profile header.
+        if (headerProfileAvatar != null) headerProfileAvatar.setProfileInContent(
+                position == MainPagerAdapter.PAGE_LIBRARY);
         ((GlassHeaderView) topBar).setGlassEnabled(position == MainPagerAdapter.PAGE_SERIES
                 || position == MainPagerAdapter.PAGE_CHAOS || position == MainPagerAdapter.PAGE_LIBRARY);
         // Preserve the current compact/expanded nav state across tab switches.

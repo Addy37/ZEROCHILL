@@ -291,9 +291,9 @@ public class LibraryProfileTest {
                 for (int j = 0; j < column.getChildCount(); j++) {
                     ViewGroup wrapper = (ViewGroup) column.getChildAt(j);
                     com.google.android.material.card.MaterialCardView avatar = (com.google.android.material.card.MaterialCardView) wrapper.getChildAt(0);
-                    assertEquals(BrowseUi.dp(activity, 84), avatar.getLayoutParams().width);
+                    assertEquals(BrowseUi.dp(activity, 72), avatar.getLayoutParams().width);
                     assertEquals(avatar.getLayoutParams().width, avatar.getLayoutParams().height);
-                    assertEquals(BrowseUi.dp(activity, 42), avatar.getRadius(), 0.1f);
+                    assertEquals(BrowseUi.dp(activity, 36), avatar.getRadius(), 0.1f);
                 }
             }
             layoutLibrary(view, 320, 800);
@@ -352,6 +352,54 @@ public class LibraryProfileTest {
             assertEquals(savedBefore, activity.getSharedPreferences("watch_later", 0).getString("items", ""));
             assertEquals(historyBefore, activity.getSharedPreferences("playback_history", 0).getString("items", ""));
             assertEquals(2, SocialContentContextStore.likedVideos(activity, owner).size());
+        } finally { view.close(); }
+    }
+
+    @Test public void cleanerPreviewsKeepOriginalMetadataPlaybackAndDownloadStatus() throws Exception {
+        String title = "OnlyFap video #32409216", url = "https://fixture.invalid/generated";
+        FavoriteStore.add(activity, title, url);
+        String before = activity.getSharedPreferences("watch_later", 0).getString("items", "");
+        List<NativeContentItem> opened = new java.util.ArrayList<>();
+        LibraryHubView view = new LibraryHubView(activity, new LibraryHubView.Listener() {
+            public void onOpenWatchLater(NativeContentItem item) { opened.add(item); }
+            public void onOpenHistory(PlaybackHistoryStore.Item item) { }
+            public void onOpenCreator(NativeContentItem item) { }
+        });
+        activity.setContentView(view);
+        Map<String, Runnable> work = new LinkedHashMap<>(); view.setWorkScheduler(work::put);
+        try {
+            view.setSocialActive(true); publish(view, work);
+            assertNull(text(view, "Saved for another time"));
+            assertNull(text(view, "Your personal media collection"));
+            assertNull(text(view, title));
+            TextView preview = (TextView) text(view, "OnlyFap video");
+            assertNotNull(preview);
+            assertEquals(2, preview.getMinLines());
+            assertEquals(2, preview.getMaxLines());
+            description(view, title).performClick();
+            assertEquals(title, opened.get(0).title);
+            assertEquals(url, opened.get(0).url);
+            assertEquals(before, activity.getSharedPreferences("watch_later", 0).getString("items", ""));
+            for (int status : new int[]{android.app.DownloadManager.STATUS_SUCCESSFUL,
+                    android.app.DownloadManager.STATUS_RUNNING, android.app.DownloadManager.STATUS_FAILED}) {
+                VideoDownloadStore.Entry entry = new VideoDownloadStore.Entry(-20, title, url, "", "", "video/mp4",
+                        1, status, 50, 100, "file:///fixture.mp4", 0);
+                View card = ReflectionHelpers.callInstanceMethod(view, "downloadCard",
+                        ReflectionHelpers.ClassParameter.from(VideoDownloadStore.Entry.class, entry));
+                assertTrue(card.getContentDescription().toString().contains(title));
+                if (status == android.app.DownloadManager.STATUS_SUCCESSFUL) {
+                    assertNotNull(card.findViewWithTag("library-offline"));
+                    assertNull(text(card, "Ready offline"));
+                    assertTrue(card.getContentDescription().toString().contains("Ready offline"));
+                } else {
+                    assertNull(card.findViewWithTag("library-offline"));
+                    assertNotNull(text(card, VideoDownloadStore.statusText(entry)));
+                }
+                android.widget.FrameLayout host = new android.widget.FrameLayout(activity);
+                host.addView(card, new android.widget.FrameLayout.LayoutParams(BrowseUi.dp(activity, 104), BrowseUi.dp(activity, 185)));
+                layoutLibrary(host, 104, 185);
+                saveRender(host, "library-clean-download-" + status);
+            }
         } finally { view.close(); }
     }
 

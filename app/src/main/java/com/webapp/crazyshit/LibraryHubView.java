@@ -363,7 +363,7 @@ final class LibraryHubView extends ScrollView {
             mediaContent.addView(open, new LinearLayout.LayoutParams(-1, -2));
             return;
         }
-        LibraryMediaRows rail = addMediaSectionShell("Liked Videos", "Your recent likes on this device", "View all", this::openLikedVideos);
+        LibraryMediaRows rail = addMediaSectionShell("Liked Videos", "View all", this::openLikedVideos);
         for (int i = 0; i < items.size(); i++) {
             NativeContentItem item = items.get(i);
             rail.addCard(compactMediaCard(item.title, item.url, item.imageUrl, "", false),
@@ -377,7 +377,7 @@ final class LibraryHubView extends ScrollView {
     }
 
     private View continueCard(PlaybackHistoryStore.Item item) {
-        MaterialCardView card = mediaCard(22);
+        MaterialCardView card = mediaCard(16);
         FrameLayout frame = new FrameLayout(activity);
         card.addView(frame, new MaterialCardView.LayoutParams(-1, -1));
 
@@ -386,7 +386,7 @@ final class LibraryHubView extends ScrollView {
 
         View shade = new View(activity);
         shade.setBackground(bottomShade());
-        frame.addView(shade, new FrameLayout.LayoutParams(-1, -1));
+        frame.addView(shade, new FrameLayout.LayoutParams(-1, dp(88), Gravity.BOTTOM));
 
         TextView remaining = pill(item.complete ? "Watched" : item.durationMs > 0L
                 ? formatRemaining(item.positionMs, item.durationMs) : "Resume");
@@ -395,10 +395,10 @@ final class LibraryHubView extends ScrollView {
         remainingParams.setMargins(0, dp(10), dp(10), 0);
         frame.addView(remaining, remainingParams);
 
-        TextView title = mediaTitle(item.title, 13.5f);
+        TextView title = mediaTitle(item.title);
         FrameLayout.LayoutParams titleParams =
                 new FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM);
-        titleParams.setMargins(dp(12), 0, dp(12), dp(17));
+        titleParams.setMargins(dp(10), 0, dp(10), dp(17));
         frame.addView(title, titleParams);
 
         if (item.durationMs > 0L) {
@@ -437,7 +437,6 @@ final class LibraryHubView extends ScrollView {
             List<CreatorAvatarOverrideStore.Override> avatarOverrides) {
         LinearLayout rail = addSectionShell(
                 "Favorite Creators",
-                "Your saved creators",
                 "View all",
                 () -> activity.startActivity(new Intent(activity, CreatorsActivity.class))
         );
@@ -469,8 +468,8 @@ final class LibraryHubView extends ScrollView {
         wrapper.setContentDescription("Open " + creator.title);
         ZeroChillMotion.installPressFeedback(wrapper);
 
-        MaterialCardView avatar = mediaCard(42);
-        avatar.setRadius(dp(42));
+        MaterialCardView avatar = mediaCard(36);
+        avatar.setRadius(dp(36));
         avatar.setClipToOutline(true);
         avatar.setCardBackgroundColor(Color.rgb(19, 23, 27));
 
@@ -494,14 +493,14 @@ final class LibraryHubView extends ScrollView {
         frame.addView(image, new FrameLayout.LayoutParams(-1, -1));
         loadCreatorImage(image, group, avatarOverrides);
 
-        wrapper.addView(avatar, new LinearLayout.LayoutParams(dp(84), dp(84)));
+        wrapper.addView(avatar, new LinearLayout.LayoutParams(dp(72), dp(72)));
 
         TextView name = text(creator.title, 12.5f,
                 ZeroChillUi.color(activity, R.color.zc_text_primary));
         name.setGravity(Gravity.CENTER);
         name.setMaxLines(2);
         name.setEllipsize(TextUtils.TruncateAt.END);
-        LinearLayout.LayoutParams nameParams = new LinearLayout.LayoutParams(dp(102), -2);
+        LinearLayout.LayoutParams nameParams = new LinearLayout.LayoutParams(dp(90), -2);
         nameParams.topMargin = dp(7);
         wrapper.addView(name, nameParams);
 
@@ -520,7 +519,6 @@ final class LibraryHubView extends ScrollView {
     ) {
         LibraryMediaRows rail = addMediaSectionShell(
                 "Watch Later",
-                "Saved for another time",
                 "View all",
                 () -> openSavedVideos(FavoritesActivity.START_WATCH_LATER)
         );
@@ -538,7 +536,6 @@ final class LibraryHubView extends ScrollView {
     private void addDownloadsSection(List<VideoDownloadStore.Entry> entries) {
         LibraryMediaRows rail = addMediaSectionShell(
                 "Downloads",
-                "Available offline and in progress",
                 "View all",
                 () -> activity.startActivity(new Intent(activity, DownloadedActivity.class))
         );
@@ -552,7 +549,7 @@ final class LibraryHubView extends ScrollView {
     }
 
     private View downloadCard(VideoDownloadStore.Entry entry) {
-        MaterialCardView card = mediaCard(18);
+        MaterialCardView card = mediaCard(16);
         FrameLayout frame = new FrameLayout(activity);
         card.addView(frame, new MaterialCardView.LayoutParams(-1, -1));
 
@@ -570,19 +567,35 @@ final class LibraryHubView extends ScrollView {
 
         View shade = new View(activity);
         shade.setBackground(bottomShade());
-        frame.addView(shade, new FrameLayout.LayoutParams(-1, -1));
+        frame.addView(shade, new FrameLayout.LayoutParams(-1, dp(88), Gravity.BOTTOM));
 
-        TextView status = pill(VideoDownloadStore.statusText(entry));
-        status.setTextSize(11f);
-        FrameLayout.LayoutParams statusParams =
-                new FrameLayout.LayoutParams(-2, dp(26), Gravity.TOP | Gravity.END);
-        statusParams.setMargins(0, dp(8), dp(8), 0);
-        frame.addView(status, statusParams);
+        if (entry.status == android.app.DownloadManager.STATUS_SUCCESSFUL) {
+            ImageView offline = new ImageView(activity);
+            offline.setImageResource(R.drawable.ic_library_offline);
+            offline.setColorFilter(UiPalette.PRIMARY);
+            offline.setPadding(dp(5), dp(5), dp(5), dp(5));
+            offline.setBackground(BrowseUi.rounded(activity, Color.argb(190, 5, 7, 9), 9));
+            offline.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+            offline.setTag("library-offline");
+            FrameLayout.LayoutParams statusParams =
+                    new FrameLayout.LayoutParams(dp(28), dp(28), Gravity.TOP | Gravity.END);
+            statusParams.setMargins(0, dp(7), dp(7), 0);
+            frame.addView(offline, statusParams);
+        } else {
+            TextView status = pill(VideoDownloadStore.statusText(entry));
+            status.setTextSize(11f);
+            status.setMaxLines(2);
+            status.setEllipsize(TextUtils.TruncateAt.END);
+            FrameLayout.LayoutParams statusParams =
+                    new FrameLayout.LayoutParams(-2, dp(30), Gravity.TOP | Gravity.END);
+            statusParams.setMargins(dp(6), dp(7), dp(7), 0);
+            frame.addView(status, statusParams);
+        }
 
-        TextView title = mediaTitle(entry.title, 14.5f);
+        TextView title = mediaTitle(entry.title);
         FrameLayout.LayoutParams titleParams =
                 new FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM);
-        titleParams.setMargins(dp(10), 0, dp(10), dp(9));
+        titleParams.setMargins(dp(10), 0, dp(10), dp(8));
         frame.addView(title, titleParams);
 
         card.setContentDescription(entry.title + ". " + VideoDownloadStore.statusText(entry));
@@ -593,7 +606,6 @@ final class LibraryHubView extends ScrollView {
     private void addHistorySection(List<PlaybackHistoryStore.Item> items) {
         LibraryMediaRows rail = addMediaSectionShell(
                 "History",
-                "Recent first · Tap unfinished videos to resume",
                 "View all",
                 () -> openSavedVideos(FavoritesActivity.START_HISTORY)
         );
@@ -622,7 +634,7 @@ final class LibraryHubView extends ScrollView {
 
         View shade = new View(activity);
         shade.setBackground(bottomShade());
-        frame.addView(shade, new FrameLayout.LayoutParams(-1, -1));
+        frame.addView(shade, new FrameLayout.LayoutParams(-1, dp(88), Gravity.BOTTOM));
 
         if (badge != null && !badge.isEmpty()) {
             TextView badgeView = pill(badge);
@@ -632,7 +644,7 @@ final class LibraryHubView extends ScrollView {
             frame.addView(badgeView, badgeParams);
         }
 
-        TextView titleView = mediaTitle(title, small ? 13.5f : 14.5f);
+        TextView titleView = mediaTitle(title);
         FrameLayout.LayoutParams titleParams =
                 new FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM);
         titleParams.setMargins(dp(10), 0, dp(10), dp(8));
@@ -647,8 +659,8 @@ final class LibraryHubView extends ScrollView {
         return card;
     }
 
-    private LibraryMediaRows addMediaSectionShell(String title, String subtitle, String actionLabel, Runnable action) {
-        LinearLayout oldRail = addSectionShell(title, subtitle, actionLabel, action);
+    private LibraryMediaRows addMediaSectionShell(String title, String actionLabel, Runnable action) {
+        LinearLayout oldRail = addSectionShell(title, actionLabel, action);
         View scroll = (View) oldRail.getParent();
         LinearLayout section = (LinearLayout) scroll.getParent();
         android.view.ViewGroup.LayoutParams params = scroll.getLayoutParams();
@@ -660,7 +672,6 @@ final class LibraryHubView extends ScrollView {
 
     private LinearLayout addSectionShell(
             String title,
-            String subtitle,
             String actionLabel,
             Runnable action
     ) {
@@ -681,12 +692,6 @@ final class LibraryHubView extends ScrollView {
         ZeroChillTypography.apply(heading, ZeroChillTypography.Role.SECTION);
         heading.setContentDescription(title);
         copy.addView(heading);
-
-        TextView hint = text(subtitle, 13f,
-                ZeroChillUi.color(activity, R.color.zc_text_muted));
-        LinearLayout.LayoutParams hintParams = new LinearLayout.LayoutParams(-1, -2);
-        hintParams.topMargin = dp(2);
-        copy.addView(hint, hintParams);
 
         headingRow.addView(copy, new LinearLayout.LayoutParams(0, -2, 1f));
 
@@ -721,7 +726,7 @@ final class LibraryHubView extends ScrollView {
         section.addView(scroll, railParams);
 
         LinearLayout.LayoutParams sectionParams = new LinearLayout.LayoutParams(-1, -2);
-        sectionParams.setMargins(0, 0, 0, dp(24));
+        sectionParams.setMargins(0, 0, 0, dp(32));
         mediaContent.addView(section, sectionParams);
         return rail;
     }
@@ -986,13 +991,21 @@ final class LibraryHubView extends ScrollView {
         activity.startActivityForResult(intent, NativeMainActivity.FAVORITES_REQUEST);
     }
 
-    private TextView mediaTitle(String value, float size) {
+    /** Display-only: original titles, metadata and playback payloads stay intact. */
+    private String previewTitle(String value) {
+        String title = clean(value);
+        if (title.isEmpty()) return "Saved video";
+        return title.matches("(?i)OnlyFap video\\s*#\\d+") ? "OnlyFap video" : title;
+    }
+
+    private TextView mediaTitle(String value) {
         TextView title = text(
-                clean(value).isEmpty() ? "Saved video" : value,
-                size,
+                previewTitle(value),
+                13f,
                 Color.WHITE
         );
         title.setTypeface(null, android.graphics.Typeface.BOLD);
+        title.setMinLines(2);
         title.setMaxLines(2);
         title.setEllipsize(TextUtils.TruncateAt.END);
         title.setShadowLayer(5f, 0f, dp(1), Color.BLACK);
@@ -1017,21 +1030,21 @@ final class LibraryHubView extends ScrollView {
                 new int[] {
                         Color.argb(0, 0, 0, 0),
                         Color.argb(32, 0, 0, 0),
-                        Color.argb(226, 0, 0, 0)
+                        Color.argb(210, 0, 0, 0)
                 }
         );
     }
 
     private LinearLayout.LayoutParams creatorRailParams(boolean last) {
         LinearLayout.LayoutParams params =
-                new LinearLayout.LayoutParams(dp(104), creatorCardHeight());
+                new LinearLayout.LayoutParams(dp(92), creatorCardHeight());
         params.setMarginEnd(last ? 0 : dp(5));
         return params;
     }
 
     private int creatorCardHeight() {
         TextView title = text("", 12.5f, UiPalette.TEXT_PRIMARY);
-        return dp(84 + 7 + 4) + title.getLineHeight() * 2;
+        return dp(72 + 7 + 4) + title.getLineHeight() * 2;
     }
 
     private TextView text(String value, float size, int color) {

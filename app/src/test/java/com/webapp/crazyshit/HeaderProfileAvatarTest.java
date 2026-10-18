@@ -64,6 +64,24 @@ public class HeaderProfileAvatarTest {
         view.close();
     }
 
+    @Test public void profileInContentStaysHiddenAcrossRefreshAndResumeAndRestoresOnOtherTabs() {
+        AccountProfileCache.record(activity, state("a", ""));
+        HeaderProfileAvatar view = avatar();
+        view.setProfileInContent(true);
+        AccountProfileCache.record(activity, state("a", "a/new.jpg"));
+        idle();
+        view.pause(); view.resume();
+        assertEquals(View.GONE, view.getVisibility());
+        view.setProfileInContent(false);
+        assertEquals(View.VISIBLE, view.getVisibility());
+        assertEquals("a/new.jpg", ReflectionHelpers.getField(view, "path"));
+        user = ""; view.refresh();
+        view.setProfileInContent(true); view.setProfileInContent(false);
+        assertEquals(View.GONE, view.getVisibility());
+        assertEquals(0, calls.size());
+        view.close();
+    }
+
     @Test public void signedOutHidesAndUntracksPriorAvatarAndCannotRoute() {
         AccountProfileCache.record(activity, state("a", "a/avatar-old.jpg"));
         HeaderProfileAvatar view = avatar();

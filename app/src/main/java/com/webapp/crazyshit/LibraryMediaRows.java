@@ -62,7 +62,7 @@ final class LibraryMediaRows extends LinearLayout {
             if (other == entry) break;
             if (other.portrait == entry.portrait) index++;
         }
-        LayoutParams params = new LayoutParams(dp(entry.portrait ? 120 : 196), dp(entry.portrait ? 213 : 110));
+        LayoutParams params = new LayoutParams(dp(entry.portrait ? 104 : 176), dp(entry.portrait ? 185 : 99));
         params.setMarginEnd(dp(10));
         row.addView(entry.card, index, params);
     }

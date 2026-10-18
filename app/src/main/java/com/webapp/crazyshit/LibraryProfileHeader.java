@@ -17,7 +17,6 @@ final class LibraryProfileHeader extends LinearLayout {
     private final Activity activity;
     private final ImageView avatar;
     private final TextView name;
-    private final TextView detail;
     private final TextView messages;
     private final TextView notifications;
     private final List<SharedPreferences> observed = new ArrayList<>();
@@ -59,10 +58,6 @@ final class LibraryProfileHeader extends LinearLayout {
         name.setMaxLines(2);
         name.setEllipsize(android.text.TextUtils.TruncateAt.END);
         copy.addView(name, new LayoutParams(-1, -2));
-        detail = label("Your personal media collection", 13, UiPalette.TEXT_SECONDARY);
-        LayoutParams detailParams = new LayoutParams(-1, -2);
-        detailParams.topMargin = dp(5);
-        copy.addView(detail, detailParams);
         identity.addView(copy, new LayoutParams(0, -2, 1));
         addView(identity, new LayoutParams(-1, -2));
 
@@ -111,7 +106,6 @@ final class LibraryProfileHeader extends LinearLayout {
         String display = known ? cache.getString("name", "") : "";
         name.setText(display == null || display.trim().isEmpty()
                 ? owner.isEmpty() ? "Your Library" : "Your ZEROCHILL" : display);
-        detail.setText(owner.isEmpty() ? "Your personal media collection · Sign in" : "Your personal media collection");
         String path = known ? cache.getString("avatar", "") : "";
         if (!owner.equals(boundOwner) || !path.equals(boundPath) || avatar.getDrawable() == null) {
             boundOwner = owner;
