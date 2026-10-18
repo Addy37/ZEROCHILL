@@ -37,7 +37,7 @@ jobs:
           done
   macrobenchmark:
     # This candidate uses the paired short-scroll audit instead of ten full flows.
-    if: ${{ github.head_ref != 'feature/shittok-dynamic-pinch' && github.head_ref != 'feature/primary-tab-activation' && github.head_ref != 'fix/notification-entry-latency' && github.head_ref != 'feature/spotlight-glass-search' && github.head_ref != 'feature/shittok-speed-mute' && github.head_ref != 'feature/shittok-deep-source-exploration' && github.head_ref != 'fix/shittok-async-creator-metadata' && github.head_ref != 'fix/shittok-startup-handoff' && github.head_ref != 'fix/onlyfap-first-open' && github.head_ref != 'feature/phone-content-grid-layout' && github.head_ref != 'feature/library-profile-redesign' }}
+    if: ${{ github.head_ref != 'release/zerochill-5.0.0' && github.head_ref != 'feature/shittok-dynamic-pinch' && github.head_ref != 'feature/primary-tab-activation' && github.head_ref != 'fix/notification-entry-latency' && github.head_ref != 'feature/spotlight-glass-search' && github.head_ref != 'feature/shittok-speed-mute' && github.head_ref != 'feature/shittok-deep-source-exploration' && github.head_ref != 'fix/shittok-async-creator-metadata' && github.head_ref != 'fix/shittok-startup-handoff' && github.head_ref != 'fix/onlyfap-first-open' && github.head_ref != 'feature/phone-content-grid-layout' && github.head_ref != 'feature/library-profile-redesign' }}
     name: performance (${{ matrix.flow }})
     runs-on: ubuntu-latest
     timeout-minutes: 60

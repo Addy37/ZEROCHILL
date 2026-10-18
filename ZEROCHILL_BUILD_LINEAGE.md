@@ -4,11 +4,14 @@ This file identifies the current approved ZEROCHILL product baseline for test AP
 
 - Source-of-truth branch: `rebrand/zerochill`
 - Integration branch: `integration/zerochill-current`
-- Approved product baseline commit: `ec1dda86914b719ff968aca3fed0ce9d9f4d8685`
-- Production release source: resolve tag `v4.3.8` for the exact release metadata commit
-- Device-tested APK source commit: `2fd5f0c22af2d4b589d16b94d78e4458dd151914`
-- Latest approved feature PR: #293
-- Approval date: 2026-10-13
+- Approved product baseline commit: `2f9a489ac6855926978630b7495965c404fe9e38`
+- Release preparation branch: `release/zerochill-5.0.0`
+- Latest approved feature PRs: #310 (Library/profile) and #309 (phone content-grid polish)
+- Approval date: 2026-10-18
+- Current production release: `v4.3.8`
+- Prepared production version: `5.0.0` (`5000000`)
+
+The 5.0.0 candidate preserves the physically approved application tree at `2f9a489a`. PRs #311 and #312 were closed CI-only drafts and are excluded from release lineage. Main-only history changes README and historical lineage documentation; the README already matches the approved branch, and obsolete 3.1.0 lineage instructions are superseded by this current record. The release branch merges main history without changing approved application code. No backend, remote-config, schema, or data migration is introduced. Signed candidate validation and artifact checks are recorded in the release PR. This is preparation only: no final tag or GitHub release has been created. `rebrand/zerochill` remains the source of truth until the approved integration into main.
 
 ZeroChill v4.3.8 contains the device-approved temporary ShitTok pinch from PR #291, primary-tab activation cleanup from PR #292, and notification-entry fix from PR #293. The complete approved functional baseline is `ec1dda86`; release metadata adds version 4.3.8 and plain-language notes without changing the approved application code. The final device-tested candidate `2fd5f0c2` passed 576 debug and 576 release tests with one skipped in each, both APK builds, production signing/package verification, and an Android 15 in-place upgrade from stable 4.3.7 to preview 4.3.8. The user approved publication on October 13. The release workflow rebuilds, verifies, and publishes the stable APK with version code `4003008`, the existing application ID and signing identity, and a checksum. Use tag `v4.3.8` and its successful publication run as the authoritative stable release source and checksum. No data migration, backend, Supabase, or remote-config change is required. Lint remains an audit with 291 errors and 385 warnings; the new warning concerns translating the loading text. No quantitative performance improvement is claimed from the failed emulator comparisons. Keep `integration/zerochill-current` synchronized with the stable release source after successful publication.
 
