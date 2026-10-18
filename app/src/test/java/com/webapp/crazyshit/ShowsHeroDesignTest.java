@@ -71,7 +71,8 @@ public class ShowsHeroDesignTest {
     }
 
     @Test
-    public void keepsContinueWatchingAndBaddiePortraitWhileShowsUseTwoRows() throws Exception {
+    public void keepsContinueWatchingAndBaddiePortraitCardsWhileBrowseShelvesUseTwoRows()
+            throws Exception {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
         ShowsHubView hub = new ShowsHubView(activity, item -> { }, item -> { }, item -> { });
         activity.setContentView(hub);
@@ -99,9 +100,12 @@ public class ShowsHeroDesignTest {
         RecyclerView.ViewHolder baddieHolder = baddie.getAdapter().createViewHolder(baddie, 0);
         assertEquals(dp(activity, 128), baddieHolder.itemView.getLayoutParams().width);
         assertEquals(dp(activity, 178), baddieHolder.itemView.getLayoutParams().height);
-        assertEquals(dp(activity, 194), baddie.getLayoutParams().height);
-        assertTrue(!(baddie.getLayoutManager()
-                instanceof androidx.recyclerview.widget.GridLayoutManager));
+        assertEquals(2 * (dp(activity, 178) + dp(activity, 6)), baddie.getLayoutParams().height);
+        androidx.recyclerview.widget.GridLayoutManager baddieManager =
+                (androidx.recyclerview.widget.GridLayoutManager) baddie.getLayoutManager();
+        assertEquals(2, baddieManager.getSpanCount());
+        assertEquals(RecyclerView.HORIZONTAL, baddieManager.getOrientation());
+        assertTrue(!baddieManager.canScrollVertically());
 
         RecyclerView continueRail = shelfRail(hub, "continueShelf");
         RecyclerView.ViewHolder continueHolder = continueRail.getAdapter().createViewHolder(
