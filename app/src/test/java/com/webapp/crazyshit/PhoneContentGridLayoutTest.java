@@ -17,6 +17,7 @@ import org.junit.runner.RunWith;
 import org.robolectric.Robolectric;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.annotation.Config;
+import org.robolectric.annotation.GraphicsMode;
 import org.robolectric.util.ReflectionHelpers;
 
 import java.util.ArrayList;
@@ -24,6 +25,7 @@ import java.util.List;
 
 @RunWith(RobolectricTestRunner.class)
 @Config(application = Application.class, sdk = 35)
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
 public class PhoneContentGridLayoutTest {
     @Test @Config(qualifiers = "w320dp-h640dp")
     public void compactPortrait() { checkShelves(288); }
@@ -65,6 +67,7 @@ public class PhoneContentGridLayoutTest {
                 showsRail.findViewHolderForAdapterPosition(1).itemView.getHeight());
         showsRail.findViewHolderForAdapterPosition(1).itemView.performClick();
         assertSame(showsItems.get(1), clicked.get(0));
+        render(showsRail, "shows-grid-" + widthDp);
         shows.setActive(false);
 
         OnlyFapHubView only = new OnlyFapHubView(activity, new OnlyFapHubView.Listener() {
@@ -92,6 +95,7 @@ public class PhoneContentGridLayoutTest {
         }
         onlyRail.findViewHolderForAdapterPosition(1).itemView.performClick();
         assertSame(creators.get(1), clicked.get(1));
+        render(onlyRail, "onlyfap-grid-" + widthDp);
         only.close();
         activity.finish();
     }
@@ -147,6 +151,24 @@ public class PhoneContentGridLayoutTest {
         rail.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
                 View.MeasureSpec.makeMeasureSpec(height, View.MeasureSpec.EXACTLY));
         rail.layout(0, 0, width, height);
+    }
+
+    private void render(RecyclerView rail, String name) {
+        java.io.File folder = new java.io.File("build/reports/visual-tests");
+        assertTrue(folder.exists() || folder.mkdirs());
+        android.graphics.Bitmap bitmap = android.graphics.Bitmap.createBitmap(
+                rail.getWidth(), rail.getHeight(), android.graphics.Bitmap.Config.ARGB_8888);
+        android.graphics.Canvas canvas = new android.graphics.Canvas(bitmap);
+        canvas.drawColor(android.graphics.Color.BLACK);
+        rail.draw(canvas);
+        try (java.io.FileOutputStream out = new java.io.FileOutputStream(
+                new java.io.File(folder, name + ".png"))) {
+            assertTrue(bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, out));
+        } catch (java.io.IOException error) {
+            throw new AssertionError(error);
+        } finally {
+            bitmap.recycle();
+        }
     }
 
     private int dp(Activity activity, int value) {
