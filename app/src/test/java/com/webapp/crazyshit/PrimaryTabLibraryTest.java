@@ -24,6 +24,7 @@ public class PrimaryTabLibraryTest {
     @Test public void deferredLibraryBuildsOnEntryAndReadsChangesMadeBeforeEntry() throws Exception {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
         LibraryHubView library = new LibraryHubView(activity, null, true);
+        activity.setContentView(library);
         Map<String, Runnable> work = new LinkedHashMap<>(); library.setWorkScheduler(work::put);
         try {
             assertNull(ReflectionHelpers.getField(library, "socialHub"));
