@@ -52,6 +52,7 @@ final class LibraryHubView extends ScrollView {
     private LibraryProfileHeader socialHub;
     private final Map<String, List<ImageView>> thumbnailTargets = new HashMap<>();
     private final Map<String, String> resolvedThumbnails = new HashMap<>();
+    private final Map<String, Boolean> portraitThumbnails = new HashMap<>();
     private final java.util.Set<String> requestedThumbnails = new java.util.HashSet<>();
     private RenderedThumbnailResolver[] thumbnailResolvers = new RenderedThumbnailResolver[0];
     private final ShowsContinueFrameStore.Listener frameListener = this::onContinueFrameUpdated;
@@ -168,12 +169,13 @@ final class LibraryHubView extends ScrollView {
 
     private void render(Snapshot snapshot) {
         int scrollY = getScrollY();
-        Map<String, Integer> railPositions = new HashMap<>();
+        Map<String, int[]> railPositions = new HashMap<>();
         for (int i = 0; i < mediaContent.getChildCount(); i++) {
             View section = mediaContent.getChildAt(i);
             if (section instanceof ViewGroup && ((ViewGroup) section).getChildCount() > 1) {
                 View rail = ((ViewGroup) section).getChildAt(1);
-                railPositions.put(String.valueOf(section.getTag()), rail.getScrollX());
+                railPositions.put(String.valueOf(section.getTag()), rail instanceof LibraryMediaRows
+                        ? ((LibraryMediaRows) rail).scrollPositions() : new int[]{rail.getScrollX()});
             }
         }
         LinearLayout previous = mediaContent;
@@ -187,13 +189,13 @@ final class LibraryHubView extends ScrollView {
                 historyByUrl.put(item.pageUrl, item);
             }
         }
-        retainSection("liked", java.util.Arrays.asList(snapshot.owner, snapshot.inputs.get(0),
-                snapshot.inputs.get(snapshot.inputs.size() - 1)), () -> addLikedSection(snapshot.likedVideos));
         List<Object> creatorState = new ArrayList<>(snapshot.inputs.subList(2, 6));
         creatorState.addAll(snapshot.inputs.subList(8, snapshot.inputs.size() - 1));
         retainSection("creators", creatorState, () -> {
             if (!snapshot.creators.isEmpty()) addCreatorSection(snapshot.creators, snapshot.avatars);
         });
+        retainSection("liked", java.util.Arrays.asList(snapshot.owner, snapshot.inputs.get(0),
+                snapshot.inputs.get(snapshot.inputs.size() - 1)), () -> addLikedSection(snapshot.likedVideos));
         retainSection("downloads", java.util.Arrays.asList(snapshot.inputs.get(6), snapshot.downloadState), () -> {
             if (!snapshot.downloads.isEmpty()) addDownloadsSection(snapshot.downloads);
         });
@@ -220,10 +222,12 @@ final class LibraryHubView extends ScrollView {
             scrollTo(0, Math.min(scrollY, Math.max(0, content.getHeight() + getPaddingTop() + getPaddingBottom() - getHeight())));
             for (int i = 0; i < mediaContent.getChildCount(); i++) {
                 View section = mediaContent.getChildAt(i);
-                Integer x = railPositions.get(String.valueOf(section.getTag()));
+                int[] x = railPositions.get(String.valueOf(section.getTag()));
                 if (x != null && section instanceof ViewGroup &&
                         ((ViewGroup) section).getChildCount() > 1) {
-                    ((ViewGroup) section).getChildAt(1).scrollTo(x, 0);
+                    View rail = ((ViewGroup) section).getChildAt(1);
+                    if (rail instanceof LibraryMediaRows) ((LibraryMediaRows) rail).restoreScroll(x);
+                    else rail.scrollTo(x[0], 0);
                 }
             }
         });
@@ -333,6 +337,7 @@ final class LibraryHubView extends ScrollView {
             if (resolver != null) resolver.close();
         }
         thumbnailTargets.clear();
+        portraitThumbnails.clear();
         requestedThumbnails.clear();
         sectionStates.clear();
     }
@@ -358,11 +363,11 @@ final class LibraryHubView extends ScrollView {
             mediaContent.addView(open, new LinearLayout.LayoutParams(-1, -2));
             return;
         }
-        LinearLayout rail = addSectionShell("Liked Videos", "Your recent likes on this device", "View all", this::openLikedVideos);
+        LibraryMediaRows rail = addMediaSectionShell("Liked Videos", "Your recent likes on this device", "View all", this::openLikedVideos);
         for (int i = 0; i < items.size(); i++) {
             NativeContentItem item = items.get(i);
-            rail.addView(compactMediaCard(item.title, item.url, item.imageUrl, "", false),
-                    mediaRailParams(168, 105, i == items.size() - 1));
+            rail.addCard(compactMediaCard(item.title, item.url, item.imageUrl, "", false),
+                    item.url, portraitThumbnails.getOrDefault(item.url, false));
         }
     }
 
@@ -415,6 +420,11 @@ final class LibraryHubView extends ScrollView {
             int fillWidth = Math.max(dp(4),
                     Math.round(dp(148) * (item.progressPercent() / 100f)));
             track.addView(fill, new FrameLayout.LayoutParams(fillWidth, -1));
+            track.addOnLayoutChangeListener((v, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) -> {
+                int width = Math.max(dp(4), Math.round((right - left) * item.progressPercent() / 100f));
+                android.view.ViewGroup.LayoutParams params = fill.getLayoutParams();
+                if (params.width != width) { params.width = width; fill.setLayoutParams(params); }
+            });
         }
 
         card.setContentDescription((item.complete ? "Watch again " : "Resume ") + item.title
@@ -432,12 +442,17 @@ final class LibraryHubView extends ScrollView {
                 () -> activity.startActivity(new Intent(activity, CreatorsActivity.class))
         );
         int count = Math.min(14, creators.size());
-        for (int i = 0; i < count; i++) {
-            CreatorCatalog.FavoriteGroup group = creators.get(i);
-            rail.addView(
-                    creatorCard(group, avatarOverrides),
-                    creatorRailParams(i == count - 1)
-            );
+        for (int i = 0; i < count; i += 2) {
+            LinearLayout column = new LinearLayout(activity);
+            column.setOrientation(LinearLayout.VERTICAL);
+            for (int row = i; row < Math.min(i + 2, count); row++) {
+                LinearLayout.LayoutParams params = creatorRailParams(true);
+                params.bottomMargin = row == i && row + 1 < count ? dp(12) : 0;
+                column.addView(creatorCard(creators.get(row), avatarOverrides), params);
+            }
+            LinearLayout.LayoutParams columnParams = new LinearLayout.LayoutParams(-2, -2);
+            columnParams.setMarginEnd(i + 2 < count ? dp(5) : 0);
+            rail.addView(column, columnParams);
         }
     }
 
@@ -454,8 +469,8 @@ final class LibraryHubView extends ScrollView {
         wrapper.setContentDescription("Open " + creator.title);
         ZeroChillMotion.installPressFeedback(wrapper);
 
-        MaterialCardView avatar = mediaCard(14);
-        avatar.setRadius(dp(14));
+        MaterialCardView avatar = mediaCard(42);
+        avatar.setRadius(dp(42));
         avatar.setClipToOutline(true);
         avatar.setCardBackgroundColor(Color.rgb(19, 23, 27));
 
@@ -470,10 +485,16 @@ final class LibraryHubView extends ScrollView {
 
         CreatorAvatarImageView image = new CreatorAvatarImageView(activity);
         image.setBackgroundColor(Color.TRANSPARENT);
+        image.setOutlineProvider(new android.view.ViewOutlineProvider() {
+            @Override public void getOutline(View view, android.graphics.Outline outline) {
+                outline.setOval(0, 0, view.getWidth(), view.getHeight());
+            }
+        });
+        image.setClipToOutline(true);
         frame.addView(image, new FrameLayout.LayoutParams(-1, -1));
         loadCreatorImage(image, group, avatarOverrides);
 
-        wrapper.addView(avatar, new LinearLayout.LayoutParams(dp(104), dp(142)));
+        wrapper.addView(avatar, new LinearLayout.LayoutParams(dp(84), dp(84)));
 
         TextView name = text(creator.title, 12.5f,
                 ZeroChillUi.color(activity, R.color.zc_text_primary));
@@ -497,7 +518,7 @@ final class LibraryHubView extends ScrollView {
             List<FavoriteStore.Item> items,
             Map<String, PlaybackHistoryStore.Item> historyByUrl
     ) {
-        LinearLayout rail = addSectionShell(
+        LibraryMediaRows rail = addMediaSectionShell(
                 "Watch Later",
                 "Saved for another time",
                 "View all",
@@ -509,15 +530,13 @@ final class LibraryHubView extends ScrollView {
             FavoriteStore.Item item = items.get(i);
             PlaybackHistoryStore.Item historyItem = historyByUrl.get(item.url);
             String poster = historyItem == null ? "" : historyItem.posterUrl;
-            rail.addView(
-                    compactMediaCard(item.title, item.url, poster, "", false),
-                    mediaRailParams(196, 122, i == count - 1)
-            );
+            rail.addCard(compactMediaCard(item.title, item.url, poster, "", false),
+                    item.url, portraitThumbnails.getOrDefault(item.url, false));
         }
     }
 
     private void addDownloadsSection(List<VideoDownloadStore.Entry> entries) {
-        LinearLayout rail = addSectionShell(
+        LibraryMediaRows rail = addMediaSectionShell(
                 "Downloads",
                 "Available offline and in progress",
                 "View all",
@@ -527,7 +546,8 @@ final class LibraryHubView extends ScrollView {
         int count = Math.min(10, entries.size());
         for (int i = 0; i < count; i++) {
             VideoDownloadStore.Entry entry = entries.get(i);
-            rail.addView(downloadCard(entry), mediaRailParams(196, 122, i == count - 1));
+            rail.addCard(downloadCard(entry), entry.pageUrl,
+                    portraitThumbnails.getOrDefault(entry.pageUrl, false));
         }
     }
 
@@ -571,7 +591,7 @@ final class LibraryHubView extends ScrollView {
     }
 
     private void addHistorySection(List<PlaybackHistoryStore.Item> items) {
-        LinearLayout rail = addSectionShell(
+        LibraryMediaRows rail = addMediaSectionShell(
                 "History",
                 "Recent first · Tap unfinished videos to resume",
                 "View all",
@@ -581,10 +601,8 @@ final class LibraryHubView extends ScrollView {
         int count = Math.min(12, items.size());
         for (int i = 0; i < count; i++) {
             PlaybackHistoryStore.Item item = items.get(i);
-            rail.addView(
-                    continueCard(item),
-                    mediaRailParams(168, 105, i == count - 1)
-            );
+            rail.addCard(continueCard(item), item.pageUrl,
+                    portraitThumbnails.getOrDefault(item.pageUrl, false));
         }
     }
 
@@ -627,6 +645,17 @@ final class LibraryHubView extends ScrollView {
             }
         });
         return card;
+    }
+
+    private LibraryMediaRows addMediaSectionShell(String title, String subtitle, String actionLabel, Runnable action) {
+        LinearLayout oldRail = addSectionShell(title, subtitle, actionLabel, action);
+        View scroll = (View) oldRail.getParent();
+        LinearLayout section = (LinearLayout) scroll.getParent();
+        android.view.ViewGroup.LayoutParams params = scroll.getLayoutParams();
+        section.removeView(scroll);
+        LibraryMediaRows rows = new LibraryMediaRows(activity);
+        section.addView(rows, params);
+        return rows;
     }
 
     private LinearLayout addSectionShell(
@@ -836,7 +865,7 @@ final class LibraryHubView extends ScrollView {
                             .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
                             .dontAnimate()
                             .transition(ThumbnailFades.avatar());
-            if (avatarOverride == null) request.centerCrop();
+            if (avatarOverride == null) request = request.circleCrop();
             request.into(image);
         } catch (Exception ignored) {
         }
@@ -883,7 +912,25 @@ final class LibraryHubView extends ScrollView {
         try {
             Glide.with(image)
                     .load(model)
-                    .centerCrop()
+                    .dontTransform()
+                    .downsample(com.bumptech.glide.load.resource.bitmap.DownsampleStrategy.AT_MOST)
+                    .override(dp(256), dp(256))
+                    .listener(new com.bumptech.glide.request.RequestListener<android.graphics.drawable.Drawable>() {
+                        @Override public boolean onLoadFailed(com.bumptech.glide.load.engine.GlideException error,
+                                Object model, com.bumptech.glide.request.target.Target<android.graphics.drawable.Drawable> target,
+                                boolean first) { return false; }
+                        @Override public boolean onResourceReady(android.graphics.drawable.Drawable resource,
+                                Object model, com.bumptech.glide.request.target.Target<android.graphics.drawable.Drawable> target,
+                                com.bumptech.glide.load.DataSource source, boolean first) {
+                            if (resource.getIntrinsicWidth() > 0 && resource.getIntrinsicHeight() > 0) {
+                                boolean portrait = resource.getIntrinsicHeight() > resource.getIntrinsicWidth();
+                                post(() -> {
+                                    if (belongsToMediaContent(image)) recordThumbnailOrientation(pageUrl, portrait);
+                                });
+                            }
+                            return false;
+                        }
+                    })
                     .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
                     .dontAnimate()
                     .transition(ThumbnailFades.thumbnail())
@@ -892,6 +939,21 @@ final class LibraryHubView extends ScrollView {
                     .into(image);
         } catch (Exception ignored) {
         }
+    }
+
+    private void recordThumbnailOrientation(String pageUrl, boolean portrait) {
+        if (closed || pageUrl.isEmpty() || !thumbnailTargets.containsKey(pageUrl)) return;
+        Boolean previous = portraitThumbnails.put(pageUrl, portrait);
+        if (previous != null && previous == portrait) return;
+        work.schedule("library-orientation:" + pageUrl, () -> {
+            if (closed || mediaContent == null) return;
+            for (int i = 0; i < mediaContent.getChildCount(); i++) {
+                View section = mediaContent.getChildAt(i);
+                if (!(section instanceof ViewGroup) || ((ViewGroup) section).getChildCount() < 2) continue;
+                View rows = ((ViewGroup) section).getChildAt(1);
+                if (rows instanceof LibraryMediaRows) ((LibraryMediaRows) rows).setPortrait(pageUrl, portrait);
+            }
+        });
     }
 
     static Object remoteImage(String imageUrl, String pageUrl) {
@@ -960,17 +1022,6 @@ final class LibraryHubView extends ScrollView {
         );
     }
 
-    private LinearLayout.LayoutParams mediaRailParams(
-            int widthDp,
-            int heightDp,
-            boolean last
-    ) {
-        LinearLayout.LayoutParams params =
-                new LinearLayout.LayoutParams(dp(widthDp), dp(heightDp));
-        params.setMarginEnd(last ? 0 : dp(10));
-        return params;
-    }
-
     private LinearLayout.LayoutParams creatorRailParams(boolean last) {
         LinearLayout.LayoutParams params =
                 new LinearLayout.LayoutParams(dp(104), creatorCardHeight());
@@ -980,7 +1031,7 @@ final class LibraryHubView extends ScrollView {
 
     private int creatorCardHeight() {
         TextView title = text("", 12.5f, UiPalette.TEXT_PRIMARY);
-        return dp(142 + 7 + 4) + title.getLineHeight() * 2;
+        return dp(84 + 7 + 4) + title.getLineHeight() * 2;
     }
 
     private TextView text(String value, float size, int color) {

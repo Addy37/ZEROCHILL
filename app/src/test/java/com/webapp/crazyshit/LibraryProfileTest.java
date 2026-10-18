@@ -241,6 +241,146 @@ public class LibraryProfileTest {
         } finally { view.close(); }
     }
 
+    @Test public void orientationRowsKeepOrderClicksAndHideEmptyRows() {
+        LibraryMediaRows rows = new LibraryMediaRows(activity);
+        View first = new View(activity), second = new View(activity), third = new View(activity);
+        int[] clicks = {0}; second.setOnClickListener(v -> clicks[0]++);
+        rows.addCard(first, "first", false);
+        rows.addCard(second, "second", false);
+        rows.addCard(third, "third", false);
+        assertEquals(View.GONE, rows.getChildAt(0).getVisibility());
+        rows.setPortrait("second", true);
+        rows.setPortrait("first", true);
+        android.widget.LinearLayout portrait = row(rows, 0), landscape = row(rows, 1);
+        assertSame(first, portrait.getChildAt(0)); assertSame(second, portrait.getChildAt(1));
+        assertSame(third, landscape.getChildAt(0));
+        assertTrue(first.getLayoutParams().height > first.getLayoutParams().width);
+        assertTrue(third.getLayoutParams().width > third.getLayoutParams().height);
+        second.performClick(); assertEquals(1, clicks[0]);
+        rows.setPortrait("second", false); rows.setPortrait("first", false);
+        assertEquals(View.GONE, rows.getChildAt(0).getVisibility());
+        assertEquals(3, landscape.getChildCount());
+        assertSame(first, landscape.getChildAt(0)); assertSame(second, landscape.getChildAt(1));
+    }
+
+    @Test public void favoriteAvatarsUseTwoRowsBeforeLikedVideos() throws Exception {
+        for (int i = 0; i < 4; i++) {
+            NativeContentItem creator = new NativeContentItem(NativeContentItem.KIND_CREATOR,
+                    "Creator " + i, "https://fapello.com/fixture-avatar-" + i + "/", "", "", "", "", "", "Creator " + i);
+            CreatorCatalog.remember(activity, java.util.Collections.singletonList(creator));
+            CreatorFavoriteStore.toggle(activity, creator);
+        }
+        NativeContentItem liked = new NativeContentItem(NativeContentItem.KIND_MEDIA, "Liked", "https://fixture.invalid/liked", "", "", "", "");
+        SocialContentContextStore.remember(activity, liked);
+        SocialContentContextStore.confirmLike(activity, owner, liked.url, true);
+        LibraryHubView view = new LibraryHubView(activity, null);
+        activity.setContentView(view);
+        Map<String, Runnable> work = new LinkedHashMap<>(); view.setWorkScheduler(work::put);
+        try {
+            view.setSocialActive(true); publish(view, work);
+            android.widget.LinearLayout media = ReflectionHelpers.getField(view, "mediaContent");
+            assertEquals("Favorite Creators", media.getChildAt(0).getTag());
+            assertEquals("Liked Videos", media.getChildAt(1).getTag());
+            ViewGroup creators = (ViewGroup) view.findViewWithTag("Favorite Creators");
+            android.widget.HorizontalScrollView scroll = (android.widget.HorizontalScrollView) creators.getChildAt(1);
+            ViewGroup rail = (ViewGroup) scroll.getChildAt(0);
+            assertEquals(2, rail.getChildCount());
+            for (int i = 0; i < rail.getChildCount(); i++) {
+                ViewGroup column = (ViewGroup) rail.getChildAt(i);
+                assertEquals(2, column.getChildCount());
+                for (int j = 0; j < column.getChildCount(); j++) {
+                    ViewGroup wrapper = (ViewGroup) column.getChildAt(j);
+                    com.google.android.material.card.MaterialCardView avatar = (com.google.android.material.card.MaterialCardView) wrapper.getChildAt(0);
+                    assertEquals(BrowseUi.dp(activity, 84), avatar.getLayoutParams().width);
+                    assertEquals(avatar.getLayoutParams().width, avatar.getLayoutParams().height);
+                    assertEquals(BrowseUi.dp(activity, 42), avatar.getRadius(), 0.1f);
+                }
+            }
+            layoutLibrary(view, 320, 800);
+            saveRender(view, "library-two-avatar-rows");
+        } finally { view.close(); }
+    }
+
+    @Test public void realThumbnailDimensionsSeparateEveryMediaCollectionWithoutChangingStores() throws Exception {
+        String portrait = thumbnailFile("portrait", 240, 426, android.graphics.Color.rgb(7, 70, 90));
+        String horizontal = thumbnailFile("landscape", 480, 270, android.graphics.Color.rgb(26, 42, 65));
+        String[] urls = {"https://fixture.invalid/portrait", "https://fixture.invalid/landscape"};
+        String[] images = {portrait, horizontal};
+        for (int i = 0; i < 2; i++) {
+            NativeContentItem video = new NativeContentItem(NativeContentItem.KIND_MEDIA,
+                    i == 0 ? "Portrait video" : "Landscape video", urls[i], images[i], "", "", "");
+            SocialContentContextStore.remember(activity, video);
+            SocialContentContextStore.confirmLike(activity, owner, video.url, true);
+            FavoriteStore.add(activity, video.title, video.url);
+            PlaybackHistoryStore.record(activity, video.title, video.url, images[i], 60_000, 180_000, false, true);
+            VideoDownloadStore.Entry download = new VideoDownloadStore.Entry(-10 - i, video.title, video.url,
+                    images[i], "", "video/mp4", 1, android.app.DownloadManager.STATUS_SUCCESSFUL, 10, 10, "file:///fixture.mp4", 0);
+            java.lang.reflect.Method save = VideoDownloadStore.class.getDeclaredMethod("saveMetadata", Context.class, VideoDownloadStore.Entry.class);
+            save.setAccessible(true); save.invoke(null, activity, download);
+        }
+        PlaybackHistoryStore.awaitPendingWritesForTests();
+        String savedBefore = activity.getSharedPreferences("watch_later", 0).getString("items", "");
+        String historyBefore = activity.getSharedPreferences("playback_history", 0).getString("items", "");
+        LibraryHubView view = new LibraryHubView(activity, null);
+        activity.setContentView(view);
+        Map<String, Runnable> work = new LinkedHashMap<>(); view.setWorkScheduler(work::put);
+        try {
+            view.setSocialActive(true); publish(view, work);
+            layoutLibrary(view, 320, 800);
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(8);
+            while (System.nanoTime() < deadline) {
+                shadowOf(Looper.getMainLooper()).idle();
+                for (String key : new java.util.ArrayList<>(work.keySet()))
+                    if (key.startsWith("library-orientation:")) work.remove(key).run();
+                Map<String, Boolean> orientations = ReflectionHelpers.getField(view, "portraitThumbnails");
+                if (Boolean.TRUE.equals(orientations.get(urls[0])) && Boolean.FALSE.equals(orientations.get(urls[1]))) break;
+                Thread.sleep(10);
+            }
+            layoutLibrary(view, 320, 800);
+            for (String section : new String[]{"Liked Videos", "Downloads", "Watch Later", "History"}) {
+                ViewGroup shell = (ViewGroup) view.findViewWithTag(section);
+                assertNotNull(section, shell);
+                LibraryMediaRows rows = (LibraryMediaRows) shell.getChildAt(1);
+                assertEquals(section + " portrait count", 1, row(rows, 0).getChildCount());
+                assertEquals(section + " landscape count", 1, row(rows, 1).getChildCount());
+                assertTrue(row(rows, 0).getChildAt(0).getHeight() > row(rows, 0).getChildAt(0).getWidth());
+                assertTrue(row(rows, 1).getChildAt(0).getWidth() > row(rows, 1).getChildAt(0).getHeight());
+            }
+            ViewGroup history = (ViewGroup) view.findViewWithTag("History");
+            saveRender(history, "library-orientation-history");
+            saveRender((View) view.findViewWithTag("Liked Videos"), "library-orientation-likes");
+            assertEquals(savedBefore, activity.getSharedPreferences("watch_later", 0).getString("items", ""));
+            assertEquals(historyBefore, activity.getSharedPreferences("playback_history", 0).getString("items", ""));
+            assertEquals(2, SocialContentContextStore.likedVideos(activity, owner).size());
+        } finally { view.close(); }
+    }
+
+    private android.widget.LinearLayout row(LibraryMediaRows rows, int index) {
+        return (android.widget.LinearLayout) ((android.widget.HorizontalScrollView) rows.getChildAt(index)).getChildAt(0);
+    }
+    private String thumbnailFile(String name, int width, int height, int color) throws Exception {
+        android.graphics.Bitmap bitmap = android.graphics.Bitmap.createBitmap(width, height, android.graphics.Bitmap.Config.ARGB_8888);
+        bitmap.eraseColor(color);
+        java.io.File file = new java.io.File(activity.getCacheDir(), name + ".png");
+        try (java.io.FileOutputStream out = new java.io.FileOutputStream(file)) { bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, out); }
+        bitmap.recycle(); return file.toURI().toString();
+    }
+    private void layoutLibrary(View view, int widthDp, int heightDp) {
+        int width = BrowseUi.dp(activity, widthDp), height = BrowseUi.dp(activity, heightDp);
+        view.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(height, View.MeasureSpec.EXACTLY));
+        view.layout(0, 0, width, height);
+    }
+    private void saveRender(View view, String name) throws Exception {
+        android.graphics.Bitmap bitmap = android.graphics.Bitmap.createBitmap(view.getWidth(), view.getHeight(), android.graphics.Bitmap.Config.ARGB_8888);
+        view.draw(new android.graphics.Canvas(bitmap));
+        java.io.File directory = new java.io.File("build/reports/visual-tests");
+        assertTrue(directory.isDirectory() || directory.mkdirs());
+        try (java.io.FileOutputStream out = new java.io.FileOutputStream(new java.io.File(directory, name + ".png"))) {
+            assertTrue(bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, out));
+        }
+        bitmap.recycle();
+    }
+
     private void publish(LibraryHubView view, Map<String, Runnable> work) throws Exception {
         Runnable refresh = work.remove("library-refresh"); assertNotNull(refresh); refresh.run();
         ((ExecutorService) ReflectionHelpers.getField(view, "refreshIo")).submit(() -> {}).get(5, TimeUnit.SECONDS);
