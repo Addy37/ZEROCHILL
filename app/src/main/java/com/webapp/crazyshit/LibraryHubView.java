@@ -582,7 +582,10 @@ final class LibraryHubView extends ScrollView {
             statusParams.setMargins(0, dp(7), dp(7), 0);
             frame.addView(offline, statusParams);
         } else {
-            TextView status = pill(VideoDownloadStore.statusText(entry));
+            String statusLabel = entry.status == android.app.DownloadManager.STATUS_FAILED ? "Download failed"
+                    : entry.status == android.app.DownloadManager.STATUS_PAUSED ? "Paused"
+                    : VideoDownloadStore.statusText(entry);
+            TextView status = pill(statusLabel);
             status.setTextSize(11f);
             status.setMaxLines(2);
             status.setEllipsize(TextUtils.TruncateAt.END);
@@ -1007,6 +1010,7 @@ final class LibraryHubView extends ScrollView {
         title.setTypeface(null, android.graphics.Typeface.BOLD);
         title.setMinLines(2);
         title.setMaxLines(2);
+        title.setGravity(Gravity.BOTTOM);
         title.setEllipsize(TextUtils.TruncateAt.END);
         title.setShadowLayer(5f, 0f, dp(1), Color.BLACK);
         return title;

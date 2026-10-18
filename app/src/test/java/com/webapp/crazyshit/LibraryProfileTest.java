@@ -376,6 +376,7 @@ public class LibraryProfileTest {
             assertNotNull(preview);
             assertEquals(2, preview.getMinLines());
             assertEquals(2, preview.getMaxLines());
+            assertEquals(android.view.Gravity.BOTTOM, preview.getGravity());
             description(view, title).performClick();
             assertEquals(title, opened.get(0).title);
             assertEquals(url, opened.get(0).url);
@@ -393,7 +394,8 @@ public class LibraryProfileTest {
                     assertTrue(card.getContentDescription().toString().contains("Ready offline"));
                 } else {
                     assertNull(card.findViewWithTag("library-offline"));
-                    assertNotNull(text(card, VideoDownloadStore.statusText(entry)));
+                    assertNotNull(text(card, status == android.app.DownloadManager.STATUS_FAILED
+                            ? "Download failed" : VideoDownloadStore.statusText(entry)));
                 }
                 android.widget.FrameLayout host = new android.widget.FrameLayout(activity);
                 host.addView(card, new android.widget.FrameLayout.LayoutParams(BrowseUi.dp(activity, 104), BrowseUi.dp(activity, 185)));
