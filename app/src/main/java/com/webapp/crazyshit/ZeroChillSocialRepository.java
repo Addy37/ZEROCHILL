@@ -1146,8 +1146,8 @@ final class ZeroChillSocialRepository {
     }
 
     static void videoLikeState(Context context, String pageUrl, Callback<VideoLikeState> callback) {
-        final String requestedOwner = ZeroChillSessionStore.currentUserId(context);
         NETWORK.execute(() -> {
+            final String requestedOwner = ZeroChillSessionStore.currentUserId(context);
             try {
                 String key = contentKey(pageUrl);
                 Response response = request(

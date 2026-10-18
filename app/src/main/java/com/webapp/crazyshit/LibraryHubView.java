@@ -61,14 +61,15 @@ final class LibraryHubView extends ScrollView {
             java.util.concurrent.Executors.newSingleThreadExecutor();
     private final List<SharedPreferences> observedPreferences = new ArrayList<>();
     private final SharedPreferences.OnSharedPreferenceChangeListener invalidation = (prefs, key) ->
-            activityOnInvalidation();
+            activityOnInvalidation(prefs);
 
-    private void activityOnInvalidation() {
+    private void activityOnInvalidation(SharedPreferences changedPreferences) {
         activity.runOnUiThread(() -> {
             if (closed) return;
             revision++;
             // Retain cached media during ordinary refreshes, never across account ownership.
-            if (displayed != null && !displayed.owner.equals(ZeroChillSessionStore.currentUserId(activity))) {
+            if (changedPreferences == ZeroChillSessionStore.preferences(activity)
+                    && displayed != null && !displayed.owner.equals(ZeroChillSessionStore.currentUserId(activity))) {
                 clearImages(mediaContent);
                 mediaContent.removeAllViews();
                 thumbnailTargets.clear();
