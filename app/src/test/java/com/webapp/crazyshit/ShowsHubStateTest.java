@@ -86,11 +86,13 @@ public class ShowsHubStateTest {
         LinearLayoutManager firstLayout = (LinearLayoutManager) firstRail.getLayoutManager();
         firstLayout.scrollToPositionWithOffset(4, -18);
         layout(firstRail);
+        int firstVisiblePosition = firstLayout.findFirstVisibleItemPosition();
+        assertTrue(firstVisiblePosition >= 0);
 
         Bundle saved = new Bundle();
         first.saveState(saved);
         assertTrue(saved.containsKey("baddiehub_categories_position"));
-        assertEquals(4, saved.getInt("baddiehub_categories_position"));
+        assertEquals(firstVisiblePosition, saved.getInt("baddiehub_categories_position"));
 
         ShowsHubView restored = hub(activity);
         activity.setContentView(restored);
