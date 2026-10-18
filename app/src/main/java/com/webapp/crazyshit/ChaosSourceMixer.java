@@ -103,9 +103,11 @@ final class ChaosSourceMixer {
             providerTimings.put(source, "active");
             try {
                 List<NativeContentItem> items = sourceLoader == null ? loader.call() : sourceLoader.load(source);
-                providerTimings.put(source, "ms=" + (android.os.SystemClock.elapsedRealtime() - at) + ",raw=" + items.size());
+                providerTimings.put(source, "ms=" + (android.os.SystemClock.elapsedRealtime() - at) + ",candidates=" + items.size());
                 return new SourceBatch(source, items);
             } finally {
+                providerTimings.computeIfPresent(source, (key, state) -> state.equals("active")
+                        ? "ms=" + (android.os.SystemClock.elapsedRealtime() - at) + ",status=cancelledOrFailed" : state);
                 activeFetches.decrementAndGet(); fetching.remove(source);
                 ShitTokPoolDiagnostics.record("provider", "source=" + source + " " + providerTimings.get(source));
             }
@@ -330,10 +332,10 @@ final class ChaosSourceMixer {
     private List<NativeContentItem> loadBaddieHubBatch(Context context) {
         try {
             ArrayList<NativeContentItem> candidates = new ArrayList<>(
-                    baddieHub.fetchShitTokCandidates(
+                    ShitTokPoolDiagnostics.fetched(BATCH_BADDIEHUB, baddieHub.fetchShitTokCandidates(
                             context,
                             nextPage("baddiehub", BADDIEHUB_MAX_PAGE)
-                    )
+                    ))
             );
             candidates.removeIf(item -> item == null || !item.isVideo());
             Collections.shuffle(candidates, random);
@@ -361,7 +363,7 @@ final class ChaosSourceMixer {
             if (!usedSeries.add(series.url)) continue;
 
             try {
-                for (NativeContentItem item : efukt.fetchSeriesFeed(context, series.url, 1)) {
+                for (NativeContentItem item : ShitTokPoolDiagnostics.fetched(BATCH_EFUKT, efukt.fetchSeriesFeed(context, series.url, 1))) {
                     if (item == null || item.url == null || item.url.isEmpty()) continue;
                     if (!NativeContentItem.KIND_MEDIA.equals(item.kind)) continue;
                     combined.putIfAbsent(item.url, item);
@@ -404,7 +406,7 @@ final class ChaosSourceMixer {
     private List<NativeContentItem> loadFapelloBatch(Context context) {
         try {
             ArrayList<NativeContentItem> candidates = new ArrayList<>(
-                    fapello.fetchPopularVideos(context, nextPage("fapello", MAX_SOURCE_PAGE))
+                    ShitTokPoolDiagnostics.fetched(BATCH_FAPELLO, fapello.fetchPopularVideos(context, nextPage("fapello", MAX_SOURCE_PAGE)))
             );
             candidates.removeIf(item -> item == null || !item.isVideo());
             Collections.shuffle(candidates, random);
@@ -418,11 +420,11 @@ final class ChaosSourceMixer {
     private List<NativeContentItem> loadKaoticBatch(Context context) {
         try {
             ArrayList<NativeContentItem> candidates = new ArrayList<>(
-                    webVideo.fetchFeed(
+                    ShitTokPoolDiagnostics.fetched(BATCH_KAOTIC, webVideo.fetchFeed(
                             context,
                             WebVideoSourceRepository.Source.KAOTIC,
                             nextPage("kaotic", MAX_SOURCE_PAGE)
-                    )
+                    ))
             );
             candidates.removeIf(item -> item == null || !item.isVideo());
             Collections.shuffle(candidates, random);
@@ -451,7 +453,7 @@ final class ChaosSourceMixer {
             ArrayList<NativeContentItem> candidates = new ArrayList<>();
             try {
                 for (NativeContentItem item :
-                        onlyHaven.fetchCreatorMedia(context, creator, 1, 18)) {
+                        ShitTokPoolDiagnostics.fetched(BATCH_ONLY_HAVEN, onlyHaven.fetchCreatorMedia(context, creator, 1, 18))) {
                     if (item == null || !item.isVideo()) continue;
                     candidates.add(new NativeContentItem(
                             item.kind,
@@ -555,7 +557,7 @@ final class ChaosSourceMixer {
         if (request == null) return;
         try {
             ArrayList<NativeContentItem> candidates = new ArrayList<>();
-            for (NativeContentItem item : repository.fetchFeed(context, request.url, request.page)) {
+            for (NativeContentItem item : ShitTokPoolDiagnostics.fetched(BATCH_REGULAR, repository.fetchFeed(context, request.url, request.page))) {
                 if (item == null || item.url == null || item.url.isEmpty()) continue;
                 if (!NativeContentItem.KIND_MEDIA.equals(item.kind)) continue;
                 candidates.add(item);

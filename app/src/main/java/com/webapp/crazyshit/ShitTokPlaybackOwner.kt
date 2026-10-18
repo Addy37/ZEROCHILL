@@ -452,6 +452,7 @@ class ShitTokPlaybackOwner(context: Context, private val callbacks: Callbacks) {
                 " format=${if(it.mediaUrl.contains(".m3u8", true) || it.mediaUrl.contains(".mpd", true)) "adaptive" else "direct"}" }
         }.orEmpty()
 
+    fun selectedBufferedMs(): Long = selected?.let { leases[it]?.player?.totalBufferedDuration } ?: 0L
     fun selectedPlaybackState(): Int = selected?.let { leases[it]?.player?.playbackState } ?: Player.STATE_IDLE
 
     private fun silence(player: ExoPlayer) {

@@ -15,7 +15,8 @@ final class ShitTokSeenStore {
     private static final ExecutorService DISK = Executors.newSingleThreadExecutor();
     private static ShitTokSeenStore shared;
     static synchronized ShitTokSeenStore get(Context context) {
-        if (shared == null) shared = new ShitTokSeenStore(context.getApplicationContext());
+        if (shared == null || shared.app != context.getApplicationContext())
+            shared = new ShitTokSeenStore(context.getApplicationContext());
         return shared;
     }
     private final Context app;

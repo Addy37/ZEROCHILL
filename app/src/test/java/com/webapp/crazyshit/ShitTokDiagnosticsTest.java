@@ -24,6 +24,7 @@ public class ShitTokDiagnosticsTest {
             AlertDialog dialog = ShadowAlertDialog.getLatestAlertDialog();
             assertEquals("Copy diagnostics", dialog.getButton(AlertDialog.BUTTON_NEUTRAL).getText().toString());
             dialog.getButton(AlertDialog.BUTTON_NEUTRAL).performClick();
+            org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
             ClipboardManager clipboard = (ClipboardManager) host.get().getSystemService(Context.CLIPBOARD_SERVICE);
             String copied = clipboard.getPrimaryClip().getItemAt(0).getText().toString();
             assertTrue(copied.contains("tailHits=3"));

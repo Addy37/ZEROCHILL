@@ -10,6 +10,13 @@ final class ShitTokPoolDiagnostics {
     private static final ArrayDeque<String> events = new ArrayDeque<>();
     private static long lastInventoryLog;
     private static String snapshot = "No ShitTok session captured yet.";
+    private static final java.util.concurrent.atomic.AtomicLong fetched = new java.util.concurrent.atomic.AtomicLong();
+    static java.util.List<NativeContentItem> fetched(int provider, java.util.List<NativeContentItem> items) {
+        fetched.addAndGet(items.size());
+        record("listing", "source=" + provider + " raw=" + items.size());
+        return items;
+    }
+    static long rawFetched() { return fetched.get(); }
     static synchronized void snapshot(String value) { snapshot = redact(value); }
     static synchronized String userReport() {
         return "ZEROCHILL " + BuildConfig.VERSION_NAME + " (" + BuildConfig.VERSION_CODE + ")"
@@ -20,7 +27,7 @@ final class ShitTokPoolDiagnostics {
                 + "\n\n" + AppPerformance.summary();
     }
     static String redact(String value) {
-        return value.replaceAll("https?://[^\\s\\]\\},]+", "[content]");
+        return value.replaceAll("https?://\\S+", "[content]");
     }
     static void setEnabled(boolean value) { enabled = value; }
     static synchronized void record(String event, String detail) {

@@ -100,6 +100,8 @@ public final class ChaosFeedView extends FrameLayout {
     private boolean firstCandidate, firstAdmitted;
     private volatile int activeAdmissions, inventoryCandidateCount;
     private final java.util.concurrent.atomic.AtomicInteger inventoryResolutions = new java.util.concurrent.atomic.AtomicInteger();
+    // Legacy cache misses and admission share URL-resolution capacity. Selected work stays immediate.
+    private final java.util.concurrent.Semaphore inventoryResolutionSlots = new java.util.concurrent.Semaphore(3, true);
     private final Runnable recoveryRunnable = () -> { consecutiveDryLoads = 0; requestContinuity(); };
     private static final int MAX_QUEUED_AHEAD = 24;
     private static final int MAX_STREAM_CACHE = 32;
@@ -126,7 +128,7 @@ public final class ChaosFeedView extends FrameLayout {
     private final java.util.concurrent.atomic.AtomicInteger seenRejected = new java.util.concurrent.atomic.AtomicInteger();
     private final java.util.concurrent.atomic.AtomicInteger likedRejected = new java.util.concurrent.atomic.AtomicInteger();
     private final java.util.concurrent.atomic.AtomicInteger likedLookupFailures = new java.util.concurrent.atomic.AtomicInteger();
-    private int refillCount, dryRefillCount, minimumRunway = Integer.MAX_VALUE;
+    private int refillCount, dryRefillCount, lateLikedSelections, minimumRunway = Integer.MAX_VALUE;
     private long refillTotalMs, refillMaxMs;
     private final Deque<String> recentUrls = new ArrayDeque<>();
     private final Set<String> recentSet = new HashSet<>();
@@ -431,22 +433,28 @@ public final class ChaosFeedView extends FrameLayout {
 
     private void recordRunway(String reason) {
         long now = android.os.SystemClock.elapsedRealtime();
-        int usable = usableUpcomingCount();
+        int usable = usableUpcomingCount(), unresolvedAhead = 0;
+        for (int i = selectedPosition + 1; i < items.size(); i++)
+            if (!streamCache.containsKey(items.get(i).url)) unresolvedAhead++;
         if (firstAdmitted) minimumRunway = Math.min(minimumRunway, usable);
         if (usable < desiredRunway()) { if (belowRunwayAt == 0) belowRunwayAt = now; }
         else if (belowRunwayAt != 0) { belowRunwayMs += now - belowRunwayAt; belowRunwayAt = 0; }
         String detail = "reason=" + reason + " selected=" + selectedPosition
                 + " queued=" + items.size() + " usable=" + usable + " desired=" + desiredRunway()
                 + " rapid=" + runway.rapid(now) + " unresolved=" + resolving.size()
-                + " selectedState=" + playbackOwner.selectedPlaybackState()
+                + " unresolvedAhead=" + unresolvedAhead + " candidateQueue=" + inventoryCandidateCount
+                + " pendingOrientation=" + orientationPending.size()
+                + " selectedState=" + playbackOwner.selectedPlaybackState() + " selectedBufferedMs=" + playbackOwner.selectedBufferedMs()
+                + " playbackProtected=" + playbackOwner.isStarvationProtected()
                 + " admissionQueue=" + (orientationPending.size() + inventoryCandidateCount) + " activeAdmissions=" + activeAdmissions
                 + " activeResolutions=" + (resolving.size() + inventoryResolutions.get())
                 + " dry=" + consecutiveDryLoads + " rejected=" + (unplayable.size() + orientationAdmission.rejectedCount())
                 + " belowMs=" + (belowRunwayMs + (belowRunwayAt == 0 ? 0 : now - belowRunwayAt))
                 + " tailHits=" + physicalTailHits + " minUsable=" + (minimumRunway == Integer.MAX_VALUE ? -1 : minimumRunway)
-                + " raw=" + rawCandidates.get() + " duplicate=" + duplicateRejected.get()
+                + " rawFetched=" + ShitTokPoolDiagnostics.rawFetched() + " offers=" + rawCandidates.get()
+                + " duplicate=" + duplicateRejected.get()
                 + " seen=" + seenRejected.get() + " liked=" + likedRejected.get()
-                + " likedLookupFailures=" + likedLookupFailures.get() + " recentFallback=0"
+                + " likedLookupFailures=" + likedLookupFailures.get() + " lateLikedSelections=" + lateLikedSelections + " recentFallback=0"
                 + " orientation=" + orientationAdmission.orientationRejectedCount()
                 + " unplayable=" + orientationAdmission.unplayableRejectedCount()
                 + " activeFetches=" + sourceMixer.activeFetches() + " providers=" + sourceMixer.providerSummary()
@@ -478,7 +486,10 @@ public final class ChaosFeedView extends FrameLayout {
         boolean removed = false;
         for (int i = items.size() - 1; i > selectedPosition; i--) {
             NativeContentItem item = items.get(i);
-            if (!unplayable.contains(item.url) && !hiddenUrls.contains(item.url) && !isBlockedCreator(item)) continue;
+            CrazyShitRepository.StreamInfo future = streamCache.get(item.url);
+            boolean liked = seenStore.liked(item.url, future == null ? null : future.mediaUrl);
+            if (!unplayable.contains(item.url) && !hiddenUrls.contains(item.url) && !isBlockedCreator(item) && !liked) continue;
+            if (liked) likedRejected.incrementAndGet();
             for (ChaosHolder holder : new ArrayList<>(playerHolders)) {
                 if (holder.item != null && item.url.equals(holder.item.url)) holder.releasePlayer();
             }
@@ -500,7 +511,7 @@ public final class ChaosFeedView extends FrameLayout {
         if (!continuityWorkNeeded || poolLoading) return;
         if (consecutiveDryLoads >= 4) {
             removeCallbacks(recoveryRunnable);
-            postDelayed(recoveryRunnable, 5_000L);
+            postDelayed(recoveryRunnable, 1_000L);
             return;
         }
         for (int i = selectedPosition + 1; i < items.size() && i <= selectedPosition + desiredRunway(); i++) {
@@ -603,7 +614,7 @@ public final class ChaosFeedView extends FrameLayout {
     }
 
     public void setActive(boolean value) {
-        if (!value && active) recordRunway("leavingFeed");
+        if (!value && active) { recordRunway("leavingFeed"); pauseRunwayClock(); }
         if (!value) resetTemporaryPinch();
         if (value && !active) consecutiveDryLoads = 0;
         active = value;
@@ -663,7 +674,7 @@ public final class ChaosFeedView extends FrameLayout {
     }
 
     public void onHostPause() {
-        if (active) recordRunway("hostPause");
+        if (active) { recordRunway("hostPause"); pauseRunwayClock(); }
         resetTemporaryPinch();
         hostResumed = false;
         cancelInventoryBatch();
@@ -800,6 +811,8 @@ public final class ChaosFeedView extends FrameLayout {
         java.util.concurrent.BlockingQueue<NativeContentItem> candidates =
                 new java.util.concurrent.ArrayBlockingQueue<>(48);
         Set<String> offered = java.util.concurrent.ConcurrentHashMap.newKeySet();
+        Set<String> resolvedIdentities = java.util.concurrent.ConcurrentHashMap.newKeySet();
+        resolvedIdentities.addAll(identitySnapshot);
         java.util.concurrent.atomic.AtomicBoolean productionDone = new java.util.concurrent.atomic.AtomicBoolean();
         java.util.concurrent.atomic.AtomicBoolean acceptingCandidates = new java.util.concurrent.atomic.AtomicBoolean(true);
         java.util.function.Consumer<List<NativeContentItem>> offer = batch -> {
@@ -817,7 +830,7 @@ public final class ChaosFeedView extends FrameLayout {
                 if (recentSnapshot.contains(item.url) || seenStore.seen(item.url, null)) { seenRejected.incrementAndGet(); continue; }
                 fresh.add(item);
             }
-            // One small authenticated lookup per provider result, on the harvest worker. Cached
+            // One small account-scoped lookup per provider result, on the harvest worker. Cached
             // exclusions work offline. A lookup failure is visible and never enables known likes.
             Set<String> unchecked = new HashSet<>();
             for (NativeContentItem item : fresh) {
@@ -864,6 +877,7 @@ public final class ChaosFeedView extends FrameLayout {
                 item -> {
                     CrazyShitRepository.StreamInfo startup = ChaosStartupPreloader.takeResolved(item.url);
                     long at = android.os.SystemClock.elapsedRealtime();
+                    inventoryResolutionSlots.acquire();
                     inventoryResolutions.incrementAndGet();
                     try {
                         AppPerformance.startup("resolve_begin");
@@ -876,7 +890,7 @@ public final class ChaosFeedView extends FrameLayout {
                             if (seenStore.seen(item.url, resolved.mediaUrl)) {
                                 seenRejected.incrementAndGet(); throw new ShitTokOrientationAdmission.Filtered();
                             }
-                            if (identitySnapshot.contains(ShitTokContentIdentity.media(resolved.mediaUrl))) {
+                            if (!resolvedIdentities.add(ShitTokContentIdentity.media(resolved.mediaUrl))) {
                                 duplicateRejected.incrementAndGet(); throw new ShitTokOrientationAdmission.Filtered();
                             }
                         }
@@ -884,6 +898,7 @@ public final class ChaosFeedView extends FrameLayout {
                     }
                     finally {
                         inventoryResolutions.decrementAndGet();
+                        inventoryResolutionSlots.release();
                         ShitTokPoolDiagnostics.record("inventoryResolve", "ms=" + (android.os.SystemClock.elapsedRealtime() - at));
                     }
                 }, () -> !work.cancelled && batchGeneration == feedGeneration && mayVerifyOrientation(),
@@ -987,6 +1002,11 @@ public final class ChaosFeedView extends FrameLayout {
         firstAdmitted = true;
         AppPerformance.startup("admitted");
         AppPerformance.record("ShitTok first admitted / resolved", android.os.SystemClock.elapsedRealtime() - initializedAt);
+    }
+
+    private void pauseRunwayClock() {
+        if (belowRunwayAt != 0) belowRunwayMs += android.os.SystemClock.elapsedRealtime() - belowRunwayAt;
+        belowRunwayAt = 0;
     }
 
     private boolean mayVerifyOrientation() {
@@ -1424,10 +1444,16 @@ public final class ChaosFeedView extends FrameLayout {
             }
             CrazyShitRepository.StreamInfo stream = ChaosStartupPreloader.takeResolved(item.url);
             Trace.beginSection("zc.shittok.resolve_bg");
+            boolean acquired = false;
             try {
+                if (position != selectedPosition) {
+                    inventoryResolutionSlots.acquire();
+                    acquired = true;
+                }
                 if (stream == null) stream = resolvePlayable(item);
             } catch (Exception ignored) {
             } finally {
+                if (acquired) inventoryResolutionSlots.release();
                 Trace.endSection();
             }
             CrazyShitRepository.StreamInfo resolved = stream;
@@ -3401,6 +3427,7 @@ public final class ChaosFeedView extends FrameLayout {
                                 || error != null) {
                             return;
                         }
+                        if (state.liked && !videoLiked && boundPosition == selectedPosition) lateLikedSelections++;
                         videoLiked = state.liked;
                         if (state.liked) {
                             CrazyShitRepository.StreamInfo likedStream = streamCache.get(target);

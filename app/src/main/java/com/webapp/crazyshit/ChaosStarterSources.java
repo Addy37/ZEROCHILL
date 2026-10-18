@@ -33,10 +33,10 @@ final class ChaosStarterSources {
             AppPerformance.startup("source_request");
             long at = android.os.SystemClock.elapsedRealtime();
             try {
-                if (source == CRAZYSHIT) return crazyShit.fetchFeed(context, url, 1);
-                if (source == KAOTIC) return new WebVideoSourceRepository().fetchFeed(
-                        context, WebVideoSourceRepository.Source.KAOTIC, 1);
-                return new FapelloRepository().fetchPopularVideos(context, 1);
+                if (source == CRAZYSHIT) return ShitTokPoolDiagnostics.fetched(source == CRAZYSHIT ? 1 : source == KAOTIC ? 3 : 5, crazyShit.fetchFeed(context, url, 1));
+                if (source == KAOTIC) return ShitTokPoolDiagnostics.fetched(source == CRAZYSHIT ? 1 : source == KAOTIC ? 3 : 5, new WebVideoSourceRepository().fetchFeed(
+                        context, WebVideoSourceRepository.Source.KAOTIC, 1));
+                return ShitTokPoolDiagnostics.fetched(source == CRAZYSHIT ? 1 : source == KAOTIC ? 3 : 5, new FapelloRepository().fetchPopularVideos(context, 1));
             } finally {
                 AppPerformance.startupCost("starter_listing_" + source, at);
             }

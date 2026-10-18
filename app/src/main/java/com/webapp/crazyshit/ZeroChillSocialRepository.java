@@ -1220,14 +1220,18 @@ final class ZeroChillSocialRepository {
         });
     }
 
-    /** Small authenticated batch against the existing indexed table. No per-clip request/row change. */
+    /** Small own-account batch against existing publicly readable likes. No auth refresh on startup. */
     static Set<String> shittokLikedKeysBlocking(Context context, Collection<String> keys) throws Exception {
         if (keys.isEmpty() || !ZeroChillAccountRepository.hasStoredSession(context)) return Collections.emptySet();
         String user = ZeroChillSessionStore.currentUserId(context);
-        String body = ZeroChillAccountRepository.restBlocking(context, user, "GET",
+        if (user.isEmpty()) throw new IllegalStateException("Like lookup has no current account.");
+        Response response = request("GET",
                 "/rest/v1/video_likes?select=content_key&user_id=eq." + encode(user)
-                        + "&content_key=in.(" + String.join(",", keys) + ")&limit=100", null);
-        JSONArray rows = new JSONArray(body);
+                        + "&content_key=in.(" + String.join(",", keys) + ")&limit=100", "", null, null, null, 900);
+        if (!response.ok()) throw error(response, "Like lookup is unavailable.");
+        if (!user.equals(ZeroChillSessionStore.currentUserId(context)))
+            throw new IllegalStateException("Account changed during like lookup.");
+        JSONArray rows = new JSONArray(response.body);
         Set<String> liked = new HashSet<>();
         for (int i = 0; i < rows.length(); i++) liked.add(rows.getJSONObject(i).getString("content_key"));
         return liked;
@@ -1265,6 +1269,11 @@ final class ZeroChillSocialRepository {
             String contentType,
             String prefer
     ) throws Exception {
+        return request(method, path, token, body, contentType, prefer, 0);
+    }
+
+    private static Response request(String method, String path, String token, byte[] body,
+                                    String contentType, String prefer, int timeoutMs) throws Exception {
         if (!ZeroChillAccountRepository.isConfigured()) {
             throw new IllegalStateException("ZeroChill social features are not configured in this build.");
         }
@@ -1274,8 +1283,8 @@ final class ZeroChillSocialRepository {
                     BuildConfig.ACCOUNT_SUPABASE_URL + path
             ).openConnection();
             connection.setRequestMethod(method);
-            connection.setConnectTimeout(12_000);
-            connection.setReadTimeout(20_000);
+            connection.setConnectTimeout(timeoutMs > 0 ? timeoutMs : 12_000);
+            connection.setReadTimeout(timeoutMs > 0 ? timeoutMs : 20_000);
             connection.setRequestProperty("apikey", BuildConfig.ACCOUNT_SUPABASE_PUBLISHABLE_KEY);
             if (!clean(token).isEmpty()) connection.setRequestProperty("Authorization", "Bearer " + token);
             if (contentType != null) connection.setRequestProperty("Content-Type", contentType);

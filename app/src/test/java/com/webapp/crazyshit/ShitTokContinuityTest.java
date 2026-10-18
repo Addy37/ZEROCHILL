@@ -113,7 +113,10 @@ public class ShitTokContinuityTest {
                 ShitTokPlayerPoolTest.Engine e = new ShitTokPlayerPoolTest.Engine(); engines.add(e); return e.player;
             });
             NativeContentItem current = item("current");
-            ReflectionHelpers.callInstanceMethod(feed, "appendUnique", from(List.class, Collections.singletonList(current)));
+            // This fixture restores an already selected page. It is not a new discovery draw,
+            // which now correctly excludes a page watched by an earlier fixture/session.
+            items.add(current);
+            ((Set<String>) ReflectionHelpers.getField(feed, "sessionUrls")).add(current.url);
             cache.put(current.url, stream(current));
             ReflectionHelpers.setField(feed, "active", true);
             owner.select(current.url, null, null, true);

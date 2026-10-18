@@ -61,8 +61,9 @@ Resolved media aliases strip only explicit transport/tracking query parameters.
 Hosts/filenames are not globally merged. Previously unknown CDN host aliases or
 historical server hashes with no known URL mapping cannot be inferred safely.
 
-Existing `video_likes` reads support one small authenticated key lookup per
-fresh provider result. Known likes are persisted locally and rechecked before
+Existing `video_likes` reads support one small own-account key lookup per
+fresh provider result using its existing public-read policy, with 900 ms connect/read
+timeouts and no startup auth refresh. Known likes are persisted locally and rechecked before
 resolution, after resolution and before insertion. Lookup failure permits
 discovery using local exclusions and increments `likedLookupFailures`; a remote
 like never learned on this device may pass during that explicitly reported
