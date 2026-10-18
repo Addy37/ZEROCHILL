@@ -161,6 +161,10 @@ jobs:
         run: >-
           gradle --no-daemon :app:testDebugUnitTest
           --tests com.webapp.crazyshit.ShitTokContinuityTest
+          --tests com.webapp.crazyshit.ShitTokStartupPreparationTest
+          --tests com.webapp.crazyshit.ChaosStartupPreloaderTest
+          --tests com.webapp.crazyshit.PrimaryTabLibraryTest
+          --tests com.webapp.crazyshit.PrimaryTabNavigationTest
           --tests com.webapp.crazyshit.ShitTokCreatorMetadataLoaderTest
           --tests com.webapp.crazyshit.ShitTokCreatorMetadataTest
           --tests com.webapp.crazyshit.ShitTokRunwayPolicyTest
@@ -172,7 +176,7 @@ jobs:
           --tests com.webapp.crazyshit.ShitTokOrientationAdmissionTest
 
       - name: Run ShitTok buffering and orientation regressions first
-        if: ${{ github.event.pull_request.number != 295 && github.event.pull_request.number != 304 && github.head_ref != 'fix/shittok-async-creator-metadata' }}
+        if: ${{ github.event.pull_request.number != 295 && github.event.pull_request.number != 304 && github.head_ref != 'fix/shittok-async-creator-metadata' && github.head_ref != 'fix/shittok-startup-handoff' }}
         run: >-
           gradle --no-daemon :app:testDebugUnitTest
           --tests 'com.webapp.crazyshit.ShitTokBuffer*'
@@ -184,7 +188,7 @@ jobs:
           --tests 'com.webapp.crazyshit.ShitTokDynamicPinchTest'
 
       - name: Run focused notification entry regressions
-        if: ${{ github.event.pull_request.number != 295 && github.event.pull_request.number != 304 && github.head_ref != 'fix/shittok-async-creator-metadata' }}
+        if: ${{ github.event.pull_request.number != 295 && github.event.pull_request.number != 304 && github.head_ref != 'fix/shittok-async-creator-metadata' && github.head_ref != 'fix/shittok-startup-handoff' }}
         run: >-
           gradle --no-daemon :app:testDebugUnitTest
           --tests 'com.webapp.crazyshit.NotificationCenterUiTest'
@@ -193,7 +197,7 @@ jobs:
           --tests 'com.webapp.crazyshit.UpdateInboxStoreTest'
 
       - name: Run focused primary-tab activation regressions
-        if: ${{ github.event.pull_request.number != 295 && github.event.pull_request.number != 304 && github.head_ref != 'fix/shittok-async-creator-metadata' }}
+        if: ${{ github.event.pull_request.number != 295 && github.event.pull_request.number != 304 && github.head_ref != 'fix/shittok-async-creator-metadata' && github.head_ref != 'fix/shittok-startup-handoff' }}
         run: >-
           gradle --no-daemon :app:testDebugUnitTest
           --tests 'com.webapp.crazyshit.PrimaryTab*'
@@ -201,7 +205,7 @@ jobs:
           --tests 'com.webapp.crazyshit.OnlyFapFavoriteAvatarTest'
 
       - name: Run focused ShitTok swipe and audio regressions
-        if: ${{ github.event.pull_request.number != 295 && github.event.pull_request.number != 304 && github.head_ref != 'fix/shittok-async-creator-metadata' }}
+        if: ${{ github.event.pull_request.number != 295 && github.event.pull_request.number != 304 && github.head_ref != 'fix/shittok-async-creator-metadata' && github.head_ref != 'fix/shittok-startup-handoff' }}
         run: >-
           gradle --no-daemon :app:testDebugUnitTest
           --tests 'com.webapp.crazyshit.ShitTokAudioOwnershipTest'
@@ -212,7 +216,7 @@ jobs:
           --tests 'com.webapp.crazyshit.ShitTokSessionResumeTest'
 
       - name: Run focused Favorite Creators cache-first regressions
-        if: ${{ github.event.pull_request.number != 295 && github.event.pull_request.number != 304 && github.head_ref != 'fix/shittok-async-creator-metadata' }}
+        if: ${{ github.event.pull_request.number != 295 && github.event.pull_request.number != 304 && github.head_ref != 'fix/shittok-async-creator-metadata' && github.head_ref != 'fix/shittok-startup-handoff' }}
         run: >-
           gradle --no-daemon :app:testDebugUnitTest
           --tests 'com.webapp.crazyshit.FavoriteCreatorsScrollTest'
@@ -221,7 +225,7 @@ jobs:
           --tests 'com.webapp.crazyshit.UpdateInboxStoreTest'
 
       - name: Run focused ShitTok block and BaddieHub Shows regressions first
-        if: ${{ github.event.pull_request.number != 295 && github.event.pull_request.number != 304 && github.head_ref != 'fix/shittok-async-creator-metadata' }}
+        if: ${{ github.event.pull_request.number != 295 && github.event.pull_request.number != 304 && github.head_ref != 'fix/shittok-async-creator-metadata' && github.head_ref != 'fix/shittok-startup-handoff' }}
         run: >-
           gradle --no-daemon :app:testDebugUnitTest
           --tests 'com.webapp.crazyshit.ShitTokQueuePrunerTest'
@@ -232,7 +236,7 @@ jobs:
           --tests 'com.webapp.crazyshit.ShowsHeroDesignTest'
 
       - name: Run focused fullscreen regressions first
-        if: ${{ github.event.pull_request.number != 295 && github.event.pull_request.number != 304 && github.head_ref != 'fix/shittok-async-creator-metadata' }}
+        if: ${{ github.event.pull_request.number != 295 && github.event.pull_request.number != 304 && github.head_ref != 'fix/shittok-async-creator-metadata' && github.head_ref != 'fix/shittok-startup-handoff' }}
         run: >-
           gradle --no-daemon :app:testDebugUnitTest
           --tests 'com.webapp.crazyshit.ShowsFullscreen*'
@@ -240,7 +244,7 @@ jobs:
           --tests 'com.webapp.crazyshit.PhoneOrientationPolicyTest'
 
       - name: Run focused navigation and gallery regressions first
-        if: ${{ github.event.pull_request.number != 295 && github.event.pull_request.number != 304 && github.head_ref != 'fix/shittok-async-creator-metadata' }}
+        if: ${{ github.event.pull_request.number != 295 && github.event.pull_request.number != 304 && github.head_ref != 'fix/shittok-async-creator-metadata' && github.head_ref != 'fix/shittok-startup-handoff' }}
         run: >-
           gradle --no-daemon :app:testDebugUnitTest
           --tests 'com.webapp.crazyshit.BottomNavigationInsetsTest'
@@ -255,7 +259,7 @@ jobs:
           --tests 'com.webapp.crazyshit.CreatorMergedGalleryTest'
 
       - name: Run focused DM regressions before build
-        if: ${{ github.event.pull_request.number != 295 && github.event.pull_request.number != 304 && github.head_ref != 'fix/shittok-async-creator-metadata' }}
+        if: ${{ github.event.pull_request.number != 295 && github.event.pull_request.number != 304 && github.head_ref != 'fix/shittok-async-creator-metadata' && github.head_ref != 'fix/shittok-startup-handoff' }}
         run: >-
           gradle --no-daemon :app:testDebugUnitTest :app:testReleaseUnitTest
           --tests 'com.webapp.crazyshit.ZeroChillMessageThreadUiTest'
@@ -271,7 +275,7 @@ jobs:
           PY
 
       - name: Run focused OnlyFap Discover release regressions first
-        if: ${{ github.event.pull_request.number != 295 && github.event.pull_request.number != 304 && github.head_ref != 'fix/shittok-async-creator-metadata' }}
+        if: ${{ github.event.pull_request.number != 295 && github.event.pull_request.number != 304 && github.head_ref != 'fix/shittok-async-creator-metadata' && github.head_ref != 'fix/shittok-startup-handoff' }}
         run: >-
           gradle --no-daemon :app:testReleaseUnitTest
           --tests 'com.webapp.crazyshit.OnlyFapDiscoverTest'
@@ -292,7 +296,7 @@ jobs:
         # These focused candidates run complete suites once instead of repeatedly
         # starting Gradle for overlapping filters. Signing/upgrade gates remain.
         run: |
-          if [ "${{ github.event.pull_request.number }}" = "295" ] || [ "${{ github.event.pull_request.number }}" = "304" ] || [ "${{ github.head_ref }}" = "fix/shittok-async-creator-metadata" ]; then
+          if [ "${{ github.event.pull_request.number }}" = "295" ] || [ "${{ github.event.pull_request.number }}" = "304" ] || [ "${{ github.head_ref }}" = "fix/shittok-async-creator-metadata" ] || [ "${{ github.head_ref }}" = "fix/shittok-startup-handoff" ]; then
             gradle --no-daemon :app:testDebugUnitTest :app:testReleaseUnitTest :app:assembleDebug :app:assembleRelease
           else
             gradle --no-daemon :app:testReleaseUnitTest :app:assembleRelease :app:assembleDebug

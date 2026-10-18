@@ -10,7 +10,7 @@ concurrency:
   cancel-in-progress: true
 jobs:
   measure:
-    if: ${{ github.head_ref == 'feature/shittok-deep-source-exploration' }}
+    if: ${{ github.head_ref == 'feature/shittok-deep-source-exploration' || github.head_ref == 'fix/shittok-startup-handoff' }}
     runs-on: ubuntu-latest
     timeout-minutes: 18
     env:
@@ -33,6 +33,9 @@ jobs:
         run: >-
           gradle --no-daemon :app:assembleDebug :app:testDebugUnitTest
           --tests 'com.webapp.crazyshit.ChaosStartupPreloaderTest'
+          --tests 'com.webapp.crazyshit.ShitTokStartupPreparationTest'
+          --tests 'com.webapp.crazyshit.PrimaryTabLibraryTest'
+          --tests 'com.webapp.crazyshit.PrimaryTabNavigationTest'
           --tests 'com.webapp.crazyshit.ChaosStarterSourcesTest'
           --tests 'com.webapp.crazyshit.ChaosSourceMixerPriorityTest'
           --tests 'com.webapp.crazyshit.ShitTokSpeedMuteTest'

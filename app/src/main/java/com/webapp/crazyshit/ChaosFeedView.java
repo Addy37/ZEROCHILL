@@ -278,6 +278,7 @@ public final class ChaosFeedView extends FrameLayout {
             @Override public void onDraw() {
                 if (initialUiDrawn) return;
                 initialUiDrawn = true;
+                AppPerformance.startup("feed_draw");
                 post(() -> {
                     if (getViewTreeObserver().isAlive()) getViewTreeObserver().removeOnDrawListener(this);
                     if (!closed) loadMorePool();
@@ -781,7 +782,8 @@ public final class ChaosFeedView extends FrameLayout {
     }
 
     private void loadMorePool() {
-    if (!initialUiDrawn) { refillDeferred = true; return; }
+    // Source production, resolution and portrait inspection are background work. Do not hold
+    // the startup handoff behind the first draw/post queue; UI application still waits for idle.
     if (closed || !active || !hostResumed || poolLoading || !sourceRequestsEnabled || !hasReservoirRoom(items.size(), selectedPosition)) return;
     continuityWorkNeeded = needsContinuity();
     boolean continuity = active && hostResumed && continuityWorkNeeded;
@@ -793,6 +795,7 @@ public final class ChaosFeedView extends FrameLayout {
     }
     refillDeferred = false;
     poolLoading = true;
+    if (items.isEmpty()) AppPerformance.startup("feed_request");
     final InventoryBatch work = new InventoryBatch();
     inventoryBatch = work;
     if (items.isEmpty()) { initialProgress.setVisibility(View.VISIBLE); empty.setVisibility(View.GONE); }
@@ -812,8 +815,10 @@ public final class ChaosFeedView extends FrameLayout {
     final Set<String> identitySnapshot = new HashSet<>(sessionIdentities);
     final Set<String> blockedSnapshot = new HashSet<>(blockedCreatorKeys);
 
+    final boolean startupBatch = items.isEmpty();
     io.execute(() -> {
         if (work.cancelled || batchGeneration != feedGeneration || closed) return;
+        if (startupBatch) AppPerformance.startup("feed_worker");
         long batchStartedAt = android.os.SystemClock.elapsedRealtime();
         java.util.concurrent.BlockingQueue<NativeContentItem> candidates =
                 new java.util.concurrent.ArrayBlockingQueue<>(48);

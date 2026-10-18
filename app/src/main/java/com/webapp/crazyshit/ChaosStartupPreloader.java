@@ -12,6 +12,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
 /** One process-scoped metadata pipeline shared by splash and the first feed harvest. No player. */
+@androidx.annotation.OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)
 final class ChaosStartupPreloader {
     static final int STARTER_ITEMS = 6;
     private static final Object LOCK = new Object();
@@ -22,6 +23,7 @@ final class ChaosStartupPreloader {
     private static long deadline;
     private static String resolvingUrl;
     private static FutureTask<CrazyShitRepository.StreamInfo> resolution;
+    private static ShitTokStartupPreparation preparation;
 
     private ChaosStartupPreloader() { }
 
@@ -32,6 +34,8 @@ final class ChaosStartupPreloader {
         synchronized (LOCK) {
             if (started) return;
             started = true;
+            preparation = new ShitTokStartupPreparation(item -> resolveListing(app, item),
+                    new ShitTokOrientationProbe(app));
             deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(ChaosStarterSources.STARTUP_MILLIS);
         }
         AppPerformance.startup("preload");
@@ -44,6 +48,7 @@ final class ChaosStartupPreloader {
     static List<NativeContentItem> collect(Context context, Consumer<List<NativeContentItem>> onCandidates)
             throws InterruptedException {
         start(context);
+        AppPerformance.startup("handoff_collect");
         synchronized (LOCK) {
             if (claimed) return new ArrayList<>();
             claimed = true;
@@ -63,6 +68,13 @@ final class ChaosStartupPreloader {
                     READY.clear();
                     done = finished || !started || System.nanoTime() >= deadline;
                 }
+                ShitTokStartupPreparation early;
+                synchronized (LOCK) { early = preparation; }
+                if (early != null) {
+                    Set<String> portraits = new HashSet<>();
+                    for (NativeContentItem item : next) if (early.portraitReady(item.url)) portraits.add(item.url);
+                    next.sort((a, b) -> Boolean.compare(portraits.contains(b.url), portraits.contains(a.url)));
+                }
                 for (NativeContentItem item : next) AppPerformance.startupItem("handoff_consumed", item.url, "");
                 result.addAll(next);
                 if (onCandidates != null && !next.isEmpty()) onCandidates.accept(next);
@@ -74,11 +86,30 @@ final class ChaosStartupPreloader {
     }
 
     static CrazyShitRepository.StreamInfo takeResolved(String pageUrl) {
-        synchronized (LOCK) { return RESOLVED.remove(pageUrl); }
+        synchronized (LOCK) {
+            CrazyShitRepository.StreamInfo stream = RESOLVED.remove(pageUrl);
+            if (stream != null && preparation != null) preparation.streamHandedOff(pageUrl);
+            return stream;
+        }
     }
 
     /** Join the splash resolver instead of fetching the same page twice. Other candidates proceed. */
     static CrazyShitRepository.StreamInfo resolveForFeed(Context context, NativeContentItem item)
+            throws Exception {
+        ShitTokStartupPreparation early;
+        synchronized (LOCK) { early = preparation; }
+        ShitTokStartupPreparation.Prepared prepared = early == null ? null : early.take(item.url);
+        if (prepared != null && prepared.attempted) return prepared.stream;
+        return resolveListing(context, item);
+    }
+
+    static Float preparedAspect(String pageUrl, CrazyShitRepository.StreamInfo stream) throws Exception {
+        ShitTokStartupPreparation early;
+        synchronized (LOCK) { early = preparation; }
+        return early == null ? null : early.aspect(pageUrl, stream);
+    }
+
+    private static CrazyShitRepository.StreamInfo resolveListing(Context context, NativeContentItem item)
             throws Exception {
         FutureTask<CrazyShitRepository.StreamInfo> pending;
         synchronized (LOCK) { pending = item.url.equals(resolvingUrl) ? resolution : null; }
@@ -123,6 +154,7 @@ final class ChaosStartupPreloader {
                 }
                 AppPerformance.startupItem("handoff_published", item.url, "source=" + ShitTokAspectPriority.sourceKey(item));
                 READY.add(item);
+                if (preparation != null) preparation.offer(item);
                 added++;
             }
             LOCK.notifyAll();
@@ -145,6 +177,9 @@ final class ChaosStartupPreloader {
         } catch (InterruptedException interrupted) {
             Thread.currentThread().interrupt();
         } finally {
+            ShitTokStartupPreparation early;
+            synchronized (LOCK) { early = preparation; }
+            if (early != null) early.finishOffers();
             synchronized (LOCK) { finished = true; LOCK.notifyAll(); }
         }
     }

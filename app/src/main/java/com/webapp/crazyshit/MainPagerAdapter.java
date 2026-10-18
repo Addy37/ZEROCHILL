@@ -181,7 +181,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                         CreatorGalleryPreloader.sessionId(activity, creator)
                 ));
             }
-        });
+        }, true);
         AppPerformance.startupCost("library_shell", stageAt);
         libraryView.setWorkScheduler((key, task) -> primaryWork.submit(PAGE_LIBRARY, key, task));
         pages[PAGE_ONLYFAP].onlyFapHub.setWorkScheduler(

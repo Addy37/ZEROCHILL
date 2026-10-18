@@ -14,6 +14,45 @@ import static org.junit.Assert.*;
 @RunWith(RobolectricTestRunner.class)
 @Config(application = Application.class, sdk = 35)
 public class ChaosStartupPreloaderTest {
+    @Test public void verifiedPortraitHandoffIsFirstAndAdmissionReusesTheProbe() throws Exception {
+        ShitTokStartupPreparationTest.Queue worker = new ShitTokStartupPreparationTest.Queue();
+        NativeContentItem landscape = clip("early-landscape"), portrait = clip("early-portrait");
+        java.util.concurrent.atomic.AtomicInteger resolves = new java.util.concurrent.atomic.AtomicInteger();
+        ShitTokStartupPreparation preparation = new ShitTokStartupPreparation(worker,
+                item -> { resolves.incrementAndGet(); return new CrazyShitRepository.StreamInfo(item.url + ".mp4", item.url, item.title); },
+                (stream, allowed) -> stream.title.equals(portrait.title) ? .5f : 1.8f, () -> 0L);
+        set("preparation", preparation);
+        publish(landscape); publish(portrait);
+        worker.next(); worker.next(); set("finished", true);
+        List<NativeContentItem> candidates = ChaosStartupPreloader.collect(RuntimeEnvironment.getApplication(), null);
+        assertEquals(portrait.url, candidates.get(0).url);
+        ShitTokOrientationAdmission gate = new ShitTokOrientationAdmission((stream, allowed) -> {
+            fail("The feed must not probe verified startup media again"); return 0f;
+        }, () -> 0L);
+        try {
+            ShitTokOrientationAdmission.Result result = gate.admit(candidates,
+                    item -> ChaosStartupPreloader.resolveForFeed(RuntimeEnvironment.getApplication(), item),
+                    () -> true, new Random(0), 6, true, null);
+            assertEquals(1, result.items.size()); assertEquals(portrait.url, result.items.get(0).url);
+            assertEquals(2, resolves.get()); assertEquals(1, gate.orientationRejectedCount());
+        } finally { gate.close(); }
+    }
+
+    @Test public void unknownStartupAspectIsRecheckedWithoutResolvingAgain() throws Exception {
+        ShitTokStartupPreparationTest.Queue worker = new ShitTokStartupPreparationTest.Queue();
+        NativeContentItem unknown = clip("unknown-probe");
+        ShitTokStartupPreparation preparation = new ShitTokStartupPreparation(worker,
+                item -> new CrazyShitRepository.StreamInfo(item.url + ".mp4", item.url, item.title),
+                (stream, allowed) -> { throw new ShitTokOrientationAdmission.Deferred(); }, () -> 0L);
+        set("preparation", preparation); publish(unknown); worker.next();
+        ShitTokOrientationAdmission gate = new ShitTokOrientationAdmission((stream, allowed) -> .5f, () -> 0L);
+        try {
+            assertEquals(1, gate.admit(Collections.singletonList(unknown),
+                    item -> ChaosStartupPreloader.resolveForFeed(RuntimeEnvironment.getApplication(), item),
+                    () -> true, new Random(0), 1, true, null).items.size());
+        } finally { gate.close(); }
+    }
+
     @Test public void fairEarlySlotChoosesFreshCandidateBeforeWaitingForOtherProviders() {
         ShitTokSeenStore store = ShitTokSeenStore.get(RuntimeEnvironment.getApplication());
         store.watch(clip("watched").url, null);
@@ -43,6 +82,7 @@ public class ChaosStartupPreloaderTest {
             Map<?, ?> resolved = ReflectionHelpers.getStaticField(ChaosStartupPreloader.class, "RESOLVED");
             resolved.clear();
             set("started", true); set("finished", false); set("claimed", false);
+            set("preparation", null);
             set("deadline", System.nanoTime() + TimeUnit.SECONDS.toNanos(2));
             set("resolvingUrl", "unused");
             // Prevent real network work when the fixture publishes listing results.
@@ -50,7 +90,10 @@ public class ChaosStartupPreloaderTest {
         }
     }
     @After public void cleanup() {
+        ShitTokStartupPreparation preparation = ReflectionHelpers.getStaticField(ChaosStartupPreloader.class, "preparation");
+        if (preparation != null) preparation.close();
         synchronized (lock) {
+            set("preparation", null);
             set("finished", true); set("started", false); set("claimed", false);
             set("resolution", null); set("resolvingUrl", null);
             lock.notifyAll();

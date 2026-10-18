@@ -280,12 +280,12 @@ public class ShitTokContinuityTest {
         }
     }
 
-    @Test public void coldFeedDoesNotHarvestBeforeInitialUiDrawAndReturnKeepsQueue() {
+    @Test public void coldFeedStartsBackgroundHarvestBeforeInitialUiDrawAndReturnKeepsQueue() {
         try (Fixture f = new Fixture()) {
             f.candidates("starter", "next");
             ReflectionHelpers.setField(f.feed, "initialUiDrawn", false);
             call(f.feed, "loadMorePool");
-            assertTrue(f.io.tasks.isEmpty());
+            assertEquals("Background work must not wait behind UI draw callbacks", 1, f.io.tasks.size());
             ReflectionHelpers.setField(f.feed, "initialUiDrawn", true);
             call(f.feed, "loadMorePool");
             assertEquals(1, f.io.tasks.size());
