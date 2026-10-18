@@ -122,6 +122,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     protected void onCreate(Bundle state) {
         super.onCreate(state);
         long activityStartedAt = android.os.SystemClock.elapsedRealtime();
+        AppPerformance.startup("main");
         android.os.Trace.beginSection("zc.startup.main_activity");
         NotificationCoordinator.clearContentNotifications(this);
         if (state != null) restoredPrimaryPage = state.getInt("primary_page", -1);

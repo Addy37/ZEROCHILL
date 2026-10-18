@@ -525,6 +525,7 @@ public final class ChaosFeedView extends FrameLayout {
     private void reconcilePlaybackWindow() {
         if (closed || !active || !hostResumed || isPaging() || selectedPosition >= items.size()) return;
         String url = items.get(selectedPosition).url;
+        AppPerformance.startupItem("owner_select", url, "");
         playbackOwner.select(url,
                 selectedPosition + 1 < items.size() ? items.get(selectedPosition + 1).url : null,
                 selectedPosition > 0 ? items.get(selectedPosition - 1).url : null,
@@ -735,7 +736,7 @@ public final class ChaosFeedView extends FrameLayout {
 
     private void loadMorePool() {
     if (!initialUiDrawn) { refillDeferred = true; return; }
-    if (closed || (!items.isEmpty() && (!active || !hostResumed)) || poolLoading || !sourceRequestsEnabled || !hasReservoirRoom(items.size(), selectedPosition)) return;
+    if (closed || !active || !hostResumed || poolLoading || !sourceRequestsEnabled || !hasReservoirRoom(items.size(), selectedPosition)) return;
     continuityWorkNeeded = needsContinuity();
     boolean continuity = active && hostResumed && continuityWorkNeeded;
     if (!items.isEmpty() && !continuityWorkNeeded) return;
@@ -777,9 +778,11 @@ public final class ChaosFeedView extends FrameLayout {
                 if (!isMedia(item) || hiddenSnapshot.contains(item.url) || sessionSnapshot.contains(item.url)
                         || ShitTokBlockedCreatorStore.isBlocked(blockedSnapshot, item)
                         || !offered.add(item.url)) continue;
+                AppPerformance.startupItem("candidate_offered", item.url, "recent=" + recentSnapshot.contains(item.url));
                 if (candidates.offer(item)) activity.runOnUiThread(() -> {
                     if (closed || work.cancelled || inventoryBatch != work || batchGeneration != feedGeneration || firstCandidate) return;
                     firstCandidate = true;
+                    AppPerformance.startup("candidate");
                     AppPerformance.record("ShitTok first candidate", android.os.SystemClock.elapsedRealtime() - initializedAt);
                 });
             } }
@@ -805,7 +808,12 @@ public final class ChaosFeedView extends FrameLayout {
                     CrazyShitRepository.StreamInfo startup = ChaosStartupPreloader.takeResolved(item.url);
                     long at = android.os.SystemClock.elapsedRealtime();
                     inventoryResolutions.incrementAndGet();
-                    try { return startup != null ? startup : resolvePlayable(item); }
+                    try {
+                        AppPerformance.startup("resolve_begin");
+                        CrazyShitRepository.StreamInfo resolved = startup != null ? startup : resolvePlayable(item);
+                        if (resolved != null) AppPerformance.startup("resolved");
+                        return resolved;
+                    }
                     finally {
                         inventoryResolutions.decrementAndGet();
                         ShitTokPoolDiagnostics.record("inventoryResolve", "ms=" + (android.os.SystemClock.elapsedRealtime() - at));
@@ -813,14 +821,11 @@ public final class ChaosFeedView extends FrameLayout {
                 }, () -> !work.cancelled && batchGeneration == feedGeneration && mayVerifyOrientation(), admissionLimit, partial ->
                     activity.runOnUiThread(() -> deferUiApply(() -> {
                         if (closed || work.cancelled || inventoryBatch != work || batchGeneration != feedGeneration) return;
-                        if (!firstAdmitted) {
-                            firstAdmitted = true;
-                            AppPerformance.record("ShitTok first admitted / resolved", android.os.SystemClock.elapsedRealtime() - initializedAt);
-                        }
                         if (!items.isEmpty() && (!continuityBatch || usableUpcomingCount() >= desiredRunway())) return;
                         streamCache.putAll(partial.streams);
                         ArrayList<NativeContentItem> newItems = new ArrayList<>();
                         for (NativeContentItem item : partial.items) {
+                            AppPerformance.startupItem("admission_ui", item.url, "recent=" + recentSnapshot.contains(item.url));
                             if (!recentSnapshot.contains(item.url) || consecutiveDryLoads >= 3)
                                 newItems.add(item);
                         }
@@ -830,6 +835,7 @@ public final class ChaosFeedView extends FrameLayout {
                         for (int i = before; i < items.size(); i++)
                             if (!recentSnapshot.contains(items.get(i).url)) publishedFresh[0]++;
                         if (added == 0) return;
+                        recordFirstAdmission();
                         adapter.notifyItemRangeInserted(before, added);
                         initialProgress.setVisibility(View.GONE);
                         empty.setVisibility(View.GONE);
@@ -883,6 +889,7 @@ public final class ChaosFeedView extends FrameLayout {
             if (added > 0 && freshAdded == 0) consecutiveDryLoads = 0;
 
             if (added > 0) {
+                recordFirstAdmission();
                 long mutationAt = android.os.SystemClock.elapsedRealtime();
                 adapter.notifyItemRangeInserted(before, added);
                 ShitTokPoolDiagnostics.record("adapterInsert", "count=" + added + " ms=" + (android.os.SystemClock.elapsedRealtime()-mutationAt));
@@ -913,6 +920,13 @@ public final class ChaosFeedView extends FrameLayout {
         }));
     });
 }
+
+    private void recordFirstAdmission() {
+        if (firstAdmitted) return;
+        firstAdmitted = true;
+        AppPerformance.startup("admitted");
+        AppPerformance.record("ShitTok first admitted / resolved", android.os.SystemClock.elapsedRealtime() - initializedAt);
+    }
 
     private boolean mayVerifyOrientation() {
         return !closed && hostResumed && (verifiedQueueEmpty
@@ -1186,7 +1200,9 @@ public final class ChaosFeedView extends FrameLayout {
             if (!acceptUnique(item, hiddenUrls, sessionUrls)) continue;
             items.add(item);
             verifiedQueueEmpty = false;
+            AppPerformance.startupItem("metadata_start", item.url, "");
             cacheCreatorMetadata(item);
+            AppPerformance.startupItem("metadata_end", item.url, "");
             CrazyShitRepository.StreamInfo preloaded = ChaosStartupPreloader.takeResolved(item.url);
             if (preloaded != null) streamCache.put(item.url, preloaded);
         }
@@ -1368,7 +1384,7 @@ public final class ChaosFeedView extends FrameLayout {
     private CrazyShitRepository.StreamInfo resolvePlayable(NativeContentItem item)
             throws Exception {
         if (item == null || item.url == null || item.url.isEmpty()) return null;
-        return PlayableSourceRouter.resolve(activity, item);
+        return ChaosStartupPreloader.resolveForFeed(activity.getApplicationContext(), item);
     }
 
     /** A retired request cannot bind a new lease. The current owner may independently
@@ -1415,6 +1431,7 @@ public final class ChaosFeedView extends FrameLayout {
         if (!active || !hostResumed || isPaging() || closed || position < 0 || position >= items.size()) return;
         NativeContentItem item = items.get(position);
         CrazyShitRepository.StreamInfo stream = streamCache.get(item.url);
+        if (position == selectedPosition) AppPerformance.startupItem("feed_prepare", item.url, "cached=" + (stream != null));
         if (stream != null && shouldPreparePlayer(position, selectedPosition)) {
             if (position == selectedPosition) {
                 playbackOwner.source(item.url, stream, playbackOwner.token(item.url));
@@ -3527,6 +3544,7 @@ public final class ChaosFeedView extends FrameLayout {
                     postOwnerUi(createdPlayer, listenerUrl, listenerToken, () -> {
                         if (boundPosition != selectedPosition) return;
                         syncLoading();
+                        sourceMixer.onFirstFrame();
                         ShitTokPoolDiagnostics.record("selectedFrame", "position=" + boundPosition);
                     });
                 }

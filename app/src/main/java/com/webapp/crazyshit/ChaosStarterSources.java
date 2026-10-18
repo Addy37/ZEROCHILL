@@ -21,7 +21,7 @@ final class ChaosStarterSources {
 
     private static final ExecutorService IO = Executors.newFixedThreadPool(3);
     static final long STARTUP_MILLIS = 2500;
-    static final int CRAZYSHIT = 1, KAOTIC = 2, EFUKT = 3;
+    static final int CRAZYSHIT = 1, KAOTIC = 2, FAPELLO = 4;
 
     private ChaosStarterSources() { }
 
@@ -30,10 +30,16 @@ final class ChaosStarterSources {
                 CrazyShitRepository.BASE + "videos/", CrazyShitRepository.BASE + "submissions/"};
         String url = urls[random.nextInt(urls.length)];
         return source -> {
-            if (source == CRAZYSHIT) return crazyShit.fetchFeed(context, url, 1);
-            if (source == KAOTIC) return new WebVideoSourceRepository().fetchFeed(
-                    context, WebVideoSourceRepository.Source.KAOTIC, 1);
-            return new EfuktRepository().fetchLatest(context);
+            AppPerformance.startup("source_request");
+            long at = android.os.SystemClock.elapsedRealtime();
+            try {
+                if (source == CRAZYSHIT) return crazyShit.fetchFeed(context, url, 1);
+                if (source == KAOTIC) return new WebVideoSourceRepository().fetchFeed(
+                        context, WebVideoSourceRepository.Source.KAOTIC, 1);
+                return new FapelloRepository().fetchPopularVideos(context, 1);
+            } finally {
+                AppPerformance.startupCost("starter_listing_" + source, at);
+            }
         };
     }
 
@@ -46,13 +52,12 @@ final class ChaosStarterSources {
             java.util.function.Consumer<List<NativeContentItem>> onCandidates) throws InterruptedException {
         CompletionService<StarterBatch> completions = new ExecutorCompletionService<>(IO);
         ArrayList<Future<?>> requests = new ArrayList<>();
-        for (int source : new int[]{CRAZYSHIT, KAOTIC, EFUKT}) {
+        for (int source : new int[]{CRAZYSHIT, KAOTIC, FAPELLO}) {
             final int selected = source;
             requests.add(completions.submit(() -> new StarterBatch(selected, loader.load(selected))));
         }
         long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(budgetMillis);
         LinkedHashMap<String, NativeContentItem> playable = new LinkedHashMap<>();
-        LinkedHashMap<String, NativeContentItem> efuktFallback = new LinkedHashMap<>();
         try {
             for (int pending = requests.size(); pending > 0; pending--) {
                 long remaining = deadline - System.nanoTime();
@@ -62,27 +67,23 @@ final class ChaosStarterSources {
                 try {
                     StarterBatch batch = done.get();
                     if (batch.items == null) continue;
-                    LinkedHashMap<String, NativeContentItem> target =
-                            batch.source == EFUKT ? efuktFallback : playable;
+                    LinkedHashMap<String, NativeContentItem> arrived = new LinkedHashMap<>();
                     for (NativeContentItem item : batch.items) {
                         if (item != null && NativeContentItem.KIND_MEDIA.equals(item.kind)
                                 && item.url != null && !item.url.isEmpty()) {
-                            target.putIfAbsent(item.url, item);
+                            playable.putIfAbsent(item.url, item);
+                            arrived.putIfAbsent(item.url, item);
                         }
                     }
                     if (onCandidates != null) {
-                        ArrayList<NativeContentItem> early = new ArrayList<>(target.values());
+                        ArrayList<NativeContentItem> early = new ArrayList<>(arrived.values());
                         Collections.shuffle(early, random);
-                        int limit = batch.source == EFUKT ? 1 : ChaosStartupPreloader.STARTER_ITEMS;
+                        int limit = ChaosStartupPreloader.STARTER_ITEMS;
                         onCandidates.accept(new ArrayList<>(early.subList(0, Math.min(limit, early.size()))));
                     } else if (!playable.isEmpty()) break;
                 } catch (java.util.concurrent.ExecutionException ignored) {
                     // The other two feeds may still be usable.
                 }
-            }
-            for (NativeContentItem item : efuktFallback.values()) {
-                if (playable.size() >= ChaosStartupPreloader.STARTER_ITEMS) break;
-                playable.putIfAbsent(item.url, item);
             }
             ArrayList<NativeContentItem> queue = new ArrayList<>(playable.values());
             Collections.shuffle(queue, random);
