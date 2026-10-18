@@ -44,7 +44,6 @@ import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.ScrollView;
 import android.widget.TextView;
-import android.widget.Toast;
 import android.window.OnBackInvokedCallback;
 import android.window.OnBackInvokedDispatcher;
 
@@ -60,7 +59,6 @@ import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
 
 import com.google.android.material.bottomsheet.BottomSheetDialog;
 import com.google.android.material.card.MaterialCardView;
-import com.google.android.material.materialswitch.MaterialSwitch;
 
 import org.json.JSONObject;
 import org.json.JSONTokener;
@@ -190,7 +188,7 @@ public class MainActivity extends Activity {
         });
         root.addView(webFrame, match());
 
-        swipeRefresh = new SwipeRefreshLayout(this);
+        swipeRefresh = new ZeroChillRefreshLayout(this);
         swipeRefresh.setOnRefreshListener(() -> {
             errorView.setVisibility(View.GONE);
             probingNativeVideo = false;
@@ -205,9 +203,9 @@ public class MainActivity extends Activity {
         swipeRefresh.addView(webView, match());
         swipeRefresh.setOnChildScrollUpCallback((parent, child) -> webView.canScrollVertically(-1));
 
-        progress = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
+        progress = new ZeroChillProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
         progress.setMax(100);
-        progress.getProgressDrawable().setTint(Color.WHITE);
+        progress.getProgressDrawable().setTint(UiPalette.PRIMARY);
         progress.setVisibility(View.GONE);
         FrameLayout.LayoutParams progressParams = new FrameLayout.LayoutParams(-1, dp(3));
         progressParams.gravity = Gravity.TOP;
@@ -338,6 +336,7 @@ public class MainActivity extends Activity {
 
         Button retry = new Button(this);
         retry.setText("Retry");
+        ZeroChillUi.styleActionButton(retry, true);
         retry.setOnClickListener(v -> {
             errorView.setVisibility(View.GONE);
             if (webView.getUrl() == null) webView.loadUrl(HOME); else webView.reload();
@@ -345,6 +344,7 @@ public class MainActivity extends Activity {
 
         Button browser = new Button(this);
         browser.setText("Open in browser");
+        ZeroChillUi.styleActionButton(browser, false);
         browser.setOnClickListener(v -> openExternal(Uri.parse(currentUrl())));
 
         box.addView(title);
@@ -467,7 +467,7 @@ public class MainActivity extends Activity {
                     return true;
                 } catch (ActivityNotFoundException e) {
                     fileCallback = null;
-                    Toast.makeText(MainActivity.this, "No file picker is available.", Toast.LENGTH_SHORT).show();
+                    ZeroChillToast.makeText(MainActivity.this, "No file picker is available.", ZeroChillToast.LENGTH_SHORT).show();
                     return false;
                 }
             }
@@ -496,7 +496,7 @@ public class MainActivity extends Activity {
                 ? new String[]{"Open", "Share", "Copy link", "Save image"}
                 : new String[]{"Open", "Share", "Copy link", "Save for later"};
 
-        new AlertDialog.Builder(this)
+        new ZeroChillDialog.Builder(this)
                 .setItems(items, (dialog, which) -> {
                     if (which == 0) {
                         Uri uri = Uri.parse(url);
@@ -523,7 +523,7 @@ public class MainActivity extends Activity {
                         FavoriteStore.add(this,
                                 pageTitle == null ? "Saved video" : pageTitle,
                                 url);
-                        Toast.makeText(this, "Saved to Watch Later.", Toast.LENGTH_SHORT).show();
+                        ZeroChillToast.makeText(this, "Saved to Watch Later.", ZeroChillToast.LENGTH_SHORT).show();
                         haptic(webView);
                     }
                 })
@@ -550,9 +550,9 @@ public class MainActivity extends Activity {
 
             if (adBlockingEnabled()) {
                 if (fromUserGesture) {
-                    Toast.makeText(this,
+                    ZeroChillToast.makeText(this,
                             "Blocked an external ad/pop-up. Long-press a real external link to open it.",
-                            Toast.LENGTH_SHORT).show();
+                            ZeroChillToast.LENGTH_SHORT).show();
                 }
                 return true;
             }
@@ -698,9 +698,9 @@ public class MainActivity extends Activity {
                         webView.getTitle() == null ? "Video" : webView.getTitle());
                 if (webView.canGoBack()) webView.goBack();
             } else if (userInitiated) {
-                Toast.makeText(this,
+                ZeroChillToast.makeText(this,
                         "No direct video stream found on this page.",
-                        Toast.LENGTH_SHORT).show();
+                        ZeroChillToast.LENGTH_SHORT).show();
             }
         });
     }
@@ -722,9 +722,9 @@ public class MainActivity extends Activity {
             if (cookies != null) intent.putExtra(PlayerActivity.EXTRA_COOKIES, cookies);
             startActivityForResult(intent, NATIVE_PLAYER);
         } catch (Exception e) {
-            Toast.makeText(this,
+            ZeroChillToast.makeText(this,
                     "Couldn't open the native player.",
-                    Toast.LENGTH_SHORT).show();
+                    ZeroChillToast.LENGTH_SHORT).show();
         }
     }
 
@@ -784,9 +784,9 @@ public class MainActivity extends Activity {
             updateBanner.setVisibility(View.GONE);
         } catch (Exception e) {
             stopMiniPlayer();
-            Toast.makeText(this,
+            ZeroChillToast.makeText(this,
                     "Couldn't start the mini-player.",
-                    Toast.LENGTH_SHORT).show();
+                    ZeroChillToast.LENGTH_SHORT).show();
         }
     }
 
@@ -842,9 +842,9 @@ public class MainActivity extends Activity {
             intent.addCategory(Intent.CATEGORY_BROWSABLE);
             startActivity(intent);
         } catch (ActivityNotFoundException e) {
-            Toast.makeText(this,
+            ZeroChillToast.makeText(this,
                     "No app can open this link.",
-                    Toast.LENGTH_SHORT).show();
+                    ZeroChillToast.LENGTH_SHORT).show();
         }
     }
 
@@ -1029,7 +1029,7 @@ public class MainActivity extends Activity {
         copy.addView(sub);
         row.addView(copy, new LinearLayout.LayoutParams(0, -2, 1f));
 
-        MaterialSwitch toggle = new MaterialSwitch(this);
+        ZeroChillSwitch toggle = new ZeroChillSwitch(this);
         toggle.setChecked(getSharedPreferences("app_prefs", MODE_PRIVATE)
                 .getBoolean(key, defaultValue));
         toggle.setOnCheckedChangeListener((button, checked) -> {
@@ -1070,7 +1070,7 @@ public class MainActivity extends Activity {
     }
 
     private void confirmClearSiteData() {
-        new AlertDialog.Builder(this)
+        new ZeroChillDialog.Builder(this)
                 .setTitle("Clear site data?")
                 .setMessage("This signs you out and clears CrazyShit.com cookies, local storage, cache, and browsing history inside the app.")
                 .setNegativeButton("Cancel", null)
@@ -1081,9 +1081,9 @@ public class MainActivity extends Activity {
                         webView.clearCache(true);
                         webView.clearHistory();
                         webView.loadUrl(HOME);
-                        Toast.makeText(this,
+                        ZeroChillToast.makeText(this,
                                 "Site data cleared.",
-                                Toast.LENGTH_SHORT).show();
+                                ZeroChillToast.LENGTH_SHORT).show();
                     });
                 })
                 .show();
@@ -1100,7 +1100,7 @@ public class MainActivity extends Activity {
         ClipboardManager clipboard =
                 (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
         clipboard.setPrimaryClip(ClipData.newPlainText("Link", text));
-        Toast.makeText(this, "Copied.", Toast.LENGTH_SHORT).show();
+        ZeroChillToast.makeText(this, "Copied.", ZeroChillToast.LENGTH_SHORT).show();
     }
 
     private String currentUrl() {
@@ -1158,13 +1158,13 @@ public class MainActivity extends Activity {
             if (cookies != null) request.addRequestHeader("Cookie", cookies);
 
             ((DownloadManager) getSystemService(Context.DOWNLOAD_SERVICE)).enqueue(request);
-            Toast.makeText(this,
+            ZeroChillToast.makeText(this,
                     "Downloading " + name,
-                    Toast.LENGTH_SHORT).show();
+                    ZeroChillToast.LENGTH_SHORT).show();
         } catch (Exception e) {
-            Toast.makeText(this,
+            ZeroChillToast.makeText(this,
                     "Couldn't start the download.",
-                    Toast.LENGTH_SHORT).show();
+                    ZeroChillToast.LENGTH_SHORT).show();
         }
     }
 
@@ -1309,9 +1309,9 @@ public class MainActivity extends Activity {
 
         if (!userInitiated && now - lastCheck < UPDATE_CHECK_INTERVAL_MS) return;
         if (userInitiated) {
-            Toast.makeText(this,
+            ZeroChillToast.makeText(this,
                     "Checking for updates…",
-                    Toast.LENGTH_SHORT).show();
+                    ZeroChillToast.LENGTH_SHORT).show();
         }
 
         new Thread(() -> {
@@ -1369,18 +1369,18 @@ public class MainActivity extends Activity {
                     } else {
                         updateBanner.setVisibility(View.GONE);
                         if (userInitiated) {
-                            Toast.makeText(this,
+                            ZeroChillToast.makeText(this,
                                     "You're up to date.",
-                                    Toast.LENGTH_SHORT).show();
+                                    ZeroChillToast.LENGTH_SHORT).show();
                         }
                     }
                 });
             } catch (Exception e) {
                 if (userInitiated) {
-                    runOnUiThread(() -> Toast.makeText(
+                    runOnUiThread(() -> ZeroChillToast.makeText(
                             this,
                             "Couldn't check for updates.",
-                            Toast.LENGTH_SHORT
+                            ZeroChillToast.LENGTH_SHORT
                     ).show());
                 }
             } finally {
@@ -1499,9 +1499,9 @@ public class MainActivity extends Activity {
                     results[0] == PackageManager.PERMISSION_GRANTED) {
                 enqueueDownload(pendingDownload);
             } else {
-                Toast.makeText(this,
+                ZeroChillToast.makeText(this,
                         "Storage permission is needed for downloads.",
-                        Toast.LENGTH_LONG).show();
+                        ZeroChillToast.LENGTH_LONG).show();
             }
             pendingDownload = null;
         }

@@ -3,7 +3,14 @@ package com.webapp.crazyshit;
 import android.app.Application;
 import android.content.Intent;
 import android.os.Bundle;
+import android.graphics.Bitmap;
+import android.graphics.Canvas;
+import android.graphics.Rect;
+import android.graphics.RectF;
+import android.graphics.drawable.ColorDrawable;
 import android.view.View;
+import android.view.ViewGroup;
+import android.widget.ImageView;
 
 import androidx.viewpager2.widget.ViewPager2;
 
@@ -28,6 +35,99 @@ import static org.robolectric.Shadows.shadowOf;
 @RunWith(RobolectricTestRunner.class)
 @Config(application = Application.class, sdk = 35)
 public class NavigationIaTest {
+    @Test public void portraitRestoreDoesNotDrawOldBlueHeaderBorder() {
+        android.content.Context context = org.robolectric.RuntimeEnvironment.getApplication();
+        context.getSharedPreferences("app_prefs", 0).edit()
+                .putBoolean("access_notice_2_8_3_accepted", true).apply();
+        ActivityController<NativeMainActivity> controller =
+                Robolectric.buildActivity(NativeMainActivity.class)
+                        .create().start().resume().visible();
+        NativeMainActivity activity = controller.get();
+        View topBar = ReflectionHelpers.getField(activity, "topBar");
+
+        // The landscape controller runs a portrait pass after returning from fullscreen.
+        LandscapeUiController.attach(activity);
+        LandscapeUiController.apply(activity);
+        assertTrue(topBar.getBackground() instanceof ColorDrawable);
+        assertEquals(ZeroChillUi.background(activity),
+                ((ColorDrawable) topBar.getBackground()).getColor());
+
+        controller.pause().stop().destroy();
+    }
+
+    @Test public void fullscreenReturnDoesNotRevealDuplicateOnlyFapHeader() {
+        android.content.Context context = org.robolectric.RuntimeEnvironment.getApplication();
+        context.getSharedPreferences("app_prefs", 0).edit()
+                .putBoolean("access_notice_2_8_3_accepted", true).apply();
+        ActivityController<NativeMainActivity> controller =
+                Robolectric.buildActivity(NativeMainActivity.class)
+                        .create().start().resume().visible();
+        shadowOf(android.os.Looper.getMainLooper()).idle();
+        NativeMainActivity activity = controller.get();
+        BottomNavigationView nav = ReflectionHelpers.getField(activity, "bottomNavigation");
+        View topBar = ReflectionHelpers.getField(activity, "topBar");
+
+        nav.setSelectedItemId(3); // Stable OnlyFap slot.
+        shadowOf(android.os.Looper.getMainLooper()).idle();
+        assertEquals(View.GONE, topBar.getVisibility());
+
+        // This restoration pass previously forced the main bar visible over the hero title.
+        LandscapeUiController.attach(activity);
+        LandscapeUiController.apply(activity);
+        assertEquals(View.GONE, topBar.getVisibility());
+
+        nav.setSelectedItemId(6); // Library uses the main header.
+        shadowOf(android.os.Looper.getMainLooper()).idle();
+        LandscapeUiController.apply(activity);
+        assertEquals(View.VISIBLE, topBar.getVisibility());
+
+        controller.pause().stop().destroy();
+    }
+
+    @Test public void showsDetailsIntentCarriesRealCollectionPresentationData() {
+        android.content.Context context = org.robolectric.RuntimeEnvironment.getApplication();
+        context.getSharedPreferences("app_prefs", 0).edit()
+                .putBoolean("access_notice_2_8_3_accepted", true).apply();
+        ActivityController<NativeMainActivity> controller =
+                Robolectric.buildActivity(NativeMainActivity.class)
+                        .create().start().resume().visible();
+        shadowOf(android.os.Looper.getMainLooper()).idle();
+
+        NativeContentItem item = new NativeContentItem(
+                NativeContentItem.KIND_SERIES,
+                "Test Show",
+                "https://crazyshit.com/series/test-show/",
+                "https://cdn.example.com/show.jpg",
+                "",
+                "",
+                "",
+                "Real source description"
+        );
+        Intent intent = NativeFeedBrowserActivity.createShowDetails(
+                controller.get(),
+                item,
+                NativeFeedBrowserActivity.SOURCE_CRAZYSHIT
+        );
+
+        assertEquals(NativeFeedBrowserActivity.class.getName(),
+                intent.getComponent().getClassName());
+        assertTrue(intent.getBooleanExtra(NativeFeedBrowserActivity.EXTRA_SHOW_DETAILS, false));
+        assertEquals(item.title,
+                intent.getStringExtra(NativeFeedBrowserActivity.EXTRA_TITLE));
+        assertEquals(item.url,
+                intent.getStringExtra(NativeFeedBrowserActivity.EXTRA_BASE_URL));
+        assertEquals(item.imageUrl,
+                intent.getStringExtra(NativeFeedBrowserActivity.EXTRA_SHOW_IMAGE_URL));
+        assertEquals(item.description,
+                intent.getStringExtra(NativeFeedBrowserActivity.EXTRA_SHOW_DESCRIPTION));
+        assertEquals(item.kind,
+                intent.getStringExtra(NativeFeedBrowserActivity.EXTRA_SHOW_KIND));
+        assertEquals(NativeFeedBrowserActivity.SOURCE_CRAZYSHIT,
+                intent.getStringExtra(NativeFeedBrowserActivity.EXTRA_SOURCE));
+
+        controller.pause().stop().destroy();
+    }
+
     @Test public void restoredSlotThreeIsOnlyFapWithStablePublicNavigation() {
         android.content.Context context = org.robolectric.RuntimeEnvironment.getApplication();
         context.getSharedPreferences("app_prefs", 0).edit()
@@ -42,46 +142,390 @@ public class NavigationIaTest {
         BottomNavigationView nav = ReflectionHelpers.getField(activity, "bottomNavigation");
         MainPagerAdapter adapter = ReflectionHelpers.getField(activity, "primaryPagerAdapter");
         assertEquals(4, adapter.getItemCount());
-        assertEquals(MainPagerAdapter.PAGE_ONLYFAP, pager.getCurrentItem());
-        assertEquals("Home", nav.getMenu().findItem(1).getTitle());
+        assertEquals(
+                MainPagerAdapter.PAGE_ONLYFAP,
+                MainPagerAdapter.pageForPagerPosition(pager.getCurrentItem())
+        );
+        assertNull(nav.getMenu().findItem(1));
         assertEquals("Shows", nav.getMenu().findItem(2).getTitle());
         assertEquals("ShitTok", nav.getMenu().findItem(4).getTitle());
         assertEquals("OnlyFap", nav.getMenu().findItem(3).getTitle());
-        assertEquals("More", nav.getMenu().findItem(5).getTitle());
-        assertNull(findMenuItem(nav, "Library"));
-        View modeButton = findByDescription(activity.getWindow().getDecorView(),
-                "Show Trending OnlyFap creators");
-        View badge = findByDescription(activity.getWindow().getDecorView(), "Creator list mode");
-        assertNotNull(modeButton);
-        assertNotNull(badge);
-        View modeRow = (View) modeButton.getParent();
-        View caption = (View) badge.getParent();
-        android.widget.FrameLayout.LayoutParams modeParams =
-                (android.widget.FrameLayout.LayoutParams) modeRow.getLayoutParams();
-        android.widget.FrameLayout.LayoutParams captionParams =
-                (android.widget.FrameLayout.LayoutParams) caption.getLayoutParams();
+        assertEquals("Library", nav.getMenu().findItem(6).getTitle());
+        assertNull(findMenuItem(nav, "Home"));
+        assertNull(findMenuItem(nav, "More"));
+        assertNotNull(findByDescription(activity.getWindow().getDecorView(), "More"));
+        View search = findByDescription(activity.getWindow().getDecorView(),
+                "Search OnlyFap creators");
+        View heroMore = findByDescription(activity.getWindow().getDecorView(),
+                "OnlyFap More");
+        View featuredAction = findByDescription(activity.getWindow().getDecorView(),
+                "Open featured creator gallery");
+        View discoverShelf = findByDescription(activity.getWindow().getDecorView(),
+                "Discover creators shelf");
+        View primaryTopBar = findByDescription(activity.getWindow().getDecorView(),
+                "Primary top bar");
+        assertNotNull(search);
+        assertNotNull(heroMore);
+        assertNotNull(featuredAction);
+        assertNotNull(discoverShelf);
+        assertNotNull(primaryTopBar);
+        assertEquals(View.GONE, primaryTopBar.getVisibility());
+        assertNull(findByDescription(activity.getWindow().getDecorView(),
+                "Show Trending OnlyFap creators"));
+
         Object[] pages = ReflectionHelpers.getField(adapter, "pages");
         Object onlyFap = pages[MainPagerAdapter.PAGE_ONLYFAP];
         androidx.swiperefreshlayout.widget.SwipeRefreshLayout refresh =
                 ReflectionHelpers.getField(onlyFap, "refresh");
-        android.widget.FrameLayout.LayoutParams refreshParams =
-                (android.widget.FrameLayout.LayoutParams) refresh.getLayoutParams();
-        assertTrue(captionParams.topMargin >= modeParams.topMargin + modeParams.height);
-        assertEquals(0, refreshParams.topMargin);
-        assertTrue(modeRow.getParent() instanceof FrostedOverlayLayout);
-        FrostedOverlayLayout root = (FrostedOverlayLayout) modeRow.getParent();
-        assertSame(modeRow, root.frostedOverlayForTest());
-        androidx.recyclerview.widget.RecyclerView recycler =
-                ReflectionHelpers.getField(onlyFap, "recycler");
-        assertEquals(BrowseUi.dp(activity, 127), recycler.getPaddingTop());
-        assertFalse(recycler.getClipToPadding());
+        assertEquals(View.GONE, refresh.getVisibility());
+        OnlyFapHubView hub = ReflectionHelpers.getField(onlyFap, "onlyFapHub");
+        assertNotNull(hub);
+
+        search.performClick();
+        Intent searchIntent = shadowOf(activity).getNextStartedActivity();
+        assertNull(searchIntent);
+        SearchPanel panel = ReflectionHelpers.getField(activity, "searchPanel");
+        assertNotNull(panel);
+        assertEquals("Search creators", panel.field().getHint().toString());
+
         android.widget.TextView title = ReflectionHelpers.getField(activity, "headerTitle");
         assertEquals("OnlyFap", title.getText().toString());
+
+        BottomNavigationView navForChrome =
+                ReflectionHelpers.getField(activity, "bottomNavigation");
+        navForChrome.setSelectedItemId(6);
+        shadowOf(android.os.Looper.getMainLooper()).idle();
+        assertEquals(View.VISIBLE, primaryTopBar.getVisibility());
+
+        controller.pause().stop().destroy();
+    }
+
+    @Test public void onlyFapCreatorCardRoutesToGalleryInsteadOfPlayback() {
+        android.content.Context context = org.robolectric.RuntimeEnvironment.getApplication();
+        context.getSharedPreferences("app_prefs", 0).edit()
+                .putBoolean("access_notice_2_8_3_accepted", true).apply();
+
+        ActivityController<NativeMainActivity> controller =
+                Robolectric.buildActivity(NativeMainActivity.class)
+                        .create().start().resume().visible();
+        shadowOf(android.os.Looper.getMainLooper()).idle();
+
+        NativeMainActivity activity = controller.get();
+        MainPagerAdapter adapter = ReflectionHelpers.getField(activity, "primaryPagerAdapter");
+        NativeContentItem creator = new NativeContentItem(
+                NativeContentItem.KIND_CREATOR,
+                "Test Creator",
+                "https://fapello.com/test-creator/",
+                "https://cdn.example.com/test.jpg",
+                "",
+                "https://fapello.com/test-creator/",
+                "",
+                "",
+                "test creator"
+        );
+
+        ReflectionHelpers.callInstanceMethod(
+                adapter,
+                "openBrowseItem",
+                ReflectionHelpers.ClassParameter.from(NativeContentItem.class, creator)
+        );
+
+        Intent started = shadowOf(activity).getNextStartedActivity();
+        assertEquals(
+                NativeFeedBrowserActivity.class.getName(),
+                started.getComponent().getClassName()
+        );
+        assertEquals(
+                "test creator",
+                started.getStringExtra(NativeFeedBrowserActivity.EXTRA_BUNKR_CREATOR_QUERY)
+        );
+
+        controller.pause().stop().destroy();
+    }
+
+    @Test public void bottomNavigationCanCollapseWithoutChangingTabGeometryContract() {
+        android.content.Context context = org.robolectric.RuntimeEnvironment.getApplication();
+        context.getSharedPreferences("app_prefs", 0).edit()
+                .putBoolean("access_notice_2_8_3_accepted", true).apply();
+
+        ActivityController<NativeMainActivity> controller =
+                Robolectric.buildActivity(NativeMainActivity.class)
+                        .create().start().resume().visible();
+        shadowOf(android.os.Looper.getMainLooper()).idle();
+
+        NativeMainActivity activity = controller.get();
+        ZeroChillBottomNavigationView nav =
+                ReflectionHelpers.getField(activity, "bottomNavigation");
+
+        nav.setCollapsed(true, false);
+        android.view.ViewGroup.MarginLayoutParams collapsed =
+                (android.view.ViewGroup.MarginLayoutParams) nav.getLayoutParams();
+        int densityMargin = Math.round(60 * activity.getResources().getDisplayMetrics().density);
+        assertTrue(nav.isCollapsedForTest());
+        assertEquals(Math.round(50 * activity.getResources().getDisplayMetrics().density),
+                collapsed.height);
+        assertEquals(densityMargin, collapsed.leftMargin);
+        assertEquals(densityMargin, collapsed.rightMargin);
+        assertEquals(
+                com.google.android.material.navigation.NavigationBarView.LABEL_VISIBILITY_LABELED,
+                nav.getLabelVisibilityMode()
+        );
+
+        nav.setSelectedItemId(6);
+        shadowOf(android.os.Looper.getMainLooper()).idle();
+        assertTrue(nav.isCollapsedForTest());
+
+        nav.setCollapsed(false, false);
+        android.view.ViewGroup.MarginLayoutParams expanded =
+                (android.view.ViewGroup.MarginLayoutParams) nav.getLayoutParams();
+        assertFalse(nav.isCollapsedForTest());
+        assertEquals(Math.round(61 * activity.getResources().getDisplayMetrics().density),
+                expanded.height);
+        assertEquals(Math.round(16 * activity.getResources().getDisplayMetrics().density),
+                expanded.leftMargin);
+        assertEquals(expanded.leftMargin, expanded.rightMargin);
+        assertEquals(
+                com.google.android.material.navigation.NavigationBarView.LABEL_VISIBILITY_LABELED,
+                nav.getLabelVisibilityMode()
+        );
+
+        controller.pause().stop().destroy();
+    }
+
+    @Test public void threeButtonNavigationInsetIsOwnedByShellNotAppliedAgainToBottomNav() {
+        android.content.Context context = org.robolectric.RuntimeEnvironment.getApplication();
+        context.getSharedPreferences("app_prefs", 0).edit()
+                .putBoolean("access_notice_2_8_3_accepted", true).apply();
+
+        ActivityController<NativeMainActivity> controller =
+                Robolectric.buildActivity(NativeMainActivity.class)
+                        .create().start().resume().visible();
+        shadowOf(android.os.Looper.getMainLooper()).idle();
+
+        NativeMainActivity activity = controller.get();
+        View shell = ReflectionHelpers.getField(activity, "shell");
+        ZeroChillBottomNavigationView nav =
+                ReflectionHelpers.getField(activity, "bottomNavigation");
+
+        int baselineNavBottomPadding = nav.getPaddingBottom();
+        int baselineNavTopPadding = nav.getPaddingTop();
+        assertEquals(0, baselineNavTopPadding);
+        assertEquals(0, baselineNavBottomPadding);
+        float density = activity.getResources().getDisplayMetrics().density;
+        int statusInset = Math.round(24 * density);
+        int navigationInset = Math.round(48 * density);
+        android.view.WindowInsets insets = new android.view.WindowInsets.Builder()
+                .setInsets(
+                        android.view.WindowInsets.Type.statusBars(),
+                        android.graphics.Insets.of(0, statusInset, 0, 0)
+                )
+                .setVisible(android.view.WindowInsets.Type.statusBars(), true)
+                .setInsets(
+                        android.view.WindowInsets.Type.navigationBars(),
+                        android.graphics.Insets.of(0, 0, 0, navigationInset)
+                )
+                .setVisible(android.view.WindowInsets.Type.navigationBars(), true)
+                .build();
+
+        shell.dispatchApplyWindowInsets(insets);
+        nav.dispatchApplyWindowInsets(insets);
+        shadowOf(android.os.Looper.getMainLooper()).idle();
+
+        assertEquals(navigationInset, shell.getPaddingBottom());
+        assertEquals(baselineNavBottomPadding, nav.getPaddingBottom());
+        assertEquals(baselineNavTopPadding, nav.getPaddingTop());
+
+        controller.pause().stop().destroy();
+    }
+
+    @Test public void portraitChromePassesCannotResetCompactOrIntermediateNavGeometry() {
+        android.content.Context context = org.robolectric.RuntimeEnvironment.getApplication();
+        context.getSharedPreferences("app_prefs", 0).edit()
+                .putBoolean("access_notice_2_8_3_accepted", true).apply();
+        ActivityController<NativeMainActivity> controller =
+                Robolectric.buildActivity(NativeMainActivity.class)
+                        .create().start().resume().visible();
+        NativeMainActivity activity = controller.get();
+        ZeroChillBottomNavigationView nav = ReflectionHelpers.getField(activity, "bottomNavigation");
+        StableBottomNavigationController.attach(activity);
+        shadowOf(android.os.Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(1000));
+
+        nav.setCollapsed(true, false);
+        nav.setSelectedItemId(6);
+        shadowOf(android.os.Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(650));
+        assertNavGeometry(nav, activity, 1f);
+        assertTrue(nav.isCollapsedForTest());
+
+        nav.setCollapseProgressForTest(0.45f);
+        StableBottomNavigationController.applyOrientation(activity);
+        shadowOf(android.os.Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(650));
+        assertEquals(0.45f, nav.collapseProgressForTest(), 0.01f);
+        assertNavGeometry(nav, activity, 0.45f);
+
+        nav.setCollapsed(false, false);
+        nav.setSelectedItemId(2);
+        shadowOf(android.os.Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(650));
+        assertNavGeometry(nav, activity, 0f);
+        assertFalse(nav.isCollapsedForTest());
+
+        StableBottomNavigationController.detach(activity);
+        controller.pause().stop().destroy();
+    }
+
+    private static void assertNavGeometry(
+            ZeroChillBottomNavigationView nav, NativeMainActivity activity, float progress) {
+        android.widget.LinearLayout.LayoutParams params =
+                (android.widget.LinearLayout.LayoutParams) nav.getLayoutParams();
+        float density = activity.getResources().getDisplayMetrics().density;
+        int expanded = Math.round(61 * density);
+        int compact = Math.round(50 * density);
+        int height = Math.round(expanded + (compact - expanded) * progress);
+        assertEquals(height, params.height);
+        assertEquals(Math.round(Math.round(16 * density) +
+                (Math.round(60 * density) - Math.round(16 * density)) * progress),
+                params.leftMargin);
+        assertEquals(params.leftMargin, params.rightMargin);
+        assertEquals(-height - Math.round(8 * density), params.topMargin);
+        assertEquals(Math.round(8 * density), params.bottomMargin);
+    }
+
+    @Test public void primaryTabsDragFromSelectedBottomCapsule() {
+        android.content.Context context = org.robolectric.RuntimeEnvironment.getApplication();
+        context.getSharedPreferences("app_prefs", 0).edit()
+                .putBoolean("access_notice_2_8_3_accepted", true).apply();
+
+        ActivityController<NativeMainActivity> controller =
+                Robolectric.buildActivity(NativeMainActivity.class)
+                        .create().start().resume().visible();
+        shadowOf(android.os.Looper.getMainLooper()).idle();
+
+        NativeMainActivity activity = controller.get();
+        ViewPager2 pager = ReflectionHelpers.getField(activity, "primaryPager");
+        ZeroChillBottomNavigationView nav =
+                ReflectionHelpers.getField(activity, "bottomNavigation");
+
+        assertFalse(pager.isUserInputEnabled());
+        assertEquals(
+                MainPagerAdapter.PAGE_CHAOS,
+                MainPagerAdapter.pageForPagerPosition(pager.getCurrentItem())
+        );
+
+        assertTrue(nav.startSquareDrag());
+        nav.dragSquareBy(.8f);
+        nav.endSquareDrag(false);
+        shadowOf(android.os.Looper.getMainLooper()).idle();
+        assertEquals(MainPagerAdapter.PAGE_ONLYFAP,
+                MainPagerAdapter.pageForPagerPosition(pager.getCurrentItem()));
+        nav.setCollapsed(true, false);
+        assertTrue(nav.startSquareDrag());
+        nav.dragSquareBy(.8f);
+        nav.endSquareDrag(false);
+        shadowOf(android.os.Looper.getMainLooper()).idle();
+        assertEquals(MainPagerAdapter.PAGE_LIBRARY,
+                MainPagerAdapter.pageForPagerPosition(pager.getCurrentItem()));
+        assertTrue(nav.isCollapsedForTest());
+        controller.pause().stop().destroy();
+    }
+
+    @Test public void compactNavIconsAndSelectedCapsuleFitAtEveryProgress() {
+        android.content.Context context = org.robolectric.RuntimeEnvironment.getApplication();
+        context.getSharedPreferences("app_prefs", 0).edit()
+                .putBoolean("access_notice_2_8_3_accepted", true).apply();
+        ActivityController<NativeMainActivity> controller =
+                Robolectric.buildActivity(NativeMainActivity.class)
+                        .create().start().resume().visible();
+        shadowOf(android.os.Looper.getMainLooper()).idle();
+        ZeroChillBottomNavigationView nav = ReflectionHelpers.getField(controller.get(),
+                "bottomNavigation");
+        for (float progress : new float[]{0f, 0.25f, 0.5f, 0.75f, 1f}) {
+            nav.setCollapseProgressForTest(progress);
+            int width = Math.round(360 * context.getResources().getDisplayMetrics().density)
+                    - ((ViewGroup.MarginLayoutParams) nav.getLayoutParams()).leftMargin * 2;
+            int height = ((ViewGroup.MarginLayoutParams) nav.getLayoutParams()).height;
+            nav.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
+                    View.MeasureSpec.makeMeasureSpec(height, View.MeasureSpec.EXACTLY));
+            nav.layout(0, 0, width, height);
+            View compose = nav.getChildAt(nav.getChildCount() - 1);
+            assertTrue(compose instanceof androidx.compose.ui.platform.ComposeView);
+            assertEquals(width, compose.getMeasuredWidth());
+            assertEquals(height, compose.getMeasuredHeight());
+            RectF capsule = nav.selectedCapsuleBoundsForTest();
+            assertTrue("capsule top at " + progress, capsule.top >= 0);
+            assertTrue("capsule bottom at " + progress, capsule.bottom <= height);
+            assertEquals(
+                    com.google.android.material.navigation.NavigationBarView.LABEL_VISIBILITY_LABELED,
+                    nav.getLabelVisibilityMode());
+        }
+        controller.pause().stop().destroy();
+    }
+
+    @Test public void collapseAnimationReversesFromItsCurrentProgressWithoutRestartingSameTarget() {
+        android.content.Context context = org.robolectric.RuntimeEnvironment.getApplication();
+        context.getSharedPreferences("app_prefs", 0).edit()
+                .putBoolean("access_notice_2_8_3_accepted", true).apply();
+        ActivityController<NativeMainActivity> controller =
+                Robolectric.buildActivity(NativeMainActivity.class)
+                        .create().start().resume().visible();
+        ZeroChillBottomNavigationView nav = ReflectionHelpers.getField(controller.get(),
+                "bottomNavigation");
+        nav.setCollapseProgressForTest(0.45f);
+        nav.setCollapsed(false, true);
+        assertEquals(0.45f, nav.collapseProgressForTest(), 0.01f);
+        nav.setCollapsed(false, true);
+        assertEquals(0.45f, nav.collapseProgressForTest(), 0.01f);
+        nav.setCollapseProgressForTest(0.55f);
+        nav.setCollapsed(true, true);
+        assertEquals(0.55f, nav.collapseProgressForTest(), 0.01f);
+        nav.setCollapsed(true, true);
+        assertEquals(0.55f, nav.collapseProgressForTest(), 0.01f);
+        controller.pause().stop().destroy();
+    }
+
+    private static ImageView findIcon(View root) {
+        if (root instanceof ImageView) return (ImageView) root;
+        if (!(root instanceof ViewGroup)) return null;
+        ViewGroup group = (ViewGroup) root;
+        for (int i = 0; i < group.getChildCount(); i++) {
+            ImageView result = findIcon(group.getChildAt(i));
+            if (result != null) return result;
+        }
+        return null;
+    }
+
+    @Test public void dormantHomeRestoreFallsBackToShitTokAndLibraryIsPrimaryTab() {
+        android.content.Context context = org.robolectric.RuntimeEnvironment.getApplication();
+        context.getSharedPreferences("app_prefs", 0).edit()
+                .putBoolean("access_notice_2_8_3_accepted", true).apply();
+        Bundle state = new Bundle();
+        state.putInt("primary_page", MainPagerAdapter.PAGE_HOME);
+        ActivityController<NativeMainActivity> controller =
+                Robolectric.buildActivity(NativeMainActivity.class)
+                        .create(state).start().resume().visible();
+        shadowOf(android.os.Looper.getMainLooper()).idle();
+
+        NativeMainActivity activity = controller.get();
+        ViewPager2 pager = ReflectionHelpers.getField(activity, "primaryPager");
+        BottomNavigationView nav = ReflectionHelpers.getField(activity, "bottomNavigation");
+        assertEquals(
+                MainPagerAdapter.PAGE_CHAOS,
+                MainPagerAdapter.pageForPagerPosition(pager.getCurrentItem())
+        );
+
+        nav.setSelectedItemId(6);
+        shadowOf(android.os.Looper.getMainLooper()).idle();
+        assertEquals(
+                MainPagerAdapter.PAGE_LIBRARY,
+                MainPagerAdapter.pageForPagerPosition(pager.getCurrentItem())
+        );
+        assertNotNull(findByDescription(activity.getWindow().getDecorView(), "Library media hub"));
+        android.widget.TextView title = ReflectionHelpers.getField(activity, "headerTitle");
+        assertEquals("Library", title.getText().toString());
+
         controller.pause().stop().destroy();
     }
 
     @SuppressWarnings({"rawtypes", "unchecked"})
-    @Test public void shitTokKeepsLegacyPortraitViewportWhilePagerCanSwipeBehindNav() {
+    @Test public void shitTokKeepsLegacyPortraitViewportWithPrimaryPager() {
         android.content.Context context = org.robolectric.RuntimeEnvironment.getApplication();
         context.getSharedPreferences("app_prefs", 0).edit()
                 .putBoolean("access_notice_2_8_3_accepted", true).apply();
@@ -111,10 +555,8 @@ public class NavigationIaTest {
 
         Object[] pages = ReflectionHelpers.getField(adapter, "pages");
         View homeRoot = ReflectionHelpers.getField(pages[MainPagerAdapter.PAGE_HOME], "root");
-        assertTrue(homeRoot.getLayoutParams() instanceof android.widget.FrameLayout.LayoutParams);
-        android.widget.FrameLayout.LayoutParams homeParams =
-                (android.widget.FrameLayout.LayoutParams) homeRoot.getLayoutParams();
-        assertEquals(0, homeParams.bottomMargin);
+        assertNotNull(homeRoot);
+        assertNull(homeRoot.getParent());
 
         controller.pause().stop().destroy();
     }
@@ -211,26 +653,76 @@ public class NavigationIaTest {
         controller.pause().stop().destroy();
     }
 
-    @Test public void collectionsKeepsCategoriesAsPersistedFourthSource() {
+    @Test public void libraryViewAllOpensAsStandaloneHistorySection() {
+        android.content.Context context = org.robolectric.RuntimeEnvironment.getApplication();
+        Intent intent = new Intent(context, FavoritesActivity.class)
+                .putExtra(FavoritesActivity.EXTRA_START_TAB, FavoritesActivity.START_HISTORY);
+
+        ActivityController<FavoritesActivity> controller =
+                Robolectric.buildActivity(FavoritesActivity.class, intent)
+                        .create().start().resume().visible();
+        shadowOf(android.os.Looper.getMainLooper()).idle();
+
+        FavoritesActivity activity = controller.get();
+        ViewPager2 pager = ReflectionHelpers.getField(activity, "pager");
+        assertFalse(pager.isUserInputEnabled());
+        assertEquals(FavoritesActivity.START_HISTORY, pager.getCurrentItem());
+        assertNotNull(findByDescription(
+                activity.getWindow().getDecorView(),
+                "History section"
+        ));
+        assertNotNull(findByDescription(
+                activity.getWindow().getDecorView(),
+                "Search History"
+        ));
+        assertNotNull(findByDescription(
+                activity.getWindow().getDecorView(),
+                "Section options"
+        ));
+
+        controller.pause().stop().destroy();
+    }
+
+    @Test public void showsAlwaysUsesCombinedHubAndRemovesSourceRail() {
         android.content.Context context = org.robolectric.RuntimeEnvironment.getApplication();
         context.getSharedPreferences("app_prefs", 0).edit()
-                .putBoolean("access_notice_2_8_3_accepted", true).apply();
+                .putBoolean("access_notice_2_8_3_accepted", true)
+                .putInt("native_series_source", 3)
+                .apply();
         Bundle state = new Bundle();
         state.putInt("primary_page", MainPagerAdapter.PAGE_SERIES);
         ActivityController<NativeMainActivity> controller = Robolectric.buildActivity(NativeMainActivity.class)
                 .create(state).start().resume().visible();
         shadowOf(android.os.Looper.getMainLooper()).idle();
         NativeMainActivity activity = controller.get();
-        View categories = findByDescription(activity.getWindow().getDecorView(),
-                "Show Categories collections");
-        assertNotNull(categories);
-        categories.performClick();
-        assertEquals(3, context.getSharedPreferences("app_prefs", 0)
+
+        assertEquals(4, context.getSharedPreferences("app_prefs", 0)
                 .getInt("native_series_source", -1));
+        assertNull(findByDescription(activity.getWindow().getDecorView(),
+                "Show Featured collections"));
+        assertNull(findByDescription(activity.getWindow().getDecorView(),
+                "Show CrazyShit collections"));
+        assertNull(findByDescription(activity.getWindow().getDecorView(),
+                "Show EFukt collections"));
+        assertNull(findByDescription(activity.getWindow().getDecorView(),
+                "Show Categories collections"));
+
+        MainPagerAdapter adapter = ReflectionHelpers.getField(activity, "primaryPagerAdapter");
+        Object[] pages = ReflectionHelpers.getField(adapter, "pages");
+        Object shows = pages[MainPagerAdapter.PAGE_SERIES];
+        ShowsHubView hub = ReflectionHelpers.getField(shows, "showsHub");
+        androidx.swiperefreshlayout.widget.SwipeRefreshLayout refresh =
+                ReflectionHelpers.getField(shows, "refresh");
+        assertNotNull(hub);
+        assertEquals(View.VISIBLE, hub.getVisibility());
+        assertEquals(View.GONE, refresh.getVisibility());
+        android.widget.TextView title = ReflectionHelpers.getField(activity, "headerTitle");
+        assertEquals("ZEROCHILL Shows", title.getText().toString());
+
         controller.pause().stop().destroy();
     }
 
-    @Test public void collectionsRemovesOnlyFapAndMigratesItsOldSelectionToCrazyShit() {
+    @Test public void showsMigratesLegacyOnlyFapSelectionToCombinedHub() {
         android.content.Context context = org.robolectric.RuntimeEnvironment.getApplication();
         context.getSharedPreferences("app_prefs", 0).edit()
                 .putBoolean("access_notice_2_8_3_accepted", true)
@@ -241,34 +733,8 @@ public class NavigationIaTest {
         ActivityController<NativeMainActivity> controller = Robolectric.buildActivity(NativeMainActivity.class)
                 .create(state).start().resume().visible();
         shadowOf(android.os.Looper.getMainLooper()).idle();
-        NativeMainActivity activity = controller.get();
-        assertEquals(0, context.getSharedPreferences("app_prefs", 0)
+        assertEquals(4, context.getSharedPreferences("app_prefs", 0)
                 .getInt("native_series_source", -1));
-        assertNull(findByDescription(activity.getWindow().getDecorView(),
-                "Show OnlyFap collections"));
-        View crazyShit = findByDescription(activity.getWindow().getDecorView(),
-                "Show CrazyShit collections");
-        assertNotNull(crazyShit);
-        android.view.ViewGroup selector = (android.view.ViewGroup) crazyShit.getParent();
-        assertFalse(selector.getClipChildren());
-        assertFalse(selector.getClipToPadding());
-        assertTrue(selector.getParent() instanceof FrostedOverlayLayout);
-        FrostedOverlayLayout root = (FrostedOverlayLayout) selector.getParent();
-        assertSame(selector, root.frostedOverlayForTest());
-        MainPagerAdapter adapter = ReflectionHelpers.getField(activity, "primaryPagerAdapter");
-        Object[] pages = ReflectionHelpers.getField(adapter, "pages");
-        Object shows = pages[MainPagerAdapter.PAGE_SERIES];
-        androidx.swiperefreshlayout.widget.SwipeRefreshLayout refresh =
-                ReflectionHelpers.getField(shows, "refresh");
-        androidx.recyclerview.widget.RecyclerView recycler =
-                ReflectionHelpers.getField(shows, "recycler");
-        assertEquals(0, ((android.widget.FrameLayout.LayoutParams)
-                refresh.getLayoutParams()).topMargin);
-        assertEquals(BrowseUi.dp(activity, 61), recycler.getPaddingTop());
-        assertFalse(recycler.getClipToPadding());
-        assertNull(findByDescription(activity.getWindow().getDecorView(), "My profile"));
-        android.widget.TextView title = ReflectionHelpers.getField(activity, "headerTitle");
-        assertEquals("Shows", title.getText().toString());
         controller.pause().stop().destroy();
     }
 

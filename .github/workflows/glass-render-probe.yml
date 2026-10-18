@@ -1,0 +1,56 @@
+name: Glass renderer visual probe
+on:
+  pull_request:
+    branches: [ rebrand/zerochill ]
+    paths:
+      - 'app/src/main/java/com/webapp/crazyshit/*Glass*'
+      - 'app/src/main/java/com/webapp/crazyshit/glass/**'
+      - 'app/src/main/java/com/webapp/crazyshit/*Navigation*'
+      - 'app/src/main/java/com/webapp/crazyshit/ViewPageBackdrop.kt'
+      - 'app/src/main/java/com/webapp/crazyshit/Frosted*'
+      - 'app/src/debug/**'
+      - '.github/workflows/glass-render-probe.yml'
+      - 'tools/capture_glass_probe.py'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      ANALYTICS_ENDPOINT: ""
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v4
+      - run: sdkmanager "platforms;android-35" "platforms;android-36" "build-tools;35.0.0"
+      - uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: '8.11.1'
+      - run: gradle --no-daemon :app:assembleDebug
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Capture live GPU refraction and frame pacing
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          emulator-options: -no-window -gpu swiftshader -no-snapshot -noaudio -no-boot-anim
+          api-level: 35
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: false
+          script: |
+            GLASS_PROBE_REQUIRE_REFRACTION=true GLASS_PROBE_OUTPUT=glass-probe-output/square-stack python3 tools/capture_glass_probe.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: glass-render-probe
+          path: glass-probe-output/

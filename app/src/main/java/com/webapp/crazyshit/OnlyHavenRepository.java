@@ -31,6 +31,7 @@ final class OnlyHavenRepository {
         final String name;
         final String url;
         final String imageUrl;
+        final String headerImageUrl;
         final int postCount;
         final int dmCount;
 
@@ -47,6 +48,12 @@ final class OnlyHavenRepository {
                 int postCount,
                 int dmCount
         ) {
+            this(service, id, name, url, imageUrl, postCount, dmCount, "");
+        }
+
+        Creator(String service, String id, String name, String url, String imageUrl,
+                int postCount, int dmCount, String headerImageUrl) {
+            this.headerImageUrl = cleanStatic(headerImageUrl);
             this.service = cleanStatic(service);
             this.id = cleanStatic(id);
             this.name = cleanStatic(name);
@@ -233,7 +240,7 @@ final class OnlyHavenRepository {
                 String key = service.toLowerCase(Locale.US) + ":" + id.toLowerCase(Locale.US);
                 result.putIfAbsent(
                         key,
-                        new Creator(service, id, name, url, image, postCount, dmCount)
+                        new Creator(service, id, name, url, image, postCount, dmCount, creatorHeaderImage(config, row, service, id))
                 );
             }
             return new ArrayList<>(result.values());
@@ -429,6 +436,30 @@ final class OnlyHavenRepository {
                     urlToken(id) + "/avatar.webp";
         }
         return "";
+    }
+
+    String creatorHeaderUrl(Creator creator) {
+        return creator == null ? "" : creator.headerImageUrl;
+    }
+
+    private String creatorHeaderImage(SourceConfig.OnlyHaven config, JSONObject row,
+            String service, String id) {
+        // ThumbHash is Base64 image metadata, not an asset path. Its presence is
+        // evidence of a custom header; unknown/HTML-only records keep the avatar.
+        String hash = firstJsonText(row, "headerThumbhash", "header_thumbhash");
+        if (row.has("hasHeader") && !row.optBoolean("hasHeader")) return "";
+        try {
+            byte[] metadata = java.util.Base64.getDecoder().decode(hash);
+            if (metadata.length < 12 || metadata.length > 64) return "";
+        } catch (IllegalArgumentException invalid) { return ""; }
+        return imageBase(config) + "creator/" + urlToken(service) + "/" + urlToken(id) + "/header.webp";
+    }
+
+    static boolean matchesHeaderCreator(String query, Creator creator) {
+        String wanted = CreatorNameMatcher.normalized(query);
+        return !wanted.isEmpty() && creator != null
+                && (wanted.equals(CreatorNameMatcher.normalized(creator.name))
+                || wanted.equals(CreatorNameMatcher.normalized(creator.id)));
     }
 
     private String imageBase(SourceConfig.OnlyHaven config) {

@@ -48,4 +48,35 @@ public class BundledCreatorIndexTest {
         assertEquals(OnlyFapCreatorResults.key(saved), OnlyFapCreatorResults.key(result.get(0)));
         assertEquals("Zoe", result.get(1).title);
     }
+
+    @Test public void reviewedBelleVariantsCollapseWithOneReadableTitle() {
+        List<NativeContentItem> variants = Arrays.asList(
+                creator("Belle Del", "", ""), creator("Belle Delphine", "", ""),
+                creator("Belle Delph", "", ""), creator("Belle Delphi", "", ""),
+                creator("Belle Delphin", "", ""), creator("belledelphiine", "", ""));
+        List<NativeContentItem> result = OnlyFapCreatorResults.merge(variants, null, 20);
+        assertEquals(1, result.size());
+        assertEquals("Belle Delphine", result.get(0).title);
+    }
+
+    @Test public void reviewedTaliyaAliasesCollapseButSimilarNamesRemainSeparate() {
+        List<NativeContentItem> result = OnlyFapCreatorResults.merge(Arrays.asList(
+                creator("Taliya &Amp; Gustavo", "", ""),
+                creator("Taliya & Gustavo", "https://fapello.com/taliya-gustavo/", "avatar"),
+                creator("Taliyaandgustavo", "", ""),
+                creator("Taliya and Gustavo Jr", "https://fapello.com/taliya-gustavo-jr/", "")), null, 20);
+        assertEquals(2, result.size());
+        assertEquals("Taliya & Gustavo", result.get(0).title);
+        assertEquals("avatar", result.get(0).imageUrl);
+        assertEquals("Taliya and Gustavo Jr", result.get(1).title);
+    }
+
+    @Test public void exactProfileIdentityMergesDifferentNamesButDistinctProfilesDoNot() {
+        List<NativeContentItem> result = OnlyFapCreatorResults.merge(Arrays.asList(
+                creator("Profile A", "https://fapello.com/person/", ""),
+                creator("Profile B", "https://fapello.com/person", "art"),
+                creator("Profile A", "https://fapello.com/another-person/", "")), null, 20);
+        assertEquals(2, result.size());
+        assertEquals("art", result.get(0).imageUrl);
+    }
 }

@@ -31,6 +31,36 @@ public class CreatorBackupTest {
         assertTrue(CreatorFavoriteStore.contains(context, items.get(1)));
     }
 
+    @Test public void aliasesDisplayOnceUseCachedArtworkAndRemoveTogether() throws Exception {
+        context.getSharedPreferences("creator_favorites", 0).edit().putStringSet("creators",
+                new HashSet<>(Arrays.asList("sasha foxx", "sasha foxxx"))).commit();
+        NativeContentItem rich = new NativeContentItem(NativeContentItem.KIND_CREATOR,
+                "Sasha Foxxx", "https://fapello.com/sasha-foxx/", "https://example.com/avatar.jpg",
+                "", "", "", "", "Sasha Foxxx");
+        CreatorCatalog.remember(context, Arrays.asList(rich));
+        List<NativeContentItem> displayed = CreatorCatalog.matching(context, "", true, 8);
+        assertEquals(1, displayed.size());
+        assertEquals("Sasha Foxx", displayed.get(0).title);
+        assertEquals(rich.imageUrl, displayed.get(0).imageUrl);
+        assertTrue(CreatorFavoriteStore.contains(context, displayed.get(0)));
+        assertEquals(2, CreatorFavoriteStore.names(context).size());
+        assertFalse(CreatorFavoriteStore.toggle(context, displayed.get(0)));
+        assertTrue(CreatorFavoriteStore.names(context).isEmpty());
+    }
+
+    @Test public void oldAliasKeysRoundTripThroughUnchangedBackupFormat() throws Exception {
+        context.getSharedPreferences("creator_favorites", 0).edit().putStringSet("creators",
+                new HashSet<>(Arrays.asList("sasha foxx", "sasha foxxx"))).commit();
+        JSONObject backup = AppBackupStore.export(context);
+        assertEquals(1, backup.getInt("version"));
+        assertEquals(2, backup.getJSONArray("creators").length());
+        context.getSharedPreferences("creator_favorites", 0).edit().clear().commit();
+        AppBackupStore.restore(context, backup);
+        assertEquals(new HashSet<>(Arrays.asList("sasha foxx", "sasha foxxx")),
+                CreatorFavoriteStore.names(context));
+        assertEquals(1, CreatorCatalog.matching(context, "", true, 8).size());
+    }
+
     @Test public void exactMatchOutranksAFavoritedPartialMatch() {
         CreatorCatalog.remember(context, Arrays.asList(creator("Anna"), creator("Annabelle")));
         CreatorFavoriteStore.toggle(context, creator("Annabelle"));

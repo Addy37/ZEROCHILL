@@ -3,6 +3,8 @@ package com.webapp.crazyshit;
 import android.content.Context;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
+import android.os.Handler;
+import android.os.Looper;
 import android.text.TextUtils;
 import android.view.Gravity;
 import android.view.ViewGroup;
@@ -15,16 +17,25 @@ import com.bumptech.glide.Glide;
 import com.bumptech.glide.load.model.GlideUrl;
 import com.bumptech.glide.load.model.LazyHeaders;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.function.Consumer;
 
 final class CreatorListAdapter extends RecyclerView.Adapter<CreatorListAdapter.Holder> {
+    private static final ExecutorService DIFFS = Executors.newSingleThreadExecutor();
+
     private final Context context;
     private final Consumer<NativeContentItem> open;
     private final Runnable favoriteChanged;
+    private final Handler main = new Handler(Looper.getMainLooper());
     private List<NativeContentItem> items = new ArrayList<>();
     private Set<String> favorites;
+    private int replaceGeneration;
+    private boolean floating;
+    void setFloating(boolean value) { floating = value; }
 
     CreatorListAdapter(Context context, Consumer<NativeContentItem> open, Runnable favoriteChanged) {
         this.context = context;
@@ -34,25 +45,40 @@ final class CreatorListAdapter extends RecyclerView.Adapter<CreatorListAdapter.H
     }
 
     void replace(List<NativeContentItem> next) {
-        List<NativeContentItem> old = items;
-        Set<String> oldFavorites = favorites;
-        Set<String> nextFavorites = CreatorFavoriteStore.names(context);
-        DiffUtil.DiffResult diff = DiffUtil.calculateDiff(new DiffUtil.Callback() {
-            public int getOldListSize() { return old.size(); }
-            public int getNewListSize() { return next.size(); }
-            public boolean areItemsTheSame(int a, int b) {
-                return CreatorCatalog.key(old.get(a)).equals(CreatorCatalog.key(next.get(b)));
-            }
-            public boolean areContentsTheSame(int a, int b) {
-                NativeContentItem x = old.get(a), y = next.get(b);
-                return x.title.equals(y.title) && x.imageUrl.equals(y.imageUrl)
-                        && oldFavorites.contains(CreatorFavoriteStore.key(x))
-                        == nextFavorites.contains(CreatorFavoriteStore.key(y));
-            }
+        replace(next, null);
+    }
+
+    void replace(List<NativeContentItem> next, Runnable committed) {
+        final int token = ++replaceGeneration;
+        final List<NativeContentItem> old = new ArrayList<>(items);
+        final List<NativeContentItem> incoming = next == null
+                ? new ArrayList<>() : new ArrayList<>(next);
+        final Set<String> oldFavorites = new HashSet<>(favorites);
+        DIFFS.execute(() -> {
+            Set<String> nextFavorites = CreatorFavoriteStore.names(context);
+            DiffUtil.DiffResult diff = DiffUtil.calculateDiff(new DiffUtil.Callback() {
+                public int getOldListSize() { return old.size(); }
+                public int getNewListSize() { return incoming.size(); }
+                public boolean areItemsTheSame(int a, int b) {
+                    return CreatorCatalog.key(old.get(a)).equals(CreatorCatalog.key(incoming.get(b)));
+                }
+                public boolean areContentsTheSame(int a, int b) {
+                    NativeContentItem x = old.get(a), y = incoming.get(b);
+                    return x.title.equals(y.title) && x.imageUrl.equals(y.imageUrl)
+                            && (oldFavorites.contains(CreatorFavoriteStore.key(x))
+                            || CreatorIdentity.hasStoredAlias(oldFavorites, x.title))
+                            == (nextFavorites.contains(CreatorFavoriteStore.key(y))
+                            || CreatorIdentity.hasStoredAlias(nextFavorites, y.title));
+                }
+            });
+            main.post(() -> {
+                if (token != replaceGeneration) return;
+                items = incoming;
+                favorites = nextFavorites;
+                diff.dispatchUpdatesTo(this);
+                if (committed != null) committed.run();
+            });
         });
-        items = new ArrayList<>(next);
-        favorites = nextFavorites;
-        diff.dispatchUpdatesTo(this);
     }
 
     @Override public int getItemCount() { return items.size(); }
@@ -62,9 +88,11 @@ final class CreatorListAdapter extends RecyclerView.Adapter<CreatorListAdapter.H
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
         row.setPadding(dp(12), dp(8), dp(8), dp(8));
-        row.setBackground(BrowseUi.rounded(context, BrowseUi.SURFACE, 16));
+        if (floating) row.setBackground(new SearchResultDivider(context));
+        else row.setBackground(BrowseUi.rounded(context, BrowseUi.SURFACE, 16));
         RecyclerView.LayoutParams params = new RecyclerView.LayoutParams(-1, -2);
-        params.setMargins(dp(12), dp(3), dp(12), dp(3));
+        params.setMargins(floating ? 0 : dp(12), floating ? 0 : dp(3), floating ? 0 : dp(12), floating ? 0 : dp(3));
+        if (floating) params.height = dp(72);
         row.setLayoutParams(params);
         ImageView avatar = new ImageView(context);
         avatar.setScaleType(ImageView.ScaleType.CENTER_CROP);
@@ -76,10 +104,11 @@ final class CreatorListAdapter extends RecyclerView.Adapter<CreatorListAdapter.H
         labels.setPadding(dp(12), 0, dp(4), 0);
         labels.setOrientation(LinearLayout.VERTICAL);
         TextView name = BrowseUi.text(context, "", 16, Color.WHITE);
-        name.setMaxLines(2);
+        name.setMaxLines(floating ? 1 : 2);
         name.setEllipsize(TextUtils.TruncateAt.END);
         labels.addView(name);
         TextView subtitle = BrowseUi.text(context, "Open gallery", 12, BrowseUi.MUTED);
+        if (floating) { subtitle.setMaxLines(1); subtitle.setEllipsize(TextUtils.TruncateAt.END); }
         labels.addView(subtitle);
         row.addView(labels, new LinearLayout.LayoutParams(0, -2, 1));
         TextView star = BrowseUi.action(context, "☆", "Favorite creator", v -> { });
@@ -91,7 +120,9 @@ final class CreatorListAdapter extends RecyclerView.Adapter<CreatorListAdapter.H
 
     @Override public void onBindViewHolder(Holder holder, int position) {
         NativeContentItem item = items.get(position);
-        boolean favorite = favorites.contains(CreatorFavoriteStore.key(item));
+        holder.bound = item;
+        boolean favorite = favorites.contains(CreatorFavoriteStore.key(item))
+                || CreatorIdentity.hasStoredAlias(favorites, item.title);
         holder.name.setText(item.title);
         String source = item.description == null ? "" : item.description.trim();
         holder.subtitle.setText((favorite ? "Favorite" : source).isEmpty()
@@ -102,6 +133,13 @@ final class CreatorListAdapter extends RecyclerView.Adapter<CreatorListAdapter.H
         holder.star.setBackgroundColor(Color.TRANSPARENT);
         holder.star.setContentDescription((favorite ? "Unfavorite " : "Favorite ") + item.title);
         holder.itemView.setOnClickListener(v -> open.accept(item));
+        CreatorGalleryPreloader.warm(
+                holder.itemView.getContext(),
+                item,
+                position < 3
+                        ? CreatorGalleryPreloader.PRIORITY_HIGH
+                        : CreatorGalleryPreloader.PRIORITY_NORMAL
+        );
         android.view.View.OnClickListener toggle = v -> {
             CreatorFavoriteStore.toggle(context, item);
             favoriteChanged.run();
@@ -115,13 +153,15 @@ final class CreatorListAdapter extends RecyclerView.Adapter<CreatorListAdapter.H
                     .addHeader("Referer", item.uploader.isEmpty() ? item.url : item.uploader)
                     .addHeader("User-Agent", "Mozilla/5.0 (Linux; Android 16) AppleWebKit/537.36 Chrome/139.0 Mobile Safari/537.36")
                     .build());
-            Glide.with(holder.avatar).load(url).circleCrop().dontAnimate()
+            Glide.with(holder.avatar).load(url).circleCrop().dontAnimate().transition(ThumbnailFades.avatar())
                     .placeholder(R.drawable.ic_more_account).error(R.drawable.ic_more_account)
                     .into(holder.avatar);
         }
     }
 
     @Override public void onViewRecycled(Holder holder) {
+        CreatorGalleryPreloader.cancelQueued(holder.bound);
+        holder.bound = null;
         Glide.with(holder.avatar).clear(holder.avatar);
         super.onViewRecycled(holder);
     }
@@ -131,6 +171,7 @@ final class CreatorListAdapter extends RecyclerView.Adapter<CreatorListAdapter.H
     static final class Holder extends RecyclerView.ViewHolder {
         final ImageView avatar;
         final TextView name, subtitle, star;
+        NativeContentItem bound;
         Holder(LinearLayout row, ImageView avatar, TextView name, TextView subtitle, TextView star) {
             super(row); this.avatar = avatar; this.name = name; this.subtitle = subtitle; this.star = star;
         }

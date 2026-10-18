@@ -5,6 +5,8 @@ on:
     branches: [ main, rebrand/zerochill ]
     paths:
       - 'app/**'
+      - 'RELEASE_VERSION'
+      - 'RELEASE_NOTES.md'
       - '.github/workflows/rebrand-upgrade-candidate.yml'
   workflow_dispatch:
 
@@ -16,14 +18,20 @@ jobs:
     if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
     runs-on: ubuntu-latest
     env:
+      ZEROCHILL_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
       FEEDBACK_ENDPOINT: ${{ secrets.FEEDBACK_ENDPOINT }}
       FEEDBACK_ANON_KEY: ${{ secrets.FEEDBACK_ANON_KEY }}
       SOURCE_CONFIG_ENDPOINT: https://fketutffusxgjxjlckci.supabase.co/functions/v1/app-config
       SUPABASE_PUBLISHABLE_KEY: ${{ secrets.FEEDBACK_ANON_KEY }}
+      # Signed betas and emulator upgrade checks must not pollute production analytics.
+      ANALYTICS_ENDPOINT: ${{ github.head_ref == 'release/zerochill-5.0.0' && 'https://fketutffusxgjxjlckci.supabase.co/functions/v1/analytics-ingest' || '' }}
+      SHITTOK_POOL_DIAGNOSTICS: ${{ github.head_ref == 'release/zerochill-5.0.0' && 'false' || 'true' }}
 
     steps:
       - name: Check out project
         uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - name: Set up Java 17
         uses: actions/setup-java@v5
@@ -36,13 +44,13 @@ jobs:
         with:
           packages: platform-tools
 
-      - name: Install Android API 35
-        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+      - name: Install Android APIs 35 and 36
+        run: sdkmanager "platforms;android-35" "platforms;android-36" "build-tools;35.0.0"
 
-      - name: Set up Gradle 8.7
+      - name: Set up Gradle 8.11.1
         uses: gradle/actions/setup-gradle@v6
         with:
-          gradle-version: '8.7'
+          gradle-version: '8.11.1'
           cache-provider: basic
 
       - name: Resolve candidate version above latest stable
@@ -111,8 +119,248 @@ jobs:
               output.write(f"ANDROID_KEY_PASSWORD={data['key_password']}\n")
           PY
 
+      - name: Audit live Fapello Discover pagination
+        continue-on-error: true
+        run: |
+          python3 - <<'PYTHON'
+          import sys
+          sys.path.insert(0, "tools")
+          import refresh_onlyfap_creator_index as source
+          config = source.source_config(source.DEFAULT_CONFIG, "fapello")
+          headers = source.configured_headers(config)
+          pages = {}
+          for listing, page in (("new", 4), ("new", 5), ("new", 6), ("hot", 5), ("popular", 5)):
+              url = source.fapello_listing_url(config, listing, page)
+              body = source.request_text(url, headers, retries=1)
+              parser = source.FapelloCreatorParser(config["baseUrl"])
+              parser.feed(body)
+              creators = {slug for name, slug in parser.creators}
+              if not creators:
+                  raise SystemExit(f"No parsed creators: {listing} page {page}")
+              pages[listing, page] = creators
+              print(f"DISCOVER_PAGINATION {listing} page {page}: {len(creators)} creators")
+          different = pages["new", 5] - pages["new", 4]
+          print(f"DISCOVER_PAGINATION New page 5 adds {len(different)} creators beyond page 4")
+          if not different or pages["new", 5] == pages["new", 6]:
+              raise SystemExit("Source did not return distinct deeper pages")
+          PYTHON
+
+      - name: Verify ShitTok splash does not wait for media
+        run: |
+          grep -q 'setContentView(R.layout.activity_splash)' app/src/main/java/com/webapp/crazyshit/SplashActivity.java
+          if grep -q -E 'MAX_OVERLAY_MS|content.addView\(overlay' app/src/main/java/com/webapp/crazyshit/ChaosStartupOverlayController.java; then
+            echo 'ShitTok must not cover the shell while waiting for media.'
+            exit 1
+          fi
+          if grep -q -E 'ChaosStartupPreloader.isReady|ChaosStartupPreloader.collect|ChaosStartupPreloader.resolveForFeed' app/src/main/java/com/webapp/crazyshit/SplashActivity.java; then
+            echo 'ShitTok source readiness must not hold the splash.'
+            exit 1
+          fi
+
+      - name: Verify ShitTok continuity without weakening rebuffer protection
+        if: ${{ github.head_ref != 'release/zerochill-5.0.0' }}
+        run: >-
+          gradle --no-daemon :app:testDebugUnitTest
+          --tests com.webapp.crazyshit.ShitTokContinuityTest
+          --tests com.webapp.crazyshit.ShitTokStartupPreparationTest
+          --tests com.webapp.crazyshit.ChaosStartupPreloaderTest
+          --tests com.webapp.crazyshit.PrimaryTabLibraryTest
+          --tests com.webapp.crazyshit.PrimaryTabNavigationTest
+          --tests com.webapp.crazyshit.ShitTokCreatorMetadataLoaderTest
+          --tests com.webapp.crazyshit.ShitTokCreatorMetadataTest
+          --tests com.webapp.crazyshit.ShitTokRunwayPolicyTest
+          --tests com.webapp.crazyshit.ShitTokInventoryAdmissionTest
+          --tests com.webapp.crazyshit.ShitTokLoadingStateTest
+          --tests com.webapp.crazyshit.ChaosStarterSourcesTest
+          --tests com.webapp.crazyshit.ShitTokBufferOwnerTest
+          --tests com.webapp.crazyshit.ShitTokBufferLoadControlTest
+          --tests com.webapp.crazyshit.ShitTokOrientationAdmissionTest
+
+      - name: Run ShitTok buffering and orientation regressions first
+        if: ${{ github.head_ref != 'release/zerochill-5.0.0' && github.event.pull_request.number != 295 && github.event.pull_request.number != 304 && github.head_ref != 'fix/shittok-async-creator-metadata' && github.head_ref != 'fix/shittok-startup-handoff' && github.head_ref != 'fix/onlyfap-first-open' && github.head_ref != 'feature/phone-content-grid-layout' && github.head_ref != 'feature/library-profile-redesign' }}
+        run: >-
+          gradle --no-daemon :app:testDebugUnitTest
+          --tests 'com.webapp.crazyshit.ShitTokBuffer*'
+          --tests 'com.webapp.crazyshit.ShitTokOrientation*'
+          --tests 'com.webapp.crazyshit.ShitTokAspectPriorityTest'
+          --tests 'com.webapp.crazyshit.ShitTokAudioOwnershipTest'
+          --tests 'com.webapp.crazyshit.ShitTokPlayerPoolTest'
+          --tests 'com.webapp.crazyshit.ShitTokSettledSwipeTest'
+          --tests 'com.webapp.crazyshit.ShitTokDynamicPinchTest'
+
+      - name: Verify Library profile, account isolation and existing collections
+        if: ${{ github.head_ref != 'release/zerochill-5.0.0' && github.head_ref == 'feature/library-profile-redesign' }}
+        run: >-
+          gradle --no-daemon :app:testDebugUnitTest
+          --tests 'com.webapp.crazyshit.LibraryProfileTest'
+          --tests 'com.webapp.crazyshit.LikedVideosActivityTest'
+          --tests 'com.webapp.crazyshit.PrimaryTabLibraryTest'
+          --tests 'com.webapp.crazyshit.LibrarySocialHubTest'
+          --tests 'com.webapp.crazyshit.LibrarySearchTest'
+          --tests 'com.webapp.crazyshit.PlaybackHistoryStoreTest'
+          --tests 'com.webapp.crazyshit.ProfileAccountIsolationTest'
+          --tests 'com.webapp.crazyshit.DownloadResumePolicyTest'
+          --tests 'com.webapp.crazyshit.OnlyFapFavoriteAvatarTest'
+
+      - name: Verify phone content grids and retained hub behavior
+        if: ${{ github.head_ref != 'release/zerochill-5.0.0' && github.head_ref == 'feature/phone-content-grid-layout' }}
+        run: >-
+          gradle --no-daemon :app:testDebugUnitTest
+          --tests 'com.webapp.crazyshit.PhoneContentGridLayoutTest'
+          --tests 'com.webapp.crazyshit.ShowsHeroDesignTest'
+          --tests 'com.webapp.crazyshit.ShowsHubStateTest'
+          --tests 'com.webapp.crazyshit.OnlyFapHeroDesignTest'
+          --tests 'com.webapp.crazyshit.OnlyFapHeroStartupTest'
+          --tests 'com.webapp.crazyshit.OnlyFapDiscoverLifecycleTest'
+          --tests 'com.webapp.crazyshit.OnlyFapFavoriteAvatarTest'
+
+      - name: Verify OnlyFap progressive first-open readiness
+        if: ${{ github.head_ref != 'release/zerochill-5.0.0' && github.head_ref == 'fix/onlyfap-first-open' }}
+        run: >-
+          gradle --no-daemon :app:testDebugUnitTest
+          --tests 'com.webapp.crazyshit.ColdTabSnapshotTest'
+          --tests 'com.webapp.crazyshit.OnlyFapHeroStartupTest'
+          --tests 'com.webapp.crazyshit.OnlyFapDiscoverLifecycleTest'
+          --tests 'com.webapp.crazyshit.OnlyFapFavoriteAvatarTest'
+          --tests 'com.webapp.crazyshit.PrimaryTab*'
+
+      - name: Run focused notification entry regressions
+        if: ${{ github.head_ref != 'release/zerochill-5.0.0' && github.event.pull_request.number != 295 && github.event.pull_request.number != 304 && github.head_ref != 'fix/shittok-async-creator-metadata' && github.head_ref != 'fix/shittok-startup-handoff' && github.head_ref != 'fix/onlyfap-first-open' && github.head_ref != 'feature/phone-content-grid-layout' && github.head_ref != 'feature/library-profile-redesign' }}
+        run: >-
+          gradle --no-daemon :app:testDebugUnitTest
+          --tests 'com.webapp.crazyshit.NotificationCenterUiTest'
+          --tests 'com.webapp.crazyshit.NotificationEntryLatencyTest'
+          --tests 'com.webapp.crazyshit.CreatorNotificationsTest'
+          --tests 'com.webapp.crazyshit.UpdateInboxStoreTest'
+
+      - name: Run focused primary-tab activation regressions
+        if: ${{ github.head_ref != 'release/zerochill-5.0.0' && github.event.pull_request.number != 295 && github.event.pull_request.number != 304 && github.head_ref != 'fix/shittok-async-creator-metadata' && github.head_ref != 'fix/shittok-startup-handoff' && github.head_ref != 'fix/onlyfap-first-open' && github.head_ref != 'feature/phone-content-grid-layout' && github.head_ref != 'feature/library-profile-redesign' }}
+        run: >-
+          gradle --no-daemon :app:testDebugUnitTest
+          --tests 'com.webapp.crazyshit.PrimaryTab*'
+          --tests 'com.webapp.crazyshit.PreferenceSnapshotTest'
+          --tests 'com.webapp.crazyshit.OnlyFapFavoriteAvatarTest'
+
+      - name: Run focused ShitTok swipe and audio regressions
+        if: ${{ github.head_ref != 'release/zerochill-5.0.0' && github.event.pull_request.number != 295 && github.event.pull_request.number != 304 && github.head_ref != 'fix/shittok-async-creator-metadata' && github.head_ref != 'fix/shittok-startup-handoff' && github.head_ref != 'fix/onlyfap-first-open' && github.head_ref != 'feature/phone-content-grid-layout' && github.head_ref != 'feature/library-profile-redesign' }}
+        run: >-
+          gradle --no-daemon :app:testDebugUnitTest
+          --tests 'com.webapp.crazyshit.ShitTokAudioOwnershipTest'
+          --tests 'com.webapp.crazyshit.ShitTokSettledSwipeTest'
+          --tests 'com.webapp.crazyshit.ShitTokSelectedPreparationTest'
+          --tests 'com.webapp.crazyshit.ShitTokSwipeStartTest'
+          --tests 'com.webapp.crazyshit.ShitTokAutoScrollIntegrationTest'
+          --tests 'com.webapp.crazyshit.ShitTokSessionResumeTest'
+
+      - name: Run focused Favorite Creators cache-first regressions
+        if: ${{ github.head_ref != 'release/zerochill-5.0.0' && github.event.pull_request.number != 295 && github.event.pull_request.number != 304 && github.head_ref != 'fix/shittok-async-creator-metadata' && github.head_ref != 'fix/shittok-startup-handoff' && github.head_ref != 'fix/onlyfap-first-open' && github.head_ref != 'feature/phone-content-grid-layout' && github.head_ref != 'feature/library-profile-redesign' }}
+        run: >-
+          gradle --no-daemon :app:testDebugUnitTest
+          --tests 'com.webapp.crazyshit.FavoriteCreatorsScrollTest'
+          --tests 'com.webapp.crazyshit.CreatorMergedGalleryHotPathTest'
+          --tests 'com.webapp.crazyshit.CreatorAvatarOverrideTest'
+          --tests 'com.webapp.crazyshit.UpdateInboxStoreTest'
+
+      - name: Run focused ShitTok block and BaddieHub Shows regressions first
+        if: ${{ github.head_ref != 'release/zerochill-5.0.0' && github.event.pull_request.number != 295 && github.event.pull_request.number != 304 && github.head_ref != 'fix/shittok-async-creator-metadata' && github.head_ref != 'fix/shittok-startup-handoff' && github.head_ref != 'fix/onlyfap-first-open' && github.head_ref != 'feature/phone-content-grid-layout' && github.head_ref != 'feature/library-profile-redesign' }}
+        run: >-
+          gradle --no-daemon :app:testDebugUnitTest
+          --tests 'com.webapp.crazyshit.ShitTokQueuePrunerTest'
+          --tests 'com.webapp.crazyshit.ShitTokCreatorBlockQueueIntegrationTest'
+          --tests 'com.webapp.crazyshit.BaddieHubRepositoryTest'
+          --tests 'com.webapp.crazyshit.RemoteSourceConfigManagerTest'
+          --tests 'com.webapp.crazyshit.ShowsHubStateTest'
+          --tests 'com.webapp.crazyshit.ShowsHeroDesignTest'
+
+      - name: Run focused fullscreen regressions first
+        if: ${{ github.head_ref != 'release/zerochill-5.0.0' && github.event.pull_request.number != 295 && github.event.pull_request.number != 304 && github.head_ref != 'fix/shittok-async-creator-metadata' && github.head_ref != 'fix/shittok-startup-handoff' && github.head_ref != 'fix/onlyfap-first-open' && github.head_ref != 'feature/phone-content-grid-layout' && github.head_ref != 'feature/library-profile-redesign' }}
+        run: >-
+          gradle --no-daemon :app:testDebugUnitTest
+          --tests 'com.webapp.crazyshit.ShowsFullscreen*'
+          --tests 'com.webapp.crazyshit.ShitTokProgressTest'
+          --tests 'com.webapp.crazyshit.PhoneOrientationPolicyTest'
+
+      - name: Run focused navigation and gallery regressions first
+        if: ${{ github.head_ref != 'release/zerochill-5.0.0' && github.event.pull_request.number != 295 && github.event.pull_request.number != 304 && github.head_ref != 'fix/shittok-async-creator-metadata' && github.head_ref != 'fix/shittok-startup-handoff' && github.head_ref != 'fix/onlyfap-first-open' && github.head_ref != 'feature/phone-content-grid-layout' && github.head_ref != 'feature/library-profile-redesign' }}
+        run: >-
+          gradle --no-daemon :app:testDebugUnitTest
+          --tests 'com.webapp.crazyshit.BottomNavigationInsetsTest'
+          --tests 'com.webapp.crazyshit.BottomNavigationDrawableRenderTest'
+          --tests 'com.webapp.crazyshit.NavigationIaTest'
+          --tests 'com.webapp.crazyshit.NavigationMotionControllerTest'
+          --tests 'com.webapp.crazyshit.PhoneOrientationPolicyTest'
+          --tests 'com.webapp.crazyshit.GalleryMediaRevealTest'
+          --tests 'com.webapp.crazyshit.GalleryViewerLifecycleTest'
+          --tests 'com.webapp.crazyshit.GalleryMediaTransitionTest'
+          --tests 'com.webapp.crazyshit.GallerySnapshotTest'
+          --tests 'com.webapp.crazyshit.CreatorMergedGalleryTest'
+
+      - name: Run focused DM regressions before build
+        if: ${{ github.head_ref != 'release/zerochill-5.0.0' && github.event.pull_request.number != 295 && github.event.pull_request.number != 304 && github.head_ref != 'fix/shittok-async-creator-metadata' && github.head_ref != 'fix/shittok-startup-handoff' && github.head_ref != 'fix/onlyfap-first-open' && github.head_ref != 'feature/phone-content-grid-layout' && github.head_ref != 'feature/library-profile-redesign' }}
+        run: >-
+          gradle --no-daemon :app:testDebugUnitTest :app:testReleaseUnitTest
+          --tests 'com.webapp.crazyshit.ZeroChillMessageThreadUiTest'
+
+      - name: Embed beta source lineage
+        run: |
+          python3 - <<'PY'
+          import json, pathlib, subprocess
+          pathlib.Path('app/src/main/assets/zerochill-build.json').write_text(json.dumps({
+              'source_commit': subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip(),
+              'source_branch': '${{ github.head_ref || github.ref_name }}'
+          }))
+          PY
+
+      - name: Run focused OnlyFap Discover release regressions first
+        if: ${{ github.head_ref != 'release/zerochill-5.0.0' && github.event.pull_request.number != 295 && github.event.pull_request.number != 304 && github.head_ref != 'fix/shittok-async-creator-metadata' && github.head_ref != 'fix/shittok-startup-handoff' && github.head_ref != 'fix/onlyfap-first-open' && github.head_ref != 'feature/phone-content-grid-layout' && github.head_ref != 'feature/library-profile-redesign' }}
+        run: >-
+          gradle --no-daemon :app:testReleaseUnitTest
+          --tests 'com.webapp.crazyshit.OnlyFapDiscoverTest'
+          --tests 'com.webapp.crazyshit.OnlyFapDiscoverLifecycleTest'
+          --tests 'com.webapp.crazyshit.FapelloRepositoryTest'
+
+      - name: Focused glass optics and navigation regressions
+        if: ${{ github.head_ref != 'release/zerochill-5.0.0' && github.event.pull_request.number == 295 }}
+        run: >-
+          gradle --no-daemon :app:testDebugUnitTest
+          --tests 'com.webapp.crazyshit.glass.backdrop.ClearGlassLensTest'
+          --tests 'com.webapp.crazyshit.BottomNavigation*'
+          --tests 'com.webapp.crazyshit.NavigationIaTest'
+          --tests 'com.webapp.crazyshit.PrimaryTabNavigationTest'
+          --tests 'com.webapp.crazyshit.NavigationMotionControllerTest'
+
       - name: Build signed upgrade candidate
-        run: gradle --no-daemon :app:testReleaseUnitTest :app:assembleRelease
+        # These focused candidates run complete suites once instead of repeatedly
+        # starting Gradle for overlapping filters. Signing/upgrade gates remain.
+        run: |
+          if [ "${{ github.head_ref }}" = "release/zerochill-5.0.0" ] || [ "${{ github.event.pull_request.number }}" = "295" ] || [ "${{ github.event.pull_request.number }}" = "304" ] || [ "${{ github.head_ref }}" = "fix/shittok-async-creator-metadata" ] || [ "${{ github.head_ref }}" = "fix/shittok-startup-handoff" ] || [ "${{ github.head_ref }}" = "fix/onlyfap-first-open" ] || [ "${{ github.head_ref }}" = "feature/library-profile-redesign" ]; then
+            gradle --no-daemon :app:testDebugUnitTest :app:testReleaseUnitTest :app:assembleDebug :app:assembleRelease
+          else
+            gradle --no-daemon :app:testReleaseUnitTest :app:assembleRelease :app:assembleDebug
+          fi
+
+      - name: Verify and upload signed beta
+        run: |
+          set -euo pipefail
+          REF_NAME="${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}"
+          SAFE_REF="$(printf '%s' "$REF_NAME" | tr '/ ' '--' | tr -cd 'A-Za-z0-9._-')"
+          SOURCE_SHA="$(git rev-parse HEAD)"
+          BETA_APK="ZeroChill-Beta-${SAFE_REF}-${SOURCE_SHA:0:7}.apk"
+          cp app/build/outputs/apk/debug/app-debug.apk "$BETA_APK"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$BETA_APK"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt2" dump badging "$BETA_APK" | grep "package: name='com.addy37.crazyshitunofficial.dev'"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt2" dump badging "$BETA_APK" | grep "application-label:'ZeroChill Beta'"
+          sha256sum "$BETA_APK" > SHA256SUMS-beta.txt
+
+      - name: Upload signed beta
+        uses: actions/upload-artifact@v4
+        with:
+          name: ZeroChill-signed-beta
+          path: |
+            ZeroChill-Beta-*.apk
+            SHA256SUMS-beta.txt
+          if-no-files-found: error
+          retention-days: 14
 
       - name: Prepare candidate
         run: |

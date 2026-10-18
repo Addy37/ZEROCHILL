@@ -1,10 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="app_background">#000000</color>
-    <color name="app_surface">#12171D</color>
-    <color name="app_surface_variant">#202831</color>
+    <color name="app_background">#030405</color>
+    <color name="app_surface">#0B0E11</color>
+    <color name="app_surface_raised">#10151A</color>
+    <color name="app_surface_variant">#1A2026</color>
+    <color name="app_divider">#242B32</color>
     <color name="app_primary">#0892D0</color>
     <color name="app_on_primary">#031216</color>
-    <color name="app_on_surface">#F4F4F5</color>
-    <color name="app_on_surface_variant">#C7C7CC</color>
+    <color name="app_on_surface">#F4F6F8</color>
+    <color name="app_on_surface_variant">#A7B0B8</color>
 </resources>

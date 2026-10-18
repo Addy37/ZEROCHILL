@@ -1,0 +1,192 @@
+package com.webapp.crazyshit;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Set;
+
+/** Creator selection and ordered artwork choices for the OnlyFap hero. */
+final class OnlyFapHeroPolicy {
+    private OnlyFapHeroPolicy() { }
+
+    static final class Artwork {
+        final String url;
+        final String referer;
+        final boolean avatar;
+
+        Artwork(String url, String referer, boolean avatar) {
+            this.url = url == null ? "" : url.trim();
+            this.referer = referer == null ? "" : referer.trim();
+            this.avatar = avatar;
+        }
+    }
+
+    static Set<String> excluded(Set<String> favorites, List<NativeContentItem> trending,
+            List<NativeContentItem> hot, List<NativeContentItem> popular) {
+        Set<String> keys = new HashSet<>();
+        if (favorites != null) keys.addAll(favorites);
+        addKeys(keys, trending);
+        addKeys(keys, hot);
+        addKeys(keys, popular);
+        return keys;
+    }
+
+    static List<NativeContentItem> select(List<NativeContentItem> newCreators,
+            List<NativeContentItem> backfill, Set<String> favorites,
+            List<NativeContentItem> trending, List<NativeContentItem> hot,
+            List<NativeContentItem> popular, int limit) {
+        return select(
+                newCreators,
+                backfill,
+                favorites,
+                trending,
+                hot,
+                popular,
+                Collections.emptySet(),
+                limit
+        );
+    }
+
+    static List<NativeContentItem> select(List<NativeContentItem> newCreators,
+            List<NativeContentItem> backfill, Set<String> favorites,
+            List<NativeContentItem> trending, List<NativeContentItem> hot,
+            List<NativeContentItem> popular, Set<String> recentlyFeatured, int limit) {
+        Set<String> excluded = excluded(favorites, trending, hot, popular);
+        if (recentlyFeatured != null) excluded.addAll(recentlyFeatured);
+        LinkedHashMap<String, NativeContentItem> selected = new LinkedHashMap<>();
+        append(selected, newCreators, excluded, limit);
+        append(selected, backfill, excluded, limit);
+        return new ArrayList<>(selected.values());
+    }
+
+    static void appendUniqueCreators(
+            List<NativeContentItem> destination,
+            List<NativeContentItem> source
+    ) {
+        if (destination == null || source == null || source.isEmpty()) return;
+        HashSet<String> keys = new HashSet<>();
+        for (NativeContentItem item : destination) {
+            String key = CreatorFavoriteStore.key(item);
+            if (!key.isEmpty()) keys.add(key);
+        }
+        for (NativeContentItem item : source) {
+            if (item == null || !item.isCreator()) continue;
+            String key = CreatorFavoriteStore.key(item);
+            if (key.isEmpty() || !keys.add(key)) continue;
+            destination.add(item);
+        }
+    }
+
+    static List<NativeContentItem> nextUnrequested(
+            List<NativeContentItem> candidates,
+            Set<String> requested,
+            int limit
+    ) {
+        ArrayList<NativeContentItem> result = new ArrayList<>();
+        if (candidates == null || limit <= 0) return result;
+        for (NativeContentItem item : candidates) {
+            if (result.size() >= limit) break;
+            if (item == null || !item.isCreator()) continue;
+            String key = CreatorFavoriteStore.key(item);
+            if (key.isEmpty() || (requested != null && requested.contains(key))) continue;
+            result.add(item);
+        }
+        return result;
+    }
+
+    static List<NativeContentItem> originalResolutionCandidates(
+            List<NativeContentItem> media, int limit
+    ) {
+        ArrayList<NativeContentItem> images = new ArrayList<>();
+        if (media == null || limit <= 0) return images;
+        for (NativeContentItem item : media) {
+            if (images.size() >= 36) break;
+            if (item != null && item.isImage() && !item.url.trim().isEmpty()) {
+                images.add(item);
+            }
+        }
+        if (images.size() <= limit) return images;
+        ArrayList<NativeContentItem> sample = new ArrayList<>(limit);
+        if (limit == 1) {
+            sample.add(images.get(0));
+            return sample;
+        }
+        for (int index = 0; index < limit; index++) {
+            int position = Math.round(index * (images.size() - 1f) / (limit - 1));
+            sample.add(images.get(position));
+        }
+        return sample;
+    }
+
+    private static void addKeys(Set<String> keys, List<NativeContentItem> items) {
+        if (items == null) return;
+        for (NativeContentItem item : items) {
+            String key = CreatorFavoriteStore.key(item);
+            if (!key.isEmpty()) keys.add(key);
+        }
+    }
+
+    private static void append(LinkedHashMap<String, NativeContentItem> result,
+            List<NativeContentItem> items, Set<String> excluded, int limit) {
+        if (items == null) return;
+        for (NativeContentItem item : items) {
+            if (result.size() >= limit) break;
+            if (item == null || !item.isCreator()) continue;
+            String key = CreatorFavoriteStore.key(item);
+            if (!key.isEmpty() && !excluded.contains(key)) result.putIfAbsent(key, item);
+        }
+    }
+
+    static void addMedia(List<Artwork> artwork, List<NativeContentItem> media,
+            String referer) {
+        addDirectImages(artwork, media, referer);
+        addPreviews(artwork, media, referer);
+    }
+
+    static void addDirectImages(List<Artwork> artwork, List<NativeContentItem> media,
+            String referer) {
+        if (artwork == null || media == null) return;
+        // Keep a wider sample for portrait qualification. The resolver still admits only
+        // a couple of final hero images, so this broadens discovery without bloating the hero.
+        for (NativeContentItem item : media) {
+            if (item == null || !item.isImage() || !directImage(item.url)) continue;
+            artwork.add(new Artwork(item.url, referer, false));
+            if (artwork.size() >= 12) return;
+        }
+    }
+
+    static void addPreviews(List<Artwork> artwork, List<NativeContentItem> media,
+            String referer) {
+        if (artwork == null || media == null) return;
+        // Posters and thumbnails are useful fallbacks, but should come after a wide banner.
+        for (NativeContentItem item : media) {
+            if (item == null || !directImage(item.imageUrl)) continue;
+            artwork.add(new Artwork(item.imageUrl, referer, false));
+            if (artwork.size() >= 3) return;
+        }
+    }
+
+    static boolean isGoodPortraitDimensions(int width, int height) {
+        if (width <= 0 || height <= 0) return false;
+        return height >= Math.round(width * 1.18f);
+    }
+
+    static List<Artwork> distinctArtwork(List<Artwork> input) {
+        LinkedHashMap<String, Artwork> result = new LinkedHashMap<>();
+        if (input != null) for (Artwork choice : input) {
+            if (choice != null && choice.url.startsWith("https://")) {
+                result.putIfAbsent(choice.url, choice);
+            }
+        }
+        return new ArrayList<>(result.values());
+    }
+
+    private static boolean directImage(String url) {
+        if (url == null) return false;
+        return url.toLowerCase(Locale.US)
+                .matches("^https://[^?#]+\\.(?:jpg|jpeg|png|webp|avif)(?:[?#].*)?$");
+    }
+}

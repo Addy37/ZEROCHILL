@@ -24,6 +24,12 @@ final class PhoneOrientationPolicy {
 
     static void applyBrowsingOrientation(Activity activity) {
         if (activity == null || activity.isFinishing()) return;
+        if (activity instanceof BunkrGalleryActivity) {
+            // Android owns viewer rotation and observes changes to the user's
+            // auto-rotate setting. Browsing activities keep their existing policy.
+            requestFullscreen(activity, ActivityInfo.SCREEN_ORIENTATION_USER);
+            return;
+        }
         if (!isPhoneSized(activity)) {
             if (PORTRAIT_LOCKED_ACTIVITIES.remove(activity)) {
                 activity.setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED);
@@ -53,6 +59,21 @@ final class PhoneOrientationPolicy {
         requestFullscreen(activity, ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
     }
 
+    static void enterPortraitFullscreen(Activity activity) {
+        if (activity == null || activity.isFinishing()) return;
+        requestFullscreen(activity, ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
+    }
+
+    static void enterShowsFullscreen(Activity activity, boolean portraitVideo) {
+        if (activity == null || activity.isFinishing()) return;
+        requestFullscreen(
+                activity,
+                portraitVideo
+                        ? ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+                        : ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+        );
+    }
+
     private static void requestFullscreen(Activity activity, int orientation) {
         FULLSCREEN_ACTIVITIES.put(activity, orientation);
         PORTRAIT_LOCKED_ACTIVITIES.remove(activity);
@@ -80,8 +101,17 @@ final class PhoneOrientationPolicy {
     }
 
     static boolean isPhoneSized(Activity activity) {
-        Configuration config = activity.getResources().getConfiguration();
-        return config.screenWidthDp < LARGE_SCREEN_MIN_WIDTH_DP
-                && config.smallestScreenWidthDp < LARGE_SCREEN_MIN_WIDTH_DP;
+        return isPhoneSized(activity.getResources().getConfiguration());
+    }
+
+    static boolean isPhoneSized(Configuration config) {
+        if (config == null) return true;
+        // screenWidthDp changes when a phone rotates and can exceed 600dp in landscape.
+        // smallestScreenWidthDp is rotation-stable, so use it to decide whether normal
+        // browsing should return to the phone portrait lock after fullscreen video.
+        if (config.smallestScreenWidthDp > 0) {
+            return config.smallestScreenWidthDp < LARGE_SCREEN_MIN_WIDTH_DP;
+        }
+        return config.screenWidthDp < LARGE_SCREEN_MIN_WIDTH_DP;
     }
 }

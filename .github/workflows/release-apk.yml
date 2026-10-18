@@ -8,7 +8,7 @@ on:
         required: true
         type: string
   push:
-    branches: [ main ]
+    branches: [ main, rebrand/zerochill ]
     paths:
       - RELEASE_VERSION
 
@@ -69,13 +69,13 @@ jobs:
         with:
           packages: platform-tools
 
-      - name: Install Android API 35
-        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+      - name: Install Android APIs 35 and 36
+        run: sdkmanager "platforms;android-35" "platforms;android-36" "build-tools;35.0.0"
 
-      - name: Set up Gradle 8.7
+      - name: Set up Gradle 8.11.1
         uses: gradle/actions/setup-gradle@v6
         with:
-          gradle-version: '8.7'
+          gradle-version: '8.11.1'
           cache-provider: basic
 
       - name: Restore private release signing key
@@ -112,10 +112,8 @@ jobs:
       - name: Prepare and verify release files
         run: |
           cp app/build/outputs/apk/release/app-release.apk "$APK_PRIMARY"
-          cp "$APK_PRIMARY" CrazyShit.apk
-          cp "$APK_PRIMARY" ZeroFilter.apk
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$APK_PRIMARY"
-          sha256sum "$APK_PRIMARY" CrazyShit.apk ZeroFilter.apk > SHA256SUMS.txt
+          sha256sum "$APK_PRIMARY" > SHA256SUMS.txt
 
       - name: Verify upgrade from previous stable release
         env:
@@ -150,8 +148,6 @@ jobs:
           name: ZeroChill-signed
           path: |
             ZeroChill.apk
-            CrazyShit.apk
-            ZeroFilter.apk
             SHA256SUMS.txt
           if-no-files-found: error
           retention-days: 14
@@ -162,8 +158,6 @@ jobs:
         run: |
           gh release create "v${VERSION}" \
             "$APK_PRIMARY" \
-            CrazyShit.apk \
-            ZeroFilter.apk \
             SHA256SUMS.txt \
             --target "$GITHUB_SHA" \
             --title "$RELEASE_TITLE" \

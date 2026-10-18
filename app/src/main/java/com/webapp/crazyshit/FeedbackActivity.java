@@ -3,6 +3,7 @@ package com.webapp.crazyshit;
 import android.app.Activity;
 import android.graphics.Color;
 import android.graphics.Typeface;
+import android.content.Intent;
 import android.os.Bundle;
 import android.text.InputFilter;
 import android.view.Gravity;
@@ -11,7 +12,6 @@ import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.card.MaterialCardView;
@@ -33,6 +33,7 @@ public final class FeedbackActivity extends Activity {
     private String selectedType = "feature_request";
     private int selectedRating;
     private String submissionSection = "More";
+    private boolean showingHistory;
 
     @Override
     protected void onCreate(Bundle state) {
@@ -92,7 +93,14 @@ public final class FeedbackActivity extends Activity {
         setContentView(scroll);
     }
 
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (content != null && showingHistory) showHistory();
+    }
+
     private void showComposer() {
+        showingHistory = false;
         if (content == null) buildShell();
         content.removeAllViews();
         selectTab(sendTab, historyTab);
@@ -110,7 +118,7 @@ public final class FeedbackActivity extends Activity {
         updateTypeButtons(types);
 
         label("YOUR MESSAGE");
-        message = new EditText(this);
+        message = new ZeroChillEditText(this);
         message.setHint("What should I know?");
         message.setHintTextColor(Color.rgb(115, 115, 124));
         message.setTextColor(Color.WHITE);
@@ -118,7 +126,7 @@ public final class FeedbackActivity extends Activity {
         message.setGravity(Gravity.TOP | Gravity.START);
         message.setMinHeight(dp(150));
         message.setPadding(dp(16), dp(14), dp(16), dp(14));
-        message.setBackground(rounded(SURFACE, 16));
+        message.setBackgroundResource(R.drawable.zc_input_field);
         message.setFilters(new InputFilter[]{new InputFilter.LengthFilter(2000)});
         content.addView(message, marginParams(-1, -2, 0, 0, 0, dp(8)));
 
@@ -202,18 +210,19 @@ public final class FeedbackActivity extends Activity {
                     submit.setEnabled(true);
                     submit.setText("Send feedback");
                     if (error != null) {
-                        Toast.makeText(this, "Couldn't send feedback. Try again.", Toast.LENGTH_LONG).show();
+                        ZeroChillToast.makeText(this, "Couldn't send feedback. Try again.", ZeroChillToast.LENGTH_LONG).show();
                         return;
                     }
                     message.setText("");
                     selectedRating = 0;
                     RatingFeedbackPrompt.markFeedbackSubmitted(this);
-                    Toast.makeText(this, "Feedback sent. Thank you.", Toast.LENGTH_LONG).show();
+                    ZeroChillToast.makeText(this, "Feedback sent. Thank you.", ZeroChillToast.LENGTH_LONG).show();
                     showHistory();
                 }));
     }
 
     private void showHistory() {
+        showingHistory = true;
         if (content == null) buildShell();
         content.removeAllViews();
         selectTab(historyTab, sendTab);
@@ -267,20 +276,44 @@ public final class FeedbackActivity extends Activity {
         top.addView(status);
         box.addView(top);
 
-        TextView copy = text(item.message, 15, Color.WHITE, false);
-        copy.setPadding(0, dp(10), 0, dp(4));
+        if (item.unreadCount > 0) {
+            TextView unread = text(
+                    item.unreadCount == 1 ? "NEW REPLY" : item.unreadCount + " NEW REPLIES",
+                    11,
+                    UiPalette.PRIMARY,
+                    true
+            );
+            unread.setPadding(0, dp(9), 0, 0);
+            box.addView(unread);
+        }
+
+        TextView sender = text(
+                "developer".equals(item.lastSender) ? "ZEROCHILL" : "YOU",
+                11,
+                "developer".equals(item.lastSender) ? UiPalette.PRIMARY : MUTED,
+                true
+        );
+        sender.setPadding(0, dp(10), 0, dp(3));
+        box.addView(sender);
+
+        String preview = item.lastMessage == null ? "" : item.lastMessage.trim();
+        if (preview.length() > 220) preview = preview.substring(0, 217) + "…";
+        TextView copy = text(preview, 15, Color.WHITE, false);
+        copy.setPadding(0, 0, 0, dp(4));
         box.addView(copy);
 
         if (item.rating > 0) {
             TextView rating = text("★★★★★".substring(0, item.rating), 15, UiPalette.PRIMARY, false);
             box.addView(rating);
         }
-        if (!item.developerReply.isEmpty()) {
-            TextView reply = text("Developer reply\n" + item.developerReply, 13, Color.rgb(215, 215, 221), false);
-            reply.setPadding(dp(12), dp(10), dp(12), dp(10));
-            reply.setBackground(rounded(Color.rgb(35, 35, 40), 10));
-            box.addView(reply, marginParams(-1, -2, 0, dp(10), 0, 0));
-        }
+
+        card.setClickable(true);
+        card.setFocusable(true);
+        card.setContentDescription("Open feedback conversation");
+        card.setOnClickListener(v -> startActivity(
+                new Intent(this, FeedbackThreadActivity.class)
+                        .putExtra(FeedbackThreadActivity.EXTRA_FEEDBACK_ID, item.id)
+        ));
         content.addView(card, marginParams(-1, -2, 0, dp(6), 0, dp(6)));
     }
 

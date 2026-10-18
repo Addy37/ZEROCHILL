@@ -2,303 +2,153 @@ package com.webapp.crazyshit;
 
 import android.animation.ValueAnimator;
 import android.content.Context;
-import android.graphics.Canvas;
-import android.graphics.Color;
-import android.content.res.ColorStateList;
-import android.graphics.Paint;
-import android.graphics.Rect;
 import android.graphics.RectF;
-import android.graphics.RuntimeShader;
-import android.graphics.drawable.Drawable;
-import android.os.Build;
-import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.ImageView;
-import android.widget.TextView;
+import android.view.WindowInsets;
 import android.view.animation.DecelerateInterpolator;
-
-import androidx.annotation.RequiresApi;
-import androidx.core.content.ContextCompat;
-
 import com.google.android.material.bottomnavigation.BottomNavigationView;
 
-/**
- * Bottom navigation with a selected glass capsule that tracks ViewPager swipes.
- *
- * Android 13+ adds a hardware RuntimeShader reflection over the approved static glass. Older
- * Android versions keep the same static selected-glass drawable.
- */
+/** Compatibility/navigation owner. Square's Compose stack owns all visible pixels. */
 final class ZeroChillBottomNavigationView extends BottomNavigationView {
-    private static final int[] PAGE_NAV_IDS = {1, 2, 4, 3};
-    private static final long REFLECTION_SETTLE_MS = 180L;
-
-    private final Drawable selectedGlass;
-    private final Rect firstRect = new Rect();
-    private final Rect secondRect = new Rect();
-    private final RectF indicatorRect = new RectF();
-    private final Runnable settleReflectionRunnable = this::settleReflection;
-
+    interface OnNavigationDragListener {
+        boolean onNavigationDragStart();
+        void onNavigationDragBy(float deltaPageFraction);
+        void onNavigationDragEnd(boolean canceled);
+    }
+    static final int[] PAGE_NAV_IDS = {2, 4, 3, 6};
     private float pagerPosition;
-    private float reflectionFocus = 0.5f;
-    private float pressScale = 1f;
-    private ValueAnimator pressAnimator;
-    private boolean touchReflectionActive;
-    private boolean gpuReflectionDisabled;
-    private ValueAnimator reflectionAnimator;
-    private Api33Reflection shaderReflection;
+    private float collapseProgress;
+    private boolean collapsedTarget;
+    private ValueAnimator collapseAnimator;
+    private OnNavigationDragListener navigationDragListener;
+    private SquareNavigationBridge bridge;
+    private ViewPageBackdrop pageBackdrop;
+    private boolean libraryUnread;
+    private boolean dragging;
 
     ZeroChillBottomNavigationView(Context context) {
         super(context);
-        Drawable drawable = ContextCompat.getDrawable(context, R.drawable.zc_nav_selected_glass);
-        selectedGlass = drawable == null ? null : drawable.mutate();
-        setWillNotDraw(false);
-        addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> updateItemColors());
+        setMinimumHeight(0);
+        setClipChildren(false);
+        setClipToPadding(false);
+        setPadding(0, 0, 0, 0);
     }
 
+    @Override protected void onAttachedToWindow() {
+        if (bridge == null) bridge = new SquareNavigationBridge(this);
+        bridge.attach();
+        super.onAttachedToWindow();
+        updateBridge();
+    }
+
+    @Override protected void onMeasure(int width, int height) {
+        // Retain Material's menu/check state API without rendering its legacy hierarchy.
+        for (int i = 0; i < getChildCount(); i++) {
+            View child = getChildAt(i);
+            if (!(child instanceof androidx.compose.ui.platform.ComposeView)) child.setVisibility(GONE);
+        }
+        setBackground(null);
+        setElevation(0f);
+        setPadding(0, 0, 0, 0);
+        super.onMeasure(width, height);
+    }
+
+    @Override public WindowInsets dispatchApplyWindowInsets(WindowInsets insets) {
+        // The outer shell alone owns real system clearance. No synthetic Material gutter.
+        if (bridge != null) bridge.dispatchInsets();
+        return insets;
+    }
+
+    void setPageBackdrop(ViewPageBackdrop backdrop) {
+        pageBackdrop = backdrop;
+        updateBridge();
+    }
+    void setLibraryUnread(boolean unread) { libraryUnread = unread; updateBridge(); }
     void setPagerPosition(float position) {
-        float clamped = clamp(position, 0f, PAGE_NAV_IDS.length - 1f);
-        pagerPosition = clamped;
-        updateItemColors();
-        invalidate();
+        pagerPosition = Math.max(0f, Math.min(3f, position));
+        updateBridge();
     }
-
-    void refreshItemColors() {
-        updateItemColors();
+    void refreshItemColors() { updateBridge(); }
+    void setOnNavigationDragListener(OnNavigationDragListener listener) { navigationDragListener = listener; }
+    boolean startSquareDrag() {
+        dragging = navigationDragListener != null && navigationDragListener.onNavigationDragStart();
+        return dragging;
     }
-
-    float pagerPositionForTest() {
-        return pagerPosition;
+    void dragSquareBy(float fraction) {
+        if (dragging && navigationDragListener != null) navigationDragListener.onNavigationDragBy(fraction);
     }
-
-    @Override
-    protected void dispatchDraw(Canvas canvas) {
-        drawSelectedGlass(canvas);
-        super.dispatchDraw(canvas);
+    void endSquareDrag(boolean canceled) {
+        if (dragging && navigationDragListener != null) navigationDragListener.onNavigationDragEnd(canceled);
+        dragging = false;
+        updateBridge();
     }
+    void selectSquareTab(int index) { setSelectedItemId(PAGE_NAV_IDS[index]); }
+    boolean isSquareDragging() { return dragging; }
 
-    @Override
-    public boolean dispatchTouchEvent(MotionEvent event) {
-        if (event != null && getWidth() > 0) {
-            int action = event.getActionMasked();
-            if (action == MotionEvent.ACTION_DOWN || action == MotionEvent.ACTION_MOVE) {
-                removeCallbacks(settleReflectionRunnable);
-                if (reflectionAnimator != null) reflectionAnimator.cancel();
-                touchReflectionActive = true;
-                float capsuleCenter = capsuleCenterX();
-                float capsuleWidth = Math.max(1f, capsuleWidth());
-                // A finger can nudge the sheen within the capsule, never across the bar.
-                reflectionFocus = clamp(0.5f + (event.getX() - capsuleCenter)
-                        / capsuleWidth * 0.12f, 0.38f, 0.62f);
-                if (action == MotionEvent.ACTION_DOWN) animatePress(0.975f);
-                invalidate();
-            } else if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) {
-                touchReflectionActive = false;
-                removeCallbacks(settleReflectionRunnable);
-                animatePress(1f);
-                postDelayed(settleReflectionRunnable, 30L);
+    void setCollapsed(boolean collapsed, boolean animated) {
+        float target = collapsed ? 1f : 0f;
+        if (collapsedTarget == collapsed && (collapseAnimator != null || Math.abs(collapseProgress - target) < .001f)) return;
+        collapsedTarget = collapsed;
+        if (collapseAnimator != null) collapseAnimator.cancel();
+        if (!animated || !ZeroChillMotion.animationsEnabled(getContext())) {
+            collapseAnimator = null;
+            collapseProgress = target;
+            reapplyCurrentGeometry();
+            return;
+        }
+        collapseAnimator = ValueAnimator.ofFloat(collapseProgress, target);
+        collapseAnimator.setDuration(210L);
+        collapseAnimator.setInterpolator(new DecelerateInterpolator());
+        collapseAnimator.addUpdateListener(animation -> {
+            collapseProgress = (float) animation.getAnimatedValue();
+            reapplyCurrentGeometry();
+        });
+        collapseAnimator.addListener(new android.animation.AnimatorListenerAdapter() {
+            @Override public void onAnimationEnd(android.animation.Animator animation) { collapseAnimator = null; }
+        });
+        collapseAnimator.start();
+    }
+    void reapplyCurrentGeometry() {
+        ViewGroup.LayoutParams raw = getLayoutParams();
+        if (raw instanceof ViewGroup.MarginLayoutParams) {
+            ViewGroup.MarginLayoutParams params = (ViewGroup.MarginLayoutParams) raw;
+            int height = dp(61f + (50f - 61f) * collapseProgress);
+            int side = dp(16f + (60f - 16f) * collapseProgress);
+            if (params.height != height || params.leftMargin != side || params.rightMargin != side ||
+                    params.topMargin != -height - dp(8) || params.bottomMargin != dp(8)) {
+                params.height = height;
+                params.setMargins(side, -height - dp(8), side, dp(8));
+                setLayoutParams(params);
             }
         }
-        return super.dispatchTouchEvent(event);
+        setPadding(0, 0, 0, 0);
+        updateBridge();
     }
-
-    @Override
-    protected void onDetachedFromWindow() {
-        removeCallbacks(settleReflectionRunnable);
-        if (reflectionAnimator != null) reflectionAnimator.cancel();
-        if (pressAnimator != null) pressAnimator.cancel();
-        reflectionAnimator = null;
+    private void updateBridge() {
+        if (bridge != null) bridge.update(pageBackdrop, pagerPosition, collapseProgress, libraryUnread);
+    }
+    boolean isCollapsedForTest() { return collapsedTarget; }
+    float collapseProgressForTest() { return collapseProgress; }
+    float pagerPositionForTest() { return pagerPosition; }
+    void setCollapseProgressForTest(float progress) {
+        if (collapseAnimator != null) collapseAnimator.cancel();
+        collapseAnimator = null;
+        collapseProgress = Math.max(0f, Math.min(1f, progress));
+        collapsedTarget = collapseProgress == 1f;
+        reapplyCurrentGeometry();
+    }
+    RectF selectedCapsuleBoundsForTest() {
+        float width = (getWidth() - dp(8)) / 4f;
+        return new RectF(dp(4) + pagerPosition * width, dp(4),
+                dp(4) + (pagerPosition + 1) * width, getHeight() - dp(4));
+    }
+    private int dp(float value) { return Math.round(value * getResources().getDisplayMetrics().density); }
+    @Override protected void onDetachedFromWindow() {
+        if (collapseAnimator != null) collapseAnimator.cancel();
+        collapseAnimator = null;
+        endSquareDrag(true);
+        if (bridge != null) bridge.detach();
         super.onDetachedFromWindow();
-    }
-
-    private void drawSelectedGlass(Canvas canvas) {
-        if (getWidth() <= 0 || getHeight() <= 0) return;
-
-        float position = clamp(pagerPosition, 0f, PAGE_NAV_IDS.length - 1f);
-        int lower = Math.min(PAGE_NAV_IDS.length - 1, (int) Math.floor(position));
-        int upper = Math.min(PAGE_NAV_IDS.length - 1, lower + 1);
-        float fraction = position - lower;
-
-        View first = findViewById(PAGE_NAV_IDS[lower]);
-        View second = findViewById(PAGE_NAV_IDS[upper]);
-        if (first == null || second == null || first.getWidth() <= 0 || second.getWidth() <= 0) {
-            return;
-        }
-
-        descendantRect(first, firstRect);
-        descendantRect(second, secondRect);
-
-        float firstCenter = firstRect.exactCenterX();
-        float secondCenter = secondRect.exactCenterX();
-        float center = lerp(firstCenter, secondCenter, fraction);
-        // Match the approved zc_nav_item_background inset bounds exactly.
-        float width = lerp(firstRect.width(), secondRect.width(), fraction) - dp(8);
-        float top = lerp(firstRect.top, secondRect.top, fraction) + dp(4);
-        float bottom = lerp(firstRect.bottom, secondRect.bottom, fraction) + dp(10);
-        if (bottom <= top) return;
-
-        float midY = (top + bottom) / 2f;
-        float halfWidth = width * pressScale / 2f;
-        float halfHeight = (bottom - top) * pressScale / 2f;
-        indicatorRect.set(center - halfWidth, midY - halfHeight,
-                center + halfWidth, midY + halfHeight);
-
-        if (selectedGlass != null) {
-            selectedGlass.setBounds(
-                    Math.round(indicatorRect.left),
-                    Math.round(indicatorRect.top),
-                    Math.round(indicatorRect.right),
-                    Math.round(indicatorRect.bottom)
-            );
-            selectedGlass.draw(canvas);
-        }
-
-        drawGpuReflection(canvas);
-    }
-
-    private void drawGpuReflection(Canvas canvas) {
-        if (gpuReflectionDisabled || Build.VERSION.SDK_INT < 33 || !canvas.isHardwareAccelerated()) {
-            return;
-        }
-        try {
-            if (shaderReflection == null) shaderReflection = new Api33Reflection();
-            float localFocus = reflectionFocus;
-            shaderReflection.draw(
-                    canvas,
-                    indicatorRect,
-                    localFocus,
-                    getResources().getDimension(R.dimen.zc_radius_pill)
-            );
-        } catch (Throwable ignored) {
-            gpuReflectionDisabled = true;
-            shaderReflection = null;
-        }
-    }
-
-    private void settleReflection() {
-        float target = 0.5f;
-        if (!ZeroChillMotion.animationsEnabled(getContext())) {
-            reflectionFocus = target;
-            invalidate();
-            return;
-        }
-        if (reflectionAnimator != null) reflectionAnimator.cancel();
-        reflectionAnimator = ValueAnimator.ofFloat(reflectionFocus, target);
-        reflectionAnimator.setDuration(REFLECTION_SETTLE_MS);
-        reflectionAnimator.setInterpolator(new DecelerateInterpolator());
-        reflectionAnimator.addUpdateListener(animation -> {
-            reflectionFocus = (float) animation.getAnimatedValue();
-            invalidate();
-        });
-        reflectionAnimator.start();
-    }
-
-    private float capsuleCenterX() {
-        int index = Math.round(pagerPosition);
-        View item = findViewById(PAGE_NAV_IDS[index]);
-        if (item == null) return getWidth() * 0.5f;
-        descendantRect(item, firstRect);
-        return firstRect.exactCenterX();
-    }
-
-    private float capsuleWidth() {
-        View item = findViewById(PAGE_NAV_IDS[Math.round(pagerPosition)]);
-        return item == null ? dp(50) : item.getWidth() - dp(8);
-    }
-
-    private void animatePress(float target) {
-        if (pressAnimator != null) pressAnimator.cancel();
-        if (!ZeroChillMotion.animationsEnabled(getContext())) {
-            pressScale = 1f;
-            invalidate();
-            return;
-        }
-        pressAnimator = ValueAnimator.ofFloat(pressScale, target);
-        pressAnimator.setDuration(target < 1f ? ZeroChillMotion.PRESS_IN_MS : ZeroChillMotion.STANDARD_MS);
-        pressAnimator.setInterpolator(new DecelerateInterpolator());
-        pressAnimator.addUpdateListener(animation -> {
-            pressScale = (float) animation.getAnimatedValue();
-            invalidate();
-        });
-        pressAnimator.start();
-    }
-
-    private void updateItemColors() {
-        int active = ContextCompat.getColor(getContext(), R.color.zc_cyan);
-        int inactive = ContextCompat.getColor(getContext(), R.color.zc_text_secondary);
-        for (int index = 0; index < PAGE_NAV_IDS.length; index++) {
-            View item = findViewById(PAGE_NAV_IDS[index]);
-            if (item != null) tintChildren(item, mix(inactive, active,
-                    Math.max(0f, 1f - Math.abs(pagerPosition - index))));
-        }
-    }
-
-    private static void tintChildren(View view, int color) {
-        if (view instanceof ImageView) {
-            ((ImageView) view).setImageTintList(ColorStateList.valueOf(color));
-        } else if (view instanceof TextView) {
-            ((TextView) view).setTextColor(color);
-        } else if (view instanceof ViewGroup) {
-            ViewGroup group = (ViewGroup) view;
-            for (int i = 0; i < group.getChildCount(); i++) {
-                tintChildren(group.getChildAt(i), color);
-            }
-        }
-    }
-
-    private static int mix(int from, int to, float fraction) {
-        return Color.rgb(
-                Math.round(lerp(Color.red(from), Color.red(to), fraction)),
-                Math.round(lerp(Color.green(from), Color.green(to), fraction)),
-                Math.round(lerp(Color.blue(from), Color.blue(to), fraction)));
-    }
-
-    private void descendantRect(View view, Rect out) {
-        out.set(0, 0, view.getWidth(), view.getHeight());
-        offsetDescendantRectToMyCoords(view, out);
-    }
-
-    private int dp(int value) {
-        return Math.round(value * getResources().getDisplayMetrics().density);
-    }
-
-    private static float lerp(float start, float end, float fraction) {
-        return start + ((end - start) * fraction);
-    }
-
-    private static float clamp(float value, float min, float max) {
-        return Math.max(min, Math.min(max, value));
-    }
-
-    @RequiresApi(33)
-    private static final class Api33Reflection {
-        private static final String SHADER_SOURCE =
-                "uniform float2 size;\n" +
-                "uniform float2 origin;\n" +
-                "uniform float focus;\n" +
-                "half4 main(float2 p) {\n" +
-                "  float2 uv = (p - origin) / max(size, float2(1.0));\n" +
-                "  float diagonal = uv.x + ((1.0 - uv.y) * 0.22);\n" +
-                "  float band = exp(-pow((diagonal - focus) * 6.5, 2.0));\n" +
-                "  float top = pow(max(0.0, 1.0 - uv.y), 2.1);\n" +
-                "  float rim = exp(-pow((uv.y - 0.08) * 18.0, 2.0));\n" +
-                "  float alpha = min(0.10, (band * top * 0.075) + (rim * 0.018));\n" +
-                "  half3 tint = half3(0.72, 0.91, 1.0);\n" +
-                "  return half4(tint * half(alpha), half(alpha));\n" +
-                "}";
-
-        private final RuntimeShader shader = new RuntimeShader(SHADER_SOURCE);
-        private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
-
-        Api33Reflection() {
-            paint.setShader(shader);
-        }
-
-        void draw(Canvas canvas, RectF rect, float focus, float radius) {
-            shader.setFloatUniform("size", rect.width(), rect.height());
-            shader.setFloatUniform("origin", rect.left, rect.top);
-            shader.setFloatUniform("focus", focus);
-            canvas.drawRoundRect(rect, radius, radius, paint);
-        }
     }
 }

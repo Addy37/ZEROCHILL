@@ -14,6 +14,7 @@ import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.SystemClock;
 import android.text.TextUtils;
 import android.view.Gravity;
 import android.view.HapticFeedbackConstants;
@@ -35,7 +36,6 @@ import android.widget.ProgressBar;
 import android.widget.ScrollView;
 import android.widget.SeekBar;
 import android.widget.TextView;
-import android.widget.Toast;
 import android.window.OnBackInvokedCallback;
 import android.window.OnBackInvokedDispatcher;
 
@@ -47,10 +47,12 @@ import androidx.media3.common.Player;
 import androidx.media3.common.VideoSize;
 import androidx.media3.common.util.UnstableApi;
 import androidx.media3.datasource.DefaultHttpDataSource;
+import androidx.media3.datasource.DefaultDataSource;
 import androidx.media3.exoplayer.ExoPlayer;
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory;
 import androidx.media3.ui.AspectRatioFrameLayout;
 import androidx.media3.ui.PlayerView;
+import androidx.media3.ui.PlayerControlView;
 
 import com.bumptech.glide.Glide;
 import com.bumptech.glide.load.engine.DiskCacheStrategy;
@@ -78,13 +80,23 @@ public class VideoDetailActivity extends Activity {
     public static final String EXTRA_SOURCE = "content_source";
     public static final String EXTRA_MEDIA_REFERER = "media_referer";
     public static final String EXTRA_POSTER_URL = "poster_url";
+    public static final String EXTRA_SHOWS_ORIGIN = "shows_origin";
+    public static final String EXTRA_PLAYBACK_IDENT = "playback_ident";
+    public static final String EXTRA_SHOWS_CONTINUE_RESUME = "shows_continue_resume";
+    public static final String EXTRA_MANUAL_LANDSCAPE_FULLSCREEN =
+            ShowsPlaybackOrientationPolicy.EXTRA_MANUAL_LANDSCAPE_FULLSCREEN;
+    public static final String EXTRA_SOCIAL_ENTRY = "social_entry";
+    public static final String EXTRA_SOCIAL_FOCUS_COMMENT_ID = "social_focus_comment_id";
+    public static final String EXTRA_SOCIAL_AUTO_REPLY = "social_auto_reply";
 
     private static final String SITE = "https://crazyshit.com/";
-    private static final int CONTROL_TIMEOUT_MS = 2600;
+    private static final int CONTROL_TIMEOUT_MS = 2500;
     private static final int RELATED_HISTORY_LIMIT = 24;
     private static final int RELATED_THUMBNAIL_WORKERS = 4;
     private static final long RELATED_SLIDE_OUT_MS = 105L;
     private static final long RELATED_SLIDE_IN_MS = 175L;
+    private static final long SHOWS_IDENT_MIN_MS =
+            ShowsPlaybackSplashView.FIRST_REVEAL_COMPLETE_MS + 50L;
     private static final String THUMB_UA =
             "Mozilla/5.0 (Linux; Android 16) AppleWebKit/537.36 " +
             "(KHTML, like Gecko) Chrome/139.0 Mobile Safari/537.36";
@@ -93,6 +105,7 @@ public class VideoDetailActivity extends Activity {
     private final CrazyShitRepository repository = new CrazyShitRepository();
     private final EfuktRepository efuktRepository = new EfuktRepository();
     private final BunkrRepository bunkrRepository = new BunkrRepository();
+    private final BaddieHubRepository baddieHubRepository = new BaddieHubRepository();
     private final WebVideoSourceRepository webVideoSourceRepository = new WebVideoSourceRepository();
     private final Map<String, ImageView> relatedImages = new LinkedHashMap<>();
     private final Map<String, String> resolvedRelatedThumbnails = new LinkedHashMap<>();
@@ -103,16 +116,25 @@ public class VideoDetailActivity extends Activity {
     private LinearLayout shell;
     private SwipeMinimizeFrameLayout playerContainer;
     private PlayerView playerView;
+    private PlayerControlView fullscreenOverlay;
+    private ShowsFullscreenControls fullscreenControls;
+    private FullscreenVideoGestures fullscreenGestures;
+    private boolean fullscreenChromeActive;
     private ScrollView detailsScroll;
     private LinearLayout detailsColumn;
     private LinearLayout relatedContainer;
     private TextView titleView;
     private TextView metaView;
     private TextView playerTitleView;
+    private TextView videoLikeButton;
+    private TextView commentButton;
+    private TextView watchLaterButton;
     private ImageButton portraitFullscreenButton;
     private ProgressBar loading;
     private ImageView startupPoster;
     private ProgressBar startupPosterLoading;
+    private FrameLayout showsLaunchCurtain;
+    private ShowsPlaybackSplashView showsLaunchLoader;
     private SeekBar portraitSeekBar;
     private ExoPlayer player;
     private RenderedThumbnailResolver[] thumbnailResolvers;
@@ -134,6 +156,23 @@ public class VideoDetailActivity extends Activity {
     private String source;
     private String mediaReferer;
     private String posterUrl;
+    private boolean showsOrigin;
+    private boolean manualLandscapeFullscreen;
+    private boolean playbackIdent;
+    private boolean socialEntry;
+    private String socialFocusCommentId;
+    private boolean socialAutoReply;
+    private boolean socialCommentsOpened;
+    private InlineCommentsDialog activeComments;
+    private boolean socialNavigationPendingReturn;
+    private boolean socialReturnPlayWhenReady;
+    private boolean videoLiked;
+    private int videoLikeCount;
+    private String videoLikePageUrl = "";
+    private int videoLikeRequestGeneration;
+    private int commentCount;
+    private String commentCountPageUrl = "";
+    private int commentCountRequestGeneration;
     private final PlaybackRecovery playbackRecovery = new PlaybackRecovery();
     private boolean recoveryResumed;
     private long requestedStartPosition;
@@ -147,11 +186,19 @@ public class VideoDetailActivity extends Activity {
     private boolean portraitFullscreen;
     private boolean rotatableFullscreen;
     private boolean sensorFullscreen;
+    private boolean videoSizeKnown;
     private SensorMediaOrientationListener orientationListener;
     private int thumbnailResolverCursor;
     private int relatedLoadGeneration;
     private int relatedPlayGeneration;
     private boolean portraitSeekScrubbing;
+    private Boolean showsPortraitOrientation;
+    private boolean showsFirstFrameRendered;
+    private boolean showsOrientationSettled;
+    private boolean showsCurtainDismissScheduled;
+    private int showsTargetOrientation = Configuration.ORIENTATION_UNDEFINED;
+    private long showsIdentStartedAt;
+    private long lastShowsFramePositionMs = -1L;
 
     private final Runnable portraitProgressTicker = new Runnable() {
         @Override
@@ -234,6 +281,17 @@ public class VideoDetailActivity extends Activity {
         source = clean(getIntent().getStringExtra(EXTRA_SOURCE));
         mediaReferer = clean(getIntent().getStringExtra(EXTRA_MEDIA_REFERER));
         posterUrl = clean(getIntent().getStringExtra(EXTRA_POSTER_URL));
+        showsOrigin = getIntent().getBooleanExtra(EXTRA_SHOWS_ORIGIN, false);
+        manualLandscapeFullscreen = getIntent().getBooleanExtra(
+                EXTRA_MANUAL_LANDSCAPE_FULLSCREEN,
+                false
+        );
+        playbackIdent = showsOrigin || getIntent().getBooleanExtra(EXTRA_PLAYBACK_IDENT, false);
+        socialEntry = getIntent().getBooleanExtra(EXTRA_SOCIAL_ENTRY, false);
+        socialFocusCommentId = clean(getIntent().getStringExtra(EXTRA_SOCIAL_FOCUS_COMMENT_ID));
+        socialAutoReply = getIntent().getBooleanExtra(EXTRA_SOCIAL_AUTO_REPLY, false);
+        socialCommentsOpened = state != null && state.getBoolean("social_comments_opened", false)
+                && !state.getBoolean("social_comments_visible", false);
         requestedStartPosition = getIntent().getLongExtra(PlayerActivity.EXTRA_START_POSITION, -1L);
 
         if (mediaUrl == null || mediaUrl.trim().isEmpty()) {
@@ -252,14 +310,22 @@ public class VideoDetailActivity extends Activity {
 
         buildUi();
         buildPlayer(requestedStartPosition);
-        thumbnailResolvers = new RenderedThumbnailResolver[RELATED_THUMBNAIL_WORKERS];
-        for (int i = 0; i < thumbnailResolvers.length; i++) {
-            thumbnailResolvers[i] = new RenderedThumbnailResolver(this, this::onThumbnailResolved);
+        if (!showsOrigin) {
+            thumbnailResolvers = new RenderedThumbnailResolver[RELATED_THUMBNAIL_WORKERS];
+            for (int i = 0; i < thumbnailResolvers.length; i++) {
+                thumbnailResolvers[i] = new RenderedThumbnailResolver(this, this::onThumbnailResolved);
+            }
         }
         configureBackHandling();
         applyOrientation(getResources().getConfiguration().orientation);
-        loadRelated();
+        if (!showsOrigin) loadRelated();
         root.post(this::playEntranceOnce);
+        if (socialEntry && !socialCommentsOpened) {
+            socialCommentsOpened = true;
+            root.post(() -> {
+                if (!isFinishing() && !isDestroyed() && supportsComments()) openComments();
+            });
+        }
     }
 
     private void buildUi() {
@@ -305,7 +371,7 @@ public class VideoDetailActivity extends Activity {
             @Override
             public void onDrag(float distancePx, float progress) {
                 if (minimizing) return;
-                playerView.hideController();
+                hideVideoControls();
                 playerContainer.setPivotX(playerContainer.getWidth() / 2f);
 
                 float scale = 1f - (0.08f * progress);
@@ -344,45 +410,6 @@ public class VideoDetailActivity extends Activity {
         playerView.setResizeMode(resizeMode);
         playerContainer.addView(playerView, new FrameLayout.LayoutParams(-1, -1));
 
-        portraitSeekBar = new SeekBar(this);
-        portraitSeekBar.setMax(1000);
-        portraitSeekBar.setProgress(0);
-        portraitSeekBar.setSplitTrack(false);
-        portraitSeekBar.setPadding(dp(8), 0, dp(8), 0);
-        portraitSeekBar.setProgressTintList(ColorStateList.valueOf(UiPalette.PRIMARY));
-        portraitSeekBar.setProgressBackgroundTintList(
-                ColorStateList.valueOf(Color.argb(100, 255, 255, 255))
-        );
-        portraitSeekBar.setThumbTintList(ColorStateList.valueOf(UiPalette.PRIMARY));
-        portraitSeekBar.setContentDescription("Video progress. Drag to seek.");
-        FrameLayout.LayoutParams portraitSeekParams =
-                new FrameLayout.LayoutParams(-1, dp(28));
-        portraitSeekParams.gravity = Gravity.BOTTOM;
-        playerContainer.addView(portraitSeekBar, portraitSeekParams);
-        portraitSeekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
-            @Override
-            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
-                if (!fromUser || player == null) return;
-                long duration = Math.max(0L, player.getDuration());
-                if (duration <= 0L) return;
-                player.seekTo(portraitSeekPosition(progress, seekBar.getMax(), duration));
-            }
-
-            @Override
-            public void onStartTrackingTouch(SeekBar seekBar) {
-                portraitSeekScrubbing = true;
-                showPortraitSeekBar();
-            }
-
-            @Override
-            public void onStopTrackingTouch(SeekBar seekBar) {
-                portraitSeekScrubbing = false;
-                updatePortraitProgress();
-                schedulePortraitSeekBarHide();
-            }
-        });
-        portraitSeekBar.setVisibility(View.INVISIBLE);
-        portraitSeekBar.setAlpha(0f);
 
         startupPoster = new ImageView(this);
         startupPoster.setBackgroundColor(Color.BLACK);
@@ -390,7 +417,7 @@ public class VideoDetailActivity extends Activity {
         startupPoster.setClickable(false);
         playerContainer.addView(startupPoster, new FrameLayout.LayoutParams(-1, -1));
 
-        startupPosterLoading = new ProgressBar(this);
+        startupPosterLoading = new ZeroChillProgressBar(this);
         startupPosterLoading.setClickable(false);
         if (startupPosterLoading.getIndeterminateDrawable() != null) {
             startupPosterLoading.getIndeterminateDrawable().setTint(UiPalette.PRIMARY);
@@ -399,12 +426,31 @@ public class VideoDetailActivity extends Activity {
                 new FrameLayout.LayoutParams(dp(38), dp(38), Gravity.CENTER);
         playerContainer.addView(startupPosterLoading, startupLoadingParams);
 
-        playerView.setOnTouchListener((view, event) -> {
-            if (event.getActionMasked() == MotionEvent.ACTION_UP) {
-                showPortraitSeekBar();
-            }
-            return false;
+        fullscreenOverlay = (PlayerControlView) getLayoutInflater().inflate(
+                R.layout.view_shows_fullscreen_overlay, playerContainer, false);
+        playerContainer.addView(fullscreenOverlay, new FrameLayout.LayoutParams(-1, -1));
+        fullscreenControls = new ShowsFullscreenControls(fullscreenOverlay);
+        fullscreenControls.suspend(true);
+        fullscreenOverlay.setVisibility(View.GONE);
+        ((TextView) fullscreenOverlay.findViewById(R.id.player_title)).setText(title);
+        fullscreenOverlay.findViewById(R.id.player_back).setOnClickListener(v -> { haptic(v); handleBack(); });
+        fullscreenOverlay.findViewById(R.id.player_menu).setOnClickListener(v -> { haptic(v); showPlayerMenu(); });
+        fullscreenOverlay.findViewById(R.id.shows_save).setOnClickListener(v -> {
+            haptic(v); toggleWatchLater(); fullscreenControls.show();
         });
+        fullscreenOverlay.findViewById(R.id.shows_download).setOnClickListener(v -> {
+            haptic(v); downloadCurrentVideo(); fullscreenControls.show();
+        });
+        fullscreenOverlay.findViewById(R.id.shows_share).setOnClickListener(v -> { haptic(v); sharePage(); });
+        fullscreenOverlay.findViewById(R.id.shows_like).setOnClickListener(v -> {
+            haptic(v); toggleVideoLike(); fullscreenControls.show();
+        });
+        fullscreenOverlay.findViewById(R.id.shows_fullscreen_toggle).setOnClickListener(v -> {
+            haptic(v); setRotatableFullscreen(!rotatableFullscreen);
+        });
+        fullscreenGestures = new FullscreenVideoGestures(
+                playerView, () -> player, fullscreenControls, () -> fullscreenChromeActive);
+        playerView.setOnTouchListener(fullscreenGestures);
 
         View playerBack = playerView.findViewById(R.id.player_back);
         playerTitleView = playerView.findViewById(R.id.player_title);
@@ -421,10 +467,17 @@ public class VideoDetailActivity extends Activity {
         });
         portraitFullscreenButton.setOnClickListener(v -> {
             haptic(v);
-            setRotatableFullscreen(!rotatableFullscreen);
+            boolean portraitOrientation = getResources().getConfiguration().orientation
+                    != Configuration.ORIENTATION_LANDSCAPE;
+            if (portraitVideo && portraitOrientation) {
+                setPortraitFullscreen(!portraitFullscreen);
+            } else {
+                setRotatableFullscreen(!rotatableFullscreen);
+            }
         });
         updatePortraitFullscreenButton();
-        playerView.hideController();
+        applyPlayerChrome(getResources().getConfiguration().orientation);
+        hideVideoControls();
 
         detailsScroll = new ScrollView(this);
         detailsScroll.setFillViewport(true);
@@ -451,14 +504,36 @@ public class VideoDetailActivity extends Activity {
 
         LinearLayout actions = new LinearLayout(this);
         actions.setOrientation(LinearLayout.HORIZONTAL);
-        actions.setGravity(Gravity.CENTER_VERTICAL);
-        actions.setPadding(0, 0, 0, dp(3));
+        actions.setGravity(Gravity.CENTER_HORIZONTAL | Gravity.CENTER_VERTICAL);
+        actions.setPadding(0, dp(2), 0, dp(3));
         detailsColumn.addView(actions, new LinearLayout.LayoutParams(-1, -2));
+        videoLikeButton = actionIconButton(
+                R.drawable.ic_action_heart_outline,
+                this::toggleVideoLike,
+                "Like this video"
+        );
+        actions.addView(videoLikeButton, actionParams());
         if (supportsComments()) {
-            actions.addView(actionButton(comments.isEmpty() ? "💬 Comments" : "💬 " + comments, this::openComments), actionParams());
+            commentButton = actionIconButton(
+                    R.drawable.ic_action_comments,
+                    this::openComments,
+                    "Open comments"
+            );
+            actions.addView(commentButton, actionParams());
         }
-        actions.addView(actionButton("♡ Later", this::toggleWatchLater), actionParams());
-        actions.addView(actionButton("↗ Share", this::sharePage), actionParams());
+        watchLaterButton = actionIconButton(
+                FavoriteStore.contains(this, pageUrl)
+                        ? R.drawable.ic_nav_saved
+                        : R.drawable.ic_action_save_outline,
+                this::toggleWatchLater,
+                "Save to Watch Later"
+        );
+        actions.addView(watchLaterButton, actionParams());
+        actions.addView(actionIconButton(
+                R.drawable.ic_action_share,
+                this::sharePage,
+                "Share video"
+        ), actionParams());
 
         TextView relatedTitle = new TextView(this);
         relatedTitle.setText("Related videos");
@@ -472,19 +547,41 @@ public class VideoDetailActivity extends Activity {
         relatedContainer.setOrientation(LinearLayout.VERTICAL);
         detailsColumn.addView(relatedContainer, new LinearLayout.LayoutParams(-1, -2));
 
-        loading = new ProgressBar(this);
+        loading = new ZeroChillProgressBar(this);
         loading.setVisibility(View.GONE);
         FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(dp(52), dp(52));
         lp.gravity = Gravity.CENTER;
         root.addView(loading, lp);
 
+        if (playbackIdent) installShowsLaunchCurtain();
+
         updateMetadataUi();
         setContentView(root);
     }
 
+    private void installShowsLaunchCurtain() {
+        showsLaunchCurtain = new FrameLayout(this);
+        showsLaunchCurtain.setBackgroundColor(Color.BLACK);
+        showsLaunchCurtain.setClickable(true);
+        showsLaunchCurtain.setFocusable(true);
+        showsLaunchCurtain.setImportantForAccessibility(
+                View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
+        );
+
+        showsLaunchLoader = new ShowsPlaybackSplashView(this);
+        FrameLayout.LayoutParams mascotParams = new FrameLayout.LayoutParams(
+                dp(ShowsPlaybackSplashView.MASCOT_SIZE_DP),
+                dp(ShowsPlaybackSplashView.MASCOT_SIZE_DP),
+                Gravity.CENTER
+        );
+        showsLaunchCurtain.addView(showsLaunchLoader, mascotParams);
+        root.addView(showsLaunchCurtain, new FrameLayout.LayoutParams(-1, -1));
+        showsIdentStartedAt = SystemClock.uptimeMillis();
+    }
+
     private LinearLayout.LayoutParams actionParams() {
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, dp(40), 1f);
-        params.setMargins(dp(3), 0, dp(3), 0);
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(dp(54), dp(60));
+        params.setMargins(dp(2), 0, dp(2), 0);
         return params;
     }
 
@@ -516,6 +613,11 @@ public class VideoDetailActivity extends Activity {
 
     private void showStartupPoster() {
         if (startupPoster == null) return;
+        if (playbackIdent) {
+            startupPosterDismissed = true;
+            hideStartupPosterNow();
+            return;
+        }
 
         startupPosterDismissed = false;
         startupPoster.animate().cancel();
@@ -700,7 +802,7 @@ public class VideoDetailActivity extends Activity {
                 .alpha(1f)
                 .setDuration(150L)
                 .setInterpolator(new DecelerateInterpolator())
-                .withEndAction(() -> playerView.showController())
+                .withEndAction(this::showVideoControls)
                 .start();
         if (detailsScroll != null) {
             detailsScroll.animate().cancel();
@@ -713,15 +815,23 @@ public class VideoDetailActivity extends Activity {
         }
     }
 
-    private TextView actionButton(String text, Runnable action) {
+    private TextView actionIconButton(int icon, Runnable action, String description) {
         TextView button = new TextView(this);
-        button.setText(text);
-        button.setTextColor(Color.rgb(238, 238, 242));
-        button.setTextSize(13);
+        button.setText(" ");
+        button.setTextColor(Color.TRANSPARENT);
+        button.setTextSize(10);
         button.setGravity(Gravity.CENTER);
-        button.setBackground(actionPill());
+        button.setBackgroundColor(Color.TRANSPARENT);
+        button.setPadding(dp(6), dp(5), dp(6), dp(5));
+        button.setCompoundDrawablesWithIntrinsicBounds(0, icon, 0, 0);
+        button.setCompoundDrawableTintList(ColorStateList.valueOf(Color.WHITE));
+        button.setCompoundDrawablePadding(dp(1));
+        button.setContentDescription(description);
         button.setClickable(true);
         button.setFocusable(true);
+        button.setMinWidth(dp(48));
+        button.setMinHeight(dp(48));
+        ZeroChillMotion.installPressFeedback(button);
         button.setOnClickListener(v -> {
             haptic(v);
             action.run();
@@ -738,6 +848,7 @@ public class VideoDetailActivity extends Activity {
     }
 
     private void buildPlayer(long startPosition) {
+        videoSizeKnown = false;
         portraitVideo = false;
         if (portraitFullscreen) setPortraitFullscreen(false);
         else updatePortraitFullscreenButton();
@@ -762,10 +873,21 @@ public class VideoDetailActivity extends Activity {
         if (!cookies.isEmpty()) headers.put("Cookie", cookies);
         if (!headers.isEmpty()) httpFactory.setDefaultRequestProperties(headers);
 
-        DefaultMediaSourceFactory sourceFactory =
-                new DefaultMediaSourceFactory(this).setDataSourceFactory(httpFactory);
-        player = new ExoPlayer.Builder(this).setMediaSourceFactory(sourceFactory).build();
+        String scheme = Uri.parse(mediaUrl).getScheme();
+        DefaultMediaSourceFactory sourceFactory = new DefaultMediaSourceFactory(this)
+                .setDataSourceFactory("content".equalsIgnoreCase(scheme)
+                        || "file".equalsIgnoreCase(scheme)
+                        ? new DefaultDataSource.Factory(this, httpFactory) : httpFactory);
+        player = new ExoPlayer.Builder(this)
+                .setMediaSourceFactory(sourceFactory)
+                .setSeekBackIncrementMs(10_000L)
+                .setSeekForwardIncrementMs(10_000L)
+                .build();
         playerView.setPlayer(player);
+        if (fullscreenControls != null) {
+            fullscreenOverlay.setPlayer(player);
+            fullscreenControls.bind(player);
+        }
 
         MediaItem.Builder item = new MediaItem.Builder().setUri(mediaUrl);
         String lower = mediaUrl.toLowerCase();
@@ -786,12 +908,6 @@ public class VideoDetailActivity extends Activity {
             public void onPlaybackStateChanged(int playbackState) {
                 if (playbackState == Player.STATE_READY) {
                     RatingFeedbackPrompt.recordSuccessfulPlayback(VideoDetailActivity.this, mediaUrl);
-                    String readyPageUrl = pageUrl;
-                    playerView.postDelayed(() -> {
-                        if (supportsComments() && readyPageUrl.equals(pageUrl)) {
-                            NativeCommentsLoader.preload(VideoDetailActivity.this, readyPageUrl);
-                        }
-                    }, 650L);
                 } else if (playbackState == Player.STATE_ENDED) {
                     savePlaybackState(true);
                 }
@@ -799,7 +915,13 @@ public class VideoDetailActivity extends Activity {
 
             @Override
             public void onRenderedFirstFrame() {
-                dismissStartupPoster();
+                if (playbackIdent) {
+                    showsFirstFrameRendered = true;
+                    hideStartupPosterNow();
+                    maybeDismissShowsLaunchCurtain();
+                } else {
+                    dismissStartupPoster();
+                }
             }
 
             @Override
@@ -810,21 +932,71 @@ public class VideoDetailActivity extends Activity {
 
             @Override
             public void onVideoSizeChanged(VideoSize videoSize) {
-                float displayWidth = videoSize == null
-                        ? 0f
-                        : videoSize.width * videoSize.pixelWidthHeightRatio;
-                boolean isPortrait = videoSize != null
-                        && videoSize.width > 0
-                        && videoSize.height > displayWidth;
-                if (portraitVideo == isPortrait) return;
+                if (videoSize == null || videoSize.width <= 0 || videoSize.height <= 0) return;
+                boolean firstVideoSize = !videoSizeKnown;
+                videoSizeKnown = true;
+                boolean isPortrait = isPortraitVideoSize(
+                        videoSize.width,
+                        videoSize.height,
+                        videoSize.pixelWidthHeightRatio
+                );
+                if (showsOrigin) {
+                    portraitVideo = isPortrait;
+                    showsTargetOrientation = isPortrait
+                            ? Configuration.ORIENTATION_PORTRAIT
+                            : Configuration.ORIENTATION_LANDSCAPE;
+                    showsOrientationSettled = orientationMatches(
+                            getResources().getConfiguration().orientation,
+                            showsTargetOrientation
+                    );
+                    if (showsPortraitOrientation == null ||
+                            showsPortraitOrientation.booleanValue() != isPortrait) {
+                        showsPortraitOrientation = isPortrait;
+                        PhoneOrientationPolicy.enterShowsFullscreen(
+                                VideoDetailActivity.this,
+                                isPortrait
+                        );
+                    }
+                    applyOrientation(getResources().getConfiguration().orientation);
+                    maybeDismissShowsLaunchCurtain();
+                    return;
+                }
+                if (portraitVideo == isPortrait) {
+                    if (firstVideoSize && orientationListener != null) orientationListener.redispatch();
+                    return;
+                }
                 portraitVideo = isPortrait;
-                if (!portraitVideo && portraitFullscreen) setPortraitFullscreen(false);
-                else updatePortraitFullscreenButton();
+                if (portraitVideo) {
+                    if (sensorFullscreen || rotatableFullscreen) {
+                        sensorFullscreen = false;
+                        rotatableFullscreen = false;
+                        portraitFullscreen = false;
+                        PhoneOrientationPolicy.exitFullscreenVideo(VideoDetailActivity.this);
+                        applyOrientation(getResources().getConfiguration().orientation);
+                    } else {
+                        PhoneOrientationPolicy.applyBrowsingOrientation(VideoDetailActivity.this);
+                    }
+                    updatePortraitFullscreenButton();
+                } else if (portraitFullscreen) {
+                    setPortraitFullscreen(false);
+                } else {
+                    updatePortraitFullscreenButton();
+                }
+                if (orientationListener != null) orientationListener.redispatch();
             }
         });
         player.prepare();
-        startPortraitProgressTicker();
-        showPortraitSeekBar();
+    }
+
+    static boolean isPortraitVideoSize(int width, int height, float pixelWidthHeightRatio) {
+        if (width <= 0 || height <= 0) return false;
+        float ratio = pixelWidthHeightRatio > 0f ? pixelWidthHeightRatio : 1f;
+        return height > (width * ratio);
+    }
+
+    static boolean orientationMatches(int currentOrientation, int targetOrientation) {
+        return targetOrientation != Configuration.ORIENTATION_UNDEFINED &&
+                currentOrientation == targetOrientation;
     }
 
     static float portraitProgressFraction(long positionMs, long durationMs) {
@@ -839,7 +1011,8 @@ public class VideoDetailActivity extends Activity {
     }
 
     private boolean canShowPortraitSeekBar() {
-        return getResources().getConfiguration().orientation
+        return !showsOrigin
+                && getResources().getConfiguration().orientation
                 != Configuration.ORIENTATION_LANDSCAPE
                 && !portraitFullscreen
                 && !rotatableFullscreen;
@@ -898,16 +1071,22 @@ public class VideoDetailActivity extends Activity {
     private void updateMetadataUi() {
         if (titleView != null) titleView.setText(title);
         if (playerTitleView != null) playerTitleView.setText(title);
+        if (fullscreenOverlay != null) {
+            ((TextView) fullscreenOverlay.findViewById(R.id.player_title)).setText(title);
+        }
         if (metaView != null) {
             ArrayList<String> parts = new ArrayList<>();
             if (!views.isEmpty()) parts.add(views + " views");
             if (!uploader.isEmpty()) parts.add(uploader);
             metaView.setText(TextUtils.join("  •  ", parts));
         }
+        refreshVideoLikeState(false);
+        refreshCommentCount(false);
+        updateWatchLaterButton();
     }
 
     private void loadRelated() {
-        if (relatedContainer == null) return;
+        if (showsOrigin || relatedContainer == null) return;
         final int requestGeneration = ++relatedLoadGeneration;
         relatedContainer.removeAllViews();
         TextView loadingText = new TextView(this);
@@ -955,6 +1134,16 @@ public class VideoDetailActivity extends Activity {
                     }
                 } catch (Exception ignored) {
                 }
+            } else if (isBaddieHub()) {
+                try {
+                    List<NativeContentItem> baddie = baddieHubRepository.fetchRelated(this, excludeUrl);
+                    for (NativeContentItem item : baddie) {
+                        if (item != null && !item.isSection() && !item.url.equals(excludeUrl)) {
+                            merged.put(item.url, item);
+                        }
+                    }
+                } catch (Exception ignored) {
+                }
             } else {
                 try {
                     List<NativeContentItem> home = repository.fetchFeed(this, CrazyShitRepository.HOME, 1);
@@ -985,7 +1174,7 @@ public class VideoDetailActivity extends Activity {
     }
 
     void renderContextRelated(List<NativeContentItem> items) {
-        if (isFinishing() || items == null || items.isEmpty()) return;
+        if (showsOrigin || isFinishing() || items == null || items.isEmpty()) return;
         relatedLoadGeneration++;
         renderRelated(items);
     }
@@ -1069,15 +1258,6 @@ public class VideoDetailActivity extends Activity {
         meta.setPadding(0, dp(5), 0, 0);
         copy.addView(meta);
 
-        if (!clean(item.comments).isEmpty()) {
-            TextView commentCount = new TextView(this);
-            commentCount.setText(item.comments + " comments");
-            commentCount.setTextColor(UiPalette.PRIMARY);
-            commentCount.setTextSize(11);
-            commentCount.setPadding(0, dp(5), 0, 0);
-            copy.addView(commentCount);
-        }
-
         relatedImages.put(item.url, image);
         String resolvedThumbnail = resolvedRelatedThumbnails.get(item.url);
         if (!clean(resolvedThumbnail).isEmpty()) {
@@ -1131,6 +1311,9 @@ public class VideoDetailActivity extends Activity {
                     .centerCrop()
                     .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
                     .dontAnimate()
+                    .transition(view == startupPoster
+                            ? new com.bumptech.glide.load.resource.drawable.DrawableTransitionOptions().dontTransition()
+                            : ThumbnailFades.thumbnail())
                     .placeholder(new ColorDrawable(Color.rgb(18, 18, 21)))
                     .error(new ColorDrawable(Color.rgb(18, 18, 21)))
                     .into(view);
@@ -1167,7 +1350,11 @@ public class VideoDetailActivity extends Activity {
                 if (isFinishing() || requestGeneration != relatedPlayGeneration) return;
                 loading.setVisibility(View.GONE);
                 if (resolved == null || resolved.mediaUrl == null || resolved.mediaUrl.isEmpty()) {
-                    openWebsite(item.url);
+                    ZeroChillToast.makeText(
+                            this,
+                            "Couldn't resolve that related video natively right now.",
+                            ZeroChillToast.LENGTH_SHORT
+                    ).show();
                     return;
                 }
                 pushCurrentVideo();
@@ -1210,7 +1397,7 @@ public class VideoDetailActivity extends Activity {
                 mediaReferer,
                 posterUrl,
                 position,
-                captureRelatedBackPreview()
+                capturePlayerFrame()
         ));
         while (relatedHistory.size() > RELATED_HISTORY_LIMIT) {
             recycleHistoryPreview(relatedHistory.removeFirst());
@@ -1252,7 +1439,7 @@ public class VideoDetailActivity extends Activity {
         return true;
     }
 
-    private Bitmap captureRelatedBackPreview() {
+    private Bitmap capturePlayerFrame() {
         TextureView texture = findTextureView(playerView);
         if (texture == null || !texture.isAvailable() || texture.getWidth() <= 0 || texture.getHeight() <= 0) {
             return null;
@@ -1476,24 +1663,203 @@ public class VideoDetailActivity extends Activity {
 
     private void openComments() {
         if (pageUrl.isEmpty() || !supportsComments()) return;
-        new InlineCommentsDialog(
-                this,
-                pageUrl,
-                title,
-                comments,
-                null
-        ).show();
+        SocialContentContextStore.remember(this, new NativeContentItem(NativeContentItem.KIND_MEDIA,
+                title, pageUrl, posterUrl, views, uploader, comments));
+        if (activeComments != null && activeComments.isShowing()) return;
+        showCommentSheet(socialEntry ? socialFocusCommentId : "", socialEntry && socialAutoReply);
+        socialFocusCommentId = "";
+        socialAutoReply = false;
+    }
+
+    private void showCommentSheet(String focusId, boolean reply) {
+        final InlineCommentsDialog[] opened = new InlineCommentsDialog[1];
+        opened[0] = new InlineCommentsDialog(this, pageUrl, title, comments, focusId, reply,
+                new InlineCommentsDialog.ResizeListener() {
+                    @Override public void onSheetTopChanged(int top) { }
+                    @Override public void onSheetClosed() {
+                        if (activeComments == opened[0]) activeComments = null;
+                        if (!isFinishing() && !isDestroyed()) refreshCommentCount(true);
+                    }
+                });
+        activeComments = opened[0];
+        activeComments.show();
+    }
+
+    boolean openSocialCommentsIfCurrent(String targetPageUrl, String commentId, boolean reply) {
+        if (!ZeroChillSocialRepository.contentKey(targetPageUrl).equals(ZeroChillSocialRepository.contentKey(pageUrl)) || !supportsComments()) return false;
+        if (activeComments != null && activeComments.isShowing()) activeComments.dismiss();
+        showCommentSheet(commentId, reply);
+        return true;
+    }
+
+    void prepareForSocialNavigation() {
+        socialNavigationPendingReturn = true;
+        socialReturnPlayWhenReady = player != null && player.getPlayWhenReady();
+        if (player != null) player.pause();
+    }
+
+    private void refreshVideoLikeState(boolean force) {
+        if (videoLikeButton == null) return;
+        String target = pageUrl == null ? "" : pageUrl.trim();
+        if (target.isEmpty()) {
+            videoLikeButton.setEnabled(false);
+            videoLikeButton.setText(" ");
+            videoLikeButton.setTextColor(Color.TRANSPARENT);
+            videoLikeButton.setCompoundDrawablesWithIntrinsicBounds(
+                    0, R.drawable.ic_action_heart_outline, 0, 0
+            );
+            videoLikeButton.setCompoundDrawableTintList(ColorStateList.valueOf(Color.WHITE));
+            return;
+        }
+        if (!force && target.equals(videoLikePageUrl)) return;
+
+        videoLikePageUrl = target;
+        int generation = ++videoLikeRequestGeneration;
+        ZeroChillSocialRepository.videoLikeState(this, target, (state, error) ->
+                runOnUiThread(() -> {
+                    if (generation != videoLikeRequestGeneration || !target.equals(pageUrl)) return;
+                    if (error != null || state == null) return;
+                    videoLiked = state.liked;
+                    videoLikeCount = state.count;
+                    updateVideoLikeButton();
+                })
+        );
+    }
+
+    private void updateVideoLikeButton() {
+        if (videoLikeButton != null) {
+            videoLikeButton.setCompoundDrawablesWithIntrinsicBounds(
+                    0,
+                    videoLiked ? R.drawable.ic_action_heart_filled : R.drawable.ic_action_heart_outline,
+                    0,
+                    0
+            );
+            videoLikeButton.setCompoundDrawableTintList(ColorStateList.valueOf(
+                    videoLiked ? UiPalette.PRIMARY : Color.WHITE
+            ));
+            boolean showCount = videoLikeCount > 0;
+            videoLikeButton.setText(showCount ? String.valueOf(videoLikeCount) : " ");
+            videoLikeButton.setTextColor(showCount
+                    ? (videoLiked ? UiPalette.PRIMARY : Color.rgb(238, 238, 242))
+                    : Color.TRANSPARENT);
+            videoLikeButton.setEnabled(true);
+            videoLikeButton.setContentDescription(
+                    videoLiked ? "Unlike this video" : "Like this video"
+            );
+        }
+        if (fullscreenControls != null) fullscreenControls.syncLiked(videoLiked, true);
+    }
+
+    private void setVideoLikeEnabled(boolean enabled) {
+        if (videoLikeButton != null) videoLikeButton.setEnabled(enabled);
+        if (fullscreenControls != null) fullscreenControls.syncLiked(videoLiked, enabled);
+    }
+
+    private void refreshCommentCount(boolean force) {
+        if (commentButton == null) return;
+        String target = pageUrl == null ? "" : pageUrl.trim();
+        if (target.isEmpty()) {
+            commentButton.setText(" ");
+            commentButton.setTextColor(Color.TRANSPARENT);
+            commentButton.setEnabled(false);
+            return;
+        }
+        if (!force && target.equals(commentCountPageUrl)) return;
+
+        commentCountPageUrl = target;
+        commentButton.setText("");
+        commentButton.setEnabled(true);
+        int generation = ++commentCountRequestGeneration;
+        ZeroChillSocialRepository.loadComments(this, target, (loaded, error) ->
+                runOnUiThread(() -> {
+                    if (isFinishing() || isDestroyed()) return;
+                    if (generation != commentCountRequestGeneration || !target.equals(pageUrl)) return;
+                    if (error != null || loaded == null) return;
+                    int visible = 0;
+                    for (ZeroChillSocialRepository.Comment comment : loaded) {
+                        if (comment != null && !comment.deleted()) visible++;
+                    }
+                    commentCount = visible;
+                    updateCommentButton();
+                })
+        );
+    }
+
+    private void updateCommentButton() {
+        if (commentButton == null) return;
+        commentButton.setCompoundDrawablesWithIntrinsicBounds(
+                0, R.drawable.ic_action_comments, 0, 0
+        );
+        commentButton.setCompoundDrawableTintList(ColorStateList.valueOf(Color.WHITE));
+        commentButton.setText(String.valueOf(Math.max(0, commentCount)));
+        commentButton.setTextColor(Color.rgb(238, 238, 242));
+        commentButton.setEnabled(true);
+        commentButton.setContentDescription(
+                commentCount == 1 ? "Open 1 comment" : "Open " + commentCount + " comments"
+        );
+    }
+
+    private void updateWatchLaterButton() {
+        if (watchLaterButton == null) return;
+        boolean saved = pageUrl != null && !pageUrl.isEmpty() && FavoriteStore.contains(this, pageUrl);
+        watchLaterButton.setCompoundDrawablesWithIntrinsicBounds(
+                0,
+                saved ? R.drawable.ic_nav_saved : R.drawable.ic_action_save_outline,
+                0,
+                0
+        );
+        watchLaterButton.setCompoundDrawableTintList(ColorStateList.valueOf(
+                saved ? UiPalette.PRIMARY : Color.WHITE
+        ));
+        watchLaterButton.setText(" ");
+        watchLaterButton.setTextColor(Color.TRANSPARENT);
+        watchLaterButton.setContentDescription(
+                saved ? "Remove from Watch Later" : "Save to Watch Later"
+        );
+    }
+
+    private void toggleVideoLike() {
+        if (pageUrl == null || pageUrl.trim().isEmpty()) return;
+        if (!ZeroChillAccountRepository.hasStoredSession(this)) {
+            startActivity(new Intent(this, ZeroChillAccountActivity.class));
+            return;
+        }
+
+        String target = pageUrl;
+        boolean wasLiked = videoLiked;
+        setVideoLikeEnabled(false);
+        ZeroChillSocialRepository.toggleVideoLike(this, new NativeContentItem(NativeContentItem.KIND_MEDIA,
+                title, target, posterUrl, views, uploader, comments), wasLiked, (state, error) ->
+                runOnUiThread(() -> {
+                    if (!target.equals(pageUrl)) return;
+                    setVideoLikeEnabled(true);
+                    if (error != null || state == null) {
+                        ZeroChillToast.makeText(
+                                this,
+                                error == null ? "Unable to update the like." : error.getMessage(),
+                                ZeroChillToast.LENGTH_LONG
+                        ).show();
+                        return;
+                    }
+                    videoLikePageUrl = target;
+                    videoLiked = state.liked;
+                    videoLikeCount = state.count;
+                    updateVideoLikeButton();
+                })
+        );
     }
 
     private void toggleWatchLater() {
         if (pageUrl.isEmpty()) return;
         if (FavoriteStore.contains(this, pageUrl)) {
             FavoriteStore.remove(this, pageUrl);
-            Toast.makeText(this, "Removed from Watch Later.", Toast.LENGTH_SHORT).show();
+            ZeroChillToast.makeText(this, "Removed from Watch Later.", ZeroChillToast.LENGTH_SHORT).show();
         } else {
             FavoriteStore.add(this, title, pageUrl);
-            Toast.makeText(this, "Saved to Watch Later.", Toast.LENGTH_SHORT).show();
+            ZeroChillToast.makeText(this, "Saved to Watch Later.", ZeroChillToast.LENGTH_SHORT).show();
         }
+        updateWatchLaterButton();
+        if (fullscreenControls != null) fullscreenControls.syncSaved(FavoriteStore.contains(this, pageUrl));
     }
 
     private void sharePage() {
@@ -1526,11 +1892,12 @@ public class VideoDetailActivity extends Activity {
         ));
         actions.add(VideoActionSheet.action(
                 R.drawable.ic_more_website,
-                "Video details",
-                "View this video on the site",
+                "Open source website",
+                "Open the original video page",
                 () -> openWebsite(pageUrl)
         ));
-        if (getResources().getConfiguration().orientation != Configuration.ORIENTATION_LANDSCAPE) {
+        if (!showsOrigin &&
+                getResources().getConfiguration().orientation != Configuration.ORIENTATION_LANDSCAPE) {
             if (portraitVideo) {
                 actions.add(VideoActionSheet.action(
                         portraitFullscreen
@@ -1549,15 +1916,17 @@ public class VideoDetailActivity extends Activity {
                     "Keep playing while you browse",
                     this::minimizeFromMenu
             ));
-            actions.add(VideoActionSheet.action(
-                    R.drawable.ic_action_fullscreen,
-                    "Fullscreen",
-                    "Allow rotation while the video stays fullscreen",
-                    () -> setRotatableFullscreen(true)
-            ));
+            if (!portraitVideo) {
+                actions.add(VideoActionSheet.action(
+                        R.drawable.ic_action_fullscreen,
+                        "Fullscreen",
+                        "Allow rotation while the video stays fullscreen",
+                        () -> setRotatableFullscreen(true)
+                ));
+            }
         }
 
-        VideoActionSheet.show(
+        VideoActionSheet.showCompact(
                 this,
                 title,
                 VideoActionSheet.section(
@@ -1622,8 +1991,13 @@ public class VideoDetailActivity extends Activity {
         return "kaotic".equals(source) || WebVideoSourceRepository.isKaoticUrl(pageUrl);
     }
 
+    private boolean isBaddieHub() {
+        return NativeFeedBrowserActivity.SOURCE_BADDIEHUB.equals(source) ||
+                BaddieHubRepository.isBaddieHubUrl(pageUrl);
+    }
+
     private boolean supportsComments() {
-        return !isEfukt() && !isBunkr();
+        return pageUrl != null && !pageUrl.trim().isEmpty();
     }
 
     private void minimizeFromMenu() {
@@ -1634,7 +2008,7 @@ public class VideoDetailActivity extends Activity {
     private void showSpeedMenu() {
         String[] labels = {"0.5×", "0.75×", "1×", "1.25×", "1.5×", "2×"};
         float[] speeds = {0.5f, 0.75f, 1f, 1.25f, 1.5f, 2f};
-        new AlertDialog.Builder(this)
+        new ZeroChillDialog.Builder(this)
                 .setTitle("Playback speed")
                 .setItems(labels, (dialog, which) -> {
                     if (player != null) player.setPlaybackParameters(new PlaybackParameters(speeds[which]));
@@ -1649,7 +2023,7 @@ public class VideoDetailActivity extends Activity {
                 AspectRatioFrameLayout.RESIZE_MODE_FILL,
                 AspectRatioFrameLayout.RESIZE_MODE_ZOOM
         };
-        new AlertDialog.Builder(this)
+        new ZeroChillDialog.Builder(this)
                 .setTitle("Video size")
                 .setItems(labels, (dialog, which) -> {
                     resizeMode = modes[which];
@@ -1661,8 +2035,9 @@ public class VideoDetailActivity extends Activity {
     private void showPlaybackFailure() {
         if (failureShown || isFinishing()) return;
         failureShown = true;
+        dismissShowsLaunchCurtain(true);
         RatingFeedbackPrompt.recordPlaybackError(this);
-        new AlertDialog.Builder(this)
+        new ZeroChillDialog.Builder(this)
                 .setTitle("Couldn't play this stream")
                 .setMessage("The native player couldn't continue this video. You can open the normal webpage instead.")
                 .setNegativeButton("Close", null)
@@ -1683,13 +2058,20 @@ public class VideoDetailActivity extends Activity {
     public void onConfigurationChanged(Configuration newConfig) {
         super.onConfigurationChanged(newConfig);
         abortRelatedBackPreview();
+        if (showsOrigin && showsTargetOrientation != Configuration.ORIENTATION_UNDEFINED) {
+            showsOrientationSettled = orientationMatches(
+                    newConfig.orientation,
+                    showsTargetOrientation
+            );
+        }
         applyOrientation(newConfig.orientation);
+        maybeDismissShowsLaunchCurtain();
     }
 
     private void applyOrientation(int orientation) {
         boolean landscape = orientation == Configuration.ORIENTATION_LANDSCAPE;
         if (landscape) portraitFullscreen = false;
-        boolean fullscreen = landscape || portraitFullscreen || rotatableFullscreen;
+        boolean fullscreen = showsOrigin || landscape || portraitFullscreen || rotatableFullscreen;
         if (detailsScroll != null) {
             detailsScroll.setVisibility(fullscreen ? View.GONE : View.VISIBLE);
             detailsScroll.setAlpha(1f);
@@ -1711,41 +2093,185 @@ public class VideoDetailActivity extends Activity {
         playerContainer.setTranslationY(0f);
         playerContainer.setAlpha(1f);
         updatePortraitFullscreenButton();
+        applyPlayerChrome(orientation);
+        syncFullscreenChrome(fullscreen, landscape);
         updateSwipeEnabled();
         updatePortraitProgress();
         if (canShowPortraitSeekBar()) showPortraitSeekBar();
         shell.requestApplyInsets();
     }
 
+    private void syncFullscreenChrome(boolean fullscreen, boolean landscape) {
+        if (fullscreenControls == null) return;
+        boolean changed = fullscreenChromeActive != fullscreen;
+        fullscreenChromeActive = fullscreen;
+        playerView.setUseController(!fullscreen);
+        if (changed) fullscreenControls.suspend(!fullscreen);
+        if (!fullscreen) {
+            fullscreenOverlay.setVisibility(View.GONE);
+            if (fullscreenGestures != null) fullscreenGestures.cancel();
+        }
+        if (fullscreen) {
+            ((TextView) fullscreenOverlay.findViewById(R.id.player_title)).setText(title);
+            fullscreenControls.syncSaved(FavoriteStore.contains(this, pageUrl));
+            View toggle = fullscreenOverlay.findViewById(R.id.shows_fullscreen_toggle);
+            toggle.setVisibility(!landscape && !portraitVideo ? View.VISIBLE : View.GONE);
+            fullscreenOverlay.post(() -> fullscreenControls.applyInsets(
+                    androidx.core.view.ViewCompat.getRootWindowInsets(fullscreenOverlay)));
+        }
+    }
+
+    private void showVideoControls() {
+        if (fullscreenChromeActive && fullscreenControls != null) fullscreenControls.show();
+        else if (playerView != null) playerView.showController();
+    }
+
+    private void hideVideoControls() {
+        if (fullscreenChromeActive && fullscreenControls != null) fullscreenControls.hide();
+        else if (playerView != null) playerView.hideController();
+    }
+
+    private void applyPlayerChrome(int orientation) {
+        if (playerView == null) return;
+        boolean landscape = orientation == Configuration.ORIENTATION_LANDSCAPE;
+
+        View rewind = playerView.findViewById(androidx.media3.ui.R.id.exo_rew);
+        View forward = playerView.findViewById(androidx.media3.ui.R.id.exo_ffwd);
+        if (rewind != null) rewind.setVisibility(landscape ? View.VISIBLE : View.GONE);
+        if (forward != null) forward.setVisibility(landscape ? View.VISIBLE : View.GONE);
+
+        if (playerTitleView != null) {
+            playerTitleView.setVisibility(landscape ? View.VISIBLE : View.GONE);
+        }
+
+        View centerControls = playerView.findViewById(androidx.media3.ui.R.id.exo_center_controls);
+        if (centerControls != null &&
+                centerControls.getLayoutParams() instanceof FrameLayout.LayoutParams) {
+            FrameLayout.LayoutParams centerParams =
+                    (FrameLayout.LayoutParams) centerControls.getLayoutParams();
+            centerParams.gravity = landscape
+                    ? Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL
+                    : Gravity.CENTER;
+            centerParams.bottomMargin = landscape ? dp(62) : 0;
+            centerControls.setLayoutParams(centerParams);
+        }
+    }
+
+    private void maybeDismissShowsLaunchCurtain() {
+        if (!playbackIdent || showsLaunchCurtain == null ||
+                showsLaunchCurtain.getVisibility() != View.VISIBLE ||
+                showsCurtainDismissScheduled ||
+                !showsFirstFrameRendered) {
+            return;
+        }
+        if (showsOrigin && (!showsOrientationSettled ||
+                showsTargetOrientation == Configuration.ORIENTATION_UNDEFINED)) {
+            return;
+        }
+
+        showsCurtainDismissScheduled = true;
+        long elapsed = Math.max(0L, SystemClock.uptimeMillis() - showsIdentStartedAt);
+        long minimumRemaining = Math.max(0L, SHOWS_IDENT_MIN_MS - elapsed);
+        long delay = Math.max(90L, minimumRemaining);
+        showsLaunchCurtain.postDelayed(() -> {
+            showsCurtainDismissScheduled = false;
+            if (isFinishing() || showsLaunchCurtain == null ||
+                    !showsFirstFrameRendered) {
+                return;
+            }
+            if (showsOrigin && !orientationMatches(
+                    getResources().getConfiguration().orientation,
+                    showsTargetOrientation
+            )) {
+                return;
+            }
+            dismissShowsLaunchCurtain(false);
+        }, delay);
+    }
+
+    private void dismissShowsLaunchCurtain(boolean immediate) {
+        if (showsLaunchCurtain == null ||
+                showsLaunchCurtain.getVisibility() != View.VISIBLE) {
+            return;
+        }
+        showsCurtainDismissScheduled = false;
+
+        Runnable finish = () -> {
+            if (showsLaunchLoader != null) {
+                showsLaunchLoader.stop();
+                showsLaunchLoader.setVisibility(View.GONE);
+            }
+            if (showsLaunchCurtain != null) {
+                showsLaunchCurtain.animate().cancel();
+                showsLaunchCurtain.setAlpha(1f);
+                showsLaunchCurtain.setVisibility(View.GONE);
+            }
+        };
+
+        if (immediate || !ZeroChillMotion.animationsEnabled(this)) {
+            finish.run();
+            return;
+        }
+
+        showsLaunchCurtain.animate().cancel();
+        showsLaunchCurtain.animate()
+                .alpha(0f)
+                .setDuration(170L)
+                .setInterpolator(new DecelerateInterpolator())
+                .withEndAction(finish)
+                .start();
+    }
+
     private void setPortraitFullscreen(boolean enabled) {
         boolean portraitOrientation = getResources().getConfiguration().orientation
                 != Configuration.ORIENTATION_LANDSCAPE;
         portraitFullscreen = enabled && portraitVideo && portraitOrientation;
-        rotatableFullscreen = portraitFullscreen;
+        rotatableFullscreen = false;
         sensorFullscreen = false;
-        if (rotatableFullscreen) {
-            PhoneOrientationPolicy.enterFullscreenVideo(this);
+        if (portraitFullscreen) {
+            PhoneOrientationPolicy.enterPortraitFullscreen(this);
         } else {
             PhoneOrientationPolicy.exitFullscreenVideo(this);
         }
         applyOrientation(getResources().getConfiguration().orientation);
-        if (playerView != null) playerView.showController();
+        if (playerView != null) showVideoControls();
     }
 
     private void setRotatableFullscreen(boolean enabled) {
+        if (enabled && portraitVideo) {
+            setPortraitFullscreen(true);
+            return;
+        }
         rotatableFullscreen = enabled;
         sensorFullscreen = false;
         if (enabled) {
-            PhoneOrientationPolicy.enterFullscreenVideo(this);
+            if (ShowsPlaybackOrientationPolicy.shouldForceLandscapeOnFullscreen(
+                    manualLandscapeFullscreen,
+                    showsOrigin,
+                    portraitVideo
+            )) {
+                // Match ShitTok: an explicit fullscreen tap on horizontal media
+                // immediately requests sensor-landscape orientation.
+                PhoneOrientationPolicy.enterSensorFullscreen(this);
+            } else {
+                PhoneOrientationPolicy.enterFullscreenVideo(this);
+            }
         } else {
             portraitFullscreen = false;
             PhoneOrientationPolicy.exitFullscreenVideo(this);
         }
         applyOrientation(getResources().getConfiguration().orientation);
-        if (playerView != null) playerView.showController();
+        if (playerView != null) showVideoControls();
     }
 
     private void onPhysicalOrientation(SensorMediaOrientationListener.Position position) {
+        if (socialEntry && activeComments != null && activeComments.isShowing()) return;
+        if (player == null || !videoSizeKnown || !ShowsPlaybackOrientationPolicy.autoRotateEnabled(this)) return;
+        if (!ShowsPlaybackOrientationPolicy.shouldAutoRotateFromSensor(
+                manualLandscapeFullscreen,
+                showsOrigin,
+                portraitVideo
+        )) return;
         if (position == SensorMediaOrientationListener.Position.LANDSCAPE) {
             sensorFullscreen = true;
             rotatableFullscreen = true;
@@ -1763,6 +2289,10 @@ public class VideoDetailActivity extends Activity {
 
     private void updatePortraitFullscreenButton() {
         if (portraitFullscreenButton == null) return;
+        if (showsOrigin) {
+            portraitFullscreenButton.setVisibility(View.GONE);
+            return;
+        }
         boolean portraitOrientation = getResources().getConfiguration().orientation
                 != Configuration.ORIENTATION_LANDSCAPE;
         portraitFullscreenButton.setVisibility(
@@ -1775,7 +2305,9 @@ public class VideoDetailActivity extends Activity {
                         : R.drawable.ic_action_fullscreen
         );
         portraitFullscreenButton.setContentDescription(
-                fullscreen ? "Exit fullscreen" : "Fullscreen"
+                portraitVideo && portraitOrientation
+                        ? (fullscreen ? "Exit portrait fullscreen" : "Fill screen")
+                        : (fullscreen ? "Exit fullscreen" : "Fullscreen")
         );
     }
 
@@ -1784,7 +2316,9 @@ public class VideoDetailActivity extends Activity {
         boolean portrait = getResources().getConfiguration().orientation != Configuration.ORIENTATION_LANDSCAPE;
         boolean enabled = getSharedPreferences("app_prefs", MODE_PRIVATE)
                 .getBoolean("swipe_down_minimize", true);
-        playerContainer.setSwipeEnabled(portrait && enabled && !minimizing && !rotatableFullscreen);
+        playerContainer.setSwipeEnabled(
+                !showsOrigin && portrait && enabled && !minimizing && !rotatableFullscreen
+        );
     }
 
     private void setFullscreenUi(boolean enabled) {
@@ -1818,7 +2352,16 @@ public class VideoDetailActivity extends Activity {
     }
 
     private void handleBack() {
-        if (portraitFullscreen || rotatableFullscreen) {
+        if (showsOrigin) {
+            savePlaybackState(false);
+            finish();
+            return;
+        }
+        if (portraitFullscreen) {
+            setPortraitFullscreen(false);
+            return;
+        }
+        if (rotatableFullscreen) {
             setRotatableFullscreen(false);
             return;
         }
@@ -1827,7 +2370,12 @@ public class VideoDetailActivity extends Activity {
             PhoneOrientationPolicy.exitFullscreenVideo(this);
             return;
         }
-        if (restorePreviousRelatedVideo(true)) return;
+        if (!socialEntry && restorePreviousRelatedVideo(true)) return;
+        if (socialEntry) {
+            savePlaybackState(false);
+            finish();
+            return;
+        }
         if (getSharedPreferences("app_prefs", MODE_PRIVATE).getBoolean("minimize_on_back", true)) {
             minimizing = true;
             minimizeToFeed();
@@ -1854,6 +2402,8 @@ public class VideoDetailActivity extends Activity {
         result.putExtra(EXTRA_COMMENTS, comments);
         result.putExtra(EXTRA_RELATED_FEED_URL, relatedFeedUrl);
         result.putExtra(EXTRA_SOURCE, source);
+        result.putExtra(EXTRA_SHOWS_ORIGIN, showsOrigin);
+        if (!posterUrl.isEmpty()) result.putExtra(EXTRA_POSTER_URL, posterUrl);
         if (player != null) result.putExtra(PlayerActivity.EXTRA_START_POSITION, player.getCurrentPosition());
         setResult(RESULT_OK, result);
         finish();
@@ -1864,9 +2414,15 @@ public class VideoDetailActivity extends Activity {
         handleBack();
     }
 
+    @Override
+    protected void onSaveInstanceState(Bundle outState) {
+        outState.putBoolean("social_comments_opened", socialCommentsOpened);
+        outState.putBoolean("social_comments_visible", activeComments != null && activeComments.isShowing());
+        super.onSaveInstanceState(outState);
+    }
+
     private boolean rememberPositionEnabled() {
-        return getSharedPreferences("app_prefs", MODE_PRIVATE)
-                .getBoolean("remember_video_position", true);
+        return true;
     }
 
     private String positionKey() {
@@ -1880,7 +2436,17 @@ public class VideoDetailActivity extends Activity {
         long duration = player.getDuration();
         if (duration < 0L) duration = 0L;
 
-        PlaybackHistoryStore.record(this, title, pageUrl, position, duration, ended);
+        PlaybackHistoryStore.record(
+                this,
+                title,
+                pageUrl,
+                posterUrl,
+                position,
+                duration,
+                ended,
+                showsOrigin
+        );
+        updateShowsContinueFrame(ended, position, duration);
 
         if (!rememberPositionEnabled()) return;
         SharedPreferences prefs = getSharedPreferences("player_positions", MODE_PRIVATE);
@@ -1890,6 +2456,30 @@ public class VideoDetailActivity extends Activity {
         } else if (position > 3000L) {
             prefs.edit().putLong(positionKey(), position).apply();
         }
+    }
+
+    private void updateShowsContinueFrame(boolean ended, long positionMs, long durationMs) {
+        if (!showsOrigin || pageUrl == null || pageUrl.trim().isEmpty()) return;
+        boolean complete = ended ||
+                (durationMs > 0L && positionMs >= (long) (durationMs * 0.95f));
+        if (complete) {
+            ShowsContinueFrameStore.deleteAsync(this, pageUrl);
+            lastShowsFramePositionMs = positionMs;
+            return;
+        }
+        if (positionMs < 5_000L) return;
+        if (lastShowsFramePositionMs >= 0L &&
+                Math.abs(positionMs - lastShowsFramePositionMs) < 2_000L) {
+            return;
+        }
+        Bitmap frame = capturePlayerFrame();
+        if (frame == null) return;
+        lastShowsFramePositionMs = positionMs;
+        ShowsContinueFrameStore.saveAsync(this, pageUrl, frame);
+    }
+
+    boolean isShowsOrigin() {
+        return showsOrigin;
     }
 
     private boolean recoverPlayback(PlaybackException error) {
@@ -1904,8 +2494,9 @@ public class VideoDetailActivity extends Activity {
     }
 
     private void releasePlayer() {
+        if (fullscreenGestures != null) fullscreenGestures.cancel();
+        if (fullscreenControls != null) fullscreenControls.release();
         playbackRecovery.cancel();
-        stopPortraitProgressTicker();
         portraitSeekScrubbing = false;
         if (portraitSeekBar != null) portraitSeekBar.setProgress(0);
         if (playerView != null) playerView.setPlayer(null);
@@ -1976,9 +2567,13 @@ public class VideoDetailActivity extends Activity {
         super.onResume();
         recoveryResumed = true;
         if (orientationListener != null) orientationListener.enable();
+        if (socialNavigationPendingReturn) {
+            socialNavigationPendingReturn = false;
+            if (player != null) player.setPlayWhenReady(socialReturnPlayWhenReady);
+        }
         updateSwipeEnabled();
-        startPortraitProgressTicker();
         if (detailsScroll != null) applyDetailsBackground();
+        refreshVideoLikeState(true);
     }
 
     @Override
@@ -1998,8 +2593,10 @@ public class VideoDetailActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        if (activeComments != null) activeComments.dismiss();
         if (orientationListener != null) orientationListener.disable();
         abortRelatedBackPreview();
+        dismissShowsLaunchCurtain(true);
         if (portraitFullscreen ||
                 getResources().getConfiguration().orientation == Configuration.ORIENTATION_LANDSCAPE) {
             setFullscreenUi(false);

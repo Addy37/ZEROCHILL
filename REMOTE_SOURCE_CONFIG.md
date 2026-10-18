@@ -47,6 +47,7 @@ the active cache.
 | TheYNC | Same supported values as Kaotic, with an independent configuration |
 | ItemFix | Same supported values as Kaotic, with an independent configuration |
 | OnlyHaven (cum.st) | Enabled, base/fallback domains, media/image CDN bases, creator-search UI/API, creator-page/posts routes, User-Agent, Referer override, approved headers, request timeout/retry count, creator/media/playable selectors, bounded creator/media regex |
+| BaddieHub | Enabled, base/fallback domains, latest/categories/category pagination routes, User-Agent, Referer override, approved headers, request timeout/retry count, category/card/player selectors |
 
 ## Values that remain compiled
 
@@ -113,3 +114,8 @@ When this source-expansion change is deployed, deploy the updated `app-config-ad
 publishing a configuration that contains the expanded source objects or the OnlyHaven
 `creatorSearchApi` / `imageBaseUrl` fields. No database migration is required for these source fields because the
 configuration document remains stored as JSON.
+
+The Android schema accepts an optional `sources.baddiehub` object and keeps compiled known-good
+defaults when an older remote snapshot does not contain it. The current backend admin validator
+must add the same BaddieHub data fields before operators publish them remotely. Until then, the
+bundled values remain active and existing remote snapshots continue to validate.

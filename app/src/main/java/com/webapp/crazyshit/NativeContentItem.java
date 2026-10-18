@@ -18,6 +18,8 @@ public final class NativeContentItem {
     public final String comments;
     public final String description;
     public final String searchQuery;
+    public final long publishedAtMillis;
+    public final float aspectRatioHint;
 
     public NativeContentItem(
             String kind,
@@ -55,6 +57,49 @@ public final class NativeContentItem {
             String description,
             String searchQuery
     ) {
+        this(kind, title, url, imageUrl, views, uploader, comments, description, searchQuery, 0L, 0f);
+    }
+
+    public NativeContentItem(
+            String kind,
+            String title,
+            String url,
+            String imageUrl,
+            String views,
+            String uploader,
+            String comments,
+            String description,
+            String searchQuery,
+            long publishedAtMillis
+    ) {
+        this(
+                kind,
+                title,
+                url,
+                imageUrl,
+                views,
+                uploader,
+                comments,
+                description,
+                searchQuery,
+                publishedAtMillis,
+                0f
+        );
+    }
+
+    public NativeContentItem(
+            String kind,
+            String title,
+            String url,
+            String imageUrl,
+            String views,
+            String uploader,
+            String comments,
+            String description,
+            String searchQuery,
+            long publishedAtMillis,
+            float aspectRatioHint
+    ) {
         this.kind = kind == null ? KIND_MEDIA : kind;
         this.title = title == null ? "" : title;
         this.url = url == null ? "" : url;
@@ -64,6 +109,10 @@ public final class NativeContentItem {
         this.comments = comments == null ? "" : comments;
         this.description = description == null ? "" : description;
         this.searchQuery = searchQuery == null ? "" : searchQuery;
+        this.publishedAtMillis = Math.max(0L, publishedAtMillis);
+        this.aspectRatioHint = aspectRatioHint > 0f && Float.isFinite(aspectRatioHint)
+                ? aspectRatioHint
+                : 0f;
     }
 
     public boolean isCategory() {
@@ -105,7 +154,9 @@ public final class NativeContentItem {
                 choose(uploader, other.uploader),
                 choose(comments, other.comments),
                 choose(description, other.description),
-                choose(searchQuery, other.searchQuery)
+                choose(searchQuery, other.searchQuery),
+                publishedAtMillis > 0L ? publishedAtMillis : other.publishedAtMillis,
+                aspectRatioHint > 0f ? aspectRatioHint : other.aspectRatioHint
         );
     }
 

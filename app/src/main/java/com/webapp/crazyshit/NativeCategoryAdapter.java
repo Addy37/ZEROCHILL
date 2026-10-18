@@ -19,7 +19,6 @@ import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
@@ -66,9 +65,6 @@ public final class NativeCategoryAdapter extends RecyclerView.Adapter<NativeCate
     private static final float ASPECT_HERO = 16f / 9f;
     private static final float ASPECT_PORTRAIT = 4f / 5f;
     private static final float ASPECT_SQUARE = 1f;
-
-    private static final DrawableCrossFadeFactory CREATOR_CROSS_FADE =
-            new DrawableCrossFadeFactory.Builder(260).setCrossFadeEnabled(true).build();
 
     public interface Listener {
         void onOpen(NativeContentItem item);
@@ -162,7 +158,7 @@ public final class NativeCategoryAdapter extends RecyclerView.Adapter<NativeCate
     public Holder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
         boolean creatorCard = isCreatorViewType(viewType);
         MaterialCardView card = new MaterialCardView(parent.getContext());
-        ZeroChillUi.styleMaterialCard(card, R.dimen.zc_radius_medium);
+        ZeroChillUi.styleMediaCard(card, R.dimen.zc_radius_medium);
         card.setRadius(dp(parent, creatorCard ? 9 : 16));
         card.setCardElevation(dp(parent, creatorCard ? 1 : 2));
         card.setClickable(true);
@@ -306,7 +302,7 @@ public final class NativeCategoryAdapter extends RecyclerView.Adapter<NativeCate
         description.setTextColor(creatorCard
                 ? Color.rgb(188, 188, 198)
                 : Color.rgb(210, 210, 218));
-        description.setTextSize(creatorCard ? 10.5f : 11f);
+        description.setTextSize(12f);
         description.setMaxLines(creatorCard ? 1 : 5);
         description.setEllipsize(TextUtils.TruncateAt.END);
         description.setVisibility(View.GONE);
@@ -360,6 +356,7 @@ public final class NativeCategoryAdapter extends RecyclerView.Adapter<NativeCate
         holder.favoriteStar.setVisibility(creatorFavorite ? View.VISIBLE : View.GONE);
 
         if (creatorCard) {
+            CreatorGalleryPreloader.warm(holder.card.getContext(), item);
             int rank = creatorRank(item, position);
             holder.rank.setText("#" + rank);
             holder.description.setText("Pictures + videos");
@@ -399,12 +396,12 @@ public final class NativeCategoryAdapter extends RecyclerView.Adapter<NativeCate
                                         ? "Long press to remove from favorites."
                                         : "Long press to add to favorites.")
                 );
-                Toast.makeText(
+                ZeroChillToast.makeText(
                         v.getContext(),
                         favorite
                                 ? current.title + " added to favorites."
                                 : current.title + " removed from favorites.",
-                        Toast.LENGTH_SHORT
+                        ZeroChillToast.LENGTH_SHORT
                 ).show();
                 return true;
             });
@@ -417,30 +414,12 @@ public final class NativeCategoryAdapter extends RecyclerView.Adapter<NativeCate
     }
 
     private void styleCreatorCard(Holder holder, int rank) {
-        if (rank == 1) {
-            holder.card.setStrokeWidth(dp(holder.card, 2));
-            holder.card.setStrokeColor(ZeroChillUi.color(holder.card.getContext(), R.color.zc_cyan));
-        } else {
-            holder.card.setStrokeWidth(dp(holder.card, 1));
-            holder.card.setStrokeColor(rank <= 3
-                    ? ZeroChillUi.color(holder.card.getContext(), R.color.zc_cyan_dim)
-                    : ZeroChillUi.color(holder.card.getContext(), R.color.zc_edge));
-        }
+        holder.card.setStrokeWidth(0);
 
         GradientDrawable rankBackground = new GradientDrawable();
         rankBackground.setCornerRadius(dp(holder.card, 15));
-        if (rank == 1) {
-            rankBackground.setColor(UiPalette.PRIMARY);
-            holder.rank.setTextColor(Color.BLACK);
-        } else {
-            rankBackground.setColor(ZeroChillUi.color(
-                    holder.card.getContext(), R.color.zc_surface_glass_strong));
-            rankBackground.setStroke(
-                    dp(holder.card, 1),
-                    ZeroChillUi.color(holder.card.getContext(), R.color.zc_cyan_dim)
-            );
-            holder.rank.setTextColor(UiPalette.PRIMARY);
-        }
+        rankBackground.setColor(UiPalette.RAISED);
+        holder.rank.setTextColor(UiPalette.TEXT_SECONDARY);
         holder.rank.setBackground(rankBackground);
     }
 
@@ -452,6 +431,7 @@ public final class NativeCategoryAdapter extends RecyclerView.Adapter<NativeCate
                     .diskCacheStrategy(DiskCacheStrategy.NONE)
                     .skipMemoryCache(false)
                     .dontAnimate()
+                    .transition(ThumbnailFades.thumbnail())
                     .centerCrop()
                     .placeholder(new ColorDrawable(Color.rgb(31, 31, 35)))
                     .error(new ColorDrawable(Color.rgb(31, 31, 35)))
@@ -479,6 +459,7 @@ public final class NativeCategoryAdapter extends RecyclerView.Adapter<NativeCate
                 .load(remoteImage(imageUrl.trim(), artwork == null ? item.url : artwork.referer))
                 .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
                 .dontAnimate()
+                .transition(ThumbnailFades.thumbnail())
                 .centerCrop()
                 .placeholder(new ColorDrawable(Color.rgb(31, 31, 35)))
                 .error(new ColorDrawable(Color.rgb(31, 31, 35)))
@@ -549,7 +530,7 @@ public final class NativeCategoryAdapter extends RecyclerView.Adapter<NativeCate
                     }
                 });
         if (ZeroChillMotion.animationsEnabled(holder.image.getContext())) {
-            foreground = foreground.transition(DrawableTransitionOptions.with(CREATOR_CROSS_FADE));
+            foreground = foreground.transition(ThumbnailFades.hero());
         } else {
             foreground = foreground.dontAnimate();
         }
@@ -566,7 +547,7 @@ public final class NativeCategoryAdapter extends RecyclerView.Adapter<NativeCate
                         : backdropPlaceholder)
                 .error(new ColorDrawable(Color.TRANSPARENT));
         if (ZeroChillMotion.animationsEnabled(holder.backdrop.getContext())) {
-            backdrop = backdrop.transition(DrawableTransitionOptions.with(CREATOR_CROSS_FADE));
+            backdrop = backdrop.transition(ThumbnailFades.hero());
         } else {
             backdrop = backdrop.dontAnimate();
         }

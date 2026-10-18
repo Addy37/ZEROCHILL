@@ -20,6 +20,8 @@ import java.util.regex.Pattern;
 
 /** Shared native feed and playback parser for lightweight public video sources. */
 final class WebVideoSourceRepository {
+    private final Map<String, String> kaoticPaginationTemplates = new java.util.concurrent.ConcurrentHashMap<>();
+
     enum Source {
         KAOTIC("Kaotic"),
         THEYNC("TheYNC"),
@@ -87,6 +89,154 @@ final class WebVideoSourceRepository {
         return result;
     }
 
+    List<NativeContentItem> fetchCategories(Context context, Source source) throws IOException {
+        if (source != Source.KAOTIC) return new ArrayList<>();
+        SourceConfig.WebVideo config = config(source);
+        if (!config.enabled) throw new IOException(source.label + " is temporarily unavailable");
+
+        Document home = fetchConfigured(context, config, config.baseUrl);
+        String categoriesUrl = "";
+        for (Element link : home.select("a[href]")) {
+            if (!"categories".equalsIgnoreCase(clean(link.text()))) continue;
+            String candidate = absolute(link, "href", home.location());
+            if (sameHost(config.baseUrl, candidate)) {
+                categoriesUrl = candidate;
+                break;
+            }
+        }
+        if (categoriesUrl.isEmpty()) {
+            throw new IOException("Kaotic categories directory was not found");
+        }
+
+        Document categories = fetchConfigured(context, config, categoriesUrl);
+        return parseKaoticCategories(categories);
+    }
+
+    List<NativeContentItem> fetchFeed(
+            Context context,
+            Source source,
+            String collectionUrl,
+            int page
+    ) throws IOException {
+        if (source != Source.KAOTIC) return fetchFeed(context, source, page);
+        SourceConfig.WebVideo config = config(source);
+        if (!config.enabled) throw new IOException(source.label + " is temporarily unavailable");
+
+        String base = cleanUrl(collectionUrl);
+        if (base.isEmpty()) throw new IOException("Kaotic category URL is empty");
+
+        int requestedPage = Math.max(1, page);
+        String requested = base;
+        Document document = null;
+        if (requestedPage > 1) {
+            String template = kaoticPaginationTemplates.get(base);
+            if (template == null || template.isEmpty()) {
+                Document first = fetchConfigured(context, config, base);
+                rememberKaoticPaginationTemplate(base, first);
+                template = kaoticPaginationTemplates.get(base);
+            }
+            if (template == null || template.isEmpty()) return new ArrayList<>();
+            requested = template.replace("{page}", String.valueOf(requestedPage));
+        }
+
+        document = fetchConfigured(context, config, requested);
+        if (requestedPage == 1) rememberKaoticPaginationTemplate(base, document);
+        return parseFeed(document, source, requestedPage, config);
+    }
+
+    List<NativeContentItem> parseKaoticCategories(Document document) {
+        ArrayList<NativeContentItem> result = new ArrayList<>();
+        if (document == null) return result;
+
+        java.util.LinkedHashSet<String> seen = new java.util.LinkedHashSet<>();
+        for (Element heading : document.select("h2")) {
+            Element link = heading.selectFirst("a[href]");
+            if (link == null) continue;
+            String url = absolute(link, "href", document.location());
+            String title = clean(link.text());
+            if (url.isEmpty() || title.isEmpty() || !sameHost(document.location(), url)) continue;
+            if (!seen.add(url)) continue;
+
+            result.add(new NativeContentItem(
+                    NativeContentItem.KIND_CATEGORY,
+                    title,
+                    url,
+                    image(link, cardScope(link), document.location()),
+                    "",
+                    Source.KAOTIC.label,
+                    ""
+            ));
+            if (result.size() >= 40) break;
+        }
+        return result;
+    }
+
+    private void rememberKaoticPaginationTemplate(String baseUrl, Document document) {
+        if (baseUrl == null || baseUrl.isEmpty() || document == null) return;
+        int bestPage = Integer.MAX_VALUE;
+        String bestUrl = "";
+        for (Element link : document.select("a[href]")) {
+            String label = clean(link.text());
+            if (!label.matches("\\d+")) continue;
+            int page;
+            try {
+                page = Integer.parseInt(label);
+            } catch (NumberFormatException ignored) {
+                continue;
+            }
+            if (page <= 1 || page >= bestPage) continue;
+            String candidate = absolute(link, "href", document.location());
+            if (!sameHost(baseUrl, candidate)) continue;
+            String template = paginationTemplate(candidate, page);
+            if (template.isEmpty()) continue;
+            bestPage = page;
+            bestUrl = template;
+        }
+        if (!bestUrl.isEmpty()) kaoticPaginationTemplates.put(baseUrl, bestUrl);
+    }
+
+    private String paginationTemplate(String pageUrl, int pageNumber) {
+        try {
+            URI uri = new URI(pageUrl);
+            String query = uri.getRawQuery();
+            if (query == null || query.isEmpty()) return "";
+            String[] parts = query.split("&");
+            boolean replaced = false;
+            for (int index = 0; index < parts.length; index++) {
+                int equals = parts[index].indexOf('=');
+                if (equals <= 0) continue;
+                String value = parts[index].substring(equals + 1);
+                if (!String.valueOf(pageNumber).equals(value)) continue;
+                parts[index] = parts[index].substring(0, equals + 1) + "__ZEROCHILL_PAGE__";
+                replaced = true;
+                break;
+            }
+            if (!replaced) return "";
+            String rebuiltQuery = String.join("&", parts);
+            String rebuilt = new URI(
+                    uri.getScheme(),
+                    uri.getAuthority(),
+                    uri.getPath(),
+                    rebuiltQuery,
+                    uri.getFragment()
+            ).toASCIIString();
+            return rebuilt.replace("__ZEROCHILL_PAGE__", "{page}");
+        } catch (Exception ignored) {
+            return "";
+        }
+    }
+
+    private boolean sameHost(String firstUrl, String secondUrl) {
+        try {
+            URI first = new URI(firstUrl);
+            URI second = new URI(secondUrl);
+            return first.getHost() != null && second.getHost() != null
+                    && first.getHost().equalsIgnoreCase(second.getHost());
+        } catch (Exception ignored) {
+            return false;
+        }
+    }
+
     List<NativeContentItem> parseFeed(Document document, Source source, int page) {
         return parseFeed(document, source, page, config(source));
     }
@@ -100,6 +250,7 @@ final class WebVideoSourceRepository {
         ArrayList<NativeContentItem> result = new ArrayList<>();
         LinkedHashMap<String, Integer> positions = new LinkedHashMap<>();
         String pendingHeader = "";
+        long currentPublishedAt = 0L;
         int sectionOrdinal = 0;
         int mediaCount = 0;
 
@@ -108,7 +259,13 @@ final class WebVideoSourceRepository {
             if (!"a".equalsIgnoreCase(tag)) {
                 if (source == Source.KAOTIC) {
                     String section = kaoticSection(node);
-                    if (!section.isEmpty()) pendingHeader = section;
+                    if (!section.isEmpty()) {
+                        pendingHeader = section;
+                        currentPublishedAt = SourcePublishedDate.parse(
+                                section,
+                                System.currentTimeMillis()
+                        );
+                    }
                 } else if (source == Source.ITEMFIX && mediaCount > 0 &&
                         "popular fixes".equalsIgnoreCase(clean(node.ownText()))) {
                     break;
@@ -126,6 +283,12 @@ final class WebVideoSourceRepository {
             if (title.length() < 2) continue;
             String image = image(node, scope, document.location());
             String views = views(scope);
+            long publishedAt = source == Source.KAOTIC
+                    ? currentPublishedAt
+                    : SourcePublishedDate.parse(
+                            scope == null ? "" : scope.text(),
+                            System.currentTimeMillis()
+                    );
             NativeContentItem candidate = new NativeContentItem(
                     NativeContentItem.KIND_MEDIA,
                     title,
@@ -133,7 +296,10 @@ final class WebVideoSourceRepository {
                     image,
                     views,
                     source.label,
-                    ""
+                    "",
+                    "",
+                    "",
+                    publishedAt
             );
 
             String feedKey = feedKey(source, pageUrl);

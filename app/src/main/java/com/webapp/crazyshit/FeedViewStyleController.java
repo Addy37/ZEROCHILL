@@ -6,9 +6,7 @@ import android.content.res.Configuration;
 import android.view.HapticFeedbackConstants;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.PopupMenu;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.LinearLayoutManager;
@@ -87,13 +85,13 @@ final class FeedViewStyleController {
         if (activity == null || activity.isFinishing()) return;
         ViewPager2 pager = fieldValue(activity, "primaryPager", ViewPager2.class);
         if (pager == null || pager.getCurrentItem() != MainPagerAdapter.PAGE_HOME) {
-            Toast.makeText(activity, "Open Home to change its view style.", Toast.LENGTH_SHORT).show();
+            ZeroChillToast.makeText(activity, "Open Home to change its view style.", ZeroChillToast.LENGTH_SHORT).show();
             return;
         }
 
         int selected = safeMode(activity.getSharedPreferences("app_prefs", 0)
                 .getInt(HOME_PREF, NativeFeedAdapter.VIEW_CARDS));
-        AlertDialog dialog = new AlertDialog.Builder(activity)
+        AlertDialog dialog = new ZeroChillDialog.Builder(activity)
                 .setTitle("View style")
                 .setSingleChoiceItems(LABELS, selected, null)
                 .setNegativeButton("Close", null)
@@ -116,7 +114,7 @@ final class FeedViewStyleController {
         BROWSER_ATTACHED.put(activity, Boolean.TRUE);
         options.setOnClickListener(v -> {
             v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
-            PopupMenu menu = new PopupMenu(activity, v);
+            ZeroChillMenu menu = new ZeroChillMenu(activity, v);
             menu.getMenu().add(0, 1, 0, "View style");
             menu.getMenu().add(0, 2, 1, "Open website");
             menu.setOnMenuItemClickListener(item -> {
@@ -147,7 +145,7 @@ final class FeedViewStyleController {
     private static void showBrowser(NativeFeedBrowserActivity activity) {
         int selected = safeMode(activity.getSharedPreferences("app_prefs", 0)
                 .getInt(COLLECTION_PREF, NativeFeedAdapter.VIEW_CARDS));
-        AlertDialog dialog = new AlertDialog.Builder(activity)
+        AlertDialog dialog = new ZeroChillDialog.Builder(activity)
                 .setTitle("View style")
                 .setSingleChoiceItems(LABELS, selected, null)
                 .setNegativeButton("Close", null)

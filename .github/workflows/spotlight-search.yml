@@ -1,0 +1,101 @@
+name: Spotlight search focused validation
+on:
+  push:
+    branches: [feature/spotlight-glass-search]
+  pull_request:
+    branches: [rebrand/zerochill]
+    paths:
+      - 'app/src/main/java/com/webapp/crazyshit/Search*'
+      - 'app/src/main/java/com/webapp/crazyshit/CreatorSuggestionsController.java'
+      - 'app/src/test/java/com/webapp/crazyshit/Search*'
+      - 'baselineprofile/src/main/java/com/webapp/crazyshit/baselineprofile/SearchImeSmokeBenchmark.kt'
+      - '.github/workflows/spotlight-search.yml'
+concurrency:
+  group: spotlight-search-${{ github.ref }}
+  cancel-in-progress: true
+permissions:
+  contents: read
+jobs:
+  focused:
+    if: ${{ github.head_ref == 'feature/spotlight-glass-search' || github.ref_name == 'feature/spotlight-glass-search' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v4
+      - uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: '8.11.1'
+      - name: Search interaction and existing chrome tests
+        run: >-
+          gradle --no-daemon :app:testDebugUnitTest
+          --tests 'com.webapp.crazyshit.SearchOverlayTest'
+          --tests 'com.webapp.crazyshit.SearchPaneGeometryTest'
+          --tests 'com.webapp.crazyshit.SearchFloatingPresentationTest'
+          --tests 'com.webapp.crazyshit.CreatorSuggestionsTest'
+          --tests 'com.webapp.crazyshit.SearchStateTest'
+          --tests 'com.webapp.crazyshit.LibrarySearchTest'
+          --tests 'com.webapp.crazyshit.GlassHeaderLayoutTest'
+          --tests 'com.webapp.crazyshit.HeaderGlassMaterialTest'
+          --tests 'com.webapp.crazyshit.VisualRefreshTest'
+          --tests 'com.webapp.crazyshit.NavigationIaTest'
+          --tests 'com.webapp.crazyshit.BottomNavigationInsetsTest'
+          --tests 'com.webapp.crazyshit.ShowsHubStateTest'
+          --tests 'com.webapp.crazyshit.PrimaryTabNavigationTest'
+      - name: Debug build
+        run: gradle --no-daemon :app:assembleDebug
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: spotlight-search-validation
+          path: |
+            app/build/reports/tests/testDebugUnitTest
+            app/build/outputs/apk/debug/*.apk
+            app/build/reports/visual-tests/*.png
+
+  search-ime-smoke:
+    if: ${{ github.head_ref == 'feature/spotlight-glass-search' || github.ref_name == 'feature/spotlight-glass-search' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      ANALYTICS_ENDPOINT: ""
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v4
+      - uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: '8.11.1'
+      - name: Build only search smoke target and instrumentation
+        run: gradle --no-daemon :app:assembleBenchmarkRelease :baselineprofile:assembleBenchmarkRelease
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Three measured search iterations with animations enabled
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          profile: pixel_6
+          ram-size: 2048M
+          disable-animations: false
+          emulator-options: -no-window -gpu swiftshader -no-snapshot -noaudio -no-boot-anim
+          script: |
+            start=$(date +%s); timeout --kill-after=10s 5m bash tools/run_performance_audit.sh :baselineprofile:connectedBenchmarkReleaseAndroidTest '-Pandroid.testInstrumentationRunnerArguments.class=com.webapp.crazyshit.baselineprofile.SearchImeSmokeBenchmark#openImeScrollCollapse' '-Pandroid.testInstrumentationRunnerArguments.androidx.benchmark.enabledRules=Macrobenchmark'; status=$?; echo "Search smoke wall time: $(($(date +%s)-start)) seconds; requested measured iterations: 3; status: $status"; exit "$status"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: spotlight-search-ime-smoke
+          path: baselineprofile/build/outputs/

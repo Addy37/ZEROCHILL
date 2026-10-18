@@ -1,14 +1,17 @@
 plugins {
     id("com.android.application")
+    id("org.jetbrains.kotlin.android")
+    id("org.jetbrains.kotlin.plugin.compose")
     id("androidx.baselineprofile")
 }
 
 android {
     namespace = "com.webapp.crazyshit"
-    compileSdk = 35
+    compileSdk = 36
 
     buildFeatures {
         buildConfig = true
+        compose = true
     }
 
     defaultConfig {
@@ -18,6 +21,8 @@ android {
         targetSdk = 35
         versionCode = System.getenv("APP_VERSION_CODE")?.toIntOrNull() ?: 3_001_000
         versionName = System.getenv("APP_VERSION_NAME") ?: "3.1.0"
+        buildConfigField("boolean", "SHITTOK_POOL_DIAGNOSTICS", System.getenv("SHITTOK_POOL_DIAGNOSTICS") ?: "false")
+        buildConfigField("String", "SOURCE_REVISION", "\"${System.getenv("ZEROCHILL_SOURCE_SHA") ?: "local"}\"")
         buildConfigField(
             "String",
             "FEEDBACK_ENDPOINT",
@@ -32,6 +37,16 @@ android {
             "String",
             "ANALYTICS_ENDPOINT",
             "\"${System.getenv("ANALYTICS_ENDPOINT") ?: "https://fketutffusxgjxjlckci.supabase.co/functions/v1/analytics-ingest"}\""
+        )
+        buildConfigField(
+            "String",
+            "ACCOUNT_SUPABASE_URL",
+            "\"${System.getenv("SUPABASE_URL") ?: "https://fketutffusxgjxjlckci.supabase.co"}\""
+        )
+        buildConfigField(
+            "String",
+            "ACCOUNT_SUPABASE_PUBLISHABLE_KEY",
+            "\"${System.getenv("SUPABASE_PUBLISHABLE_KEY") ?: ""}\""
         )
         buildConfigField(
             "String",
@@ -93,7 +108,20 @@ android {
     }
 }
 
+// Native Robolectric surface fixtures share a JVM with the complete regression suite.
+// Budget test memory explicitly; this does not change the application's heap or APK.
+tasks.withType<org.gradle.api.tasks.testing.Test>().configureEach {
+    maxHeapSize = "1g"
+}
+
+kotlin { jvmToolchain(17) }
+
 dependencies {
+    implementation(platform("androidx.compose:compose-bom:2026.06.01"))
+    implementation("androidx.compose.ui:ui")
+    implementation("androidx.compose.foundation:foundation")
+    implementation("androidx.compose.animation:animation")
+    implementation("androidx.compose.material3:material3")
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.json:json:20240303")
     testImplementation("org.robolectric:robolectric:4.16")
@@ -112,11 +140,13 @@ dependencies {
 
     baselineProfile(project(":baselineprofile"))
 
-    val media3Version = "1.9.4"
+    val media3Version = "1.11.1"
     implementation("androidx.media3:media3-exoplayer:$media3Version")
+    implementation("androidx.media3:media3-common-ktx:$media3Version")
     implementation("androidx.media3:media3-exoplayer-hls:$media3Version")
     implementation("androidx.media3:media3-exoplayer-dash:$media3Version")
     implementation("androidx.media3:media3-ui:$media3Version")
+    implementation("androidx.media3:media3-inspector-frame:$media3Version")
 }
 
 baselineProfile {

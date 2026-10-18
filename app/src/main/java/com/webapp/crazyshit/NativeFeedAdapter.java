@@ -67,6 +67,8 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
     }
 
     private final Context context;
+    private final PreloadRequestTracker directThumbnailPreloads =
+            new PreloadRequestTracker(256);
     private final List<NativeContentItem> items = new ArrayList<>();
     private final Set<String> itemUrls = new HashSet<>();
     private final Listener listener;
@@ -408,7 +410,7 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
     ) {
         MaterialCardView card = new MaterialCardView(parent.getContext());
         card.setTag(STYLE_TAG);
-        ZeroChillUi.styleMaterialCard(card, R.dimen.zc_radius_medium);
+        ZeroChillUi.styleMediaCard(card, R.dimen.zc_radius_medium);
         card.setRadius(dp(parent, radius));
         ZeroChillMotion.installPressFeedback(card);
         RecyclerView.LayoutParams params = new RecyclerView.LayoutParams(
@@ -646,17 +648,14 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
         holder.overlayComments.setVisibility(View.GONE);
         holder.overlayComments.setOnClickListener(null);
 
-        if (!meme && item.comments != null && !item.comments.isEmpty()) {
-            String compact = compactCount(item.comments);
+        if (!meme && item.isVideo() && item.url != null && !item.url.isEmpty()) {
             if (viewMode == VIEW_CARDS || viewMode == VIEW_POSTERS) {
                 holder.overlayComments.setVisibility(View.VISIBLE);
-                holder.overlayComments.setText(viewMode == VIEW_CARDS
-                        ? compact + " comments"
-                        : "💬 " + compact);
+                holder.overlayComments.setText(viewMode == VIEW_CARDS ? "Comments" : "💬");
                 holder.overlayComments.setOnClickListener(v -> listener.onComments(item));
             } else {
                 holder.comments.setVisibility(View.VISIBLE);
-                holder.comments.setText("💬 " + compact);
+                holder.comments.setText("💬 Comments");
                 holder.comments.setOnClickListener(v -> listener.onComments(item));
             }
         }
@@ -713,7 +712,7 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
         holder.watchBadge.setVisibility(View.GONE);
         holder.progressTrack.setVisibility(View.GONE);
         holder.progressFill.setScaleX(0f);
-        holder.card.setStrokeColor(ZeroChillUi.color(holder.card.getContext(), R.color.zc_edge));
+        holder.card.setStrokeWidth(0);
         if (item == null || item.isMeme()) return;
 
         PlaybackHistoryStore.Item history = playbackByUrl.get(item.url);
@@ -729,7 +728,6 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
                     R.dimen.zc_radius_pill
             ));
             holder.watchBadge.setVisibility(View.VISIBLE);
-            holder.card.setStrokeColor(ZeroChillUi.color(holder.card.getContext(), R.color.zc_divider));
             return;
         }
 
@@ -742,7 +740,6 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
                 R.dimen.zc_radius_pill
         ));
         holder.watchBadge.setVisibility(View.VISIBLE);
-        holder.card.setStrokeColor(ZeroChillUi.color(holder.card.getContext(), R.color.zc_cyan_dim));
 
         if (history.durationMs > 0L) {
             float fraction = Math.max(0f, Math.min(1f, history.positionMs / (float) history.durationMs));
@@ -787,6 +784,7 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
                 .load(source)
                 .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
                 .dontAnimate()
+                .transition(ThumbnailFades.thumbnail())
                 .placeholder(new ColorDrawable(ZeroChillUi.color(
                         holder.image.getContext(), R.color.zc_surface_glass_strong)))
                 .error(new ColorDrawable(ZeroChillUi.color(
@@ -842,9 +840,13 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
 
     private void preloadDirectThumbnail(NativeContentItem item) {
         if (item == null || item.isSection() || item.imageUrl == null || item.imageUrl.isEmpty()) return;
-        Object source = item.imageUrl.startsWith("file://")
-                ? item.imageUrl
-                : withSiteHeaders(item.imageUrl, item.url);
+        String imageUrl = item.imageUrl.trim();
+        if (imageUrl.isEmpty()) return;
+        String preloadKey = imageUrl + "\n" + (item.url == null ? "" : item.url.trim());
+        if (!directThumbnailPreloads.markIfNew(preloadKey)) return;
+        Object source = imageUrl.startsWith("file://")
+                ? imageUrl
+                : withSiteHeaders(imageUrl, item.url);
         Glide.with(context)
                 .load(source)
                 .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)

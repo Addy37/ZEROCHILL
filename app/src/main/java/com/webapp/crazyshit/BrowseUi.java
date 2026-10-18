@@ -18,8 +18,8 @@ import java.util.function.Consumer;
 /** Common spacing, focus targets and inset handling for native browsing screens. */
 final class BrowseUi {
     static final int BACKGROUND = Color.BLACK;
-    static final int SURFACE = Color.rgb(20, 20, 24);
-    static final int MUTED = Color.rgb(174, 174, 184);
+    static final int SURFACE = UiPalette.SURFACE;
+    static final int MUTED = UiPalette.TEXT_SECONDARY;
     private BrowseUi() { }
 
     static int dp(Context context, int value) {
@@ -48,7 +48,7 @@ final class BrowseUi {
         action.setMinHeight(dp(context, 48));
         action.setMinWidth(dp(context, 48));
         action.setContentDescription(description);
-        action.setBackground(rounded(context, SURFACE, 14));
+        ZeroChillUi.styleAction(action, false);
         action.setFocusable(true);
         action.setOnClickListener(click);
         return action;

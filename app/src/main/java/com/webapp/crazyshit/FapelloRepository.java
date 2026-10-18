@@ -1242,6 +1242,31 @@ final class FapelloRepository {
                 .replace(".th.", ".");
     }
 
+    /** A listing photo already carries its media identity; a post-page fetch is optional. */
+    static String photoUrlFromItem(NativeContentItem item) {
+        if (item == null || !item.isImage() || !isFapelloUrl(item.url)) return "";
+        String image = isPhotoUrl(item.url) ? item.url : item.imageUrl;
+        if (!isFapelloUrl(image) || !isPhotoUrl(image)) return "";
+        String original = originalUrlFromPreview(image);
+        return original.isEmpty() ? image : original;
+    }
+
+    private static boolean isPhotoUrl(String url) {
+        return url != null && url.matches("(?i)^https://[^?#]+\\.(?:jpg|jpeg|png|webp|avif)(?:[?#].*)?$");
+    }
+
+    static String originalUrlFromPreview(String previewUrl) {
+        if (previewUrl == null || !isFapelloUrl(previewUrl)) return "";
+        String clean = previewUrl.trim();
+        if (!clean.matches("(?i)^https://[^?#]+\\.(?:jpg|jpeg|png|webp|avif)(?:[?#].*)?$")) {
+            return "";
+        }
+        String original = clean.replace("_300px", "")
+                .replace(".md.", ".")
+                .replace(".th.", ".");
+        return original.equals(clean) ? "" : original;
+    }
+
     private boolean isDirectMedia(String value) {
         return value != null && DIRECT_MEDIA.matcher(value).find();
     }
@@ -1339,7 +1364,10 @@ final class FapelloRepository {
     }
 
     private static String cleanStatic(String value) {
-        return value == null ? "" : value.replace('\u00a0', ' ').replaceAll("\\s+", " ").trim();
+        if (value == null) return "";
+        String decoded = org.jsoup.parser.Parser.unescapeEntities(
+                value.replaceAll("(?i)&amp;", "&"), false);
+        return decoded.replace('\u00a0', ' ').replaceAll("\\s+", " ").trim();
     }
 
     private String fileTitle(String url) {

@@ -98,9 +98,12 @@ final class OnlyFapCreatorSearchAdapter
         Context context = parent.getContext();
 
         MaterialCardView card = new MaterialCardView(context);
-        card.setCardBackgroundColor(ZeroChillUi.color(context, R.color.zc_surface_glass));
-        card.setRadius(dp(context, 16));
-        card.setStrokeWidth(dp(context, 1));
+        card.setCardBackgroundColor(Color.TRANSPARENT);
+        card.setTag(R.id.zerochill_surface_styled, true);
+        card.setCardElevation(0f);
+        card.setForeground(new SearchResultDivider(context));
+        card.setRadius(0);
+        card.setStrokeWidth(0);
         card.setStrokeColor(ZeroChillUi.color(context, R.color.zc_divider));
         card.setRippleColor(android.content.res.ColorStateList.valueOf(
                 ZeroChillUi.color(context, R.color.zc_cyan_container)));
@@ -108,13 +111,8 @@ final class OnlyFapCreatorSearchAdapter
         card.setFocusable(true);
 
         RecyclerView.LayoutParams cardParams =
-                new RecyclerView.LayoutParams(-1, dp(context, 116));
-        cardParams.setMargins(
-                dp(context, 10),
-                dp(context, 5),
-                dp(context, 10),
-                dp(context, 5)
-        );
+                new RecyclerView.LayoutParams(-1, dp(context, 80));
+        cardParams.setMargins(0, 0, 0, 0);
         card.setLayoutParams(cardParams);
 
         LinearLayout row = new LinearLayout(context);
@@ -132,7 +130,7 @@ final class OnlyFapCreatorSearchAdapter
         avatar.setScaleType(ImageView.ScaleType.CENTER_CROP);
         avatar.setBackgroundColor(ZeroChillUi.color(context, R.color.zc_surface_pressed));
         avatar.setContentDescription(null);
-        row.addView(avatar, new LinearLayout.LayoutParams(dp(context, 54), dp(context, 54)));
+        row.addView(avatar, new LinearLayout.LayoutParams(dp(context, 44), dp(context, 44)));
 
         LinearLayout copy = new LinearLayout(context);
         copy.setOrientation(LinearLayout.VERTICAL);
@@ -142,14 +140,15 @@ final class OnlyFapCreatorSearchAdapter
 
         TextView badge = new TextView(context);
         badge.setText("OnlyFap");
-        badge.setTextColor(Color.BLACK);
+        badge.setTextColor(UiPalette.TEXT_SECONDARY);
         badge.setTextSize(10.5f);
         badge.setTypeface(null, android.graphics.Typeface.BOLD);
         badge.setGravity(Gravity.CENTER);
-        badge.setBackground(BrowseUi.rounded(context, UiPalette.PRIMARY, 8));
+        badge.setBackground(BrowseUi.rounded(context, UiPalette.RAISED, 8));
         LinearLayout.LayoutParams badgeParams =
                 new LinearLayout.LayoutParams(-2, dp(context, 20));
         badgeParams.bottomMargin = dp(context, 4);
+        badge.setVisibility(android.view.View.GONE);
         copy.addView(badge, badgeParams);
 
         TextView name = new TextView(context);
@@ -162,15 +161,15 @@ final class OnlyFapCreatorSearchAdapter
 
         TextView handle = new TextView(context);
         handle.setTextColor(ZeroChillUi.color(context, R.color.zc_text_muted));
-        handle.setTextSize(11.5f);
+        handle.setTextSize(12f);
         handle.setSingleLine(true);
         handle.setEllipsize(TextUtils.TruncateAt.END);
         copy.addView(handle, new LinearLayout.LayoutParams(-1, -2));
 
         TextView meta = new TextView(context);
         meta.setTextColor(ZeroChillUi.color(context, R.color.zc_text_secondary));
-        meta.setTextSize(11f);
-        meta.setMaxLines(2);
+        meta.setTextSize(12f);
+        meta.setMaxLines(1);
         meta.setEllipsize(TextUtils.TruncateAt.END);
         LinearLayout.LayoutParams metaParams = new LinearLayout.LayoutParams(-1, -2);
         metaParams.topMargin = dp(context, 3);
@@ -181,6 +180,7 @@ final class OnlyFapCreatorSearchAdapter
                 ZeroChillUi.color(context, R.color.zc_surface_pressed), 12));
         LinearLayout.LayoutParams previewParams =
                 new LinearLayout.LayoutParams(dp(context, 112), -1);
+        previewFrame.setVisibility(android.view.View.GONE);
         row.addView(previewFrame, previewParams);
 
         ImageView preview = new ImageView(context);
@@ -194,21 +194,31 @@ final class OnlyFapCreatorSearchAdapter
     @Override
     public void onBindViewHolder(@NonNull Holder holder, int position) {
         NativeContentItem item = items.get(position);
+        holder.bound = item;
         holder.name.setText(item.title);
         holder.handle.setText(creatorHandle(item));
         holder.meta.setText(metaText(item));
         holder.card.setContentDescription(item.title + ", OnlyFap creator");
         holder.card.setOnClickListener(v -> open.accept(item));
+        CreatorGalleryPreloader.warm(
+                holder.card.getContext(),
+                item,
+                position < 3
+                        ? CreatorGalleryPreloader.PRIORITY_HIGH
+                        : CreatorGalleryPreloader.PRIORITY_NORMAL
+        );
 
         if (!item.imageUrl.equals(holder.imageUrl)) {
             load(holder.avatar, item, true);
-            load(holder.preview, item, false);
+            // The source supplies one avatar URL, not a distinct media preview.
             holder.imageUrl = item.imageUrl;
         }
     }
 
     @Override
     public void onViewRecycled(@NonNull Holder holder) {
+        CreatorGalleryPreloader.cancelQueued(holder.bound);
+        holder.bound = null;
         Glide.with(holder.avatar).clear(holder.avatar);
         Glide.with(holder.preview).clear(holder.preview);
         holder.imageUrl = null;
@@ -244,7 +254,7 @@ final class OnlyFapCreatorSearchAdapter
                 Glide.with(target)
                         .load(source)
                         .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
-                        .transition(DrawableTransitionOptions.withCrossFade(200))
+                        .transition(circle ? ThumbnailFades.avatar() : ThumbnailFades.thumbnail())
                         .placeholder(R.drawable.ic_more_account)
                         .error(R.drawable.ic_more_account);
         if (circle) request.circleCrop();
@@ -296,6 +306,7 @@ final class OnlyFapCreatorSearchAdapter
         final TextView handle;
         final TextView meta;
         String imageUrl;
+        NativeContentItem bound;
 
         Holder(
                 MaterialCardView card,

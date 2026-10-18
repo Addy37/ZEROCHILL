@@ -3,6 +3,8 @@ package com.webapp.crazyshit;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
 public class VideoDetailProgressTest {
     @Test
@@ -19,5 +21,41 @@ public class VideoDetailProgressTest {
         assertEquals(0L, VideoDetailActivity.portraitSeekPosition(-10, 1000, 100_000L));
         assertEquals(100_000L, VideoDetailActivity.portraitSeekPosition(1200, 1000, 100_000L));
         assertEquals(0L, VideoDetailActivity.portraitSeekPosition(500, 0, 100_000L));
+    }
+
+    @Test
+    public void orientationMatchWaitsForRequestedShowsOrientation() {
+        assertTrue(VideoDetailActivity.orientationMatches(
+                android.content.res.Configuration.ORIENTATION_PORTRAIT,
+                android.content.res.Configuration.ORIENTATION_PORTRAIT
+        ));
+        assertTrue(VideoDetailActivity.orientationMatches(
+                android.content.res.Configuration.ORIENTATION_LANDSCAPE,
+                android.content.res.Configuration.ORIENTATION_LANDSCAPE
+        ));
+        assertFalse(VideoDetailActivity.orientationMatches(
+                android.content.res.Configuration.ORIENTATION_PORTRAIT,
+                android.content.res.Configuration.ORIENTATION_LANDSCAPE
+        ));
+        assertFalse(VideoDetailActivity.orientationMatches(
+                android.content.res.Configuration.ORIENTATION_PORTRAIT,
+                android.content.res.Configuration.ORIENTATION_UNDEFINED
+        ));
+    }
+
+    @Test
+    public void videoSizeClassificationUsesDisplayAspectRatio() {
+        assertTrue(VideoDetailActivity.isPortraitVideoSize(1080, 1920, 1f));
+        assertFalse(VideoDetailActivity.isPortraitVideoSize(1920, 1080, 1f));
+        assertFalse(VideoDetailActivity.isPortraitVideoSize(1080, 1080, 1f));
+        assertTrue(VideoDetailActivity.isPortraitVideoSize(720, 1280, 0f));
+    }
+
+    @Test
+    public void showsLandscapeCanAutoRotateWhilePortraitAndDedicatedFullscreenRemainSeparate() {
+        assertTrue(ShowsPlaybackOrientationPolicy.shouldAutoRotateFromSensor(true, false, false));
+        assertTrue(ShowsPlaybackOrientationPolicy.shouldAutoRotateFromSensor(false, false, false));
+        assertFalse(ShowsPlaybackOrientationPolicy.shouldAutoRotateFromSensor(false, true, false));
+        assertFalse(ShowsPlaybackOrientationPolicy.shouldAutoRotateFromSensor(false, false, true));
     }
 }

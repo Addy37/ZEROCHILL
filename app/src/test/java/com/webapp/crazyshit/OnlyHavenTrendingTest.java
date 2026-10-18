@@ -11,28 +11,7 @@ import static org.junit.Assert.assertEquals;
 public class OnlyHavenTrendingTest {
     @Test
     public void creatorApiKeepsPopularityOrderAndContentCounts() throws Exception {
-        SourceConfig.OnlyHaven config = new SourceConfig.OnlyHaven(
-                true,
-                "https://cum.st/",
-                Collections.emptyList(),
-                "https://e1.cum.st/media/",
-                "https://img.cum.st/",
-                "test",
-                Collections.emptyMap(),
-                "",
-                1000,
-                0,
-                "creators?search={query}",
-                "api/v1/creators?q={query}&n={limit}&o={offset}",
-                "creators/{service}/{id}?page={page}",
-                "api/v1/{service}/user/{id}/posts?o={offset}&n={limit}",
-                "a[href*=/creators/]",
-                "a[href]",
-                "video[src]",
-                "img[src]",
-                Pattern.compile("(?i)^https?://(?:www\\.)?cum\\.st/creators/([a-z0-9_-]+)/([a-z0-9_-]+)(?:[/?#].*)?$"),
-                Pattern.compile("(?i)https?://[^\\s\\\"'<>]+")
-        );
+        SourceConfig.OnlyHaven config = config("https://img.cum.st/");
 
         String json = "{\"creators\":["
                 + "{\"service\":\"onlyfans\",\"id\":\"first\",\"name\":\"First\",\"avatarThumbhash\":\"abc123hash\",\"postCount\":42,\"dmCount\":3},"
@@ -55,13 +34,18 @@ public class OnlyHavenTrendingTest {
     }
 
     @Test
-    public void onlyFapTopModeIsPresentedAsTrending() {
-        assertEquals("Trending", FapzoneCreatorRepository.titleFor(
+    public void onlyFapTopModeIsPresentedAsDiscover() {
+        assertEquals("Discover", FapzoneCreatorRepository.titleFor(
                 FapzoneCreatorRepository.MODE_TOP_50
         ));
-        assertEquals("LIVE", FapzoneCreatorRepository.badgeFor(
+        assertEquals("Random picks from Fapello · fresh each visit",
+                FapzoneCreatorRepository.hintFor(
+                        FapzoneCreatorRepository.MODE_TOP_50
+                ));
+        assertEquals("MIX", FapzoneCreatorRepository.badgeFor(
                 FapzoneCreatorRepository.MODE_TOP_50
         ));
+        assertEquals(16, FapzoneCreatorRepository.DISCOVER_ITEMS);
     }
     @Test
     public void trendingArtworkFallsBackToGalleryPreview() {
@@ -80,6 +64,31 @@ public class OnlyHavenTrendingTest {
         assertEquals(
                 "https://img.cum.st/thumbnail/abc/preview.webp",
                 FapzoneCreatorRepository.chooseGalleryPreview(media)
+        );
+    }
+
+    static SourceConfig.OnlyHaven config(String imageBase) {
+        return new SourceConfig.OnlyHaven(
+                true,
+                "https://cum.st/",
+                Collections.emptyList(),
+                "https://e1.cum.st/media/",
+                imageBase,
+                "test",
+                Collections.emptyMap(),
+                "",
+                1000,
+                0,
+                "creators?search={query}",
+                "api/v1/creators?q={query}&n={limit}&o={offset}",
+                "creators/{service}/{id}?page={page}",
+                "api/v1/{service}/user/{id}/posts?o={offset}&n={limit}",
+                "a[href*=/creators/]",
+                "a[href]",
+                "video[src]",
+                "img[src]",
+                Pattern.compile("(?i)^https?://(?:www\\.)?cum\\.st/creators/([a-z0-9_-]+)/([a-z0-9_-]+)(?:[/?#].*)?$"),
+                Pattern.compile("(?i)https?://[^\\s\\\"'<>]+")
         );
     }
 

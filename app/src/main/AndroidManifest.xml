@@ -21,6 +21,9 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.CrazyShit"
         android:usesCleartextTraffic="false">
+        <activity android:name=".ZeroChillAccountSecurityActivity" android:exported="false" android:windowSoftInputMode="adjustResize" />
+        <activity android:name=".ZeroChillSocialSettingsActivity" android:exported="false" android:windowSoftInputMode="adjustResize" />
+
 
         <service
             android:name=".AcceleratedDownloadService"
@@ -38,25 +41,51 @@
         </provider>
 
         <activity
-            android:name=".LoginActivity"
+            android:name=".ZeroChillInboxActivity"
             android:screenOrientation="portrait"
             android:enableOnBackInvokedCallback="true"
             android:exported="false" />
 
         <activity
-            android:name=".ProfileActivity"
+            android:name=".ZeroChillMessageActivity"
+            android:screenOrientation="portrait"
+            android:enableOnBackInvokedCallback="true"
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize" />
+
+        <activity
+            android:name=".ZeroChillPublicProfileActivity"
             android:screenOrientation="portrait"
             android:enableOnBackInvokedCallback="true"
             android:exported="false" />
 
         <activity
-            android:name=".CommentsActivity"
+            android:name=".ZeroChillAccountActivity"
             android:screenOrientation="portrait"
             android:enableOnBackInvokedCallback="true"
-            android:exported="false" />
+            android:exported="true"
+            android:launchMode="singleTop"
+            android:theme="@style/Theme.ZeroChill.Account"
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="com.addy37.zerochill"
+                    android:host="auth"
+                    android:path="/confirmed" />
+            </intent-filter>
+        </activity>
 
         <activity
             android:name=".SettingsActivity"
+            android:screenOrientation="portrait"
+            android:enableOnBackInvokedCallback="true"
+            android:exported="false" />
+
+        <activity
+            android:name=".StartupWizardActivity"
             android:screenOrientation="portrait"
             android:enableOnBackInvokedCallback="true"
             android:exported="false" />
@@ -67,6 +96,17 @@
             android:enableOnBackInvokedCallback="true"
             android:exported="false"
             android:windowSoftInputMode="adjustResize" />
+
+        <activity
+            android:name=".FeedbackThreadActivity"
+            android:screenOrientation="portrait"
+            android:enableOnBackInvokedCallback="true"
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize" />
+
+        <activity
+            android:name=".LikedVideosActivity"
+            android:exported="false" />
 
         <activity
             android:name=".FavoritesActivity"
@@ -87,11 +127,23 @@
             android:exported="false" />
 
         <activity
+            android:name=".UpdateInboxActivity"
+            android:screenOrientation="portrait"
+            android:enableOnBackInvokedCallback="true"
+            android:exported="false" />
+
+        <activity
             android:name=".CreatorsActivity"
             android:screenOrientation="portrait"
             android:enableOnBackInvokedCallback="true"
             android:exported="false"
             android:windowSoftInputMode="adjustResize" />
+
+        <activity
+            android:name=".CreatorAvatarCropActivity"
+            android:screenOrientation="portrait"
+            android:enableOnBackInvokedCallback="true"
+            android:exported="false" />
 
         <activity
             android:name=".SearchActivity"
@@ -168,3 +220,4 @@
     </application>
 
 </manifest>
+

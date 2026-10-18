@@ -49,6 +49,7 @@ final class SourceConfig {
     final WebVideo theYnc;
     final WebVideo itemFix;
     final OnlyHaven onlyHaven;
+    final BaddieHub baddieHub;
     private final String serialized;
 
     private SourceConfig(
@@ -65,6 +66,7 @@ final class SourceConfig {
             WebVideo theYnc,
             WebVideo itemFix,
             OnlyHaven onlyHaven,
+            BaddieHub baddieHub,
             String serialized
     ) {
         this.schemaVersion = schemaVersion;
@@ -80,6 +82,7 @@ final class SourceConfig {
         this.theYnc = theYnc;
         this.itemFix = itemFix;
         this.onlyHaven = onlyHaven;
+        this.baddieHub = baddieHub;
         this.serialized = serialized;
     }
 
@@ -112,7 +115,7 @@ final class SourceConfig {
             JSONObject sources = requiredObject(root, "sources");
             rejectUnknown(sources, set(
                     "fapello", "bunkr", "wikifeet", "wikifeetx",
-                    "kaotic", "theync", "itemfix", "onlyhaven"
+                    "kaotic", "theync", "itemfix", "onlyhaven", "baddiehub"
             ), "sources");
             Fapello fapello = parseFapello(requiredObject(sources, "fapello"));
             Bunkr bunkr = parseBunkr(requiredObject(sources, "bunkr"));
@@ -122,11 +125,14 @@ final class SourceConfig {
             WebVideo theYnc = parseWebVideo(requiredObject(sources, "theync"), "theync");
             WebVideo itemFix = parseWebVideo(requiredObject(sources, "itemfix"), "itemfix");
             OnlyHaven onlyHaven = parseOnlyHaven(requiredObject(sources, "onlyhaven"));
+            BaddieHub baddieHub = sources.has("baddiehub")
+                    ? parseBaddieHub(requiredObject(sources, "baddiehub"))
+                    : defaultBaddieHub();
             String canonical = root.toString();
             return new SourceConfig(schemaVersion, configVersion, updatedAt,
                     sourceKillSwitchesEnabled, fallbacksEnabled,
                     fapello, bunkr, wikiFeet, wikiFeetX,
-                    kaotic, theYnc, itemFix, onlyHaven, canonical);
+                    kaotic, theYnc, itemFix, onlyHaven, baddieHub, canonical);
         } catch (ValidationException error) {
             throw error;
         } catch (JSONException error) {
@@ -306,6 +312,67 @@ final class SourceConfig {
                 selector(selectors, "playableImage"),
                 regex(patterns, "creatorUrl"),
                 regex(patterns, "scriptMediaUrl")
+        );
+    }
+
+    private static BaddieHub parseBaddieHub(JSONObject value)
+            throws ValidationException, JSONException {
+        rejectUnknown(value, set(
+                "enabled", "baseUrl", "fallbackDomains", "userAgent", "requestHeaders",
+                "refererOverride", "requestTimeoutMs", "retryCount", "routes", "selectors"
+        ), "sources.baddiehub");
+        JSONObject routes = requiredObject(value, "routes");
+        rejectUnknown(routes, set(
+                "listingFirst", "listingPage", "categoriesFirst", "categoriesPage",
+                "categoryFirst", "categoryPage"
+        ), "sources.baddiehub.routes");
+        JSONObject selectors = requiredObject(value, "selectors");
+        rejectUnknown(selectors, set(
+                "categoryLinks", "cardLinks", "playableFrame", "playableVideo"
+        ), "sources.baddiehub.selectors");
+        return new BaddieHub(
+                requiredBoolean(value, "enabled"),
+                httpsBase(value, "baseUrl"),
+                httpsList(value, "fallbackDomains"),
+                userAgent(value),
+                headers(value, "requestHeaders"),
+                optionalHttpsUrl(value, "refererOverride"),
+                timeout(value, "requestTimeoutMs"),
+                retryCount(value),
+                route(routes, "listingFirst", set("page")),
+                route(routes, "listingPage", set("page")),
+                route(routes, "categoriesFirst", set("page")),
+                route(routes, "categoriesPage", set("page")),
+                route(routes, "categoryFirst", set("slug", "page")),
+                route(routes, "categoryPage", set("slug", "page")),
+                selector(selectors, "categoryLinks"),
+                selector(selectors, "cardLinks"),
+                selector(selectors, "playableFrame"),
+                selector(selectors, "playableVideo")
+        );
+    }
+
+    static BaddieHub defaultBaddieHub() {
+        return new BaddieHub(
+                true,
+                "https://baddiehub.com/",
+                Collections.emptyList(),
+                "Mozilla/5.0 (Linux; Android 16) AppleWebKit/537.36 " +
+                        "(KHTML, like Gecko) Chrome/140.0 Mobile Safari/537.36",
+                Collections.singletonMap("Accept-Language", "en-US,en;q=0.9"),
+                "",
+                12_000,
+                0,
+                "?filter=latest",
+                "page/{page}/?filter=latest",
+                "categories/",
+                "categories/page/{page}/",
+                "category/{slug}/",
+                "category/{slug}/page/{page}/",
+                "a[href*='/category/']",
+                "a[href]",
+                "iframe[src*='player-x.php'][src*='q=']",
+                "video source[src],source[src],video[src]"
         );
     }
 
@@ -656,6 +723,58 @@ final class SourceConfig {
             this.mediaLinksSelector = mediaLinksSelector; this.playableVideoSelector = playableVideoSelector;
             this.playableImageSelector = playableImageSelector; this.creatorUrlPattern = creatorUrlPattern;
             this.scriptMediaUrlPattern = scriptMediaUrlPattern;
+        }
+    }
+
+    static final class BaddieHub {
+        final boolean enabled;
+        final String baseUrl, userAgent, refererOverride;
+        final List<String> fallbackDomains;
+        final Map<String, String> requestHeaders;
+        final int requestTimeoutMs, retryCount;
+        final String listingFirstRoute, listingPageRoute, categoriesFirstRoute,
+                categoriesPageRoute, categoryFirstRoute, categoryPageRoute;
+        final String categoryLinksSelector, cardLinksSelector, playableFrameSelector,
+                playableVideoSelector;
+
+        BaddieHub(
+                boolean enabled,
+                String baseUrl,
+                List<String> fallbackDomains,
+                String userAgent,
+                Map<String, String> requestHeaders,
+                String refererOverride,
+                int requestTimeoutMs,
+                int retryCount,
+                String listingFirstRoute,
+                String listingPageRoute,
+                String categoriesFirstRoute,
+                String categoriesPageRoute,
+                String categoryFirstRoute,
+                String categoryPageRoute,
+                String categoryLinksSelector,
+                String cardLinksSelector,
+                String playableFrameSelector,
+                String playableVideoSelector
+        ) {
+            this.enabled = enabled;
+            this.baseUrl = baseUrl;
+            this.fallbackDomains = fallbackDomains;
+            this.userAgent = userAgent;
+            this.requestHeaders = requestHeaders;
+            this.refererOverride = refererOverride;
+            this.requestTimeoutMs = requestTimeoutMs;
+            this.retryCount = retryCount;
+            this.listingFirstRoute = listingFirstRoute;
+            this.listingPageRoute = listingPageRoute;
+            this.categoriesFirstRoute = categoriesFirstRoute;
+            this.categoriesPageRoute = categoriesPageRoute;
+            this.categoryFirstRoute = categoryFirstRoute;
+            this.categoryPageRoute = categoryPageRoute;
+            this.categoryLinksSelector = categoryLinksSelector;
+            this.cardLinksSelector = cardLinksSelector;
+            this.playableFrameSelector = playableFrameSelector;
+            this.playableVideoSelector = playableVideoSelector;
         }
     }
 

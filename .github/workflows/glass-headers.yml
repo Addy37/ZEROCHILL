@@ -1,0 +1,38 @@
+name: Glass headers focused validation
+on:
+  push:
+    branches: [feature/subtle-glass-headers]
+permissions:
+  contents: read
+jobs:
+  focused:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v4
+      - uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: '8.11.1'
+      - name: Header geometry and existing chrome tests
+        run: >-
+          gradle --no-daemon :app:testDebugUnitTest
+          --tests 'com.webapp.crazyshit.GlassHeaderLayoutTest'
+          --tests 'com.webapp.crazyshit.HeaderGlassMaterialTest'
+          --tests 'com.webapp.crazyshit.VisualRefreshTest'
+          --tests 'com.webapp.crazyshit.NavigationIaTest'
+          --tests 'com.webapp.crazyshit.BottomNavigationInsetsTest'
+          --tests 'com.webapp.crazyshit.ShowsHubStateTest'
+          --tests 'com.webapp.crazyshit.PrimaryTabNavigationTest'
+      - name: Debug build
+        run: gradle --no-daemon :app:assembleDebug
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: glass-header-validation
+          path: |
+            app/build/reports/tests/testDebugUnitTest
+            app/build/outputs/apk/debug/*.apk

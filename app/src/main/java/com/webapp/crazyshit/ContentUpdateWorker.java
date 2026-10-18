@@ -19,11 +19,9 @@ import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -31,13 +29,7 @@ import java.util.regex.Pattern;
 public final class ContentUpdateWorker extends Worker {
     private static final String APP_PREFS = "app_prefs";
     private static final String STATE_PREFS = "notification_state";
-    private static final String STABLE_API =
-            "https://api.github.com/repos/Addy37/CrazyShitAndroid/releases/latest";
-    private static final String RELEASES_API =
-            "https://api.github.com/repos/Addy37/CrazyShitAndroid/releases?per_page=100";
     private static final Pattern NUMBER = Pattern.compile("\\d+");
-    private static final int MAX_SEEN = 160;
-    private static final int MAX_REASONABLE_NEW_ITEMS = 20;
 
     public ContentUpdateWorker(@NonNull Context context, @NonNull WorkerParameters params) {
         super(context, params);
@@ -60,21 +52,26 @@ public final class ContentUpdateWorker extends Worker {
                 .apply();
 
         if (prefs.getBoolean(NotificationCoordinator.PREF_NEW_VIDEO_ALERTS, true)) {
-            for (SourceCheck check : sourceChecks(context)) {
-                attempted++;
-                CheckResult result = runSourceCheck(context, state, check, alerts);
-                statuses.put(check.key, result.status);
-                if (result.success) succeeded++;
+            if (CreatorFavoriteStore.names(context).isEmpty()) {
+                for (String source : new String[] { "bunkr", "fapello", "onlyhaven" })
+                    statuses.put(source, "No favorite creators");
+            } else {
+                for (SourceCheck check : sourceChecks(context)) {
+                    attempted++;
+                    CheckResult result = runSourceCheck(context, state, check, alerts);
+                    statuses.put(check.key, result.status);
+                    if (result.success) succeeded++;
+                }
             }
         } else {
-            for (SourceCheck check : sourceChecks(context)) {
-                statuses.put(check.key, "Content alerts off");
-            }
+            for (String source : new String[] { "bunkr", "fapello", "onlyhaven" })
+                statuses.put(source, "Favorite creator tracking off");
         }
 
         if (!alerts.isEmpty()) {
-            NotificationCoordinator.showNewVideoNotifications(context, alerts);
+            UpdateInboxStore.record(context, alerts);
         }
+        NotificationCoordinator.clearContentNotifications(context);
 
         String updateStatus = prefs.getBoolean(NotificationCoordinator.PREF_UPDATE_ALERTS, true)
                 ? "Waiting to check"
@@ -94,15 +91,15 @@ public final class ContentUpdateWorker extends Worker {
                 .putLong(NotificationCoordinator.KEY_CHECK_FINISHED, System.currentTimeMillis())
                 .putString(
                         NotificationCoordinator.KEY_STATUS_CRAZYSHIT,
-                        status(statuses, "crazyshit")
+                        "Not tracked"
                 )
                 .putString(
                         NotificationCoordinator.KEY_STATUS_EFUKT,
-                        status(statuses, "efukt")
+                        "Not tracked"
                 )
                 .putString(
                         NotificationCoordinator.KEY_STATUS_KAOTIC,
-                        status(statuses, "kaotic")
+                        "Not tracked"
                 )
                 .putString(
                         NotificationCoordinator.KEY_STATUS_BUNKR,
@@ -132,41 +129,9 @@ public final class ContentUpdateWorker extends Worker {
 
     private List<SourceCheck> sourceChecks(Context context) {
         ArrayList<SourceCheck> checks = new ArrayList<>();
-        checks.add(new SourceCheck(
-                "crazyshit",
-                "CrazyShit",
-                () -> new CrazyShitRepository()
-                        .fetchFeed(context, CrazyShitRepository.HOME, 1)
-        ));
-        checks.add(new SourceCheck(
-                "efukt",
-                "EFukt",
-                () -> new EfuktRepository().fetchLatest(context)
-        ));
-        checks.add(new SourceCheck(
-                "kaotic",
-                "Kaotic",
-                () -> new WebVideoSourceRepository().fetchFeed(
-                        context,
-                        WebVideoSourceRepository.Source.KAOTIC,
-                        1
-                )
-        ));
-        checks.add(new SourceCheck(
-                "bunkr",
-                "Bunkr",
-                () -> new BunkrRepository().fetchAlbums(context, 1)
-        ));
-        checks.add(new SourceCheck(
-                "fapello",
-                "Fapello",
-                () -> new FapelloRepository().fetchPopularVideos(context, 1)
-        ));
-        checks.add(new SourceCheck(
-                "onlyhaven",
-                "OnlyHaven",
-                () -> onlyHavenTrending(context)
-        ));
+        SharedPreferences state = context.getSharedPreferences(STATE_PREFS, Context.MODE_PRIVATE);
+        for (FavoriteCreatorUpdateScanner.Profile profile : FavoriteCreatorUpdateScanner.plan(context, state))
+            checks.add(new SourceCheck(profile, () -> profile.fetch(context)));
         return checks;
     }
 
@@ -180,44 +145,14 @@ public final class ContentUpdateWorker extends Worker {
             List<NativeContentItem> items = check.loader.load();
             int itemCount = countFeedItems(items);
             if (itemCount == 0) throw new Exception("No content found");
-            boolean alreadyWatching =
-                    state.getBoolean("seen_initialized_" + check.key, false);
-            NotificationCoordinator.SourceAlert alert = findNew(
-                    context,
-                    check.key,
-                    check.label,
-                    items
-            );
+            boolean alreadyWatching = state.getBoolean("seen_initialized_" + check.profile.watchKey, false);
+            NotificationCoordinator.SourceAlert alert =
+                    FavoriteCreatorUpdateScanner.detect(state, check.profile, items);
             if (alert != null) alerts.add(alert);
             return new CheckResult(true, sourceStatus(alreadyWatching, itemCount, alert));
         } catch (Exception error) {
             return new CheckResult(false, friendlyError(error));
         }
-    }
-
-    private List<NativeContentItem> onlyHavenTrending(Context context) throws Exception {
-        ArrayList<NativeContentItem> items = new ArrayList<>();
-        for (OnlyHavenRepository.Creator creator :
-                new OnlyHavenRepository().fetchTrendingCreators(context, 24)) {
-            if (creator == null || creator.url == null || creator.url.trim().isEmpty()) continue;
-            if (creator.isKnownEmpty()) continue;
-            String title = creator.name == null || creator.name.trim().isEmpty()
-                    ? "OnlyHaven creator"
-                    : creator.name.trim();
-            String count = creator.postCount >= 0
-                    ? creator.postCount + (creator.postCount == 1 ? " post" : " posts")
-                    : "";
-            items.add(new NativeContentItem(
-                    NativeContentItem.KIND_SERIES,
-                    title,
-                    creator.url,
-                    creator.imageUrl,
-                    count,
-                    "OnlyHaven",
-                    ""
-            ));
-        }
-        return items;
     }
 
     private String status(Map<String, String> statuses, String key) {
@@ -262,75 +197,6 @@ public final class ContentUpdateWorker extends Worker {
         return "Could not check source";
     }
 
-    private NotificationCoordinator.SourceAlert findNew(
-            Context context,
-            String key,
-            String source,
-            List<NativeContentItem> rawItems
-    ) {
-        LinkedHashMap<String, NativeContentItem> current = new LinkedHashMap<>();
-        if (rawItems != null) {
-            for (NativeContentItem item : rawItems) {
-                if (item == null || item.isSection() || item.url == null || item.url.trim().isEmpty()) continue;
-                current.putIfAbsent(item.url.trim(), item);
-            }
-        }
-        if (current.isEmpty()) return null;
-
-        SharedPreferences state = context.getSharedPreferences(STATE_PREFS, Context.MODE_PRIVATE);
-        String initializedKey = "seen_initialized_" + key;
-        String seenKey = "seen_urls_" + key;
-        LinkedHashSet<String> seen = decode(state.getString(seenKey, ""));
-
-        if (!state.getBoolean(initializedKey, false)) {
-            saveSeen(state, initializedKey, seenKey, current.keySet(), seen);
-            return null;
-        }
-
-        ArrayList<NativeContentItem> added = new ArrayList<>();
-        for (NativeContentItem item : current.values()) {
-            if (!seen.contains(item.url)) added.add(item);
-        }
-        saveSeen(state, initializedKey, seenKey, current.keySet(), seen);
-
-        if (added.isEmpty() || added.size() > MAX_REASONABLE_NEW_ITEMS) return null;
-        return new NotificationCoordinator.SourceAlert(key, source, added);
-    }
-
-    private void saveSeen(
-            SharedPreferences state,
-            String initializedKey,
-            String seenKey,
-            Set<String> current,
-            Set<String> previous
-    ) {
-        LinkedHashSet<String> combined = new LinkedHashSet<>();
-        combined.addAll(current);
-        combined.addAll(previous);
-        StringBuilder encoded = new StringBuilder();
-        int count = 0;
-        for (String url : combined) {
-            if (url == null || url.trim().isEmpty()) continue;
-            if (count++ >= MAX_SEEN) break;
-            if (encoded.length() > 0) encoded.append('\n');
-            encoded.append(url.trim());
-        }
-        state.edit()
-                .putBoolean(initializedKey, true)
-                .putString(seenKey, encoded.toString())
-                .apply();
-    }
-
-    private LinkedHashSet<String> decode(String encoded) {
-        LinkedHashSet<String> result = new LinkedHashSet<>();
-        if (encoded == null || encoded.isEmpty()) return result;
-        for (String line : encoded.split("\\n")) {
-            String value = line.trim();
-            if (!value.isEmpty()) result.add(value);
-        }
-        return result;
-    }
-
     private interface SourceLoader {
         List<NativeContentItem> load() throws Exception;
     }
@@ -339,10 +205,12 @@ public final class ContentUpdateWorker extends Worker {
         final String key;
         final String label;
         final SourceLoader loader;
+        final FavoriteCreatorUpdateScanner.Profile profile;
 
-        SourceCheck(String key, String label, SourceLoader loader) {
-            this.key = key;
-            this.label = label;
+        SourceCheck(FavoriteCreatorUpdateScanner.Profile profile, SourceLoader loader) {
+            this.profile = profile;
+            this.key = profile.source;
+            this.label = profile.name;
             this.loader = loader;
         }
     }
@@ -363,6 +231,12 @@ public final class ContentUpdateWorker extends Worker {
         if (release == null) return;
         String current = currentVersion(context);
         if (compareVersions(release.version, current) > 0) {
+            UpdateInboxStore.recordAppUpdate(
+                    context,
+                    release.version,
+                    release.title,
+                    release.beta
+            );
             NotificationCoordinator.showUpdateNotification(
                     context,
                     release.version,
@@ -375,13 +249,13 @@ public final class ContentUpdateWorker extends Worker {
     }
 
     private Release fetchStable() throws Exception {
-        JSONObject release = new JSONObject(httpGet(STABLE_API));
+        JSONObject release = new JSONObject(httpGetFirst(ZeroChillReleaseEndpoints.stableApis()));
         if (release.optBoolean("draft", false)) return null;
         return parseRelease(release, false);
     }
 
     private Release fetchLatestBeta() throws Exception {
-        JSONArray releases = new JSONArray(httpGet(RELEASES_API));
+        JSONArray releases = new JSONArray(httpGetFirst(ZeroChillReleaseEndpoints.releasesApis()));
         Release latest = null;
         for (int i = 0; i < releases.length(); i++) {
             JSONObject release = releases.optJSONObject(i);
@@ -417,6 +291,19 @@ public final class ContentUpdateWorker extends Worker {
         if (!hasMatchingApk) return null;
         String title = release.optString("name", version);
         return new Release(version, title, beta);
+    }
+
+    private String httpGetFirst(List<String> addresses) throws Exception {
+        Exception lastError = null;
+        for (String address : addresses) {
+            try {
+                return httpGet(address);
+            } catch (Exception error) {
+                lastError = error;
+            }
+        }
+        if (lastError != null) throw lastError;
+        throw new Exception("No update endpoint was available");
     }
 
     private String httpGet(String address) throws Exception {

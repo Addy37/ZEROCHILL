@@ -55,9 +55,13 @@ final class ResponsiveFitmentController {
         } else if (activity instanceof FavoritesActivity) {
             installSafeInsets(activity);
             fitSingleColumn(activity, widthDp, 920);
-        } else if (activity instanceof CommentsActivity) {
-            fitSecondaryShell(activity, landscape, widthDp, 920, 56);
-        } else if (activity instanceof LoginActivity || activity instanceof ProfileActivity) {
+        } else if (activity instanceof ZeroChillMessageActivity) {
+            installSafeInsets(activity, true);
+            fitSecondaryShell(activity, landscape, widthDp, 980, 56);
+        } else if (activity instanceof ZeroChillAccountActivity
+                || activity instanceof ZeroChillPublicProfileActivity
+                || activity instanceof ZeroChillInboxActivity) {
+            installSafeInsets(activity);
             fitSecondaryShell(activity, landscape, widthDp, 980, 56);
         } else if (activity instanceof WebFallbackActivity) {
             fitSecondaryShell(activity, landscape, widthDp, 1100, 54);
@@ -199,6 +203,10 @@ final class ResponsiveFitmentController {
     }
 
     private static void installSafeInsets(Activity activity) {
+        installSafeInsets(activity, false);
+    }
+
+    private static void installSafeInsets(Activity activity, boolean includeIme) {
         if (INSET_TARGETS.containsKey(activity)) return;
         View content = activity.findViewById(android.R.id.content);
         View target = firstChild(content);
@@ -221,6 +229,10 @@ final class ResponsiveFitmentController {
                 top = safe.top;
                 right = safe.right;
                 bottom = safe.bottom;
+                if (includeIme) {
+                    android.graphics.Insets ime = insets.getInsets(WindowInsets.Type.ime());
+                    bottom = Math.max(bottom, ime.bottom);
+                }
             } else {
                 left = insets.getSystemWindowInsetLeft();
                 top = insets.getSystemWindowInsetTop();

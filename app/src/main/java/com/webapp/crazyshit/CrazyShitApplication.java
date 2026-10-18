@@ -15,11 +15,16 @@ public final class CrazyShitApplication extends Application {
     public void onCreate() {
         super.onCreate();
         AppPerformance.begin();
+        long initializationAt = android.os.SystemClock.elapsedRealtime();
+        android.os.Trace.beginSection("zc.startup.application");
+
+        SharedPreferences appPrefs = getSharedPreferences("app_prefs", MODE_PRIVATE);
+        StartupWizardPolicy.markFreshStorageIfEmpty(appPrefs);
+
+        PlaybackHistoryStore.initializeAsync(this);
         RemoteSourceConfigManager.initialize(this);
         RemoteSourceConfigManager.refreshInBackground(this);
         AnalyticsTracker.initialize(this);
-
-        SharedPreferences appPrefs = getSharedPreferences("app_prefs", MODE_PRIVATE);
         boolean needsMigration = appPrefs.getBoolean("minimize_on_back", true)
                 || appPrefs.getBoolean("swipe_down_minimize", true)
                 || appPrefs.contains("collapse_header_enabled")
@@ -36,7 +41,10 @@ public final class CrazyShitApplication extends Application {
         if (needsMigration) migratePreferences(appPrefs);
 
         AppShortcuts.publish(this);
-        NotificationCoordinator.initialize(this);
+        boolean startupWizardPending = StartupWizardPolicy.shouldShow(this);
+        if (!startupWizardPending) {
+            NotificationCoordinator.initialize(this);
+        }
 
         registerActivityLifecycleCallbacks(new ActivityLifecycleCallbacks() {
             @Override
@@ -60,12 +68,18 @@ public final class CrazyShitApplication extends Application {
             @Override
             public void onActivityResumed(Activity activity) {
                 PhoneOrientationPolicy.applyBrowsingOrientation(activity);
-                NotificationCoordinator.onAppForeground(activity);
+                ZeroChillToast.onResumed(activity);
+                if (!StartupWizardPolicy.shouldShow(activity)) {
+                    NotificationCoordinator.onAppForeground(activity);
+                }
                 UiFoundationCoordinator.onActivityResumed(activity);
+                if (!StartupWizardPolicy.shouldShow(activity)) SocialActivityCoordinator.onResumed(activity);
             }
 
             @Override
             public void onActivityPaused(Activity activity) {
+                ZeroChillToast.onPaused(activity);
+                SocialActivityCoordinator.onPaused(activity);
                 UiFoundationCoordinator.onActivityPaused(activity);
             }
 
@@ -85,6 +99,8 @@ public final class CrazyShitApplication extends Application {
                 UiFoundationCoordinator.onActivityDestroyed(activity);
             }
         });
+        android.os.Trace.endSection();
+        AppPerformance.record("Application initialization", android.os.SystemClock.elapsedRealtime() - initializationAt);
     }
 
     private void migratePreferences(SharedPreferences appPrefs) {

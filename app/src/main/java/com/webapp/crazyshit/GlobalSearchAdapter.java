@@ -150,39 +150,43 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
                 Configuration.ORIENTATION_LANDSCAPE;
         if (viewType == TYPE_SECTION) {
             TextView title = new TextView(parent.getContext());
-            title.setTextColor(Color.rgb(245, 245, 248));
-            title.setTextSize(landscape ? 16f : 17f);
+            title.setTextColor(UiPalette.TEXT_SECONDARY);
+            title.setTextSize(11.5f);
             title.setTypeface(null, android.graphics.Typeface.BOLD);
             title.setGravity(Gravity.CENTER_VERTICAL);
-            title.setPadding(dp(parent, 16), dp(parent, landscape ? 10 : 15), dp(parent, 16), dp(parent, 6));
-            title.setLayoutParams(new RecyclerView.LayoutParams(-1, dp(parent, landscape ? 46 : 52)));
+            title.setPadding(dp(parent, 12), dp(parent, 5), dp(parent, 12), dp(parent, 3));
+            title.setLayoutParams(new RecyclerView.LayoutParams(-1, dp(parent, 28)));
             return new SectionHolder(title);
         }
 
         MaterialCardView card = new MaterialCardView(parent.getContext());
-        card.setCardBackgroundColor(Color.rgb(25, 25, 29));
-        card.setRadius(dp(parent, 14));
-        card.setStrokeWidth(dp(parent, 1));
+        card.setCardBackgroundColor(Color.TRANSPARENT);
+        card.setTag(R.id.zerochill_surface_styled, true);
+        card.setCardElevation(0f);
+        card.setForeground(new SearchResultDivider(parent.getContext()));
+        card.setRadius(0);
+        card.setStrokeWidth(0);
         card.setStrokeColor(Color.rgb(51, 51, 58));
-        RecyclerView.LayoutParams cardParams = new RecyclerView.LayoutParams(-1, dp(parent, landscape ? 112 : 124));
-        cardParams.setMargins(dp(parent, 10), dp(parent, 5), dp(parent, 10), dp(parent, 5));
+        RecyclerView.LayoutParams cardParams = new RecyclerView.LayoutParams(-1, dp(parent, 84));
+        cardParams.setMargins(0, 0, 0, 0);
         card.setLayoutParams(cardParams);
 
         LinearLayout row = new LinearLayout(parent.getContext());
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(dp(parent, 12), dp(parent, 8), dp(parent, 8), dp(parent, 8));
         card.addView(row, new MaterialCardView.LayoutParams(-1, -1));
 
         ImageView image = new ImageView(parent.getContext());
         image.setScaleType(ImageView.ScaleType.CENTER_CROP);
         image.setBackgroundColor(Color.rgb(31, 31, 36));
-        LinearLayout.LayoutParams imageParams = new LinearLayout.LayoutParams(dp(parent, landscape ? 136 : 150), -1);
+        LinearLayout.LayoutParams imageParams = new LinearLayout.LayoutParams(dp(parent, 64), dp(parent, 64));
         row.addView(image, imageParams);
 
         LinearLayout text = new LinearLayout(parent.getContext());
         text.setOrientation(LinearLayout.VERTICAL);
         text.setGravity(Gravity.CENTER_VERTICAL);
-        text.setPadding(dp(parent, 13), dp(parent, landscape ? 7 : 9), dp(parent, 13), dp(parent, landscape ? 7 : 9));
+        text.setPadding(dp(parent, 12), 0, dp(parent, 8), 0);
         row.addView(text, new LinearLayout.LayoutParams(0, -1, 1f));
 
         TextView title = new TextView(parent.getContext());
@@ -196,7 +200,7 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
         TextView meta = new TextView(parent.getContext());
         meta.setTextColor(Color.rgb(174, 174, 184));
         meta.setTextSize(landscape ? 12f : 12.5f);
-        meta.setMaxLines(3);
+        meta.setMaxLines(1);
         meta.setEllipsize(android.text.TextUtils.TruncateAt.END);
         LinearLayout.LayoutParams metaParams = new LinearLayout.LayoutParams(-1, -2);
         metaParams.topMargin = dp(parent, 5);
@@ -246,6 +250,15 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
         result.meta.setText(metaText(item, entry.source));
         result.card.setContentDescription(item.title);
         result.card.setOnClickListener(v -> listener.onOpen(item));
+        if (item.isCreator()) {
+            CreatorGalleryPreloader.warm(
+                    result.card.getContext(),
+                    item,
+                    position < 6
+                            ? CreatorGalleryPreloader.PRIORITY_HIGH
+                            : CreatorGalleryPreloader.PRIORITY_NORMAL
+            );
+        }
         loadImage(result.image, item);
         requestRenderedThumbnail(item);
     }
@@ -353,6 +366,7 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
                     .diskCacheStrategy(DiskCacheStrategy.NONE)
                     .skipMemoryCache(false)
                     .dontAnimate()
+                    .transition(ThumbnailFades.thumbnail())
                     .centerCrop()
                     .placeholder(new ColorDrawable(Color.rgb(31, 31, 36)))
                     .error(new ColorDrawable(Color.rgb(31, 31, 36)))
@@ -374,6 +388,7 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
                 .load(source)
                 .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
                 .dontAnimate()
+                .transition(ThumbnailFades.thumbnail())
                 .centerCrop()
                 .placeholder(new ColorDrawable(Color.rgb(31, 31, 36)))
                 .error(new ColorDrawable(Color.rgb(31, 31, 36)));

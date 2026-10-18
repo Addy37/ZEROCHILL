@@ -12,19 +12,27 @@
     <color name="app_on_surface_muted">#B4B4BE</color>
     <color name="icon_background">#000000</color>
 
-    <!-- ZeroChill liquid-glass foundation. Keep large areas OLED black and layer glass above it. -->
+    <!-- ZeroChill 5.0 roles: neutral structure, purposeful electric cyan. -->
     <color name="zc_background">#000000</color>
-    <color name="zc_surface_glass">#E612151A</color>
-    <color name="zc_surface_glass_strong">#F21A1D22</color>
-    <color name="zc_surface_pressed">#FF222831</color>
+    <color name="zc_surface_glass">@color/zc_surface</color>
+    <color name="zc_surface_glass_strong">@color/zc_surface_raised</color>
+    <color name="zc_surface_pressed">#2B3139</color>
     <color name="zc_cyan">#0892D0</color>
     <color name="zc_cyan_dim">#990892D0</color>
     <color name="zc_cyan_container">#330892D0</color>
     <color name="zc_nav_selection">#D912171D</color>
-    <color name="zc_edge">#660892D0</color>
-    <color name="zc_divider">#2E9AA5B1</color>
-    <color name="zc_text_primary">#FFF7FA</color>
+    <color name="zc_edge">#293039</color>
+    <color name="zc_divider">#293039</color>
+    <color name="zc_text_primary">#F5F7FA</color>
     <color name="zc_text_secondary">#B8C0CC</color>
-    <color name="zc_text_muted">#8993A1</color>
+    <color name="zc_text_muted">#929DAC</color>
     <color name="zc_scrim">#99000000</color>
+    <color name="zc_surface">#101216</color>
+    <color name="zc_surface_raised">#191C21</color>
+    <color name="zc_surface_floating">#20242A</color>
+    <color name="zc_destructive">#FF9C9C</color>
+    <color name="zc_warning">#E6BE73</color>
+    <color name="zc_success">#87CAA9</color>
+    <color name="zc_ripple">#24FFFFFF</color>
+    <color name="zc_disabled">#69727E</color>
 </resources>

@@ -12,7 +12,6 @@ import android.os.Handler;
 import android.os.Looper;
 import android.webkit.CookieManager;
 import android.webkit.WebSettings;
-import android.widget.Toast;
 
 import org.json.JSONObject;
 
@@ -324,10 +323,12 @@ final class VideoDownloadStore {
             toast(activity, "The downloaded file is no longer available.");
             return;
         }
-        Intent player = new Intent(activity, PlayerActivity.class);
+        Intent player = new Intent(activity, VideoDetailActivity.class);
         player.putExtra(PlayerActivity.EXTRA_MEDIA_URL, uri.toString());
         player.putExtra(PlayerActivity.EXTRA_PAGE_URL, entry.pageUrl);
         player.putExtra(PlayerActivity.EXTRA_TITLE, entry.title);
+        player.putExtra(VideoDetailActivity.EXTRA_POSTER_URL, entry.imageUrl);
+        player.putExtra(VideoDetailActivity.EXTRA_SHOWS_ORIGIN, true);
         player.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
         activity.startActivity(player);
     }
@@ -637,7 +638,7 @@ final class VideoDownloadStore {
     }
 
     private static void toast(Context context, String message) {
-        MAIN.post(() -> Toast.makeText(context, message, Toast.LENGTH_SHORT).show());
+        MAIN.post(() -> ZeroChillToast.makeText(context, message, ZeroChillToast.LENGTH_SHORT).show());
     }
 
     static final class Entry {

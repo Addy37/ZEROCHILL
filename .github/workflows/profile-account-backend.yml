@@ -1,0 +1,22 @@
+name: Profile Account Backend
+on:
+  pull_request:
+    paths:
+      - 'supabase/functions/account-delete/**'
+      - 'supabase/tests/profile_account_2.sql'
+      - '.github/workflows/profile-account-backend.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Check deletion function types
+        run: deno check supabase/functions/account-delete/index.ts
+      - name: Test deletion authentication and ownership
+        run: deno test --allow-env supabase/functions/account-delete/handler_test.ts

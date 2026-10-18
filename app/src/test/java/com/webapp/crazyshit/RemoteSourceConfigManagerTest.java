@@ -54,6 +54,24 @@ public final class RemoteSourceConfigManagerTest {
 
     }
 
+    @Test public void olderConfigWithoutBaddieHubKeepsCompiledBaddieHubFallback() throws Exception {
+        JSONObject legacy = defaults();
+        legacy.getJSONObject("sources").remove("baddiehub");
+
+        SourceConfig parsed = SourceConfig.parseAndValidate(legacy.toString());
+
+        assertTrue(parsed.baddieHub.enabled);
+        assertEquals("https://baddiehub.com/", parsed.baddieHub.baseUrl);
+        assertEquals("categories/page/{page}/", parsed.baddieHub.categoriesPageRoute);
+        assertTrue(parsed.kaotic.enabled);
+    }
+
+    @Test public void presentInvalidBaddieHubObjectIsRejected() throws Exception {
+        JSONObject invalid = defaults();
+        invalid.getJSONObject("sources").put("baddiehub", JSONObject.NULL);
+        assertRejected(invalid);
+    }
+
     @Test public void backgroundRefreshDoesNotWaitForNetwork() throws Exception {
         CountDownLatch finished = new CountDownLatch(1);
         long start = System.nanoTime();
@@ -207,6 +225,12 @@ public final class RemoteSourceConfigManagerTest {
                 .put("creatorSearch", "people?query={query}")
                 .put("creatorSearchApi", "api/v2/creators?q={query}&n={limit}&o={offset}");
         onlyHaven.put("imageBaseUrl", "https://images.example/");
+        JSONObject baddieHub = sources.getJSONObject("baddiehub");
+        baddieHub.put("baseUrl", "https://baddie.example/");
+        baddieHub.getJSONObject("routes")
+                .put("categoriesFirst", "topics/")
+                .put("categoryFirst", "topic/{slug}/")
+                .put("categoryPage", "topic/{slug}/p/{page}/");
         RemoteSourceConfigManager.applyRemoteForTests(context, config.toString());
 
         assertEquals("https://kaotic-mirror.example/",
@@ -217,6 +241,18 @@ public final class RemoteSourceConfigManagerTest {
                 RemoteSourceConfigManager.snapshot().onlyHaven.creatorSearchApiRoute);
         assertEquals("https://images.example/",
                 RemoteSourceConfigManager.snapshot().onlyHaven.imageBaseUrl);
+        assertEquals("https://baddie.example/",
+                RemoteSourceConfigManager.snapshot().baddieHub.baseUrl);
+        assertEquals("topics/",
+                RemoteSourceConfigManager.snapshot().baddieHub.categoriesFirstRoute);
+        assertEquals("topic/{slug}/p/{page}/",
+                RemoteSourceConfigManager.snapshot().baddieHub.categoryPageRoute);
+        assertEquals("https://baddie.example/topic/sample/p/3/",
+                BaddieHubRepository.categoryPageUrl(
+                        RemoteSourceConfigManager.snapshot().baddieHub,
+                        "https://baddie.example/topic/sample/",
+                        3
+                ));
         assertTrue(RemoteSourceConfigManager.snapshot().theYnc.enabled);
         assertTrue(RemoteSourceConfigManager.snapshot().itemFix.enabled);
     }

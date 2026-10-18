@@ -37,6 +37,10 @@ public class VisualRefreshTest {
         int w = BrowseUi.dp(root.getContext(), width), h = BrowseUi.dp(root.getContext(), height);
         root.measure(View.MeasureSpec.makeMeasureSpec(w, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(h, View.MeasureSpec.EXACTLY));
         root.layout(0, 0, w, h);
+        // Detached renders lack ViewRoot's next traversal after a size-listener request.
+        root.forceLayout();
+        root.measure(View.MeasureSpec.makeMeasureSpec(w, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(h, View.MeasureSpec.EXACTLY));
+        root.layout(0, 0, w, h);
         Bitmap bitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
         root.draw(new Canvas(bitmap));
         File dir = new File("build/reports/visual-tests"); dir.mkdirs();
@@ -112,8 +116,11 @@ public class VisualRefreshTest {
         nav.setSelectedItemId(3);
         shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(800));
         androidx.viewpager2.widget.ViewPager2 viewPager = ReflectionHelpers.getField(main, "primaryPager");
-        assertEquals(MainPagerAdapter.PAGE_ONLYFAP, viewPager.getCurrentItem());
-        nav.setSelectedItemId(1);
+        assertEquals(
+                MainPagerAdapter.PAGE_ONLYFAP,
+                MainPagerAdapter.pageForPagerPosition(viewPager.getCurrentItem())
+        );
+        // Home remains constructed and testable, but is intentionally not an active pager page.
         UiPolishController.attach(main);
         ResponsiveFitmentController.applySoon(main);
         shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(800));
@@ -122,22 +129,32 @@ public class VisualRefreshTest {
 
         TextView headerTitle = ReflectionHelpers.getField(main, "headerTitle");
         TextView headerSubtitle = ReflectionHelpers.getField(main, "headerSubtitle");
-        assertEquals("ZEROCHILL", headerTitle.getText().toString());
+        assertEquals("OnlyFap", headerTitle.getText().toString());
         assertEquals(View.GONE, headerSubtitle.getVisibility());
         LinearLayout shell = ReflectionHelpers.getField(main, "shell");
         assertTrue(shell instanceof FrostedNavigationLayout);
         View topBar = shell.getChildAt(0);
+        assertTrue(topBar instanceof GlassHeaderView);
+        topBar = ((android.view.ViewGroup) topBar).getChildAt(1);
         assertTrue(topBar instanceof LinearLayout);
-        assertEquals(2, ((LinearLayout) topBar).getChildCount());
+        assertEquals(4, ((LinearLayout) topBar).getChildCount());
         View search = ((LinearLayout) topBar).getChildAt(1);
         assertEquals("Global Search", String.valueOf(search.getContentDescription()));
+        View avatar = ((LinearLayout) topBar).getChildAt(2);
+        assertTrue(avatar instanceof HeaderProfileAvatar);
+        assertEquals(View.GONE, avatar.getVisibility());
+        View more = ((LinearLayout) topBar).getChildAt(3);
+        assertEquals("More", String.valueOf(more.getContentDescription()));
 
         RecyclerView homeList = ReflectionHelpers.getField(home, "recycler");
         assertNull(homeList.getItemAnimator());
-        NativeFeedAdapter.Holder visibleCard = (NativeFeedAdapter.Holder) homeList.findViewHolderForAdapterPosition(1);
-        assertNotNull(visibleCard);
-        NativeFeedAdapter.Holder visibleSection = (NativeFeedAdapter.Holder) homeList.findViewHolderForAdapterPosition(0);
-        assertNotNull(visibleSection);
+        RecyclerView holderParent = new RecyclerView(main);
+        NativeFeedAdapter.Holder visibleCard = (NativeFeedAdapter.Holder)
+                feed.onCreateViewHolder(holderParent, feed.getItemViewType(1));
+        feed.onBindViewHolder(visibleCard, 1);
+        NativeFeedAdapter.Holder visibleSection = (NativeFeedAdapter.Holder)
+                feed.onCreateViewHolder(holderParent, feed.getItemViewType(0));
+        feed.onBindViewHolder(visibleSection, 0);
         assertEquals("TODAY'S CRAZY SHIT", visibleSection.sectionTitle.getText().toString());
         com.google.android.material.card.MaterialCardView sectionCard =
                 (com.google.android.material.card.MaterialCardView) visibleSection.itemView;
@@ -148,32 +165,24 @@ public class VisualRefreshTest {
         visibleCard.image.setImageResource(R.drawable.ic_nav_chaos);
         visibleCard.image.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
         com.google.android.material.card.MaterialCardView card = (com.google.android.material.card.MaterialCardView) visibleCard.itemView;
-        assertEquals(BrowseUi.dp(main, 1), card.getStrokeWidth());
+        assertEquals(0, card.getStrokeWidth());
         assertEquals(main.getColor(R.color.zc_surface_glass), card.getCardBackgroundColor().getDefaultColor());
-        assertEquals(main.getColor(R.color.zc_edge), card.getStrokeColor());
         capture(root, "home-lifecycle", 360, 800);
-        assertEquals(MainPagerAdapter.PAGE_HOME, viewPager.getCurrentItem());
-        assertEquals(main.getResources().getDimensionPixelSize(R.dimen.zc_bottom_nav_height),
-                nav.getLayoutParams().height);
+        assertEquals(
+                MainPagerAdapter.PAGE_ONLYFAP,
+                MainPagerAdapter.pageForPagerPosition(viewPager.getCurrentItem())
+        );
+        assertEquals(BrowseUi.dp(main, 61), nav.getLayoutParams().height);
         assertSame(nav, ((FrostedNavigationLayout) shell).frostedNavigationViewForTest());
         assertEquals(BrowseUi.dp(main, 20),
                 main.getResources().getDimensionPixelSize(R.dimen.zc_navigation_blur_radius));
-        assertEquals(main.getResources().getDimensionPixelSize(R.dimen.zc_nav_indicator_height),
-                nav.getItemActiveIndicatorHeight());
-        assertEquals(Color.TRANSPARENT,
-                nav.getItemActiveIndicatorColor().getDefaultColor());
+        assertTrue(nav.getChildAt(nav.getChildCount() - 1) instanceof androidx.compose.ui.platform.ComposeView);
         assertFalse(nav.getClipChildren());
         assertFalse(nav.getClipToPadding());
-        assertTrue(nav.getChildAt(0) instanceof android.view.ViewGroup);
-        android.view.ViewGroup navMenu = (android.view.ViewGroup) nav.getChildAt(0);
-        assertFalse(navMenu.getClipChildren());
-        assertFalse(navMenu.getClipToPadding());
-        assertEquals(main.getColor(R.color.zc_text_secondary),
-                nav.getItemIconTintList().getColorForState(new int[] {android.R.attr.state_checked}, Color.WHITE));
-        assertTrue(nav.isItemActiveIndicatorEnabled());
+        assertEquals(View.GONE, nav.getChildAt(0).getVisibility());
         assertTrue(nav instanceof ZeroChillBottomNavigationView);
         assertEquals(
-                MainPagerAdapter.PAGE_HOME,
+                MainPagerAdapter.pagerPositionForPage(MainPagerAdapter.PAGE_ONLYFAP),
                 Math.round(((ZeroChillBottomNavigationView) nav).pagerPositionForTest())
         );
         ZeroChillBottomNavigationView slidingNav = (ZeroChillBottomNavigationView) nav;
@@ -181,27 +190,22 @@ public class VisualRefreshTest {
         Bitmap navBitmap = Bitmap.createBitmap(nav.getWidth(), nav.getHeight(), Bitmap.Config.ARGB_8888);
         nav.draw(new Canvas(navBitmap));
         navBitmap.recycle();
-        android.graphics.RectF capsule = ReflectionHelpers.getField(slidingNav, "indicatorRect");
-        View homeTab = nav.findViewById(1);
-        View showsTab = nav.findViewById(2);
-        assertEquals((homeTab.getWidth() + showsTab.getWidth()) / 2f - BrowseUi.dp(main, 8),
-                capsule.width(), 1f);
+        android.graphics.RectF capsule = slidingNav.selectedCapsuleBoundsForTest();
+        assertEquals((nav.getWidth() - BrowseUi.dp(main, 8)) / 4f, capsule.width(), 1f);
         assertEquals(BrowseUi.dp(main, 4), capsule.top, 1f);
-        assertEquals(nav.getHeight() + BrowseUi.dp(main, 10), capsule.bottom, 1f);
+        assertEquals(nav.getHeight() - BrowseUi.dp(main, 4), capsule.bottom, 1f);
         assertEquals(0.5f, slidingNav.pagerPositionForTest(), 0.001f);
         slidingNav.setPagerPosition(0f);
-        assertEquals(5, nav.getMenu().size());
-        assertEquals("Home", nav.getMenu().findItem(1).getTitle());
+        assertEquals(4, nav.getMenu().size());
+        assertNull(nav.getMenu().findItem(1));
         assertEquals("Shows", nav.getMenu().findItem(2).getTitle());
         assertEquals("ShitTok", nav.getMenu().findItem(4).getTitle());
         assertEquals("OnlyFap", nav.getMenu().findItem(3).getTitle());
-        assertEquals("More", nav.getMenu().findItem(5).getTitle());
-        for (int id : new int[] {1, 2, 4, 3, 5}) {
-            View tab = nav.findViewById(id);
-            assertTrue("Tab " + id + " width=" + tab.getWidth() + " nav=" + nav.getWidth(), tab.getWidth() >= BrowseUi.dp(main, 48));
-            assertEquals(nav.getHeight(), tab.getHeight());
-            assertEquals(0, Math.round(tab.getTranslationY()));
-        }
+        assertEquals("Library", nav.getMenu().findItem(6).getTitle());
+        assertNull(nav.getMenu().findItem(5));
+        assertEquals(0, nav.getPaddingTop());
+        assertEquals(0, nav.getPaddingBottom());
+        assertTrue((nav.getWidth() - BrowseUi.dp(main, 8)) / 4f >= BrowseUi.dp(main, 48));
         prefs.edit().putInt("native_view_home", NativeFeedAdapter.VIEW_GRID).apply();
         FeedViewStyleController.prepareVisualRefresh(main);
         assertEquals(NativeFeedAdapter.VIEW_GRID, prefs.getInt("native_view_home", -1));
@@ -221,9 +225,9 @@ public class VisualRefreshTest {
 
         assertEquals(host.get().getColor(R.color.zc_surface_glass),
                 holder.card.getCardBackgroundColor().getDefaultColor());
-        assertEquals(host.get().getColor(R.color.zc_cyan), holder.card.getStrokeColor());
+        assertEquals(0, holder.card.getStrokeWidth());
         assertEquals(0.62f, holder.backdrop.getAlpha(), 0.001f);
-        assertEquals(Boolean.TRUE, holder.card.getTag(R.id.zerochill_motion_installed));
+        assertNotNull(holder.card.getTag(R.id.zerochill_motion_installed));
 
         adapter.close();
         host.pause().stop().destroy();
@@ -293,7 +297,7 @@ public class VisualRefreshTest {
         assertEquals("5 Reasons to Say \"What in the Fuc...\"", homeHolder.title.getText().toString());
         assertEquals(4, homeHolder.title.getMaxLines());
         assertEquals("41.1K views", homeHolder.info.getText().toString());
-        assertEquals("💬 12K", homeHolder.comments.getText().toString());
+        assertEquals("💬 Comments", homeHolder.comments.getText().toString());
 
         NativeFeedAdapter regularAdapter = new NativeFeedAdapter(host.get(), listener);
         regularAdapter.setViewMode(NativeFeedAdapter.VIEW_LIST);
@@ -311,10 +315,10 @@ public class VisualRefreshTest {
         host.pause().stop().destroy();
     }
 
-    @Test public void shitTokActionsUseCompactGlassRails() {
+    @Test public void shitTokActionsFloatWithMuteWithoutShare() {
         ActivityController<Activity> host = Robolectric.buildActivity(Activity.class).setup();
         host.get().setTheme(R.style.Theme_CrazyShit);
-        ChaosFeedView feed = new ChaosFeedView(host.get(), item -> { });
+        ChaosFeedView feed = new ChaosFeedView(host.get(), item -> { }, false);
         try {
             RecyclerView.Adapter<?> rawAdapter = ReflectionHelpers.getField(feed, "adapter");
             RecyclerView parent = new RecyclerView(host.get());
@@ -322,27 +326,29 @@ public class VisualRefreshTest {
             View root = holder.itemView;
 
             View actionRail = root.findViewWithTag("shittok_action_rail");
-            View playbackRail = root.findViewWithTag("shittok_playback_rail");
             assertNotNull(actionRail);
-            assertNotNull(playbackRail);
-            assertNotNull(actionRail.getBackground());
-            assertNotNull(playbackRail.getBackground());
+            assertNull(root.findViewWithTag("shittok_playback_rail"));
+            assertNotNull(root.findViewWithTag("shittok_mute"));
+            assertNull(root.findViewWithTag("shittok_share"));
+            assertNull(actionRail.getBackground());
+            assertEquals(6, ((ViewGroup) actionRail).getChildCount());
 
             for (String tag : new String[] {
+                    "shittok_like",
                     "shittok_save",
                     "shittok_comments",
-                    "shittok_share",
+                    "shittok_auto_scroll",
                     "shittok_more",
                     "shittok_mute",
-                    "shittok_fullscreen"
+                    "shittok_landscape_mute",
+                    "shittok_landscape_like",
+                    "shittok_landscape_comments",
+                    "shittok_landscape_save",
+                    "shittok_landscape_auto_scroll"
             }) {
                 View control = root.findViewWithTag(tag);
                 assertNotNull(tag, control);
-                if ("shittok_fullscreen".equals(tag)) {
-                    assertTrue(tag, control instanceof ImageView);
-                } else {
-                    assertTrue(tag, control instanceof TextView);
-                }
+                assertTrue(tag, control instanceof TextView);
                 assertTrue(tag, control.getLayoutParams().width >= BrowseUi.dp(host.get(), 48));
                 assertTrue(tag, control.getLayoutParams().height >= BrowseUi.dp(host.get(), 48));
                 assertNotNull(tag, control.getContentDescription());
@@ -352,6 +358,108 @@ public class VisualRefreshTest {
             assertEquals("Save to Watch Later", String.valueOf(save.getContentDescription()));
             View fullscreen = root.findViewWithTag("shittok_fullscreen");
             assertEquals(View.GONE, fullscreen.getVisibility());
+            assertEquals("Full screen", ((TextView) fullscreen).getText().toString());
+            assertEquals("Auto Scroll off. Tap to turn on", String.valueOf(
+                    root.findViewWithTag("shittok_auto_scroll").getContentDescription()));
+        } finally {
+            feed.close();
+            host.pause().stop().destroy();
+        }
+    }
+
+    @Test public void shitTokAutoScrollIsSessionOnlyAndLandscapeHasOwnControls() throws Exception {
+        ActivityController<Activity> host = Robolectric.buildActivity(Activity.class).setup();
+        host.get().setTheme(R.style.Theme_CrazyShit);
+        ChaosFeedView feed = new ChaosFeedView(host.get(), item -> { }, false);
+        try {
+            RecyclerView.Adapter<?> adapter = ReflectionHelpers.getField(feed, "adapter");
+            RecyclerView.ViewHolder holder = adapter.onCreateViewHolder(
+                    new RecyclerView(host.get()), 0);
+            View root = holder.itemView;
+            View portraitToggle = root.findViewWithTag("shittok_auto_scroll");
+            View landscapeToggle = root.findViewWithTag("shittok_landscape_auto_scroll");
+            assertEquals("Auto Scroll off. Tap to turn on",
+                    String.valueOf(portraitToggle.getContentDescription()));
+            portraitToggle.performClick();
+            assertEquals("Auto Scroll on. Tap to turn off",
+                    String.valueOf(portraitToggle.getContentDescription()));
+            // A detached holder won't be part of pagerRecycler's child iteration; the
+            // attached layout uses that path. Its second control toggles the same feed field.
+            landscapeToggle.performClick();
+            assertEquals(Boolean.FALSE, ReflectionHelpers.getField(feed, "autoScrollEnabled"));
+
+            android.content.res.Configuration original = new android.content.res.Configuration(
+                    host.get().getResources().getConfiguration());
+            android.content.res.Configuration landscape = new android.content.res.Configuration(original);
+            landscape.orientation = android.content.res.Configuration.ORIENTATION_LANDSCAPE;
+            host.get().getResources().updateConfiguration(landscape,
+                    host.get().getResources().getDisplayMetrics());
+            ReflectionHelpers.setField(feed, "manualFullscreen", true);
+            ReflectionHelpers.callInstanceMethod(holder, "syncOrientationChrome");
+            View header = root.findViewWithTag("shittok_landscape_header");
+            View actions = root.findViewWithTag("shittok_landscape_actions");
+            View portraitRail = root.findViewWithTag("shittok_action_rail");
+            View topScrim = root.findViewWithTag("shittok_landscape_top_scrim");
+            View bottomScrim = root.findViewWithTag("shittok_landscape_bottom_scrim");
+            assertNotNull(topScrim);
+            assertNotNull(bottomScrim);
+            assertEquals(View.VISIBLE, header.getVisibility());
+            assertEquals(View.VISIBLE, actions.getVisibility());
+            assertEquals(View.VISIBLE, topScrim.getVisibility());
+            assertEquals(View.VISIBLE, bottomScrim.getVisibility());
+            assertTrue(topScrim.getBackground() instanceof android.graphics.drawable.GradientDrawable);
+            assertTrue(bottomScrim.getBackground() instanceof android.graphics.drawable.GradientDrawable);
+            assertEquals(View.GONE, ((View) portraitRail.getParent()).getVisibility());
+            capture(root, "shittok-landscape-controls", 740, 360);
+            root.measure(View.MeasureSpec.makeMeasureSpec(740, View.MeasureSpec.EXACTLY),
+                    View.MeasureSpec.makeMeasureSpec(360, View.MeasureSpec.EXACTLY));
+            root.layout(0, 0, 740, 360);
+            assertTrue(header.getBottom() < actions.getTop());
+            View progress = root.findViewWithTag("shittok_progress_row");
+            View media = ReflectionHelpers.getField(holder, "mediaLayer");
+            assertEquals(0, media.getTop());
+            assertEquals(root.getHeight(), media.getBottom());
+            assertTrue(progress.getTop() < media.getBottom());
+            assertTrue(progress.getBottom() <= actions.getTop());
+            FrameLayout.LayoutParams actionParams =
+                    (FrameLayout.LayoutParams) actions.getLayoutParams();
+            assertEquals(BrowseUi.dp(host.get(), 4), actionParams.bottomMargin);
+            assertEquals(View.VISIBLE, root.findViewWithTag("shittok_elapsed").getVisibility());
+            assertEquals(View.VISIBLE, root.findViewWithTag("shittok_remaining").getVisibility());
+            host.get().getResources().updateConfiguration(original,
+                    host.get().getResources().getDisplayMetrics());
+            ReflectionHelpers.setField(feed, "manualFullscreen", false);
+            ReflectionHelpers.callInstanceMethod(holder, "syncOrientationChrome");
+            assertEquals(View.GONE, header.getVisibility());
+            assertEquals(View.GONE, topScrim.getVisibility());
+            assertEquals(View.GONE, bottomScrim.getVisibility());
+            assertEquals(View.VISIBLE, ((View) portraitRail.getParent()).getVisibility());
+            ReflectionHelpers.setField(holder, "videoAspectRatio", 2f);
+            ReflectionHelpers.setField(holder, "horizontalVideo", true);
+            ReflectionHelpers.callInstanceMethod(holder, "syncOrientationChrome");
+            capture(root, "shittok-portrait-controls", 400, 900);
+            View fittedMedia = ReflectionHelpers.getField(holder, "mediaLayer");
+            int capturedVideoBottom = fittedMedia.getTop() + (fittedMedia.getHeight()
+                    + Math.min(fittedMedia.getHeight(), Math.round(fittedMedia.getWidth() / 2f))) / 2;
+            assertTrue(root.findViewWithTag("shittok_fullscreen").getTop() >= capturedVideoBottom
+                    + BrowseUi.dp(host.get(), 8));
+            root.measure(View.MeasureSpec.makeMeasureSpec(400, View.MeasureSpec.EXACTLY),
+                    View.MeasureSpec.makeMeasureSpec(900, View.MeasureSpec.EXACTLY));
+            root.layout(0, 0, 400, 900);
+            FrameLayout.LayoutParams promptParams = (FrameLayout.LayoutParams)
+                    root.findViewWithTag("shittok_fullscreen").getLayoutParams();
+            media = ReflectionHelpers.getField(holder, "mediaLayer");
+            int fittedHeight = Math.min(media.getHeight(), Math.round(media.getWidth() / 2f));
+            int videoBottom = media.getTop() + (media.getHeight() + fittedHeight) / 2;
+            assertTrue(promptParams.topMargin >= videoBottom + BrowseUi.dp(host.get(), 8));
+            assertEquals(View.GONE, root.findViewWithTag("shittok_elapsed").getVisibility());
+            assertEquals(View.GONE, root.findViewWithTag("shittok_remaining").getVisibility());
+            ChaosFeedView fresh = new ChaosFeedView(host.get(), item -> { }, false);
+            try {
+                assertEquals(Boolean.FALSE, ReflectionHelpers.getField(fresh, "autoScrollEnabled"));
+            } finally {
+                fresh.close();
+            }
         } finally {
             feed.close();
             host.pause().stop().destroy();
@@ -380,24 +488,68 @@ public class VisualRefreshTest {
         BunkrGalleryAdapter adapter = ReflectionHelpers.getField(screen.get(), "bunkrGalleryAdapter");
         assertEquals(8, adapter.getItemCount());
         assertEquals(Integer.valueOf(2), ReflectionHelpers.getField(screen.get(), "creatorGalleryColumns"));
+
+        // Exercise the real delayed 56dp header normalization and collapsed app bar.
+        OledImmersiveUiController.attachBrowser(screen.get());
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(500));
+        com.google.android.material.appbar.AppBarLayout appBar =
+                ReflectionHelpers.getField(screen.get(), "creatorAppBar");
+        appBar.setExpanded(false, false);
+        capture(root, "creator-gallery-avatar", 411, 891);
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(300));
+        View action = root.findViewWithTag("creator_favorite_compact");
+        for (int width : new int[] {320, 411, 600}) {
+            capture(root, "creator-gallery-avatar-" + width, width, 891);
+            assertEquals(View.VISIBLE, action.getVisibility());
+            assertTrue(action.getWidth() >= BrowseUi.dp(screen.get(), 48));
+            assertTrue(action.getHeight() >= BrowseUi.dp(screen.get(), 48));
+            android.view.ViewGroup bar = (android.view.ViewGroup) action.getParent();
+            assertTrue(action.getTop() >= bar.getPaddingTop());
+            assertTrue(action.getBottom() <= bar.getHeight() - bar.getPaddingBottom());
+            for (String tag : new String[] {"creator_favorite_ring", "creator_favorite_avatar", "creator_favorite_badge"}) {
+                View part = action.findViewWithTag(tag);
+                android.graphics.Rect bounds = new android.graphics.Rect();
+                part.getDrawingRect(bounds);
+                ((android.view.ViewGroup) action).offsetDescendantRectToMyCoords(part, bounds);
+                int inset = BrowseUi.dp(screen.get(), 4);
+                assertTrue(tag, bounds.left >= inset && bounds.top >= inset);
+                assertTrue(tag, bounds.right <= action.getWidth() - inset
+                        && bounds.bottom <= action.getHeight() - inset);
+            }
+        }
+        if (!action.isSelected()) action.performClick();
+        assertTrue(action.isSelected());
+        capture(root, "creator-gallery-avatar-selected", 411, 891);
+        appBar.setExpanded(true, false);
+        capture(root, "creator-gallery-avatar-expanded", 411, 891);
+        assertEquals(View.GONE, action.getVisibility());
         screen.pause().stop().destroy();
     }
 
     @Test public void searchResultsLeaveRoomForTheKeyboardAndOpenTheCreator() throws Exception {
-        ActivityController<SearchActivity> screen = Robolectric.buildActivity(SearchActivity.class).create().start().resume();
+        ActivityController<SearchActivity> screen = Robolectric.buildActivity(SearchActivity.class).create().start().resume().visible();
         CreatorCatalog.remember(screen.get(), Collections.singletonList(creator()));
-        EditText input = ReflectionHelpers.getField(screen.get(), "input");
+        EditText input = ReflectionHelpers.getField(screen.get().panel, "input");
         input.setText("Alex");
-        CreatorSuggestionsController suggestions = ReflectionHelpers.getField(screen.get(), "suggestions");
+        CreatorSuggestionsController suggestions = ReflectionHelpers.getField(screen.get().panel, "suggestions");
         suggestions.refreshLocal();
+        CreatorListAdapter adapter = ReflectionHelpers.getField(suggestions, "adapter");
+        long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(3);
+        while (adapter.getItemCount() == 0 && System.nanoTime() < deadline) {
+            shadowOf(Looper.getMainLooper()).idle();
+            Thread.sleep(10);
+        }
+        assertEquals(1, adapter.getItemCount());
         View root = ((android.view.ViewGroup) screen.get().findViewById(android.R.id.content)).getChildAt(0);
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(220));
         capture(root, "creator-search", 411, 891);
         capture(root, "creator-search-keyboard-space", 360, 380);
+        RecyclerView suggestionList = ReflectionHelpers.getField(suggestions, "recycler");
+        assertTrue(suggestionList.getHeight() - suggestionList.getPaddingTop() >= BrowseUi.dp(screen.get(), 72));
         TextView action = ReflectionHelpers.getField(suggestions, "searchAll");
         assertEquals(View.VISIBLE, action.getVisibility());
         assertTrue(action.getHeight() >= BrowseUi.dp(screen.get(), 48));
-        assertEquals(View.GONE, ((View) ReflectionHelpers.getField(screen.get(), "filterBar")).getVisibility());
-        CreatorListAdapter adapter = ReflectionHelpers.getField(suggestions, "adapter");
+        assertEquals(View.GONE, ((View) ReflectionHelpers.getField(screen.get().panel, "filterBar")).getVisibility());
         CreatorListAdapter.Holder row = adapter.onCreateViewHolder(new RecyclerView(screen.get()), 0);
         adapter.onBindViewHolder(row, 0); row.itemView.performClick();
         assertEquals(NativeFeedBrowserActivity.class.getName(), shadowOf(screen.get()).getNextStartedActivity().getComponent().getClassName());

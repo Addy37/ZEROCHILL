@@ -27,7 +27,6 @@ import android.window.OnBackInvokedCallback;
 import android.window.OnBackInvokedDispatcher;
 import android.widget.FrameLayout;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import androidx.media3.common.MediaItem;
 import androidx.media3.common.MimeTypes;
@@ -60,6 +59,7 @@ public class PlayerActivity extends Activity {
 
     private ExoPlayer player;
     private PlayerView playerView;
+    private ShowsFullscreenControls fullscreenControls;
     private FrameLayout videoSurface;
     private View menuButton;
     private TextView titleView;
@@ -124,20 +124,21 @@ public class PlayerActivity extends Activity {
         root.addView(videoSurface, new FrameLayout.LayoutParams(-1, -1));
 
         playerView = (PlayerView) getLayoutInflater().inflate(
-                R.layout.view_polished_video_player_texture,
+                R.layout.view_shows_fullscreen_player,
                 videoSurface,
                 false
         );
         playerView.setBackgroundColor(Color.BLACK);
         playerView.setUseController(true);
         playerView.setControllerAutoShow(false);
-        playerView.setControllerHideOnTouch(true);
-        playerView.setControllerShowTimeoutMs(2600);
+        playerView.setControllerHideOnTouch(false);
+        playerView.setControllerShowTimeoutMs(0);
         playerView.setShowBuffering(PlayerView.SHOW_BUFFERING_WHEN_PLAYING);
         playerView.setKeepScreenOn(true);
         playerView.setResizeMode(resizeMode);
         videoSurface.addView(playerView, new FrameLayout.LayoutParams(-1, -1));
 
+        fullscreenControls = new ShowsFullscreenControls(playerView);
         View backButton = playerView.findViewById(R.id.player_back);
         titleView = playerView.findViewById(R.id.player_title);
         menuButton = playerView.findViewById(R.id.player_menu);
@@ -150,6 +151,25 @@ public class PlayerActivity extends Activity {
             haptic(v);
             showPlayerMenu();
         });
+
+        playerView.findViewById(R.id.shows_save).setOnClickListener(v -> {
+            toggleWatchLater();
+            fullscreenControls.show();
+        });
+        playerView.findViewById(R.id.shows_download).setOnClickListener(v -> {
+            haptic(v);
+            downloadCurrentVideo();
+            fullscreenControls.show();
+        });
+        playerView.findViewById(R.id.shows_share).setOnClickListener(v -> {
+            haptic(v);
+            sharePage();
+        });
+        playerView.findViewById(R.id.shows_minimize).setOnClickListener(v -> {
+            haptic(v);
+            minimizeToBrowser();
+        });
+        fullscreenControls.syncSaved(FavoriteStore.contains(this, pageUrl));
 
         gestureLabel = new TextView(this);
         gestureLabel.setTextColor(Color.WHITE);
@@ -166,7 +186,7 @@ public class PlayerActivity extends Activity {
 
         setContentView(root);
         configureGestures();
-        playerView.post(playerView::showController);
+        playerView.post(fullscreenControls::show);
     }
 
     private void buildPlayer() {
@@ -196,6 +216,7 @@ public class PlayerActivity extends Activity {
                 .setMediaSourceFactory(mediaSourceFactory)
                 .build();
         playerView.setPlayer(player);
+        fullscreenControls.bind(player);
 
         MediaItem.Builder item = new MediaItem.Builder().setUri(mediaUrl);
         String lower = mediaUrl.toLowerCase(Locale.US);
@@ -248,6 +269,8 @@ public class PlayerActivity extends Activity {
     }
 
     private void configureGestures() {
+        FullscreenVideoGestures seekGestures = new FullscreenVideoGestures(
+                playerView, () -> player, fullscreenControls, () -> !dragMinimize);
         final GestureDetector detector = new GestureDetector(this,
                 new GestureDetector.SimpleOnGestureListener() {
                     @Override
@@ -258,24 +281,15 @@ public class PlayerActivity extends Activity {
                     @Override
                     public boolean onSingleTapConfirmed(MotionEvent e) {
                         if (dragMinimize) return true;
-                        if (playerView.isControllerFullyVisible()) {
-                            playerView.hideController();
-                        } else {
-                            playerView.showController();
-                        }
+                        fullscreenControls.onVideoTap();
                         return true;
                     }
 
                     @Override
                     public boolean onDoubleTap(MotionEvent e) {
                         if (player == null || dragMinimize) return true;
-                        long delta = e.getX() < playerView.getWidth() / 2f ? -10_000L : 10_000L;
-                        long duration = player.getDuration();
-                        long target = Math.max(0L, player.getCurrentPosition() + delta);
-                        if (duration > 0L) target = Math.min(duration, target);
-                        player.seekTo(target);
+                        seekGestures.seek(e.getX() >= playerView.getWidth() / 2f);
                         haptic(playerView);
-                        showGesture(delta < 0 ? "−10 seconds" : "+10 seconds");
                         return true;
                     }
                 });
@@ -323,7 +337,7 @@ public class PlayerActivity extends Activity {
                                     getSharedPreferences("app_prefs", MODE_PRIVATE)
                                             .getBoolean("swipe_down_minimize", true)) {
                                 dragMinimize = true;
-                                playerView.hideController();
+                                fullscreenControls.hide();
                             }
                         }
                         if (!moved) return true;
@@ -412,7 +426,7 @@ public class PlayerActivity extends Activity {
                     .setDuration(180L)
                     .withEndAction(() -> {
                         dragMinimize = false;
-                        playerView.showController();
+                        fullscreenControls.show();
                     })
                     .start();
         }
@@ -422,7 +436,7 @@ public class PlayerActivity extends Activity {
         String saveTitle = FavoriteStore.contains(this, pageUrl)
                 ? "Remove from Watch Later"
                 : "Watch Later";
-        VideoActionSheet.show(
+        VideoActionSheet.showCompact(
                 this,
                 title,
                 VideoActionSheet.section(
@@ -507,7 +521,7 @@ public class PlayerActivity extends Activity {
     private void showSpeedMenu() {
         String[] labels = {"0.5×", "0.75×", "1×", "1.25×", "1.5×", "2×"};
         float[] speeds = {0.5f, 0.75f, 1f, 1.25f, 1.5f, 2f};
-        new AlertDialog.Builder(this)
+        new ZeroChillDialog.Builder(this)
                 .setTitle("Playback speed")
                 .setItems(labels, (dialog, which) -> {
                     if (player != null) {
@@ -526,7 +540,7 @@ public class PlayerActivity extends Activity {
                 AspectRatioFrameLayout.RESIZE_MODE_FILL,
                 AspectRatioFrameLayout.RESIZE_MODE_ZOOM
         };
-        new AlertDialog.Builder(this)
+        new ZeroChillDialog.Builder(this)
                 .setTitle("Video size")
                 .setItems(labels, (dialog, which) -> {
                     resizeMode = modes[which];
@@ -539,16 +553,17 @@ public class PlayerActivity extends Activity {
 
     private void toggleWatchLater() {
         if (pageUrl == null || pageUrl.isEmpty()) {
-            Toast.makeText(this, "This video has no page to save.", Toast.LENGTH_SHORT).show();
+            ZeroChillToast.makeText(this, "This video has no page to save.", ZeroChillToast.LENGTH_SHORT).show();
             return;
         }
         if (FavoriteStore.contains(this, pageUrl)) {
             FavoriteStore.remove(this, pageUrl);
-            Toast.makeText(this, "Removed from Watch Later.", Toast.LENGTH_SHORT).show();
+            ZeroChillToast.makeText(this, "Removed from Watch Later.", ZeroChillToast.LENGTH_SHORT).show();
         } else {
             FavoriteStore.add(this, title, pageUrl);
-            Toast.makeText(this, "Saved to Watch Later.", Toast.LENGTH_SHORT).show();
+            ZeroChillToast.makeText(this, "Saved to Watch Later.", ZeroChillToast.LENGTH_SHORT).show();
         }
+        fullscreenControls.syncSaved(FavoriteStore.contains(this, pageUrl));
         haptic(playerView);
     }
 
@@ -565,7 +580,7 @@ public class PlayerActivity extends Activity {
         if (failureShown || isFinishing()) return;
         failureShown = true;
         RatingFeedbackPrompt.recordPlaybackError(this);
-        new AlertDialog.Builder(this)
+        new ZeroChillDialog.Builder(this)
                 .setTitle("Couldn't play this stream")
                 .setMessage("This video isn't exposing a stream the native player can use. You can open the normal webpage instead.")
                 .setCancelable(false)
@@ -602,8 +617,7 @@ public class PlayerActivity extends Activity {
     }
 
     private boolean rememberPositionEnabled() {
-        return getSharedPreferences("app_prefs", MODE_PRIVATE)
-                .getBoolean("remember_video_position", true);
+        return true;
     }
 
     private String positionKey() {
@@ -685,7 +699,9 @@ public class PlayerActivity extends Activity {
         }
         resetMinimizeTransform();
         if (gestureLabel != null) gestureLabel.setVisibility(View.GONE);
+        if (fullscreenControls != null) fullscreenControls.suspend(isInPictureInPictureMode);
         if (playerView != null) playerView.setUseController(!isInPictureInPictureMode);
+        if (!isInPictureInPictureMode && fullscreenControls != null) fullscreenControls.show();
     }
 
     private void configureBackHandling() {
@@ -841,6 +857,7 @@ public class PlayerActivity extends Activity {
         }
         savePosition();
         recordHistory(false);
+        if (fullscreenControls != null) fullscreenControls.release();
         if (playerView != null) playerView.setPlayer(null);
         if (player != null) {
             player.release();

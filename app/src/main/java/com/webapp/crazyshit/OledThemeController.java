@@ -32,6 +32,9 @@ final class OledThemeController {
 
     private static void apply(Activity activity) {
         if (activity == null || activity.isFinishing()) return;
+        // This viewer owns a separate black backdrop that leaves with the return
+        // transition. Painting its content container black defeats that handoff.
+        if (activity instanceof BunkrGalleryActivity) return;
         boolean enabled = activity.getSharedPreferences("app_prefs", Activity.MODE_PRIVATE)
                 .getBoolean("oled_black_enabled", true);
         if (!enabled) return;
@@ -58,7 +61,7 @@ final class OledThemeController {
 
         if (view instanceof MaterialCardView) {
             MaterialCardView card = (MaterialCardView) view;
-            if (!NativeFeedAdapter.STYLE_TAG.equals(card.getTag())) {
+            if (!NativeFeedAdapter.STYLE_TAG.equals(card.getTag()) && card.getTag(R.id.zerochill_surface_styled) == null) {
                 card.setCardBackgroundColor(OLED_CARD);
                 if (card.getStrokeWidth() > 0) card.setStrokeColor(OLED_STROKE);
             }
@@ -88,4 +91,3 @@ final class OledThemeController {
         return max <= 36 && (max - min) <= 12;
     }
 }
-

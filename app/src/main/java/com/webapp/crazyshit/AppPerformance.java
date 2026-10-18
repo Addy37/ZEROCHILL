@@ -20,7 +20,42 @@ final class AppPerformance {
     private static long frames, slowFrames;
     private static boolean firstDraw;
     private AppPerformance() { }
-    static void begin() { }
+    static void begin() {
+        record("Application entry from process start", SystemClock.elapsedRealtime() - android.os.Process.getStartElapsedRealtime());
+    }
+
+    private static final java.util.Set<String> STARTUP_EVENTS = new java.util.HashSet<>();
+
+    static synchronized void startup(String event) {
+        if (!STARTUP_EVENTS.add(event)) return;
+        long elapsed = SystemClock.elapsedRealtime() - android.os.Process.getStartElapsedRealtime();
+        record("Process -> " + event, elapsed);
+        android.os.Trace.beginSection("zc.startup." + event);
+        android.os.Trace.endSection();
+        if (ShitTokPoolDiagnostics.isEnabled())
+            android.util.Log.i("ZeroChillStartup", event + " processMs=" + elapsed);
+    }
+
+    private static final Map<String, Integer> STARTUP_CLIPS = new LinkedHashMap<>();
+    private static final java.util.Set<String> CLIP_EVENTS = new java.util.HashSet<>();
+
+    /** Bounded, correlated cold-start phases. URLs remain on-device and never enter the report. */
+    static synchronized void startupItem(String event, String url, String detail) {
+        if (STARTUP_EVENTS.contains("frame") || CLIP_EVENTS.size() >= 200 || url == null) return;
+        int clip = STARTUP_CLIPS.computeIfAbsent(url, ignored -> STARTUP_CLIPS.size() + 1);
+        if (!CLIP_EVENTS.add(event + ":" + clip)) return;
+        long elapsed = SystemClock.elapsedRealtime() - android.os.Process.getStartElapsedRealtime();
+        record("Startup clip " + clip + " " + event + " " + detail, elapsed);
+        if (ShitTokPoolDiagnostics.isEnabled())
+            android.util.Log.i("ZeroChillStartup", event + " clip=" + clip + " processMs=" + elapsed + " " + detail);
+    }
+
+    static void startupCost(String phase, long startedAt) {
+        long elapsed = SystemClock.elapsedRealtime() - startedAt;
+        record("Startup " + phase, elapsed);
+        if (ShitTokPoolDiagnostics.isEnabled())
+            android.util.Log.i("ZeroChillStartup", phase + " durationMs=" + elapsed);
+    }
 
     static synchronized void record(String label, long milliseconds) {
         if (milliseconds < 0) return;
@@ -36,7 +71,16 @@ final class AppPerformance {
         }
         if (activity instanceof NativeMainActivity && !firstDraw) {
             firstDraw = true;
-            activity.getWindow().getDecorView().postOnAnimation(() -> record("Main screen first draw", SystemClock.elapsedRealtime() - STARTED));
+            android.view.View decor = activity.getWindow().getDecorView();
+            decor.getViewTreeObserver().addOnDrawListener(new android.view.ViewTreeObserver.OnDrawListener() {
+                boolean recorded;
+                @Override public void onDraw() {
+                    if (recorded) return;
+                    recorded = true;
+                    record("Main screen first draw", SystemClock.elapsedRealtime() - STARTED);
+                    decor.post(() -> decor.getViewTreeObserver().removeOnDrawListener(this));
+                }
+            });
         }
         float rate = activity.getWindowManager().getDefaultDisplay().getRefreshRate();
         long budget = (long) (1_000_000_000d / Math.max(30, rate));

@@ -26,13 +26,12 @@ import static org.junit.Assert.assertTrue;
 @RunWith(RobolectricTestRunner.class)
 @Config(application = Application.class, sdk = 35)
 public class ZeroChillFoundationTest {
-    @Test public void tokensKeepOledBackgroundAndReadableGlassColors() {
+    @Test public void tokensKeepOledBackgroundAndPurposefulFloatingGlass() {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
         assertEquals(Color.BLACK, ZeroChillUi.color(activity, R.color.zc_background));
         assertEquals(Color.rgb(8, 146, 208), ZeroChillUi.color(activity, R.color.zc_cyan));
         assertEquals(ZeroChillUi.color(activity, R.color.zc_cyan), UiPalette.PRIMARY);
-        assertTrue(Color.alpha(ZeroChillUi.color(activity, R.color.zc_surface_glass)) < 255);
-        assertTrue(Color.alpha(ZeroChillUi.color(activity, R.color.zc_surface_glass)) > 180);
+        assertEquals(255, Color.alpha(ZeroChillUi.color(activity, R.color.zc_surface_glass)));
         assertEquals(48, Math.round(activity.getResources()
                 .getDimension(R.dimen.zc_touch_target) / activity.getResources()
                 .getDisplayMetrics().density));
@@ -43,8 +42,8 @@ public class ZeroChillFoundationTest {
         assertEquals(3, ((LayerDrawable) navigation).getNumberOfLayers());
         Drawable sourceRail = ZeroChillUi.sourceRailGlass(activity);
         assertNotNull(sourceRail);
-        assertTrue(sourceRail instanceof LayerDrawable);
-        assertEquals(3, ((LayerDrawable) sourceRail).getNumberOfLayers());
+        assertTrue(sourceRail instanceof GradientDrawable);
+        assertEquals(UiPalette.SURFACE, ((GradientDrawable) sourceRail).getColor().getDefaultColor());
         Drawable outerNavigationGlass = ((LayerDrawable) navigation).getDrawable(0);
         assertTrue(outerNavigationGlass instanceof GradientDrawable);
         int[] navigationColors = ((GradientDrawable) outerNavigationGlass).getColors();
@@ -70,8 +69,7 @@ public class ZeroChillFoundationTest {
         ZeroChillUi.styleSourceRailChip(sourceChip, true);
         assertTrue(sourceChip.isSelected());
         assertEquals(activity.getColor(R.color.zc_cyan), sourceChip.getCurrentTextColor());
-        assertTrue(sourceChip.getBackground() instanceof LayerDrawable);
-        assertEquals(3, ((LayerDrawable) sourceChip.getBackground()).getNumberOfLayers());
+        assertTrue(sourceChip.getBackground() instanceof GradientDrawable);
 
         Drawable selectedNavigation = activity.getDrawable(R.drawable.zc_nav_selected_glass);
         Drawable shitTokRail = activity.getDrawable(R.drawable.zc_shittok_control_rail);
@@ -90,29 +88,35 @@ public class ZeroChillFoundationTest {
         assertEquals(activity.getColor(R.color.zc_surface_glass),
                 card.getCardBackgroundColor().getDefaultColor());
         assertEquals(activity.getColor(R.color.zc_edge), card.getStrokeColor());
+
+        MaterialCardView mediaCard = new MaterialCardView(activity);
+        ZeroChillUi.styleMediaCard(mediaCard, R.dimen.zc_radius_medium);
+        assertEquals(0, mediaCard.getStrokeWidth());
         activity.finish();
     }
 
     @Test public void motionHelpersSetDeterministicEndState() {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
-        View view = new View(activity);
-        ZeroChillMotion.animateSelection(view, false);
+        TextView view = new TextView(activity);
+        ZeroChillUi.styleChip(view, false);
         assertEquals(1f, view.getScaleX(), 0.05f);
         assertEquals(1f, view.getScaleY(), 0.05f);
         ZeroChillMotion.installPressFeedback(view);
+        Object feedback = view.getTag(R.id.zerochill_motion_installed);
+        assertNotNull(feedback);
         ZeroChillMotion.installPressFeedback(view);
-        assertEquals(Boolean.TRUE, view.getTag(R.id.zerochill_motion_installed));
+        assertTrue(feedback == view.getTag(R.id.zerochill_motion_installed));
         activity.finish();
     }
 
     @Test public void reducedMotionSkipsSelectionAnimationAndAppliesFinalState() {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
-        View view = new View(activity);
+        TextView view = new TextView(activity);
         activity.getSharedPreferences("app_prefs", Activity.MODE_PRIVATE).edit()
                 .putBoolean("immersive_motion_enabled", false)
                 .apply();
         assertFalse(ZeroChillMotion.animationsEnabled(activity));
-        ZeroChillMotion.animateSelection(view, true);
+        ZeroChillUi.styleChip(view, true);
         assertEquals(1f, view.getScaleX(), 0.001f);
         assertEquals(1f, view.getScaleY(), 0.001f);
         activity.finish();

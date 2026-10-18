@@ -31,8 +31,13 @@ final class FapzoneCreatorRepository {
     static final int MODE_POPULAR = 3;
 
     private static final int LIVE_ITEMS = 30;
-    private static final int TRENDING_ITEMS = 50;
-    private static final int LIVE_PAGES = 4;
+    static final int DISCOVER_ITEMS = 16;
+    static final int DISCOVER_CANDIDATES = 48;
+    static final int DISCOVER_START_PAGE = 2;
+    static final int DISCOVER_END_PAGE = 3;
+    static final int LIVE_PAGES = 4;
+    static final int DISCOVER_REFILL_START_PAGE = LIVE_PAGES + 1;
+    private static final int DISCOVER_REFILL_PAGES = 4;
     private static final int PROGRESS_STEP = 6;
     private static final long CACHE_AGE_MS = TimeUnit.HOURS.toMillis(6);
     private static final long FETCH_BUDGET_MS = 45_000L;
@@ -52,7 +57,7 @@ final class FapzoneCreatorRepository {
             ProgressListener listener
     ) throws IOException {
         if (mode == MODE_TOP_50) {
-            return fetchTrending(context, listener);
+            return fetchDiscover(context, listener);
         }
         String listing = listingFor(mode);
         Context appContext = context.getApplicationContext();
@@ -145,115 +150,252 @@ final class FapzoneCreatorRepository {
         throw new IOException("No OnlyFap creators were available");
     }
 
-    private List<NativeContentItem> fetchTrending(
+    private List<NativeContentItem> fetchDiscover(
             Context context,
             ProgressListener listener
     ) throws IOException {
         Context appContext = context.getApplicationContext();
-        List<NativeContentItem> fresh = readCache(appContext, MODE_TOP_50, false);
-        if (!fresh.isEmpty()) {
-            if (listener != null) listener.onProgress(new ArrayList<>(fresh));
-            return fresh;
-        }
 
+        // Discover intentionally refreshes on each load so the set changes naturally.
+        // Keep the last successful set only as an offline/network-failure fallback.
         List<NativeContentItem> stale = readCache(appContext, MODE_TOP_50, true);
-        if (listener != null && !stale.isEmpty()) {
-            listener.onProgress(new ArrayList<>(stale));
-        }
 
-        List<OnlyHavenRepository.Creator> creators;
-        try {
-            creators = onlyHaven.fetchTrendingCreators(context, TRENDING_ITEMS);
-        } catch (IOException error) {
-            if (!stale.isEmpty()) return stale;
-            throw error;
-        }
-        if (creators == null || creators.isEmpty()) {
-            if (!stale.isEmpty()) return stale;
-            throw new IOException("No OnlyHaven trending creators were available");
-        }
+        LinkedHashMap<String, FapelloRepository.Model> models = new LinkedHashMap<>();
+        IOException lastError = null;
+        String[] listings = {
+                FapelloRepository.LIST_NEW,
+                FapelloRepository.LIST_HOT,
+                FapelloRepository.LIST_POPULAR
+        };
 
-        ExecutorService workers = Executors.newFixedThreadPool(10);
-        ExecutorCompletionService<ResolvedCreator> completed =
-                new ExecutorCompletionService<>(workers);
-        int submitted = 0;
-        for (int index = 0; index < creators.size() && index < TRENDING_ITEMS; index++) {
-            OnlyHavenRepository.Creator creator = creators.get(index);
-            if (creator == null || !OnlyHavenRepository.isOnlyHavenUrl(creator.url)) continue;
-            int rank = index;
-            completed.submit(() -> resolveTrending(context, rank, creator));
-            submitted++;
-        }
-
-        ArrayList<ResolvedCreator> resolved = new ArrayList<>();
-        int lastPublished = stale.size();
-        long deadline = SystemClock.elapsedRealtime() + FETCH_BUDGET_MS;
-        try {
-            for (int i = 0; i < submitted; i++) {
-                long remaining = deadline - SystemClock.elapsedRealtime();
-                if (remaining <= 0L) break;
-                Future<ResolvedCreator> future = completed.poll(remaining, TimeUnit.MILLISECONDS);
-                if (future == null) break;
+        for (String listing : listings) {
+            for (int page = DISCOVER_START_PAGE; page <= DISCOVER_END_PAGE; page++) {
                 try {
-                    ResolvedCreator creator = future.get();
-                    if (creator == null) continue;
-                    resolved.add(creator);
-                    if (listener != null) {
-                        ArrayList<NativeContentItem> progress =
-                                buildItems(resolved, TRENDING_ITEMS);
-                        int milestone = Math.min(
-                                TRENDING_ITEMS,
-                                ((lastPublished / PROGRESS_STEP) + 1) * PROGRESS_STEP
-                        );
-                        if (progress.size() >= milestone) {
-                            lastPublished = progress.size();
-                            listener.onProgress(progress);
+                    List<FapelloRepository.Model> pageModels =
+                            fapello.fetchModelListing(context, listing, page);
+                    if (pageModels == null || pageModels.isEmpty()) break;
+                    for (FapelloRepository.Model model : pageModels) {
+                        if (model == null || !FapelloRepository.isModelUrl(model.url)) continue;
+                        String imageUrl = clean(model.imageUrl);
+                        if (imageUrl.isEmpty() ||
+                                imageUrl.toLowerCase(Locale.US).contains("load.svg")) {
+                            continue;
                         }
+                        models.putIfAbsent(model.url, model);
                     }
-                } catch (Exception ignored) {
+                } catch (IOException error) {
+                    lastError = error;
+                    break;
                 }
             }
-        } catch (InterruptedException interrupted) {
-            Thread.currentThread().interrupt();
-        } finally {
-            workers.shutdownNow();
         }
 
-        ArrayList<NativeContentItem> result = mergeWarm(
-                buildItems(resolved, TRENDING_ITEMS),
-                stale,
-                TRENDING_ITEMS
+        if (models.isEmpty()) {
+            if (!stale.isEmpty()) return stale;
+            throw lastError == null
+                    ? new IOException("No Fapello creators were available for Discover")
+                    : lastError;
+        }
+
+        ArrayList<FapelloRepository.Model> pool = new ArrayList<>(models.values());
+        java.util.Collections.shuffle(pool);
+
+        ArrayList<NativeContentItem> result = new ArrayList<>();
+        for (FapelloRepository.Model model : pool) {
+            result.add(new NativeContentItem(
+                    NativeContentItem.KIND_CREATOR,
+                    model.name,
+                    model.url,
+                    model.imageUrl,
+                    String.valueOf(result.size() + 1),
+                    model.url,
+                    "",
+                    "Random Fapello discovery pick",
+                    model.name
+            ));
+            if (result.size() >= DISCOVER_CANDIDATES) break;
+        }
+
+        if (result.isEmpty()) {
+            if (!stale.isEmpty()) return stale;
+            throw new IOException("No Fapello creators had usable Discover artwork");
+        }
+
+        // Cache only after final shelf exclusions and refill, so an overlapping warm pool
+        // cannot overwrite the previous useful offline selection.
+        if (listener != null) listener.onProgress(new ArrayList<>(result));
+        return result;
+    }
+
+    interface DiscoverPageLoader {
+        List<FapelloRepository.Model> load(String listing, int page) throws IOException;
+    }
+
+    List<NativeContentItem> completeDiscover(
+            Context context, List<NativeContentItem> candidates,
+            List<NativeContentItem> newItems, List<NativeContentItem> hotItems,
+            List<NativeContentItem> popularItems
+    ) {
+        return completeDiscover(context, candidates, newItems, hotItems, popularItems,
+                (listing, page) -> fapello.fetchModelListing(context, listing, page));
+    }
+
+    List<NativeContentItem> completeDiscover(
+            Context context, List<NativeContentItem> candidates,
+            List<NativeContentItem> newItems, List<NativeContentItem> hotItems,
+            List<NativeContentItem> popularItems, DiscoverPageLoader loader
+    ) {
+        Context appContext = context.getApplicationContext();
+        ArrayList<NativeContentItem> result = refillDiscoverCandidates(
+                candidates, readCache(appContext, MODE_TOP_50, true),
+                newItems, hotItems, popularItems, loader
         );
-        if (listener != null && !result.isEmpty()) {
-            listener.onProgress(new ArrayList<>(result));
-        }
-        if (!result.isEmpty()) {
+        if (!Thread.currentThread().isInterrupted() && !result.isEmpty()) {
             writeCache(appContext, MODE_TOP_50, result);
-            return result;
         }
-        if (!stale.isEmpty()) return stale;
-        throw new IOException("No OnlyHaven trending creators were available");
+        return result;
+    }
+
+    static ArrayList<NativeContentItem> refillDiscoverCandidates(
+            List<NativeContentItem> candidates, List<NativeContentItem> cached,
+            List<NativeContentItem> newItems, List<NativeContentItem> hotItems,
+            List<NativeContentItem> popularItems, DiscoverPageLoader loader
+    ) {
+        ArrayList<NativeContentItem> pool = new ArrayList<>();
+        if (candidates != null) pool.addAll(candidates);
+        String[] listings = {FapelloRepository.LIST_NEW, FapelloRepository.LIST_HOT,
+                FapelloRepository.LIST_POPULAR};
+        boolean[] exhausted = new boolean[listings.length];
+        long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(FETCH_BUDGET_MS);
+        for (int page = DISCOVER_REFILL_START_PAGE;
+                page < DISCOVER_REFILL_START_PAGE + DISCOVER_REFILL_PAGES; page++) {
+            for (int index = 0; index < listings.length; index++) {
+                if (Thread.currentThread().isInterrupted() || System.nanoTime() >= deadline ||
+                        selectDiscoverItems(pool, newItems, hotItems, popularItems).size()
+                                >= DISCOVER_ITEMS) break;
+                if (exhausted[index]) continue;
+                try {
+                    List<FapelloRepository.Model> models = loader.load(listings[index], page);
+                    if (models == null || models.isEmpty()) {
+                        exhausted[index] = true;
+                        continue;
+                    }
+                    ArrayList<NativeContentItem> pageItems = new ArrayList<>();
+                    for (FapelloRepository.Model model : models) {
+                        if (model == null || !FapelloRepository.isModelUrl(model.url) ||
+                                clean(model.imageUrl).isEmpty() ||
+                                model.imageUrl.toLowerCase(Locale.US).contains("load.svg")) continue;
+                        pageItems.add(new NativeContentItem(NativeContentItem.KIND_CREATOR,
+                                model.name, model.url, model.imageUrl, "", model.url, "",
+                                "Random Fapello discovery pick", model.name));
+                    }
+                    java.util.Collections.shuffle(pageItems);
+                    pool.addAll(pageItems);
+                } catch (IOException error) {
+                    exhausted[index] = true;
+                }
+            }
+        }
+        // Fresh candidates take priority. A partial/failed refresh retains useful cached
+        // creators without relaxing duplicate protection or clearing a good cache.
+        if (cached != null) pool.addAll(cached);
+        return selectDiscoverCandidates(pool, newItems, hotItems, popularItems,
+                DISCOVER_CANDIDATES);
+    }
+
+    static ArrayList<NativeContentItem> selectDiscoverItems(
+            List<NativeContentItem> candidates,
+            List<NativeContentItem> newItems,
+            List<NativeContentItem> hotItems,
+            List<NativeContentItem> popularItems
+    ) {
+        return selectDiscoverCandidates(candidates, newItems, hotItems, popularItems,
+                DISCOVER_ITEMS);
+    }
+
+    private static ArrayList<NativeContentItem> selectDiscoverCandidates(
+            List<NativeContentItem> candidates, List<NativeContentItem> newItems,
+            List<NativeContentItem> hotItems, List<NativeContentItem> popularItems, int limit
+    ) {
+        HashSet<String> excluded = new HashSet<>();
+        addCreatorKeys(excluded, newItems);
+        addCreatorKeys(excluded, hotItems);
+        addCreatorKeys(excluded, popularItems);
+
+        ArrayList<NativeContentItem> result = new ArrayList<>();
+        HashSet<String> seen = new HashSet<>();
+        if (candidates == null) return result;
+
+        for (NativeContentItem item : candidates) {
+            if (item == null || matchesCreatorKeys(excluded, item) ||
+                    matchesCreatorKeys(seen, item)) continue;
+            String identity = primaryCreatorKey(item);
+            if (identity.isEmpty()) continue;
+            addCreatorKeys(seen, java.util.Collections.singletonList(item));
+            result.add(item);
+            if (result.size() >= limit) break;
+        }
+        return result;
+    }
+
+    private static void addCreatorKeys(Set<String> keys, List<NativeContentItem> items) {
+        if (keys == null || items == null) return;
+        for (NativeContentItem item : items) {
+            if (item == null) continue;
+            String urlKey = creatorUrlKey(item);
+            String nameKey = creatorNameKey(item);
+            if (!urlKey.isEmpty()) keys.add(urlKey);
+            if (!nameKey.isEmpty()) keys.add(nameKey);
+        }
+    }
+
+    private static boolean matchesCreatorKeys(Set<String> keys, NativeContentItem item) {
+        if (keys == null || keys.isEmpty() || item == null) return false;
+        String urlKey = creatorUrlKey(item);
+        if (!urlKey.isEmpty() && keys.contains(urlKey)) return true;
+        String nameKey = creatorNameKey(item);
+        return !nameKey.isEmpty() && keys.contains(nameKey);
+    }
+
+    private static String primaryCreatorKey(NativeContentItem item) {
+        String urlKey = creatorUrlKey(item);
+        return urlKey.isEmpty() ? creatorNameKey(item) : urlKey;
+    }
+
+    private static String creatorUrlKey(NativeContentItem item) {
+        String url = clean(item == null ? "" : item.url).toLowerCase(Locale.US);
+        if (url.isEmpty()) return "";
+        while (url.endsWith("/")) url = url.substring(0, url.length() - 1);
+        return "url:" + url;
+    }
+
+    private static String creatorNameKey(NativeContentItem item) {
+        if (item == null) return "";
+        String value = clean(item.searchQuery);
+        if (value.isEmpty()) value = clean(item.title);
+        String compact = compact(value);
+        return compact.isEmpty() ? "" : "name:" + compact;
     }
 
     static String titleFor(int mode) {
         if (mode == MODE_NEW) return "New creators";
         if (mode == MODE_HOT) return "Hot creators";
         if (mode == MODE_POPULAR) return "Popular creators";
-        return "Trending";
+        return "Discover";
     }
 
     static String hintFor(int mode) {
         if (mode == MODE_NEW) return "Recently added on Fapello • one combined gallery";
         if (mode == MODE_HOT) return "Hot on Fapello • matched across OnlyFap";
         if (mode == MODE_POPULAR) return "Popular on Fapello • matched across OnlyFap";
-        return "Popular on OnlyHaven · updates automatically";
+        return "Random picks from Fapello · fresh each visit";
     }
 
     static String badgeFor(int mode) {
         if (mode == MODE_NEW) return "NEW";
         if (mode == MODE_HOT) return "HOT";
         if (mode == MODE_POPULAR) return "POP";
-        return "LIVE";
+        return "MIX";
     }
 
     private ResolvedCreator resolveTrending(
@@ -536,7 +678,7 @@ final class FapzoneCreatorRepository {
 
     private List<NativeContentItem> readCache(Context context, int mode, boolean allowStale) {
         ArrayList<NativeContentItem> result = new ArrayList<>();
-        int limit = mode == MODE_TOP_50 ? TRENDING_ITEMS : LIVE_ITEMS;
+        int limit = mode == MODE_TOP_50 ? DISCOVER_CANDIDATES : LIVE_ITEMS;
         try {
             SharedPreferences prefs = context.getSharedPreferences(cacheName(mode), Context.MODE_PRIVATE);
             long updated = prefs.getLong("updated", 0L);
@@ -566,7 +708,7 @@ final class FapzoneCreatorRepository {
                         value.optString(
                                 "description",
                                 mode == MODE_TOP_50
-                                        ? "OnlyHaven"
+                                        ? "Random Fapello discovery pick"
                                         : "Bunkr + Fapello + OnlyHaven + WikiFeet + WikiFeet X"
                         ),
                         query
@@ -609,7 +751,7 @@ final class FapzoneCreatorRepository {
     }
 
     private String cacheName(int mode) {
-        if (mode == MODE_TOP_50) return "onlyfap_trending_v4";
+        if (mode == MODE_TOP_50) return "onlyfap_discover_v2";
         // v3 discards cards cached before static Fapello routes were excluded from listings.
         return "fapzone_creator_feed_v3_" + mode;
     }

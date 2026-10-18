@@ -6,68 +6,57 @@
         android:id="@id/exo_controls_background"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:background="@drawable/player_controls_scrim" />
+        android:background="#06000000" />
 
     <LinearLayout
-        android:id="@id/exo_top_controls"
+        android:id="@+id/player_top_controls"
         android:layout_width="match_parent"
-        android:layout_height="72dp"
+        android:layout_height="52dp"
         android:layout_gravity="top"
-        android:background="@drawable/player_top_scrim"
+        android:background="@drawable/player_top_scrim_minimal"
         android:gravity="center_vertical"
         android:orientation="horizontal"
         android:paddingStart="10dp"
-        android:paddingTop="8dp"
+        android:paddingTop="4dp"
         android:paddingEnd="10dp"
-        android:paddingBottom="16dp">
+        android:paddingBottom="4dp">
 
         <ImageButton
             android:id="@+id/player_back"
-            android:layout_width="44dp"
-            android:layout_height="44dp"
-            android:background="@drawable/player_control_button"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:background="@drawable/player_control_button_minimal"
             android:contentDescription="Back"
-            android:padding="11dp"
+            android:padding="9dp"
             android:scaleType="fitCenter"
             android:src="@drawable/ic_player_back" />
 
         <TextView
             android:id="@+id/player_title"
             android:layout_width="0dp"
-            android:layout_height="44dp"
+            android:layout_height="36dp"
             android:layout_weight="1"
             android:ellipsize="end"
             android:fontFamily="sans-serif-medium"
             android:gravity="center_vertical"
             android:maxLines="1"
-            android:paddingStart="11dp"
-            android:paddingEnd="11dp"
-            android:shadowColor="#FF000000"
+            android:paddingStart="10dp"
+            android:paddingEnd="10dp"
+            android:shadowColor="#99000000"
             android:shadowDx="0"
             android:shadowDy="1"
-            android:shadowRadius="3"
+            android:shadowRadius="2"
             android:text="Video"
-            android:textColor="#FFFFFFFF"
-            android:textSize="14sp" />
-
-        <ImageButton
-            android:id="@+id/player_portrait_fullscreen"
-            android:layout_width="44dp"
-            android:layout_height="44dp"
-            android:background="@drawable/player_control_button"
-            android:contentDescription="Portrait fullscreen"
-            android:padding="11dp"
-            android:scaleType="fitCenter"
-            android:src="@drawable/ic_action_fullscreen"
-            android:visibility="gone" />
+            android:textColor="#F2FFFFFF"
+            android:textSize="13sp" />
 
         <ImageButton
             android:id="@+id/player_menu"
-            android:layout_width="44dp"
-            android:layout_height="44dp"
-            android:background="@drawable/player_control_button"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:background="@drawable/player_control_button_minimal"
             android:contentDescription="Video actions"
-            android:padding="11dp"
+            android:padding="9dp"
             android:scaleType="fitCenter"
             android:src="@drawable/ic_player_more" />
     </LinearLayout>
@@ -84,73 +73,73 @@
 
         <ImageButton
             android:id="@id/exo_rew"
-            android:layout_width="52dp"
-            android:layout_height="52dp"
-            android:layout_marginEnd="20dp"
-            android:background="@drawable/player_control_button"
-            android:contentDescription="Seek back"
-            android:padding="13dp"
+            android:layout_width="38dp"
+            android:layout_height="38dp"
+            android:layout_marginEnd="16dp"
+            android:background="@drawable/player_control_button_minimal"
+            android:contentDescription="Back 10 seconds"
+            android:padding="10dp"
             android:scaleType="fitCenter"
             android:src="@drawable/ic_player_rewind" />
 
         <ImageButton
             android:id="@id/exo_play_pause"
-            android:layout_width="68dp"
-            android:layout_height="68dp"
-            android:background="@drawable/player_control_button_primary"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="@drawable/player_control_button_primary_minimal"
             android:contentDescription="Play or pause"
-            android:padding="17dp"
+            android:padding="13dp"
             android:scaleType="fitCenter"
             android:src="@drawable/ic_player_play" />
 
         <ImageButton
             android:id="@id/exo_ffwd"
-            android:layout_width="52dp"
-            android:layout_height="52dp"
-            android:layout_marginStart="20dp"
-            android:background="@drawable/player_control_button"
-            android:contentDescription="Seek forward"
-            android:padding="13dp"
+            android:layout_width="38dp"
+            android:layout_height="38dp"
+            android:layout_marginStart="16dp"
+            android:background="@drawable/player_control_button_minimal"
+            android:contentDescription="Forward 10 seconds"
+            android:padding="10dp"
             android:scaleType="fitCenter"
             android:src="@drawable/ic_player_forward" />
     </LinearLayout>
 
     <FrameLayout
-        android:id="@id/exo_bottom_bar"
+        android:id="@+id/player_bottom_bar"
         android:layout_width="match_parent"
-        android:layout_height="90dp"
+        android:layout_height="58dp"
         android:layout_gravity="bottom"
-        android:background="@drawable/player_bottom_scrim"
+        android:background="@drawable/player_bottom_scrim_minimal"
         android:layoutDirection="ltr">
 
         <androidx.media3.ui.DefaultTimeBar
             android:id="@id/exo_progress"
             android:layout_width="match_parent"
-            android:layout_height="34dp"
+            android:layout_height="24dp"
             android:layout_gravity="bottom"
-            android:layout_marginStart="14dp"
-            android:layout_marginEnd="14dp"
-            android:layout_marginBottom="31dp"
-            app:ad_marker_color="#CCFFFFFF"
-            app:bar_height="3dp"
-            app:buffered_color="#A6FFFFFF"
+            android:layout_marginStart="12dp"
+            android:layout_marginEnd="48dp"
+            android:layout_marginBottom="20dp"
+            app:ad_marker_color="#AFFFFFFF"
+            app:bar_height="2dp"
+            app:buffered_color="#66FFFFFF"
             app:played_ad_marker_color="@color/app_primary"
             app:played_color="@color/app_primary"
             app:scrubber_color="@color/app_primary"
             app:scrubber_disabled_size="0dp"
-            app:scrubber_dragged_size="16dp"
-            app:scrubber_enabled_size="11dp"
-            app:touch_target_height="34dp"
-            app:unplayed_color="#5CFFFFFF" />
+            app:scrubber_dragged_size="10dp"
+            app:scrubber_enabled_size="7dp"
+            app:touch_target_height="24dp"
+            app:unplayed_color="#38FFFFFF" />
 
         <LinearLayout
             android:layout_width="match_parent"
-            android:layout_height="32dp"
+            android:layout_height="20dp"
             android:layout_gravity="bottom"
             android:gravity="center_vertical"
             android:orientation="horizontal"
-            android:paddingStart="18dp"
-            android:paddingEnd="18dp">
+            android:paddingStart="14dp"
+            android:paddingEnd="54dp">
 
             <TextView
                 android:id="@id/exo_position"
@@ -158,8 +147,8 @@
                 android:layout_height="match_parent"
                 android:fontFamily="sans-serif-medium"
                 android:gravity="center_vertical"
-                android:textColor="#FFFFFFFF"
-                android:textSize="12sp" />
+                android:textColor="#F2FFFFFF"
+                android:textSize="10sp" />
 
             <TextView
                 android:layout_width="wrap_content"
@@ -167,8 +156,8 @@
                 android:fontFamily="sans-serif"
                 android:gravity="center_vertical"
                 android:text="  /  "
-                android:textColor="#A8FFFFFF"
-                android:textSize="12sp" />
+                android:textColor="#70FFFFFF"
+                android:textSize="9sp" />
 
             <TextView
                 android:id="@id/exo_duration"
@@ -176,25 +165,21 @@
                 android:layout_height="match_parent"
                 android:fontFamily="sans-serif"
                 android:gravity="center_vertical"
-                android:textColor="#C8FFFFFF"
-                android:textSize="12sp" />
-
-            <View
-                android:layout_width="0dp"
-                android:layout_height="1dp"
-                android:layout_weight="1" />
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="26dp"
-                android:background="@drawable/player_control_button"
-                android:fontFamily="sans-serif-medium"
-                android:gravity="center"
-                android:paddingStart="10dp"
-                android:paddingEnd="10dp"
-                android:text="Drag the timeline to seek"
-                android:textColor="#C8FFFFFF"
+                android:textColor="#AFFFFFFF"
                 android:textSize="10sp" />
         </LinearLayout>
+
+        <ImageButton
+            android:id="@+id/player_portrait_fullscreen"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:layout_gravity="bottom|end"
+            android:layout_marginEnd="8dp"
+            android:layout_marginBottom="8dp"
+            android:background="@drawable/player_control_button_minimal"
+            android:contentDescription="Fullscreen"
+            android:padding="9dp"
+            android:scaleType="fitCenter"
+            android:src="@drawable/ic_action_fullscreen" />
     </FrameLayout>
 </merge>

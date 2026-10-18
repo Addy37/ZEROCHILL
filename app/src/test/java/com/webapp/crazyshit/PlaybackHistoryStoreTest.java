@@ -1,0 +1,256 @@
+package com.webapp.crazyshit;
+
+import android.app.Application;
+import android.content.Context;
+
+import org.junit.Before;
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.robolectric.RobolectricTestRunner;
+import org.robolectric.RuntimeEnvironment;
+import org.robolectric.annotation.Config;
+
+import java.util.List;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+
+@RunWith(RobolectricTestRunner.class)
+@Config(application = Application.class, sdk = 35)
+public class PlaybackHistoryStoreTest {
+    private Context context;
+
+    @Before
+    public void setUp() {
+        context = RuntimeEnvironment.getApplication();
+        PlaybackHistoryStore.resetForTests();
+        context.getSharedPreferences("playback_history", Context.MODE_PRIVATE)
+                .edit()
+                .clear()
+                .commit();
+    }
+
+
+    @Test
+    public void recordIsVisibleImmediatelyAndPersistsAcrossCacheReset() {
+        PlaybackHistoryStore.initializeAsync(context);
+        PlaybackHistoryStore.record(
+                context,
+                "Cached clip",
+                "https://crazyshit.com/video/cached-clip/",
+                "https://cdn.example.com/cached.jpg",
+                45_000L,
+                120_000L,
+                false,
+                false
+        );
+
+        List<PlaybackHistoryStore.Item> immediate = PlaybackHistoryStore.load(context);
+        assertEquals(1, immediate.size());
+        assertEquals("Cached clip", immediate.get(0).title);
+
+        PlaybackHistoryStore.awaitPendingWritesForTests();
+        PlaybackHistoryStore.resetForTests();
+
+        List<PlaybackHistoryStore.Item> reloaded = PlaybackHistoryStore.load(context);
+        assertEquals(1, reloaded.size());
+        assertEquals("https://crazyshit.com/video/cached-clip/", reloaded.get(0).pageUrl);
+        assertEquals("https://cdn.example.com/cached.jpg", reloaded.get(0).posterUrl);
+    }
+
+    @Test
+    public void historyRemainsBoundedToTwoHundredItems() {
+        PlaybackHistoryStore.initializeAsync(context);
+        for (int i = 0; i < 205; i++) {
+            PlaybackHistoryStore.record(
+                    context,
+                    "Clip " + i,
+                    "https://crazyshit.com/video/clip-" + i + "/",
+                    45_000L,
+                    120_000L,
+                    false
+            );
+        }
+
+        List<PlaybackHistoryStore.Item> items = PlaybackHistoryStore.load(context);
+        assertEquals(200, items.size());
+        assertEquals("Clip 204", items.get(0).title);
+        assertEquals("Clip 5", items.get(199).title);
+    }
+
+    @Test
+    public void showsContinueWatchingOnlyIncludesShowsVideos() {
+        PlaybackHistoryStore.record(
+                context,
+                "Show clip",
+                "https://crazyshit.com/video/show-clip/",
+                "https://cdn.example.com/show-clip.jpg",
+                45_000L,
+                120_000L,
+                false,
+                true
+        );
+        PlaybackHistoryStore.record(
+                context,
+                "Home clip",
+                "https://crazyshit.com/video/home-clip/",
+                "https://cdn.example.com/home-clip.jpg",
+                50_000L,
+                120_000L,
+                false,
+                false
+        );
+
+        List<PlaybackHistoryStore.Item> shows =
+                PlaybackHistoryStore.continueWatchingShows(context);
+
+        assertEquals(1, shows.size());
+        assertEquals("Show clip", shows.get(0).title);
+        assertEquals("https://cdn.example.com/show-clip.jpg", shows.get(0).posterUrl);
+        assertTrue(shows.get(0).fromShows);
+        assertEquals(37, shows.get(0).progressPercent());
+    }
+
+    @Test
+    public void onlyFapHistoryNeverAppearsInShowsContinueWatching() {
+        String pageUrl = "https://fapello.com/example/video/12345/";
+
+        PlaybackHistoryStore.record(
+                context,
+                "OnlyFap video",
+                pageUrl,
+                "",
+                45_000L,
+                120_000L,
+                false,
+                true
+        );
+
+        assertTrue(PlaybackHistoryStore.continueWatchingShows(context).isEmpty());
+
+        PlaybackHistoryStore.record(
+                context,
+                "OnlyFap video",
+                pageUrl,
+                "",
+                60_000L,
+                120_000L,
+                false,
+                false
+        );
+
+        PlaybackHistoryStore.Item item = PlaybackHistoryStore.load(context).get(0);
+        assertFalse(item.fromShows);
+        assertTrue(PlaybackHistoryStore.continueWatchingShows(context).isEmpty());
+    }
+
+    @Test
+    public void showsContinueWatchingIncludesStartedVideosBeforeThirtySeconds() {
+        PlaybackHistoryStore.record(
+                context,
+                "First short start",
+                "https://crazyshit.com/video/first-short-start/",
+                "",
+                13_000L,
+                54_000L,
+                false,
+                true
+        );
+        PlaybackHistoryStore.record(
+                context,
+                "Second short start",
+                "https://crazyshit.com/video/second-short-start/",
+                "",
+                20_000L,
+                96_000L,
+                false,
+                true
+        );
+        PlaybackHistoryStore.record(
+                context,
+                "Third short start",
+                "https://crazyshit.com/video/third-short-start/",
+                "",
+                8_000L,
+                80_000L,
+                false,
+                true
+        );
+
+        List<PlaybackHistoryStore.Item> shows =
+                PlaybackHistoryStore.continueWatchingShows(context);
+
+        assertEquals(3, shows.size());
+        assertEquals("Third short start", shows.get(0).title);
+        assertEquals("Second short start", shows.get(1).title);
+        assertEquals("First short start", shows.get(2).title);
+    }
+
+    @Test
+    public void showsContinueWatchingStillIgnoresAccidentalStartsUnderFiveSeconds() {
+        PlaybackHistoryStore.record(
+                context,
+                "Accidental start",
+                "https://crazyshit.com/video/accidental-start/",
+                "",
+                4_000L,
+                80_000L,
+                false,
+                true
+        );
+
+        assertTrue(PlaybackHistoryStore.continueWatchingShows(context).isEmpty());
+    }
+
+    @Test
+    public void laterPlaybackKeepsKnownShowsClassificationAndPoster() {
+        String pageUrl = "https://crazyshit.com/video/show-clip/";
+        PlaybackHistoryStore.record(
+                context,
+                "Show clip",
+                pageUrl,
+                "https://cdn.example.com/show-clip.jpg",
+                45_000L,
+                120_000L,
+                false,
+                true
+        );
+
+        PlaybackHistoryStore.record(
+                context,
+                "Show clip",
+                pageUrl,
+                60_000L,
+                120_000L,
+                false
+        );
+
+        List<PlaybackHistoryStore.Item> shows =
+                PlaybackHistoryStore.continueWatchingShows(context);
+
+        assertEquals(1, shows.size());
+        assertTrue(shows.get(0).fromShows);
+        assertEquals("https://cdn.example.com/show-clip.jpg", shows.get(0).posterUrl);
+        assertEquals(50, shows.get(0).progressPercent());
+    }
+
+    @Test
+    public void completedShowsVideoDropsOutOfContinueWatching() {
+        PlaybackHistoryStore.record(
+                context,
+                "Finished clip",
+                "https://crazyshit.com/video/finished/",
+                "",
+                119_000L,
+                120_000L,
+                false,
+                true
+        );
+
+        assertTrue(PlaybackHistoryStore.continueWatchingShows(context).isEmpty());
+        PlaybackHistoryStore.Item item = PlaybackHistoryStore.load(context).get(0);
+        assertTrue(item.complete);
+        assertFalse(item.posterUrl == null);
+    }
+}

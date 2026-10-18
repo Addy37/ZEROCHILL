@@ -1,6 +1,5 @@
 package com.webapp.crazyshit;
 
-import android.content.Context;
 import android.content.Intent;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
@@ -10,7 +9,6 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
@@ -58,10 +56,7 @@ final class WatchStatePolish {
     }
 
     static void showResumeToast(VideoDetailActivity activity) {
-        if (activity == null || activity.isFinishing()) return;
-        if (!activity.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
-                .getBoolean("remember_video_position", true)) return;
-
+        if (activity == null || activity.isFinishing() || activity.isShowsOrigin()) return;
         Intent intent = activity.getIntent();
         if (intent == null) return;
         String pageUrl = clean(intent.getStringExtra(PlayerActivity.EXTRA_PAGE_URL));
@@ -71,10 +66,10 @@ final class WatchStatePolish {
             if (!pageUrl.equals(item.pageUrl)) continue;
             if (item.complete || item.positionMs < MIN_RESUME_MS) return;
             if (item.durationMs > 0L && item.positionMs >= (long) (item.durationMs * 0.95f)) return;
-            Toast.makeText(
+            ZeroChillToast.makeText(
                     activity,
                     "Resuming at " + formatTime(item.positionMs),
-                    Toast.LENGTH_SHORT
+                    ZeroChillToast.LENGTH_SHORT
             ).show();
             return;
         }
@@ -113,9 +108,9 @@ final class WatchStatePolish {
             TextView text = (TextView) view;
             CharSequence value = text.getText();
             String label = value == null ? "" : value.toString().trim();
-            if (label.startsWith("Continue")) {
+            if (isWatchStateBadge(text) && label.startsWith("Continue")) {
                 styleContinue(text, label);
-            } else if ("✓ Watched".equals(label)) {
+            } else if (isWatchStateBadge(text) && "✓ Watched".equals(label)) {
                 styleWatched(text);
             }
         }
@@ -130,8 +125,14 @@ final class WatchStatePolish {
         String time = currentLabel.substring("Continue".length()).replace("·", "").trim();
         badge.setText(time.isEmpty() ? "Continue" : "Continue · " + time);
         badge.setTextSize(9.5f);
+        badge.setTextColor(Color.WHITE);
         badge.setPadding(dp(badge, 7), dp(badge, 3), dp(badge, 7), dp(badge, 3));
-        badge.setBackground(rounded(Color.argb(205, 77, 75, 6), dp(badge, 11)));
+        badge.setBackground(ZeroChillUi.rounded(
+                badge.getContext(),
+                ZeroChillUi.color(badge.getContext(), R.color.zc_cyan_container),
+                ZeroChillUi.color(badge.getContext(), R.color.zc_cyan_dim),
+                R.dimen.zc_radius_pill
+        ));
         styleMediaFrame(badge, true);
     }
 
@@ -162,6 +163,15 @@ final class WatchStatePolish {
             if (params.height <= 0 || params.height > dp(child, 5)) continue;
             child.setBackgroundColor(Color.argb(105, 16, 16, 20));
         }
+    }
+
+    static boolean isWatchStateBadge(TextView text) {
+        if (text == null || !(text.getParent() instanceof FrameLayout)) return false;
+        ViewGroup.LayoutParams raw = text.getLayoutParams();
+        if (!(raw instanceof FrameLayout.LayoutParams)) return false;
+        FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) raw;
+        return (params.gravity & Gravity.TOP) == Gravity.TOP &&
+                (params.gravity & Gravity.START) == Gravity.START;
     }
 
     private static GradientDrawable rounded(int color, int radiusPx) {

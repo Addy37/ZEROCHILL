@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "configVersion": 5,
-  "updatedAt": "2026-09-21T13:25:00Z",
+  "updatedAt": "2026-10-06T00:30:00Z",
   "global": {
     "sourceKillSwitchesEnabled": true,
     "fallbacksEnabled": true
@@ -255,6 +255,33 @@
       },
       "mediaBaseUrl": "https://e1.cum.st/media/",
       "imageBaseUrl": "https://img.cum.st/"
+    },
+    "baddiehub": {
+      "enabled": true,
+      "baseUrl": "https://baddiehub.com/",
+      "fallbackDomains": [],
+      "userAgent": "Mozilla/5.0 (Linux; Android 16) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0 Mobile Safari/537.36",
+      "requestHeaders": {
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9"
+      },
+      "refererOverride": "",
+      "requestTimeoutMs": 12000,
+      "retryCount": 0,
+      "routes": {
+        "listingFirst": "?filter=latest",
+        "listingPage": "page/{page}/?filter=latest",
+        "categoriesFirst": "categories/",
+        "categoriesPage": "categories/page/{page}/",
+        "categoryFirst": "category/{slug}/",
+        "categoryPage": "category/{slug}/page/{page}/"
+      },
+      "selectors": {
+        "categoryLinks": "a[href*='/category/']",
+        "cardLinks": "a[href]",
+        "playableFrame": "iframe[src*='player-x.php'][src*='q=']",
+        "playableVideo": "video source[src],source[src],video[src]"
+      }
     }
   }
 }

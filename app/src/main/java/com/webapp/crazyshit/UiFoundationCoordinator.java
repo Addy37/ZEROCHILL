@@ -16,7 +16,7 @@ import java.util.WeakHashMap;
  *
  * 2.8 centralizes when visual, responsive and navigation systems attach so the Application no
  * longer has to know the ordering rules for every screen. Portrait navigation has one visible
- * owner; the older Flash/Material geometry loops are deliberately not attached.
+ * owner.
  */
 final class UiFoundationCoordinator {
     private static WeakReference<NativeMainActivity> currentMain = new WeakReference<>(null);
@@ -43,8 +43,7 @@ final class UiFoundationCoordinator {
         if (activity instanceof NativeMainActivity) {
             NativeMainActivity main = (NativeMainActivity) activity;
             currentMain = new WeakReference<>(main);
-            // If this is a cold launch from SplashActivity, cover the native UI with the exact same
-            // wordmark until the selected Chaos player reports its first rendered frame.
+            // Consume legacy launch extras without covering the application UI for network work.
             ChaosStartupOverlayController.attach(main);
             attachMain(main, false);
             StableBottomNavigationController.attach(main);
@@ -59,7 +58,8 @@ final class UiFoundationCoordinator {
             ResponsiveFitmentController.applySoon(activity);
         } else if (activity instanceof VideoDetailActivity) {
             VideoDetailActivity detail = (VideoDetailActivity) activity;
-            RelatedVideosPolish.attach(detail);
+            if (!detail.isShowsOrigin()) RelatedVideosPolish.attach(detail);
+            else RelatedVideosPolish.detach(detail);
             PredictiveBackPolish.attach(detail);
             ResponsiveFitmentController.applySoon(activity);
         } else {
@@ -81,7 +81,6 @@ final class UiFoundationCoordinator {
         if (activity instanceof NativeMainActivity) {
             NativeMainActivity main = (NativeMainActivity) activity;
             FeedViewStyleController.detachMain(main);
-            FlashUiController.detach(main);
             UiPolishController.detach(main);
             LandscapeUiController.detach(main);
             StableBottomNavigationController.detach(main);
@@ -173,9 +172,6 @@ final class UiFoundationCoordinator {
         GlobalSearchUiController.attachSoon(main);
         FeedViewStyleController.attachMain(main);
         UiPolishController.attach(main);
-        // Flash used to create a second floating Chaos button, move an active indicator and poll
-        // the Material nav every 320 ms. That entire portrait-nav path stays detached.
-        FlashUiController.detach(main);
         WatchStatePolish.attach(main);
         PredictiveBackPolish.attach(main);
         // NativeMainActivity owns its ZeroChill shell and motion. The legacy controllers remain

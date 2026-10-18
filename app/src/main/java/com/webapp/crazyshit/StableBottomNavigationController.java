@@ -33,6 +33,15 @@ final class StableBottomNavigationController {
     /** Shared ZeroChill floating-glass portrait navigation styling. */
     static void styleBar(BottomNavigationView nav) {
         if (nav == null) return;
+        if (nav instanceof ZeroChillBottomNavigationView) {
+            nav.setBackground(null);
+            nav.setElevation(0f);
+            if (nav.getParent() instanceof FrostedNavigationLayout) {
+                ((FrostedNavigationLayout) nav.getParent()).setFrostedNavigationView(nav);
+            }
+            ((ZeroChillBottomNavigationView) nav).refreshItemColors();
+            return;
+        }
         Context context = nav.getContext();
         nav.setBackground(ZeroChillUi.navigationGlass(context));
         nav.setBackgroundTintList(null);
@@ -237,7 +246,10 @@ final class StableBottomNavigationController {
             TextView title = field(activity, "headerTitle", TextView.class);
             TextView subtitle = field(activity, "headerSubtitle", TextView.class);
 
-            topBar.setBackgroundColor(ZeroChillUi.background(activity));
+            // The live header owns its material and platform fallback background.
+            if (!(topBar instanceof GlassHeaderView)) {
+                topBar.setBackgroundColor(ZeroChillUi.background(activity));
+            }
             topBar.setElevation(0f);
             if (title != null) {
                 title.setTextSize(22f);
@@ -249,6 +261,13 @@ final class StableBottomNavigationController {
             if (nav == null || nav.getLayoutParams() == null) return;
             if (activity.getResources().getConfiguration().orientation ==
                     Configuration.ORIENTATION_LANDSCAPE) return;
+
+            if (nav instanceof ZeroChillBottomNavigationView) {
+                // Tab and lifecycle passes may restyle the bar, but vertical motion owns its
+                // height and margins. Never reset a compact or intermediate animation frame.
+                ((ZeroChillBottomNavigationView) nav).reapplyCurrentGeometry();
+                return;
+            }
 
             ViewGroup.LayoutParams raw = nav.getLayoutParams();
             boolean changed = false;

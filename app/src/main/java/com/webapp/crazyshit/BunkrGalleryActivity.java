@@ -10,6 +10,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.text.TextUtils;
 import android.view.Gravity;
+import android.view.HapticFeedbackConstants;
 import android.view.Menu;
 import android.view.View;
 import android.view.WindowInsets;
@@ -17,12 +18,13 @@ import android.view.WindowInsetsController;
 import android.webkit.CookieManager;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
-import android.widget.PopupMenu;
 import android.widget.ProgressBar;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import androidx.annotation.OptIn;
+import androidx.core.graphics.Insets;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowInsetsCompat;
 import androidx.media3.common.MediaItem;
 import androidx.media3.common.MimeTypes;
 import androidx.media3.common.PlaybackException;
@@ -52,8 +54,10 @@ public final class BunkrGalleryActivity extends Activity {
     public static final String EXTRA_CREATOR_QUERY = "bunkr_gallery_creator_query";
     public static final String EXTRA_FAPELLO_PROFILE_URL = "bunkr_gallery_fapello_profile_url";
     public static final String EXTRA_MEDIA_FILTER = "bunkr_gallery_media_filter";
+    static final String EXTRA_NOTIFICATION_GALLERY_FALLBACK = "notification_gallery_fallback";
     public static final String EXTRA_INITIAL_URL = "bunkr_gallery_initial_url";
     public static final String EXTRA_INITIAL_POSITION = "bunkr_gallery_initial_position";
+    public static final String EXTRA_SHARED_ELEMENT_NAME = "bunkr_gallery_shared_element_name";
     public static final String FILTER_ALL = "all";
     public static final String FILTER_PICTURES = "pictures";
     public static final String FILTER_VIDEOS = "videos";
@@ -93,12 +97,18 @@ public final class BunkrGalleryActivity extends Activity {
     private TextView downloadAction;
     private TextView itemTitleView;
     private TextView itemMetaView;
-    private ProgressBar initialLoading;
+    private ZeroChillLoadingView initialLoading;
+    private ProgressBar loadMoreLoading;
     private boolean chromeVisible = true;
     private boolean restoreChromeAfterLandscape;
     private boolean landscapeFullscreen;
-    private boolean sensorFullscreen;
-    private SensorMediaOrientationListener orientationListener;
+    private boolean manualVideoFullscreen;
+    private boolean sensorVideoFullscreen;
+    private boolean videoSizeKnown;
+    private boolean portraitVideo;
+    private SensorMediaOrientationListener videoOrientationListener;
+    private View viewerBackdrop;
+    private boolean returningToGallery;
     private ExoPlayer player;
     private final PlaybackRecovery playbackRecovery = new PlaybackRecovery();
     private boolean recoveryResumed;
@@ -108,13 +118,22 @@ public final class BunkrGalleryActivity extends Activity {
     private final Set<String> warmedVideos = new HashSet<>();
     private final Map<String, String> videoReferers = new HashMap<>();
     private int pendingVideoPosition = -1;
+    private boolean autoplayInitialSelection;
+    private String sharedElementName = "";
+    private boolean sharedElementPending;
+    private boolean sharedElementStarted;
+    private boolean sharedElementCompleted;
+    private View sharedElementTarget;
+    private int pendingTransitionAutoplayPosition = -1;
 
     @Override
     protected void onCreate(Bundle state) {
         super.onCreate(state);
+        PhoneOrientationPolicy.applyBrowsingOrientation(this);
+        videoOrientationListener = new SensorMediaOrientationListener(this, this::onVideoOrientation);
+        GalleryMediaTransition.requestWindowFeature(this);
         getWindow().setStatusBarColor(Color.BLACK);
         getWindow().setNavigationBarColor(Color.BLACK);
-        orientationListener = new SensorMediaOrientationListener(this, this::onPhysicalOrientation);
 
         sessionId = value(getIntent().getStringExtra(EXTRA_SESSION_ID));
         albumTitle = value(getIntent().getStringExtra(EXTRA_TITLE));
@@ -127,6 +146,19 @@ public final class BunkrGalleryActivity extends Activity {
         }
         initialUrl = value(getIntent().getStringExtra(EXTRA_INITIAL_URL));
         initialPosition = Math.max(0, getIntent().getIntExtra(EXTRA_INITIAL_POSITION, 0));
+        sharedElementName = state == null
+                ? value(getIntent().getStringExtra(EXTRA_SHARED_ELEMENT_NAME))
+                : "";
+        sharedElementPending = !sharedElementName.isEmpty()
+                && ZeroChillMotion.animationsEnabled(this);
+        if (sharedElementPending) {
+            GalleryMediaTransition.configureViewer(
+                    this,
+                    this::onSharedElementEnterFinished
+            );
+            postponeEnterTransition();
+        }
+        autoplayInitialSelection = state == null && !initialUrl.isEmpty();
         if (albumTitle.isEmpty()) albumTitle = "OnlyFap gallery";
 
         if (state != null) {
@@ -163,6 +195,7 @@ public final class BunkrGalleryActivity extends Activity {
         buildUi();
         applyViewerOrientation(getResources().getConfiguration().orientation);
         if (snapshot == null || snapshot.items.isEmpty()) {
+            initialLoading.setVisibility(View.VISIBLE);
             loadInitialPage();
         } else {
             showSnapshot(snapshot);
@@ -171,7 +204,9 @@ public final class BunkrGalleryActivity extends Activity {
 
     private void buildUi() {
         FrameLayout root = new FrameLayout(this);
-        root.setBackgroundColor(Color.BLACK);
+        viewerBackdrop = new View(this);
+        viewerBackdrop.setBackgroundColor(Color.BLACK);
+        root.addView(viewerBackdrop, new FrameLayout.LayoutParams(-1, -1));
 
         pager = new ViewPager2(this);
         pager.setOrientation(ViewPager2.ORIENTATION_HORIZONTAL);
@@ -185,11 +220,29 @@ public final class BunkrGalleryActivity extends Activity {
                     }
 
                     @Override
+                    public void onMediaLongPress(int position, NativeContentItem item) {
+                        if (pager != null) {
+                            pager.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
+                        }
+                        downloadGalleryItem(position, item);
+                    }
+
+                    @Override
                     public void onResolvedImageFailed(int position, NativeContentItem item) {
                         BunkrGallerySessionStore.clearResolvedUrl(sessionId, item.url);
                     }
+
+                    @Override public void onVideoBack() { onBackPressed(); }
+                    @Override public void onVideoMenu(View anchor) { showMenu(anchor); }
+                    @Override public void onVideoFullscreen() { toggleVideoFullscreen(); }
+
+                    @Override
+                    public void onSharedElementReady(View target) {
+                        BunkrGalleryActivity.this.onSharedElementReady(target);
+                    }
                 }
         );
+        adapter.setInitialSharedElement(initialUrl, sharedElementName);
         pager.setAdapter(adapter);
         root.addView(pager, new FrameLayout.LayoutParams(-1, -1));
 
@@ -201,7 +254,7 @@ public final class BunkrGalleryActivity extends Activity {
 
         TextView back = action("‹", 32);
         back.setContentDescription("Back");
-        back.setOnClickListener(v -> finish());
+        back.setOnClickListener(v -> finishViewer());
         topBar.addView(back, new LinearLayout.LayoutParams(dp(52), dp(54)));
 
         LinearLayout heading = new LinearLayout(this);
@@ -244,6 +297,7 @@ public final class BunkrGalleryActivity extends Activity {
         FrameLayout.LayoutParams topParams = new FrameLayout.LayoutParams(-1, dp(64));
         topParams.gravity = Gravity.TOP;
         root.addView(topBar, topParams);
+        applyTopBarInsets();
 
         bottomBar = new LinearLayout(this);
         bottomBar.setOrientation(LinearLayout.VERTICAL);
@@ -271,12 +325,32 @@ public final class BunkrGalleryActivity extends Activity {
         bottomParams.gravity = Gravity.BOTTOM;
         root.addView(bottomBar, bottomParams);
 
-        initialLoading = new ProgressBar(this);
-        FrameLayout.LayoutParams loadingParams = new FrameLayout.LayoutParams(dp(52), dp(52));
+        initialLoading = new ZeroChillLoadingView(this, "Loading gallery...", true);
+        FrameLayout.LayoutParams loadingParams =
+                new FrameLayout.LayoutParams(dp(160), dp(132));
         loadingParams.gravity = Gravity.CENTER;
         root.addView(initialLoading, loadingParams);
+        initialLoading.setVisibility(View.GONE);
+
+        loadMoreLoading = new ZeroChillProgressBar(this);
+        loadMoreLoading.setVisibility(View.GONE);
+        FrameLayout.LayoutParams loadMoreParams =
+                new FrameLayout.LayoutParams(dp(40), dp(40));
+        loadMoreParams.gravity = Gravity.CENTER;
+        root.addView(loadMoreLoading, loadMoreParams);
+
+        if (sharedElementPending) {
+            topBar.setAlpha(0f);
+            bottomBar.setAlpha(0f);
+        }
 
         setContentView(root);
+        // Even a transparent ColorDrawable makes a ViewGroup an implicit
+        // transition group. Keep ancestors background-free so only siblings leave.
+        findViewById(android.R.id.content).setBackground(null);
+        if (sharedElementPending) {
+            root.postDelayed(this::startSharedElementFallback, 900L);
+        }
 
         pager.registerOnPageChangeCallback(new ViewPager2.OnPageChangeCallback() {
             @Override
@@ -287,14 +361,47 @@ public final class BunkrGalleryActivity extends Activity {
                 updateChrome(position);
                 resolvePhoto(position);
                 preloadNeighbors(position);
+                maybeAutoplayInitialSelection(position);
                 if (position >= Math.max(0, adapter.getItemCount() - 5)) loadMore();
             }
         });
     }
 
+    private void applyTopBarInsets() {
+        if (topBar == null) return;
+        final int baseLeft = dp(6);
+        final int baseTop = dp(5);
+        final int baseRight = dp(6);
+        final int baseBottom = dp(5);
+        final int baseHeight = dp(64);
+
+        ViewCompat.setOnApplyWindowInsetsListener(topBar, (view, windowInsets) -> {
+            Insets safe = windowInsets.getInsets(
+                    WindowInsetsCompat.Type.statusBars()
+                            | WindowInsetsCompat.Type.displayCutout()
+            );
+            view.setPadding(
+                    baseLeft + safe.left,
+                    baseTop + safe.top,
+                    baseRight + safe.right,
+                    baseBottom
+            );
+            android.view.ViewGroup.LayoutParams params = view.getLayoutParams();
+            if (params != null && params.height != baseHeight + safe.top) {
+                params.height = baseHeight + safe.top;
+                view.setLayoutParams(params);
+            }
+            return windowInsets;
+        });
+        ViewCompat.requestApplyInsets(topBar);
+    }
+
     private void showSnapshot(BunkrGallerySessionStore.Snapshot snapshot) {
-        initialLoading.setVisibility(View.GONE);
+        boolean finishInitialLoader = initialLoading.getVisibility() == View.VISIBLE
+                && snapshot != null && !snapshot.items.isEmpty();
         adapter.replace(filterMedia(snapshot.items), snapshot.resolvedUrls);
+        if (finishInitialLoader && adapter.getItemCount() > 0) initialLoading.finish();
+        else initialLoading.setVisibility(View.GONE);
         currentPage = snapshot.currentPage;
         endReached = snapshot.endReached;
         if (adapter.getItemCount() == 0) {
@@ -312,13 +419,15 @@ public final class BunkrGalleryActivity extends Activity {
         updateChrome(start);
         resolvePhoto(start);
         preloadNeighbors(start);
+        int initialStart = start;
+        pager.post(() -> maybeAutoplayInitialSelection(initialStart));
         if (start >= Math.max(0, adapter.getItemCount() - 5)) loadMore();
     }
 
     private void loadInitialPage() {
         if (albumUrl.isEmpty() && !isCreatorGallery()) {
             initialLoading.setVisibility(View.GONE);
-            Toast.makeText(this, "This album could not be opened.", Toast.LENGTH_SHORT).show();
+            ZeroChillToast.makeText(this, "This album could not be opened.", ZeroChillToast.LENGTH_SHORT).show();
             return;
         }
         int requestGeneration = generation;
@@ -352,12 +461,12 @@ public final class BunkrGalleryActivity extends Activity {
                             BunkrGallerySessionStore.snapshot(sessionId);
                     if (fresh != null && !fresh.items.isEmpty()) showSnapshot(fresh);
                     if (fapelloFailure != null) showFapelloFailure(fapelloFailure);
-                    else if (fresh == null || fresh.items.isEmpty()) Toast.makeText(
+                    else if (fresh == null || fresh.items.isEmpty()) ZeroChillToast.makeText(
                             this,
                             isCreatorGallery()
                                     ? "No matching pictures or videos loaded. Try again."
                                     : "No supported pictures or videos were found.",
-                            Toast.LENGTH_LONG
+                            ZeroChillToast.LENGTH_LONG
                     ).show();
                 });
             } catch (Exception error) {
@@ -365,14 +474,14 @@ public final class BunkrGalleryActivity extends Activity {
                     if (requestGeneration != generation || isFinishing()) return;
                     initialLoading.setVisibility(View.GONE);
                     FapelloSourceException failure = fapelloFailure(error);
-                    Toast.makeText(
+                    ZeroChillToast.makeText(
                             this,
                             failure != null
                                     ? failure.userMessage()
                                     : isCreatorGallery()
                                     ? "Couldn't build this creator gallery. Try again."
                                     : "Couldn't load this album.",
-                            Toast.LENGTH_LONG
+                            ZeroChillToast.LENGTH_LONG
                     ).show();
                 });
             }
@@ -403,10 +512,14 @@ public final class BunkrGalleryActivity extends Activity {
                 runOnUiThread(() -> {
                     if (requestGeneration != generation || isFinishing()) return;
                     loadingMore = false;
-                    initialLoading.setVisibility(View.GONE);
+                    boolean finishingInitialLoad = initialLoading.getVisibility() == View.VISIBLE
+                            && adapter.getItemCount() == 0;
+                    loadMoreLoading.setVisibility(View.GONE);
                     BunkrGallerySessionStore.Snapshot currentCreator = isCreatorGallery()
                             ? BunkrGallerySessionStore.snapshot(sessionId) : null;
                     int added = adapter.append(currentCreator == null ? visibleResult : filterMedia(currentCreator.items));
+                    if (finishingInitialLoad && added > 0) initialLoading.finish();
+                    else if (!finishingInitialLoad) initialLoading.setVisibility(View.GONE);
                     if (currentCreator != null) {
                         currentPage = currentCreator.currentPage;
                         endReached = currentCreator.endReached;
@@ -425,7 +538,11 @@ public final class BunkrGalleryActivity extends Activity {
                     preloadNeighbors(pager.getCurrentItem());
                     if (fapelloFailure != null) showFapelloFailure(fapelloFailure);
                     if (isCreatorGallery() && added == 0 && !endReached) {
-                        initialLoading.setVisibility(View.VISIBLE);
+                        if (adapter.getItemCount() == 0) {
+                            initialLoading.setVisibility(View.VISIBLE);
+                        } else {
+                            loadMoreLoading.setVisibility(View.VISIBLE);
+                        }
                         pager.post(this::loadMore);
                     }
                 });
@@ -433,11 +550,12 @@ public final class BunkrGalleryActivity extends Activity {
                 runOnUiThread(() -> {
                     loadingMore = false;
                     initialLoading.setVisibility(View.GONE);
+                    loadMoreLoading.setVisibility(View.GONE);
                     if (adapter.getItemCount() == 0) {
-                        Toast.makeText(
+                        ZeroChillToast.makeText(
                                 this,
                                 "Couldn't load more matching media.",
-                                Toast.LENGTH_SHORT
+                                ZeroChillToast.LENGTH_SHORT
                         ).show();
                     }
                 });
@@ -448,7 +566,7 @@ public final class BunkrGalleryActivity extends Activity {
     private void showFapelloFailure(FapelloSourceException failure) {
         if (failure == null || fapelloFailureShown) return;
         fapelloFailureShown = true;
-        Toast.makeText(this, failure.userMessage(), Toast.LENGTH_LONG).show();
+        ZeroChillToast.makeText(this, failure.userMessage(), ZeroChillToast.LENGTH_LONG).show();
     }
 
     private FapelloSourceException fapelloFailure(Throwable error) {
@@ -462,12 +580,178 @@ public final class BunkrGalleryActivity extends Activity {
         return null;
     }
 
+    private void onSharedElementReady(View target) {
+        if (!sharedElementPending || sharedElementStarted || target == null) return;
+        String targetName = ViewCompat.getTransitionName(target);
+        if (!sharedElementName.equals(targetName)) return;
+        sharedElementTarget = target;
+        target.post(() -> {
+            if (!sharedElementPending || sharedElementStarted || isFinishing()) return;
+            sharedElementStarted = true;
+            startPostponedEnterTransition();
+        });
+    }
+
+    private void startSharedElementFallback() {
+        if (!sharedElementPending || sharedElementStarted || isFinishing()) return;
+        sharedElementStarted = true;
+        startPostponedEnterTransition();
+        // With no matching target Android may have no shared transition to finish.
+        // Restore normal viewer behavior even in that fallback.
+        if (sharedElementTarget == null) {
+            getWindow().getDecorView().postDelayed(() -> {
+                if (sharedElementPending) onSharedElementEnterFinished();
+            }, GalleryMediaTransition.EXPAND_DURATION_MS + 80L);
+        }
+    }
+
+    private void onSharedElementEnterFinished() {
+        if (!sharedElementPending) return;
+        sharedElementPending = false;
+        if (adapter != null) adapter.finishOpeningTransition();
+        sharedElementCompleted = sharedElementTarget != null;
+        if (chromeVisible && topBar != null && bottomBar != null) {
+            topBar.animate().cancel();
+            bottomBar.animate().cancel();
+            topBar.animate().alpha(1f)
+                    .setDuration(GalleryMediaTransition.CHROME_FADE_MS).start();
+            bottomBar.animate().alpha(1f)
+                    .setDuration(GalleryMediaTransition.CHROME_FADE_MS).start();
+        }
+        int autoplayPosition = pendingTransitionAutoplayPosition;
+        pendingTransitionAutoplayPosition = -1;
+        if (autoplayPosition >= 0) {
+            maybeAutoplayInitialSelection(autoplayPosition);
+        }
+    }
+
+    private void finishViewer() {
+        if (isFinishing() || returningToGallery) return;
+        if (adapter != null) adapter.stopReveals();
+        NativeContentItem current = adapter == null || pager == null
+                ? null
+                : adapter.itemAt(pager.getCurrentItem());
+        boolean sharedReturn = sharedElementCompleted
+                && canReturnWithSharedElement(sharedElementName, initialUrl, current);
+        if (!sharedReturn) {
+            if (sharedElementPending) {
+                sharedElementPending = false;
+                startPostponedEnterTransition();
+            }
+            finish();
+            overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out);
+            return;
+        }
+
+        returningToGallery = true;
+        generation++;
+        topBar.animate().cancel();
+        bottomBar.animate().cancel();
+        pager.setUserInputEnabled(false);
+        View target = adapter.prepareSharedReturn(pager, pager.getCurrentItem());
+        releasePlayer();
+        if (target == null) {
+            finish();
+            overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out);
+            return;
+        }
+        GalleryMediaTransition.configureReturnSurfaces(this, viewerBackdrop, topBar, bottomBar,
+                initialLoading, loadMoreLoading);
+        final boolean[] returnStarted = {false};
+        Runnable startReturn = () -> {
+            if (returnStarted[0]) return;
+            returnStarted[0] = true;
+            if (isFinishing() || isDestroyed()) return;
+            setResult(RESULT_OK);
+            finishAfterTransition();
+        };
+        // Leave the poster drawn before Android captures its return snapshot.
+        android.view.ViewTreeObserver.OnPreDrawListener ready = new android.view.ViewTreeObserver.OnPreDrawListener() {
+            @Override public boolean onPreDraw() {
+                target.getViewTreeObserver().removeOnPreDrawListener(this);
+                startReturn.run();
+                return true;
+            }
+        };
+        target.getViewTreeObserver().addOnPreDrawListener(ready);
+        // A screen-off or window-stop interruption may prevent the next draw.
+        target.postDelayed(() -> {
+            if (target.getViewTreeObserver().isAlive())
+                target.getViewTreeObserver().removeOnPreDrawListener(ready);
+            startReturn.run();
+        }, 350L);
+        target.invalidate();
+    }
+
+    static boolean canReturnWithSharedElement(
+            String transitionName,
+            String initialUrl,
+            NativeContentItem current
+    ) {
+        return transitionName != null
+                && !transitionName.isEmpty()
+                && initialUrl != null
+                && !initialUrl.isEmpty()
+                && current != null
+                && initialUrl.equals(current.url);
+    }
+
+    @Override
+    public void onBackPressed() {
+        finishViewer();
+    }
+
+    private void maybeAutoplayInitialSelection(int position) {
+        if (returningToGallery || isFinishing()) return;
+        NativeContentItem item = adapter == null ? null : adapter.itemAt(position);
+        if (!shouldAutoplayInitialSelection(
+                autoplayInitialSelection,
+                initialUrl,
+                item
+        )) return;
+        if (shouldDelayInitialAutoplay(
+                sharedElementPending,
+                autoplayInitialSelection,
+                initialUrl,
+                item
+        )) {
+            pendingTransitionAutoplayPosition = position;
+            return;
+        }
+        autoplayInitialSelection = false;
+        pendingTransitionAutoplayPosition = -1;
+        playVideo(position, item);
+    }
+
+    static boolean shouldAutoplayInitialSelection(
+            boolean requested,
+            String initialUrl,
+            NativeContentItem item
+    ) {
+        return requested
+                && item != null
+                && item.isVideo()
+                && initialUrl != null
+                && !initialUrl.isEmpty()
+                && initialUrl.equals(item.url);
+    }
+
+    static boolean shouldDelayInitialAutoplay(
+            boolean sharedTransitionPending,
+            boolean requested,
+            String initialUrl,
+            NativeContentItem item
+    ) {
+        return sharedTransitionPending
+                && shouldAutoplayInitialSelection(requested, initialUrl, item);
+    }
+
     private void onMediaTap(int position, NativeContentItem item) {
         if (item == null) return;
         if (adapter.isFailed(position)) {
             adapter.setFailed(position, false);
             if (item.isVideo()) playVideo(position, item);
-            else resolvePhoto(position);
+            else resolvePhoto(position, false, false);
             return;
         }
         if (item.isVideo()) playVideo(position, item);
@@ -501,6 +785,10 @@ public final class BunkrGalleryActivity extends Activity {
     }
 
     private void resolvePhoto(int position, boolean prefetch) {
+        resolvePhoto(position, prefetch, true);
+    }
+
+    private void resolvePhoto(int position, boolean prefetch, boolean useListingOriginal) {
         NativeContentItem item = adapter.itemAt(position);
         if (item == null || !item.isImage()) return;
         if (!adapter.resolvedUrl(position).isEmpty()) {
@@ -511,9 +799,12 @@ public final class BunkrGalleryActivity extends Activity {
             if (!prefetch) adapter.setLoading(position, true);
             return;
         }
-        if (isOnlyHavenDirectImage(item)) {
-            adapter.setResolvedUrl(position, item.url);
-            BunkrGallerySessionStore.setResolvedUrl(sessionId, item.url, item.url);
+        // An explicit retry asks the primary source again if the listing original failed.
+        String directPhoto = useListingOriginal ? FapelloRepository.photoUrlFromItem(item) : "";
+        if (directPhoto.isEmpty() && isOnlyHavenDirectImage(item)) directPhoto = item.url;
+        if (!directPhoto.isEmpty()) {
+            adapter.setResolvedUrl(position, directPhoto);
+            BunkrGallerySessionStore.setResolvedUrl(sessionId, item.url, directPhoto);
             if (prefetch) adapter.preloadImage(position);
             return;
         }
@@ -553,7 +844,8 @@ public final class BunkrGalleryActivity extends Activity {
                     if (requestGeneration != generation || isFinishing()) return;
                     resolvingMedia.remove(item.url);
                     adapter.setLoading(position, false);
-                    if (pager.getCurrentItem() == position) adapter.setFailed(position, true);
+                    if (pager.getCurrentItem() == position)
+                        adapter.setFailed(position, true);
                 });
             }
         });
@@ -568,7 +860,12 @@ public final class BunkrGalleryActivity extends Activity {
                     : videoReferers.getOrDefault(item.url, item.url);
             if (warmedVideos.add(url)) warmIo.execute(() -> {
                 if (withinPreloadWindow(position)) {
-                    GalleryVideoCache.warm(this, videoHttpFactory(url, referer), url);
+                    GalleryVideoCache.warm(
+                            this,
+                            videoHttpFactory(url, referer),
+                            url,
+                            Math.abs(position - pager.getCurrentItem())
+                    );
                 } else {
                     runOnUiThread(() -> warmedVideos.remove(url));
                 }
@@ -595,8 +892,12 @@ public final class BunkrGalleryActivity extends Activity {
                                 ? item.url : resolved.requestReferer;
                         warmIo.execute(() -> {
                             if (withinPreloadWindow(position)) {
-                                GalleryVideoCache.warm(this,
-                                        videoHttpFactory(resolved.mediaUrl, referer), resolved.mediaUrl);
+                                GalleryVideoCache.warm(
+                                        this,
+                                        videoHttpFactory(resolved.mediaUrl, referer),
+                                        resolved.mediaUrl,
+                                        Math.abs(position - pager.getCurrentItem())
+                                );
                             } else {
                                 runOnUiThread(() -> warmedVideos.remove(resolved.mediaUrl));
                             }
@@ -614,7 +915,7 @@ public final class BunkrGalleryActivity extends Activity {
                     if (pendingVideoPosition == position && pager.getCurrentItem() == position) {
                         pendingVideoPosition = -1;
                         adapter.setFailed(position, true);
-                        Toast.makeText(this, "Couldn't play this video.", Toast.LENGTH_SHORT).show();
+                        ZeroChillToast.makeText(this, "Couldn't play this video.", ZeroChillToast.LENGTH_SHORT).show();
                     }
                 });
             }
@@ -623,7 +924,7 @@ public final class BunkrGalleryActivity extends Activity {
 
     private void playVideo(int position, NativeContentItem item) {
         if (activeVideoPosition == position && player != null) {
-            if (player.isPlaying()) player.pause(); else player.play();
+            adapter.toggleVideoControls(position);
             return;
         }
         playbackRecovery.reset();
@@ -673,7 +974,7 @@ public final class BunkrGalleryActivity extends Activity {
                     if (requestGeneration != generation || isFinishing()) return;
                     adapter.setLoading(position, false);
                     adapter.setFailed(position, true);
-                    Toast.makeText(this, "Couldn't play this video.", Toast.LENGTH_SHORT).show();
+                    ZeroChillToast.makeText(this, "Couldn't play this video.", ZeroChillToast.LENGTH_SHORT).show();
                 });
             }
         });
@@ -695,6 +996,11 @@ public final class BunkrGalleryActivity extends Activity {
                         ? GalleryVideoCache.factory(this, httpFactory) : httpFactory);
         player = new ExoPlayer.Builder(this).setMediaSourceFactory(mediaSourceFactory).build();
         activeVideoPosition = position;
+        videoSizeKnown = false;
+        if (PhoneOrientationPolicy.isPhoneSized(this)
+                && ShowsPlaybackOrientationPolicy.autoRotateEnabled(this)
+                && getResources().getConfiguration().orientation != Configuration.ORIENTATION_LANDSCAPE)
+            PhoneOrientationPolicy.enterPortraitFullscreen(this);
         adapter.activateVideo(position, player);
 
         MediaItem.Builder media = new MediaItem.Builder().setUri(mediaUrl);
@@ -703,9 +1009,31 @@ public final class BunkrGalleryActivity extends Activity {
         else if (lower.contains(".mpd")) media.setMimeType(MimeTypes.APPLICATION_MPD);
         player.setMediaItem(media.build());
         playbackRecovery.bind(player, item.url);
+        ExoPlayer startedPlayer = player;
         player.addListener(new Player.Listener() {
+            @Override public void onVideoSizeChanged(androidx.media3.common.VideoSize size) {
+                if (player != startedPlayer || size.width <= 0 || size.height <= 0) return;
+                onVideoDimensions(size);
+            }
+
+            @Override
+            public void onRenderedFirstFrame() {
+                if (player != startedPlayer || returningToGallery || isFinishing()) return;
+                adapter.onVideoFirstFrame(position, startedPlayer);
+            }
+
+            @Override
+            public void onPlayWhenReadyChanged(boolean playWhenReady, int reason) {
+                if (player != startedPlayer || returningToGallery || isFinishing()) return;
+                adapter.onVideoBuffering(position, startedPlayer,
+                        startedPlayer.getPlaybackState() == Player.STATE_BUFFERING && playWhenReady);
+            }
+
             @Override
             public void onPlaybackStateChanged(int playbackState) {
+                if (player != startedPlayer || returningToGallery || isFinishing()) return;
+                adapter.onVideoBuffering(position, startedPlayer,
+                        playbackState == Player.STATE_BUFFERING && startedPlayer.getPlayWhenReady());
                 if (playbackState == Player.STATE_READY) {
                     RatingFeedbackPrompt.recordSuccessfulPlayback(
                             BunkrGalleryActivity.this, mediaUrl);
@@ -725,12 +1053,12 @@ public final class BunkrGalleryActivity extends Activity {
                 }, () -> {
                     RatingFeedbackPrompt.recordPlaybackError(BunkrGalleryActivity.this);
                     releasePlayer(); adapter.setFailed(position, true);
-                    Toast.makeText(BunkrGalleryActivity.this, "Couldn't refresh this video. Tap it to retry.", Toast.LENGTH_SHORT).show();
+                    ZeroChillToast.makeText(BunkrGalleryActivity.this, "Couldn't refresh this video. Tap it to retry.", ZeroChillToast.LENGTH_SHORT).show();
                 })) return;
                 RatingFeedbackPrompt.recordPlaybackError(BunkrGalleryActivity.this);
                 releasePlayer();
                 adapter.setFailed(position, true);
-                Toast.makeText(BunkrGalleryActivity.this, "Couldn't continue this video. Tap it to retry.", Toast.LENGTH_SHORT).show();
+                ZeroChillToast.makeText(BunkrGalleryActivity.this, "Couldn't continue this video. Tap it to retry.", ZeroChillToast.LENGTH_SHORT).show();
             }
         });
         player.setPlayWhenReady(true);
@@ -765,7 +1093,49 @@ public final class BunkrGalleryActivity extends Activity {
         return httpFactory;
     }
 
+    private void onVideoDimensions(androidx.media3.common.VideoSize size) {
+        boolean portrait = VideoDetailActivity.isPortraitVideoSize(
+                size.width, size.height, size.pixelWidthHeightRatio);
+        boolean eligibilityChanged = !videoSizeKnown || portraitVideo != portrait;
+        portraitVideo = portrait;
+        videoSizeKnown = true;
+        if (portraitVideo) {
+            manualVideoFullscreen = sensorVideoFullscreen = false;
+            if (PhoneOrientationPolicy.isPhoneSized(this)
+                    && ShowsPlaybackOrientationPolicy.autoRotateEnabled(this))
+                PhoneOrientationPolicy.enterPortraitFullscreen(this);
+        }
+        // Quality switches keep the same orientation choice, including a manual exit.
+        if (eligibilityChanged && videoOrientationListener != null) videoOrientationListener.redispatch();
+    }
+
+    private void toggleVideoFullscreen() {
+        if (player == null || !videoSizeKnown || portraitVideo) return;
+        manualVideoFullscreen = !(manualVideoFullscreen || sensorVideoFullscreen);
+        sensorVideoFullscreen = false;
+        if (manualVideoFullscreen) PhoneOrientationPolicy.enterSensorFullscreen(this);
+        else PhoneOrientationPolicy.enterPortraitFullscreen(this);
+        adapter.setVideoFullscreen(manualVideoFullscreen);
+    }
+
+    private void onVideoOrientation(SensorMediaOrientationListener.Position position) {
+        if (player == null || !videoSizeKnown || portraitVideo
+                || !ShowsPlaybackOrientationPolicy.autoRotateEnabled(this)) return;
+        if (position == SensorMediaOrientationListener.Position.LANDSCAPE) {
+            sensorVideoFullscreen = true;
+            PhoneOrientationPolicy.enterSensorFullscreen(this);
+        } else if (sensorVideoFullscreen || manualVideoFullscreen) {
+            sensorVideoFullscreen = manualVideoFullscreen = false;
+            PhoneOrientationPolicy.enterPortraitFullscreen(this);
+        }
+        adapter.setVideoFullscreen(sensorVideoFullscreen || manualVideoFullscreen);
+    }
+
     private void releasePlayer() {
+        if (player != null) {
+            manualVideoFullscreen = sensorVideoFullscreen = videoSizeKnown = false;
+            PhoneOrientationPolicy.applyBrowsingOrientation(this);
+        }
         playbackRecovery.cancel();
         if (player != null) {
             player.release();
@@ -820,22 +1190,13 @@ public final class BunkrGalleryActivity extends Activity {
     public void onConfigurationChanged(Configuration newConfig) {
         super.onConfigurationChanged(newConfig);
         applyViewerOrientation(newConfig.orientation);
-    }
-
-    private void onPhysicalOrientation(SensorMediaOrientationListener.Position position) {
-        if (position == SensorMediaOrientationListener.Position.LANDSCAPE) {
-            sensorFullscreen = true;
-            PhoneOrientationPolicy.enterSensorFullscreen(this);
-        } else if (sensorFullscreen) {
-            sensorFullscreen = false;
-            PhoneOrientationPolicy.exitFullscreenVideo(this);
-        }
+        if (adapter != null) adapter.setVideoFullscreen(newConfig.orientation == Configuration.ORIENTATION_LANDSCAPE);
     }
 
     private void applyViewerOrientation(int orientation) {
         boolean landscape = orientation == Configuration.ORIENTATION_LANDSCAPE;
         if (topBar == null || bottomBar == null) {
-            setSystemBars(landscape);
+            setSystemBars(true);
             return;
         }
         if (landscape && !landscapeFullscreen) {
@@ -847,7 +1208,7 @@ public final class BunkrGalleryActivity extends Activity {
             if (restoreChromeAfterLandscape) setChromeVisible(true);
             restoreChromeAfterLandscape = false;
         }
-        setSystemBars(landscape);
+        setSystemBars(true);
     }
 
     private void setSystemBars(boolean fullscreen) {
@@ -874,7 +1235,7 @@ public final class BunkrGalleryActivity extends Activity {
 
     private void showMenu(View anchor) {
         NativeContentItem current = adapter.itemAt(pager.getCurrentItem());
-        PopupMenu menu = new PopupMenu(this, anchor);
+        ZeroChillMenu menu = new ZeroChillMenu(this, anchor);
         if (current != null && current.isVideo()) {
             menu.getMenu().add(Menu.NONE, 3, 0, "Download video");
         }
@@ -903,13 +1264,42 @@ public final class BunkrGalleryActivity extends Activity {
         menu.show();
     }
 
+    private void downloadGalleryItem(int position, NativeContentItem item) {
+        if (item == null) return;
+        String resolvedUrl = adapter.resolvedUrl(position);
+        String referer = item.isVideo()
+                ? videoReferers.getOrDefault(item.url, item.url)
+                : "";
+        GalleryMediaDownloader.download(
+                this,
+                mediaIo,
+                item,
+                resolvedUrl,
+                referer,
+                (mediaUrl, requestReferer) -> {
+                    if (!item.isImage()) return;
+                    adapter.setResolvedUrl(position, mediaUrl);
+                    BunkrGallerySessionStore.setResolvedUrl(
+                            sessionId,
+                            item.url,
+                            mediaUrl
+                    );
+                }
+        );
+    }
+
+    private void downloadVideoItem(int position, NativeContentItem item) {
+        downloadGalleryItem(position, item);
+    }
+
     private void downloadCurrentVideo() {
-        NativeContentItem item = adapter.itemAt(pager.getCurrentItem());
+        int position = pager.getCurrentItem();
+        NativeContentItem item = adapter.itemAt(position);
         if (item == null || !item.isVideo()) {
-            Toast.makeText(this, "This item is not a video.", Toast.LENGTH_SHORT).show();
+            ZeroChillToast.makeText(this, "This item is not a video.", ZeroChillToast.LENGTH_SHORT).show();
             return;
         }
-        VideoDownloadStore.downloadPage(this, item);
+        downloadVideoItem(position, item);
     }
 
     private void shareCurrent() {
@@ -949,7 +1339,7 @@ public final class BunkrGalleryActivity extends Activity {
     protected void onResume() {
         super.onResume();
         recoveryResumed = true;
-        if (orientationListener != null) orientationListener.enable();
+        if (videoOrientationListener != null) videoOrientationListener.enable();
     }
 
     @Override protected void onSaveInstanceState(Bundle state) {
@@ -966,8 +1356,8 @@ public final class BunkrGalleryActivity extends Activity {
 
     @Override
     protected void onPause() {
+        if (videoOrientationListener != null) videoOrientationListener.disable();
         recoveryResumed = false;
-        if (orientationListener != null) orientationListener.disable();
         BunkrGallerySessionStore.persist(this, sessionId);
         releasePlayer();
         super.onPause();
@@ -975,8 +1365,9 @@ public final class BunkrGalleryActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        if (videoOrientationListener != null) videoOrientationListener.disable();
         generation++;
-        if (orientationListener != null) orientationListener.disable();
+        if (adapter != null) adapter.stopReveals();
         releasePlayer();
         pageIo.shutdownNow();
         mediaIo.shutdownNow();

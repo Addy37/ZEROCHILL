@@ -27,6 +27,12 @@ public final class FapelloRepositoryTest {
         assertEquals("https://fapello.com/second-sample/", models.get(1).url);
     }
 
+    @Test public void sourceHtmlEntitiesBecomeReadableCreatorNames() throws Exception {
+        String json = "{\"results\":[{\"name\":\"Taliya &Amp; Gustavo\","
+                + "\"url\":\"https://fapello.com/taliya-gustavo/\"}]}";
+        assertEquals("Taliya & Gustavo", repository.parseSearchResponse(json).get(0).name);
+    }
+
     @Test public void creatorParsingExtractsImagesVideosLazyUrlsAndPagination() throws Exception {
         FapelloRepository.Model model = model();
         String endpoint = FapelloRepository.modelProfilePageUrl(model.url, 1);
@@ -68,6 +74,21 @@ public final class FapelloRepositoryTest {
                 "https://fapello.com/sample-creator/1001/"
         );
         assertEquals("https://cdn.fapello.com/content/sample/photo.jpg", stream.mediaUrl);
+    }
+
+    @Test public void galleryThumbnailCanPointDirectlyToOriginalWithoutPostPage() {
+        assertEquals(
+                "https://fapello.com/content/s/a/sample-creator/100000/sample-creator_1815.jpg",
+                FapelloRepository.originalUrlFromPreview(
+                        "https://fapello.com/content/s/a/sample-creator/100000/sample-creator_1815_300px.jpg")
+        );
+        assertEquals(
+                "https://cdn.fapello.com/content/sample/photo.webp",
+                FapelloRepository.originalUrlFromPreview(
+                        "https://cdn.fapello.com/content/sample/photo_300px.webp")
+        );
+        assertEquals("", FapelloRepository.originalUrlFromPreview(
+                "https://cdn.fapello.com/content/sample/photo.webp"));
     }
 
     @Test public void videoResolutionUsesPlayableSourceInsteadOfPoster() throws Exception {

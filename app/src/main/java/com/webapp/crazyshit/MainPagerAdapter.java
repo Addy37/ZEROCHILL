@@ -1,9 +1,7 @@
 package com.webapp.crazyshit;
 
 import android.app.Activity;
-import android.content.res.Configuration;
 import android.graphics.Color;
-import android.graphics.drawable.GradientDrawable;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
@@ -21,32 +19,58 @@ import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * Keeps Home, Shows, ShitTok and OnlyFap alive for true horizontal paging.
+ * Keeps dormant Home compatibility plus Shows, ShitTok, OnlyFap and Library alive for paging.
  * Chaos itself owns a nested vertical ViewPager2 for Shorts/Reels-style playback.
  */
 public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapter.Holder> {
     public static final int PAGE_HOME = 0;
     public static final int PAGE_SERIES = 1;
     public static final int PAGE_CHAOS = 2;
-    /** Stable slot 3 is preserved for upgrades; it now hosts the public OnlyFap tab. */
+    /** Stable slot 3 is preserved for upgrades; it hosts the public OnlyFap tab. */
     public static final int PAGE_ONLYFAP = 3;
-    @Deprecated public static final int PAGE_LIBRARY = PAGE_ONLYFAP;
+    public static final int PAGE_LIBRARY = 4;
     @Deprecated public static final int PAGE_CATEGORIES = PAGE_ONLYFAP;
     public static final int PAGE_COUNT = 4;
     private static final int PAGE_ARRAY_COUNT = 4;
     private static final int SERIES_SOURCE_CRAZYSHIT = 0;
     private static final int SERIES_SOURCE_EFUKT = 1;
-    private static final int SERIES_SOURCE_BUNKR = 2;
     private static final int SERIES_SOURCE_CATEGORIES = 3;
+    private static final int SERIES_SOURCE_HUB = 4;
     private static final String PREF_SERIES_SOURCE = "native_series_source";
-    private static final String PREF_FAPZONE_MODE = "native_fapzone_mode";
 
     public interface Host {
         void onOpenItem(NativeContentItem item);
+
+        default void onOpenItemWithPlaybackIdent(NativeContentItem item) {
+            onOpenItem(item);
+        }
+
         void onLongPressItem(NativeContentItem item, View anchor);
         void onOpenComments(NativeContentItem item);
+
+        default void onSearch(View anchor) {}
+
+        default void onOpenMore() {
+        }
+
+        default void onOpenMore(View anchor) {
+            onOpenMore();
+        }
+
+        default void onChaosClearDisplayChanged(boolean clear) {
+        }
+
+        default void onChaosTemporaryPinchChanged(boolean pinching) {
+        }
+
+        default void onNavigationScroll(int sourcePage, int dy, boolean atTop, boolean userDriven) {
+        }
+
+        default void onPrimarySettled(int page) {
+        }
     }
 
     private enum PageKind {
@@ -62,37 +86,115 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
     private final CrazyShitRepository repository = new CrazyShitRepository();
     private final BrowseRepository browseRepository = new BrowseRepository();
     private final EfuktRepository efuktRepository = new EfuktRepository();
+    private final WebVideoSourceRepository webVideoRepository = new WebVideoSourceRepository();
+    private final BaddieHubRepository baddieHubRepository = new BaddieHubRepository();
     private final BunkrRepository bunkrRepository = new BunkrRepository();
     private final FapzoneCreatorRepository fapzoneCreatorRepository =
             new FapzoneCreatorRepository();
+    private final FavoriteCreatorArtworkHydrator favoriteCreatorArtworkHydrator =
+            new FavoriteCreatorArtworkHydrator();
     private final BrowseArtworkResolver browseArtworkResolver;
-    private final ExecutorService io = Executors.newFixedThreadPool(3);
+    private final ExecutorService io = Executors.newFixedThreadPool(5);
+    private final ExecutorService baddieHubIo = Executors.newSingleThreadExecutor();
     private final Page[] pages = new Page[PAGE_ARRAY_COUNT];
     private final ChaosFeedView chaosView;
+    private final LibraryHubView libraryView;
+    private int primaryPage = -1;
+    private boolean hostResumed = true;
+    private boolean primarySettled;
+    private final PrimaryTabWorkQueue primaryWork;
 
     public MainPagerAdapter(Activity activity, Host host) {
         this.activity = activity;
         this.host = host;
+        primaryWork = new PrimaryTabWorkQueue(activity.getWindow().getDecorView());
+        long stageAt = android.os.SystemClock.elapsedRealtime();
         this.browseArtworkResolver = new BrowseArtworkResolver(activity);
+        AppPerformance.startupCost("artwork_resolver", stageAt);
         setHasStableIds(true);
 
+        stageAt = android.os.SystemClock.elapsedRealtime();
         pages[PAGE_HOME] = buildFeedPage(PAGE_HOME, "native_view_home", CrazyShitRepository.HOME);
+        AppPerformance.startupCost("home_shell", stageAt);
+        stageAt = android.os.SystemClock.elapsedRealtime();
         pages[PAGE_SERIES] = buildBrowsePage(PAGE_SERIES, PageKind.SERIES);
+        AppPerformance.startupCost("shows_shell", stageAt);
+        stageAt = android.os.SystemClock.elapsedRealtime();
         pages[PAGE_ONLYFAP] = buildBrowsePage(PAGE_ONLYFAP, PageKind.ONLYFAP);
+        AppPerformance.startupCost("onlyfap_shell", stageAt);
+        stageAt = android.os.SystemClock.elapsedRealtime();
 
         chaosView = new ChaosFeedView(activity, new ChaosFeedView.Host() {
             @Override
             public void openDetails(NativeContentItem item) {
                 host.onOpenItem(item);
             }
+
+            @Override
+            public void onClearDisplayChanged(boolean clear) {
+                host.onChaosClearDisplayChanged(clear);
+            }
+
+            @Override
+            public void onTemporaryPinchChanged(boolean pinching) {
+                host.onChaosTemporaryPinchChanged(pinching);
+            }
+
+            @Override
+            public void onVerticalPageChanged(int direction, boolean atTop, boolean userDriven) {
+                host.onNavigationScroll(PAGE_CHAOS, direction * dp(24), atTop, userDriven);
+            }
         });
+        AppPerformance.startupCost("shittok_shell", stageAt);
+        chaosView.getViewTreeObserver().addOnDrawListener(
+                new android.view.ViewTreeObserver.OnDrawListener() {
+                    private boolean recorded;
+                    @Override public void onDraw() {
+                        if (recorded || !chaosView.isShown()) return;
+                        recorded = true;
+                        AppPerformance.startup("shell");
+                        chaosView.post(() -> chaosView.getViewTreeObserver().removeOnDrawListener(this));
+                    }
+                });
         chaosView.setActive(false);
+        stageAt = android.os.SystemClock.elapsedRealtime();
+        libraryView = new LibraryHubView(activity, new LibraryHubView.Listener() {
+            @Override
+            public void onOpenWatchLater(NativeContentItem item) {
+                openLibraryVideo(item);
+            }
+
+            @Override
+            public void onOpenHistory(PlaybackHistoryStore.Item item) {
+                openShowsResume(item, false);
+            }
+
+            @Override
+            public void onOpenCreator(NativeContentItem creator) {
+                if (creator == null) return;
+                CreatorGalleryPreloader.warm(activity, creator);
+                activity.startActivity(NativeFeedBrowserActivity.createCreatorGallery(
+                        activity,
+                        creator.title,
+                        creator.searchQuery.isEmpty() ? creator.title : creator.searchQuery,
+                        NativeFeedBrowserActivity.creatorProfileHint(creator),
+                        CreatorGalleryPreloader.sessionId(activity, creator)
+                ));
+            }
+        }, true);
+        AppPerformance.startupCost("library_shell", stageAt);
+        libraryView.setWorkScheduler((key, task) -> primaryWork.submit(PAGE_LIBRARY, key, task));
+        pages[PAGE_ONLYFAP].onlyFapHub.setWorkScheduler(
+                (key, task) -> primaryWork.submit(PAGE_ONLYFAP, key, task));
+        libraryView.setOnScrollChangeListener((v, scrollX, scrollY, oldScrollX, oldScrollY) ->
+                host.onNavigationScroll(PAGE_LIBRARY, scrollY - oldScrollY, scrollY <= dp(4), true));
 
     }
 
     public String titleFor(int position) {
         if (position == PAGE_SERIES) return "Shows";
         if (position == PAGE_ONLYFAP) return "OnlyFap";
+        if (position == PAGE_LIBRARY) return "Library";
         if (position == PAGE_CHAOS) return "ShitTok";
         return "Home";
     }
@@ -106,7 +208,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
     }
 
     public void setViewMode(int position, int mode) {
-        if (position == PAGE_CHAOS) return;
+        if (position == PAGE_CHAOS || position == PAGE_LIBRARY) return;
         Page page = pageAt(position);
         if (page == null || page.kind != PageKind.FEED) return;
 
@@ -127,36 +229,140 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
             chaosView.refresh();
             return;
         }
+        if (position == PAGE_LIBRARY) return;
         Page page = pageAt(position);
         if (page == null) return;
         page.generation++;
         if (page.loadTask != null) page.loadTask.cancel(true);
+        cancelShowsHubTasks(page);
+        cancelOnlyFapHubTasks(page);
+        if (page.kind == PageKind.SERIES &&
+                page.seriesSource == SERIES_SOURCE_HUB &&
+                page.showsHub != null) {
+            page.showsHub.clear();
+        }
+        if (page.kind == PageKind.ONLYFAP && page.onlyFapHub != null) {
+            page.onlyFapHub.clear();
+            page.currentPage = 0;
+            page.endReached = false;
+            page.loading = false;
+            loadOnlyFapHub(page);
+            return;
+        }
         page.empty.setVisibility(View.GONE);
         page.currentPage = 0;
+        page.displayHomeSource = 0;
         page.endReached = false;
         page.loading = false;
         load(page, false);
     }
 
+    void onPrimaryRequested(int position) {
+        if (position == PAGE_ONLYFAP && primaryPage != PAGE_ONLYFAP)
+            pages[PAGE_ONLYFAP].onlyFapHub.onOpenRequested();
+    }
+
     public void setPrimaryActive(int position) {
+        if (primaryPage == position) return;
+        primaryPage = position;
+        if (position == PAGE_ONLYFAP) pages[PAGE_ONLYFAP].onlyFapHub.onOpenRequested();
+        else pages[PAGE_ONLYFAP].onlyFapHub.onOpenCancelled();
+        if (position != PAGE_CHAOS) ChaosStartupPreloader.stopPreparation();
+        primaryWork.select(position);
+        // Playback/audio ownership still changes immediately through the approved path.
         chaosView.setActive(position == PAGE_CHAOS);
-        if (position == PAGE_CHAOS) return;
-        Page page = pageAt(position);
-        if (page != null && page.itemCount() == 0 && !page.loading && !page.endReached) {
-            load(page, false);
-        }
+        deactivateHubs();
+        schedulePrimaryRefresh();
+    }
+
+    public void onPrimaryMotionChanged(boolean settled) {
+        if (primarySettled == settled) return;
+        primarySettled = settled;
+        primaryWork.setSettled(settled);
+        if (!settled) deactivateHubs();
+        else schedulePrimaryRefresh();
+    }
+
+    private void deactivateHubs() {
+        libraryView.setSocialActive(false);
+        pages[PAGE_SERIES].showsHub.setActive(false);
+        pages[PAGE_ONLYFAP].onlyFapHub.setActive(false);
+    }
+
+    private void schedulePrimaryRefresh() {
+        final int position = primaryPage;
+        primaryWork.submit(position, "activation", () -> {
+            if (!hostResumed || activity.isFinishing() || activity.isDestroyed()) return;
+            host.onPrimarySettled(position);
+            if (position == PAGE_LIBRARY) {
+                libraryView.setSocialActive(true);
+            } else if (position == PAGE_SERIES) {
+                pages[PAGE_SERIES].showsHub.setActive(true);
+                pages[PAGE_SERIES].showsHub.refreshContinueWatching();
+            } else if (position == PAGE_ONLYFAP) {
+                pages[PAGE_ONLYFAP].onlyFapHub.setActive(true);
+            }
+            if (position == PAGE_CHAOS || position == PAGE_LIBRARY) return;
+            Page page = pageAt(position);
+            if (page == null) return;
+            if (page.kind == PageKind.ONLYFAP && OnlyFapRefreshPolicy.shouldRefresh(
+                    page.onlyFapLastLoadedElapsedMs,
+                    android.os.SystemClock.elapsedRealtime(), page.loading)) {
+                // Keep the existing hero and shelves while stale listings refresh.
+                page.generation++;
+                loadOnlyFapHub(page);
+            } else if (page.itemCount() == 0 && !page.loading && !page.endReached) {
+                load(page, false);
+            }
+        });
     }
 
     public void onHostResume() {
+        hostResumed = true;
+        if (primaryPage == PAGE_ONLYFAP) pages[PAGE_ONLYFAP].onlyFapHub.onOpenRequested();
         chaosView.onHostResume();
+        primaryWork.setResumed(true);
+        schedulePrimaryRefresh();
+    }
+
+    public void saveState(android.os.Bundle out) {
+        if (out == null) return;
+        Page shows = pageAt(PAGE_SERIES);
+        if (shows != null && shows.showsHub != null) {
+            android.os.Bundle showsState = new android.os.Bundle();
+            shows.showsHub.saveState(showsState);
+            out.putBundle("shows_hub_state", showsState);
+        }
+
         Page onlyFap = pageAt(PAGE_ONLYFAP);
-        if (onlyFap != null && onlyFap.browseAdapter != null) onlyFap.browseAdapter.notifyDataSetChanged();
-        Page home = pageAt(PAGE_HOME);
-        if (home != null && home.feedAdapter != null) home.feedAdapter.refreshPlaybackState();
+        if (onlyFap != null && onlyFap.onlyFapHub != null) {
+            android.os.Bundle onlyFapState = new android.os.Bundle();
+            onlyFap.onlyFapHub.saveState(onlyFapState);
+            out.putBundle("onlyfap_hub_state", onlyFapState);
+        }
+    }
+
+    public void restoreState(android.os.Bundle state) {
+        if (state == null) return;
+        Page shows = pageAt(PAGE_SERIES);
+        if (shows != null && shows.showsHub != null) {
+            shows.showsHub.restoreState(state.getBundle("shows_hub_state"));
+        }
+        Page onlyFap = pageAt(PAGE_ONLYFAP);
+        if (onlyFap != null && onlyFap.onlyFapHub != null) {
+            onlyFap.onlyFapHub.restoreState(state.getBundle("onlyfap_hub_state"));
+        }
     }
 
     public void onHostPause() {
+        hostResumed = false;
+        pages[PAGE_ONLYFAP].onlyFapHub.onOpenCancelled();
+        primaryWork.setResumed(false);
+        deactivateHubs();
         chaosView.onHostPause();
+        Page profilePage = pageAt(PAGE_ONLYFAP);
+        if (profilePage != null && profilePage.onlyFapHub != null) profilePage.onlyFapHub.setProfileActive(false);
+        libraryView.setSocialActive(false);
     }
 
     public void onConfigurationChanged() {
@@ -168,21 +374,47 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
     }
 
     public void close() {
+        primaryWork.close();
         chaosView.close();
+        libraryView.close();
         browseArtworkResolver.close();
         for (Page page : pages) {
             if (page == null) continue;
             page.generation++;
             if (page.loadTask != null) page.loadTask.cancel(true);
+            cancelShowsHubTasks(page);
+            cancelOnlyFapHubTasks(page);
+            if (page.onlyFapHub != null) page.onlyFapHub.close();
             if (page.browseAdapter != null) page.browseAdapter.close();
             if (page.feedAdapter != null) page.feedAdapter.close();
         }
         io.shutdownNow();
+        baddieHubIo.shutdownNow();
+    }
+
+    static int pagerPositionForPage(int page) {
+        if (page == PAGE_SERIES) return 0;
+        if (page == PAGE_CHAOS) return 1;
+        if (page == PAGE_ONLYFAP) return 2;
+        if (page == PAGE_LIBRARY) return 3;
+        return -1;
+    }
+
+    static int pageForPagerPosition(int position) {
+        if (position == 0) return PAGE_SERIES;
+        if (position == 1) return PAGE_CHAOS;
+        if (position == 2) return PAGE_ONLYFAP;
+        if (position == 3) return PAGE_LIBRARY;
+        return PAGE_CHAOS;
+    }
+
+    static boolean isPrimaryPage(int page) {
+        return pagerPositionForPage(page) >= 0;
     }
 
     @Override
     public long getItemId(int position) {
-        return 10_000L + position;
+        return 10_000L + pageForPagerPosition(position);
     }
 
     @Override
@@ -201,19 +433,31 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
 
     @Override
     public void onBindViewHolder(@NonNull Holder holder, int position) {
+        int pageIndex = pageForPagerPosition(position);
         View pageView;
-        if (position == PAGE_CHAOS) {
+        if (pageIndex == PAGE_CHAOS) {
             pageView = chaosView;
+        } else if (pageIndex == PAGE_LIBRARY) {
+            pageView = libraryView;
         } else {
-            Page page = pageAt(position);
+            Page page = pageAt(pageIndex);
             if (page == null) return;
             pageView = page.root;
         }
         if (pageView.getParent() instanceof ViewGroup) {
             ((ViewGroup) pageView.getParent()).removeView(pageView);
         }
+        holder.container.setClipChildren(pageIndex == PAGE_ONLYFAP);
+        holder.container.setClipToPadding(pageIndex == PAGE_ONLYFAP);
+        if (pageIndex == PAGE_SERIES) ((ViewGroup) pageView).setClipChildren(false);
         holder.container.removeAllViews();
-        holder.container.addView(pageView, new FrameLayout.LayoutParams(-1, -1));
+        FrameLayout.LayoutParams pageParams = new FrameLayout.LayoutParams(-1, -1);
+        if (pageIndex == PAGE_LIBRARY) {
+            int header = ZeroChillUi.dimension(activity, R.dimen.zc_top_bar_height);
+            pageParams.topMargin = -header;
+            pageView.setPadding(0, header, 0, 0);
+        }
+        holder.container.addView(pageView, pageParams);
     }
 
     private Page buildFeedPage(int index, String prefKey, String baseUrl) {
@@ -266,6 +510,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                     return;
                 }
                 page.homeSource = selected;
+                page.displayHomeSource = 0;
                 homePrefs.edit().putInt("home_source", selected).apply();
                 styleHomeSources(page);
                 page.feedAdapter.replace(java.util.Collections.emptyList());
@@ -302,6 +547,14 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
             public void onScrolled(@NonNull RecyclerView view, int dx, int dy) {
                 RecyclerView.LayoutManager manager = view.getLayoutManager();
                 if (!(manager instanceof LinearLayoutManager)) return;
+                LinearLayoutManager positionManager = (LinearLayoutManager) manager;
+                host.onNavigationScroll(
+                        page.index,
+                        dy,
+                        positionManager.findFirstCompletelyVisibleItemPosition() <= 0 &&
+                                !view.canScrollVertically(-1),
+                        true
+                );
                 LinearLayoutManager lm = (LinearLayoutManager) manager;
                 int first = lm.findFirstVisibleItemPosition();
                 int last = lm.findLastVisibleItemPosition();
@@ -315,40 +568,301 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         return page;
     }
 
-    private Page buildBrowsePage(int index, PageKind kind) {
-        Page page = createPageShell(index, kind, "", "");
-        page.browseAdapter = new NativeCategoryAdapter(activity, item -> {
-            if (item == null) return;
-            if (item.isCreator()) {
-                String query = item.searchQuery == null || item.searchQuery.trim().isEmpty()
-                        ? item.title
-                        : item.searchQuery.trim();
-                activity.startActivity(NativeFeedBrowserActivity.createCreatorGallery(
-                        activity,
-                        item.title,
-                        query,
-                        FapelloRepository.isModelUrl(item.url) ? item.url : ""
-                ));
-                return;
-            }
-            if (item.url == null || item.url.isEmpty()) return;
-            String source = BunkrRepository.isAlbumUrl(item.url)
-                    ? NativeFeedBrowserActivity.SOURCE_BUNKR
-                    : EfuktRepository.isEfuktUrl(item.url)
-                    ? NativeFeedBrowserActivity.SOURCE_EFUKT
-                    : NativeFeedBrowserActivity.SOURCE_CRAZYSHIT;
-            activity.startActivity(NativeFeedBrowserActivity.create(
+    private void openBrowseItem(NativeContentItem item) {
+        if (item == null) return;
+        if (item.isCreator()) {
+            String query = item.searchQuery == null || item.searchQuery.trim().isEmpty()
+                    ? item.title
+                    : item.searchQuery.trim();
+            activity.startActivity(NativeFeedBrowserActivity.createCreatorGallery(
                     activity,
                     item.title,
-                    item.url,
-                    false,
-                    source
+                    query,
+                    NativeFeedBrowserActivity.creatorProfileHint(item),
+                    CreatorGalleryPreloader.sessionId(activity, item)
             ));
+            return;
+        }
+        if (item.url == null || item.url.isEmpty()) return;
+        String source = BunkrRepository.isAlbumUrl(item.url)
+                ? NativeFeedBrowserActivity.SOURCE_BUNKR
+                : EfuktRepository.isEfuktUrl(item.url)
+                ? NativeFeedBrowserActivity.SOURCE_EFUKT
+                : NativeFeedBrowserActivity.SOURCE_CRAZYSHIT;
+        activity.startActivity(NativeFeedBrowserActivity.create(
+                activity,
+                item.title,
+                item.url,
+                false,
+                source
+        ));
+    }
+
+    private void openFavoriteCreator(CreatorCatalog.FavoriteGroup group) {
+        if (group == null || group.item == null) return;
+        CreatorGallerySpec spec = CreatorGallerySpec.from(group);
+        CreatorGalleryPreloader.warm(
+                activity,
+                spec,
+                CreatorGalleryPreloader.PRIORITY_HIGH
+        );
+        String sessionId = CreatorGalleryPreloader.sessionId(activity, spec.cacheKey);
+        if (sessionId.isEmpty() && spec.grouped) {
+            sessionId = CreatorGalleryPreloader.composeInMemoryMergedSession(activity, spec);
+        }
+        activity.startActivity(NativeFeedBrowserActivity.createCreatorGallery(
+                activity,
+                spec.item.title,
+                spec.query,
+                spec.profileHint,
+                sessionId,
+                spec.cacheKey,
+                spec.seedNames,
+                spec.seedUrls,
+                spec.seedImages
+        ));
+    }
+
+    private void openShowDetails(NativeContentItem item) {
+        if (item == null || item.url == null || item.url.isEmpty()) return;
+        String source = WebVideoSourceRepository.isKaoticUrl(item.url)
+                ? NativeFeedBrowserActivity.SOURCE_KAOTIC
+                : BaddieHubRepository.isBaddieHubUrl(item.url)
+                ? NativeFeedBrowserActivity.SOURCE_BADDIEHUB
+                : EfuktRepository.isEfuktUrl(item.url)
+                ? NativeFeedBrowserActivity.SOURCE_EFUKT
+                : NativeFeedBrowserActivity.SOURCE_CRAZYSHIT;
+        activity.startActivity(NativeFeedBrowserActivity.createShowDetails(
+                activity,
+                item,
+                source
+        ));
+    }
+
+    void openLibraryVideo(NativeContentItem item) {
+        openShowsVideo(item, false);
+    }
+
+    void openLibraryHistory(NativeContentItem item) {
+        if (item == null) return;
+        for (PlaybackHistoryStore.Item history : PlaybackHistoryStore.load(activity)) {
+            if (history.pageUrl.equals(item.url)) {
+                openShowsResume(history, false);
+                return;
+            }
+        }
+        openShowsVideo(item, false);
+    }
+
+    private void openShowsVideo(NativeContentItem item) {
+        openShowsVideo(item, true);
+    }
+
+    private void openShowsVideo(
+            NativeContentItem item,
+            boolean manualLandscapeFullscreen
+    ) {
+        if (item == null || !item.isVideo() || item.url == null || item.url.trim().isEmpty()) {
+            return;
+        }
+
+        io.execute(() -> {
+            CrazyShitRepository.StreamInfo stream = null;
+            try {
+                stream = PlayableSourceRouter.resolve(activity, item);
+            } catch (Exception ignored) {
+            }
+            CrazyShitRepository.StreamInfo resolved = stream;
+            activity.runOnUiThread(() -> {
+                if (activity.isFinishing() || activity.isDestroyed()) return;
+                if (resolved == null || resolved.mediaUrl == null || resolved.mediaUrl.isEmpty()) {
+                    ZeroChillToast.makeText(
+                            activity,
+                            "Couldn't resolve this video natively right now.",
+                            ZeroChillToast.LENGTH_SHORT
+                    ).show();
+                    return;
+                }
+
+                String resolvedPage = resolved.pageUrl == null || resolved.pageUrl.isEmpty()
+                        ? item.url
+                        : resolved.pageUrl;
+                String source = WebVideoSourceRepository.isKaoticUrl(resolvedPage)
+                        ? NativeFeedBrowserActivity.SOURCE_KAOTIC
+                        : BaddieHubRepository.isBaddieHubUrl(resolvedPage)
+                        ? NativeFeedBrowserActivity.SOURCE_BADDIEHUB
+                        : EfuktRepository.isEfuktUrl(resolvedPage)
+                        ? NativeFeedBrowserActivity.SOURCE_EFUKT
+                        : NativeFeedBrowserActivity.SOURCE_CRAZYSHIT;
+
+                android.content.Intent intent =
+                        new android.content.Intent(activity, VideoDetailActivity.class);
+                intent.putExtra(PlayerActivity.EXTRA_MEDIA_URL, resolved.mediaUrl);
+                intent.putExtra(PlayerActivity.EXTRA_PAGE_URL, resolvedPage);
+                intent.putExtra(PlayerActivity.EXTRA_TITLE, item.title);
+                intent.putExtra(VideoDetailActivity.EXTRA_VIEWS, item.views);
+                intent.putExtra(VideoDetailActivity.EXTRA_UPLOADER, item.uploader);
+                intent.putExtra(VideoDetailActivity.EXTRA_COMMENTS, item.comments);
+                intent.putExtra(VideoDetailActivity.EXTRA_SOURCE, source);
+                if (manualLandscapeFullscreen) {
+                    ShowsPlaybackOrientationPolicy.requireManualLandscapeFullscreen(intent);
+                }
+                intent.putExtra(
+                        VideoDetailActivity.EXTRA_MEDIA_REFERER,
+                        resolved.requestReferer
+                );
+                if (item.imageUrl != null && !item.imageUrl.trim().isEmpty()) {
+                    intent.putExtra(VideoDetailActivity.EXTRA_POSTER_URL, item.imageUrl);
+                }
+                try {
+                    intent.putExtra(
+                            PlayerActivity.EXTRA_USER_AGENT,
+                            android.webkit.WebSettings.getDefaultUserAgent(activity)
+                    );
+                } catch (Exception ignored) {
+                }
+                try {
+                    String cookies = android.webkit.CookieManager.getInstance()
+                            .getCookie(resolved.mediaUrl);
+                    if ((cookies == null || cookies.isEmpty()) && resolvedPage != null) {
+                        cookies = android.webkit.CookieManager.getInstance().getCookie(resolvedPage);
+                    }
+                    if (cookies != null) {
+                        intent.putExtra(PlayerActivity.EXTRA_COOKIES, cookies);
+                    }
+                } catch (Exception ignored) {
+                }
+                activity.startActivity(intent);
+            });
         });
+    }
+
+    private void openShowsResume(PlaybackHistoryStore.Item history) {
+        openShowsResume(history, true);
+    }
+
+    private void openShowsResume(
+            PlaybackHistoryStore.Item history,
+            boolean manualLandscapeFullscreen
+    ) {
+        if (history == null || history.pageUrl == null || history.pageUrl.trim().isEmpty()) return;
+        NativeContentItem item = new NativeContentItem(
+                NativeContentItem.KIND_MEDIA,
+                history.title,
+                history.pageUrl,
+                history.posterUrl,
+                "",
+                "",
+                ""
+        );
+        io.execute(() -> {
+            CrazyShitRepository.StreamInfo stream = null;
+            try {
+                stream = PlayableSourceRouter.resolve(activity, item);
+            } catch (Exception ignored) {
+            }
+            CrazyShitRepository.StreamInfo resolved = stream;
+            activity.runOnUiThread(() -> {
+                if (activity.isFinishing() || activity.isDestroyed()) return;
+                if (resolved == null || resolved.mediaUrl == null || resolved.mediaUrl.isEmpty()) {
+                    ZeroChillToast.makeText(
+                            activity,
+                            "Couldn't resume this video natively right now.",
+                            ZeroChillToast.LENGTH_SHORT
+                    ).show();
+                    return;
+                }
+
+                String resolvedPage = resolved.pageUrl == null ? history.pageUrl : resolved.pageUrl;
+                String source = WebVideoSourceRepository.isKaoticUrl(resolvedPage)
+                        ? NativeFeedBrowserActivity.SOURCE_KAOTIC
+                        : BaddieHubRepository.isBaddieHubUrl(resolvedPage)
+                        ? NativeFeedBrowserActivity.SOURCE_BADDIEHUB
+                        : EfuktRepository.isEfuktUrl(resolvedPage)
+                        ? NativeFeedBrowserActivity.SOURCE_EFUKT
+                        : NativeFeedBrowserActivity.SOURCE_CRAZYSHIT;
+
+                android.content.Intent intent =
+                        new android.content.Intent(activity, VideoDetailActivity.class);
+                intent.putExtra(PlayerActivity.EXTRA_MEDIA_URL, resolved.mediaUrl);
+                // Keep the history identity stable when a resolver canonicalizes or redirects
+                // the source page. This updates the same Continue Watching entry on exit.
+                intent.putExtra(PlayerActivity.EXTRA_PAGE_URL, history.pageUrl);
+                intent.putExtra(PlayerActivity.EXTRA_TITLE, history.title);
+                intent.putExtra(PlayerActivity.EXTRA_START_POSITION,
+                        history.complete ? 0L : history.positionMs);
+                intent.putExtra(VideoDetailActivity.EXTRA_SOURCE, source);
+                if (manualLandscapeFullscreen) {
+                    ShowsPlaybackOrientationPolicy.requireManualLandscapeFullscreen(intent);
+                }
+                intent.putExtra(VideoDetailActivity.EXTRA_SHOWS_CONTINUE_RESUME, true);
+                intent.putExtra(
+                        VideoDetailActivity.EXTRA_MEDIA_REFERER,
+                        resolved.requestReferer
+                );
+                if (history.posterUrl != null && !history.posterUrl.trim().isEmpty()) {
+                    intent.putExtra(VideoDetailActivity.EXTRA_POSTER_URL, history.posterUrl);
+                }
+                try {
+                    intent.putExtra(
+                            PlayerActivity.EXTRA_USER_AGENT,
+                            android.webkit.WebSettings.getDefaultUserAgent(activity)
+                    );
+                } catch (Exception ignored) {
+                }
+                try {
+                    String cookies = android.webkit.CookieManager.getInstance()
+                            .getCookie(resolved.mediaUrl);
+                    if ((cookies == null || cookies.isEmpty()) && resolvedPage != null) {
+                        cookies = android.webkit.CookieManager.getInstance().getCookie(resolvedPage);
+                    }
+                    if (cookies != null) {
+                        intent.putExtra(PlayerActivity.EXTRA_COOKIES, cookies);
+                    }
+                } catch (Exception ignored) {
+                }
+                activity.startActivity(intent);
+            });
+        });
+    }
+
+    private Page buildBrowsePage(int index, PageKind kind) {
+        Page page = createPageShell(index, kind, "", "");
+        NativeCategoryAdapter.Listener browseListener =
+                kind == PageKind.SERIES ? this::openShowDetails : this::openBrowseItem;
+        page.browseAdapter = new NativeCategoryAdapter(activity, browseListener);
         page.recycler.setAdapter(page.browseAdapter);
         page.recycler.setLayoutManager(new GridLayoutManager(activity, 2));
         if (kind == PageKind.SERIES) {
-            addSeriesSourceSelector(page);
+            page.showsHub = new ShowsHubView(
+                    activity,
+                    this::openShowDetails,
+                    this::openShowsResume,
+                    item -> ShowsCollectionWarmCache.request(activity, item),
+                    this::openShowsVideo
+            );
+            page.showsHub.setNavigationScrollListener(
+                    (v, scrollX, scrollY, oldScrollX, oldScrollY) ->
+                            host.onNavigationScroll(
+                                    PAGE_SERIES,
+                                    scrollY - oldScrollY,
+                                    scrollY <= dp(4),
+                                    true
+                            )
+            );
+            page.root.addView(page.showsHub, new FrameLayout.LayoutParams(-1, -1));
+            // Shows is now a single combined hub. Keep the legacy source preference
+            // pinned to the hub so upgrades from older installs cannot reopen a hidden
+            // CrazyShit / EFukt / Categories sub-tab.
+            page.seriesSource = SERIES_SOURCE_HUB;
+            activity.getSharedPreferences("app_prefs", Activity.MODE_PRIVATE)
+                    .edit()
+                    .putInt(PREF_SERIES_SOURCE, SERIES_SOURCE_HUB)
+                    .apply();
+            page.showsHub.setVisibility(View.VISIBLE);
+            page.refresh.setVisibility(View.GONE);
+            page.empty.setVisibility(View.GONE);
+            page.progress.setVisibility(View.GONE);
             page.empty.setOnClickListener(v -> {
                 String url = page.seriesSource == SERIES_SOURCE_EFUKT
                         ? EfuktRepository.SERIES
@@ -360,326 +874,63 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                 activity.startActivity(intent);
             });
         } else if (kind == PageKind.ONLYFAP) {
-            addOnlyFapControls(page);
-            page.empty.setOnClickListener(v -> refresh(PAGE_ONLYFAP));
+            page.onlyFapHub = new OnlyFapHubView(
+                    activity,
+                    new OnlyFapHubView.Listener() {
+                        @Override
+                        public void onOpenCreator(NativeContentItem creator) {
+                            if (creator == null) return;
+                            CreatorGalleryPreloader.warm(
+                                    activity,
+                                    creator,
+                                    CreatorGalleryPreloader.PRIORITY_HIGH
+                            );
+                            openBrowseItem(creator);
+                        }
+
+                        @Override
+                        public void onOpenFavoriteCreator(CreatorCatalog.FavoriteGroup group) {
+                            openFavoriteCreator(group);
+                        }
+
+                        @Override
+                        public void onSearch() {
+                            host.onSearch(null);
+                        }
+
+                        @Override public void onSearch(View anchor) {
+                            host.onSearch(anchor);
+                        }
+
+                        @Override
+                        public void onMore(View anchor) {
+                            host.onOpenMore(anchor);
+                        }
+
+                        @Override
+                        public void onViewAllFavorites() {
+                            activity.startActivity(new android.content.Intent(
+                                    activity,
+                                    CreatorsActivity.class
+                            ));
+                        }
+                    }
+            );
+            page.onlyFapHub.setNavigationScrollListener(
+                    (v, scrollX, scrollY, oldScrollX, oldScrollY) ->
+                            host.onNavigationScroll(
+                                    PAGE_ONLYFAP,
+                                    scrollY - oldScrollY,
+                                    scrollY <= dp(4),
+                                    true
+                            )
+            );
+            page.root.addView(page.onlyFapHub, new FrameLayout.LayoutParams(-1, -1));
+            page.refresh.setVisibility(View.GONE);
+            page.empty.setVisibility(View.GONE);
+            page.progress.setVisibility(View.GONE);
         }
         return page;
-    }
-
-    private void addSeriesSourceSelector(Page page) {
-        android.content.SharedPreferences prefs =
-                activity.getSharedPreferences("app_prefs", Activity.MODE_PRIVATE);
-        int storedSource = prefs.getInt(PREF_SERIES_SOURCE, SERIES_SOURCE_CRAZYSHIT);
-        if (storedSource == SERIES_SOURCE_CRAZYSHIT ||
-                storedSource == SERIES_SOURCE_EFUKT ||
-                storedSource == SERIES_SOURCE_CATEGORIES) {
-            page.seriesSource = storedSource;
-        } else {
-            page.seriesSource = SERIES_SOURCE_CRAZYSHIT;
-            prefs.edit().putInt(PREF_SERIES_SOURCE, SERIES_SOURCE_CRAZYSHIT).apply();
-        }
-
-        LinearLayout selector = new LinearLayout(activity);
-        selector.setOrientation(LinearLayout.HORIZONTAL);
-        selector.setClipChildren(false);
-        selector.setClipToPadding(false);
-        selector.setGravity(Gravity.CENTER);
-        selector.setPadding(dp(12), dp(8), dp(12), dp(8));
-        selector.setBackground(ZeroChillUi.sourceRailGlass(activity));
-        selector.setElevation(ZeroChillUi.dimension(activity, R.dimen.zc_elevation_low));
-
-        page.crazyShitSource = seriesSourceButton("CrazyShit");
-        page.efuktSource = seriesSourceButton("EFukt");
-        page.categoriesSource = seriesSourceButton("Categories");
-        TextView[] sourceButtons = {
-                page.crazyShitSource,
-                page.efuktSource,
-                page.categoriesSource
-        };
-        for (int index = 0; index < sourceButtons.length; index++) {
-            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, dp(40), 1f);
-            if (index > 0) params.setMarginStart(dp(4));
-            if (index + 1 < sourceButtons.length) params.setMarginEnd(dp(4));
-            selector.addView(sourceButtons[index], params);
-        }
-
-        page.crazyShitSource.setOnClickListener(v -> switchSeriesSource(page, SERIES_SOURCE_CRAZYSHIT));
-        page.efuktSource.setOnClickListener(v -> switchSeriesSource(page, SERIES_SOURCE_EFUKT));
-        page.categoriesSource.setOnClickListener(v -> switchSeriesSource(page, SERIES_SOURCE_CATEGORIES));
-
-        FrameLayout.LayoutParams selectorParams = new FrameLayout.LayoutParams(-1, dp(56));
-        selectorParams.gravity = Gravity.TOP;
-        selectorParams.setMargins(dp(8), 0, dp(8), 0);
-        page.root.addView(selector, selectorParams);
-        ((FrostedOverlayLayout) page.root).setFrostedOverlay(selector);
-        updateSeriesSourceButtons(page);
-    }
-
-    private void addOnlyFapControls(Page page) {
-        android.content.SharedPreferences prefs =
-                activity.getSharedPreferences("app_prefs", Activity.MODE_PRIVATE);
-        page.fapzoneMode = prefs.getInt(PREF_FAPZONE_MODE, FapzoneCreatorRepository.MODE_TOP_50);
-        if (page.fapzoneMode < FapzoneCreatorRepository.MODE_TOP_50 ||
-                page.fapzoneMode > FapzoneCreatorRepository.MODE_POPULAR) {
-            page.fapzoneMode = FapzoneCreatorRepository.MODE_TOP_50;
-            prefs.edit().putInt(PREF_FAPZONE_MODE, page.fapzoneMode).apply();
-        }
-
-        LinearLayout modes = new LinearLayout(activity);
-        modes.setOrientation(LinearLayout.HORIZONTAL);
-        modes.setGravity(Gravity.CENTER);
-        modes.setPadding(dp(12), dp(6), dp(12), dp(6));
-        modes.setBackground(ZeroChillUi.sourceRailGlass(activity));
-
-        page.fapzoneTop = fapzoneModeButton("Trending");
-        page.fapzoneNew = fapzoneModeButton("New");
-        page.fapzoneHot = fapzoneModeButton("Hot");
-        page.fapzonePopular = fapzoneModeButton("Popular");
-        TextView[] modeButtons = {
-                page.fapzoneTop,
-                page.fapzoneNew,
-                page.fapzoneHot,
-                page.fapzonePopular
-        };
-        for (int index = 0; index < modeButtons.length; index++) {
-            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, dp(36), 1f);
-            if (index > 0) params.setMarginStart(dp(3));
-            if (index + 1 < modeButtons.length) params.setMarginEnd(dp(3));
-            modes.addView(modeButtons[index], params);
-        }
-
-        page.fapzoneTop.setOnClickListener(v -> switchFapzoneMode(
-                page, FapzoneCreatorRepository.MODE_TOP_50));
-        page.fapzoneNew.setOnClickListener(v -> switchFapzoneMode(
-                page, FapzoneCreatorRepository.MODE_NEW));
-        page.fapzoneHot.setOnClickListener(v -> switchFapzoneMode(
-                page, FapzoneCreatorRepository.MODE_HOT));
-        page.fapzonePopular.setOnClickListener(v -> switchFapzoneMode(
-                page, FapzoneCreatorRepository.MODE_POPULAR));
-        page.fapzoneModes = modes;
-
-        FrameLayout.LayoutParams modeParams = new FrameLayout.LayoutParams(-1, dp(52));
-        modeParams.gravity = Gravity.TOP;
-        modeParams.setMargins(dp(8), 0, dp(8), 0);
-        page.root.addView(modes, modeParams);
-        ((FrostedOverlayLayout) page.root).setFrostedOverlay(modes);
-
-        LinearLayout caption = new LinearLayout(activity);
-        caption.setOrientation(LinearLayout.HORIZONTAL);
-        caption.setGravity(Gravity.CENTER_VERTICAL);
-        caption.setPadding(dp(17), dp(7), dp(17), dp(9));
-        caption.setBackground(ZeroChillUi.panelGlass(activity));
-
-        LinearLayout captionCopy = new LinearLayout(activity);
-        captionCopy.setOrientation(LinearLayout.VERTICAL);
-        captionCopy.setGravity(Gravity.CENTER_VERTICAL);
-
-        TextView captionTitle = new TextView(activity);
-        captionTitle.setText(FapzoneCreatorRepository.titleFor(page.fapzoneMode));
-        captionTitle.setTextColor(Color.WHITE);
-        captionTitle.setTextSize(17);
-        captionTitle.setTypeface(null, android.graphics.Typeface.BOLD);
-        captionTitle.setMaxLines(1);
-        captionTitle.setEllipsize(android.text.TextUtils.TruncateAt.END);
-        captionCopy.addView(captionTitle, new LinearLayout.LayoutParams(-1, -2));
-
-        TextView captionHint = new TextView(activity);
-        captionHint.setText(FapzoneCreatorRepository.hintFor(page.fapzoneMode));
-        ZeroChillUi.styleSecondary(captionHint);
-        captionHint.setTextSize(11.5f);
-        captionHint.setMaxLines(1);
-        captionHint.setEllipsize(android.text.TextUtils.TruncateAt.END);
-        LinearLayout.LayoutParams hintParams = new LinearLayout.LayoutParams(-1, -2);
-        hintParams.topMargin = dp(1);
-        captionCopy.addView(captionHint, hintParams);
-        caption.addView(captionCopy, new LinearLayout.LayoutParams(0, -2, 1f));
-
-        TextView countBadge = new TextView(activity);
-        countBadge.setText(FapzoneCreatorRepository.badgeFor(page.fapzoneMode));
-        countBadge.setTextColor(Color.BLACK);
-        countBadge.setTextSize(13);
-        countBadge.setTypeface(null, android.graphics.Typeface.BOLD);
-        countBadge.setGravity(Gravity.CENTER);
-        countBadge.setContentDescription("Creator list mode");
-        GradientDrawable badgeBackground = new GradientDrawable();
-        badgeBackground.setColor(UiPalette.PRIMARY);
-        badgeBackground.setCornerRadius(dp(17));
-        countBadge.setBackground(badgeBackground);
-        LinearLayout.LayoutParams badgeParams = new LinearLayout.LayoutParams(dp(50), dp(30));
-        badgeParams.setMarginStart(dp(12));
-        caption.addView(countBadge, badgeParams);
-
-        page.seriesCaptionTitle = captionTitle;
-        page.seriesCaptionHint = captionHint;
-        page.seriesCaptionBadge = countBadge;
-        page.seriesCaption = caption;
-
-        FrameLayout.LayoutParams captionParams = new FrameLayout.LayoutParams(-1, dp(64));
-        captionParams.gravity = Gravity.TOP;
-        captionParams.setMargins(dp(8), dp(56), dp(8), 0);
-        page.root.addView(caption, captionParams);
-
-        FrameLayout.LayoutParams refreshParams =
-                (FrameLayout.LayoutParams) page.refresh.getLayoutParams();
-        refreshParams.topMargin = 0;
-        page.refresh.setLayoutParams(refreshParams);
-        page.recycler.setPadding(dp(4), dp(127), dp(4), dp(26));
-        page.browseAdapter.setWideCreatorCards(true);
-        applyBrowseLayout(page, true);
-        updateFapzoneModeButtons(page);
-        updateFapzoneCaption(page);
-    }
-
-    private TextView fapzoneModeButton(String label) {
-        TextView button = new TextView(activity);
-        button.setText(label);
-        button.setTextSize(12.5f);
-        button.setTypeface(null, android.graphics.Typeface.BOLD);
-        button.setGravity(Gravity.CENTER);
-        button.setClickable(true);
-        button.setFocusable(true);
-        button.setContentDescription("Show " + label + " OnlyFap creators");
-        return button;
-    }
-
-    private TextView seriesSourceButton(String label) {
-        TextView button = new TextView(activity);
-        button.setText(label);
-        button.setTextSize(14);
-        button.setTypeface(null, android.graphics.Typeface.BOLD);
-        button.setGravity(Gravity.CENTER);
-        button.setClickable(true);
-        button.setFocusable(true);
-        button.setContentDescription("Show " + label + " collections");
-        return button;
-    }
-
-    private void switchSeriesSource(Page page, int source) {
-        if (page == null || page.kind != PageKind.SERIES || page.seriesSource == source) return;
-        page.seriesSource = source;
-        activity.getSharedPreferences("app_prefs", Activity.MODE_PRIVATE)
-                .edit()
-                .putInt(PREF_SERIES_SOURCE, source)
-                .apply();
-        updateSeriesSourceButtons(page);
-        page.generation++;
-        page.loading = false;
-        page.endReached = false;
-        page.currentPage = 0;
-        page.browseAdapter.replace(java.util.Collections.emptyList());
-        page.recycler.scrollToPosition(0);
-        page.empty.setVisibility(View.GONE);
-        load(page, false);
-    }
-
-    private void switchFapzoneMode(Page page, int mode) {
-        if (page == null || page.kind != PageKind.ONLYFAP || page.fapzoneMode == mode) return;
-        page.fapzoneMode = mode;
-        activity.getSharedPreferences("app_prefs", Activity.MODE_PRIVATE)
-                .edit()
-                .putInt(PREF_FAPZONE_MODE, mode)
-                .apply();
-        updateFapzoneModeButtons(page);
-        updateFapzoneCaption(page);
-        page.generation++;
-        page.loading = false;
-        page.endReached = false;
-        page.currentPage = 0;
-        page.browseAdapter.replace(java.util.Collections.emptyList());
-        page.recycler.scrollToPosition(0);
-        page.empty.setVisibility(View.GONE);
-        load(page, false);
-    }
-
-    private void updateSeriesSourceButtons(Page page) {
-        styleSeriesSourceButton(page.crazyShitSource, page.seriesSource == SERIES_SOURCE_CRAZYSHIT);
-        styleSeriesSourceButton(page.efuktSource, page.seriesSource == SERIES_SOURCE_EFUKT);
-        styleSeriesSourceButton(page.categoriesSource, page.seriesSource == SERIES_SOURCE_CATEGORIES);
-        if (page.refresh != null) {
-            FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) page.refresh.getLayoutParams();
-            params.topMargin = 0;
-            page.refresh.setLayoutParams(params);
-        }
-        if (page.recycler != null) {
-            page.recycler.setPadding(0, dp(61), 0, dp(18));
-        }
-        if (page.browseAdapter != null) {
-            page.browseAdapter.setWideCreatorCards(false);
-        }
-        applyBrowseLayout(page, false);
-    }
-
-    private void updateFapzoneModeButtons(Page page) {
-        if (page == null) return;
-        styleFapzoneModeButton(
-                page.fapzoneTop,
-                page.fapzoneMode == FapzoneCreatorRepository.MODE_TOP_50
-        );
-        styleFapzoneModeButton(
-                page.fapzoneNew,
-                page.fapzoneMode == FapzoneCreatorRepository.MODE_NEW
-        );
-        styleFapzoneModeButton(
-                page.fapzoneHot,
-                page.fapzoneMode == FapzoneCreatorRepository.MODE_HOT
-        );
-        styleFapzoneModeButton(
-                page.fapzonePopular,
-                page.fapzoneMode == FapzoneCreatorRepository.MODE_POPULAR
-        );
-    }
-
-    private void updateFapzoneCaption(Page page) {
-        if (page == null) return;
-        if (page.seriesCaptionTitle != null) {
-            page.seriesCaptionTitle.setText(FapzoneCreatorRepository.titleFor(page.fapzoneMode));
-        }
-        if (page.seriesCaptionHint != null) {
-            page.seriesCaptionHint.setText(FapzoneCreatorRepository.hintFor(page.fapzoneMode));
-        }
-        if (page.seriesCaptionBadge != null) {
-            page.seriesCaptionBadge.setText(FapzoneCreatorRepository.badgeFor(page.fapzoneMode));
-        }
-    }
-
-    private void applyBrowseLayout(Page page, boolean wideCards) {
-        if (page == null || page.recycler == null) return;
-        if (!wideCards) {
-            RecyclerView.LayoutManager current = page.recycler.getLayoutManager();
-            if (current instanceof GridLayoutManager &&
-                    ((GridLayoutManager) current).getSpanCount() == 2) return;
-            page.recycler.setLayoutManager(new GridLayoutManager(activity, 2));
-            return;
-        }
-
-        int columns = creatorGridColumnCount();
-        GridLayoutManager editorialGrid = new GridLayoutManager(activity, columns);
-        editorialGrid.setInitialPrefetchItemCount(Math.max(8, columns * 3));
-        GridLayoutManager.SpanSizeLookup spanLookup = new GridLayoutManager.SpanSizeLookup() {
-            @Override
-            public int getSpanSize(int adapterPosition) {
-                return page.browseAdapter.creatorSpanSize(adapterPosition, columns);
-            }
-        };
-        spanLookup.setSpanIndexCacheEnabled(true);
-        editorialGrid.setSpanSizeLookup(spanLookup);
-        editorialGrid.setUsingSpansToEstimateScrollbarDimensions(true);
-        page.recycler.setLayoutManager(editorialGrid);
-    }
-
-    private int creatorGridColumnCount() {
-        Configuration config = activity.getResources().getConfiguration();
-        if (config.screenWidthDp >= 720) return 4;
-        return config.orientation == Configuration.ORIENTATION_LANDSCAPE &&
-                config.screenWidthDp >= 600 ? 4 : 2;
-    }
-
-    private void styleSeriesSourceButton(TextView button, boolean selected) {
-        ZeroChillUi.styleSourceRailChip(button, selected);
-    }
-
-    private void styleFapzoneModeButton(TextView button, boolean selected) {
-        ZeroChillUi.styleSourceRailChip(button, selected);
     }
 
     private Page createPageShell(int index, PageKind kind, String prefKey, String baseUrl) {
@@ -690,7 +941,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                 : new FrameLayout(activity);
         page.root.setBackgroundColor(ZeroChillUi.background(activity));
 
-        page.refresh = new SwipeRefreshLayout(activity);
+        page.refresh = new ZeroChillRefreshLayout(activity);
         page.refresh.setColorSchemeColors(UiPalette.PRIMARY);
         page.root.addView(page.refresh, new FrameLayout.LayoutParams(-1, -1));
 
@@ -701,7 +952,8 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         page.recycler.setItemAnimator(null);
         page.refresh.addView(page.recycler, new SwipeRefreshLayout.LayoutParams(-1, -1));
 
-        page.progress = new ZeroChillLoadingView(activity, null);
+        boolean brandedInitialLoad = index == PAGE_HOME || index == PAGE_SERIES;
+        page.progress = new ZeroChillLoadingView(activity, null, brandedInitialLoad);
         FrameLayout.LayoutParams progressParams = new FrameLayout.LayoutParams(dp(72), dp(72));
         progressParams.gravity = Gravity.CENTER;
         page.root.addView(page.progress, progressParams);
@@ -760,10 +1012,19 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
 
     private void load(Page page, boolean append) {
         if (page == null || page.loading || page.endReached) return;
+        if (page.kind == PageKind.SERIES && page.seriesSource == SERIES_SOURCE_HUB) {
+            loadShowsHub(page);
+            return;
+        }
+        if (page.kind == PageKind.ONLYFAP && page.onlyFapHub != null) {
+            loadOnlyFapHub(page);
+            return;
+        }
         if (page.kind != PageKind.FEED) append = false;
         page.loading = true;
         final int generation = page.generation;
-        final int selectedHomeSource = page.homeSource;
+        final int selectedHomeSource = append && page.displayHomeSource != 0
+                ? page.displayHomeSource : page.homeSource;
         final boolean appendRequest = append;
         final int requestPage = append ? page.currentPage + 1 : 1;
         if (!append && page.itemCount() == 0) page.progress.setVisibility(View.VISIBLE);
@@ -771,6 +1032,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         page.loadTask = io.submit(() -> {
             try {
                 List<NativeContentItem> result;
+                int loadedHomeSource = selectedHomeSource;
                 if (page.kind == PageKind.ONLYFAP) {
                     result = fapzoneCreatorRepository.fetch(
                             activity,
@@ -786,27 +1048,44 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                 } else if (page.kind == PageKind.CATEGORIES) {
                     result = browseRepository.fetchCategories(activity);
                 } else {
-                    result = homeRepository.fetch(activity, selectedHomeSource, requestPage,
-                            items -> {
-                                if (appendRequest) return;
-                                activity.runOnUiThread(() -> {
-                                    if (generation != page.generation || activity.isFinishing()) return;
-                                    page.feedAdapter.replace(items);
-                                    page.progress.setVisibility(View.GONE);
-                                    page.refresh.setRefreshing(false);
-                                    page.empty.setVisibility(View.GONE);
+                    if (!appendRequest && selectedHomeSource == 1) {
+                        HomeSourceRepository.FeedResult feed =
+                                homeRepository.fetchWithFallback(activity, selectedHomeSource, requestPage);
+                        result = feed.items;
+                        loadedHomeSource = feed.source;
+                    } else {
+                        result = homeRepository.fetch(activity, selectedHomeSource, requestPage,
+                                items -> {
+                                    if (appendRequest) return;
+                                    activity.runOnUiThread(() -> {
+                                        if (generation != page.generation || activity.isFinishing()) return;
+                                        page.feedAdapter.replace(items);
+                                        finishInitialProgress(page, !items.isEmpty());
+                                        page.refresh.setRefreshing(false);
+                                        page.empty.setVisibility(View.GONE);
+                                    });
                                 });
-                            });
+                    }
                 }
 
+                final int displayedSource = loadedHomeSource;
                 activity.runOnUiThread(() -> {
                     if (generation != page.generation) return;
                     page.loading = false;
-                    page.progress.setVisibility(View.GONE);
+                    finishInitialProgress(page, !appendRequest && !result.isEmpty());
                     page.refresh.setRefreshing(false);
                     page.empty.setVisibility(View.GONE);
 
                     if (page.kind == PageKind.FEED) {
+                        if (!appendRequest) {
+                            page.displayHomeSource = displayedSource;
+                            if (page.homeSource == 1 && displayedSource != 1) {
+                                ZeroChillToast.makeText(activity,
+                                        "CrazyShit unavailable • showing "
+                                                + (displayedSource == 3 ? "Kaotic" : "EFukt"),
+                                        ZeroChillToast.LENGTH_SHORT).show();
+                            }
+                        }
                         if (appendRequest) page.feedAdapter.append(result);
                         else page.feedAdapter.replace(result);
                         if (!result.isEmpty()) page.currentPage = requestPage;
@@ -851,6 +1130,333 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                 });
             }
         });
+    }
+
+    private void postPrimaryResult(Page page, int generation, String key, Runnable task) {
+        activity.runOnUiThread(() -> {
+            if (generation != page.generation || activity.isFinishing() || activity.isDestroyed()) return;
+            primaryWork.submit(page.index, key, () -> {
+                if (generation == page.generation) task.run();
+            });
+        });
+    }
+
+    private void loadOnlyFapHub(Page page) {
+        if (page == null || page.onlyFapHub == null || page.loading) return;
+        cancelOnlyFapHubTasks(page);
+        page.loading = true;
+        page.endReached = false;
+        page.empty.setVisibility(View.GONE);
+        page.progress.setVisibility(View.GONE);
+
+        page.onlyFapHub.beginRefresh();
+        final int generation = page.generation;
+        page.onlyFapFavoriteArtworkTask = io.submit(() ->
+                favoriteCreatorArtworkHydrator.hydrate(
+                        activity,
+                        10,
+                        () -> postPrimaryResult(page, generation, "favorites", () -> {
+                            if (generation == page.generation && page.onlyFapHub != null) {
+                                page.onlyFapHub.refreshFavorites();
+                            }
+                        })
+                )
+        );
+        AtomicInteger remaining = new AtomicInteger(2);
+        java.util.concurrent.CountDownLatch regularShelvesReady =
+                new java.util.concurrent.CountDownLatch(1);
+        java.util.Map<Integer, List<NativeContentItem>> finalShelves =
+                new java.util.concurrent.ConcurrentHashMap<>();
+
+        page.onlyFapHubTasks.add(io.submit(() -> {
+            try {
+                List<NativeContentItem> candidates = java.util.Collections.emptyList();
+                try {
+                    // Prefetch in parallel, but do not publish a row that later exclusions
+                    // can consume. The regular worker records final results before release.
+                    candidates = fapzoneCreatorRepository.fetch(
+                            activity, FapzoneCreatorRepository.MODE_TOP_50, null);
+                } catch (Exception ignored) {
+                }
+                regularShelvesReady.await();
+                if (Thread.currentThread().isInterrupted()) return;
+                List<NativeContentItem> items = fapzoneCreatorRepository.completeDiscover(
+                        activity, candidates,
+                        finalShelves.get(FapzoneCreatorRepository.MODE_NEW),
+                        finalShelves.get(FapzoneCreatorRepository.MODE_HOT),
+                        finalShelves.get(FapzoneCreatorRepository.MODE_POPULAR));
+                if (Thread.currentThread().isInterrupted()) return;
+                if (!items.isEmpty()) CreatorCatalog.remember(activity, items);
+                postPrimaryResult(page, generation, "discover", () -> {
+                    if (generation == page.generation && page.onlyFapHub != null) {
+                        page.onlyFapHub.setTrending(items);
+                    }
+                });
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+            } finally {
+                finishOnlyFapHubSource(page, generation, remaining);
+            }
+        }));
+
+        page.onlyFapHubTasks.add(io.submit(() -> {
+            try {
+                int[] modes = {
+                        FapzoneCreatorRepository.MODE_NEW,
+                        FapzoneCreatorRepository.MODE_HOT,
+                        FapzoneCreatorRepository.MODE_POPULAR
+                };
+                for (int mode : modes) {
+                    if (Thread.currentThread().isInterrupted()) break;
+                    List<NativeContentItem> result = java.util.Collections.emptyList();
+                    try {
+                        result = fapzoneCreatorRepository.fetch(
+                                activity, mode,
+                                items -> showOnlyFapHubProgress(page, generation, mode, items));
+                    } catch (Exception ignored) {
+                    }
+                    finalShelves.put(mode, new java.util.ArrayList<>(result));
+                    if (!result.isEmpty()) CreatorCatalog.remember(activity, result);
+                    final List<NativeContentItem> items = result;
+                    postPrimaryResult(page, generation, "shelf-" + mode, () -> {
+                        if (generation != page.generation || page.onlyFapHub == null) return;
+                        applyOnlyFapShelf(page.onlyFapHub, mode, items);
+                    });
+                }
+            } finally {
+                regularShelvesReady.countDown();
+                finishOnlyFapHubSource(page, generation, remaining);
+            }
+        }));
+    }
+
+    private void showOnlyFapHubProgress(
+            Page page,
+            int generation,
+            int mode,
+            List<NativeContentItem> items
+    ) {
+        if (items == null || items.isEmpty()) return;
+        postPrimaryResult(page, generation, "shelf-" + mode, () -> {
+            if (generation != page.generation || page.onlyFapHub == null) return;
+            applyOnlyFapShelf(page.onlyFapHub, mode, items);
+        });
+    }
+
+    private void applyOnlyFapShelf(
+            OnlyFapHubView hub,
+            int mode,
+            List<NativeContentItem> items
+    ) {
+        if (hub == null) return;
+        if (mode == FapzoneCreatorRepository.MODE_NEW) {
+            hub.setNewCreators(items);
+        } else if (mode == FapzoneCreatorRepository.MODE_HOT) {
+            hub.setHot(items);
+        } else if (mode == FapzoneCreatorRepository.MODE_POPULAR) {
+            hub.setPopular(items);
+        } else {
+            hub.setTrending(items);
+        }
+    }
+
+    private void finishOnlyFapHubSource(
+            Page page,
+            int generation,
+            AtomicInteger remaining
+    ) {
+        if (remaining.decrementAndGet() != 0) return;
+        postPrimaryResult(page, generation, "onlyfap-finished", () -> {
+            if (generation != page.generation) return;
+            page.loading = false;
+            page.endReached = true;
+            page.onlyFapLastLoadedElapsedMs = android.os.SystemClock.elapsedRealtime();
+            page.onlyFapHubTasks.clear();
+            if (page.onlyFapHub != null) page.onlyFapHub.finishLoading();
+        });
+    }
+
+    private void cancelOnlyFapHubTasks(Page page) {
+        if (page == null) return;
+        if (page.onlyFapFavoriteArtworkTask != null) {
+            page.onlyFapFavoriteArtworkTask.cancel(true);
+            page.onlyFapFavoriteArtworkTask = null;
+        }
+        for (java.util.concurrent.Future<?> task : page.onlyFapHubTasks) {
+            if (task != null) task.cancel(true);
+        }
+        page.onlyFapHubTasks.clear();
+    }
+
+    private void loadShowsHub(Page page) {
+        if (page == null || page.showsHub == null || page.loading) return;
+        cancelShowsHubTasks(page);
+        page.loading = true;
+        page.endReached = false;
+        page.empty.setVisibility(View.GONE);
+        page.progress.setVisibility(View.GONE);
+        page.showsHub.clear();
+
+        final int generation = page.generation;
+        AtomicInteger remaining = new AtomicInteger(5);
+
+        page.showsWeeklyTask = io.submit(() -> {
+            List<NativeContentItem> result = java.util.Collections.emptyList();
+            try {
+                result = homeRepository.fetch(
+                        activity,
+                        0,
+                        1,
+                        items -> showWeeklyShowsProgress(page, generation, items)
+                );
+            } catch (Exception ignored) {
+            }
+            java.util.ArrayList<NativeContentItem> weeklyCandidates =
+                    new java.util.ArrayList<>(result);
+            try {
+                weeklyCandidates.addAll(repository.fetchFeed(
+                        activity,
+                        CrazyShitRepository.HOME,
+                        2
+                ));
+            } catch (Exception ignored) {
+            }
+            final List<NativeContentItem> items = WeeklyShowsFeed.build(
+                    weeklyCandidates,
+                    System.currentTimeMillis()
+            );
+            postPrimaryResult(page, generation, "weekly", () -> {
+                if (generation == page.generation && page.showsHub != null) {
+                    page.showsHub.setThisWeek(items);
+                }
+            });
+        });
+
+        page.showsHubTasks.add(io.submit(() -> {
+            List<NativeContentItem> result = java.util.Collections.emptyList();
+            try {
+                result = browseRepository.fetchSeries(activity);
+            } catch (Exception ignored) {
+            }
+            final List<NativeContentItem> items = result;
+            postPrimaryResult(page, generation, "crazyshit", () -> {
+                if (generation == page.generation && page.showsHub != null) {
+                    page.showsHub.setCrazyShit(items);
+                }
+            });
+            finishShowsHubSource(page, generation, remaining);
+        }));
+
+        page.showsHubTasks.add(io.submit(() -> {
+            List<NativeContentItem> result = java.util.Collections.emptyList();
+            try {
+                result = efuktRepository.fetchSeries(activity);
+            } catch (Exception ignored) {
+            }
+            final List<NativeContentItem> items = result;
+            postPrimaryResult(page, generation, "efukt", () -> {
+                if (generation == page.generation && page.showsHub != null) {
+                    page.showsHub.setEfukt(items);
+                }
+            });
+            finishShowsHubSource(page, generation, remaining);
+        }));
+
+        page.showsHubTasks.add(baddieHubIo.submit(() -> {
+            List<NativeContentItem> result = java.util.Collections.emptyList();
+            try {
+                result = baddieHubRepository.fetchCategories(activity);
+            } catch (Exception ignored) {
+            }
+            final List<NativeContentItem> items = result;
+            postPrimaryResult(page, generation, "baddiehub", () -> {
+                if (generation == page.generation && page.showsHub != null) {
+                    page.showsHub.setBaddieHubCategories(items);
+                }
+            });
+            finishShowsHubSource(page, generation, remaining);
+        }));
+
+        page.showsHubTasks.add(io.submit(() -> {
+            List<NativeContentItem> result = java.util.Collections.emptyList();
+            try {
+                result = browseRepository.fetchCategories(activity);
+            } catch (Exception ignored) {
+            }
+            final List<NativeContentItem> items = result;
+            postPrimaryResult(page, generation, "categories", () -> {
+                if (generation == page.generation && page.showsHub != null) {
+                    page.showsHub.setCategories(items);
+                }
+            });
+            finishShowsHubSource(page, generation, remaining);
+        }));
+
+        page.showsHubTasks.add(io.submit(() -> {
+            List<NativeContentItem> result = java.util.Collections.emptyList();
+            try {
+                result = webVideoRepository.fetchCategories(
+                        activity,
+                        WebVideoSourceRepository.Source.KAOTIC
+                );
+            } catch (Exception ignored) {
+            }
+            final List<NativeContentItem> items = result;
+            postPrimaryResult(page, generation, "kaotic", () -> {
+                if (generation == page.generation && page.showsHub != null) {
+                    page.showsHub.setKaoticCategories(items);
+                }
+            });
+            finishShowsHubSource(page, generation, remaining);
+        }));
+    }
+
+    private void showWeeklyShowsProgress(
+            Page page,
+            int generation,
+            List<NativeContentItem> items
+    ) {
+        List<NativeContentItem> weekly = WeeklyShowsFeed.build(
+                items,
+                System.currentTimeMillis()
+        );
+        if (weekly.isEmpty()) return;
+        postPrimaryResult(page, generation, "weekly", () -> {
+            if (generation != page.generation || page.showsHub == null) return;
+            page.showsHub.setThisWeek(weekly);
+        });
+    }
+
+    private void finishShowsHubSource(Page page, int generation, AtomicInteger remaining) {
+        if (remaining.decrementAndGet() != 0) return;
+        postPrimaryResult(page, generation, "shows-finished", () -> {
+            if (generation != page.generation) return;
+            page.loading = false;
+            page.endReached = true;
+            page.showsHubTasks.clear();
+            if (page.showsHub != null) page.showsHub.finishLoading();
+        });
+    }
+
+    private void cancelShowsHubTasks(Page page) {
+        if (page == null) return;
+        if (page.showsWeeklyTask != null) {
+            page.showsWeeklyTask.cancel(true);
+            page.showsWeeklyTask = null;
+        }
+        for (java.util.concurrent.Future<?> task : page.showsHubTasks) {
+            if (task != null) task.cancel(true);
+        }
+        page.showsHubTasks.clear();
+    }
+
+    private void finishInitialProgress(Page page, boolean animate) {
+        if (page == null || page.progress == null) return;
+        if (animate && page.progress instanceof ZeroChillLoadingView) {
+            ((ZeroChillLoadingView) page.progress).finish();
+        } else {
+            page.progress.setVisibility(View.GONE);
+        }
     }
 
     private void showPopularCreatorProgress(
@@ -926,29 +1532,26 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         TextView empty;
         NativeFeedAdapter feedAdapter;
         NativeCategoryAdapter browseAdapter;
-        TextView crazyShitSource;
-        TextView efuktSource;
-        TextView bunkrSource;
-        TextView categoriesSource;
-        View fapzoneModes;
-        TextView fapzoneTop;
-        TextView fapzoneNew;
-        TextView fapzoneHot;
-        TextView fapzonePopular;
-        View seriesCaption;
-        TextView seriesCaptionTitle;
-        TextView seriesCaptionHint;
-        TextView seriesCaptionBadge;
+        ShowsHubView showsHub;
+        OnlyFapHubView onlyFapHub;
         int viewMode = NativeFeedAdapter.VIEW_LIST;
-        int seriesSource = SERIES_SOURCE_CRAZYSHIT;
+        int seriesSource = SERIES_SOURCE_HUB;
         int fapzoneMode = FapzoneCreatorRepository.MODE_TOP_50;
         int homeSource;
+        int displayHomeSource;
         java.util.concurrent.Future<?> loadTask;
+        java.util.concurrent.Future<?> showsWeeklyTask;
+        final java.util.List<java.util.concurrent.Future<?>> showsHubTasks =
+                new java.util.ArrayList<>();
+        final java.util.List<java.util.concurrent.Future<?>> onlyFapHubTasks =
+                new java.util.ArrayList<>();
+        java.util.concurrent.Future<?> onlyFapFavoriteArtworkTask;
         final java.util.List<TextView> homeChips = new java.util.ArrayList<>();
         int currentPage;
         boolean loading;
         boolean endReached;
         int generation;
+        long onlyFapLastLoadedElapsedMs;
 
         Page(int index, PageKind kind, String preferenceKey, String baseUrl) {
             this.index = index;
@@ -959,6 +1562,12 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
 
         int itemCount() {
             if (feedAdapter != null) return feedAdapter.getItemCount();
+            if (kind == PageKind.SERIES && seriesSource == SERIES_SOURCE_HUB && showsHub != null) {
+                return showsHub.itemCount();
+            }
+            if (kind == PageKind.ONLYFAP && onlyFapHub != null) {
+                return onlyFapHub.itemCount();
+            }
             return browseAdapter == null ? 0 : browseAdapter.getItemCount();
         }
     }

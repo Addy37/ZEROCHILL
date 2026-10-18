@@ -2,6 +2,7 @@ package com.webapp.crazyshit;
 
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.content.Context;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
@@ -20,10 +21,18 @@ final class AccessNoticeDialog {
     private AccessNoticeDialog() {
     }
 
-    static boolean isAccepted(Activity activity) {
-        return activity != null && activity
-                .getSharedPreferences("app_prefs", Activity.MODE_PRIVATE)
+    static boolean isAccepted(Context context) {
+        return context != null && context
+                .getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
                 .getBoolean(PREF_ACCEPTED, false);
+    }
+
+    static void markAccepted(Context context) {
+        if (context == null) return;
+        context.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
+                .edit()
+                .putBoolean(PREF_ACCEPTED, true)
+                .apply();
     }
 
     static void show(Activity activity, Runnable onAccepted) {
@@ -44,8 +53,8 @@ final class AccessNoticeDialog {
                 activity,
                 content,
                 "CONTENT WARNING",
-                "CrazyShit and EFukt contain adult, graphic, violent, and otherwise sensitive " +
-                        "material. Continue only if you are 18 or older and choose to view it."
+                "ZEROCHILL can provide access to adult, graphic, violent, and otherwise " +
+                        "sensitive material. Continue only if you are 18 or older and choose to view it."
         );
         addNoticeCard(
                 activity,
@@ -67,8 +76,8 @@ final class AccessNoticeDialog {
                 activity,
                 content,
                 "UNOFFICIAL APP",
-                "This independent, unofficial app was made for fun. It is not affiliated with, " +
-                        "endorsed by, sponsored by, or published by CrazyShit.com or EFukt.com."
+                "ZEROCHILL is an independent application. It is not affiliated with, endorsed by, " +
+                        "sponsored by, or published by the websites and services it accesses."
         );
 
         TextView responsibility = text(
@@ -89,10 +98,7 @@ final class AccessNoticeDialog {
                 .setCancelable(false)
                 .setNegativeButton("Exit", (ignored, which) -> activity.finish())
                 .setPositiveButton("I understand", (ignored, which) -> {
-                    activity.getSharedPreferences("app_prefs", Activity.MODE_PRIVATE)
-                            .edit()
-                            .putBoolean(PREF_ACCEPTED, true)
-                            .apply();
+                    markAccepted(activity);
                     if (onAccepted != null) onAccepted.run();
                 })
                 .create();

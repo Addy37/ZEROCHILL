@@ -1,0 +1,13 @@
+# Header profile and personal hub beta
+
+Base: `rebrand/zerochill` at `daef04706318d1f44e0b80685fa24575b57fcb65`, including merged profile/social cleanup and creator indicators.
+
+The main header and OnlyFap's existing embedded header use the same 32dp circular avatar inside a 44 by 48dp shortcut between Search and More. Tapping opens the existing ZeroChillAccountActivity. Signed-out state hides the shortcut and clears its image request/tracking. Search, More, header visibility/fullscreen policy and navigation geometry remain unchanged.
+
+AccountProfileCache stores only the latest account's derived public display name and avatar path. The encrypted session remains authoritative. Successful existing account reads, sign-in, profile saves and avatar uploads publish the cache. HeaderProfileAvatar observes cache/session changes while its host is resumed, rechecks ownership before rendering/routing and discards late callbacks. Existing sessions with no cached profile hydrate once per account/view through the existing account repository; simultaneous header hydration is coalesced. There is no header timer or separate image pipeline. Failed initial hydration retains the signed-in placeholder until a later account read or activity recreation. Glide, AccountAvatarImages and existing avatar fades handle image work.
+
+The existing Account screen keeps its identity, avatar crop/edit, public-profile link and bio. Edit Profile expands the existing name/bio form, retaining drafts and editing state across recreation. Social appears directly below the default identity area, reusing LibrarySocialHubView with a Social label. Messages retains the existing inbox preview, avatar and unread badge. Notifications retains UpdateInboxStore's current-account history, latest preview and unread badge. Account/security/preferences/blocks and Sign Out follow below. Library retains its current Connect section.
+
+The profile hub activates only while resumed and closes on account changes/rebuild/destruction. The Library hub already pauses behind another activity. Comment notification refresh uses the same application SocialActivityCoordinator, now also eligible on Account. No duplicate social store, subscription or background poll is introduced. Existing DM 500-row and notification-history/query bounds remain.
+
+No backend, migration, remote-config, package, signing, persisted media/favorite/history/download/backup or source/player changes. Beta uses the existing `.dev` package and persistent signing workflow. Device validation remains required on OnePlus 13 Android 16 at 120Hz for spacing, uploaded images, account transitions, scroll/edit behavior, unread updates, routing and Back.

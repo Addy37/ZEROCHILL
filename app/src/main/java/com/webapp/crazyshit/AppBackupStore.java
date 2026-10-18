@@ -18,7 +18,7 @@ final class AppBackupStore {
         JSONObject document = new JSONObject().put("format", "crazyshit-backup").put("version", 1)
                 .put("createdAt", System.currentTimeMillis()).put("appVersion", BuildConfig.VERSION_NAME);
         document.put("creators", ContentItemCodec.encodeList(
-                CreatorCatalog.matching(context, "", true, BackupDocument.MAX_ITEMS + 1), BackupDocument.MAX_ITEMS + 1));
+                CreatorCatalog.rawFavorites(context), BackupDocument.MAX_ITEMS + 1));
         JSONArray later = new JSONArray();
         for (FavoriteStore.Item item : FavoriteStore.load(context)) later.put(new JSONObject()
                 .put("title", item.title).put("url", item.url).put("savedAt", item.savedAt));
