@@ -21,6 +21,10 @@ public class ShitTokSeenStoreTest {
                 ShitTokContentIdentity.page("https://fapello.com/model/123/"));
         assertNotEquals(ShitTokContentIdentity.page("https://fapello.com/model/124/"),
                 ShitTokContentIdentity.page("https://fapello.com/model/123/"));
+        assertNotEquals(ShitTokContentIdentity.page("https://fapello.com/other-model/123/"),
+                ShitTokContentIdentity.page("https://fapello.com/model/123/"));
+        assertNotEquals(ShitTokContentIdentity.page("https://fapello.com/video/123/"),
+                ShitTokContentIdentity.page("https://fapello.com/model/123/"));
         assertNotEquals(ShitTokContentIdentity.media("https://one.test/file.mp4"),
                 ShitTokContentIdentity.media("https://two.test/file.mp4"));
         assertNotEquals(ShitTokContentIdentity.media("https://one.test/download?token=first"),

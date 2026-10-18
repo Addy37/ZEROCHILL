@@ -8,7 +8,7 @@ import java.util.regex.Pattern;
 /** Conservative aliases, based on the parsers' existing post IDs. Never match filenames globally. */
 final class ShitTokContentIdentity {
     private static final Pattern CRAZY_POST = Pattern.compile("^/cnt/medias/(\\d+)(?:/.*)?$");
-    private static final Pattern FAPELLO_POST = Pattern.compile("^/(?:video/(?:[^/]+/)?|[^/]+/)(\\d+)/?$");
+    private static final Pattern FAPELLO_POST = Pattern.compile("^/(?:video/)?([^/]+)/(\\d+)/?$");
 
     static String page(String raw) {
         try {
@@ -18,7 +18,8 @@ final class ShitTokContentIdentity {
             Matcher id = CRAZY_POST.matcher(path);
             if (host.equals("crazyshit.com") && id.matches()) return "crazyshit:post:" + id.group(1);
             id = FAPELLO_POST.matcher(path);
-            if (FapelloRepository.isFapelloUrl(raw) && id.matches()) return "fapello:post:" + id.group(1);
+            if (FapelloRepository.isFapelloUrl(raw) && id.matches())
+                return "fapello:post:" + id.group(1) + ":" + id.group(2);
             // Known page parsers ignore query/fragment. Unknown routes retain meaningful queries.
             boolean page = WebVideoSourceRepository.isKaoticUrl(raw)
                     || EfuktRepository.isEfuktUrl(raw) || BaddieHubRepository.isBaddieHubUrl(raw);

@@ -57,7 +57,8 @@ imported and remains maintained for rollback/backup compatibility. Seen entries
 age out by insertion order; likes use a larger independent bound and no dry-batch
 fallback. Unlike does not erase the device's historical anti-repeat signal.
 
-Identities reuse CrazyShit/Fapello post-ID shapes. Other URLs retain their host
+Identities reuse CrazyShit/Fapello post-ID shapes; Fapello keeps its creator/route
+namespace rather than assuming post numbers are globally unique. Other URLs retain their host
 and case-sensitive path; unknown page routes retain meaningful query parameters.
 Resolved media aliases strip only explicit transport/tracking query parameters.
 Hosts/filenames are not globally merged. Previously unknown CDN host aliases or
