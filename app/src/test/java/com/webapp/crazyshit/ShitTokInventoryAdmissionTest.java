@@ -7,6 +7,26 @@ import org.junit.Test;
 import static org.junit.Assert.*;
 
 public class ShitTokInventoryAdmissionTest {
+    @Test public void aSlowProviderCannotMonopolizeAllLanesWhileOtherSourcesAreArriving() {
+        ShitTokOrientationAdmission gate = new ShitTokOrientationAdmission((s, allowed) -> .5f, () -> 0L);
+        BlockingQueue<NativeContentItem> queue = new ArrayBlockingQueue<>(48);
+        for (int i = 0; i < 4; i++) queue.add(new NativeContentItem("media", "slow" + i,
+                "https://fixture.invalid/slow" + i, "", "", "Kaotic", "", ""));
+        queue.add(new NativeContentItem("media", "fast", "https://fixture.invalid/fast",
+                "", "", "creator", "", "OnlyFap"));
+        CountDownLatch release = new CountDownLatch(1);
+        AtomicBoolean productionDone = new AtomicBoolean();
+        try {
+            ShitTokOrientationAdmission.Result result = gate.admitConcurrent(queue, productionDone::get, candidate -> {
+                if (!candidate.title.equals("fast")) release.await(2, TimeUnit.SECONDS);
+                return new CrazyShitRepository.StreamInfo(candidate.url + ".mp4", candidate.url, candidate.title);
+            }, () -> true, 1, partial -> {
+                assertEquals("fast", partial.items.get(0).title);
+                productionDone.set(true); release.countDown();
+            }, count -> assertTrue(count <= 3));
+            assertEquals("fast", result.items.get(0).title);
+        } finally { release.countDown(); gate.close(); }
+    }
     @Test public void cancelledResolutionSlotWaitDefersWithoutUnplayableCooldown() {
         ShitTokOrientationAdmission gate = new ShitTokOrientationAdmission((s, allowed) -> .5f, () -> 0L);
         BlockingQueue<NativeContentItem> queue = new ArrayBlockingQueue<>(48);

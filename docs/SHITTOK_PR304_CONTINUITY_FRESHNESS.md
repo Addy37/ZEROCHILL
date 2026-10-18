@@ -41,8 +41,10 @@ timeouts/headers/remote configuration do not change. Interrupted source work
 cannot start a second copy for the same provider while the original still runs.
 
 Admission races up to three candidates even for a one-item deficit. Its bounded
-budget grows with forward consumption and increased runway pressure. Rejected
-seen/liked/duplicate aliases do not spend the playable admission budget. Legacy
+budget grows with forward consumption and increased runway pressure.
+While providers are still producing candidates, at most two active admissions
+may belong to one provider, leaving a lane for another provider's later result.
+Once production completes, a single provider can use all three lanes again. Rejected seen/liked/duplicate aliases do not spend the playable admission budget. Legacy
 unresolved pages no longer prohibit independent source fetching. Adapter/player
 mutations still wait for paging idle. No new player or far-ahead media buffering.
 

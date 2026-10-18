@@ -27,6 +27,9 @@ public class ChaosStartupPreloaderTest {
     private NativeContentItem clip(String id) {
         return new NativeContentItem("media", id, "https://fixture.invalid/" + id, "", "", "", "");
     }
+    private NativeContentItem sourceClip(String id, String uploader, String description) {
+        return new NativeContentItem("media", id, "https://fixture.invalid/" + id, "", "", uploader, "", description);
+    }
     private void set(String key, Object value) {
         ReflectionHelpers.setStaticField(ChaosStartupPreloader.class, key, value);
     }
@@ -117,10 +120,10 @@ public class ChaosStartupPreloaderTest {
                         if (!item.title.equals("portrait")) { slowStarted.countDown(); release.await(2, TimeUnit.SECONDS); }
                         return new CrazyShitRepository.StreamInfo(item.url + ".mp4", item.url, item.title);
                     }, () -> true, 3, partial -> { if (partial.items.get(0).title.equals("portrait")) fast.countDown(); }, count -> {}));
-            publish(clip("general-a"), clip("general-a-2"));
-            publish(clip("general-b"), clip("general-b-2"));
+            publish(sourceClip("general-a", "Kaotic", ""), sourceClip("general-a-2", "Kaotic", ""));
+            publish(sourceClip("general-b", "", "OnlyFap"), sourceClip("general-b-2", "", "OnlyFap"));
             assertTrue(slowStarted.await(1, TimeUnit.SECONDS));
-            publish(clip("portrait"));
+            publish(sourceClip("portrait", "Shit Show", ""));
             assertTrue("the fast portrait candidate must be admitted while both other providers remain blocked",
                     fast.await(1, TimeUnit.SECONDS));
             release.countDown();

@@ -199,7 +199,7 @@ final class ShitTokOrientationAdmission {
             while (allowedWork.getAsBoolean() && !Thread.currentThread().isInterrupted()
                     && admitted.size() < maxItems.getAsInt() && clock.getAsLong() - started < BATCH_MILLIS) {
                 while (active.size() < 3 && attempts < 24) {
-                    NativeContentItem item = candidates.poll();
+                    NativeContentItem item = nextCandidate(candidates, active.values(), productionDone.getAsBoolean(), remaining);
                     if (item == null) break;
                     attempts++;
                     try {
@@ -237,6 +237,29 @@ final class ShitTokOrientationAdmission {
             activeCount.accept(0);
         }
         return new Result(admitted, streams, remaining, !allowedWork.getAsBoolean());
+    }
+
+    private static NativeContentItem nextCandidate(java.util.concurrent.BlockingQueue<NativeContentItem> candidates,
+            java.util.Collection<NativeContentItem> active, boolean productionDone, List<NativeContentItem> remaining) {
+        // Keep one of the three lanes available to a later, faster provider. Once production
+        // finishes there is nothing left to race, so a single provider may use all three.
+        Map<String, Integer> counts = new java.util.HashMap<>();
+        for (NativeContentItem item : active) counts.merge(ShitTokAspectPriority.sourceKey(item), 1, Integer::sum);
+        synchronized (candidates) {
+            ArrayList<NativeContentItem> deferred = new ArrayList<>();
+            NativeContentItem selected = null;
+            int available = candidates.size();
+            for (int i = 0; i < available; i++) {
+                NativeContentItem item = candidates.poll();
+                if (item == null) break;
+                if (productionDone || counts.getOrDefault(ShitTokAspectPriority.sourceKey(item), 0) < 2) {
+                    selected = item; break;
+                }
+                deferred.add(item);
+            }
+            for (NativeContentItem item : deferred) if (!candidates.offer(item)) remaining.add(item);
+            return selected;
+        }
     }
 
     void close() { inventoryIo.shutdownNow(); }
