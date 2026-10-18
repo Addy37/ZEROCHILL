@@ -3,7 +3,6 @@ package com.webapp.crazyshit;
 import android.app.Activity;
 import android.app.Application;
 import android.content.Context;
-import android.os.Looper;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.List;
@@ -29,9 +28,9 @@ public class ShitTokCreatorMetadataLoaderTest {
     }
 
     static NativeContentItem clip() {
-        return new NativeContentItem(NativeContentItem.KIND_MEDIA, "Clip",
+        return ShitTokOrientation.copy(new NativeContentItem(NativeContentItem.KIND_MEDIA, "Clip",
                 "https://fapello.com/jane/123/", "https://example.com/clip.webp",
-                "", "Jane", "", "OnlyFap");
+                "", "Jane", "", "OnlyFap"), .5f);
     }
 
     static NativeContentItem creator() {
@@ -177,7 +176,11 @@ public class ShitTokCreatorMetadataLoaderTest {
                 assertEquals(creator().imageUrl,
                         ((NativeContentItem) ReflectionHelpers.getField(holder, "creatorIdentity")).imageUrl);
                 assertNull(ReflectionHelpers.getField(holder, "player"));
-                assertTrue(ShitTokPoolDiagnostics.report().contains("creatorMetadata"));
+                ReflectionHelpers.callInstanceMethod(feed, "timedAdmissionApply", from(String.class, "test"),
+                        from(Runnable.class, () -> org.robolectric.shadows.ShadowSystemClock.advanceBy(
+                                java.time.Duration.ofMillis(123))));
+                assertEquals(1L, (long) ReflectionHelpers.getField(feed, "admissionApplyCount"));
+                assertEquals(123L, (long) ReflectionHelpers.getField(feed, "admissionApplyMaxMs"));
             } finally { feed.close(); }
         }
     }
