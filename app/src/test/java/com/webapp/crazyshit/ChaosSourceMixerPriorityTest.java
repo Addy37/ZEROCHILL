@@ -40,29 +40,11 @@ public final class ChaosSourceMixerPriorityTest {
         assertEquals(4, noEfukt.size());
     }
 
-    @Test public void bunkrCanReturnThroughPostFrameExpansionPool() {
+    @Test public void bunkrIsNotPartOfShitTokMixedPool() {
         List<NativeContentItem> result = ChaosSourceMixer.mixAvailable(
                 clips("Kaotic", 2), clips("Shit Show", 2), clips("Fapello", 2),
-                clips("Bunkr", 2), clips("CrazyShit", 2), clips("EFukt", 2));
-        assertEquals(2, count(result, "Bunkr"));
-    }
-
-    @Test public void startupWebSlotRemainsKaoticUntilExplorationUnlocks() {
-        for (int bucket = 0; bucket < 8; bucket++) {
-            assertEquals(WebVideoSourceRepository.Source.KAOTIC,
-                    ChaosSourceMixer.webVideoSourceForExploration(false, bucket));
-        }
-    }
-
-    @Test public void postFrameWebSlotAddsTheYncAndItemFixWithoutDroppingKaotic() {
-        assertEquals(WebVideoSourceRepository.Source.KAOTIC,
-                ChaosSourceMixer.webVideoSourceForExploration(true, 0));
-        assertEquals(WebVideoSourceRepository.Source.KAOTIC,
-                ChaosSourceMixer.webVideoSourceForExploration(true, 1));
-        assertEquals(WebVideoSourceRepository.Source.THEYNC,
-                ChaosSourceMixer.webVideoSourceForExploration(true, 2));
-        assertEquals(WebVideoSourceRepository.Source.ITEMFIX,
-                ChaosSourceMixer.webVideoSourceForExploration(true, 3));
+                clips("OnlyHaven", 2), clips("CrazyShit", 2), clips("EFukt", 2));
+        assertEquals(0, count(result, "Bunkr"));
     }
 
     private static int count(List<NativeContentItem> items, String source) {

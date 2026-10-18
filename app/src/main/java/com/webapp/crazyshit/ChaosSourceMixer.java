@@ -25,10 +25,7 @@ import java.util.concurrent.TimeUnit;
  */
 final class ChaosSourceMixer {
     private static final int MAX_SOURCE_PAGE = 8;
-    private static final int EXPANDED_WEB_MAX_PAGE = 4;
     private static final int BADDIEHUB_MAX_PAGE = 3;
-    private static final int BUNKR_MAX_PAGE = 3;
-    private static final int ONLY_HAVEN_MAX_PAGE = 3;
     private static final ExecutorService CRAZY_IO = Executors.newFixedThreadPool(2);
     private static final ExecutorService SOURCE_IO = Executors.newFixedThreadPool(6);
     private static final ExecutorService CONTINUITY_SOURCE_IO = Executors.newFixedThreadPool(3);
@@ -49,7 +46,6 @@ final class ChaosSourceMixer {
     private static final int ONLY_HAVEN_ITEMS_PER_BATCH = 6;
     private static final int ONLY_HAVEN_ITEMS_PER_CREATOR = 3;
     private static final int ONLY_HAVEN_TRENDING_CREATORS = 30;
-    private static final int BUNKR_ITEMS_PER_BATCH = 6;
     private static final int BADDIEHUB_ITEMS_PER_BATCH = 7;
     private static final String VIDEOS = CrazyShitRepository.BASE + "videos/";
     private static final String USER_UPLOADS = CrazyShitRepository.BASE + "submissions/";
@@ -58,7 +54,6 @@ final class ChaosSourceMixer {
     private final Random random;
     private final ShitShowTapSource shitShow = new ShitShowTapSource();
     private final EfuktRepository efukt = new EfuktRepository();
-    private final BunkrRepository bunkr = new BunkrRepository();
     private final FapelloRepository fapello = new FapelloRepository();
     private final WebVideoSourceRepository webVideo = new WebVideoSourceRepository();
     private final OnlyHavenRepository onlyHaven = new OnlyHavenRepository();
@@ -118,17 +113,12 @@ final class ChaosSourceMixer {
         // eFukt remains a bounded startup fallback; its directory expansion waits for first frame.
         requests.add(() -> new SourceBatch(BATCH_EFUKT,
                 explorationAllowed ? loadEfuktBatch(context) : efukt.fetchLatest(context)));
-        // Before first frame this is still Kaotic page 1. Normal post-frame refills rotate through
-        // Kaotic, TheYNC and ItemFix without adding a worker. Continuity refills stay on Kaotic.
         requests.add(() -> new SourceBatch(
-                BATCH_KAOTIC, loadWebVideoBatch(context, explorationAllowed && !continuityOnly)));
+                BATCH_KAOTIC, loadKaoticBatch(context)));
         requests.add(() -> new SourceBatch(
                 BATCH_FAPELLO, loadFapelloBatch(context)));
-        // Bunkr shares the existing post-first-frame exploration slot with OnlyHaven. Continuity
-        // refills keep the previous OnlyHaven path so flaky album work cannot compete with rescue.
         if (explorationAllowed) requests.add(() -> new SourceBatch(
-                BATCH_ONLY_HAVEN, continuityOnly
-                        ? loadOnlyHavenBatch(context) : loadPostFrameExpansionBatch(context)));
+                BATCH_ONLY_HAVEN, loadOnlyHavenBatch(context)));
         requests.add(() -> new SourceBatch(
                 BATCH_BADDIEHUB, loadBaddieHubBatch(context)));
         if (continuityOnly) Collections.shuffle(requests, random);
@@ -381,62 +371,18 @@ final class ChaosSourceMixer {
         }
     }
 
-    private List<NativeContentItem> loadWebVideoBatch(Context context, boolean allowExpandedSources) {
+    private List<NativeContentItem> loadKaoticBatch(Context context) {
         try {
-            WebVideoSourceRepository.Source source = webVideoSourceForExploration(
-                    allowExpandedSources, random.nextInt(4));
-            int maxPage = source == WebVideoSourceRepository.Source.KAOTIC
-                    ? MAX_SOURCE_PAGE : EXPANDED_WEB_MAX_PAGE;
             ArrayList<NativeContentItem> candidates = new ArrayList<>(
                     webVideo.fetchFeed(
                             context,
-                            source,
-                            explorationAllowed ? 1 + random.nextInt(maxPage) : 1
+                            WebVideoSourceRepository.Source.KAOTIC,
+                            explorationAllowed ? 1 + random.nextInt(MAX_SOURCE_PAGE) : 1
                     )
             );
             candidates.removeIf(item -> item == null || !item.isVideo());
             Collections.shuffle(candidates, random);
             int take = Math.min(KAOTIC_ITEMS_PER_BATCH, candidates.size());
-            return new ArrayList<>(candidates.subList(0, take));
-        } catch (Exception ignored) {
-            return new ArrayList<>();
-        }
-    }
-
-    static WebVideoSourceRepository.Source webVideoSourceForExploration(
-            boolean explorationAllowed, int bucket) {
-        if (!explorationAllowed) return WebVideoSourceRepository.Source.KAOTIC;
-        int normalized = Math.floorMod(bucket, 4);
-        if (normalized == 2) return WebVideoSourceRepository.Source.THEYNC;
-        if (normalized == 3) return WebVideoSourceRepository.Source.ITEMFIX;
-        return WebVideoSourceRepository.Source.KAOTIC;
-    }
-
-    private List<NativeContentItem> loadPostFrameExpansionBatch(Context context) {
-        return random.nextBoolean() ? loadOnlyHavenBatch(context) : loadBunkrBatch(context);
-    }
-
-    private List<NativeContentItem> loadBunkrBatch(Context context) {
-        try {
-            int indexPage = 1 + random.nextInt(BUNKR_MAX_PAGE);
-            ArrayList<NativeContentItem> albums = new ArrayList<>(random.nextBoolean()
-                    ? bunkr.fetchAlbums(context, indexPage)
-                    : bunkr.fetchAlbumsByFileCount(context, indexPage));
-            albums.removeIf(album -> album == null || album.url == null || album.url.isEmpty()
-                    || !BunkrRepository.isAlbumUrl(album.url));
-            if (albums.isEmpty()) return new ArrayList<>();
-            Collections.shuffle(albums, random);
-
-            // One album per batch is intentional. The mixer already bounds this provider at
-            // 2.2 seconds, and limiting expansion to one album prevents the historical Bunkr
-            // failure mode where several flaky album requests could stretch a swipe refill.
-            NativeContentItem album = albums.get(0);
-            int albumPage = random.nextInt(4) == 0 ? 2 : 1;
-            ArrayList<NativeContentItem> candidates = new ArrayList<>(
-                    bunkr.fetchAlbum(context, album.url, albumPage));
-            candidates.removeIf(item -> item == null || !item.isVideo());
-            Collections.shuffle(candidates, random);
-            int take = Math.min(BUNKR_ITEMS_PER_BATCH, candidates.size());
             return new ArrayList<>(candidates.subList(0, take));
         } catch (Exception ignored) {
             return new ArrayList<>();
@@ -460,9 +406,8 @@ final class ChaosSourceMixer {
 
             ArrayList<NativeContentItem> candidates = new ArrayList<>();
             try {
-                int creatorPage = 1 + random.nextInt(ONLY_HAVEN_MAX_PAGE);
                 for (NativeContentItem item :
-                        onlyHaven.fetchCreatorMedia(context, creator, creatorPage, 18)) {
+                        onlyHaven.fetchCreatorMedia(context, creator, 1, 18)) {
                     if (item == null || !item.isVideo()) continue;
                     candidates.add(new NativeContentItem(
                             item.kind,
