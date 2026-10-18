@@ -1,0 +1,21 @@
+# ZEROCHILL Library profile
+
+Library reads the existing retained, deferred LibraryHubView shell. LibraryProfileHeader uses the matching AccountProfileCache identity and avatar, with a signed-out fallback linking to the existing account screen. Messages, Notifications and Settings are compact, accessible actions. Unread information comes from existing local badge/inbox state. Header rendering adds no account/inbox polling or profile query.
+
+The content order is Liked Videos, Favorite Creators, Downloads, Watch Later, History. Collection previews retain their existing bounded rails and reuse unchanged views across refreshes. Creator artwork is portrait with the existing custom crop support. Empty collections are omitted; the likes collection retains a compact shortcut so older likes can be loaded explicitly. No decorative counters are queried.
+
+History replaces the duplicated Continue Watching presentation. Recent-first ordering and completed state come from PlaybackHistoryStore. Unfinished cards expose progress and remaining time or Resume, and route through the original saved-position listener. Completed items replay from zero through the existing resume policy. The full History destination also shows progress for unfinished entries. Internal Continue Watching APIs and other screens remain intact.
+
+The first unresolved snapshot displays a restrained loading placeholder, never the true empty state. Normal refreshes retain content, artwork and rail positions. Account ownership changes clear the previous media immediately before the next background snapshot. Bottom content padding includes the floating navigation height plus spacing; the host keeps its existing system/cutout insets.
+
+## Likes and compatibility
+
+The existing server `video_likes` table remains the only authority for likes. It contains account IDs, hashed content keys and timestamps, without video URLs, titles or artwork. Device discovery exclusions are deliberately not treated as current account likes: they are device-wide, may include unliked items and contain non-reversible aliases.
+
+SocialContentContextStore now also holds a derived, account-scoped cache of confirmed likes, alongside its existing native video metadata. Successful existing like reads/toggles update this cache; failed mutations do not. ShitTok and detail like calls pass their already available metadata to that same repository, on its worker, without changing playback or source behavior. Confirmed unlikes remove cached entries. Cache writes and reads reject mismatched accounts. Existing watch history and Watch Later metadata match older server keys without source scraping. The cache retains metadata/URLs independently of later local history deletion, with up to 2,000 confirmed rows per account.
+
+Library opens locally. LikedVideosActivity is a recycled list, with explicit Refresh and 100-row Load more actions against the existing authenticated API. Unknown historical hashes are reported as older likes without video details, not replaced by fake content or guessed URLs. The full view can page beyond the local cache limit in memory. Rotation retains loaded rows, paging and scroll; process recreation reloads the bounded local cache. Refresh starts a new server snapshot, and failures retain displayed content. Other-device unlike changes are reconciled on explicit Refresh, rather than adding Library background traffic.
+
+No schema migration, duplicate authoritative likes database, source configuration, backend deployment, dependency, package/signing identity, existing store rename, download location, backup format or auth behavior change. Existing saves, favorites, downloads and history remain owned by their original stores.
+
+Physical-device checks remain necessary for uploaded artwork, live authenticated sync/pagination, playback resume and portrait/landscape gestures. Native fixture renders use synthetic metadata and fallback artwork.

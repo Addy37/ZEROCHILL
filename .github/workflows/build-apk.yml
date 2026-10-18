@@ -194,6 +194,20 @@ jobs:
           gradle-version: '8.11.1'
           cache-provider: basic
 
+      - name: Verify Library profile, account isolation and existing collections
+        if: ${{ github.head_ref == 'feature/library-profile-redesign' }}
+        run: >-
+          gradle --no-daemon :app:testDebugUnitTest
+          --tests 'com.webapp.crazyshit.LibraryProfileTest'
+          --tests 'com.webapp.crazyshit.LikedVideosActivityTest'
+          --tests 'com.webapp.crazyshit.PrimaryTabLibraryTest'
+          --tests 'com.webapp.crazyshit.LibrarySocialHubTest'
+          --tests 'com.webapp.crazyshit.LibrarySearchTest'
+          --tests 'com.webapp.crazyshit.PlaybackHistoryStoreTest'
+          --tests 'com.webapp.crazyshit.ProfileAccountIsolationTest'
+          --tests 'com.webapp.crazyshit.DownloadResumePolicyTest'
+          --tests 'com.webapp.crazyshit.OnlyFapFavoriteAvatarTest'
+
       - name: Verify phone content grids and retained hub behavior
         if: ${{ github.head_ref == 'feature/phone-content-grid-layout' }}
         run: >-
@@ -244,7 +258,7 @@ jobs:
           --tests com.webapp.crazyshit.ShitTokOrientationAdmissionTest
 
       - name: Run ShitTok buffering and orientation regressions first
-        if: ${{ github.event.pull_request.number != 304 && github.head_ref != 'fix/shittok-async-creator-metadata' && github.head_ref != 'fix/shittok-startup-handoff' && github.head_ref != 'fix/onlyfap-first-open' && github.head_ref != 'feature/phone-content-grid-layout' }}
+        if: ${{ github.event.pull_request.number != 304 && github.head_ref != 'fix/shittok-async-creator-metadata' && github.head_ref != 'fix/shittok-startup-handoff' && github.head_ref != 'fix/onlyfap-first-open' && github.head_ref != 'feature/phone-content-grid-layout' && github.head_ref != 'feature/library-profile-redesign' }}
         run: >-
           gradle --no-daemon :app:testDebugUnitTest
           --tests 'com.webapp.crazyshit.ShitTokBuffer*'
@@ -256,7 +270,7 @@ jobs:
           --tests 'com.webapp.crazyshit.ShitTokDynamicPinchTest'
 
       - name: Run focused notification entry regressions
-        if: ${{ github.event.pull_request.number != 304 && github.head_ref != 'fix/shittok-async-creator-metadata' && github.head_ref != 'fix/shittok-startup-handoff' && github.head_ref != 'fix/onlyfap-first-open' && github.head_ref != 'feature/phone-content-grid-layout' }}
+        if: ${{ github.event.pull_request.number != 304 && github.head_ref != 'fix/shittok-async-creator-metadata' && github.head_ref != 'fix/shittok-startup-handoff' && github.head_ref != 'fix/onlyfap-first-open' && github.head_ref != 'feature/phone-content-grid-layout' && github.head_ref != 'feature/library-profile-redesign' }}
         run: >-
           gradle --no-daemon :app:testDebugUnitTest
           --tests 'com.webapp.crazyshit.NotificationCenterUiTest'
@@ -265,7 +279,7 @@ jobs:
           --tests 'com.webapp.crazyshit.UpdateInboxStoreTest'
 
       - name: Run focused primary-tab activation regressions
-        if: ${{ github.event.pull_request.number != 304 && github.head_ref != 'fix/shittok-async-creator-metadata' && github.head_ref != 'fix/shittok-startup-handoff' && github.head_ref != 'fix/onlyfap-first-open' && github.head_ref != 'feature/phone-content-grid-layout' }}
+        if: ${{ github.event.pull_request.number != 304 && github.head_ref != 'fix/shittok-async-creator-metadata' && github.head_ref != 'fix/shittok-startup-handoff' && github.head_ref != 'fix/onlyfap-first-open' && github.head_ref != 'feature/phone-content-grid-layout' && github.head_ref != 'feature/library-profile-redesign' }}
         run: >-
           gradle --no-daemon :app:testDebugUnitTest
           --tests 'com.webapp.crazyshit.PrimaryTab*'
@@ -273,7 +287,7 @@ jobs:
           --tests 'com.webapp.crazyshit.OnlyFapFavoriteAvatarTest'
 
       - name: Run focused ShitTok swipe and audio regressions
-        if: ${{ github.event.pull_request.number != 304 && github.head_ref != 'fix/shittok-async-creator-metadata' && github.head_ref != 'fix/shittok-startup-handoff' && github.head_ref != 'fix/onlyfap-first-open' && github.head_ref != 'feature/phone-content-grid-layout' }}
+        if: ${{ github.event.pull_request.number != 304 && github.head_ref != 'fix/shittok-async-creator-metadata' && github.head_ref != 'fix/shittok-startup-handoff' && github.head_ref != 'fix/onlyfap-first-open' && github.head_ref != 'feature/phone-content-grid-layout' && github.head_ref != 'feature/library-profile-redesign' }}
         run: >-
           gradle --no-daemon :app:testDebugUnitTest
           --tests 'com.webapp.crazyshit.ShitTokAudioOwnershipTest'
@@ -284,7 +298,7 @@ jobs:
           --tests 'com.webapp.crazyshit.ShitTokSessionResumeTest'
 
       - name: Run focused Favorite Creators cache-first regressions
-        if: ${{ github.event.pull_request.number != 304 && github.head_ref != 'fix/shittok-async-creator-metadata' && github.head_ref != 'fix/shittok-startup-handoff' && github.head_ref != 'fix/onlyfap-first-open' && github.head_ref != 'feature/phone-content-grid-layout' }}
+        if: ${{ github.event.pull_request.number != 304 && github.head_ref != 'fix/shittok-async-creator-metadata' && github.head_ref != 'fix/shittok-startup-handoff' && github.head_ref != 'fix/onlyfap-first-open' && github.head_ref != 'feature/phone-content-grid-layout' && github.head_ref != 'feature/library-profile-redesign' }}
         run: >-
           gradle --no-daemon :app:testDebugUnitTest
           --tests 'com.webapp.crazyshit.FavoriteCreatorsScrollTest'
@@ -293,7 +307,7 @@ jobs:
           --tests 'com.webapp.crazyshit.UpdateInboxStoreTest'
 
       - name: Run focused ShitTok block and BaddieHub Shows regressions first
-        if: ${{ github.event.pull_request.number != 304 && github.head_ref != 'fix/shittok-async-creator-metadata' && github.head_ref != 'fix/shittok-startup-handoff' && github.head_ref != 'fix/onlyfap-first-open' && github.head_ref != 'feature/phone-content-grid-layout' }}
+        if: ${{ github.event.pull_request.number != 304 && github.head_ref != 'fix/shittok-async-creator-metadata' && github.head_ref != 'fix/shittok-startup-handoff' && github.head_ref != 'fix/onlyfap-first-open' && github.head_ref != 'feature/phone-content-grid-layout' && github.head_ref != 'feature/library-profile-redesign' }}
         run: >-
           gradle --no-daemon :app:testDebugUnitTest
           --tests 'com.webapp.crazyshit.ShitTokQueuePrunerTest'
@@ -304,7 +318,7 @@ jobs:
           --tests 'com.webapp.crazyshit.ShowsHeroDesignTest'
 
       - name: Run focused fullscreen regressions first
-        if: ${{ github.event.pull_request.number != 304 && github.head_ref != 'fix/shittok-async-creator-metadata' && github.head_ref != 'fix/shittok-startup-handoff' && github.head_ref != 'fix/onlyfap-first-open' && github.head_ref != 'feature/phone-content-grid-layout' }}
+        if: ${{ github.event.pull_request.number != 304 && github.head_ref != 'fix/shittok-async-creator-metadata' && github.head_ref != 'fix/shittok-startup-handoff' && github.head_ref != 'fix/onlyfap-first-open' && github.head_ref != 'feature/phone-content-grid-layout' && github.head_ref != 'feature/library-profile-redesign' }}
         run: >-
           gradle --no-daemon :app:testDebugUnitTest
           --tests 'com.webapp.crazyshit.ShowsFullscreen*'
@@ -312,7 +326,7 @@ jobs:
           --tests 'com.webapp.crazyshit.PhoneOrientationPolicyTest'
 
       - name: Run focused header profile hub regressions first
-        if: ${{ github.event.pull_request.number != 304 && github.head_ref != 'fix/shittok-async-creator-metadata' && github.head_ref != 'fix/shittok-startup-handoff' && github.head_ref != 'fix/onlyfap-first-open' && github.head_ref != 'feature/phone-content-grid-layout' }}
+        if: ${{ github.event.pull_request.number != 304 && github.head_ref != 'fix/shittok-async-creator-metadata' && github.head_ref != 'fix/shittok-startup-handoff' && github.head_ref != 'fix/onlyfap-first-open' && github.head_ref != 'feature/phone-content-grid-layout' && github.head_ref != 'feature/library-profile-redesign' }}
         run: >-
           gradle --no-daemon :app:testDebugUnitTest
           --tests 'com.webapp.crazyshit.HeaderProfileAvatarTest'
@@ -320,7 +334,7 @@ jobs:
           --tests 'com.webapp.crazyshit.ZeroChillAccountUiTest'
 
       - name: Run focused profile and social cleanup regressions first
-        if: ${{ github.event.pull_request.number != 304 && github.head_ref != 'fix/shittok-async-creator-metadata' && github.head_ref != 'fix/shittok-startup-handoff' && github.head_ref != 'fix/onlyfap-first-open' && github.head_ref != 'feature/phone-content-grid-layout' }}
+        if: ${{ github.event.pull_request.number != 304 && github.head_ref != 'fix/shittok-async-creator-metadata' && github.head_ref != 'fix/shittok-startup-handoff' && github.head_ref != 'fix/onlyfap-first-open' && github.head_ref != 'feature/phone-content-grid-layout' && github.head_ref != 'feature/library-profile-redesign' }}
         run: >-
           gradle --no-daemon :app:testDebugUnitTest
           --tests 'com.webapp.crazyshit.ProfileAvatar*'
@@ -331,13 +345,13 @@ jobs:
           --tests 'com.webapp.crazyshit.ZeroChillMessageThreadUiTest'
 
       - name: Run focused thumbnail loading regressions first
-        if: ${{ github.event.pull_request.number != 304 && github.head_ref != 'fix/shittok-async-creator-metadata' && github.head_ref != 'fix/shittok-startup-handoff' && github.head_ref != 'fix/onlyfap-first-open' && github.head_ref != 'feature/phone-content-grid-layout' }}
+        if: ${{ github.event.pull_request.number != 304 && github.head_ref != 'fix/shittok-async-creator-metadata' && github.head_ref != 'fix/shittok-startup-handoff' && github.head_ref != 'fix/onlyfap-first-open' && github.head_ref != 'feature/phone-content-grid-layout' && github.head_ref != 'feature/library-profile-redesign' }}
         run: >-
           gradle --no-daemon :app:testDebugUnitTest
           --tests 'com.webapp.crazyshit.ThumbnailLoadTransitionTest'
 
       - name: Run focused navigation and gallery regressions first
-        if: ${{ github.event.pull_request.number != 304 && github.head_ref != 'fix/shittok-async-creator-metadata' && github.head_ref != 'fix/shittok-startup-handoff' && github.head_ref != 'fix/onlyfap-first-open' && github.head_ref != 'feature/phone-content-grid-layout' }}
+        if: ${{ github.event.pull_request.number != 304 && github.head_ref != 'fix/shittok-async-creator-metadata' && github.head_ref != 'fix/shittok-startup-handoff' && github.head_ref != 'fix/onlyfap-first-open' && github.head_ref != 'feature/phone-content-grid-layout' && github.head_ref != 'feature/library-profile-redesign' }}
         run: >-
           gradle --no-daemon :app:testDebugUnitTest
           --tests 'com.webapp.crazyshit.BottomNavigationInsetsTest'
@@ -352,7 +366,7 @@ jobs:
           --tests 'com.webapp.crazyshit.CreatorMergedGalleryTest'
 
       - name: Run focused profile and account regressions first
-        if: ${{ github.event.pull_request.number != 304 && github.head_ref != 'fix/shittok-async-creator-metadata' && github.head_ref != 'fix/shittok-startup-handoff' && github.head_ref != 'fix/onlyfap-first-open' && github.head_ref != 'feature/phone-content-grid-layout' }}
+        if: ${{ github.event.pull_request.number != 304 && github.head_ref != 'fix/shittok-async-creator-metadata' && github.head_ref != 'fix/shittok-startup-handoff' && github.head_ref != 'fix/onlyfap-first-open' && github.head_ref != 'feature/phone-content-grid-layout' && github.head_ref != 'feature/library-profile-redesign' }}
         run: >-
           gradle --no-daemon :app:testDebugUnitTest
           --tests 'com.webapp.crazyshit.ZeroChillAccount*'
@@ -361,7 +375,7 @@ jobs:
           --tests 'com.webapp.crazyshit.ProfileAccountIsolationTest'
 
       - name: Run focused Library social hub regressions first
-        if: ${{ github.event.pull_request.number != 304 && github.head_ref != 'fix/shittok-async-creator-metadata' && github.head_ref != 'fix/shittok-startup-handoff' && github.head_ref != 'fix/onlyfap-first-open' && github.head_ref != 'feature/phone-content-grid-layout' }}
+        if: ${{ github.event.pull_request.number != 304 && github.head_ref != 'fix/shittok-async-creator-metadata' && github.head_ref != 'fix/shittok-startup-handoff' && github.head_ref != 'fix/onlyfap-first-open' && github.head_ref != 'feature/phone-content-grid-layout' && github.head_ref != 'feature/library-profile-redesign' }}
         run: >-
           gradle --no-daemon :app:testDebugUnitTest
           --tests 'com.webapp.crazyshit.LibrarySocialHub*'
@@ -373,13 +387,13 @@ jobs:
           --tests 'com.webapp.crazyshit.OnlyFapFavoriteAvatarTest'
 
       - name: Run focused DM regressions first
-        if: ${{ github.event.pull_request.number != 304 && github.head_ref != 'fix/shittok-async-creator-metadata' && github.head_ref != 'fix/shittok-startup-handoff' && github.head_ref != 'fix/onlyfap-first-open' && github.head_ref != 'feature/phone-content-grid-layout' }}
+        if: ${{ github.event.pull_request.number != 304 && github.head_ref != 'fix/shittok-async-creator-metadata' && github.head_ref != 'fix/shittok-startup-handoff' && github.head_ref != 'fix/onlyfap-first-open' && github.head_ref != 'feature/phone-content-grid-layout' && github.head_ref != 'feature/library-profile-redesign' }}
         run: >-
           gradle --no-daemon :app:testDebugUnitTest
           --tests 'com.webapp.crazyshit.ZeroChillMessageThreadUiTest'
 
       - name: Run focused OnlyFap Discover regressions first
-        if: ${{ github.event.pull_request.number != 304 && github.head_ref != 'fix/shittok-async-creator-metadata' && github.head_ref != 'fix/shittok-startup-handoff' && github.head_ref != 'fix/onlyfap-first-open' && github.head_ref != 'feature/phone-content-grid-layout' }}
+        if: ${{ github.event.pull_request.number != 304 && github.head_ref != 'fix/shittok-async-creator-metadata' && github.head_ref != 'fix/shittok-startup-handoff' && github.head_ref != 'fix/onlyfap-first-open' && github.head_ref != 'feature/phone-content-grid-layout' && github.head_ref != 'feature/library-profile-redesign' }}
         run: >-
           gradle --no-daemon :app:testDebugUnitTest
           --tests 'com.webapp.crazyshit.OnlyFapDiscoverTest'

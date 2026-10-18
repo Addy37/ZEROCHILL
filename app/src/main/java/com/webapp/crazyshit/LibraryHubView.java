@@ -32,8 +32,8 @@ import java.util.Map;
 /**
  * Personal ZEROCHILL media hub.
  *
- * Existing stores remain the source of truth. This view only gives Continue Watching, creators,
- * Watch Later, Downloads and History a first-class visual presentation inside the primary pager.
+ * Existing stores remain the source of truth. Profile actions precede bounded previews of
+ * confirmed likes, creators, downloads, Watch Later and recent History with resume progress.
  */
 final class LibraryHubView extends ScrollView {
     interface Listener {
@@ -49,7 +49,7 @@ final class LibraryHubView extends ScrollView {
     private final Activity activity;
     private final Listener listener;
     private final LinearLayout content;
-    private LibrarySocialHubView socialHub;
+    private LibraryProfileHeader socialHub;
     private final Map<String, List<ImageView>> thumbnailTargets = new HashMap<>();
     private final Map<String, String> resolvedThumbnails = new HashMap<>();
     private final java.util.Set<String> requestedThumbnails = new java.util.HashSet<>();
@@ -60,10 +60,25 @@ final class LibraryHubView extends ScrollView {
     private final java.util.concurrent.ExecutorService refreshIo =
             java.util.concurrent.Executors.newSingleThreadExecutor();
     private final List<SharedPreferences> observedPreferences = new ArrayList<>();
-    private final SharedPreferences.OnSharedPreferenceChangeListener invalidation = (prefs, key) -> {
-        this.revision++;
-        if (this.active) scheduleRefresh();
-    };
+    private final SharedPreferences.OnSharedPreferenceChangeListener invalidation = (prefs, key) ->
+            activityOnInvalidation();
+
+    private void activityOnInvalidation() {
+        activity.runOnUiThread(() -> {
+            if (closed) return;
+            revision++;
+            // Retain cached media during ordinary refreshes, never across account ownership.
+            if (displayed != null && !displayed.owner.equals(ZeroChillSessionStore.currentUserId(activity))) {
+                clearImages(mediaContent);
+                mediaContent.removeAllViews();
+                thumbnailTargets.clear();
+                sectionStates.clear();
+                displayed = null;
+                addLoadingState();
+            }
+            if (active) scheduleRefresh();
+        });
+    }
     private PrimaryTabWorkQueue.Scheduler work = (key, task) -> post(task);
     private boolean active;
     private boolean loading;
@@ -89,7 +104,8 @@ final class LibraryHubView extends ScrollView {
 
         content = new LinearLayout(activity);
         content.setOrientation(LinearLayout.VERTICAL);
-        content.setPadding(dp(16), dp(16), dp(16), dp(32));
+        content.setPadding(dp(16), dp(16), dp(16),
+                ZeroChillUi.dimension(activity, R.dimen.zc_bottom_nav_height) + dp(32));
         addView(content, new ScrollView.LayoutParams(-1, -2));
         if (!deferContent) ensureContent();
     }
@@ -97,7 +113,7 @@ final class LibraryHubView extends ScrollView {
     private void ensureContent() {
         if (closed || socialHub != null) return;
         long started = android.os.SystemClock.elapsedRealtime();
-        socialHub = new LibrarySocialHubView(activity);
+        socialHub = new LibraryProfileHeader(activity);
         content.addView(socialHub, new LinearLayout.LayoutParams(-1, -2));
 
         thumbnailResolvers = new RenderedThumbnailResolver[] {
@@ -108,13 +124,13 @@ final class LibraryHubView extends ScrollView {
         mediaContent = new LinearLayout(activity);
         mediaContent.setOrientation(LinearLayout.VERTICAL);
         content.addView(mediaContent, new LinearLayout.LayoutParams(-1, -2));
-        addGlobalEmptyState();
+        addLoadingState();
         for (String name : new String[] {"playback_history", "watch_later", "creator_favorites",
                 "creator_catalog_v1", "creator_avatar_overrides_v1", "manual_creator_merges_v1",
                 "native_video_downloads", "zerochill_account_secure_state", "popular_creator_feed_v3",
                 "popular_creator_feed_v2", "onlyfap_trending_v4", "fapzone_creator_feed_v3_1",
                 "fapzone_creator_feed_v3_2", "fapzone_creator_feed_v3_3", "fapzone_creator_feed_v1_1",
-                "fapzone_creator_feed_v1_2", "fapzone_creator_feed_v1_3"}) {
+                "fapzone_creator_feed_v1_2", "fapzone_creator_feed_v1_3", SocialContentContextStore.PREFS}) {
             SharedPreferences prefs = activity.getSharedPreferences(name, Activity.MODE_PRIVATE);
             observedPreferences.add(prefs);
             prefs.registerOnSharedPreferenceChangeListener(invalidation);
@@ -170,24 +186,24 @@ final class LibraryHubView extends ScrollView {
                 historyByUrl.put(item.pageUrl, item);
             }
         }
-        retainSection("continue", snapshot.inputs.get(0), () -> {
-            if (!snapshot.continueItems.isEmpty()) addContinueSection(snapshot.continueItems);
-        });
+        retainSection("liked", java.util.Arrays.asList(snapshot.owner, snapshot.inputs.get(0),
+                snapshot.inputs.get(snapshot.inputs.size() - 1)), () -> addLikedSection(snapshot.likedVideos));
         List<Object> creatorState = new ArrayList<>(snapshot.inputs.subList(2, 6));
-        creatorState.addAll(snapshot.inputs.subList(8, snapshot.inputs.size()));
+        creatorState.addAll(snapshot.inputs.subList(8, snapshot.inputs.size() - 1));
         retainSection("creators", creatorState, () -> {
             if (!snapshot.creators.isEmpty()) addCreatorSection(snapshot.creators, snapshot.avatars);
-        });
-        retainSection("watch-later", java.util.Arrays.asList(snapshot.inputs.get(0), snapshot.inputs.get(1)), () -> {
-            if (!snapshot.watchLater.isEmpty()) addWatchLaterSection(snapshot.watchLater, historyByUrl);
         });
         retainSection("downloads", java.util.Arrays.asList(snapshot.inputs.get(6), snapshot.downloadState), () -> {
             if (!snapshot.downloads.isEmpty()) addDownloadsSection(snapshot.downloads);
         });
+        retainSection("watch-later", java.util.Arrays.asList(snapshot.inputs.get(0), snapshot.inputs.get(1)), () -> {
+            if (!snapshot.watchLater.isEmpty()) addWatchLaterSection(snapshot.watchLater, historyByUrl);
+        });
         retainSection("history", snapshot.inputs.get(0), () -> {
             if (!history.isEmpty()) addHistorySection(history);
         });
-        if (mediaContent.getChildCount() == 0) retainSection("empty", true, this::addGlobalEmptyState);
+        if (snapshot.likedVideos.isEmpty() && snapshot.creators.isEmpty() && snapshot.watchLater.isEmpty()
+                && snapshot.downloads.isEmpty() && history.isEmpty()) retainSection("empty", true, this::addGlobalEmptyState);
         else sectionStates.remove("empty");
         content.removeView(previous);
         content.addView(mediaContent, new LinearLayout.LayoutParams(-1, -2));
@@ -253,7 +269,8 @@ final class LibraryHubView extends ScrollView {
     private static final class Snapshot {
         final List<String> inputs = new ArrayList<>();
         final List<PlaybackHistoryStore.Item> history;
-        final List<PlaybackHistoryStore.Item> continueItems;
+        final List<NativeContentItem> likedVideos;
+        final String owner;
         final List<CreatorCatalog.FavoriteGroup> creators;
         final List<CreatorAvatarOverrideStore.Override> avatars;
         final List<FavoriteStore.Item> watchLater;
@@ -262,6 +279,7 @@ final class LibraryHubView extends ScrollView {
 
         Snapshot(Activity activity, List<SharedPreferences> preferences, Snapshot previous) {
             for (SharedPreferences prefs : preferences) inputs.add(PreferenceSnapshot.key(prefs));
+            owner = ZeroChillSessionStore.currentUserId(activity);
             downloads = first(VideoDownloadStore.entries(activity), 10);
             StringBuilder state = new StringBuilder();
             for (VideoDownloadStore.Entry entry : downloads) {
@@ -270,15 +288,15 @@ final class LibraryHubView extends ScrollView {
                         .append(':').append(entry.localUri).append(':').append(entry.reason).append(';');
             }
             downloadState = state.toString();
-            if (previous != null && inputs.equals(previous.inputs)) {
+            if (previous != null && owner.equals(previous.owner) && inputs.equals(previous.inputs)) {
                 history = previous.history;
-                continueItems = previous.continueItems;
+                likedVideos = previous.likedVideos;
                 creators = previous.creators;
                 avatars = previous.avatars;
                 watchLater = previous.watchLater;
             } else {
                 history = PlaybackHistoryStore.load(activity);
-                continueItems = first(PlaybackHistoryStore.continueWatching(activity), 10);
+                likedVideos = first(SocialContentContextStore.likedVideos(activity, owner), 10);
                 creators = first(CreatorCatalog.favoriteGroups(activity), 14);
                 List<CreatorAvatarOverrideStore.Override> allAvatars = CreatorAvatarOverrideStore.load(activity);
                 avatars = new ArrayList<>();
@@ -327,19 +345,28 @@ final class LibraryHubView extends ScrollView {
         if (active) scheduleRefresh();
     }
 
-    private void addContinueSection(List<PlaybackHistoryStore.Item> items) {
-        LinearLayout rail = addSectionShell(
-                "Continue Watching",
-                "Pick up where you left off",
-                "View all",
-                () -> openSavedVideos(FavoritesActivity.START_CONTINUE)
-        );
-
-        int count = Math.min(10, items.size());
-        for (int i = 0; i < count; i++) {
-            PlaybackHistoryStore.Item item = items.get(i);
-            rail.addView(continueCard(item), mediaRailParams(248, 140, i == count - 1));
+    private void addLikedSection(List<NativeContentItem> items) {
+        if (items.isEmpty()) {
+            TextView open = text("Liked Videos  ›", 15f, UiPalette.TEXT_SECONDARY);
+            open.setPadding(dp(4), dp(12), dp(4), dp(12));
+            open.setMinimumHeight(dp(48));
+            open.setClickable(true);
+            open.setFocusable(true);
+            open.setContentDescription("Open Liked Videos");
+            open.setOnClickListener(v -> openLikedVideos());
+            mediaContent.addView(open, new LinearLayout.LayoutParams(-1, -2));
+            return;
         }
+        LinearLayout rail = addSectionShell("Liked Videos", "Your recent likes on this device", "View all", this::openLikedVideos);
+        for (int i = 0; i < items.size(); i++) {
+            NativeContentItem item = items.get(i);
+            rail.addView(compactMediaCard(item.title, item.url, item.imageUrl, "", false),
+                    mediaRailParams(168, 105, i == items.size() - 1));
+        }
+    }
+
+    private void openLikedVideos() {
+        activity.startActivityForResult(new Intent(activity, LikedVideosActivity.class), NativeMainActivity.FAVORITES_REQUEST);
     }
 
     private View continueCard(PlaybackHistoryStore.Item item) {
@@ -354,14 +381,14 @@ final class LibraryHubView extends ScrollView {
         shade.setBackground(bottomShade());
         frame.addView(shade, new FrameLayout.LayoutParams(-1, -1));
 
-        TextView remaining = pill(formatRemaining(item.positionMs, item.durationMs));
-        remaining.setVisibility(item.durationMs > 0L ? View.VISIBLE : View.GONE);
+        TextView remaining = pill(item.complete ? "Watched" : item.durationMs > 0L
+                ? formatRemaining(item.positionMs, item.durationMs) : "Resume");
         FrameLayout.LayoutParams remainingParams =
                 new FrameLayout.LayoutParams(-2, dp(28), Gravity.TOP | Gravity.END);
         remainingParams.setMargins(0, dp(10), dp(10), 0);
         frame.addView(remaining, remainingParams);
 
-        TextView title = mediaTitle(item.title, 16.5f);
+        TextView title = mediaTitle(item.title, 13.5f);
         FrameLayout.LayoutParams titleParams =
                 new FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM);
         titleParams.setMargins(dp(12), 0, dp(12), dp(17));
@@ -384,11 +411,12 @@ final class LibraryHubView extends ScrollView {
             fillBg.setCornerRadius(dp(2));
             fill.setBackground(fillBg);
             int fillWidth = Math.max(dp(4),
-                    Math.round(dp(228) * (item.progressPercent() / 100f)));
+                    Math.round(dp(148) * (item.progressPercent() / 100f)));
             track.addView(fill, new FrameLayout.LayoutParams(fillWidth, -1));
         }
 
-        card.setContentDescription("Continue watching " + item.title);
+        card.setContentDescription((item.complete ? "Watch again " : "Resume ") + item.title
+                + (item.durationMs > 0L ? ". " + item.progressPercent() + "% watched" : ""));
         card.setOnClickListener(v -> openHistoryItem(item));
         return card;
     }
@@ -424,8 +452,8 @@ final class LibraryHubView extends ScrollView {
         wrapper.setContentDescription("Open " + creator.title);
         ZeroChillMotion.installPressFeedback(wrapper);
 
-        MaterialCardView avatar = mediaCard(42);
-        avatar.setRadius(dp(42));
+        MaterialCardView avatar = mediaCard(14);
+        avatar.setRadius(dp(14));
         avatar.setClipToOutline(true);
         avatar.setCardBackgroundColor(Color.rgb(19, 23, 27));
 
@@ -440,16 +468,10 @@ final class LibraryHubView extends ScrollView {
 
         CreatorAvatarImageView image = new CreatorAvatarImageView(activity);
         image.setBackgroundColor(Color.TRANSPARENT);
-        image.setOutlineProvider(new android.view.ViewOutlineProvider() {
-            @Override public void getOutline(View view, android.graphics.Outline outline) {
-                outline.setOval(0, 0, view.getWidth(), view.getHeight());
-            }
-        });
-        image.setClipToOutline(true);
         frame.addView(image, new FrameLayout.LayoutParams(-1, -1));
         loadCreatorImage(image, group, avatarOverrides);
 
-        wrapper.addView(avatar, new LinearLayout.LayoutParams(dp(84), dp(84)));
+        wrapper.addView(avatar, new LinearLayout.LayoutParams(dp(104), dp(142)));
 
         TextView name = text(creator.title, 12.5f,
                 ZeroChillUi.color(activity, R.color.zc_text_primary));
@@ -549,7 +571,7 @@ final class LibraryHubView extends ScrollView {
     private void addHistorySection(List<PlaybackHistoryStore.Item> items) {
         LinearLayout rail = addSectionShell(
                 "History",
-                "Recently watched",
+                "Recent first · Tap unfinished videos to resume",
                 "View all",
                 () -> openSavedVideos(FavoritesActivity.START_HISTORY)
         );
@@ -558,33 +580,10 @@ final class LibraryHubView extends ScrollView {
         for (int i = 0; i < count; i++) {
             PlaybackHistoryStore.Item item = items.get(i);
             rail.addView(
-                    historyCard(item),
+                    continueCard(item),
                     mediaRailParams(168, 105, i == count - 1)
             );
         }
-    }
-
-    private View historyCard(PlaybackHistoryStore.Item item) {
-        MaterialCardView card = mediaCard(16);
-        FrameLayout frame = new FrameLayout(activity);
-        card.addView(frame, new MaterialCardView.LayoutParams(-1, -1));
-
-        ImageView image = mediaImage(frame);
-        loadMediaImage(image, item.pageUrl, item.posterUrl, false);
-
-        View shade = new View(activity);
-        shade.setBackground(bottomShade());
-        frame.addView(shade, new FrameLayout.LayoutParams(-1, -1));
-
-        TextView title = mediaTitle(item.title, 13.5f);
-        FrameLayout.LayoutParams titleParams =
-                new FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM);
-        titleParams.setMargins(dp(10), 0, dp(10), dp(8));
-        frame.addView(title, titleParams);
-
-        card.setContentDescription(item.title);
-        card.setOnClickListener(v -> openHistoryItem(item));
-        return card;
     }
 
     private View compactMediaCard(
@@ -696,6 +695,19 @@ final class LibraryHubView extends ScrollView {
         return rail;
     }
 
+    private void addLoadingState() {
+        LinearLayout loadingState = new LinearLayout(activity);
+        loadingState.setOrientation(LinearLayout.VERTICAL);
+        loadingState.setContentDescription("Loading your Library");
+        TextView label = text("Loading your Library…", 13f, UiPalette.TEXT_MUTED);
+        label.setPadding(dp(4), dp(16), 0, dp(12));
+        loadingState.addView(label);
+        View placeholder = new View(activity);
+        placeholder.setBackground(BrowseUi.rounded(activity, UiPalette.SURFACE, 16));
+        loadingState.addView(placeholder, new LinearLayout.LayoutParams(-1, dp(105)));
+        mediaContent.addView(loadingState, new LinearLayout.LayoutParams(-1, -2));
+    }
+
     private void addGlobalEmptyState() {
         LinearLayout empty = new LinearLayout(activity);
         empty.setOrientation(LinearLayout.VERTICAL);
@@ -715,7 +727,7 @@ final class LibraryHubView extends ScrollView {
         empty.addView(title, titleParams);
 
         TextView body = text(
-                "Keep watching, favorite a creator, save something for later, or download a video.",
+                "Like a video, favorite a creator, save something for later, or download a video. Your recent viewing appears in History.",
                 13f,
                 ZeroChillUi.color(activity, R.color.zc_text_secondary)
         );
@@ -822,7 +834,7 @@ final class LibraryHubView extends ScrollView {
                             .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
                             .dontAnimate()
                             .transition(ThumbnailFades.avatar());
-            if (avatarOverride == null) request.circleCrop();
+            if (avatarOverride == null) request.centerCrop();
             request.into(image);
         } catch (Exception ignored) {
         }
@@ -959,7 +971,7 @@ final class LibraryHubView extends ScrollView {
 
     private LinearLayout.LayoutParams creatorRailParams(boolean last) {
         LinearLayout.LayoutParams params =
-                new LinearLayout.LayoutParams(dp(104), dp(124));
+                new LinearLayout.LayoutParams(dp(104), dp(182));
         params.setMarginEnd(last ? 0 : dp(5));
         return params;
     }

@@ -3502,7 +3502,7 @@ public final class ChaosFeedView extends FrameLayout {
             videoLikePending = true;
             like.setEnabled(false);
             landscapeLike.setEnabled(false);
-            ZeroChillSocialRepository.toggleVideoLike(activity, target, wasLiked, (state, error) ->
+            ZeroChillSocialRepository.toggleVideoLike(activity, item, wasLiked, (state, error) ->
                     activity.runOnUiThread(() -> {
                         if (request != videoLikeRequestGeneration || item == null || !target.equals(item.url)) return;
                         videoLikePending = false;

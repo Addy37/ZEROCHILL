@@ -141,13 +141,15 @@ public class LibrarySocialHubTest {
         hub.close();
     }
 
-    @Test public void libraryRenderHasCompactHubAndExistingEmptyState() throws Exception {
+    @Test public void libraryFirstRenderHasProfileActionsAndLoadingInsteadOfEmptyState() throws Exception {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
         LibraryHubView library = new LibraryHubView(activity, null);
         activity.setContentView(library);
         assertNotNull(findDescription(library, "Messages."));
         assertNotNull(findDescription(library, "Notifications."));
-        assertNotNull(findText(library, "Your Library is ready"));
+        assertNull(findText(library, "Your Library is ready"));
+        assertNotNull(findDescription(library, "Loading your Library"));
+        assertNotNull(findDescription(library, "Settings"));
         int width = BrowseUi.dp(activity, 320), height = BrowseUi.dp(activity, 800);
         library.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
                 View.MeasureSpec.makeMeasureSpec(height, View.MeasureSpec.EXACTLY));

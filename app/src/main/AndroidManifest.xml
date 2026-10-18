@@ -105,6 +105,10 @@
             android:windowSoftInputMode="adjustResize" />
 
         <activity
+            android:name=".LikedVideosActivity"
+            android:exported="false" />
+
+        <activity
             android:name=".FavoritesActivity"
             android:screenOrientation="portrait"
             android:enableOnBackInvokedCallback="true"

@@ -1828,7 +1828,8 @@ public class VideoDetailActivity extends Activity {
         String target = pageUrl;
         boolean wasLiked = videoLiked;
         setVideoLikeEnabled(false);
-        ZeroChillSocialRepository.toggleVideoLike(this, target, wasLiked, (state, error) ->
+        ZeroChillSocialRepository.toggleVideoLike(this, new NativeContentItem(NativeContentItem.KIND_MEDIA,
+                title, target, posterUrl, views, uploader, comments), wasLiked, (state, error) ->
                 runOnUiThread(() -> {
                     if (!target.equals(pageUrl)) return;
                     setVideoLikeEnabled(true);
