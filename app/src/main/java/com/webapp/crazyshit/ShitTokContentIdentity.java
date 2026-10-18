@@ -30,8 +30,9 @@ final class ShitTokContentIdentity {
         try {
             URI uri = new URI(raw);
             if (host(uri).isEmpty() || uri.getRawPath() == null) return "";
-            // Keep host and complete case-sensitive path. Strip only transport/tracking parameters.
-            return "media:" + host(uri) + uri.getRawPath() + query(uri, false, true);
+            // Opaque download endpoints may use a token as the content ID. Preserve it there.
+            boolean filePath = uri.getRawPath().matches("(?i).+\\.(?:mp4|m4v|mov|webm|m3u8|mpd)$");
+            return "media:" + host(uri) + uri.getRawPath() + query(uri, false, filePath);
         } catch (Exception invalid) { return ""; }
     }
 
