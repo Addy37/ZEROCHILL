@@ -27,6 +27,7 @@ final class ShitTokOrientationAdmission {
         float inspect(CrazyShitRepository.StreamInfo stream, BooleanSupplier allowedWork) throws Exception;
     }
     static final class Deferred extends Exception {}
+    static final class Filtered extends Exception {}
     static final class Result {
         final List<NativeContentItem> items;
         final Map<String, CrazyShitRepository.StreamInfo> streams;
@@ -135,6 +136,7 @@ final class ShitTokOrientationAdmission {
                     }
                 } else aspect = 0f;
             } catch (Exception failure) {
+                if (failure instanceof Filtered) continue;
                 event("candidate_error", item, "type=" + failure.getClass().getSimpleName());
                 if (!allowedWork.getAsBoolean() || Thread.currentThread().isInterrupted() || deferred(failure)) {
                     deferred = true;
@@ -154,6 +156,10 @@ final class ShitTokOrientationAdmission {
             Entry result = new Entry(aspect, stream,
                     aspect > 0f ? 0L : clock.getAsLong() + UNKNOWN_COOLDOWN_MS, provenance);
             synchronized (cache) { cache.put(item.url, result); }
+            if (!ShitTokOrientation.eligible(aspect)) {
+                if (stream == null || stream.mediaUrl == null || stream.mediaUrl.isEmpty()) unplayableRejected.incrementAndGet();
+                else orientationRejected.incrementAndGet();
+            }
             event(ShitTokOrientation.eligible(aspect) ? "verified" : "rejected", item, "aspect=" + aspect);
             if (ShitTokOrientation.eligible(aspect)) accept(item, result, admitted, streams, onVerified);
         }
@@ -165,11 +171,21 @@ final class ShitTokOrientationAdmission {
             new java.util.concurrent.ThreadPoolExecutor(3, 3, 0L, java.util.concurrent.TimeUnit.MILLISECONDS,
                     new java.util.concurrent.ArrayBlockingQueue<>(3));
     private final java.util.concurrent.atomic.AtomicInteger rejectedCount = new java.util.concurrent.atomic.AtomicInteger();
+    private final java.util.concurrent.atomic.AtomicInteger orientationRejected = new java.util.concurrent.atomic.AtomicInteger();
+    private final java.util.concurrent.atomic.AtomicInteger unplayableRejected = new java.util.concurrent.atomic.AtomicInteger();
     int rejectedCount() { return rejectedCount.get(); }
+    int orientationRejectedCount() { return orientationRejected.get(); }
+    int unplayableRejectedCount() { return unplayableRejected.get(); }
 
     Result admitConcurrent(java.util.concurrent.BlockingQueue<NativeContentItem> candidates,
             BooleanSupplier productionDone, Resolver resolver, BooleanSupplier allowedWork,
             int maxItems, Consumer<Result> onVerified, java.util.function.IntConsumer activeCount) {
+        return admitConcurrent(candidates, productionDone, resolver, allowedWork, () -> maxItems, onVerified, activeCount);
+    }
+
+    Result admitConcurrent(java.util.concurrent.BlockingQueue<NativeContentItem> candidates,
+            BooleanSupplier productionDone, Resolver resolver, BooleanSupplier allowedWork,
+            java.util.function.IntSupplier maxItems, Consumer<Result> onVerified, java.util.function.IntConsumer activeCount) {
         java.util.concurrent.CompletionService<Result> completed =
                 new java.util.concurrent.ExecutorCompletionService<>(inventoryIo);
         Map<java.util.concurrent.Future<Result>, NativeContentItem> active = new LinkedHashMap<>();
@@ -179,8 +195,8 @@ final class ShitTokOrientationAdmission {
         int attempts = 0;
         try {
             while (allowedWork.getAsBoolean() && !Thread.currentThread().isInterrupted()
-                    && admitted.size() < maxItems && clock.getAsLong() - started < BATCH_MILLIS) {
-                while (active.size() < 3 && attempts < 24 && admitted.size() + active.size() < maxItems) {
+                    && admitted.size() < maxItems.getAsInt() && clock.getAsLong() - started < BATCH_MILLIS) {
+                while (active.size() < 3 && attempts < 24) {
                     NativeContentItem item = candidates.poll();
                     if (item == null) break;
                     attempts++;

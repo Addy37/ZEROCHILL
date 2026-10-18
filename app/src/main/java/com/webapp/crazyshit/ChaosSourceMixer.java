@@ -24,12 +24,12 @@ import java.util.concurrent.TimeUnit;
  * it is a JavaScript-driven swipe player, not a normal /cnt/medias/ listing.
  */
 final class ChaosSourceMixer {
-    private static final int MAX_SOURCE_PAGE = 8;
+    private static final int MAX_SOURCE_PAGE = 32;
     private static final int BADDIEHUB_MAX_PAGE = 3;
     private static final ExecutorService CRAZY_IO = Executors.newFixedThreadPool(2);
     private static final ExecutorService SOURCE_IO = Executors.newFixedThreadPool(6);
     private static final ExecutorService CONTINUITY_SOURCE_IO = Executors.newFixedThreadPool(3);
-    private static final long MIX_BATCH_BUDGET_MS = 2_200L;
+    private static final long MIX_BATCH_BUDGET_MS = 5_500L;
     private static final int BATCH_REGULAR = 1;
     private static final int BATCH_EFUKT = 2;
     private static final int BATCH_KAOTIC = 3;
@@ -41,8 +41,8 @@ final class ChaosSourceMixer {
     private static final int SHIT_SHOW_PER_BATCH = 24;
     private static final int EFUKT_ITEMS_PER_BATCH = 12;
     private static final int EFUKT_SERIES_PER_BATCH = 2;
-    private static final int FAPELLO_ITEMS_PER_BATCH = 4;
-    private static final int KAOTIC_ITEMS_PER_BATCH = 8;
+    private static final int FAPELLO_ITEMS_PER_BATCH = 16;
+    private static final int KAOTIC_ITEMS_PER_BATCH = 16;
     private static final int ONLY_HAVEN_ITEMS_PER_BATCH = 6;
     private static final int ONLY_HAVEN_ITEMS_PER_CREATOR = 3;
     private static final int ONLY_HAVEN_TRENDING_CREATORS = 30;
@@ -52,6 +52,8 @@ final class ChaosSourceMixer {
 
     private final CrazyShitRepository repository;
     private final Random random;
+    interface SourceLoader { List<NativeContentItem> load(int source) throws Exception; }
+    private final SourceLoader sourceLoader;
     private final ShitShowTapSource shitShow = new ShitShowTapSource();
     private final EfuktRepository efukt = new EfuktRepository();
     private final FapelloRepository fapello = new FapelloRepository();
@@ -72,12 +74,54 @@ final class ChaosSourceMixer {
     private boolean onlyHavenCatalogAttempted;
     private boolean starterPending = true;
     private volatile boolean explorationAllowed;
+    private final java.util.concurrent.atomic.AtomicInteger activeFetches = new java.util.concurrent.atomic.AtomicInteger();
+    private final java.util.concurrent.ConcurrentHashMap<Integer, String> providerTimings = new java.util.concurrent.ConcurrentHashMap<>();
+    private final Set<Integer> fetching = java.util.concurrent.ConcurrentHashMap.newKeySet();
+    private final java.util.Map<String, ArrayDeque<Integer>> pageDecks = new java.util.HashMap<>();
+    int activeFetches() { return activeFetches.get(); }
+    String providerSummary() { return providerTimings.toString(); }
+
+    // Page traversal is cheap post-starter work, independent of rendering/expensive catalog warmup.
+    synchronized int nextPage(String source, int maximum) {
+        ArrayDeque<Integer> pages = pageDecks.computeIfAbsent(source, ignored -> new ArrayDeque<>());
+        if (pages.isEmpty()) {
+            ArrayList<Integer> shuffled = new ArrayList<>();
+            for (int page = 1; page <= maximum; page++) shuffled.add(page);
+            Collections.shuffle(shuffled, random);
+            pages.addAll(shuffled);
+        }
+        return pages.removeFirst();
+    }
+
+    private java.util.concurrent.Callable<SourceBatch> provider(int source,
+            java.util.concurrent.Callable<List<NativeContentItem>> loader) {
+        return () -> {
+            // Interrupted socket IO may outlive a batch. Never queue another copy behind it.
+            if (!fetching.add(source)) return new SourceBatch(source, Collections.emptyList());
+            activeFetches.incrementAndGet();
+            long at = android.os.SystemClock.elapsedRealtime();
+            providerTimings.put(source, "active");
+            try {
+                List<NativeContentItem> items = sourceLoader == null ? loader.call() : sourceLoader.load(source);
+                providerTimings.put(source, "ms=" + (android.os.SystemClock.elapsedRealtime() - at) + ",raw=" + items.size());
+                return new SourceBatch(source, items);
+            } finally {
+                activeFetches.decrementAndGet(); fetching.remove(source);
+                ShitTokPoolDiagnostics.record("provider", "source=" + source + " " + providerTimings.get(source));
+            }
+        };
+    }
 
     void onFirstFrame() { explorationAllowed = true; }
 
     ChaosSourceMixer(CrazyShitRepository repository, Random random) {
+        this(repository, random, null);
+    }
+
+    ChaosSourceMixer(CrazyShitRepository repository, Random random, SourceLoader sourceLoader) {
         this.repository = repository;
         this.random = random;
+        this.sourceLoader = sourceLoader;
     }
 
     void setPlaybackProtected(boolean value) {
@@ -108,20 +152,15 @@ final class ChaosSourceMixer {
                 new ExecutorCompletionService<>(continuityOnly ? CONTINUITY_SOURCE_IO : SOURCE_IO);
         ArrayList<Future<SourceBatch>> work = new ArrayList<>();
         ArrayList<java.util.concurrent.Callable<SourceBatch>> requests = new ArrayList<>();
-        requests.add(() -> new SourceBatch(
-                BATCH_REGULAR, loadRegularBatch(context)));
-        // eFukt remains a bounded startup fallback; its directory expansion waits for first frame.
-        requests.add(() -> new SourceBatch(BATCH_EFUKT,
-                explorationAllowed ? loadEfuktBatch(context) : efukt.fetchLatest(context)));
-        requests.add(() -> new SourceBatch(
-                BATCH_KAOTIC, loadKaoticBatch(context)));
-        requests.add(() -> new SourceBatch(
-                BATCH_FAPELLO, loadFapelloBatch(context)));
-        if (explorationAllowed) requests.add(() -> new SourceBatch(
-                BATCH_ONLY_HAVEN, loadOnlyHavenBatch(context)));
-        requests.add(() -> new SourceBatch(
-                BATCH_BADDIEHUB, loadBaddieHubBatch(context)));
-        if (continuityOnly) Collections.shuffle(requests, random);
+        // Fast independent listings enter the bounded three-worker pool before multi-page catalogs.
+        requests.add(provider(BATCH_KAOTIC, () -> loadKaoticBatch(context)));
+        requests.add(provider(BATCH_FAPELLO, () -> loadFapelloBatch(context)));
+        requests.add(provider(BATCH_REGULAR, () -> loadRegularBatch(context, onCandidates)));
+        requests.add(provider(BATCH_BADDIEHUB, () -> loadBaddieHubBatch(context)));
+        // eFukt remains bounded before the first frame. No new sources are introduced.
+        requests.add(provider(BATCH_EFUKT,
+                () -> explorationAllowed ? loadEfuktBatch(context) : efukt.fetchLatest(context)));
+        if (explorationAllowed) requests.add(provider(BATCH_ONLY_HAVEN, () -> loadOnlyHavenBatch(context)));
         for (java.util.concurrent.Callable<SourceBatch> request : requests) work.add(completions.submit(request));
 
         ArrayList<NativeContentItem> regularItems = new ArrayList<>();
@@ -239,7 +278,7 @@ final class ChaosSourceMixer {
         for (int i = 0; i < source.size() && i < limit; i++) result.add(source.get(i));
     }
 
-    private List<NativeContentItem> loadRegularBatch(Context context) {
+    private List<NativeContentItem> loadRegularBatch(Context context, java.util.function.Consumer<List<NativeContentItem>> onCandidates) {
         ensureCatalog(context);
         LinkedHashMap<String, NativeContentItem> regular = new LinkedHashMap<>();
         int sourceCount;
@@ -248,7 +287,12 @@ final class ChaosSourceMixer {
         }
         for (int i = 0; i < sourceCount; i++) {
             if (Thread.currentThread().isInterrupted()) break;
+            int before = regular.size();
             addRequest(context, regular, nextRequest());
+            if (onCandidates != null && regular.size() > before) {
+                List<NativeContentItem> arrived = new ArrayList<>(regular.values());
+                onCandidates.accept(arrived.subList(before, arrived.size()));
+            }
         }
         return new ArrayList<>(regular.values());
     }
@@ -288,7 +332,7 @@ final class ChaosSourceMixer {
             ArrayList<NativeContentItem> candidates = new ArrayList<>(
                     baddieHub.fetchShitTokCandidates(
                             context,
-                            explorationAllowed ? 1 + random.nextInt(BADDIEHUB_MAX_PAGE) : 1
+                            nextPage("baddiehub", BADDIEHUB_MAX_PAGE)
                     )
             );
             candidates.removeIf(item -> item == null || !item.isVideo());
@@ -360,7 +404,7 @@ final class ChaosSourceMixer {
     private List<NativeContentItem> loadFapelloBatch(Context context) {
         try {
             ArrayList<NativeContentItem> candidates = new ArrayList<>(
-                    fapello.fetchPopularVideos(context, explorationAllowed ? 1 + random.nextInt(MAX_SOURCE_PAGE) : 1)
+                    fapello.fetchPopularVideos(context, nextPage("fapello", MAX_SOURCE_PAGE))
             );
             candidates.removeIf(item -> item == null || !item.isVideo());
             Collections.shuffle(candidates, random);
@@ -377,7 +421,7 @@ final class ChaosSourceMixer {
                     webVideo.fetchFeed(
                             context,
                             WebVideoSourceRepository.Source.KAOTIC,
-                            explorationAllowed ? 1 + random.nextInt(MAX_SOURCE_PAGE) : 1
+                            nextPage("kaotic", MAX_SOURCE_PAGE)
                     )
             );
             candidates.removeIf(item -> item == null || !item.isVideo());
@@ -536,7 +580,7 @@ final class ChaosSourceMixer {
                 String url = sourceDeck.pollFirst();
                 if (url == null || url.isEmpty()) continue;
 
-                int page = explorationAllowed ? 1 + random.nextInt(MAX_SOURCE_PAGE) : 1;
+                int page = nextPage(url, MAX_SOURCE_PAGE);
                 String key = url + "#" + page;
                 if (usedSourcePages.add(key)) return new SourceRequest(url, page);
             }
@@ -545,7 +589,7 @@ final class ChaosSourceMixer {
             if (sourceDeck.isEmpty()) refillDeck();
             String url = sourceDeck.pollFirst();
             if (url == null || url.isEmpty()) return null;
-            int page = explorationAllowed ? 1 + random.nextInt(MAX_SOURCE_PAGE) : 1;
+            int page = nextPage(url, MAX_SOURCE_PAGE);
             usedSourcePages.add(url + "#" + page);
             return new SourceRequest(url, page);
         }

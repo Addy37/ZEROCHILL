@@ -7,6 +7,56 @@ import org.junit.Test;
 import static org.junit.Assert.*;
 
 public class ShitTokInventoryAdmissionTest {
+    @Test public void oneMissingClipStillRacesAllThreeLanes() throws Exception {
+        ShitTokOrientationAdmission gate = new ShitTokOrientationAdmission((s, allowed) -> .5f, () -> 0L);
+        BlockingQueue<NativeContentItem> queue = new ArrayBlockingQueue<>(48);
+        queue.add(item("slow")); queue.add(item("fast")); queue.add(item("other"));
+        CountDownLatch release = new CountDownLatch(1);
+        try {
+            ShitTokOrientationAdmission.Result result = gate.admitConcurrent(queue, () -> true, candidate -> {
+                if (!candidate.title.equals("fast")) release.await(2, TimeUnit.SECONDS);
+                return new CrazyShitRepository.StreamInfo(candidate.url + ".mp4", candidate.url, candidate.title);
+            }, () -> true, 1, partial -> {
+                assertEquals("fast", partial.items.get(0).title);
+                release.countDown();
+            }, active -> assertTrue(active <= 3));
+            assertEquals("fast", result.items.get(0).title);
+        } finally { release.countDown(); gate.close(); }
+    }
+
+    @Test public void consumptionAndRapidPressureCanGrowBudgetDuringIncrementalAdmission() {
+        ShitTokOrientationAdmission gate = new ShitTokOrientationAdmission((s, allowed) -> .5f, () -> 0L);
+        BlockingQueue<NativeContentItem> queue = new ArrayBlockingQueue<>(48);
+        for (int i = 0; i < 16; i++) queue.add(item("fresh" + i));
+        AtomicInteger budget = new AtomicInteger(6), published = new AtomicInteger();
+        try {
+            ShitTokOrientationAdmission.Result result = gate.admitConcurrent(queue, () -> true,
+                    candidate -> new CrazyShitRepository.StreamInfo(candidate.url + ".mp4", candidate.url, candidate.title),
+                    () -> true, budget::get, partial -> {
+                        // Two clips consumed and rapid mode entered while this batch is still running.
+                        if (published.incrementAndGet() == 1) budget.set(12);
+                    }, count -> assertTrue(count <= 3));
+            assertEquals(12, result.items.size());
+            assertEquals(12, published.get());
+        } finally { gate.close(); }
+    }
+
+    @Test public void resolvedSeenAliasesDoNotSpendAdmissionBudgetOrProbe() {
+        AtomicInteger probes = new AtomicInteger();
+        ShitTokOrientationAdmission gate = new ShitTokOrientationAdmission((s, allowed) -> {
+            probes.incrementAndGet(); return .5f;
+        }, () -> 0L);
+        BlockingQueue<NativeContentItem> queue = new ArrayBlockingQueue<>(48);
+        queue.add(item("seen")); queue.add(item("fresh"));
+        try {
+            ShitTokOrientationAdmission.Result result = gate.admitConcurrent(queue, () -> true, candidate -> {
+                if (candidate.title.equals("seen")) throw new ShitTokOrientationAdmission.Filtered();
+                return new CrazyShitRepository.StreamInfo(candidate.url + ".mp4", candidate.url, candidate.title);
+            }, () -> true, 1, null, count -> {});
+            assertEquals("fresh", result.items.get(0).title);
+            assertEquals(0, gate.unplayableRejectedCount());
+        } finally { gate.close(); }
+    }
     static NativeContentItem item(String name) { return new NativeContentItem(NativeContentItem.KIND_MEDIA,
             name, "https://fixture.invalid/" + name, "", "", "Shit Show", "", "", "", 0L, .5f); }
     @Test public void fastStarterPublishesBeforeSlowSecondaryAndFullRunway() throws Exception {

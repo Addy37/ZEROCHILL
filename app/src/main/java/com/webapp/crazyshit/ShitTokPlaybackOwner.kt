@@ -80,6 +80,8 @@ class ShitTokPlaybackOwner(context: Context, private val callbacks: Callbacks) {
     private val initializedAt = SystemClock.elapsedRealtime()
     private var firstPrepare = false
     private var firstFrame = false
+    private var firstFrameListener: Runnable? = null
+    fun setFirstFrameListener(listener: Runnable) { firstFrameListener = listener }
     private var planCount = 0
     private var testFactory: PlayerFactory? = null
     private data class Lease(val player: ExoPlayer, val token: Int,
@@ -179,6 +181,7 @@ class ShitTokPlaybackOwner(context: Context, private val callbacks: Callbacks) {
                                 ShitTokPoolDiagnostics.record("firstFrame", url)
                                 if (url == selected && !firstFrame) {
                                     firstFrame = true
+                                    firstFrameListener?.run()
                                     AppPerformance.startupItem("rendered", url, "")
                                     AppPerformance.startup("frame")
                                     AppPerformance.record("ShitTok first rendered frame", SystemClock.elapsedRealtime() - initializedAt)
@@ -448,6 +451,8 @@ class ShitTokPlaybackOwner(context: Context, private val callbacks: Callbacks) {
             leases[url]?.stream?.let { " pageHost=${Uri.parse(it.pageUrl).host} mediaHost=${Uri.parse(it.mediaUrl).host}" +
                 " format=${if(it.mediaUrl.contains(".m3u8", true) || it.mediaUrl.contains(".mpd", true)) "adaptive" else "direct"}" }
         }.orEmpty()
+
+    fun selectedPlaybackState(): Int = selected?.let { leases[it]?.player?.playbackState } ?: Player.STATE_IDLE
 
     private fun silence(player: ExoPlayer) {
         endSpeedBoost(player)

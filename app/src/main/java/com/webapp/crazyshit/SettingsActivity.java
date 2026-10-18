@@ -594,9 +594,26 @@ public class SettingsActivity extends Activity {
     }
 
     private void showPerformanceDetails() {
+        String report = ShitTokPoolDiagnostics.userReport();
+        TextView details = new TextView(this);
+        details.setText(report);
+        details.setTextColor(UiPalette.TEXT_PRIMARY);
+        details.setTextSize(12);
+        details.setTextIsSelectable(true);
+        details.setPadding(dp(20), dp(12), dp(20), dp(12));
+        ScrollView scroll = new ScrollView(this);
+        scroll.addView(details);
         new ZeroChillDialog.Builder(this)
                 .setTitle("Performance details")
-                .setMessage(AppPerformance.summary())
+                .setView(scroll)
+                .setNeutralButton("Copy diagnostics", (dialog, which) -> {
+                    android.content.ClipboardManager clipboard = (android.content.ClipboardManager)
+                            getSystemService(Context.CLIPBOARD_SERVICE);
+                    if (clipboard != null) {
+                        clipboard.setPrimaryClip(android.content.ClipData.newPlainText("ZEROCHILL diagnostics", report));
+                        ZeroChillToast.makeText(this, "Diagnostics copied.", ZeroChillToast.LENGTH_SHORT).show();
+                    }
+                })
                 .setPositiveButton("Close", null)
                 .show();
     }

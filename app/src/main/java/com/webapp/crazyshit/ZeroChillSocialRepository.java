@@ -17,6 +17,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Collection;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -1169,6 +1170,7 @@ final class ZeroChillSocialRepository {
                 for (int i = 0; i < rows.length(); i++) {
                     if (mine.equals(rows.getJSONObject(i).optString("user_id"))) liked = true;
                 }
+                if (liked) ShitTokSeenStore.get(context).heart(pageUrl, null);
                 callback.complete(new VideoLikeState(rows.length(), liked), null);
             } catch (Exception error) {
                 callback.complete(null, error);
@@ -1210,11 +1212,25 @@ final class ZeroChillSocialRepository {
                     );
                 }
                 if (!response.ok()) throw error(response, "Unable to update the video like.");
+                if (!currentlyLiked) ShitTokSeenStore.get(context).heart(pageUrl, null);
                 videoLikeState(context, pageUrl, callback);
             } catch (Exception error) {
                 callback.complete(null, error);
             }
         });
+    }
+
+    /** Small authenticated batch against the existing indexed table. No per-clip request/row change. */
+    static Set<String> shittokLikedKeysBlocking(Context context, Collection<String> keys) throws Exception {
+        if (keys.isEmpty() || !ZeroChillAccountRepository.hasStoredSession(context)) return Collections.emptySet();
+        String user = ZeroChillSessionStore.currentUserId(context);
+        String body = ZeroChillAccountRepository.restBlocking(context, user, "GET",
+                "/rest/v1/video_likes?select=content_key&user_id=eq." + encode(user)
+                        + "&content_key=in.(" + String.join(",", keys) + ")&limit=100", null);
+        JSONArray rows = new JSONArray(body);
+        Set<String> liked = new HashSet<>();
+        for (int i = 0; i < rows.length(); i++) liked.add(rows.getJSONObject(i).getString("content_key"));
+        return liked;
     }
 
     private static long socialTime(String value) {
