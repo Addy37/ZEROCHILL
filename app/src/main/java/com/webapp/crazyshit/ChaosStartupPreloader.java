@@ -95,12 +95,16 @@ final class ChaosStartupPreloader {
     }
 
     private static void publish(Context app, List<NativeContentItem> items, int limit) {
+        ShitTokSeenStore exclusions = ShitTokSeenStore.get(app);
         FutureTask<CrazyShitRepository.StreamInfo> firstTask = null;
         synchronized (LOCK) {
             int added = 0;
             for (NativeContentItem item : items) {
                 // Reserve fallback room for each of the three racing sources.
                 if (published.size() >= STARTER_ITEMS || added >= limit) break;
+                // Choose the first fresh candidate, rather than wasting a provider's fair early
+                // slot on a clip the feed will discard. This runs on the startup worker.
+                if (exclusions.seen(item.url, null) || exclusions.liked(item.url, null)) continue;
                 if (!published.add(item.url)) continue;
                 if (resolution == null) {
                     resolvingUrl = item.url;

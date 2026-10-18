@@ -7,6 +7,19 @@ import org.junit.Test;
 import static org.junit.Assert.*;
 
 public class ShitTokInventoryAdmissionTest {
+    @Test public void cancelledResolutionSlotWaitDefersWithoutUnplayableCooldown() {
+        ShitTokOrientationAdmission gate = new ShitTokOrientationAdmission((s, allowed) -> .5f, () -> 0L);
+        BlockingQueue<NativeContentItem> queue = new ArrayBlockingQueue<>(48);
+        queue.add(item("waiting"));
+        try {
+            ShitTokOrientationAdmission.Result result = gate.admitConcurrent(queue, () -> true,
+                    candidate -> { throw new InterruptedException("slot wait cancelled"); },
+                    () -> true, 1, null, count -> {});
+            assertTrue(result.items.isEmpty());
+            assertEquals(1, result.remaining.size());
+            assertEquals(0, gate.unplayableRejectedCount());
+        } finally { gate.close(); }
+    }
     @Test public void oneMissingClipStillRacesAllThreeLanes() throws Exception {
         ShitTokOrientationAdmission gate = new ShitTokOrientationAdmission((s, allowed) -> .5f, () -> 0L);
         BlockingQueue<NativeContentItem> queue = new ArrayBlockingQueue<>(48);

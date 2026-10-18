@@ -823,9 +823,12 @@ public final class ChaosFeedView extends FrameLayout {
                 if (!isMedia(item) || hiddenSnapshot.contains(item.url)
                         || ShitTokBlockedCreatorStore.isBlocked(blockedSnapshot, item)) continue;
                 String identity = ShitTokContentIdentity.page(item.url);
-                if (sessionSnapshot.contains(item.url) || identitySnapshot.contains(identity) || !offered.add(identity)) {
+                if (sessionSnapshot.contains(item.url) || identitySnapshot.contains(identity)) {
                     duplicateRejected.incrementAndGet(); continue;
                 }
+                // Partial provider results appear again in the final mix. Do not count this
+                // internal replay as a new fetched duplicate or spend another lookup.
+                if (!offered.add(identity)) continue;
                 if (seenStore.liked(item.url, null)) { likedRejected.incrementAndGet(); continue; }
                 if (recentSnapshot.contains(item.url) || seenStore.seen(item.url, null)) { seenRejected.incrementAndGet(); continue; }
                 fresh.add(item);

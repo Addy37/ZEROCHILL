@@ -97,7 +97,7 @@ final class ShitTokOrientationAdmission {
                         && Float.compare(known.aspect, item.aspectRatioHint) == 0 ? known.stream : null;
                 Entry hint = new Entry(item.aspectRatioHint, reusable, 0L, "metadata");
                 synchronized (cache) { cache.put(item.url, hint); }
-                if (!ShitTokOrientation.eligible(hint.aspect)) continue;
+                if (!ShitTokOrientation.eligible(hint.aspect)) { orientationRejected.incrementAndGet(); continue; }
                 if (!requireStreams || reusable != null) {
                     accept(item, hint, admitted, streams, onVerified);
                     continue;
@@ -107,8 +107,9 @@ final class ShitTokOrientationAdmission {
             }
             if (known != null && (known.aspect > 0f || known.retryAt > clock.getAsLong())
                     && (!requireStreams || known.stream != null || !ShitTokOrientation.eligible(known.aspect))) {
-                if (ShitTokOrientation.eligible(known.aspect))
-                    accept(item, known, admitted, streams, onVerified);
+                if (ShitTokOrientation.eligible(known.aspect)) accept(item, known, admitted, streams, onVerified);
+                else if (known.stream == null || known.stream.mediaUrl == null || known.stream.mediaUrl.isEmpty()) unplayableRejected.incrementAndGet();
+                else orientationRejected.incrementAndGet();
                 continue;
             }
             if (!allowedWork.getAsBoolean() || Thread.currentThread().isInterrupted()) {
@@ -137,6 +138,7 @@ final class ShitTokOrientationAdmission {
                 } else aspect = 0f;
             } catch (Exception failure) {
                 if (failure instanceof Filtered) continue;
+                if (failure instanceof InterruptedException) Thread.currentThread().interrupt();
                 event("candidate_error", item, "type=" + failure.getClass().getSimpleName());
                 if (!allowedWork.getAsBoolean() || Thread.currentThread().isInterrupted() || deferred(failure)) {
                     deferred = true;

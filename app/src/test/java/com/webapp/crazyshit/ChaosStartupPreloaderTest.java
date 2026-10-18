@@ -14,6 +14,15 @@ import static org.junit.Assert.*;
 @RunWith(RobolectricTestRunner.class)
 @Config(application = Application.class, sdk = 35)
 public class ChaosStartupPreloaderTest {
+    @Test public void fairEarlySlotChoosesFreshCandidateBeforeWaitingForOtherProviders() {
+        ShitTokSeenStore store = ShitTokSeenStore.get(RuntimeEnvironment.getApplication());
+        store.watch(clip("watched").url, null);
+        store.heart(clip("hearted").url, null);
+        publish(clip("watched"), clip("hearted"), clip("fresh"), clip("fallback"));
+        List<NativeContentItem> ready = ReflectionHelpers.getStaticField(ChaosStartupPreloader.class, "READY");
+        assertEquals(1, ready.size());
+        assertEquals("fresh", ready.get(0).title);
+    }
     private Object lock;
     private NativeContentItem clip(String id) {
         return new NativeContentItem("media", id, "https://fixture.invalid/" + id, "", "", "", "");
