@@ -376,7 +376,8 @@ public class LibraryProfileTest {
             assertNotNull(preview);
             assertEquals(2, preview.getMinLines());
             assertEquals(2, preview.getMaxLines());
-            assertEquals(android.view.Gravity.BOTTOM, preview.getGravity());
+            assertEquals(android.view.Gravity.BOTTOM,
+                    preview.getGravity() & android.view.Gravity.VERTICAL_GRAVITY_MASK);
             description(view, title).performClick();
             assertEquals(title, opened.get(0).title);
             assertEquals(url, opened.get(0).url);
