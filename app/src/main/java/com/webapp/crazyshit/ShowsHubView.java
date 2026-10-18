@@ -20,6 +20,7 @@ import android.widget.TextView;
 
 import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.LinearLayoutManager;
+import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.bumptech.glide.Glide;
@@ -53,6 +54,7 @@ final class ShowsHubView extends FrameLayout {
     private static final long HERO_ROTATION_MS = 13_000L;
     private static final int HERO_MAX_ITEMS = 8;
 
+    private final int shelfTitleHeight;
     private final Listener listener;
     private final Listener weeklyListener;
     private final ContinueListener continueListener;
@@ -109,6 +111,7 @@ final class ShowsHubView extends FrameLayout {
             Listener weeklyListener
     ) {
         super(context);
+        shelfTitleHeight = showTitleHeight(showTitle());
         this.listener = listener;
         this.weeklyListener = weeklyListener;
         this.continueListener = continueListener;
@@ -336,7 +339,7 @@ final class ShowsHubView extends FrameLayout {
         baddieHubCategoryShelf = addShelf(
                 "BaddieHub Categories",
                 "Browse BaddieHub by category",
-                false
+                true
         );
 
         heroCard.setOnClickListener(v -> openHero());
@@ -734,14 +737,14 @@ final class ShowsHubView extends FrameLayout {
         return new ContinueShelf(block, rail, adapter);
     }
 
-    private Shelf addShelf(String title, String subtitle, boolean wideCards) {
-        return addShelf(title, subtitle, wideCards, listener, false, true);
+    private Shelf addShelf(String title, String subtitle, boolean portraitCards) {
+        return addShelf(title, subtitle, portraitCards, listener, false, true);
     }
 
     private Shelf addShelf(
             String title,
             String subtitle,
-            boolean wideCards,
+            boolean portraitCards,
             Listener clickListener,
             boolean showSource,
             boolean prewarmCollections
@@ -774,13 +777,14 @@ final class ShowsHubView extends FrameLayout {
         rail.setClipToPadding(false);
         rail.setHorizontalScrollBarEnabled(false);
         rail.setOverScrollMode(OVER_SCROLL_NEVER);
-        LinearLayoutManager manager =
-                new LinearLayoutManager(getContext(), RecyclerView.HORIZONTAL, false);
-        manager.setInitialPrefetchItemCount(5);
+        LinearLayoutManager manager = portraitCards
+                ? new LinearLayoutManager(getContext(), RecyclerView.HORIZONTAL, false)
+                : new GridLayoutManager(getContext(), 2, RecyclerView.HORIZONTAL, false);
+        manager.setInitialPrefetchItemCount(portraitCards ? 5 : 4);
         rail.setLayoutManager(manager);
 
         RailAdapter adapter = new RailAdapter(
-                wideCards,
+                portraitCards,
                 clickListener,
                 showSource,
                 prewarmCollections
@@ -789,7 +793,7 @@ final class ShowsHubView extends FrameLayout {
         rail.setPadding(dp(2), 0, dp(22), 0);
         block.addView(rail, new LinearLayout.LayoutParams(
                 -1,
-                dp(wideCards ? 150 : 194)
+                portraitCards ? dp(194) : 2 * (showCardHeight() + dp(10))
         ));
 
         block.setVisibility(View.GONE);
@@ -1057,20 +1061,41 @@ final class ShowsHubView extends FrameLayout {
         }
     }
 
+    private TextView showTitle() {
+        TextView title = text("", 14.5f, Color.WHITE);
+        title.setTypeface(null, android.graphics.Typeface.BOLD);
+        title.setLines(2);
+        title.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        title.setGravity(Gravity.TOP);
+        title.setPadding(dp(5), dp(4), dp(5), 0);
+        return title;
+    }
+
+    private int showTitleHeight(TextView title) {
+        // TextView's font padding is separate from its line spacing.
+        android.graphics.Paint.FontMetricsInt metrics = title.getPaint().getFontMetricsInt();
+        return title.getLineHeight() * 2 + metrics.bottom - metrics.descent
+                + metrics.ascent - metrics.top + title.getPaddingTop();
+    }
+
+    private int showCardHeight() {
+        return Math.round(dp(160) * 9f / 16f) + shelfTitleHeight;
+    }
+
     private final class RailAdapter extends RecyclerView.Adapter<RailHolder> {
-        private final boolean wide;
+        private final boolean portrait;
         private final Listener clickListener;
         private final boolean showSource;
         private final boolean prewarmCollections;
         private final List<NativeContentItem> items = new ArrayList<>();
 
         RailAdapter(
-                boolean wide,
+                boolean portrait,
                 Listener clickListener,
                 boolean showSource,
                 boolean prewarmCollections
         ) {
-            this.wide = wide;
+            this.portrait = portrait;
             this.clickListener = clickListener;
             this.showSource = showSource;
             this.prewarmCollections = prewarmCollections;
@@ -1100,10 +1125,10 @@ final class ShowsHubView extends FrameLayout {
             card.setFocusable(true);
             ZeroChillMotion.installPressFeedback(card);
 
-            int width = dp(wide ? 205 : 128);
-            int height = dp(wide ? 132 : 178);
+            int width = dp(portrait ? 128 : 160);
+            int height = portrait ? dp(178) : showCardHeight();
             RecyclerView.LayoutParams params = new RecyclerView.LayoutParams(width, height);
-            params.setMargins(dp(3), dp(2), dp(10), dp(4));
+            params.setMargins(dp(3), dp(2), dp(10), dp(portrait ? 4 : 8));
             card.setLayoutParams(params);
 
             FrameLayout frame = new FrameLayout(getContext());
@@ -1111,7 +1136,8 @@ final class ShowsHubView extends FrameLayout {
 
             ImageView image = new ImageView(getContext());
             image.setScaleType(ImageView.ScaleType.CENTER_CROP);
-            frame.addView(image, new FrameLayout.LayoutParams(-1, -1));
+            frame.addView(image, new FrameLayout.LayoutParams(
+                    -1, portrait ? -1 : Math.round(width * 9f / 16f)));
 
             View shade = new View(getContext());
             shade.setBackground(new GradientDrawable(
@@ -1122,7 +1148,7 @@ final class ShowsHubView extends FrameLayout {
                             Color.argb(235, 0, 0, 0)
                     }
             ));
-            frame.addView(shade, new FrameLayout.LayoutParams(-1, -1));
+            if (portrait) frame.addView(shade, new FrameLayout.LayoutParams(-1, -1));
 
             TextView source = text("", 10.5f, UiPalette.PRIMARY);
             source.setTypeface(null, android.graphics.Typeface.BOLD);
@@ -1133,13 +1159,16 @@ final class ShowsHubView extends FrameLayout {
             sourceParams.setMargins(dp(11), dp(9), dp(11), 0);
             frame.addView(source, sourceParams);
 
-            TextView title = text("", wide ? 14f : 14.5f, Color.WHITE);
+            TextView title = portrait ? text("", 14.5f, Color.WHITE) : showTitle();
             title.setTypeface(null, android.graphics.Typeface.BOLD);
             title.setMaxLines(2);
             title.setEllipsize(android.text.TextUtils.TruncateAt.END);
-            title.setGravity(Gravity.BOTTOM);
-            title.setPadding(dp(11), dp(8), dp(11), dp(10));
-            frame.addView(title, new FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM));
+            if (portrait) {
+                title.setGravity(Gravity.BOTTOM);
+                title.setPadding(dp(11), dp(8), dp(11), dp(10));
+            }
+            frame.addView(title, new FrameLayout.LayoutParams(
+                    -1, portrait ? -2 : shelfTitleHeight, Gravity.BOTTOM));
 
             return new RailHolder(card, image, source, title);
         }

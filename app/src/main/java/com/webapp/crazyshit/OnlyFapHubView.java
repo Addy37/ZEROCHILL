@@ -23,6 +23,7 @@ import android.widget.TextView;
 
 import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.LinearLayoutManager;
+import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.bumptech.glide.Glide;
@@ -708,9 +709,10 @@ final class OnlyFapHubView extends FrameLayout {
         section.addView(subtitleView, subtitleParams);
 
         RecyclerView rail = new RecyclerView(getContext());
-        rail.setLayoutManager(new LinearLayoutManager(
+        rail.setLayoutManager(new GridLayoutManager(
                 getContext(),
-                LinearLayoutManager.HORIZONTAL,
+                2,
+                RecyclerView.HORIZONTAL,
                 false
         ));
         rail.setHorizontalScrollBarEnabled(false);
@@ -721,7 +723,10 @@ final class OnlyFapHubView extends FrameLayout {
 
         CreatorPortraitAdapter adapter = new CreatorPortraitAdapter(listener);
         rail.setAdapter(adapter);
-        section.addView(rail, new LinearLayout.LayoutParams(-1, dp(236)));
+        // Preserve the source portrait ratio, with a small phone-friendly size reduction.
+        int cardHeight = Math.round(dp(128) * 216f / 148f);
+        int railHeight = 2 * (cardHeight + dp(10)) + rail.getPaddingTop() + rail.getPaddingBottom();
+        section.addView(rail, new LinearLayout.LayoutParams(-1, railHeight));
 
         LinearLayout.LayoutParams sectionParams = new LinearLayout.LayoutParams(-1, -2);
         sectionParams.setMargins(0, 0, 0, dp(14));
@@ -1659,14 +1664,14 @@ final class OnlyFapHubView extends FrameLayout {
             ZeroChillMotion.installPressFeedback(card);
 
             RecyclerView.LayoutParams cardParams = new RecyclerView.LayoutParams(
-                    BrowseUi.dp(context, 148),
-                    BrowseUi.dp(context, 216)
+                    BrowseUi.dp(context, 128),
+                    Math.round(BrowseUi.dp(context, 128) * 216f / 148f)
             );
             cardParams.setMargins(
                     0,
                     0,
                     BrowseUi.dp(context, 10),
-                    0
+                    BrowseUi.dp(context, 10)
             );
             card.setLayoutParams(cardParams);
 
@@ -1740,19 +1745,9 @@ final class OnlyFapHubView extends FrameLayout {
             title.setTextColor(Color.WHITE);
             title.setTextSize(14.5f);
             title.setTypeface(null, android.graphics.Typeface.BOLD);
-            title.setMaxLines(2);
+            title.setLines(2);
             title.setEllipsize(TextUtils.TruncateAt.END);
             copy.addView(title);
-
-            TextView hint = new TextView(context);
-            hint.setText("Open gallery");
-            hint.setTextColor(
-                    ZeroChillUi.color(context, R.color.zc_text_secondary));
-            hint.setTextSize(12f);
-            LinearLayout.LayoutParams hintParams =
-                    new LinearLayout.LayoutParams(-1, -2);
-            hintParams.topMargin = BrowseUi.dp(context, 2);
-            copy.addView(hint, hintParams);
 
             return new Holder(card, image, initials, title, favorite);
         }
