@@ -777,10 +777,9 @@ final class ShowsHubView extends FrameLayout {
         rail.setClipToPadding(false);
         rail.setHorizontalScrollBarEnabled(false);
         rail.setOverScrollMode(OVER_SCROLL_NEVER);
-        LinearLayoutManager manager = portraitCards
-                ? new LinearLayoutManager(getContext(), RecyclerView.HORIZONTAL, false)
-                : new GridLayoutManager(getContext(), 2, RecyclerView.HORIZONTAL, false);
-        manager.setInitialPrefetchItemCount(portraitCards ? 5 : 4);
+        GridLayoutManager manager =
+                new GridLayoutManager(getContext(), 2, RecyclerView.HORIZONTAL, false);
+        manager.setInitialPrefetchItemCount(4);
         rail.setLayoutManager(manager);
 
         RailAdapter adapter = new RailAdapter(
@@ -793,7 +792,9 @@ final class ShowsHubView extends FrameLayout {
         rail.setPadding(dp(2), 0, dp(22), 0);
         block.addView(rail, new LinearLayout.LayoutParams(
                 -1,
-                portraitCards ? dp(194) : 2 * (showCardHeight() + dp(10))
+                portraitCards
+                        ? 2 * (dp(178) + dp(6))
+                        : 2 * (showCardHeight() + dp(10))
         ));
 
         block.setVisibility(View.GONE);
@@ -1062,7 +1063,7 @@ final class ShowsHubView extends FrameLayout {
     }
 
     private TextView showTitle() {
-        TextView title = text("", 14.5f, Color.WHITE);
+        TextView title = text("", 13.5f, Color.WHITE);
         title.setTypeface(null, android.graphics.Typeface.BOLD);
         title.setLines(2);
         title.setEllipsize(android.text.TextUtils.TruncateAt.END);
