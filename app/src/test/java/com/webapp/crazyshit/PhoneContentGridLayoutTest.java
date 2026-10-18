@@ -140,9 +140,11 @@ public class PhoneContentGridLayoutTest {
         ImageView image = ReflectionHelpers.getField(holder, "image");
         TextView title = ReflectionHelpers.getField(holder, "title");
         checkTitle(title);
-        assertEquals(13.5f,
-                title.getTextSize() / title.getResources().getDisplayMetrics().scaledDensity,
-                0.01f);
+        // Android 14+ uses nonlinear SP scaling at larger accessibility font sizes.
+        assertEquals(android.util.TypedValue.applyDimension(
+                        android.util.TypedValue.COMPLEX_UNIT_SP, 13.5f,
+                        title.getResources().getDisplayMetrics()),
+                title.getTextSize(), 0.01f);
         assertEquals(16f / 9f, image.getWidth() / (float) image.getHeight(), 0.02f);
         assertTrue(title.getTop() >= image.getBottom());
         assertTrue(title.getHeight() >= title.getLineHeight() * 2);
