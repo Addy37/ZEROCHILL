@@ -116,6 +116,7 @@ public class ShitTokContinuityTest {
             // This fixture restores an already selected page. It is not a new discovery draw,
             // which now correctly excludes a page watched by an earlier fixture/session.
             items.add(current);
+            ReflectionHelpers.setField(feed, "verifiedQueueEmpty", false);
             ((Set<String>) ReflectionHelpers.getField(feed, "sessionUrls")).add(current.url);
             cache.put(current.url, stream(current));
             ReflectionHelpers.setField(feed, "active", true);
