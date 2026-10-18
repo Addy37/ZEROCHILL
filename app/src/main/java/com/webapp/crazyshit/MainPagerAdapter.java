@@ -181,7 +181,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                         CreatorGalleryPreloader.sessionId(activity, creator)
                 ));
             }
-        });
+        }, true);
         AppPerformance.startupCost("library_shell", stageAt);
         libraryView.setWorkScheduler((key, task) -> primaryWork.submit(PAGE_LIBRARY, key, task));
         pages[PAGE_ONLYFAP].onlyFapHub.setWorkScheduler(
@@ -260,6 +260,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
     public void setPrimaryActive(int position) {
         if (primaryPage == position) return;
         primaryPage = position;
+        if (position != PAGE_CHAOS) ChaosStartupPreloader.stopPreparation();
         primaryWork.select(position);
         // Playback/audio ownership still changes immediately through the approved path.
         chaosView.setActive(position == PAGE_CHAOS);

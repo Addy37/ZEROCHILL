@@ -131,9 +131,15 @@ final class ShitTokOrientationAdmission {
                 if (!allowedWork.getAsBoolean() || Thread.currentThread().isInterrupted()) throw new Deferred();
                 if (stream != null && stream.mediaUrl != null && !stream.mediaUrl.isEmpty()) {
                     if (!(aspect > 0f)) {
-                        event("probe_start", item, "");
-                        aspect = probe.inspect(stream, allowedWork);
-                        event("probe_end", item, "aspect=" + aspect);
+                        Float prepared = ChaosStartupPreloader.preparedAspect(item.url, stream);
+                        if (prepared != null) {
+                            aspect = prepared;
+                            event("early_probe_reused", item, "aspect=" + aspect);
+                        } else {
+                            event("probe_start", item, "");
+                            aspect = probe.inspect(stream, allowedWork);
+                            event("probe_end", item, "aspect=" + aspect);
+                        }
                     }
                 } else aspect = 0f;
             } catch (Exception failure) {

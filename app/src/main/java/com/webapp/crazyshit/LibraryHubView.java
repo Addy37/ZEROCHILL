@@ -49,11 +49,11 @@ final class LibraryHubView extends ScrollView {
     private final Activity activity;
     private final Listener listener;
     private final LinearLayout content;
-    private final LibrarySocialHubView socialHub;
+    private LibrarySocialHubView socialHub;
     private final Map<String, List<ImageView>> thumbnailTargets = new HashMap<>();
     private final Map<String, String> resolvedThumbnails = new HashMap<>();
     private final java.util.Set<String> requestedThumbnails = new java.util.HashSet<>();
-    private final RenderedThumbnailResolver[] thumbnailResolvers;
+    private RenderedThumbnailResolver[] thumbnailResolvers = new RenderedThumbnailResolver[0];
     private final ShowsContinueFrameStore.Listener frameListener = this::onContinueFrameUpdated;
     private LinearLayout mediaContent;
     private final Map<String, SectionState> sectionStates = new HashMap<>();
@@ -73,6 +73,10 @@ final class LibraryHubView extends ScrollView {
     private volatile boolean closed;
 
     LibraryHubView(Activity activity, Listener listener) {
+        this(activity, listener, false);
+    }
+
+    LibraryHubView(Activity activity, Listener listener, boolean deferContent) {
         super(activity);
         this.activity = activity;
         this.listener = listener;
@@ -87,6 +91,12 @@ final class LibraryHubView extends ScrollView {
         content.setOrientation(LinearLayout.VERTICAL);
         content.setPadding(dp(16), dp(16), dp(16), dp(32));
         addView(content, new ScrollView.LayoutParams(-1, -2));
+        if (!deferContent) ensureContent();
+    }
+
+    private void ensureContent() {
+        if (closed || socialHub != null) return;
+        long started = android.os.SystemClock.elapsedRealtime();
         socialHub = new LibrarySocialHubView(activity);
         content.addView(socialHub, new LinearLayout.LayoutParams(-1, -2));
 
@@ -109,6 +119,7 @@ final class LibraryHubView extends ScrollView {
             observedPreferences.add(prefs);
             prefs.registerOnSharedPreferenceChangeListener(invalidation);
         }
+        AppPerformance.startupCost("library_content", started);
     }
 
     void setWorkScheduler(PrimaryTabWorkQueue.Scheduler scheduler) { work = scheduler; }
@@ -296,9 +307,9 @@ final class LibraryHubView extends ScrollView {
         for (SharedPreferences prefs : observedPreferences) {
             prefs.unregisterOnSharedPreferenceChangeListener(invalidation);
         }
-        clearImages(mediaContent);
+        if (mediaContent != null) clearImages(mediaContent);
         ShowsContinueFrameStore.removeListener(frameListener);
-        socialHub.close();
+        if (socialHub != null) socialHub.close();
         for (RenderedThumbnailResolver resolver : thumbnailResolvers) {
             if (resolver != null) resolver.close();
         }
@@ -310,7 +321,8 @@ final class LibraryHubView extends ScrollView {
     void setSocialActive(boolean active) {
         if (closed || this.active == active) return;
         this.active = active;
-        socialHub.setActive(active);
+        if (active) ensureContent();
+        if (socialHub != null) socialHub.setActive(active);
         // DownloadManager can change without a preference write. Check once on settled entry.
         if (active) scheduleRefresh();
     }

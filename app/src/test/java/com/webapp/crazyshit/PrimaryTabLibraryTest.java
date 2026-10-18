@@ -21,6 +21,34 @@ import static org.robolectric.Shadows.shadowOf;
 @RunWith(RobolectricTestRunner.class)
 @Config(application = Application.class, sdk = 35)
 public class PrimaryTabLibraryTest {
+    @Test public void deferredLibraryBuildsOnEntryAndReadsChangesMadeBeforeEntry() throws Exception {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        LibraryHubView library = new LibraryHubView(activity, null, true);
+        activity.setContentView(library);
+        Map<String, Runnable> work = new LinkedHashMap<>(); library.setWorkScheduler(work::put);
+        try {
+            assertNull(ReflectionHelpers.getField(library, "socialHub"));
+            assertTrue(((java.util.List<?>) ReflectionHelpers.getField(library, "observedPreferences")).isEmpty());
+            library.setSocialActive(false);
+            assertNull(ReflectionHelpers.getField(library, "socialHub"));
+            FavoriteStore.add(activity, "Saved before entry", "https://fixture.invalid/saved-before-entry");
+            library.setSocialActive(true); refresh(library, work);
+            Object social = ReflectionHelpers.getField(library, "socialHub");
+            assertNotNull(social);
+            Object snapshot = ReflectionHelpers.getField(library, "displayed");
+            assertEquals(1, ((java.util.List<?>) ReflectionHelpers.getField(snapshot, "watchLater")).size());
+            library.setSocialActive(false); library.setSocialActive(true);
+            assertSame(social, ReflectionHelpers.getField(library, "socialHub"));
+        } finally { library.close(); }
+    }
+
+    @Test public void deferredLibraryCanCloseBeforeFirstEntry() {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        LibraryHubView library = new LibraryHubView(activity, null, true);
+        library.close(); library.close(); library.setSocialActive(true);
+        assertNull(ReflectionHelpers.getField(library, "socialHub"));
+    }
+
     @Test public void unchangedReturnKeepsViewsAndFavoriteMutationRefreshesAfterEntry() throws Exception {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
         activity.getSharedPreferences("watch_later", 0).edit().clear().commit();
