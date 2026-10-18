@@ -27,6 +27,7 @@ final class ShitTokOrientationAdmission {
         float inspect(CrazyShitRepository.StreamInfo stream, BooleanSupplier allowedWork) throws Exception;
     }
     static final class Deferred extends Exception {}
+    static final class Filtered extends Exception {}
     static final class Result {
         final List<NativeContentItem> items;
         final Map<String, CrazyShitRepository.StreamInfo> streams;
@@ -41,6 +42,11 @@ final class ShitTokOrientationAdmission {
         }
     }
 
+    interface Observer { void event(String phase, NativeContentItem item, String detail); }
+    private final Observer observer;
+    private void event(String phase, NativeContentItem item, String detail) {
+        if (observer != null) observer.event(phase, item, detail);
+    }
     private final Probe probe;
     private final LongSupplier clock;
     private final LinkedHashMap<String, Entry> cache = new LinkedHashMap<String, Entry>(64, .75f, true) {
@@ -50,11 +56,16 @@ final class ShitTokOrientationAdmission {
     };
 
     ShitTokOrientationAdmission(Context context) {
-        this(new ShitTokOrientationProbe(context), () -> System.nanoTime() / 1_000_000L);
+        this(new ShitTokOrientationProbe(context), () -> System.nanoTime() / 1_000_000L,
+                (phase, item, detail) -> AppPerformance.startupItem(phase, item.url, detail));
     }
     ShitTokOrientationAdmission(Probe probe, LongSupplier clock) {
+        this(probe, clock, null);
+    }
+    ShitTokOrientationAdmission(Probe probe, LongSupplier clock, Observer observer) {
         this.probe = probe;
         this.clock = clock;
+        this.observer = observer;
     }
 
     Result admit(List<NativeContentItem> candidates, Resolver resolver,
@@ -86,7 +97,7 @@ final class ShitTokOrientationAdmission {
                         && Float.compare(known.aspect, item.aspectRatioHint) == 0 ? known.stream : null;
                 Entry hint = new Entry(item.aspectRatioHint, reusable, 0L, "metadata");
                 synchronized (cache) { cache.put(item.url, hint); }
-                if (!ShitTokOrientation.eligible(hint.aspect)) continue;
+                if (!ShitTokOrientation.eligible(hint.aspect)) { orientationRejected.incrementAndGet(); continue; }
                 if (!requireStreams || reusable != null) {
                     accept(item, hint, admitted, streams, onVerified);
                     continue;
@@ -96,8 +107,9 @@ final class ShitTokOrientationAdmission {
             }
             if (known != null && (known.aspect > 0f || known.retryAt > clock.getAsLong())
                     && (!requireStreams || known.stream != null || !ShitTokOrientation.eligible(known.aspect))) {
-                if (ShitTokOrientation.eligible(known.aspect))
-                    accept(item, known, admitted, streams, onVerified);
+                if (ShitTokOrientation.eligible(known.aspect)) accept(item, known, admitted, streams, onVerified);
+                else if (known.stream == null || known.stream.mediaUrl == null || known.stream.mediaUrl.isEmpty()) unplayableRejected.incrementAndGet();
+                else orientationRejected.incrementAndGet();
                 continue;
             }
             if (!allowedWork.getAsBoolean() || Thread.currentThread().isInterrupted()) {
@@ -113,12 +125,21 @@ final class ShitTokOrientationAdmission {
             CrazyShitRepository.StreamInfo stream = known != null && known.provenance.equals("pending") ? known.stream : null;
             float aspect = known != null && ShitTokOrientation.eligible(known.aspect) ? known.aspect : 0f;
             try {
+                event("resolve_start", item, "source=" + ShitTokAspectPriority.sourceKey(item));
                 if (stream == null) stream = resolver.resolve(item);
+                event("resolve_end", item, "playable=" + (stream != null));
                 if (!allowedWork.getAsBoolean() || Thread.currentThread().isInterrupted()) throw new Deferred();
                 if (stream != null && stream.mediaUrl != null && !stream.mediaUrl.isEmpty()) {
-                    if (!(aspect > 0f)) aspect = probe.inspect(stream, allowedWork);
+                    if (!(aspect > 0f)) {
+                        event("probe_start", item, "");
+                        aspect = probe.inspect(stream, allowedWork);
+                        event("probe_end", item, "aspect=" + aspect);
+                    }
                 } else aspect = 0f;
             } catch (Exception failure) {
+                if (failure instanceof Filtered) continue;
+                if (failure instanceof InterruptedException) Thread.currentThread().interrupt();
+                event("candidate_error", item, "type=" + failure.getClass().getSimpleName());
                 if (!allowedWork.getAsBoolean() || Thread.currentThread().isInterrupted() || deferred(failure)) {
                     deferred = true;
                     if (stream != null) synchronized (cache) {
@@ -137,6 +158,11 @@ final class ShitTokOrientationAdmission {
             Entry result = new Entry(aspect, stream,
                     aspect > 0f ? 0L : clock.getAsLong() + UNKNOWN_COOLDOWN_MS, provenance);
             synchronized (cache) { cache.put(item.url, result); }
+            if (!ShitTokOrientation.eligible(aspect)) {
+                if (stream == null || stream.mediaUrl == null || stream.mediaUrl.isEmpty()) unplayableRejected.incrementAndGet();
+                else orientationRejected.incrementAndGet();
+            }
+            event(ShitTokOrientation.eligible(aspect) ? "verified" : "rejected", item, "aspect=" + aspect);
             if (ShitTokOrientation.eligible(aspect)) accept(item, result, admitted, streams, onVerified);
         }
         return new Result(admitted, streams, remaining, deferred);
@@ -147,11 +173,21 @@ final class ShitTokOrientationAdmission {
             new java.util.concurrent.ThreadPoolExecutor(3, 3, 0L, java.util.concurrent.TimeUnit.MILLISECONDS,
                     new java.util.concurrent.ArrayBlockingQueue<>(3));
     private final java.util.concurrent.atomic.AtomicInteger rejectedCount = new java.util.concurrent.atomic.AtomicInteger();
+    private final java.util.concurrent.atomic.AtomicInteger orientationRejected = new java.util.concurrent.atomic.AtomicInteger();
+    private final java.util.concurrent.atomic.AtomicInteger unplayableRejected = new java.util.concurrent.atomic.AtomicInteger();
     int rejectedCount() { return rejectedCount.get(); }
+    int orientationRejectedCount() { return orientationRejected.get(); }
+    int unplayableRejectedCount() { return unplayableRejected.get(); }
 
     Result admitConcurrent(java.util.concurrent.BlockingQueue<NativeContentItem> candidates,
             BooleanSupplier productionDone, Resolver resolver, BooleanSupplier allowedWork,
             int maxItems, Consumer<Result> onVerified, java.util.function.IntConsumer activeCount) {
+        return admitConcurrent(candidates, productionDone, resolver, allowedWork, () -> maxItems, onVerified, activeCount);
+    }
+
+    Result admitConcurrent(java.util.concurrent.BlockingQueue<NativeContentItem> candidates,
+            BooleanSupplier productionDone, Resolver resolver, BooleanSupplier allowedWork,
+            java.util.function.IntSupplier maxItems, Consumer<Result> onVerified, java.util.function.IntConsumer activeCount) {
         java.util.concurrent.CompletionService<Result> completed =
                 new java.util.concurrent.ExecutorCompletionService<>(inventoryIo);
         Map<java.util.concurrent.Future<Result>, NativeContentItem> active = new LinkedHashMap<>();
@@ -161,9 +197,9 @@ final class ShitTokOrientationAdmission {
         int attempts = 0;
         try {
             while (allowedWork.getAsBoolean() && !Thread.currentThread().isInterrupted()
-                    && admitted.size() < maxItems && clock.getAsLong() - started < BATCH_MILLIS) {
-                while (active.size() < 3 && attempts < 24 && admitted.size() + active.size() < maxItems) {
-                    NativeContentItem item = candidates.poll();
+                    && admitted.size() < maxItems.getAsInt() && clock.getAsLong() - started < BATCH_MILLIS) {
+                while (active.size() < 3 && attempts < 24) {
+                    NativeContentItem item = nextCandidate(candidates, active.values(), productionDone.getAsBoolean(), remaining);
                     if (item == null) break;
                     attempts++;
                     try {
@@ -201,6 +237,29 @@ final class ShitTokOrientationAdmission {
             activeCount.accept(0);
         }
         return new Result(admitted, streams, remaining, !allowedWork.getAsBoolean());
+    }
+
+    private static NativeContentItem nextCandidate(java.util.concurrent.BlockingQueue<NativeContentItem> candidates,
+            java.util.Collection<NativeContentItem> active, boolean productionDone, List<NativeContentItem> remaining) {
+        // Keep one of the three lanes available to a later, faster provider. Once production
+        // finishes there is nothing left to race, so a single provider may use all three.
+        Map<String, Integer> counts = new java.util.HashMap<>();
+        for (NativeContentItem item : active) counts.merge(ShitTokAspectPriority.sourceKey(item), 1, Integer::sum);
+        synchronized (candidates) {
+            ArrayList<NativeContentItem> deferred = new ArrayList<>();
+            NativeContentItem selected = null;
+            int available = candidates.size();
+            for (int i = 0; i < available; i++) {
+                NativeContentItem item = candidates.poll();
+                if (item == null) break;
+                if (productionDone || counts.getOrDefault(ShitTokAspectPriority.sourceKey(item), 0) < 2) {
+                    selected = item; break;
+                }
+                deferred.add(item);
+            }
+            for (NativeContentItem item : deferred) if (!candidates.offer(item)) remaining.add(item);
+            return selected;
+        }
     }
 
     void close() { inventoryIo.shutdownNow(); }

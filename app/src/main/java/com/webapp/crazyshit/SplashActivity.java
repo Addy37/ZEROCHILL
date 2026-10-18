@@ -33,18 +33,21 @@ public final class SplashActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         splashStartedAt = SystemClock.uptimeMillis();
+        AppPerformance.startup("splash");
         launchAction = getIntent() == null ? null : getIntent().getAction();
         startupWizard = StartupWizardPolicy.shouldShow(this);
-        chaosHandoff = !startupWizard
-                && (!AppShortcuts.isShortcutAction(launchAction)
-                || AppShortcuts.isChaosAction(launchAction));
+        chaosHandoff = shouldPreload(startupWizard, launchAction);
+        if (chaosHandoff) ChaosStartupPreloader.start(getApplicationContext());
         getWindow().setStatusBarColor(Color.BLACK);
         getWindow().setNavigationBarColor(Color.BLACK);
         setContentView(R.layout.activity_splash);
 
-        // Source work belongs to the feed after the shell starts. Avoid a duplicate starter race.
         animateSplash();
         handler.postDelayed(readinessRunnable, MIN_SPLASH_MS);
+    }
+
+    static boolean shouldPreload(boolean wizard, String action) {
+        return !wizard && (!AppShortcuts.isShortcutAction(action) || AppShortcuts.isChaosAction(action));
     }
 
     private void animateSplash() {

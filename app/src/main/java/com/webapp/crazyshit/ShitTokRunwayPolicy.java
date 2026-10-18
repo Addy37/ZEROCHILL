@@ -4,7 +4,8 @@ package com.webapp.crazyshit;
 final class ShitTokRunwayPolicy {
     static final int NORMAL = 6, RAPID = 10;
     static final long RAPID_WINDOW_MS = 1_500L, DECAY_MS = 4_000L;
-    private long lastForward = Long.MIN_VALUE / 2, rapidUntil;
+    private long lastForward = Long.MIN_VALUE / 2;
+    private volatile long rapidUntil;
     private int streak;
     private boolean refilling = true;
 

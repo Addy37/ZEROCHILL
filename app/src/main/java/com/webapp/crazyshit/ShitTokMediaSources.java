@@ -22,7 +22,26 @@ final class ShitTokMediaSources {
     private ShitTokMediaSources() {}
 
     static MediaSource create(Context context, String url, CrazyShitRepository.StreamInfo stream) {
-        return new DefaultMediaSourceFactory(context).setDataSourceFactory(factory(context, stream, null))
+        DataSource.Factory original = factory(context, stream, null);
+        DataSource.Factory observed = () -> {
+            DataSource source = original.createDataSource();
+            source.addTransferListener(new TransferListener() {
+                private boolean opening, started, received;
+
+                @Override public void onTransferInitializing(DataSource source, androidx.media3.datasource.DataSpec spec, boolean network) {
+                    if (!opening) { opening = true; AppPerformance.startupItem("media_open_start", url, "network=" + network); }
+                }
+                @Override public void onTransferStart(DataSource source, androidx.media3.datasource.DataSpec spec, boolean network) {
+                    if (!started) { started = true; AppPerformance.startupItem("media_open_end", url, "network=" + network); }
+                }
+                @Override public void onBytesTransferred(DataSource source, androidx.media3.datasource.DataSpec spec, boolean network, int bytes) {
+                    if (!received) { received = true; AppPerformance.startupItem("media_bytes", url, "network=" + network); }
+                }
+                @Override public void onTransferEnd(DataSource source, androidx.media3.datasource.DataSpec spec, boolean network) { }
+            });
+            return source;
+        };
+        return new DefaultMediaSourceFactory(context).setDataSourceFactory(observed)
                 .createMediaSource(mediaItem(url, stream));
     }
 

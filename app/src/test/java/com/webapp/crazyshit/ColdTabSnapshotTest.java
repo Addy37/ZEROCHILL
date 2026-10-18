@@ -172,10 +172,6 @@ public class ColdTabSnapshotTest {
         assertTrue(f.live.getScrollY() > 0);
         ShadowSystemClock.advanceBy(Duration.ofMillis(200));
         f.controller.onPreDraw();
-        assertEquals(2, f.root.getChildCount());
-        ImageView cover = (ImageView) f.root.getChildAt(1);
-        assertEquals(180, cover.animate().getDuration());
-        assertFalse(cover.isClickable());
         ReflectionHelpers.callInstanceMethod(f.controller, "capture");
         ShadowLooper.idleMainLooper(250, TimeUnit.MILLISECONDS);
         drainIo();

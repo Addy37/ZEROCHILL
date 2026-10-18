@@ -24,6 +24,48 @@ import static org.robolectric.util.ReflectionHelpers.ClassParameter.from;
 @RunWith(RobolectricTestRunner.class)
 @Config(application = Application.class, sdk = 35)
 public class ShitTokContinuityTest {
+    @Test public void seenAndHeartedCandidatesNeverConsumeRunwayEvenAfterDryBatches() {
+        try (Fixture f = new Fixture()) {
+            ShitTokSeenStore store = ReflectionHelpers.getField(f.feed, "seenStore");
+            store.watch(item("seen").url, null);
+            store.heart(item("liked").url, null);
+            ReflectionHelpers.setField(f.feed, "consecutiveDryLoads", 3);
+            f.candidates("seen", "liked", "fresh");
+            call(f.feed, "loadMorePool"); f.io.tasks.removeFirst().run();
+            org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
+            assertEquals(2, f.items.size());
+            assertEquals("fresh", f.items.get(1).title);
+            assertTrue(((java.util.concurrent.atomic.AtomicInteger) ReflectionHelpers.getField(f.feed, "seenRejected")).get() > 0);
+            assertTrue(((java.util.concurrent.atomic.AtomicInteger) ReflectionHelpers.getField(f.feed, "likedRejected")).get() > 0);
+        }
+    }
+    @Test public void fiveReadyClipsAndIncrementalAdmissionFillNormalTarget() {
+        try (Fixture f = new Fixture()) {
+            for (int i = 0; i < 5; i++) {
+                NativeContentItem next = item("existing" + i);
+                ReflectionHelpers.callInstanceMethod(f.feed, "appendUnique", from(List.class, Collections.singletonList(next)));
+                f.cache.put(next.url, stream(next));
+            }
+            f.candidates("fresh1", "fresh2", "fresh3");
+            call(f.feed, "maintainContinuity"); f.io.tasks.removeFirst().run();
+            org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
+            assertEquals(6, (int) ReflectionHelpers.callInstanceMethod(f.feed, "usableUpcomingCount"));
+            assertFalse((boolean) ReflectionHelpers.getField(f.feed, "continuityWorkNeeded"));
+        }
+    }
+    @Test public void emptyTailDragRetainsCurrentSourceAndManualPause() {
+        try (Fixture f = new Fixture()) {
+            f.owner.setUserPaused(item("current").url, true);
+            int prepares = f.engines.get(0).prepares, assignments = f.engines.get(0).sourceAssignments;
+            f.candidates("next"); call(f.feed, "wakeForwardContinuity");
+            f.io.tasks.removeFirst().run();
+            org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
+            assertEquals(prepares, f.engines.get(0).prepares);
+            assertEquals(assignments, f.engines.get(0).sourceAssignments);
+            assertFalse(f.engines.get(0).play);
+            assertEquals(0, (int) ReflectionHelpers.getField(f.feed, "selectedPosition"));
+        }
+    }
     static NativeContentItem item(String id) {
         return new NativeContentItem(NativeContentItem.KIND_MEDIA, id,
                 "https://fixture.invalid/" + id, "", "", "Kaotic", "", "", "", 0L, .5f);
@@ -71,7 +113,11 @@ public class ShitTokContinuityTest {
                 ShitTokPlayerPoolTest.Engine e = new ShitTokPlayerPoolTest.Engine(); engines.add(e); return e.player;
             });
             NativeContentItem current = item("current");
-            ReflectionHelpers.callInstanceMethod(feed, "appendUnique", from(List.class, Collections.singletonList(current)));
+            // This fixture restores an already selected page. It is not a new discovery draw,
+            // which now correctly excludes a page watched by an earlier fixture/session.
+            items.add(current);
+            ReflectionHelpers.setField(feed, "verifiedQueueEmpty", false);
+            ((Set<String>) ReflectionHelpers.getField(feed, "sessionUrls")).add(current.url);
             cache.put(current.url, stream(current));
             ReflectionHelpers.setField(feed, "active", true);
             owner.select(current.url, null, null, true);
@@ -97,6 +143,24 @@ public class ShitTokContinuityTest {
             Map<String, CrazyShitRepository.StreamInfo> startup = ReflectionHelpers.getStaticField(ChaosStartupPreloader.class, "RESOLVED");
             startup.clear();
             host.close();
+        }
+    }
+    @Test public void discardedRecentCandidateDoesNotClaimFirstFeedAdmission() {
+        try (Fixture f = new Fixture()) {
+            Set<String> recent = ReflectionHelpers.getField(f.feed, "recentSet");
+            recent.add(item("watched").url);
+            f.candidates("watched");
+            call(f.feed, "loadMorePool");
+            f.io.tasks.removeFirst().run();
+            org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
+            assertEquals(1, f.items.size());
+            assertFalse((boolean) ReflectionHelpers.getField(f.feed, "firstAdmitted"));
+            f.candidates("fresh");
+            call(f.feed, "loadMorePool");
+            f.io.tasks.removeFirst().run();
+            org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
+            assertEquals(2, f.items.size());
+            assertTrue((boolean) ReflectionHelpers.getField(f.feed, "firstAdmitted"));
         }
     }
     @Test public void starvingThinPagerBuildsSixResolvedNextPagesWithoutExtraPlayers() {

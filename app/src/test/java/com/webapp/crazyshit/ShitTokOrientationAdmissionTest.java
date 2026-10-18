@@ -12,6 +12,20 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
 public class ShitTokOrientationAdmissionTest {
+    @Test public void phaseObserverSeparatesResolutionFromOrientationWork() {
+        AtomicLong clock = new AtomicLong(0);
+        List<String> phases = new ArrayList<>();
+        ShitTokOrientationAdmission gate = new ShitTokOrientationAdmission((stream, allowed) -> {
+            clock.addAndGet(900); return .5f;
+        }, clock::get, (phase, item, detail) -> phases.add(phase + ":" + clock.get()));
+        gate.admit(Collections.singletonList(item("first", "Kaotic", 0f)), candidate -> {
+            clock.addAndGet(400); return stream(candidate);
+        }, () -> true, new Random(0), 1, true, null);
+        assertEquals(Arrays.asList("resolve_start:0", "resolve_end:400", "probe_start:400",
+                "probe_end:1300", "verified:1300"), phases);
+        gate.close();
+    }
+
     @Test public void continuitySkipsFailedAndLandscapeCandidatesAndStopsAtSmallPlayableBudget() {
         AtomicInteger resolves = new AtomicInteger();
         AtomicInteger probes = new AtomicInteger();
