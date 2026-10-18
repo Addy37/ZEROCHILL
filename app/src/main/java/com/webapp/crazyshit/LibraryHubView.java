@@ -153,7 +153,7 @@ final class LibraryHubView extends ScrollView {
             post(() -> work.schedule("library-publish", () -> {
                 loading = false;
                 if (closed) return;
-                if (requestedRevision != revision) {
+                if (requestedRevision != revision || !snapshot.owner.equals(ZeroChillSessionStore.currentUserId(activity))) {
                     if (active) scheduleRefresh();
                     return;
                 }
@@ -313,7 +313,7 @@ final class LibraryHubView extends ScrollView {
         }
 
         boolean sameData(Snapshot other) {
-            return inputs.equals(other.inputs) && downloadState.equals(other.downloadState);
+            return owner.equals(other.owner) && inputs.equals(other.inputs) && downloadState.equals(other.downloadState);
         }
     }
 

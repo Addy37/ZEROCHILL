@@ -253,7 +253,6 @@ final class ZeroChillSocialRepository {
     }
 
     static void loadComments(Context context, String pageUrl, Callback<ArrayList<Comment>> callback) {
-        final String requestedOwner = ZeroChillSessionStore.currentUserId(context);
         NETWORK.execute(() -> {
             try {
                 String key = contentKey(pageUrl);
@@ -1147,6 +1146,7 @@ final class ZeroChillSocialRepository {
     }
 
     static void videoLikeState(Context context, String pageUrl, Callback<VideoLikeState> callback) {
+        final String requestedOwner = ZeroChillSessionStore.currentUserId(context);
         NETWORK.execute(() -> {
             try {
                 String key = contentKey(pageUrl);
