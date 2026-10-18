@@ -366,6 +366,7 @@ final class LibraryHubView extends ScrollView {
         }
     }
 
+    @androidx.annotation.OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)
     private void openLikedVideos() {
         activity.startActivityForResult(new Intent(activity, LikedVideosActivity.class), NativeMainActivity.FAVORITES_REQUEST);
     }
