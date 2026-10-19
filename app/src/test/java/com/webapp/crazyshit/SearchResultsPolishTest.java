@@ -148,11 +148,8 @@ public class SearchResultsPolishTest {
             assertTrue(holder.avatar.getClipToOutline());
             assertEquals(BrowseUi.dp(host.get(), 64), holder.avatar.getLayoutParams().width);
             assertEquals(18f, holder.name.getTextSize() / host.get().getResources().getDisplayMetrics().scaledDensity, .1f);
-            android.graphics.Outline outline = new android.graphics.Outline();
-            int side = BrowseUi.dp(host.get(), 64);
-            holder.avatar.layout(0, 0, side, side);
-            holder.avatar.getOutlineProvider().getOutline(holder.avatar, outline);
-            assertEquals(BrowseUi.dp(host.get(), 32), outline.getRadius(), 1f);
+            assertEquals(BrowseUi.dp(host.get(), 32),
+                    ((android.graphics.drawable.GradientDrawable) holder.avatar.getBackground()).getCornerRadius(), 1f);
             holder.favorite.performClick();
             assertEquals("★", holder.favorite.getText().toString());
             holder.card.performLongClick();
@@ -174,6 +171,14 @@ public class SearchResultsPolishTest {
                 GlobalSearchAdapter.Entry.item(b, 0), GlobalSearchAdapter.Entry.item(a, 0)));
         assertEquals(firstId, adapter.getItemId(1));
         assertEquals(5, adapter.getItemCount());
+        android.os.Bundle state = new android.os.Bundle();
+        adapter.saveOrder(state);
+        GlobalSearchAdapter restored = new GlobalSearchAdapter(item -> {});
+        restored.restoreOrder(state);
+        restored.replace(Arrays.asList(GlobalSearchAdapter.Entry.section("Videos • 1"),
+                GlobalSearchAdapter.Entry.item(video, 0), GlobalSearchAdapter.Entry.section("Creators • 2"),
+                GlobalSearchAdapter.Entry.item(b, 0), GlobalSearchAdapter.Entry.item(a, 0)));
+        assertEquals(firstId, restored.getItemId(1));
     }
 
     @Test public void entranceFadesDoNotReplayOnMetadataUpdatesAndRespectReducedMotion() {

@@ -79,6 +79,25 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
     void resetOrder() { sectionOrder.clear(); itemOrder.clear(); }
     void resetEntrance() { fades.reset(); resetOrder(); }
 
+    void saveOrder(android.os.Bundle state) {
+        state.putStringArrayList("search.sections", new ArrayList<>(sectionOrder));
+        android.os.Bundle groups = new android.os.Bundle();
+        for (Map.Entry<String, List<String>> entry : itemOrder.entrySet())
+            groups.putStringArrayList(entry.getKey(), new ArrayList<>(entry.getValue()));
+        state.putBundle("search.items", groups);
+    }
+
+    void restoreOrder(android.os.Bundle state) {
+        resetOrder();
+        ArrayList<String> sections = state.getStringArrayList("search.sections");
+        if (sections != null) sectionOrder.addAll(sections);
+        android.os.Bundle groups = state.getBundle("search.items");
+        if (groups != null) for (String key : groups.keySet()) {
+            ArrayList<String> items = groups.getStringArrayList(key);
+            if (items != null) itemOrder.put(key, new ArrayList<>(items));
+        }
+    }
+
     private List<Entry> stableOrder(List<Entry> next) {
         Map<String, Entry> headings = new java.util.LinkedHashMap<>();
         Map<String, Map<String, Entry>> groups = new java.util.LinkedHashMap<>();

@@ -143,6 +143,7 @@ final class SearchPanel {
             snapshotId = state.getString("snapshot", snapshotId);
             try { filter = Filter.valueOf(state.getString("filter", "ALL")); } catch (Exception ignored) { }
             refreshFilterStyles();
+            if (adapter != null) adapter.restoreOrder(state);
             input.setText(state.getString("typed", ""));
             input.setSelection(input.length());
             restoredScroll = state.getParcelable("scroll");
@@ -152,6 +153,10 @@ final class SearchPanel {
             if (!activeQuery.isEmpty()) {
                 final String savedQuery = activeQuery;
                 if (bunkrOnly || previewMode) {
+                    try {
+                        publishCreators(ContentItemCodec.decodeList(
+                                new org.json.JSONArray(state.getString("creators", "[]")), 80));
+                    } catch (Exception ignored) { }
                     startOnlyFapSearch(savedQuery);
                 } else {
                     final int token = ++generation;
@@ -274,7 +279,7 @@ final class SearchPanel {
         updateContentVisibility();
     }
 
-    private boolean showingRecent() { return input.length() == 0; }
+    private boolean showingRecent() { return input.getText().toString().trim().isEmpty(); }
 
     private void showRecentSearches() {
         if (recentPanel == null) return;
@@ -318,7 +323,7 @@ final class SearchPanel {
         recentLayer.setVisibility(recent ? View.VISIBLE : View.GONE);
         resultLayer.setVisibility(recent ? View.INVISIBLE : View.VISIBLE);
         searchAll.setVisibility(!recent && previewMode && !bunkrOnly ? View.VISIBLE : View.GONE);
-        if (filterBar != null) filterBar.setVisibility(recent ? View.GONE : View.VISIBLE);
+        if (filterBar != null) filterBar.setVisibility(recent || previewMode ? View.GONE : View.VISIBLE);
         searchFooter.setVisibility(recent ? View.GONE : View.VISIBLE);
     }
 
@@ -340,13 +345,14 @@ final class SearchPanel {
         recentLayer.setVisibility(View.GONE);
         resultLayer.setVisibility(View.VISIBLE);
         searchFooter.setVisibility(View.VISIBLE);
-        if (filterBar != null) filterBar.setVisibility(View.VISIBLE);
+        if (filterBar != null) filterBar.setVisibility(View.GONE);
         previewMode = true;
-        searchAll.setVisibility(bunkrOnly ? View.GONE : View.VISIBLE);
+        searchAll.setVisibility(bunkrOnly || query.length() < 2 ? View.GONE : View.VISIBLE);
         status.setText(query.length() < 2 ? "Type at least 2 characters" : "");
         status.setVisibility(query.length() < 2 ? View.VISIBLE : View.GONE);
         searchState.setVisibility(View.VISIBLE);
         searchState.setText(query.length() < 2 ? "" : "Checking creators…");
+        searchFooter.setVisibility(query.length() < 2 ? View.GONE : View.VISIBLE);
         progress.setVisibility(query.length() < 2 ? View.GONE : View.VISIBLE);
         if (query.length() >= 2) {
             liveSearch = () -> startOnlyFapSearch(query);
@@ -380,12 +386,13 @@ final class SearchPanel {
         if (shell == null || recycler == null) return;
         int count = showingRecent() ? RecentSearchStore.load(activity).size() + 1
                 : recycler.getAdapter().getItemCount();
-        shell.setResultCount(Math.max(1, count), showingRecent() ? 56 : 104);
+        boolean shortQuery = !showingRecent() && input.getText().toString().trim().length() < 2;
+        shell.setResultCount(shortQuery ? 0 : Math.max(1, count), showingRecent() ? 56 : 104);
     }
 
     private void updateContentVisibility() {
         if (content == null || input == null || resultsControls == null || closing) return;
-        boolean show = input.length() > 0 || !RecentSearchStore.load(activity).isEmpty();
+        boolean show = !showingRecent() || !RecentSearchStore.load(activity).isEmpty();
         updateResultSize();
         if (show) content.setVisibility(View.VISIBLE);
         if (show == resultShown) {
@@ -829,7 +836,7 @@ final class SearchPanel {
         searchState.setContentDescription(searchState.getText());
         if (output.isEmpty()) {
             status.setText(pendingSources > 0 ? "" : !unavailable.isEmpty()
-                    ? "Some sources could not be reached.\nTap the message above to retry."
+                    ? "Some sources could not be reached.\nTap the message below to retry."
                     : "No matches for “" + activeQuery + "”\n\nTry a shorter or more general search.");
             status.setVisibility(pendingSources > 0 ? View.GONE : View.VISIBLE);
         } else {
@@ -1080,6 +1087,9 @@ final class SearchPanel {
         state.putString("filter", filter.name());
         state.putString("snapshot", snapshotId);
         state.putBoolean("preview", previewMode);
+        if (adapter != null) adapter.saveOrder(state);
+        try { state.putString("creators", ContentItemCodec.encodeList(creatorResults, 80).toString()); }
+        catch (Exception ignored) { }
         state.putParcelable("scroll", recycler.getLayoutManager().onSaveInstanceState());
         if (!bunkrOnly) saveSnapshot();
     }
