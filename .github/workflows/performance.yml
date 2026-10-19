@@ -17,7 +17,7 @@ permissions:
 jobs:
   cancel-superseded-matrix:
     # This focused follow-up must not launch the general ten-flow benchmark.
-    if: ${{ github.head_ref == 'fix/shittok-async-creator-metadata' || github.head_ref == 'fix/shittok-startup-handoff' || github.head_ref == 'fix/onlyfap-first-open' }}
+    if: ${{ github.head_ref == 'fix/shittok-async-creator-metadata' || github.head_ref == 'fix/shittok-startup-handoff' || github.head_ref == 'fix/onlyfap-first-open' || github.head_ref == 'fix/library-onlyfap-creator-context' }}
     runs-on: ubuntu-latest
     permissions:
       actions: write
@@ -28,7 +28,21 @@ jobs:
           GH_REPO: ${{ github.repository }}
           CANDIDATE_BRANCH: ${{ github.head_ref }}
           CURRENT_RUN: ${{ github.run_id }}
+          CANDIDATE_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
+          if [ "$CANDIDATE_BRANCH" = "fix/library-onlyfap-creator-context" ]; then
+            # Same branch, older heads only. Preserve the current candidate's build/signing jobs.
+            gh api --method GET "repos/$GH_REPO/actions/runs" -f branch="$CANDIDATE_BRANCH" -f per_page=100 \
+              --jq ".workflow_runs[] | select(.id < $CURRENT_RUN and .head_sha != \"$CANDIDATE_SHA\" and (.status == \"queued\" or .status == \"in_progress\")) | .id" |
+            while read -r run_id; do
+              if gh api --method POST "repos/$GH_REPO/actions/runs/$run_id/cancel"; then
+                echo "Canceled superseded run $run_id"
+              else
+                echo "Could not cancel superseded run $run_id"
+              fi
+            done
+            exit 0
+          fi
           gh api --method GET "repos/$GH_REPO/actions/workflows/performance.yml/runs" -f branch="$CANDIDATE_BRANCH" --jq '.workflow_runs[] | select(.status == "queued" or .status == "in_progress") | .id' |
           while read -r run_id; do
             if [ "$run_id" != "$CURRENT_RUN" ]; then
@@ -37,7 +51,7 @@ jobs:
           done
   macrobenchmark:
     # This candidate uses the paired short-scroll audit instead of ten full flows.
-    if: ${{ github.head_ref != 'release/zerochill-5.0.0' && github.head_ref != 'feature/shittok-dynamic-pinch' && github.head_ref != 'feature/primary-tab-activation' && github.head_ref != 'fix/notification-entry-latency' && github.head_ref != 'feature/spotlight-glass-search' && github.head_ref != 'feature/shittok-speed-mute' && github.head_ref != 'feature/shittok-deep-source-exploration' && github.head_ref != 'fix/shittok-async-creator-metadata' && github.head_ref != 'fix/shittok-startup-handoff' && github.head_ref != 'fix/onlyfap-first-open' && github.head_ref != 'feature/phone-content-grid-layout' && github.head_ref != 'feature/library-profile-redesign' }}
+    if: ${{ github.head_ref != 'release/zerochill-5.0.0' && github.head_ref != 'feature/shittok-dynamic-pinch' && github.head_ref != 'feature/primary-tab-activation' && github.head_ref != 'fix/notification-entry-latency' && github.head_ref != 'feature/spotlight-glass-search' && github.head_ref != 'feature/shittok-speed-mute' && github.head_ref != 'feature/shittok-deep-source-exploration' && github.head_ref != 'fix/shittok-async-creator-metadata' && github.head_ref != 'fix/shittok-startup-handoff' && github.head_ref != 'fix/onlyfap-first-open' && github.head_ref != 'feature/phone-content-grid-layout' && github.head_ref != 'feature/library-profile-redesign' && github.head_ref != 'fix/library-onlyfap-creator-context' }}
     name: performance (${{ matrix.flow }})
     runs-on: ubuntu-latest
     timeout-minutes: 60
