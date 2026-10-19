@@ -8,9 +8,10 @@ final class ShitTokCreatorGalleryPreloader {
     }
 
     static void warm(Context context, NativeContentItem item) {
-        String creator = ShitTokCreatorMetadata.creatorName(item);
-        if (creator.isEmpty() || context == null) return;
-        CreatorGalleryPreloader.warm(context, creator, creator, "");
+        if (context == null) return;
+        // Immediate metadata only. Catalog enrichment belongs to the existing async loader.
+        NativeContentItem creator = ShitTokCreatorMetadata.creatorIdentity(null, item);
+        CreatorGalleryPreloader.warm(context, creator);
     }
 
     static String sessionId(android.content.Context context, String creator) {

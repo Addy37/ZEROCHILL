@@ -3887,8 +3887,10 @@ public final class ChaosFeedView extends FrameLayout {
         private void openCreatorGallery(boolean seamless, String transitionToken) {
             pinch.reset();
             if (item == null) return;
-            String creator = ShitTokCreatorMetadata.creatorName(item);
-            if (creator.isEmpty()) return;
+            NativeContentItem identity = creatorMetadata.identity(item);
+            if (identity == null) return;
+            String query = identity.searchQuery.trim().isEmpty()
+                    ? identity.title : identity.searchQuery;
             String returnToken = transitionToken == null ? "" : transitionToken.trim();
             if (returnToken.isEmpty()) {
                 View sourceSurface = creatorSwipeSourceView();
@@ -3901,10 +3903,10 @@ public final class ChaosFeedView extends FrameLayout {
             pauseAndRecord();
             Intent intent = NativeFeedBrowserActivity.createCreatorGallery(
                     activity,
-                    creator,
-                    creator,
-                    "",
-                    ShitTokCreatorGalleryPreloader.sessionId(activity, creator)
+                    identity.title,
+                    query,
+                    NativeFeedBrowserActivity.creatorProfileHint(identity),
+                    ShitTokCreatorGalleryPreloader.sessionId(activity, query)
             );
             if (!returnToken.isEmpty()) {
                 intent.putExtra(

@@ -455,17 +455,7 @@ final class ChaosSourceMixer {
                 for (NativeContentItem item :
                         ShitTokPoolDiagnostics.fetched(BATCH_ONLY_HAVEN, onlyHaven.fetchCreatorMedia(context, creator, 1, 18))) {
                     if (item == null || !item.isVideo()) continue;
-                    candidates.add(new NativeContentItem(
-                            item.kind,
-                            item.title,
-                            item.url,
-                            item.imageUrl,
-                            item.views,
-                            "OnlyHaven",
-                            item.comments,
-                            item.description,
-                            item.searchQuery
-                    ));
+                    candidates.add(onlyHavenClip(item, creator));
                 }
             } catch (Exception ignored) {
             }
@@ -481,6 +471,16 @@ final class ChaosSourceMixer {
         }
 
         return new ArrayList<>(combined.values());
+    }
+
+    // Preserve the source relationship at harvest time; playback still uses item.url.
+    static NativeContentItem onlyHavenClip(NativeContentItem item, OnlyHavenRepository.Creator creator) {
+        return new NativeContentItem(
+                item.kind, item.title, item.url, item.imageUrl, item.views,
+                creator.url.isEmpty() ? item.uploader : creator.url,
+                item.comments, item.description, item.searchQuery,
+                item.publishedAtMillis, item.aspectRatioHint
+        );
     }
 
     private void ensureOnlyHavenCatalog(Context context) {

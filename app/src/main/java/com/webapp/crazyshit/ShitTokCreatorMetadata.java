@@ -20,7 +20,8 @@ final class ShitTokCreatorMetadata {
 
         String uploader = clean(item.uploader);
         String description = clean(item.description).toLowerCase(Locale.US);
-        boolean onlyHaven = "onlyhaven".equalsIgnoreCase(uploader)
+        boolean onlyHaven = OnlyHavenRepository.isOnlyHavenUrl(uploader)
+                || "onlyhaven".equalsIgnoreCase(uploader)
                 || description.contains("onlyhaven");
         if (!onlyHaven) return "";
 
@@ -38,11 +39,12 @@ final class ShitTokCreatorMetadata {
 
         String profileUrl = "";
         if (media != null) {
-            if (FapelloRepository.isModelUrl(media.url)
-                    || OnlyHavenRepository.isOnlyHavenUrl(media.url)) {
+            if (isOnlyHavenProfile(media.uploader)) {
+                profileUrl = media.uploader;
+            } else if (FapelloRepository.isModelUrl(media.url)
+                    || isOnlyHavenProfile(media.url)) {
                 profileUrl = media.url;
-            } else if (FapelloRepository.isModelUrl(media.uploader)
-                    || OnlyHavenRepository.isOnlyHavenUrl(media.uploader)) {
+            } else if (FapelloRepository.isModelUrl(media.uploader)) {
                 profileUrl = media.uploader;
             }
         }
@@ -68,10 +70,24 @@ final class ShitTokCreatorMetadata {
             String title = CreatorNameMatcher.normalized(candidate.title);
             String query = CreatorNameMatcher.normalized(candidate.searchQuery);
             if (wanted.equals(title) || wanted.equals(query)) {
-                return candidate.merge(fallback);
+                // Catalog artwork/name can enrich the clip, but must not replace its exact profile.
+                NativeContentItem knownProfile = new NativeContentItem(
+                        NativeContentItem.KIND_CREATOR, "", profileUrl, "", "", "", "", "", "");
+                return knownProfile.merge(candidate).merge(fallback);
             }
         }
         return fallback;
+    }
+
+    private static boolean isOnlyHavenProfile(String url) {
+        if (!OnlyHavenRepository.isOnlyHavenUrl(url)) return false;
+        try {
+            String path = new java.net.URI(url).getPath();
+            // Media CDN hosts also end in cum.st; a playable URL is not a creator profile.
+            return path != null && path.matches("/creators/[^/]+/[^/]+/?");
+        } catch (java.net.URISyntaxException invalid) {
+            return false;
+        }
     }
 
     private static boolean isGenericCreatorLabel(String value) {
