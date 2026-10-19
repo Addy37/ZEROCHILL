@@ -131,6 +131,18 @@ public class OnlyFapLibraryMetadataTest {
         assertFalse(intent.getBooleanExtra(VideoDetailActivity.EXTRA_SHOWS_ORIGIN, true));
     }
 
+    @Test public void lateCreatorRecoveryPersistsInConfirmedLikeAfterGeneralCacheIsTrimmed() {
+        SocialContentContextStore.remember(context, OnlyFapVideoMetadata.basic("OnlyFap video", URL, ""));
+        SocialContentContextStore.confirmLike(context, owner, URL, true);
+        SocialContentContextStore.enrichConfirmedLike(context, clip());
+        context.getSharedPreferences(SocialContentContextStore.PREFS, 0).edit().remove("items").commit();
+        assertEquals(PROFILE, OnlyFapVideoMetadata.creator(
+                SocialContentContextStore.likedVideos(context, owner).get(0)).url);
+        SocialContentContextStore.confirmLike(context, owner, URL, false);
+        SocialContentContextStore.enrichConfirmedLike(context, clip());
+        assertTrue(SocialContentContextStore.likedVideos(context, owner).isEmpty());
+    }
+
     @Test public void creatorHeaderOpensExactGalleryAndFavoriteUsesCreatorName() {
         VideoDetailActivity activity = Robolectric.buildActivity(VideoDetailActivity.class).get();
         LinearLayout row = new LinearLayout(activity);

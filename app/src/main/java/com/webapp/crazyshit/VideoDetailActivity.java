@@ -1181,6 +1181,7 @@ public class VideoDetailActivity extends Activity {
             NativeContentItem creator = OnlyFapVideoMetadata.creator(this, content);
             if (creator != null) {
                 SocialContentContextStore.remember(this, enriched);
+                SocialContentContextStore.enrichConfirmedLike(this, enriched);
                 FavoriteStore.enrich(this, enriched);
                 VideoDownloadStore.enrich(this, enriched);
             }

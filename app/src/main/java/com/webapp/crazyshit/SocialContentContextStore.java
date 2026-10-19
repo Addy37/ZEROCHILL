@@ -116,6 +116,21 @@ final class SocialContentContextStore {
         return out;
     }
 
+    static synchronized void enrichConfirmedLike(Context context, NativeContentItem item) {
+        String owner = ZeroChillSessionStore.currentUserId(context);
+        if (owner.isEmpty()) return;
+        String key = ZeroChillSocialRepository.contentKey(item.url);
+        JSONArray rows = likeRows(context, owner);
+        for (int i = 0; i < rows.length(); i++) {
+            JSONObject row = rows.optJSONObject(i);
+            if (row == null || !key.equals(row.optString("key"))) continue;
+            try { row.put("item", ContentItemCodec.encode(item)).put("url", item.url); }
+            catch (Exception ignored) { return; }
+            saveLikes(context, owner, rows);
+            return;
+        }
+    }
+
     static java.util.Map<String, NativeContentItem> knownVideos(Context context, String owner) {
         java.util.Map<String, NativeContentItem> known = new java.util.LinkedHashMap<>();
         // Keep reversible URLs from confirmed likes even after local history is trimmed.
