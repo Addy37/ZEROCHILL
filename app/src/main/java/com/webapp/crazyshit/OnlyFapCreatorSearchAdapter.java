@@ -40,6 +40,8 @@ final class OnlyFapCreatorSearchAdapter
             "(KHTML, like Gecko) Chrome/139.0 Mobile Safari/537.36";
 
     private final Consumer<NativeContentItem> open;
+    private final SearchResultFades fades = new SearchResultFades();
+    void resetEntrance() { fades.reset(); }
     private List<NativeContentItem> items = new ArrayList<>();
 
     OnlyFapCreatorSearchAdapter(Consumer<NativeContentItem> open) {
@@ -111,12 +113,14 @@ final class OnlyFapCreatorSearchAdapter
         card.setFocusable(true);
 
         RecyclerView.LayoutParams cardParams =
-                new RecyclerView.LayoutParams(-1, dp(context, 80));
+                new RecyclerView.LayoutParams(-1, -2);
         cardParams.setMargins(0, 0, 0, 0);
         card.setLayoutParams(cardParams);
+        card.setMinimumHeight(dp(context, 104));
 
         LinearLayout row = new LinearLayout(context);
         row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setMinimumHeight(BrowseUi.dp(row.getContext(), 104));
         row.setGravity(Gravity.CENTER_VERTICAL);
         row.setPadding(
                 dp(context, 10),
@@ -124,19 +128,20 @@ final class OnlyFapCreatorSearchAdapter
                 dp(context, 9),
                 dp(context, 9)
         );
-        card.addView(row, new MaterialCardView.LayoutParams(-1, -1));
+        card.addView(row, new MaterialCardView.LayoutParams(-1, -2));
 
         ImageView avatar = new ImageView(context);
         avatar.setScaleType(ImageView.ScaleType.CENTER_CROP);
-        avatar.setBackgroundColor(ZeroChillUi.color(context, R.color.zc_surface_pressed));
+        avatar.setBackground(BrowseUi.rounded(context, ZeroChillUi.color(context, R.color.zc_surface_pressed), 32));
+        avatar.setClipToOutline(true);
         avatar.setContentDescription(null);
-        row.addView(avatar, new LinearLayout.LayoutParams(dp(context, 44), dp(context, 44)));
+        row.addView(avatar, new LinearLayout.LayoutParams(dp(context, 64), dp(context, 64)));
 
         LinearLayout copy = new LinearLayout(context);
         copy.setOrientation(LinearLayout.VERTICAL);
         copy.setGravity(Gravity.CENTER_VERTICAL);
         copy.setPadding(dp(context, 11), 0, dp(context, 8), 0);
-        row.addView(copy, new LinearLayout.LayoutParams(0, -1, 1f));
+        row.addView(copy, new LinearLayout.LayoutParams(0, -2, 1f));
 
         TextView badge = new TextView(context);
         badge.setText("OnlyFap");
@@ -153,22 +158,22 @@ final class OnlyFapCreatorSearchAdapter
 
         TextView name = new TextView(context);
         name.setTextColor(Color.WHITE);
-        name.setTextSize(15.5f);
+        name.setTextSize(18f);
         name.setTypeface(null, android.graphics.Typeface.BOLD);
-        name.setSingleLine(true);
+        name.setMaxLines(2);
         name.setEllipsize(TextUtils.TruncateAt.END);
         copy.addView(name, new LinearLayout.LayoutParams(-1, -2));
 
         TextView handle = new TextView(context);
         handle.setTextColor(ZeroChillUi.color(context, R.color.zc_text_muted));
-        handle.setTextSize(12f);
+        handle.setTextSize(13.5f);
         handle.setSingleLine(true);
         handle.setEllipsize(TextUtils.TruncateAt.END);
         copy.addView(handle, new LinearLayout.LayoutParams(-1, -2));
 
         TextView meta = new TextView(context);
         meta.setTextColor(ZeroChillUi.color(context, R.color.zc_text_secondary));
-        meta.setTextSize(12f);
+        meta.setTextSize(13.5f);
         meta.setMaxLines(1);
         meta.setEllipsize(TextUtils.TruncateAt.END);
         LinearLayout.LayoutParams metaParams = new LinearLayout.LayoutParams(-1, -2);
@@ -188,18 +193,22 @@ final class OnlyFapCreatorSearchAdapter
         preview.setContentDescription(null);
         previewFrame.addView(preview, new FrameLayout.LayoutParams(-1, -1));
 
-        return new Holder(card, avatar, preview, name, handle, meta);
+        TextView favorite = SearchResultFavorites.create(context);
+        row.addView(favorite, new LinearLayout.LayoutParams(dp(context, 48), dp(context, 48)));
+        return new Holder(card, avatar, preview, name, handle, meta, favorite);
     }
 
     @Override
     public void onBindViewHolder(@NonNull Holder holder, int position) {
         NativeContentItem item = items.get(position);
         holder.bound = item;
+        fades.show(holder.card, creatorKey(item));
         holder.name.setText(item.title);
         holder.handle.setText(creatorHandle(item));
         holder.meta.setText(metaText(item));
         holder.card.setContentDescription(item.title + ", OnlyFap creator");
         holder.card.setOnClickListener(v -> open.accept(item));
+        SearchResultFavorites.bind(holder.favorite, holder.card, item);
         CreatorGalleryPreloader.warm(
                 holder.card.getContext(),
                 item,
@@ -219,10 +228,13 @@ final class OnlyFapCreatorSearchAdapter
     public void onViewRecycled(@NonNull Holder holder) {
         CreatorGalleryPreloader.cancelQueued(holder.bound);
         holder.bound = null;
+        SearchResultFades.recycle(holder.card);
         Glide.with(holder.avatar).clear(holder.avatar);
         Glide.with(holder.preview).clear(holder.preview);
         holder.imageUrl = null;
         holder.card.setOnClickListener(null);
+        holder.card.setOnLongClickListener(null);
+        holder.favorite.setOnClickListener(null);
         super.onViewRecycled(holder);
     }
 
@@ -305,6 +317,7 @@ final class OnlyFapCreatorSearchAdapter
         final TextView name;
         final TextView handle;
         final TextView meta;
+        final TextView favorite;
         String imageUrl;
         NativeContentItem bound;
 
@@ -314,7 +327,8 @@ final class OnlyFapCreatorSearchAdapter
                 ImageView preview,
                 TextView name,
                 TextView handle,
-                TextView meta
+                TextView meta,
+                TextView favorite
         ) {
             super(card);
             this.card = card;
@@ -323,6 +337,7 @@ final class OnlyFapCreatorSearchAdapter
             this.name = name;
             this.handle = handle;
             this.meta = meta;
+            this.favorite = favorite;
         }
     }
 }

@@ -73,6 +73,43 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
 
     private final List<Entry> entries = new ArrayList<>();
     private final Listener listener;
+    private final SearchResultFades fades = new SearchResultFades();
+    private final List<String> sectionOrder = new ArrayList<>();
+    private final Map<String, List<String>> itemOrder = new java.util.LinkedHashMap<>();
+    void resetOrder() { sectionOrder.clear(); itemOrder.clear(); }
+    void resetEntrance() { fades.reset(); resetOrder(); }
+
+    private List<Entry> stableOrder(List<Entry> next) {
+        Map<String, Entry> headings = new java.util.LinkedHashMap<>();
+        Map<String, Map<String, Entry>> groups = new java.util.LinkedHashMap<>();
+        String section = "";
+        for (Entry entry : next) {
+            if (entry.section) {
+                section = sectionKey(entry);
+                headings.put(section, entry);
+                groups.putIfAbsent(section, new java.util.LinkedHashMap<>());
+                if (!sectionOrder.contains(section)) sectionOrder.add(section);
+            } else {
+                groups.computeIfAbsent(section, k -> new java.util.LinkedHashMap<>()).put(itemKey(entry), entry);
+                if (!sectionOrder.contains(section)) sectionOrder.add(section);
+            }
+        }
+        ArrayList<Entry> ordered = new ArrayList<>();
+        for (String key : sectionOrder) {
+            Map<String, Entry> group = groups.get(key);
+            if (group == null) continue;
+            if (headings.containsKey(key)) ordered.add(headings.get(key));
+            List<String> identities = itemOrder.computeIfAbsent(key, k -> new ArrayList<>());
+            for (String identity : group.keySet()) if (!identities.contains(identity)) identities.add(identity);
+            for (String identity : identities) if (group.containsKey(identity)) ordered.add(group.get(identity));
+        }
+        return ordered;
+    }
+
+    private static String itemKey(Entry entry) {
+        return entry.item.kind + ":" + entry.source + ":" + (entry.item.isCreator()
+                ? OnlyFapCreatorResults.key(entry.item) : entry.item.url);
+    }
     private final Map<String, String> resolvedThumbnails = new HashMap<>();
     private final Set<String> requestedThumbnails = new HashSet<>();
     private final Set<String> failedDirectThumbnails = new HashSet<>();
@@ -88,7 +125,7 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
 
     void replace(List<Entry> next) {
         List<Entry> old = new ArrayList<>(entries);
-        List<Entry> replacement = next == null ? new ArrayList<>() : new ArrayList<>(next);
+        List<Entry> replacement = stableOrder(next == null ? new ArrayList<>() : next);
         androidx.recyclerview.widget.DiffUtil.DiffResult diff = androidx.recyclerview.widget.DiffUtil.calculateDiff(
                 new androidx.recyclerview.widget.DiffUtil.Callback() {
                     public int getOldListSize() { return old.size(); }
@@ -97,12 +134,13 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
                         Entry x = old.get(a), y = replacement.get(b);
                         if (x.section != y.section) return false;
                         if (x.section) return sectionKey(x).equals(sectionKey(y));
-                        return x.source == y.source && x.item.kind.equals(y.item.kind) && x.item.url.equals(y.item.url);
+                        return itemKey(x).equals(itemKey(y));
                     }
                     public boolean areContentsTheSame(int a, int b) {
                         Entry x = old.get(a), y = replacement.get(b);
                         if (x.section) return x.sectionTitle.equals(y.sectionTitle);
-                        return x.item.title.equals(y.item.title) && x.item.imageUrl.equals(y.item.imageUrl)
+                        return x.item.url.equals(y.item.url) && x.item.searchQuery.equals(y.item.searchQuery)
+                                && x.item.title.equals(y.item.title) && x.item.imageUrl.equals(y.item.imageUrl)
                                 && x.item.views.equals(y.item.views) && x.item.uploader.equals(y.item.uploader)
                                 && x.item.comments.equals(y.item.comments) && x.item.description.equals(y.item.description);
                     }
@@ -135,7 +173,7 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
         Entry entry = entries.get(position);
         if (entry.section) return ("section:" + sectionKey(entry)).hashCode();
         if (entry.item == null) return position;
-        return (entry.item.kind + ":" + entry.item.url + ":" + entry.source).hashCode();
+        return itemKey(entry).hashCode();
     }
 
     @Override
@@ -151,7 +189,7 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
         if (viewType == TYPE_SECTION) {
             TextView title = new TextView(parent.getContext());
             title.setTextColor(UiPalette.TEXT_SECONDARY);
-            title.setTextSize(11.5f);
+            title.setTextSize(13f);
             title.setTypeface(null, android.graphics.Typeface.BOLD);
             title.setGravity(Gravity.CENTER_VERTICAL);
             title.setPadding(dp(parent, 12), dp(parent, 5), dp(parent, 12), dp(parent, 3));
@@ -167,31 +205,33 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
         card.setRadius(0);
         card.setStrokeWidth(0);
         card.setStrokeColor(Color.rgb(51, 51, 58));
-        RecyclerView.LayoutParams cardParams = new RecyclerView.LayoutParams(-1, dp(parent, 84));
+        RecyclerView.LayoutParams cardParams = new RecyclerView.LayoutParams(-1, -2);
         cardParams.setMargins(0, 0, 0, 0);
         card.setLayoutParams(cardParams);
+        card.setMinimumHeight(dp(parent, 104));
 
         LinearLayout row = new LinearLayout(parent.getContext());
         row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setMinimumHeight(BrowseUi.dp(row.getContext(), 104));
         row.setGravity(Gravity.CENTER_VERTICAL);
         row.setPadding(dp(parent, 12), dp(parent, 8), dp(parent, 8), dp(parent, 8));
-        card.addView(row, new MaterialCardView.LayoutParams(-1, -1));
+        card.addView(row, new MaterialCardView.LayoutParams(-1, -2));
 
         ImageView image = new ImageView(parent.getContext());
         image.setScaleType(ImageView.ScaleType.CENTER_CROP);
         image.setBackgroundColor(Color.rgb(31, 31, 36));
-        LinearLayout.LayoutParams imageParams = new LinearLayout.LayoutParams(dp(parent, 64), dp(parent, 64));
+        LinearLayout.LayoutParams imageParams = new LinearLayout.LayoutParams(dp(parent, 88), dp(parent, 66));
         row.addView(image, imageParams);
 
         LinearLayout text = new LinearLayout(parent.getContext());
         text.setOrientation(LinearLayout.VERTICAL);
         text.setGravity(Gravity.CENTER_VERTICAL);
         text.setPadding(dp(parent, 12), 0, dp(parent, 8), 0);
-        row.addView(text, new LinearLayout.LayoutParams(0, -1, 1f));
+        row.addView(text, new LinearLayout.LayoutParams(0, -2, 1f));
 
         TextView title = new TextView(parent.getContext());
         title.setTextColor(Color.WHITE);
-        title.setTextSize(landscape ? 15f : 15.5f);
+        title.setTextSize(18f);
         title.setTypeface(null, android.graphics.Typeface.BOLD);
         title.setMaxLines(2);
         title.setEllipsize(android.text.TextUtils.TruncateAt.END);
@@ -199,14 +239,17 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
 
         TextView meta = new TextView(parent.getContext());
         meta.setTextColor(Color.rgb(174, 174, 184));
-        meta.setTextSize(landscape ? 12f : 12.5f);
+        meta.setTextSize(13.5f);
         meta.setMaxLines(1);
         meta.setEllipsize(android.text.TextUtils.TruncateAt.END);
         LinearLayout.LayoutParams metaParams = new LinearLayout.LayoutParams(-1, -2);
         metaParams.topMargin = dp(parent, 5);
         text.addView(meta, metaParams);
 
-        return new ResultHolder(card, image, title, meta);
+        TextView favorite = SearchResultFavorites.create(parent.getContext());
+        row.addView(favorite, new LinearLayout.LayoutParams(dp(parent, 48), dp(parent, 48)));
+        favorite.setVisibility(View.GONE);
+        return new ResultHolder(card, image, title, meta, favorite);
     }
 
     @Override
@@ -246,10 +289,18 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
         if (item == null) return;
         ensureContext(result.image.getContext());
         result.boundUrl = item.url == null ? "" : item.url;
+        fades.show(result.card, itemKey(entry));
+        LinearLayout.LayoutParams imageSize = (LinearLayout.LayoutParams) result.image.getLayoutParams();
+        imageSize.width = dp(result.image, item.isCreator() ? 64 : 88);
+        imageSize.height = dp(result.image, item.isCreator() ? 64 : 66);
+        result.image.setLayoutParams(imageSize);
+        result.image.setBackground(BrowseUi.rounded(result.image.getContext(), Color.rgb(31, 31, 36), item.isCreator() ? 32 : 8));
+        result.image.setClipToOutline(true);
         result.title.setText(item.title);
         result.meta.setText(metaText(item, entry.source));
         result.card.setContentDescription(item.title);
         result.card.setOnClickListener(v -> listener.onOpen(item));
+        SearchResultFavorites.bind(result.favorite, result.card, item);
         if (item.isCreator()) {
             CreatorGalleryPreloader.warm(
                     result.card.getContext(),
@@ -267,6 +318,8 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
         StringBuilder meta;
         if (source == SOURCE_LIBRARY) {
             meta = new StringBuilder("Library");
+        } else if (item.isCreator()) {
+            meta = new StringBuilder("Creator");
         } else if (item.isSeries()) {
             meta = new StringBuilder(BunkrRepository.isAlbumUrl(item.url) ? "OnlyFap album" : "Series");
         } else if (item.isCategory()) {
@@ -491,8 +544,11 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
         if (holder instanceof ResultHolder) {
             ResultHolder result = (ResultHolder) holder;
             result.boundUrl = "";
+            SearchResultFades.recycle(result.card);
             Glide.with(result.image).clear(result.image);
             result.card.setOnClickListener(null);
+            result.card.setOnLongClickListener(null);
+            result.favorite.setOnClickListener(null);
         }
         super.onViewRecycled(holder);
     }
@@ -520,14 +576,16 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
         final ImageView image;
         final TextView title;
         final TextView meta;
+        final TextView favorite;
         String boundUrl = "";
 
-        ResultHolder(MaterialCardView card, ImageView image, TextView title, TextView meta) {
+        ResultHolder(MaterialCardView card, ImageView image, TextView title, TextView meta, TextView favorite) {
             super(card);
             this.card = card;
             this.image = image;
             this.title = title;
             this.meta = meta;
+            this.favorite = favorite;
         }
     }
 }

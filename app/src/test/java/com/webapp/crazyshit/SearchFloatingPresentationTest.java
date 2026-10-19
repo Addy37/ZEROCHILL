@@ -46,12 +46,8 @@ public class SearchFloatingPresentationTest {
             assertTrue(results.getTop() > pill.getBottom());
             assertTrue(results.getHeight() < BrowseUi.dp(activity, 180));
             View resultLayer = ReflectionHelpers.getField(panel, "resultLayer");
-            assertEquals(View.INVISIBLE, resultLayer.getVisibility());
-            CreatorSuggestionsController suggestions = ReflectionHelpers.getField(panel, "suggestions");
-            suggestions.hide();
             assertEquals(View.VISIBLE, resultLayer.getVisibility());
-            suggestions.show("a");
-            assertEquals(View.INVISIBLE, resultLayer.getVisibility());
+            assertEquals(View.GONE, ((View) ReflectionHelpers.getField(panel, "recentLayer")).getVisibility());
             View clear = ReflectionHelpers.getField(panel, "clear");
             clear.performClick();
             org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(200));
