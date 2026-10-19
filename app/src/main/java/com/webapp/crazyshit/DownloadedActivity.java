@@ -177,6 +177,7 @@ public final class DownloadedActivity extends Activity {
             if (LibrarySearch.matches(
                     query,
                     entry.title,
+                    entry.content == null ? "" : OnlyFapVideoMetadata.displayTitle(entry.content),
                     entry.pageUrl,
                     entry.mediaUrl,
                     VideoDownloadStore.statusText(entry)
