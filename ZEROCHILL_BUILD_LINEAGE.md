@@ -2,14 +2,22 @@
 
 This file identifies the current approved ZEROCHILL product baseline for test APKs and future feature work.
 
-- Source-of-truth branch: `rebrand/zerochill`
-- Integration branch: `integration/zerochill-current`
-- Approved product baseline commit: `2f9a489ac6855926978630b7495965c404fe9e38`
-- Release preparation branch: `release/zerochill-5.0.0`
-- Latest approved feature PRs: #310 (Library/profile) and #309 (phone content-grid polish)
-- Approval date: 2026-10-18
-- Current production release: `v4.3.8`
-- Prepared production version: `5.0.0` (`5000000`)
+- Source-of-truth branch: `main`
+- Integration branch: `main`
+- Approved product baseline commit: `c1a9e486988c99c67839670c9da120fae745c897`
+- Release preparation branch: `release/zerochill-5.0.1`
+- Latest approved feature PRs: #314 (creator/gallery handoff), #315 (OnlyFap Library creator context), #316 (BaddieHub titles), and #317 (search results and recent searches)
+- Approval and publication authorization date: 2026-10-19
+- Previous stable release: `v5.0.0`
+- Release target: `5.0.1` (`5000001`)
+
+The user physically approved the search candidate at `0860f0e4574e79e072526075e4059852843d9c26` and approved its merge through PR #317. Main at `c1a9e486` has the identical application tree and includes all approved work since 5.0.0. The candidate passed 44 focused search/source/geometry checks, 871 tests per debug/release variant (zero failures/errors, one skipped each), both APK builds, production signing checks, and an Android 15 in-place upgrade from stable 5.0.0. Physical testing and publication are authorized. The existing non-blocking lint audit reports 321 errors and 418 warnings.
+
+The 5.0.1 preparation changes release metadata and this lineage record only. The production release workflow rebuilds and tests the approved application code, verifies the package and stable signing certificate, checks that version code `5000001` upgrades from 5.0.0 (`5000000`), and publishes `ZeroChill.apk` plus `SHA256SUMS.txt`. Use the successful production workflow, final `v5.0.1` tag, and its published checksum as the authoritative release record. No existing data migration, backend deployment, or remote-config change is required; recent searches use a new optional local preference file.
+
+ZeroChill v5.0.0 was published on 2026-10-18 with production APK SHA-256 `bc8e6d481b9e7e4e0c67a66cddbb0bb3664b241b0260c29e155d7c638acd520b`.
+
+## Prior release preparation: 5.0.0
 
 The 5.0.0 candidate preserves the physically approved application tree at `2f9a489a`. PRs #311 and #312 were closed CI-only drafts and are excluded from release lineage. Main-only history changes README and historical lineage documentation; the README already matches the approved branch, and obsolete 3.1.0 lineage instructions are superseded by this current record. The release branch merges main history without changing approved application code. No backend, remote-config, schema, or data migration is introduced. Signed candidate validation and artifact checks are recorded in the release PR. This is preparation only: no final tag or GitHub release has been created. `rebrand/zerochill` remains the source of truth until the approved integration into main.
 
@@ -63,11 +71,9 @@ The approved devil-head launcher and themed icons and DEVIL WAKE splash came fro
 
 Before producing or sharing a ZEROCHILL test APK:
 
-1. Verify the candidate commit is the approved product baseline commit or a descendant of it.
-2. Treat `rebrand/zerochill` as the current ZEROCHILL source of truth until it is merged into `main`.
-3. Keep `integration/zerochill-current` synchronized with the latest approved complete ZEROCHILL lineage.
-4. Start new feature work from the current complete integration lineage, not from an older feature branch.
-5. Do not build from an older feature branch when a newer compatible approved lineage exists.
-6. Include the source branch and short commit SHA in the APK filename.
-
-If a newer complete build replaces this baseline, advance both current branches as appropriate, preserve a rollback checkpoint for the last approved build, and update the approved product baseline commit here.
+1. Verify that its source commit is the approved product baseline or a descendant of it.
+2. Use `main` as the complete approved lineage unless the user specifies another active branch.
+3. Start new feature work from current `main`, rather than an older feature branch.
+4. Include the source branch and short commit SHA in a test APK filename.
+5. Preserve the application ID, production signing identity, existing installs, and saved data.
+6. Record subsequent approved baselines and production release evidence here without replacing historical release records.
