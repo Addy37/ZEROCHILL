@@ -25,7 +25,8 @@ final class ShitTokCreatorMetadata {
                 || description.contains("onlyhaven");
         if (!onlyHaven) return "";
 
-        String creator = clean(item.title);
+        String creator = clean(item.searchQuery);
+        if (creator.isEmpty()) creator = clean(item.title);
         return isGenericCreatorLabel(creator) ? "" : creator;
     }
 
@@ -37,22 +38,7 @@ final class ShitTokCreatorMetadata {
         String creator = creatorName(media);
         if (creator.isEmpty()) return null;
 
-        String profileUrl = "";
-        if (media != null) {
-            // Popular Fapello media keeps the display name in uploader and the exact
-            // creator lookup URL in searchQuery; creator identities still search by name.
-            if (FapelloRepository.isFapelloUrl(media.url)
-                    && FapelloRepository.isModelUrl(media.searchQuery)) {
-                profileUrl = media.searchQuery;
-            } else if (isOnlyHavenProfile(media.uploader)) {
-                profileUrl = media.uploader;
-            } else if (FapelloRepository.isModelUrl(media.url)
-                    || isOnlyHavenProfile(media.url)) {
-                profileUrl = media.url;
-            } else if (FapelloRepository.isModelUrl(media.uploader)) {
-                profileUrl = media.uploader;
-            }
-        }
+        String profileUrl = knownProfileUrl(media);
 
         NativeContentItem fallback = new NativeContentItem(
                 NativeContentItem.KIND_CREATOR,
@@ -82,6 +68,27 @@ final class ShitTokCreatorMetadata {
             }
         }
         return fallback;
+    }
+
+    static String knownProfileUrl(NativeContentItem media) {
+        String profileUrl = "";
+        if (media != null) {
+            // Popular Fapello media keeps the display name in uploader and the exact
+            // creator lookup URL in searchQuery; creator identities still search by name.
+            if (FapelloRepository.isFapelloUrl(media.url)
+                    && FapelloRepository.isModelUrl(media.searchQuery)) {
+                profileUrl = media.searchQuery;
+            } else if (isOnlyHavenProfile(media.uploader)) {
+                profileUrl = media.uploader;
+            } else if (FapelloRepository.isModelUrl(media.url)
+                    || isOnlyHavenProfile(media.url)) {
+                profileUrl = media.url;
+            } else if (FapelloRepository.isModelUrl(media.uploader)) {
+                profileUrl = media.uploader;
+            }
+        }
+
+        return profileUrl;
     }
 
     private static boolean isOnlyHavenProfile(String url) {

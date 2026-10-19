@@ -234,6 +234,9 @@ jobs:
         run: >-
           gradle --no-daemon :app:testDebugUnitTest
           --tests 'com.webapp.crazyshit.ShitTokCreatorGalleryHandoffTest'
+          --tests 'com.webapp.crazyshit.ShitTokCreatorSearchLearningTest'
+          --tests 'com.webapp.crazyshit.FapzoneCreatorSearchRepositoryTest'
+          --tests 'com.webapp.crazyshit.CreatorNameMatcherTest'
           --tests 'com.webapp.crazyshit.FapelloRepositoryTest'
           --tests 'com.webapp.crazyshit.HomeSourceTest'
           --tests 'com.webapp.crazyshit.NotificationCoordinatorFormattingTest'
@@ -242,6 +245,12 @@ jobs:
           --tests 'com.webapp.crazyshit.ChaosSourceMixerPriorityTest'
           --tests 'com.webapp.crazyshit.ShitTokAspectPriorityTest'
           --tests 'com.webapp.crazyshit.CreatorMergedGalleryTest'
+
+      - name: Audit live creator search responses
+        if: ${{ github.head_ref == 'fix/shittok-creator-gallery-handoff' }}
+        continue-on-error: true
+        timeout-minutes: 2
+        run: python3 tools/audit-creator-search.py
 
       - name: Verify ShitTok interaction boundaries
         if: ${{ github.head_ref != 'release/zerochill-5.0.0' }}

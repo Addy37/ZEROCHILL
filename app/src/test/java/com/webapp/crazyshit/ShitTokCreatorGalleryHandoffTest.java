@@ -69,6 +69,17 @@ public class ShitTokCreatorGalleryHandoffTest {
         assertEquals(PROFILE, ShitTokCreatorMetadata.creatorIdentity(null, harvested).url);
     }
 
+    @Test public void onlyHavenUsesHarvestedCreatorNameInsteadOfPostCaption() {
+        OnlyHavenRepository.Creator creator = new OnlyHavenRepository.Creator(
+                "onlyfans", "jane-id", "Jane Doe", "https://cum.st/creators/onlyfans/jane-id", "");
+        NativeContentItem post = new NativeContentItem(NativeContentItem.KIND_MEDIA, "An unrelated post caption",
+                "https://e1.cum.st/media/post.mp4", "", "", creator.url, "", "onlyfans · OnlyHaven");
+        NativeContentItem harvested = ChaosSourceMixer.onlyHavenClip(post, creator);
+        assertEquals(post.title, harvested.title);
+        assertEquals("Jane Doe", ShitTokCreatorMetadata.creatorName(harvested));
+        assertEquals("Jane Doe", ShitTokCreatorMetadata.creatorIdentity(null, harvested).searchQuery);
+    }
+
     @Test public void exactProfileSurvivesCatalogEnrichmentAndKeepsFavoriteAndArtwork() {
         NativeContentItem catalog = new NativeContentItem(NativeContentItem.KIND_CREATOR,
                 "CarrotSoki", "https://fapello.com/carrotsoki/", "https://example.com/avatar.jpg",

@@ -4,6 +4,7 @@ import android.app.Application;
 import android.content.Context;
 
 import org.junit.Test;
+import org.junit.Before;
 import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.RuntimeEnvironment;
@@ -24,6 +25,12 @@ import static org.junit.Assert.*;
 @RunWith(RobolectricTestRunner.class)
 @Config(application = Application.class, sdk = 35)
 public final class FapzoneCreatorSearchRepositoryTest {
+    @Before public void clearLearnedCreators() {
+        Context context = RuntimeEnvironment.getApplication();
+        context.getSharedPreferences(CreatorCatalog.PREFS, 0).edit().clear().commit();
+        context.getSharedPreferences("creator_favorites", 0).edit().clear().commit();
+    }
+
     @Test public void publishesFastSourceBeforeSlowSourceCompletes() throws Exception {
         Context context = RuntimeEnvironment.getApplication();
         ExecutorService executor = Executors.newFixedThreadPool(2);
@@ -95,6 +102,57 @@ public final class FapzoneCreatorSearchRepositoryTest {
         } finally {
             executor.shutdownNow();
         }
+    }
+
+    @Test public void failedSourceCannotTurnHealthyEmptyRepliesIntoConfirmedNoMatches() throws Exception {
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        try {
+            FapzoneCreatorSearchRepository repository = new FapzoneCreatorSearchRepository(executor,
+                    Arrays.asList((context, query, limit) -> { throw new IOException("Fapello unavailable"); },
+                            (context, query, limit) -> Collections.emptyList()));
+            try {
+                repository.search(RuntimeEnvironment.getApplication(), "CarrotSoki", 10);
+                fail("An incomplete search must not claim there were no matches");
+            } catch (IOException expected) {
+                assertTrue(expected.getMessage().contains("incomplete"));
+            }
+        } finally { executor.shutdownNow(); }
+    }
+
+    @Test public void completeHealthyEmptySearchStillReturnsNoMatches() throws Exception {
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        try {
+            FapzoneCreatorSearchRepository repository = new FapzoneCreatorSearchRepository(executor,
+                    Collections.singletonList((context, query, limit) -> Collections.emptyList()));
+            assertTrue(repository.search(RuntimeEnvironment.getApplication(), "CarrotSoki", 10).isEmpty());
+        } finally { executor.shutdownNow(); }
+    }
+
+    @Test public void successfulMatchesSurviveAnotherSourcesFailure() throws Exception {
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        try {
+            FapzoneCreatorSearchRepository repository = new FapzoneCreatorSearchRepository(executor,
+                    Arrays.asList((context, query, limit) -> { throw new IOException("unavailable"); },
+                            (context, query, limit) -> Collections.singletonList(creator("CarrotSoki", "Fapello"))));
+            assertEquals("CarrotSoki", repository.search(RuntimeEnvironment.getApplication(),
+                    "Carrot Soki", 10).get(0).title);
+        } finally { executor.shutdownNow(); }
+    }
+
+    @Test public void sharedSearchIncludesLearnedProfilesEvenWhenEveryLiveSourceFails() throws Exception {
+        Context context = RuntimeEnvironment.getApplication();
+        context.getSharedPreferences(CreatorCatalog.PREFS, 0).edit().clear().commit();
+        NativeContentItem known = new NativeContentItem(NativeContentItem.KIND_CREATOR,
+                "CarrotSoki", "https://fapello.com/carrotsoki-2/", "", "", "", "", "Fapello", "CarrotSoki");
+        CreatorCatalog.remember(context, Collections.singletonList(known));
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        try {
+            FapzoneCreatorSearchRepository repository = new FapzoneCreatorSearchRepository(executor,
+                    Collections.singletonList((ignored, query, limit) -> { throw new IOException("unavailable"); }));
+            List<NativeContentItem> found = repository.search(context, "Carrot Soki", 10);
+            assertEquals(1, found.size());
+            assertEquals(known.url, found.get(0).url);
+        } finally { executor.shutdownNow(); }
     }
 
     private NativeContentItem creator(String name, String source) {

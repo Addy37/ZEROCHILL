@@ -61,6 +61,13 @@ final class FapzoneCreatorSearchRepository {
         String cleanQuery = query == null ? "" : query.trim();
         if (cleanQuery.length() < 2) return new ArrayList<>();
         int safeLimit = Math.max(1, Math.min(20, limit));
+        ArrayList<NativeContentItem> learned = new ArrayList<>();
+        if (context != null) {
+            for (NativeContentItem item : CreatorCatalog.matching(context, cleanQuery, false, safeLimit)) {
+                if (matchesQuery(item, cleanQuery) && hasUsableDisplayName(item)) learned.add(item);
+            }
+        }
+        if (listener != null && !learned.isEmpty()) publish(listener, learned, false);
         ExecutorCompletionService<List<NativeContentItem>> completed =
                 new ExecutorCompletionService<>(searchIo);
         ArrayList<Future<List<NativeContentItem>>> requests = new ArrayList<>();
@@ -80,6 +87,7 @@ final class FapzoneCreatorSearchRepository {
                 if (reply == null) break;
                 replies++;
                 List<NativeContentItem> items = reply.get();
+                if (items == null) throw new IOException("Creator source returned no response");
                 successes++;
                 if (items != null) {
                     for (NativeContentItem item : items) {
@@ -88,7 +96,8 @@ final class FapzoneCreatorSearchRepository {
                     }
                 }
                 if (listener != null && replies < requests.size() && !groups.isEmpty()) {
-                    publish(listener, snapshot(groups, safeLimit), false);
+                    publish(listener, OnlyFapCreatorResults.merge(
+                            learned, snapshot(groups, safeLimit), safeLimit), false);
                 }
             } catch (InterruptedException interrupted) {
                 Thread.currentThread().interrupt();
@@ -102,9 +111,15 @@ final class FapzoneCreatorSearchRepository {
             android.util.Log.w("OnlyFapSearch", (requests.size() - replies)
                     + " creator sources timed out or were cancelled");
         }
-        if (successes == 0) throw new IOException("OnlyFap creator search could not be reached");
+        if (successes == 0 && learned.isEmpty()) {
+            throw new IOException("OnlyFap creator search could not be reached");
+        }
 
-        ArrayList<NativeContentItem> output = snapshot(groups, safeLimit);
+        ArrayList<NativeContentItem> output = new ArrayList<>(
+                OnlyFapCreatorResults.merge(learned, snapshot(groups, safeLimit), safeLimit));
+        if (output.isEmpty() && successes < requests.size()) {
+            throw new IOException("Creator search was incomplete; some sources were unavailable");
+        }
         if (listener != null) publish(listener, output, true);
         return output;
     }

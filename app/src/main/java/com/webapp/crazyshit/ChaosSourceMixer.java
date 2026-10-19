@@ -478,7 +478,8 @@ final class ChaosSourceMixer {
         return new NativeContentItem(
                 item.kind, item.title, item.url, item.imageUrl, item.views,
                 creator.url.isEmpty() ? item.uploader : creator.url,
-                item.comments, item.description, item.searchQuery,
+                item.comments, item.description,
+                creator.name.isEmpty() ? item.searchQuery : creator.name,
                 item.publishedAtMillis, item.aspectRatioHint
         );
     }

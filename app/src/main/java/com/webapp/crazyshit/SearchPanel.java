@@ -496,10 +496,10 @@ final class SearchPanel {
                 progress.setVisibility(View.GONE);
 
                 if (creators == null) {
-                    searchState.setText("Live sources unavailable · Saved creators shown · Tap to retry");
+                    searchState.setText("Creator search incomplete · Saved creators shown · Tap to retry");
                     searchState.setContentDescription(searchState.getText());
                     if (onlyFapLocal.isEmpty()) {
-                        status.setText("Couldn't reach the creator sources right now.\nTap the message above to retry.");
+                        status.setText("Some creator sources couldn't be checked.\nTap the message above to retry.");
                         status.setVisibility(View.VISIBLE);
                     }
                     return;

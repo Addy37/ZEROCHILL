@@ -17,6 +17,33 @@ import static org.junit.Assert.fail;
 public final class FapelloRepositoryTest {
     private final FapelloRepository repository = new FapelloRepository();
 
+    @Test public void duplicateWeeklyClipKeepsCreatorEvenWhenFirstEntryHasThumbnail() {
+        String video = "https://fapello.com/video/week/31142429/";
+        String html = "<div><a href='" + video + "'><img src='/preview.jpg'></a></div>"
+                + "<div><a href='/carrotsoki-2/' title='CarrotSoki'>CarrotSoki</a>"
+                + "<a href='" + video + "'>Video</a></div>"
+                + "<a href='/other-profile/'>Another creator outside the cards</a>";
+        List<NativeContentItem> items = repository.parsePopularVideos(Jsoup.parse(html, FapelloRepository.BASE),
+                FapelloRepository.BASE);
+        assertEquals(1, items.size());
+        assertEquals("https://fapello.com/preview.jpg", items.get(0).imageUrl);
+        assertEquals("CarrotSoki", items.get(0).uploader);
+        assertEquals("https://fapello.com/carrotsoki-2/", items.get(0).searchQuery);
+    }
+
+    @Test public void richerThumbnailDuplicateDoesNotEraseEarlierCreatorProfile() {
+        String video = "https://fapello.com/video/week/31142429/";
+        String html = "<div><a href='/carrotsoki-2/' title='CarrotSoki'>CarrotSoki</a>"
+                + "<a href='" + video + "'>Video</a></div>"
+                + "<div><a href='" + video + "'><img src='/preview.jpg'></a></div>"
+                + "<a href='/other-profile/'>Another creator outside the cards</a>";
+        NativeContentItem item = repository.parsePopularVideos(Jsoup.parse(html, FapelloRepository.BASE),
+                FapelloRepository.BASE).get(0);
+        assertEquals("https://fapello.com/preview.jpg", item.imageUrl);
+        assertEquals("CarrotSoki", item.uploader);
+        assertEquals("https://fapello.com/carrotsoki-2/", item.searchQuery);
+    }
+
     @Test public void searchParsingReturnsCanonicalDeduplicatedCreators() throws Exception {
         List<FapelloRepository.Model> models = repository.parseSearchResponse(fixture("search.json"));
         assertEquals(2, models.size());

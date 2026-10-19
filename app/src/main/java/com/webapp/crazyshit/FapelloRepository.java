@@ -524,8 +524,12 @@ final class FapelloRepository {
                     "", creator == null ? "" : creator.name, "", "OnlyFap",
                     creator == null ? "" : creator.url);
             NativeContentItem existing = items.get(pageUrl);
-            if (existing == null || (existing.imageUrl.isEmpty() && !thumbnail.isEmpty())) {
+            if (existing == null) {
                 items.put(pageUrl, candidate);
+            } else if (existing.imageUrl.isEmpty() && !thumbnail.isEmpty()) {
+                items.put(pageUrl, candidate.merge(existing));
+            } else {
+                items.put(pageUrl, existing.merge(candidate));
             }
         }
         return new ArrayList<>(items.values());
