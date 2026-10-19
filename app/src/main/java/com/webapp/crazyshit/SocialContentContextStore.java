@@ -14,6 +14,8 @@ final class SocialContentContextStore {
         if (context == null || item == null || item.url.isEmpty()) return;
         try {
             JSONArray existing = read(context);
+            NativeContentItem previous = find(context, item.url);
+            item = OnlyFapVideoMetadata.merge(item, previous);
             JSONArray updated = new JSONArray().put(ContentItemCodec.encode(item));
             String key = ZeroChillSocialRepository.contentKey(item.url);
             for (int i = 0; i < existing.length() && updated.length() < LIMIT; i++) {
@@ -114,7 +116,22 @@ final class SocialContentContextStore {
         return out;
     }
 
-    private static java.util.Map<String, NativeContentItem> knownVideos(Context context, String owner) {
+    static synchronized void enrichConfirmedLike(Context context, NativeContentItem item) {
+        String owner = ZeroChillSessionStore.currentUserId(context);
+        if (owner.isEmpty()) return;
+        String key = ZeroChillSocialRepository.contentKey(item.url);
+        JSONArray rows = likeRows(context, owner);
+        for (int i = 0; i < rows.length(); i++) {
+            JSONObject row = rows.optJSONObject(i);
+            if (row == null || !key.equals(row.optString("key"))) continue;
+            try { row.put("item", ContentItemCodec.encode(item)).put("url", item.url); }
+            catch (Exception ignored) { return; }
+            saveLikes(context, owner, rows);
+            return;
+        }
+    }
+
+    static java.util.Map<String, NativeContentItem> knownVideos(Context context, String owner) {
         java.util.Map<String, NativeContentItem> known = new java.util.LinkedHashMap<>();
         // Keep reversible URLs from confirmed likes even after local history is trimmed.
         JSONArray likes = likeRows(context, owner);
@@ -125,16 +142,25 @@ final class SocialContentContextStore {
                     ? ContentItemCodec.decode(row.optJSONObject("item")) : new NativeContentItem(
                     NativeContentItem.KIND_MEDIA, "Liked video", url, "", "", "", ""));
         }
-        for (FavoriteStore.Item item : FavoriteStore.load(context)) known.put(ZeroChillSocialRepository.contentKey(item.url),
-                new NativeContentItem(NativeContentItem.KIND_MEDIA, item.title, item.url, "", "", "", ""));
+        for (FavoriteStore.Item item : FavoriteStore.load(context)) {
+            String key = ZeroChillSocialRepository.contentKey(item.url);
+            NativeContentItem base = item.content == null
+                    ? OnlyFapVideoMetadata.basic(item.title, item.url, "") : item.content;
+            known.put(key, OnlyFapVideoMetadata.merge(base, known.get(key)));
+        }
         JSONArray metadata = read(context);
         for (int i = 0; i < metadata.length(); i++) {
             JSONObject row = metadata.optJSONObject(i);
             NativeContentItem item = row == null ? null : ContentItemCodec.decode(row);
-            if (item != null && item.isVideo()) known.put(ZeroChillSocialRepository.contentKey(item.url), item);
+            if (item != null && item.isVideo()) known.put(ZeroChillSocialRepository.contentKey(item.url),
+                    OnlyFapVideoMetadata.merge(item, known.get(ZeroChillSocialRepository.contentKey(item.url))));
         }
-        for (PlaybackHistoryStore.Item item : PlaybackHistoryStore.load(context)) known.put(ZeroChillSocialRepository.contentKey(item.pageUrl),
-                new NativeContentItem(NativeContentItem.KIND_MEDIA, item.title, item.pageUrl, item.posterUrl, "", "", ""));
+        for (PlaybackHistoryStore.Item item : PlaybackHistoryStore.load(context)) {
+            String key = ZeroChillSocialRepository.contentKey(item.pageUrl);
+            NativeContentItem base = item.content == null
+                    ? OnlyFapVideoMetadata.basic(item.title, item.pageUrl, item.posterUrl) : item.content;
+            known.put(key, OnlyFapVideoMetadata.merge(base, known.get(key)));
+        }
         return known;
     }
 

@@ -182,7 +182,7 @@ public final class LikedVideosActivity extends Activity {
         }
         @Override public void onBindViewHolder(Holder holder, int position) {
             NativeContentItem item = items.get(position);
-            holder.title.setText(item.title);
+            holder.title.setText(OnlyFapVideoMetadata.displayTitle(item));
             holder.itemView.setContentDescription("Play liked video " + item.title);
             Glide.with(holder.image).clear(holder.image);
             holder.image.setImageResource(R.drawable.ic_more_account);

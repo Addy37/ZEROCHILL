@@ -86,6 +86,7 @@ final class LibraryHubView extends ScrollView {
     private boolean loading;
     private int revision;
     private Snapshot displayed;
+    private Map<String, NativeContentItem> videoMetadata = java.util.Collections.emptyMap();
     private int resolverCursor;
     private volatile boolean closed;
 
@@ -168,6 +169,7 @@ final class LibraryHubView extends ScrollView {
     }
 
     private void render(Snapshot snapshot) {
+        videoMetadata = snapshot.videoMetadata;
         int scrollY = getScrollY();
         Map<String, int[]> railPositions = new HashMap<>();
         for (int i = 0; i < mediaContent.getChildCount(); i++) {
@@ -195,14 +197,14 @@ final class LibraryHubView extends ScrollView {
             if (!snapshot.creators.isEmpty()) addCreatorSection(snapshot.creators, snapshot.avatars);
         });
         retainSection("liked", java.util.Arrays.asList(snapshot.owner, snapshot.inputs.get(0),
-                snapshot.inputs.get(snapshot.inputs.size() - 1)), () -> addLikedSection(snapshot.likedVideos));
-        retainSection("downloads", java.util.Arrays.asList(snapshot.inputs.get(6), snapshot.downloadState), () -> {
+                snapshot.inputs.get(snapshot.inputs.size() - 1), snapshot.metadataKey), () -> addLikedSection(snapshot.likedVideos));
+        retainSection("downloads", java.util.Arrays.asList(snapshot.inputs.get(6), snapshot.downloadState, snapshot.metadataKey), () -> {
             if (!snapshot.downloads.isEmpty()) addDownloadsSection(snapshot.downloads);
         });
-        retainSection("watch-later", java.util.Arrays.asList(snapshot.inputs.get(0), snapshot.inputs.get(1)), () -> {
+        retainSection("watch-later", java.util.Arrays.asList(snapshot.inputs.get(0), snapshot.inputs.get(1), snapshot.metadataKey), () -> {
             if (!snapshot.watchLater.isEmpty()) addWatchLaterSection(snapshot.watchLater, historyByUrl);
         });
-        retainSection("history", snapshot.inputs.get(0), () -> {
+        retainSection("history", java.util.Arrays.asList(snapshot.inputs.get(0), snapshot.metadataKey), () -> {
             if (!history.isEmpty()) addHistorySection(history);
         });
         if (snapshot.likedVideos.isEmpty() && snapshot.creators.isEmpty() && snapshot.watchLater.isEmpty()
@@ -274,6 +276,8 @@ final class LibraryHubView extends ScrollView {
     private static final class Snapshot {
         final List<String> inputs = new ArrayList<>();
         final List<PlaybackHistoryStore.Item> history;
+        final Map<String, NativeContentItem> videoMetadata;
+        final String metadataKey;
         final List<NativeContentItem> likedVideos;
         final String owner;
         final List<CreatorCatalog.FavoriteGroup> creators;
@@ -294,12 +298,14 @@ final class LibraryHubView extends ScrollView {
             }
             downloadState = state.toString();
             if (previous != null && owner.equals(previous.owner) && inputs.equals(previous.inputs)) {
+                videoMetadata = previous.videoMetadata;
                 history = previous.history;
                 likedVideos = previous.likedVideos;
                 creators = previous.creators;
                 avatars = previous.avatars;
                 watchLater = previous.watchLater;
             } else {
+                videoMetadata = OnlyFapVideoMetadata.snapshot(activity);
                 history = PlaybackHistoryStore.load(activity);
                 likedVideos = first(SocialContentContextStore.likedVideos(activity, owner), 10);
                 creators = first(CreatorCatalog.favoriteGroups(activity), 14);
@@ -312,6 +318,10 @@ final class LibraryHubView extends ScrollView {
                 }
                 watchLater = first(FavoriteStore.load(activity), 10);
             }
+            String encoded = "";
+            try { encoded = ContentItemCodec.encodeList(new ArrayList<>(videoMetadata.values()),
+                    videoMetadata.size()).toString(); } catch (Exception ignored) { }
+            metadataKey = encoded;
         }
         private static <T> List<T> first(List<T> items, int limit) {
             return new ArrayList<>(items.subList(0, Math.min(items.size(), limit)));
@@ -395,7 +405,8 @@ final class LibraryHubView extends ScrollView {
         remainingParams.setMargins(0, dp(10), dp(10), 0);
         frame.addView(remaining, remainingParams);
 
-        TextView title = mediaTitle(item.title);
+        TextView title = mediaTitle(OnlyFapVideoMetadata.displayTitle(
+                videoItem(item.title, item.pageUrl, item.posterUrl)));
         FrameLayout.LayoutParams titleParams =
                 new FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM);
         titleParams.setMargins(dp(10), 0, dp(10), dp(17));
@@ -595,7 +606,8 @@ final class LibraryHubView extends ScrollView {
             frame.addView(status, statusParams);
         }
 
-        TextView title = mediaTitle(entry.title);
+        TextView title = mediaTitle(OnlyFapVideoMetadata.displayTitle(
+                videoItem(entry.title, entry.pageUrl, entry.imageUrl)));
         FrameLayout.LayoutParams titleParams =
                 new FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM);
         titleParams.setMargins(dp(10), 0, dp(10), dp(8));
@@ -632,13 +644,16 @@ final class LibraryHubView extends ScrollView {
         FrameLayout frame = new FrameLayout(activity);
         card.addView(frame, new MaterialCardView.LayoutParams(-1, -1));
 
+        NativeContentItem content = videoItem(title, pageUrl, posterUrl);
         ImageView image = mediaImage(frame);
-        loadMediaImage(image, pageUrl, posterUrl, false);
+        loadMediaImage(image, pageUrl, content.imageUrl, false);
 
         View shade = new View(activity);
         shade.setBackground(bottomShade());
         frame.addView(shade, new FrameLayout.LayoutParams(-1, dp(88), Gravity.BOTTOM));
 
+        if ((badge == null || badge.isEmpty()) && OnlyFapVideoMetadata.applies(
+                videoItem(title, pageUrl, posterUrl))) badge = "OnlyFap";
         if (badge != null && !badge.isEmpty()) {
             TextView badgeView = pill(badge);
             FrameLayout.LayoutParams badgeParams =
@@ -647,13 +662,13 @@ final class LibraryHubView extends ScrollView {
             frame.addView(badgeView, badgeParams);
         }
 
-        TextView titleView = mediaTitle(title);
+        TextView titleView = mediaTitle(OnlyFapVideoMetadata.displayTitle(content));
         FrameLayout.LayoutParams titleParams =
                 new FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM);
         titleParams.setMargins(dp(10), 0, dp(10), dp(8));
         frame.addView(titleView, titleParams);
 
-        card.setContentDescription(title);
+        card.setContentDescription(OnlyFapVideoMetadata.displayTitle(content));
         card.setOnClickListener(v -> {
             if (listener != null && !clean(pageUrl).isEmpty()) {
                 listener.onOpenWatchLater(videoItem(title, pageUrl, posterUrl));
@@ -977,7 +992,7 @@ final class LibraryHubView extends ScrollView {
     }
 
     private NativeContentItem videoItem(String title, String pageUrl, String posterUrl) {
-        return new NativeContentItem(
+        return OnlyFapVideoMetadata.merge(videoMetadata.get(pageUrl), new NativeContentItem(
                 NativeContentItem.KIND_MEDIA,
                 clean(title).isEmpty() ? "Saved video" : title,
                 pageUrl,
@@ -985,7 +1000,7 @@ final class LibraryHubView extends ScrollView {
                 "",
                 "",
                 ""
-        );
+        ));
     }
 
     private void openSavedVideos(int startTab) {

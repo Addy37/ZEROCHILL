@@ -230,6 +230,22 @@ jobs:
           --tests 'com.webapp.crazyshit.OnlyFapFavoriteAvatarTest'
           --tests 'com.webapp.crazyshit.PrimaryTab*'
 
+      - name: Run focused OnlyFap Library regressions first
+        if: ${{ github.head_ref == 'fix/library-onlyfap-creator-context' }}
+        run: >-
+          gradle --no-daemon :app:testDebugUnitTest
+          --tests 'com.webapp.crazyshit.OnlyFapLibrary*Test'
+          --tests 'com.webapp.crazyshit.PlaybackHistoryStoreTest'
+          --tests 'com.webapp.crazyshit.CreatorBackupTest'
+          --tests 'com.webapp.crazyshit.LibraryProfileTest'
+          --tests 'com.webapp.crazyshit.LibrarySocialHubTest'
+          --tests 'com.webapp.crazyshit.PrimaryTabLibraryTest'
+          --tests 'com.webapp.crazyshit.SocialContentNavigationTest'
+          --tests 'com.webapp.crazyshit.DownloadResumePolicyTest'
+          --tests 'com.webapp.crazyshit.VideoDetailProgressTest'
+          --tests 'com.webapp.crazyshit.FapelloRepositoryTest'
+          --tests 'com.webapp.crazyshit.ShitTokSwipeStartTest'
+
       - name: Run focused ShitTok creator handoff regressions first
         run: >-
           gradle --no-daemon :app:testDebugUnitTest

@@ -60,6 +60,22 @@ final class BackupDocument {
             JSONObject item = later.getJSONObject(i);
             requireText(item, "title", 1000, false);
             requireUrl(item.getString("url"), false);
+            if (item.has("content")) {
+                JSONObject content = item.getJSONObject("content");
+                if (!NativeContentItem.KIND_MEDIA.equals(content.optString("kind"))
+                        || !item.getString("url").equals(content.optString("url")))
+                    throw new IOException("A saved video's metadata does not match its link.");
+                requireText(content, "name", 1000, true);
+                requireText(content, "description", 1000, true);
+                requireText(content, "query", 4096, true);
+                requireText(content, "referer", 4096, true);
+                requireUrl(content.getString("url"), false);
+                requireUrl(content.optString("image"), true);
+                for (String key : new String[]{"query", "referer"}) {
+                    String value = content.getString(key);
+                    if (value.contains("://")) requireUrl(value, false);
+                }
+            }
             if (!(item.opt("savedAt") instanceof Number) || item.getLong("savedAt") < 0)
                 throw new IOException("A saved item's date is invalid.");
         }

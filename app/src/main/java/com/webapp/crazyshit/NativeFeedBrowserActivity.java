@@ -1871,7 +1871,7 @@ public final class NativeFeedBrowserActivity extends Activity {
             FavoriteStore.remove(this, item.url);
             ZeroChillToast.makeText(this, "Removed from Watch Later.", ZeroChillToast.LENGTH_SHORT).show();
         } else {
-            FavoriteStore.add(this, item.title, item.url);
+            FavoriteStore.add(this, item);
             ZeroChillToast.makeText(this, "Saved to Watch Later.", ZeroChillToast.LENGTH_SHORT).show();
         }
     }

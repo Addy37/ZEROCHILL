@@ -216,6 +216,7 @@ public class FavoritesActivity extends Activity {
             if (LibrarySearch.matches(
                     query,
                     item.title,
+                    item.content == null ? "" : OnlyFapVideoMetadata.displayTitle(item.content),
                     item.pageUrl,
                     item.fromShows ? "shows" : ""
             )) {
@@ -269,7 +270,8 @@ public class FavoritesActivity extends Activity {
         shade.setBackground(bottomShade());
         media.addView(shade, new FrameLayout.LayoutParams(-1, -1));
 
-        TextView title = text(item.title, 13, Color.WHITE);
+        TextView title = text(OnlyFapVideoMetadata.displayTitle(item.content == null
+                ? OnlyFapVideoMetadata.basic(item.title, item.pageUrl, item.posterUrl) : item.content), 13, Color.WHITE);
         title.setTypeface(null, android.graphics.Typeface.BOLD);
         title.setMaxLines(2);
         title.setEllipsize(TextUtils.TruncateAt.END);
@@ -346,7 +348,8 @@ public class FavoritesActivity extends Activity {
         String query = searchQuery();
         List<FavoriteStore.Item> items = new ArrayList<>();
         for (FavoriteStore.Item item : allItems) {
-            if (LibrarySearch.matches(query, item.title, item.url)) {
+            if (LibrarySearch.matches(query, item.title, item.url,
+                    item.content == null ? "" : OnlyFapVideoMetadata.displayTitle(item.content))) {
                 items.add(item);
             }
         }
@@ -391,7 +394,8 @@ public class FavoritesActivity extends Activity {
         shade.setBackground(bottomShade());
         media.addView(shade, new FrameLayout.LayoutParams(-1, -1));
 
-        TextView title = text(item.title, 13, Color.WHITE);
+        TextView title = text(OnlyFapVideoMetadata.displayTitle(item.content == null
+                ? OnlyFapVideoMetadata.basic(item.title, item.url, "") : item.content), 13, Color.WHITE);
         title.setTypeface(null, android.graphics.Typeface.BOLD);
         title.setMaxLines(2);
         title.setEllipsize(TextUtils.TruncateAt.END);

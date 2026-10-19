@@ -177,6 +177,7 @@ public final class DownloadedActivity extends Activity {
             if (LibrarySearch.matches(
                     query,
                     entry.title,
+                    entry.content == null ? "" : OnlyFapVideoMetadata.displayTitle(entry.content),
                     entry.pageUrl,
                     entry.mediaUrl,
                     VideoDownloadStore.statusText(entry)
@@ -323,7 +324,8 @@ public final class DownloadedActivity extends Activity {
         moreParams.setMargins(0, dp(5), dp(5), 0);
         media.addView(more, moreParams);
 
-        TextView title = text(entry.title, 13, Color.WHITE, true);
+        TextView title = text(OnlyFapVideoMetadata.displayTitle(entry.content == null
+                ? OnlyFapVideoMetadata.basic(entry.title, entry.pageUrl, entry.imageUrl) : entry.content), 13, Color.WHITE, true);
         title.setMaxLines(2);
         title.setEllipsize(TextUtils.TruncateAt.END);
         FrameLayout.LayoutParams titleParams =
