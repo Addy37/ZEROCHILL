@@ -81,11 +81,28 @@ final class FapelloRepository {
         Document fetch(Model model) throws IOException;
     }
 
+    interface SearchQueryFetcher {
+        String fetch(String query, int offset, int limit) throws IOException;
+    }
+
     List<Model> searchModels(Context context, String query, int limit) throws IOException {
         requireEnabled();
-        return searchMatchingModels(query, limit, (offset, size) ->
-                fetchBody(context, searchUrl(query, size, offset), baseUrl(), true),
+        return searchModelsWithQueryFallback(query, limit, (name, offset, size) ->
+                fetchBody(context, searchUrl(name, size, offset), baseUrl(), true),
                 model -> fetchDocument(context, model.url, baseUrl()));
+    }
+
+    List<Model> searchModelsWithQueryFallback(String query, int limit, SearchQueryFetcher fetcher,
+                                             SearchProfileFetcher profiles) throws IOException {
+        String name = clean(query);
+        List<Model> found = searchMatchingModels(name, limit,
+                (offset, size) -> fetcher.fetch(name, offset, size), profiles);
+        String compact = name.replaceAll("\\s+", "");
+        if (!found.isEmpty() || compact.equals(name)) return found;
+        // Fapello can return unrelated fuzzy results for spaced handles such as Carrot Soki.
+        // Keep the original matching/alias rules while retrying the compact handle once.
+        return searchMatchingModels(name, limit,
+                (offset, size) -> fetcher.fetch(compact, offset, size), profiles);
     }
 
     List<Model> searchMatchingModels(String query, int limit, SearchPageFetcher fetcher) throws IOException {

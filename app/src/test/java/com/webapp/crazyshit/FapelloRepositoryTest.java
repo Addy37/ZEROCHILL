@@ -108,6 +108,27 @@ public final class FapelloRepositoryTest {
         assertEquals(1, calls[0]);
     }
 
+    @Test public void spacedHandleRetriesCompactSourceQueryAfterUnrelatedResults() throws Exception {
+        java.util.ArrayList<String> queries = new java.util.ArrayList<>();
+        List<FapelloRepository.Model> found = repository.searchModelsWithQueryFallback("Carrot Soki", 8,
+                (query, offset, size) -> {
+                    queries.add(query);
+                    if (query.equals("Carrot Soki")) return "{\"results\":[{\"name\":\"Sasha_candy\","
+                            + "\"url\":\"https://fapello.com/sasha-candy/\"}],\"has_more\":false}";
+                    return fixture("search-carrotsoki-window.json");
+                }, null);
+        assertEquals(java.util.Arrays.asList("Carrot Soki", "CarrotSoki"), queries);
+        assertEquals("CarrotSoki", found.get(0).name);
+    }
+
+    @Test public void exactNameNeedsNoCompactQueryRetry() throws Exception {
+        int[] queries = {0};
+        List<FapelloRepository.Model> found = repository.searchModelsWithQueryFallback("Sample Creator", 8,
+                (query, offset, size) -> { queries[0]++; return fixture("search.json"); }, null);
+        assertFalse(found.isEmpty());
+        assertEquals(1, queries[0]);
+    }
+
     private static Document aliasProfile(String canonical, String heading, String aliases) {
         return Jsoup.parse("<link rel='canonical' href='" + canonical + "'>"
                 + "<h2>" + heading + "</h2><p class='font-semibold'>" + aliases + "</p>",
