@@ -206,9 +206,11 @@ public class OnlyFapLibraryMetadataTest {
                 "", "", PROFILE, "", "Fapello");
         assertEquals("CarrotSoki", OnlyFapVideoMetadata.displayTitle(gallery));
         assertEquals(PROFILE, OnlyFapVideoMetadata.creator(gallery).url);
-        NativeContentItem legacy = new NativeContentItem(NativeContentItem.KIND_MEDIA, "An unrelated caption",
-                "https://e1.cum.st/clip.mp4", "", "", "https://cum.st/creators/onlyfans/id", "", "OnlyHaven");
-        assertNull(OnlyFapVideoMetadata.creator(legacy));
+        for (String query : new String[]{"", "OnlyHaven"}) {
+            NativeContentItem legacy = new NativeContentItem(NativeContentItem.KIND_MEDIA, "An unrelated caption",
+                    "https://e1.cum.st/clip.mp4", "", "", "https://cum.st/creators/onlyfans/id", "", "OnlyHaven", query);
+            assertNull(OnlyFapVideoMetadata.creator(legacy));
+        }
     }
 
     @Test public void backupRoundTripRetainsCreatorAndRejectsNonWebMetadataImages() throws Exception {

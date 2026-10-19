@@ -38,7 +38,9 @@ final class OnlyFapVideoMetadata {
 
     static NativeContentItem creator(NativeContentItem item) {
         if (!applies(item)) return null;
-        if (!FapelloRepository.isFapelloUrl(item.url) && item.searchQuery.isEmpty()) return null;
+        if (!FapelloRepository.isFapelloUrl(item.url) && !FapelloRepository.isModelUrl(item.uploader)
+                && (item.searchQuery.trim().isEmpty() || !item.searchQuery.trim().equals(
+                ShitTokCreatorMetadata.creatorName(item)))) return null;
         NativeContentItem creator = ShitTokCreatorMetadata.creatorIdentity(null, item);
         if (creator != null && !creator.title.regionMatches(true, 0, "http", 0, 4)
                 && creator.title.codePoints().anyMatch(Character::isLetter)) return creator;
