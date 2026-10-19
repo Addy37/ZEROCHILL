@@ -44,10 +44,15 @@ final class VideoDownloadStore {
 
     static void downloadPage(Context context, NativeContentItem item) {
         if (item == null) return;
-        downloadPage(context, item.title, item.url, item.imageUrl);
+        downloadPage(context, item.title, item.url, item.imageUrl, item);
     }
 
     static void downloadPage(Context context, String title, String pageUrl, String imageUrl) {
+        downloadPage(context, title, pageUrl, imageUrl, null);
+    }
+
+    private static void downloadPage(Context context, String title, String pageUrl, String imageUrl,
+                                     NativeContentItem content) {
         if (context == null || pageUrl == null || pageUrl.trim().isEmpty()) return;
         Context app = context.getApplicationContext();
         toast(app, "Preparing download…");
@@ -58,6 +63,8 @@ final class VideoDownloadStore {
             } catch (Exception ignored) {
             }
             CrazyShitRepository.StreamInfo resolved = stream;
+            NativeContentItem enriched = OnlyFapVideoMetadata.restore(app,
+                    content == null ? OnlyFapVideoMetadata.basic(title, pageUrl, imageUrl) : content);
             MAIN.post(() -> {
                 if (resolved == null || resolved.mediaUrl == null || resolved.mediaUrl.isEmpty()) {
                     toast(app, "Couldn't find a downloadable video file.");
@@ -72,7 +79,7 @@ final class VideoDownloadStore {
                         resolved.mediaUrl,
                         defaultUserAgent(app),
                         cookiesFor(resolved.mediaUrl, pageUrl),
-                        resolved.requestReferer
+                        resolved.requestReferer, enriched
                 );
             });
         });
@@ -123,7 +130,7 @@ final class VideoDownloadStore {
         );
     }
 
-    private static synchronized void enqueue(
+    private static void enqueue(
             Context context,
             String title,
             String pageUrl,
@@ -132,6 +139,28 @@ final class VideoDownloadStore {
             String userAgent,
             String cookies,
             String requestReferer
+    ) {
+        enqueue(context, title, pageUrl, imageUrl, mediaUrl, userAgent, cookies, requestReferer, null);
+    }
+
+    static void downloadKnown(Context context, NativeContentItem content, String mediaUrl,
+                              String userAgent, String cookies, String requestReferer) {
+        if (context == null || content == null) return;
+        enqueue(context.getApplicationContext(), content.title, content.url, content.imageUrl,
+                safe(mediaUrl), safe(userAgent).isEmpty() ? defaultUserAgent(context) : userAgent,
+                safe(cookies).isEmpty() ? cookiesFor(mediaUrl, content.url) : cookies,
+                safe(requestReferer).isEmpty() ? content.url : requestReferer, content);
+    }
+
+    private static synchronized void enqueue(
+            Context context,
+            String title,
+            String pageUrl,
+            String imageUrl,
+            String mediaUrl,
+            String userAgent,
+            String cookies,
+            String requestReferer, NativeContentItem content
     ) {
         String lower = mediaUrl.toLowerCase(Locale.US);
         if (!lower.startsWith("https://") && !lower.startsWith("http://")) {
@@ -175,7 +204,7 @@ final class VideoDownloadStore {
                         0L,
                         -1L,
                         "",
-                        0
+                        0, OnlyFapVideoMetadata.applies(content) ? content : null
                 ));
                 AcceleratedDownloadService.start(
                         context,
@@ -231,7 +260,7 @@ final class VideoDownloadStore {
                     0L,
                     -1L,
                     "",
-                    0
+                    0, OnlyFapVideoMetadata.applies(content) ? content : null
             ));
             toast(context, "Download started in Downloads.");
         } catch (Exception ignored) {
@@ -328,7 +357,9 @@ final class VideoDownloadStore {
         player.putExtra(PlayerActivity.EXTRA_PAGE_URL, entry.pageUrl);
         player.putExtra(PlayerActivity.EXTRA_TITLE, entry.title);
         player.putExtra(VideoDetailActivity.EXTRA_POSTER_URL, entry.imageUrl);
-        player.putExtra(VideoDetailActivity.EXTRA_SHOWS_ORIGIN, true);
+        player.putExtra(VideoDetailActivity.EXTRA_SHOWS_ORIGIN, !OnlyFapVideoMetadata.applies(
+                entry.content == null ? OnlyFapVideoMetadata.basic(entry.title, entry.pageUrl, entry.imageUrl) : entry.content));
+        OnlyFapVideoMetadata.put(player, entry.content);
         player.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
         activity.startActivity(player);
     }
@@ -403,11 +434,11 @@ final class VideoDownloadStore {
                     if (entry.id >= 0L || Build.VERSION.SDK_INT < 29) {
                         remove(app, current);
                         enqueue(app, entry.title, entry.pageUrl, entry.imageUrl, media,
-                                defaultUserAgent(app), cookiesFor(media, entry.pageUrl), stream.requestReferer);
+                                defaultUserAgent(app), cookiesFor(media, entry.pageUrl), stream.requestReferer, entry.content);
                     } else {
                         saveMetadata(app, new Entry(entry.id, entry.title, entry.pageUrl, entry.imageUrl, media,
                                 mimeType(media), entry.createdAt, DownloadManager.STATUS_PENDING,
-                                current.downloadedBytes, current.totalBytes, current.localUri, 0));
+                                current.downloadedBytes, current.totalBytes, current.localUri, 0, entry.content));
                         AcceleratedDownloadService.start(app, entry.id, entry.title,
                                 fileName(entry.title, entry.pageUrl, mimeType(media)), media, mimeType(media),
                                 requestHeaders(media, stream.requestReferer, defaultUserAgent(app), cookiesFor(media, entry.pageUrl)));
@@ -470,6 +501,7 @@ final class VideoDownloadStore {
         json.put("total", entry.totalBytes);
         json.put("local", entry.localUri);
         json.put("reason", entry.reason);
+        if (entry.content != null) json.put("content", ContentItemCodec.encode(entry.content));
         prefs.edit()
                 .putStringSet(KEY_IDS, ids)
                 .putString(KEY_PREFIX + entry.id, json.toString())
@@ -492,10 +524,35 @@ final class VideoDownloadStore {
                     json.optLong("downloaded", 0L),
                     json.optLong("total", -1L),
                     json.optString("local", ""),
-                    json.optInt("reason", 0)
+                    json.optInt("reason", 0),
+                    OnlyFapVideoMetadata.decode(json.optJSONObject("content"), json.optString("page", ""))
             );
         } catch (Exception ignored) {
             return null;
+        }
+    }
+
+    static List<NativeContentItem> savedContent(Context context) {
+        List<NativeContentItem> out = new ArrayList<>();
+        for (Map.Entry<String, ?> row : context.getSharedPreferences(PREFS, 0).getAll().entrySet()) {
+            if (!row.getKey().startsWith(KEY_PREFIX) || !(row.getValue() instanceof String)) continue;
+            Entry item = metadata((String) row.getValue());
+            if (item != null && item.content != null) out.add(item.content);
+        }
+        return out;
+    }
+
+    static synchronized void enrich(Context context, NativeContentItem content) {
+        for (Map.Entry<String, ?> row : context.getSharedPreferences(PREFS, 0).getAll().entrySet()) {
+            if (!row.getKey().startsWith(KEY_PREFIX) || !(row.getValue() instanceof String)) continue;
+            Entry entry = metadata((String) row.getValue());
+            if (entry == null || !entry.pageUrl.equals(content.url)) continue;
+            try {
+                saveMetadata(context, new Entry(entry.id, entry.title, entry.pageUrl, entry.imageUrl,
+                        entry.mediaUrl, entry.mimeType, entry.createdAt, entry.status,
+                        entry.downloadedBytes, entry.totalBytes, entry.localUri, entry.reason,
+                        OnlyFapVideoMetadata.merge(content, entry.content)));
+            } catch (Exception ignored) { }
         }
     }
 
@@ -654,6 +711,7 @@ final class VideoDownloadStore {
         final long totalBytes;
         final String localUri;
         final int reason;
+        final NativeContentItem content;
 
         Entry(
                 long id,
@@ -669,6 +727,14 @@ final class VideoDownloadStore {
                 String localUri,
                 int reason
         ) {
+            this(id, title, pageUrl, imageUrl, mediaUrl, mimeType, createdAt, status, downloadedBytes,
+                    totalBytes, localUri, reason, null);
+        }
+
+        Entry(long id, String title, String pageUrl, String imageUrl, String mediaUrl, String mimeType,
+              long createdAt, int status, long downloadedBytes, long totalBytes, String localUri,
+              int reason, NativeContentItem content) {
+            this.content = content;
             this.id = id;
             this.title = safe(title);
             this.pageUrl = safe(pageUrl);
@@ -686,7 +752,7 @@ final class VideoDownloadStore {
         Entry withState(int status, long downloaded, long total, String localUri, int reason) {
             return new Entry(
                     id, title, pageUrl, imageUrl, mediaUrl, mimeType, createdAt,
-                    status, downloaded, total, localUri, reason
+                    status, downloaded, total, localUri, reason, content
             );
         }
     }

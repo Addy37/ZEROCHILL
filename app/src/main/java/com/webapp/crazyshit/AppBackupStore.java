@@ -20,8 +20,7 @@ final class AppBackupStore {
         document.put("creators", ContentItemCodec.encodeList(
                 CreatorCatalog.rawFavorites(context), BackupDocument.MAX_ITEMS + 1));
         JSONArray later = new JSONArray();
-        for (FavoriteStore.Item item : FavoriteStore.load(context)) later.put(new JSONObject()
-                .put("title", item.title).put("url", item.url).put("savedAt", item.savedAt));
+        for (FavoriteStore.Item item : FavoriteStore.load(context)) later.put(watchLaterItem(item, item.content));
         document.put("watchLater", later);
         JSONObject settings = new JSONObject();
         for (Map.Entry<String, ?> entry : context.getSharedPreferences("app_prefs", Context.MODE_PRIVATE).getAll().entrySet()) {
@@ -34,6 +33,12 @@ final class AppBackupStore {
         if (document.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8).length > BackupDocument.MAX_BYTES)
             throw new IOException("Your backup is too large to export.");
         return document;
+    }
+
+    private static JSONObject watchLaterItem(FavoriteStore.Item item, NativeContentItem content) throws Exception {
+        JSONObject json = new JSONObject().put("title", item.title).put("url", item.url).put("savedAt", item.savedAt);
+        if (content != null) json.put("content", ContentItemCodec.encode(content));
+        return json;
     }
 
     static synchronized void restore(Context context, JSONObject document) throws Exception {
@@ -53,8 +58,12 @@ final class AppBackupStore {
             JSONObject item = incoming.getJSONObject(i);
             watchLater.put(item.getString("url"), item);
         }
-        for (FavoriteStore.Item item : FavoriteStore.load(context)) watchLater.put(item.url, new JSONObject()
-                .put("title", item.title).put("url", item.url).put("savedAt", item.savedAt));
+        for (FavoriteStore.Item item : FavoriteStore.load(context)) {
+            JSONObject incomingItem = watchLater.get(item.url);
+            NativeContentItem imported = incomingItem == null ? null
+                    : OnlyFapVideoMetadata.decode(incomingItem.optJSONObject("content"), item.url);
+            watchLater.put(item.url, watchLaterItem(item, OnlyFapVideoMetadata.merge(item.content, imported)));
+        }
         if (favorites.size() > BackupDocument.MAX_ITEMS || watchLater.size() > BackupDocument.MAX_ITEMS)
             throw new IOException("The combined saved lists exceed the backup limit.");
         ArrayList<JSONObject> ordered = new ArrayList<>(watchLater.values());

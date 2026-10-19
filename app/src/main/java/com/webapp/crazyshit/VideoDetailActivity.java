@@ -123,6 +123,11 @@ public class VideoDetailActivity extends Activity {
     private ScrollView detailsScroll;
     private LinearLayout detailsColumn;
     private LinearLayout relatedContainer;
+    private TextView relatedTitle;
+    private LinearLayout onlyFapCreatorRow;
+    private NativeContentItem onlyFapContent;
+    private NativeContentItem onlyFapCreator;
+    private String onlyFapSession = "";
     private TextView titleView;
     private TextView metaView;
     private TextView playerTitleView;
@@ -235,6 +240,7 @@ public class VideoDetailActivity extends Activity {
         final String posterUrl;
         final long positionMs;
         final Bitmap previewBitmap;
+        final NativeContentItem content;
 
         VideoHistoryEntry(
                 String mediaUrl,
@@ -248,7 +254,7 @@ public class VideoDetailActivity extends Activity {
                 String mediaReferer,
                 String posterUrl,
                 long positionMs,
-                Bitmap previewBitmap
+                Bitmap previewBitmap, NativeContentItem content
         ) {
             this.mediaUrl = mediaUrl;
             this.pageUrl = pageUrl;
@@ -262,6 +268,7 @@ public class VideoDetailActivity extends Activity {
             this.posterUrl = posterUrl;
             this.positionMs = positionMs;
             this.previewBitmap = previewBitmap;
+            this.content = content;
         }
     }
 
@@ -282,6 +289,7 @@ public class VideoDetailActivity extends Activity {
         mediaReferer = clean(getIntent().getStringExtra(EXTRA_MEDIA_REFERER));
         posterUrl = clean(getIntent().getStringExtra(EXTRA_POSTER_URL));
         showsOrigin = getIntent().getBooleanExtra(EXTRA_SHOWS_ORIGIN, false);
+        onlyFapContent = OnlyFapVideoMetadata.fromIntent(getIntent(), pageUrl);
         manualLandscapeFullscreen = getIntent().getBooleanExtra(
                 EXTRA_MANUAL_LANDSCAPE_FULLSCREEN,
                 false
@@ -535,7 +543,15 @@ public class VideoDetailActivity extends Activity {
                 "Share video"
         ), actionParams());
 
-        TextView relatedTitle = new TextView(this);
+        onlyFapCreatorRow = new LinearLayout(this);
+        onlyFapCreatorRow.setOrientation(LinearLayout.HORIZONTAL);
+        onlyFapCreatorRow.setGravity(Gravity.CENTER_VERTICAL);
+        onlyFapCreatorRow.setPadding(dp(10), dp(12), dp(10), dp(12));
+        onlyFapCreatorRow.setBackground(BrowseUi.rounded(this, Color.rgb(18, 22, 27), 16));
+        detailsColumn.addView(onlyFapCreatorRow, marginParams(0, dp(12)));
+        onlyFapCreatorRow.setVisibility(View.GONE);
+
+        relatedTitle = new TextView(this);
         relatedTitle.setText("Related videos");
         relatedTitle.setTextColor(Color.WHITE);
         relatedTitle.setTextSize(18);
@@ -1069,15 +1085,16 @@ public class VideoDetailActivity extends Activity {
     }
 
     private void updateMetadataUi() {
-        if (titleView != null) titleView.setText(title);
-        if (playerTitleView != null) playerTitleView.setText(title);
+        String displayTitle = OnlyFapVideoMetadata.displayTitle(currentContent());
+        if (titleView != null) titleView.setText(displayTitle);
+        if (playerTitleView != null) playerTitleView.setText(displayTitle);
         if (fullscreenOverlay != null) {
-            ((TextView) fullscreenOverlay.findViewById(R.id.player_title)).setText(title);
+            ((TextView) fullscreenOverlay.findViewById(R.id.player_title)).setText(displayTitle);
         }
         if (metaView != null) {
             ArrayList<String> parts = new ArrayList<>();
             if (!views.isEmpty()) parts.add(views + " views");
-            if (!uploader.isEmpty()) parts.add(uploader);
+            if (!uploader.isEmpty() && !OnlyFapVideoMetadata.applies(currentContent())) parts.add(uploader);
             metaView.setText(TextUtils.join("  •  ", parts));
         }
         refreshVideoLikeState(false);
@@ -1085,8 +1102,138 @@ public class VideoDetailActivity extends Activity {
         updateWatchLaterButton();
     }
 
+    private NativeContentItem currentContent() {
+        NativeContentItem basic = new NativeContentItem(NativeContentItem.KIND_MEDIA,
+                title, pageUrl, posterUrl, views, uploader, comments);
+        return OnlyFapVideoMetadata.merge(basic, onlyFapContent);
+    }
+
+    private void updateOnlyFapCreatorRow(boolean resolving) {
+        if (onlyFapCreatorRow == null) return;
+        onlyFapCreatorRow.removeAllViews();
+        onlyFapCreatorRow.setVisibility(View.VISIBLE);
+        if (onlyFapCreator == null) {
+            TextView unavailable = BrowseUi.text(this,
+                    resolving ? "Finding creator…" : "Creator unavailable", 14, UiPalette.TEXT_SECONDARY);
+            onlyFapCreatorRow.addView(unavailable);
+            if (relatedTitle != null) relatedTitle.setText("Creator videos");
+            return;
+        }
+        NativeContentItem creator = onlyFapCreator;
+        ImageView avatar = new ImageView(this);
+        FrameLayout avatarFrame = new FrameLayout(this);
+        avatarFrame.setBackground(BrowseUi.rounded(this, Color.rgb(28, 37, 43), 22));
+        avatarFrame.setClipToOutline(true);
+        TextView initial = BrowseUi.text(this, creator.title.substring(0, 1).toUpperCase(java.util.Locale.ROOT),
+                22, UiPalette.PRIMARY);
+        initial.setGravity(Gravity.CENTER);
+        avatarFrame.addView(initial, new FrameLayout.LayoutParams(-1, -1));
+        avatarFrame.addView(avatar, new FrameLayout.LayoutParams(-1, -1));
+        avatar.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        onlyFapCreatorRow.addView(avatarFrame, new LinearLayout.LayoutParams(dp(44), dp(44)));
+        if (!creator.imageUrl.isEmpty()) Glide.with(avatar).load(withHeaders(creator.imageUrl,
+                creator.uploader.isEmpty() ? creator.url : creator.uploader)).into(avatar);
+        TextView gallery = BrowseUi.text(this, creator.title + "\nView gallery", 14, Color.WHITE);
+        gallery.setPadding(dp(12), 0, dp(8), 0);
+        gallery.setMinHeight(dp(48));
+        gallery.setGravity(Gravity.CENTER_VERTICAL);
+        gallery.setContentDescription("Open " + creator.title + " gallery");
+        View.OnClickListener open = view -> {
+            savePlaybackState(false);
+            if (player != null) player.pause();
+            startActivity(NativeFeedBrowserActivity.createCreatorGallery(this, creator.title,
+                    creator.searchQuery.isEmpty() ? creator.title : creator.searchQuery,
+                    NativeFeedBrowserActivity.creatorProfileHint(creator), onlyFapSession));
+        };
+        gallery.setOnClickListener(open);
+        avatarFrame.setContentDescription("Open " + creator.title + " gallery");
+        avatarFrame.setOnClickListener(open);
+        onlyFapCreatorRow.addView(gallery, new LinearLayout.LayoutParams(0, -2, 1f));
+        boolean favorite = CreatorFavoriteStore.contains(this, creator);
+        TextView star = BrowseUi.text(this, favorite ? "★" : "☆", 28,
+                favorite ? UiPalette.PRIMARY : Color.WHITE);
+        star.setGravity(Gravity.CENTER);
+        star.setContentDescription((favorite ? "Remove " : "Add ") + creator.title
+                + (favorite ? " from Favorite Creators" : " to Favorite Creators"));
+        star.setOnClickListener(view -> {
+            CreatorFavoriteStore.toggle(this, creator);
+            updateOnlyFapCreatorRow(false);
+        });
+        onlyFapCreatorRow.addView(star, new LinearLayout.LayoutParams(dp(48), dp(48)));
+        if (relatedTitle != null) relatedTitle.setText("More from " + creator.title);
+    }
+
+    private void loadOnlyFapRelated() {
+        final int generation = ++relatedLoadGeneration;
+        NativeContentItem current = currentContent();
+        String expectedUrl = current.url;
+        onlyFapCreator = OnlyFapVideoMetadata.creator(current);
+        updateOnlyFapCreatorRow(onlyFapCreator == null);
+        relatedContainer.removeAllViews();
+        io.execute(() -> {
+            NativeContentItem content = OnlyFapVideoMetadata.restore(this, current);
+            if (FapelloRepository.isPostUrl(content.url)
+                    && ShitTokCreatorMetadata.knownProfileUrl(content).isEmpty()) {
+                try { content = new FapelloRepository().recoverVideoMetadata(this, content); }
+                catch (Exception ignored) { }
+            }
+            NativeContentItem enriched = content;
+            NativeContentItem creator = OnlyFapVideoMetadata.creator(this, content);
+            if (creator != null) {
+                SocialContentContextStore.remember(this, enriched);
+                FavoriteStore.enrich(this, enriched);
+                VideoDownloadStore.enrich(this, enriched);
+            }
+            runOnUiThread(() -> {
+                if (isFinishing() || generation != relatedLoadGeneration || !expectedUrl.equals(pageUrl)) return;
+                onlyFapContent = enriched;
+                onlyFapCreator = creator;
+                updateMetadataUi();
+                updateOnlyFapCreatorRow(false);
+            });
+            ArrayList<NativeContentItem> videos = new ArrayList<>();
+            String session = "";
+            if (creator != null && !Thread.currentThread().isInterrupted()) {
+                String query = creator.searchQuery.isEmpty() ? creator.title : creator.searchQuery;
+                String profile = NativeFeedBrowserActivity.creatorProfileHint(creator);
+                session = CreatorGalleryPreloader.sessionId(this, creator);
+                BunkrGallerySessionStore.Snapshot snapshot = BunkrGallerySessionStore.snapshot(session);
+                boolean exact = snapshot != null && snapshot.items.stream().anyMatch(item ->
+                        profile.equals(ShitTokCreatorMetadata.knownProfileUrl(item)));
+                if (!exact) {
+                    session = BunkrGallerySessionStore.createCreator(creator.title,
+                            BunkrRepository.searchUrl(query), query);
+                    try {
+                        BunkrCreatorGalleryRepository repository = new BunkrCreatorGalleryRepository();
+                        repository.reset(session, query, profile, creator.title);
+                        BunkrCreatorGalleryRepository.Batch batch = repository.fetchNext(this, session,
+                                query, profile, creator.title);
+                        BunkrGallerySessionStore.appendPreview(session, batch.items);
+                    } catch (Exception ignored) { }
+                    snapshot = BunkrGallerySessionStore.snapshot(session);
+                }
+                if (snapshot != null) for (NativeContentItem item : snapshot.items) {
+                    if (item.isVideo() && !expectedUrl.equals(item.url)) videos.add(item);
+                    if (videos.size() == 12) break;
+                }
+            }
+            String gallerySession = session;
+            runOnUiThread(() -> {
+                if (isFinishing() || generation != relatedLoadGeneration || !expectedUrl.equals(pageUrl)) return;
+                onlyFapSession = gallerySession;
+                renderRelated(videos);
+            });
+        });
+    }
+
     private void loadRelated() {
         if (showsOrigin || relatedContainer == null) return;
+        if (OnlyFapVideoMetadata.applies(currentContent())) {
+            loadOnlyFapRelated();
+            return;
+        }
+        if (onlyFapCreatorRow != null) onlyFapCreatorRow.setVisibility(View.GONE);
+        if (relatedTitle != null) relatedTitle.setText("Related videos");
         final int requestGeneration = ++relatedLoadGeneration;
         relatedContainer.removeAllViews();
         TextView loadingText = new TextView(this);
@@ -1185,7 +1332,9 @@ public class VideoDetailActivity extends Activity {
         clearRelatedImageTargets();
         if (items == null || items.isEmpty()) {
             TextView empty = new TextView(this);
-            empty.setText("No related videos could be loaded right now.");
+            empty.setText(OnlyFapVideoMetadata.applies(currentContent())
+                    ? "No creator videos could be loaded right now."
+                    : "No related videos could be loaded right now.");
             empty.setTextColor(Color.rgb(155, 155, 164));
             empty.setTextSize(13);
             empty.setPadding(dp(4), dp(10), dp(4), dp(18));
@@ -1362,6 +1511,9 @@ public class VideoDetailActivity extends Activity {
                 Runnable swap = () -> {
                     mediaUrl = resolved.mediaUrl;
                     pageUrl = item.url;
+                    onlyFapContent = item;
+                    onlyFapCreator = null;
+                    onlyFapSession = "";
                     mediaReferer = resolved.requestReferer;
                     String resolvedPoster = resolvedRelatedThumbnails.get(item.url);
                     posterUrl = clean(resolvedPoster).isEmpty() ? clean(item.imageUrl) : clean(resolvedPoster);
@@ -1397,7 +1549,7 @@ public class VideoDetailActivity extends Activity {
                 mediaReferer,
                 posterUrl,
                 position,
-                capturePlayerFrame()
+                capturePlayerFrame(), currentContent()
         ));
         while (relatedHistory.size() > RELATED_HISTORY_LIMIT) {
             recycleHistoryPreview(relatedHistory.removeFirst());
@@ -1422,6 +1574,9 @@ public class VideoDetailActivity extends Activity {
         loading.setVisibility(View.GONE);
         mediaUrl = previous.mediaUrl;
         pageUrl = previous.pageUrl;
+        onlyFapContent = previous.content;
+        onlyFapCreator = null;
+        onlyFapSession = "";
         title = previous.title;
         views = previous.views;
         uploader = previous.uploader;
@@ -1663,8 +1818,7 @@ public class VideoDetailActivity extends Activity {
 
     private void openComments() {
         if (pageUrl.isEmpty() || !supportsComments()) return;
-        SocialContentContextStore.remember(this, new NativeContentItem(NativeContentItem.KIND_MEDIA,
-                title, pageUrl, posterUrl, views, uploader, comments));
+        SocialContentContextStore.remember(this, currentContent());
         if (activeComments != null && activeComments.isShowing()) return;
         showCommentSheet(socialEntry ? socialFocusCommentId : "", socialEntry && socialAutoReply);
         socialFocusCommentId = "";
@@ -1828,8 +1982,7 @@ public class VideoDetailActivity extends Activity {
         String target = pageUrl;
         boolean wasLiked = videoLiked;
         setVideoLikeEnabled(false);
-        ZeroChillSocialRepository.toggleVideoLike(this, new NativeContentItem(NativeContentItem.KIND_MEDIA,
-                title, target, posterUrl, views, uploader, comments), wasLiked, (state, error) ->
+        ZeroChillSocialRepository.toggleVideoLike(this, currentContent(), wasLiked, (state, error) ->
                 runOnUiThread(() -> {
                     if (!target.equals(pageUrl)) return;
                     setVideoLikeEnabled(true);
@@ -1855,7 +2008,7 @@ public class VideoDetailActivity extends Activity {
             FavoriteStore.remove(this, pageUrl);
             ZeroChillToast.makeText(this, "Removed from Watch Later.", ZeroChillToast.LENGTH_SHORT).show();
         } else {
-            FavoriteStore.add(this, title, pageUrl);
+            FavoriteStore.add(this, currentContent());
             ZeroChillToast.makeText(this, "Saved to Watch Later.", ZeroChillToast.LENGTH_SHORT).show();
         }
         updateWatchLaterButton();
@@ -1969,9 +2122,7 @@ public class VideoDetailActivity extends Activity {
     private void downloadCurrentVideo() {
         VideoDownloadStore.downloadKnown(
                 this,
-                title,
-                pageUrl,
-                "",
+                currentContent(),
                 mediaUrl,
                 userAgent,
                 cookies,
@@ -2402,6 +2553,7 @@ public class VideoDetailActivity extends Activity {
         result.putExtra(EXTRA_COMMENTS, comments);
         result.putExtra(EXTRA_RELATED_FEED_URL, relatedFeedUrl);
         result.putExtra(EXTRA_SOURCE, source);
+        OnlyFapVideoMetadata.put(result, currentContent());
         result.putExtra(EXTRA_SHOWS_ORIGIN, showsOrigin);
         if (!posterUrl.isEmpty()) result.putExtra(EXTRA_POSTER_URL, posterUrl);
         if (player != null) result.putExtra(PlayerActivity.EXTRA_START_POSITION, player.getCurrentPosition());
@@ -2438,9 +2590,7 @@ public class VideoDetailActivity extends Activity {
 
         PlaybackHistoryStore.record(
                 this,
-                title,
-                pageUrl,
-                posterUrl,
+                currentContent(),
                 position,
                 duration,
                 ended,
@@ -2574,6 +2724,7 @@ public class VideoDetailActivity extends Activity {
         updateSwipeEnabled();
         if (detailsScroll != null) applyDetailsBackground();
         refreshVideoLikeState(true);
+        if (onlyFapCreatorRow != null && OnlyFapVideoMetadata.applies(currentContent())) updateOnlyFapCreatorRow(false);
     }
 
     @Override

@@ -2232,7 +2232,7 @@ public final class ChaosFeedView extends FrameLayout {
             FavoriteStore.remove(activity, item.url);
             ZeroChillToast.makeText(activity, "Removed from Watch Later.", ZeroChillToast.LENGTH_SHORT).show();
         } else {
-            FavoriteStore.add(activity, item.title, item.url);
+            FavoriteStore.add(activity, item);
             ZeroChillToast.makeText(activity, "Saved to Watch Later.", ZeroChillToast.LENGTH_SHORT).show();
         }
         updateSaveButton(item, button);
@@ -3726,8 +3726,7 @@ public final class ChaosFeedView extends FrameLayout {
                             if (item != null) {
                                 try {
                                     long duration = Math.max(0L, createdPlayer.getDuration());
-                                    PlaybackHistoryStore.record(activity, item.title, item.url,
-                                            duration, duration, true);
+                                    PlaybackHistoryStore.record(activity, item, duration, duration, true, false);
                                 } catch (Exception ignored) { }
                             }
                             handleCompletion(createdPlayer);
@@ -4028,9 +4027,7 @@ public final class ChaosFeedView extends FrameLayout {
             }
             VideoDownloadStore.downloadKnown(
                     activity,
-                    item.title,
-                    stream.pageUrl == null || stream.pageUrl.isEmpty() ? item.url : stream.pageUrl,
-                    item.imageUrl,
+                    item,
                     stream.mediaUrl,
                     userAgent,
                     cookies,
@@ -4505,7 +4502,7 @@ public final class ChaosFeedView extends FrameLayout {
                 long duration = Math.max(0L, player.getDuration());
                 if (everStarted || position > 1000L) {
                     PlaybackHistoryStore.record(
-                            activity, item.title, item.url, position, duration, false);
+                            activity, item, position, duration, false, false);
                 }
             } catch (Exception ignored) {
             }

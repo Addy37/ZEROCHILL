@@ -640,18 +640,24 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
     }
 
     void openLibraryVideo(NativeContentItem item) {
-        openShowsVideo(item, false);
+        if (OnlyFapVideoMetadata.applies(item)) openLibraryHistory(item);
+        else openShowsVideo(item, false);
     }
 
     void openLibraryHistory(NativeContentItem item) {
         if (item == null) return;
-        for (PlaybackHistoryStore.Item history : PlaybackHistoryStore.load(activity)) {
-            if (history.pageUrl.equals(item.url)) {
-                openShowsResume(history, false);
-                return;
+        io.execute(() -> {
+            PlaybackHistoryStore.Item resume = null;
+            for (PlaybackHistoryStore.Item history : PlaybackHistoryStore.load(activity)) {
+                if (history.pageUrl.equals(item.url)) { resume = history; break; }
             }
-        }
-        openShowsVideo(item, false);
+            PlaybackHistoryStore.Item saved = resume;
+            activity.runOnUiThread(() -> {
+                if (activity.isFinishing() || activity.isDestroyed()) return;
+                if (saved != null) openShowsResume(saved, false);
+                else openShowsVideo(item, false);
+            });
+        });
     }
 
     private void openShowsVideo(NativeContentItem item) {
@@ -667,6 +673,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         }
 
         io.execute(() -> {
+            NativeContentItem libraryContent = OnlyFapVideoMetadata.restore(activity, item);
             CrazyShitRepository.StreamInfo stream = null;
             try {
                 stream = PlayableSourceRouter.resolve(activity, item);
@@ -698,12 +705,14 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                 android.content.Intent intent =
                         new android.content.Intent(activity, VideoDetailActivity.class);
                 intent.putExtra(PlayerActivity.EXTRA_MEDIA_URL, resolved.mediaUrl);
-                intent.putExtra(PlayerActivity.EXTRA_PAGE_URL, resolvedPage);
+                intent.putExtra(PlayerActivity.EXTRA_PAGE_URL, OnlyFapVideoMetadata.applies(libraryContent)
+                        ? item.url : resolvedPage);
                 intent.putExtra(PlayerActivity.EXTRA_TITLE, item.title);
                 intent.putExtra(VideoDetailActivity.EXTRA_VIEWS, item.views);
                 intent.putExtra(VideoDetailActivity.EXTRA_UPLOADER, item.uploader);
                 intent.putExtra(VideoDetailActivity.EXTRA_COMMENTS, item.comments);
                 intent.putExtra(VideoDetailActivity.EXTRA_SOURCE, source);
+                OnlyFapVideoMetadata.put(intent, libraryContent);
                 if (manualLandscapeFullscreen) {
                     ShowsPlaybackOrientationPolicy.requireManualLandscapeFullscreen(intent);
                 }
@@ -746,16 +755,10 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
             boolean manualLandscapeFullscreen
     ) {
         if (history == null || history.pageUrl == null || history.pageUrl.trim().isEmpty()) return;
-        NativeContentItem item = new NativeContentItem(
-                NativeContentItem.KIND_MEDIA,
-                history.title,
-                history.pageUrl,
-                history.posterUrl,
-                "",
-                "",
-                ""
-        );
+        NativeContentItem item = OnlyFapVideoMetadata.merge(history.content,
+                OnlyFapVideoMetadata.basic(history.title, history.pageUrl, history.posterUrl));
         io.execute(() -> {
+            NativeContentItem libraryContent = OnlyFapVideoMetadata.restore(activity, item);
             CrazyShitRepository.StreamInfo stream = null;
             try {
                 stream = PlayableSourceRouter.resolve(activity, item);
@@ -792,6 +795,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                 intent.putExtra(PlayerActivity.EXTRA_START_POSITION,
                         history.complete ? 0L : history.positionMs);
                 intent.putExtra(VideoDetailActivity.EXTRA_SOURCE, source);
+                OnlyFapVideoMetadata.put(intent, libraryContent);
                 if (manualLandscapeFullscreen) {
                     ShowsPlaybackOrientationPolicy.requireManualLandscapeFullscreen(intent);
                 }

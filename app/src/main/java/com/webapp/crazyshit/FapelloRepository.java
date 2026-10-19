@@ -679,6 +679,28 @@ final class FapelloRepository {
         return null;
     }
 
+    NativeContentItem recoverVideoMetadata(Context context, NativeContentItem item) throws IOException {
+        requireEnabled();
+        if (!isPostUrl(item.url)) return item;
+        return parseVideoMetadata(fetchDocument(context, item.url, baseUrl()), item);
+    }
+
+    NativeContentItem parseVideoMetadata(Document document, NativeContentItem item) {
+        LinkedHashMap<String, Model> creators = new LinkedHashMap<>();
+        for (Element link : document.select("a[href]")) {
+            Matcher label = CREATOR_LINK_TEXT.matcher(clean(link.text()));
+            if (!label.matches()) continue;
+            String profile = canonicalModelUrl(normalizeUrl(link.attr("href"), item.url));
+            if (isModelUrl(profile)) creators.put(profile, new Model(label.group(1), profile, ""));
+        }
+        // Related creators and ads cannot establish the watched video's creator.
+        if (creators.size() != 1) return item;
+        Model creator = creators.values().iterator().next();
+        return new NativeContentItem(item.kind, item.title, item.url, item.imageUrl,
+                item.views, creator.name, item.comments, "OnlyFap", creator.url,
+                item.publishedAtMillis, item.aspectRatioHint);
+    }
+
     CrazyShitRepository.StreamInfo resolvePlayable(Context context, String pageUrl)
             throws IOException {
         requireEnabled();

@@ -1034,7 +1034,8 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     ) {
         Intent intent = new Intent(this, VideoDetailActivity.class);
         intent.putExtra(PlayerActivity.EXTRA_MEDIA_URL, stream.mediaUrl);
-        intent.putExtra(PlayerActivity.EXTRA_PAGE_URL, stream.pageUrl);
+        intent.putExtra(PlayerActivity.EXTRA_PAGE_URL, OnlyFapVideoMetadata.applies(item)
+                ? item.url : stream.pageUrl);
         intent.putExtra(VideoDetailActivity.EXTRA_MEDIA_REFERER, stream.requestReferer);
         if (playbackIdent) {
             intent.putExtra(VideoDetailActivity.EXTRA_PLAYBACK_IDENT, true);
@@ -1045,6 +1046,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
                 item != null && item.title != null && !item.title.trim().isEmpty()
                         ? item.title : stream.title);
         if (item != null) {
+            OnlyFapVideoMetadata.put(intent, item);
             intent.putExtra(VideoDetailActivity.EXTRA_VIEWS, item.views);
             intent.putExtra(VideoDetailActivity.EXTRA_UPLOADER, item.uploader);
             intent.putExtra(VideoDetailActivity.EXTRA_COMMENTS, item.comments);

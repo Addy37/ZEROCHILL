@@ -68,6 +68,13 @@ public final class PlaybackHistoryStore {
             boolean ended,
             boolean fromShows
     ) {
+        record(context, OnlyFapVideoMetadata.basic(title, pageUrl, posterUrl), positionMs, durationMs, ended, fromShows);
+    }
+
+    public static void record(Context context, NativeContentItem content, long positionMs,
+                              long durationMs, boolean ended, boolean fromShows) {
+        if (content == null) return;
+        String title = content.title, pageUrl = content.url, posterUrl = content.imageUrl;
         if (context == null || pageUrl == null || pageUrl.trim().isEmpty()) return;
         if (!ended && positionMs < MIN_HISTORY_MS) return;
 
@@ -80,7 +87,8 @@ public final class PlaybackHistoryStore {
                 durationMs,
                 ended,
                 fromShows,
-                System.currentTimeMillis()
+                System.currentTimeMillis(),
+                OnlyFapVideoMetadata.applies(content) ? content : null
         );
 
         synchronized (LOCK) {
@@ -212,7 +220,8 @@ public final class PlaybackHistoryStore {
                         Math.max(0L, object.optLong("durationMs", 0L)),
                         Math.max(0L, object.optLong("lastWatched", 0L)),
                         object.optBoolean("complete", false),
-                        object.optBoolean("fromShows", false)
+                        object.optBoolean("fromShows", false),
+                        OnlyFapVideoMetadata.decode(object.optJSONObject("content"), pageUrl)
                 ));
             }
         } catch (Exception ignored) {
@@ -255,7 +264,8 @@ public final class PlaybackHistoryStore {
                 safeDuration,
                 mutation.watchedAt,
                 complete,
-                showsRelated
+                showsRelated,
+                OnlyFapVideoMetadata.merge(mutation.content, previous == null ? null : previous.content)
         ));
         trimToLimit(items);
     }
@@ -307,6 +317,7 @@ public final class PlaybackHistoryStore {
                 object.put("lastWatched", item.lastWatched);
                 object.put("complete", item.complete);
                 object.put("fromShows", item.fromShows);
+                if (item.content != null) object.put("content", ContentItemCodec.encode(item.content));
                 array.put(object);
             }
         } catch (Exception ignored) {
@@ -376,6 +387,7 @@ public final class PlaybackHistoryStore {
         final boolean ended;
         final boolean fromShows;
         final long watchedAt;
+        final NativeContentItem content;
 
         RecordMutation(
                 String title,
@@ -385,8 +397,9 @@ public final class PlaybackHistoryStore {
                 long durationMs,
                 boolean ended,
                 boolean fromShows,
-                long watchedAt
+                long watchedAt, NativeContentItem content
         ) {
+            this.content = content;
             this.title = title;
             this.pageUrl = pageUrl;
             this.posterUrl = posterUrl;
@@ -407,6 +420,7 @@ public final class PlaybackHistoryStore {
         public final long lastWatched;
         public final boolean complete;
         public final boolean fromShows;
+        public final NativeContentItem content;
 
         Item(
                 String title,
@@ -418,6 +432,12 @@ public final class PlaybackHistoryStore {
                 boolean complete,
                 boolean fromShows
         ) {
+            this(title, pageUrl, posterUrl, positionMs, durationMs, lastWatched, complete, fromShows, null);
+        }
+
+        Item(String title, String pageUrl, String posterUrl, long positionMs, long durationMs,
+             long lastWatched, boolean complete, boolean fromShows, NativeContentItem content) {
+            this.content = content;
             this.title = title == null || title.trim().isEmpty() ? "Video" : title;
             this.pageUrl = pageUrl == null ? "" : pageUrl;
             this.posterUrl = posterUrl == null ? "" : posterUrl;
