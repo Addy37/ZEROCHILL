@@ -70,13 +70,123 @@ final class FapelloRepository {
                     + "video-player|forgot-password)$"
     );
 
+    private static final int SEARCH_WINDOW_SIZE = 40;
+    private static final int MAX_SEARCH_WINDOWS = 3;
+
+    interface SearchPageFetcher {
+        String fetch(int offset, int limit) throws IOException;
+    }
+
+    interface SearchProfileFetcher {
+        Document fetch(Model model) throws IOException;
+    }
+
+    interface SearchQueryFetcher {
+        String fetch(String query, int offset, int limit) throws IOException;
+    }
+
     List<Model> searchModels(Context context, String query, int limit) throws IOException {
         requireEnabled();
+        return searchModelsWithQueryFallback(query, limit, (name, offset, size) ->
+                fetchBody(context, searchUrl(name, size, offset), baseUrl(), true),
+                model -> fetchDocument(context, model.url, baseUrl()));
+    }
+
+    List<Model> searchModelsWithQueryFallback(String query, int limit, SearchQueryFetcher fetcher,
+                                             SearchProfileFetcher profiles) throws IOException {
+        String name = clean(query);
+        List<Model> found = searchMatchingModels(name, limit,
+                (offset, size) -> fetcher.fetch(name, offset, size), profiles);
+        String compact = name.replaceAll("\\s+", "");
+        if (!found.isEmpty() || compact.equals(name)) return found;
+        // Fapello can return unrelated fuzzy results for spaced handles such as Carrot Soki.
+        // Keep the original matching/alias rules while retrying the compact handle once.
+        return searchMatchingModels(name, limit,
+                (offset, size) -> fetcher.fetch(compact, offset, size), profiles);
+    }
+
+    List<Model> searchMatchingModels(String query, int limit, SearchPageFetcher fetcher) throws IOException {
+        return searchMatchingModels(query, limit, fetcher, null);
+    }
+
+    List<Model> searchMatchingModels(String query, int limit, SearchPageFetcher fetcher,
+                                    SearchProfileFetcher profiles) throws IOException {
         String cleanQuery = clean(query);
         if (cleanQuery.isEmpty()) return new ArrayList<>();
         int safeLimit = Math.max(1, Math.min(8, limit));
-        String endpoint = searchUrl(cleanQuery, safeLimit);
-        return limitModels(parseSearchResponse(fetchBody(context, endpoint, baseUrl(), true)), safeLimit);
+        LinkedHashMap<String, Model> matches = new LinkedHashMap<>();
+        int offset = 0;
+        boolean more = false;
+        for (int window = 0; window < MAX_SEARCH_WINDOWS; window++) {
+            if (Thread.currentThread().isInterrupted()) {
+                if (matches.isEmpty()) throw new IOException("Fapello creator search was interrupted");
+                break;
+            }
+            String body;
+            List<Model> models;
+            try {
+                body = fetcher.fetch(offset, SEARCH_WINDOW_SIZE);
+                models = parseSearchResponse(body);
+            } catch (IOException error) {
+                if (matches.isEmpty()) throw error;
+                break;
+            }
+            boolean exact = false;
+            for (Model model : models) {
+                int rank = CreatorNameMatcher.rank(model.name, cleanQuery);
+                if (rank == Integer.MAX_VALUE) continue;
+                matches.putIfAbsent(canonicalKey(model.url), model);
+                if (rank == 0) exact = true;
+            }
+            if (exact || matches.size() >= safeLimit) break;
+            int count = models.size();
+            more = false;
+            try {
+                Object root = new org.json.JSONTokener(body).nextValue();
+                if (root instanceof JSONObject) {
+                    JSONObject response = (JSONObject) root;
+                    more = response.optBoolean("has_more", false);
+                    JSONArray results = response.optJSONArray("results");
+                    if (results != null) count = results.length();
+                }
+            } catch (Exception ignored) { }
+            // The API matches aliases but omits them from its JSON. Verify only a narrow,
+            // complete result set against the creator header, never arbitrary page text.
+            if (matches.isEmpty() && !more && offset == 0 && models.size() <= 3 && profiles != null) {
+                for (Model model : models) {
+                    if (Thread.currentThread().isInterrupted()) throw new IOException("Creator search interrupted");
+                    if (profileConfirmsAlias(profiles.fetch(model), model, cleanQuery)) {
+                        matches.putIfAbsent(canonicalKey(model.url), model);
+                    }
+                }
+            }
+            if (!more || count == 0) break;
+            offset += count;
+        }
+        if (matches.isEmpty() && more) {
+            throw new IOException("Fapello search result window was incomplete; retry a more specific name");
+        }
+        ArrayList<Model> output = new ArrayList<>(matches.values());
+        output.sort(java.util.Comparator.comparingInt(model -> CreatorNameMatcher.rank(model.name, cleanQuery)));
+        return limitModels(output, safeLimit);
+    }
+
+    static boolean profileConfirmsAlias(Document document, Model model, String query) {
+        if (document == null || model == null) return false;
+        Element canonical = document.selectFirst("link[rel=canonical][href]");
+        if (canonical == null || !canonicalKey(model.url).equals(
+                canonicalKey(normalizeUrl(canonical.attr("href"), model.url)))) return false;
+        for (Element heading : document.select("h2")) {
+            if (CreatorNameMatcher.rank(heading.text(), model.name) != 0) continue;
+            Element aliases = heading.nextElementSibling();
+            if (aliases == null || !aliases.tagName().equals("p") || !aliases.hasClass("font-semibold")) continue;
+            String wanted = CreatorNameMatcher.normalized(query).replace(" ", "");
+            if (wanted.isEmpty()) return false;
+            for (String alias : aliases.text().split(",")) {
+                if (CreatorNameMatcher.normalized(alias).replace(" ", "").equals(wanted)) return true;
+            }
+        }
+        return false;
     }
 
     List<Model> searchConfirmedModels(Context context, String query, int limit) throws IOException {
@@ -84,14 +194,19 @@ final class FapelloRepository {
     }
 
     static String searchUrl(String query, int limit) throws IOException {
+        return searchUrl(query, limit, 0);
+    }
+
+    static String searchUrl(String query, int limit, int offset) throws IOException {
         String cleanQuery = cleanStatic(query);
-        int safeLimit = Math.max(1, Math.min(8, limit));
+        int safeLimit = Math.max(1, Math.min(SEARCH_WINDOW_SIZE, limit));
+        String safeOffset = String.valueOf(Math.max(0, offset));
         if (cleanQuery.isEmpty()) throw new IOException("Fapello creator name was missing");
         SourceConfig.Fapello config = config();
         if (config == null) return BASE + "search_v2/?ajax=1&q=" + encodeStatic(cleanQuery) +
-                "&type=models&limit=" + safeLimit + "&offset=0";
+                "&type=models&limit=" + safeLimit + "&offset=" + safeOffset;
         return config.baseUrl + route(config.searchRoute,
-                "query", encodeStatic(cleanQuery), "limit", String.valueOf(safeLimit), "offset", "0");
+                "query", encodeStatic(cleanQuery), "limit", String.valueOf(safeLimit), "offset", safeOffset);
     }
 
     List<Model> parseSearchResponse(String body) throws IOException {
@@ -518,19 +633,24 @@ final class FapelloRepository {
             String id = postId(pageUrl);
             String title = clean(link.attr("title"));
             if (title.isEmpty()) title = id.isEmpty() ? "OnlyFap video" : "OnlyFap video #" + id;
-            String creator = popularVideoCreator(link, endpoint, pageUrl);
+            Model creator = popularVideoCreator(link, endpoint, pageUrl);
             NativeContentItem candidate = new NativeContentItem(
                     NativeContentItem.KIND_MEDIA, title, pageUrl, thumbnail,
-                    "", creator, "", "OnlyFap");
+                    "", creator == null ? "" : creator.name, "", "OnlyFap",
+                    creator == null ? "" : creator.url);
             NativeContentItem existing = items.get(pageUrl);
-            if (existing == null || (existing.imageUrl.isEmpty() && !thumbnail.isEmpty())) {
+            if (existing == null) {
                 items.put(pageUrl, candidate);
+            } else if (existing.imageUrl.isEmpty() && !thumbnail.isEmpty()) {
+                items.put(pageUrl, candidate.merge(existing));
+            } else {
+                items.put(pageUrl, existing.merge(candidate));
             }
         }
         return new ArrayList<>(items.values());
     }
 
-    private String popularVideoCreator(Element postLink, String endpoint, String pageUrl) {
+    private Model popularVideoCreator(Element postLink, String endpoint, String pageUrl) {
         Element scope = postLink == null ? null : postLink.parent();
         for (int depth = 0; scope != null && depth < 5; depth++, scope = scope.parent()) {
             if (clean(scope.text()).length() > 1200) break;
@@ -553,12 +673,10 @@ final class FapelloRepository {
             if (name.isEmpty()) name = clean(creatorLink.text());
             Matcher label = CREATOR_LINK_TEXT.matcher(name);
             if (label.matches()) name = clean(label.group(1));
-            if (!name.isEmpty() && name.length() <= 80) return name;
-
-            String slug = modelSlug(entry.getKey());
-            return humanizeSlug(slug);
+            if (name.isEmpty() || name.length() > 80) name = humanizeSlug(modelSlug(entry.getKey()));
+            return new Model(name, entry.getKey(), "");
         }
-        return "";
+        return null;
     }
 
     CrazyShitRepository.StreamInfo resolvePlayable(Context context, String pageUrl)

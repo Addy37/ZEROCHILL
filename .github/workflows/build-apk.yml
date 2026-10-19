@@ -230,6 +230,23 @@ jobs:
           --tests 'com.webapp.crazyshit.OnlyFapFavoriteAvatarTest'
           --tests 'com.webapp.crazyshit.PrimaryTab*'
 
+      - name: Run focused ShitTok creator handoff regressions first
+        run: >-
+          gradle --no-daemon :app:testDebugUnitTest
+          --tests 'com.webapp.crazyshit.ShitTokCreatorGalleryHandoffTest'
+          --tests 'com.webapp.crazyshit.ShitTokCreatorSearchLearningTest'
+          --tests 'com.webapp.crazyshit.ShitTokSwipeStartTest'
+          --tests 'com.webapp.crazyshit.FapzoneCreatorSearchRepositoryTest'
+          --tests 'com.webapp.crazyshit.CreatorNameMatcherTest'
+          --tests 'com.webapp.crazyshit.FapelloRepositoryTest'
+          --tests 'com.webapp.crazyshit.HomeSourceTest'
+          --tests 'com.webapp.crazyshit.NotificationCoordinatorFormattingTest'
+          --tests 'com.webapp.crazyshit.ShitTokCreatorMetadataTest'
+          --tests 'com.webapp.crazyshit.ShitTokCreatorMetadataLoaderTest'
+          --tests 'com.webapp.crazyshit.ChaosSourceMixerPriorityTest'
+          --tests 'com.webapp.crazyshit.ShitTokAspectPriorityTest'
+          --tests 'com.webapp.crazyshit.CreatorMergedGalleryTest'
+
       - name: Verify ShitTok interaction boundaries
         if: ${{ github.head_ref != 'release/zerochill-5.0.0' }}
         run: >-

@@ -20,11 +20,13 @@ final class ShitTokCreatorMetadata {
 
         String uploader = clean(item.uploader);
         String description = clean(item.description).toLowerCase(Locale.US);
-        boolean onlyHaven = "onlyhaven".equalsIgnoreCase(uploader)
+        boolean onlyHaven = OnlyHavenRepository.isOnlyHavenUrl(uploader)
+                || "onlyhaven".equalsIgnoreCase(uploader)
                 || description.contains("onlyhaven");
         if (!onlyHaven) return "";
 
-        String creator = clean(item.title);
+        String creator = clean(item.searchQuery);
+        if (isGenericCreatorLabel(creator)) creator = clean(item.title);
         return isGenericCreatorLabel(creator) ? "" : creator;
     }
 
@@ -36,16 +38,7 @@ final class ShitTokCreatorMetadata {
         String creator = creatorName(media);
         if (creator.isEmpty()) return null;
 
-        String profileUrl = "";
-        if (media != null) {
-            if (FapelloRepository.isModelUrl(media.url)
-                    || OnlyHavenRepository.isOnlyHavenUrl(media.url)) {
-                profileUrl = media.url;
-            } else if (FapelloRepository.isModelUrl(media.uploader)
-                    || OnlyHavenRepository.isOnlyHavenUrl(media.uploader)) {
-                profileUrl = media.uploader;
-            }
-        }
+        String profileUrl = knownProfileUrl(media);
 
         NativeContentItem fallback = new NativeContentItem(
                 NativeContentItem.KIND_CREATOR,
@@ -68,10 +61,45 @@ final class ShitTokCreatorMetadata {
             String title = CreatorNameMatcher.normalized(candidate.title);
             String query = CreatorNameMatcher.normalized(candidate.searchQuery);
             if (wanted.equals(title) || wanted.equals(query)) {
-                return candidate.merge(fallback);
+                // Catalog artwork/name can enrich the clip, but must not replace its exact profile.
+                NativeContentItem knownProfile = new NativeContentItem(
+                        NativeContentItem.KIND_CREATOR, "", profileUrl, "", "", "", "", "", "");
+                return knownProfile.merge(candidate).merge(fallback);
             }
         }
         return fallback;
+    }
+
+    static String knownProfileUrl(NativeContentItem media) {
+        String profileUrl = "";
+        if (media != null) {
+            // Popular Fapello media keeps the display name in uploader and the exact
+            // creator lookup URL in searchQuery; creator identities still search by name.
+            if (FapelloRepository.isFapelloUrl(media.url)
+                    && FapelloRepository.isModelUrl(media.searchQuery)) {
+                profileUrl = media.searchQuery;
+            } else if (isOnlyHavenProfile(media.uploader)) {
+                profileUrl = media.uploader;
+            } else if (FapelloRepository.isModelUrl(media.url)
+                    || isOnlyHavenProfile(media.url)) {
+                profileUrl = media.url;
+            } else if (FapelloRepository.isModelUrl(media.uploader)) {
+                profileUrl = media.uploader;
+            }
+        }
+
+        return profileUrl;
+    }
+
+    private static boolean isOnlyHavenProfile(String url) {
+        if (!OnlyHavenRepository.isOnlyHavenUrl(url)) return false;
+        try {
+            String path = new java.net.URI(url).getPath();
+            // Media CDN hosts also end in cum.st; a playable URL is not a creator profile.
+            return path != null && path.matches("/creators/[^/]+/[^/]+/?");
+        } catch (java.net.URISyntaxException invalid) {
+            return false;
+        }
     }
 
     private static boolean isGenericCreatorLabel(String value) {

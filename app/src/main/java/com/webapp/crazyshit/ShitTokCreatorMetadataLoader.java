@@ -34,9 +34,42 @@ final class ShitTokCreatorMetadataLoader {
                 }), ui, resolver(context), ready);
     }
 
-    private static Function<NativeContentItem, NativeContentItem> resolver(Context context) {
+    static Function<NativeContentItem, NativeContentItem> resolver(Context context) {
         Context app = context.getApplicationContext();
-        return media -> ShitTokCreatorMetadata.creatorIdentity(app, media);
+        Set<String> learned = new HashSet<>();
+        return media -> {
+            NativeContentItem identity = ShitTokCreatorMetadata.creatorIdentity(app, media);
+            String profile = ShitTokCreatorMetadata.knownProfileUrl(media);
+            String name = identity == null ? "" : identity.title;
+            boolean named = identity != null
+                    && (FapelloRepository.isFapelloUrl(media.url) || (!media.searchQuery.trim().isEmpty()
+                    && media.searchQuery.trim().equals(ShitTokCreatorMetadata.creatorName(media))))
+                    && !name.regionMatches(true, 0, "http://", 0, 7)
+                    && !name.regionMatches(true, 0, "https://", 0, 8)
+                    && name.codePoints().anyMatch(Character::isLetter);
+            if (named && !profile.isEmpty()
+                    && learned.add(CreatorFavoriteStore.key(identity) + "\n" + profile)) {
+                boolean saved = false;
+                for (NativeContentItem candidate : CreatorCatalog.matching(
+                        app, identity.title, false, 12)) {
+                    if (profile.equals(candidate.url)
+                            && CreatorFavoriteStore.key(identity).equals(CreatorFavoriteStore.key(candidate))) {
+                        saved = true;
+                        break;
+                    }
+                }
+                // Worker-only, once per creator/profile. Never learn a guessed name-only identity
+                // or rewrite catalog artwork each time another clip from the creator is bound.
+                if (!saved) {
+                    NativeContentItem catalog = new NativeContentItem(identity.kind, identity.title,
+                            profile, identity.imageUrl, identity.views, identity.uploader, identity.comments,
+                            FapelloRepository.isModelUrl(profile) ? "Fapello" : "OnlyHaven",
+                            identity.searchQuery);
+                    CreatorCatalog.remember(app, java.util.Collections.singletonList(catalog));
+                }
+            }
+            return identity;
+        };
     }
 
     ShitTokCreatorMetadataLoader(Executor worker, Executor ui,

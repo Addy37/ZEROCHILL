@@ -17,6 +17,168 @@ import static org.junit.Assert.fail;
 public final class FapelloRepositoryTest {
     private final FapelloRepository repository = new FapelloRepository();
 
+    @Test public void duplicateWeeklyClipKeepsCreatorEvenWhenFirstEntryHasThumbnail() {
+        String video = "https://fapello.com/video/week/31142429/";
+        String html = "<div><a href='" + video + "'><img src='/preview.jpg'></a></div>"
+                + "<div><a href='/carrotsoki-2/' title='CarrotSoki'>CarrotSoki</a>"
+                + "<a href='" + video + "'>Video</a></div>"
+                + "<a href='/other-profile/'>Another creator outside the cards</a>";
+        List<NativeContentItem> items = repository.parsePopularVideos(Jsoup.parse(html, FapelloRepository.BASE),
+                FapelloRepository.BASE);
+        assertEquals(1, items.size());
+        assertEquals("https://fapello.com/preview.jpg", items.get(0).imageUrl);
+        assertEquals("CarrotSoki", items.get(0).uploader);
+        assertEquals("https://fapello.com/carrotsoki-2/", items.get(0).searchQuery);
+    }
+
+    @Test public void richerThumbnailDuplicateDoesNotEraseEarlierCreatorProfile() {
+        String video = "https://fapello.com/video/week/31142429/";
+        String html = "<div><a href='/carrotsoki-2/' title='CarrotSoki'>CarrotSoki</a>"
+                + "<a href='" + video + "'>Video</a></div>"
+                + "<div><a href='" + video + "'><img src='/preview.jpg'></a></div>"
+                + "<a href='/other-profile/'>Another creator outside the cards</a>";
+        NativeContentItem item = repository.parsePopularVideos(Jsoup.parse(html, FapelloRepository.BASE),
+                FapelloRepository.BASE).get(0);
+        assertEquals("https://fapello.com/preview.jpg", item.imageUrl);
+        assertEquals("CarrotSoki", item.uploader);
+        assertEquals("https://fapello.com/carrotsoki-2/", item.searchQuery);
+    }
+
+    @Test public void liveCarrotSokiResultThirtyOneIsMatchedBeforeDisplayLimit() throws Exception {
+        String body = fixture("search-carrotsoki-window.json");
+        assertEquals("CarrotSoki", repository.parseSearchResponse(body).get(30).name);
+        int[] calls = {0};
+        List<FapelloRepository.Model> found = repository.searchMatchingModels("CarrotSoki", 8,
+                (offset, size) -> {
+                    assertEquals(0, offset);
+                    assertEquals(40, size);
+                    calls[0]++;
+                    return body;
+                });
+        assertEquals(1, calls[0]);
+        assertEquals(1, found.size());
+        assertEquals("CarrotSoki", found.get(0).name);
+        assertEquals("https://fapello.com/carrotsoki-2/", found.get(0).url);
+    }
+
+    @Test public void creatorSearchCanContinuePastAFuzzyWindowWithinItsBound() throws Exception {
+        java.util.ArrayList<Integer> offsets = new java.util.ArrayList<>();
+        List<FapelloRepository.Model> found = repository.searchMatchingModels("Later Creator", 8,
+                (offset, size) -> {
+                    offsets.add(offset);
+                    if (offset == 0) return fixture("search-carrotsoki-window.json");
+                    return "{\"results\":[{\"name\":\"Later Creator\",\"url\":\"https://fapello.com/later-creator/\"}],\"has_more\":true}";
+                });
+        assertEquals(java.util.Arrays.asList(0, 40), offsets);
+        assertEquals("Later Creator", found.get(0).name);
+    }
+
+    @Test public void boundedUnmatchedSearchCannotClaimACompleteEmptyResult() throws Exception {
+        int[] calls = {0};
+        try {
+            repository.searchMatchingModels("No Related Name", 8, (offset, size) -> {
+                calls[0]++;
+                return fixture("search-carrotsoki-window.json");
+            });
+            fail("More source results remain outside the bounded search");
+        } catch (IOException expected) {
+            assertTrue(expected.getMessage().contains("incomplete"));
+        }
+        assertEquals(3, calls[0]);
+    }
+
+    @Test public void confirmedMatchesRemainUsableIfALaterSearchWindowFails() throws Exception {
+        List<FapelloRepository.Model> found = repository.searchMatchingModels("carrot", 8, (offset, size) -> {
+            if (offset == 0) return fixture("search-carrotsoki-window.json");
+            throw new IOException("later request unavailable");
+        });
+        assertTrue(found.stream().anyMatch(model -> model.name.equals("CarrotSoki")));
+        assertTrue(found.stream().allMatch(model -> CreatorNameMatcher.rank(model.name, "carrot") != Integer.MAX_VALUE));
+    }
+
+    @Test public void searchWindowsUseConfiguredOffsetAndKeepExplicitEmptyResponsesValid() throws Exception {
+        String url = FapelloRepository.searchUrl("CarrotSoki", 40, 40);
+        assertTrue(url.contains("limit=40"));
+        assertTrue(url.contains("offset=40"));
+        int[] calls = {0};
+        assertTrue(repository.searchMatchingModels("Nobody", 8, (offset, size) -> {
+            calls[0]++;
+            return "{\"results\":[],\"has_more\":false}";
+        }).isEmpty());
+        assertEquals(1, calls[0]);
+    }
+
+    @Test public void spacedHandleRetriesCompactSourceQueryAfterUnrelatedResults() throws Exception {
+        java.util.ArrayList<String> queries = new java.util.ArrayList<>();
+        List<FapelloRepository.Model> found = repository.searchModelsWithQueryFallback("Carrot Soki", 8,
+                (query, offset, size) -> {
+                    queries.add(query);
+                    if (query.equals("Carrot Soki")) return "{\"results\":[{\"name\":\"Sasha_candy\","
+                            + "\"url\":\"https://fapello.com/sasha-candy/\"}],\"has_more\":false}";
+                    return fixture("search-carrotsoki-window.json");
+                }, null);
+        assertEquals(java.util.Arrays.asList("Carrot Soki", "CarrotSoki"), queries);
+        assertEquals("CarrotSoki", found.get(0).name);
+    }
+
+    @Test public void exactNameNeedsNoCompactQueryRetry() throws Exception {
+        int[] queries = {0};
+        List<FapelloRepository.Model> found = repository.searchModelsWithQueryFallback("Sample Creator", 8,
+                (query, offset, size) -> { queries[0]++; return fixture("search.json"); }, null);
+        assertFalse(found.isEmpty());
+        assertEquals(1, queries[0]);
+    }
+
+    private static Document aliasProfile(String canonical, String heading, String aliases) {
+        return Jsoup.parse("<link rel='canonical' href='" + canonical + "'>"
+                + "<h2>" + heading + "</h2><p class='font-semibold'>" + aliases + "</p>",
+                FapelloRepository.BASE);
+    }
+
+    @Test public void sourceAliasIsVerifiedWithoutChangingCreatorIdentity() throws Exception {
+        int[] profiles = {0};
+        List<FapelloRepository.Model> found = repository.searchMatchingModels("sofiavictoria_iris", 8,
+                (offset, size) -> "{\"results\":[{\"name\":\"CarrotSoki\","
+                        + "\"url\":\"https://fapello.com/carrotsoki-2/\"}],\"has_more\":false}",
+                model -> {
+                    profiles[0]++;
+                    return aliasProfile(model.url, model.name, "Sofia Victoria, sofiavictoria_iris");
+                });
+        assertEquals(1, profiles[0]);
+        assertEquals("CarrotSoki", found.get(0).name);
+        assertEquals("https://fapello.com/carrotsoki-2/", found.get(0).url);
+    }
+
+    @Test public void aliasVerificationRejectsWrongProfilesAndUnrelatedPageText() {
+        FapelloRepository.Model model = new FapelloRepository.Model("CarrotSoki",
+                "https://fapello.com/carrotsoki-2/", "");
+        assertFalse(FapelloRepository.profileConfirmsAlias(aliasProfile("https://fapello.com/other/",
+                model.name, "sofiavictoria_iris"), model, "sofiavictoria_iris"));
+        assertFalse(FapelloRepository.profileConfirmsAlias(aliasProfile(model.url,
+                "Other Creator", "sofiavictoria_iris"), model, "sofiavictoria_iris"));
+        Document unrelated = aliasProfile(model.url, model.name, "Other Handle");
+        unrelated.body().append("<p>sofiavictoria_iris</p>");
+        assertFalse(FapelloRepository.profileConfirmsAlias(unrelated, model, "sofiavictoria_iris"));
+        assertFalse(FapelloRepository.profileConfirmsAlias(aliasProfile(model.url, model.name,
+                "sofiavictoria_iris"), model, "sofia"));
+    }
+
+    @Test public void namedSearchAndBroadFuzzyResultsNeverFetchAliasProfiles() throws Exception {
+        int[] profiles = {0};
+        FapelloRepository.SearchProfileFetcher unexpected = model -> {
+            profiles[0]++;
+            throw new IOException("No alias profile should be needed");
+        };
+        repository.searchMatchingModels("CarrotSoki", 8,
+                (offset, size) -> fixture("search-carrotsoki-window.json"), unexpected);
+        try {
+            repository.searchMatchingModels("unrelated handle", 8,
+                    (offset, size) -> fixture("search-carrotsoki-window.json"), unexpected);
+            fail("Broad incomplete result set must not be reported as empty");
+        } catch (IOException expected) { }
+        assertEquals(0, profiles[0]);
+    }
+
     @Test public void searchParsingReturnsCanonicalDeduplicatedCreators() throws Exception {
         List<FapelloRepository.Model> models = repository.parseSearchResponse(fixture("search.json"));
         assertEquals(2, models.size());
