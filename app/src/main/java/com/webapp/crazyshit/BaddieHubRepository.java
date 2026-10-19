@@ -423,7 +423,7 @@ final class BaddieHubRepository {
 
             String canonical = stripQueryAndFragment(url);
             if (found.containsKey(canonical)) continue;
-            String title = clean(anchor.text());
+            String title = cardTitle(anchor);
             if (title.isEmpty()) title = clean(image.attr("alt"));
             if (title.isEmpty()) title = slugTitle(canonical);
             String imageUrl = imageUrl(image, document.location());
@@ -431,6 +431,21 @@ final class BaddieHubRepository {
             if (found.size() >= maxItems) break;
         }
         return new ArrayList<>(found.values());
+    }
+
+    private static String cardTitle(Element anchor) {
+        // Live cards put views/duration inside the thumbnail and the title in this header.
+        // Reading the whole link combines all three, including counts such as 587 or 153K.
+        Element heading = anchor.selectFirst(".entry-header");
+        String title = clean(heading == null ? "" : heading.text());
+        if (!title.isEmpty()) return title;
+        title = clean(anchor.attr("title"));
+        if (!title.isEmpty()) return title;
+
+        // Keep older/plain-text cards working without guessing that a leading number is a count.
+        Element textOnly = anchor.clone();
+        textOnly.select(".post-thumbnail .views, .post-thumbnail .duration").remove();
+        return clean(textOnly.text());
     }
 
     private void parseCategories(
