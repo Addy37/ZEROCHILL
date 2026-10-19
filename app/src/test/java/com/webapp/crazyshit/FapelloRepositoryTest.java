@@ -44,6 +44,70 @@ public final class FapelloRepositoryTest {
         assertEquals("https://fapello.com/carrotsoki-2/", item.searchQuery);
     }
 
+    @Test public void liveCarrotSokiResultThirtyOneIsMatchedBeforeDisplayLimit() throws Exception {
+        String body = fixture("search-carrotsoki-window.json");
+        assertEquals("CarrotSoki", repository.parseSearchResponse(body).get(30).name);
+        int[] calls = {0};
+        List<FapelloRepository.Model> found = repository.searchMatchingModels("CarrotSoki", 8,
+                (offset, size) -> {
+                    assertEquals(0, offset);
+                    assertEquals(40, size);
+                    calls[0]++;
+                    return body;
+                });
+        assertEquals(1, calls[0]);
+        assertEquals(1, found.size());
+        assertEquals("CarrotSoki", found.get(0).name);
+        assertEquals("https://fapello.com/carrotsoki-2/", found.get(0).url);
+    }
+
+    @Test public void creatorSearchCanContinuePastAFuzzyWindowWithinItsBound() throws Exception {
+        java.util.ArrayList<Integer> offsets = new java.util.ArrayList<>();
+        List<FapelloRepository.Model> found = repository.searchMatchingModels("Later Creator", 8,
+                (offset, size) -> {
+                    offsets.add(offset);
+                    if (offset == 0) return fixture("search-carrotsoki-window.json");
+                    return "{\"results\":[{\"name\":\"Later Creator\",\"url\":\"https://fapello.com/later-creator/\"}],\"has_more\":true}";
+                });
+        assertEquals(java.util.Arrays.asList(0, 40), offsets);
+        assertEquals("Later Creator", found.get(0).name);
+    }
+
+    @Test public void boundedUnmatchedSearchCannotClaimACompleteEmptyResult() throws Exception {
+        int[] calls = {0};
+        try {
+            repository.searchMatchingModels("No Related Name", 8, (offset, size) -> {
+                calls[0]++;
+                return fixture("search-carrotsoki-window.json");
+            });
+            fail("More source results remain outside the bounded search");
+        } catch (IOException expected) {
+            assertTrue(expected.getMessage().contains("incomplete"));
+        }
+        assertEquals(3, calls[0]);
+    }
+
+    @Test public void confirmedMatchesRemainUsableIfALaterSearchWindowFails() throws Exception {
+        List<FapelloRepository.Model> found = repository.searchMatchingModels("carrot", 8, (offset, size) -> {
+            if (offset == 0) return fixture("search-carrotsoki-window.json");
+            throw new IOException("later request unavailable");
+        });
+        assertTrue(found.stream().anyMatch(model -> model.name.equals("CarrotSoki")));
+        assertTrue(found.stream().allMatch(model -> CreatorNameMatcher.rank(model.name, "carrot") != Integer.MAX_VALUE));
+    }
+
+    @Test public void searchWindowsUseConfiguredOffsetAndKeepExplicitEmptyResponsesValid() throws Exception {
+        String url = FapelloRepository.searchUrl("CarrotSoki", 40, 40);
+        assertTrue(url.contains("limit=40"));
+        assertTrue(url.contains("offset=40"));
+        int[] calls = {0};
+        assertTrue(repository.searchMatchingModels("Nobody", 8, (offset, size) -> {
+            calls[0]++;
+            return "{\"results\":[],\"has_more\":false}";
+        }).isEmpty());
+        assertEquals(1, calls[0]);
+    }
+
     @Test public void searchParsingReturnsCanonicalDeduplicatedCreators() throws Exception {
         List<FapelloRepository.Model> models = repository.parseSearchResponse(fixture("search.json"));
         assertEquals(2, models.size());

@@ -11,6 +11,7 @@ CONFIG = json.loads((pathlib.Path(__file__).resolve().parents[1]
                      / 'app/src/main/assets/source_config_defaults.json').read_text())['sources']
 JOBS = [('fapello', 'CarrotSoki', offset, 8) for offset in (0, 8, 16, 24, 32)] + [
     ('fapello', 'CarrotSoki', 0, 40), ('fapello', 'Carrot Soki', 0, 8),
+    ('fapello', 'sofiavictoria_iris', 0, 40), ('fapello', 'Sofia Victoria', 0, 40),
     ('fapello', 'carrot', 0, 8), ('fapello', 'sonya blaze', 0, 8),
     ('onlyhaven', 'CarrotSoki', 0, 8), ('onlyhaven', 'jane', 0, 8)]
 
@@ -66,7 +67,23 @@ def probe(job):
     return output
 
 
+def profile_alias_probe():
+    url = CONFIG['fapello']['baseUrl'] + 'carrotsoki-2/'
+    output = {'profile': url}
+    try:
+        headers = {'User-Agent': CONFIG['fapello']['userAgent']}
+        with urllib.request.urlopen(urllib.request.Request(url, headers=headers), timeout=15) as response:
+            body = response.read(1048576).decode('utf-8', 'replace')
+        # Only inspect creator-name/alias markup, never media URLs or page content.
+        output['alias_markup'] = [body[max(0, m.start()-180):m.end()+180]
+                                  for m in re.finditer(r'Sofia Victoria|sofiavictoria_iris', body, re.I)][:8]
+    except Exception as error:
+        output['error'] = str(error)
+    print('CREATOR_ALIAS_AUDIT ' + json.dumps(output, ensure_ascii=True), flush=True)
+
+
 if __name__ == '__main__':
+    profile_alias_probe()
     with concurrent.futures.ThreadPoolExecutor(max_workers=5) as pool:
         for result in pool.map(probe, JOBS):
             print('CREATOR_SEARCH_AUDIT ' + json.dumps(result, ensure_ascii=True), flush=True)
