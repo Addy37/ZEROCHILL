@@ -30,7 +30,8 @@ import static org.robolectric.Shadows.shadowOf;
 
 @RunWith(RobolectricTestRunner.class)
 @Config(application = Application.class, sdk = 35, shadows = {
-        OnlyFapLibraryPlaybackTest.Pages.class, OnlyFapLibraryPlaybackTest.Galleries.class})
+        OnlyFapLibraryPlaybackTest.Pages.class, OnlyFapLibraryPlaybackTest.Galleries.class,
+        OnlyFapLibraryPlaybackTest.Albums.class})
 public class OnlyFapLibraryPlaybackTest {
     private static final String URL = "https://fapello.com/video/week/31142429/";
     private static final String PROFILE = "https://fapello.com/carrotsoki-2/";
@@ -59,6 +60,15 @@ public class OnlyFapLibraryPlaybackTest {
         }
     }
 
+    @Implements(value = BunkrRepository.class, isInAndroidSdk = false)
+    public static class Albums {
+        static int calls;
+        @Implementation protected List<NativeContentItem> fetchAlbum(Context context, String url, int page) {
+            calls++;
+            return Collections.emptyList();
+        }
+    }
+
     private static class Queue extends AbstractExecutorService {
         final ArrayDeque<Runnable> pending = new ArrayDeque<>();
         boolean closed;
@@ -79,7 +89,7 @@ public class OnlyFapLibraryPlaybackTest {
                 SocialContentContextStore.PREFS, "onlyfap_hot_gallery_sessions"})
             context.getSharedPreferences(prefs, 0).edit().clear().commit();
         Pages.calls = 0; Pages.unavailable = false;
-        Galleries.calls = 0; Galleries.profile = "";
+        Galleries.calls = 0; Galleries.profile = ""; Albums.calls = 0;
     }
 
     private static NativeContentItem clip() {
@@ -141,6 +151,18 @@ public class OnlyFapLibraryPlaybackTest {
             NativeContentItem content = ReflectionHelpers.callInstanceMethod(activity, "currentContent");
             assertEquals("A post caption", content.title);
             assertEquals("Fixture Creator", OnlyFapVideoMetadata.displayTitle(content));
+        });
+    }
+
+    @Test public void knownBunkrAlbumRetainsItsExistingRelatedMediaPath() {
+        NativeContentItem item = OnlyFapVideoMetadata.basic("Album video", "https://bunkr.cr/v/fixture", "");
+        withPlayer(item, (activity, queue) -> {
+            ReflectionHelpers.setField(activity, "relatedFeedUrl", "https://bunkr.cr/a/fixture");
+            ReflectionHelpers.callInstanceMethod(activity, "loadRelated");
+            queue.runAll(); shadowOf(Looper.getMainLooper()).idle();
+            assertEquals(1, Albums.calls);
+            assertEquals(0, Pages.calls);
+            assertEquals(0, Galleries.calls);
         });
     }
 

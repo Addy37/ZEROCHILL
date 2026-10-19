@@ -30,6 +30,7 @@ final class OnlyFapVideoMetadata {
     static NativeContentItem merge(NativeContentItem current, NativeContentItem saved) {
         if (current == null) return saved;
         if (saved == null || !current.url.equals(saved.url)) return current;
+        if (!applies(current) && !applies(saved)) return current;
         if (ShitTokCreatorMetadata.knownProfileUrl(current).isEmpty()
                 && !ShitTokCreatorMetadata.knownProfileUrl(saved).isEmpty()) return saved.merge(current);
         return current.merge(saved);

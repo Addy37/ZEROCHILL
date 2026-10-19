@@ -644,8 +644,9 @@ final class LibraryHubView extends ScrollView {
         FrameLayout frame = new FrameLayout(activity);
         card.addView(frame, new MaterialCardView.LayoutParams(-1, -1));
 
+        NativeContentItem content = videoItem(title, pageUrl, posterUrl);
         ImageView image = mediaImage(frame);
-        loadMediaImage(image, pageUrl, posterUrl, false);
+        loadMediaImage(image, pageUrl, content.imageUrl, false);
 
         View shade = new View(activity);
         shade.setBackground(bottomShade());
@@ -661,7 +662,6 @@ final class LibraryHubView extends ScrollView {
             frame.addView(badgeView, badgeParams);
         }
 
-        NativeContentItem content = videoItem(title, pageUrl, posterUrl);
         TextView titleView = mediaTitle(OnlyFapVideoMetadata.displayTitle(content));
         FrameLayout.LayoutParams titleParams =
                 new FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM);

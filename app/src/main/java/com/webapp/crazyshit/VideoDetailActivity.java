@@ -194,7 +194,7 @@ public class VideoDetailActivity extends Activity {
     private boolean videoSizeKnown;
     private SensorMediaOrientationListener orientationListener;
     private int thumbnailResolverCursor;
-    private int relatedLoadGeneration;
+    private volatile int relatedLoadGeneration;
     private int relatedPlayGeneration;
     private boolean portraitSeekScrubbing;
     private Boolean showsPortraitOrientation;
@@ -1131,8 +1131,7 @@ public class VideoDetailActivity extends Activity {
         avatarFrame.addView(avatar, new FrameLayout.LayoutParams(-1, -1));
         avatar.setScaleType(ImageView.ScaleType.CENTER_CROP);
         onlyFapCreatorRow.addView(avatarFrame, new LinearLayout.LayoutParams(dp(44), dp(44)));
-        if (!creator.imageUrl.isEmpty()) Glide.with(avatar).load(withHeaders(creator.imageUrl,
-                creator.uploader.isEmpty() ? creator.url : creator.uploader)).into(avatar);
+        if (!creator.imageUrl.isEmpty()) Glide.with(avatar).load(withHeaders(creator.imageUrl, creator.url)).into(avatar);
         TextView gallery = BrowseUi.text(this, creator.title + "\nView gallery", 14, Color.WHITE);
         gallery.setPadding(dp(12), 0, dp(8), 0);
         gallery.setMinHeight(dp(48));
@@ -1171,6 +1170,7 @@ public class VideoDetailActivity extends Activity {
         updateOnlyFapCreatorRow(onlyFapCreator == null);
         relatedContainer.removeAllViews();
         io.execute(() -> {
+            if (generation != relatedLoadGeneration || Thread.currentThread().isInterrupted()) return;
             NativeContentItem content = OnlyFapVideoMetadata.restore(this, current);
             if (FapelloRepository.isPostUrl(content.url)
                     && ShitTokCreatorMetadata.knownProfileUrl(content).isEmpty()) {
@@ -1185,7 +1185,7 @@ public class VideoDetailActivity extends Activity {
                 VideoDownloadStore.enrich(this, enriched);
             }
             runOnUiThread(() -> {
-                if (isFinishing() || generation != relatedLoadGeneration || !expectedUrl.equals(pageUrl)) return;
+                if (isFinishing() || isDestroyed() || generation != relatedLoadGeneration || !expectedUrl.equals(pageUrl)) return;
                 onlyFapContent = enriched;
                 onlyFapCreator = creator;
                 updateMetadataUi();
@@ -1193,7 +1193,8 @@ public class VideoDetailActivity extends Activity {
             });
             ArrayList<NativeContentItem> videos = new ArrayList<>();
             String session = "";
-            if (creator != null && !Thread.currentThread().isInterrupted()) {
+            if (generation != relatedLoadGeneration || Thread.currentThread().isInterrupted()) return;
+            if (creator != null) {
                 String query = creator.searchQuery.isEmpty() ? creator.title : creator.searchQuery;
                 String profile = NativeFeedBrowserActivity.creatorProfileHint(creator);
                 session = CreatorGalleryPreloader.sessionId(this, creator);
@@ -1219,7 +1220,7 @@ public class VideoDetailActivity extends Activity {
             }
             String gallerySession = session;
             runOnUiThread(() -> {
-                if (isFinishing() || generation != relatedLoadGeneration || !expectedUrl.equals(pageUrl)) return;
+                if (isFinishing() || isDestroyed() || generation != relatedLoadGeneration || !expectedUrl.equals(pageUrl)) return;
                 onlyFapSession = gallerySession;
                 renderRelated(videos);
             });
@@ -1228,7 +1229,9 @@ public class VideoDetailActivity extends Activity {
 
     private void loadRelated() {
         if (showsOrigin || relatedContainer == null) return;
-        if (OnlyFapVideoMetadata.applies(currentContent())) {
+        boolean knownAlbum = BunkrRepository.isAlbumUrl(relatedFeedUrl)
+                && OnlyFapVideoMetadata.creator(currentContent()) == null;
+        if (OnlyFapVideoMetadata.applies(currentContent()) && !knownAlbum) {
             loadOnlyFapRelated();
             return;
         }
