@@ -64,6 +64,8 @@ public class ShitTokCreatorGalleryHandoffTest {
         assertEquals(original.imageUrl, harvested.imageUrl);
         assertEquals(original.publishedAtMillis, harvested.publishedAtMillis);
         assertEquals(original.aspectRatioHint, harvested.aspectRatioHint, 0f);
+        assertEquals(ShitTokAspectPriority.sourceKey(clip("OnlyHaven")),
+                ShitTokAspectPriority.sourceKey(harvested));
         assertEquals(PROFILE, ShitTokCreatorMetadata.creatorIdentity(null, harvested).url);
     }
 

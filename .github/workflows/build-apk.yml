@@ -230,6 +230,16 @@ jobs:
           --tests 'com.webapp.crazyshit.OnlyFapFavoriteAvatarTest'
           --tests 'com.webapp.crazyshit.PrimaryTab*'
 
+      - name: Run focused ShitTok creator handoff regressions first
+        run: >-
+          gradle --no-daemon :app:testDebugUnitTest
+          --tests 'com.webapp.crazyshit.ShitTokCreatorGalleryHandoffTest'
+          --tests 'com.webapp.crazyshit.ShitTokCreatorMetadataTest'
+          --tests 'com.webapp.crazyshit.ShitTokCreatorMetadataLoaderTest'
+          --tests 'com.webapp.crazyshit.ChaosSourceMixerPriorityTest'
+          --tests 'com.webapp.crazyshit.ShitTokAspectPriorityTest'
+          --tests 'com.webapp.crazyshit.CreatorMergedGalleryTest'
+
       - name: Verify ShitTok interaction boundaries
         if: ${{ github.head_ref != 'release/zerochill-5.0.0' }}
         run: >-
@@ -270,15 +280,6 @@ jobs:
           --tests 'com.webapp.crazyshit.ShitTokPlayerPoolTest'
           --tests 'com.webapp.crazyshit.ShitTokSettledSwipeTest'
           --tests 'com.webapp.crazyshit.ShitTokDynamicPinchTest'
-
-      - name: Run focused ShitTok creator handoff regressions first
-        run: >-
-          gradle --no-daemon :app:testDebugUnitTest
-          --tests 'com.webapp.crazyshit.ShitTokCreatorGalleryHandoffTest'
-          --tests 'com.webapp.crazyshit.ShitTokCreatorMetadataTest'
-          --tests 'com.webapp.crazyshit.ShitTokCreatorMetadataLoaderTest'
-          --tests 'com.webapp.crazyshit.ChaosSourceMixerPriorityTest'
-          --tests 'com.webapp.crazyshit.CreatorMergedGalleryTest'
 
       - name: Run focused notification entry regressions
         if: ${{ github.head_ref != 'release/zerochill-5.0.0' && github.event.pull_request.number != 304 && github.head_ref != 'fix/shittok-async-creator-metadata' && github.head_ref != 'fix/shittok-startup-handoff' && github.head_ref != 'fix/onlyfap-first-open' && github.head_ref != 'feature/phone-content-grid-layout' && github.head_ref != 'feature/library-profile-redesign' }}
