@@ -126,6 +126,15 @@ public class ShitTokCreatorSearchLearningTest {
         assertTrue(CreatorCatalog.matching(context, "A post caption", false, 10).isEmpty());
     }
 
+    @Test public void legacyGenericQueryKeepsTitleFallbackWithoutTeachingPostCaptions() {
+        NativeContentItem media = new NativeContentItem(NativeContentItem.KIND_MEDIA, "Fixture creator",
+                "https://e1.cum.st/post.mp4", "", "", "https://cum.st/creators/onlyfans/123", "",
+                "OnlyHaven", "OnlyHaven");
+        assertEquals("Fixture creator", ShitTokCreatorMetadata.creatorName(media));
+        ShitTokCreatorMetadataLoader.resolver(context).apply(media);
+        assertTrue(CreatorCatalog.matching(context, "Fixture creator", false, 10).isEmpty());
+    }
+
     @Test public void existingCreatorArtworkAndFavoritesAreNotRewrittenByClipLearning() {
         NativeContentItem creator = new NativeContentItem(NativeContentItem.KIND_CREATOR, "CarrotSoki",
                 PROFILE, "https://example.com/avatar.jpg", "", "", "", "Fapello", "CarrotSoki");

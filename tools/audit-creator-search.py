@@ -9,8 +9,10 @@ import urllib.request
 
 CONFIG = json.loads((pathlib.Path(__file__).resolve().parents[1]
                      / 'app/src/main/assets/source_config_defaults.json').read_text())['sources']
-JOBS = [('fapello', 'CarrotSoki'), ('fapello', 'Carrot Soki'),
-        ('fapello', 'sonya blaze'), ('onlyhaven', 'CarrotSoki'), ('onlyhaven', 'jane')]
+JOBS = [('fapello', 'CarrotSoki', offset, 8) for offset in (0, 8, 16, 24, 32)] + [
+    ('fapello', 'CarrotSoki', 0, 40), ('fapello', 'Carrot Soki', 0, 8),
+    ('fapello', 'carrot', 0, 8), ('fapello', 'sonya blaze', 0, 8),
+    ('onlyhaven', 'CarrotSoki', 0, 8), ('onlyhaven', 'jane', 0, 8)]
 
 
 def rows(value, output):
@@ -31,17 +33,17 @@ def rows(value, output):
 
 
 def probe(job):
-    source, query = job
+    source, query, offset, limit = job
     config = CONFIG[source]
     route = config['routes']['search' if source == 'fapello' else 'creatorSearchApi']
-    for key, value in {'query': urllib.parse.quote(query), 'limit': '8', 'offset': '0'}.items():
+    for key, value in {'query': urllib.parse.quote(query), 'limit': str(limit), 'offset': str(offset)}.items():
         route = route.replace('{' + key + '}', value)
     headers = dict(config.get('requestHeaders') or {})
     headers.update(config.get('ajaxHeaders') or {})
     headers.pop('Accept-Encoding', None)
     headers['User-Agent'] = config['userAgent']
     headers['Referer'] = config.get('refererOverride') or config['baseUrl']
-    output = {'source': source, 'query': query}
+    output = {'source': source, 'query': query, 'requested_offset': offset, 'requested_limit': limit}
     try:
         request = urllib.request.Request(config['baseUrl'] + route, headers=headers)
         with urllib.request.urlopen(request, timeout=15) as response:
@@ -51,6 +53,8 @@ def probe(job):
         try:
             data = json.loads(body)
             output['root_keys'] = sorted(data.keys()) if isinstance(data, dict) else ['array']
+            if isinstance(data, dict):
+                output['pagination'] = {k: data[k] for k in ('total', 'has_more', 'offset', 'query', 'success') if k in data}
             output['sample'] = []
             rows(data, output['sample'])
             output['format'] = 'json'

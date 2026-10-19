@@ -42,7 +42,8 @@ final class ShitTokCreatorMetadataLoader {
             String profile = ShitTokCreatorMetadata.knownProfileUrl(media);
             String name = identity == null ? "" : identity.title;
             boolean named = identity != null
-                    && (FapelloRepository.isFapelloUrl(media.url) || !media.searchQuery.trim().isEmpty())
+                    && (FapelloRepository.isFapelloUrl(media.url) || (!media.searchQuery.trim().isEmpty()
+                    && media.searchQuery.trim().equals(ShitTokCreatorMetadata.creatorName(media))))
                     && !name.regionMatches(true, 0, "http://", 0, 7)
                     && !name.regionMatches(true, 0, "https://", 0, 8)
                     && name.codePoints().anyMatch(Character::isLetter);

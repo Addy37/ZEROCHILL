@@ -26,7 +26,7 @@ final class ShitTokCreatorMetadata {
         if (!onlyHaven) return "";
 
         String creator = clean(item.searchQuery);
-        if (creator.isEmpty()) creator = clean(item.title);
+        if (isGenericCreatorLabel(creator)) creator = clean(item.title);
         return isGenericCreatorLabel(creator) ? "" : creator;
     }
 
