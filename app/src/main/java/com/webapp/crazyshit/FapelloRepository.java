@@ -518,10 +518,11 @@ final class FapelloRepository {
             String id = postId(pageUrl);
             String title = clean(link.attr("title"));
             if (title.isEmpty()) title = id.isEmpty() ? "OnlyFap video" : "OnlyFap video #" + id;
-            String creator = popularVideoCreator(link, endpoint, pageUrl);
+            Model creator = popularVideoCreator(link, endpoint, pageUrl);
             NativeContentItem candidate = new NativeContentItem(
                     NativeContentItem.KIND_MEDIA, title, pageUrl, thumbnail,
-                    "", creator, "", "OnlyFap");
+                    "", creator == null ? "" : creator.name, "", "OnlyFap",
+                    creator == null ? "" : creator.url);
             NativeContentItem existing = items.get(pageUrl);
             if (existing == null || (existing.imageUrl.isEmpty() && !thumbnail.isEmpty())) {
                 items.put(pageUrl, candidate);
@@ -530,7 +531,7 @@ final class FapelloRepository {
         return new ArrayList<>(items.values());
     }
 
-    private String popularVideoCreator(Element postLink, String endpoint, String pageUrl) {
+    private Model popularVideoCreator(Element postLink, String endpoint, String pageUrl) {
         Element scope = postLink == null ? null : postLink.parent();
         for (int depth = 0; scope != null && depth < 5; depth++, scope = scope.parent()) {
             if (clean(scope.text()).length() > 1200) break;
@@ -553,12 +554,10 @@ final class FapelloRepository {
             if (name.isEmpty()) name = clean(creatorLink.text());
             Matcher label = CREATOR_LINK_TEXT.matcher(name);
             if (label.matches()) name = clean(label.group(1));
-            if (!name.isEmpty() && name.length() <= 80) return name;
-
-            String slug = modelSlug(entry.getKey());
-            return humanizeSlug(slug);
+            if (name.isEmpty() || name.length() > 80) name = humanizeSlug(modelSlug(entry.getKey()));
+            return new Model(name, entry.getKey(), "");
         }
-        return "";
+        return null;
     }
 
     CrazyShitRepository.StreamInfo resolvePlayable(Context context, String pageUrl)

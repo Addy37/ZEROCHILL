@@ -234,6 +234,9 @@ jobs:
         run: >-
           gradle --no-daemon :app:testDebugUnitTest
           --tests 'com.webapp.crazyshit.ShitTokCreatorGalleryHandoffTest'
+          --tests 'com.webapp.crazyshit.FapelloRepositoryTest'
+          --tests 'com.webapp.crazyshit.HomeSourceTest'
+          --tests 'com.webapp.crazyshit.NotificationCoordinatorFormattingTest'
           --tests 'com.webapp.crazyshit.ShitTokCreatorMetadataTest'
           --tests 'com.webapp.crazyshit.ShitTokCreatorMetadataLoaderTest'
           --tests 'com.webapp.crazyshit.ChaosSourceMixerPriorityTest'

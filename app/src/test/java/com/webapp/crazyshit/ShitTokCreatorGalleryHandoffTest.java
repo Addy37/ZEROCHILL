@@ -154,6 +154,32 @@ public class ShitTokCreatorGalleryHandoffTest {
         assertEquals(1, pending.size());
     }
 
+    @Test public void fapelloWeeklyClipRetainsExactCarrotSokiProfileThroughNavigationAndPreload() {
+        String clipUrl = "https://fapello.com/video/week/31142429/";
+        String profile = "https://fapello.com/carrotsoki-2/";
+        String html = "<div class='card'><a href='" + profile
+                + "' title='CarrotSoki'>CarrotSoki</a><a href='" + clipUrl
+                + "'><img src='/thumbnail.jpg'></a></div>";
+        NativeContentItem media = new FapelloRepository().parsePopularVideos(
+                org.jsoup.Jsoup.parse(html, FapelloRepository.BASE), FapelloRepository.BASE).get(0);
+        assertEquals(clipUrl, media.url);
+        assertEquals("CarrotSoki", media.uploader);
+        assertEquals(profile, media.searchQuery);
+        NativeContentItem immediate = ShitTokCreatorMetadata.creatorIdentity(null, media);
+        assertEquals(profile, immediate.url);
+        assertEquals("CarrotSoki", immediate.searchQuery);
+        ShitTokCreatorGalleryPreloader.warm(context, media);
+        assertEquals(profile, Preloads.profile);
+        assertEquals("CarrotSoki", Preloads.query);
+        assertNavigation(media, profile);
+
+        // A similarly named catalog entry must not redirect the known profile.
+        CreatorCatalog.remember(context, Collections.singletonList(new NativeContentItem(
+                NativeContentItem.KIND_CREATOR, "CarrotSoki", "https://fapello.com/carrotsoki/",
+                "https://example.com/avatar.jpg", "", "", "", "", "CarrotSoki")));
+        assertEquals(profile, ShitTokCreatorMetadata.creatorIdentity(context, media).url);
+    }
+
     @Test public void fapelloProfileAndCatalogFallbackStillWork() {
         NativeContentItem media = new NativeContentItem(NativeContentItem.KIND_MEDIA,
                 "Clip", "https://fapello.com/carrotsoki/123/", "", "", "CarrotSoki", "", "OnlyFap");

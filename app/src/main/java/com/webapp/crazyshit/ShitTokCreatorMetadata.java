@@ -39,7 +39,12 @@ final class ShitTokCreatorMetadata {
 
         String profileUrl = "";
         if (media != null) {
-            if (isOnlyHavenProfile(media.uploader)) {
+            // Popular Fapello media keeps the display name in uploader and the exact
+            // creator lookup URL in searchQuery; creator identities still search by name.
+            if (FapelloRepository.isFapelloUrl(media.url)
+                    && FapelloRepository.isModelUrl(media.searchQuery)) {
+                profileUrl = media.searchQuery;
+            } else if (isOnlyHavenProfile(media.uploader)) {
                 profileUrl = media.uploader;
             } else if (FapelloRepository.isModelUrl(media.url)
                     || isOnlyHavenProfile(media.url)) {
