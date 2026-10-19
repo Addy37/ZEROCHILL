@@ -29,13 +29,16 @@ final class FapzoneCreatorSearchRepository {
         List<NativeContentItem> search(Context context, String query, int limit) throws IOException;
     }
 
+    /** Implementations verify names or profile aliases before returning creator results. */
+    interface ConfirmedSourceSearch extends SourceSearch { }
+
     private final ExecutorService searchIo;
     private final List<SourceSearch> sources;
 
     FapzoneCreatorSearchRepository() {
         searchIo = SEARCH_IO;
         sources = new ArrayList<>();
-        sources.add(this::fromFapello);
+        sources.add((ConfirmedSourceSearch) this::fromFapello);
         sources.add((context, query, limit) -> fromWikiFeet(
                 context, WikiFeetRepository.Site.WIKIFEET, query, limit));
         sources.add((context, query, limit) -> fromWikiFeet(
@@ -72,7 +75,18 @@ final class FapzoneCreatorSearchRepository {
                 new ExecutorCompletionService<>(searchIo);
         ArrayList<Future<List<NativeContentItem>>> requests = new ArrayList<>();
         for (SourceSearch source : sources) {
-            requests.add(completed.submit(() -> source.search(context, cleanQuery, safeLimit)));
+            requests.add(completed.submit(() -> {
+                List<NativeContentItem> items = source.search(context, cleanQuery, safeLimit);
+                if (items == null) throw new IOException("Creator source returned no response");
+                ArrayList<NativeContentItem> confirmed = new ArrayList<>();
+                for (NativeContentItem item : items) {
+                    if (hasUsableDisplayName(item) && item.isCreator()
+                            && (source instanceof ConfirmedSourceSearch || matchesQuery(item, cleanQuery))) {
+                        confirmed.add(item);
+                    }
+                }
+                return confirmed;
+            }));
         }
 
         LinkedHashMap<String, CreatorGroup> groups = new LinkedHashMap<>();
@@ -91,7 +105,6 @@ final class FapzoneCreatorSearchRepository {
                 successes++;
                 if (items != null) {
                     for (NativeContentItem item : items) {
-                        if (!matchesQuery(item, cleanQuery) || !hasUsableDisplayName(item)) continue;
                         add(groups, item);
                     }
                 }

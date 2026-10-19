@@ -108,6 +108,56 @@ public final class FapelloRepositoryTest {
         assertEquals(1, calls[0]);
     }
 
+    private static Document aliasProfile(String canonical, String heading, String aliases) {
+        return Jsoup.parse("<link rel='canonical' href='" + canonical + "'>"
+                + "<h2>" + heading + "</h2><p class='font-semibold'>" + aliases + "</p>",
+                FapelloRepository.BASE);
+    }
+
+    @Test public void sourceAliasIsVerifiedWithoutChangingCreatorIdentity() throws Exception {
+        int[] profiles = {0};
+        List<FapelloRepository.Model> found = repository.searchMatchingModels("sofiavictoria_iris", 8,
+                (offset, size) -> "{\"results\":[{\"name\":\"CarrotSoki\","
+                        + "\"url\":\"https://fapello.com/carrotsoki-2/\"}],\"has_more\":false}",
+                model -> {
+                    profiles[0]++;
+                    return aliasProfile(model.url, model.name, "Sofia Victoria, sofiavictoria_iris");
+                });
+        assertEquals(1, profiles[0]);
+        assertEquals("CarrotSoki", found.get(0).name);
+        assertEquals("https://fapello.com/carrotsoki-2/", found.get(0).url);
+    }
+
+    @Test public void aliasVerificationRejectsWrongProfilesAndUnrelatedPageText() {
+        FapelloRepository.Model model = new FapelloRepository.Model("CarrotSoki",
+                "https://fapello.com/carrotsoki-2/", "");
+        assertFalse(FapelloRepository.profileConfirmsAlias(aliasProfile("https://fapello.com/other/",
+                model.name, "sofiavictoria_iris"), model, "sofiavictoria_iris"));
+        assertFalse(FapelloRepository.profileConfirmsAlias(aliasProfile(model.url,
+                "Other Creator", "sofiavictoria_iris"), model, "sofiavictoria_iris"));
+        Document unrelated = aliasProfile(model.url, model.name, "Other Handle");
+        unrelated.body().append("<p>sofiavictoria_iris</p>");
+        assertFalse(FapelloRepository.profileConfirmsAlias(unrelated, model, "sofiavictoria_iris"));
+        assertFalse(FapelloRepository.profileConfirmsAlias(aliasProfile(model.url, model.name,
+                "sofiavictoria_iris"), model, "sofia"));
+    }
+
+    @Test public void namedSearchAndBroadFuzzyResultsNeverFetchAliasProfiles() throws Exception {
+        int[] profiles = {0};
+        FapelloRepository.SearchProfileFetcher unexpected = model -> {
+            profiles[0]++;
+            throw new IOException("No alias profile should be needed");
+        };
+        repository.searchMatchingModels("CarrotSoki", 8,
+                (offset, size) -> fixture("search-carrotsoki-window.json"), unexpected);
+        try {
+            repository.searchMatchingModels("unrelated handle", 8,
+                    (offset, size) -> fixture("search-carrotsoki-window.json"), unexpected);
+            fail("Broad incomplete result set must not be reported as empty");
+        } catch (IOException expected) { }
+        assertEquals(0, profiles[0]);
+    }
+
     @Test public void searchParsingReturnsCanonicalDeduplicatedCreators() throws Exception {
         List<FapelloRepository.Model> models = repository.parseSearchResponse(fixture("search.json"));
         assertEquals(2, models.size());

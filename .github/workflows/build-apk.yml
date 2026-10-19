@@ -10,15 +10,6 @@ permissions:
   contents: write
 
 jobs:
-  creator-search-audit:
-    if: ${{ github.head_ref == 'fix/shittok-creator-gallery-handoff' }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 3
-    steps:
-      - uses: actions/checkout@v6
-      - name: Audit live creator search responses
-        run: python3 tools/audit-creator-search.py
-
   build:
     runs-on: ubuntu-latest
     env:

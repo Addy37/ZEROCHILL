@@ -77,13 +77,23 @@ final class FapelloRepository {
         String fetch(int offset, int limit) throws IOException;
     }
 
+    interface SearchProfileFetcher {
+        Document fetch(Model model) throws IOException;
+    }
+
     List<Model> searchModels(Context context, String query, int limit) throws IOException {
         requireEnabled();
         return searchMatchingModels(query, limit, (offset, size) ->
-                fetchBody(context, searchUrl(query, size, offset), baseUrl(), true));
+                fetchBody(context, searchUrl(query, size, offset), baseUrl(), true),
+                model -> fetchDocument(context, model.url, baseUrl()));
     }
 
     List<Model> searchMatchingModels(String query, int limit, SearchPageFetcher fetcher) throws IOException {
+        return searchMatchingModels(query, limit, fetcher, null);
+    }
+
+    List<Model> searchMatchingModels(String query, int limit, SearchPageFetcher fetcher,
+                                    SearchProfileFetcher profiles) throws IOException {
         String cleanQuery = clean(query);
         if (cleanQuery.isEmpty()) return new ArrayList<>();
         int safeLimit = Math.max(1, Math.min(8, limit));
@@ -123,6 +133,16 @@ final class FapelloRepository {
                     if (results != null) count = results.length();
                 }
             } catch (Exception ignored) { }
+            // The API matches aliases but omits them from its JSON. Verify only a narrow,
+            // complete result set against the creator header, never arbitrary page text.
+            if (matches.isEmpty() && !more && offset == 0 && models.size() <= 3 && profiles != null) {
+                for (Model model : models) {
+                    if (Thread.currentThread().isInterrupted()) throw new IOException("Creator search interrupted");
+                    if (profileConfirmsAlias(profiles.fetch(model), model, cleanQuery)) {
+                        matches.putIfAbsent(canonicalKey(model.url), model);
+                    }
+                }
+            }
             if (!more || count == 0) break;
             offset += count;
         }
@@ -132,6 +152,24 @@ final class FapelloRepository {
         ArrayList<Model> output = new ArrayList<>(matches.values());
         output.sort(java.util.Comparator.comparingInt(model -> CreatorNameMatcher.rank(model.name, cleanQuery)));
         return limitModels(output, safeLimit);
+    }
+
+    static boolean profileConfirmsAlias(Document document, Model model, String query) {
+        if (document == null || model == null) return false;
+        Element canonical = document.selectFirst("link[rel=canonical][href]");
+        if (canonical == null || !canonicalKey(model.url).equals(
+                canonicalKey(normalizeUrl(canonical.attr("href"), model.url)))) return false;
+        for (Element heading : document.select("h2")) {
+            if (CreatorNameMatcher.rank(heading.text(), model.name) != 0) continue;
+            Element aliases = heading.nextElementSibling();
+            if (aliases == null || !aliases.tagName().equals("p") || !aliases.hasClass("font-semibold")) continue;
+            String wanted = CreatorNameMatcher.normalized(query).replace(" ", "");
+            if (wanted.isEmpty()) return false;
+            for (String alias : aliases.text().split(",")) {
+                if (CreatorNameMatcher.normalized(alias).replace(" ", "").equals(wanted)) return true;
+            }
+        }
+        return false;
     }
 
     List<Model> searchConfirmedModels(Context context, String query, int limit) throws IOException {

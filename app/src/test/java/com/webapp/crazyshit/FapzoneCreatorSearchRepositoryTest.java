@@ -31,6 +31,26 @@ public final class FapzoneCreatorSearchRepositoryTest {
         context.getSharedPreferences("creator_favorites", 0).edit().clear().commit();
     }
 
+    @Test public void verifiedAliasSurvivesMergedSearchWithOriginalFavoriteKey() throws Exception {
+        Context context = RuntimeEnvironment.getApplication();
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        NativeContentItem item = new NativeContentItem(NativeContentItem.KIND_CREATOR, "CarrotSoki",
+                "https://fapello.com/carrotsoki-2/", "", "", "", "", "Fapello", "CarrotSoki");
+        FapzoneCreatorSearchRepository.ConfirmedSourceSearch verified =
+                (ignored, query, limit) -> Collections.singletonList(item);
+        try {
+            List<NativeContentItem> found = new FapzoneCreatorSearchRepository(executor,
+                    Collections.singletonList(verified)).search(context, "sofiavictoria_iris", 8);
+            assertEquals(1, found.size());
+            assertEquals("CarrotSoki", found.get(0).title);
+            assertEquals(item.url, found.get(0).url);
+            assertEquals(CreatorFavoriteStore.key(item), CreatorFavoriteStore.key(found.get(0)));
+            assertEquals("CarrotSoki", found.get(0).searchQuery);
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
     @Test public void publishesFastSourceBeforeSlowSourceCompletes() throws Exception {
         Context context = RuntimeEnvironment.getApplication();
         ExecutorService executor = Executors.newFixedThreadPool(2);
