@@ -253,7 +253,7 @@ final class SearchPanel {
         searchAll.setBackgroundColor(Color.TRANSPARENT);
         searchAll.setTextSize(14f);
         searchAll.setVisibility(View.GONE);
-        resultsControls.addView(searchAll, new LinearLayout.LayoutParams(-1, dp(44)));
+        resultsControls.addView(searchAll, new LinearLayout.LayoutParams(-1, dp(48)));
         if (!bunkrOnly) {
             filterBar = buildFilters();
             resultsControls.addView(filterBar, new LinearLayout.LayoutParams(-1, dp(44)));
@@ -630,7 +630,7 @@ final class SearchPanel {
 
     private boolean current(int token, String query) {
         return !destroyed && !activity.isFinishing() && !activity.isDestroyed()
-                && token == generation && query.equals(input.getText().toString().trim());
+                && token == generation && query.equals(activeQuery);
     }
 
     private void startGlobalSearch(String query, boolean clear) {
@@ -812,7 +812,7 @@ final class SearchPanel {
         if (filter == Filter.EFUKT) appendSection(output, "EFukt Videos", efuktVideos, GlobalSearchAdapter.SOURCE_REMOTE, 40);
         if (filter == Filter.ALL || filter == Filter.BUNKR || filter == Filter.COLLECTIONS) {
             appendSection(output, "OnlyFap Creators", fapzoneCreators,
-                    GlobalSearchAdapter.SOURCE_REMOTE, 20);
+                    GlobalSearchAdapter.SOURCE_REMOTE, 80);
             appendSection(output, "OnlyFap Albums", bunkrAlbums, GlobalSearchAdapter.SOURCE_REMOTE, 30);
         }
         if (filter == Filter.ALL || filter == Filter.COLLECTIONS) appendSection(output, "Series", series, GlobalSearchAdapter.SOURCE_REMOTE, 20);
@@ -1079,6 +1079,8 @@ final class SearchPanel {
 
     void resume() {
         if (showingRecent()) { showRecentSearches(); updateContentVisibility(); }
+        else if (onlyFapAdapter != null) onlyFapAdapter.notifyDataSetChanged();
+        else if (adapter != null) adapter.notifyDataSetChanged();
     }
 
     void save(Bundle state) {

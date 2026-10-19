@@ -13,6 +13,7 @@ import androidx.recyclerview.widget.RecyclerView;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.util.Collections;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -531,27 +532,25 @@ public class VisualRefreshTest {
         CreatorCatalog.remember(screen.get(), Collections.singletonList(creator()));
         EditText input = ReflectionHelpers.getField(screen.get().panel, "input");
         input.setText("Alex");
-        CreatorSuggestionsController suggestions = ReflectionHelpers.getField(screen.get().panel, "suggestions");
-        suggestions.refreshLocal();
-        CreatorListAdapter adapter = ReflectionHelpers.getField(suggestions, "adapter");
-        long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(3);
-        while (adapter.getItemCount() == 0 && System.nanoTime() < deadline) {
-            shadowOf(Looper.getMainLooper()).idle();
-            Thread.sleep(10);
-        }
-        assertEquals(1, adapter.getItemCount());
+        SearchPanel panel = screen.get().panel;
+        ReflectionHelpers.callInstanceMethod(panel, "cancelSearchWork");
+        ReflectionHelpers.setField(panel, "activeQuery", "Alex");
+        ReflectionHelpers.callInstanceMethod(panel, "publishCreators",
+                ReflectionHelpers.ClassParameter.from(List.class, Collections.singletonList(creator())));
+        GlobalSearchAdapter adapter = ReflectionHelpers.getField(panel, "adapter");
+        assertEquals(2, adapter.getItemCount()); // Section heading and creator row.
         View root = ((android.view.ViewGroup) screen.get().findViewById(android.R.id.content)).getChildAt(0);
         shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(220));
         capture(root, "creator-search", 411, 891);
         capture(root, "creator-search-keyboard-space", 360, 380);
-        RecyclerView suggestionList = ReflectionHelpers.getField(suggestions, "recycler");
-        assertTrue(suggestionList.getHeight() - suggestionList.getPaddingTop() >= BrowseUi.dp(screen.get(), 72));
-        TextView action = ReflectionHelpers.getField(suggestions, "searchAll");
+        RecyclerView suggestionList = ReflectionHelpers.getField(panel, "recycler");
+        assertTrue(suggestionList.getHeight() - suggestionList.getPaddingTop() >= BrowseUi.dp(screen.get(), 104));
+        TextView action = ReflectionHelpers.getField(panel, "searchAll");
         assertEquals(View.VISIBLE, action.getVisibility());
         assertTrue(action.getHeight() >= BrowseUi.dp(screen.get(), 48));
         assertEquals(View.GONE, ((View) ReflectionHelpers.getField(screen.get().panel, "filterBar")).getVisibility());
-        CreatorListAdapter.Holder row = adapter.onCreateViewHolder(new RecyclerView(screen.get()), 0);
-        adapter.onBindViewHolder(row, 0); row.itemView.performClick();
+        RecyclerView.ViewHolder row = adapter.onCreateViewHolder(new RecyclerView(screen.get()), adapter.getItemViewType(1));
+        adapter.onBindViewHolder(row, 1); row.itemView.performClick();
         assertEquals(NativeFeedBrowserActivity.class.getName(), shadowOf(screen.get()).getNextStartedActivity().getComponent().getClassName());
         screen.pause().stop().destroy();
     }
