@@ -194,6 +194,20 @@ jobs:
           gradle-version: '8.11.1'
           cache-provider: basic
 
+      - name: Run focused BaddieHub title parsing first
+        if: ${{ github.head_ref == 'fix/baddiehub-view-count-titles' }}
+        run: gradle --no-daemon :app:testDebugUnitTest --tests 'com.webapp.crazyshit.BaddieHubRepositoryTest'
+
+      - name: Run related BaddieHub source and admission regressions
+        if: ${{ github.head_ref == 'fix/baddiehub-view-count-titles' }}
+        run: >-
+          gradle --no-daemon :app:testDebugUnitTest
+          --tests 'com.webapp.crazyshit.RemoteSourceConfigManagerTest'
+          --tests 'com.webapp.crazyshit.ShowsHubStateTest'
+          --tests 'com.webapp.crazyshit.ShowsHeroDesignTest'
+          --tests 'com.webapp.crazyshit.ShitTokOrientationAdmissionTest'
+          --tests 'com.webapp.crazyshit.ShitTokAspectPriorityTest'
+
       - name: Verify Library profile, account isolation and existing collections
         if: ${{ github.head_ref != 'release/zerochill-5.0.0' && github.head_ref == 'feature/library-profile-redesign' }}
         run: >-

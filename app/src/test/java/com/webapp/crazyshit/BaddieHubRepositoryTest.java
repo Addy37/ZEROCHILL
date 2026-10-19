@@ -87,4 +87,79 @@ public final class BaddieHubRepositoryTest {
         assertEquals("https://baddiehub.com/related-two/", items.get(1).url);
         assertEquals(BaddieHubRepository.LABEL, items.get(0).uploader);
     }
+    @Test public void listingSeparatesPlainNumericViewsFromTitle() {
+        assertCardTitle("587", "Toni Camille");
+    }
+
+    @Test public void listingSeparatesKViewsFromTitle() {
+        assertCardTitle("153K", "Hailey & Sarah");
+        assertCardTitle("107K", "Dessy");
+        assertCardTitle("167K", "Mandy Muse");
+        assertCardTitle("76K", "Cherry Milk");
+    }
+
+    @Test public void listingSeparatesDecimalMViewsFromTitle() {
+        assertCardTitle("1.2M", "Example Name");
+    }
+
+    @Test public void listingKeepsNormalTitleWithoutCount() {
+        assertCardTitle("", "Example Name");
+    }
+
+    @Test public void listingPreservesNumberLeadingTitlesEvenWithViews() {
+        assertCardTitle("118K", "1 v 3");
+        assertCardTitle("587", "2 Friends");
+        assertCardTitle("153K", "153K Challenge");
+        assertEquals("2026 Highlights", listingTitle(
+                "<a href='/clip/'><img src='/clip.jpg'>2026 Highlights</a>"));
+        assertEquals("587 Toni Camille", listingTitle(
+                "<a href='/clip/'><img src='/clip.jpg'>587 Toni Camille</a>"));
+    }
+
+    @Test public void missingHeaderUsesExplicitLinkTitle() {
+        assertEquals("2 Friends", listingTitle(
+                "<a href='/clip/' title='2 Friends'><img src='/clip.jpg'>"
+                + "<span class='views'>153K</span></a>"));
+    }
+
+    @Test public void missingHeaderAndAttributeRemoveOnlyThumbnailMetadata() {
+        assertEquals("2 Friends", listingTitle(
+                "<a href='/clip/'><div class='post-thumbnail'><img src='/clip.jpg'>"
+                + "<span class='views'>1.2M</span><span class='duration'>02:48</span>"
+                + "</div>2 Friends</a>"));
+        assertEquals("2026 Highlights", listingTitle(
+                "<a href='/clip/'><div class='post-thumbnail'><img src='/clip.jpg' "
+                + "alt='2026 Highlights'><span class='views'>587</span></div></a>"));
+    }
+
+    @Test public void relatedTitlesUseSameCleanExtractionAndKeepCurrentVideoExcluded() {
+        String html = card("/current/", "587", "Current")
+                + card("/related/", "1.2M", "1 v 3");
+        java.util.List<NativeContentItem> items = BaddieHubRepository.parseRelatedListing(
+                html, "https://baddiehub.com/current/", "a[href]", "https://baddiehub.com/current/");
+        assertEquals(1, items.size());
+        assertEquals("1 v 3", items.get(0).title);
+        assertEquals("https://baddiehub.com/related/", items.get(0).url);
+        assertEquals("https://baddiehub.com/thumb.jpg", items.get(0).imageUrl);
+        assertEquals(BaddieHubRepository.LABEL, items.get(0).uploader);
+    }
+
+    private static void assertCardTitle(String views, String title) {
+        assertEquals(title, listingTitle(card("/clip/", views, title)));
+    }
+
+    private static String listingTitle(String html) {
+        return BaddieHubRepository.parseShowsListing(
+                html, "https://baddiehub.com/category/sample/", "a[href]").get(0).title;
+    }
+
+    private static String card(String url, String views, String title) {
+        // Structure captured from live related cards: the link wraps thumbnail metadata + header.
+        // Deliberately different alt/title attributes verify that the visible header wins.
+        return "<a href='" + url + "' title='Fallback title'><div class='post-thumbnail'>"
+                + "<div class='post-thumbnail-container'><img src='/thumb.jpg' alt='Fallback alt'></div>"
+                + "<div class='video-overlay'></div><span class='views'><i class='fa fa-eye'></i> "
+                + views + "</span><span class='duration'><i class='fa fa-clock-o'></i>02:48</span>"
+                + "</div><header class='entry-header'><span>" + title + "</span></header></a>";
+    }
 }
