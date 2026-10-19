@@ -90,7 +90,7 @@ final class SearchPanel {
     private final ExecutorService io = Executors.newFixedThreadPool(8);
 
     private EditText input;
-    private ZeroChillLoadingView progress;
+    private ZeroChillProgressBar progress;
     private TextView status;
     private RecyclerView recycler;
     private GlobalSearchAdapter adapter;
@@ -110,7 +110,15 @@ final class SearchPanel {
     private String activeQuery = "";
     private int generation;
     private boolean bunkrOnly;
-    private CreatorSuggestionsController suggestions;
+    private final android.os.Handler searchHandler = new android.os.Handler(android.os.Looper.getMainLooper());
+    private Runnable liveSearch;
+    private boolean restoring;
+    private boolean previewMode;
+    private LinearLayout recentPanel;
+    private View recentLayer;
+    private View searchFooter;
+    private TextView searchAll;
+    private List<NativeContentItem> creatorResults = new ArrayList<>();
     private TextView searchState;
     private View filterBar;
     private final List<Future<?>> requests = new ArrayList<>();
@@ -122,7 +130,6 @@ final class SearchPanel {
     private Parcelable restoredScroll;
     private long searchStarted;
     private boolean firstResultsRecorded;
-    private List<NativeContentItem> onlyFapLocal = new ArrayList<>();
 
 
     void create(Bundle state) {
@@ -131,19 +138,25 @@ final class SearchPanel {
         if (bunkrOnly) io.execute(() -> BundledCreatorIndex.get(activity.getApplicationContext()));
 
 
+        restoring = true;
         if (state != null) {
             snapshotId = state.getString("snapshot", snapshotId);
             try { filter = Filter.valueOf(state.getString("filter", "ALL")); } catch (Exception ignored) { }
             refreshFilterStyles();
+            if (adapter != null) adapter.restoreOrder(state);
             input.setText(state.getString("typed", ""));
             input.setSelection(input.length());
             restoredScroll = state.getParcelable("scroll");
             activeQuery = state.getString("active", "");
-            boolean showingSuggestions = state.getBoolean("suggestions", true);
-            if (!showingSuggestions) { suggestions.hide(); input.clearFocus(); }
+            previewMode = state.getBoolean("preview", false);
+            if (!previewMode) input.clearFocus();
             if (!activeQuery.isEmpty()) {
                 final String savedQuery = activeQuery;
-                if (bunkrOnly) {
+                if (bunkrOnly || previewMode) {
+                    try {
+                        publishCreators(ContentItemCodec.decodeList(
+                                new org.json.JSONArray(state.getString("creators", "[]")), 80));
+                    } catch (Exception ignored) { }
                     startOnlyFapSearch(savedQuery);
                 } else {
                     final int token = ++generation;
@@ -167,6 +180,10 @@ final class SearchPanel {
 
             }
         }
+        restoring = false;
+        showRecentSearches();
+        if (activeQuery.isEmpty()) queryChanged(input.getText().toString());
+        updateContentVisibility();
     }
 
     private void buildUi() {
@@ -225,18 +242,18 @@ final class SearchPanel {
         status.setPadding(dp(12), dp(14), dp(12), dp(8));
         status.setText(bunkrOnly ? "Search OnlyFap creators" : "Search creators or videos");
         resultLayer.addView(status, new FrameLayout.LayoutParams(-1, -2));
-        progress = new ZeroChillLoadingView(activity, null, true);
-        progress.setVisibility(View.GONE);
-        FrameLayout.LayoutParams progressParams = new FrameLayout.LayoutParams(dp(28), dp(28), Gravity.TOP | Gravity.CENTER_HORIZONTAL);
-        progressParams.topMargin = dp(12);
-        resultLayer.addView(progress, progressParams);
-        suggestionPanel = new LinearLayout(activity);
-        suggestionPanel.setClipChildren(true);
-        suggestionPanel.setClipToPadding(false);
-        content.addView(suggestionPanel, new FrameLayout.LayoutParams(-1, -1));
-        suggestions = new CreatorSuggestionsController(activity, input, suggestionPanel, this::openCreator);
-        suggestions.setFloatingPresentation(this::updateResultSize);
-        suggestions.setSearchAction(this::runSearch);
+        recentPanel = new LinearLayout(activity);
+        recentPanel.setOrientation(LinearLayout.VERTICAL);
+        android.widget.ScrollView recentScroll = new android.widget.ScrollView(activity);
+        recentScroll.setFillViewport(false);
+        recentScroll.addView(recentPanel);
+        recentLayer = recentScroll;
+        content.addView(recentScroll, new FrameLayout.LayoutParams(-1, -1));
+        searchAll = BrowseUi.action(activity, "Search all results  ›", "Search all results", v -> runSearch());
+        searchAll.setBackgroundColor(Color.TRANSPARENT);
+        searchAll.setTextSize(14f);
+        searchAll.setVisibility(View.GONE);
+        resultsControls.addView(searchAll, new LinearLayout.LayoutParams(-1, dp(48)));
         if (!bunkrOnly) {
             filterBar = buildFilters();
             resultsControls.addView(filterBar, new LinearLayout.LayoutParams(-1, dp(44)));
@@ -246,31 +263,136 @@ final class SearchPanel {
         searchState.setVisibility(View.GONE);
         searchState.setOnClickListener(v -> {
             if (activeQuery.isEmpty()) return;
-            if (bunkrOnly) startOnlyFapSearch(activeQuery);
+            if (bunkrOnly || previewMode) startOnlyFapSearch(activeQuery);
             else startGlobalSearch(activeQuery, false);
         });
-        resultsControls.addView(searchState);
-        suggestions.setVisibilityListener(showing -> {
-            resultLayer.setVisibility(showing ? View.INVISIBLE : View.VISIBLE);
-            if (filterBar != null) filterBar.setVisibility(showing ? View.GONE : View.VISIBLE);
-            updateContentVisibility();
-        });
+        LinearLayout footer = new LinearLayout(activity);
+        footer.setGravity(Gravity.CENTER_VERTICAL);
+        progress = new ZeroChillProgressBar(activity);
+        progress.setVisibility(View.GONE);
+        footer.addView(progress, new LinearLayout.LayoutParams(dp(40), dp(28)));
+        footer.addView(searchState, new LinearLayout.LayoutParams(0, -2, 1f));
+        searchFooter = footer;
+        resultsControls.addView(footer);
+        showRecentSearches();
         view = shell;
         updateContentVisibility();
     }
 
-    private LinearLayout suggestionPanel;
+    private boolean showingRecent() { return input.getText().toString().trim().isEmpty(); }
+
+    private void showRecentSearches() {
+        if (recentPanel == null) return;
+        recentPanel.removeAllViews();
+        List<String> history = RecentSearchStore.load(activity);
+        LinearLayout heading = new LinearLayout(activity);
+        heading.setGravity(Gravity.CENTER_VERTICAL);
+        TextView title = BrowseUi.text(activity, "Recent searches", 16, Color.WHITE);
+        title.setPadding(dp(14), 0, 0, 0);
+        heading.addView(title, new LinearLayout.LayoutParams(0, dp(48), 1f));
+        title.setGravity(Gravity.CENTER_VERTICAL);
+        TextView clearHistory = BrowseUi.action(activity, "Clear all", "Clear all recent searches", v -> {
+            RecentSearchStore.clear(activity);
+            showRecentSearches();
+            updateContentVisibility();
+        });
+        clearHistory.setTextSize(13.5f);
+        clearHistory.setBackgroundColor(Color.TRANSPARENT);
+        heading.addView(clearHistory, new LinearLayout.LayoutParams(-2, dp(48)));
+        recentPanel.addView(heading);
+        for (String query : history) {
+            LinearLayout row = new LinearLayout(activity);
+            row.setGravity(Gravity.CENTER_VERTICAL);
+            TextView label = BrowseUi.text(activity, query, 17, Color.WHITE);
+            label.setSingleLine(true);
+            label.setEllipsize(android.text.TextUtils.TruncateAt.END);
+            label.setGravity(Gravity.CENTER_VERTICAL);
+            label.setPadding(dp(14), 0, dp(8), 0);
+            label.setContentDescription("Search again for " + query);
+            label.setOnClickListener(v -> { input.setText(query); input.setSelection(input.length()); runSearch(); });
+            row.addView(label, new LinearLayout.LayoutParams(0, dp(56), 1f));
+            TextView remove = BrowseUi.action(activity, "×", "Remove recent search " + query, v -> {
+                RecentSearchStore.remove(activity, query);
+                showRecentSearches(); updateContentVisibility();
+            });
+            remove.setBackgroundColor(Color.TRANSPARENT);
+            row.addView(remove, new LinearLayout.LayoutParams(dp(48), dp(48)));
+            recentPanel.addView(row);
+        }
+        boolean recent = showingRecent();
+        recentLayer.setVisibility(recent ? View.VISIBLE : View.GONE);
+        resultLayer.setVisibility(recent ? View.INVISIBLE : View.VISIBLE);
+        searchAll.setVisibility(!recent && previewMode && !bunkrOnly ? View.VISIBLE : View.GONE);
+        if (filterBar != null) filterBar.setVisibility(recent || previewMode ? View.GONE : View.VISIBLE);
+        searchFooter.setVisibility(recent ? View.GONE : View.VISIBLE);
+    }
+
+    private void queryChanged(String value) {
+        if (restoring || destroyed) return;
+        cancelSearchWork();
+        String query = value.trim();
+        if (!query.equals(activeQuery)) {
+            activeQuery = "";
+            creatorResults = new ArrayList<>();
+            clearResults();
+        }
+        if (query.isEmpty()) {
+            progress.setVisibility(View.GONE);
+            showRecentSearches();
+            updateContentVisibility();
+            return;
+        }
+        recentLayer.setVisibility(View.GONE);
+        resultLayer.setVisibility(View.VISIBLE);
+        searchFooter.setVisibility(View.VISIBLE);
+        if (filterBar != null) filterBar.setVisibility(View.GONE);
+        previewMode = true;
+        searchAll.setVisibility(bunkrOnly || query.length() < 2 ? View.GONE : View.VISIBLE);
+        status.setText(query.length() < 2 ? "Type at least 2 characters" : "");
+        status.setVisibility(query.length() < 2 ? View.VISIBLE : View.GONE);
+        searchState.setVisibility(View.VISIBLE);
+        searchState.setText(query.length() < 2 ? "" : "Checking creators…");
+        searchFooter.setVisibility(query.length() < 2 ? View.GONE : View.VISIBLE);
+        progress.setVisibility(query.length() < 2 ? View.GONE : View.VISIBLE);
+        if (query.length() >= 2) {
+            liveSearch = () -> startOnlyFapSearch(query);
+            searchHandler.postDelayed(liveSearch, 280L);
+        }
+        updateContentVisibility();
+    }
+
+    private void cancelSearchWork() {
+        if (liveSearch != null) searchHandler.removeCallbacks(liveSearch);
+        generation++;
+        for (Future<?> request : requests) request.cancel(true);
+        requests.clear();
+        if (io instanceof java.util.concurrent.ThreadPoolExecutor)
+            ((java.util.concurrent.ThreadPoolExecutor) io).purge();
+    }
+
+    private void clearResults() {
+        if (adapter != null) { adapter.resetEntrance(); adapter.replace(new ArrayList<>()); }
+        if (onlyFapAdapter != null) { onlyFapAdapter.resetEntrance(); onlyFapAdapter.replace(new ArrayList<>()); }
+        crazyVideos = new ArrayList<>(); efuktVideos = new ArrayList<>();
+        crazySeries = new ArrayList<>(); efuktSeries = new ArrayList<>();
+        bunkrAlbums = new ArrayList<>(); fapzoneCreators = new ArrayList<>();
+        categories = new ArrayList<>(); library = new ArrayList<>();
+        videos = new ArrayList<>(); series = new ArrayList<>();
+        restoredScroll = null;
+        recycler.scrollToPosition(0);
+    }
 
     private void updateResultSize() {
-        if (shell == null || recycler == null || suggestions == null) return;
-        int count = suggestions.isShowing() ? suggestions.resultCount()
+        if (shell == null || recycler == null) return;
+        int count = showingRecent() ? RecentSearchStore.load(activity).size() + 1
                 : recycler.getAdapter().getItemCount();
-        shell.setResultCount(!suggestions.isShowing() && count == 0 ? 1 : count);
+        boolean shortQuery = !showingRecent() && input.getText().toString().trim().length() < 2;
+        shell.setResultCount(shortQuery ? 0 : Math.max(1, count), showingRecent() ? 56 : 104);
     }
 
     private void updateContentVisibility() {
         if (content == null || input == null || resultsControls == null || closing) return;
-        boolean show = input.length() > 0;
+        boolean show = !showingRecent() || !RecentSearchStore.load(activity).isEmpty();
         updateResultSize();
         if (show) content.setVisibility(View.VISIBLE);
         if (show == resultShown) {
@@ -341,6 +463,7 @@ final class SearchPanel {
         row.addView(clear, new LinearLayout.LayoutParams(dp(44), dp(48)));
         input.addTextChangedListener(BrowseUi.onText(value -> {
             clear.setVisibility(value.isEmpty() ? View.GONE : View.VISIBLE);
+            if (recentPanel != null) queryChanged(value);
             updateContentVisibility();
         }));
         return row;
@@ -384,6 +507,7 @@ final class SearchPanel {
         chip.setOnClickListener(v -> {
             haptic(v);
             filter = (Filter) v.getTag();
+            adapter.resetOrder();
             refreshFilterStyles();
             renderResults();
             recycler.scrollToPosition(0);
@@ -409,7 +533,14 @@ final class SearchPanel {
         }
         BrowseUi.hideKeyboard(activity, input);
         input.clearFocus();
-        suggestions.hide();
+        cancelSearchWork();
+        RecentSearchStore.remember(activity, query);
+        previewMode = false;
+        searchAll.setVisibility(View.GONE);
+        recentLayer.setVisibility(View.GONE);
+        resultLayer.setVisibility(View.VISIBLE);
+        searchFooter.setVisibility(View.VISIBLE);
+        if (filterBar != null) filterBar.setVisibility(View.VISIBLE);
         if (bunkrOnly) {
             startOnlyFapSearch(query);
             return;
@@ -418,6 +549,7 @@ final class SearchPanel {
     }
 
     private void openCreator(NativeContentItem item) {
+        RecentSearchStore.remember(activity, input.getText().toString());
         BrowseUi.hideKeyboard(activity, input);
         activity.startActivity(NativeFeedBrowserActivity.createCreatorGallery(activity, item.title,
                 item.searchQuery.isEmpty() ? item.title : item.searchQuery,
@@ -425,94 +557,65 @@ final class SearchPanel {
                 CreatorGalleryPreloader.sessionId(activity, item)));
     }
 
-    private void startOnlyFapSearch(String query) {
-        for (Future<?> request : requests) request.cancel(true);
-        requests.clear();
-        if (io instanceof java.util.concurrent.ThreadPoolExecutor) {
-            ((java.util.concurrent.ThreadPoolExecutor) io).purge();
+    private void publishCreators(List<NativeContentItem> next) {
+        creatorResults = OnlyFapCreatorResults.merge(creatorResults, next, 80);
+        if (onlyFapAdapter != null) onlyFapAdapter.replace(creatorResults);
+        else {
+            fapzoneCreators = creatorResults;
+            renderResults();
         }
+        updateResultSize();
+    }
 
-        activeQuery = query == null ? "" : query.trim();
+    private void startOnlyFapSearch(String query) {
+        cancelSearchWork();
+        activeQuery = query.trim();
         final String requestedQuery = activeQuery;
-        final int token = ++generation;
+        final int token = generation;
         pendingSources = 1;
         errors.clear();
-        onlyFapLocal = new ArrayList<>();
-        if (onlyFapAdapter != null) onlyFapAdapter.replace(onlyFapLocal);
-        recycler.scrollToPosition(0);
         progress.setVisibility(View.VISIBLE);
         status.setVisibility(View.GONE);
         searchState.setVisibility(View.VISIBLE);
         searchState.setText("Finding saved creators · Checking sources…");
-        searchState.setContentDescription(searchState.getText());
-
         requests.add(io.submit(() -> {
             BundledCreatorIndex index = BundledCreatorIndex.get(activity.getApplicationContext());
-            List<NativeContentItem> bundled = index.matching(requestedQuery, 60);
-            List<NativeContentItem> learned = CreatorCatalog.matching(
-                    activity.getApplicationContext(), requestedQuery, false, 60);
-            List<NativeContentItem> local = OnlyFapCreatorResults.merge(bundled, learned, 60);
-            local.sort(java.util.Comparator.comparingInt(
-                    (NativeContentItem item) -> index.rank(item, requestedQuery))
+            List<NativeContentItem> local = OnlyFapCreatorResults.merge(index.matching(requestedQuery, 60),
+                    CreatorCatalog.matching(activity.getApplicationContext(), requestedQuery, false, 60), 60);
+            local.sort(java.util.Comparator.comparingInt((NativeContentItem item) -> index.rank(item, requestedQuery))
                     .thenComparing(item -> CreatorNameMatcher.normalized(item.title)));
             activity.runOnUiThread(() -> {
-                if (destroyed || activity.isFinishing() || token != generation) return;
-                onlyFapLocal = local;
-                if (onlyFapAdapter != null) onlyFapAdapter.replace(local);
-                if (!local.isEmpty()) progress.finish();
+                if (!current(token, requestedQuery)) return;
+                publishCreators(local);
                 status.setVisibility(View.GONE);
-                searchState.setText(local.size() + " saved creators · Checking sources…");
+                searchState.setText(creatorResults.size() + " creators · Checking sources…");
             });
             List<NativeContentItem> result = null;
             try {
-                result = new FapzoneCreatorSearchRepository().search(
-                        activity,
-                        requestedQuery,
-                        40,
-                        (partial, complete) -> {
-                            if (complete || partial == null || partial.isEmpty()) return;
-                            List<NativeContentItem> visible = OnlyFapCreatorResults.merge(
-                                    onlyFapLocal, partial, 80);
-                            activity.runOnUiThread(() -> {
-                                if (destroyed || activity.isFinishing() || token != generation) return;
-                                status.setVisibility(View.GONE);
-                                if (onlyFapAdapter != null) onlyFapAdapter.replace(visible);
-                                if (!visible.isEmpty()) progress.finish();
-                                searchState.setText(visible.size() + " creators · Checking sources…");
-                                searchState.setContentDescription(searchState.getText());
-                            });
-                        }
-                );
-            } catch (Exception ignored) {
-            }
-
+                result = new FapzoneCreatorSearchRepository().search(activity, requestedQuery, 40, (partial, complete) -> {
+                    if (complete || partial == null || partial.isEmpty()) return;
+                    activity.runOnUiThread(() -> {
+                        if (!current(token, requestedQuery)) return;
+                        publishCreators(partial);
+                        status.setVisibility(View.GONE);
+                        searchState.setText(creatorResults.size() + " creators · Checking sources…");
+                    });
+                });
+            } catch (Exception ignored) { }
             List<NativeContentItem> creators = result;
-            if (creators != null) CreatorCatalog.remember(activity.getApplicationContext(), creators);
-            List<NativeContentItem> combined = creators == null ? null
-                    : OnlyFapCreatorResults.merge(onlyFapLocal, creators, 80);
+            if (creators != null && !Thread.currentThread().isInterrupted())
+                CreatorCatalog.remember(activity.getApplicationContext(), creators);
             activity.runOnUiThread(() -> {
-                if (destroyed || activity.isFinishing() || token != generation) return;
+                if (!current(token, requestedQuery)) return;
                 pendingSources = 0;
+                publishCreators(creators);
                 progress.setVisibility(View.GONE);
-
-                if (creators == null) {
-                    searchState.setText("Creator search incomplete · Saved creators shown · Tap to retry");
-                    searchState.setContentDescription(searchState.getText());
-                    if (onlyFapLocal.isEmpty()) {
-                        status.setText("Some creator sources couldn't be checked.\nTap the message above to retry.");
-                        status.setVisibility(View.VISIBLE);
-                    }
-                    return;
-                }
-
-                if (onlyFapAdapter != null) onlyFapAdapter.replace(combined);
-                searchState.setText(combined.size() == 1
-                        ? "1 creator"
-                        : combined.size() + " creators");
+                searchState.setText(creators == null ? "Creator search incomplete · Tap to retry"
+                        : creatorResults.size() + (creatorResults.size() == 1 ? " creator" : " creators"));
                 searchState.setContentDescription(searchState.getText());
-
-                if (combined.isEmpty()) {
-                    status.setText("No creator matches for “" + requestedQuery + "”\n\nTry a shorter or more general search.");
+                if (creatorResults.isEmpty()) {
+                    status.setText(creators == null ? "Some creator sources couldn't be checked.\nTap the message below to retry."
+                            : "No creator matches for “" + requestedQuery + "”\n\nTry a shorter or more general search.");
                     status.setVisibility(View.VISIBLE);
                 } else {
                     status.setVisibility(View.GONE);
@@ -525,24 +628,24 @@ final class SearchPanel {
         }));
     }
 
+    private boolean current(int token, String query) {
+        return !destroyed && !activity.isFinishing() && !activity.isDestroyed()
+                && token == generation && query.equals(activeQuery);
+    }
+
     private void startGlobalSearch(String query, boolean clear) {
         for (Future<?> request : requests) request.cancel(true);
         requests.clear();
         if (io instanceof java.util.concurrent.ThreadPoolExecutor)
             ((java.util.concurrent.ThreadPoolExecutor) io).purge();
+        boolean sameQuery = query.equals(activeQuery);
         activeQuery = query;
         int token = ++generation;
         errors.clear();
         pendingSources = 8;
         searchStarted = android.os.SystemClock.elapsedRealtime();
         firstResultsRecorded = false;
-        if (clear) {
-            crazyVideos.clear(); efuktVideos.clear(); crazySeries.clear(); efuktSeries.clear();
-            bunkrAlbums.clear(); fapzoneCreators.clear(); categories.clear(); library.clear();
-            videos.clear(); series.clear();
-            restoredScroll = null;
-            recycler.scrollToPosition(0);
-        }
+        if (clear && !sameQuery) clearResults();
         renderResults();
         source(token, 0, "CrazyShit videos", () -> repository.fetchFeed(activity, repository.searchUrl(query), 1));
         source(token, 1, "EFukt videos", () -> efuktRepository.search(activity, query));
@@ -552,7 +655,14 @@ final class SearchPanel {
         source(token, 5, "Categories", () -> matchCatalog(browseRepository.fetchCategories(activity), query));
         source(token, 6, "Your Library", () -> searchLibrary(query));
         source(token, 7, "OnlyFap creators", () ->
-                new FapzoneCreatorSearchRepository().search(activity, query, 20));
+                new FapzoneCreatorSearchRepository().search(activity, query, 20, (partial, complete) -> {
+                    if (complete || partial == null || partial.isEmpty()) return;
+                    activity.runOnUiThread(() -> {
+                        if (!current(token, query)) return;
+                        fapzoneCreators = OnlyFapCreatorResults.merge(fapzoneCreators, partial, 80);
+                        renderResults();
+                    });
+                }));
     }
 
     private void source(int token, int id, String title, Callable<List<NativeContentItem>> fetch) {
@@ -573,7 +683,7 @@ final class SearchPanel {
                     case 5: categories = result; break;
                     case 6: library = result; break;
                     case 7:
-                        fapzoneCreators = result;
+                        fapzoneCreators = OnlyFapCreatorResults.merge(fapzoneCreators, result, 80);
                         CreatorCatalog.remember(activity, result);
                         break;
                 }
@@ -695,31 +805,28 @@ final class SearchPanel {
     private void renderResults() {
         if (activeQuery.isEmpty()) return;
         ArrayList<GlobalSearchAdapter.Entry> output = new ArrayList<>();
+        if (previewMode) {
+            appendSection(output, "OnlyFap Creators", fapzoneCreators, GlobalSearchAdapter.SOURCE_REMOTE, 80);
+        } else {
         if (filter == Filter.ALL || filter == Filter.VIDEOS) appendSection(output, "Videos  •  CrazyShit + EFukt", videos, GlobalSearchAdapter.SOURCE_REMOTE, 40);
         if (filter == Filter.EFUKT) appendSection(output, "EFukt Videos", efuktVideos, GlobalSearchAdapter.SOURCE_REMOTE, 40);
         if (filter == Filter.ALL || filter == Filter.BUNKR || filter == Filter.COLLECTIONS) {
             appendSection(output, "OnlyFap Creators", fapzoneCreators,
-                    GlobalSearchAdapter.SOURCE_REMOTE, 20);
+                    GlobalSearchAdapter.SOURCE_REMOTE, 80);
             appendSection(output, "OnlyFap Albums", bunkrAlbums, GlobalSearchAdapter.SOURCE_REMOTE, 30);
         }
         if (filter == Filter.ALL || filter == Filter.COLLECTIONS) appendSection(output, "Series", series, GlobalSearchAdapter.SOURCE_REMOTE, 20);
         if (filter == Filter.EFUKT) appendSection(output, "EFukt Series", efuktSeries, GlobalSearchAdapter.SOURCE_REMOTE, 20);
         if (filter == Filter.ALL || filter == Filter.CATEGORIES) appendSection(output, "Categories", categories, GlobalSearchAdapter.SOURCE_REMOTE, 20);
         if (filter == Filter.ALL || filter == Filter.LIBRARY) appendSection(output, "Your Library", library, GlobalSearchAdapter.SOURCE_LIBRARY, 30);
+        }
         if (!output.isEmpty() && !firstResultsRecorded && searchStarted > 0) {
             firstResultsRecorded = true;
             AppPerformance.record("Search first results", android.os.SystemClock.elapsedRealtime() - searchStarted);
         }
         adapter.replace(output);
 
-        boolean waitingForFirstResult = output.isEmpty() && pendingSources > 0;
-        if (waitingForFirstResult) {
-            progress.setVisibility(View.VISIBLE);
-        } else if (!output.isEmpty() && progress.getVisibility() == View.VISIBLE) {
-            progress.finish();
-        } else {
-            progress.setVisibility(View.GONE);
-        }
+        progress.setVisibility(pendingSources > 0 ? View.VISIBLE : View.GONE);
         String unavailable = unavailableForCurrentFilter();
         searchState.setVisibility(View.VISIBLE);
         searchState.setText(pendingSources > 0
@@ -729,7 +836,7 @@ final class SearchPanel {
         searchState.setContentDescription(searchState.getText());
         if (output.isEmpty()) {
             status.setText(pendingSources > 0 ? "" : !unavailable.isEmpty()
-                    ? "Some sources could not be reached.\nTap the message above to retry."
+                    ? "Some sources could not be reached.\nTap the message below to retry."
                     : "No matches for “" + activeQuery + "”\n\nTry a shorter or more general search.");
             status.setVisibility(pendingSources > 0 ? View.GONE : View.VISIBLE);
         } else {
@@ -786,6 +893,7 @@ final class SearchPanel {
 
     private void openResult(NativeContentItem item) {
         if (item == null || item.url == null || item.url.isEmpty()) return;
+        RecentSearchStore.remember(activity, input.getText().toString());
         haptic(recycler);
         if (item.isCreator()) {
             openCreator(item);
@@ -970,7 +1078,9 @@ final class SearchPanel {
     }
 
     void resume() {
-        if (suggestions != null) suggestions.refreshLocal();
+        if (showingRecent()) { showRecentSearches(); updateContentVisibility(); }
+        else if (onlyFapAdapter != null) onlyFapAdapter.notifyDataSetChanged();
+        else if (adapter != null) adapter.notifyDataSetChanged();
     }
 
     void save(Bundle state) {
@@ -978,7 +1088,10 @@ final class SearchPanel {
         state.putString("active", activeQuery);
         state.putString("filter", filter.name());
         state.putString("snapshot", snapshotId);
-        state.putBoolean("suggestions", suggestions.isShowing());
+        state.putBoolean("preview", previewMode);
+        if (adapter != null) adapter.saveOrder(state);
+        try { state.putString("creators", ContentItemCodec.encodeList(creatorResults, 80).toString()); }
+        catch (Exception ignored) { }
         state.putParcelable("scroll", recycler.getLayoutManager().onSaveInstanceState());
         if (!bunkrOnly) saveSnapshot();
     }
@@ -988,7 +1101,7 @@ final class SearchPanel {
         if (morphAnimator != null) { morphAnimator.removeAllListeners(); morphAnimator.cancel(); }
         if (resultsAnimator != null) { resultsAnimator.removeAllListeners(); resultsAnimator.cancel(); }
         generation++;
-        if (suggestions != null) suggestions.close();
+        searchHandler.removeCallbacksAndMessages(null);
         if (adapter != null) adapter.close();
         io.shutdownNow();
     }

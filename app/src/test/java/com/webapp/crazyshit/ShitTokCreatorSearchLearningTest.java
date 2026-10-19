@@ -157,7 +157,7 @@ public class ShitTokCreatorSearchLearningTest {
                 queue.runAll();
                 OnlyFapCreatorSearchAdapter adapter = ReflectionHelpers.getField(panel, "onlyFapAdapter");
                 assertEquals(1, adapter.getItemCount());
-                List<NativeContentItem> local = ReflectionHelpers.getField(panel, "onlyFapLocal");
+                List<NativeContentItem> local = ReflectionHelpers.getField(adapter, "items");
                 assertEquals(PROFILE, local.get(0).url);
                 TextView state = ReflectionHelpers.getField(panel, "searchState");
                 if (unavailable) assertTrue(state.getText().toString().contains("incomplete"));

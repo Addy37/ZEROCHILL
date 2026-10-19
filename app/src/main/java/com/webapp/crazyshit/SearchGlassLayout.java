@@ -23,6 +23,7 @@ final class SearchGlassLayout extends FrameLayout {
     private boolean dirty = true;
     private int underlayRevision = -1;
     private int resultCount;
+    private int resultRowHeightDp = 76;
     private android.animation.ValueAnimator heightAnimator;
     private int animatedHeight;
     private final Path rowClip = new Path();
@@ -99,9 +100,12 @@ final class SearchGlassLayout extends FrameLayout {
         invalidate();
     }
 
-    void setResultCount(int count) {
-        if (resultCount == count) return;
+    void setResultCount(int count) { setResultCount(count, 76); }
+
+    void setResultCount(int count, int rowHeightDp) {
+        if (resultCount == count && resultRowHeightDp == rowHeightDp) return;
         resultCount = count;
+        resultRowHeightDp = rowHeightDp;
         if (heightAnimator != null) { heightAnimator.removeAllListeners(); heightAnimator.cancel(); }
         if (getHeight() > 0 && rows.getVisibility() == VISIBLE && ZeroChillMotion.animationsEnabled(getContext())) {
             heightAnimator = android.animation.ValueAnimator.ofInt(rows.getHeight(), resultHeight());
@@ -120,7 +124,7 @@ final class SearchGlassLayout extends FrameLayout {
     @Override protected void onMeasure(int widthSpec, int heightSpec) {
         int width = MeasureSpec.getSize(widthSpec) - getPaddingLeft() - getPaddingRight();
         int height = resultHeight(MeasureSpec.getSize(heightSpec),
-                heightAnimator != null && heightAnimator.isRunning() ? animatedHeight : dp(96 + resultCount * 76));
+                heightAnimator != null && heightAnimator.isRunning() ? animatedHeight : dp(96 + resultCount * resultRowHeightDp));
         if (pillBounds == null) place(pill, width - dp(88), dp(56), dp(14), dp(8));
         else place(pill, Math.round(pillBounds.width()), Math.round(pillBounds.height()),
                 Math.round(pillBounds.left) - getPaddingLeft(), Math.round(pillBounds.top) - getPaddingTop());
@@ -131,7 +135,7 @@ final class SearchGlassLayout extends FrameLayout {
     }
 
     private int resultHeight() {
-        return resultHeight(getHeight(), dp(96 + resultCount * 76));
+        return resultHeight(getHeight(), dp(96 + resultCount * resultRowHeightDp));
     }
 
     private int resultHeight(int windowHeight, int desired) {

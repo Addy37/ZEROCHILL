@@ -95,17 +95,16 @@ public class SearchPaneGeometryTest {
     @Test public void lastCreatorAndFooterStayReachableWithInternalBottomSpaceAndIme() throws Exception {
         var host = Robolectric.buildActivity(Activity.class).create().start().resume().visible();
         SearchGlassOwner owner = new SearchGlassOwner(host.get());
-        SearchPanel panel = new SearchPanel(host.get(), new Intent(), true, () -> {});
+        SearchPanel panel = new SearchPanel(host.get(), new Intent().putExtra("scope", "bunkr"), true, () -> {});
         panel.create(null);
         host.get().setContentView(panel.view);
-        panel.field().setText("a"); // No live lookup is needed for this layout fixture.
-        CreatorSuggestionsController controller = ReflectionHelpers.getField(panel, "suggestions");
-        CreatorListAdapter adapter = ReflectionHelpers.getField(controller, "adapter");
+        panel.field().setText("fixture");
+        ReflectionHelpers.callInstanceMethod(panel, "cancelSearchWork");
+        OnlyFapCreatorSearchAdapter adapter = ReflectionHelpers.getField(panel, "onlyFapAdapter");
         List<NativeContentItem> creators = new ArrayList<>();
         for (int i = 0; i < 20; i++) creators.add(CreatorCatalog.fromModel(
                 new FapelloRepository.Model("Creator " + i, "https://fapello.com/test-" + i + "/", "")));
         adapter.replace(creators);
-        // Creator diffs commit asynchronously onto the main thread.
         long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(3);
         while (adapter.getItemCount() != 20 && System.nanoTime() < deadline) {
             Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
@@ -113,9 +112,11 @@ public class SearchPaneGeometryTest {
         }
         assertEquals(20, adapter.getItemCount());
         Shadows.shadowOf(android.os.Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(200));
-        TextView footer = ReflectionHelpers.getField(controller, "searchAll");
+        TextView footer = ReflectionHelpers.getField(panel, "searchState");
+        footer.setText("20 creators");
         footer.setVisibility(View.VISIBLE);
-        RecyclerView list = ReflectionHelpers.getField(controller, "recycler");
+        ((View) ReflectionHelpers.getField(panel, "progress")).setVisibility(View.GONE);
+        RecyclerView list = ReflectionHelpers.getField(panel, "recycler");
         ViewGroup rows = ReflectionHelpers.getField(panel, "resultsControls");
         View pane = ReflectionHelpers.getField(panel, "resultSurface");
         for (int ime : new int[]{0, 300}) {
