@@ -77,7 +77,7 @@ Public branding is ZEROCHILL / ZeroChill.
 - Tagline: `NO LIMITS. ALL CONTENT.`
 - Mascot: black devil face with electric-blue glowing horns and outline, one X eye, one angry eye, sharp teeth, and electric-blue tongue.
 
-Do not substitute a lighter cyan for the primary electric-blue brand token on newly branded surfaces.
+Do not substitute a lighter blue-green shade for the primary electric-blue brand token on newly branded surfaces.
 
 Do not restore public CrazyShit or ZeroFilter branding, the ZF logo, the pink/red concept, or old yellow/orange styling on newly branded surfaces.
 
