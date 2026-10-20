@@ -46,7 +46,7 @@ class ConsoleFlowTest {
         screenshot("02-home")
         ui.onNodeWithText("Feedback",useUnmergedTree=true).performClick();idle();screenshot("03-inbox")
         ui.onNodeWithText("Search messages, devices, versions").performTextInput("nothing matches")
-        ui.onNodeWithText("No matching threads").assertExists()
+        ui.onNodeWithText("No matching threads").assertExists();screenshot("03b-no-results")
         ui.onNodeWithContentDescription("Clear search").performClick()
         ui.onNodeWithText("Playback stutters after rotating the phone.").performClick();idle();screenshot("04-thread")
         ui.onNodeWithText("Details",substring=true).performClick();screenshot("05-thread-details")
@@ -66,6 +66,8 @@ class ConsoleFlowTest {
         ui.onNodeWithText("Sources",useUnmergedTree=true).performClick();idle();screenshot("06-sources")
         ui.onNodeWithText("Publish",useUnmergedTree=true).assertIsNotEnabled()
         ui.onNodeWithTag("source-list").performScrollToNode(hasContentDescription("Fapello enabled"))
+        ui.onNodeWithText("Fapello").performClick();screenshot("06b-source-editor")
+        ui.onNodeWithContentDescription("Close editor").performClick()
         ui.onNodeWithContentDescription("Fapello enabled").performClick()
         ui.onNodeWithText("Validate",useUnmergedTree=true).performClick();idle()
         ui.onNodeWithText("Publish",useUnmergedTree=true).assertIsEnabled()
@@ -83,6 +85,14 @@ class ConsoleFlowTest {
         ui.onNodeWithContentDescription("Admin settings").performClick()
         ui.onNodeWithText("Lock session").performClick();ui.onNodeWithText("Lock",useUnmergedTree=true).performClick()
         ui.onNodeWithText("Connect securely").assertExists();assertEquals("",SecureTokenStore.read(app))
+    }
+    @Test fun rejectedPairingKeepsTokenStoreEmpty() {
+        launch(false);fake.rejectPairing=true
+        ui.onNodeWithText("Admin token").performTextInput("fixture-token-for-instrumented-test-only")
+        ui.onNodeWithText("Connect securely").performClick();idle()
+        assertFalse(state.paired);assertEquals("",SecureTokenStore.read(app))
+        ui.onNodeWithText("Authentication failed. Check your admin token.").assertExists()
+        screenshot("10-pairing-error")
     }
     @Test fun savedStateRestoresCandidateAndDraftButNeverValidationPermission() {
         launch();idle()
@@ -117,11 +127,11 @@ class ConsoleFlowTest {
     }
 }
 private class FixtureGateway : AdminGateway {
-    var status="submitted";var replies=0;var publishes=0;var deleted=false;var failStatus=false;var expired=false
+    var status="submitted";var replies=0;var publishes=0;var deleted=false;var failStatus=false;var expired=false;var rejectPairing=false
     private val messages=mutableListOf(AdminRepository.FeedbackMessage(JSONObject("""{"id":"m1","feedback_id":"fixture-feedback","sender":"user","message":"Playback stutters after rotating the phone.","created_at":"2026-10-20T04:10:00Z","read_at":"2026-10-20T04:15:00Z"}""")),
         AdminRepository.FeedbackMessage(JSONObject("""{"id":"m2","feedback_id":"fixture-feedback","sender":"developer","message":"Thanks for the report. I am checking the player handoff.","created_at":"2026-10-20T04:18:00Z","read_at":"2026-10-20T04:20:00Z"}""")))
     private fun item()=AdminRepository.Item(JSONObject("""{"id":"fixture-feedback","type":"bug_report","message":"Playback stutters after rotating the phone.","last_message":"Playback stutters after rotating the phone.","status":"$status","app_version":"5.0.1","android_version":"16","device":"OnePlus 13 / CPH2655","section":"shittok","created_at":"2026-10-20T04:10:00Z","last_message_at":"2026-10-20T04:10:00Z","unread_count":2}"""))
-    override fun list(token:String)=if(deleted) emptyList() else listOf(item())
+    override fun list(token:String):List<AdminRepository.Item> {if(rejectPairing) throw SecurityException("Rejected fixture");return if(deleted) emptyList() else listOf(item())}
     override fun analytics(token:String):AdminRepository.AnalyticsDashboard {
         if(expired) throw SecurityException("Expired")
         return AdminRepository.AnalyticsDashboard(JSONObject("""{"active_users":{"daily":128,"weekly":426,"monthly":1248},"generated_at":"2026-10-20T04:25:00Z","creators":[{"value":"Creator A","unique_users":162,"event_count":713},{"value":"Creator B","unique_users":98,"event_count":341},{"value":"Creator C","unique_users":64,"event_count":190}],"sections":[{"value":"shittok","unique_users":318,"event_count":6200},{"value":"onlyfap","unique_users":267,"event_count":3100},{"value":"shows","unique_users":104,"event_count":580}],"sources":[{"value":"kaotic","unique_users":240,"event_count":2000},{"value":"fapello","unique_users":170,"event_count":1410}],"versions":[{"value":"5.0.1","unique_users":310,"event_count":2000},{"value":"5.0.0","unique_users":116,"event_count":560}],"device_models":[{"value":"CPH2655","unique_users":38,"users_today":12,"event_count":470}],"device_manufacturers":[{"value":"Samsung","unique_users":180,"users_today":44,"event_count":1600}],"android_versions":[{"value":"16","unique_users":245,"users_today":95,"event_count":2800}]}"""))

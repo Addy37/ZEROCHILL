@@ -13,6 +13,7 @@ class ConsoleLogicTest {
         assertEquals(9,JSONObject(candidate).getInt("configVersion"))
         val edited=validated.edit(JSONObject(validated.text).apply {getJSONObject("sources").getJSONObject("fapello").put("enabled",false)})
         assertFalse(edited.canPublish);assertTrue(edited.dirty)
+        assertEquals(9,JSONObject(edited.candidate()).getInt("configVersion"))
         assertEquals(listOf("sources.fapello.enabled"),edited.changes())
         assertFalse(edited.discard().dirty);assertFalse(edited.discard().canPublish)
     }

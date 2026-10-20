@@ -49,8 +49,7 @@ internal data class ConfigDraft(val baseline: String, val text: String, val publ
     val validated: String = "") {
     val dirty: Boolean by lazy { canonical(JSONObject(baseline)) != canonical(JSONObject(text)) }
     val canPublish: Boolean get() = validated.isNotEmpty() && validated == text
-    val candidateVersion: Long get() = maxOf(published, JSONObject(text).optLong("configVersion")) +
-        if (canPublish) 0 else 1
+    val candidateVersion: Long by lazy { maxOf(published, JSONObject(baseline).optLong("configVersion")) + 1 }
     fun edit(next: JSONObject) = copy(text = next.toString(), validated = "")
     fun discard() = copy(text = baseline, validated = "")
     fun candidate(): String = JSONObject(text).put("configVersion", candidateVersion)

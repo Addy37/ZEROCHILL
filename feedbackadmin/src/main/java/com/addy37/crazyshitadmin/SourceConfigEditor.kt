@@ -226,6 +226,7 @@ private fun fieldLabel(key: String) = key.replace(Regex("([a-z])([A-Z])"),"$1 $2
             Column(Modifier.padding(20.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
                 Row(verticalAlignment=Alignment.CenterVertically) {Text("Config history",Modifier.weight(1f),style=MaterialTheme.typography.headlineMedium);ActionIcon(Icons.Outlined.Close,"Close history",onClick=dismiss)}
                 Text("Rollback republishes a previous snapshot as a new higher version.",color=Muted)
+                if(state.config?.dirty == true) Text("Discard or publish the candidate before rolling back.",color=Muted)
                 ErrorPanel(state.errors["history"],state::loadHistory)
                 ErrorPanel(state.errors["configAction"])
                 BusyLine("history" in state.busy || busy)

@@ -57,6 +57,7 @@ class AnalyticsActivity : ComponentActivity() {
     var lock by rememberSaveable { mutableStateOf(false) }
     val snackbar = remember { SnackbarHostState() }
     val screenState = rememberSaveableStateHolder()
+    val focus = androidx.compose.ui.platform.LocalFocusManager.current
     LaunchedEffect(state.paired) { if(state.paired) { state.refresh(); if(state.threadId.isNotEmpty()) state.loadThread() } }
     LaunchedEffect(state.notice) { if(state.notice.isNotEmpty()) { snackbar.showSnackbar(state.notice); state.consumeNotice() } }
     BackHandler(state.paired && (state.destination != "home" || state.threadId.isNotEmpty())) {
@@ -67,7 +68,7 @@ class AnalyticsActivity : ComponentActivity() {
         PairingScreen(state); return
     }
     if(state.threadId.isNotEmpty()) { ThreadScreen(state, onBack={state.closeThread();threadBack?.invoke()}); return }
-    Scaffold(containerColor=Ink, snackbarHost={ SnackbarHost(snackbar) },
+    Scaffold(modifier=Modifier.imePadding(),containerColor=Ink, snackbarHost={ SnackbarHost(snackbar) },
         topBar={ Column(Modifier.statusBarsPadding()) {
             Row(Modifier.fillMaxWidth().padding(start=22.dp, end=8.dp, top=10.dp, bottom=8.dp),
                 verticalAlignment=Alignment.CenterVertically) {
@@ -83,7 +84,7 @@ class AnalyticsActivity : ComponentActivity() {
             }
             BusyLine(state.busy.isNotEmpty())
         } },
-        bottomBar={ ConsoleNav(state.destination, state.items.count { it.unreadCount > 0 }, state::navigate) }) { padding ->
+        bottomBar={ ConsoleNav(state.destination, state.items.count { it.unreadCount > 0 }) { focus.clearFocus(); state.navigate(it) } }) { padding ->
         Box(Modifier.padding(padding).fillMaxSize()) {
             AnimatedContent(state.destination, transitionSpec={ (fadeIn() + slideInHorizontally { it/16 }) togetherWith fadeOut() }, label="destination") { destination ->
                 screenState.SaveableStateProvider(destination) { when(destination) {
@@ -111,6 +112,7 @@ class AnalyticsActivity : ComponentActivity() {
     var token by remember { mutableStateOf("") }
     var visible by remember { mutableStateOf(false) }
     val connecting = "pair" in state.busy
+    val keyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
     Box(Modifier.fillMaxSize().background(Ink)) {
         EnergyField(Modifier.fillMaxWidth().height(340.dp).align(Alignment.TopCenter))
         Column(Modifier.align(Alignment.Center).widthIn(max=500.dp).fillMaxWidth().systemBarsPadding().imePadding()
@@ -129,7 +131,7 @@ class AnalyticsActivity : ComponentActivity() {
                 trailingIcon={ActionIcon(if(visible) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
                     if(visible) "Hide token" else "Show token") {visible=!visible}})
             ErrorPanel(state.errors["pair"])
-            Button(onClick={state.connect(token)}, enabled=!connecting && token.isNotBlank(), modifier=Modifier.fillMaxWidth().heightIn(min=54.dp)) {
+            Button(onClick={keyboard?.hide();state.connect(token)}, enabled=!connecting && token.isNotBlank(), modifier=Modifier.fillMaxWidth().heightIn(min=54.dp)) {
                 if(connecting) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth=2.dp, color=Ink)
                 else Icon(Icons.Outlined.Key, null)
                 Spacer(Modifier.width(10.dp)); Text(if(connecting) "Connecting…" else "Connect securely")

@@ -53,7 +53,7 @@ internal class ConsoleState @JvmOverloads constructor(application: Application, 
         tasks[key] = viewModelScope.launch {
             try { block(token) }
             catch (e: CancellationException) { throw e }
-            catch (e: SecurityException) { if (generation == epoch) { lock(); errors = mapOf("pair" to "Your admin session expired. Connect again.") } }
+            catch (e: SecurityException) { if (generation == epoch) { lock(); errors = mapOf("pair" to if(key == "pair") "Authentication failed. Check your admin token." else "Your admin session expired. Connect again.") } }
             catch (e: Exception) { if (generation == epoch) errors = errors + (key to (e.message ?: "Request failed. Try again.")) }
             finally { if (generation == epoch && requestIds[key] == requestId) { busy = busy - key; tasks.remove(key) } }
         }

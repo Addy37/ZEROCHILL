@@ -20,6 +20,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 @Composable internal fun InboxScreen(state: ConsoleState) {
+    val focus = androidx.compose.ui.platform.LocalFocusManager.current
     var query by rememberSaveable { mutableStateOf("") }
     var type by rememberSaveable { mutableStateOf("") }
     var status by rememberSaveable { mutableStateOf("") }
@@ -49,7 +50,7 @@ import androidx.compose.ui.unit.sp
         if(state.items.isEmpty() && "feedback" in state.busy) item {InitialLoad("Loading feedback")}
         else if(shown.isEmpty()) item {EmptyPanel(if(query.isNotBlank() || type.isNotEmpty() || status.isNotEmpty() || unread) "No matching threads" else "Nothing waiting",
             if(state.errors["feedback"] != null) "Retry to load your inbox." else "New reports and replies will appear here. Try adjusting your filters.")}
-        items(shown,key={it.id}) { item -> FeedbackRow(item,Modifier.animateItem()) {state.openThread(item.id)} }
+        items(shown,key={it.id}) { item -> FeedbackRow(item,Modifier.animateItem()) {focus.clearFocus();state.openThread(item.id)} }
         item {Text("Search and filters cover the latest 200 tickets returned by the server.",color=Muted,style=MaterialTheme.typography.bodySmall)}
     }
 }
