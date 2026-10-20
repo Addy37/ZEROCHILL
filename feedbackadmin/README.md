@@ -4,17 +4,19 @@ The private admin app uses Kotlin and Jetpack Compose for presentation. The cons
 
 ## Presentation architecture
 
-- `MainActivity`: pairing, four primary destinations, shared admin menu, notification permission, and legacy destination intents.
-- `ConsoleState`: lifecycle-owned UI state, independent background requests, cancellation on lock, saved navigation, reply drafts and source candidate. Credentials never enter saved state. Process restoration intentionally revokes validation permission.
-- `AdminGateway`: small test seam that delegates to the unchanged Java repository in production.
+- `MainActivity`: pairing, four primary destinations, shared admin menu, notification permission, legacy destination intents, and foreground-only live counter polling on Home and Analytics.
+- `ConsoleState`: lifecycle-owned UI state, independent background requests, cancellation on lock, saved navigation, reply drafts and source candidate. Credentials never enter saved state. Process restoration intentionally revokes validation permission. Lightweight active-install counts are stored separately from the full analytics snapshot so fast refreshes cannot replace rankings or charts.
+- `AdminGateway`: small test seam that delegates to the existing Java repository in production.
 - `ConsoleTheme`: OLED/electric-blue palette using the ZEROCHILL primary accent `#0892D0`, typography, reusable panels, tags, placeholders, navigation, and short animations. Compose animations follow Android's animator duration scale.
-- `HomeScreen`, `InboxScreen`, `AnalyticsScreen`: operational snapshot, local search/filters over the server's latest 200 tickets, and aggregate rankings. No invented time series or runtime source health.
+- `HomeScreen`, `InboxScreen`, `AnalyticsScreen`: operational snapshot, local search/filters over the server's latest 200 tickets, and aggregate rankings. Home and the Analytics summary show live Today/Week/Month counts refreshed every five seconds while the admin app is foregrounded on those screens. No invented time series or runtime source health.
 - `FeedbackThreadActivity`: preserved notification entry point plus Compose conversation, confirmed status, sticky reply composer, read receipts, details, and confirmed permanent deletion.
 - `SourceConfigEditor`: providers and fields derived from the loaded document, guided scalar/list edits, advanced JSON, exact-candidate validation, explicit publish review, and existing rollback-as-new-version semantics. Every edit revokes validation. Refresh retains unsaved edits.
 
 The bright ZEROCHILL accent is electric blue `#0892D0`. Newly branded admin surfaces should use that exact token.
 
-No backend, schema, authorization, analytics-collection, or remote-config contract changes are required. Compose BOM 2026.06.01 matches the existing consumer app's compatible stable stack; Kotlin/compiler plugins reuse the root's 2.2.10. Activity Compose 1.10.1 and Lifecycle Compose 2.9.2 support the thin state layer. Material 3 and native Canvas charts avoid a chart dependency. Compile SDK 36, minimum/target SDK unchanged at 26/34.
+The `feedback-admin` Edge Function now exposes an additive, admin-token-protected `active_counts` action. It performs three indexed count queries against the existing `analytics_uniques` table for the current UTC day, week, and month. The full `analytics_dashboard()` RPC remains unchanged and continues to provide rankings and charts. No schema migration, analytics-ingest change, consumer-app change, authorization-boundary change, or remote-config change is required.
+
+Compose BOM 2026.06.01 matches the existing consumer app's compatible stable stack; Kotlin/compiler plugins reuse the root's 2.2.10. Activity Compose 1.10.1 and Lifecycle Compose 2.9.2 support the thin state layer. Material 3 and native Canvas charts avoid a chart dependency. Compile SDK 36, minimum/target SDK unchanged at 26/34.
 
 ## Verification
 
