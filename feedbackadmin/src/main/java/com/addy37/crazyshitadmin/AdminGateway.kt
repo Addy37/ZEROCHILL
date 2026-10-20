@@ -6,6 +6,7 @@ import org.json.JSONObject
 internal interface AdminGateway {
     fun list(token: String): List<AdminRepository.Item>
     fun analytics(token: String): AdminRepository.AnalyticsDashboard
+    fun activeCounts(token: String): AdminRepository.ActiveCounts = AdminRepository.ActiveCounts(analytics(token))
     fun currentConfig(token: String): JSONObject?
     fun configHistory(token: String): List<AdminRepository.ConfigVersion>
     fun validateConfig(token: String, config: JSONObject): Long
@@ -19,6 +20,7 @@ internal interface AdminGateway {
 internal object RepositoryGateway : AdminGateway {
     override fun list(token: String) = AdminRepository.list(token)
     override fun analytics(token: String) = AdminRepository.analytics(token)
+    override fun activeCounts(token: String) = AdminRepository.activeCounts(token)
     override fun currentConfig(token: String) = AdminRepository.currentConfig(token)
     override fun configHistory(token: String) = AdminRepository.configHistory(token)
     override fun validateConfig(token: String, config: JSONObject) = AdminRepository.validateConfig(token, config)
