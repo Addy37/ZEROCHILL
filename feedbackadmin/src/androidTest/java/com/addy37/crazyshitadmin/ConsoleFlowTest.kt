@@ -1,6 +1,9 @@
 package com.addy37.crazyshitadmin
 
 import android.app.Application
+import android.content.ContentValues
+import android.os.Build
+import android.provider.MediaStore
 import android.graphics.Bitmap
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -34,8 +37,19 @@ class ConsoleFlowTest {
     private fun screenshot(name: String) {
         ui.waitForIdle()
         val bitmap=InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot()
-        val dir=File(app.getExternalFilesDir(null),"console-review").apply {mkdirs()}
-        File(dir,"$name.png").outputStream().use {bitmap.compress(Bitmap.CompressFormat.PNG,100,it)}
+        if(Build.VERSION.SDK_INT >= 29) {
+            // Public test media survives AGP uninstalling the fixture app after instrumentation.
+            val values=ContentValues().apply {
+                put(MediaStore.Images.Media.DISPLAY_NAME,"$name.png")
+                put(MediaStore.Images.Media.MIME_TYPE,"image/png")
+                put(MediaStore.Images.Media.RELATIVE_PATH,"Pictures/ZeroChillAdminReview")
+            }
+            val uri=checkNotNull(app.contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI,values))
+            checkNotNull(app.contentResolver.openOutputStream(uri)).use {bitmap.compress(Bitmap.CompressFormat.PNG,100,it)}
+        } else {
+            val dir=File(app.getExternalFilesDir(null),"console-review").apply {mkdirs()}
+            File(dir,"$name.png").outputStream().use {bitmap.compress(Bitmap.CompressFormat.PNG,100,it)}
+        }
     }
     @After fun clean() {if(::state.isInitialized) ui.runOnUiThread {state.lock()}}
     @Test fun completeConsoleWithFixtureData() {
@@ -64,19 +78,19 @@ class ConsoleFlowTest {
         ui.onNodeWithText("Delete thread").performClick()
         ui.onNodeWithText("Delete permanently").performClick();idle();assertTrue(fake.deleted)
         ui.onNodeWithText("Sources",useUnmergedTree=true).performClick();idle();screenshot("06-sources")
-        ui.onNodeWithText("Publish",useUnmergedTree=true).assertIsNotEnabled()
+        ui.onNodeWithText("Publish").assertIsNotEnabled()
         ui.onNodeWithTag("source-list").performScrollToNode(hasContentDescription("Fapello enabled"))
         ui.onNodeWithText("Fapello").performClick();screenshot("06b-source-editor")
         ui.onNodeWithContentDescription("Close editor").performClick()
         ui.onNodeWithContentDescription("Fapello enabled").performClick()
         ui.onNodeWithText("Validate",useUnmergedTree=true).performClick();idle()
-        ui.onNodeWithText("Publish",useUnmergedTree=true).assertIsEnabled()
+        ui.onNodeWithText("Publish").assertIsEnabled()
         screenshot("07-candidate-validated")
         ui.onNodeWithTag("source-list").performScrollToNode(hasContentDescription("Fapello enabled"))
         ui.onNodeWithContentDescription("Fapello enabled").performClick()
-        ui.onNodeWithText("Publish",useUnmergedTree=true).assertIsNotEnabled()
+        ui.onNodeWithText("Publish").assertIsNotEnabled()
         ui.onNodeWithText("Validate",useUnmergedTree=true).performClick();idle()
-        ui.onNodeWithText("Publish",useUnmergedTree=true).performClick()
+        ui.onNodeWithText("Publish").performClick()
         ui.onNodeWithText("Publish version").performClick();idle();assertEquals(1,fake.publishes)
         ui.onNodeWithTag("source-list").performScrollToIndex(0)
         ui.onNodeWithText("History").performClick();idle();screenshot("08-history")

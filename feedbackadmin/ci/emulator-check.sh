@@ -9,6 +9,6 @@ if [ -f baseline-admin.apk ]; then
 fi
 RESULT=0
 gradle --no-daemon :feedbackadmin:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.addy37.crazyshitadmin.ConsoleFlowTest || RESULT=$?
-adb pull /sdcard/Android/data/com.addy37.crazyshitadmin/files/console-review console-review || true
+adb pull /sdcard/Pictures/ZeroChillAdminReview console-review || true
 if [ "$RESULT" -ne 0 ]; then exit "$RESULT"; fi
 exit "$UPGRADE_RESULT"
