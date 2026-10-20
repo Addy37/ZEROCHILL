@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
+# Synthetic tokens must never reach the hosted admin API. Host-side Gradle downloads remain available.
+adb shell svc wifi disable
+adb shell svc data disable
 UPGRADE_RESULT=0
 if [ -f baseline-admin.apk ]; then
   bash feedbackadmin/ci/token-upgrade-check.sh || UPGRADE_RESULT=$?
