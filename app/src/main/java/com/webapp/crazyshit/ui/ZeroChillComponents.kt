@@ -100,7 +100,7 @@ fun ZeroChillToggleRow(title: String, subtitle: String = "", checked: Boolean,
 }
 
 @Composable
-fun ZeroChillButton(label: String, enabled: Boolean = true, modifier: Modifier = Modifier,
+fun ZeroChillButton(label: String, modifier: Modifier = Modifier, enabled: Boolean = true,
     onClick: () -> Unit) {
     Button(onClick, modifier.heightIn(min = ZeroChillSpace.Touch), enabled = enabled,
         shape = MaterialTheme.shapes.small) { Text(label, textAlign = TextAlign.Center) }

@@ -78,8 +78,8 @@ internal fun FeedbackThreadScreen(state: FeedbackThreadUiState, events: Feedback
                 label = { Text("Reply to ZEROCHILL") }, enabled = !state.sending, maxLines = 5,
                 shape = MaterialTheme.shapes.medium, isError = state.validation != null,
                 supportingText = { Text(state.validation ?: "${state.draft.length}/2000") })
-            ZeroChillButton(if (state.sending) "Sending…" else "Send", !state.sending,
-                Modifier.align(Alignment.End), events::send)
+            ZeroChillButton(if (state.sending) "Sending…" else "Send",
+                modifier = Modifier.align(Alignment.End), enabled = !state.sending, onClick = events::send)
         }
     }
 }

@@ -126,7 +126,8 @@ internal fun FeedbackScreen(state: FeedbackUiState, events: FeedbackState, onBac
                 }
                 item(key = "submit") {
                     ZeroChillButton(if (state.sending) "Sending…" else "Send feedback",
-                        state.configured && !state.sending, Modifier.fillMaxWidth(), events::submit)
+                        modifier = Modifier.fillMaxWidth(), enabled = state.configured && !state.sending,
+                        onClick = events::submit)
                     if (!state.configured) Text("Feedback is not connected yet.",
                         color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp))
                 }

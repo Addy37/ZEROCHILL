@@ -32,7 +32,6 @@ import androidx.savedstate.SavedStateRegistryController
 import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.webapp.crazyshit.glass.*
-import com.webapp.crazyshit.ui.ZeroChillTheme
 import com.webapp.crazyshit.glass.backdrop.Backdrop
 import com.webapp.crazyshit.glass.backdrop.backdrops.emptyBackdrop
 import com.webapp.crazyshit.glass.backdrop.backdrops.layerBackdrop
@@ -68,7 +67,7 @@ internal class SquareNavigationBridge(private val nav: ZeroChillBottomNavigation
             compose.clipChildren = false
             compose.clipToPadding = false
             compose.setContent {
-                ZeroChillTheme { Navigation() }
+                MaterialTheme(colorScheme = darkColorScheme(primary = SelectedInk)) { Navigation() }
             }
             nav.addView(compose, FrameLayout.LayoutParams(-1, -1))
         }

@@ -14,7 +14,7 @@ Development branch: `feature/zerochill-compose-6.0`. No release/version change y
 
 - `ui/ZeroChillTheme.kt`: colors from the existing XML roles, approved `#0892D0` accent, OLED preference, typography, shapes and spacing.
 - `ui/ZeroChillComponents.kt`: bounded/inset-aware screen, panels, section headers, action/toggle rows, buttons, loading and empty/error states. Glass surface delegates to the existing liquid-glass engine.
-- Existing glass bottom navigation now consumes the shared theme. Its backdrop, lens, drag/collapse and selection code remain intact.
+- Existing glass bottom navigation and header implementation remain unchanged. Theme integration into the main shell is deferred until its migration phase; the new glass primitive delegates to the same engine.
 - New standalone screens use AndroidX `ComponentActivity` lifecycle/saved-state owners and a stable Compose root ID. Existing navigation/header bridges remain in place for legacy screens.
 
 ## Hybrid
@@ -35,7 +35,8 @@ Development branch: `feature/zerochill-compose-6.0`. No release/version change y
 
 ## Validation and next batch
 
-Validation in progress. No physical-device or performance claim yet.
+The earlier checkpoint passed 888 tests per debug/release variant (one skipped each) and both APK builds. Lint retained 321 existing errors; the new parameter-order warning is fixed. Updated-checkpoint validation is in progress.
+Macrobenchmarks reported navigation-readiness timeouts/ANRs, creator autoplay timeout and lost emulators; no passing approved search-baseline performance run was available. Main navigation theme integration was deferred to keep that runtime path unchanged from main. No performance equivalence claim yet.
 Physical testing needed: Settings toggles/dialogs/backup, Feedback draft/keyboard/tabs/conversation routing, font scaling, insets and navigation glass appearance.
 Next batch: Settings dialogs, then Library/Search. Preserve player and source systems.
 No package, signing, persisted-key, database, backend or remote-config changes.
