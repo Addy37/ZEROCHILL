@@ -16,6 +16,8 @@ import org.junit.After
 import org.junit.Rule
 import org.junit.Test
 import java.io.File
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 /** Fixture-only UI verification. Never contacts the hosted backend or publishes real configuration. */
 class ConsoleFlowTest {
@@ -127,6 +129,20 @@ class ConsoleFlowTest {
             assertEquals("Keep this draft",restored.draft("fixture-feedback"))
         }
     }
+    @Test fun lateStatusUpdateDoesNotOverwriteAnotherThread() {
+        launch();idle()
+        ui.runOnUiThread {state.openThread("fixture-feedback")};idle()
+        val gate=CountDownLatch(1);fake.statusGate=gate
+        ui.runOnUiThread {
+            state.updateStatus("completed")
+            state.closeThread()
+            state.openThread("other-feedback")
+        }
+        ui.waitUntil(10_000) {state.thread?.item?.id=="other-feedback"}
+        gate.countDown();idle()
+        assertEquals("other-feedback",state.threadId)
+        assertEquals("submitted",state.threadStatus)
+    }
     @Test fun failedStatusRetainsConfirmedStatusAndExpiredAuthReturnsToPairing() {
         launch();idle()
         ui.runOnUiThread {state.openThread("fixture-feedback")};idle()
@@ -141,10 +157,10 @@ class ConsoleFlowTest {
     }
 }
 private class FixtureGateway : AdminGateway {
-    var status="submitted";var replies=0;var publishes=0;var deleted=false;var failStatus=false;var expired=false;var rejectPairing=false
+    var status="submitted";var replies=0;var publishes=0;var deleted=false;var failStatus=false;var expired=false;var rejectPairing=false;var statusGate:CountDownLatch?=null
     private val messages=mutableListOf(AdminRepository.FeedbackMessage(JSONObject("""{"id":"m1","feedback_id":"fixture-feedback","sender":"user","message":"Playback stutters after rotating the phone.","created_at":"2026-10-20T04:10:00Z","read_at":"2026-10-20T04:15:00Z"}""")),
         AdminRepository.FeedbackMessage(JSONObject("""{"id":"m2","feedback_id":"fixture-feedback","sender":"developer","message":"Thanks for the report. I am checking the player handoff.","created_at":"2026-10-20T04:18:00Z","read_at":"2026-10-20T04:20:00Z"}""")))
-    private fun item()=AdminRepository.Item(JSONObject("""{"id":"fixture-feedback","type":"bug_report","message":"Playback stutters after rotating the phone.","last_message":"Playback stutters after rotating the phone.","status":"$status","app_version":"5.0.1","android_version":"16","device":"OnePlus 13 / CPH2655","section":"shittok","created_at":"2026-10-20T04:10:00Z","last_message_at":"2026-10-20T04:10:00Z","unread_count":2}"""))
+    private fun item(id:String="fixture-feedback")=AdminRepository.Item(JSONObject("""{"id":"$id","type":"bug_report","message":"Playback stutters after rotating the phone.","last_message":"Playback stutters after rotating the phone.","status":"${if(id=="fixture-feedback") status else "submitted"}","app_version":"5.0.1","android_version":"16","device":"OnePlus 13 / CPH2655","section":"shittok","created_at":"2026-10-20T04:10:00Z","last_message_at":"2026-10-20T04:10:00Z","unread_count":2}"""))
     override fun list(token:String):List<AdminRepository.Item> {if(rejectPairing) throw SecurityException("Rejected fixture");return if(deleted) emptyList() else listOf(item())}
     override fun analytics(token:String):AdminRepository.AnalyticsDashboard {
         if(expired) throw SecurityException("Expired")
@@ -156,8 +172,8 @@ private class FixtureGateway : AdminGateway {
     override fun validateConfig(token:String,config:JSONObject)=config.getLong("configVersion")
     override fun publishConfig(token:String,config:JSONObject):Long {publishes++;this.config=JSONObject(config.toString());return config.getLong("configVersion")}
     override fun rollbackConfig(token:String,version:Long)=version+1
-    override fun thread(token:String,id:String)=AdminRepository.FeedbackThread(item(),messages.toList())
+    override fun thread(token:String,id:String)=AdminRepository.FeedbackThread(item(id),messages.toList())
     override fun reply(token:String,id:String,status:String,message:String) {replies++;messages+=AdminRepository.FeedbackMessage(JSONObject().put("id","reply-$replies").put("sender","developer").put("message",message).put("created_at","2026-10-20T04:30:00Z"))}
-    override fun updateStatus(token:String,id:String,status:String) {if(failStatus) throw IllegalStateException("Fixture status failure");this.status=status}
+    override fun updateStatus(token:String,id:String,status:String) {if(failStatus) throw IllegalStateException("Fixture status failure");check(statusGate?.await(8,TimeUnit.SECONDS)!=false);this.status=status}
     override fun deleteFeedback(token:String,id:String) {deleted=true}
 }

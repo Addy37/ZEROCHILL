@@ -138,7 +138,8 @@ internal class ConsoleState @JvmOverloads constructor(application: Application, 
         request("threadAction") { token ->
             // Keep the confirmed status until the server accepts the change.
             withContext(Dispatchers.IO) { gateway.updateStatus(token, prior.item.id, status) }
-            threadStatus = status; notice = "Status updated to ${statusLabel(status)}"; loadThread()
+            notice = "Status updated to ${statusLabel(status)}"
+            if (threadId == prior.item.id) { threadStatus = status; loadThread() } else loadFeedback()
         }
     }
     fun draft(id: String): String = saved["reply:$id"] ?: ""
@@ -155,7 +156,8 @@ internal class ConsoleState @JvmOverloads constructor(application: Application, 
         val id = threadId
         request("threadAction") { token ->
             withContext(Dispatchers.IO) { gateway.deleteFeedback(token, id) }
-            saved.remove<String>("reply:$id"); notice = "Feedback deleted"; closeThread(); done()
+            saved.remove<String>("reply:$id"); notice = "Feedback deleted"
+            if (threadId == id) { closeThread(); done() } else loadFeedback()
         }
     }
     fun consumeNotice() { notice = "" }
