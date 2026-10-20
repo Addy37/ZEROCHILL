@@ -18,6 +18,7 @@ import androidx.compose.ui.unit.dp
 
 @Composable internal fun HomeScreen(state: ConsoleState) {
     val a = state.analytics
+    val counts = state.activeCounts
     val draft = state.config
     val sources = remember(draft?.text) { draft?.let { org.json.JSONObject(it.text).optJSONObject("sources") } }
     val enabled = sources?.keysList()?.count { sources.optJSONObject(it)?.optBoolean("enabled", true) == true }
@@ -31,17 +32,18 @@ import androidx.compose.ui.unit.dp
             Box(Modifier.fillMaxWidth()) {
                 ConsolePanel(Modifier.fillMaxWidth(), accent=true) {
                     Eyebrow("ACTIVE INSTALLS")
-                    Metric(a?.dailyUsers, "Active today", large=true)
+                    Metric(counts?.dailyUsers ?: a?.dailyUsers, "Active today", large=true)
                     HorizontalDivider(color=Cyan.copy(alpha=.12f))
                     Row(Modifier.fillMaxWidth(), horizontalArrangement=Arrangement.spacedBy(28.dp)) {
-                        Metric(a?.weeklyUsers, "This week", modifier=Modifier.weight(1f))
-                        Metric(a?.monthlyUsers, "This month", modifier=Modifier.weight(1f))
+                        Metric(counts?.weeklyUsers ?: a?.weeklyUsers, "This week", modifier=Modifier.weight(1f))
+                        Metric(counts?.monthlyUsers ?: a?.monthlyUsers, "This month", modifier=Modifier.weight(1f))
                     }
                 }
                 EnergyField(Modifier.matchParentSize())
             }
             Spacer(Modifier.height(8.dp))
-            Text(a?.generatedAt?.let { "Analytics · ${dateLabel(it)}" } ?: "Waiting for analytics", color=Muted, style=MaterialTheme.typography.bodySmall)
+            val generated = counts?.generatedAt?.takeIf { it.isNotEmpty() } ?: a?.generatedAt
+            Text(generated?.let { "Live counters · ${dateLabel(it)}" } ?: "Waiting for analytics", color=Muted, style=MaterialTheme.typography.bodySmall)
             ErrorPanel(state.errors["analytics"], state::loadAnalytics)
         }
         item {
