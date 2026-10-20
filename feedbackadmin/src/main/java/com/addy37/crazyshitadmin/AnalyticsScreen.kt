@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.sp
 
 @Composable internal fun AnalyticsScreen(state: ConsoleState) {
     val a = state.analytics
+    val counts = state.activeCounts
     LazyColumn(Modifier.fillMaxSize(),contentPadding=PaddingValues(22.dp),verticalArrangement=Arrangement.spacedBy(22.dp)) {
         item { Eyebrow("04 / AUDIENCE INSIGHTS",color=Cyan);Spacer(Modifier.height(8.dp));Text("Analytics",style=MaterialTheme.typography.headlineLarge)
             Spacer(Modifier.height(8.dp));Text("Aggregate activity. No individual user timelines.",color=Muted) }
@@ -36,11 +37,12 @@ import androidx.compose.ui.unit.sp
         else {
             item {ConsolePanel(Modifier.fillMaxWidth(),accent=true) {
                 Eyebrow("ACTIVE INSTALLS")
-                Metric(a.dailyUsers,"Today",large=true)
+                Metric(counts?.dailyUsers ?: a.dailyUsers,"Today",large=true)
                 Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(24.dp)) {
-                    Metric(a.weeklyUsers,"7 days",modifier=Modifier.weight(1f));Metric(a.monthlyUsers,"30 days",modifier=Modifier.weight(1f))
+                    Metric(counts?.weeklyUsers ?: a.weeklyUsers,"7 days",modifier=Modifier.weight(1f));Metric(counts?.monthlyUsers ?: a.monthlyUsers,"30 days",modifier=Modifier.weight(1f))
                 }
-                Text("Generated ${dateLabel(a.generatedAt)}",color=Muted,fontSize=12.sp)
+                val generated = counts?.generatedAt?.takeIf { it.isNotEmpty() } ?: a.generatedAt
+                Text("Live counters · ${dateLabel(generated)}",color=Muted,fontSize=12.sp)
             } }
             item {RankingSection("Creator rankings","Gallery interest · weekly users & opens",a.creators,expandedInitially=true,creator=true)}
             item {BoxWithConstraints {
@@ -56,7 +58,10 @@ import androidx.compose.ui.unit.sp
             item {RankingSection("Device models","Physical devices · weekly activity",a.deviceModels.filter {realDevice(it.value)},false,device=true)}
             item {RankingSection("Manufacturers","Weekly active installs",a.deviceManufacturers,false,device=true)}
             item {RankingSection("Android versions","Weekly active installs",a.androidVersions,false,device=true)}
-            if(a.monthlyUsers==0L && a.weeklyUsers==0L && a.dailyUsers==0L) item {EmptyPanel("Waiting for activity","Metrics fill in as analytics-enabled apps report activity.",Icons.Outlined.Insights)}
+            val daily = counts?.dailyUsers ?: a.dailyUsers
+            val weekly = counts?.weeklyUsers ?: a.weeklyUsers
+            val monthly = counts?.monthlyUsers ?: a.monthlyUsers
+            if(monthly==0L && weekly==0L && daily==0L) item {EmptyPanel("Waiting for activity","Metrics fill in as analytics-enabled apps report activity.",Icons.Outlined.Insights)}
             item {Text("Bars compare weekly users within each group. Counts can overlap across sections, sources, and creators.",color=Muted,fontSize=13.sp)}
         }
     }
