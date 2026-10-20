@@ -35,8 +35,13 @@ Development branch: `feature/zerochill-compose-6.0`. No release/version change y
 
 ## Validation and next batch
 
-The earlier checkpoint passed 888 tests per debug/release variant (one skipped each) and both APK builds. Lint retained 321 existing errors; the new parameter-order warning is fixed. Updated-checkpoint validation is in progress.
-Macrobenchmarks reported navigation-readiness timeouts/ANRs, creator autoplay timeout and lost emulators; no passing approved search-baseline performance run was available. Main navigation theme integration was deferred to keep that runtime path unchanged from main. No performance equivalence claim yet.
-Physical testing needed: Settings toggles/dialogs/backup, Feedback draft/keyboard/tabs/conversation routing, font scaling, insets and navigation glass appearance.
-Next batch: Settings dialogs, then Library/Search. Preserve player and source systems.
-No package, signing, persisted-key, database, backend or remote-config changes.
+- Application checkpoint: `6accae3a05a612f8ab87789e0d512561c558af1d`.
+- Build Android APK #2073 and Signed Upgrade Candidate #863 passed. Full debug/release suites each ran 888 tests, zero failures/errors, one skipped. The migration adds 17 tests. Local focused UI/state/navigation checks passed 65 tests.
+- Clean local debug/release builds passed. A local incremental ART-profile `BufferUnderflowException` cleared after cleaning generated build outputs; fresh CI builds passed too.
+- Lint remains an audit failure: 321 existing errors and 405 warnings locally, with no findings in the new Compose files. The introduced parameter-order warning is fixed.
+- Signed preview: `5.0.2-zerochill-preview` / `5000002`, existing production package and signing certificate. The APK embeds this branch and source commit. Android 15 installed it over stable 5.0.1 and retained the package's first-install record. This is a 6.0 development checkpoint, not the final 6.0 release.
+- Performance run #1018: cold/warm startup, tab switching, baseline profile and ShitTok scrolling passed. Search failed with a main-shell ANR/readiness timeout; creator gallery autoplay timed out; both Shows flows lost emulator connections. The long ShitTok session was still running when this checkpoint was documented. Causes remain unresolved; no performance-equivalence claim. Main navigation code is identical to main, and the approved search checkpoint had no completed comparison matrix.
+
+Physical testing needed: Settings actions/dialogs/backup, Feedback draft/keyboard/tabs/reply routing, large fonts, insets and glass appearance; startup, Search, gallery playback, ShitTok gestures and rotation also need device checks. Automated upgrade installation does not verify every saved collection or signed-in account on a real device.
+Next: compare the failed performance flows against approved main and diagnose the timeouts, then migrate Settings dialogs and Library/Search. Preserve player and source systems.
+No package, signing, persisted-key, database, backend or remote-config changes. CI runs both full suites once for this branch while retaining signing/version/upgrade gates. No merge or publication.
