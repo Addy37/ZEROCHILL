@@ -13,6 +13,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.webapp.crazyshit.R
 import com.webapp.crazyshit.glass.GlassEffectConfig
@@ -31,7 +32,7 @@ fun ZeroChillScreen(title: String, onBack: () -> Unit, content: @Composable Colu
                         Icon(painterResource(R.drawable.ic_player_back), "Back")
                     }
                     Text(title, style = MaterialTheme.typography.headlineSmall,
-                        modifier = Modifier.padding(start = 8.dp).semantics { heading() })
+                        modifier = Modifier.weight(1f).padding(start = 8.dp).semantics { heading() })
                 }
                 content()
             }
@@ -76,11 +77,12 @@ fun ZeroChillActionRow(title: String, subtitle: String = "", value: String = "",
     Row(Modifier.fillMaxWidth().clickable(role = Role.Button, onClick = onClick)
         .heightIn(min = 60.dp).padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        // Stack long values with copy, so large system fonts don't squeeze the title away.
-        RowCopy(title, subtitle, Modifier.weight(1f))
-        if (value.isNotBlank()) Text(value, style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.primary, textAlign = TextAlign.End,
-            modifier = Modifier.widthIn(max = 120.dp))
+        // Status values stack with copy so large fonts and long summaries keep their space.
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            RowCopy(title, subtitle, Modifier.fillMaxWidth())
+            if (value.isNotBlank()) Text(value, style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        }
         Text("›", color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }

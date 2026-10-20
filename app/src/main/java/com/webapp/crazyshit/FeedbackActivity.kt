@@ -59,15 +59,19 @@ class FeedbackActivity : ComponentActivity() {
 }
 
 @Composable
-private fun FeedbackScreen(state: FeedbackUiState, events: FeedbackState, onBack: () -> Unit, onThread: (String) -> Unit) {
+internal fun FeedbackScreen(state: FeedbackUiState, events: FeedbackState, onBack: () -> Unit, onThread: (String) -> Unit) {
     val composeScroll = rememberLazyListState()
     val historyScroll = rememberLazyListState()
     ZeroChillScreen("Feedback", onBack) {
-        TabRow(selectedTabIndex = if (state.history) 1 else 0,
+        PrimaryTabRow(selectedTabIndex = if (state.history) 1 else 0,
             containerColor = MaterialTheme.colorScheme.background) {
             Tab(!state.history, { events.showHistory(false) }, enabled = !state.sending,
+                selectedContentColor = MaterialTheme.colorScheme.primary,
+                unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
                 text = { Text("Send feedback") })
             Tab(state.history, { events.showHistory(true) }, enabled = !state.sending,
+                selectedContentColor = MaterialTheme.colorScheme.primary,
+                unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
                 text = { Text("My feedback") })
         }
         LazyColumn(state = if (state.history) historyScroll else composeScroll,

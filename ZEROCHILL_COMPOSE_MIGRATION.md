@@ -8,6 +8,7 @@ Development branch: `feature/zerochill-compose-6.0`. No release/version change y
 - Settings screen: Compose sections, action rows, switches, status text and version footer. Existing Java controller retains preference writes, notification permission/scheduling, backup result handling and actions.
 - Feedback form and history: Compose radio choices, message input, rating, submit state, loading/error/empty states and keyed conversation cards. Existing repository contracts and feedback identity remain unchanged.
 - Feedback state holder retains draft, rating, selected tab and in-flight submit across rotation; Bundle restores draft after process recreation. Late history responses cannot replace newer results or the composer.
+- Feedback conversation: Compose message bubbles, sender/status/read receipts, pull-to-refresh and reply input. Retains the existing thread/reply APIs and read tracking. Replies survive rotation, and a refresh started before a successful reply cannot replace the subsequent refreshed conversation.
 
 ## Shared foundation
 
@@ -19,14 +20,13 @@ Development branch: `feature/zerochill-compose-6.0`. No release/version change y
 ## Hybrid
 
 - Settings dialogs, diagnostics, backup picker and updater overlays still use existing implementations.
-- Feedback conversation (`FeedbackThreadActivity`) still uses Views.
-- Main shell (`NativeMainActivity`), Search (`SpotlightSearchPanel`, `SearchGlassPane`) and headers retain View controls with Compose glass.
+- Main shell (`NativeMainActivity`), Search (`SearchPanel`, `SearchGlassLayout`) and headers retain View controls with Compose glass.
 
 ## Remaining inventory
 
-- Library: `LibraryHomeView`, `FavoritesActivity`, `CreatorsActivity`, `DownloadedActivity`, `LikedVideosActivity`, `LibraryHubActivity`.
-- Search: `SpotlightSearchPanel`, creator/global result adapters, recent-search presentation. Preserve approved progressive results and fade behavior.
-- Content: `OnlyFapHubView`, `SeriesHubView`, `BunkrGalleryActivity`, native feed/detail screens and creator media grids.
+- Library: `LibraryHubView`, `FavoritesActivity`, `CreatorsActivity`, `DownloadedActivity`, `LikedVideosActivity`, `LibraryHubActivity`.
+- Search: `SearchPanel`, creator/global result adapters, recent-search presentation. Preserve approved progressive results and fade behavior.
+- Content: `OnlyFapHubView`, `ShowsHubView`, `BunkrGalleryActivity`, native feed/detail screens and creator media grids.
 - Accounts/social: account/security/profile, messages/inbox, social settings and notification screens.
 - Startup: splash/wizard and account announcement surfaces.
 - Playback: `ChaosFeedView`/ViewPager2 and `PlayerActivity`/Media3. Migrate shells only after lower-risk screens.
@@ -37,5 +37,5 @@ Development branch: `feature/zerochill-compose-6.0`. No release/version change y
 
 Validation in progress. No physical-device or performance claim yet.
 Physical testing needed: Settings toggles/dialogs/backup, Feedback draft/keyboard/tabs/conversation routing, font scaling, insets and navigation glass appearance.
-Next batch: Feedback conversation and Settings dialogs, then Library/Search. Preserve player and source systems.
+Next batch: Settings dialogs, then Library/Search. Preserve player and source systems.
 No package, signing, persisted-key, database, backend or remote-config changes.
