@@ -15,6 +15,7 @@ internal class ConsoleState @JvmOverloads constructor(application: Application, 
     var destination by mutableStateOf(saved.get<String>("destination") ?: "home"); private set
     var items by mutableStateOf<List<AdminRepository.Item>>(emptyList()); private set
     var analytics by mutableStateOf<AdminRepository.AnalyticsDashboard?>(null); private set
+    var activeCounts by mutableStateOf<AdminRepository.ActiveCounts?>(null); private set
     var config by mutableStateOf<ConfigDraft?>(null); private set
     var history by mutableStateOf<List<AdminRepository.ConfigVersion>>(emptyList()); private set
     var thread by mutableStateOf<AdminRepository.FeedbackThread?>(null); private set
@@ -71,7 +72,7 @@ internal class ConsoleState @JvmOverloads constructor(application: Application, 
     fun lock() {
         generation++; tasks.values.toList().forEach { it.cancel() }; tasks.clear()
         SecureTokenStore.clear(getApplication()); paired = false
-        items = emptyList(); analytics = null; config = null; history = emptyList(); thread = null
+        items = emptyList(); analytics = null; activeCounts = null; config = null; history = emptyList(); thread = null
         threadId = ""; saved["threadId"] = ""; busy = emptySet(); errors = emptyMap(); notice = ""
         saved.keys().filter { it.startsWith("reply:") }.forEach { saved.remove<String>(it) }
         persistConfig(); navigate("home")
@@ -81,7 +82,12 @@ internal class ConsoleState @JvmOverloads constructor(application: Application, 
         items = withContext(Dispatchers.IO) { gateway.list(token) }; refreshed = java.time.Instant.now().toString()
     }
     fun loadAnalytics() = request("analytics") { token ->
-        analytics = withContext(Dispatchers.IO) { gateway.analytics(token) }
+        val loaded = withContext(Dispatchers.IO) { gateway.analytics(token) }
+        analytics = loaded
+        activeCounts = AdminRepository.ActiveCounts(loaded)
+    }
+    fun loadActiveCounts() = request("activeCounts") { token ->
+        activeCounts = withContext(Dispatchers.IO) { gateway.activeCounts(token) }
     }
     fun loadConfig(force: Boolean = false) {
         if (config != null && !force) return
