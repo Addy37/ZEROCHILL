@@ -15,7 +15,7 @@ When instructions conflict, follow the higher-priority instruction and report th
 
 ## Source of truth and lineage
 
-- Treat `rebrand/zerochill` as the ZEROCHILL source-of-truth branch until it is merged into `main`, unless the user explicitly selects another active branch.
+- Treat `main` as the ZEROCHILL source-of-truth branch unless the user explicitly selects another active branch.
 - Read `ZEROCHILL_BUILD_LINEAGE.md` before substantial feature work, release work, or producing an APK.
 - Start new work from the current complete approved lineage. Do not build new features on an older feature branch because it happens to contain one desired change.
 - Keep `integration/zerochill-current` synchronized with the current approved complete product lineage when the lineage document calls for it.
