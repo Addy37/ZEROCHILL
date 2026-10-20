@@ -73,8 +73,12 @@ jobs:
               output.write(f"ANDROID_KEY_PASSWORD={data['key_password']}\n")
           PY
 
-      - name: Build private admin APK
-        run: gradle --no-daemon :feedbackadmin:assembleRelease
+      - name: Test and build private admin APK
+        run: >-
+          gradle --no-daemon
+          :feedbackadmin:testDebugUnitTest
+          :feedbackadmin:testReleaseUnitTest
+          :feedbackadmin:assembleRelease
 
       - name: Prepare APK
         run: |
