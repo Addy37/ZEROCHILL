@@ -81,11 +81,11 @@ class FeedbackThreadActivity : ComponentActivity() {
             Row(Modifier.fillMaxWidth().padding(horizontal=22.dp),verticalAlignment=Alignment.CenterVertically) {
                 Box {
                     TextButton(onClick={statusMenu=true},enabled=item!=null && !actionBusy) {
-                        Text(item?.let {statusLabel(it.status)} ?: "Loading status");Icon(Icons.Outlined.ExpandMore,null)
+                        Text(item?.let {statusLabel(state.threadStatus.ifEmpty {it.status})} ?: "Loading status");Icon(Icons.Outlined.ExpandMore,null)
                     }
                     DropdownMenu(statusMenu,{statusMenu=false}) {
-                        statuses.forEach {(key,label)-> DropdownMenuItem(text={Text(label)},onClick={statusMenu=false;if(item?.status!=key) state.updateStatus(key)},
-                            trailingIcon={if(item?.status==key) Icon(Icons.Outlined.Check,null,tint=Cyan)}) }
+                        statuses.forEach {(key,label)-> DropdownMenuItem(text={Text(label)},onClick={statusMenu=false;if(state.threadStatus!=key) state.updateStatus(key)},
+                            trailingIcon={if(state.threadStatus==key) Icon(Icons.Outlined.Check,null,tint=Cyan)}) }
                     }
                 }
                 Spacer(Modifier.weight(1f))

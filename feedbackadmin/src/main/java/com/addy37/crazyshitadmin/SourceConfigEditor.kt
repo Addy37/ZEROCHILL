@@ -36,6 +36,8 @@ import org.json.JSONObject
     val document = remember(draft?.text) { draft?.let {JSONObject(it.text)} }
     val sources = document?.optJSONObject("sources")
     val keys = remember(draft?.text) {sources?.keysList().orEmpty()}
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+    val sourceColumns = if(maxWidth>680.dp) 2 else 1
     Column(Modifier.fillMaxSize()) {
         LazyColumn(Modifier.weight(1f).fillMaxWidth(),contentPadding=PaddingValues(22.dp),verticalArrangement=Arrangement.spacedBy(16.dp)) {
             item {
@@ -66,11 +68,16 @@ import org.json.JSONObject
                     }
                 } }
                 item {Eyebrow("PROVIDERS")}
-                items(keys,key={it}) {key ->
-                    val source = sources?.optJSONObject(key)
-                    if(source!=null) SourceCard(key,source,!actionBusy,onEdit={editing=key}) {value ->
-                        state.editConfig(JSONObject(draft.text).apply {getJSONObject("sources").getJSONObject(key).put("enabled",value)})
-                    } else ErrorPanel("Config problem · $key must be an object")
+                items(keys.chunked(sourceColumns),key={it.joinToString()}) {rowKeys ->
+                    Row(horizontalArrangement=Arrangement.spacedBy(16.dp)) {
+                        rowKeys.forEach {key -> Column(Modifier.weight(1f)) {
+                            val source = sources?.optJSONObject(key)
+                            if(source!=null) SourceCard(key,source,!actionBusy,onEdit={editing=key}) {value ->
+                                state.editConfig(JSONObject(draft.text).apply {getJSONObject("sources").getJSONObject(key).put("enabled",value)})
+                            } else ErrorPanel("Config problem · $key must be an object")
+                        } }
+                        if(rowKeys.size<sourceColumns) Spacer(Modifier.weight(1f))
+                    }
                 }
                 item { TextButton(onClick={editing="__full__"},enabled=!actionBusy) {Icon(Icons.Outlined.DataObject,null);Spacer(Modifier.width(8.dp));Text("Advanced · full configuration JSON")} }
             }
@@ -84,6 +91,7 @@ import org.json.JSONObject
                 Button(onClick={publish=true},enabled=draft.canPublish && !actionBusy,modifier=Modifier.weight(1f)) {Text("Publish")}
             }
         }
+    }
     }
     if(editing!=null && draft!=null) {
         val key = editing!!
@@ -155,7 +163,7 @@ private fun fieldLabel(key: String) = key.replace(Regex("([a-z])([A-Z])"),"$1 $2
         (original.opt(it) !is JSONArray || (0 until original.getJSONArray(it).length()).all {index -> original.getJSONArray(it).opt(index) is String})}.groupBy(::fieldGroup)}
     val close = { if(local != initial || raw != original.toString(2)) confirmClose=true else onDismiss() }
     Dialog(onDismissRequest=close,properties=DialogProperties(usePlatformDefaultWidth=false)) {
-        Surface(Modifier.fillMaxSize().systemBarsPadding().imePadding().padding(10.dp).widthIn(max=740.dp),shape=ConsoleShape,color=Ink) {
+        Surface(Modifier.systemBarsPadding().imePadding().padding(10.dp).widthIn(max=740.dp).fillMaxWidth().fillMaxHeight(),shape=ConsoleShape,color=Ink) {
             Column {
                 Row(Modifier.padding(start=20.dp,end=8.dp,top=12.dp),verticalAlignment=Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {Eyebrow("CANDIDATE EDITOR",color=Cyan);Text(title,style=MaterialTheme.typography.headlineMedium)}
@@ -212,7 +220,7 @@ private fun fieldLabel(key: String) = key.replace(Regex("([a-z])([A-Z])"),"$1 $2
     var target by remember {mutableStateOf<Long?>(null)}
     val busy = "configAction" in state.busy
     Dialog(onDismissRequest=dismiss,properties=DialogProperties(usePlatformDefaultWidth=false)) {
-        Surface(Modifier.fillMaxWidth().widthIn(max=640.dp).fillMaxHeight(.85f).padding(16.dp),shape=ConsoleShape,color=Ink) {
+        Surface(Modifier.widthIn(max=640.dp).fillMaxWidth().fillMaxHeight(.85f).padding(16.dp),shape=ConsoleShape,color=Ink) {
             Column(Modifier.padding(20.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
                 Row(verticalAlignment=Alignment.CenterVertically) {Text("Config history",Modifier.weight(1f),style=MaterialTheme.typography.headlineMedium);ActionIcon(Icons.Outlined.Close,"Close history",onClick=dismiss)}
                 Text("Rollback republishes a previous snapshot as a new higher version.",color=Muted)

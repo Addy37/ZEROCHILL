@@ -73,7 +73,7 @@ class AnalyticsActivity : ComponentActivity() {
                 verticalAlignment=Alignment.CenterVertically) {
                 Column(Modifier.weight(1f), verticalArrangement=Arrangement.spacedBy(6.dp)) {
                     Wordmark()
-                    Text("Private session · connected", color=Muted, style=MaterialTheme.typography.bodySmall)
+                    Text("Private admin session", color=Muted, style=MaterialTheme.typography.bodySmall)
                 }
                 ActionIcon(Icons.Outlined.Refresh, "Refresh", state.busy.isEmpty()) {
                     when(state.destination) { "feedback" -> state.loadFeedback(); "analytics" -> state.loadAnalytics();

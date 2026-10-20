@@ -24,7 +24,10 @@ internal fun JSONObject.keysList() = keys().asSequence().toList().sorted()
 internal fun canonical(value: Any?): String = when(value) {
     is JSONObject -> value.keysList().joinToString(",", "{", "}") { JSONObject.quote(it) + ":" + canonical(value.get(it)) }
     is JSONArray -> (0 until value.length()).joinToString(",", "[", "]") { canonical(value.get(it)) }
-    else -> JSONObject.valueToString(value)
+    null, JSONObject.NULL -> "null"
+    is String -> JSONObject.quote(value)
+    is Number -> JSONObject.numberToString(value)
+    else -> value.toString()
 }
 
 /** Validation belongs to an exact immutable candidate. Any edit revokes publication permission. */

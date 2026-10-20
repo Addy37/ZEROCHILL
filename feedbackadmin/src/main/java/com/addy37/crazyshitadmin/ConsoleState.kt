@@ -18,6 +18,7 @@ internal class ConsoleState @JvmOverloads constructor(application: Application, 
     var config by mutableStateOf<ConfigDraft?>(null); private set
     var history by mutableStateOf<List<AdminRepository.ConfigVersion>>(emptyList()); private set
     var thread by mutableStateOf<AdminRepository.FeedbackThread?>(null); private set
+    var threadStatus by mutableStateOf(""); private set
     var threadId by mutableStateOf(saved.get<String>("threadId") ?: ""); private set
     var busy by mutableStateOf(setOf<String>()); private set
     var errors by mutableStateOf(mapOf<String, String>()); private set
@@ -129,7 +130,7 @@ internal class ConsoleState @JvmOverloads constructor(application: Application, 
         val id = threadId.takeIf { it.isNotEmpty() } ?: return
         request("thread") { token ->
             val loaded = withContext(Dispatchers.IO) { gateway.thread(token, id) }
-            if (threadId == id) thread = loaded
+            if (threadId == id) { thread = loaded; threadStatus = loaded.item.status }
         }
     }
     fun updateStatus(status: String) {
@@ -137,7 +138,7 @@ internal class ConsoleState @JvmOverloads constructor(application: Application, 
         request("threadAction") { token ->
             // Keep the confirmed status until the server accepts the change.
             withContext(Dispatchers.IO) { gateway.updateStatus(token, prior.item.id, status) }
-            notice = "Status updated to ${statusLabel(status)}"; loadThread()
+            threadStatus = status; notice = "Status updated to ${statusLabel(status)}"; loadThread()
         }
     }
     fun draft(id: String): String = saved["reply:$id"] ?: ""
@@ -146,7 +147,7 @@ internal class ConsoleState @JvmOverloads constructor(application: Application, 
         val current = thread ?: return
         if (value.trim().isEmpty() || value.length > 2000) return
         request("threadAction") { token ->
-            withContext(Dispatchers.IO) { gateway.reply(token, current.item.id, current.item.status, value.trim()) }
+            withContext(Dispatchers.IO) { gateway.reply(token, current.item.id, threadStatus.ifEmpty {current.item.status}, value.trim()) }
             setDraft(current.item.id, ""); notice = "Reply sent"; loadThread()
         }
     }
