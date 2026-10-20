@@ -15,6 +15,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontFamily
@@ -39,7 +40,7 @@ import org.json.JSONObject
     BoxWithConstraints(Modifier.fillMaxSize()) {
     val sourceColumns = if(maxWidth>680.dp) 2 else 1
     Column(Modifier.fillMaxSize()) {
-        LazyColumn(Modifier.weight(1f).fillMaxWidth(),contentPadding=PaddingValues(22.dp),verticalArrangement=Arrangement.spacedBy(16.dp)) {
+        LazyColumn(Modifier.weight(1f).fillMaxWidth().testTag("source-list"),contentPadding=PaddingValues(22.dp),verticalArrangement=Arrangement.spacedBy(16.dp)) {
             item {
                 Eyebrow("03 / REMOTE CONTROL",color=Cyan);Spacer(Modifier.height(8.dp))
                 Text("Sources",style=MaterialTheme.typography.headlineLarge)
@@ -158,6 +159,7 @@ private fun fieldLabel(key: String) = key.replace(Regex("([a-z])([A-Z])"),"$1 $2
     var error by rememberSaveable {mutableStateOf<String?>(null)}
     var confirmClose by remember {mutableStateOf(false)}
     var invalidKeys by rememberSaveable {mutableStateOf(listOf<String>())}
+    var fieldRevision by rememberSaveable {mutableStateOf(0)}
     val value = remember(local) {JSONObject(local)}
     val groups = remember(initial) {original.keysList().filter {it != "enabled" && original.opt(it) !is JSONObject &&
         (original.opt(it) !is JSONArray || (0 until original.getJSONArray(it).length()).all {index -> original.getJSONArray(it).opt(index) is String})}.groupBy(::fieldGroup)}
@@ -178,7 +180,7 @@ private fun fieldLabel(key: String) = key.replace(Regex("([a-z])([A-Z])"),"$1 $2
                             items(keys,key={it}) {key ->
                                 val field = value.opt(key)
                                 if(field is Boolean) ToggleSetting(fieldLabel(key),"",field,true) {local=JSONObject(local).put(key,it).toString()}
-                                else ConfigField(key,original.opt(key),field,onValidity={ valid -> invalidKeys=if(valid) invalidKeys-key else (invalidKeys+key).distinct() }) {next -> local=JSONObject(local).put(key,next).toString()}
+                                else androidx.compose.runtime.key(fieldRevision,key) { ConfigField(key,original.opt(key),field,onValidity={ valid -> invalidKeys=if(valid) invalidKeys-key else (invalidKeys+key).distinct() }) {next -> local=JSONObject(local).put(key,next).toString()} }
                             }
                         }
                         item {TextButton(onClick={raw=JSONObject(local).toString(2);advanced=true;error=null}) {Icon(Icons.Outlined.Code,null);Spacer(Modifier.width(8.dp));Text("Advanced · all fields as JSON")}}
@@ -186,7 +188,7 @@ private fun fieldLabel(key: String) = key.replace(Regex("([a-z])([A-Z])"),"$1 $2
                         item {Text("All configuration fields remain available here. JSON must parse before it can become a candidate. Server validation is still required.",color=Muted)}
                         item {OutlinedTextField(raw,{raw=it;error=null},Modifier.fillMaxWidth().heightIn(min=320.dp),
                             textStyle=MaterialTheme.typography.bodyMedium.copy(fontFamily=FontFamily.Monospace),label={Text("Advanced JSON")},isError=error!=null)}
-                        if(!full) item {TextButton(onClick={runCatching {JSONObject(raw)}.onSuccess {local=it.toString();advanced=false;error=null}.onFailure {error="Invalid JSON: ${it.message}"}}) {Text("Return to guided fields")}}
+                        if(!full) item {TextButton(onClick={runCatching {JSONObject(raw)}.onSuccess {local=it.toString();advanced=false;error=null;fieldRevision++;invalidKeys=emptyList()}.onFailure {error="Invalid JSON: ${it.message}"}}) {Text("Return to guided fields")}}
                     }
                 }
                 Row(Modifier.fillMaxWidth().padding(16.dp),horizontalArrangement=Arrangement.spacedBy(12.dp)) {

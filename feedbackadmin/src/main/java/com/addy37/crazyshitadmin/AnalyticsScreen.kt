@@ -76,7 +76,9 @@ import androidx.compose.ui.unit.sp
                 if(adoption && rows.isNotEmpty()) AdoptionRing(rows)
                 val max = rows.maxOfOrNull {it.uniqueUsers}?.coerceAtLeast(1) ?: 1
                 rows.take(if(all) rows.size else if(creator) 5 else 4).forEachIndexed {index,row ->
-                    val progress by animateFloatAsState((row.uniqueUsers.toFloat()/max).coerceIn(0f,1f),tween(300),label="ranking")
+                    var entered by remember {mutableStateOf(false)}
+                    LaunchedEffect(Unit) { entered=true }
+                    val progress by animateFloatAsState(if(entered) (row.uniqueUsers.toFloat()/max).coerceIn(0f,1f) else 0f,tween(300),label="ranking")
                     Column(verticalArrangement=Arrangement.spacedBy(7.dp)) {
                         Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(10.dp)) {
                             if(creator) Text(String.format("%02d",index+1),color=if(index==0) Cyan else Muted,fontSize=13.sp)

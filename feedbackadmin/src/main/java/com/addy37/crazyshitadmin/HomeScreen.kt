@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ArrowForward
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -51,7 +52,7 @@ import androidx.compose.ui.unit.dp
                         Eyebrow("FEEDBACK")
                         Text(state.items.count { it.unreadCount > 0 }.toString(), style=MaterialTheme.typography.headlineLarge)
                         Text("Unread threads · ${state.items.count { it.status == "submitted" }} new", color=Muted)
-                        TextButton(onClick={state.navigate("feedback")}) { Text("Open inbox"); Spacer(Modifier.width(8.dp)); Icon(Icons.Outlined.ArrowForward, null, Modifier.size(18.dp)) }
+                        TextButton(onClick={state.navigate("feedback")}) { Text("Open inbox"); Spacer(Modifier.width(8.dp)); Icon(Icons.AutoMirrored.Outlined.ArrowForward, null, Modifier.size(18.dp)) }
                     }
                 }
                 val service: @Composable (Modifier) -> Unit = { mod ->
@@ -59,7 +60,7 @@ import androidx.compose.ui.unit.dp
                         Eyebrow("SOURCE CONTROL")
                         Text(if(sources == null) "Awaiting config" else "$enabled / ${sources.length()}", style=MaterialTheme.typography.headlineLarge)
                         Text("Sources enabled · runtime health unavailable", color=Muted)
-                        TextButton(onClick={state.navigate("sources")}) { Text("Manage sources"); Spacer(Modifier.width(8.dp)); Icon(Icons.Outlined.ArrowForward, null, Modifier.size(18.dp)) }
+                        TextButton(onClick={state.navigate("sources")}) { Text("Manage sources"); Spacer(Modifier.width(8.dp)); Icon(Icons.AutoMirrored.Outlined.ArrowForward, null, Modifier.size(18.dp)) }
                     }
                 }
                 if(wide) Row(horizontalArrangement=Arrangement.spacedBy(16.dp)) { panels(Modifier.weight(1f)); service(Modifier.weight(1f)) }

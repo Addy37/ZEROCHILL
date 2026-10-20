@@ -6,6 +6,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.Sort
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -41,21 +42,21 @@ import androidx.compose.ui.unit.sp
             }
             Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
                 Text("${shown.size} threads",Modifier.weight(1f),color=Muted)
-                TextButton(onClick={oldest=!oldest}) {Icon(Icons.Outlined.Sort,null,Modifier.size(18.dp));Spacer(Modifier.width(6.dp));Text(if(oldest) "Oldest first" else "Newest first")}
+                TextButton(onClick={oldest=!oldest}) {Icon(Icons.AutoMirrored.Outlined.Sort,null,Modifier.size(18.dp));Spacer(Modifier.width(6.dp));Text(if(oldest) "Oldest first" else "Newest first")}
             }
         } }
         item { ErrorPanel(state.errors["feedback"],state::loadFeedback) }
         if(state.items.isEmpty() && "feedback" in state.busy) item {InitialLoad("Loading feedback")}
         else if(shown.isEmpty()) item {EmptyPanel(if(query.isNotBlank() || type.isNotEmpty() || status.isNotEmpty() || unread) "No matching threads" else "Nothing waiting",
             if(state.errors["feedback"] != null) "Retry to load your inbox." else "New reports and replies will appear here. Try adjusting your filters.")}
-        items(shown,key={it.id}) { item -> FeedbackRow(item) {state.openThread(item.id)} }
+        items(shown,key={it.id}) { item -> FeedbackRow(item,Modifier.animateItem()) {state.openThread(item.id)} }
         item {Text("Search and filters cover the latest 200 tickets returned by the server.",color=Muted,style=MaterialTheme.typography.bodySmall)}
     }
 }
-@Composable internal fun FeedbackRow(item: AdminRepository.Item, click: () -> Unit) {
+@Composable internal fun FeedbackRow(item: AdminRepository.Item, modifier: Modifier = Modifier, click: () -> Unit) {
     val color = when(item.type) {"bug_report" -> Danger; "feature_request" -> Cyan; else -> Good}
     val icon = when(item.type) {"bug_report" -> Icons.Outlined.BugReport; "feature_request" -> Icons.Outlined.AutoAwesome; else -> Icons.Outlined.ChatBubbleOutline}
-    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Panel).clickable(onClick=click).padding(17.dp),
+    Column(modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Panel).clickable(onClick=click).padding(17.dp),
         verticalArrangement=Arrangement.spacedBy(10.dp)) {
         Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(9.dp)) {
             Icon(icon,null,tint=color,modifier=Modifier.size(19.dp))
