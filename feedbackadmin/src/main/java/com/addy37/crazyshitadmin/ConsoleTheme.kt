@@ -26,6 +26,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 internal val ElectricBlue = Color(0xFF0892D0)
+// Existing screens still use this internal name; it maps to the exact electric-blue brand token.
+internal val Cyan = ElectricBlue
 internal val Ink = Color(0xFF030609)
 internal val Panel = Color(0xFF0D141B)
 internal val Muted = Color(0xFF9AAEBE)
