@@ -47,7 +47,9 @@ internal val ConsoleShape = RoundedCornerShape(22.dp)
             bodyMedium = TextStyle(fontSize = 14.sp, lineHeight = 21.sp),
             labelSmall = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 12.sp, letterSpacing = 1.sp)),
         shapes = Shapes(small = RoundedCornerShape(12.dp), medium = RoundedCornerShape(16.dp), large = ConsoleShape),
-        content = content
+        content = {
+            Surface(Modifier.fillMaxSize(), color = Ink, contentColor = MaterialTheme.colorScheme.onBackground, content = content)
+        }
     )
 }
 @Composable internal fun Eyebrow(text: String, modifier: Modifier = Modifier, color: Color = Muted) {
