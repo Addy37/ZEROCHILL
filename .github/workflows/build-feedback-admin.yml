@@ -74,7 +74,7 @@ jobs:
           PY
 
       - name: Build private admin APK
-        run: gradle --no-daemon :feedbackadmin:assembleRelease
+        run: gradle --no-daemon :feedbackadmin:testDebugUnitTest :feedbackadmin:testReleaseUnitTest :feedbackadmin:assembleDebug :feedbackadmin:assembleRelease :feedbackadmin:assembleDebugAndroidTest
 
       - name: Prepare APK
         run: |
@@ -94,4 +94,33 @@ jobs:
             ZeroChill-Admin-*-signed.apk
             ZeroChill-Admin-SHA256.txt
           if-no-files-found: error
+          retention-days: 14
+
+      - name: Enable emulator acceleration
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Compose flow checks and visual capture
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          script: |
+            gradle --no-daemon :feedbackadmin:connectedDebugAndroidTest
+            adb pull /sdcard/Android/data/com.addy37.crazyshitadmin/files/console-review console-review
+
+      - name: Admin test and visual reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ZeroChill-Admin-review
+          path: |
+            feedbackadmin/build/reports/tests/
+            feedbackadmin/build/reports/androidTests/
+            feedbackadmin/build/outputs/androidTest-results/
+            console-review/
           retention-days: 14
