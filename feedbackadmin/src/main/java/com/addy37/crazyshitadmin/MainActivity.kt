@@ -117,7 +117,7 @@ class AnalyticsActivity : ComponentActivity() {
         EnergyField(Modifier.fillMaxWidth().height(340.dp).align(Alignment.TopCenter))
         Column(Modifier.align(Alignment.Center).widthIn(max=500.dp).fillMaxWidth().systemBarsPadding().imePadding()
             .verticalScroll(rememberScrollState()).padding(28.dp), verticalArrangement=Arrangement.spacedBy(22.dp)) {
-            Image(painterResource(R.drawable.ic_admin), contentDescription=null, modifier=Modifier.size(92.dp))
+            Image(painterResource(R.drawable.ic_admin_foreground), contentDescription=null, modifier=Modifier.size(92.dp))
             Wordmark()
             Column(verticalArrangement=Arrangement.spacedBy(10.dp)) {
                 Eyebrow("PRIVATE CONTROL CENTER", color=Cyan)
