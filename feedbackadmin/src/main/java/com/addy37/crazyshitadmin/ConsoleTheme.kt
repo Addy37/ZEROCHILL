@@ -37,7 +37,14 @@ internal val ConsoleShape = RoundedCornerShape(22.dp)
     MaterialTheme(
         colorScheme = darkColorScheme(primary = Cyan, onPrimary = Ink, background = Ink, onBackground = Color(0xFFF1F7FC),
             surface = Panel, onSurface = Color(0xFFF1F7FC), surfaceVariant = Color(0xFF14212B), onSurfaceVariant = Muted,
-            secondary = Good, error = Danger, outline = Color(0xFF31424E)),
+            secondary = Good, error = Danger, outline = Color(0xFF31424E), outlineVariant = Color(0xFF233440),
+            primaryContainer = Color(0xFF12343D), onPrimaryContainer = Cyan,
+            secondaryContainer = Color(0xFF12343D), onSecondaryContainer = Cyan,
+            tertiary = Cyan, tertiaryContainer = Panel, onTertiaryContainer = Cyan,
+            inverseSurface = Color(0xFF16313C), inverseOnSurface = Color(0xFFF1F7FC), inversePrimary = Cyan,
+            surfaceDim = Ink, surfaceBright = Color(0xFF1B2B35),
+            surfaceContainerLowest = Ink, surfaceContainerLow = Color(0xFF091017), surfaceContainer = Panel,
+            surfaceContainerHigh = Color(0xFF111D26), surfaceContainerHighest = Color(0xFF172630)),
         typography = Typography(
             displayLarge = TextStyle(fontFamily = FontFamily.SansSerif, fontWeight = FontWeight.Bold, fontSize = 64.sp, letterSpacing = (-3).sp),
             headlineLarge = TextStyle(fontWeight = FontWeight.Bold, fontSize = 34.sp, letterSpacing = (-1).sp),

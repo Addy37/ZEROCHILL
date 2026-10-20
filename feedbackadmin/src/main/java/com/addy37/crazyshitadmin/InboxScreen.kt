@@ -42,7 +42,7 @@ import androidx.compose.ui.unit.sp
                 (listOf("" to "All statuses") + statuses.toList()).forEach {(key,label)->FilterChip(status==key,{status=key},label={Text(label)})}
             }
             Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
-                Text("${shown.size} threads",Modifier.weight(1f),color=Muted)
+                Text(if(shown.size==1) "1 thread" else "${shown.size} threads",Modifier.weight(1f),color=Muted)
                 TextButton(onClick={oldest=!oldest}) {Icon(Icons.AutoMirrored.Outlined.Sort,null,Modifier.size(18.dp));Spacer(Modifier.width(6.dp));Text(if(oldest) "Oldest first" else "Newest first")}
             }
         } }

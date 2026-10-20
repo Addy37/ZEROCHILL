@@ -3,6 +3,7 @@ package com.addy37.crazyshitadmin
 import android.app.Application
 import android.content.ContentValues
 import android.os.Build
+import android.os.SystemClock
 import android.provider.MediaStore
 import android.graphics.Bitmap
 import androidx.compose.ui.test.*
@@ -37,7 +38,10 @@ class ConsoleFlowTest {
     }
     private fun idle() { ui.waitUntil(10_000) {state.busy.isEmpty()};ui.waitForIdle() }
     private fun screenshot(name: String) {
+        ui.mainClock.advanceTimeBy(400)
         ui.waitForIdle()
+        InstrumentationRegistry.getInstrumentation().waitForIdleSync()
+        SystemClock.sleep(300) // Let the emulator compositor present the completed frame.
         val bitmap=InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot()
         if(Build.VERSION.SDK_INT >= 29) {
             // Public test media survives AGP uninstalling the fixture app after instrumentation.
@@ -85,13 +89,13 @@ class ConsoleFlowTest {
         ui.onNodeWithText("Fapello").performClick();screenshot("06b-source-editor")
         ui.onNodeWithContentDescription("Close editor").performClick()
         ui.onNodeWithContentDescription("Fapello enabled").performClick()
-        ui.onNodeWithText("Validate",useUnmergedTree=true).performClick();idle()
+        ui.onNodeWithText("Validate").performClick();idle()
         ui.onNodeWithText("Publish").assertIsEnabled()
         screenshot("07-candidate-validated")
         ui.onNodeWithTag("source-list").performScrollToNode(hasContentDescription("Fapello enabled"))
         ui.onNodeWithContentDescription("Fapello enabled").performClick()
         ui.onNodeWithText("Publish").assertIsNotEnabled()
-        ui.onNodeWithText("Validate",useUnmergedTree=true).performClick();idle()
+        ui.onNodeWithText("Validate").performClick();idle()
         ui.onNodeWithText("Publish").performClick()
         ui.onNodeWithText("Publish version").performClick();idle();assertEquals(1,fake.publishes)
         ui.onNodeWithTag("source-list").performScrollToIndex(0)

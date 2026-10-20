@@ -68,7 +68,7 @@ class AnalyticsActivity : ComponentActivity() {
         PairingScreen(state); return
     }
     if(state.threadId.isNotEmpty()) { ThreadScreen(state, onBack={state.closeThread();threadBack?.invoke()}); return }
-    Scaffold(modifier=Modifier.imePadding(),containerColor=Ink, snackbarHost={ SnackbarHost(snackbar) },
+    Scaffold(modifier=Modifier.imePadding(),containerColor=Ink, snackbarHost={ SnackbarHost(snackbar,Modifier.padding(bottom=if(state.destination=="sources") 120.dp else 0.dp)) },
         topBar={ Column(Modifier.statusBarsPadding()) {
             Row(Modifier.fillMaxWidth().padding(start=22.dp, end=8.dp, top=10.dp, bottom=8.dp),
                 verticalAlignment=Alignment.CenterVertically) {
@@ -84,7 +84,7 @@ class AnalyticsActivity : ComponentActivity() {
             }
             BusyLine(state.busy.isNotEmpty())
         } },
-        bottomBar={ ConsoleNav(state.destination, state.items.count { it.unreadCount > 0 }) { focus.clearFocus(); state.navigate(it) } }) { padding ->
+        bottomBar={ ConsoleNav(state.destination, state.items.count { it.unreadCount > 0 }) { snackbar.currentSnackbarData?.dismiss(); state.consumeNotice(); focus.clearFocus(); state.navigate(it) } }) { padding ->
         Box(Modifier.padding(padding).fillMaxSize()) {
             AnimatedContent(state.destination, transitionSpec={ (fadeIn() + slideInHorizontally { it/16 }) togetherWith fadeOut() }, label="destination") { destination ->
                 screenState.SaveableStateProvider(destination) { when(destination) {
