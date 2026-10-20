@@ -12,7 +12,7 @@ The private admin app uses Kotlin and Jetpack Compose for presentation. The cons
 - `FeedbackThreadActivity`: preserved notification entry point plus Compose conversation, confirmed status, sticky reply composer, read receipts, details, and confirmed permanent deletion.
 - `SourceConfigEditor`: providers and fields derived from the loaded document, guided scalar/list edits, advanced JSON, exact-candidate validation, explicit publish review, and existing rollback-as-new-version semantics. Every edit revokes validation. Refresh retains unsaved edits.
 
-The bright ZEROCHILL accent is electric blue `#0892D0`. Do not substitute the lighter `#44E5FF` cyan used by an earlier draft of this redesign.
+The bright ZEROCHILL accent is electric blue `#0892D0`. Do not substitute the lighter `#44E5FF` shade used by an earlier draft of this redesign.
 
 No backend, schema, authorization, analytics-collection, or remote-config contract changes are required. Compose BOM 2026.06.01 matches the existing consumer app's compatible stable stack; Kotlin/compiler plugins reuse the root's 2.2.10. Activity Compose 1.10.1 and Lifecycle Compose 2.9.2 support the thin state layer. Material 3 and native Canvas charts avoid a chart dependency. Compile SDK 36, minimum/target SDK unchanged at 26/34.
 
