@@ -7,7 +7,7 @@ The private admin app uses Kotlin and Jetpack Compose for presentation. The cons
 - `MainActivity`: pairing, four primary destinations, shared admin menu, notification permission, and legacy destination intents.
 - `ConsoleState`: lifecycle-owned UI state, independent background requests, cancellation on lock, saved navigation, reply drafts and source candidate. Credentials never enter saved state. Process restoration intentionally revokes validation permission.
 - `AdminGateway`: small test seam that delegates to the unchanged Java repository in production.
-- `ConsoleTheme`: OLED/cyan palette, typography, reusable panels, tags, placeholders, navigation, and short animations. Compose animations follow Android's animator duration scale.
+- `ConsoleTheme`: OLED/electric-blue palette using the ZEROCHILL primary accent `#0892D0`, typography, reusable panels, tags, placeholders, navigation, and short animations. Compose animations follow Android's animator duration scale.
 - `HomeScreen`, `InboxScreen`, `AnalyticsScreen`: operational snapshot, local search/filters over the server's latest 200 tickets, and aggregate rankings. No invented time series or runtime source health.
 - `FeedbackThreadActivity`: preserved notification entry point plus Compose conversation, confirmed status, sticky reply composer, read receipts, details, and confirmed permanent deletion.
 - `SourceConfigEditor`: providers and fields derived from the loaded document, guided scalar/list edits, advanced JSON, exact-candidate validation, explicit publish review, and existing rollback-as-new-version semantics. Every edit revokes validation. Refresh retains unsaved edits.
