@@ -2,6 +2,7 @@ package com.addy37.crazyshitadmin
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -31,7 +32,10 @@ import androidx.compose.ui.unit.sp
 class FeedbackThreadActivity : ComponentActivity() {
     private val state: ConsoleState by viewModels()
     override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState); enableEdgeToEdge()
+        super.onCreate(savedInstanceState); enableEdgeToEdge(
+            statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
+            navigationBarStyle = SystemBarStyle.dark(android.graphics.Color.BLACK)
+        )
         val id = intent.getStringExtra(EXTRA_FEEDBACK_ID)
         if(id.isNullOrBlank()) {finish();return}
         if(state.paired) state.openThread(id)
