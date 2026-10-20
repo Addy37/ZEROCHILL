@@ -25,7 +25,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-internal val Cyan = Color(0xFF44E5FF)
+internal val ElectricBlue = Color(0xFF0892D0)
+// Compatibility alias for existing screens. New UI should use ElectricBlue directly.
+internal val Cyan = ElectricBlue
 internal val Ink = Color(0xFF030609)
 internal val Panel = Color(0xFF0D141B)
 internal val Muted = Color(0xFF9AAEBE)
@@ -35,13 +37,13 @@ internal val ConsoleShape = RoundedCornerShape(22.dp)
 
 @Composable internal fun ConsoleTheme(content: @Composable () -> Unit) {
     MaterialTheme(
-        colorScheme = darkColorScheme(primary = Cyan, onPrimary = Ink, background = Ink, onBackground = Color(0xFFF1F7FC),
+        colorScheme = darkColorScheme(primary = ElectricBlue, onPrimary = Ink, background = Ink, onBackground = Color(0xFFF1F7FC),
             surface = Panel, onSurface = Color(0xFFF1F7FC), surfaceVariant = Color(0xFF14212B), onSurfaceVariant = Muted,
             secondary = Good, error = Danger, outline = Color(0xFF31424E), outlineVariant = Color(0xFF233440),
-            primaryContainer = Color(0xFF12343D), onPrimaryContainer = Cyan,
-            secondaryContainer = Color(0xFF12343D), onSecondaryContainer = Cyan,
-            tertiary = Cyan, tertiaryContainer = Panel, onTertiaryContainer = Cyan,
-            inverseSurface = Color(0xFF16313C), inverseOnSurface = Color(0xFFF1F7FC), inversePrimary = Cyan,
+            primaryContainer = Color(0xFF12343D), onPrimaryContainer = ElectricBlue,
+            secondaryContainer = Color(0xFF12343D), onSecondaryContainer = ElectricBlue,
+            tertiary = ElectricBlue, tertiaryContainer = Panel, onTertiaryContainer = ElectricBlue,
+            inverseSurface = Color(0xFF16313C), inverseOnSurface = Color(0xFFF1F7FC), inversePrimary = ElectricBlue,
             surfaceDim = Ink, surfaceBright = Color(0xFF1B2B35),
             surfaceContainerLowest = Ink, surfaceContainerLow = Color(0xFF091017), surfaceContainer = Panel,
             surfaceContainerHigh = Color(0xFF111D26), surfaceContainerHighest = Color(0xFF172630)),
@@ -65,7 +67,7 @@ internal val ConsoleShape = RoundedCornerShape(22.dp)
 @Composable internal fun Wordmark() {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text("ZERO", fontWeight = FontWeight.Black, fontSize = 18.sp, letterSpacing = 1.sp)
-        Text("CHILL", fontWeight = FontWeight.Black, fontSize = 18.sp, letterSpacing = 1.sp, color = Cyan)
+        Text("CHILL", fontWeight = FontWeight.Black, fontSize = 18.sp, letterSpacing = 1.sp, color = ElectricBlue)
         Text(" / ADMIN", color = Muted, fontFamily = FontFamily.Monospace, fontSize = 12.sp)
     }
 }
@@ -74,7 +76,7 @@ internal val ConsoleShape = RoundedCornerShape(22.dp)
         else Brush.linearGradient(listOf(Panel, Color(0xFF091016)))).padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp), content = content)
 }
-@Composable internal fun StatusTag(text: String, color: Color = Cyan) {
+@Composable internal fun StatusTag(text: String, color: Color = ElectricBlue) {
     Row(Modifier.clip(RoundedCornerShape(8.dp)).background(color.copy(alpha = 0.09f)).padding(horizontal = 9.dp, vertical = 5.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
         Canvas(Modifier.size(5.dp)) { drawCircle(color) }
@@ -85,7 +87,7 @@ internal val ConsoleShape = RoundedCornerShape(22.dp)
     IconButton(onClick, enabled = enabled) { Icon(icon, contentDescription = description, tint = if(enabled) Muted else Muted.copy(alpha = .4f)) }
 }
 @Composable internal fun BusyLine(show: Boolean) {
-    if(show) LinearProgressIndicator(Modifier.fillMaxWidth().height(2.dp), color = Cyan, trackColor = Panel)
+    if(show) LinearProgressIndicator(Modifier.fillMaxWidth().height(2.dp), color = ElectricBlue, trackColor = Panel)
     else Spacer(Modifier.height(2.dp))
 }
 @Composable internal fun ErrorPanel(message: String?, retry: (() -> Unit)? = null) {
@@ -100,7 +102,7 @@ internal val ConsoleShape = RoundedCornerShape(22.dp)
 @Composable internal fun EmptyPanel(title: String, detail: String, icon: ImageVector = Icons.Outlined.Inbox) {
     Column(Modifier.fillMaxWidth().padding(vertical=36.dp, horizontal=24.dp),
         horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Icon(icon, null, tint = Cyan, modifier = Modifier.size(40.dp))
+        Icon(icon, null, tint = ElectricBlue, modifier = Modifier.size(40.dp))
         Text(title, style = MaterialTheme.typography.titleLarge)
         Text(detail, color = Muted, style = MaterialTheme.typography.bodyMedium)
     }
@@ -115,7 +117,7 @@ internal val ConsoleShape = RoundedCornerShape(22.dp)
                 Box(Modifier.fillMaxWidth(.7f).height(18.dp).clip(ConsoleShape).background(Muted.copy(alpha=.07f)))
             }
         }
-        LinearProgressIndicator(Modifier.fillMaxWidth(), color = Cyan)
+        LinearProgressIndicator(Modifier.fillMaxWidth(), color = ElectricBlue)
     }
 }
 internal data class Destination(val id: String, val label: String, val icon: ImageVector)
@@ -127,14 +129,14 @@ internal val destinations = listOf(Destination("home", "Home", Icons.Outlined.Sp
         horizontalArrangement = Arrangement.SpaceEvenly) {
         destinations.forEach { item ->
             val active = item.id == selected
-            val color by animateColorAsState(if(active) Cyan else Muted, tween(160), label="navigation")
+            val color by animateColorAsState(if(active) ElectricBlue else Muted, tween(160), label="navigation")
             Column(Modifier.weight(1f).clip(RoundedCornerShape(16.dp)).clickable { navigate(item.id) }
                 .padding(vertical=9.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement=Arrangement.spacedBy(5.dp)) {
-                BadgedBox(badge={ if(item.id == "feedback" && unread > 0) Badge(containerColor=Cyan, contentColor=Ink) { Text(unread.toString()) } }) {
+                BadgedBox(badge={ if(item.id == "feedback" && unread > 0) Badge(containerColor=ElectricBlue, contentColor=Ink) { Text(unread.toString()) } }) {
                     Icon(item.icon, null, tint = color, modifier=Modifier.size(23.dp))
                 }
                 Text(item.label, color=color, fontSize=12.sp, fontWeight=if(active) FontWeight.Bold else FontWeight.Normal)
-                Box(Modifier.width(if(active) 18.dp else 0.dp).height(2.dp).background(Cyan))
+                Box(Modifier.width(if(active) 18.dp else 0.dp).height(2.dp).background(ElectricBlue))
             }
         }
     }
@@ -142,19 +144,19 @@ internal val destinations = listOf(Destination("home", "Home", Icons.Outlined.Sp
 @Composable internal fun Metric(value: Long?, label: String, large: Boolean = false, modifier: Modifier = Modifier) {
     val animated by animateFloatAsState(value?.toFloat() ?: 0f, tween(350), label="metric")
     Column(modifier, verticalArrangement=Arrangement.spacedBy(5.dp)) {
-        Text(if(value == null) "···" else number(animated.toLong()), color=if(large) Cyan else MaterialTheme.colorScheme.onSurface,
+        Text(if(value == null) "···" else number(animated.toLong()), color=if(large) ElectricBlue else MaterialTheme.colorScheme.onSurface,
             style=if(large) MaterialTheme.typography.displayLarge else MaterialTheme.typography.headlineLarge)
         Text(label, color=Muted, fontSize=13.sp)
     }
 }
 @Composable internal fun EnergyField(modifier: Modifier = Modifier) {
     Canvas(modifier) {
-        val c = Cyan.copy(alpha=.10f)
+        val c = ElectricBlue.copy(alpha=.10f)
         for(i in 0..8) {
             val x = size.width * i / 8f
             drawLine(c, Offset(x, 0f), Offset(x - size.height*.6f, size.height), 1f)
         }
         for(i in 0..5) drawLine(c, Offset(0f, size.height*i/5), Offset(size.width, size.height*i/5), 1f)
-        drawCircle(Brush.radialGradient(listOf(Cyan.copy(alpha=.17f), Color.Transparent), center=Offset(size.width*.8f, size.height*.2f), radius=size.width*.7f), radius=size.width*.7f, center=Offset(size.width*.8f,size.height*.2f))
+        drawCircle(Brush.radialGradient(listOf(ElectricBlue.copy(alpha=.17f), Color.Transparent), center=Offset(size.width*.8f, size.height*.2f), radius=size.width*.7f), radius=size.width*.7f, center=Offset(size.width*.8f,size.height*.2f))
     }
 }
