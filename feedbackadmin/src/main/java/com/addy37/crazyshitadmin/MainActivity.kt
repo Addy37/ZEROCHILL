@@ -5,6 +5,8 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.BackHandler
@@ -32,6 +34,15 @@ import androidx.core.app.NotificationManagerCompat
 
 class MainActivity : ComponentActivity() {
     private val state: ConsoleState by viewModels()
+    private val liveCounterHandler = Handler(Looper.getMainLooper())
+    private val liveCounterTick = object : Runnable {
+        override fun run() {
+            val liveScreen = state.destination == "home" || state.destination == "analytics"
+            val failed = state.errors.containsKey("activeCounts")
+            if(state.paired && state.threadId.isEmpty() && liveScreen) state.loadActiveCounts()
+            liveCounterHandler.postDelayed(this, if(failed) 30_000L else 5_000L)
+        }
+    }
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge(
@@ -44,7 +55,16 @@ class MainActivity : ComponentActivity() {
             ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.POST_NOTIFICATIONS), 10)
     }
     override fun onNewIntent(intent: Intent) { super.onNewIntent(intent); setIntent(intent); state.route(intent.getStringExtra(EXTRA_DESTINATION)) }
-    override fun onResume() { super.onResume(); if(state.paired) state.loadFeedback() }
+    override fun onResume() {
+        super.onResume()
+        if(state.paired) state.loadFeedback()
+        liveCounterHandler.removeCallbacks(liveCounterTick)
+        liveCounterHandler.post(liveCounterTick)
+    }
+    override fun onPause() {
+        liveCounterHandler.removeCallbacks(liveCounterTick)
+        super.onPause()
+    }
     companion object { const val EXTRA_DESTINATION = "destination" }
 }
 /** Preserve the old internal Activity entry point without retaining the old UI. */
@@ -62,6 +82,7 @@ class AnalyticsActivity : ComponentActivity() {
     val snackbar = remember { SnackbarHostState() }
     val screenState = rememberSaveableStateHolder()
     val focus = androidx.compose.ui.platform.LocalFocusManager.current
+    val blockingBusy = state.busy.any { it != "activeCounts" }
     LaunchedEffect(state.paired) { if(state.paired) { state.refresh(); if(state.threadId.isNotEmpty()) state.loadThread() } }
     LaunchedEffect(state.notice) { if(state.notice.isNotEmpty()) { snackbar.showSnackbar(state.notice); state.consumeNotice() } }
     BackHandler(state.paired && (state.destination != "home" || state.threadId.isNotEmpty())) {
@@ -80,13 +101,13 @@ class AnalyticsActivity : ComponentActivity() {
                     Wordmark()
                     Text("Private admin session", color=Muted, style=MaterialTheme.typography.bodySmall)
                 }
-                ActionIcon(Icons.Outlined.Refresh, "Refresh", state.busy.isEmpty()) {
+                ActionIcon(Icons.Outlined.Refresh, "Refresh", !blockingBusy) {
                     when(state.destination) { "feedback" -> state.loadFeedback(); "analytics" -> state.loadAnalytics();
                         "sources" -> state.loadConfig(force=true); else -> state.refresh() }
                 }
                 ActionIcon(Icons.Outlined.AdminPanelSettings, "Admin settings") { settings=true }
             }
-            BusyLine(state.busy.isNotEmpty())
+            BusyLine(blockingBusy)
         } },
         bottomBar={ ConsoleNav(state.destination, state.items.count { it.unreadCount > 0 }) { snackbar.currentSnackbarData?.dismiss(); state.consumeNotice(); focus.clearFocus(); state.navigate(it) } }) { padding ->
         Box(Modifier.padding(padding).fillMaxSize()) {
