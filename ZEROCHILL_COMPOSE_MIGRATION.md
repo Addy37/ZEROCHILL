@@ -19,7 +19,7 @@ Development branch: `feature/zerochill-compose-6.0`. No release/version change y
 
 ## Hybrid
 
-- Settings dialogs, diagnostics, backup picker and updater overlays still use existing implementations.
+- Settings choices, confirmations and diagnostics now use Compose. Platform backup pickers and the existing backup/updater-owned progress and result overlays remain native.
 - Main shell (`NativeMainActivity`), Search (`SearchPanel`, `SearchGlassLayout`) and headers retain View controls with Compose glass.
 
 ## Remaining inventory
@@ -43,5 +43,26 @@ Development branch: `feature/zerochill-compose-6.0`. No release/version change y
 - Performance run #1018: cold/warm startup, tab switching, baseline profile and ShitTok scrolling passed. Search failed with a main-shell ANR/readiness timeout; creator gallery autoplay timed out; both Shows flows lost emulator connections. The long ShitTok session was still running when this checkpoint was documented. Causes remain unresolved; no performance-equivalence claim. Main navigation code is identical to main, and the approved search checkpoint had no completed comparison matrix.
 
 Physical testing needed: Settings actions/dialogs/backup, Feedback draft/keyboard/tabs/reply routing, large fonts, insets and glass appearance; startup, Search, gallery playback, ShitTok gestures and rotation also need device checks. Automated upgrade installation does not verify every saved collection or signed-in account on a real device.
-Next: compare the failed performance flows against approved main and diagnose the timeouts, then migrate Settings dialogs and Library/Search. Preserve player and source systems.
+Next: complete the Library/Search continuation from committed state and validate the new checkpoint. Preserve player and source systems; do not repeat the prior performance investigation without a reproducible new regression.
 No package, signing, persisted-key, database, backend or remote-config changes. CI runs both full suites once for this branch while retaining signing/version/upgrade gates. No merge or publication.
+
+## Approved-main performance comparison (preserved findings)
+
+Paired run [39512013693](https://github.com/Addy37/ZEROCHILL/actions/runs/39512013693) compared main `da9b00588e6ecc370327cad75209e757475c2370` with unchanged Compose application checkpoint `702226b0609437dab5a68595243953b9cae1c1e3`. It used the same harness, original timeout/iteration settings, API 35 x86_64 Pixel 6, RAM 2048 MB, disk 4096 MB, fresh emulators per flow and matching animation settings.
+
+- Search: main passed three measured iterations. Compose initially failed main-shell readiness/focus with an ANR before opening Search, then passed three iterations on a single retry without application changes. This establishes neither a reproducible Compose regression nor performance parity.
+- Creator gallery: both revisions lost emulator connections. The earlier autoplay timeout remains inconclusive.
+- Shows: main failed shared shell readiness/SplashActivity focus; Compose lost its emulator.
+- Shows motion: both revisions lost emulator connections.
+- Readiness/disconnect failures therefore also occur on approved main. Playback and providers were not changed to chase them.
+- Earlier matrix #1018 long-session eventually failed because controls did not return after background/foreground. It has no paired-main comparison and remains an open validation issue.
+
+## Recovery continuation
+
+The inaccessible workspace's uncommitted continuation is lost. This pass starts from GitHub commit `07455a2c57b3ebeee99564d329997f001635e722`; none of the lost work was recovered or used as implementation state.
+
+Settings checkpoint `262e252bf8a7cd138f54dc52beb60fa7fc8da193` migrates backup/restore choice, data-clear confirmations, preload/frequency choice, blocked creators, source status and selectable/copyable diagnostics. Existing Java actions and preferences remain authoritative. Rotation restores presentation requests, never accepts a destructive action automatically; a rotated collection-clear confirmation returns to the choice list.
+
+CI ran eight Settings/Feedback tests successfully. The first full debug suite ran 890 tests with one failure and one skip: the existing diagnostics-copy test still expected a native AlertDialog. That regression check is migrated to click the Compose action and retains all clipboard/privacy assertions. Library/Search implementation and final validation are ongoing; no new install candidate is certified yet.
+
+The general ten-flow performance matrix now skips this Compose branch. The historical paired-main workflow is manual-only so cumulative PR path filters cannot repeatedly launch the old comparison. Existing same-branch automatic performance runs are canceled through the existing scoped CI cleanup job; build/signing checks remain active.

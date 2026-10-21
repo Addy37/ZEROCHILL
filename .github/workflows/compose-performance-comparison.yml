@@ -1,9 +1,7 @@
 name: Compose approved-main performance comparison
 
 on:
-  pull_request:
-    paths:
-      - '.github/workflows/compose-performance-comparison.yml'
+  # The approved-main comparison is recorded. Run it again only when explicitly needed.
   workflow_dispatch:
 
 permissions:

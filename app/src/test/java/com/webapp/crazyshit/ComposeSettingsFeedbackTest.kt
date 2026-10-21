@@ -75,6 +75,21 @@ class ComposeSettingsFeedbackTest {
         }
     }
 
+    @Test fun settingsCopiesRetainedInventoryAndStartupEvidenceWithoutContentUrls() {
+        Robolectric.buildActivity(SettingsActivity::class.java).setup().use { host ->
+            ShitTokPoolDiagnostics.snapshot("usable=2 desired=10 tailHits=3 selectedState=3 https://private.test/video?token=secret")
+            org.robolectric.util.ReflectionHelpers.callInstanceMethod<Unit>(host.get(), "showPerformanceDetails")
+            compose.onNodeWithText("Copy diagnostics").performClick()
+            val clipboard = host.get().getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+            val copied = clipboard.primaryClip!!.getItemAt(0).text.toString()
+            assertTrue(copied.contains("tailHits=3"))
+            assertTrue(copied.contains("This app session"))
+            assertTrue(copied.contains("Source:"))
+            assertFalse(copied.contains("private.test"))
+            assertFalse(copied.contains("secret"))
+        }
+    }
+
     @Test fun feedbackDraftAndRatingSurviveActivityRecreation() {
         val intent = Intent().putExtra(FeedbackActivity.EXTRA_SOURCE, "Player")
             .putExtra(FeedbackActivity.EXTRA_PRESELECTED_RATING, 4)
