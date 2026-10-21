@@ -13,25 +13,23 @@ import android.widget.TextView;
 final class ContentPreferenceUi {
     static void choose(Context context, Runnable changed) {
         int cyan = ZeroChillUi.color(context, R.color.zc_cyan);
-        int gray = ZeroChillUi.color(context, R.color.zc_text_secondary);
         LinearLayout panel = new LinearLayout(context);
         panel.setOrientation(LinearLayout.VERTICAL);
-        panel.setPadding(dp(context, 16), dp(context, 18), dp(context, 16), dp(context, 10));
-        panel.setBackground(glass(context, ContentPreference.ALL, false, true));
-        panel.setClipToOutline(true);
-        TextView heading = label(context, "Content preference", 20, Color.WHITE);
+        panel.setPadding(dp(context, 12), dp(context, 16), dp(context, 12), dp(context, 6));
+        TextView heading = label(context, "Content preference", 18, Color.WHITE);
         heading.setTypeface(null, android.graphics.Typeface.BOLD);
+        heading.setShadowLayer(dp(context, 3), 0, dp(context, 1), Color.BLACK);
         panel.addView(heading, new LinearLayout.LayoutParams(-1, -2));
-        TextView hint = label(context, "Choose your OnlyFap discovery", 12, gray);
-        hint.setPadding(0, dp(context, 5), 0, dp(context, 12));
-        panel.addView(hint, new LinearLayout.LayoutParams(-1, -2));
         android.widget.ScrollView scroll = new android.widget.ScrollView(context);
         scroll.setFillViewport(false);
         LinearLayout choices = new LinearLayout(context);
         choices.setOrientation(LinearLayout.VERTICAL);
         scroll.addView(choices);
-        panel.addView(scroll, new LinearLayout.LayoutParams(-1, -2));
-        android.app.AlertDialog dialog = new ZeroChillDialog.Builder(context).setView(panel).create();
+        LinearLayout.LayoutParams scrollParams = new LinearLayout.LayoutParams(-1, -2);
+        scrollParams.topMargin = dp(context, 12);
+        panel.addView(scroll, scrollParams);
+        PreferenceGlassPanel glassPanel = new PreferenceGlassPanel(context, panel);
+        android.app.AlertDialog dialog = new ZeroChillDialog.Builder(context).setView(glassPanel).create();
         ContentPreference current = ContentPreference.get(context);
         for (ContentPreference option : ContentPreference.values()) {
             boolean selected = current == option;
@@ -45,33 +43,37 @@ final class ContentPreferenceUi {
             row.setTag("preference_" + option.value);
             row.setSelected(selected);
             row.setGravity(Gravity.CENTER_VERTICAL);
-            row.setMinimumHeight(dp(context, 52));
-            row.setPadding(dp(context, 12), dp(context, 8), dp(context, 12), dp(context, 8));
-            row.setBackground(glass(context, option, selected, false));
+            row.setMinimumHeight(dp(context, 48));
+            row.setPadding(dp(context, 8), dp(context, 6), dp(context, 8), dp(context, 6));
+            row.setBackground(selected ? ZeroChillUi.rounded(context, 0x300892D0,
+                    0x600892D0, R.dimen.zc_radius_medium) : null);
             row.setClickable(true); row.setFocusable(true);
             row.setContentDescription(option.label);
             if (option.icon() != 0) {
                 ImageView icon = new ImageView(context);
-                icon.setImageResource(option.icon()); icon.setColorFilter(selected ? cyan : gray);
+                icon.setImageResource(option.icon()); icon.setColorFilter(selected ? cyan : Color.WHITE);
                 icon.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
                 row.addView(icon, new LinearLayout.LayoutParams(dp(context, 34), dp(context, 28)));
             } else {
                 TextView icon = label(context, option.symbol, option == ContentPreference.ALL ? 12 : 25,
-                        selected ? cyan : gray);
+                        selected ? cyan : Color.WHITE);
                 icon.setTypeface(null, weight(option));
+                icon.setShadowLayer(dp(context, 3), 0, dp(context, 1), Color.BLACK);
                 icon.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
                 row.addView(icon, new LinearLayout.LayoutParams(dp(context, 34), dp(context, 32)));
             }
-            TextView title = label(context, option.label, 15, selected ? Color.WHITE : gray);
+            TextView title = label(context, option.label, 15, Color.WHITE);
             title.setGravity(Gravity.CENTER_VERTICAL);
+            title.setShadowLayer(dp(context, 3), 0, dp(context, 1), Color.BLACK);
             title.setPadding(dp(context, 12), 0, dp(context, 8), 0);
             title.setTypeface(null, selected ? android.graphics.Typeface.BOLD : weight(option));
             row.addView(title, new LinearLayout.LayoutParams(0, -2, 1));
-            TextView check = label(context, selected ? "✓" : "○", 20, selected ? cyan : gray);
+            TextView check = label(context, selected ? "✓" : "○", 20, selected ? cyan : Color.WHITE);
+            check.setShadowLayer(dp(context, 3), 0, dp(context, 1), Color.BLACK);
             check.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
             row.addView(check, new LinearLayout.LayoutParams(dp(context, 26), -2));
             LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, -2);
-            params.bottomMargin = dp(context, 5);
+            params.bottomMargin = dp(context, 2);
             choices.addView(row, params);
             ZeroChillMotion.installPressFeedback(row);
             row.setOnClickListener(v -> {
@@ -88,7 +90,7 @@ final class ContentPreferenceUi {
         ZeroChillMotion.installPressFeedback(cancel);
         panel.addView(cancel, new LinearLayout.LayoutParams(-1, -2));
         dialog.setCanceledOnTouchOutside(true);
-        dialog.setView(panel, 0, 0, 0, 0);
+        dialog.setView(glassPanel, 0, 0, 0, 0);
         if (dialog.getWindow() != null) dialog.getWindow().setWindowAnimations(
                 ZeroChillMotion.animationsEnabled(context) ? R.style.Animation_ZeroChill_Preference : 0);
         dialog.show();
@@ -97,7 +99,7 @@ final class ContentPreferenceUi {
             window.setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(Color.TRANSPARENT));
             window.getDecorView().setPadding(0, 0, 0, 0);
             android.util.DisplayMetrics metrics = context.getResources().getDisplayMetrics();
-            int width = Math.min(dp(context, 400), metrics.widthPixels - dp(context, 32));
+            int width = pickerWidth(context);
             // Keep every option reachable with large fonts, small windows and rotation.
             panel.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
                     View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
@@ -106,9 +108,12 @@ final class ContentPreferenceUi {
                     Math.max(dp(context, 100), (int) (metrics.heightPixels * .82f) - chrome));
             window.setLayout(width, -2);
             window.addFlags(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND);
-            window.setDimAmount(.35f);
-            if (android.os.Build.VERSION.SDK_INT >= 31) window.setBackgroundBlurRadius(dp(context, 20));
+            window.setDimAmount(.16f);
         }
+    }
+
+    static int pickerWidth(Context context) {
+        return Math.min(dp(context, 292), Math.round(context.getResources().getDisplayMetrics().widthPixels * .80f));
     }
 
     static void bindSelector(TextView selector) {

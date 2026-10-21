@@ -463,6 +463,9 @@ jobs:
           test "$BEFORE" = "$AFTER"
           grep -m1 "versionCode=$APP_VERSION_CODE" /tmp/zc-after.txt
           echo "In-place upgrade installed; Android preserved the package's first-install record."
+          if [ "${{ github.head_ref }}" = "feature/zerochill-5.1.0" ]; then
+            python3 tools/capture_preference_glass.py
+          fi
           SH
 
       - name: Install over previous stable on Android 15
@@ -473,6 +476,15 @@ jobs:
           profile: pixel_6
           disable-animations: true
           script: bash "$RUNNER_TEMP/verify-upgrade.sh"
+
+      - name: Upload native preference glass GPU check
+        if: always() && github.head_ref == 'feature/zerochill-5.1.0'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ZeroChill-preference-glass-check
+          path: preference-glass-check/
+          if-no-files-found: ignore
+          retention-days: 14
 
       - name: Upload signed upgrade candidate
         uses: actions/upload-artifact@v4

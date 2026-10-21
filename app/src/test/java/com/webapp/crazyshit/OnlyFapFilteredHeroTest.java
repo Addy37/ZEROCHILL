@@ -217,7 +217,8 @@ public class OnlyFapFilteredHeroTest {
         capture(hub, "onlyfap-preference-hero", 411, 700);
         ContentPreferenceUi.choose(activity, null);
         android.app.AlertDialog dialog = org.robolectric.shadows.ShadowAlertDialog.getLatestAlertDialog();
-        capture(dialog.getWindow().getDecorView(), "onlyfap-preference-picker", 380, 650);
+        org.robolectric.shadows.ShadowLooper.idleMainLooper(400, java.util.concurrent.TimeUnit.MILLISECONDS);
+        capture(dialog.getWindow().getDecorView(), "onlyfap-preference-picker", 292, 510);
         assertNotNull(dialog.getWindow().getDecorView().findViewWithTag("preference_groups"));
         dialog.dismiss();
     }

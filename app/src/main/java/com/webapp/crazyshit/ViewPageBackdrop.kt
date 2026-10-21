@@ -55,6 +55,18 @@ class ViewPageBackdrop(private val source: View) : Backdrop {
         return drawn
     }
 
+    /** Dialogs have a separate window origin; align their lens to screen coordinates. */
+    fun drawPageIntoDialog(canvas: Canvas, target: View): Boolean {
+        source.getLocationOnScreen(location)
+        target.getLocationOnScreen(targetLocation)
+        val checkpoint = canvas.save()
+        canvas.translate((location[0] - targetLocation[0]).toFloat(),
+            (location[1] - targetLocation[1]).toFloat())
+        val drawn = drawPage(canvas)
+        canvas.restoreToCount(checkpoint)
+        return drawn
+    }
+
     override val isCoordinatesDependent = true
 
     override fun DrawScope.drawBackdrop(

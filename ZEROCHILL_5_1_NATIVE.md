@@ -111,6 +111,28 @@ follow-up skips the unrelated ten-flow performance matrix; no performance improv
 is claimed. Prior unresolved warm-start/long-session benchmark findings remain open.
 Validation results for the actual follow-up commit are recorded in draft PR #321.
 
+## Compact liquid preference panel
+
+The physical-device follow-up replaces the opaque stacked row capsules with one
+292dp-maximum panel, capped at 80% of the current screen width. Rows keep a 48dp
+minimum target, explicit white labels/symbols, local identity icons and a cyan
+selected check. Large fonts/small windows retain scrolling and Cancel/back/outside
+dismissal. Preference persistence, hero selection and provider behavior are untouched.
+
+PreferenceGlassPanel is a native ViewGroup, not a Compose picker. It samples the
+same ViewPageBackdrop used by navigation and directly reuses the existing rounded
+refraction AGSL shader and navigation lens tuning. Android 13+ supplies the lens;
+Android 12 uses blur; unsupported/software rendering has a readable dark fallback.
+A 3dp blur and translucent wash sit below the native controls, keeping ink sharp.
+A screen-coordinate bridge aligns the shared page across the dialog window.
+
+A bounded 320ms forming shape expands from a rounded droplet into the final panel
+while the labels fade in. Reduced motion shows the completed panel immediately.
+There is no repeating animation. Detach removes source observers, cancels motion
+and releases owned RenderNodes. The existing upgrade emulator also runs a short
+GPU fixture check on two backgrounds and records the entrance, avoiding a separate
+performance matrix or emulator. No quantitative performance claim is made.
+
 ## Favorite artwork repair
 
 Favorite Creators keeps its grid, Find Creators and Change avatar flows. Its new

@@ -87,6 +87,8 @@ public final class GlassRenderProbeActivity extends Activity {
         StableBottomNavigationController.styleBar(nav); nav.reapplyCurrentGeometry();
         setContentView(shell);
         nav.setCollapsed(getIntent().getBooleanExtra("collapsed", false), false);
+        if (getIntent().getBooleanExtra("preference", false))
+            shell.postDelayed(() -> ContentPreferenceUi.choose(this, null), 500);
         alive = true; start = SystemClock.uptimeMillis();
         if(getIntent().getBooleanExtra("moving",false))handler.post(animate);
     }
