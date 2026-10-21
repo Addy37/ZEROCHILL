@@ -79,6 +79,29 @@ public class ContentPreferenceTest {
         assertTrue(selector.getText().toString().contains("Women"));
         hub.close(); controller.destroy();
     }
+    @Test public void filteredHeroAcceptsCategoryCreatorsAndRejectsUnrelatedCachedCreators() throws Exception {
+        Activity host = Robolectric.buildActivity(Activity.class).setup().get();
+        OnlyFapHubView hub = new OnlyFapHubView(host, new OnlyFapHubView.Listener() {
+            @Override public void onOpenCreator(NativeContentItem creator) {}
+            @Override public void onSearch() {}
+            @Override public void onViewAllFavorites() {}
+        });
+        ContentPreference.set(context, ContentPreference.MEN);
+        hub.preparePreference(ContentPreference.MEN);
+        NativeContentItem matching = new NativeContentItem(NativeContentItem.KIND_CREATOR,
+                "Matching", "https://cum.st/creators/onlyfans/123", "", "", "", "", "OnlyHaven", "Matching");
+        hub.setPreferenceCreators(Collections.singletonList(matching));
+        Class<?> candidateClass = Class.forName("com.webapp.crazyshit.OnlyFapHubView$HeroCandidate");
+        java.lang.reflect.Constructor<?> constructor = candidateClass.getDeclaredConstructor(
+                NativeContentItem.class, String.class, String.class);
+        constructor.setAccessible(true);
+        java.lang.reflect.Method allowed = OnlyFapHubView.class.getDeclaredMethod("startupAllowed", candidateClass);
+        allowed.setAccessible(true);
+        assertEquals(true, allowed.invoke(hub, constructor.newInstance(matching, "", "")));
+        assertEquals(false, allowed.invoke(hub, constructor.newInstance(clip("unrelated"), "", "")));
+        hub.close();
+    }
+
     private android.view.View findText(android.view.View view, String text) {
         if (view instanceof android.widget.TextView && text.contentEquals(((android.widget.TextView) view).getText())) return view;
         if (view instanceof android.view.ViewGroup) {

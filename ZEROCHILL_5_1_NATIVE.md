@@ -71,7 +71,7 @@ creator search. Only exact normalized or already reviewed identity matches quali
 Successful metadata goes through `CreatorCatalog.remember`, including relevant raw
 favorite identities. No favorite key or custom override is rewritten.
 
-One search runs at a time on a single worker. Each saved result refreshes the visible
+One search runs at a time on one process-wide worker, including across Activity recreation. Each saved result refreshes the visible
 grid. The dialog reports completed/total counts and allows cancellation. Leaving
 the Activity also cancels future work, including on recreation; an in-flight network
 request can take its existing timeout to return, but a separate run token prevents

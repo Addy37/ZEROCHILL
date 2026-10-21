@@ -872,7 +872,13 @@ final class OnlyFapHubView extends FrameLayout {
     }
 
     private boolean startupAllowed(HeroCandidate candidate) {
-        return candidate != null && !OnlyFapHeroPolicy.excluded(
+        if (candidate == null) return false;
+        if (discoveryPreference != ContentPreference.ALL) {
+            for (NativeContentItem creator : discoverCandidates)
+                if (creator.url.equals(candidate.creator.url)) return true;
+            return false;
+        }
+        return !OnlyFapHeroPolicy.excluded(
                 CreatorFavoriteStore.names(getContext()), trendingItems, hotItems, popularItems)
                 .contains(CreatorFavoriteStore.key(candidate.creator));
     }

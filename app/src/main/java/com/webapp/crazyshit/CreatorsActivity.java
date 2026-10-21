@@ -42,7 +42,7 @@ import java.util.HashMap;
 public final class CreatorsActivity extends Activity {
     private static final int REQUEST_PICK_AVATAR = 4106;
 
-    private final java.util.concurrent.ExecutorService artworkIo = java.util.concurrent.Executors.newSingleThreadExecutor();
+    private static final java.util.concurrent.ExecutorService ARTWORK_IO = java.util.concurrent.Executors.newSingleThreadExecutor();
     private java.util.concurrent.Future<?> artworkTask;
     private android.app.AlertDialog artworkDialog;
     private java.util.concurrent.atomic.AtomicBoolean artworkCancelled = new java.util.concurrent.atomic.AtomicBoolean();
@@ -216,7 +216,7 @@ public final class CreatorsActivity extends Activity {
                 .setMessage("Checking favorite creators…")
                 .setNegativeButton("Cancel", (dialog, which) -> cancelArtwork()).show();
         artworkDialog.setOnCancelListener(dialog -> cancelArtwork());
-        artworkTask = artworkIo.submit(() -> {
+        artworkTask = ARTWORK_IO.submit(() -> {
             FavoriteCreatorArtworkHydrator.Result result = new FavoriteCreatorArtworkHydrator()
                     .fetchMissing(this, cancelled::get, progress -> runOnUiThread(() -> {
                         if (stopped || cancelled.get() || run != artworkRun) return;
@@ -750,7 +750,6 @@ public final class CreatorsActivity extends Activity {
     }
     @Override protected void onDestroy() {
         cancelArtwork();
-        artworkIo.shutdownNow();
         super.onDestroy();
     }
 
