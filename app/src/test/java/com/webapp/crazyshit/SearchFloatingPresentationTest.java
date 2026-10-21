@@ -53,9 +53,9 @@ public class SearchFloatingPresentationTest {
             org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(200));
             assertEquals(View.INVISIBLE, results.getVisibility());
             assertFalse(activity.isFinishing());
-            RecyclerView list = ReflectionHelpers.getField(panel, "recycler");
-            assertFalse(list.getClipToPadding());
-            assertTrue(((FrameLayout.LayoutParams) list.getLayoutParams()).topMargin < 0);
+            SearchResultsCompose list = ReflectionHelpers.getField(panel, "results");
+            assertTrue(list.getView() instanceof androidx.compose.ui.platform.ComposeView);
+            assertEquals(0, ((FrameLayout.LayoutParams) list.getView().getLayoutParams()).topMargin);
         } finally { host.pause().stop().destroy(); }
     }
 

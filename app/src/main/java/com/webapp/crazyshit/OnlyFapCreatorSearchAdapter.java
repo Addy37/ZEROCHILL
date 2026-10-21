@@ -85,6 +85,8 @@ final class OnlyFapCreatorSearchAdapter
         diff.dispatchUpdatesTo(this);
     }
 
+    String composeKey(int position) { return creatorKey(items.get(position)); }
+
     boolean isEmpty() {
         return items.isEmpty();
     }

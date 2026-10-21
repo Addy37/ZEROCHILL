@@ -25,12 +25,12 @@ Development branch: `feature/zerochill-compose-6.0`. No release/version change y
 ## Hybrid
 
 - Settings choices, confirmations and diagnostics now use Compose. Platform backup pickers and the existing backup/updater-owned progress and result overlays remain native.
-- Main shell (`NativeMainActivity`), Search (`SearchPanel`, `SearchGlassLayout`) and headers retain View controls with Compose glass.
+- Main shell (`NativeMainActivity`) and Search glass/header/query/filter/loading/status controls remain View/Compose-glass hybrids. Search results now use a Compose lazy viewport around approved native row binders; recent searches are Compose.
 
 ## Remaining inventory
 
 - Library native islands: profile/social header, bounded media rails, media cards/menus and creator/download/likes RecyclerView rows. Their surrounding presentation now uses Compose.
-- Search: `SearchPanel`, creator/global result adapters, recent-search presentation. Preserve approved progressive results and fade behavior.
+- Search native islands: query/focus/keyboard shell, filter/footer/three-dot loader and creator/global result row binders. Provider controller and ordering/fade policies remain unchanged.
 - Content: `OnlyFapHubView`, `ShowsHubView`, `BunkrGalleryActivity`, native feed/detail screens and creator media grids.
 - Accounts/social: account/security/profile, messages/inbox, social settings and notification screens.
 - Startup: splash/wizard and account announcement surfaces.
@@ -77,3 +77,11 @@ The general ten-flow performance matrix now skips this Compose branch. The histo
 Library continuation was implemented from committed source. No collection formats, ordering, stores, account contracts or result extras change. The obsolete Favorites ViewPager and eager grid assembly are bypassed by a keyed Compose lazy grid. Standalone Compose roots bypass the legacy inset fitter. Main Library keeps its native bounded rails while Compose owns vertical scrolling and View saved-state preserves the scroll offset.
 
 Local Kotlin/Java compilation passed. Focused checks exposed and fixed a missing lifecycle owner on the Library host. The prior native RecyclerView/AlertDialog assertions were adapted to their current presentation, while collection, navigation, clipboard and privacy assertions remain. After the fixes, 19 Library-profile/Search/Compose checks passed, followed by 13 Settings/Feedback/Library checks including the new hub scroll-restore test. Native and Compose test renders were inspected. Full clean debug/release suites, builds, lint and signed upgrade validation are still pending for this checkpoint.
+
+### Search checkpoint
+
+The Search result viewport and recent-search panel now use Compose lazy lists. The existing SearchPanel controller still owns queries, generations, cancellation, provider updates, ordering, snapshots and navigation. Existing row binders preserve round avatars/placeholders, typography, thumbnail sizes, favorites, thumbnail resolution and per-query fades. Adapter change notifications publish snapshots immediately as providers return; unchanged rows are not rebound when another provider inserts results, so their fades are not interrupted. Thumbnail payloads continue through the original partial binder.
+
+Search scroll index/offset use the existing saved-state path through a small Bundle rather than RecyclerView state. Native query focus/keyboard, glass geometry, loading dots and error/retry controls remain in place. Closing the panel disposes both compositions and unregisters its snapshot observer.
+
+Focused Search/Compose checks passed, including progressive results, unchanged-row/fade preservation, recents run/remove/clear, stale-result rejection, input retention, viewport/footer geometry and scroll save/restore. No providers, playback, storage, backend or remote config were changed. Final full-suite/build/lint/signed-upgrade results will follow in the validation checkpoint.

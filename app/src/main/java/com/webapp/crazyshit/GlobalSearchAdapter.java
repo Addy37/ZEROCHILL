@@ -195,6 +195,16 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
         return itemKey(entry).hashCode();
     }
 
+    String composeKey(int position) {
+        Entry entry = entries.get(position);
+        if (entry.section) return "section:" + sectionKey(entry);
+        String section = "";
+        for (int i = position - 1; i >= 0; i--) {
+            if (entries.get(i).section) { section = sectionKey(entries.get(i)); break; }
+        }
+        return section + ":" + itemKey(entry);
+    }
+
     @Override
     public int getItemViewType(int position) {
         return entries.get(position).section ? TYPE_SECTION : TYPE_RESULT;
