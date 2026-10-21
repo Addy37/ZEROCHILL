@@ -455,7 +455,8 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         if (pageIndex == PAGE_LIBRARY) {
             int header = ZeroChillUi.dimension(activity, R.dimen.zc_top_bar_height);
             pageParams.topMargin = -header;
-            pageView.setPadding(0, header, 0, 0);
+            pageView.setPadding(0, 0, 0, 0);
+            libraryView.setHeaderInset(header);
         }
         holder.container.addView(pageView, pageParams);
     }

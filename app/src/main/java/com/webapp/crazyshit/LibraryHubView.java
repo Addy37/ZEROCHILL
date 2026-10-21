@@ -157,6 +157,8 @@ final class LibraryHubView extends FrameLayout {
         AppPerformance.startupCost("library_content", started);
     }
 
+    void setHeaderInset(int pixels) { presentation.setHeaderInsetPx(pixels); }
+
     void setNavigationScrollListener(java.util.function.BiConsumer<Integer, Boolean> listener) { presentation.setOnScroll(listener); }
 
     void setWorkScheduler(PrimaryTabWorkQueue.Scheduler scheduler) { work = scheduler; }

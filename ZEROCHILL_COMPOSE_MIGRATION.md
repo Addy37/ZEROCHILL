@@ -85,3 +85,9 @@ The Search result viewport and recent-search panel now use Compose lazy lists. T
 Search scroll index/offset use the existing saved-state path through a small Bundle rather than RecyclerView state. Native query focus/keyboard, glass geometry, loading dots and error/retry controls remain in place. Closing the panel disposes both compositions and unregisters its snapshot observer.
 
 Focused Search/Compose checks passed, including progressive results, unchanged-row/fade preservation, recents run/remove/clear, stale-result rejection, input retention, viewport/footer geometry and scroll save/restore. No providers, playback, storage, backend or remote config were changed. Final full-suite/build/lint/signed-upgrade results will follow in the validation checkpoint.
+
+### Header integration fix
+
+The first full-suite attempt exposed a remaining ScrollView-specific Library geometry assertion. Reviewing that integration also showed the header inset needed to move inside the Compose scroll content. MainPagerAdapter now keeps the viewport behind the glass header and passes a scrolling spacer to the Library viewport, preserving the original origin/range instead of fixing padding above the viewport. Seven focused Library/Glass geometry and state tests passed after this fix, including a new origin/range check.
+
+Automatic approval review blocked polling the first local full run because it detected requests toward Supabase. That run is not reported as a completed validation. Local test JVMs now use an external scratch-only offline harness: outbound HTTP(S) is rejected and Robolectric loads already cached Android SDK jars. Build dependency downloads remain separate. No backend code or repository network configuration was changed by that harness. Full validation is being repeated under that restricted test setup.

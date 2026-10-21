@@ -8,6 +8,7 @@ import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.*
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
@@ -19,6 +20,8 @@ import java.util.function.BiConsumer
 internal class LibraryHomeCompose(activity: Activity, host: View, content: View) {
     private val owner = NavOwner(activity)
     private val scroll = ScrollState(0)
+    var headerInsetPx by mutableIntStateOf(0)
+    fun maximumScroll() = scroll.maxValue
     var restoredPosition by mutableIntStateOf(-1)
     fun scrollPosition() = scroll.value
     init {
@@ -44,6 +47,7 @@ internal class LibraryHomeCompose(activity: Activity, host: View, content: View)
                     }
                 }
                 Column(Modifier.fillMaxSize().verticalScroll(scroll)) {
+                    Spacer(Modifier.height(with(LocalDensity.current) { headerInsetPx.toDp() }))
                     AndroidView(factory = { content }, modifier = Modifier.fillMaxWidth())
                 }
             }

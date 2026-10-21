@@ -98,6 +98,32 @@ class ComposeLibraryTest {
         }
     }
 
+    @Test fun libraryHeaderSpacerScrollsWithContentAndKeepsItsRange() {
+        Robolectric.buildActivity(ComponentActivity::class.java).setup().use { host ->
+            val frame = android.widget.FrameLayout(host.get())
+            val content = android.widget.LinearLayout(host.get())
+            content.addView(View(host.get()), android.widget.LinearLayout.LayoutParams(1, 3000))
+            val presentation = LibraryHomeCompose(host.get(), frame, content)
+            try {
+                presentation.headerInsetPx = 80
+                frame.addView(presentation.view, android.widget.FrameLayout.LayoutParams(-1, -1))
+                host.get().setContentView(frame)
+                compose.waitForIdle()
+                assertEquals(3080 - presentation.view.height, presentation.maximumScroll())
+                fun contentTop(): Int {
+                    val bounds = android.graphics.Rect(0, 0, content.width, content.height)
+                    presentation.view.offsetDescendantRectToMyCoords(content, bounds)
+                    return bounds.top
+                }
+                assertEquals(80, contentTop())
+                compose.onNode(hasScrollAction()).performTouchInput { swipeUp() }
+                compose.waitForIdle()
+                assertTrue(presentation.scrollPosition() > 80)
+                assertEquals(80 - presentation.scrollPosition(), contentTop())
+            } finally { presentation.close() }
+        }
+    }
+
     private fun saveRender(name: String, view: View) {
         compose.waitForIdle()
         val bitmap = android.graphics.Bitmap.createBitmap(view.width, view.height, android.graphics.Bitmap.Config.ARGB_8888)
