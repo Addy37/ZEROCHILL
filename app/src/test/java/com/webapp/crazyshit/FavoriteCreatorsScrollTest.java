@@ -35,7 +35,7 @@ import static org.robolectric.Shadows.shadowOf;
 
 /** Exercise the actual View All adapter, rather than CreatorListAdapter. */
 @RunWith(RobolectricTestRunner.class)
-@Config(application = Application.class, sdk = 35, shadows = FavoriteCreatorsScrollTest.Preloads.class)
+@Config(application = Application.class, sdk = 35, shadows = {FavoriteCreatorsScrollTest.Preloads.class, FavoriteArtworkScheduleShadow.class})
 public class FavoriteCreatorsScrollTest {
     private final Context context = RuntimeEnvironment.getApplication();
 

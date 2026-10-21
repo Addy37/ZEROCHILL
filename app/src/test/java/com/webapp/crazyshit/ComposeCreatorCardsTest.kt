@@ -25,7 +25,7 @@ import org.robolectric.util.ReflectionHelpers
 import java.io.File
 
 @RunWith(RobolectricTestRunner::class)
-@Config(application = Application::class, sdk = [35], qualifiers = "w360dp-h800dp-mdpi")
+@Config(application = Application::class, sdk = [35], qualifiers = "w360dp-h800dp-mdpi", shadows = [FavoriteArtworkScheduleShadow::class])
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @LooperMode(LooperMode.Mode.PAUSED)
 class ComposeCreatorCardsTest {
@@ -37,6 +37,7 @@ class ComposeCreatorCardsTest {
             "creator_avatar_overrides_v1", "zerochill_update_inbox_v1").forEach {
             context.getSharedPreferences(it, 0).edit().clear().commit()
         }
+        FavoriteArtworkScheduleShadow.calls = 0
         ManualCreatorMergeStore.clearCacheForTest()
         CreatorAvatarOverrideStore.clearCacheForTest()
     }
@@ -100,6 +101,50 @@ class ComposeCreatorCardsTest {
         Robolectric.buildActivity(CreatorsActivity::class.java).setup().use {
             compose.onNodeWithContentDescription("7 new items from Alpha", useUnmergedTree = true).assertIsDisplayed()
             compose.onNodeWithText("7", useUnmergedTree = true).assertExists()
+            UpdateInboxStore.markAllRead(context)
+            org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
+            compose.onNodeWithContentDescription("7 new items from Alpha", useUnmergedTree = true).assertDoesNotExist()
+        }
+    }
+
+    @Test fun mergeTargetSelectionUsesTheExistingConfirmationAndGroupingStore() {
+        seed(listOf("Alpha", "Beta"))
+        Robolectric.buildActivity(CreatorsActivity::class.java).setup().use { host ->
+            options("Alpha")
+            compose.onNodeWithText("Merge with…").performClick()
+            compose.onNode(hasText("Beta") and hasAnyAncestor(isPopup())).performClick()
+            val dialog = org.robolectric.shadows.ShadowDialog.getLatestDialog()
+            assertNotNull(dialog)
+            assertEquals(2, CreatorCatalog.favoriteGroups(host.get()).size)
+            LibraryProfileTest.text(dialog.window!!.decorView, "Merge")!!.performClick()
+            compose.onNodeWithText("2 profiles").assertIsDisplayed()
+            val groups = CreatorCatalog.favoriteGroups(host.get())
+            assertEquals(1, groups.size)
+            assertEquals(2, groups.single().members.size)
+        }
+    }
+
+    @Test fun favoriteScreenSchedulesRestorationAndPublishesLearnedArtworkInPlace() {
+        seed(listOf("Alpha"))
+        Robolectric.buildActivity(CreatorsActivity::class.java).setup().use { host ->
+            compose.waitForIdle()
+            assertTrue(FavoriteArtworkScheduleShadow.calls > 0)
+            val item = NativeContentItem(NativeContentItem.KIND_CREATOR, "Alpha",
+                "https://fapello.com/alpha/", "https://fixture.invalid/alpha.jpg", "", "", "", "", "Alpha")
+            CreatorCatalog.remember(context, listOf(item))
+            org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
+            compose.waitForIdle()
+            val grid = ReflectionHelpers.getField<RecyclerView>(host.get(), "recycler")
+            val adapter = grid.adapter!!
+            val cards = ReflectionHelpers.getField<List<Any>>(adapter, "cards")
+            val group = ReflectionHelpers.getField<CreatorCatalog.FavoriteGroup>(cards.single(), "group")
+            assertEquals(item.imageUrl, group.item.imageUrl)
+            val before = FavoriteArtworkScheduleShadow.calls
+            context.getSharedPreferences("creator_favorites", 0).edit()
+                .putStringSet("creators", setOf("alpha", "beta")).commit()
+            org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
+            compose.onNodeWithText("beta").assertIsDisplayed()
+            assertTrue(FavoriteArtworkScheduleShadow.calls > before)
         }
     }
 

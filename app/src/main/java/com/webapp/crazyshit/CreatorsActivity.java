@@ -39,6 +39,13 @@ public final class CreatorsActivity extends androidx.activity.ComponentActivity 
     private ArrayList<String> pendingAvatarKeys;
     private boolean badgesDirty;
     private boolean stopped;
+    private android.content.SharedPreferences catalogPreferences, favoritePreferences;
+    private final Runnable creatorRefresh = () -> { if (!stopped) render(); };
+    private final SharedPreferences.OnSharedPreferenceChangeListener creatorMetadataListener = (prefs, key) -> {
+        recycler.removeCallbacks(creatorRefresh);
+        recycler.post(creatorRefresh);
+        if (prefs == favoritePreferences && !stopped) FavoriteCreatorArtworkHydrator.schedule(this);
+    };
     private int scrollDirection = 1;
     private boolean prefetchPosted;
     private final Runnable avatarPrefetch = () -> {
@@ -505,11 +512,19 @@ public final class CreatorsActivity extends androidx.activity.ComponentActivity 
     @Override protected void onResume() {
         super.onResume();
         stopped = false;
+        catalogPreferences = getSharedPreferences(CreatorCatalog.PREFS, MODE_PRIVATE);
+        favoritePreferences = getSharedPreferences("creator_favorites", MODE_PRIVATE);
+        catalogPreferences.registerOnSharedPreferenceChangeListener(creatorMetadataListener);
+        favoritePreferences.registerOnSharedPreferenceChangeListener(creatorMetadataListener);
+        FavoriteCreatorArtworkHydrator.schedule(this);
         UpdateInboxStore.registerChangeListener(this, inboxListener);
         render();
     }
     @Override protected void onStop() {
         stopped = true;
+        catalogPreferences.unregisterOnSharedPreferenceChangeListener(creatorMetadataListener);
+        favoritePreferences.unregisterOnSharedPreferenceChangeListener(creatorMetadataListener);
+        recycler.removeCallbacks(creatorRefresh);
         UpdateInboxStore.unregisterChangeListener(this, inboxListener);
         recycler.removeCallbacks(avatarPrefetch);
         recycler.removeCallbacks(badgeRefresh);

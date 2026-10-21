@@ -1159,7 +1159,6 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         page.onlyFapFavoriteArtworkTask = io.submit(() ->
                 favoriteCreatorArtworkHydrator.hydrate(
                         activity,
-                        10,
                         () -> postPrimaryResult(page, generation, "favorites", () -> {
                             if (generation == page.generation && page.onlyFapHub != null) {
                                 page.onlyFapHub.refreshFavorites();

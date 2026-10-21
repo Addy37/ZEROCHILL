@@ -36,6 +36,7 @@ public class OnlyFapFavoriteAvatarTest {
 
     @Before
     public void clean() {
+        context.getSharedPreferences(FavoriteCreatorArtworkHydrator.RETRIES, 0).edit().clear().commit();
         context.getSharedPreferences("creator_favorites", 0).edit().clear().commit();
         context.getSharedPreferences(CreatorCatalog.PREFS, 0).edit().clear().commit();
         context.getSharedPreferences("creator_avatar_overrides_v1", 0).edit().clear().commit();
@@ -71,7 +72,7 @@ public class OnlyFapFavoriteAvatarTest {
                 )
         );
 
-        hydrator.hydrate(context, 10, callbacks::incrementAndGet);
+        hydrator.hydrate(context, callbacks::incrementAndGet);
 
         assertEquals(1, callbacks.get());
         CreatorCatalog.FavoriteGroup group = CreatorCatalog.favoriteGroups(context).get(0);

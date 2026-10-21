@@ -84,7 +84,9 @@ public class SearchOverlayTest {
         assertSame(underlying, root.getChildAt(0));
         assertTrue(panel.field().hasFocus());
         View content = ReflectionHelpers.getField(panel, "content");
-        assertEquals(View.INVISIBLE, content.getVisibility());
+        assertEquals(View.VISIBLE, content.getVisibility());
+        assertEquals(android.graphics.Color.BLACK,
+                ((android.graphics.drawable.ColorDrawable) panel.view.getBackground()).getColor());
         panel.field().setText("a");
         View clear = ReflectionHelpers.getField(panel, "clear");
         assertEquals(View.VISIBLE, clear.getVisibility());
