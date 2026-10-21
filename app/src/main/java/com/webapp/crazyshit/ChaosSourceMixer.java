@@ -86,7 +86,8 @@ final class ChaosSourceMixer {
         ContentPreference mode = ContentPreference.get(context);
         if (!explorationAllowed && mode != ContentPreference.ALL) return;
         Context app = context.getApplicationContext();
-        preferenceBuffer.request(mode, () -> loadOnlyHavenBatch(app, mode), available);
+        preferenceBuffer.request(mode, () -> provider(BATCH_ONLY_HAVEN,
+                () -> loadOnlyHavenBatch(app, mode)).call().items, available);
     }
 
     boolean hasPreference(ContentPreference mode) { return preferenceBuffer.hasReady(mode); }

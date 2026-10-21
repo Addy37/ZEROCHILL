@@ -160,6 +160,40 @@ public class ContentPreferenceTest {
         feed.close();
     }
 
+    @Test public void latePreferenceAdmissionPreservesNormalTailCurrentNextAndExclusions() {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        ContentPreference.set(activity, ContentPreference.MEN);
+        ChaosFeedView feed = new ChaosFeedView(activity, item -> {}, false);
+        ArrayList<NativeContentItem> items = org.robolectric.util.ReflectionHelpers.getField(feed, "items");
+        NativeContentItem current = clip("current"), next = clip("next"),
+                kaotic = clip("kaotic"), fapello = clip("fapello"), efukt = clip("efukt");
+        items.addAll(Arrays.asList(current, next, kaotic, fapello, efukt));
+        NativeContentItem match = havenClip("match"), blocked = havenClip("blocked"),
+                watched = havenClip("watched"), liked = havenClip("liked");
+        Set<String> blockedKeys = org.robolectric.util.ReflectionHelpers.getField(feed, "blockedCreatorKeys");
+        blockedKeys.add(ShitTokBlockedCreatorStore.keyFor(blocked));
+        ShitTokSeenStore seen = org.robolectric.util.ReflectionHelpers.getField(feed, "seenStore");
+        seen.watch(watched.url, null); seen.heart(liked.url, null);
+        ChaosSourceMixer mixer = org.robolectric.util.ReflectionHelpers.getField(feed, "sourceMixer");
+        Set<String> matches = org.robolectric.util.ReflectionHelpers.getField(mixer, "preferenceMatches");
+        for (NativeContentItem item : Arrays.asList(match, blocked, watched, liked))
+            matches.add(ContentPreference.MEN.value + "|" + item.url);
+        org.robolectric.util.ReflectionHelpers.callInstanceMethod(feed, "appendUnique",
+                org.robolectric.util.ReflectionHelpers.ClassParameter.from(List.class,
+                        Arrays.asList(blocked, watched, liked, match, match)));
+        org.robolectric.util.ReflectionHelpers.callInstanceMethod(feed, "prioritizePreferenceQueue");
+        assertEquals(Arrays.asList(current, next, match, kaotic, fapello, efukt), items);
+        assertEquals(1, (int) Collections.frequency(items, match));
+        assertTrue(seen.seen(watched.url, null)); assertTrue(seen.liked(liked.url, null));
+        feed.close();
+    }
+
+    private NativeContentItem havenClip(String name) {
+        return new NativeContentItem(NativeContentItem.KIND_MEDIA, name,
+                "https://e1.cum.st/media/" + name + ".mp4", "", "",
+                "https://cum.st/creators/onlyfans/" + name, "", "onlyfans · OnlyHaven", name, 0L, .6f);
+    }
+
     private NativeContentItem clip(String name) {
         return new NativeContentItem(NativeContentItem.KIND_MEDIA, name, "https://test/" + name,
                 "", "", name, "", "", "");
