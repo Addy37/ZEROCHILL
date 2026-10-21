@@ -31,11 +31,15 @@ internal class SettingsCompose(private val activity: ComponentActivity) {
         val checked: Boolean? = null, val action: Runnable? = null, val toggle: Consumer<Boolean>? = null)
     internal data class Section(val title: String, val rows: List<Setting>)
 
+    private val dialogs = SettingsDialogs()
+    fun dialog() = dialogs.builder()
+    fun dialogTitle() = dialogs.title()
+
     private var sections by mutableStateOf(emptyList<Section>())
     var notificationStatus by mutableStateOf(NotificationCoordinator.statusSummary(activity))
     var sourceStatus by mutableStateOf("")
 
-    init { activity.installZeroChillContent { Screen() } }
+    init { activity.installZeroChillContent { Screen(); dialogs.Render() } }
 
     fun show(groups: List<Group>) { sections = groups.map { it.snapshot() } }
 

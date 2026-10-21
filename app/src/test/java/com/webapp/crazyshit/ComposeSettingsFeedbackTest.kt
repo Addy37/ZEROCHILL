@@ -46,6 +46,35 @@ class ComposeSettingsFeedbackTest {
         }
     }
 
+    @Test fun settingsChoicesAndDiagnosticsSurviveRotationWithoutRunningActions() {
+        Robolectric.buildActivity(SettingsActivity::class.java).setup().use { host ->
+            compose.onNodeWithText("Check frequency").performScrollTo().performClick()
+            compose.onNodeWithText("Every 3 hours").assertExists()
+            host.recreate()
+            compose.onNodeWithText("Every 3 hours").assertExists()
+            compose.onNodeWithText("Cancel").performClick()
+            compose.onNode(hasScrollToIndexAction()).performScrollToNode(hasText("Performance details"))
+            compose.onNodeWithText("Performance details").performClick()
+            compose.onNodeWithText("Copy diagnostics").assertExists()
+            compose.onNodeWithText("Close").performClick()
+        }
+    }
+
+    @Test fun destructiveSettingsChoiceNeverExecutesOnRotationOrCancel() {
+        Robolectric.buildActivity(SettingsActivity::class.java).setup().use { host ->
+            val context = host.get()
+            FavoriteStore.add(context, "Keep this", "https://fixture.invalid/keep")
+            compose.onNode(hasScrollToIndexAction()).performScrollToNode(hasText("Manage history & Watch Later"))
+            compose.onNodeWithText("Manage history & Watch Later").performClick()
+            compose.onNodeWithText("Clear Watch Later").performClick()
+            compose.onNodeWithText("Clear Watch Later?").assertExists()
+            host.recreate()
+            compose.onNodeWithText("Clear Watch Later").assertExists()
+            compose.onNodeWithText("Cancel").performClick()
+            assertEquals(1, FavoriteStore.load(host.get()).size)
+        }
+    }
+
     @Test fun feedbackDraftAndRatingSurviveActivityRecreation() {
         val intent = Intent().putExtra(FeedbackActivity.EXTRA_SOURCE, "Player")
             .putExtra(FeedbackActivity.EXTRA_PRESELECTED_RATING, 4)

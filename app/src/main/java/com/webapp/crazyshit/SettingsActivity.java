@@ -12,8 +12,6 @@ import android.view.HapticFeedbackConstants;
 import android.view.View;
 import android.webkit.CookieManager;
 import android.webkit.WebStorage;
-import android.widget.ScrollView;
-import android.widget.TextView;
 
 import androidx.core.content.ContextCompat;
 
@@ -54,6 +52,7 @@ public class SettingsActivity extends ComponentActivity {
         backup = new AppBackupController(this);
         ZeroChillUi.applySystemBars(this);
         buildUi();
+        if (state != null) restoreDialog(state.getString("settings_dialog", ""));
 
         if (getIntent().getBooleanExtra(EXTRA_CHECK_FOR_UPDATES, false)) {
             getIntent().removeExtra(EXTRA_CHECK_FOR_UPDATES);
@@ -267,7 +266,7 @@ public class SettingsActivity extends ComponentActivity {
 
     private void showBackupRestore() {
         String[] actions = {"Export backup", "Restore backup"};
-        new ZeroChillDialog.Builder(this)
+        presentation.dialog()
                 .setTitle("Backup & restore")
                 .setItems(actions, (dialog, which) -> {
                     if (which == 0) backup.exportFile();
@@ -279,7 +278,7 @@ public class SettingsActivity extends ComponentActivity {
 
     private void showManageLibraryData() {
         String[] actions = {"Clear watch history", "Clear Watch Later"};
-        new ZeroChillDialog.Builder(this)
+        presentation.dialog()
                 .setTitle("Manage history & Watch Later")
                 .setItems(actions, (dialog, which) -> {
                     if (which == 0) {
@@ -329,7 +328,7 @@ public class SettingsActivity extends ComponentActivity {
     }
 
     private void confirmDestructive(String title, String message, Runnable action) {
-        new ZeroChillDialog.Builder(this).destructive()
+        presentation.dialog().destructive()
                 .setTitle(title)
                 .setMessage(message)
                 .setNegativeButton("Cancel", null)
@@ -339,17 +338,10 @@ public class SettingsActivity extends ComponentActivity {
 
     private void showPerformanceDetails() {
         String report = ShitTokPoolDiagnostics.userReport();
-        TextView details = new TextView(this);
-        details.setText(report);
-        details.setTextColor(UiPalette.TEXT_PRIMARY);
-        details.setTextSize(12);
-        details.setTextIsSelectable(true);
-        details.setPadding(dp(20), dp(12), dp(20), dp(12));
-        ScrollView scroll = new ScrollView(this);
-        scroll.addView(details);
-        new ZeroChillDialog.Builder(this)
+        presentation.dialog()
                 .setTitle("Performance details")
-                .setView(scroll)
+                .setMessage(report)
+                .selectable()
                 .setNeutralButton("Copy diagnostics", (dialog, which) -> {
                     android.content.ClipboardManager clipboard = (android.content.ClipboardManager)
                             getSystemService(Context.CLIPBOARD_SERVICE);
@@ -406,7 +398,7 @@ public class SettingsActivity extends ComponentActivity {
     }
 
     private void showSourceConfigDetails() {
-        new ZeroChillDialog.Builder(this)
+        presentation.dialog()
                 .setTitle("Source configuration")
                 .setMessage(sourceConfigDetails())
                 .setNeutralButton(
@@ -449,7 +441,7 @@ public class SettingsActivity extends ComponentActivity {
 
         String[] labels = new String[blocked.size()];
         for (int i = 0; i < blocked.size(); i++) labels[i] = blocked.get(i).label;
-        new ZeroChillDialog.Builder(this)
+        presentation.dialog()
                 .setTitle("Blocked ShitTok creators")
                 .setItems(labels, (dialog, which) -> {
                     if (which < 0 || which >= blocked.size()) return;
@@ -460,7 +452,6 @@ public class SettingsActivity extends ComponentActivity {
                             "Unblocked " + creator.label + ".",
                             ZeroChillToast.LENGTH_SHORT
                     ).show();
-                    dialog.dismiss();
                     recreate();
                 })
                 .setNegativeButton("Close", null)
@@ -473,7 +464,7 @@ public class SettingsActivity extends ComponentActivity {
                 "Wi-Fi / unmetered only",
                 "Minimal"
         };
-        new ZeroChillDialog.Builder(this)
+        presentation.dialog()
                 .setTitle("ShitTok preloading")
                 .setSingleChoiceItems(
                         choices,
@@ -483,7 +474,6 @@ public class SettingsActivity extends ComponentActivity {
                                     this,
                                     ChaosPreloadPolicy.modeForIndex(which)
                             );
-                            dialog.dismiss();
                             recreate();
                         }
                 )
@@ -503,16 +493,39 @@ public class SettingsActivity extends ComponentActivity {
                 "Every 6 hours"
         };
 
-        new ZeroChillDialog.Builder(this)
+        presentation.dialog()
                 .setTitle("Creator update frequency")
                 .setSingleChoiceItems(choices, selected, (dialog, which) -> {
                     int hours = which == 2 ? 6 : which == 1 ? 3 : 1;
                     NotificationCoordinator.setFrequency(this, hours);
-                    dialog.dismiss();
                     recreate();
                 })
                 .setNegativeButton("Cancel", null)
                 .show();
+    }
+
+    @Override
+    protected void onSaveInstanceState(Bundle state) {
+        state.putString("settings_dialog", presentation == null ? "" : presentation.dialogTitle());
+        super.onSaveInstanceState(state);
+    }
+
+    private void restoreDialog(String title) {
+        switch (title) {
+            case "Backup & restore": showBackupRestore(); break;
+            case "Manage history & Watch Later": showManageLibraryData(); break;
+            case "Clear watch history?":
+            case "Clear Watch Later?":
+                // Reopen the chooser. Never restore a destructive action as an accepted action.
+                showManageLibraryData(); break;
+            case "Clear site data?": confirmClearSiteData(); break;
+            case "Performance details": showPerformanceDetails(); break;
+            case "Source configuration": showSourceConfigDetails(); break;
+            case "Blocked ShitTok creators": showBlockedShitTokCreators(); break;
+            case "ShitTok preloading": showChaosPreloadChoices(); break;
+            case "Creator update frequency": showNotificationFrequencyChoices(); break;
+            default: break;
+        }
     }
 
     private void haptic(View view) {
