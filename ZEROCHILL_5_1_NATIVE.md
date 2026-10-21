@@ -35,16 +35,23 @@ fallback contract. No live configuration is published and no backend is changed.
 The live endpoint returned config v10 without the expanded source objects; the
 existing Android validation/fallback behavior remains unchanged.
 `tools/verify_onlyhaven_categories.py` audits the current public category contract
-and response schema for all six categories without modifying the source.
+and real creator portrait responses for all six categories without modifying the source.
+Creator avatars use the configured image CDN's creator service/id endpoint;
+`avatarThumbhash` is Base64 placeholder metadata, not an image path.
 
 ShitTok All content uses the existing pool and ordering. In other modes, the
-OnlyHaven provider uses the selected category, starts earlier among the existing
-post-first-frame providers, and streams at most two matching candidates per
-harvest. Normal providers remain requested. Once clips pass the existing block,
+OnlyHaven uses the selected category on one process-wide preference worker after
+the first playback frame. A two-candidate buffer survives completion/cancellation
+of a faster ordinary harvest. Late results get a bounded admission turn even if
+the ordinary runway is full or an orientation reservoir remains. Normal providers
+retain their existing harvest path; All content never starts this preference worker. Once clips pass the existing block,
 seen/liked, identity, playable-media and portrait checks, the future tail orders
 one matching clip followed by two ordinary clips while both are available.
 No other provider gets an inferred gender label. Scarcity does not remove content
-or stall playback. Category catalog failures have a one-minute retry backoff.
+or stall playback. Category catalog failures have a one-minute retry backoff;
+empty preference batches back off for 30 seconds. Navigation/pause/close cancels
+preference work, stale completions cannot cross mode changes, and successful raw
+candidates can be retained for resume. Every candidate still passes normal admission.
 
 Changing the preference cancels the discovery batch and discards the future queue
 after the current and immediately prepared next clip. It keeps playback generation,

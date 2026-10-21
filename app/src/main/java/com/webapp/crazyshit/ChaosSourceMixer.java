@@ -72,6 +72,7 @@ final class ChaosSourceMixer {
     private boolean catalogLoading;
     private boolean efuktCatalogAttempted;
     private boolean onlyHavenCatalogAttempted;
+    private final java.util.concurrent.atomic.AtomicBoolean onlyHavenDeckReset = new java.util.concurrent.atomic.AtomicBoolean();
     private ContentPreference onlyHavenCatalogPreference = ContentPreference.ALL;
     private long categoryRetryAfter;
     private final Set<String> preferenceMatches = java.util.concurrent.ConcurrentHashMap.newKeySet();
@@ -79,6 +80,19 @@ final class ChaosSourceMixer {
     boolean matchesPreference(NativeContentItem item, ContentPreference mode) {
         return mode != ContentPreference.ALL && preferenceMatches.contains(mode.value + "|" + item.url);
     }
+    private final ShitTokPreferenceBuffer preferenceBuffer = new ShitTokPreferenceBuffer();
+
+    void requestPreference(Context context, Runnable available) {
+        ContentPreference mode = ContentPreference.get(context);
+        if (!explorationAllowed && mode != ContentPreference.ALL) return;
+        Context app = context.getApplicationContext();
+        preferenceBuffer.request(mode, () -> loadOnlyHavenBatch(app, mode), available);
+    }
+
+    boolean hasPreference(ContentPreference mode) { return preferenceBuffer.hasReady(mode); }
+    List<NativeContentItem> takePreference(ContentPreference mode) { return preferenceBuffer.take(mode); }
+    void stopPreference() { preferenceBuffer.stop(); }
+
     private boolean starterPending = true;
     private volatile boolean explorationAllowed;
     private final java.util.concurrent.atomic.AtomicInteger activeFetches = new java.util.concurrent.atomic.AtomicInteger();
@@ -162,8 +176,6 @@ final class ChaosSourceMixer {
         ArrayList<Future<SourceBatch>> work = new ArrayList<>();
         ArrayList<java.util.concurrent.Callable<SourceBatch>> requests = new ArrayList<>();
         final ContentPreference preference = ContentPreference.get(context);
-        if (explorationAllowed && preference != ContentPreference.ALL)
-            requests.add(provider(BATCH_ONLY_HAVEN, () -> loadOnlyHavenBatch(context, onCandidates)));
         // Fast independent listings enter the bounded three-worker pool before multi-page catalogs.
         requests.add(provider(BATCH_KAOTIC, () -> loadKaoticBatch(context)));
         requests.add(provider(BATCH_FAPELLO, () -> loadFapelloBatch(context)));
@@ -319,8 +331,7 @@ final class ChaosSourceMixer {
         shitShow.resetDeck();
         efuktSeriesDeck.clear();
         if (efuktSeries.isEmpty()) efuktCatalogAttempted = false;
-        onlyHavenCreatorDeck.clear();
-        if (onlyHavenCreators.isEmpty()) onlyHavenCatalogAttempted = false;
+        onlyHavenDeckReset.set(true);
     }
 
     private List<NativeContentItem> withKnownStarter(List<NativeContentItem> starter) {
@@ -447,20 +458,22 @@ final class ChaosSourceMixer {
     }
 
     private List<NativeContentItem> loadOnlyHavenBatch(Context context) {
-        return loadOnlyHavenBatch(context, null);
+        return loadOnlyHavenBatch(context, ContentPreference.ALL);
     }
 
-    private List<NativeContentItem> loadOnlyHavenBatch(Context context,
-            java.util.function.Consumer<List<NativeContentItem>> partial) {
-        ContentPreference mode = ContentPreference.get(context);
+    private synchronized List<NativeContentItem> loadOnlyHavenBatch(Context context, ContentPreference mode) {
+        if (onlyHavenDeckReset.getAndSet(false)) {
+            onlyHavenCreatorDeck.clear();
+            if (onlyHavenCreators.isEmpty()) onlyHavenCatalogAttempted = false;
+        }
         ensureOnlyHavenCatalog(context, mode);
         if (onlyHavenCreators.isEmpty()) return new ArrayList<>();
 
         LinkedHashMap<String, NativeContentItem> combined = new LinkedHashMap<>();
         HashSet<String> usedCreators = new HashSet<>();
         int attempts = Math.min(4, onlyHavenCreators.size());
-        // The normal runway is six clips. At most two matching candidates per harvest
-        // leave room for ordinary providers even when this endpoint wins the fetch race.
+        // The independent preference buffer holds at most two raw matching clips.
+        // Ordinary providers keep their normal fetch/admission path.
         int batchLimit = mode == ContentPreference.ALL ? ONLY_HAVEN_ITEMS_PER_BATCH : 2;
         while (combined.size() < batchLimit && attempts-- > 0) {
             if (Thread.currentThread().isInterrupted()) break;
@@ -488,7 +501,6 @@ final class ChaosSourceMixer {
                 if (mode != ContentPreference.ALL) {
                     if (preferenceMatches.size() > 4096) preferenceMatches.clear();
                     preferenceMatches.add(mode.value + "|" + item.url);
-                    if (partial != null) partial.accept(Collections.singletonList(item));
                 }
                 if (combined.size() >= batchLimit) break;
             }
@@ -532,7 +544,9 @@ final class ChaosSourceMixer {
         }
         if (onlyHavenCreators.isEmpty() && mode != ContentPreference.ALL) {
             onlyHavenCatalogAttempted = false;
-            categoryRetryAfter = android.os.SystemClock.elapsedRealtime() + 60_000L;
+            // Cancellation is navigation, not evidence of a failing provider.
+            categoryRetryAfter = Thread.currentThread().isInterrupted() ? 0L
+                    : android.os.SystemClock.elapsedRealtime() + 60_000L;
         } else if (!loaded && onlyHavenCreators.isEmpty()) onlyHavenCatalogAttempted = false;
         refillOnlyHavenDeck();
     }

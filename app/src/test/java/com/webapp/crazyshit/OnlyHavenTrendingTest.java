@@ -26,11 +26,24 @@ public class OnlyHavenTrendingTest {
         assertEquals(42, creators.get(0).postCount);
         assertEquals(3, creators.get(0).dmCount);
         assertEquals(
-                "https://img.cum.st/thumbnail/abc123hash/preview.webp",
+                "https://img.cum.st/creator/onlyfans/first/avatar.webp",
                 creators.get(0).imageUrl
         );
         assertEquals("Second", creators.get(1).name);
         assertEquals(7, creators.get(1).postCount);
+    }
+
+    @Test public void base64AvatarPlaceholderIsNeverUsedAsAnAssetPath() throws Exception {
+        String[] metadata = {"U+gFCYJFOtmEd/mICIgFVig=", "", "default"};
+        for (String placeholder : metadata) {
+            String json = "[{\"service\":\"fansly\",\"id\":\"123\",\"avatarThumbhash\":\"" + placeholder + "\"}]";
+            assertEquals("https://configured.example/creator/fansly/123/avatar.webp",
+                    new OnlyHavenRepository().parseCreatorSearchJson(json,
+                            config("https://configured.example/"), "", 1).get(0).imageUrl);
+        }
+        String direct = "[{\"service\":\"fansly\",\"id\":\"123\",\"avatarUrl\":\"https://explicit.example/avatar.webp\"}]";
+        assertEquals("https://explicit.example/avatar.webp", new OnlyHavenRepository().parseCreatorSearchJson(
+                direct, config("https://configured.example/"), "", 1).get(0).imageUrl);
     }
 
     @Test

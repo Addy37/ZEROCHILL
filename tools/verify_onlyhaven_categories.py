@@ -27,10 +27,27 @@ code = "\n".join(get(url) for url in dict.fromkeys(chunks))
 assert "set(`gender`," in code, "Creator category request contract changed"
 for key, token in config["categoryValues"].items():
     assert f"`{token}`" in code, f"Category token no longer exposed: {key}"
-    route = config["routes"]["creatorCategoryApi"].replace("{category}", token).replace("{limit}", "1").replace("{offset}", "0")
+    route = config["routes"]["creatorCategoryApi"].replace("{category}", token).replace("{limit}", "3").replace("{offset}", "0")
     response = json.loads(get(config["baseUrl"] + route))
     creators = response if isinstance(response, list) else next(
         (response[k] for k in ("creators", "items", "results", "data") if isinstance(response.get(k), list)), None)
     assert creators is not None, f"Unrecognized creator response: {key}"
-    print(f"{key}: HTTP 200, {len(creators)} creator(s), response schema recognized")
+    checked = 0
+    for creator in creators:
+        # ThumbHash is placeholder metadata. Verify the actual portrait endpoint,
+        # rather than merely recognizing the JSON array as the earlier audit did.
+        if not creator.get("avatarThumbhash"):
+            continue
+        service = urllib.parse.quote(str(creator["service"]), safe="")
+        identity = urllib.parse.quote(str(creator["id"]), safe="")
+        portrait = config["imageBaseUrl"] + f"creator/{service}/{identity}/avatar.webp"
+        request = urllib.request.Request(portrait, headers={"Referer": config["baseUrl"]})
+        with urllib.request.urlopen(request, timeout=25) as image:
+            data = image.read()
+            assert image.headers.get_content_type().startswith("image/"), f"Non-image portrait: {key}"
+            assert len(data) > 256, f"Empty portrait: {key}"
+        checked += 1
+        break
+    assert checked, f"No creator portrait verified: {key}"
+    print(f"{key}: HTTP 200, {len(creators)} creator(s), portrait HTTP 200/image verified")
 print("OnlyHaven category contract verified")

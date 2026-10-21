@@ -437,24 +437,10 @@ final class OnlyHavenRepository {
         String direct = firstJsonText(row, "avatarUrl", "avatar_url", "imageUrl", "image_url");
         if (direct.startsWith("https://")) return direct;
 
-        String thumbHash = firstJsonText(
-                row,
-                "avatarThumbhash",
-                "avatar_thumbhash",
-                "avatar",
-                "avatar_hash"
-        );
-        if (thumbHash.startsWith("https://")) return thumbHash;
-        String cleanHash = clean(thumbHash)
-                .replaceFirst("^/+", "")
-                .replaceFirst("^data/", "")
-                .replaceFirst("^media/", "")
-                .replaceFirst("^thumbnail/", "");
-        int slash = cleanHash.indexOf('/');
-        if (slash >= 0) cleanHash = cleanHash.substring(0, slash);
-        if (!cleanHash.isEmpty()) {
-            return imageBase(config) + "thumbnail/" + cleanHash + "/preview.webp";
-        }
+        // avatarThumbhash is Base64 placeholder metadata, never a CDN asset key.
+        // The provider serves creator portraits by service/id, like creator headers.
+        String avatar = firstJsonText(row, "avatar");
+        if (avatar.startsWith("https://")) return avatar;
 
         if (!clean(service).isEmpty() && !clean(id).isEmpty()) {
             return imageBase(config) + "creator/" + urlToken(service) + "/" +

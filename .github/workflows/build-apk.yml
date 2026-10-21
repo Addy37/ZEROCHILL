@@ -221,6 +221,8 @@ jobs:
         run: >-
           gradle --no-daemon :app:testDebugUnitTest
           --tests 'com.webapp.crazyshit.ContentPreferenceTest'
+          --tests 'com.webapp.crazyshit.ShitTokPreferenceBufferTest'
+          --tests 'com.webapp.crazyshit.OnlyHavenTrendingTest'
           --tests 'com.webapp.crazyshit.FavoriteArtworkFetchTest'
           --tests 'com.webapp.crazyshit.SettingsCompactSwitchTest'
           --tests 'com.webapp.crazyshit.OnlyFapFavoriteAvatarTest'
