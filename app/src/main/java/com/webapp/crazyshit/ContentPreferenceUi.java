@@ -91,8 +91,12 @@ final class ContentPreferenceUi {
         panel.addView(cancel, new LinearLayout.LayoutParams(-1, -2));
         dialog.setCanceledOnTouchOutside(true);
         dialog.setView(glassPanel, 0, 0, 0, 0);
-        if (dialog.getWindow() != null) dialog.getWindow().setWindowAnimations(
-                ZeroChillMotion.animationsEnabled(context) ? R.style.Animation_ZeroChill_Preference : 0);
+        if (dialog.getWindow() != null) {
+            // Install the decor before assigning zero; otherwise the theme restores its animation.
+            dialog.getWindow().getDecorView();
+            dialog.getWindow().setWindowAnimations(ZeroChillMotion.animationsEnabled(context)
+                    ? R.style.Animation_ZeroChill_Preference : 0);
+        }
         dialog.show();
         android.view.Window window = dialog.getWindow();
         if (window != null) {
