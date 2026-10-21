@@ -30,6 +30,7 @@ internal class LibraryCompose(private val activity: ComponentActivity, private v
     var actionLabel by mutableStateOf("")
     var actionEnabled by mutableStateOf(true)
     var action: Runnable? = null
+    var anchoredAction: Consumer<View>? = null
     var moreLabel by mutableStateOf("")
     var more: Runnable? = null
     private var cards by mutableStateOf(emptyList<Card>())
@@ -37,10 +38,15 @@ internal class LibraryCompose(private val activity: ComponentActivity, private v
     fun install(content: View?) {
         activity.installZeroChillContent {
             ZeroChillScreen(title, activity::finish, actions = {
-                if (actionLabel == "Section options" || actionLabel == "Find creators") {
+                if (actionLabel == "Section options") {
+                    // Keep the approved glass popup anchored to its actual header control.
+                    AndroidView(factory = { context ->
+                        BrowseUi.action(context, "⋮", "Section options") { anchor -> anchoredAction?.accept(anchor) }
+                    }, modifier = Modifier.size(48.dp))
+                } else if (actionLabel == "Find creators") {
                     IconButton(onClick = { action?.run() }, enabled = actionEnabled,
                         modifier = Modifier.size(48.dp).semantics { contentDescription = actionLabel }) {
-                        Text(if (actionLabel == "Section options") "⋮" else "+", fontSize = 24.sp)
+                        Text("+", fontSize = 24.sp)
                     }
                 } else if (actionLabel.isNotEmpty()) TextButton(onClick = { action?.run() }, enabled = actionEnabled,
                     modifier = Modifier.semantics { contentDescription = actionLabel }) { Text("Refresh") }

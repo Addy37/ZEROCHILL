@@ -106,7 +106,7 @@ public class FavoritesActivity extends androidx.activity.ComponentActivity {
         ZeroChillUi.applySystemBars(this);
         presentation = new LibraryCompose(this, sectionTitle(), value -> renderAllPages());
         presentation.setActionLabel("Section options");
-        presentation.setAction(() -> showSectionMenu(getWindow().getDecorView()));
+        presentation.setAnchoredAction(this::showSectionMenu);
         presentation.install(null);
     }
 
