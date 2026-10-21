@@ -32,7 +32,7 @@ for setting in ('animator_duration_scale', 'transition_animation_scale', 'window
 for mode in (0, 1):
     adb('shell', 'am', 'force-stop', 'com.addy37.crazyshitunofficial.dev')
     adb('logcat', '-c')
-    recording = subprocess.Popen(['adb', 'shell', 'screenrecord', '--time-limit', '4',
+    recording = subprocess.Popen(['adb', 'shell', 'screenrecord', '--time-limit', '8',
         '/sdcard/preference-formation.mp4']) if mode == 0 else None
     launch = adb('shell', 'am', 'start', '-W', '-n',
         'com.addy37.crazyshitunofficial.dev/com.webapp.crazyshit.GlassRenderProbeActivity',
@@ -42,7 +42,7 @@ for mode in (0, 1):
     deadline = time.monotonic() + 12
     while True:
         log = adb('logcat', '-d', '-s', 'ZeroChillGlass:I', 'AndroidRuntime:E').decode(errors='replace')
-        if 'preference renderer=lens' in log or 'FATAL EXCEPTION' in log or time.monotonic() >= deadline:
+        if ('preference renderer=lens' in log and 'preference formation complete' in log) or 'FATAL EXCEPTION' in log or time.monotonic() >= deadline:
             break
         time.sleep(.25)
     time.sleep(.5)  # Capture the settled state after the bounded 320ms formation.
@@ -51,7 +51,7 @@ for mode in (0, 1):
     if recording is not None:
         recording.wait(timeout=10)
         adb('pull', '/sdcard/preference-formation.mp4', str(out / 'formation.mp4'))
-    assert 'preference renderer=lens' in log, log
+    assert 'preference renderer=lens' in log and 'preference formation complete' in log, log
     assert 'preference glass fallback' not in log and 'FATAL EXCEPTION' not in log, log
     adb('shell', 'input', 'keyevent', 'KEYCODE_BACK')
 print('Native preference lens rendered on both fixture backgrounds; back dismissal completed.')

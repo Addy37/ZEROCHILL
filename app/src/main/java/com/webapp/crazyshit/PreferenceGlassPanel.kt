@@ -58,6 +58,14 @@ internal class PreferenceGlassPanel(context: Context, private val controls: View
                     controls.alpha = ((formation - .22f) / .78f).coerceIn(0f, 1f)
                     invalidate()
                 }
+                addListener(object : android.animation.AnimatorListenerAdapter() {
+                    override fun onAnimationEnd(animation: android.animation.Animator) {
+                        formation = 1f
+                        controls.alpha = 1f
+                        invalidate()
+                        if (BuildConfig.DEBUG) android.util.Log.i("ZeroChillGlass", "preference formation complete")
+                    }
+                })
                 start()
             }
         }
@@ -114,7 +122,7 @@ internal class PreferenceGlassPanel(context: Context, private val controls: View
     }
 
     override fun onDetachedFromWindow() {
-        forming?.removeAllUpdateListeners(); forming?.cancel(); forming = null
+        forming?.removeAllUpdateListeners(); forming?.removeAllListeners(); forming?.cancel(); forming = null
         observer?.takeIf { it.isAlive }?.removeOnDrawListener(sourceDraw); observer = null
         if (Build.VERSION.SDK_INT >= 31) renderer?.release()
         renderer = null
