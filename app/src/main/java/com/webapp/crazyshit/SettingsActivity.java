@@ -169,6 +169,10 @@ public class SettingsActivity extends Activity {
             );
         }
 
+        LinearLayout content = addGroup(root, "Content");
+        addAction(content, "Content preference", ContentPreference.get(this).label, "",
+                () -> ContentPreferenceUi.choose(this, this::recreate));
+
         LinearLayout playback = addGroup(root, "Playback");
         addAction(
                 playback,
@@ -378,7 +382,7 @@ public class SettingsActivity extends Activity {
         LinearLayout copy = copy(title, subtitle);
         row.addView(copy, new LinearLayout.LayoutParams(0, -2, 1f));
 
-        ZeroChillSwitch toggle = new ZeroChillSwitch(this);
+        ZeroChillSwitch toggle = new ZeroChillSwitch(this, true);
         toggle.setChecked(prefs.getBoolean(key, defaultValue));
         toggle.setContentDescription(title);
         toggle.setMinWidth(dp(48));

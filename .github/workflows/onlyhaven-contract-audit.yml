@@ -2,34 +2,18 @@ name: OnlyHaven category contract audit
 on:
   pull_request:
     branches: [main]
-    paths: ['.github/workflows/onlyhaven-contract-audit.yml']
+    paths:
+      - '.github/workflows/onlyhaven-contract-audit.yml'
+      - 'tools/verify_onlyhaven_categories.py'
+      - 'app/src/main/java/com/webapp/crazyshit/OnlyHavenRepository.java'
+      - 'app/src/main/assets/source_config_defaults.json'
 permissions:
   contents: read
 jobs:
   inspect:
-    if: github.head_ref == 'feature/zerochill-5.1.0'
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v6
-      - name: Inspect current public category contract
-        env:
-          PUBLIC_KEY: ${{ secrets.FEEDBACK_ANON_KEY }}
-        run: |
-          python3 - <<'PY'
-          import urllib.request, re, json
-          def get(url, headers={}):
-              return urllib.request.urlopen(urllib.request.Request(url, headers=headers), timeout=25).read().decode()
-          config=json.loads(get('https://fketutffusxgjxjlckci.supabase.co/functions/v1/app-config', {'apikey':__import__('os').environ['PUBLIC_KEY']}))
-          print('LIVE CONFIG', json.dumps(config))
-          html=get('https://cum.st/creators')
-          print('SCRIPTS', re.findall(r'<script[^>]+src="([^"]+)', html))
-          urls=re.findall(r'(?:src|href)="([^" ]+\.js[^" ]*)', html)
-          seen=set()
-          for path in urls:
-              url=urllib.parse.urljoin('https://cum.st',path)
-              if url in seen: continue
-              seen.add(url)
-              js=get(url)
-              for m in list(re.finditer(r'gender|trans.woman|non.binary', js, re.I))[:40]:
-                  print(url, js[max(0,m.start()-250):m.end()+350])
-          PY
+      - name: Verify current public category contract
+        run: python3 tools/verify_onlyhaven_categories.py

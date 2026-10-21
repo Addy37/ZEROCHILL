@@ -278,11 +278,11 @@ final class SourceConfig {
     private static OnlyHaven parseOnlyHaven(JSONObject value)
             throws ValidationException, JSONException {
         rejectUnknown(value, set(
-                "enabled", "baseUrl", "fallbackDomains", "mediaBaseUrl", "imageBaseUrl", "userAgent", "requestHeaders",
+                "enabled", "baseUrl", "fallbackDomains", "mediaBaseUrl", "imageBaseUrl", "categoryValues", "userAgent", "requestHeaders",
                 "refererOverride", "requestTimeoutMs", "retryCount", "routes", "selectors", "patterns"
         ), "sources.onlyhaven");
         JSONObject routes = requiredObject(value, "routes");
-        rejectUnknown(routes, set("creatorSearch", "creatorSearchApi", "creatorPage", "creatorPostsApi"),
+        rejectUnknown(routes, set("creatorSearch", "creatorSearchApi", "creatorCategoryApi", "creatorPage", "creatorPostsApi"),
                 "sources.onlyhaven.routes");
         JSONObject selectors = requiredObject(value, "selectors");
         rejectUnknown(selectors, set(
@@ -291,7 +291,7 @@ final class SourceConfig {
         JSONObject patterns = requiredObject(value, "patterns");
         rejectUnknown(patterns, set("creatorUrl", "scriptMediaUrl"),
                 "sources.onlyhaven.patterns");
-        return new OnlyHaven(
+        OnlyHaven result = new OnlyHaven(
                 requiredBoolean(value, "enabled"),
                 httpsBase(value, "baseUrl"),
                 httpsList(value, "fallbackDomains"),
@@ -313,6 +313,20 @@ final class SourceConfig {
                 regex(patterns, "creatorUrl"),
                 regex(patterns, "scriptMediaUrl")
         );
+        if (routes.has("creatorCategoryApi")) result.creatorCategoryApiRoute =
+                route(routes, "creatorCategoryApi", set("category", "limit", "offset"));
+        if (value.has("categoryValues")) {
+            JSONObject categories = requiredObject(value, "categoryValues");
+            rejectUnknown(categories, set("women", "men", "trans_women", "trans_men", "non_binary", "groups"), "onlyhaven.categoryValues");
+            Map<String, String> mapping = new LinkedHashMap<>();
+            for (String key : result.categoryValues.keySet()) {
+                String token = requiredString(categories, key, 40);
+                if (!token.matches("[a-z_]+")) throw invalid("Invalid OnlyHaven category value");
+                mapping.put(key, token);
+            }
+            result.categoryValues = Collections.unmodifiableMap(mapping);
+        }
+        return result;
     }
 
     private static BaddieHub parseBaddieHub(JSONObject value)
@@ -696,6 +710,11 @@ final class SourceConfig {
     }
 
     static final class OnlyHaven {
+        // Optional data extension. Older remote snapshots keep these known-good defaults.
+        String creatorCategoryApiRoute = "api/v1/creators?gender={category}&content=imported&n={limit}&o={offset}";
+        Map<String, String> categoryValues = Collections.unmodifiableMap(new LinkedHashMap<>(Map.of(
+                "women", "woman", "men", "man", "trans_women", "trans_woman",
+                "trans_men", "trans_man", "non_binary", "nonbinary", "groups", "group")));
         final boolean enabled;
         final String baseUrl, mediaBaseUrl, imageBaseUrl, userAgent, refererOverride, creatorSearchRoute,
                 creatorSearchApiRoute, creatorPageRoute, creatorPostsApiRoute;

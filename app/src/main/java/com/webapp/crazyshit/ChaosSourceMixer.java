@@ -72,6 +72,13 @@ final class ChaosSourceMixer {
     private boolean catalogLoading;
     private boolean efuktCatalogAttempted;
     private boolean onlyHavenCatalogAttempted;
+    private ContentPreference onlyHavenCatalogPreference = ContentPreference.ALL;
+    private long categoryRetryAfter;
+    private final Set<String> preferenceMatches = java.util.concurrent.ConcurrentHashMap.newKeySet();
+
+    boolean matchesPreference(NativeContentItem item, ContentPreference mode) {
+        return mode != ContentPreference.ALL && preferenceMatches.contains(mode.value + "|" + item.url);
+    }
     private boolean starterPending = true;
     private volatile boolean explorationAllowed;
     private final java.util.concurrent.atomic.AtomicInteger activeFetches = new java.util.concurrent.atomic.AtomicInteger();
@@ -154,6 +161,9 @@ final class ChaosSourceMixer {
                 new ExecutorCompletionService<>(continuityOnly ? CONTINUITY_SOURCE_IO : SOURCE_IO);
         ArrayList<Future<SourceBatch>> work = new ArrayList<>();
         ArrayList<java.util.concurrent.Callable<SourceBatch>> requests = new ArrayList<>();
+        final ContentPreference preference = ContentPreference.get(context);
+        if (explorationAllowed && preference != ContentPreference.ALL)
+            requests.add(provider(BATCH_ONLY_HAVEN, () -> loadOnlyHavenBatch(context, onCandidates)));
         // Fast independent listings enter the bounded three-worker pool before multi-page catalogs.
         requests.add(provider(BATCH_KAOTIC, () -> loadKaoticBatch(context)));
         requests.add(provider(BATCH_FAPELLO, () -> loadFapelloBatch(context)));
@@ -162,7 +172,8 @@ final class ChaosSourceMixer {
         // eFukt remains bounded before the first frame. No new sources are introduced.
         requests.add(provider(BATCH_EFUKT,
                 () -> explorationAllowed ? loadEfuktBatch(context) : efukt.fetchLatest(context)));
-        if (explorationAllowed) requests.add(provider(BATCH_ONLY_HAVEN, () -> loadOnlyHavenBatch(context)));
+        if (explorationAllowed && preference == ContentPreference.ALL)
+            requests.add(provider(BATCH_ONLY_HAVEN, () -> loadOnlyHavenBatch(context)));
         for (java.util.concurrent.Callable<SourceBatch> request : requests) work.add(completions.submit(request));
 
         ArrayList<NativeContentItem> regularItems = new ArrayList<>();
@@ -436,7 +447,13 @@ final class ChaosSourceMixer {
     }
 
     private List<NativeContentItem> loadOnlyHavenBatch(Context context) {
-        ensureOnlyHavenCatalog(context);
+        return loadOnlyHavenBatch(context, null);
+    }
+
+    private List<NativeContentItem> loadOnlyHavenBatch(Context context,
+            java.util.function.Consumer<List<NativeContentItem>> partial) {
+        ContentPreference mode = ContentPreference.get(context);
+        ensureOnlyHavenCatalog(context, mode);
         if (onlyHavenCreators.isEmpty()) return new ArrayList<>();
 
         LinkedHashMap<String, NativeContentItem> combined = new LinkedHashMap<>();
@@ -466,6 +483,11 @@ final class ChaosSourceMixer {
                 NativeContentItem item = candidates.get(i);
                 if (item.url == null || item.url.isEmpty()) continue;
                 combined.putIfAbsent(item.url, item);
+                if (mode != ContentPreference.ALL) {
+                    if (preferenceMatches.size() > 4096) preferenceMatches.clear();
+                    preferenceMatches.add(mode.value + "|" + item.url);
+                    if (partial != null) partial.accept(Collections.singletonList(item));
+                }
                 if (combined.size() >= ONLY_HAVEN_ITEMS_PER_BATCH) break;
             }
         }
@@ -484,13 +506,20 @@ final class ChaosSourceMixer {
         );
     }
 
-    private void ensureOnlyHavenCatalog(Context context) {
-        if (onlyHavenCatalogAttempted) return;
+    private void ensureOnlyHavenCatalog(Context context, ContentPreference mode) {
+        if (onlyHavenCatalogPreference != mode) {
+            onlyHavenCreators.clear(); onlyHavenCreatorDeck.clear();
+            onlyHavenCatalogAttempted = false;
+            onlyHavenCatalogPreference = mode;
+            categoryRetryAfter = 0;
+        }
+        if (onlyHavenCatalogAttempted || (mode != ContentPreference.ALL
+                && android.os.SystemClock.elapsedRealtime() < categoryRetryAfter)) return;
         onlyHavenCatalogAttempted = true;
         boolean loaded = false;
         try {
             for (OnlyHavenRepository.Creator creator :
-                    onlyHaven.fetchTrendingCreators(context, ONLY_HAVEN_TRENDING_CREATORS)) {
+                    onlyHaven.fetchCategoryCreators(context, mode, ONLY_HAVEN_TRENDING_CREATORS)) {
                 if (Thread.currentThread().isInterrupted()) break;
                 if (creator == null || creator.url == null || creator.url.isEmpty()) continue;
                 if (creator.isKnownEmpty()) continue;
@@ -499,7 +528,10 @@ final class ChaosSourceMixer {
             loaded = !Thread.currentThread().isInterrupted();
         } catch (Exception ignored) {
         }
-        if (!loaded && onlyHavenCreators.isEmpty()) onlyHavenCatalogAttempted = false;
+        if (onlyHavenCreators.isEmpty() && mode != ContentPreference.ALL) {
+            onlyHavenCatalogAttempted = false;
+            categoryRetryAfter = android.os.SystemClock.elapsedRealtime() + 60_000L;
+        } else if (!loaded && onlyHavenCreators.isEmpty()) onlyHavenCatalogAttempted = false;
         refillOnlyHavenDeck();
     }
 

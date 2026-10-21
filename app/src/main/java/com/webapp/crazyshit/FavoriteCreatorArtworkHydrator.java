@@ -7,15 +7,8 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 
-/**
- * Restores artwork for account-synced creator favorites after a fresh local install.
- *
- * Account sync intentionally stores stable creator keys, not transient source artwork URLs.
- * This resolver only touches visible favorites that are still missing artwork, then lets the
- * normal CreatorCatalog persist the resolved metadata for later launches.
- */
+/** User-requested sequential artwork repair. Each success is saved before progressing. */
 final class FavoriteCreatorArtworkHydrator {
-    static final int MAX_VISIBLE_FAVORITES = 10;
     private static final int SEARCH_LIMIT = 6;
 
     interface Searcher {
@@ -38,43 +31,65 @@ final class FavoriteCreatorArtworkHydrator {
         this.searcher = searcher;
     }
 
-    void hydrate(Context context, int visibleLimit, Listener listener) {
-        if (context == null || searcher == null) return;
-        Context appContext = context.getApplicationContext();
-        List<CreatorCatalog.FavoriteGroup> favorites = CreatorCatalog.favoriteGroups(appContext);
-        int limit = Math.min(
-                MAX_VISIBLE_FAVORITES,
-                Math.min(Math.max(0, visibleLimit), favorites.size())
-        );
+    interface Progress { void update(Result result); }
 
-        for (int index = 0; index < limit; index++) {
-            if (Thread.currentThread().isInterrupted()) return;
-            CreatorCatalog.FavoriteGroup group = favorites.get(index);
-            if (group == null || group.item == null || !clean(group.item.imageUrl).isEmpty()) {
-                continue;
-            }
+    static final class Result {
+        final int total, completed, restored, unresolved, errors;
+        final boolean cancelled;
+        Result(int total, int completed, int restored, int unresolved, int errors, boolean cancelled) {
+            this.total = total; this.completed = completed; this.restored = restored;
+            this.unresolved = unresolved; this.errors = errors; this.cancelled = cancelled;
+        }
+    }
 
+    // Retained for existing callers/tests. The explicit operation always scans the full collection.
+    void hydrate(Context context, int ignoredLimit, Listener listener) {
+        final int[] last = {0};
+        fetchMissing(context, () -> false, result -> {
+            if (listener != null && result.restored > last[0]) listener.onResolved();
+            last[0] = result.restored;
+        });
+    }
+
+    Result fetchMissing(Context context, java.util.function.BooleanSupplier cancelled, Progress progress) {
+        Context app = context.getApplicationContext();
+        java.util.ArrayList<CreatorCatalog.FavoriteGroup> missing = new java.util.ArrayList<>();
+        java.util.HashSet<String> identities = new java.util.HashSet<>();
+        for (CreatorCatalog.FavoriteGroup group : CreatorCatalog.favoriteGroups(app)) {
+            if (group == null || group.item == null || group.customAvatar || usableImage(group.item.imageUrl)) continue;
+            String identity = CreatorIdentity.key(group.item.searchQuery.isEmpty() ? group.item.title : group.item.searchQuery);
+            if (identities.add(identity)) missing.add(group);
+        }
+        int completed = 0, restored = 0, unresolved = 0, errors = 0;
+        if (progress != null) progress.update(new Result(missing.size(), 0, 0, 0, 0, false));
+        for (CreatorCatalog.FavoriteGroup group : missing) {
+            if (cancelled.getAsBoolean() || Thread.currentThread().isInterrupted()) break;
             String query = clean(group.item.searchQuery);
             if (query.isEmpty()) query = clean(group.item.title);
-            if (query.length() < 2) continue;
-
             try {
-                FapelloRepository.Model model = exactArtworkMatch(
-                        query,
-                        searcher.search(appContext, query, SEARCH_LIMIT)
-                );
-                if (model == null) continue;
-                CreatorCatalog.remember(
-                        appContext,
-                        Collections.singletonList(CreatorCatalog.fromModel(model))
-                );
-                if (listener != null) listener.onResolved();
-            } catch (IOException ignored) {
-                // Keep the text fallback. The normal OnlyFap load may still learn this creator.
-            } catch (RuntimeException ignored) {
-                // One malformed creator must not prevent the remaining favorites from restoring.
-            }
+                FapelloRepository.Model model = query.length() < 2 ? null
+                        : exactArtworkMatch(query, searcher.search(app, query, SEARCH_LIMIT));
+                if (model == null) unresolved++;
+                else {
+                    java.util.ArrayList<NativeContentItem> metadata = new java.util.ArrayList<>();
+                    // Save to the existing raw identity too, so reviewed aliases and old favorites
+                    // receive artwork without changing their favorite keys or grouping data.
+                    for (String key : group.members.keySet()) {
+                        if (!CreatorIdentity.sameReviewedIdentity(key, model.name)
+                                && !CreatorNameMatcher.normalized(key).equals(CreatorNameMatcher.normalized(model.name))) continue;
+                        metadata.add(new NativeContentItem(NativeContentItem.KIND_CREATOR, key,
+                                model.url, model.imageUrl, "", model.url, "", "Fapello", key));
+                    }
+                    metadata.add(CreatorCatalog.fromModel(model));
+                    CreatorCatalog.remember(app, metadata);
+                    restored++;
+                }
+            } catch (IOException | RuntimeException error) { errors++; }
+            completed++;
+            if (progress != null) progress.update(new Result(missing.size(), completed, restored, unresolved, errors, false));
         }
+        return new Result(missing.size(), completed, restored, unresolved, errors,
+                completed < missing.size());
     }
 
     static FapelloRepository.Model exactArtworkMatch(
@@ -85,14 +100,15 @@ final class FavoriteCreatorArtworkHydrator {
         if (target.isEmpty() || models == null) return null;
         for (FapelloRepository.Model model : models) {
             if (model == null || !usableImage(model.imageUrl)) continue;
-            if (target.equals(CreatorNameMatcher.normalized(clean(model.name)))) {
+            if (target.equals(CreatorNameMatcher.normalized(clean(model.name)))
+                    || CreatorIdentity.sameReviewedIdentity(query, model.name)) {
                 return model;
             }
         }
         return null;
     }
 
-    private static boolean usableImage(String value) {
+    static boolean usableImage(String value) {
         String clean = clean(value);
         if (clean.isEmpty()) return false;
         String lower = clean.toLowerCase(Locale.US);

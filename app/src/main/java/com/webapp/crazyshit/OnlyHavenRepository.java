@@ -188,6 +188,31 @@ final class OnlyHavenRepository {
         throw new IOException("OnlyHaven returned no trending creators");
     }
 
+    static String categoryRoute(SourceConfig.OnlyHaven config, ContentPreference preference, int limit, int offset) {
+        String category = config.categoryValues.get(preference.value);
+        if (category == null) throw new IllegalArgumentException("A category preference is required");
+        return config.creatorCategoryApiRoute.replace("{category}", category)
+                .replace("{limit}", String.valueOf(Math.max(1, Math.min(50, limit))))
+                .replace("{offset}", String.valueOf(Math.max(0, offset)));
+    }
+
+    List<Creator> fetchCategoryCreators(Context context, ContentPreference preference, int limit) throws IOException {
+        if (preference == ContentPreference.ALL) return fetchTrendingCreators(context, limit);
+        SourceConfig.OnlyHaven config = config();
+        if (!config.enabled) throw new IOException("OnlyHaven is temporarily unavailable");
+        String route = categoryRoute(config, preference, limit, 0);
+        // No unfiltered fallback: only the provider's category endpoint can classify these results.
+        List<Creator> creators = parseCreatorSearchJson(
+                fetchConfiguredText(context, config, config.baseUrl + route), config, "", Math.max(1, limit));
+        creators.removeIf(Creator::isKnownEmpty);
+        return creators;
+    }
+
+    static NativeContentItem creatorItem(Creator creator) {
+        return new NativeContentItem(NativeContentItem.KIND_CREATOR, creator.name, creator.url,
+                creator.imageUrl, "", creator.url, "", "OnlyHaven", creator.name);
+    }
+
     List<Creator> parseCreatorSearchJson(
             String body,
             SourceConfig.OnlyHaven config,
