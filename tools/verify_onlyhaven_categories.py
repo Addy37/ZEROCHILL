@@ -4,11 +4,19 @@ import pathlib
 import re
 import urllib.parse
 import urllib.request
+import urllib.error
+import time
 
 
 def get(url):
-    with urllib.request.urlopen(url, timeout=25) as response:
-        return response.read().decode()
+    for attempt in range(3):
+        try:
+            with urllib.request.urlopen(url, timeout=25) as response:
+                return response.read().decode()
+        except (urllib.error.URLError, TimeoutError):
+            if attempt == 2:
+                raise
+            time.sleep(attempt + 1)
 
 
 config = json.loads(pathlib.Path("app/src/main/assets/source_config_defaults.json").read_text())["sources"]["onlyhaven"]

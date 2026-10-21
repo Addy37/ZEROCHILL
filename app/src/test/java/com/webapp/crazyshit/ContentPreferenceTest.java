@@ -57,6 +57,40 @@ public class ContentPreferenceTest {
         ShadowAlertDialog.getLatestAlertDialog().getListView().performItemClick(null, ContentPreference.MEN.ordinal(), 0);
         assertEquals(1, changed[0]);
     }
+    @Test public void settingsAndOnlyFapSelectorChangeTheSamePreference() {
+        org.robolectric.android.controller.ActivityController<SettingsActivity> controller =
+                Robolectric.buildActivity(SettingsActivity.class).create();
+        SettingsActivity settings = controller.get();
+        android.view.View title = findText(settings.getWindow().getDecorView(), "Content preference");
+        assertNotNull(title);
+        ((android.view.View) title.getParent().getParent()).performClick();
+        ShadowAlertDialog.getLatestAlertDialog().getListView().performItemClick(null, ContentPreference.MEN.ordinal(), 0);
+        Activity host = Robolectric.buildActivity(Activity.class).setup().get();
+        OnlyFapHubView hub = new OnlyFapHubView(host, new OnlyFapHubView.Listener() {
+            @Override public void onOpenCreator(NativeContentItem creator) {}
+            @Override public void onSearch() {}
+            @Override public void onViewAllFavorites() {}
+        });
+        android.widget.TextView selector = org.robolectric.util.ReflectionHelpers.getField(hub, "preferenceSelector");
+        assertTrue(selector.getText().toString().contains("Men"));
+        selector.performClick();
+        ShadowAlertDialog.getLatestAlertDialog().getListView().performItemClick(null, ContentPreference.WOMEN.ordinal(), 0);
+        assertEquals(ContentPreference.WOMEN, ContentPreference.get(settings));
+        assertTrue(selector.getText().toString().contains("Women"));
+        hub.close(); controller.destroy();
+    }
+    private android.view.View findText(android.view.View view, String text) {
+        if (view instanceof android.widget.TextView && text.contentEquals(((android.widget.TextView) view).getText())) return view;
+        if (view instanceof android.view.ViewGroup) {
+            android.view.ViewGroup group = (android.view.ViewGroup) view;
+            for (int i = 0; i < group.getChildCount(); i++) {
+                android.view.View found = findText(group.getChildAt(i), text);
+                if (found != null) return found;
+            }
+        }
+        return null;
+    }
+
     @Test public void categoryMappingUsesVerifiedProviderTokensAndConfiguredRoute() throws Exception {
         JSONObject document = new JSONObject(new String(Files.readAllBytes(Paths.get("src/main/assets/source_config_defaults.json")), java.nio.charset.StandardCharsets.UTF_8));
         String[] tokens = {"woman", "man", "trans_woman", "trans_man", "nonbinary", "group"};

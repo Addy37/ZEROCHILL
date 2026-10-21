@@ -97,6 +97,11 @@ final class OnlyFapHubView extends FrameLayout {
         }
     }
 
+    private void presentPreference() {
+        if (active && publishedPreference == ContentPreference.get(getContext()))
+            ContentPreferenceUi.present(this, false);
+    }
+
     void setPreferenceCreators(List<NativeContentItem> items) {
         discoverCandidates = safe(items);
         trendingItems = safe(items);
@@ -108,7 +113,7 @@ final class OnlyFapHubView extends FrameLayout {
         loadingLabel.setVisibility(items.isEmpty() ? View.VISIBLE : View.GONE);
         if (!items.isEmpty()) loadStartupThumbnail(items.get(0));
         refreshFavorites();
-        if (active) post(() -> ContentPreferenceUi.present(this, false));
+        if (active) post(this::presentPreference);
     }
 
     private static final String USER_AGENT =
@@ -666,7 +671,7 @@ final class OnlyFapHubView extends FrameLayout {
         shelvesFinished = true;
         if (discoveryPreference != ContentPreference.ALL) return;
         publishedPreference = discoveryPreference;
-        if (active) post(() -> ContentPreferenceUi.present(this, false));
+        if (active) post(this::presentPreference);
         // Select once against final shelves, never against progressively growing exclusions.
         refreshDiscoverShelf();
         refreshHeroCandidates();
@@ -697,7 +702,7 @@ final class OnlyFapHubView extends FrameLayout {
             heroRefreshHandler.removeCallbacksAndMessages(null);
             return;
         }
-        if (publishedPreference == discoveryPreference) post(() -> ContentPreferenceUi.present(this, false));
+        if (publishedPreference == discoveryPreference) post(this::presentPreference);
         requestStartupHero();
         requestHeroCandidates();
         refreshFavorites();

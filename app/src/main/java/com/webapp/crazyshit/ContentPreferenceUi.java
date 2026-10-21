@@ -66,6 +66,9 @@ final class ContentPreferenceUi {
                 : shittok ? "Matching OnlyFap content will be prioritized"
                 : "OnlyFap filtered to your preference";
         overlay.addView(label(context, detail, 14, ZeroChillUi.color(context, R.color.zc_text_secondary)));
+        View previous = surface.findViewWithTag("content_preference_presentation");
+        if (previous != null) surface.removeView(previous);
+        overlay.setTag("content_preference_presentation");
         surface.addView(overlay, new FrameLayout.LayoutParams(-1, -1));
         overlay.setAlpha(0);
         overlay.setScaleX(.94f); overlay.setScaleY(.94f);
