@@ -39,14 +39,88 @@ class ComposeLibraryTest {
             host.recreate()
             compose.onNodeWithText("Alpha").assertExists()
             compose.waitForIdle()
-            val card = find(host.get().window.decorView, "Watch Later Alpha video")
-            assertNotNull(card)
-            card!!.performClick()
+            compose.onNodeWithContentDescription("Watch Later Alpha video").performClick()
             assertEquals("https://fixture.invalid/alpha", shadowOf(host.get()).resultIntent
                 .getStringExtra(FavoritesActivity.EXTRA_SELECTED_URL))
             assertEquals(FavoritesActivity.START_WATCH_LATER, shadowOf(host.get()).resultIntent
                 .getIntExtra(FavoritesActivity.EXTRA_SELECTED_TAB, -1))
             assertEquals(2, FavoriteStore.load(host.get()).size)
+        }
+    }
+
+    @Test fun cardMenuRemovesOnlyChosenItemAndClearRequiresConfirmation() {
+        val intent = Intent().putExtra(FavoritesActivity.EXTRA_START_TAB, FavoritesActivity.START_WATCH_LATER)
+        Robolectric.buildActivity(FavoritesActivity::class.java, intent).setup().use { host ->
+            FavoriteStore.clear(host.get())
+            FavoriteStore.add(host.get(), "Alpha video", "https://fixture.invalid/alpha")
+            FavoriteStore.add(host.get(), "Beta video", "https://fixture.invalid/beta")
+            host.pause().resume()
+            compose.onNodeWithContentDescription("Options for Alpha video").performClick()
+            compose.onNodeWithText("Remove from Watch Later").performClick()
+            assertEquals(listOf("https://fixture.invalid/beta"), FavoriteStore.load(host.get()).map { it.url })
+            compose.onNodeWithContentDescription("Section options").performClick()
+            compose.onNodeWithText("Clear Watch Later").performClick()
+            compose.onNodeWithText("Cancel").performClick()
+            assertEquals(1, FavoriteStore.load(host.get()).size)
+            compose.onNodeWithContentDescription("Section options").performClick()
+            compose.onNodeWithText("Clear Watch Later").performClick()
+            compose.onNodeWithText("Clear").performClick()
+            assertTrue(FavoriteStore.load(host.get()).isEmpty())
+            compose.onNodeWithText("0 videos · Saved").assertExists()
+        }
+    }
+
+    @Test fun metadataRefreshKeepsImageAndReleaseUnregistersThumbnailTarget() {
+        val intent = Intent().putExtra(FavoritesActivity.EXTRA_START_TAB, FavoritesActivity.START_WATCH_LATER)
+        Robolectric.buildActivity(FavoritesActivity::class.java, intent).setup().use { host ->
+            FavoriteStore.clear(host.get())
+            FavoriteStore.add(host.get(), "Alpha video", "https://fixture.invalid/alpha")
+            host.pause().resume()
+            compose.waitForIdle()
+            fun targets() = org.robolectric.util.ReflectionHelpers.getField<MutableMap<String, List<android.widget.ImageView>>>(
+                host.get(), "thumbnailTargets")
+            val image = targets().getValue("https://fixture.invalid/alpha").single()
+            host.pause().resume()
+            compose.waitForIdle()
+            assertSame(image, targets().getValue("https://fixture.invalid/alpha").single())
+            compose.onNodeWithText("Search Watch Later").performTextInput("Missing")
+            compose.waitForIdle()
+            assertTrue(targets().isEmpty())
+            compose.onNodeWithText("Missing").performTextClearance()
+            compose.waitForIdle()
+            assertEquals(1, targets().getValue("https://fixture.invalid/alpha").size)
+        }
+    }
+
+    @Test fun continueCardKeepsProgressAndExistingHistoryRemoval() {
+        val intent = Intent().putExtra(FavoritesActivity.EXTRA_START_TAB, FavoritesActivity.START_CONTINUE)
+        Robolectric.buildActivity(FavoritesActivity::class.java, intent).setup().use { host ->
+            PlaybackHistoryStore.clear(host.get())
+            PlaybackHistoryStore.record(host.get(), "In progress", "https://fixture.invalid/progress", "",
+                60_000, 180_000, false, true)
+            host.pause().resume()
+            compose.onNodeWithText("2:00 left").assertExists()
+            compose.onNodeWithText("33% watched").assertExists()
+            compose.onNodeWithContentDescription("Options for In progress").performClick()
+            compose.onNodeWithText("Remove from Continue Watching").performClick()
+            assertTrue(PlaybackHistoryStore.load(host.get()).isEmpty())
+            compose.onNodeWithText("0 videos · In progress").assertExists()
+        }
+    }
+
+    @Test @Config(qualifiers = "w740dp-h360dp-land-mdpi")
+    fun savedCardKeepsItsMenuAndTitleAtLargeFonts() {
+        org.robolectric.RuntimeEnvironment.setFontScale(2f)
+        val title = "A saved video with a longer title"
+        val intent = Intent().putExtra(FavoritesActivity.EXTRA_START_TAB, FavoritesActivity.START_WATCH_LATER)
+        Robolectric.buildActivity(FavoritesActivity::class.java, intent).setup().use { host ->
+            FavoriteStore.clear(host.get())
+            FavoriteStore.add(host.get(), title, "https://fixture.invalid/large-font")
+            host.pause().resume()
+            saveRender("compose-library-large-font", host.get().window.decorView)
+            compose.onNodeWithText(title, useUnmergedTree = true).assertIsDisplayed()
+            compose.onNodeWithContentDescription("Options for $title").performClick()
+            compose.onNodeWithText("Remove from Watch Later").assertIsDisplayed()
         }
     }
 
