@@ -56,9 +56,7 @@ final class SearchPanel {
     private SearchGlassLayout shell;
     private LinearLayout resultsControls;
     private GlassHeaderView resultSurface, favoriteSurface;
-    private android.animation.ValueAnimator resultsAnimator;
     private float morphProgress;
-    private boolean resultShown;
     private ViewPageBackdrop emptyBackdrop;
 
     void setEmptyBackdrop(ViewPageBackdrop backdrop) {
@@ -201,6 +199,7 @@ final class SearchPanel {
         resultSurface = new GlassHeaderView(activity, new FrameLayout(activity), 24f, true);
         resultsControls = new LinearLayout(activity);
         resultsControls.setOrientation(LinearLayout.VERTICAL);
+        resultsControls.setBackgroundColor(Color.BLACK);
         resultsControls.setClipChildren(true);
         resultsControls.setPadding(0, 0, 0, dp(14));
         resultsControls.setClipToPadding(false);
@@ -244,14 +243,17 @@ final class SearchPanel {
         searchAll = BrowseUi.action(activity, "Search all results  ›", "Search all results", v -> runSearch());
         searchAll.setBackgroundColor(Color.TRANSPARENT);
         searchAll.setTextSize(14f);
+        searchAll.setMinHeight(dp(48));
+        searchAll.setTextColor(UiPalette.PRIMARY);
         searchAll.setVisibility(View.GONE);
-        resultsControls.addView(searchAll, new LinearLayout.LayoutParams(-1, dp(48)));
+        resultsControls.addView(searchAll, new LinearLayout.LayoutParams(-1, -2));
         if (!bunkrOnly) {
             filterBar = buildFilters();
-            resultsControls.addView(filterBar, new LinearLayout.LayoutParams(-1, dp(44)));
+            resultsControls.addView(filterBar, 0, new LinearLayout.LayoutParams(-1, -2));
         }
         searchState = BrowseUi.text(activity, "", 11, BrowseUi.MUTED);
-        searchState.setPadding(dp(14), dp(4), dp(14), dp(8));
+        searchState.setPadding(dp(14), dp(8), dp(14), dp(8));
+        searchState.setMinHeight(dp(48));
         searchState.setVisibility(View.GONE);
         searchState.setOnClickListener(v -> {
             if (activeQuery.isEmpty()) return;
@@ -349,31 +351,12 @@ final class SearchPanel {
 
     private void updateContentVisibility() {
         if (content == null || input == null || resultsControls == null || closing) return;
-        boolean show = !showingRecent() || !RecentSearchStore.load(activity).isEmpty();
         updateResultSize();
-        if (show) content.setVisibility(View.VISIBLE);
-        if (show == resultShown) {
-            if (!show) { content.setVisibility(View.INVISIBLE); resultSurface.setVisibility(View.INVISIBLE); resultsControls.setVisibility(View.INVISIBLE); resultSurface.setAlpha(0f); resultsControls.setAlpha(0f); }
-            return;
-        }
-        resultShown = show;
-        if (resultsAnimator != null) resultsAnimator.cancel();
+        content.setVisibility(View.VISIBLE);
         resultSurface.setVisibility(View.VISIBLE);
         resultsControls.setVisibility(View.VISIBLE);
-        resultsAnimator = android.animation.ValueAnimator.ofFloat(resultSurface.getAlpha(), show ? 1f : 0f);
-        resultsAnimator.setDuration(ZeroChillMotion.animationsEnabled(activity) ? 180L : 0L);
-        resultsAnimator.addUpdateListener(a -> {
-            float amount = (float) a.getAnimatedValue();
-            resultSurface.setAlpha(amount); resultsControls.setAlpha(amount);
-            float rise = dp(8) * (1f - amount);
-            resultSurface.setTranslationY(rise); resultsControls.setTranslationY(rise);
-        });
-        resultsAnimator.addListener(new android.animation.AnimatorListenerAdapter() {
-            @Override public void onAnimationEnd(android.animation.Animator a) {
-                if (!resultShown) { content.setVisibility(View.INVISIBLE); resultSurface.setVisibility(View.INVISIBLE); resultsControls.setVisibility(View.INVISIBLE); }
-            }
-        });
-        resultsAnimator.start();
+        resultSurface.setAlpha(1f);
+        resultsControls.setAlpha(1f);
     }
 
     private View buildSearchRow() {
@@ -441,7 +424,7 @@ final class SearchPanel {
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
         row.setPadding(dp(10), dp(4), dp(10), dp(4));
-        scroll.addView(row, new HorizontalScrollView.LayoutParams(-2, -1));
+        scroll.addView(row, new HorizontalScrollView.LayoutParams(-2, -2));
 
         addFilter(row, "All", Filter.ALL);
         addFilter(row, "Videos", Filter.VIDEOS);
@@ -459,6 +442,7 @@ final class SearchPanel {
         chip.setText(label);
         chip.setTag(value);
         chip.setTextSize(13.5f);
+        chip.setMinHeight(dp(48));
         chip.setGravity(Gravity.CENTER);
         chip.setPadding(dp(15), 0, dp(15), 0);
         chip.setOnClickListener(v -> {
@@ -469,7 +453,7 @@ final class SearchPanel {
             renderResults();
             results.scrollToPosition(0);
         });
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-2, dp(36));
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-2, -2);
         params.setMargins(dp(4), 0, dp(4), 0);
         row.addView(chip, params);
         filterViews.add(chip);
@@ -960,7 +944,6 @@ final class SearchPanel {
         if (morphAnimator != null) { morphAnimator.removeAllListeners(); morphAnimator.cancel(); }
         if (!expanding) {
             BrowseUi.hideKeyboard(activity, input);
-            if (resultsAnimator != null) { resultsAnimator.removeAllListeners(); resultsAnimator.cancel(); }
         }
         if (expanding && morphProgress == 0f) { header.setAlpha(0f); favoriteSurface.setAlpha(0f); }
         if (expanding) {
@@ -1056,7 +1039,6 @@ final class SearchPanel {
     void close() {
         destroyed = true;
         if (morphAnimator != null) { morphAnimator.removeAllListeners(); morphAnimator.cancel(); }
-        if (resultsAnimator != null) { resultsAnimator.removeAllListeners(); resultsAnimator.cancel(); }
         generation++;
         searchHandler.removeCallbacksAndMessages(null);
         if (recent != null) recent.close();

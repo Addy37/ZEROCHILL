@@ -21,7 +21,7 @@ import static org.junit.Assert.*;
 @Config(application = Application.class, sdk = 35)
 public class SearchPaneGeometryTest {
     @Test @GraphicsMode(GraphicsMode.Mode.NATIVE)
-    public void overflowingContentIsClippedToGlassOutlineIncludingTranslatedCorners() {
+    public void opaqueSearchClipsOverflowToItsFullWidthViewport() {
         var host = Robolectric.buildActivity(Activity.class).create().start().resume().visible();
         Activity activity = host.get();
         SearchGlassOwner owner = new SearchGlassOwner(activity);
@@ -41,15 +41,15 @@ public class SearchPaneGeometryTest {
         for (int ime : new int[]{0, 160, 300}) {
             ViewCompat.dispatchApplyWindowInsets(shell, insets(ime));
             layout(shell);
-            pane.setTranslationY(4f); overflowing.setTranslationY(4f);
+
             assertAligned(pane, overflowing);
-            assertSame(pane.getOutlineProvider(), overflowing.getOutlineProvider());
-            assertTrue(overflowing.getClipToOutline());
+            assertFalse(overflowing.getClipToOutline());
+            assertEquals(400, overflowing.getWidth());
             Bitmap image = Bitmap.createBitmap(400, 800, Bitmap.Config.ARGB_8888);
             shell.draw(new Canvas(image));
             assertEquals(Color.MAGENTA, image.getPixel(pane.getLeft() + pane.getWidth()/2, pane.getTop() + 40));
-            assertNotEquals(Color.MAGENTA, image.getPixel(pane.getLeft(), (int)pane.getY()));
-            assertNotEquals(Color.MAGENTA, image.getPixel(pane.getLeft(), (int)pane.getY() + pane.getHeight() - 1));
+            assertEquals(Color.MAGENTA, image.getPixel(pane.getLeft(), (int)pane.getY()));
+            assertEquals(Color.MAGENTA, image.getPixel(pane.getLeft(), (int)pane.getY() + pane.getHeight() - 1));
             assertNotEquals(Color.MAGENTA, image.getPixel(pane.getLeft() + pane.getWidth()/2, (int)pane.getY() + pane.getHeight() + 2));
             assertNotEquals(Color.MAGENTA, image.getPixel(pane.getLeft() + pane.getWidth()/2, pane.getTop() - 2));
             image.recycle();
@@ -83,7 +83,7 @@ public class SearchPaneGeometryTest {
             int gap = BrowseUi.dp(host.get(), 12) - Math.min(BrowseUi.dp(host.get(), 4), Math.max(0, bottom - 20));
             assertEquals(800 - Math.max(20, bottom) - gap, pane.getBottom());
             assertEquals(initialHeight - pane.getHeight(), Math.max(20, bottom) - 20 + gap - BrowseUi.dp(host.get(), 12));
-            assertTrue(rows.getClipToOutline());
+            assertFalse(rows.getClipToOutline());
         }
         callback.onEnd(animation); layout(shell);
         assertEquals(top, pane.getTop()); assertAligned(pane, rows);

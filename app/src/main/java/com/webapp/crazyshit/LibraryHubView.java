@@ -716,34 +716,8 @@ final class LibraryHubView extends FrameLayout {
         section.setOrientation(LinearLayout.VERTICAL);
         section.setTag(title);
 
-        LinearLayout headingRow = new LinearLayout(activity);
-        headingRow.setOrientation(LinearLayout.HORIZONTAL);
-        headingRow.setGravity(Gravity.CENTER_VERTICAL);
-        headingRow.setPadding(dp(4), 0, dp(2), 0);
-
-        LinearLayout copy = new LinearLayout(activity);
-        copy.setOrientation(LinearLayout.VERTICAL);
-
-        TextView heading = text(title, 20f,
-                ZeroChillUi.color(activity, R.color.zc_text_primary));
-        ZeroChillTypography.apply(heading, ZeroChillTypography.Role.SECTION);
-        heading.setContentDescription(title);
-        copy.addView(heading);
-
-        headingRow.addView(copy, new LinearLayout.LayoutParams(0, -2, 1f));
-
-        TextView viewAll = text(actionLabel, 13f, UiPalette.TEXT_SECONDARY);
-        viewAll.setTypeface(null, android.graphics.Typeface.BOLD);
-        viewAll.setGravity(Gravity.CENTER);
-        viewAll.setPadding(dp(12), dp(10), dp(8), dp(10));
-        viewAll.setClickable(true);
-        viewAll.setFocusable(true);
-        viewAll.setContentDescription(actionLabel + " " + title);
-        ZeroChillMotion.installPressFeedback(viewAll);
-        viewAll.setOnClickListener(v -> action.run());
-        headingRow.addView(viewAll, new LinearLayout.LayoutParams(-2, dp(48)));
-
-        section.addView(headingRow, new LinearLayout.LayoutParams(-1, -2));
+        section.addView(LibrarySectionCompose.create(activity, title, actionLabel, action),
+                new LinearLayout.LayoutParams(-1, -2));
 
         HorizontalScrollView scroll = new HorizontalScrollView(activity);
         scroll.setHorizontalScrollBarEnabled(false);

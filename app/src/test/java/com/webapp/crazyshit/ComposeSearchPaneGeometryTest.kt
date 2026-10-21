@@ -67,6 +67,11 @@ class ComposeSearchPaneGeometryTest {
                     compose.waitForIdle()
                     layout(panel.view)
                     compose.waitForIdle()
+                    assertTrue("Keyboard must leave a useful results viewport", list.height >= 200)
+                    assertEquals(400, rows.width)
+                    ViewCompat.dispatchApplyWindowInsets(panel.view, insets)
+                    layout(panel.view)
+                    assertTrue(rows.bottom <= 800 - maxOf(20, ime))
                     val last = compose.onNodeWithContentDescription("Creator 19, OnlyFap creator")
                         .assertIsDisplayed().fetchSemanticsNode().boundsInRoot
                     assertTrue(last.bottom <= list.height)
@@ -88,6 +93,58 @@ class ComposeSearchPaneGeometryTest {
                 }
             } finally { panel.close(); owner.close() }
         }
+    }
+
+    @Test fun globalFiltersAndStatusLeaveUsefulKeyboardViewportAtDoubleFont() {
+        org.robolectric.RuntimeEnvironment.setFontScale(2f)
+        try {
+            Robolectric.buildActivity(Activity::class.java).setup().use { host ->
+                val owner = SearchGlassOwner(host.get())
+                val panel = SearchPanel(host.get(), Intent(), true) { }
+                try {
+                    panel.create(null)
+                    host.get().setContentView(panel.view)
+                    panel.field().setText("fixture")
+                    ReflectionHelpers.callInstanceMethod<Unit>(panel, "cancelSearchWork")
+                    ReflectionHelpers.setField(panel, "activeQuery", "fixture")
+                    ReflectionHelpers.setField(panel, "previewMode", false)
+                    ReflectionHelpers.setField(panel, "videos", listOf(NativeContentItem(
+                        NativeContentItem.KIND_MEDIA, "Fixture video", "https://fixture.invalid/video", "", "", "", "")))
+                    ReflectionHelpers.callInstanceMethod<Unit>(panel, "renderResults")
+                    ReflectionHelpers.callInstanceMethod<Unit>(panel, "showRecentSearches")
+                    ViewCompat.dispatchApplyWindowInsets(panel.view, WindowInsetsCompat.Builder()
+                        .setInsets(WindowInsetsCompat.Type.systemBars(), Insets.of(0, 24, 0, 20))
+                        .setInsets(WindowInsetsCompat.Type.ime(), Insets.of(0, 0, 0, 300)).build())
+                    layout(panel.view)
+                    compose.waitForIdle()
+                    layout(panel.view)
+                    val viewport = ReflectionHelpers.getField<SearchResultsCompose>(panel, "results").view
+                    ViewCompat.dispatchApplyWindowInsets(panel.view, WindowInsetsCompat.Builder()
+                        .setInsets(WindowInsetsCompat.Type.systemBars(), Insets.of(0, 24, 0, 20))
+                        .setInsets(WindowInsetsCompat.Type.ime(), Insets.of(0, 0, 0, 300)).build())
+                    layout(panel.view)
+                    val rows = ReflectionHelpers.getField<View>(panel, "resultsControls")
+                    assertTrue("Results must stop above the keyboard", rows.bottom <= 500)
+                    assertTrue("Large text and keyboard must leave a useful result area", viewport.height >= 160)
+                    val filters = ReflectionHelpers.getField<View>(panel, "filterBar")
+                    val content = ReflectionHelpers.getField<View>(panel, "content")
+                    assertTrue(filters.bottom <= content.top)
+                    compose.onNodeWithText("Fixture video").assertIsDisplayed()
+                    ViewCompat.dispatchApplyWindowInsets(panel.view, WindowInsetsCompat.Builder()
+                        .setInsets(WindowInsetsCompat.Type.systemBars(), Insets.of(0, 24, 0, 20))
+                        .setInsets(WindowInsetsCompat.Type.ime(), Insets.of(0, 0, 0, 300)).build())
+                    layout(panel.view)
+                    assertTrue(rows.bottom <= 500)
+                    val image = android.graphics.Bitmap.createBitmap(400, 800, android.graphics.Bitmap.Config.ARGB_8888)
+                    panel.view.draw(android.graphics.Canvas(image))
+                    val dir = java.io.File("build/reports/visual-tests").apply { mkdirs() }
+                    java.io.File(dir, "compose-search-keyboard-double-font.png").outputStream().use {
+                        image.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it)
+                    }
+                    image.recycle()
+                } finally { panel.close(); owner.close() }
+            }
+        } finally { org.robolectric.RuntimeEnvironment.setFontScale(1f) }
     }
 
     private fun layout(view: View) {

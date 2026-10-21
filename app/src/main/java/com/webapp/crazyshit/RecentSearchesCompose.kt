@@ -44,6 +44,10 @@ internal class RecentSearchesCompose(activity: Activity, private val open: Consu
                             }) { Text("Clear all") }
                         }
                     }
+                    if (queries.isEmpty()) item(key = "empty") {
+                        Text("Search creators or videos", color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(16.dp))
+                    }
                     items(queries, key = { it }) { query ->
                         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                             Text(query, fontSize = 17.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
