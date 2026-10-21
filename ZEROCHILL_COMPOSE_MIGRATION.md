@@ -11,7 +11,7 @@ Development branch: `feature/zerochill-compose-6.0`. No release/version change y
 - Feedback conversation: Compose message bubbles, sender/status/read receipts, pull-to-refresh and reply input. Retains the existing thread/reply APIs and read tracking. Replies survive rotation, and a refresh started before a successful reply cannot replace the subsequent refreshed conversation.
 
 - Standalone Library hub: fully Compose action list with existing destination/result routing.
-- Continue Watching, History and Watch Later: Compose header/search/count/empty state and keyed lazy grid. Existing native media cards, thumbnail resolution, menus, clear confirmations and selection extras remain embedded.
+- Continue Watching, History and Watch Later: Compose header/search/count/empty state, keyed lazy grid, media cards, progress, anchored menus and clear confirmations. Existing thumbnail resolution/cache/fades and selection extras remain unchanged; only image delivery stays in ImageViews.
 - Favorite creators, Downloads and Liked Videos: Compose headers/actions/query/status/empty states with existing optimized RecyclerViews. Creator avatar crops, unread badges, drag-to-merge, download polling/actions and account-scoped likes refresh/pagination are retained.
 - Main Library hub: Compose vertical viewport with existing profile/social header and bounded media rails. The host supplies lifecycle owners for legacy Activities, relays navigation-scroll events and saves/restores its vertical position.
 
@@ -25,12 +25,12 @@ Development branch: `feature/zerochill-compose-6.0`. No release/version change y
 ## Hybrid
 
 - Settings choices, confirmations and diagnostics now use Compose. Platform backup pickers and the existing backup/updater-owned progress and result overlays remain native.
-- Main shell (`NativeMainActivity`) and Search glass/header/query/filter/loading/status controls remain View/Compose-glass hybrids. Search results now use a Compose lazy viewport around approved native row binders; recent searches are Compose.
+- Main shell (`NativeMainActivity`) and Search glass/header/query/filter/loading/status controls remain View/Compose-glass hybrids. Search results, section headings and creator favorite actions use keyed Compose rows with immutable presentation snapshots; recent searches are Compose. Existing adapters retain ordering and image resolution, but their native row binders are no longer mounted by the viewport.
 
 ## Remaining inventory
 
-- Library native islands: profile/social header, bounded media rails, media cards/menus and creator/download/likes RecyclerView rows. Their surrounding presentation now uses Compose.
-- Search native islands: query/focus/keyboard shell, filter/footer/three-dot loader and creator/global result row binders. Provider controller and ordering/fade policies remain unchanged.
+- Library native islands: profile/social header, bounded media rails and their media cards/menus, and creator/download/likes RecyclerView rows. Standalone saved-video cards and menus are Compose. Their surrounding presentation now uses Compose.
+- Search native islands: query/focus/keyboard/glass shell and filter/footer/three-dot loader. Creator/global result presentation is Compose with native image delivery. Legacy row binders remain in the data/image adapters for existing callers and regression coverage; the Search viewport does not instantiate them. Provider controller and ordering/fade policies remain unchanged.
 - Content: `OnlyFapHubView`, `ShowsHubView`, `BunkrGalleryActivity`, native feed/detail screens and creator media grids.
 - Accounts/social: account/security/profile, messages/inbox, social settings and notification screens.
 - Startup: splash/wizard and account announcement surfaces.
@@ -98,7 +98,7 @@ The saved-collection overflow retains its native header anchor so the existing g
 
 The offline full run exposed those remaining native-inset/legacy-overlay integration cases. After fixing them, a fresh non-incremental focused run passed 37 tests covering navigation, learned creator searches, Compose Library state/geometry and progressive Search. Generated intermediate outputs had retained a deleted combined test class; they were archived before this fresh run. Final validation uses fresh outputs and exact source counts, rather than the stale intermediate counts.
 
-## Current continuation validation
+## Previous continuation validation (ef5d0501)
 
 Application source: `ef5d0501ace64ebd953dc62bd13d17979790e19d` on `feature/zerochill-compose-6.0`, a descendant of approved main `da9b00588e6ecc370327cad75209e757475c2370`.
 
@@ -128,8 +128,42 @@ Application source: `ef5d0501ace64ebd953dc62bd13d17979790e19d` on `feature/zeroc
 - Search: fast query changes, results appearing progressively, ongoing/new-result fades, recent rerun/remove/clear, round placeholders, favorite actions, keyboard/focus, rotation and error/retry behavior.
 - Upgrade retention: check existing favorites, likes, history, downloads, settings, backup compatibility and signed-in account on the physical device. Automated package upgrade checks do not validate every user collection.
 
+## Stage 1 saved-video cards and Search rows (October 21, 2026)
+
+Application source: `96d391e4127bcbe3a3cf5ec18262ddf7bc3eb419`, continued from verified branch head `b60baf1565d6df97962caa95dfe2918b8b442ff7`. Library checkpoint: `6d81f94c7418dde0ff6ed8d7fc4ddf7f34a36ccb`. These checkpoints are part of PR #320, not a new migration branch.
+
+- Continue Watching, History and Watch Later now render card titles, details, progress, play affordances, overflow menus and clear confirmation in Compose. The existing stores, deletion behavior, query matching, display-title policy and playback result extras remain authoritative.
+- Saved-card thumbnail targets now live until Compose releases the image, rather than unregistering on a temporary detach. Metadata/progress refreshes retain the same image view and request. The controller still resolves thumbnails, applies existing headers/cache/fades and closes its workers.
+- A large-font render caught overlap between titles and the play affordance. The card now measures its title and play area together; the decorative icon uses a fixed-size vector. No collection format changes are involved.
+- Search section headings, creator/global rows and favorite actions now render in Compose from immutable item snapshots. Mutable adapter positions no longer determine a later frame's row binding. Existing adapters still own ordering, direct/resolved image loading, cache and thumbnail payloads; their legacy native rows are not mounted by this viewport.
+- Stable row keys retain images and per-query entrance animations across progressive provider updates. Thumbnail payloads update only the image request. Creator prewarming/cancellation policies, row typography, round avatars/placeholders, open/long-press/favorite actions and scroll Bundle keys remain intact. A single preference observer keeps creator stars synchronized and unregisters on close.
+- Library/Search remain a partial Stage 1 checkpoint. Main Library profile/media rails and their cards, creator drag-to-merge grid, download grid/actions and likes list remain native. Search query/focus/keyboard/glass/filter/footer/loading controls remain native. Account/Profile/Inbox presentation was inspected but is unchanged; Stage 2 has not started.
+
+Validation for this application source:
+
+- Full local debug suite: 905 tests, zero failures/errors, one existing live-smoke skip.
+- Full local release suite: 905 tests, zero failures/errors, one existing live-smoke skip.
+- Both local debug and release APK builds passed. These default-key local builds are not the production-signed handoff.
+- Lint audit: 321 errors and 390 warnings, matching the previous checkpoint. No findings in the migrated Compose files or added presentation code. Four existing warnings remain in unchanged Java image/legacy-row code in the touched adapters. The combined Gradle invocation exits nonzero only at lint, after both suites and both builds finish.
+- Seven additional tests cover saved-card removal/clear/cancel, stable image lifetime, continue progress/removal, 200% fonts, mixed provider insertion plus metadata changes, favorite/long-press persistence, and new-query entrances. Existing query/cancellation/order, saved collections, navigation, scroll state and account isolation regressions also ran.
+- The last-row/footer/IME regression moved from a native descendant lookup to a Compose semantics fixture with a matching 400x800 window. It retains all pane alignment, footer reachability, bottom inset, clipping and scroll-end assertions, and adds actual displayed-result verification. Focused final Compose checks passed all 16 tests.
+- Saved-card normal and large-font renders were inspected. Physical-device glass, keyboard, navigation, animation/scroll smoothness and real user-data retention still need device testing.
+- Initial local runtime retrieval failed before tests executed; cached SDK jars and a scratch-only offline test-JVM agent resolved it. The first full suite then found the obsolete native Search lookup; its migrated test and the final complete suites pass. No backend tooling or production HTTP requests were needed by the final local tests.
+
+- [Build Android APK 39588408837](https://github.com/Addy37/ZEROCHILL/actions/runs/39588408837) passed for this application source, including both complete suites and APK builds. Its lint audit remains non-blocking historical debt.
+- [Signed Upgrade Candidate 39588408798](https://github.com/Addy37/ZEROCHILL/actions/runs/39588408798) passed both complete suites, signed debug/release builds, package/version/certificate checks and Android 15 in-place installation of the production-package sibling over stable 5.0.1. Android retained its first-install record. This does not verify every user collection.
+- The requested handoff is the signed **Beta**, not the production-package upgrade candidate. File: `ZeroChill-Beta-feature-zerochill-compose-6.0-96d391e.apk`; version `5.0.2-zerochill-preview-dev` / `5000002`; existing Beta package `com.addy37.crazyshitunofficial.dev`; launcher label `ZeroChill Beta`. Beta installs alongside the regular app and uses separate app data. No package/signing configuration was changed to produce it.
+- Beta APK SHA-256: `1becbf5739482b3764eeda53039a313c40512d71a2b3fa99b3bd7d0bf947eabf`.
+- Signing certificate SHA-256: `04abf84b3d468cbb1a562dea83b0007e686b2e56018cce911223963faea51356`.
+- Downloaded Beta archive digest `c0ef358d4a73c37f5a6a5d4f17d61ae20a2db3e84a170f7e4bb1bfddcec4a2db`, contained APK checksum, signature, label/package/version and embedded branch/source were checked locally before handoff. Embedded source is exactly `96d391e4127bcbe3a3cf5ec18262ddf7bc3eb419` on `feature/zerochill-compose-6.0`.
+- The final documentation-only commit uses `[skip ci]` to avoid repeating completed validation. The certified Beta's application source remains the application checkpoint above.
+
+No new frame-time measurements are available because local `/dev/kvm` is absent. The preserved approved-main comparison remains inconclusive, and this checkpoint makes no performance-parity claim.
+
+No application-ID, signing configuration, persisted key/format, collection/account data, schema, backend, remote-config, content-provider or playback-internal changes. No final production version bump, merge, tag or publication.
+
 ## Next recommended batch
 
-After physical approval, finish native media cards/menus, the creator/download/likes grids, Library profile/media rails and remaining Search controls/row presentation as small batches. Then move to profile/account/inbox presentation. Keep ShitTok, PlayerActivity/Media3, Shows playback, providers, networking, Supabase and remote configuration outside those UI batches.
+After physical approval, finish the creator/download/likes grids, Library profile/media rails and their cards/menus, and remaining Search controls as small batches. Then move to profile/account/inbox presentation. Keep ShitTok, PlayerActivity/Media3, Shows playback, providers, networking, Supabase and remote configuration outside those UI batches.
 
 This remains a draft 6.0 development checkpoint. No merge, release, final 6.0 version bump, identity/signing change, persistent-format/schema migration or backend/remote-config deployment is authorized by this checkpoint.
