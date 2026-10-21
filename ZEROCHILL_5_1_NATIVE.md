@@ -85,6 +85,8 @@ their existing behavior. Filtered heroes do not overwrite All-content hero memor
 Changing modes clears the previous hero set and future candidates, cancels tracked
 startup/selection/resolution/discovery work and advances the existing generation.
 Late callbacks cannot mutate the new generation, including requested-creator keys.
+The generation is checked before deferred-queue insertion as well as execution,
+so stale work cannot replace a coalesced task for the current category.
 An in-flight provider request may still take its existing timeout to stop.
 
 The preference pill now sits below the creator description and above View Gallery.

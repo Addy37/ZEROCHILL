@@ -1000,6 +1000,16 @@ final class OnlyFapHubView extends FrameLayout {
         heroCard.setContentDescription("Open " + candidate.creator.title + " gallery");
     }
 
+    /** Reject stale work before coalescing, so it cannot replace a new generation's queue entry. */
+    private void postHeroWork(int generation, String key, Runnable task) {
+        post(() -> {
+            if (closed || generation != heroGeneration) return;
+            work.schedule(key, () -> {
+                if (!closed && generation == heroGeneration) task.run();
+            });
+        });
+    }
+
     private void requestHeroCandidates() {
         if (closed || !active || heroSelectionLoading || heroResolveInFlight > 0 ||
                 heroItems.size() >= HERO_MAX_ITEMS) return;
@@ -1021,7 +1031,7 @@ final class OnlyFapHubView extends FrameLayout {
                     discoveryFirst, finished ? CreatorCatalog.all(getContext()) : Collections.emptyList(),
                     CreatorFavoriteStore.names(getContext()), trending, hot, popular,
                     OnlyFapHeroHistory.recent(getContext()), HERO_SEARCH_LIMIT);
-            post(() -> work.schedule("hero-selection", () -> {
+            postHeroWork(generation, "hero-selection", () -> {
                 if (closed || generation != heroGeneration) return;
                 heroSelectionLoading = false;
                 if (!active) return;
@@ -1033,7 +1043,7 @@ final class OnlyFapHubView extends FrameLayout {
                     resolveHeroAsync(creator);
                 }
                 if (finished && replacements.isEmpty()) requestMoreHeroDiscovery();
-            }));
+            });
         });
     }
 
@@ -1075,7 +1085,7 @@ final class OnlyFapHubView extends FrameLayout {
 
             final List<NativeContentItem> result = discovered;
             final boolean pageFailed = failed;
-            post(() -> work.schedule("hero-discovery", () -> {
+            postHeroWork(generation, "hero-discovery", () -> {
                 if (closed || generation != heroGeneration) return;
                 heroDiscoveryLoading = false;
                 if (pageFailed) {
@@ -1088,7 +1098,7 @@ final class OnlyFapHubView extends FrameLayout {
                     heroDiscoveryExhausted = result.isEmpty();
                 }
                 requestHeroCandidates();
-            }));
+            });
         });
     }
 
@@ -1267,11 +1277,11 @@ final class OnlyFapHubView extends FrameLayout {
             List<OnlyFapHeroPolicy.Artwork> choices =
                     OnlyFapHeroPolicy.distinctArtwork(portraitArtwork);
             boolean interruptedByNavigation = !active;
-            post(() -> work.schedule("hero-resolution", () -> {
+            postHeroWork(generation, "hero-resolution", () -> {
                 if (closed || generation != heroGeneration) return;
                 if (interruptedByNavigation) requestedHeroCreators.remove(CreatorFavoriteStore.key(creator));
                 finishHeroResolution(generation, creator, choices);
-            }));
+            });
         });
     }
 

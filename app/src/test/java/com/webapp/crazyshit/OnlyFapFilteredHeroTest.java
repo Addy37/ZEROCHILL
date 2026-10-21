@@ -157,6 +157,31 @@ public class OnlyFapFilteredHeroTest {
         assertTrue(((Set<?>) ReflectionHelpers.getField(hub, "requestedHeroCreators")).isEmpty());
     }
 
+    @Test public void staleCallbackCannotReplaceCurrentDeferredHeroWork() {
+        Map<String, Runnable> deferred = new LinkedHashMap<>();
+        hub.setWorkScheduler(deferred::put);
+        int old = generation();
+        hub.preparePreference(ContentPreference.MEN);
+        int current = generation();
+        boolean[] ran = {false};
+        enqueue(current, "hero-selection", () -> ran[0] = true);
+        enqueue(old, "hero-selection", () -> fail("Stale selection must not enter the work queue"));
+        ShadowLooper.idleMainLooper();
+        assertEquals(1, deferred.size());
+        deferred.remove("hero-selection").run();
+        assertTrue(ran[0]);
+        enqueue(current, "hero-resolution", () -> fail("Queued work must recheck its generation"));
+        ShadowLooper.idleMainLooper();
+        hub.preparePreference(ContentPreference.WOMEN);
+        deferred.remove("hero-resolution").run();
+    }
+    private void enqueue(int generation, String key, Runnable task) {
+        ReflectionHelpers.callInstanceMethod(hub, "postHeroWork",
+                ReflectionHelpers.ClassParameter.from(int.class, generation),
+                ReflectionHelpers.ClassParameter.from(String.class, key),
+                ReflectionHelpers.ClassParameter.from(Runnable.class, task));
+    }
+
     @Test public void filteredCategoryIgnoresShelfFavoriteAndHistoryExclusionsButAllKeepsThem() {
         List<NativeContentItem> category = creators(2);
         hub.setPreferenceCreators(category);
