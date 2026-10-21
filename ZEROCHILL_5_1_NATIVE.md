@@ -70,6 +70,45 @@ an ALL treatment; women/men use the standard symbols; trans modes use the trans
 symbol with explicit labels; non-binary and groups use local vector icons. Every
 mode retains visible text.
 
+## Filtered heroes and preference glass follow-up
+
+Filtered modes reuse the existing eight-slot hero set, dots, gallery action,
+13-second rotation, portrait qualification and rejected/alternate artwork path.
+The category creator pool is the sole membership authority. Selection is deduplicated
+and resolves one creator at a time until eight qualify or the pool is exhausted.
+The Discover shelf is intentionally not an exclusion for a filtered category.
+Filtered artwork resolves the exact OnlyHaven service/id profile without name-based
+substitution, catalog backfill or Fapello discovery. One qualifying creator is valid.
+All-content discovery, exclusions, deeper Fapello fallback and memory/history retain
+their existing behavior. Filtered heroes do not overwrite All-content hero memory.
+
+Changing modes clears the previous hero set and future candidates, cancels tracked
+startup/selection/resolution/discovery work and advances the existing generation.
+Late callbacks cannot mutate the new generation, including requested-creator keys.
+An in-flight provider request may still take its existing timeout to stop.
+
+The preference pill now sits below the creator description and above View Gallery.
+Native smoked glass, cyan rims and inset highlights follow the search/navigation
+material. The existing native FrostedBackdropRenderer supplies Android 12+ hardware
+backdrop blur, now supporting descendant coordinates. Other renderers retain a dark
+translucent fallback. The custom scrollable native modal has labeled identity icons,
+a selected checkmark, one-tap selection, Cancel/outside/back dismissal, and short
+window motion that follows the existing reduced-motion preference. Android 12+
+window blur is optional and depends on system/device support.
+
+All content keeps the core cyan/bold treatment; Women uses softer inset highlights;
+Men uses firmer corners/weight; both trans modes share a luminous inset edge and
+explicit labels, with Trans men retaining firmer geometry; Non-binary uses a balanced
+horizontal sheen and the existing vector; Groups uses the local multi-person vector
+and a wider layered inset. All modes share the same black/cyan/white foundation.
+No Compose UI or dependency is added. Preference persistence is unchanged.
+
+Focused hero/picker regressions run before full debug/release tests and builds.
+The existing native-render harness writes hero/picker PNGs for review. This scoped
+follow-up skips the unrelated ten-flow performance matrix; no performance improvement
+is claimed. Prior unresolved warm-start/long-session benchmark findings remain open.
+Validation results for the actual follow-up commit are recorded in draft PR #321.
+
 ## Favorite artwork repair
 
 Favorite Creators keeps its grid, Find Creators and Change avatar flows. Its new

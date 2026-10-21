@@ -5,7 +5,6 @@ import android.app.Activity;
 import android.app.Application;
 import android.app.AlertDialog;
 import android.content.Context;
-import android.widget.ListView;
 import org.json.JSONObject;
 import org.junit.Before;
 import org.junit.Test;
@@ -49,12 +48,11 @@ public class ContentPreferenceTest {
         int[] changed = {0};
         ContentPreferenceUi.choose(activity, () -> changed[0]++);
         AlertDialog dialog = ShadowAlertDialog.getLatestAlertDialog();
-        ListView choices = dialog.getListView();
-        choices.performItemClick(null, ContentPreference.MEN.ordinal(), 0);
+        dialog.getWindow().getDecorView().findViewWithTag("preference_men").performClick();
         assertEquals(ContentPreference.MEN, ContentPreference.get(context));
         assertEquals(1, changed[0]);
         ContentPreferenceUi.choose(activity, () -> changed[0]++);
-        ShadowAlertDialog.getLatestAlertDialog().getListView().performItemClick(null, ContentPreference.MEN.ordinal(), 0);
+        ShadowAlertDialog.getLatestAlertDialog().getWindow().getDecorView().findViewWithTag("preference_men").performClick();
         assertEquals(1, changed[0]);
     }
     @Test public void settingsAndOnlyFapSelectorChangeTheSamePreference() {
@@ -64,7 +62,7 @@ public class ContentPreferenceTest {
         android.view.View title = findText(settings.getWindow().getDecorView(), "Content preference");
         assertNotNull(title);
         ((android.view.View) title.getParent().getParent()).performClick();
-        ShadowAlertDialog.getLatestAlertDialog().getListView().performItemClick(null, ContentPreference.MEN.ordinal(), 0);
+        ShadowAlertDialog.getLatestAlertDialog().getWindow().getDecorView().findViewWithTag("preference_men").performClick();
         Activity host = Robolectric.buildActivity(Activity.class).setup().get();
         OnlyFapHubView hub = new OnlyFapHubView(host, new OnlyFapHubView.Listener() {
             @Override public void onOpenCreator(NativeContentItem creator) {}
@@ -74,11 +72,37 @@ public class ContentPreferenceTest {
         android.widget.TextView selector = org.robolectric.util.ReflectionHelpers.getField(hub, "preferenceSelector");
         assertTrue(selector.getText().toString().contains("Men"));
         selector.performClick();
-        ShadowAlertDialog.getLatestAlertDialog().getListView().performItemClick(null, ContentPreference.WOMEN.ordinal(), 0);
+        ShadowAlertDialog.getLatestAlertDialog().getWindow().getDecorView().findViewWithTag("preference_women").performClick();
         assertEquals(ContentPreference.WOMEN, ContentPreference.get(settings));
         assertTrue(selector.getText().toString().contains("Women"));
         hub.close(); controller.destroy();
     }
+    @Test public void glassPillAndPickerReflectEveryModeAfterRecreationAndCancelDoesNotChangeIt() {
+        org.robolectric.android.controller.ActivityController<Activity> controller =
+                Robolectric.buildActivity(Activity.class).setup();
+        for (ContentPreference mode : ContentPreference.values()) {
+            ContentPreference.set(context, mode);
+            controller.recreate();
+            Activity activity = controller.get();
+            android.widget.TextView pill = new android.widget.TextView(activity);
+            ContentPreferenceUi.bindSelector(pill);
+            assertTrue(pill.getText().toString().contains(mode.label));
+            assertEquals("Content preference: " + mode.label, pill.getContentDescription());
+            assertEquals(mode, pill.getTag(R.id.content_preference_mode));
+            assertNotNull(pill.getBackground());
+            ContentPreferenceUi.choose(activity, () -> fail("Cancel cannot change preference"));
+            AlertDialog dialog = ShadowAlertDialog.getLatestAlertDialog();
+            android.view.View row = dialog.getWindow().getDecorView().findViewWithTag("preference_" + mode.value);
+            assertTrue(row.isSelected());
+            android.view.accessibility.AccessibilityNodeInfo info = row.createAccessibilityNodeInfo();
+            assertTrue(info.isCheckable()); assertTrue(info.isChecked());
+            dialog.getWindow().getDecorView().findViewWithTag("preference_cancel").performClick();
+            assertFalse(dialog.isShowing());
+            assertEquals(mode, ContentPreference.get(activity));
+        }
+        controller.destroy();
+    }
+
     @Test public void filteredHeroAcceptsCategoryCreatorsAndRejectsUnrelatedCachedCreators() throws Exception {
         Activity host = Robolectric.buildActivity(Activity.class).setup().get();
         OnlyFapHubView hub = new OnlyFapHubView(host, new OnlyFapHubView.Listener() {

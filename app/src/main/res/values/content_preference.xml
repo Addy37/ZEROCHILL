@@ -1,0 +1,7 @@
+<resources>
+    <item name="content_preference_mode" type="id" />
+    <style name="Animation.ZeroChill.Preference" parent="@android:style/Animation.Dialog">
+        <item name="android:windowEnterAnimation">@anim/preference_enter</item>
+        <item name="android:windowExitAnimation">@anim/preference_exit</item>
+    </style>
+</resources>
