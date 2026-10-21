@@ -84,6 +84,7 @@ final class ContentPreferenceUi {
         }
         TextView cancel = label(context, "Cancel", 14, Color.WHITE);
         cancel.setTag("preference_cancel");
+        cancel.setShadowLayer(dp(context, 3), 0, dp(context, 1), Color.BLACK);
         cancel.setMinimumHeight(dp(context, 48));
         cancel.setClickable(true); cancel.setFocusable(true);
         cancel.setOnClickListener(v -> dialog.dismiss());
@@ -92,6 +93,9 @@ final class ContentPreferenceUi {
         dialog.setCanceledOnTouchOutside(true);
         dialog.setView(glassPanel, 0, 0, 0, 0);
         if (dialog.getWindow() != null) {
+            // Native RenderNode optics require a hardware-accelerated dialog window.
+            if (android.os.Build.VERSION.SDK_INT >= 31) dialog.getWindow().addFlags(
+                    android.view.WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED);
             // Install the decor before assigning zero; otherwise the theme restores its animation.
             dialog.getWindow().getDecorView();
             dialog.getWindow().setWindowAnimations(ZeroChillMotion.animationsEnabled(context)
