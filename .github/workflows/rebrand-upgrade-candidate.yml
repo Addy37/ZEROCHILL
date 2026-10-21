@@ -113,7 +113,7 @@ jobs:
               code = release_code
               name = release_version
           if "${{ github.head_ref || github.ref_name }}" == "feature/zerochill-5.1.0":
-              beta = pathlib.Path("BETA_VERSION").read_text().strip()
+              beta = "5.1.0-beta.1"
               beta_match = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)-beta\.(\d+)", beta)
               if not beta_match:
                   raise SystemExit("Invalid BETA_VERSION")
@@ -148,16 +148,6 @@ jobs:
           keystore = pathlib.Path(os.environ["RUNNER_TEMP"]) / "zerochill-upgrade-candidate.jks"
           keystore.write_bytes(base64.b64decode(data["keystore_base64"]))
           keystore.chmod(0o600)
-          if "${{ github.head_ref || github.ref_name }}" == "feature/zerochill-5.1.0":
-              beta = pathlib.Path("BETA_VERSION").read_text().strip()
-              beta_match = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)-beta\.(\d+)", beta)
-              if not beta_match:
-                  raise SystemExit("Invalid BETA_VERSION")
-              beta_major, beta_minor, beta_patch, _ = map(int, beta_match.groups())
-              beta_code = beta_major * 1_000_000 + beta_minor * 1000 + beta_patch
-              if beta_code <= release_code:
-                  raise SystemExit("5.1 beta must upgrade the released application")
-              code, name = beta_code, beta
           with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as output:
               output.write(f"ANDROID_KEYSTORE_PATH={keystore}\n")
               output.write(f"ANDROID_KEYSTORE_PASSWORD={data['store_password']}\n")

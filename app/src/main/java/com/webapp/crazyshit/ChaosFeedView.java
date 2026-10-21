@@ -793,7 +793,6 @@ public final class ChaosFeedView extends FrameLayout {
         if (queuePreference == current) return;
         if (isPaging()) { deferUiApply(this::applyContentPreference); return; }
         queuePreference = current;
-        feedGeneration++;
         cancelInventoryBatch();
         cancelPendingAutoAdvance();
         orientationPending.clear();

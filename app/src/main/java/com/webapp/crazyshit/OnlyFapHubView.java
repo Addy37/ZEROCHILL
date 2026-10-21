@@ -88,6 +88,13 @@ final class OnlyFapHubView extends FrameLayout {
     void preparePreference(ContentPreference mode) {
         discoveryPreference = mode;
         ContentPreferenceUi.bindSelector(preferenceSelector);
+        if (trendingShelf != null) {
+            ((TextView) trendingShelf.container.getChildAt(0)).setText(mode == ContentPreference.ALL
+                    ? "Discover" : mode.label);
+            ((TextView) trendingShelf.container.getChildAt(1)).setText(mode == ContentPreference.ALL
+                    ? FapzoneCreatorRepository.hintFor(FapzoneCreatorRepository.MODE_TOP_50)
+                    : "OnlyHaven · " + mode.label);
+        }
     }
 
     void setPreferenceCreators(List<NativeContentItem> items) {

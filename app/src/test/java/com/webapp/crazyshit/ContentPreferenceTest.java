@@ -86,6 +86,23 @@ public class ContentPreferenceTest {
         assertEquals(new HashSet<>(original), new HashSet<>(ordered));
         assertEquals(original, ShitTokPreferenceMix.order(original, item -> false));
     }
+    @Test public void preferenceChangePreservesPlayingGenerationAndNextQueueItem() {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        ChaosFeedView feed = new ChaosFeedView(activity, item -> {}, false);
+        org.robolectric.util.ReflectionHelpers.setField(feed, "queuePreference", ContentPreference.ALL);
+        org.robolectric.util.ReflectionHelpers.setField(feed, "feedGeneration", 7);
+        ArrayList<NativeContentItem> items = org.robolectric.util.ReflectionHelpers.getField(feed, "items");
+        NativeContentItem current = clip("current"), next = clip("next"), future = clip("future");
+        items.add(current); items.add(next); items.add(future);
+        ContentPreference.set(activity, ContentPreference.MEN);
+        org.robolectric.util.ReflectionHelpers.callInstanceMethod(feed, "applyContentPreference");
+        assertEquals(7, (int) org.robolectric.util.ReflectionHelpers.getField(feed, "feedGeneration"));
+        assertEquals(Arrays.asList(current, next), items);
+        assertEquals(0, (int) org.robolectric.util.ReflectionHelpers.getField(feed, "selectedPosition"));
+        assertEquals(ContentPreference.MEN, org.robolectric.util.ReflectionHelpers.getField(feed, "queuePreference"));
+        feed.close();
+    }
+
     private NativeContentItem clip(String name) {
         return new NativeContentItem(NativeContentItem.KIND_MEDIA, name, "https://test/" + name,
                 "", "", name, "", "", "");
