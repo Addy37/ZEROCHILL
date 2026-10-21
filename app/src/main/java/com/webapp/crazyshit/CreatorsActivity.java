@@ -1,26 +1,16 @@
 package com.webapp.crazyshit;
 
-import android.app.Activity;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.graphics.drawable.Drawable;
 import android.graphics.Color;
-import android.graphics.drawable.ColorDrawable;
 import android.os.Bundle;
 import android.os.Parcelable;
-import android.text.TextUtils;
-import android.view.Gravity;
-import android.view.HapticFeedbackConstants;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.EditText;
-import android.widget.FrameLayout;
 import android.widget.ImageView;
-import android.widget.LinearLayout;
-import android.widget.TextView;
 
 import androidx.recyclerview.widget.GridLayoutManager;
-import androidx.recyclerview.widget.ItemTouchHelper;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.bumptech.glide.Glide;
@@ -39,19 +29,23 @@ import java.util.Map;
 import java.util.HashMap;
 
 /** All starred creators, including favorites saved before the creator catalog existed. */
-public final class CreatorsActivity extends Activity {
+public final class CreatorsActivity extends androidx.activity.ComponentActivity {
     private static final int REQUEST_PICK_AVATAR = 4106;
 
-    private EditText input;
-    private TextView empty, count;
+    private LibraryCompose presentation;
     private RecyclerView recycler;
     private CreatorGridAdapter adapter;
     private Parcelable pendingScroll;
-    private ItemTouchHelper dragHelper;
-    private CreatorGridAdapter.Holder dragged, hovered;
     private ArrayList<String> pendingAvatarKeys;
     private boolean badgesDirty;
     private boolean stopped;
+    private android.content.SharedPreferences catalogPreferences, favoritePreferences;
+    private final Runnable creatorRefresh = () -> { if (!stopped) render(); };
+    private final SharedPreferences.OnSharedPreferenceChangeListener creatorMetadataListener = (prefs, key) -> {
+        recycler.removeCallbacks(creatorRefresh);
+        recycler.post(creatorRefresh);
+        if (prefs == favoritePreferences && !stopped) FavoriteCreatorArtworkHydrator.schedule(this);
+    };
     private int scrollDirection = 1;
     private boolean prefetchPosted;
     private final Runnable avatarPrefetch = () -> {
@@ -82,37 +76,12 @@ public final class CreatorsActivity extends Activity {
 
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
-        LinearLayout root = BrowseUi.screen(this);
-        LinearLayout header = new LinearLayout(this);
-        header.setGravity(Gravity.CENTER_VERTICAL);
-        header.setPadding(dp(12), dp(8), dp(12), dp(8));
-        header.addView(BrowseUi.action(this, "‹", "Back", v -> finish()), new LinearLayout.LayoutParams(dp(48), dp(48)));
-        TextView title = BrowseUi.text(this, "Favorite creators", 20, Color.WHITE);
-        title.setPadding(dp(12), 0, 0, 0);
-        header.addView(title, new LinearLayout.LayoutParams(0, -2, 1));
-        header.addView(BrowseUi.action(this, "+", "Find creators", v -> startActivity(SearchActivity.createBunkrSearch(this))),
-                new LinearLayout.LayoutParams(dp(48), dp(48)));
-        root.addView(header);
-        input = new ZeroChillEditText(this);
-        input.setHint("Search your favorite creators");
-        input.setHintTextColor(BrowseUi.MUTED);
-        input.setTextColor(Color.WHITE);
-        input.setTextSize(16);
-        input.setSingleLine(true);
-        input.setPadding(dp(14), 0, dp(14), 0);
-        input.setBackgroundResource(R.drawable.zc_input_field);
-        LinearLayout.LayoutParams inputParams = new LinearLayout.LayoutParams(-1, dp(50));
-        inputParams.setMargins(dp(12), 0, dp(12), dp(8));
-        root.addView(input, inputParams);
-        count = BrowseUi.text(this, "", 12, BrowseUi.MUTED);
-        count.setPadding(dp(16), dp(4), dp(16), dp(8));
-        root.addView(count);
-        empty = BrowseUi.text(this, "", 15, BrowseUi.MUTED);
-        empty.setGravity(Gravity.CENTER);
-        empty.setPadding(dp(24), dp(32), dp(24), dp(24));
-        root.addView(empty);
+        ZeroChillUi.applySystemBars(this);
+        presentation = new LibraryCompose(this, "Favorite creators", value -> render());
+        presentation.setActionLabel("Find creators");
+        presentation.setAction(() -> startActivity(SearchActivity.createBunkrSearch(this)));
         recycler = new RecyclerView(this);
-        GridLayoutManager grid = new GridLayoutManager(this, 3);
+        GridLayoutManager grid = new GridLayoutManager(this, creatorColumns());
         grid.setInitialPrefetchItemCount(6);
         recycler.setLayoutManager(grid);
         // The grid fills a weighted, fixed viewport; item count does not size the RecyclerView.
@@ -134,62 +103,9 @@ public final class CreatorsActivity extends Activity {
                 if (state == RecyclerView.SCROLL_STATE_IDLE) view.post(badgeRefresh);
             }
         });
-        dragHelper = new ItemTouchHelper(new ItemTouchHelper.SimpleCallback(
-                ItemTouchHelper.UP | ItemTouchHelper.DOWN | ItemTouchHelper.LEFT | ItemTouchHelper.RIGHT, 0) {
-            @Override public boolean isLongPressDragEnabled() { return true; }
-            @Override public boolean onMove(RecyclerView list, RecyclerView.ViewHolder source,
-                                            RecyclerView.ViewHolder target) { return false; }
-            @Override public void onSwiped(RecyclerView.ViewHolder holder, int direction) { }
-            @Override public void onSelectedChanged(RecyclerView.ViewHolder selected, int state) {
-                super.onSelectedChanged(selected, state);
-                if (state == ItemTouchHelper.ACTION_STATE_DRAG && selected instanceof CreatorGridAdapter.Holder) {
-                    dragged = (CreatorGridAdapter.Holder) selected;
-                    dragged.itemView.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
-                    dragged.itemView.setScaleX(1.05f); dragged.itemView.setScaleY(1.05f);
-                    dragged.itemView.setElevation(dp(12));
-                }
-            }
-            @Override public void onChildDraw(android.graphics.Canvas canvas, RecyclerView list,
-                                              RecyclerView.ViewHolder selected, float dx, float dy,
-                                              int state, boolean active) {
-                super.onChildDraw(canvas, list, selected, dx, dy, state, active);
-                if (state != ItemTouchHelper.ACTION_STATE_DRAG || !active || dragged == null) return;
-                float x = selected.itemView.getLeft() + dx + selected.itemView.getWidth() / 2f;
-                float y = selected.itemView.getTop() + dy + selected.itemView.getHeight() / 2f;
-                CreatorGridAdapter.Holder next = null;
-                for (int i = 0; i < list.getChildCount(); i++) {
-                    View child = list.getChildAt(i);
-                    if (child == selected.itemView || x < child.getLeft() || x > child.getRight()
-                            || y < child.getTop() || y > child.getBottom()) continue;
-                    RecyclerView.ViewHolder holder = list.getChildViewHolder(child);
-                    if (holder instanceof CreatorGridAdapter.Holder) next = (CreatorGridAdapter.Holder) holder;
-                    break;
-                }
-                if (hovered != next) {
-                    if (hovered != null) hovered.itemView.setBackground(null);
-                    hovered = next;
-                    if (hovered != null) hovered.itemView.setBackground(
-                            BrowseUi.rounded(CreatorsActivity.this, Color.rgb(18, 40, 52), 16));
-                }
-            }
-            @Override public void clearView(RecyclerView list, RecyclerView.ViewHolder selected) {
-                CreatorCatalog.FavoriteGroup from = dragged == null ? null : dragged.bound;
-                CreatorCatalog.FavoriteGroup to = hovered == null ? null : hovered.bound;
-                if (hovered != null) hovered.itemView.setBackground(null);
-                selected.itemView.setScaleX(1f); selected.itemView.setScaleY(1f);
-                selected.itemView.setElevation(0f);
-                dragged = hovered = null;
-                super.clearView(list, selected);
-                if (from != null && to != null && from != to)
-                    list.post(() -> confirmMerge(from, to));
-            }
-        });
-        dragHelper.attachToRecyclerView(recycler);
-        root.addView(recycler, new LinearLayout.LayoutParams(-1, 0, 1));
-        setContentView(root);
-        input.addTextChangedListener(BrowseUi.onText(value -> render()));
+        presentation.install(recycler);
         if (state != null) {
-            input.setText(state.getString("query", ""));
+            presentation.setQuery(state.getString("query", ""));
             pendingScroll = state.getParcelable("scroll");
             pendingAvatarKeys = state.getStringArrayList("pending_avatar_keys");
         }
@@ -197,16 +113,22 @@ public final class CreatorsActivity extends Activity {
                 | android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
     }
 
+    private int creatorColumns() {
+        android.content.res.Configuration config = getResources().getConfiguration();
+        return config.screenWidthDp >= 600 && config.fontScale < 1.5f ? 2 : 1;
+    }
+
     private void render() {
         List<CreatorCatalog.FavoriteGroup> creators = CreatorCatalog.favoriteGroups(this);
-        String query = input.getText().toString();
+        String query = presentation.getQuery();
         creators.removeIf(group -> CreatorNameMatcher.rank(group.item.title, query) == Integer.MAX_VALUE
                 && group.members.values().stream().noneMatch(member ->
                 CreatorNameMatcher.rank(member.title, query) != Integer.MAX_VALUE));
         adapter.replace(creators);
-        count.setText(creators.size() + (creators.size() == 1 ? " creator · A–Z" : " creators · A–Z"));
-        empty.setVisibility(creators.isEmpty() ? View.VISIBLE : View.GONE);
-        empty.setText(input.length() == 0 ? "No favorite creators yet\n\nTap + to find creators, then tap ☆ to save them here."
+        presentation.setSummary(creators.size() + (creators.size() == 1 ? " creator · A–Z" : " creators · A–Z")
+                + "\nHold a creator for options or merge");
+        presentation.setEmptyMessage(!creators.isEmpty() ? "" : presentation.getQuery().isEmpty()
+                ? "No favorite creators yet\n\nTap Find creators, then tap ☆ to save them here."
                 : "No favorite creators match your search.");
         if (pendingScroll != null) {
             recycler.getLayoutManager().onRestoreInstanceState(pendingScroll);
@@ -216,7 +138,9 @@ public final class CreatorsActivity extends Activity {
 
     private void openCreator(CreatorCatalog.FavoriteGroup group) {
         if (group == null || group.item == null) return;
-        BrowseUi.hideKeyboard(this, input);
+        getWindow().getDecorView().clearFocus();
+        ((android.view.inputmethod.InputMethodManager) getSystemService(INPUT_METHOD_SERVICE))
+                .hideSoftInputFromWindow(getWindow().getDecorView().getWindowToken(), 0);
         CreatorGallerySpec spec = CreatorGallerySpec.from(group);
         String sessionId = CreatorGalleryPreloader.sessionId(this, spec.cacheKey);
         if (sessionId.isEmpty() && spec.grouped) {
@@ -253,8 +177,16 @@ public final class CreatorsActivity extends Activity {
         });
     }
 
-    private void showMenu(View anchor, CreatorCatalog.FavoriteGroup group) {
+    private ZeroChillMenu creatorMenu(View anchor, CreatorCatalog.FavoriteGroup group) {
         ZeroChillMenu menu = new ZeroChillMenu(this, anchor);
+        android.view.SubMenu merge = menu.getMenu().addSubMenu("Merge with…");
+        for (CreatorCatalog.FavoriteGroup target : CreatorCatalog.favoriteGroups(this)) {
+            if (!java.util.Collections.disjoint(group.relationshipKeys, target.relationshipKeys)) continue;
+            merge.add(target.item.title).setOnMenuItemClickListener(item -> {
+                confirmMerge(group, target); return true;
+            });
+        }
+        merge.getItem().setEnabled(merge.size() > 0);
         if (group.manual) {
             menu.getMenu().add("Merged creators").setOnMenuItemClickListener(item -> {
                 CreatorMergeSheet.showMembers(this, group.members);
@@ -292,12 +224,14 @@ public final class CreatorsActivity extends Activity {
         menu.getMenu().add("Remove from favorites").setOnMenuItemClickListener(item -> {
             removeGroup(group); return true;
         });
-        menu.show();
+        return menu;
     }
 
     private void pickAvatar(CreatorCatalog.FavoriteGroup group) {
         if (group == null || group.item == null || group.relationshipKeys.isEmpty()) return;
-        BrowseUi.hideKeyboard(this, input);
+        getWindow().getDecorView().clearFocus();
+        ((android.view.inputmethod.InputMethodManager) getSystemService(INPUT_METHOD_SERVICE))
+                .hideSoftInputFromWindow(getWindow().getDecorView().getWindowToken(), 0);
         pendingAvatarKeys = new ArrayList<>(group.relationshipKeys);
         CreatorGallerySpec spec = CreatorGallerySpec.from(group);
         String sessionId = CreatorGalleryPreloader.sessionId(this, spec.cacheKey);
@@ -347,7 +281,7 @@ public final class CreatorsActivity extends Activity {
             extends RecyclerView.Adapter<CreatorGridAdapter.Holder> {
         private final List<Card> cards = new ArrayList<>();
         private final Map<Integer, CustomTarget<Drawable>> prefetchTargets = new HashMap<>();
-        private final int avatarSide = dp(86);
+        private final int avatarSide = dp(56);
 
         final class Card {
             final CreatorCatalog.FavoriteGroup group;
@@ -446,71 +380,18 @@ public final class CreatorsActivity extends Activity {
 
         @Override
         public Holder onCreateViewHolder(ViewGroup parent, int viewType) {
-            LinearLayout wrapper = new LinearLayout(CreatorsActivity.this);
-            wrapper.setOrientation(LinearLayout.VERTICAL);
-            wrapper.setGravity(Gravity.CENTER_HORIZONTAL);
-            wrapper.setPadding(dp(4), dp(7), dp(4), dp(8));
-            RecyclerView.LayoutParams params =
-                    new RecyclerView.LayoutParams(-1, -2);
-            params.setMargins(dp(2), dp(2), dp(2), dp(4));
-            wrapper.setLayoutParams(params);
-            wrapper.setFocusable(true);
-            wrapper.setClickable(true);
-            ZeroChillMotion.installPressFeedback(wrapper);
-
-            FrameLayout avatarFrame = new FrameLayout(CreatorsActivity.this);
-            wrapper.addView(avatarFrame, new LinearLayout.LayoutParams(dp(86), dp(86)));
-
             MaterialCardView avatarCard = new MaterialCardView(CreatorsActivity.this);
-            avatarCard.setRadius(dp(43));
+            avatarCard.setRadius(dp(28));
             avatarCard.setCardElevation(0f);
             avatarCard.setStrokeWidth(0);
             avatarCard.setCardBackgroundColor(Color.rgb(19, 23, 27));
             avatarCard.setClipToOutline(true);
-            avatarFrame.addView(avatarCard, new FrameLayout.LayoutParams(-1, -1));
-
             CreatorAvatarImageView avatar = new CreatorAvatarImageView(CreatorsActivity.this);
-            avatar.setBackgroundColor(Color.rgb(19, 23, 27));
             avatarCard.addView(avatar, new MaterialCardView.LayoutParams(-1, -1));
-
-            TextView updateBadge = BrowseUi.text(CreatorsActivity.this, "", 11, Color.BLACK);
-            updateBadge.setTypeface(null, android.graphics.Typeface.BOLD);
-            updateBadge.setGravity(Gravity.CENTER);
-            updateBadge.setMinWidth(dp(26));
-            updateBadge.setPadding(dp(7), 0, dp(7), 0);
-            updateBadge.setBackground(BrowseUi.rounded(
-                    CreatorsActivity.this,
-                    UiPalette.PRIMARY,
-                    13
-            ));
-            updateBadge.setVisibility(View.GONE);
-            FrameLayout.LayoutParams updateBadgeParams =
-                    new FrameLayout.LayoutParams(-2, dp(26), Gravity.TOP | Gravity.END);
-            updateBadgeParams.setMargins(0, dp(2), dp(2), 0);
-            avatarFrame.addView(updateBadge, updateBadgeParams);
-
-            TextView mergeBadge = CreatorMergeUi.badge(CreatorsActivity.this);
-            FrameLayout.LayoutParams mergeBadgeParams =
-                    new FrameLayout.LayoutParams(-2, dp(22), Gravity.BOTTOM | Gravity.END);
-            mergeBadgeParams.setMargins(0, 0, dp(1), dp(1));
-            avatarFrame.addView(mergeBadge, mergeBadgeParams);
-
-            TextView more = BrowseUi.text(CreatorsActivity.this, "⋮", 23, Color.WHITE);
-            more.setGravity(Gravity.CENTER);
-            more.setBackground(BrowseUi.rounded(CreatorsActivity.this, Color.argb(190, 0, 0, 0), 14));
-            FrameLayout.LayoutParams moreParams = new FrameLayout.LayoutParams(dp(30), dp(30), Gravity.TOP | Gravity.START);
-            avatarFrame.addView(more, moreParams);
-
-            TextView name = BrowseUi.text(CreatorsActivity.this, "", 13, Color.WHITE);
-            name.setGravity(Gravity.CENTER);
-            name.setMaxLines(2);
-            name.setEllipsize(TextUtils.TruncateAt.END);
-            LinearLayout.LayoutParams nameParams =
-                    new LinearLayout.LayoutParams(-1, -2);
-            nameParams.setMargins(dp(2), dp(7), dp(2), 0);
-            wrapper.addView(name, nameParams);
-
-            return new Holder(wrapper, avatar, name, updateBadge, mergeBadge, more);
+            CreatorCardCompose compose = new CreatorCardCompose(CreatorsActivity.this, avatarCard);
+            View wrapper = compose.getView();
+            wrapper.setLayoutParams(new RecyclerView.LayoutParams(-1, -2));
+            return new Holder(wrapper, avatar, compose);
         }
 
         @Override
@@ -519,17 +400,8 @@ public final class CreatorsActivity extends Activity {
             CreatorCatalog.FavoriteGroup group = card.group;
             NativeContentItem item = group.item;
             holder.bound = group;
-            holder.name.setText(item.title);
-            CreatorMergeUi.bind(
-                    holder.mergeBadge,
-                    group,
-                    () -> CreatorMergeUi.showMembers(CreatorsActivity.this, group)
-            );
             bindBadges(holder, card);
-
             holder.itemView.setOnClickListener(v -> openCreator(group));
-            holder.more.setContentDescription("Creator options for " + item.title);
-            holder.more.setOnClickListener(v -> showMenu(v, group));
 
             Glide.with(holder.avatar).clear(holder.avatar);
             CreatorAvatarOverrideStore.Override avatarOverride = card.avatarOverride;
@@ -543,35 +415,35 @@ public final class CreatorsActivity extends Activity {
                 avatarRequest(card)
                         .priority(Priority.HIGH)
                         .transition(ThumbnailFades.avatar())
-                        .placeholder(holder.placeholder)
-                        .error(R.drawable.ic_more_account)
+                        .placeholder(R.drawable.creator_avatar_fallback)
+                        .error(R.drawable.creator_avatar_fallback)
+                        .listener(new com.bumptech.glide.request.RequestListener<Drawable>() {
+                            @Override public boolean onLoadFailed(com.bumptech.glide.load.engine.GlideException error,
+                                    Object model, com.bumptech.glide.request.target.Target<Drawable> target,
+                                    boolean first) {
+                                // A failed custom image must not apply its photo crop to the mascot.
+                                holder.avatar.clearAvatarCrop();
+                                return false;
+                            }
+                            @Override public boolean onResourceReady(Drawable resource, Object model,
+                                    com.bumptech.glide.request.target.Target<Drawable> target,
+                                    com.bumptech.glide.load.DataSource source, boolean first) { return false; }
+                        })
                         .into(holder.avatar);
             } else {
-                holder.avatar.setImageResource(R.drawable.ic_more_account);
+                holder.avatar.setImageResource(R.drawable.creator_avatar_fallback);
             }
         }
 
         private void bindBadges(Holder holder, Card card) {
-            NativeContentItem item = card.group.item;
-            int unread = card.unread;
-            if (unread > 0) {
-                holder.updateBadge.setText(unread > 9 ? "9+" : String.valueOf(unread));
-                holder.updateBadge.setContentDescription(
-                        unread + (unread == 1 ? " new item from " : " new items from ") + item.title
-                );
-                holder.updateBadge.setVisibility(View.VISIBLE);
-            } else {
-                holder.updateBadge.setText("");
-                holder.updateBadge.setContentDescription(null);
-                holder.updateBadge.setVisibility(View.GONE);
-            }
-            holder.itemView.setContentDescription(
-                    unread > 0
-                            ? "Open " + item.title + ". " + unread
-                            + (unread == 1 ? " new item." : " new items.")
-                            : "Open " + item.title
-            );
-
+            CreatorCatalog.FavoriteGroup group = card.group;
+            holder.compose.bind(String.join("|", new java.util.TreeSet<>(group.relationshipKeys)),
+                    group.item.title, card.unread, CreatorMergeUi.isMerged(group) ? group.members.size() : 1,
+                    () -> openCreator(group), () -> CreatorMergeUi.showMembers(CreatorsActivity.this, group),
+                    () -> creatorMenu(holder.itemView, group));
+            holder.itemView.setContentDescription(card.unread > 0
+                    ? "Open " + group.item.title + ". " + card.unread + " new items."
+                    : "Open " + group.item.title);
         }
 
         @Override
@@ -583,33 +455,20 @@ public final class CreatorsActivity extends Activity {
         @Override
         public void onViewRecycled(Holder holder) {
             holder.bound = null;
+            holder.compose.clear();
             Glide.with(holder.avatar).clear(holder.avatar);
             super.onViewRecycled(holder);
         }
 
         final class Holder extends RecyclerView.ViewHolder {
             final CreatorAvatarImageView avatar;
-            final TextView name;
-            final TextView updateBadge;
-            final TextView mergeBadge;
-            final TextView more;
-            final ColorDrawable placeholder = new ColorDrawable(Color.rgb(19, 23, 27));
+            final CreatorCardCompose compose;
             CreatorCatalog.FavoriteGroup bound;
 
-            Holder(
-                    View itemView,
-                    CreatorAvatarImageView avatar,
-                    TextView name,
-                    TextView updateBadge,
-                    TextView mergeBadge,
-                    TextView more
-            ) {
+            Holder(View itemView, CreatorAvatarImageView avatar, CreatorCardCompose compose) {
                 super(itemView);
                 this.avatar = avatar;
-                this.name = name;
-                this.updateBadge = updateBadge;
-                this.mergeBadge = mergeBadge;
-                this.more = more;
+                this.compose = compose;
             }
         }
     }
@@ -653,11 +512,19 @@ public final class CreatorsActivity extends Activity {
     @Override protected void onResume() {
         super.onResume();
         stopped = false;
+        catalogPreferences = getSharedPreferences(CreatorCatalog.PREFS, MODE_PRIVATE);
+        favoritePreferences = getSharedPreferences("creator_favorites", MODE_PRIVATE);
+        catalogPreferences.registerOnSharedPreferenceChangeListener(creatorMetadataListener);
+        favoritePreferences.registerOnSharedPreferenceChangeListener(creatorMetadataListener);
+        FavoriteCreatorArtworkHydrator.schedule(this);
         UpdateInboxStore.registerChangeListener(this, inboxListener);
         render();
     }
     @Override protected void onStop() {
         stopped = true;
+        catalogPreferences.unregisterOnSharedPreferenceChangeListener(creatorMetadataListener);
+        favoritePreferences.unregisterOnSharedPreferenceChangeListener(creatorMetadataListener);
+        recycler.removeCallbacks(creatorRefresh);
         UpdateInboxStore.unregisterChangeListener(this, inboxListener);
         recycler.removeCallbacks(avatarPrefetch);
         recycler.removeCallbacks(badgeRefresh);
@@ -690,7 +557,7 @@ public final class CreatorsActivity extends Activity {
         }
     };
     @Override protected void onSaveInstanceState(Bundle state) {
-        state.putString("query", input.getText().toString());
+        state.putString("query", presentation.getQuery());
         state.putParcelable("scroll", recycler.getLayoutManager().onSaveInstanceState());
         if (pendingAvatarKeys != null) {
             state.putStringArrayList("pending_avatar_keys", pendingAvatarKeys);

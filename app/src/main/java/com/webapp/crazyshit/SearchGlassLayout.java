@@ -2,9 +2,6 @@ package com.webapp.crazyshit;
 
 import android.app.Activity;
 import android.graphics.Canvas;
-import android.graphics.Path;
-import android.graphics.Outline;
-import android.graphics.Rect;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 import androidx.core.view.WindowInsetsAnimationCompat;
@@ -15,20 +12,13 @@ import android.widget.FrameLayout;
 /** One native-content recording for the pinned pill. Glass never records itself. */
 final class SearchGlassLayout extends FrameLayout {
     private final ViewPageBackdrop page = new ViewPageBackdrop(this);
-    private ViewPageBackdrop underlay;
     private final ViewPageBackdrop empty = new ViewPageBackdrop(this);
     private RectF pillBounds;
     private GlassHeaderView pill, favorites, results;
     private View rows;
     private boolean dirty = true;
-    private int underlayRevision = -1;
     private int resultCount;
     private int resultRowHeightDp = 76;
-    private android.animation.ValueAnimator heightAnimator;
-    private int animatedHeight;
-    private final Path rowClip = new Path();
-    private final Outline resultOutline = new Outline();
-    private final Rect resultRect = new Rect();
     private int imeBottom;
     private int systemBottom;
     private int imeAnimations;
@@ -76,6 +66,7 @@ final class SearchGlassLayout extends FrameLayout {
 
     SearchGlassLayout(Activity activity) {
         super(activity);
+        setBackgroundColor(android.graphics.Color.BLACK);
         setClipChildren(false);
         setClipToPadding(false);
     }
@@ -84,18 +75,15 @@ final class SearchGlassLayout extends FrameLayout {
                  GlassHeaderView results, View rows) {
         this.pill = pill; this.favorites = favorites; this.results = results; this.rows = rows;
         addView(results); addView(rows); addView(pill); addView(favorites);
-        // Share the glass outline itself, including its radius and current size.
-        // This clips the complete native subtree on the hardware rendering path.
-        rows.setOutlineProvider(results.getOutlineProvider());
-        rows.setClipToOutline(true);
+        // Results use the available rectangular viewport. Header glass stays separate.
+        rows.setClipToOutline(false);
         pill.setPageBackdrop(page);
         favorites.setPageBackdrop(page);
         results.setPageBackdrop(empty);
     }
 
     void setUnderlay(ViewPageBackdrop value) {
-        underlay = value;
-        if (value != null) results.setPageBackdrop(value);
+        // Active Search never samples the busy screen below its opaque backdrop.
         dirty = true;
         invalidate();
     }
@@ -106,44 +94,28 @@ final class SearchGlassLayout extends FrameLayout {
         if (resultCount == count && resultRowHeightDp == rowHeightDp) return;
         resultCount = count;
         resultRowHeightDp = rowHeightDp;
-        if (heightAnimator != null) { heightAnimator.removeAllListeners(); heightAnimator.cancel(); }
-        if (getHeight() > 0 && rows.getVisibility() == VISIBLE && ZeroChillMotion.animationsEnabled(getContext())) {
-            heightAnimator = android.animation.ValueAnimator.ofInt(rows.getHeight(), resultHeight());
-            heightAnimator.setDuration(180L);
-            heightAnimator.setInterpolator(new android.view.animation.DecelerateInterpolator());
-            heightAnimator.addUpdateListener(a -> { animatedHeight = (int) a.getAnimatedValue(); dirty = true; requestLayout(); });
-            heightAnimator.addListener(new android.animation.AnimatorListenerAdapter() {
-                @Override public void onAnimationEnd(android.animation.Animator a) { heightAnimator = null; requestLayout(); }
-            });
-            heightAnimator.start();
-        }
         dirty = true;
         requestLayout();
     }
 
     @Override protected void onMeasure(int widthSpec, int heightSpec) {
         int width = MeasureSpec.getSize(widthSpec) - getPaddingLeft() - getPaddingRight();
-        int height = resultHeight(MeasureSpec.getSize(heightSpec),
-                heightAnimator != null && heightAnimator.isRunning() ? animatedHeight : dp(96 + resultCount * resultRowHeightDp));
+        int height = resultHeight(MeasureSpec.getSize(heightSpec));
         if (pillBounds == null) place(pill, width - dp(88), dp(56), dp(14), dp(8));
         else place(pill, Math.round(pillBounds.width()), Math.round(pillBounds.height()),
                 Math.round(pillBounds.left) - getPaddingLeft(), Math.round(pillBounds.top) - getPaddingTop());
         place(favorites, dp(48), dp(48), width - dp(62), dp(12));
-        place(results, width - dp(28), height, dp(14), dp(76));
-        place(rows, width - dp(28), height, dp(14), dp(76));
+        place(results, width, height, 0, dp(76));
+        place(rows, width, height, 0, dp(76));
         super.onMeasure(widthSpec, heightSpec);
     }
 
-    private int resultHeight() {
-        return resultHeight(getHeight(), dp(96 + resultCount * resultRowHeightDp));
-    }
-
-    private int resultHeight(int windowHeight, int desired) {
+    private int resultHeight(int windowHeight) {
         // Close the 4dp gap difference continuously as IME crosses the nav inset.
         // Switching gaps on visibility alone would briefly expand the pane.
         int bottomGap = dp(12) - Math.min(dp(4), Math.max(0, imeBottom - systemBottom));
-        return Math.max(0, Math.min(windowHeight - getPaddingTop() - getPaddingBottom()
-                - dp(76) - bottomGap, desired));
+        return Math.max(0, windowHeight - getPaddingTop() - getPaddingBottom()
+                - dp(76) - bottomGap);
     }
 
     void setPillBounds(RectF bounds) {
@@ -177,18 +149,15 @@ final class SearchGlassLayout extends FrameLayout {
     }
 
     @Override protected void dispatchDraw(Canvas canvas) {
-        if (underlay != null && underlayRevision != underlay.getRecordings()) {
-            underlayRevision = underlay.getRecordings(); dirty = true;
-        }
         if (dirty && canvas.isHardwareAccelerated() && getWidth() > 0 && getHeight() > 0) {
             dirty = false;
             page.record(getWidth(), getHeight(), recording -> {
-                if (underlay != null) underlay.drawPageInto(recording, this);
+                recording.drawColor(android.graphics.Color.BLACK);
                 drawRows(recording);
                 return kotlin.Unit.INSTANCE;
             });
         }
-        if (results.getVisibility() == VISIBLE) drawChild(canvas, results, getDrawingTime());
+        // No giant glass results panel. The header samples only Search itself.
         drawRows(canvas);
         drawChild(canvas, pill, getDrawingTime());
         drawChild(canvas, favorites, getDrawingTime());
@@ -197,13 +166,7 @@ final class SearchGlassLayout extends FrameLayout {
     private void drawRows(Canvas canvas) {
         if (rows.getVisibility() != VISIBLE) return;
         int checkpoint = canvas.save();
-        rowClip.reset();
-        results.getOutlineProvider().getOutline(results, resultOutline);
-        if (!resultOutline.getRect(resultRect)) { canvas.restoreToCount(checkpoint); return; }
-        RectF bounds = new RectF(resultRect);
-        bounds.offset(results.getX(), results.getY());
-        rowClip.addRoundRect(bounds, resultOutline.getRadius(), resultOutline.getRadius(), Path.Direction.CW);
-        canvas.clipPath(rowClip);
+        canvas.clipRect(rows.getLeft(), rows.getTop(), rows.getRight(), rows.getBottom());
         drawChild(canvas, rows, getDrawingTime());
         canvas.restoreToCount(checkpoint);
     }
@@ -214,7 +177,6 @@ final class SearchGlassLayout extends FrameLayout {
     }
 
     @Override protected void onDetachedFromWindow() {
-        if (heightAnimator != null) { heightAnimator.removeAllListeners(); heightAnimator.cancel(); }
         page.release(); empty.release(); dirty = true;
         super.onDetachedFromWindow();
     }

@@ -45,11 +45,16 @@ public class GlassHeaderLayoutTest {
                 layout(frame);
                 assertEquals(-header, scroll.getTop());
             } else {
-                scroll = (ScrollView) page;
-                ((ViewGroup) scroll.getChildAt(0)).addView(new View(activity),
-                        new ViewGroup.LayoutParams(1, 2000));
+                LibraryHubView library = (LibraryHubView) page;
+                LibraryHomeCompose presentation = ReflectionHelpers.getField(library, "presentation");
                 layout(frame);
                 assertEquals(-header, page.getTop());
+                assertEquals(0, page.getPaddingTop());
+                assertEquals(header, presentation.getHeaderInsetPx());
+                assertEquals(frame.getHeight() + header, page.getHeight());
+                assertEquals(page.getHeight(), presentation.getView().getHeight());
+                continue; // Compose scroll origin/range is exercised in ComposeLibraryTest.
+
             }
             assertEquals(header, scroll.getPaddingTop());
             assertEquals(frame.getHeight() + header, scroll.getHeight());

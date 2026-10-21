@@ -56,9 +56,7 @@ final class SearchPanel {
     private SearchGlassLayout shell;
     private LinearLayout resultsControls;
     private GlassHeaderView resultSurface, favoriteSurface;
-    private android.animation.ValueAnimator resultsAnimator;
     private float morphProgress;
-    private boolean resultShown;
     private ViewPageBackdrop emptyBackdrop;
 
     void setEmptyBackdrop(ViewPageBackdrop backdrop) {
@@ -92,7 +90,7 @@ final class SearchPanel {
     private EditText input;
     private ZeroChillProgressBar progress;
     private TextView status;
-    private RecyclerView recycler;
+    private SearchResultsCompose results;
     private GlobalSearchAdapter adapter;
     private OnlyFapCreatorSearchAdapter onlyFapAdapter;
     private final List<TextView> filterViews = new ArrayList<>();
@@ -114,7 +112,7 @@ final class SearchPanel {
     private Runnable liveSearch;
     private boolean restoring;
     private boolean previewMode;
-    private LinearLayout recentPanel;
+    private RecentSearchesCompose recent;
     private View recentLayer;
     private View searchFooter;
     private TextView searchAll;
@@ -201,6 +199,7 @@ final class SearchPanel {
         resultSurface = new GlassHeaderView(activity, new FrameLayout(activity), 24f, true);
         resultsControls = new LinearLayout(activity);
         resultsControls.setOrientation(LinearLayout.VERTICAL);
+        resultsControls.setBackgroundColor(Color.BLACK);
         resultsControls.setClipChildren(true);
         resultsControls.setPadding(0, 0, 0, dp(14));
         resultsControls.setClipToPadding(false);
@@ -216,23 +215,16 @@ final class SearchPanel {
         resultLayer.setClipChildren(true);
         resultLayer.setClipToPadding(false);
         content.addView(resultLayer, new FrameLayout.LayoutParams(-1, -1));
-        recycler = new RecyclerView(activity);
-        recycler.setLayoutManager(new LinearLayoutManager(activity));
-        recycler.setBackgroundColor(Color.TRANSPARENT);
-        recycler.setClipToPadding(false);
-        recycler.setPadding(0, dp(68), 0, dp(4));
-        recycler.setItemAnimator(null);
+        results = new SearchResultsCompose(activity);
         if (bunkrOnly) {
             onlyFapAdapter = new OnlyFapCreatorSearchAdapter(this::openCreator);
-            recycler.setAdapter(onlyFapAdapter);
+            results.setAdapter(onlyFapAdapter);
         } else {
             adapter = new GlobalSearchAdapter(this::openResult);
-            recycler.setAdapter(adapter);
+            results.setAdapter(adapter);
         }
-        FrameLayout.LayoutParams listParams = new FrameLayout.LayoutParams(-1, -1);
-        listParams.topMargin = -dp(68);
-        resultLayer.addView(recycler, listParams);
-        recycler.getAdapter().registerAdapterDataObserver(new RecyclerView.AdapterDataObserver() {
+        resultLayer.addView(results.getView(), new FrameLayout.LayoutParams(-1, -1));
+        (bunkrOnly ? onlyFapAdapter : adapter).registerAdapterDataObserver(new RecyclerView.AdapterDataObserver() {
             @Override public void onChanged() { updateResultSize(); }
             @Override public void onItemRangeInserted(int start, int count) { updateResultSize(); }
             @Override public void onItemRangeRemoved(int start, int count) { updateResultSize(); }
@@ -242,24 +234,26 @@ final class SearchPanel {
         status.setPadding(dp(12), dp(14), dp(12), dp(8));
         status.setText(bunkrOnly ? "Search OnlyFap creators" : "Search creators or videos");
         resultLayer.addView(status, new FrameLayout.LayoutParams(-1, -2));
-        recentPanel = new LinearLayout(activity);
-        recentPanel.setOrientation(LinearLayout.VERTICAL);
-        android.widget.ScrollView recentScroll = new android.widget.ScrollView(activity);
-        recentScroll.setFillViewport(false);
-        recentScroll.addView(recentPanel);
-        recentLayer = recentScroll;
-        content.addView(recentScroll, new FrameLayout.LayoutParams(-1, -1));
+        recent = new RecentSearchesCompose(activity,
+                query -> { input.setText(query); input.setSelection(input.length()); runSearch(); },
+                query -> { RecentSearchStore.remove(activity, query); showRecentSearches(); updateContentVisibility(); },
+                () -> { RecentSearchStore.clear(activity); showRecentSearches(); updateContentVisibility(); });
+        recentLayer = recent.getView();
+        content.addView(recentLayer, new FrameLayout.LayoutParams(-1, -1));
         searchAll = BrowseUi.action(activity, "Search all results  ›", "Search all results", v -> runSearch());
         searchAll.setBackgroundColor(Color.TRANSPARENT);
         searchAll.setTextSize(14f);
+        searchAll.setMinHeight(dp(48));
+        searchAll.setTextColor(UiPalette.PRIMARY);
         searchAll.setVisibility(View.GONE);
-        resultsControls.addView(searchAll, new LinearLayout.LayoutParams(-1, dp(48)));
+        resultsControls.addView(searchAll, new LinearLayout.LayoutParams(-1, -2));
         if (!bunkrOnly) {
             filterBar = buildFilters();
-            resultsControls.addView(filterBar, new LinearLayout.LayoutParams(-1, dp(44)));
+            resultsControls.addView(filterBar, 0, new LinearLayout.LayoutParams(-1, -2));
         }
         searchState = BrowseUi.text(activity, "", 11, BrowseUi.MUTED);
-        searchState.setPadding(dp(14), dp(4), dp(14), dp(8));
+        searchState.setPadding(dp(14), dp(8), dp(14), dp(8));
+        searchState.setMinHeight(dp(48));
         searchState.setVisibility(View.GONE);
         searchState.setOnClickListener(v -> {
             if (activeQuery.isEmpty()) return;
@@ -282,43 +276,8 @@ final class SearchPanel {
     private boolean showingRecent() { return input.getText().toString().trim().isEmpty(); }
 
     private void showRecentSearches() {
-        if (recentPanel == null) return;
-        recentPanel.removeAllViews();
-        List<String> history = RecentSearchStore.load(activity);
-        LinearLayout heading = new LinearLayout(activity);
-        heading.setGravity(Gravity.CENTER_VERTICAL);
-        TextView title = BrowseUi.text(activity, "Recent searches", 16, Color.WHITE);
-        title.setPadding(dp(14), 0, 0, 0);
-        heading.addView(title, new LinearLayout.LayoutParams(0, dp(48), 1f));
-        title.setGravity(Gravity.CENTER_VERTICAL);
-        TextView clearHistory = BrowseUi.action(activity, "Clear all", "Clear all recent searches", v -> {
-            RecentSearchStore.clear(activity);
-            showRecentSearches();
-            updateContentVisibility();
-        });
-        clearHistory.setTextSize(13.5f);
-        clearHistory.setBackgroundColor(Color.TRANSPARENT);
-        heading.addView(clearHistory, new LinearLayout.LayoutParams(-2, dp(48)));
-        recentPanel.addView(heading);
-        for (String query : history) {
-            LinearLayout row = new LinearLayout(activity);
-            row.setGravity(Gravity.CENTER_VERTICAL);
-            TextView label = BrowseUi.text(activity, query, 17, Color.WHITE);
-            label.setSingleLine(true);
-            label.setEllipsize(android.text.TextUtils.TruncateAt.END);
-            label.setGravity(Gravity.CENTER_VERTICAL);
-            label.setPadding(dp(14), 0, dp(8), 0);
-            label.setContentDescription("Search again for " + query);
-            label.setOnClickListener(v -> { input.setText(query); input.setSelection(input.length()); runSearch(); });
-            row.addView(label, new LinearLayout.LayoutParams(0, dp(56), 1f));
-            TextView remove = BrowseUi.action(activity, "×", "Remove recent search " + query, v -> {
-                RecentSearchStore.remove(activity, query);
-                showRecentSearches(); updateContentVisibility();
-            });
-            remove.setBackgroundColor(Color.TRANSPARENT);
-            row.addView(remove, new LinearLayout.LayoutParams(dp(48), dp(48)));
-            recentPanel.addView(row);
-        }
+        if (recent == null) return;
+        recent.show(RecentSearchStore.load(activity));
         boolean recent = showingRecent();
         recentLayer.setVisibility(recent ? View.VISIBLE : View.GONE);
         resultLayer.setVisibility(recent ? View.INVISIBLE : View.VISIBLE);
@@ -379,44 +338,25 @@ final class SearchPanel {
         categories = new ArrayList<>(); library = new ArrayList<>();
         videos = new ArrayList<>(); series = new ArrayList<>();
         restoredScroll = null;
-        recycler.scrollToPosition(0);
+        results.scrollToPosition(0);
     }
 
     private void updateResultSize() {
-        if (shell == null || recycler == null) return;
+        if (shell == null || results == null) return;
         int count = showingRecent() ? RecentSearchStore.load(activity).size() + 1
-                : recycler.getAdapter().getItemCount();
+                : (bunkrOnly ? onlyFapAdapter.getItemCount() : adapter.getItemCount());
         boolean shortQuery = !showingRecent() && input.getText().toString().trim().length() < 2;
         shell.setResultCount(shortQuery ? 0 : Math.max(1, count), showingRecent() ? 56 : 104);
     }
 
     private void updateContentVisibility() {
         if (content == null || input == null || resultsControls == null || closing) return;
-        boolean show = !showingRecent() || !RecentSearchStore.load(activity).isEmpty();
         updateResultSize();
-        if (show) content.setVisibility(View.VISIBLE);
-        if (show == resultShown) {
-            if (!show) { content.setVisibility(View.INVISIBLE); resultSurface.setVisibility(View.INVISIBLE); resultsControls.setVisibility(View.INVISIBLE); resultSurface.setAlpha(0f); resultsControls.setAlpha(0f); }
-            return;
-        }
-        resultShown = show;
-        if (resultsAnimator != null) resultsAnimator.cancel();
+        content.setVisibility(View.VISIBLE);
         resultSurface.setVisibility(View.VISIBLE);
         resultsControls.setVisibility(View.VISIBLE);
-        resultsAnimator = android.animation.ValueAnimator.ofFloat(resultSurface.getAlpha(), show ? 1f : 0f);
-        resultsAnimator.setDuration(ZeroChillMotion.animationsEnabled(activity) ? 180L : 0L);
-        resultsAnimator.addUpdateListener(a -> {
-            float amount = (float) a.getAnimatedValue();
-            resultSurface.setAlpha(amount); resultsControls.setAlpha(amount);
-            float rise = dp(8) * (1f - amount);
-            resultSurface.setTranslationY(rise); resultsControls.setTranslationY(rise);
-        });
-        resultsAnimator.addListener(new android.animation.AnimatorListenerAdapter() {
-            @Override public void onAnimationEnd(android.animation.Animator a) {
-                if (!resultShown) { content.setVisibility(View.INVISIBLE); resultSurface.setVisibility(View.INVISIBLE); resultsControls.setVisibility(View.INVISIBLE); }
-            }
-        });
-        resultsAnimator.start();
+        resultSurface.setAlpha(1f);
+        resultsControls.setAlpha(1f);
     }
 
     private View buildSearchRow() {
@@ -463,7 +403,7 @@ final class SearchPanel {
         row.addView(clear, new LinearLayout.LayoutParams(dp(44), dp(48)));
         input.addTextChangedListener(BrowseUi.onText(value -> {
             clear.setVisibility(value.isEmpty() ? View.GONE : View.VISIBLE);
-            if (recentPanel != null) queryChanged(value);
+            if (recent != null) queryChanged(value);
             updateContentVisibility();
         }));
         return row;
@@ -484,7 +424,7 @@ final class SearchPanel {
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
         row.setPadding(dp(10), dp(4), dp(10), dp(4));
-        scroll.addView(row, new HorizontalScrollView.LayoutParams(-2, -1));
+        scroll.addView(row, new HorizontalScrollView.LayoutParams(-2, -2));
 
         addFilter(row, "All", Filter.ALL);
         addFilter(row, "Videos", Filter.VIDEOS);
@@ -502,6 +442,7 @@ final class SearchPanel {
         chip.setText(label);
         chip.setTag(value);
         chip.setTextSize(13.5f);
+        chip.setMinHeight(dp(48));
         chip.setGravity(Gravity.CENTER);
         chip.setPadding(dp(15), 0, dp(15), 0);
         chip.setOnClickListener(v -> {
@@ -510,9 +451,9 @@ final class SearchPanel {
             adapter.resetOrder();
             refreshFilterStyles();
             renderResults();
-            recycler.scrollToPosition(0);
+            results.scrollToPosition(0);
         });
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-2, dp(36));
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-2, -2);
         params.setMargins(dp(4), 0, dp(4), 0);
         row.addView(chip, params);
         filterViews.add(chip);
@@ -619,8 +560,8 @@ final class SearchPanel {
                     status.setVisibility(View.VISIBLE);
                 } else {
                     status.setVisibility(View.GONE);
-                    if (restoredScroll != null && recycler.getLayoutManager() != null) {
-                        recycler.getLayoutManager().onRestoreInstanceState(restoredScroll);
+                    if (restoredScroll != null) {
+                        results.restoreScroll(restoredScroll);
                         restoredScroll = null;
                     }
                 }
@@ -842,7 +783,7 @@ final class SearchPanel {
         } else {
             status.setVisibility(View.GONE);
             if (restoredScroll != null) {
-                recycler.getLayoutManager().onRestoreInstanceState(restoredScroll);
+                results.restoreScroll(restoredScroll);
                 restoredScroll = null;
             }
         }
@@ -894,7 +835,7 @@ final class SearchPanel {
     private void openResult(NativeContentItem item) {
         if (item == null || item.url == null || item.url.isEmpty()) return;
         RecentSearchStore.remember(activity, input.getText().toString());
-        haptic(recycler);
+        haptic(results.getView());
         if (item.isCreator()) {
             openCreator(item);
             return;
@@ -1003,7 +944,6 @@ final class SearchPanel {
         if (morphAnimator != null) { morphAnimator.removeAllListeners(); morphAnimator.cancel(); }
         if (!expanding) {
             BrowseUi.hideKeyboard(activity, input);
-            if (resultsAnimator != null) { resultsAnimator.removeAllListeners(); resultsAnimator.cancel(); }
         }
         if (expanding && morphProgress == 0f) { header.setAlpha(0f); favoriteSurface.setAlpha(0f); }
         if (expanding) {
@@ -1092,16 +1032,17 @@ final class SearchPanel {
         if (adapter != null) adapter.saveOrder(state);
         try { state.putString("creators", ContentItemCodec.encodeList(creatorResults, 80).toString()); }
         catch (Exception ignored) { }
-        state.putParcelable("scroll", recycler.getLayoutManager().onSaveInstanceState());
+        state.putParcelable("scroll", results.saveScroll());
         if (!bunkrOnly) saveSnapshot();
     }
 
     void close() {
         destroyed = true;
         if (morphAnimator != null) { morphAnimator.removeAllListeners(); morphAnimator.cancel(); }
-        if (resultsAnimator != null) { resultsAnimator.removeAllListeners(); resultsAnimator.cancel(); }
         generation++;
         searchHandler.removeCallbacksAndMessages(null);
+        if (recent != null) recent.close();
+        if (results != null) results.close();
         if (adapter != null) adapter.close();
         io.shutdownNow();
     }

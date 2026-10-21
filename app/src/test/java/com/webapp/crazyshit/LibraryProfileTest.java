@@ -58,9 +58,9 @@ public class LibraryProfileTest {
             publish(view, work);
             assertNotNull(text(view, "Your Library is ready"));
             assertNull(description(view, "Loading your Library"));
-            assertNull(view.findViewWithTag("History"));
-            assertNull(view.findViewWithTag("Downloads"));
-            assertNull(view.findViewWithTag("Favorite Creators"));
+            assertNull(nativeContent(view).findViewWithTag("History"));
+            assertNull(nativeContent(view).findViewWithTag("Downloads"));
+            assertNull(nativeContent(view).findViewWithTag("Favorite Creators"));
             description(view, "Messages.").performClick();
             assertEquals(ZeroChillInboxActivity.class.getName(), shadowOf(activity).getNextStartedActivity().getComponent().getClassName());
             description(view, "Notifications.").performClick();
@@ -88,15 +88,15 @@ public class LibraryProfileTest {
         Map<String, Runnable> work = new LinkedHashMap<>(); view.setWorkScheduler(work::put);
         try {
             view.setSocialActive(true); publish(view, work);
-            assertNull(view.findViewWithTag("Continue Watching"));
-            assertNotNull(view.findViewWithTag("History"));
+            assertNull(nativeContent(view).findViewWithTag("Continue Watching"));
+            assertNotNull(nativeContent(view).findViewWithTag("History"));
             description(view, "Resume In progress").performClick();
             assertEquals(60_000L, selected.get(0).positionMs);
             description(view, "Watch again Finished").performClick();
             assertTrue(selected.get(1).complete);
-            View rail = view.findViewWithTag("History");
+            View rail = nativeContent(view).findViewWithTag("History");
             view.refresh();
-            assertSame(rail, view.findViewWithTag("History"));
+            assertSame(rail, nativeContent(view).findViewWithTag("History"));
             assertNull(text(view, "Your Library is ready"));
             // Wait for the unchanged snapshot before closing/recreating the view.
             ((ExecutorService) ReflectionHelpers.getField(view, "refreshIo")).submit(() -> {}).get(5, TimeUnit.SECONDS);
@@ -126,12 +126,12 @@ public class LibraryProfileTest {
         Map<String, Runnable> work = new LinkedHashMap<>(); view.setWorkScheduler(work::put);
         try {
             view.setSocialActive(true); publish(view, work);
-            assertNotNull(view.findViewWithTag("Liked Videos"));
+            assertNotNull(nativeContent(view).findViewWithTag("Liked Videos"));
             assertNotNull(text(view, "A liked video"));
-            assertNotNull(view.findViewWithTag("Watch Later"));
+            assertNotNull(nativeContent(view).findViewWithTag("Watch Later"));
             SocialContentContextStore.confirmLike(activity, owner, url, false);
             shadowOf(Looper.getMainLooper()).idle(); publish(view, work);
-            assertNull(view.findViewWithTag("Liked Videos"));
+            assertNull(nativeContent(view).findViewWithTag("Liked Videos"));
             assertEquals(1, FavoriteStore.load(activity).size());
             assertTrue(PlaybackHistoryStore.load(activity).isEmpty());
         } finally { view.close(); }
@@ -281,7 +281,7 @@ public class LibraryProfileTest {
             android.widget.LinearLayout media = ReflectionHelpers.getField(view, "mediaContent");
             assertEquals("Favorite Creators", media.getChildAt(0).getTag());
             assertEquals("Liked Videos", media.getChildAt(1).getTag());
-            ViewGroup creators = (ViewGroup) view.findViewWithTag("Favorite Creators");
+            ViewGroup creators = (ViewGroup) nativeContent(view).findViewWithTag("Favorite Creators");
             android.widget.HorizontalScrollView scroll = (android.widget.HorizontalScrollView) creators.getChildAt(1);
             ViewGroup rail = (ViewGroup) scroll.getChildAt(0);
             assertEquals(2, rail.getChildCount());
@@ -338,7 +338,7 @@ public class LibraryProfileTest {
             }
             layoutLibrary(view, 320, 800);
             for (String section : new String[]{"Liked Videos", "Downloads", "Watch Later", "History"}) {
-                ViewGroup shell = (ViewGroup) view.findViewWithTag(section);
+                ViewGroup shell = (ViewGroup) nativeContent(view).findViewWithTag(section);
                 assertNotNull(section, shell);
                 LibraryMediaRows rows = (LibraryMediaRows) shell.getChildAt(1);
                 assertEquals(section + " portrait count", 1, row(rows, 0).getChildCount());
@@ -346,9 +346,9 @@ public class LibraryProfileTest {
                 assertTrue(row(rows, 0).getChildAt(0).getHeight() > row(rows, 0).getChildAt(0).getWidth());
                 assertTrue(row(rows, 1).getChildAt(0).getWidth() > row(rows, 1).getChildAt(0).getHeight());
             }
-            ViewGroup history = (ViewGroup) view.findViewWithTag("History");
+            ViewGroup history = (ViewGroup) nativeContent(view).findViewWithTag("History");
             saveRender(history, "library-orientation-history");
-            saveRender((View) view.findViewWithTag("Liked Videos"), "library-orientation-likes");
+            saveRender((View) nativeContent(view).findViewWithTag("Liked Videos"), "library-orientation-likes");
             assertEquals(savedBefore, activity.getSharedPreferences("watch_later", 0).getString("items", ""));
             assertEquals(historyBefore, activity.getSharedPreferences("playback_history", 0).getString("items", ""));
             assertEquals(2, SocialContentContextStore.likedVideos(activity, owner).size());
@@ -416,12 +416,21 @@ public class LibraryProfileTest {
         try (java.io.FileOutputStream out = new java.io.FileOutputStream(file)) { bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, out); }
         bitmap.recycle(); return file.toURI().toString();
     }
+    private static View nativeContent(LibraryHubView view) {
+        return ReflectionHelpers.getField(view, "content");
+    }
     private void layoutLibrary(View view, int widthDp, int heightDp) {
+        if (view instanceof LibraryHubView) view = nativeContent((LibraryHubView) view);
         int width = BrowseUi.dp(activity, widthDp), height = BrowseUi.dp(activity, heightDp);
         view.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(height, View.MeasureSpec.EXACTLY));
         view.layout(0, 0, width, height);
     }
     private void saveRender(View view, String name) throws Exception {
+        if (view instanceof LibraryHubView) view = nativeContent((LibraryHubView) view);
+        // Capture native content independently of the Compose viewport's clipping.
+        view.measure(View.MeasureSpec.makeMeasureSpec(BrowseUi.dp(activity, 320), View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
+        view.layout(0, 0, view.getMeasuredWidth(), view.getMeasuredHeight());
         android.graphics.Bitmap bitmap = android.graphics.Bitmap.createBitmap(view.getWidth(), view.getHeight(), android.graphics.Bitmap.Config.ARGB_8888);
         view.draw(new android.graphics.Canvas(bitmap));
         java.io.File directory = new java.io.File("build/reports/visual-tests");
@@ -446,6 +455,7 @@ public class LibraryProfileTest {
         return find(root, view -> view instanceof TextView && value.contentEquals(((TextView) view).getText()));
     }
     private static View find(View root, java.util.function.Predicate<View> predicate) {
+        if (root instanceof LibraryHubView) root = nativeContent((LibraryHubView) root);
         if (predicate.test(root)) return root;
         if (root instanceof ViewGroup) for (int i = 0; i < ((ViewGroup) root).getChildCount(); i++) {
             View found = find(((ViewGroup) root).getChildAt(i), predicate); if (found != null) return found;

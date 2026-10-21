@@ -1,0 +1,83 @@
+name: Compose approved-main performance comparison
+
+on:
+  # The approved-main comparison is recorded. Run it again only when explicitly needed.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  paired:
+    if: github.head_ref == 'feature/zerochill-compose-6.0' || github.ref_name == 'feature/zerochill-compose-6.0'
+    name: paired (${{ matrix.revision.name }}, ${{ matrix.flow.name }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      ANALYTICS_ENDPOINT: ''
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        revision:
+          - name: approved-main
+            sha: da9b00588e6ecc370327cad75209e757475c2370
+          - name: compose-checkpoint
+            sha: 702226b0609437dab5a68595243953b9cae1c1e3
+        flow:
+          - name: search
+            test: searchFlow
+          - name: creator-gallery-playback
+            test: creatorGalleryAndPlayback
+          - name: shows-scroll
+            test: showsScroll
+          - name: shows-scroll-motion
+            test: showsScroll
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ matrix.revision.sha }}
+      - name: Record exact source and unchanged harness
+        run: |
+          git rev-parse HEAD
+          sha256sum tools/run_performance_audit.sh baselineprofile/src/main/java/com/webapp/crazyshit/baselineprofile/{MainFlowsBenchmark,CriticalUserJourneys}.kt
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v4
+        with:
+          packages: platform-tools
+      - uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: '8.11.1'
+          cache-provider: basic
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Run unchanged failing journey with original emulator settings
+        uses: ReactiveCircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: ${{ matrix.flow.name != 'shows-scroll-motion' }}
+          disk-size: 4096M
+          ram-size: 2048M
+          script: >-
+            bash tools/run_performance_audit.sh :baselineprofile:connectedBenchmarkReleaseAndroidTest
+            "-Pandroid.testInstrumentationRunnerArguments.class=com.webapp.crazyshit.baselineprofile.MainFlowsBenchmark#${{ matrix.flow.test }}"
+            "-Pandroid.testInstrumentationRunnerArguments.androidx.benchmark.enabledRules=Macrobenchmark"
+      - name: Preserve comparison evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: paired-${{ matrix.revision.name }}-${{ matrix.flow.name }}
+          path: |
+            baselineprofile/build/outputs/connected_android_test_additional_output/
+            baselineprofile/build/outputs/final-pass-diagnostics/
+            baselineprofile/build/outputs/androidTest-results/
+          if-no-files-found: warn
+          retention-days: 7

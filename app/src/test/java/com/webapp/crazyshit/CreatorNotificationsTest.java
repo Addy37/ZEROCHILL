@@ -24,7 +24,7 @@ import java.util.List;
 import static org.junit.Assert.*;
 
 @RunWith(RobolectricTestRunner.class)
-@Config(application = Application.class, sdk = 35, shadows = CreatorNotificationsTest.OfflineImages.class)
+@Config(application = Application.class, sdk = 35, shadows = {CreatorNotificationsTest.OfflineImages.class, FavoriteArtworkScheduleShadow.class})
 public class CreatorNotificationsTest {
     @org.robolectric.annotation.Implements(value = com.bumptech.glide.load.data.HttpUrlFetcher.class,
             isInAndroidSdk = false)
@@ -335,18 +335,18 @@ public class CreatorNotificationsTest {
             RecyclerView.Adapter adapter = recycler.getAdapter();
             RecyclerView.ViewHolder holder = adapter.createViewHolder(recycler, 0);
             adapter.bindViewHolder(holder, 0);
-            android.widget.TextView badge = (android.widget.TextView) field(holder, "updateBadge");
-            assertEquals("4", badge.getText().toString());
+            Object card = ((java.util.List<?>) field(adapter, "cards")).get(0);
+            assertEquals(4, field(card, "unread"));
             UpdateInboxStore.markCreatorItemRead(app, group().children.get(0).id);
             Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
             adapter.onBindViewHolder(holder, 0, Collections.singletonList("badges"));
-            assertEquals("3", badge.getText().toString());
+            assertEquals(3, field(card, "unread"));
             holder.itemView.performClick();
             assertEquals(3, group().unreadItems());
             UpdateInboxStore.markAllRead(app);
             Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
             adapter.onBindViewHolder(holder, 0, Collections.singletonList("badges"));
-            assertEquals(android.view.View.GONE, badge.getVisibility());
+            assertEquals(0, field(card, "unread"));
         } finally { controller.pause().stop().destroy(); }
     }
 

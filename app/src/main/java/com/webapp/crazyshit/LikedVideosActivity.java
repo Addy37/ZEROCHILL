@@ -19,12 +19,12 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /** Lazy, account-scoped collection. Network refresh and pagination require an explicit tap. */
-public final class LikedVideosActivity extends Activity {
+public final class LikedVideosActivity extends androidx.activity.ComponentActivity {
     private final ExecutorService disk = Executors.newSingleThreadExecutor();
     private final List<NativeContentItem> items = new ArrayList<>();
     private final LikesAdapter adapter = new LikesAdapter();
     private RecyclerView recycler;
-    private TextView status, refresh, more;
+    private LibraryCompose presentation;
     private String owner = "";
     private boolean loading;
     private int generation, nextOffset, unavailable;
@@ -37,31 +37,21 @@ public final class LikedVideosActivity extends Activity {
         super.onCreate(state);
         ZeroChillUi.applySystemBars(this);
         owner = ZeroChillSessionStore.currentUserId(this);
-        LinearLayout root = BrowseUi.screen(this);
-        LinearLayout heading = new LinearLayout(this);
-        heading.setGravity(Gravity.CENTER_VERTICAL);
-        heading.addView(BrowseUi.action(this, "‹", "Back", v -> finish()), new LinearLayout.LayoutParams(dp(48), dp(48)));
-        TextView title = BrowseUi.text(this, "Liked Videos", 22, UiPalette.TEXT_PRIMARY);
-        heading.addView(title, new LinearLayout.LayoutParams(0, -2, 1));
-        refresh = BrowseUi.action(this, "Refresh", "Refresh liked videos", v -> loadPage(0));
-        heading.addView(refresh, new LinearLayout.LayoutParams(-2, dp(48)));
-        root.addView(heading);
-        status = BrowseUi.text(this, "Loading your likes…", 13, UiPalette.TEXT_MUTED);
-        status.setPadding(dp(16), dp(8), dp(16), dp(12));
-        root.addView(status);
+        presentation = new LibraryCompose(this, "Liked Videos", value -> { });
+        presentation.setSearchable(false);
+        presentation.setSummary("Loading your likes…");
+        presentation.setActionLabel("Refresh liked videos");
+        presentation.setAction(() -> loadPage(0));
+        presentation.setMore(() -> loadPage(nextOffset));
         recycler = new RecyclerView(this);
         recycler.setLayoutManager(new LinearLayoutManager(this));
         recycler.setAdapter(adapter);
         recycler.setClipToPadding(false);
         recycler.setPadding(dp(12), 0, dp(12), dp(24));
-        root.addView(recycler, new LinearLayout.LayoutParams(-1, 0, 1));
-        more = BrowseUi.action(this, "Load more", "Load more liked videos", v -> loadPage(nextOffset));
-        more.setVisibility(View.GONE);
-        root.addView(more, new LinearLayout.LayoutParams(-1, dp(48)));
-        setContentView(root);
+        presentation.install(recycler);
         ZeroChillSessionStore.preferences(this).registerOnSharedPreferenceChangeListener(sessionListener);
         if (state != null) restoredScroll = state.getParcelable("scroll");
-        Retained retained = (Retained) getLastNonConfigurationInstance();
+        Retained retained = (Retained) getLastCustomNonConfigurationInstance();
         if (retained != null && owner.equals(retained.owner)) {
             items.addAll(retained.items);
             nextOffset = retained.nextOffset; unavailable = retained.unavailable; hasMore = retained.hasMore;
@@ -71,7 +61,7 @@ public final class LikedVideosActivity extends Activity {
         } else loadLocal();
     }
 
-    @Override public Object onRetainNonConfigurationInstance() {
+    @Override public Object onRetainCustomNonConfigurationInstance() {
         return new Retained(owner, new ArrayList<>(items), nextOffset, unavailable, hasMore);
     }
 
@@ -94,8 +84,8 @@ public final class LikedVideosActivity extends Activity {
         nextOffset = unavailable = 0;
         hasMore = false;
         items.clear(); adapter.notifyDataSetChanged();
-        more.setVisibility(View.GONE);
-        status.setText("Loading your likes…");
+        presentation.setMoreLabel("");
+        presentation.setSummary("Loading your likes…");
         loadLocal();
     }
 
@@ -125,14 +115,14 @@ public final class LikedVideosActivity extends Activity {
         loading = true;
         final int request = ++generation;
         final String requested = owner;
-        refresh.setEnabled(false); more.setEnabled(false);
-        status.setText("Loading liked videos…");
+        presentation.setActionEnabled(false);
+        presentation.setSummary("Loading liked videos…");
         ZeroChillSocialRepository.loadLikedVideoPage(this, offset, (page, error) -> runOnUiThread(() -> {
             if (!valid(request, requested)) return;
             loading = false;
             if (error != null || page == null) {
-                status.setText("Couldn't refresh likes. Your cached videos are still available. Tap Refresh to retry.");
-                refresh.setEnabled(true); more.setEnabled(true);
+                presentation.setSummary("Couldn't refresh likes. Your cached videos are still available. Tap Refresh to retry.");
+                presentation.setActionEnabled(true);
                 return;
             }
             if (offset == 0) { items.clear(); unavailable = 0; }
@@ -152,9 +142,9 @@ public final class LikedVideosActivity extends Activity {
     }
 
     private void showStatus(boolean synced) {
-        refresh.setEnabled(true); more.setEnabled(true);
-        more.setVisibility(hasMore ? View.VISIBLE : View.GONE);
-        status.setText(owner.isEmpty() ? "Sign in, then tap Refresh to view your likes."
+        presentation.setActionEnabled(true);
+        presentation.setMoreLabel(hasMore ? "Load more liked videos" : "");
+        presentation.setSummary(owner.isEmpty() ? "Sign in, then tap Refresh to view your likes."
                 : unavailable > 0 ? items.size() + " available · " + unavailable
                         + " older likes have no video details on this device."
                 : items.isEmpty() ? synced ? "No liked videos yet." : "Tap Refresh to load your previous likes."
@@ -202,7 +192,7 @@ public final class LikedVideosActivity extends Activity {
         final ImageView image; final TextView title;
         Holder(View root, ImageView image, TextView title) { super(root); this.image = image; this.title = title; }
     }
-    @Override protected void onResume() { super.onResume(); if (status != null) checkAccount(); }
+    @Override protected void onResume() { super.onResume(); if (presentation != null) checkAccount(); }
     @Override protected void onSaveInstanceState(Bundle state) {
         state.putParcelable("scroll", recycler.getLayoutManager().onSaveInstanceState());
         super.onSaveInstanceState(state);

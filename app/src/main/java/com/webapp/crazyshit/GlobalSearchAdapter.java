@@ -195,6 +195,28 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
         return itemKey(entry).hashCode();
     }
 
+    String composeKey(int position) {
+        Entry entry = entries.get(position);
+        if (entry.section) return "section:" + sectionKey(entry);
+        String section = "";
+        for (int i = position - 1; i >= 0; i--) {
+            if (entries.get(i).section) { section = sectionKey(entries.get(i)); break; }
+        }
+        return section + ":" + itemKey(entry);
+    }
+
+    // Compose consumes immutable data, while the established image pipeline stays here.
+    Entry composeEntry(int position) { return entries.get(position); }
+    String composeMeta(Entry entry) { return metaText(entry.item, entry.source); }
+    int composeGeneration() { return fades.generation(); }
+    boolean composeFirstPresentation(String key) { return fades.firstPresentation(key); }
+    void composeOpen(NativeContentItem item) { listener.onOpen(item); }
+    void composeLoadImage(ImageView image, NativeContentItem item) {
+        ensureContext(image.getContext());
+        loadImage(image, item);
+        requestRenderedThumbnail(item);
+    }
+
     @Override
     public int getItemViewType(int position) {
         return entries.get(position).section ? TYPE_SECTION : TYPE_RESULT;

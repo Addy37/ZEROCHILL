@@ -7,10 +7,13 @@ import java.util.Set;
 /** Fade a result only on its first presentation in a query, never on metadata refresh. */
 final class SearchResultFades {
     private final Set<String> revealed = new HashSet<>();
-    void reset() { revealed.clear(); }
+    private int generation;
+    void reset() { revealed.clear(); generation++; }
+    int generation() { return generation; }
+    boolean firstPresentation(String key) { return revealed.add(key); }
     void show(View view, String key) {
         view.animate().cancel();
-        if (!revealed.add(key) || !ZeroChillMotion.animationsEnabled(view.getContext())) {
+        if (!firstPresentation(key) || !ZeroChillMotion.animationsEnabled(view.getContext())) {
             view.setAlpha(1f);
             return;
         }

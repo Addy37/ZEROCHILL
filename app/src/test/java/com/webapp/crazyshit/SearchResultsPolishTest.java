@@ -93,17 +93,16 @@ public class SearchResultsPolishTest {
         try {
             View content = ReflectionHelpers.getField(panel, "content");
             assertEquals(View.VISIBLE, content.getVisibility());
-            View rerun = find(panel.view, "Search again for Sophie");
-            assertNotNull(rerun);
-            rerun.performClick();
+            RecentSearchesCompose recent = ReflectionHelpers.getField(panel, "recent");
+            recent.repeatQuery("Sophie");
             assertEquals("Sophie", panel.field().getText().toString());
             assertFalse((boolean) ReflectionHelpers.getField(panel, "previewMode"));
             panel.field().setText("");
-            find(panel.view, "Remove recent search Sophie").performClick();
+            recent.removeQuery("Sophie");
             assertTrue(RecentSearchStore.load(host.get()).isEmpty());
             RecentSearchStore.remember(host.get(), "Another");
             panel.resume();
-            find(panel.view, "Clear all recent searches").performClick();
+            recent.clearQueries();
             assertTrue(RecentSearchStore.load(host.get()).isEmpty());
         } finally { panel.close(); host.pause().stop().destroy(); }
     }
@@ -113,7 +112,7 @@ public class SearchResultsPolishTest {
         SearchPanel panel = new SearchPanel(host.get(), new Intent().putExtra("scope", "bunkr"), true, () -> {});
         panel.create(null);
         try {
-            RecyclerView list = ReflectionHelpers.getField(panel, "recycler");
+            SearchResultsCompose list = ReflectionHelpers.getField(panel, "results");
             panel.field().setText("needle");
             shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(280));
             assertTrue(SearchSource.partial.await(3, TimeUnit.SECONDS));
@@ -128,7 +127,7 @@ public class SearchResultsPolishTest {
             SearchSource.finish.countDown();
             await(() -> ((int) ReflectionHelpers.getField(panel, "pendingSources")) == 0);
             assertEquals(3, list.getAdapter().getItemCount());
-            assertSame(list, ReflectionHelpers.getField(panel, "recycler"));
+            assertSame(list, ReflectionHelpers.getField(panel, "results"));
             assertEquals(View.GONE, ((View) ReflectionHelpers.getField(panel, "progress")).getVisibility());
             assertTrue(RecentSearchStore.load(host.get()).isEmpty());
             panel.field().setText("");

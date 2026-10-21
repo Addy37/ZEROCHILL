@@ -186,8 +186,8 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         libraryView.setWorkScheduler((key, task) -> primaryWork.submit(PAGE_LIBRARY, key, task));
         pages[PAGE_ONLYFAP].onlyFapHub.setWorkScheduler(
                 (key, task) -> primaryWork.submit(PAGE_ONLYFAP, key, task));
-        libraryView.setOnScrollChangeListener((v, scrollX, scrollY, oldScrollX, oldScrollY) ->
-                host.onNavigationScroll(PAGE_LIBRARY, scrollY - oldScrollY, scrollY <= dp(4), true));
+        libraryView.setNavigationScrollListener((delta, atTop) ->
+                host.onNavigationScroll(PAGE_LIBRARY, delta, atTop, true));
 
     }
 
@@ -455,7 +455,8 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         if (pageIndex == PAGE_LIBRARY) {
             int header = ZeroChillUi.dimension(activity, R.dimen.zc_top_bar_height);
             pageParams.topMargin = -header;
-            pageView.setPadding(0, header, 0, 0);
+            pageView.setPadding(0, 0, 0, 0);
+            libraryView.setHeaderInset(header);
         }
         holder.container.addView(pageView, pageParams);
     }
@@ -1158,7 +1159,6 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         page.onlyFapFavoriteArtworkTask = io.submit(() ->
                 favoriteCreatorArtworkHydrator.hydrate(
                         activity,
-                        10,
                         () -> postPrimaryResult(page, generation, "favorites", () -> {
                             if (generation == page.generation && page.onlyFapHub != null) {
                                 page.onlyFapHub.refreshFavorites();

@@ -37,6 +37,9 @@ final class UiFoundationCoordinator {
 
     static void onActivityResumed(Activity activity) {
         if (activity == null || activity.isFinishing()) return;
+        // Full Compose screens own their theme, width and consumed window insets.
+        // The legacy View fitter would pad their root a second time on real app resume.
+        if (activity.findViewById(com.webapp.crazyshit.R.id.zerochill_compose_root) != null) return;
 
         OledThemeController.applySoon(activity);
 

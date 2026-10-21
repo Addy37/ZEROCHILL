@@ -35,7 +35,7 @@ import static org.robolectric.Shadows.shadowOf;
 
 /** Exercise the actual View All adapter, rather than CreatorListAdapter. */
 @RunWith(RobolectricTestRunner.class)
-@Config(application = Application.class, sdk = 35, shadows = FavoriteCreatorsScrollTest.Preloads.class)
+@Config(application = Application.class, sdk = 35, shadows = {FavoriteCreatorsScrollTest.Preloads.class, FavoriteArtworkScheduleShadow.class})
 public class FavoriteCreatorsScrollTest {
     private final Context context = RuntimeEnvironment.getApplication();
 
@@ -128,17 +128,17 @@ public class FavoriteCreatorsScrollTest {
             RecyclerView.Adapter adapter = grid.getAdapter();
             RecyclerView.ViewHolder holder = adapter.createViewHolder(grid, 0);
             adapter.bindViewHolder(holder, 0);
-            TextView badge = ReflectionHelpers.getField(holder, "updateBadge");
-            assertEquals(View.GONE, badge.getVisibility());
+            List<?> cards = ReflectionHelpers.getField(adapter, "cards");
+            assertEquals(0, (int) ReflectionHelpers.getField(cards.get(0), "unread"));
             writeUnread("Testcreator000", 7);
             shadowOf(Looper.getMainLooper()).idle();
             adapter.onBindViewHolder(holder, 0, Collections.singletonList("badges"));
-            assertEquals("7", badge.getText().toString());
+            assertEquals(7, (int) ReflectionHelpers.getField(cards.get(0), "unread"));
             assertTrue(holder.itemView.getContentDescription().toString().contains("7 new items"));
             UpdateInboxStore.markCreatorRead(context, Arrays.asList("Testcreator000"));
             shadowOf(Looper.getMainLooper()).idle();
             adapter.onBindViewHolder(holder, 0, Collections.singletonList("badges"));
-            assertEquals(View.GONE, badge.getVisibility());
+            assertEquals(0, (int) ReflectionHelpers.getField(cards.get(0), "unread"));
         }
     }
 
@@ -182,7 +182,7 @@ public class FavoriteCreatorsScrollTest {
             java.lang.reflect.Method requestMethod = adapter.getClass().getDeclaredMethod("avatarRequest", card.getClass());
             requestMethod.setAccessible(true);
             com.bumptech.glide.RequestBuilder<?> request = (com.bumptech.glide.RequestBuilder<?>) requestMethod.invoke(adapter, card);
-            int expected = Math.round(BrowseUi.dp(controller.get(), 86) * 2.4f);
+            int expected = Math.round(BrowseUi.dp(controller.get(), 56) * 2.4f);
             assertEquals(expected, request.getOverrideWidth());
             assertEquals(expected, request.getOverrideHeight());
             assertFalse(request.isTransformationAllowed());

@@ -55,15 +55,15 @@ public class LikedVideosActivityTest {
         try {
             settle(activity);
             assertTrue(calls.isEmpty());
-            LibraryProfileTest.description(activity.getWindow().getDecorView(), "Refresh liked videos").performClick();
+            presentation(activity).getAction().run();
             assertEquals(Integer.valueOf(0), offsets.get(0));
             NativeContentItem item = video("First", "first");
             calls.get(0).complete(new SocialContentContextStore.LikedPage(Collections.singletonList(item), 1, 100, true), null);
             shadowOf(Looper.getMainLooper()).idle();
             RecyclerView list = ReflectionHelpers.getField(activity, "recycler");
             assertEquals(1, list.getAdapter().getItemCount());
-            assertTrue(((TextView) ReflectionHelpers.getField(activity, "status")).getText().toString().contains("older likes"));
-            LibraryProfileTest.description(activity.getWindow().getDecorView(), "Load more liked videos").performClick();
+            assertTrue(presentation(activity).getSummary().contains("older likes"));
+            presentation(activity).getMore().run();
             assertEquals(Integer.valueOf(100), offsets.get(1));
             calls.get(1).complete(new SocialContentContextStore.LikedPage(Collections.singletonList(video("Second", "second")), 0, 101, false), null);
             shadowOf(Looper.getMainLooper()).idle();
@@ -85,14 +85,14 @@ public class LikedVideosActivityTest {
             settle(activity);
             RecyclerView list = ReflectionHelpers.getField(activity, "recycler");
             assertEquals(1, list.getAdapter().getItemCount());
-            ((View) ReflectionHelpers.getField(activity, "refresh")).performClick();
+            presentation(activity).getAction().run();
             owner = "account-b";
             ZeroChillSessionStore.preferences(activity).edit().putString("test-owner", owner).apply();
             shadowOf(Looper.getMainLooper()).idle(); settle(activity);
             calls.get(0).complete(new SocialContentContextStore.LikedPage(Collections.singletonList(video("Old", "old")), 0, 1, false), null);
             shadowOf(Looper.getMainLooper()).idle();
             assertEquals(0, list.getAdapter().getItemCount());
-            assertTrue(((View) ReflectionHelpers.getField(activity, "refresh")).isEnabled());
+            assertTrue(presentation(activity).getActionEnabled());
         } finally { controller.pause().stop().destroy(); }
     }
     @Test public void failedRefreshKeepsLocalLikesAndRecreationKeepsCollection() throws Exception {
@@ -101,7 +101,7 @@ public class LikedVideosActivityTest {
         ActivityController<LikedVideosActivity> controller = Robolectric.buildActivity(LikedVideosActivity.class).setup();
         try {
             LikedVideosActivity activity = controller.get(); settle(activity);
-            ((View) ReflectionHelpers.getField(activity, "refresh")).performClick();
+            presentation(activity).getAction().run();
             calls.get(0).complete(null, new Exception("offline"));
             shadowOf(Looper.getMainLooper()).idle();
             RecyclerView list = ReflectionHelpers.getField(activity, "recycler");
@@ -112,6 +112,9 @@ public class LikedVideosActivityTest {
             assertEquals(1, list.getAdapter().getItemCount());
             assertEquals("Recreation must not start network work", 1, calls.size());
         } finally { controller.pause().stop().destroy(); }
+    }
+    private LibraryCompose presentation(LikedVideosActivity activity) {
+        return ReflectionHelpers.getField(activity, "presentation");
     }
     private void settle(LikedVideosActivity activity) throws Exception {
         ((ExecutorService) ReflectionHelpers.getField(activity, "disk")).submit(() -> {}).get(5, TimeUnit.SECONDS);

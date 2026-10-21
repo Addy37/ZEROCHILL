@@ -29,7 +29,7 @@ public class SearchStateTest {
         ActivityController<SearchActivity> controller =
                 Robolectric.buildActivity(SearchActivity.class, intent).create().start().resume();
 
-        RecyclerView recycler = ReflectionHelpers.getField(controller.get().panel, "recycler");
+        SearchResultsCompose recycler = ReflectionHelpers.getField(controller.get().panel, "results");
         assertTrue(recycler.getAdapter() instanceof OnlyFapCreatorSearchAdapter);
 
         controller.pause().stop().destroy();

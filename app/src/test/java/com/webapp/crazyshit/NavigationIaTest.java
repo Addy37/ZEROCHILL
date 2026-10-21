@@ -623,33 +623,21 @@ public class NavigationIaTest {
         assertEquals(0, LandscapeUiController.resolveShellTopInset(true, 0, 42));
     }
 
-    @Test public void libraryHubActionsOpenExistingActivities() {
+    @Test public void libraryHubUsesComposeInsetsWithoutLegacyPadding() {
         ActivityController<LibraryHubActivity> controller =
                 Robolectric.buildActivity(LibraryHubActivity.class).setup();
         LibraryHubActivity activity = controller.get();
-        android.widget.FrameLayout content = activity.findViewById(android.R.id.content);
-        android.view.ViewGroup root = (android.view.ViewGroup) content.getChildAt(0);
-        View shell = root.getChildAt(0);
-        androidx.core.view.WindowInsetsCompat safeInsets =
-                new androidx.core.view.WindowInsetsCompat.Builder()
-                        .setInsets(
-                                androidx.core.view.WindowInsetsCompat.Type.systemBars()
-                                        | androidx.core.view.WindowInsetsCompat.Type.displayCutout(),
-                                androidx.core.graphics.Insets.of(3, 24, 5, 12)
-                        )
-                        .build();
-        androidx.core.view.ViewCompat.dispatchApplyWindowInsets(shell, safeInsets);
-        assertEquals(3, shell.getPaddingLeft());
-        assertEquals(24, shell.getPaddingTop());
-        assertEquals(5, shell.getPaddingRight());
-        assertEquals(12, shell.getPaddingBottom());
-        View libraryAction = findByDescription(activity.getWindow().getDecorView(), "History");
-        assertNotNull(libraryAction);
-        libraryAction.performClick();
-        Intent started = shadowOf(activity).getNextStartedActivity();
-        assertEquals(FavoritesActivity.class.getName(), started.getComponent().getClassName());
-        assertEquals(FavoritesActivity.START_HISTORY,
-                started.getIntExtra(FavoritesActivity.EXTRA_START_TAB, -1));
+        View root = activity.findViewById(R.id.zerochill_compose_root);
+        assertNotNull(root);
+        androidx.core.view.WindowInsetsCompat safeInsets = new androidx.core.view.WindowInsetsCompat.Builder()
+                .setInsets(androidx.core.view.WindowInsetsCompat.Type.systemBars(),
+                        androidx.core.graphics.Insets.of(3, 24, 5, 12)).build();
+        androidx.core.view.ViewCompat.dispatchApplyWindowInsets(root, safeInsets);
+        // Compose consumes these insets internally; the obsolete View shell must not add them again.
+        assertEquals(0, root.getPaddingLeft());
+        assertEquals(0, root.getPaddingTop());
+        assertEquals(0, root.getPaddingRight());
+        assertEquals(0, root.getPaddingBottom());
         controller.pause().stop().destroy();
     }
 
@@ -664,21 +652,12 @@ public class NavigationIaTest {
         shadowOf(android.os.Looper.getMainLooper()).idle();
 
         FavoritesActivity activity = controller.get();
-        ViewPager2 pager = ReflectionHelpers.getField(activity, "pager");
-        assertFalse(pager.isUserInputEnabled());
-        assertEquals(FavoritesActivity.START_HISTORY, pager.getCurrentItem());
-        assertNotNull(findByDescription(
-                activity.getWindow().getDecorView(),
-                "History section"
-        ));
-        assertNotNull(findByDescription(
-                activity.getWindow().getDecorView(),
-                "Search History"
-        ));
-        assertNotNull(findByDescription(
-                activity.getWindow().getDecorView(),
-                "Section options"
-        ));
+        assertEquals(FavoritesActivity.START_HISTORY, (int) ReflectionHelpers.getField(activity, "tab"));
+        LibraryCompose presentation = ReflectionHelpers.getField(activity, "presentation");
+        assertNotNull(activity.findViewById(R.id.zerochill_compose_root));
+        assertEquals("Section options", presentation.getActionLabel());
+        assertTrue(presentation.getSearchable());
+        assertTrue(presentation.getSummary().contains("Recent first"));
 
         controller.pause().stop().destroy();
     }

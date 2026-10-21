@@ -20,7 +20,7 @@ import static org.junit.Assert.*;
 @RunWith(RobolectricTestRunner.class)
 @Config(application = Application.class, sdk = 35)
 public class SearchFloatingPresentationTest {
-    @Test public void pillAndFavoritesFloatOutsideCompactResultsAndHonorReducedMotion() {
+    @Test public void headerAndFavoritesStayAboveOpaqueFullHeightResultsAndHonorReducedMotion() {
         org.robolectric.android.controller.ActivityController<SearchActivity> host =
                 Robolectric.buildActivity(SearchActivity.class).create().start().resume().visible();
         try {
@@ -37,25 +37,26 @@ public class SearchFloatingPresentationTest {
             assertEquals(BrowseUi.dp(activity, 56), pill.getHeight());
             assertTrue(pill.getRight() < favorite.getLeft());
             assertTrue(pill.getClipToOutline());
-            assertEquals(View.INVISIBLE, results.getVisibility());
+            assertEquals(View.VISIBLE, results.getVisibility());
             panel.field().setText("a");
             org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(200));
             layout(panel.view);
-            assertEquals(0L, ((android.animation.ValueAnimator) ReflectionHelpers.getField(panel, "resultsAnimator")).getDuration());
+            assertEquals(1f, results.getAlpha(), 0f);
             assertEquals(View.VISIBLE, results.getVisibility());
             assertTrue(results.getTop() > pill.getBottom());
-            assertTrue(results.getHeight() < BrowseUi.dp(activity, 180));
+            assertTrue(results.getHeight() > BrowseUi.dp(activity, 500));
+            assertEquals(Color.BLACK, ((ColorDrawable) panel.view.getBackground()).getColor());
             View resultLayer = ReflectionHelpers.getField(panel, "resultLayer");
             assertEquals(View.VISIBLE, resultLayer.getVisibility());
             assertEquals(View.GONE, ((View) ReflectionHelpers.getField(panel, "recentLayer")).getVisibility());
             View clear = ReflectionHelpers.getField(panel, "clear");
             clear.performClick();
             org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(200));
-            assertEquals(View.INVISIBLE, results.getVisibility());
+            assertEquals(View.VISIBLE, results.getVisibility());
             assertFalse(activity.isFinishing());
-            RecyclerView list = ReflectionHelpers.getField(panel, "recycler");
-            assertFalse(list.getClipToPadding());
-            assertTrue(((FrameLayout.LayoutParams) list.getLayoutParams()).topMargin < 0);
+            SearchResultsCompose list = ReflectionHelpers.getField(panel, "results");
+            assertTrue(list.getView() instanceof androidx.compose.ui.platform.ComposeView);
+            assertEquals(0, ((FrameLayout.LayoutParams) list.getView().getLayoutParams()).topMargin);
         } finally { host.pause().stop().destroy(); }
     }
 

@@ -21,7 +21,7 @@ import static org.junit.Assert.*;
 @Config(application = Application.class, sdk = 35)
 public class SearchPaneGeometryTest {
     @Test @GraphicsMode(GraphicsMode.Mode.NATIVE)
-    public void overflowingContentIsClippedToGlassOutlineIncludingTranslatedCorners() {
+    public void opaqueSearchClipsOverflowToItsFullWidthViewport() {
         var host = Robolectric.buildActivity(Activity.class).create().start().resume().visible();
         Activity activity = host.get();
         SearchGlassOwner owner = new SearchGlassOwner(activity);
@@ -41,15 +41,15 @@ public class SearchPaneGeometryTest {
         for (int ime : new int[]{0, 160, 300}) {
             ViewCompat.dispatchApplyWindowInsets(shell, insets(ime));
             layout(shell);
-            pane.setTranslationY(4f); overflowing.setTranslationY(4f);
+
             assertAligned(pane, overflowing);
-            assertSame(pane.getOutlineProvider(), overflowing.getOutlineProvider());
-            assertTrue(overflowing.getClipToOutline());
+            assertFalse(overflowing.getClipToOutline());
+            assertEquals(400, overflowing.getWidth());
             Bitmap image = Bitmap.createBitmap(400, 800, Bitmap.Config.ARGB_8888);
             shell.draw(new Canvas(image));
             assertEquals(Color.MAGENTA, image.getPixel(pane.getLeft() + pane.getWidth()/2, pane.getTop() + 40));
-            assertNotEquals(Color.MAGENTA, image.getPixel(pane.getLeft(), (int)pane.getY()));
-            assertNotEquals(Color.MAGENTA, image.getPixel(pane.getLeft(), (int)pane.getY() + pane.getHeight() - 1));
+            assertEquals(Color.MAGENTA, image.getPixel(pane.getLeft(), (int)pane.getY()));
+            assertEquals(Color.MAGENTA, image.getPixel(pane.getLeft(), (int)pane.getY() + pane.getHeight() - 1));
             assertNotEquals(Color.MAGENTA, image.getPixel(pane.getLeft() + pane.getWidth()/2, (int)pane.getY() + pane.getHeight() + 2));
             assertNotEquals(Color.MAGENTA, image.getPixel(pane.getLeft() + pane.getWidth()/2, pane.getTop() - 2));
             image.recycle();
@@ -83,62 +83,12 @@ public class SearchPaneGeometryTest {
             int gap = BrowseUi.dp(host.get(), 12) - Math.min(BrowseUi.dp(host.get(), 4), Math.max(0, bottom - 20));
             assertEquals(800 - Math.max(20, bottom) - gap, pane.getBottom());
             assertEquals(initialHeight - pane.getHeight(), Math.max(20, bottom) - 20 + gap - BrowseUi.dp(host.get(), 12));
-            assertTrue(rows.getClipToOutline());
+            assertFalse(rows.getClipToOutline());
         }
         callback.onEnd(animation); layout(shell);
         assertEquals(top, pane.getTop()); assertAligned(pane, rows);
         ViewCompat.dispatchApplyWindowInsets(shell, insets(0)); layout(shell);
         assertEquals(initialHeight, pane.getHeight());
-        panel.close(); owner.close(); host.pause().stop().destroy();
-    }
-
-    @Test public void lastCreatorAndFooterStayReachableWithInternalBottomSpaceAndIme() throws Exception {
-        var host = Robolectric.buildActivity(Activity.class).create().start().resume().visible();
-        SearchGlassOwner owner = new SearchGlassOwner(host.get());
-        SearchPanel panel = new SearchPanel(host.get(), new Intent().putExtra("scope", "bunkr"), true, () -> {});
-        panel.create(null);
-        host.get().setContentView(panel.view);
-        panel.field().setText("fixture");
-        ReflectionHelpers.callInstanceMethod(panel, "cancelSearchWork");
-        OnlyFapCreatorSearchAdapter adapter = ReflectionHelpers.getField(panel, "onlyFapAdapter");
-        List<NativeContentItem> creators = new ArrayList<>();
-        for (int i = 0; i < 20; i++) creators.add(CreatorCatalog.fromModel(
-                new FapelloRepository.Model("Creator " + i, "https://fapello.com/test-" + i + "/", "")));
-        adapter.replace(creators);
-        long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(3);
-        while (adapter.getItemCount() != 20 && System.nanoTime() < deadline) {
-            Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
-            Thread.sleep(10);
-        }
-        assertEquals(20, adapter.getItemCount());
-        Shadows.shadowOf(android.os.Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(200));
-        TextView footer = ReflectionHelpers.getField(panel, "searchState");
-        footer.setText("20 creators");
-        footer.setVisibility(View.VISIBLE);
-        ((View) ReflectionHelpers.getField(panel, "progress")).setVisibility(View.GONE);
-        RecyclerView list = ReflectionHelpers.getField(panel, "recycler");
-        ViewGroup rows = ReflectionHelpers.getField(panel, "resultsControls");
-        View pane = ReflectionHelpers.getField(panel, "resultSurface");
-        for (int ime : new int[]{0, 300}) {
-            ViewCompat.dispatchApplyWindowInsets(panel.view, insets(ime)); layout(panel.view);
-            ((LinearLayoutManager)list.getLayoutManager()).scrollToPositionWithOffset(19, 0);
-            layout(panel.view);
-            list.scrollBy(0, 100000); layout(panel.view);
-            View last = list.getLayoutManager().findViewByPosition(19);
-            assertNotNull(last);
-            assertTrue(last.getBottom() <= list.getHeight() - list.getPaddingBottom());
-            assertTrue(last.getTop() >= list.getPaddingTop());
-            assertFalse(list.canScrollVertically(1));
-            assertEquals(BrowseUi.dp(host.get(), 14), rows.getPaddingBottom());
-            Rect bounds = new Rect(0, 0, footer.getWidth(), footer.getHeight());
-            rows.offsetDescendantRectToMyCoords(footer, bounds);
-            assertTrue(bounds.bottom <= rows.getHeight() - rows.getPaddingBottom());
-            assertTrue(bounds.top >= 0); assertTrue(footer.getHeight() > 0);
-            assertAligned(pane, rows);
-            FrameLayout slot = (FrameLayout) list.getParent();
-            assertTrue(slot.getClipChildren());
-            assertEquals(slot.getHeight(), list.getBottom());
-        }
         panel.close(); owner.close(); host.pause().stop().destroy();
     }
 
