@@ -34,7 +34,7 @@ import java.util.Date;
 import java.util.List;
 
 /** Local view of videos queued through Android's download service. */
-public final class DownloadedActivity extends Activity {
+public final class DownloadedActivity extends androidx.activity.ComponentActivity {
     private static final long REFRESH_MS = 750L;
 
     private final Handler main = new Handler(Looper.getMainLooper());
@@ -44,9 +44,7 @@ public final class DownloadedActivity extends Activity {
     private final java.util.concurrent.ExecutorService loader = java.util.concurrent.Executors.newSingleThreadExecutor();
     private boolean reading;
     private android.os.Parcelable restoredScroll;
-    private EditText input;
-    private TextView count;
-    private TextView empty;
+    private LibraryCompose presentation;
     private List<VideoDownloadStore.Entry> currentEntries = new ArrayList<>();
     private boolean polling;
     private String renderedState = "";
@@ -68,8 +66,7 @@ public final class DownloadedActivity extends Activity {
         buildUi();
         if (state != null) {
             restoredScroll = state.getParcelable("scroll");
-            input.setText(state.getString("query", ""));
-            input.setSelection(input.length());
+            presentation.setQuery(state.getString("query", ""));
         }
         loader.execute(() -> VideoDownloadStore.recoverInterrupted(this));
     }
@@ -91,47 +88,8 @@ public final class DownloadedActivity extends Activity {
     }
 
     private void buildUi() {
-        LinearLayout root = BrowseUi.screen(this);
-
-        LinearLayout header = new LinearLayout(this);
-        header.setOrientation(LinearLayout.HORIZONTAL);
-        header.setGravity(Gravity.CENTER_VERTICAL);
-        header.setPadding(dp(12), dp(8), dp(12), dp(8));
-
-        TextView back = BrowseUi.action(this, "‹", "Back", v -> {
-            v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
-            finish();
-        });
-        header.addView(back, new LinearLayout.LayoutParams(dp(48), dp(48)));
-
-        TextView title = BrowseUi.text(this, "Downloads", 20, Color.WHITE);
-        title.setPadding(dp(12), 0, 0, 0);
-        header.addView(title, new LinearLayout.LayoutParams(0, -2, 1f));
-        root.addView(header);
-
-        input = new ZeroChillEditText(this);
-        input.setHint("Search Downloads");
-        input.setHintTextColor(BrowseUi.MUTED);
-        input.setTextColor(Color.WHITE);
-        input.setTextSize(16);
-        input.setSingleLine(true);
-        input.setPadding(dp(14), 0, dp(14), 0);
-        input.setBackgroundResource(R.drawable.zc_input_field);
-        input.setContentDescription("Search Downloads");
-        LinearLayout.LayoutParams inputParams = new LinearLayout.LayoutParams(-1, dp(50));
-        inputParams.setMargins(dp(12), 0, dp(12), dp(8));
-        root.addView(input, inputParams);
-
-        count = BrowseUi.text(this, "", 12, BrowseUi.MUTED);
-        count.setPadding(dp(16), dp(4), dp(16), dp(8));
-        root.addView(count);
-
-        empty = BrowseUi.text(this, "", 15, BrowseUi.MUTED);
-        empty.setGravity(Gravity.CENTER);
-        empty.setPadding(dp(24), dp(32), dp(24), dp(24));
-        empty.setVisibility(View.GONE);
-        root.addView(empty);
-
+        ZeroChillUi.applySystemBars(this);
+        presentation = new LibraryCompose(this, "Downloads", value -> showDownloads(currentEntries));
         recycler = new androidx.recyclerview.widget.RecyclerView(this);
         recycler.setLayoutManager(new GridLayoutManager(this, 2));
         recycler.setItemAnimator(null);
@@ -139,10 +97,7 @@ public final class DownloadedActivity extends Activity {
         recycler.setClipToPadding(false);
         downloadsAdapter = new DownloadsAdapter();
         recycler.setAdapter(downloadsAdapter);
-        root.addView(recycler, new LinearLayout.LayoutParams(-1, 0, 1f));
-
-        setContentView(root);
-        input.addTextChangedListener(BrowseUi.onText(value -> showDownloads(currentEntries)));
+        presentation.install(recycler);
         getWindow().setSoftInputMode(
                 android.view.WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN
                         | android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
@@ -167,7 +122,7 @@ public final class DownloadedActivity extends Activity {
                 ? new ArrayList<>()
                 : new ArrayList<>(entries);
 
-        String query = input == null ? "" : input.getText().toString();
+        String query = presentation == null ? "" : presentation.getQuery();
         String state = stateOf(currentEntries) + "|query=" + LibrarySearch.normalize(query);
         if (state.equals(renderedState)) return;
         renderedState = state;
@@ -196,7 +151,7 @@ public final class DownloadedActivity extends Activity {
 
         boolean searching = !LibrarySearch.normalize(query).isEmpty();
         if (searching) {
-            count.setText(filtered.size() + " of " + currentEntries.size()
+            presentation.setSummary(filtered.size() + " of " + currentEntries.size()
                     + (currentEntries.size() == 1 ? " download" : " downloads")
                     + " · Search results");
         } else {
@@ -206,19 +161,17 @@ public final class DownloadedActivity extends Activity {
                 summary += " · " + ready + (ready == 1 ? " saved" : " saved");
                 if (active > 0) summary += " · " + active + " active";
             }
-            count.setText(summary);
+            presentation.setSummary(summary);
         }
 
         if (currentEntries.isEmpty()) {
-            empty.setText("No downloads yet\n\nSave a video from its menu to keep it available offline.");
-            empty.setVisibility(View.VISIBLE);
+            presentation.setEmptyMessage("No downloads yet\n\nSave a video from its menu to keep it available offline.");
             recycler.setVisibility(View.GONE);
         } else if (filtered.isEmpty()) {
-            empty.setText("No downloads match your search.");
-            empty.setVisibility(View.VISIBLE);
+            presentation.setEmptyMessage("No downloads match your search.");
             recycler.setVisibility(View.GONE);
         } else {
-            empty.setVisibility(View.GONE);
+            presentation.setEmptyMessage("");
             recycler.setVisibility(View.VISIBLE);
         }
 
@@ -267,7 +220,7 @@ public final class DownloadedActivity extends Activity {
 
     @Override protected void onSaveInstanceState(Bundle state) {
         state.putParcelable("scroll", recycler.getLayoutManager().onSaveInstanceState());
-        state.putString("query", input == null ? "" : input.getText().toString());
+        state.putString("query", presentation == null ? "" : presentation.getQuery());
         super.onSaveInstanceState(state);
     }
     @Override protected void onDestroy() {

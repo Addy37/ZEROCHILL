@@ -35,7 +35,7 @@ import java.util.Map;
  * Existing stores remain the source of truth. Profile actions precede bounded previews of
  * confirmed likes, creators, downloads, Watch Later and recent History with resume progress.
  */
-final class LibraryHubView extends ScrollView {
+final class LibraryHubView extends FrameLayout {
     interface Listener {
         void onOpenWatchLater(NativeContentItem item);
         void onOpenHistory(PlaybackHistoryStore.Item item);
@@ -57,6 +57,7 @@ final class LibraryHubView extends ScrollView {
     private RenderedThumbnailResolver[] thumbnailResolvers = new RenderedThumbnailResolver[0];
     private final ShowsContinueFrameStore.Listener frameListener = this::onContinueFrameUpdated;
     private LinearLayout mediaContent;
+    private LibraryHomeCompose presentation;
     private final Map<String, SectionState> sectionStates = new HashMap<>();
     private final java.util.concurrent.ExecutorService refreshIo =
             java.util.concurrent.Executors.newSingleThreadExecutor();
@@ -97,11 +98,10 @@ final class LibraryHubView extends ScrollView {
     LibraryHubView(Activity activity, Listener listener, boolean deferContent) {
         super(activity);
         this.activity = activity;
+        setId(R.id.zerochill_library_host);
         this.listener = listener;
 
-        setFillViewport(true);
         setContentDescription("Library media hub");
-        setVerticalScrollBarEnabled(false);
         setClipToPadding(false);
         setBackgroundColor(ZeroChillUi.background(activity));
 
@@ -109,8 +109,24 @@ final class LibraryHubView extends ScrollView {
         content.setOrientation(LinearLayout.VERTICAL);
         content.setPadding(dp(16), dp(16), dp(16),
                 ZeroChillUi.dimension(activity, R.dimen.zc_bottom_nav_height) + dp(32));
-        addView(content, new ScrollView.LayoutParams(-1, -2));
+        presentation = new LibraryHomeCompose(activity, this, content);
+        addView(presentation.getView(), new FrameLayout.LayoutParams(-1, -1));
         if (!deferContent) ensureContent();
+    }
+
+    @Override protected android.os.Parcelable onSaveInstanceState() {
+        android.os.Bundle state = new android.os.Bundle();
+        state.putParcelable("super", super.onSaveInstanceState());
+        state.putInt("scroll", presentation.scrollPosition());
+        return state;
+    }
+
+    @Override protected void onRestoreInstanceState(android.os.Parcelable saved) {
+        if (saved instanceof android.os.Bundle) {
+            android.os.Bundle state = (android.os.Bundle) saved;
+            super.onRestoreInstanceState(state.getParcelable("super"));
+            presentation.setRestoredPosition(state.getInt("scroll"));
+        } else super.onRestoreInstanceState(saved);
     }
 
     private void ensureContent() {
@@ -141,6 +157,8 @@ final class LibraryHubView extends ScrollView {
         AppPerformance.startupCost("library_content", started);
     }
 
+    void setNavigationScrollListener(java.util.function.BiConsumer<Integer, Boolean> listener) { presentation.setOnScroll(listener); }
+
     void setWorkScheduler(PrimaryTabWorkQueue.Scheduler scheduler) { work = scheduler; }
 
     private void scheduleRefresh() { work.schedule("library-refresh", this::refresh); }
@@ -170,7 +188,6 @@ final class LibraryHubView extends ScrollView {
 
     private void render(Snapshot snapshot) {
         videoMetadata = snapshot.videoMetadata;
-        int scrollY = getScrollY();
         Map<String, int[]> railPositions = new HashMap<>();
         for (int i = 0; i < mediaContent.getChildCount(); i++) {
             View section = mediaContent.getChildAt(i);
@@ -221,7 +238,6 @@ final class LibraryHubView extends ScrollView {
         requestedThumbnails.retainAll(thumbnailTargets.keySet());
         post(() -> {
             if (closed) return;
-            scrollTo(0, Math.min(scrollY, Math.max(0, content.getHeight() + getPaddingTop() + getPaddingBottom() - getHeight())));
             for (int i = 0; i < mediaContent.getChildCount(); i++) {
                 View section = mediaContent.getChildAt(i);
                 int[] x = railPositions.get(String.valueOf(section.getTag()));
@@ -335,6 +351,7 @@ final class LibraryHubView extends ScrollView {
     void close() {
         if (closed) return;
         closed = true;
+        presentation.close();
         active = false;
         refreshIo.shutdownNow();
         for (SharedPreferences prefs : observedPreferences) {

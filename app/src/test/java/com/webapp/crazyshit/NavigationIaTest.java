@@ -664,21 +664,12 @@ public class NavigationIaTest {
         shadowOf(android.os.Looper.getMainLooper()).idle();
 
         FavoritesActivity activity = controller.get();
-        ViewPager2 pager = ReflectionHelpers.getField(activity, "pager");
-        assertFalse(pager.isUserInputEnabled());
-        assertEquals(FavoritesActivity.START_HISTORY, pager.getCurrentItem());
-        assertNotNull(findByDescription(
-                activity.getWindow().getDecorView(),
-                "History section"
-        ));
-        assertNotNull(findByDescription(
-                activity.getWindow().getDecorView(),
-                "Search History"
-        ));
-        assertNotNull(findByDescription(
-                activity.getWindow().getDecorView(),
-                "Section options"
-        ));
+        assertEquals(FavoritesActivity.START_HISTORY, (int) ReflectionHelpers.getField(activity, "tab"));
+        LibraryCompose presentation = ReflectionHelpers.getField(activity, "presentation");
+        assertNotNull(activity.findViewById(R.id.zerochill_compose_root));
+        assertEquals("Section options", presentation.getActionLabel());
+        assertTrue(presentation.getSearchable());
+        assertTrue(presentation.getSummary().contains("Recent first"));
 
         controller.pause().stop().destroy();
     }

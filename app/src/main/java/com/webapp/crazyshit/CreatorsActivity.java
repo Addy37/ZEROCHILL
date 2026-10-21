@@ -39,11 +39,10 @@ import java.util.Map;
 import java.util.HashMap;
 
 /** All starred creators, including favorites saved before the creator catalog existed. */
-public final class CreatorsActivity extends Activity {
+public final class CreatorsActivity extends androidx.activity.ComponentActivity {
     private static final int REQUEST_PICK_AVATAR = 4106;
 
-    private EditText input;
-    private TextView empty, count;
+    private LibraryCompose presentation;
     private RecyclerView recycler;
     private CreatorGridAdapter adapter;
     private Parcelable pendingScroll;
@@ -82,35 +81,10 @@ public final class CreatorsActivity extends Activity {
 
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
-        LinearLayout root = BrowseUi.screen(this);
-        LinearLayout header = new LinearLayout(this);
-        header.setGravity(Gravity.CENTER_VERTICAL);
-        header.setPadding(dp(12), dp(8), dp(12), dp(8));
-        header.addView(BrowseUi.action(this, "‹", "Back", v -> finish()), new LinearLayout.LayoutParams(dp(48), dp(48)));
-        TextView title = BrowseUi.text(this, "Favorite creators", 20, Color.WHITE);
-        title.setPadding(dp(12), 0, 0, 0);
-        header.addView(title, new LinearLayout.LayoutParams(0, -2, 1));
-        header.addView(BrowseUi.action(this, "+", "Find creators", v -> startActivity(SearchActivity.createBunkrSearch(this))),
-                new LinearLayout.LayoutParams(dp(48), dp(48)));
-        root.addView(header);
-        input = new ZeroChillEditText(this);
-        input.setHint("Search your favorite creators");
-        input.setHintTextColor(BrowseUi.MUTED);
-        input.setTextColor(Color.WHITE);
-        input.setTextSize(16);
-        input.setSingleLine(true);
-        input.setPadding(dp(14), 0, dp(14), 0);
-        input.setBackgroundResource(R.drawable.zc_input_field);
-        LinearLayout.LayoutParams inputParams = new LinearLayout.LayoutParams(-1, dp(50));
-        inputParams.setMargins(dp(12), 0, dp(12), dp(8));
-        root.addView(input, inputParams);
-        count = BrowseUi.text(this, "", 12, BrowseUi.MUTED);
-        count.setPadding(dp(16), dp(4), dp(16), dp(8));
-        root.addView(count);
-        empty = BrowseUi.text(this, "", 15, BrowseUi.MUTED);
-        empty.setGravity(Gravity.CENTER);
-        empty.setPadding(dp(24), dp(32), dp(24), dp(24));
-        root.addView(empty);
+        ZeroChillUi.applySystemBars(this);
+        presentation = new LibraryCompose(this, "Favorite creators", value -> render());
+        presentation.setActionLabel("Find creators");
+        presentation.setAction(() -> startActivity(SearchActivity.createBunkrSearch(this)));
         recycler = new RecyclerView(this);
         GridLayoutManager grid = new GridLayoutManager(this, 3);
         grid.setInitialPrefetchItemCount(6);
@@ -185,11 +159,9 @@ public final class CreatorsActivity extends Activity {
             }
         });
         dragHelper.attachToRecyclerView(recycler);
-        root.addView(recycler, new LinearLayout.LayoutParams(-1, 0, 1));
-        setContentView(root);
-        input.addTextChangedListener(BrowseUi.onText(value -> render()));
+        presentation.install(recycler);
         if (state != null) {
-            input.setText(state.getString("query", ""));
+            presentation.setQuery(state.getString("query", ""));
             pendingScroll = state.getParcelable("scroll");
             pendingAvatarKeys = state.getStringArrayList("pending_avatar_keys");
         }
@@ -199,14 +171,14 @@ public final class CreatorsActivity extends Activity {
 
     private void render() {
         List<CreatorCatalog.FavoriteGroup> creators = CreatorCatalog.favoriteGroups(this);
-        String query = input.getText().toString();
+        String query = presentation.getQuery();
         creators.removeIf(group -> CreatorNameMatcher.rank(group.item.title, query) == Integer.MAX_VALUE
                 && group.members.values().stream().noneMatch(member ->
                 CreatorNameMatcher.rank(member.title, query) != Integer.MAX_VALUE));
         adapter.replace(creators);
-        count.setText(creators.size() + (creators.size() == 1 ? " creator · A–Z" : " creators · A–Z"));
-        empty.setVisibility(creators.isEmpty() ? View.VISIBLE : View.GONE);
-        empty.setText(input.length() == 0 ? "No favorite creators yet\n\nTap + to find creators, then tap ☆ to save them here."
+        presentation.setSummary(creators.size() + (creators.size() == 1 ? " creator · A–Z" : " creators · A–Z"));
+        presentation.setEmptyMessage(!creators.isEmpty() ? "" : presentation.getQuery().isEmpty()
+                ? "No favorite creators yet\n\nTap Find creators, then tap ☆ to save them here."
                 : "No favorite creators match your search.");
         if (pendingScroll != null) {
             recycler.getLayoutManager().onRestoreInstanceState(pendingScroll);
@@ -216,7 +188,9 @@ public final class CreatorsActivity extends Activity {
 
     private void openCreator(CreatorCatalog.FavoriteGroup group) {
         if (group == null || group.item == null) return;
-        BrowseUi.hideKeyboard(this, input);
+        getWindow().getDecorView().clearFocus();
+        ((android.view.inputmethod.InputMethodManager) getSystemService(INPUT_METHOD_SERVICE))
+                .hideSoftInputFromWindow(getWindow().getDecorView().getWindowToken(), 0);
         CreatorGallerySpec spec = CreatorGallerySpec.from(group);
         String sessionId = CreatorGalleryPreloader.sessionId(this, spec.cacheKey);
         if (sessionId.isEmpty() && spec.grouped) {
@@ -297,7 +271,9 @@ public final class CreatorsActivity extends Activity {
 
     private void pickAvatar(CreatorCatalog.FavoriteGroup group) {
         if (group == null || group.item == null || group.relationshipKeys.isEmpty()) return;
-        BrowseUi.hideKeyboard(this, input);
+        getWindow().getDecorView().clearFocus();
+        ((android.view.inputmethod.InputMethodManager) getSystemService(INPUT_METHOD_SERVICE))
+                .hideSoftInputFromWindow(getWindow().getDecorView().getWindowToken(), 0);
         pendingAvatarKeys = new ArrayList<>(group.relationshipKeys);
         CreatorGallerySpec spec = CreatorGallerySpec.from(group);
         String sessionId = CreatorGalleryPreloader.sessionId(this, spec.cacheKey);
@@ -690,7 +666,7 @@ public final class CreatorsActivity extends Activity {
         }
     };
     @Override protected void onSaveInstanceState(Bundle state) {
-        state.putString("query", input.getText().toString());
+        state.putString("query", presentation.getQuery());
         state.putParcelable("scroll", recycler.getLayoutManager().onSaveInstanceState());
         if (pendingAvatarKeys != null) {
             state.putStringArrayList("pending_avatar_keys", pendingAvatarKeys);

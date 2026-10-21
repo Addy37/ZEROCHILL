@@ -10,6 +10,11 @@ Development branch: `feature/zerochill-compose-6.0`. No release/version change y
 - Feedback state holder retains draft, rating, selected tab and in-flight submit across rotation; Bundle restores draft after process recreation. Late history responses cannot replace newer results or the composer.
 - Feedback conversation: Compose message bubbles, sender/status/read receipts, pull-to-refresh and reply input. Retains the existing thread/reply APIs and read tracking. Replies survive rotation, and a refresh started before a successful reply cannot replace the subsequent refreshed conversation.
 
+- Standalone Library hub: fully Compose action list with existing destination/result routing.
+- Continue Watching, History and Watch Later: Compose header/search/count/empty state and keyed lazy grid. Existing native media cards, thumbnail resolution, menus, clear confirmations and selection extras remain embedded.
+- Favorite creators, Downloads and Liked Videos: Compose headers/actions/query/status/empty states with existing optimized RecyclerViews. Creator avatar crops, unread badges, drag-to-merge, download polling/actions and account-scoped likes refresh/pagination are retained.
+- Main Library hub: Compose vertical viewport with existing profile/social header and bounded media rails. The host supplies lifecycle owners for legacy Activities, relays navigation-scroll events and saves/restores its vertical position.
+
 ## Shared foundation
 
 - `ui/ZeroChillTheme.kt`: colors from the existing XML roles, approved `#0892D0` accent, OLED preference, typography, shapes and spacing.
@@ -24,7 +29,7 @@ Development branch: `feature/zerochill-compose-6.0`. No release/version change y
 
 ## Remaining inventory
 
-- Library: `LibraryHubView`, `FavoritesActivity`, `CreatorsActivity`, `DownloadedActivity`, `LikedVideosActivity`, `LibraryHubActivity`.
+- Library native islands: profile/social header, bounded media rails, media cards/menus and creator/download/likes RecyclerView rows. Their surrounding presentation now uses Compose.
 - Search: `SearchPanel`, creator/global result adapters, recent-search presentation. Preserve approved progressive results and fade behavior.
 - Content: `OnlyFapHubView`, `ShowsHubView`, `BunkrGalleryActivity`, native feed/detail screens and creator media grids.
 - Accounts/social: account/security/profile, messages/inbox, social settings and notification screens.
@@ -66,3 +71,9 @@ Settings checkpoint `262e252bf8a7cd138f54dc52beb60fa7fc8da193` migrates backup/r
 CI ran eight Settings/Feedback tests successfully. The first full debug suite ran 890 tests with one failure and one skip: the existing diagnostics-copy test still expected a native AlertDialog. That regression check is migrated to click the Compose action and retains all clipboard/privacy assertions. Library/Search implementation and final validation are ongoing; no new install candidate is certified yet.
 
 The general ten-flow performance matrix now skips this Compose branch. The historical paired-main workflow is manual-only so cumulative PR path filters cannot repeatedly launch the old comparison. Existing same-branch automatic performance runs are canceled through the existing scoped CI cleanup job; build/signing checks remain active.
+
+### Library checkpoint
+
+Library continuation was implemented from committed source. No collection formats, ordering, stores, account contracts or result extras change. The obsolete Favorites ViewPager and eager grid assembly are bypassed by a keyed Compose lazy grid. Standalone Compose roots bypass the legacy inset fitter. Main Library keeps its native bounded rails while Compose owns vertical scrolling and View saved-state preserves the scroll offset.
+
+Local Kotlin/Java compilation passed. Focused checks exposed and fixed a missing lifecycle owner on the Library host. The prior native RecyclerView/AlertDialog assertions were adapted to their current presentation, while collection, navigation, clipboard and privacy assertions remain. After the fixes, 19 Library-profile/Search/Compose checks passed, followed by 13 Settings/Feedback/Library checks including the new hub scroll-restore test. Native and Compose test renders were inspected. Full clean debug/release suites, builds, lint and signed upgrade validation are still pending for this checkpoint.

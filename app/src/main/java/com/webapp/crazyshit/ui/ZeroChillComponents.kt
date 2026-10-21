@@ -22,7 +22,8 @@ import com.webapp.crazyshit.glass.liquidGlass
 
 /** Bounded phone/tablet content, with system/cutout/keyboard protection applied once. */
 @Composable
-fun ZeroChillScreen(title: String, onBack: () -> Unit, content: @Composable ColumnScope.() -> Unit) {
+fun ZeroChillScreen(title: String, onBack: () -> Unit, actions: @Composable RowScope.() -> Unit = {},
+    content: @Composable ColumnScope.() -> Unit) {
     Surface(color = MaterialTheme.colorScheme.background) {
         Box(Modifier.fillMaxSize().safeDrawingPadding().imePadding(), contentAlignment = Alignment.TopCenter) {
             Column(Modifier.widthIn(max = 720.dp).fillMaxSize()) {
@@ -33,6 +34,7 @@ fun ZeroChillScreen(title: String, onBack: () -> Unit, content: @Composable Colu
                     }
                     Text(title, style = MaterialTheme.typography.headlineSmall,
                         modifier = Modifier.weight(1f).padding(start = 8.dp).semantics { heading() })
+                    actions()
                 }
                 content()
             }

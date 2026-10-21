@@ -186,8 +186,8 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         libraryView.setWorkScheduler((key, task) -> primaryWork.submit(PAGE_LIBRARY, key, task));
         pages[PAGE_ONLYFAP].onlyFapHub.setWorkScheduler(
                 (key, task) -> primaryWork.submit(PAGE_ONLYFAP, key, task));
-        libraryView.setOnScrollChangeListener((v, scrollX, scrollY, oldScrollX, oldScrollY) ->
-                host.onNavigationScroll(PAGE_LIBRARY, scrollY - oldScrollY, scrollY <= dp(4), true));
+        libraryView.setNavigationScrollListener((delta, atTop) ->
+                host.onNavigationScroll(PAGE_LIBRARY, delta, atTop, true));
 
     }
 

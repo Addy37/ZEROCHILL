@@ -23,7 +23,6 @@ import android.widget.TextView;
 
 import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
-import androidx.viewpager2.widget.ViewPager2;
 
 import com.bumptech.glide.Glide;
 import com.bumptech.glide.load.engine.DiskCacheStrategy;
@@ -46,10 +45,9 @@ import java.util.Set;
  * Dedicated Library section destination.
  *
  * The Library hub chooses Continue Watching, History, or Watch Later before launching this screen.
- * ViewPager2 remains as the compatibility container, but user paging is disabled so each launch
- * behaves as a standalone destination.
+ * Compose owns the keyed lazy grid. Existing stores, card actions and result extras are retained.
  */
-public class FavoritesActivity extends Activity {
+public class FavoritesActivity extends androidx.activity.ComponentActivity {
     public static final String EXTRA_SELECTED_URL = "selected_url";
     public static final String EXTRA_SELECTED_TITLE = "selected_title";
     public static final String EXTRA_SELECTED_TAB = "selected_tab";
@@ -61,18 +59,12 @@ public class FavoritesActivity extends Activity {
     private static final int TAB_CONTINUE = 0;
     private static final int TAB_HISTORY = 1;
     private static final int TAB_WATCH_LATER = 2;
-    private static final int PAGE_COUNT = 3;
     private static final String SITE = "https://crazyshit.com/";
     private static final String USER_AGENT =
             "Mozilla/5.0 (Linux; Android 16) AppleWebKit/537.36 " +
             "(KHTML, like Gecko) Chrome/139.0 Mobile Safari/537.36";
 
-    private final LinearLayout[] listContainers = new LinearLayout[PAGE_COUNT];
-    private final View[] pageViews = new View[PAGE_COUNT];
-    private TextView clearAction;
-    private EditText input;
-    private TextView count;
-    private ViewPager2 pager;
+    private LibraryCompose presentation;
     private int tab = TAB_CONTINUE;
 
     private final Map<String, List<ImageView>> thumbnailTargets = new HashMap<>();
@@ -95,10 +87,7 @@ public class FavoritesActivity extends Activity {
                 new RenderedThumbnailResolver(this, this::onThumbnailResolved)
         };
         buildUi();
-        if (state != null && input != null) {
-            input.setText(state.getString("query", ""));
-            input.setSelection(input.length());
-        }
+        if (state != null) presentation.setQuery(state.getString("query", ""));
     }
 
     @Override
@@ -114,73 +103,11 @@ public class FavoritesActivity extends Activity {
     }
 
     private void buildUi() {
-        LinearLayout root = BrowseUi.screen(this);
-
-        LinearLayout header = new LinearLayout(this);
-        header.setOrientation(LinearLayout.HORIZONTAL);
-        header.setGravity(Gravity.CENTER_VERTICAL);
-        header.setPadding(dp(12), dp(8), dp(12), dp(8));
-
-        TextView back = BrowseUi.action(this, "‹", "Back", v -> finish());
-        header.addView(back, new LinearLayout.LayoutParams(dp(48), dp(48)));
-
-        TextView title = BrowseUi.text(this, sectionTitle(), 20, Color.WHITE);
-        title.setPadding(dp(12), 0, 0, 0);
-        title.setContentDescription(sectionTitle() + " section");
-        header.addView(title, new LinearLayout.LayoutParams(0, -2, 1f));
-
-        clearAction = BrowseUi.action(this, "⋮", "Section options", this::showSectionMenu);
-        clearAction.setTextSize(24);
-        header.addView(clearAction, new LinearLayout.LayoutParams(dp(48), dp(48)));
-        root.addView(header);
-
-        input = new ZeroChillEditText(this);
-        input.setHint("Search " + sectionTitle());
-        input.setHintTextColor(BrowseUi.MUTED);
-        input.setTextColor(Color.WHITE);
-        input.setTextSize(16);
-        input.setSingleLine(true);
-        input.setPadding(dp(14), 0, dp(14), 0);
-        input.setBackgroundResource(R.drawable.zc_input_field);
-        input.setContentDescription("Search " + sectionTitle());
-        LinearLayout.LayoutParams inputParams = new LinearLayout.LayoutParams(-1, dp(50));
-        inputParams.setMargins(dp(12), 0, dp(12), dp(8));
-        root.addView(input, inputParams);
-
-        count = BrowseUi.text(this, "", 12, BrowseUi.MUTED);
-        count.setPadding(dp(16), dp(4), dp(16), dp(8));
-        root.addView(count);
-
-        for (int i = 0; i < PAGE_COUNT; i++) pageViews[i] = buildPage(i);
-
-        pager = new ViewPager2(this);
-        pager.setOrientation(ViewPager2.ORIENTATION_HORIZONTAL);
-        pager.setUserInputEnabled(false);
-        pager.setOffscreenPageLimit(PAGE_COUNT - 1);
-        pager.setAdapter(new LibraryPagerAdapter());
-        pager.setCurrentItem(tab, false);
-        root.addView(pager, new LinearLayout.LayoutParams(-1, 0, 1f));
-
-        setContentView(root);
-        input.addTextChangedListener(BrowseUi.onText(value -> renderAllPages()));
-        getWindow().setSoftInputMode(
-                android.view.WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN
-                        | android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
-        );
-    }
-
-    private View buildPage(int index) {
-        FrameLayout page = new FrameLayout(this);
-        page.setBackgroundColor(Color.rgb(13, 13, 15));
-        ScrollView scroll = new ScrollView(this);
-        scroll.setFillViewport(true);
-        LinearLayout list = new LinearLayout(this);
-        list.setOrientation(LinearLayout.VERTICAL);
-        list.setPadding(dp(12), dp(6), dp(12), dp(24));
-        listContainers[index] = list;
-        scroll.addView(list, new ScrollView.LayoutParams(-1, -2));
-        page.addView(scroll, new FrameLayout.LayoutParams(-1, -1));
-        return page;
+        ZeroChillUi.applySystemBars(this);
+        presentation = new LibraryCompose(this, sectionTitle(), value -> renderAllPages());
+        presentation.setActionLabel("Section options");
+        presentation.setAction(() -> showSectionMenu(getWindow().getDecorView()));
+        presentation.install(null);
     }
 
     private String sectionTitle() {
@@ -191,60 +118,43 @@ public class FavoritesActivity extends Activity {
 
 
     private void renderAllPages() {
-        thumbnailTargets.clear();
-        for (LinearLayout list : listContainers) {
-            if (list != null) list.removeAllViews();
-        }
-        if (tab == TAB_HISTORY) {
-            renderHistory(listContainers[TAB_HISTORY], false);
-        } else if (tab == TAB_WATCH_LATER) {
-            renderWatchLater(listContainers[TAB_WATCH_LATER]);
-        } else {
-            renderHistory(listContainers[TAB_CONTINUE], true);
-        }
-    }
-
-    private void renderHistory(LinearLayout target, boolean continueOnly) {
-        if (target == null) return;
-        List<PlaybackHistoryStore.Item> allItems = continueOnly
-                ? PlaybackHistoryStore.continueWatching(this)
-                : PlaybackHistoryStore.load(this);
-
+        if (presentation == null) return;
+        List<LibraryCompose.Card> cards = new ArrayList<>();
         String query = searchQuery();
-        List<PlaybackHistoryStore.Item> items = new ArrayList<>();
-        for (PlaybackHistoryStore.Item item : allItems) {
-            if (LibrarySearch.matches(
-                    query,
-                    item.title,
-                    item.content == null ? "" : OnlyFapVideoMetadata.displayTitle(item.content),
-                    item.pageUrl,
-                    item.fromShows ? "shows" : ""
-            )) {
-                items.add(item);
+        int total;
+        String empty;
+        if (tab == TAB_WATCH_LATER) {
+            List<FavoriteStore.Item> all = FavoriteStore.load(this);
+            total = all.size();
+            for (FavoriteStore.Item item : all) {
+                if (LibrarySearch.matches(query, item.title, item.url,
+                        item.content == null ? "" : OnlyFapVideoMetadata.displayTitle(item.content))) {
+                    cards.add(new LibraryCompose.Card(item.url, item.url + item.savedAt + item.title,
+                            () -> makeWatchLaterCard(item)));
+                }
             }
+            empty = "Nothing saved yet\n\nLong-press a video card and choose Save to Watch Later.";
+        } else {
+            boolean continuing = tab == TAB_CONTINUE;
+            List<PlaybackHistoryStore.Item> all = continuing
+                    ? PlaybackHistoryStore.continueWatching(this) : PlaybackHistoryStore.load(this);
+            total = all.size();
+            for (PlaybackHistoryStore.Item item : all) {
+                if (LibrarySearch.matches(query, item.title,
+                        item.content == null ? "" : OnlyFapVideoMetadata.displayTitle(item.content),
+                        item.pageUrl, item.fromShows ? "shows" : "")) {
+                    cards.add(new LibraryCompose.Card(item.pageUrl,
+                            item.pageUrl + item.title + item.lastWatched + item.positionMs + item.durationMs + item.complete,
+                            () -> makeHistoryCard(item, continuing)));
+                }
+            }
+            empty = continuing ? "Nothing to continue\n\nVideos watched for at least 30 seconds appear here until they're nearly finished."
+                    : "No watch history yet\n\nVideos you watch in the native player will appear here.";
         }
-        updateCount(items.size(), allItems.size(), continueOnly ? "In progress" : "Recent first");
-
-        if (allItems.isEmpty()) {
-            showEmpty(
-                    target,
-                    continueOnly ? "Nothing to continue" : "No watch history yet",
-                    continueOnly
-                            ? "Videos watched for at least 30 seconds appear here until they're nearly finished."
-                            : "Videos you watch in the native player will appear here."
-            );
-            return;
-        }
-        if (items.isEmpty()) {
-            showEmpty(target, "No matching videos", "Try a different title, source, or keyword.");
-            return;
-        }
-
-        List<View> cards = new ArrayList<>();
-        for (PlaybackHistoryStore.Item item : items) {
-            cards.add(makeHistoryCard(item, continueOnly));
-        }
-        addTwoColumnGrid(target, cards);
+        updateCount(cards.size(), total, tab == TAB_WATCH_LATER ? "Saved" : tab == TAB_HISTORY ? "Recent first" : "In progress");
+        presentation.setEmptyMessage(total == 0 ? empty : cards.isEmpty()
+                ? "No matching videos\n\nTry a different title, source, or keyword." : "");
+        presentation.showCards(cards);
     }
 
     private View makeHistoryCard(PlaybackHistoryStore.Item item, boolean continueOnly) {
@@ -342,35 +252,6 @@ public class FavoritesActivity extends Activity {
         menu.show();
     }
 
-    private void renderWatchLater(LinearLayout target) {
-        if (target == null) return;
-        List<FavoriteStore.Item> allItems = FavoriteStore.load(this);
-        String query = searchQuery();
-        List<FavoriteStore.Item> items = new ArrayList<>();
-        for (FavoriteStore.Item item : allItems) {
-            if (LibrarySearch.matches(query, item.title, item.url,
-                    item.content == null ? "" : OnlyFapVideoMetadata.displayTitle(item.content))) {
-                items.add(item);
-            }
-        }
-        updateCount(items.size(), allItems.size(), "Saved");
-
-        if (allItems.isEmpty()) {
-            showEmpty(target, "Nothing saved yet", "Long-press a video card and choose Save to Watch Later.");
-            return;
-        }
-        if (items.isEmpty()) {
-            showEmpty(target, "No matching videos", "Try a different title, source, or keyword.");
-            return;
-        }
-
-        List<View> cards = new ArrayList<>();
-        for (FavoriteStore.Item item : items) {
-            cards.add(makeWatchLaterCard(item));
-        }
-        addTwoColumnGrid(target, cards);
-    }
-
     private View makeWatchLaterCard(FavoriteStore.Item item) {
         LinearLayout wrapper = new LinearLayout(this);
         wrapper.setOrientation(LinearLayout.VERTICAL);
@@ -439,33 +320,6 @@ public class FavoritesActivity extends Activity {
         menu.show();
     }
 
-    private void addTwoColumnGrid(LinearLayout target, List<View> cards) {
-        for (int i = 0; i < cards.size(); i += 2) {
-            LinearLayout row = new LinearLayout(this);
-            row.setOrientation(LinearLayout.HORIZONTAL);
-            row.setGravity(Gravity.TOP);
-
-            LinearLayout.LayoutParams left =
-                    new LinearLayout.LayoutParams(0, -2, 1f);
-            left.setMargins(0, dp(5), dp(5), dp(7));
-            row.addView(cards.get(i), left);
-
-            if (i + 1 < cards.size()) {
-                LinearLayout.LayoutParams right =
-                        new LinearLayout.LayoutParams(0, -2, 1f);
-                right.setMargins(dp(5), dp(5), 0, dp(7));
-                row.addView(cards.get(i + 1), right);
-            } else {
-                View spacer = new View(this);
-                LinearLayout.LayoutParams spacerParams =
-                        new LinearLayout.LayoutParams(0, 1, 1f);
-                spacerParams.setMargins(dp(5), 0, 0, 0);
-                row.addView(spacer, spacerParams);
-            }
-            target.addView(row, new LinearLayout.LayoutParams(-1, -2));
-        }
-    }
-
     private TextView overflowButton(String description) {
         TextView view = text("⋮", 22, Color.WHITE);
         view.setGravity(Gravity.CENTER);
@@ -521,6 +375,13 @@ public class FavoritesActivity extends Activity {
         media.addView(play, playParams);
 
         thumbnailTargets.computeIfAbsent(pageUrl, key -> new ArrayList<>()).add(image);
+        image.addOnAttachStateChangeListener(new View.OnAttachStateChangeListener() {
+            public void onViewAttachedToWindow(View view) { }
+            public void onViewDetachedFromWindow(View view) {
+                List<ImageView> targets = thumbnailTargets.get(pageUrl);
+                if (targets != null) { targets.remove(image); if (targets.isEmpty()) thumbnailTargets.remove(pageUrl); }
+            }
+        });
         String resolved = resolvedThumbnails.get(pageUrl);
         if (resolved != null && !resolved.isEmpty()) {
             loadThumbnail(image, resolved, pageUrl);
@@ -538,6 +399,7 @@ public class FavoritesActivity extends Activity {
     }
 
     private void onThumbnailResolved(String pageUrl, String thumbnailUrl) {
+        if (isFinishing() || isDestroyed()) return;
         if (pageUrl == null || pageUrl.isEmpty() || thumbnailUrl == null || thumbnailUrl.isEmpty()) return;
         resolvedThumbnails.put(pageUrl, thumbnailUrl);
         List<ImageView> targets = thumbnailTargets.get(pageUrl);
@@ -597,28 +459,12 @@ public class FavoritesActivity extends Activity {
         return button;
     }
 
-    private void showEmpty(LinearLayout target, String titleValue, String bodyValue) {
-        LinearLayout empty = new LinearLayout(this);
-        empty.setOrientation(LinearLayout.VERTICAL);
-        empty.setGravity(Gravity.CENTER);
-        empty.setPadding(dp(24), dp(72), dp(24), dp(24));
-        TextView title = text(titleValue, 20, Color.WHITE);
-        title.setGravity(Gravity.CENTER);
-        title.setTypeface(null, android.graphics.Typeface.BOLD);
-        TextView body = text(bodyValue, 14, UiPalette.TEXT_SECONDARY);
-        body.setGravity(Gravity.CENTER);
-        body.setPadding(0, dp(8), 0, 0);
-        empty.addView(title);
-        empty.addView(body);
-        target.addView(empty);
-    }
-
     private void select(String url) {
         select(url, "");
     }
 
     private void select(String url, String title) {
-        haptic(pager == null ? clearAction : pager);
+        haptic(getWindow().getDecorView());
         Intent data = new Intent();
         data.putExtra(EXTRA_SELECTED_URL, url);
         data.putExtra(EXTRA_SELECTED_TITLE, title);
@@ -628,16 +474,16 @@ public class FavoritesActivity extends Activity {
     }
 
     private String searchQuery() {
-        return input == null ? "" : input.getText().toString();
+        return presentation == null ? "" : presentation.getQuery();
     }
 
     private void updateCount(int visible, int total, String label) {
-        if (count == null) return;
+        if (presentation == null) return;
         String noun = total == 1 ? "video" : "videos";
         if (LibrarySearch.normalize(searchQuery()).isEmpty()) {
-            count.setText(total + " " + noun + " · " + label);
+            presentation.setSummary(total + " " + noun + " · " + label);
         } else {
-            count.setText(visible + " of " + total + " " + noun + " · Search results");
+            presentation.setSummary(visible + " of " + total + " " + noun + " · Search results");
         }
     }
 
@@ -711,41 +557,14 @@ public class FavoritesActivity extends Activity {
         view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
     }
 
+    @Override protected void onDestroy() {
+        if (thumbnailResolvers != null) for (RenderedThumbnailResolver resolver : thumbnailResolvers) resolver.close();
+        thumbnailTargets.clear();
+        super.onDestroy();
+    }
+
     private int dp(int value) {
         return Math.round(value * getResources().getDisplayMetrics().density);
     }
 
-    private final class LibraryPagerAdapter extends RecyclerView.Adapter<PageHolder> {
-        @Override
-        public int getItemCount() {
-            return PAGE_COUNT;
-        }
-
-        @NonNull
-        @Override
-        public PageHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
-            FrameLayout container = new FrameLayout(parent.getContext());
-            container.setLayoutParams(new RecyclerView.LayoutParams(-1, -1));
-            return new PageHolder(container);
-        }
-
-        @Override
-        public void onBindViewHolder(@NonNull PageHolder holder, int position) {
-            View page = pageViews[position];
-            if (page.getParent() instanceof ViewGroup) {
-                ((ViewGroup) page.getParent()).removeView(page);
-            }
-            holder.container.removeAllViews();
-            holder.container.addView(page, new FrameLayout.LayoutParams(-1, -1));
-        }
-    }
-
-    private static final class PageHolder extends RecyclerView.ViewHolder {
-        final FrameLayout container;
-
-        PageHolder(FrameLayout container) {
-            super(container);
-            this.container = container;
-        }
-    }
 }
