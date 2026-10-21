@@ -38,7 +38,7 @@ Development branch: `feature/zerochill-compose-6.0`. No release/version change y
 - Platform: WebFallback/WebView and remaining dialogs/sheets.
 - XML layouts are predominantly splash and player/Shows control surfaces. Most normal screens assemble Views in Java.
 
-## Validation and next batch
+## Previous checkpoint validation
 
 - Application checkpoint: `6accae3a05a612f8ab87789e0d512561c558af1d`.
 - Build Android APK #2073 and Signed Upgrade Candidate #863 passed. Full debug/release suites each ran 888 tests, zero failures/errors, one skipped. The migration adds 17 tests. Local focused UI/state/navigation checks passed 65 tests.
@@ -48,7 +48,7 @@ Development branch: `feature/zerochill-compose-6.0`. No release/version change y
 - Performance run #1018: cold/warm startup, tab switching, baseline profile and ShitTok scrolling passed. Search failed with a main-shell ANR/readiness timeout; creator gallery autoplay timed out; both Shows flows lost emulator connections. The long ShitTok session was still running when this checkpoint was documented. Causes remain unresolved; no performance-equivalence claim. Main navigation code is identical to main, and the approved search checkpoint had no completed comparison matrix.
 
 Physical testing needed: Settings actions/dialogs/backup, Feedback draft/keyboard/tabs/reply routing, large fonts, insets and glass appearance; startup, Search, gallery playback, ShitTok gestures and rotation also need device checks. Automated upgrade installation does not verify every saved collection or signed-in account on a real device.
-Next: complete the Library/Search continuation from committed state and validate the new checkpoint. Preserve player and source systems; do not repeat the prior performance investigation without a reproducible new regression.
+Next: physically validate this checkpoint, then finish the remaining native Library/Search islands before broader account/profile presentation. Preserve player and source systems; do not repeat the prior performance investigation without a reproducible new regression.
 No package, signing, persisted-key, database, backend or remote-config changes. CI runs both full suites once for this branch while retaining signing/version/upgrade gates. No merge or publication.
 
 ## Approved-main performance comparison (preserved findings)
@@ -97,3 +97,39 @@ Automatic approval review blocked polling the first local full run because it de
 The saved-collection overflow retains its native header anchor so the existing glass popup opens at the button. Search now supplies a window-level lifecycle owner only when a legacy host has none, matching the existing navigation bridge's WindowRecomposer requirements; it preserves pre-existing owners and clears only its own fallback on close. Native shell-inset assertions were migrated to check the Compose root without duplicate View padding; the Compose test continues to exercise actual History navigation.
 
 The offline full run exposed those remaining native-inset/legacy-overlay integration cases. After fixing them, a fresh non-incremental focused run passed 37 tests covering navigation, learned creator searches, Compose Library state/geometry and progressive Search. Generated intermediate outputs had retained a deleted combined test class; they were archived before this fresh run. Final validation uses fresh outputs and exact source counts, rather than the stale intermediate counts.
+
+## Current continuation validation
+
+Application source: `ef5d0501ace64ebd953dc62bd13d17979790e19d` on `feature/zerochill-compose-6.0`, a descendant of approved main `da9b00588e6ecc370327cad75209e757475c2370`.
+
+- Fresh local debug suite: 898 tests, zero failures/errors, one skip.
+- Fresh local release suite: 898 tests, zero failures/errors, one skip.
+- The skip in each variant is the existing `FapelloLiveSmokeTest.liveSearchCreatorPaginationImagesAndVideos`; it was not newly disabled.
+- Both local debug and release APK builds completed. These local APKs are not the production-signed install handoff.
+- Lint audit: 321 errors and 390 warnings. No findings in any touched Kotlin/Compose file. Existing Java/Media3 opt-in and other audit debt remains; the final Gradle invocation exits nonzero at lint after the suites and both builds finish.
+- Ten additional tests cover the new presentation/state behavior; the diagnostics clipboard/privacy test was moved to the Compose dialog rather than dropped. Existing controller, data, account-isolation, creator drag/avatar, query/cancellation, navigation and geometry tests remain active.
+- Intermediate failures in native-dialog/native-scroll assertions and legacy overlay lifecycle ownership were fixed. Generated outputs retaining a deleted test class were archived; final counts above come from fresh outputs with incremental Kotlin compilation disabled.
+- The initial local full-run approval block was resolved by running test JVMs offline, with cached Robolectric SDKs and rejected outbound HTTP(S). No Supabase tools, backend deployment, schema change or remote-config mutation was performed.
+- Targeted lazy scrolling, saved-state, viewport geometry, creator cache/prefetch and fade-preservation regressions ran. New frame-time measurements were not taken: the local environment has no `/dev/kvm`. The historical paired-main findings remain unchanged; no performance-parity claim.
+- [Build Android APK 39544657487](https://github.com/Addy37/ZEROCHILL/actions/runs/39544657487) passed, including full debug/release suites and both builds. Its lint audit remains non-blocking debt.
+- [Signed Upgrade Candidate 39544657555](https://github.com/Addy37/ZEROCHILL/actions/runs/39544657555) passed both full suites, both signed builds, package/version/certificate gates and an Android 15 in-place upgrade over stable 5.0.1. Android retained the first-install record.
+- Install candidate: `ZEROCHILL-feature-zerochill-compose-6.0-ef5d0501-upgrade.apk`, preview `5.0.2-zerochill-preview` / `5000002`, package `com.addy37.crazyshitunofficial`.
+- The APK's embedded source is `ef5d0501ace64ebd953dc62bd13d17979790e19d`, branch `feature/zerochill-compose-6.0`. Embedded lineage and downloaded archive/APK checksums were verified locally.
+- Production signing certificate SHA-256: `04abf84b3d468cbb1a562dea83b0007e686b2e56018cce911223963faea51356`.
+- APK SHA-256: `a1789d9130b815a7429209590007af5968e0965deed9e143deaed9ef075f55a5`.
+- This final documentation-only checkpoint changes no application code and uses `[skip ci]` to avoid repeating completed suites/builds. The certified APK source remains the application checkpoint above.
+
+## Physical-device handoff checklist
+
+- Settings: frequency/preloading choices, blocked creators, warnings/clear confirmations, diagnostics copy, notification permission/scheduling and updater actions.
+- Backup: export, picker return, restore preview/confirmation and restore completion. Platform pickers, the backup controller's restore confirmation and updater-owned overlays remain native.
+- Library: hub/profile actions, Favorites/Watch Later, Continue Watching, History, Creators/avatars/badges/drag-to-merge, Downloads/progress/offline actions and account-scoped Liked Videos refresh/pagination.
+- Scrolling/state: Library scroll under the glass header, collection searches and updates, rotation, rapid navigation, large fonts, OLED/electric-cyan appearance and edge-to-edge insets.
+- Search: fast query changes, results appearing progressively, ongoing/new-result fades, recent rerun/remove/clear, round placeholders, favorite actions, keyboard/focus, rotation and error/retry behavior.
+- Upgrade retention: check existing favorites, likes, history, downloads, settings, backup compatibility and signed-in account on the physical device. Automated package upgrade checks do not validate every user collection.
+
+## Next recommended batch
+
+After physical approval, finish native media cards/menus, the creator/download/likes grids, Library profile/media rails and remaining Search controls/row presentation as small batches. Then move to profile/account/inbox presentation. Keep ShitTok, PlayerActivity/Media3, Shows playback, providers, networking, Supabase and remote configuration outside those UI batches.
+
+This remains a draft 6.0 development checkpoint. No merge, release, final 6.0 version bump, identity/signing change, persistent-format/schema migration or backend/remote-config deployment is authorized by this checkpoint.
