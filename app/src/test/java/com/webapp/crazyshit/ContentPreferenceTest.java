@@ -188,6 +188,36 @@ public class ContentPreferenceTest {
         feed.close();
     }
 
+    @Test public void onlyHavenCatalogLockCannotBlockOrdinaryProviderPagination() throws Exception {
+        ChaosSourceMixer mixer = new ChaosSourceMixer(new CrazyShitRepository(), new Random(1));
+        org.robolectric.util.ReflectionHelpers.setField(mixer, "onlyHavenCatalogAttempted", true);
+        Object lock = org.robolectric.util.ReflectionHelpers.getField(mixer, "onlyHavenLock");
+        java.lang.reflect.Method load = ChaosSourceMixer.class.getDeclaredMethod(
+                "loadOnlyHavenBatch", Context.class, ContentPreference.class);
+        load.setAccessible(true);
+        java.util.concurrent.ExecutorService io = java.util.concurrent.Executors.newFixedThreadPool(2);
+        java.util.concurrent.CountDownLatch started = new java.util.concurrent.CountDownLatch(1);
+        java.util.concurrent.Future<?> haven;
+        try {
+            synchronized (lock) {
+                haven = io.submit(() -> {
+                    started.countDown();
+                    try { return load.invoke(mixer, context, ContentPreference.ALL); }
+                    catch (Exception failure) { throw new RuntimeException(failure); }
+                });
+                assertTrue(started.await(2, java.util.concurrent.TimeUnit.SECONDS));
+                try {
+                    haven.get(200, java.util.concurrent.TimeUnit.MILLISECONDS);
+                    fail("The OnlyHaven loader must use its dedicated catalog lock");
+                } catch (java.util.concurrent.TimeoutException expected) { }
+                int page = io.submit(() -> mixer.nextPage("kaotic", 32))
+                        .get(2, java.util.concurrent.TimeUnit.SECONDS);
+                assertTrue(page >= 1 && page <= 32);
+            }
+            haven.get(2, java.util.concurrent.TimeUnit.SECONDS);
+        } finally { io.shutdownNow(); }
+    }
+
     private NativeContentItem havenClip(String name) {
         return new NativeContentItem(NativeContentItem.KIND_MEDIA, name,
                 "https://e1.cum.st/media/" + name + ".mp4", "", "",

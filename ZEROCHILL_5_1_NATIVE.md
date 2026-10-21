@@ -52,6 +52,8 @@ or stall playback. Category catalog failures have a one-minute retry backoff;
 empty preference batches back off for 30 seconds. Navigation/pause/close cancels
 preference work, stale completions cannot cross mode changes, and successful raw
 candidates can be retained for resume. Every candidate still passes normal admission.
+OnlyHaven catalog IO has a dedicated lock; it never holds the ordinary providers'
+page-deck monitor during network requests.
 
 Changing the preference cancels the discovery batch and discards the future queue
 after the current and immediately prepared next clip. It keeps playback generation,

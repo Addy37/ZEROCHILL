@@ -68,6 +68,7 @@ final class ChaosSourceMixer {
     private final ArrayDeque<String> sourceDeck = new ArrayDeque<>();
     private final Set<String> usedSourcePages = new HashSet<>();
     private final Object catalogLock = new Object();
+    private final Object onlyHavenLock = new Object();
     private boolean catalogLoaded;
     private boolean catalogLoading;
     private boolean efuktCatalogAttempted;
@@ -462,7 +463,12 @@ final class ChaosSourceMixer {
         return loadOnlyHavenBatch(context, ContentPreference.ALL);
     }
 
-    private synchronized List<NativeContentItem> loadOnlyHavenBatch(Context context, ContentPreference mode) {
+    private List<NativeContentItem> loadOnlyHavenBatch(Context context, ContentPreference mode) {
+        // Catalog serialization must not hold this mixer's nextPage() monitor across IO.
+        synchronized (onlyHavenLock) { return harvestOnlyHavenBatch(context, mode); }
+    }
+
+    private List<NativeContentItem> harvestOnlyHavenBatch(Context context, ContentPreference mode) {
         if (onlyHavenDeckReset.getAndSet(false)) {
             onlyHavenCreatorDeck.clear();
             if (onlyHavenCreators.isEmpty()) onlyHavenCatalogAttempted = false;
