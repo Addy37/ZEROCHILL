@@ -88,6 +88,9 @@ final class ContentPreferenceUi {
         ZeroChillMotion.installPressFeedback(cancel);
         panel.addView(cancel, new LinearLayout.LayoutParams(-1, -2));
         dialog.setCanceledOnTouchOutside(true);
+        dialog.setView(panel, 0, 0, 0, 0);
+        if (dialog.getWindow() != null) dialog.getWindow().setWindowAnimations(
+                ZeroChillMotion.animationsEnabled(context) ? R.style.Animation_ZeroChill_Preference : 0);
         dialog.show();
         android.view.Window window = dialog.getWindow();
         if (window != null) {
@@ -104,8 +107,6 @@ final class ContentPreferenceUi {
             window.setLayout(width, -2);
             window.addFlags(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND);
             window.setDimAmount(.35f);
-            window.setWindowAnimations(ZeroChillMotion.animationsEnabled(context)
-                    ? R.style.Animation_ZeroChill_Preference : 0);
             if (android.os.Build.VERSION.SDK_INT >= 31) window.setBackgroundBlurRadius(dp(context, 20));
         }
     }

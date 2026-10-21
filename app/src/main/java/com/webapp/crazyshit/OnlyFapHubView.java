@@ -1217,7 +1217,7 @@ final class OnlyFapHubView extends FrameLayout {
                                 if (error instanceof FapelloSourceException &&
                                         ((FapelloSourceException) error).reason ==
                                                 FapelloSourceException.Reason.BLOCKED) {
-                                    fapelloPostsBlocked = true;
+                                    if (generation == heroGeneration) fapelloPostsBlocked = true;
                                 }
                             }
                         }
@@ -1449,7 +1449,9 @@ final class OnlyFapHubView extends FrameLayout {
                                 DataSource dataSource,
                                 boolean first
                         ) {
-                            if (!closed && heroItem == candidate && imageUrl.equals(candidate.currentImageUrl())) {
+                            if (closed || heroItem != candidate || !startupAllowed(candidate)
+                                    || !imageUrl.equals(candidate.currentImageUrl())) return true;
+                            {
                                 startupHero = null;
                                 if (discoveryPreference == ContentPreference.ALL && !candidate.usingAvatar()) metadataIo.execute(() ->
                                         OnlyFapHeroMemory.remember(getContext(), candidate.creator, imageUrl, referer));
