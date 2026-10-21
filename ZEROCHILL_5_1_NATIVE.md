@@ -89,21 +89,15 @@ The generation is checked before deferred-queue insertion as well as execution,
 so stale work cannot replace a coalesced task for the current category.
 An in-flight provider request may still take its existing timeout to stop.
 
-The preference pill now sits below the creator description and above View Gallery.
-Native smoked glass, cyan rims and inset highlights follow the search/navigation
-material. The existing native FrostedBackdropRenderer supplies Android 12+ hardware
-backdrop blur, now supporting descendant coordinates. Other renderers retain a dark
-translucent fallback. The custom scrollable native modal has labeled identity icons,
-a selected checkmark, one-tap selection, Cancel/outside/back dismissal, and short
-window motion that follows the existing reduced-motion preference. Android 12+
-window blur is optional and depends on system/device support.
-
-All content keeps the core cyan/bold treatment; Women uses softer inset highlights;
-Men uses firmer corners/weight; both trans modes share a luminous inset edge and
-explicit labels, with Trans men retaining firmer geometry; Non-binary uses a balanced
-horizontal sheen and the existing vector; Groups uses the local multi-person vector
-and a wider layered inset. All modes share the same black/cyan/white foundation.
-No Compose UI or dependency is added. Preference persistence is unchanged.
+The compact preference selector sits beside View Gallery below the creator description.
+Both controls share the gallery button's dark translucent fill, white border and
+48dp height. OnlyFap shows the mode symbol/local icon and dropdown arrow; the
+accessibility label and tooltip retain the full mode name. The picker and Settings
+keep full labels. All content uses ALL, trans modes share their identity symbol,
+and non-binary/groups use existing local vectors. The shared button treatment
+replaces the previous mode-specific pill highlights and corners at the user's request.
+The picker retains its native liquid glass and short forming entrance, detailed below.
+Preference persistence, hero loading and rotation are unchanged.
 
 Focused hero/picker regressions run before full debug/release tests and builds.
 The existing native-render harness writes hero/picker PNGs for review. This scoped

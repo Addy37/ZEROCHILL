@@ -70,11 +70,13 @@ public class ContentPreferenceTest {
             @Override public void onViewAllFavorites() {}
         });
         android.widget.TextView selector = org.robolectric.util.ReflectionHelpers.getField(hub, "preferenceSelector");
-        assertTrue(selector.getText().toString().contains("Men"));
+        assertEquals("♂  ▾", selector.getText().toString());
+        assertEquals("Content preference: Men", selector.getContentDescription());
         selector.performClick();
         ShadowAlertDialog.getLatestAlertDialog().getWindow().getDecorView().findViewWithTag("preference_women").performClick();
         assertEquals(ContentPreference.WOMEN, ContentPreference.get(settings));
-        assertTrue(selector.getText().toString().contains("Women"));
+        assertEquals("♀  ▾", selector.getText().toString());
+        assertEquals("Content preference: Women", selector.getContentDescription());
         hub.close(); controller.destroy();
     }
     @Test public void glassPillAndPickerReflectEveryModeAfterRecreationAndCancelDoesNotChangeIt() {
@@ -86,7 +88,9 @@ public class ContentPreferenceTest {
             Activity activity = controller.get();
             android.widget.TextView pill = new android.widget.TextView(activity);
             ContentPreferenceUi.bindSelector(pill);
-            assertTrue(pill.getText().toString().contains(mode.label));
+            assertEquals((mode.symbol.isEmpty() ? "" : mode.symbol + "  ") + "▾", pill.getText().toString());
+            assertFalse(pill.getText().toString().contains(mode.label));
+            assertEquals(mode.icon() != 0, pill.getCompoundDrawablesRelative()[0] != null);
             assertEquals("Content preference: " + mode.label, pill.getContentDescription());
             assertEquals(mode, pill.getTag(R.id.content_preference_mode));
             assertNotNull(pill.getBackground());

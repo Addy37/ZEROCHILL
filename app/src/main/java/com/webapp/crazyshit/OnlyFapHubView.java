@@ -199,7 +199,6 @@ final class OnlyFapHubView extends FrameLayout {
     private volatile boolean closed;
     private volatile int heroGeneration;
     private java.util.concurrent.Future<?> startupTask, selectionTask, resolutionTask, discoveryTask;
-    private boolean recordingPreferenceBackdrop;
     private volatile boolean fapelloPostsBlocked;
     private Bundle pendingRestoreState;
 
@@ -229,28 +228,7 @@ final class OnlyFapHubView extends FrameLayout {
         heroCard.setContentDescription("OnlyFap featured creator");
         ZeroChillMotion.installPressFeedback(heroCard);
 
-        FrameLayout heroFrame = new FrameLayout(context) {
-            private final FrostedBackdropRenderer glass = new FrostedBackdropRenderer();
-            private void drawBase(android.graphics.Canvas canvas) { super.dispatchDraw(canvas); }
-            @Override protected void dispatchDraw(android.graphics.Canvas canvas) {
-                if (!glass.draw(this, canvas, preferenceSelector, getDrawingTime(),
-                        new FrostedBackdropRenderer.Drawer() {
-                    @Override public void drawContent(android.graphics.Canvas target, View overlay, long time) {
-                        recordingPreferenceBackdrop = true;
-                        try { drawBase(target); } finally { recordingPreferenceBackdrop = false; }
-                    }
-                    @Override public void drawOverlay(android.graphics.Canvas target, View overlay, long time) {
-                        android.graphics.Rect bounds = new android.graphics.Rect();
-                        overlay.getDrawingRect(bounds);
-                        offsetDescendantRectToMyCoords(overlay, bounds);
-                        int saved = target.save();
-                        target.translate(bounds.left, bounds.top);
-                        overlay.draw(target);
-                        target.restoreToCount(saved);
-                    }
-                })) super.dispatchDraw(canvas);
-            }
-        };
+        FrameLayout heroFrame = new FrameLayout(context);
         heroCard.addView(heroFrame, new MaterialCardView.LayoutParams(-1, -1));
 
         heroImage = new ImageView(context);
@@ -316,8 +294,8 @@ final class OnlyFapHubView extends FrameLayout {
         heroBar.addView(heroMore, heroMoreParams);
 
         preferenceSelector = text("", 13f, UiPalette.PRIMARY);
-        preferenceSelector.setGravity(Gravity.CENTER_VERTICAL);
-        preferenceSelector.setPadding(dp(16), dp(8), dp(16), dp(8));
+        preferenceSelector.setGravity(Gravity.CENTER);
+        preferenceSelector.setPadding(dp(8), dp(8), dp(8), dp(8));
         preferenceSelector.setMinimumHeight(dp(48));
         preferenceSelector.setClickable(true);
         preferenceSelector.setFocusable(true);
@@ -339,12 +317,7 @@ final class OnlyFapHubView extends FrameLayout {
         heroDots.setVisibility(View.GONE);
         heroDots.setContentDescription("Featured creator position");
 
-        LinearLayout heroCopy = new LinearLayout(context) {
-            @Override protected boolean drawChild(android.graphics.Canvas canvas, View child, long time) {
-                return recordingPreferenceBackdrop && child == preferenceSelector
-                        || super.drawChild(canvas, child, time);
-            }
-        };
+        LinearLayout heroCopy = new LinearLayout(context);
         heroCopy.setOrientation(LinearLayout.VERTICAL);
         heroCopy.setGravity(Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
         heroCopy.setPadding(dp(24), dp(28), dp(24), dp(20));
@@ -375,25 +348,25 @@ final class OnlyFapHubView extends FrameLayout {
         heroHintParams.topMargin = dp(5);
         heroCopy.addView(heroHint, heroHintParams);
 
-        LinearLayout.LayoutParams selectorParams = new LinearLayout.LayoutParams(-2, -2);
-        selectorParams.topMargin = dp(10);
-        selectorParams.gravity = Gravity.CENTER_HORIZONTAL;
-        heroCopy.addView(preferenceSelector, selectorParams);
+        LinearLayout heroActions = new LinearLayout(context);
+        heroActions.setOrientation(LinearLayout.HORIZONTAL);
+        heroActions.setGravity(Gravity.CENTER_VERTICAL);
+        LinearLayout.LayoutParams heroActionsParams = new LinearLayout.LayoutParams(-2, -2);
+        heroActionsParams.topMargin = dp(10);
+        heroActionsParams.gravity = Gravity.CENTER_HORIZONTAL;
+        heroCopy.addView(heroActions, heroActionsParams);
 
         heroAction = text("VIEW GALLERY", 13f, Color.WHITE);
         heroAction.setTypeface(null, android.graphics.Typeface.BOLD);
         heroAction.setGravity(Gravity.CENTER);
         heroAction.setVisibility(View.GONE);
-        GradientDrawable actionBackground = new GradientDrawable();
-        actionBackground.setColor(Color.argb(205, 15, 18, 22));
-        actionBackground.setCornerRadius(dp(20));
-        actionBackground.setStroke(dp(1), Color.argb(80, 255, 255, 255));
-        heroAction.setBackground(actionBackground);
+        heroAction.setBackground(ContentPreferenceUi.heroButtonBackground(context));
+        heroAction.setMinimumHeight(dp(48));
         heroAction.setContentDescription("Open featured creator gallery");
-        LinearLayout.LayoutParams actionParams = new LinearLayout.LayoutParams(dp(136), dp(40));
-        actionParams.topMargin = dp(8);
-        actionParams.gravity = Gravity.CENTER_HORIZONTAL;
-        heroCopy.addView(heroAction, actionParams);
+        heroActions.addView(heroAction, new LinearLayout.LayoutParams(dp(136), dp(48)));
+        LinearLayout.LayoutParams selectorParams = new LinearLayout.LayoutParams(dp(72), dp(48));
+        selectorParams.setMarginStart(dp(8));
+        heroActions.addView(preferenceSelector, selectorParams);
 
         LinearLayout.LayoutParams heroDotsParams =
                 new LinearLayout.LayoutParams(-2, dp(28));

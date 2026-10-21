@@ -196,14 +196,32 @@ public class OnlyFapFilteredHeroTest {
         assertTrue(heroes().isEmpty());
     }
 
-    @Test public void preferencePillLivesBetweenDescriptionAndGalleryWithAccessibleTouchTarget() {
+    @Test public void compactPreferenceSitsBesideMatchingGalleryButtonWithAccessibleTouchTarget() {
         View pill = ReflectionHelpers.getField(hub, "preferenceSelector");
-        LinearLayout parent = (LinearLayout) pill.getParent();
-        int at = parent.indexOfChild(pill);
-        assertSame(ReflectionHelpers.getField(hub, "heroHint"), parent.getChildAt(at - 1));
-        assertSame(ReflectionHelpers.getField(hub, "heroAction"), parent.getChildAt(at + 1));
+        View gallery = ReflectionHelpers.getField(hub, "heroAction");
+        LinearLayout row = (LinearLayout) pill.getParent();
+        assertEquals(LinearLayout.HORIZONTAL, row.getOrientation());
+        assertSame(row, gallery.getParent());
+        assertSame(gallery, row.getChildAt(0));
+        assertSame(pill, row.getChildAt(1));
+        LinearLayout copy = (LinearLayout) row.getParent();
+        assertSame(ReflectionHelpers.getField(hub, "heroHint"), copy.getChildAt(copy.indexOfChild(row) - 1));
         assertTrue(pill.isClickable()); assertTrue(pill.isFocusable());
         assertTrue(pill.getMinimumHeight() >= BrowseUi.dp(activity, 48));
+        android.graphics.drawable.GradientDrawable first = (android.graphics.drawable.GradientDrawable) pill.getBackground();
+        android.graphics.drawable.GradientDrawable second = (android.graphics.drawable.GradientDrawable) gallery.getBackground();
+        assertEquals(first.getColor().getDefaultColor(), second.getColor().getDefaultColor());
+        assertEquals(first.getCornerRadius(), second.getCornerRadius(), 0f);
+        gallery.setVisibility(View.VISIBLE);
+        for (int width : new int[]{320, 411}) {
+            hub.measure(View.MeasureSpec.makeMeasureSpec(BrowseUi.dp(activity, width), View.MeasureSpec.EXACTLY),
+                    View.MeasureSpec.makeMeasureSpec(BrowseUi.dp(activity, 700), View.MeasureSpec.EXACTLY));
+            hub.layout(0, 0, hub.getMeasuredWidth(), hub.getMeasuredHeight());
+            assertEquals(gallery.getTop(), pill.getTop());
+            assertEquals(gallery.getBottom(), pill.getBottom());
+            assertTrue(pill.getLeft() > gallery.getRight());
+            assertTrue(row.getWidth() <= copy.getWidth() - copy.getPaddingLeft() - copy.getPaddingRight());
+        }
     }
     @Test @org.robolectric.annotation.GraphicsMode(org.robolectric.annotation.GraphicsMode.Mode.NATIVE)
     @Config(qualifiers = "w411dp-h891dp-xhdpi")

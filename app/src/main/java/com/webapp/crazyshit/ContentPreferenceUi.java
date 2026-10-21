@@ -129,19 +129,26 @@ final class ContentPreferenceUi {
         ContentPreference mode = ContentPreference.get(context);
         Object previous = selector.getTag(R.id.content_preference_mode);
         selector.setTag(R.id.content_preference_mode, mode);
-        selector.setText((mode.symbol.isEmpty() ? "" : mode.symbol + "  ") + mode.label + "  ▾");
+        String compact = (mode.symbol.isEmpty() ? "" : mode.symbol + "  ") + "▾";
+        android.text.SpannableString ink = new android.text.SpannableString(compact);
+        if (!mode.symbol.isEmpty() && mode != ContentPreference.ALL) {
+            ink.setSpan(new android.text.style.RelativeSizeSpan(1.65f), 0, mode.symbol.length(),
+                    android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        }
+        selector.setText(ink);
         selector.setTextColor(Color.WHITE);
         selector.setTypeface(null, weight(mode));
         android.graphics.drawable.Drawable icon = mode.icon() == 0 ? null
                 : androidx.core.content.ContextCompat.getDrawable(context, mode.icon());
         if (icon != null) {
-            icon = icon.mutate(); icon.setTint(ZeroChillUi.color(context, R.color.zc_cyan));
+            icon = icon.mutate(); icon.setTint(Color.WHITE);
             icon.setBounds(0, 0, dp(context, 22), dp(context, 22));
         }
         selector.setCompoundDrawablesRelative(icon, null, null, null);
         selector.setCompoundDrawablePadding(dp(context, 7));
-        selector.setBackground(glass(context, mode, true, false));
+        selector.setBackground(heroButtonBackground(context));
         selector.setContentDescription("Content preference: " + mode.label);
+        selector.setTooltipText("Content preference: " + mode.label);
         if (previous != null && previous != mode && selector.isAttachedToWindow()
                 && ZeroChillMotion.animationsEnabled(context)) {
             selector.animate().cancel(); selector.setAlpha(.65f);
@@ -155,30 +162,13 @@ final class ContentPreferenceUi {
                 : android.graphics.Typeface.NORMAL;
     }
 
-    /** Shared smoked glass, cyan rim and inset sheen, following navigation/search materials. */
-    private static android.graphics.drawable.Drawable glass(Context context, ContentPreference mode,
-            boolean selected, boolean panel) {
-        float radius = dp(context, panel ? 28 : mode == ContentPreference.MEN
-                || mode == ContentPreference.TRANS_MEN ? 20 : 28);
-        int cyan = ZeroChillUi.color(context, R.color.zc_cyan);
-        android.graphics.drawable.GradientDrawable body = new android.graphics.drawable.GradientDrawable(
-                android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM,
-                new int[]{panel ? 0xF0182029 : 0xDD18222C, panel ? 0xF2080C12 : 0xE0070C12});
-        body.setCornerRadius(radius);
-        body.setStroke(dp(context, 1), selected ? androidx.core.graphics.ColorUtils.setAlphaComponent(cyan, 150) : 0x30FFFFFF);
-        android.graphics.drawable.GradientDrawable sheen = new android.graphics.drawable.GradientDrawable(
-                mode == ContentPreference.NON_BINARY
-                        ? android.graphics.drawable.GradientDrawable.Orientation.LEFT_RIGHT
-                        : android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM,
-                new int[]{selected ? 0x240892D0 : 0x12FFFFFF, 0x01FFFFFF});
-        sheen.setCornerRadius(radius);
-        sheen.setStroke(dp(context, 1), mode == ContentPreference.TRANS_WOMEN
-                || mode == ContentPreference.TRANS_MEN ? 0x36D8F3FF : 0x16FFFFFF);
-        android.graphics.drawable.LayerDrawable layers = new android.graphics.drawable.LayerDrawable(
-                new android.graphics.drawable.Drawable[]{body, sheen});
-        int inset = dp(context, mode == ContentPreference.GROUPS ? 4 : mode == ContentPreference.WOMEN ? 3 : 2);
-        layers.setLayerInset(1, inset, dp(context, 2), inset, dp(context, 2));
-        return layers;
+    /** Shared with View Gallery so both lower hero controls use the same material. */
+    static android.graphics.drawable.GradientDrawable heroButtonBackground(Context context) {
+        android.graphics.drawable.GradientDrawable background = new android.graphics.drawable.GradientDrawable();
+        background.setColor(Color.argb(205, 15, 18, 22));
+        background.setCornerRadius(dp(context, 20));
+        background.setStroke(dp(context, 1), Color.argb(80, 255, 255, 255));
+        return background;
     }
 
     static void present(FrameLayout surface, boolean shittok) {
