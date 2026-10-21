@@ -1,5 +1,6 @@
 package com.webapp.crazyshit
 
+import androidx.lifecycle.findViewTreeLifecycleOwner
 import androidx.lifecycle.setViewTreeLifecycleOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import android.app.Activity
@@ -22,6 +23,15 @@ import com.webapp.crazyshit.ui.ZeroChillTheme
 /** Lazy Compose viewport around the approved row binders and their per-query fade policy. */
 internal class SearchResultsCompose(activity: Activity) {
     private val owner = NavOwner(activity)
+    private val decor = activity.window.decorView
+    private val installedWindowOwner = decor.findViewTreeLifecycleOwner() == null
+    init {
+        // WindowRecomposer is installed above the ComposeView in a legacy Activity.
+        if (installedWindowOwner) {
+            decor.setViewTreeLifecycleOwner(owner)
+            decor.setViewTreeSavedStateRegistryOwner(owner)
+        }
+    }
     private data class Row(val key: String, val position: Int, val type: Int, val revision: Int, val payload: Any? = null)
     private class Binding(val holder: RecyclerView.ViewHolder, var revision: Int = -1)
     private var rows by mutableStateOf(emptyList<Row>())
@@ -107,6 +117,10 @@ internal class SearchResultsCompose(activity: Activity) {
     fun close() {
         sourceAdapter?.unregisterAdapterDataObserver(observer)
         view.disposeComposition()
+        if (installedWindowOwner && decor.findViewTreeLifecycleOwner() === owner) {
+            decor.setViewTreeLifecycleOwner(null)
+            decor.setViewTreeSavedStateRegistryOwner(null)
+        }
         owner.close()
     }
 }
