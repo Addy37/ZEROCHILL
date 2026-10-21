@@ -17,6 +17,16 @@ The 5.0.1 preparation changes release metadata and this lineage record only. The
 
 ZeroChill v5.0.0 was published on 2026-10-18 with production APK SHA-256 `bc8e6d481b9e7e4e0c67a66cddbb0bb3664b241b0260c29e155d7c638acd520b`.
 
+## Unreleased native 5.1.0 development
+
+`feature/zerochill-5.1.0` / draft PR #321 starts from approved main
+`da9b00588e6ecc370327cad75209e757475c2370` (the released 5.0.1 merge).
+The user abandoned the 6.0 Compose migration experiment; PR #320 and its feature
+branch are not a source for this work. The approved product baseline remains 5.0.1.
+See `ZEROCHILL_5_1_NATIVE.md` for native feature behavior and validation scope.
+Signed testing uses the existing Beta artifact convention, with branch and source
+SHA in the APK filename. No production release, tag or merge is authorized.
+
 ## Prior release preparation: 5.0.0
 
 The 5.0.0 candidate preserves the physically approved application tree at `2f9a489a`. PRs #311 and #312 were closed CI-only drafts and are excluded from release lineage. Main-only history changes README and historical lineage documentation; the README already matches the approved branch, and obsolete 3.1.0 lineage instructions are superseded by this current record. The release branch merges main history without changing approved application code. No backend, remote-config, schema, or data migration is introduced. Signed candidate validation and artifact checks are recorded in the release PR. This is preparation only: no final tag or GitHub release has been created. `rebrand/zerochill` remains the source of truth until the approved integration into main.

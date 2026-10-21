@@ -459,8 +459,10 @@ final class ChaosSourceMixer {
         LinkedHashMap<String, NativeContentItem> combined = new LinkedHashMap<>();
         HashSet<String> usedCreators = new HashSet<>();
         int attempts = Math.min(4, onlyHavenCreators.size());
-
-        while (combined.size() < ONLY_HAVEN_ITEMS_PER_BATCH && attempts-- > 0) {
+        // The normal runway is six clips. At most two matching candidates per harvest
+        // leave room for ordinary providers even when this endpoint wins the fetch race.
+        int batchLimit = mode == ContentPreference.ALL ? ONLY_HAVEN_ITEMS_PER_BATCH : 2;
+        while (combined.size() < batchLimit && attempts-- > 0) {
             if (Thread.currentThread().isInterrupted()) break;
             if (onlyHavenCreatorDeck.isEmpty()) refillOnlyHavenDeck();
             OnlyHavenRepository.Creator creator = onlyHavenCreatorDeck.pollFirst();
@@ -488,7 +490,7 @@ final class ChaosSourceMixer {
                     preferenceMatches.add(mode.value + "|" + item.url);
                     if (partial != null) partial.accept(Collections.singletonList(item));
                 }
-                if (combined.size() >= ONLY_HAVEN_ITEMS_PER_BATCH) break;
+                if (combined.size() >= batchLimit) break;
             }
         }
 

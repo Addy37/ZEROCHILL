@@ -54,11 +54,13 @@ final class FavoriteCreatorArtworkHydrator {
     Result fetchMissing(Context context, java.util.function.BooleanSupplier cancelled, Progress progress) {
         Context app = context.getApplicationContext();
         java.util.ArrayList<CreatorCatalog.FavoriteGroup> missing = new java.util.ArrayList<>();
-        java.util.HashSet<String> identities = new java.util.HashSet<>();
+        java.util.Map<String, java.util.Set<String>> lookupKeys = new java.util.LinkedHashMap<>();
         for (CreatorCatalog.FavoriteGroup group : CreatorCatalog.favoriteGroups(app)) {
             if (group == null || group.item == null || group.customAvatar || usableImage(group.item.imageUrl)) continue;
             String identity = CreatorIdentity.key(group.item.searchQuery.isEmpty() ? group.item.title : group.item.searchQuery);
-            if (identities.add(identity)) missing.add(group);
+            if (!lookupKeys.containsKey(identity)) missing.add(group);
+            lookupKeys.computeIfAbsent(identity, ignored -> new java.util.LinkedHashSet<>())
+                    .addAll(group.members.keySet());
         }
         int completed = 0, restored = 0, unresolved = 0, errors = 0;
         if (progress != null) progress.update(new Result(missing.size(), 0, 0, 0, 0, false));
@@ -74,7 +76,7 @@ final class FavoriteCreatorArtworkHydrator {
                     java.util.ArrayList<NativeContentItem> metadata = new java.util.ArrayList<>();
                     // Save to the existing raw identity too, so reviewed aliases and old favorites
                     // receive artwork without changing their favorite keys or grouping data.
-                    for (String key : group.members.keySet()) {
+                    for (String key : lookupKeys.get(CreatorIdentity.key(query))) {
                         if (!CreatorIdentity.sameReviewedIdentity(key, model.name)
                                 && !CreatorNameMatcher.normalized(key).equals(CreatorNameMatcher.normalized(model.name))) continue;
                         metadata.add(new NativeContentItem(NativeContentItem.KIND_CREATOR, key,
@@ -112,8 +114,9 @@ final class FavoriteCreatorArtworkHydrator {
         String clean = clean(value);
         if (clean.isEmpty()) return false;
         String lower = clean.toLowerCase(Locale.US);
-        return (lower.startsWith("https://") || lower.startsWith("http://"))
-                && !lower.contains("load.svg");
+        if (!(lower.startsWith("https://") || lower.startsWith("http://")) || lower.contains("load.svg")) return false;
+        try { return java.net.URI.create(clean).getHost() != null; }
+        catch (IllegalArgumentException invalid) { return false; }
     }
 
     private static String clean(String value) {

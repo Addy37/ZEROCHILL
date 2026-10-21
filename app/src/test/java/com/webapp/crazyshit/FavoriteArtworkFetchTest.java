@@ -34,7 +34,7 @@ public class FavoriteArtworkFetchTest {
     }
     private List<FapelloRepository.Model> found(String name) {
         return Collections.singletonList(new FapelloRepository.Model(name,
-                "https://fapello.com/" + name.replace(' ', '-'), "https://cdn.example/" + name + ".jpg"));
+                "https://fapello.com/" + name.replace(' ', '-'), "https://cdn.example/" + name.replace(' ', '-') + ".jpg"));
     }
     @Test public void fetchesBeyondTenAndLaterCreatorsSurviveIndividualFailures() {
         String[] names = new String[24];
@@ -85,6 +85,16 @@ public class FavoriteArtworkFetchTest {
         assertEquals(2, new FavoriteCreatorArtworkHydrator((app, query, limit) -> found(query))
                 .fetchMissing(context, () -> false, null).restored);
     }
+    @Test public void equivalentFavoriteKeysShareOneLookupAndBothPersistArtwork() {
+        favorites("kira-pregiato", "kira_pregiato");
+        AtomicInteger calls = new AtomicInteger();
+        FavoriteCreatorArtworkHydrator.Result result = new FavoriteCreatorArtworkHydrator((app, query, limit) -> {
+            calls.incrementAndGet(); return found("Kira Pregiato");
+        }).fetchMissing(context, () -> false, null);
+        assertEquals(1, calls.get()); assertEquals(1, result.restored);
+        assertTrue(CreatorCatalog.favoriteGroups(context).stream().allMatch(g -> !g.item.imageUrl.isEmpty()));
+    }
+
     @Test public void placeholderAndLocalInvalidImageDoNotCountAsUsableNormalArtwork() {
         assertFalse(FavoriteCreatorArtworkHydrator.usableImage("https://test/load.svg"));
         assertFalse(FavoriteCreatorArtworkHydrator.usableImage("file:///missing"));
