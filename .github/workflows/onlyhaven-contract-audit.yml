@@ -10,18 +10,6 @@ on:
 permissions:
   contents: read
 jobs:
-  cancel-unrequested-legacy-publication:
-    if: github.head_ref == 'feature/zerochill-5.1.0'
-    runs-on: ubuntu-latest
-    permissions:
-      actions: write
-    steps:
-      - name: Cancel the legacy publish job started by the superseded beta metadata
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-        run: |
-          gh api --method POST "repos/$GH_REPO/actions/runs/39631464905/cancel" || true
   inspect:
     runs-on: ubuntu-latest
     timeout-minutes: 5

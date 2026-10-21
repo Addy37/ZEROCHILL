@@ -712,9 +712,14 @@ final class SourceConfig {
     static final class OnlyHaven {
         // Optional data extension. Older remote snapshots keep these known-good defaults.
         String creatorCategoryApiRoute = "api/v1/creators?gender={category}&content=imported&n={limit}&o={offset}";
-        Map<String, String> categoryValues = Collections.unmodifiableMap(new LinkedHashMap<>(Map.of(
-                "women", "woman", "men", "man", "trans_women", "trans_woman",
-                "trans_men", "trans_man", "non_binary", "nonbinary", "groups", "group")));
+        Map<String, String> categoryValues = defaultCategoryValues();
+        private static Map<String, String> defaultCategoryValues() {
+            Map<String, String> values = new LinkedHashMap<>();
+            values.put("women", "woman"); values.put("men", "man");
+            values.put("trans_women", "trans_woman"); values.put("trans_men", "trans_man");
+            values.put("non_binary", "nonbinary"); values.put("groups", "group");
+            return Collections.unmodifiableMap(values);
+        }
         final boolean enabled;
         final String baseUrl, mediaBaseUrl, imageBaseUrl, userAgent, refererOverride, creatorSearchRoute,
                 creatorSearchApiRoute, creatorPageRoute, creatorPostsApiRoute;

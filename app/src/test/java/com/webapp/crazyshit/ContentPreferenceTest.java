@@ -58,7 +58,7 @@ public class ContentPreferenceTest {
         assertEquals(1, changed[0]);
     }
     @Test public void categoryMappingUsesVerifiedProviderTokensAndConfiguredRoute() throws Exception {
-        JSONObject document = new JSONObject(Files.readString(Paths.get("src/main/assets/source_config_defaults.json")));
+        JSONObject document = new JSONObject(new String(Files.readAllBytes(Paths.get("src/main/assets/source_config_defaults.json")), java.nio.charset.StandardCharsets.UTF_8));
         String[] tokens = {"woman", "man", "trans_woman", "trans_man", "nonbinary", "group"};
         SourceConfig.OnlyHaven config = SourceConfig.parseAndValidate(document.toString()).onlyHaven;
         for (int i = 1; i < ContentPreference.values().length; i++) {
