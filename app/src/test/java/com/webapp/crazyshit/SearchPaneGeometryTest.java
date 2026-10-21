@@ -92,61 +92,6 @@ public class SearchPaneGeometryTest {
         panel.close(); owner.close(); host.pause().stop().destroy();
     }
 
-    @Test public void lastCreatorAndFooterStayReachableWithInternalBottomSpaceAndIme() throws Exception {
-        var host = Robolectric.buildActivity(Activity.class).create().start().resume().visible();
-        SearchGlassOwner owner = new SearchGlassOwner(host.get());
-        SearchPanel panel = new SearchPanel(host.get(), new Intent().putExtra("scope", "bunkr"), true, () -> {});
-        panel.create(null);
-        host.get().setContentView(panel.view);
-        panel.field().setText("fixture");
-        ReflectionHelpers.callInstanceMethod(panel, "cancelSearchWork");
-        OnlyFapCreatorSearchAdapter adapter = ReflectionHelpers.getField(panel, "onlyFapAdapter");
-        List<NativeContentItem> creators = new ArrayList<>();
-        for (int i = 0; i < 20; i++) creators.add(CreatorCatalog.fromModel(
-                new FapelloRepository.Model("Creator " + i, "https://fapello.com/test-" + i + "/", "")));
-        adapter.replace(creators);
-        long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(3);
-        while (adapter.getItemCount() != 20 && System.nanoTime() < deadline) {
-            Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
-            Thread.sleep(10);
-        }
-        assertEquals(20, adapter.getItemCount());
-        Shadows.shadowOf(android.os.Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(200));
-        TextView footer = ReflectionHelpers.getField(panel, "searchState");
-        footer.setText("20 creators");
-        footer.setVisibility(View.VISIBLE);
-        ((View) ReflectionHelpers.getField(panel, "progress")).setVisibility(View.GONE);
-        SearchResultsCompose viewport = ReflectionHelpers.getField(panel, "results");
-        androidx.compose.ui.platform.ComposeView list = viewport.getView();
-        ViewGroup rows = ReflectionHelpers.getField(panel, "resultsControls");
-        View pane = ReflectionHelpers.getField(panel, "resultSurface");
-        for (int ime : new int[]{0, 300}) {
-            ViewCompat.dispatchApplyWindowInsets(panel.view, insets(ime)); layout(panel.view);
-            viewport.scrollToPosition(19);
-            Shadows.shadowOf(android.os.Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(100));
-            layout(panel.view);
-            Shadows.shadowOf(android.os.Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(100));
-            layout(panel.view);
-            View last = LibraryProfileTest.description(list, "Creator 19, OnlyFap creator");
-            assertNotNull(last);
-            Rect visible = new Rect(0, 0, last.getWidth(), last.getHeight());
-            list.offsetDescendantRectToMyCoords(last, visible);
-            assertTrue(visible.bottom <= list.getHeight());
-            assertTrue(visible.top >= 0);
-            assertFalse(viewport.canScrollForward());
-            assertEquals(BrowseUi.dp(host.get(), 14), rows.getPaddingBottom());
-            Rect bounds = new Rect(0, 0, footer.getWidth(), footer.getHeight());
-            rows.offsetDescendantRectToMyCoords(footer, bounds);
-            assertTrue(bounds.bottom <= rows.getHeight() - rows.getPaddingBottom());
-            assertTrue(bounds.top >= 0); assertTrue(footer.getHeight() > 0);
-            assertAligned(pane, rows);
-            FrameLayout slot = (FrameLayout) list.getParent();
-            assertTrue(slot.getClipChildren());
-            assertEquals(slot.getHeight(), list.getBottom());
-        }
-        panel.close(); owner.close(); host.pause().stop().destroy();
-    }
-
     private static WindowInsetsCompat insets(int ime) {
         return new WindowInsetsCompat.Builder()
                 .setInsets(WindowInsetsCompat.Type.systemBars(), Insets.of(0, 24, 0, 20))

@@ -45,7 +45,7 @@ class ComposeSearchTest {
         }
     }
 
-    @Test fun lazySearchKeepsApprovedNativeRowsAndPublishesProgressiveSnapshots() {
+    @Test fun lazySearchKeepsImagesAndPublishesProgressiveSnapshots() {
         Robolectric.buildActivity(ComponentActivity::class.java).setup().use { host ->
             var opened = ""
             val adapter = OnlyFapCreatorSearchAdapter { opened = it.url }
@@ -56,20 +56,19 @@ class ComposeSearchTest {
                 adapter.replace(listOf(creator("First")))
                 compose.waitForIdle()
                 assertEquals(1, results.getItemCount())
-                val first = find(results.view, "First, OnlyFap creator")
-                assertNotNull(first)
-                first!!.alpha = 0.4f // A provider arriving must not interrupt an existing row's fade.
+                compose.onNodeWithContentDescription("First, OnlyFap creator").assertExists()
+                val first = images(results.view).single()
                 adapter.replace(listOf(creator("First"), creator("Second")))
                 compose.waitForIdle()
                 saveRender("compose-search-progressive", results.view)
                 assertEquals(2, results.getItemCount())
-                assertSame(first, find(results.view, "First, OnlyFap creator"))
-                assertEquals(0.4f, first.alpha, 0.01f)
-                find(results.view, "Second, OnlyFap creator")!!.performClick()
+                assertSame(first, images(results.view).first())
+                assertFalse(adapter.composeFirstPresentation(adapter.composeKey(0)))
+                compose.onNodeWithContentDescription("Second, OnlyFap creator").performClick()
                 assertEquals("https://fapello.com/second/", opened)
                 adapter.replace(emptyList())
                 compose.waitForIdle()
-                assertNull(find(results.view, "First, OnlyFap creator"))
+                compose.onNodeWithContentDescription("First, OnlyFap creator").assertDoesNotExist()
             } finally { results.close() }
         }
     }
@@ -93,6 +92,78 @@ class ComposeSearchTest {
                 assertEquals(saved.getInt("compose_index"), (results.saveScroll() as Bundle).getInt("compose_index"))
             } finally { results.close() }
         }
+    }
+
+    @Test fun mixedProviderInsertAndMetadataUpdateUseCurrentSnapshots() {
+        Robolectric.buildActivity(ComponentActivity::class.java).setup().use { host ->
+            val adapter = GlobalSearchAdapter { }
+            val results = SearchResultsCompose(host.get())
+            try {
+                results.setAdapter(adapter)
+                host.get().setContentView(results.view)
+                fun video(title: String, url: String) = NativeContentItem(NativeContentItem.KIND_MEDIA, title, url, "", "", "", "")
+                adapter.replace(listOf(GlobalSearchAdapter.Entry.section("Videos"),
+                    GlobalSearchAdapter.Entry.item(video("Retained", "https://fixture.invalid/1"), 0),
+                    GlobalSearchAdapter.Entry.section("Your Library"),
+                    GlobalSearchAdapter.Entry.item(video("Old title", "https://fixture.invalid/2"), 1)))
+                compose.waitForIdle()
+                val first = images(results.view).first()
+                adapter.replace(listOf(GlobalSearchAdapter.Entry.section("Videos"),
+                    GlobalSearchAdapter.Entry.item(video("Retained", "https://fixture.invalid/1"), 0),
+                    GlobalSearchAdapter.Entry.item(video("New provider", "https://fixture.invalid/3"), 0),
+                    GlobalSearchAdapter.Entry.section("Your Library"),
+                    GlobalSearchAdapter.Entry.item(video("Updated title", "https://fixture.invalid/2"), 1)))
+                compose.onNodeWithText("Updated title").assertExists()
+                compose.onNodeWithText("New provider").assertExists()
+                compose.onNodeWithText("Old title").assertDoesNotExist()
+                assertSame(first, images(results.view).first())
+            } finally { results.close(); adapter.close() }
+        }
+    }
+
+    @Test fun composeCreatorFavoriteAndLongPressRetainExistingStore() {
+        Robolectric.buildActivity(ComponentActivity::class.java).setup().use { host ->
+            val creator = creator("Alpha")
+            host.get().getSharedPreferences("creator_favorites", 0).edit().clear().commit()
+            val results = SearchResultsCompose(host.get())
+            val adapter = OnlyFapCreatorSearchAdapter { }
+            try {
+                results.setAdapter(adapter)
+                adapter.replace(listOf(creator))
+                host.get().setContentView(results.view)
+                compose.onNodeWithContentDescription("Favorite Alpha").performClick()
+                assertTrue(CreatorFavoriteStore.contains(host.get(), creator))
+                compose.onNodeWithContentDescription("Unfavorite Alpha").assertExists()
+                compose.onNodeWithContentDescription("Alpha, OnlyFap creator").performTouchInput { longClick() }
+                assertFalse(CreatorFavoriteStore.contains(host.get(), creator))
+            } finally { results.close() }
+        }
+    }
+
+    @Test fun sameCreatorInANewQueryClaimsANewEntrance() {
+        Robolectric.buildActivity(ComponentActivity::class.java).setup().use { host ->
+            val results = SearchResultsCompose(host.get())
+            val adapter = OnlyFapCreatorSearchAdapter { }
+            try {
+                results.setAdapter(adapter)
+                host.get().setContentView(results.view)
+                adapter.replace(listOf(creator("Alpha")))
+                compose.waitForIdle()
+                assertFalse(adapter.composeFirstPresentation(adapter.composeKey(0)))
+                adapter.resetEntrance()
+                adapter.replace(emptyList())
+                adapter.replace(listOf(creator("Alpha")))
+                compose.waitForIdle()
+                assertFalse(adapter.composeFirstPresentation(adapter.composeKey(0)))
+                compose.onNodeWithContentDescription("Alpha, OnlyFap creator").assertExists()
+            } finally { results.close() }
+        }
+    }
+
+    private fun images(view: View): List<android.widget.ImageView> = when (view) {
+        is android.widget.ImageView -> listOf(view)
+        is ViewGroup -> (0 until view.childCount).flatMap { images(view.getChildAt(it)) }
+        else -> emptyList()
     }
 
     private fun saveRender(name: String, view: View) {

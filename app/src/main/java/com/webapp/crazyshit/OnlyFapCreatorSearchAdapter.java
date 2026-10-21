@@ -87,6 +87,14 @@ final class OnlyFapCreatorSearchAdapter
 
     String composeKey(int position) { return creatorKey(items.get(position)); }
 
+    NativeContentItem composeItem(int position) { return items.get(position); }
+    String composeHandle(NativeContentItem item) { return creatorHandle(item); }
+    String composeMeta(NativeContentItem item) { return metaText(item); }
+    int composeGeneration() { return fades.generation(); }
+    boolean composeFirstPresentation(String key) { return fades.firstPresentation(key); }
+    void composeOpen(NativeContentItem item) { open.accept(item); }
+    void composeLoadImage(ImageView image, NativeContentItem item) { load(image, item, true); }
+
     boolean isEmpty() {
         return items.isEmpty();
     }
