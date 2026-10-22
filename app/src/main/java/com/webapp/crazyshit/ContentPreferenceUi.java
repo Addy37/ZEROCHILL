@@ -185,7 +185,7 @@ final class ContentPreferenceUi {
         ContentPreference mode = ContentPreference.get(context);
         PreferenceNotice notice = new PreferenceNotice(context);
         notice.setTag("content_preference_presentation");
-        notice.setOrientation(shittok ? LinearLayout.HORIZONTAL : LinearLayout.VERTICAL);
+        notice.setOrientation(LinearLayout.HORIZONTAL);
         notice.setGravity(Gravity.CENTER);
         notice.setPadding(dp(context, 16), dp(context, 10), dp(context, 16), dp(context, 10));
         notice.setClickable(false); notice.setFocusable(false);
@@ -202,9 +202,9 @@ final class ContentPreferenceUi {
             ImageView icon = new ImageView(context);
             icon.setImageResource(mode.icon()); icon.setColorFilter(cyan);
             icon.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
-            notice.addView(icon, new LinearLayout.LayoutParams(dp(context, shittok ? 24 : 36), dp(context, shittok ? 24 : 36)));
+            notice.addView(icon, new LinearLayout.LayoutParams(dp(context, 24), dp(context, 24)));
         } else {
-            TextView icon = label(context, mode.symbol, shittok ? 18 : 30, cyan);
+            TextView icon = label(context, mode.symbol, 18, cyan);
             icon.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
             icon.setShadowLayer(dp(context, 6), 0, 0, 0x600892D0);
             notice.addView(icon);
@@ -215,23 +215,12 @@ final class ContentPreferenceUi {
         if (shittok) title.setMaxWidth(Math.max(dp(context, 100),
                 (int) (context.getResources().getDisplayMetrics().widthPixels * .8f) - dp(context, 80)));
         LinearLayout.LayoutParams titleParams = new LinearLayout.LayoutParams(-2, -2);
-        if (shittok) titleParams.setMarginStart(dp(context, 8));
-        else titleParams.topMargin = dp(context, 4);
+        titleParams.setMarginStart(dp(context, 8));
         notice.addView(title, titleParams);
+        // Keep the finite confirmation clear of the creator title and gallery controls.
         FrameLayout.LayoutParams placement = new FrameLayout.LayoutParams(-2, -2,
-                shittok ? Gravity.TOP | Gravity.CENTER_HORIZONTAL : Gravity.CENTER);
-        if (shittok) placement.topMargin = dp(context, 88);
-        else if (anchor != null && surface.getWidth() > 0) {
-            android.graphics.Rect bounds = new android.graphics.Rect();
-            anchor.getDrawingRect(bounds); surface.offsetDescendantRectToMyCoords(anchor, bounds);
-            placement.gravity = Gravity.TOP | Gravity.START;
-            placement.width = dp(context, 164);
-            int center = surface.getLayoutDirection() == View.LAYOUT_DIRECTION_RTL
-                    ? surface.getWidth() - bounds.centerX() : bounds.centerX();
-            placement.setMarginStart(Math.max(dp(context, 12), Math.min(center - dp(context, 82),
-                    surface.getWidth() - dp(context, 176))));
-            placement.topMargin = Math.max(dp(context, 64), bounds.top - dp(context, 94));
-        }
+                Gravity.TOP | Gravity.CENTER_HORIZONTAL);
+        placement.topMargin = dp(context, 88);
         surface.addView(notice, placement);
         notice.start(glass, sheen);
         notice.announceForAccessibility(mode.label + (shittok && mode != ContentPreference.ALL

@@ -114,7 +114,7 @@ public class OnlyFapFilteredHeroTest {
         finish(generation(), only);
         finish(generation(), only);
         assertEquals(1, heroes().size());
-        assertEquals(View.GONE, ((View) ReflectionHelpers.getField(hub, "heroDots")).getVisibility());
+        assertEquals(View.INVISIBLE, ((View) ReflectionHelpers.getField(hub, "heroDots")).getVisibility());
         call("requestMoreHeroDiscovery");
         assertEquals(2, (int) ReflectionHelpers.getField(hub, "heroDiscoveryNextPage"));
         assertFalse(ReflectionHelpers.getField(hub, "heroDiscoveryLoading"));
@@ -319,7 +319,7 @@ public class OnlyFapFilteredHeroTest {
         assertNull(ReflectionHelpers.getField(hub, "heroMorph"));
         assertEquals(1f, ((View) ReflectionHelpers.getField(hub, "heroImage")).getAlpha(), 0f);
         assertEquals(1f, ((View) ReflectionHelpers.getField(hub, "heroTitle")).getAlpha(), 0f);
-        assertEquals(View.GONE, ((View) ReflectionHelpers.getField(hub, "preferenceLoading")).getVisibility());
+        assertEquals(View.INVISIBLE, ((View) ReflectionHelpers.getField(hub, "preferenceLoading")).getVisibility());
         assertNull(hub.findViewWithTag("content_preference_presentation"));
         assertTrue(((View) ReflectionHelpers.getField(hub, "heroAction")).isEnabled());
     }
@@ -344,7 +344,7 @@ public class OnlyFapFilteredHeroTest {
         assertFalse((boolean) ReflectionHelpers.getField(hub, "preferenceHeroPending"));
         assertEquals("No featured creator", title());
         assertEquals(View.GONE, ((View) ReflectionHelpers.getField(hub, "heroAction")).getVisibility());
-        assertEquals(View.GONE, ((View) ReflectionHelpers.getField(hub, "preferenceLoading")).getVisibility());
+        assertEquals(View.INVISIBLE, ((View) ReflectionHelpers.getField(hub, "preferenceLoading")).getVisibility());
         assertTrue(heroes().isEmpty());
     }
     @Test public void leavingTabSettlesTheFadeAndRemovesTheNotice() throws Exception {
@@ -392,6 +392,79 @@ public class OnlyFapFilteredHeroTest {
         capture(hub, "onlyfap-morph-midpoint", 411, 700);
         ShadowLooper.idleMainLooper(500, TimeUnit.MILLISECONDS);
         capture(hub, "onlyfap-morph-settled", 411, 700);
+    }
+
+    @Test public void realGlideStartupReplacesRetainedHeroWithoutWaitingForGalleryResolver() throws Exception {
+        seedVisibleHero(); changeMode(ContentPreference.MEN);
+        ReflectionHelpers.setField(hub, "active", true);
+        NativeContentItem creator = thumbnailCreator("Fast startup");
+        hub.setPreferenceCreators(Collections.singletonList(creator));
+        layoutHero();
+        awaitStartup("Fast startup");
+        assertNull(ReflectionHelpers.getField(hub, "heroItem"));
+        assertTrue(heroes().isEmpty()); // A startup thumbnail never becomes a qualified rotation slot.
+        assertFalse(io.queue.isEmpty()); // Gallery selection is still queued, deliberately not executed.
+        assertTrue(((View) ReflectionHelpers.getField(hub, "heroAction")).isEnabled());
+        assertEquals(View.INVISIBLE, ((View) ReflectionHelpers.getField(hub, "preferenceLoading")).getVisibility());
+        assertNotNull(((android.widget.ImageView) ReflectionHelpers.getField(hub, "heroImage")).getDrawable());
+    }
+
+    @Test public void realGlideRapidSwitchCannotPublishPreviousCategoryStartup() throws Exception {
+        seedVisibleHero(); changeMode(ContentPreference.MEN);
+        ReflectionHelpers.setField(hub, "active", true);
+        hub.setPreferenceCreators(Collections.singletonList(thumbnailCreator("Stale startup")));
+        changeMode(ContentPreference.GROUPS);
+        hub.setPreferenceCreators(Collections.singletonList(thumbnailCreator("Current startup")));
+        layoutHero();
+        awaitStartup("Current startup");
+        ShadowLooper.idleMainLooper(700, TimeUnit.MILLISECONDS);
+        assertEquals("Current startup", title());
+        Object startup = ReflectionHelpers.getField(hub, "startupHero");
+        NativeContentItem creator = ReflectionHelpers.getField(startup, "creator");
+        assertTrue(OnlyFapHeroPolicy.inCategory(creator,
+                ReflectionHelpers.getField(hub, "discoverCandidates")));
+    }
+
+    @Test public void titleFadesNeverOverlapAndControlsKeepTheirBounds() throws Exception {
+        seedVisibleHero(); changeMode(ContentPreference.MEN);
+        layoutHero();
+        View gallery = ReflectionHelpers.getField(hub, "heroAction");
+        View selector = ReflectionHelpers.getField(hub, "preferenceSelector");
+        int[] before = new int[2]; selector.getLocationOnScreen(before);
+        Object incoming = pendingHero("A much longer incoming creator name spanning two lines");
+        ReflectionHelpers.setField(hub, "active", true);
+        ready(generation(), incoming);
+        android.animation.ValueAnimator animator = ReflectionHelpers.getField(hub, "heroMorph");
+        for (float fraction : new float[]{.1f, .25f, .5f, .75f, .9f}) {
+            animator.setCurrentFraction(fraction);
+            View title = ReflectionHelpers.getField(hub, "heroTitle");
+            View previous = ReflectionHelpers.getField(hub, "previousHeroTitle");
+            assertEquals(0f, title.getAlpha() * previous.getAlpha(), .001f);
+        }
+        animator.end(); layoutHero();
+        int[] after = new int[2]; selector.getLocationOnScreen(after);
+        assertArrayEquals(before, after);
+        assertSame(((View) ReflectionHelpers.getField(hub, "heroImage")).getParent(),
+                ((View) ReflectionHelpers.getField(hub, "preferenceImage")).getParent());
+    }
+    private NativeContentItem thumbnailCreator(String title) {
+        return new NativeContentItem(NativeContentItem.KIND_CREATOR, title,
+                "https://cum.st/creators/onlyfans/" + title.replace(' ', '-'),
+                "https://cdn.example.invalid/startup-" + title.replace(' ', '-') + ".png", "Source", "", "");
+    }
+    private void layoutHero() {
+        int w = BrowseUi.dp(activity, 360), h = BrowseUi.dp(activity, 800);
+        hub.measure(View.MeasureSpec.makeMeasureSpec(w, View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(h, View.MeasureSpec.EXACTLY));
+        hub.layout(0, 0, w, h);
+    }
+    private void awaitStartup(String expected) throws Exception {
+        for (int i = 0; i < 400; i++) {
+            ShadowLooper.idleMainLooper(10, TimeUnit.MILLISECONDS);
+            if (expected.equals(title()) && !(boolean) ReflectionHelpers.getField(hub, "preferenceHeroPending")) return;
+            Thread.sleep(5);
+        }
+        fail("Real Glide startup did not publish " + expected + "; title=" + title());
     }
 
     private int generation() { return ReflectionHelpers.getField(hub, "heroGeneration"); }

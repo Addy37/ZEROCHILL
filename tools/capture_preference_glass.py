@@ -55,3 +55,25 @@ for mode in (0, 1):
     assert 'preference glass fallback' not in log and 'FATAL EXCEPTION' not in log, log
     adb('shell', 'input', 'keyevent', 'KEYCODE_BACK')
 print('Native preference lens rendered on both fixture backgrounds; back dismissal completed.')
+
+# Exercise the production hero hierarchy and actual delayed Glide delivery on the same GPU emulator.
+adb('shell', 'am', 'force-stop', 'com.addy37.crazyshitunofficial.dev')
+adb('logcat', '-c')
+recording = subprocess.Popen(['adb', 'shell', 'screenrecord', '--time-limit', '12',
+    '/sdcard/hero-transition.mp4'])
+launch = adb('shell', 'am', 'start', '-W', '-n',
+    'com.addy37.crazyshitunofficial.dev/com.webapp.crazyshit.OnlyFapTransitionProbeActivity')
+(out / 'hero-launch.txt').write_bytes(launch)
+assert b'Error' not in launch, launch
+deadline = time.monotonic() + 18
+while True:
+    log = adb('logcat', '-d', '-s', 'ZeroChillTransition:I', 'AndroidRuntime:E').decode(errors='replace')
+    if 'PASS real Glide' in log or 'FAIL' in log or 'FATAL EXCEPTION' in log or time.monotonic() >= deadline:
+        break
+    time.sleep(.2)
+(out / 'hero-transition.txt').write_text(log)
+(out / 'hero-settled.png').write_bytes(adb('exec-out', 'screencap', '-p'))
+recording.wait(timeout=15)
+adb('pull', '/sdcard/hero-transition.mp4', str(out / 'hero-transition.mp4'))
+assert 'PASS real Glide' in log and 'FAIL' not in log and 'FATAL EXCEPTION' not in log, log
+print('Native hero transitions passed actual Glide startup, rapid changes, qualified artwork and stable controls.')

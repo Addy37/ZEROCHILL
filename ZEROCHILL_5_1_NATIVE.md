@@ -182,8 +182,15 @@ beside the selector reports the wait. No previous-category creator is admitted t
 the new hero pool. Empty/exhausted categories retire the placeholder with an explicit
 empty state and retain retry access.
 
-The first qualified replacement loads into a second native ImageView. The outgoing
-Glide target retains its resource until the 420ms image/title/source crossfade ends;
+The selected mode's existing startup path remains available during the wait: a
+category thumbnail or All-content cached portrait can replace the old creator without
+waiting for the slower gallery qualification pass. Startup portraits remain outside
+the qualified rotation pool. Both startup and qualified replacements load through
+Glide into a second native ImageView. The outgoing
+Glide target retains its resource until the 420ms image fade ends. Old copy fades out
+before new copy fades in, avoiding overlapping names. Two reserved copy lines,
+reserved indicator/dot space and a stable image host avoid geometry changes. Live
+Glide targets are reordered inside that host without detaching them;
 then its request is cleared. Generation/candidate/URL checks reject stale readiness
 and failure callbacks. The cold-tab readiness gate follows the newly displayed target.
 Rotation starts after the fade settles. Rapid changes finish the current fade before
@@ -192,8 +199,8 @@ motion commits the complete visual immediately. Existing category/artwork admiss
 alternate-image rejection, eight-hero cap and 13-second rotation remain.
 
 Preference confirmations now use a finite 500ms translucent native glass bloom with
-the mode symbol and name, without a full-screen scrim. OnlyFap triggers it at artwork
-readiness alongside the crossfade. ShitTok uses a compact top pill with explicit
+the mode symbol and name, without a full-screen scrim. OnlyFap triggers a compact top notice at artwork
+readiness, clear of the title and gallery controls. ShitTok uses a compact top pill with explicit
 prioritization wording, keeping playback and gestures visible. Existing per-surface
 revision acknowledgements remain unchanged. Reduced motion uses a short static
 notice; detach and superseding selections remove callbacks and animators.
@@ -201,5 +208,10 @@ notice; detach and superseding selections remove callbacks and animators.
 Native regressions include retained pixels/copy, atomic readiness, stale rapid-switch
 results, empty categories, reduced motion, tab departure, compact notices, and finite
 cleanup. The existing render harness captures loading, midpoint and settled states.
+The signed-upgrade emulator additionally exercises the real production hero with
+actual delayed Glide delivery and the production tab queue: startup without waiting
+for gallery resolution, rapid category supersession, qualified artwork, no simultaneous
+visible names, fixed control bounds and finite completion. It records a device video.
+Synthetic local portraits isolate UI behavior from provider/network availability.
 No backend, provider route, remote configuration, persistence format or dependency
 changes. This follow-up does not claim measured performance improvement.
