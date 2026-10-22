@@ -1641,9 +1641,9 @@ final class OnlyFapHubView extends FrameLayout {
             heroImage.setAlpha(progress);
             // Fade the old copy out before introducing the new copy. Never ghost two names.
             float incoming = Math.max(0f, (progress - .5f) * 2f);
-            float outgoing = Math.max(0f, 1f - progress * 2f);
+            float outgoingAlpha = Math.max(0f, 1f - progress * 2f);
             heroTitle.setAlpha(incoming); heroHint.setAlpha(incoming);
-            previousHeroTitle.setAlpha(outgoing); previousHeroHint.setAlpha(outgoing);
+            previousHeroTitle.setAlpha(outgoingAlpha); previousHeroHint.setAlpha(outgoingAlpha);
         });
         heroMorph.addListener(new android.animation.AnimatorListenerAdapter() {
             @Override public void onAnimationEnd(android.animation.Animator animation) { settleHeroMorph(); }

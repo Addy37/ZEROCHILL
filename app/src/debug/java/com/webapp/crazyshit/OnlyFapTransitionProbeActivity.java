@@ -136,14 +136,18 @@ public final class OnlyFapTransitionProbeActivity extends Activity {
     }
     private void check(boolean valid, String message) { if (!valid) throw new IllegalStateException(message); }
     private void registerArtwork() throws IOException {
-        Bitmap bitmap = Bitmap.createBitmap(360, 640, Bitmap.Config.ARGB_8888);
-        Canvas canvas = new Canvas(bitmap); canvas.drawColor(0xFF365D79);
-        Paint paint = new Paint(3); paint.setColor(0xFFB8DDE5);
-        canvas.drawCircle(180, 190, 110, paint); paint.setColor(0xFF111D29);
-        canvas.drawRect(70, 300, 290, 640, paint);
-        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
-        bitmap.compress(Bitmap.CompressFormat.PNG, 100, bytes); bitmap.recycle();
-        byte[] png = bytes.toByteArray();
+        int[] colors = {0xFF365D79, 0xFF546B49, 0xFF6B4673, 0xFF397A7C, 0xFF9C6440};
+        byte[][] portraits = new byte[colors.length][];
+        for (int i = 0; i < colors.length; i++) {
+            Bitmap bitmap = Bitmap.createBitmap(360, 640, Bitmap.Config.ARGB_8888);
+            Canvas canvas = new Canvas(bitmap); canvas.drawColor(colors[i]);
+            Paint paint = new Paint(3); paint.setColor(0xFFB8DDE5);
+            canvas.drawCircle(180, 190, 110, paint); paint.setColor(0xFF111D29);
+            canvas.drawRect(70, 300, 290, 640, paint);
+            ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+            bitmap.compress(Bitmap.CompressFormat.PNG, 100, bytes); bitmap.recycle();
+            portraits[i] = bytes.toByteArray();
+        }
         Glide.get(this).getRegistry().prepend(GlideUrl.class, InputStream.class,
                 new ModelLoaderFactory<GlideUrl, InputStream>() {
             public void teardown() { }
@@ -151,7 +155,10 @@ public final class OnlyFapTransitionProbeActivity extends Activity {
                 return new ModelLoader<GlideUrl, InputStream>() {
                     public boolean handles(GlideUrl model) { return model.toStringUrl().startsWith("https://transition.invalid/"); }
                     public LoadData<InputStream> buildLoadData(GlideUrl model, int w, int h, com.bumptech.glide.load.Options options) {
-                        return new LoadData<>(new ObjectKey(model.toStringUrl()), new DataFetcher<InputStream>() {
+                        String url = model.toStringUrl();
+                        byte[] png = portraits[url.contains("qualified") ? 4 : url.contains("Latest") ? 3 :
+                                url.contains("Superseded") ? 2 : url.contains("Fast") ? 1 : 0];
+                        return new LoadData<>(new ObjectKey(url), new DataFetcher<InputStream>() {
                             public void loadData(Priority priority, DataCallback<? super InputStream> callback) {
                                 handler.postDelayed(() -> callback.onDataReady(new ByteArrayInputStream(png)),
                                         model.toStringUrl().contains("Superseded") ? 1200 : 180);
