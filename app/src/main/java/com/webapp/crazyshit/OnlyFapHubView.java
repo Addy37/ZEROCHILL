@@ -329,6 +329,7 @@ final class OnlyFapHubView extends FrameLayout {
         preferenceSelector.setOnClickListener(v -> ContentPreferenceUi.choose(context, () -> {
             ContentPreferenceUi.bindSelector(preferenceSelector);
             if (preferenceChanged != null) preferenceChanged.run();
+            pulsePreferenceSelector(); // Refresh may synchronously clear the hub a second time.
         }));
         ZeroChillMotion.installPressFeedback(preferenceSelector);
 
