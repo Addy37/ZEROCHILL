@@ -146,6 +146,34 @@ public class ContentPreferenceTest {
         return null;
     }
 
+    @Test public void preferenceNoticesAreCompactFiniteAndAcknowledgedOnce() {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        android.widget.FrameLayout surface = new android.widget.FrameLayout(activity);
+        activity.setContentView(surface);
+        ContentPreference.set(activity, ContentPreference.GROUPS);
+        ContentPreferenceUi.present(surface, true);
+        android.view.View notice = surface.findViewWithTag("content_preference_presentation");
+        assertNotNull(notice);
+        assertFalse(notice.isClickable());
+        assertEquals(android.view.ViewGroup.LayoutParams.WRAP_CONTENT, notice.getLayoutParams().width);
+        assertEquals(android.view.ViewGroup.LayoutParams.WRAP_CONTENT, notice.getLayoutParams().height);
+        assertNotNull(findText(notice, "Groups · prioritized"));
+        org.robolectric.shadows.ShadowLooper.idleMainLooper(650, java.util.concurrent.TimeUnit.MILLISECONDS);
+        assertNull(surface.findViewWithTag("content_preference_presentation"));
+        ContentPreferenceUi.present(surface, true);
+        assertNull(surface.findViewWithTag("content_preference_presentation"));
+        ContentPreference.prefs(activity).edit().putBoolean("immersive_motion_enabled", false).commit();
+        ContentPreferenceUi.present(surface, false);
+        notice = surface.findViewWithTag("content_preference_presentation");
+        assertNotNull(notice);
+        assertEquals(1f, notice.getAlpha(), 0f);
+        assertEquals(1f, notice.getScaleX(), 0f);
+        ContentPreferenceUi.clearPresentation(surface);
+        org.robolectric.shadows.ShadowLooper.idleMainLooper(650, java.util.concurrent.TimeUnit.MILLISECONDS);
+        assertNull(surface.findViewWithTag("content_preference_presentation"));
+        activity.finish();
+    }
+
     @Test public void categoryMappingUsesVerifiedProviderTokensAndConfiguredRoute() throws Exception {
         JSONObject document = new JSONObject(new String(Files.readAllBytes(Paths.get("src/main/assets/source_config_defaults.json")), java.nio.charset.StandardCharsets.UTF_8));
         String[] tokens = {"woman", "man", "trans_woman", "trans_man", "group"};

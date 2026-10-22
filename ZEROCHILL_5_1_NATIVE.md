@@ -1,7 +1,9 @@
 # ZEROCHILL 5.1.0 native beta
 
 Based only on approved native 5.0.1 main `da9b00588e6ecc370327cad75209e757475c2370`.
-Branch: `feature/zerochill-5.1.0`. Draft PR: #321. The abandoned Compose experiment
+PR #321 was approved and merged as `36cab2b49e6b34fcb030e8ceb16d33d3ad50f330`.
+The preference-motion follow-up starts from that native main commit on
+`feature/zerochill-5.1.0`; it requires separate review before merge. The abandoned Compose experiment
 and PR #320 are excluded. Existing baseline Compose dependencies are unchanged;
 this work adds native Java views only.
 
@@ -169,3 +171,47 @@ builds, lint as an audit, the existing performance workflow, and signed/upgrade 
 The PR/check results are the authoritative validation record. Physical device testing
 is still required before any product approval. Source availability and category
 coverage depend on OnlyHaven; no fallback fabricates category metadata.
+
+## Coordinated preference transition follow-up
+
+Mode changes retain the outgoing hero pixels and title/source together as a visual
+placeholder while immediately invalidating the old generation and future candidates.
+The existing loader's second clear retains the same visual placeholder. Gallery
+opening is disabled until the new category image is ready, and a small indicator
+beside the selector reports the wait. No previous-category creator is admitted to
+the new hero pool. Empty/exhausted categories retire the placeholder with an explicit
+empty state and retain retry access.
+
+The selected mode's existing startup path remains available during the wait: a
+category thumbnail or All-content cached portrait can replace the old creator without
+waiting for the slower gallery qualification pass. Startup portraits remain outside
+the qualified rotation pool. Both startup and qualified replacements load through
+Glide into a second native ImageView. The outgoing
+Glide target retains its resource until the 420ms image fade ends. Old copy fades out
+before new copy fades in, avoiding overlapping names. Two reserved copy lines,
+reserved indicator/dot space and a stable image host avoid geometry changes. Live
+Glide targets are reordered inside that host without detaching them;
+then its request is cleared. Generation/candidate/URL checks reject stale readiness
+and failure callbacks. The cold-tab readiness gate follows the newly displayed target.
+Rotation starts after the fade settles. Rapid changes finish the current fade before
+starting another wait; tab departure and close settle/cancel transient work. Reduced
+motion commits the complete visual immediately. Existing category/artwork admission,
+alternate-image rejection, eight-hero cap and 13-second rotation remain.
+
+Preference confirmations now use a finite 500ms translucent native glass bloom with
+the mode symbol and name, without a full-screen scrim. OnlyFap triggers a compact top notice at artwork
+readiness, clear of the title and gallery controls. ShitTok uses a compact top pill with explicit
+prioritization wording, keeping playback and gestures visible. Existing per-surface
+revision acknowledgements remain unchanged. Reduced motion uses a short static
+notice; detach and superseding selections remove callbacks and animators.
+
+Native regressions include retained pixels/copy, atomic readiness, stale rapid-switch
+results, empty categories, reduced motion, tab departure, compact notices, and finite
+cleanup. The existing render harness captures loading, midpoint and settled states.
+The signed-upgrade emulator additionally exercises the real production hero with
+actual delayed Glide delivery and the production tab queue: startup without waiting
+for gallery resolution, rapid category supersession, qualified artwork, no simultaneous
+visible names, fixed control bounds and finite completion. It records a device video.
+Synthetic local portraits isolate UI behavior from provider/network availability.
+No backend, provider route, remote configuration, persistence format or dependency
+changes. This follow-up does not claim measured performance improvement.

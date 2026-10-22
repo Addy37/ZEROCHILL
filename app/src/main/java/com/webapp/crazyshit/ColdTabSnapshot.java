@@ -35,7 +35,7 @@ final class ColdTabSnapshot implements ViewTreeObserver.OnPreDrawListener,
     private static final long MAX_WAIT_MS = 15_000;
     private final FrameLayout root;
     private final ScrollView live;
-    private final ImageView hero;
+    private ImageView hero;
     private final BooleanSupplier loaded;
     private final BooleanSupplier usable;
     private final File file;
@@ -132,6 +132,8 @@ final class ColdTabSnapshot implements ViewTreeObserver.OnPreDrawListener,
         } else if (cover != null || readySince != 0) root.postInvalidateDelayed(100);
         return true;
     }
+
+    void setHero(ImageView hero) { this.hero = hero; }
 
     boolean isCoverVisible() { return cover != null; }
 

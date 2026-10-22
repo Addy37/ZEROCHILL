@@ -171,50 +171,94 @@ final class ContentPreferenceUi {
         return background;
     }
 
-    static void present(FrameLayout surface, boolean shittok) {
+    static void clearPresentation(FrameLayout surface) {
+        View previous = surface.findViewWithTag("content_preference_presentation");
+        if (previous != null && previous.getParent() == surface) surface.removeView(previous);
+    }
+
+    static void present(FrameLayout surface, boolean shittok) { present(surface, shittok, null); }
+
+    static void present(FrameLayout surface, boolean shittok, View anchor) {
         if (!surface.isShown() || !ContentPreference.acknowledge(surface.getContext(), shittok ? "shittok" : "onlyfap")) return;
+        clearPresentation(surface);
         Context context = surface.getContext();
         ContentPreference mode = ContentPreference.get(context);
-        LinearLayout overlay = new LinearLayout(context);
-        overlay.setOrientation(LinearLayout.VERTICAL);
-        overlay.setGravity(Gravity.CENTER);
-        overlay.setPadding(dp(context, 24), dp(context, 20), dp(context, 24), dp(context, 20));
-        overlay.setBackgroundColor(Color.argb(shittok ? 225 : 245, 0, 0, 0));
-        // Playback and gestures continue underneath this purely visual presentation.
-        overlay.setClickable(false);
+        PreferenceNotice notice = new PreferenceNotice(context);
+        notice.setTag("content_preference_presentation");
+        notice.setOrientation(LinearLayout.HORIZONTAL);
+        notice.setGravity(Gravity.CENTER);
+        notice.setPadding(dp(context, 16), dp(context, 10), dp(context, 16), dp(context, 10));
+        notice.setClickable(false); notice.setFocusable(false);
         int cyan = ZeroChillUi.color(context, R.color.zc_cyan);
+        android.graphics.drawable.GradientDrawable glass = heroButtonBackground(context);
+        glass.setColor(0xB015222C); glass.setStroke(dp(context, 1), 0x900892D0);
+        android.graphics.drawable.GradientDrawable sheen = new android.graphics.drawable.GradientDrawable(
+                android.graphics.drawable.GradientDrawable.Orientation.TL_BR,
+                new int[]{0x40B4EFFF, 0x0A0892D0, 0x080892D0});
+        sheen.setCornerRadius(dp(context, 24));
+        notice.setBackground(new android.graphics.drawable.LayerDrawable(
+                new android.graphics.drawable.Drawable[]{glass, sheen}));
         if (mode.icon() != 0) {
             ImageView icon = new ImageView(context);
-            icon.setImageResource(mode.icon());
-            icon.setColorFilter(cyan);
+            icon.setImageResource(mode.icon()); icon.setColorFilter(cyan);
             icon.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
-            overlay.addView(icon, new LinearLayout.LayoutParams(dp(context, 64), dp(context, 64)));
+            notice.addView(icon, new LinearLayout.LayoutParams(dp(context, 24), dp(context, 24)));
         } else {
-            TextView symbol = label(context, mode.symbol, 58, cyan);
-            symbol.setShadowLayer(dp(context, 12), 0, 0, cyan);
-            symbol.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
-            overlay.addView(symbol);
+            TextView icon = label(context, mode.symbol, 18, cyan);
+            icon.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+            icon.setShadowLayer(dp(context, 6), 0, 0, 0x600892D0);
+            notice.addView(icon);
         }
-        String heading = mode.label.toUpperCase(java.util.Locale.US)
-                + (shittok && mode != ContentPreference.ALL ? " PREFERENCE ACTIVE" : "");
-        TextView title = label(context, heading, 23, Color.WHITE);
+        TextView title = label(context, mode.label + (shittok && mode != ContentPreference.ALL ? " · prioritized" : ""), 14, Color.WHITE);
         title.setTypeface(null, android.graphics.Typeface.BOLD);
-        overlay.addView(title);
-        String detail = mode == ContentPreference.ALL
-                ? "All content restored"
-                : shittok ? "Matching OnlyFap content will be prioritized"
-                : "OnlyFap filtered to your preference";
-        overlay.addView(label(context, detail, 14, ZeroChillUi.color(context, R.color.zc_text_secondary)));
-        View previous = surface.findViewWithTag("content_preference_presentation");
-        if (previous != null) surface.removeView(previous);
-        overlay.setTag("content_preference_presentation");
-        surface.addView(overlay, new FrameLayout.LayoutParams(-1, -1));
-        overlay.setAlpha(0);
-        overlay.setScaleX(.94f); overlay.setScaleY(.94f);
-        overlay.animate().alpha(1).scaleX(1).scaleY(1).setDuration(180).start();
-        overlay.postDelayed(() -> overlay.animate().alpha(0).setDuration(260)
-                .withEndAction(() -> surface.removeView(overlay)).start(), 1000);
-        overlay.announceForAccessibility(heading + ". " + detail);
+        title.setMaxLines(2);
+        if (shittok) title.setMaxWidth(Math.max(dp(context, 100),
+                (int) (context.getResources().getDisplayMetrics().widthPixels * .8f) - dp(context, 80)));
+        LinearLayout.LayoutParams titleParams = new LinearLayout.LayoutParams(-2, -2);
+        titleParams.setMarginStart(dp(context, 8));
+        notice.addView(title, titleParams);
+        // Keep the finite confirmation clear of the creator title and gallery controls.
+        FrameLayout.LayoutParams placement = new FrameLayout.LayoutParams(-2, -2,
+                Gravity.TOP | Gravity.CENTER_HORIZONTAL);
+        placement.topMargin = dp(context, 88);
+        surface.addView(notice, placement);
+        notice.start(glass, sheen);
+        notice.announceForAccessibility(mode.label + (shittok && mode != ContentPreference.ALL
+                ? ". Matching OnlyFap content will be prioritized" : ""));
+    }
+
+    /** One finite glass bloom, with no full-screen scrim or touch interception. */
+    @android.annotation.SuppressLint("ViewConstructor") // Programmatic transient notice, never inflated.
+    private static final class PreferenceNotice extends LinearLayout {
+        private android.animation.ValueAnimator bloom;
+        private final Runnable dismiss = () -> {
+            if (getParent() instanceof android.view.ViewGroup) ((android.view.ViewGroup) getParent()).removeView(this);
+        };
+        PreferenceNotice(Context context) { super(context); }
+        void start(android.graphics.drawable.GradientDrawable glass, android.graphics.drawable.GradientDrawable sheen) {
+            if (!ZeroChillMotion.animationsEnabled(getContext())) { postDelayed(dismiss, 500); return; }
+            setAlpha(0f);
+            bloom = android.animation.ValueAnimator.ofFloat(0f, 1f);
+            bloom.setDuration(500L);
+            bloom.addUpdateListener(animation -> {
+                float p = (float) animation.getAnimatedValue();
+                float form = Math.min(1f, p / .3f);
+                setScaleX(.76f + .24f * form);
+                setScaleY(.88f + .12f * form);
+                setAlpha(Math.min(1f, p / .16f) * Math.min(1f, (1f - p) / .28f));
+                glass.setCornerRadius(dp(getContext(), 24) + dp(getContext(), 20) * (1f - form));
+                sheen.setAlpha((int) (180 + 75 * Math.sin(Math.PI * p)));
+            });
+            bloom.addListener(new android.animation.AnimatorListenerAdapter() {
+                @Override public void onAnimationEnd(android.animation.Animator animation) { dismiss.run(); }
+            });
+            bloom.start();
+        }
+        @Override protected void onDetachedFromWindow() {
+            removeCallbacks(dismiss);
+            if (bloom != null) { bloom.removeAllListeners(); bloom.removeAllUpdateListeners(); bloom.cancel(); bloom = null; }
+            super.onDetachedFromWindow();
+        }
     }
     private static TextView label(Context context, String text, int size, int color) {
         TextView view = new TextView(context);
