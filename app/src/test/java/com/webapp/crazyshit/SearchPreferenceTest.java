@@ -44,7 +44,8 @@ public final class SearchPreferenceTest {
             NativeContentItem card = new NativeContentItem(NativeContentItem.KIND_CREATOR,
                     "Nolan", "https://cum.st/creators/onlyfans/nolan-1", "", "", "", "",
                     "OnlyHaven", "nolantwink");
-            SearchPanel creatorPanel = new SearchPanel(host.get(), new Intent(), true, () -> { });
+            Intent creatorIntent = new Intent().putExtra("scope", "bunkr");
+            SearchPanel creatorPanel = new SearchPanel(host.get(), creatorIntent, true, () -> { });
             SearchPanel globalPanel = new SearchPanel(host.get(), new Intent(), false, () -> { });
             try {
                 creatorPanel.create(null);
