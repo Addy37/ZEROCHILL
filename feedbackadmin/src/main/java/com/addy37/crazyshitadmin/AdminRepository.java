@@ -133,6 +133,28 @@ final class AdminRepository {
         }
     }
 
+    static final class ActiveCounts {
+        final long dailyUsers;
+        final long weeklyUsers;
+        final long monthlyUsers;
+        final String generatedAt;
+
+        ActiveCounts(JSONObject value) {
+            JSONObject active = value.optJSONObject("active_users");
+            dailyUsers = active == null ? 0L : active.optLong("daily");
+            weeklyUsers = active == null ? 0L : active.optLong("weekly");
+            monthlyUsers = active == null ? 0L : active.optLong("monthly");
+            generatedAt = value.optString("generated_at");
+        }
+
+        ActiveCounts(AnalyticsDashboard value) {
+            dailyUsers = value.dailyUsers;
+            weeklyUsers = value.weeklyUsers;
+            monthlyUsers = value.monthlyUsers;
+            generatedAt = value.generatedAt;
+        }
+    }
+
     private AdminRepository() {}
 
     static List<Item> list(String token) throws Exception {
@@ -188,6 +210,13 @@ final class AdminRepository {
                 new JSONObject().put("action", "analytics"));
         JSONObject analytics = result.optJSONObject("analytics");
         return new AnalyticsDashboard(analytics == null ? new JSONObject() : analytics);
+    }
+
+    static ActiveCounts activeCounts(String token) throws Exception {
+        JSONObject result = request(BuildConfig.ADMIN_FEEDBACK_ENDPOINT, token,
+                new JSONObject().put("action", "active_counts"));
+        JSONObject analytics = result.optJSONObject("analytics");
+        return new ActiveCounts(analytics == null ? new JSONObject() : analytics);
     }
 
     static void update(String token, String id, String status, String reply) throws Exception {

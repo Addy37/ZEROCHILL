@@ -15,7 +15,7 @@ When instructions conflict, follow the higher-priority instruction and report th
 
 ## Source of truth and lineage
 
-- Treat `rebrand/zerochill` as the ZEROCHILL source-of-truth branch until it is merged into `main`, unless the user explicitly selects another active branch.
+- Treat `main` as the ZEROCHILL source-of-truth branch unless the user explicitly selects another active branch.
 - Read `ZEROCHILL_BUILD_LINEAGE.md` before substantial feature work, release work, or producing an APK.
 - Start new work from the current complete approved lineage. Do not build new features on an older feature branch because it happens to contain one desired change.
 - Keep `integration/zerochill-current` synchronized with the current approved complete product lineage when the lineage document calls for it.
@@ -71,11 +71,13 @@ Protect existing installs and upgrade behavior.
 Public branding is ZEROCHILL / ZeroChill.
 
 - Background: OLED black or near-black.
-- Primary accent: electric cyan.
+- Primary accent: electric blue `#0892D0`.
 - Supporting text: white and cool gray.
-- Wordmark: `ZERO` in white and `CHILL` in cyan.
+- Wordmark: `ZERO` in white and `CHILL` in electric blue `#0892D0`.
 - Tagline: `NO LIMITS. ALL CONTENT.`
-- Mascot: black devil face with cyan glowing horns and outline, one X eye, one angry eye, sharp teeth, and cyan tongue.
+- Mascot: black devil face with electric-blue glowing horns and outline, one X eye, one angry eye, sharp teeth, and electric-blue tongue.
+
+Do not substitute a lighter blue-green shade for the primary electric-blue brand token on newly branded surfaces.
 
 Do not restore public CrazyShit or ZeroFilter branding, the ZF logo, the pink/red concept, or old yellow/orange styling on newly branded surfaces.
 

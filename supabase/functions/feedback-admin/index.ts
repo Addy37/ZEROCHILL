@@ -41,6 +41,34 @@ function validMessage(value: string) {
   return value.length >= 1 && value.length <= 2000;
 }
 
+function dateKey(value: Date) {
+  return value.toISOString().slice(0, 10);
+}
+
+function utcPeriodStarts(now = new Date()) {
+  const day = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  const week = new Date(day);
+  week.setUTCDate(day.getUTCDate() - ((day.getUTCDay() + 6) % 7));
+  const month = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+  return { day: dateKey(day), week: dateKey(week), month: dateKey(month) };
+}
+
+async function activeCount(
+  db: ReturnType<typeof createClient>,
+  periodType: "day" | "week" | "month",
+  periodStart: string,
+) {
+  const { count, error } = await db
+    .from("analytics_uniques")
+    .select("anon_key", { count: "exact", head: true })
+    .eq("period_type", periodType)
+    .eq("period_start", periodStart)
+    .eq("metric", "app_open")
+    .eq("value", "all");
+  if (error) throw error;
+  return count ?? 0;
+}
+
 async function feedbackById(db: ReturnType<typeof createClient>, id: string) {
   if (!feedbackIdPattern.test(id)) return null;
   const { data, error } = await db
@@ -243,6 +271,21 @@ Deno.serve(async (request) => {
       if (error) throw error;
 
       return response({ deleted: true, id });
+    }
+
+    if (action === "active_counts") {
+      const periods = utcPeriodStarts();
+      const [daily, weekly, monthly] = await Promise.all([
+        activeCount(db, "day", periods.day),
+        activeCount(db, "week", periods.week),
+        activeCount(db, "month", periods.month),
+      ]);
+      return response({
+        analytics: {
+          generated_at: new Date().toISOString(),
+          active_users: { daily, weekly, monthly },
+        },
+      });
     }
 
     if (action === "analytics") {
