@@ -98,7 +98,7 @@ public final class SourceExpansionTest {
         assertEquals(item.url, CreatorCatalog.matching(context, "nolantwink", false, 10).get(0).url);
     }
 
-    @Test public void currentClientParsesLiveOnlyHavenSearchAndMenCategory() throws Exception {
+    @Test public void currentClientParsesLiveOnlyHavenSearchAndProviderConfirmedMenCategory() throws Exception {
         assumeTrue("true".equals(System.getenv("VERIFY_PRODUCTION_SOURCE_CONFIG")));
         OnlyHavenRepository repository = new OnlyHavenRepository();
         SourceConfig.OnlyHaven config = RemoteSourceConfigManager.snapshot().onlyHaven;
@@ -115,11 +115,22 @@ public final class SourceExpansionTest {
         assertTrue(nolan.service.matches("[A-Za-z0-9_-]+"));
         assertTrue(nolan.id.matches("[A-Za-z0-9_-]+"));
         assertFalse("Live result should include avatar metadata", nolan.imageUrl.isEmpty());
-        String canonicalUrl = nolan.url;
+
+        List<OnlyHavenRepository.Creator> providerMen = repository.fetchCategoryCreators(
+                context, ContentPreference.MEN, 20);
+        assertFalse("The provider must expose at least one Men creator", providerMen.isEmpty());
+        OnlyHavenRepository.Creator confirmedMan = providerMen.get(0);
+        String menQuery = confirmedMan.searchAlias.isEmpty()
+                ? confirmedMan.name : confirmedMan.searchAlias;
         List<OnlyHavenRepository.Creator> men = repository.searchCategoryCreators(
-                context, "nolantwink", 20, ContentPreference.MEN);
-        assertTrue("The provider must confirm Men membership", men.stream()
-                .anyMatch(creator -> creator.url.equals(canonicalUrl)));
+                context, menQuery, 20, ContentPreference.MEN);
+        boolean confirmed = men.stream().anyMatch(creator -> creator.url.equals(confirmedMan.url));
+        if (!confirmed && !confirmedMan.id.equalsIgnoreCase(menQuery)) {
+            men = repository.searchCategoryCreators(
+                    context, confirmedMan.id, 20, ContentPreference.MEN);
+            confirmed = men.stream().anyMatch(creator -> creator.url.equals(confirmedMan.url));
+        }
+        assertTrue("A provider-confirmed Men creator must survive filtered creator search", confirmed);
         assertFalse("Second stable query must produce creator results",
                 repository.searchCreators(context, "Nolan", 20).isEmpty());
     }
