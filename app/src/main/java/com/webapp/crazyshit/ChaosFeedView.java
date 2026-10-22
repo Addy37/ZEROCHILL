@@ -2542,6 +2542,7 @@ public final class ChaosFeedView extends FrameLayout {
             if (heartOverlay != null) heartOverlay.setVisibility(View.GONE);
         };
         private Boolean progressInteractive;
+        private Boolean progressPortrait;
         private long displayedSecond = Long.MIN_VALUE, displayedRemainingSecond = Long.MIN_VALUE;
         private final Runnable progressTick = new Runnable() {
             @Override public void run() {
@@ -4227,14 +4228,18 @@ public final class ChaosFeedView extends FrameLayout {
                     ? (interactive ? View.VISIBLE : View.INVISIBLE) : View.GONE;
             elapsedTime.setVisibility(timeVisibility);
             remainingTime.setVisibility(timeVisibility);
-            if (progressInteractive == null || progressInteractive != interactive) {
+            boolean portraitProgress = portrait();
+            if (progressInteractive == null || progressInteractive != interactive
+                    || progressPortrait == null || progressPortrait != portraitProgress) {
                 progressInteractive = interactive;
-                // The view keeps its 48dp touch target while only the track becomes thinner.
+                progressPortrait = portraitProgress;
+                // Portrait keeps a steady 4dp line inside the video edge and a 48dp hit row.
+                int trackHeight = portraitProgress ? 4 : (interactive ? 4 : 2);
                 if (android.os.Build.VERSION.SDK_INT >= 29) {
-                    seekBar.setMinHeight(dp(interactive ? 4 : 2));
-                    seekBar.setMaxHeight(dp(interactive ? 4 : 2));
+                    seekBar.setMinHeight(dp(trackHeight));
+                    seekBar.setMaxHeight(dp(trackHeight));
                 }
-                if (seekBar.getThumb() != null) seekBar.getThumb().mutate().setAlpha(interactive ? 255 : 0);
+                if (seekBar.getThumb() != null) seekBar.getThumb().mutate().setAlpha(!portraitProgress && interactive ? 255 : 0);
                 seekBar.setAlpha(interactive ? 1f : .62f);
             }
         }
@@ -4312,7 +4317,8 @@ public final class ChaosFeedView extends FrameLayout {
             actions.bottomMargin = safeBottom;
             landscapeActions.setLayoutParams(actions);
             FrameLayout.LayoutParams progress = (FrameLayout.LayoutParams) progressRow.getLayoutParams();
-            progress.bottomMargin = landscape ? safeBottom + dp(48) : -dp(15);
+            // Move the 4dp portrait track's center up 2dp so its bottom meets the video edge.
+            progress.bottomMargin = landscape ? safeBottom + dp(48) : -dp(13);
             progressRow.setLayoutParams(progress);
             elapsedTime.setVisibility(landscape ? View.VISIBLE : View.GONE);
             remainingTime.setVisibility(landscape ? View.VISIBLE : View.GONE);
