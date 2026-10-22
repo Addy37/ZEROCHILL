@@ -124,8 +124,6 @@ final class SocialContentNavigator {
         if (host.equals(baseHost) || host.equals("www." + baseHost)) return true;
         return EfuktRepository.isEfuktUrl(url)
                 || WebVideoSourceRepository.isKaoticUrl(url)
-                || WebVideoSourceRepository.isTheYncUrl(url)
-                || WebVideoSourceRepository.isItemFixUrl(url)
                 || FapelloRepository.isPostUrl(url)
                 || BunkrRepository.isBunkrUrl(url) && !BunkrRepository.isAlbumUrl(url)
                 || OnlyHavenRepository.isOnlyHavenUrl(url);

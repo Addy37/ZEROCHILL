@@ -79,9 +79,8 @@ final class SourceConfigEditor extends LinearLayout {
         addView(sourceCard(sources, "wikifeet", "WikiFeet"));
         addView(sourceCard(sources, "wikifeetx", "WikiFeet X"));
         addView(sourceCard(sources, "kaotic", "Kaotic"));
-        addView(sourceCard(sources, "theync", "TheYNC"));
-        addView(sourceCard(sources, "itemfix", "ItemFix"));
         addView(sourceCard(sources, "onlyhaven", "OnlyHaven"));
+        addView(sourceCard(sources, "baddiehub", "BaddieHub"));
 
         MaterialButton raw = compactButton("Full JSON");
         raw.setOnClickListener(v -> showRawConfigDialog());

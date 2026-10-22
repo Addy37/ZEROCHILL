@@ -16,6 +16,8 @@ import org.robolectric.annotation.Config;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -24,6 +26,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
+import static org.junit.Assume.assumeTrue;
 
 @RunWith(RobolectricTestRunner.class)
 @Config(application = Application.class, sdk = 35)
@@ -54,16 +57,45 @@ public final class RemoteSourceConfigManagerTest {
 
     }
 
-    @Test public void olderConfigWithoutBaddieHubKeepsCompiledBaddieHubFallback() throws Exception {
+    @Test public void publishedProductionDocumentActivatesInCurrentClient() throws Exception {
+        assumeTrue("true".equals(System.getenv("VERIFY_PRODUCTION_SOURCE_CONFIG")));
+        String endpoint = BuildConfig.SOURCE_CONFIG_ENDPOINT;
+        assertTrue("CI must supply the public source-config endpoint", endpoint.startsWith("https://"));
+        RemoteSourceConfigManager.initialize(context);
+        long bundledVersion = RemoteSourceConfigManager.snapshot().configVersion;
+        HttpURLConnection connection = (HttpURLConnection) new URL(endpoint).openConnection();
+        connection.setConnectTimeout(8_000);
+        connection.setReadTimeout(12_000);
+        connection.setRequestProperty("Accept", "application/json");
+        connection.setRequestProperty("Cache-Control", "no-cache, no-store");
+        try {
+            assertEquals(200, connection.getResponseCode());
+            ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+            try (InputStream input = connection.getInputStream()) {
+                byte[] buffer = new byte[4096];
+                int count;
+                while ((count = input.read(buffer)) >= 0) {
+                    bytes.write(buffer, 0, count);
+                    assertTrue("Production config response is bounded", bytes.size() <= SourceConfig.MAX_JSON_BYTES);
+                }
+            }
+            String json = bytes.toString(StandardCharsets.UTF_8.name());
+            long publishedVersion = new JSONObject(json).getLong("configVersion");
+            assertTrue("Production publication must exceed bundled version", publishedVersion > bundledVersion);
+            RemoteSourceConfigManager.applyRemoteForTests(context, json);
+            assertEquals(publishedVersion, RemoteSourceConfigManager.snapshot().configVersion);
+            assertEquals("remote", RemoteSourceConfigManager.activeOrigin());
+        } finally { connection.disconnect(); }
+    }
+
+    @Test public void incompleteLegacyConfigKeepsBundledFallback() throws Exception {
         JSONObject legacy = defaults();
         legacy.getJSONObject("sources").remove("baddiehub");
-
-        SourceConfig parsed = SourceConfig.parseAndValidate(legacy.toString());
-
-        assertTrue(parsed.baddieHub.enabled);
-        assertEquals("https://baddiehub.com/", parsed.baddieHub.baseUrl);
-        assertEquals("categories/page/{page}/", parsed.baddieHub.categoriesPageRoute);
-        assertTrue(parsed.kaotic.enabled);
+        context.getSharedPreferences("remote_source_config", Context.MODE_PRIVATE).edit()
+                .putString("active_json", legacy.toString()).commit();
+        RemoteSourceConfigManager.initialize(context);
+        assertEquals("bundled", RemoteSourceConfigManager.activeOrigin());
+        assertTrue(RemoteSourceConfigManager.snapshot().baddieHub.enabled);
     }
 
     @Test public void presentInvalidBaddieHubObjectIsRejected() throws Exception {
@@ -253,8 +285,6 @@ public final class RemoteSourceConfigManagerTest {
                         "https://baddie.example/topic/sample/",
                         3
                 ));
-        assertTrue(RemoteSourceConfigManager.snapshot().theYnc.enabled);
-        assertTrue(RemoteSourceConfigManager.snapshot().itemFix.enabled);
     }
 
     private void assertRejected(JSONObject value) throws Exception {

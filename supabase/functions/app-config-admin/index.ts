@@ -1,5 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { validateSourceConfig } from "../_shared/source-config-validation.ts";
+import { prepareSourceConfigRollback } from "../_shared/source-config-rollback.ts";
 
 const encoder = new TextEncoder();
 
@@ -87,14 +88,17 @@ Deno.serve(async (request) => {
       if (!Number.isSafeInteger(target) || target < 1) return response({ error: "Invalid rollback version." }, 400);
       const [{ data: prior, error: priorError }, { data: active, error: activeError }] = await Promise.all([
         db.from("source_config_versions").select("config").eq("config_version", target).maybeSingle(),
-        db.from("source_config_versions").select("config_version").eq("is_active", true).maybeSingle(),
+        db.from("source_config_versions").select("config_version,config").eq("is_active", true).maybeSingle(),
       ]);
       if (priorError || activeError) throw priorError ?? activeError;
       if (!prior || !active) return response({ error: "Rollback version was not found." }, 404);
       const nextVersion = Number(active.config_version) + 1;
-      const config = { ...prior.config, configVersion: nextVersion, updatedAt: new Date().toISOString() };
-      const validation = validateSourceConfig(config);
-      if (!validation.valid) return response({ error: `Stored configuration is invalid: ${validation.reason}` }, 409);
+      let config: Record<string, unknown>;
+      try {
+        config = prepareSourceConfigRollback(prior.config, active.config, nextVersion);
+      } catch (error) {
+        return response({ error: error instanceof Error ? error.message : "Invalid rollback document." }, 409);
+      }
       const { data, error } = await db.rpc("publish_source_config", {
         p_config: config, p_based_on_version: target, p_action: "rollback",
       });

@@ -4,14 +4,13 @@ ZeroChill keeps source logic in the APK. Supabase can publish validated data val
 domains, routes, approved headers, selectors, bounded timeout/retry values, CDN hosts, fallbacks,
 and per-source availability.
 
-## Known-good baseline
+## Current schema
 
-- Baseline commit: `04a12ff15fdce3def897df71ee569232b531d7d4` (`v3.0.5`)
-- Fapello repair commit present: `d055a59` (PR #85)
-- Main-branch Android build run `34773591621`: passed before this branch was created
-- Main-branch signed release run `34773591644`: passed before this branch was created
-- The local baseline command could not download Maven dependencies in the restricted workspace, so
-  GitHub Actions is the dependency-backed test and APK build runner for this work.
+Schema 1 supports exactly seven configurable sources: Fapello, Bunkr, WikiFeet,
+WikiFeet X, Kaotic, OnlyHaven and BaddieHub. CrazyShit and EFukt retain their
+existing compiled integrations. Source parsing/control flow remains in Android.
+The bundled document is the known-good fallback. The shared backend validator,
+Android parser and private Admin editor use the same supported source set.
 
 ## Runtime order
 
@@ -44,9 +43,7 @@ the active cache.
 | WikiFeet | Enabled, base/fallback domains, picture/thumbnail hosts, search route/selector, User-Agent, Referer override, approved headers, request/ajax timeouts, retry count |
 | WikiFeet X | Same supported values as WikiFeet, with an independent configuration |
 | Kaotic | Enabled, base/fallback domains, feed routes, User-Agent, Referer override, approved headers, request timeout/retry count, card/playable selectors, bounded page/media regex |
-| TheYNC | Same supported values as Kaotic, with an independent configuration |
-| ItemFix | Same supported values as Kaotic, with an independent configuration |
-| OnlyHaven (cum.st) | Enabled, base/fallback domains, media/image CDN bases, creator-search UI/API, creator-page/posts routes, User-Agent, Referer override, approved headers, request timeout/retry count, creator/media/playable selectors, bounded creator/media regex |
+| OnlyHaven (cum.st) | Enabled, base/fallback domains, media/image CDN bases, creator-search UI/API, category search/list routes and provider category tokens, creator-page/posts routes, User-Agent, Referer override, approved headers, request timeout/retry count, creator/media/playable selectors, bounded creator/media regex |
 | BaddieHub | Enabled, base/fallback domains, latest/categories/category pagination routes, User-Agent, Referer override, approved headers, request timeout/retry count, category/card/player selectors |
 
 ## Values that remain compiled
@@ -93,11 +90,11 @@ ADMIN_SOURCE_CONFIG_ENDPOINT=https://fketutffusxgjxjlckci.supabase.co/functions/
 
 Do not add a secret/service-role Supabase key to GitHub Android-build secrets.
 
-Build and install the private admin APK. Open **Source Control** and publish a validated document
-newer than the app's bundled version 5 configuration. Version 5 keeps Kaotic, TheYNC, and ItemFix,
-uses the current OnlyHaven creator-search API, and adds the OnlyHaven image CDN base used for fast
-video preview thumbnails. Until a newer compatible document is published, ZeroChill keeps the
-bundled version 5 defaults and ignores older remote documents.
+Build and install the private admin APK. Deploy both configuration functions with
+`verify_jwt = false`, preserving the existing public read endpoint and the private
+admin handler's token-hash authentication. Do not change the feedback admin secret.
+Deploy the validator and functions before publishing the full Android document.
+No database migration is needed: immutable documents remain JSONB.
 
 ## Publishing and rollback
 
@@ -110,12 +107,67 @@ bundled version 5 defaults and ignores older remote documents.
 The main app normally receives a publish within 45 minutes. Restarting does not force repeated
 requests inside the refresh interval.
 
-When this source-expansion change is deployed, deploy the updated `app-config-admin` function before
-publishing a configuration that contains the expanded source objects or the OnlyHaven
-`creatorSearchApi` / `imageBaseUrl` fields. No database migration is required for these source fields because the
-configuration document remains stored as JSON.
+## Compatibility and rollback
 
-The Android schema accepts an optional `sources.baddiehub` object and keeps compiled known-good
-defaults when an older remote snapshot does not contain it. The current backend admin validator
-must add the same BaddieHub data fields before operators publish them remotely. Until then, the
-bundled values remain active and existing remote snapshots continue to validate.
+Android requires all seven source objects. An old/incomplete or unknown-source
+remote document fails validation as a whole. A failed refresh keeps the current
+valid snapshot; invalid persisted caches fall back to bundled defaults on startup.
+It does not delete favorites, history, downloads or user data. The public function
+also validates before responding, including before returning a conditional 304.
+A mismatched version/document or invalid stored document returns 503 so clients
+retain their known-good configuration.
+
+New optional OnlyHaven routes `creatorCategoryApi` and `creatorCategorySearchApi`
+and `categoryValues` retain compiled fallbacks when absent. Category search accepts
+only query/category/limit/offset tokens. Provider category strings are data, not
+executable code. The current HTML search uses `creators?cq={query}`.
+
+A complete older compatible document can be restored as a new version. For older
+schema-1 snapshots that predate a source or optional field, rollback overlays
+historical supported values onto the active full document. It retains new-only
+sources and fields, removes unsupported source objects, and validates the result.
+It rejects incompatible schemas and unsafe values with 409. Rollback never
+reactivates an old version number or overwrites immutable history. If the active
+document is incomplete too, publish a complete known-good document before using
+legacy rollback. Concurrent publishes/rollbacks can return 409; reload and retry.
+
+Older installed clients with stricter source-key requirements can reject this
+seven-source document and keep their own bundled/cached defaults. The server does
+not force a data or application upgrade. Application IDs, signing identity and
+persisted user-record formats are unchanged.
+
+## Validation and operation
+
+- `node --test supabase/tests/source-config-*.test.mjs` runs schema, handler, auth,
+  version and rollback regressions on Node 24 without dependencies.
+- `supabase/tests/source-config-cases.json` is shared by backend and Android tests.
+- `deno check` validates the shared helpers and both function entrypoints when the
+  existing remote Supabase SDK import is available.
+- Read the active production version immediately before publication. Publish a
+  strictly greater version through the existing serialized `publish_source_config`
+  function. Do not derive the next production version from the bundled number.
+- Read the public document back, compare all seven source objects, and run it
+  through the Android parser/activation tests. Check conditional refresh responses.
+- Live contract checks are read-only. A failed probe does not disable sources.
+
+## Production verification, 2026-10-22
+
+The previous active document was v10 with four core sources. The full seven-source
+schema-1 document is now production v11. Its four preexisting source sections are
+identical to v10; OnlyHaven adds the configured `cq` HTML and category-search routes.
+The private validator function is deployment v3. The public reader adds validation
+and version/document consistency checks. Both retain their existing auth settings.
+
+Public read-back returned the full v11 document and passed the shared validator.
+The query-based conditional refresh returned 304. The hosted gateway weakens ETags
+under content encoding, so the public reader also accepts weak/list If-None-Match
+headers using normal GET weak comparison. The opt-in Android CI test downloads,
+parses and activates the actual public production document.
+
+The real v10/v11 snapshots also passed a simulated legacy rollback to a new complete
+version. No production rollback was executed, no immutable history was changed, and
+no database migration or user-data edit was made. See PR #323 for final function
+versions, CI results and signed Beta lineage.
+
+Read-only source contracts run daily at 07:25 UTC once this workflow is on main,
+and on relevant pull requests. They never publish config or disable providers.

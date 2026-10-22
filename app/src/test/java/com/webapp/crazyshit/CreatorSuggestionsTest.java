@@ -13,8 +13,10 @@ import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BooleanSupplier;
 import org.junit.After;
+import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.Robolectric;
@@ -35,6 +37,11 @@ public class CreatorSuggestionsTest {
     private final CountDownLatch oldStarted = new CountDownLatch(1);
     private final CountDownLatch oldReply = new CountDownLatch(1);
     private final CountDownLatch oldFinished = new CountDownLatch(1);
+
+    @Before public void clearCatalog() {
+        android.content.Context context = org.robolectric.RuntimeEnvironment.getApplication();
+        context.getSharedPreferences(CreatorCatalog.PREFS, 0).edit().clear().commit();
+    }
 
     private void create() {
         activity = Robolectric.buildActivity(Activity.class).setup();
@@ -126,7 +133,8 @@ public class CreatorSuggestionsTest {
         await(() -> items().size() == 1 && items().get(0).title.equals("Zoe"));
         oldReply.countDown();
         assertTrue(oldFinished.await(3, TimeUnit.SECONDS));
-        await(() -> CreatorCatalog.matching(activity.get(), "anna", false, 8).size() == 1);
+        shadowOf(Looper.getMainLooper()).idle();
+        assertTrue(CreatorCatalog.matching(activity.get(), "anna", false, 8).isEmpty());
         assertEquals("Zoe", items().get(0).title);
         assertEquals(1, items().size());
     }
@@ -134,7 +142,8 @@ public class CreatorSuggestionsTest {
     @Test public void clearingTextKeepsTheListEmptyAfterAnOldReply() throws Exception {
         create(); startOldRequest(); input.setText(""); oldReply.countDown();
         assertTrue(oldFinished.await(3, TimeUnit.SECONDS));
-        await(() -> CreatorCatalog.matching(activity.get(), "anna", false, 8).size() == 1);
+        shadowOf(Looper.getMainLooper()).idle();
+        assertTrue(CreatorCatalog.matching(activity.get(), "anna", false, 8).isEmpty());
         assertTrue(items().isEmpty());
         assertTrue(((TextView) panel.getChildAt(0)).getText().toString().contains("at least 2"));
     }
@@ -142,14 +151,93 @@ public class CreatorSuggestionsTest {
     @Test public void submittingSearchKeepsSuggestionsDismissed() throws Exception {
         create(); startOldRequest(); controller.hide(); oldReply.countDown();
         assertTrue(oldFinished.await(3, TimeUnit.SECONDS));
-        await(() -> CreatorCatalog.matching(activity.get(), "anna", false, 8).size() == 1);
+        shadowOf(Looper.getMainLooper()).idle();
+        assertTrue(CreatorCatalog.matching(activity.get(), "anna", false, 8).isEmpty());
         assertFalse(controller.isShowing());
         assertEquals(View.GONE, panel.getVisibility());
+    }
+
+    @Test public void rapidModeChangesClearOldSuggestionsAndRestoreOnlyConfirmedMatches() throws Exception {
+        activity = Robolectric.buildActivity(Activity.class).setup();
+        ContentPreference.set(activity.get(), ContentPreference.ALL);
+        input = new EditText(activity.get());
+        panel = new LinearLayout(activity.get());
+        String url = "https://cum.st/creators/onlyfans/nolan-1";
+        NativeContentItem creator = new NativeContentItem(NativeContentItem.KIND_CREATOR,
+                "Nolan", url, "", "", "", "", "OnlyHaven", "nolantwink");
+        CreatorCategoryIndex.remember(activity.get(), ContentPreference.MEN,
+                Collections.singletonList(new OnlyHavenRepository.Creator("onlyfans", "nolan-1", "Nolan", url, "")));
+        controller = new CreatorSuggestionsController(activity.get(), input, panel, item -> { },
+                (context, query) -> Collections.emptyList(),
+                (context, query) -> Collections.singletonList(creator));
+        input.setText("nolantwink");
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(70));
+        await(() -> items().size() == 1);
+        ContentPreference.set(activity.get(), ContentPreference.MEN);
+        controller.show("nolantwink");
+        assertTrue(items().isEmpty());
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(70));
+        await(() -> items().size() == 1);
+        ContentPreference.set(activity.get(), ContentPreference.WOMEN);
+        controller.show("nolantwink");
+        assertTrue(items().isEmpty());
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(70));
+        await(() -> items().isEmpty());
+        ContentPreference.set(activity.get(), ContentPreference.MEN);
+        controller.show("nolantwink");
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(70));
+        await(() -> items().size() == 1 && items().get(0).url.equals(url));
+    }
+
+    @Test public void oldAllReplyCannotReplaceSameQueryAfterAllMenAllSwitch() throws Exception {
+        activity = Robolectric.buildActivity(Activity.class).setup();
+        ContentPreference.set(activity.get(), ContentPreference.ALL);
+        activity.get().getSharedPreferences(CreatorCatalog.PREFS, 0).edit().clear().commit();
+        input = new EditText(activity.get());
+        panel = new LinearLayout(activity.get());
+        AtomicInteger calls = new AtomicInteger();
+        CountDownLatch firstStarted = new CountDownLatch(1);
+        CountDownLatch releaseFirst = new CountDownLatch(1);
+        CountDownLatch firstFinished = new CountDownLatch(1);
+        NativeContentItem old = new NativeContentItem(NativeContentItem.KIND_CREATOR,
+                "Old Creator", "https://fapello.com/old-creator/", "", "", "", "", "Fapello", "creator");
+        NativeContentItem current = new NativeContentItem(NativeContentItem.KIND_CREATOR,
+                "New Creator", "https://fapello.com/new-creator/", "", "", "", "", "Fapello", "creator");
+        controller = new CreatorSuggestionsController(activity.get(), input, panel, item -> { },
+                (context, query) -> {
+                    if (calls.incrementAndGet() == 1) {
+                        firstStarted.countDown();
+                        boolean released = false;
+                        while (!released) try { released = releaseFirst.await(3, TimeUnit.SECONDS); }
+                        catch (InterruptedException ignored) { }
+                        Thread.interrupted();
+                        firstFinished.countDown();
+                        return Collections.singletonList(old);
+                    }
+                    return Collections.singletonList(current);
+                });
+        try {
+            input.setText("creator");
+            shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(280));
+            assertTrue(firstStarted.await(3, TimeUnit.SECONDS));
+            ContentPreference.set(activity.get(), ContentPreference.MEN);
+            controller.show("creator");
+            ContentPreference.set(activity.get(), ContentPreference.ALL);
+            controller.show("creator");
+            shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(280));
+            await(() -> items().size() == 1 && items().get(0).url.equals(current.url));
+            releaseFirst.countDown();
+            assertTrue(firstFinished.await(3, TimeUnit.SECONDS));
+            shadowOf(Looper.getMainLooper()).idle();
+            assertEquals(1, items().size());
+            assertEquals(current.url, items().get(0).url);
+        } finally { releaseFirst.countDown(); }
     }
 
     @After public void cleanUp() {
         oldReply.countDown();
         if (controller != null) controller.close();
+        if (activity != null) ContentPreference.set(activity.get(), ContentPreference.ALL);
         if (activity != null) activity.pause().stop().destroy();
     }
 }

@@ -1,5 +1,5 @@
 const ROOT_FIELDS = new Set(["schemaVersion", "configVersion", "updatedAt", "global", "sources"]);
-const SOURCE_IDS = ["fapello", "bunkr", "wikifeet", "wikifeetx", "kaotic", "theync", "itemfix", "onlyhaven"];
+export const SOURCE_IDS = ["fapello", "bunkr", "wikifeet", "wikifeetx", "kaotic", "onlyhaven", "baddiehub"];
 const FAPELLO_FIELDS = new Set(["enabled", "baseUrl", "fallbackDomains", "userAgent",
   "requestHeaders", "ajaxHeaders", "refererOverride", "requestTimeoutMs", "ajaxTimeoutMs", "retryCount",
   "routes", "selectors", "patterns", "cdnHosts"]);
@@ -11,7 +11,12 @@ const WIKI_FIELDS = new Set(["enabled", "baseUrl", "fallbackDomains", "pictureHo
   "ajaxTimeoutMs", "retryCount", "searchRoute", "searchSelector"]);
 const WEB_VIDEO_FIELDS = new Set(["enabled", "baseUrl", "fallbackDomains", "userAgent",
   "requestHeaders", "refererOverride", "requestTimeoutMs", "retryCount", "routes", "selectors", "patterns"]);
-const ONLYHAVEN_FIELDS = new Set([...WEB_VIDEO_FIELDS, "mediaBaseUrl", "imageBaseUrl"]);
+const ONLYHAVEN_FIELDS = new Set([...WEB_VIDEO_FIELDS, "mediaBaseUrl", "imageBaseUrl", "categoryValues"]);
+const ONLYHAVEN_OPTIONAL_ROUTES = new Set(["creatorCategoryApi", "creatorCategorySearchApi"]);
+const CATEGORY_KEYS = new Set(["women", "men", "trans_women", "trans_men", "non_binary", "groups"]);
+const BADDIEHUB_FIELDS = new Set([...WEB_VIDEO_FIELDS].filter((field) => field !== "patterns"));
+const BADDIEHUB_ROUTES = new Set(["listingFirst", "listingPage", "categoriesFirst", "categoriesPage", "categoryFirst", "categoryPage"]);
+const BADDIEHUB_SELECTORS = new Set(["categoryLinks", "cardLinks", "playableFrame", "playableVideo"]);
 const WEB_VIDEO_ROUTES = new Set(["feedFirst", "feedPage"]);
 const WEB_VIDEO_SELECTORS = new Set(["cardLinks", "playableVideo"]);
 const WEB_VIDEO_PATTERNS = new Set(["pageUrl", "scriptMediaUrl"]);
@@ -89,8 +94,10 @@ function validateSource(id: string, value: unknown): string | null {
   const expectedFields = id === "fapello" ? FAPELLO_FIELDS :
     id === "bunkr" ? BUNKR_FIELDS :
     id === "wikifeet" || id === "wikifeetx" ? WIKI_FIELDS :
-    id === "onlyhaven" ? ONLYHAVEN_FIELDS : WEB_VIDEO_FIELDS;
-  const fieldError = unknown(value, expectedFields, id) ?? requireFields(value, expectedFields, id);
+    id === "onlyhaven" ? ONLYHAVEN_FIELDS :
+    id === "baddiehub" ? BADDIEHUB_FIELDS : WEB_VIDEO_FIELDS;
+  const required = new Set([...expectedFields].filter((field) => id !== "onlyhaven" || field !== "categoryValues"));
+  const fieldError = unknown(value, expectedFields, id) ?? requireFields(value, required, id);
   if (fieldError) return fieldError;
   if (typeof value.userAgent !== "string" || !value.userAgent || value.userAgent.length > 512) {
     return `${id}.userAgent is invalid`;
@@ -141,7 +148,7 @@ function validateSource(id: string, value: unknown): string | null {
       requireFields(value.patterns as Record<string, unknown>, FAPELLO_PATTERNS, `${id}.patterns`);
     if (missing) return missing;
   }
-  if (id === "kaotic" || id === "theync" || id === "itemfix") {
+  if (id === "kaotic") {
     const routeError = unknown(value.routes, WEB_VIDEO_ROUTES, `${id}.routes`);
     const selectorError = unknown(value.selectors, WEB_VIDEO_SELECTORS, `${id}.selectors`);
     const patternError = unknown(value.patterns, WEB_VIDEO_PATTERNS, `${id}.patterns`);
@@ -152,13 +159,32 @@ function validateSource(id: string, value: unknown): string | null {
     if (missing) return missing;
   }
   if (id === "onlyhaven") {
-    const routeError = unknown(value.routes, ONLYHAVEN_ROUTES, `${id}.routes`);
+    const routeError = unknown(value.routes, new Set([...ONLYHAVEN_ROUTES, ...ONLYHAVEN_OPTIONAL_ROUTES]), `${id}.routes`);
     const selectorError = unknown(value.selectors, ONLYHAVEN_SELECTORS, `${id}.selectors`);
     const patternError = unknown(value.patterns, ONLYHAVEN_PATTERNS, `${id}.patterns`);
     if (routeError || selectorError || patternError) return routeError ?? selectorError ?? patternError;
     const missing = requireFields(value.routes as Record<string, unknown>, ONLYHAVEN_ROUTES, `${id}.routes`) ??
       requireFields(value.selectors as Record<string, unknown>, ONLYHAVEN_SELECTORS, `${id}.selectors`) ??
       requireFields(value.patterns as Record<string, unknown>, ONLYHAVEN_PATTERNS, `${id}.patterns`);
+    if (missing) return missing;
+  }
+
+  if (id === "onlyhaven" && "categoryValues" in value) {
+    const error = unknown(value.categoryValues, CATEGORY_KEYS, `${id}.categoryValues`) ??
+      (object(value.categoryValues) ? requireFields(value.categoryValues, CATEGORY_KEYS, `${id}.categoryValues`) : null);
+    if (error) return error;
+    for (const token of Object.values(value.categoryValues as Record<string, unknown>)) {
+      if (typeof token !== "string" || token.length > 40 || !/^[a-z_]+$/.test(token)) {
+        return `${id}.categoryValues contains an invalid category token`;
+      }
+    }
+  }
+  if (id === "baddiehub") {
+    const routeError = unknown(value.routes, BADDIEHUB_ROUTES, `${id}.routes`);
+    const selectorError = unknown(value.selectors, BADDIEHUB_SELECTORS, `${id}.selectors`);
+    if (routeError || selectorError) return routeError ?? selectorError;
+    const missing = requireFields(value.routes as Record<string, unknown>, BADDIEHUB_ROUTES, `${id}.routes`) ??
+      requireFields(value.selectors as Record<string, unknown>, BADDIEHUB_SELECTORS, `${id}.selectors`);
     if (missing) return missing;
   }
 
@@ -187,6 +213,11 @@ function validateSource(id: string, value: unknown): string | null {
     creatorSearchApi: new Set(["query", "limit", "offset"]),
     creatorPage: new Set(["service", "id", "page"]),
     creatorPostsApi: new Set(["service", "id", "offset", "limit"]),
+    creatorCategoryApi: new Set(["category", "limit", "offset"]),
+    creatorCategorySearchApi: new Set(["query", "category", "limit", "offset"]),
+    listingFirst: new Set(["page"]), listingPage: new Set(["page"]),
+    categoriesFirst: new Set(["page"]), categoriesPage: new Set(["page"]),
+    categoryFirst: new Set(["slug", "page"]), categoryPage: new Set(["slug", "page"]),
   };
   for (const [key, route] of Object.entries(object(value.routes) ? value.routes : {})) {
     try {

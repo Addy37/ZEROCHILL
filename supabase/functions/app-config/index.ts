@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { validateSourceConfig } from "../_shared/source-config-validation.ts";
 
 function response(body: unknown, status = 200, headers: Record<string, string> = {}) {
   return new Response(status === 304 ? null : JSON.stringify(body), {
@@ -52,9 +53,18 @@ Deno.serve(async (request) => {
     if (!data) return response({ error: "No configuration has been published." }, 404);
 
     const version = Number(data.config_version);
+    const validation = validateSourceConfig(data.config);
+    if (!validation.valid || data.config.configVersion !== version) {
+      console.error("Active source configuration failed validation.");
+      return response({ error: "Active configuration is incompatible. Keep the last valid configuration." }, 503);
+    }
     const etag = `\"${version}\"`;
     const current = Number(new URL(request.url).searchParams.get("currentVersion") ?? "0");
-    if (request.headers.get("if-none-match") === etag || current >= version) {
+    // The gateway may weaken the ETag when applying HTTP content encoding.
+    // If-None-Match uses weak comparison for GET and can contain a list.
+    const unchanged = (request.headers.get("if-none-match") ?? "").split(",")
+      .some((tag) => tag.trim() === "*" || tag.trim().replace(/^W\//, "") === etag);
+    if (unchanged || current >= version) {
       return response(null, 304, { ETag: etag });
     }
 

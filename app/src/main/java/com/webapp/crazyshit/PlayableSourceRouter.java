@@ -13,14 +13,6 @@ final class PlayableSourceRouter {
             throws IOException {
         if (item == null) return null;
         String pageUrl = item.url == null ? "" : item.url;
-        if (WebVideoSourceRepository.isTheYncUrl(pageUrl)) {
-            return new WebVideoSourceRepository().resolvePlayable(
-                    context,
-                    WebVideoSourceRepository.Source.THEYNC,
-                    pageUrl,
-                    item.imageUrl
-            );
-        }
         return resolve(context, pageUrl);
     }
 
@@ -43,12 +35,6 @@ final class PlayableSourceRouter {
         WebVideoSourceRepository web = new WebVideoSourceRepository();
         if (WebVideoSourceRepository.isKaoticUrl(pageUrl)) {
             return web.resolvePlayable(context, WebVideoSourceRepository.Source.KAOTIC, pageUrl);
-        }
-        if (WebVideoSourceRepository.isTheYncUrl(pageUrl)) {
-            return web.resolvePlayable(context, WebVideoSourceRepository.Source.THEYNC, pageUrl);
-        }
-        if (WebVideoSourceRepository.isItemFixUrl(pageUrl)) {
-            return web.resolvePlayable(context, WebVideoSourceRepository.Source.ITEMFIX, pageUrl);
         }
         if (EfuktRepository.isEfuktUrl(pageUrl)) {
             return new EfuktRepository().resolvePlayable(context, pageUrl);

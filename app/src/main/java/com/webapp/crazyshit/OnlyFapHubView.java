@@ -89,6 +89,7 @@ final class OnlyFapHubView extends FrameLayout {
         if (discoveryPreference != mode) {
             preferenceHeroPending = preferenceHeroPending || heroArtworkReady;
             discoveryPreference = mode;
+            pendingRestoreState = null;
             ContentPreferenceUi.clearPresentation(this);
             clear();
         }
@@ -796,6 +797,7 @@ final class OnlyFapHubView extends FrameLayout {
 
     void saveState(Bundle out) {
         if (out == null) return;
+        out.putString("content_preference", discoveryPreference.value);
         out.putInt("scroll_y", scroll.getScrollY());
         out.putInt("hero_index", heroIndex);
         saveRailState(out, "trending", trendingShelf.rail);
@@ -805,7 +807,8 @@ final class OnlyFapHubView extends FrameLayout {
     }
 
     void restoreState(Bundle state) {
-        pendingRestoreState = state == null ? null : new Bundle(state);
+        pendingRestoreState = state != null && discoveryPreference.value.equals(
+                state.getString("content_preference", "")) ? new Bundle(state) : null;
     }
 
     @Override protected void onDetachedFromWindow() {

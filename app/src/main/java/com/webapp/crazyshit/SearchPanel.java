@@ -109,6 +109,7 @@ final class SearchPanel {
     private Filter filter = Filter.ALL;
     private String activeQuery = "";
     private int generation;
+    private ContentPreference searchPreference;
     private boolean bunkrOnly;
     private final android.os.Handler searchHandler = new android.os.Handler(android.os.Looper.getMainLooper());
     private Runnable liveSearch;
@@ -153,10 +154,6 @@ final class SearchPanel {
             if (!activeQuery.isEmpty()) {
                 final String savedQuery = activeQuery;
                 if (bunkrOnly || previewMode) {
-                    try {
-                        publishCreators(ContentItemCodec.decodeList(
-                                new org.json.JSONArray(state.getString("creators", "[]")), 80));
-                    } catch (Exception ignored) { }
                     startOnlyFapSearch(savedQuery);
                 } else {
                     final int token = ++generation;
@@ -569,6 +566,10 @@ final class SearchPanel {
 
     private void startOnlyFapSearch(String query) {
         cancelSearchWork();
+        searchPreference = ContentPreference.get(activity);
+        creatorResults = new ArrayList<>();
+        fapzoneCreators = new ArrayList<>();
+        if (onlyFapAdapter != null) onlyFapAdapter.replace(creatorResults);
         activeQuery = query.trim();
         final String requestedQuery = activeQuery;
         final int token = generation;
@@ -580,8 +581,10 @@ final class SearchPanel {
         searchState.setText("Finding saved creators · Checking sources…");
         requests.add(io.submit(() -> {
             BundledCreatorIndex index = BundledCreatorIndex.get(activity.getApplicationContext());
-            List<NativeContentItem> local = OnlyFapCreatorResults.merge(index.matching(requestedQuery, 60),
-                    CreatorCatalog.matching(activity.getApplicationContext(), requestedQuery, false, 60), 60);
+            List<NativeContentItem> local = OnlyFapCreatorResults.merge(
+                    searchPreference == ContentPreference.ALL ? index.matching(requestedQuery, 60) : null,
+                    CreatorCategoryIndex.filter(activity, searchPreference,
+                            CreatorCatalog.matching(activity.getApplicationContext(), requestedQuery, false, 60)), 60);
             local.sort(java.util.Comparator.comparingInt((NativeContentItem item) -> index.rank(item, requestedQuery))
                     .thenComparing(item -> CreatorNameMatcher.normalized(item.title)));
             activity.runOnUiThread(() -> {
@@ -603,10 +606,9 @@ final class SearchPanel {
                 });
             } catch (Exception ignored) { }
             List<NativeContentItem> creators = result;
-            if (creators != null && !Thread.currentThread().isInterrupted())
-                CreatorCatalog.remember(activity.getApplicationContext(), creators);
             activity.runOnUiThread(() -> {
                 if (!current(token, requestedQuery)) return;
+                if (creators != null) CreatorCatalog.remember(activity.getApplicationContext(), creators);
                 pendingSources = 0;
                 publishCreators(creators);
                 progress.setVisibility(View.GONE);
@@ -630,10 +632,13 @@ final class SearchPanel {
 
     private boolean current(int token, String query) {
         return !destroyed && !activity.isFinishing() && !activity.isDestroyed()
-                && token == generation && query.equals(activeQuery);
+                && token == generation && query.equals(activeQuery)
+                && searchPreference == ContentPreference.get(activity);
     }
 
     private void startGlobalSearch(String query, boolean clear) {
+        boolean changedMode = searchPreference != null && searchPreference != ContentPreference.get(activity);
+        searchPreference = ContentPreference.get(activity);
         for (Future<?> request : requests) request.cancel(true);
         requests.clear();
         if (io instanceof java.util.concurrent.ThreadPoolExecutor)
@@ -645,7 +650,10 @@ final class SearchPanel {
         pendingSources = 8;
         searchStarted = android.os.SystemClock.elapsedRealtime();
         firstResultsRecorded = false;
-        if (clear && !sameQuery) clearResults();
+        if (changedMode) {
+            creatorResults = new ArrayList<>();
+            clearResults();
+        } else if (clear && !sameQuery) clearResults();
         renderResults();
         source(token, 0, "CrazyShit videos", () -> repository.fetchFeed(activity, repository.searchUrl(query), 1));
         source(token, 1, "EFukt videos", () -> efuktRepository.search(activity, query));
@@ -671,7 +679,8 @@ final class SearchPanel {
             try { items = fetch.call(); } catch (Exception ignored) { }
             List<NativeContentItem> result = items;
             activity.runOnUiThread(() -> {
-                if (destroyed || activity.isFinishing() || token != generation) return;
+                if (destroyed || activity.isFinishing() || token != generation
+                        || searchPreference != ContentPreference.get(activity)) return;
                 pendingSources--;
                 if (result == null) errors.put(id, title);
                 else switch (id) {
@@ -698,6 +707,7 @@ final class SearchPanel {
     private void saveSnapshot() {
         try {
             JSONObject data = new JSONObject().put("query", activeQuery);
+            data.put("preference", ContentPreference.get(activity).value);
             data.put("complete", pendingSources == 0);
             data.put("crazyVideos", ContentItemCodec.encodeList(crazyVideos, 100));
             data.put("efuktVideos", ContentItemCodec.encodeList(efuktVideos, 100));
@@ -712,7 +722,9 @@ final class SearchPanel {
     }
 
     private boolean restoreSnapshot(JSONObject data) {
-        if (data == null || !activeQuery.equals(data.optString("query"))) return false;
+        if (data == null || !activeQuery.equals(data.optString("query"))
+                || !ContentPreference.get(activity).value.equals(data.optString("preference"))) return false;
+        searchPreference = ContentPreference.get(activity);
         crazyVideos = ContentItemCodec.decodeList(data.optJSONArray("crazyVideos"), 100);
         efuktVideos = ContentItemCodec.decodeList(data.optJSONArray("efuktVideos"), 100);
         crazySeries = ContentItemCodec.decodeList(data.optJSONArray("crazySeries"), 100);
@@ -1078,6 +1090,12 @@ final class SearchPanel {
     }
 
     void resume() {
+        if (searchPreference != null && searchPreference != ContentPreference.get(activity)
+                && activeQuery.length() >= 2) {
+            if (bunkrOnly || previewMode) startOnlyFapSearch(activeQuery);
+            else startGlobalSearch(activeQuery, true);
+            return;
+        }
         if (showingRecent()) { showRecentSearches(); updateContentVisibility(); }
         else if (onlyFapAdapter != null) onlyFapAdapter.notifyDataSetChanged();
         else if (adapter != null) adapter.notifyDataSetChanged();

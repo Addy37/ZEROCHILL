@@ -2,6 +2,7 @@ package com.webapp.crazyshit;
 
 import android.app.Application;
 import android.content.Context;
+import org.json.JSONObject;
 
 import org.junit.Test;
 import org.junit.Before;
@@ -11,6 +12,9 @@ import org.robolectric.RuntimeEnvironment;
 import org.robolectric.annotation.Config;
 
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.ByteArrayOutputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -19,6 +23,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.Assert.*;
 
@@ -29,6 +34,72 @@ public final class FapzoneCreatorSearchRepositoryTest {
         Context context = RuntimeEnvironment.getApplication();
         context.getSharedPreferences(CreatorCatalog.PREFS, 0).edit().clear().commit();
         context.getSharedPreferences("creator_favorites", 0).edit().clear().commit();
+        context.getSharedPreferences("remote_source_config", 0).edit().clear().commit();
+        RemoteSourceConfigManager.resetForTests();
+        ContentPreference.set(context, ContentPreference.ALL);
+    }
+
+    @Test public void completedSuggestionReusesLiveResultsForFullSearchButModeAndConfigRefetch() throws Exception {
+        Context context = RuntimeEnvironment.getApplication();
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        AtomicInteger broadCalls = new AtomicInteger();
+        AtomicInteger categoryCalls = new AtomicInteger();
+        FapzoneCreatorSearchRepository repository = new FapzoneCreatorSearchRepository(executor,
+                Collections.singletonList((ignored, query, limit) -> {
+                    assertEquals(20, limit);
+                    broadCalls.incrementAndGet();
+                    return Collections.singletonList(creator("Nolan", "Fapello"));
+                }), (ignored, query, limit, mode) -> {
+                    categoryCalls.incrementAndGet();
+                    return Collections.emptyList();
+                });
+        try {
+            assertEquals(1, repository.search(context, "Nolan", 8).size());
+            assertEquals(1, repository.search(context, " nolan ", 20).size());
+            assertEquals(1, broadCalls.get());
+            ContentPreference.set(context, ContentPreference.MEN);
+            assertTrue(repository.search(context, "Nolan", 8).isEmpty());
+            assertEquals(1, categoryCalls.get());
+            ContentPreference.set(context, ContentPreference.ALL);
+            assertEquals(1, repository.search(context, "Nolan", 20).size());
+            assertEquals(1, broadCalls.get());
+
+            JSONObject updated;
+            try (InputStream input = context.getAssets().open("source_config_defaults.json")) {
+                ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+                byte[] buffer = new byte[4096];
+                int count;
+                while ((count = input.read(buffer)) >= 0) bytes.write(buffer, 0, count);
+                updated = new JSONObject(bytes.toString(StandardCharsets.UTF_8.name()));
+            }
+            updated.put("configVersion", updated.getLong("configVersion") + 1);
+            RemoteSourceConfigManager.applyRemoteForTests(context, updated.toString());
+            assertEquals(1, repository.search(context, "Nolan", 20).size());
+            assertEquals(2, broadCalls.get());
+        } finally {
+            ContentPreference.set(context, ContentPreference.ALL);
+            context.getSharedPreferences("remote_source_config", 0).edit().clear().commit();
+            RemoteSourceConfigManager.resetForTests();
+            executor.shutdownNow();
+        }
+    }
+
+    @Test public void incompleteResponseIsRetriedAndNeverCachedAsDefinitiveMiss() throws Exception {
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        AtomicInteger retries = new AtomicInteger();
+        try {
+            FapzoneCreatorSearchRepository repository = new FapzoneCreatorSearchRepository(executor,
+                    Arrays.asList((context, query, limit) -> {
+                        if (retries.incrementAndGet() == 1) throw new IOException("temporary");
+                        return Collections.singletonList(creator("Nolan", "Fapello"));
+                    }, (context, query, limit) -> Collections.emptyList()));
+            try {
+                repository.search(RuntimeEnvironment.getApplication(), "nolan", 8);
+                fail("Partial empty search should fail");
+            } catch (IOException expected) { assertTrue(expected.getMessage().contains("incomplete")); }
+            assertEquals(1, repository.search(RuntimeEnvironment.getApplication(), "nolan", 20).size());
+            assertEquals(2, retries.get());
+        } finally { executor.shutdownNow(); }
     }
 
     @Test public void verifiedAliasSurvivesMergedSearchWithOriginalFavoriteKey() throws Exception {
@@ -157,6 +228,35 @@ public final class FapzoneCreatorSearchRepositoryTest {
             assertEquals("CarrotSoki", repository.search(RuntimeEnvironment.getApplication(),
                     "Carrot Soki", 10).get(0).title);
         } finally { executor.shutdownNow(); }
+    }
+
+    @Test public void selectedModeSearchUsesOnlyProviderCategoryAndRetainsAlias() throws Exception {
+        Context context = RuntimeEnvironment.getApplication();
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        ContentPreference.set(context, ContentPreference.MEN);
+        String profile = "https://cum.st/creators/onlyfans/nolan-1";
+        OnlyHavenRepository.Creator creator = new OnlyHavenRepository.Creator("onlyfans", "nolan-1",
+                "Nolan", profile, "", 17, 0, "", "nolantwink");
+        CreatorCategoryIndex.remember(context, ContentPreference.MEN, Collections.singletonList(creator));
+        FapzoneCreatorSearchRepository repository = new FapzoneCreatorSearchRepository(executor,
+                Collections.singletonList((ignored, query, limit) -> {
+                    fail("A non-OnlyHaven source must not run in a selected mode");
+                    return Collections.emptyList();
+                }), (ignored, query, limit, category) -> {
+                    assertEquals(ContentPreference.MEN, category);
+                    return Collections.singletonList(
+                            FapzoneCreatorSearchRepository.onlyHavenItem(creator, query));
+                });
+        try {
+            List<NativeContentItem> found = repository.search(context, "nolantwink", 8);
+            assertEquals(1, found.size());
+            assertEquals(profile, found.get(0).url);
+            assertEquals("Nolan", found.get(0).title);
+            assertEquals("nolantwink", found.get(0).searchQuery);
+        } finally {
+            ContentPreference.set(context, ContentPreference.ALL);
+            executor.shutdownNow();
+        }
     }
 
     @Test public void sharedSearchIncludesLearnedProfilesEvenWhenEveryLiveSourceFails() throws Exception {
