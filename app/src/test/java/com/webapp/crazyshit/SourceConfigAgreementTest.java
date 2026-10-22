@@ -27,7 +27,7 @@ public final class SourceConfigAgreementTest {
         }
         java.nio.file.Path corpus = Paths.get("../supabase/tests/source-config-cases.json");
         if (!Files.exists(corpus)) corpus = Paths.get("supabase/tests/source-config-cases.json");
-        JSONArray cases = new JSONArray(Files.readString(corpus));
+        JSONArray cases = new JSONArray(new String(Files.readAllBytes(corpus), StandardCharsets.UTF_8));
         for (int i = 0; i < cases.length(); i++) {
             JSONObject test = cases.getJSONObject(i);
             JSONObject document = new JSONObject(bundled);

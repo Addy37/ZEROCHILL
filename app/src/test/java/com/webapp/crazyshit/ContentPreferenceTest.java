@@ -134,6 +134,82 @@ public class ContentPreferenceTest {
         hub.close();
     }
 
+    @Test public void discoveryRestoreDoesNotApplyAnEarlierModePosition() {
+        Activity host = Robolectric.buildActivity(Activity.class).setup().get();
+        OnlyFapHubView hub = new OnlyFapHubView(host, new OnlyFapHubView.Listener() {
+            @Override public void onOpenCreator(NativeContentItem creator) { }
+            @Override public void onSearch() { }
+            @Override public void onViewAllFavorites() { }
+        });
+        try {
+            android.os.Bundle earlier = new android.os.Bundle();
+            hub.saveState(earlier);
+            assertEquals("all", earlier.getString("content_preference"));
+            ContentPreference.set(context, ContentPreference.MEN);
+            hub.preparePreference(ContentPreference.MEN);
+            hub.restoreState(earlier);
+            assertNull(org.robolectric.util.ReflectionHelpers.getField(hub, "pendingRestoreState"));
+            android.os.Bundle current = new android.os.Bundle();
+            hub.saveState(current);
+            hub.restoreState(current);
+            assertNotNull(org.robolectric.util.ReflectionHelpers.getField(hub, "pendingRestoreState"));
+        } finally {
+            hub.close();
+            ContentPreference.set(context, ContentPreference.ALL);
+        }
+    }
+
+    @Test public void openingSpecificMergedCreatorKeepsBothSourceProfilesInEveryMode() {
+        NativeContentItem fapello = new NativeContentItem(NativeContentItem.KIND_CREATOR,
+                "Sasha Fox", "https://fapello.com/sasha-fox/", "", "", "", "", "Fapello", "Sasha Fox");
+        NativeContentItem haven = new NativeContentItem(NativeContentItem.KIND_CREATOR,
+                "Sasha Fox", "https://cum.st/creators/onlyfans/sasha", "", "", "", "", "OnlyHaven", "Sasha Fox");
+        LinkedHashMap<String, NativeContentItem> members = new LinkedHashMap<>();
+        members.put("fapello", fapello);
+        members.put("onlyhaven", haven);
+        CreatorCatalog.FavoriteGroup group = new CreatorCatalog.FavoriteGroup(fapello, members,
+                new LinkedHashSet<>(members.keySet()), true);
+        for (ContentPreference mode : ContentPreference.values()) {
+            ContentPreference.set(context, mode);
+            CreatorGallerySpec spec = CreatorGallerySpec.from(group);
+            assertTrue(spec.seedUrls.contains(fapello.url));
+            assertTrue(spec.seedUrls.contains(haven.url));
+        }
+        ContentPreference.set(context, ContentPreference.ALL);
+    }
+
+    @Test public void discoveryClearsOfferedCreatorsAcrossRapidModeChanges() {
+        Activity host = Robolectric.buildActivity(Activity.class).setup().get();
+        OnlyFapHubView hub = new OnlyFapHubView(host, new OnlyFapHubView.Listener() {
+            @Override public void onOpenCreator(NativeContentItem creator) { }
+            @Override public void onSearch() { }
+            @Override public void onViewAllFavorites() { }
+        });
+        NativeContentItem man = new NativeContentItem(NativeContentItem.KIND_CREATOR,
+                "Man", "https://cum.st/creators/onlyfans/man", "", "", "", "", "OnlyHaven", "Man");
+        NativeContentItem woman = new NativeContentItem(NativeContentItem.KIND_CREATOR,
+                "Woman", "https://cum.st/creators/onlyfans/woman", "", "", "", "", "OnlyHaven", "Woman");
+        try {
+            ContentPreference.set(context, ContentPreference.MEN);
+            hub.preparePreference(ContentPreference.MEN);
+            hub.setPreferenceCreators(Collections.singletonList(man));
+            assertEquals(Collections.singletonList(man),
+                    org.robolectric.util.ReflectionHelpers.getField(hub, "trendingItems"));
+            ContentPreference.set(context, ContentPreference.WOMEN);
+            hub.preparePreference(ContentPreference.WOMEN);
+            assertTrue(((List<?>) org.robolectric.util.ReflectionHelpers.getField(hub,
+                    "discoverCandidates")).isEmpty());
+            hub.setPreferenceCreators(Collections.singletonList(woman));
+            ContentPreference.set(context, ContentPreference.MEN);
+            hub.preparePreference(ContentPreference.MEN);
+            assertTrue(((List<?>) org.robolectric.util.ReflectionHelpers.getField(hub,
+                    "trendingItems")).isEmpty());
+        } finally {
+            hub.close();
+            ContentPreference.set(context, ContentPreference.ALL);
+        }
+    }
+
     private android.view.View findText(android.view.View view, String text) {
         if (view instanceof android.widget.TextView && text.contentEquals(((android.widget.TextView) view).getText())) return view;
         if (view instanceof android.view.ViewGroup) {

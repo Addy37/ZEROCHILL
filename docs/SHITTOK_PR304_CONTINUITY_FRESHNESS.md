@@ -2,7 +2,7 @@
 
 Continue `feature/shittok-deep-source-exploration`, base `rebrand/zerochill`.
 The starting head `1a94848f` has exactly the `f95bb681` rollback tree. Do not restore
-the reverted Bunkr/TheYNC/ItemFix expansion. No merge is authorized.
+the reverted experimental source expansion. No merge is authorized.
 
 ## Code-traced failure paths
 

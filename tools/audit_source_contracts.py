@@ -276,11 +276,12 @@ def wiki(source):
     def search():
         address = url.urljoin(base, CONFIG[source]['searchRoute'].replace('{query}', 'Anna'))
         body = fetch(address, source)
-        profiles.update(canonical_links(body, base, r'/(?!search|photos|videos)[^/?#]+/?'))
+        profiles.update(address for address in canonical_links(body, base, r'/(?!search|photos|videos)[^/?#]+/?')
+                        if 'anna' in url.unquote(url.urlsplit(address).path).lower())
         # WikiFeet also returns its search table in a JS array.
         for candidate in re.findall(r'"(?:url|href|path|slug|fetchname)"\s*:\s*"([^\"]+)"', body):
             canonical = url.urljoin(base, candidate if candidate.startswith('/') else '/' + candidate)
-            if re.fullmatch(r'/[^/?#]+', url.urlsplit(canonical).path): profiles.add(canonical)
+            if re.fullmatch(r'/[^/?#]+', url.urlsplit(canonical).path) and 'anna' in url.unquote(url.urlsplit(canonical).path).lower(): profiles.add(canonical)
         require(bool(profiles), 'search returned no canonical profile metadata')
     run(source, 'search/profile-lookup', search)
     def profile():
@@ -288,8 +289,12 @@ def wiki(source):
         for address in sorted(profiles)[:3]:
             body = fetch(address, source)
             if re.search(r'\bcid\b|["\']cid["\']', body) and 'gallery' in body and 'cname' in body:
-                require(bool(re.search(r'["\']?pid["\']?\s*:\s*[1-9]', body)), 'profile gallery picture ids missing')
-                artwork(body, address, source)
+                picture = re.search(r'["\']?pid["\']?\s*:\s*([1-9]\d*)', body)
+                require(bool(picture), 'profile gallery picture ids missing')
+                # WikiFeet renders gallery <img> nodes in JavaScript. The app
+                # derives the thumbnail URL from the provider's gallery pid.
+                thumbnail = 'https://' + CONFIG[source]['thumbnailHost'] + '/' + picture.group(1) + '.jpg'
+                require(fetch(thumbnail, source, head=True).lower().startswith('image/'), 'gallery thumbnail HEAD did not return an image')
                 return
         raise ValueError('searched profiles lack cid/cname/gallery metadata')
     run(source, 'profile/gallery/artwork', profile)

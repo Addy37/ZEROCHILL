@@ -74,7 +74,7 @@ jobs:
           PY
 
       - name: Build private admin APK
-        run: gradle --no-daemon :feedbackadmin:assembleRelease
+        run: gradle --no-daemon :feedbackadmin:testDebugUnitTest :feedbackadmin:assembleRelease
 
       - name: Prepare APK
         run: |
