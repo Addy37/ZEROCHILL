@@ -31,6 +31,8 @@ public final class OnlyFapTransitionProbeActivity extends Activity {
     private int step;
     private long deadline;
     private int[] controls;
+    private int[] initialReadyBounds;
+    private int initialStableFrames;
     private int frames;
     private final Runnable watch = new Runnable() {
         @Override public void run() {
@@ -44,6 +46,19 @@ public final class OnlyFapTransitionProbeActivity extends Activity {
                         step == 2 ? "Latest category with a longer name across two lines" : "Qualified gallery";
                 if (expected.equals(((TextView) title).getText().toString()) &&
                         !(boolean) field("preferenceHeroPending") && field("heroMorph") == null) {
+                    if (step == 0 && controls == null) {
+                        int[] currentBounds = bounds();
+                        if (!Arrays.equals(initialReadyBounds, currentBounds)) {
+                            initialReadyBounds = currentBounds;
+                            initialStableFrames = 0;
+                            hub.postOnAnimation(this);
+                            return;
+                        }
+                        if (++initialStableFrames < 2) {
+                            hub.postOnAnimation(this);
+                            return;
+                        }
+                    }
                     android.util.Log.i("ZeroChillTransition", "stage=" + step + " ready " + expected);
                     if (step == 3) {
                         check(frames > 10, "insufficient observed animation frames");
