@@ -28,8 +28,8 @@ def require(condition, reason):
         raise ValueError(reason)
 
 
-def fetch(address, source='', ajax=False, head=False):
-    key = (address, source, ajax, head)
+def fetch(address, source='', ajax=False, head=False, headers_override=None):
+    key = (address, source, ajax, head, tuple(sorted((headers_override or {}).items())))
     if key in CACHE:
         return CACHE[key]
     config = CONFIG.get(source, {})
@@ -38,6 +38,7 @@ def fetch(address, source='', ajax=False, head=False):
         headers.update(config.get('ajaxHeaders', {}))
     headers['Accept-Encoding'] = 'identity'
     headers['Referer'] = config.get('refererOverride') or config.get('baseUrl') or config.get('indexUrl') or address
+    headers.update(headers_override or {})
     with urllib.request.urlopen(urllib.request.Request(address, headers=headers, method='HEAD' if head else 'GET'), timeout=12) as response:
         require(response.status == 200, f'HTTP {response.status}')
         if head:
@@ -214,7 +215,7 @@ def fapello():
         parser = FapelloCreatorParser(base)
         parser.feed(body)
         return {url.urljoin(base, slug + '/') for _, slug in parser.creators}
-    discovered = set()
+    discovered, posts = set(), set()
     def discover():
         discovered.update(pages(source, route(source, 'listingNewFirst', page=1), route(source, 'listingNewPage', page=2), parse))
     run(source, 'discover/pagination', discover)
@@ -250,13 +251,21 @@ def fapello():
         artwork(body, address, source)
         slug = fapello_model_slug(address, base)
         gallery = fetch(route(source, 'creatorMedia', slug=slug, page=1), source, ajax=True)
-        require(bool(re.search(r'/(?:video/(?:[^/]+/)?\d+|[^/]+/\d+)', gallery)) or bool(Metadata(gallery, address).media), 'creator gallery has no post/media links')
+        posts.update(link for link in Metadata(gallery, address).links if re.fullmatch(CONFIG[source]['patterns']['postPath'], url.urlsplit(link).path))
+        require(bool(posts) or bool(Metadata(gallery, address).media), 'creator gallery has no post/media links')
     run(source, 'creator/profile/artwork/gallery', profile)
+    def post():
+        require(bool(posts), 'gallery offered no detail post to inspect')
+        address = sorted(posts)[0]
+        body = fetch(address, source)
+        metadata = Metadata(body, address)
+        require(bool(metadata.media) or bool(re.search(r'(?:contentUrl|og:image|uk-align-center)', body)), 'post has no original image/video metadata')
+    run(source, 'post/original-media-metadata', post)
 
 
 def bunkr():
     source, base = 'bunkr', CONFIG['bunkr']['indexUrl']
-    albums = set()
+    albums, media_links = set(), set()
     parse = lambda body, address: {link for link in Metadata(body, address).links if re.search(r'/a/[a-zA-Z0-9_-]+', url.urlsplit(link).path)}
     def listing():
         albums.update(pages(source, base, base + '?page=2', parse))
@@ -266,8 +275,31 @@ def bunkr():
         address = sorted(albums)[0]
         body = fetch(address, source)
         require(bool(Metadata(body, address).images), 'album thumbnails missing')
-        require(bool(re.search(r'/(?:v|i|f)/[a-zA-Z0-9_-]+', body)), 'album media-detail links missing')
+        media_links.update(link for link in Metadata(body, address).links if re.search(r'/(?:v|i|f)/[a-zA-Z0-9_-]+', url.urlsplit(link).path))
+        require(bool(media_links), 'album media-detail links missing')
     run(source, 'album/thumbnails/media-links', album)
+    def search():
+        found = parse(fetch(base + '?search=anna&mode=broad&page=1', source), base)
+        require(bool(found), 'album search returned no album links')
+    run(source, 'balbums/search', search)
+    def playable():
+        require(bool(media_links), 'album has no media detail to inspect')
+        address = sorted(media_links, key=lambda link: ('/v/' not in link, link))[0]
+        body = fetch(address, source)
+        cdn = re.search(r'\bjsCDN\s*=\s*["\']([^"\']+)', body, re.I)
+        if cdn:
+            asset = cdn.group(1).replace('\\/', '/')
+            require(https(asset), 'signed CDN metadata has no HTTPS media URL')
+            signer = CONFIG[source]['signUrl'] + '?path=' + url.quote(url.urlsplit(asset).path, safe='')
+            origin = url.urlsplit(address)
+            signed = json.loads(fetch(signer, source, ajax=True, headers_override={
+                'Origin': origin.scheme + '://' + origin.netloc, 'Referer': address}))
+            require(bool(signed.get('token')) and bool(signed.get('ex')), 'signed resolver response lacks token/expiry')
+        elif '/i/' in address:
+            require(bool(Metadata(body, address).images), 'image detail lacks original artwork metadata')
+        else:
+            detail(body, address)
+    run(source, 'media-detail/signed-or-direct-resolution', playable)
 
 
 def wiki(source):
@@ -331,6 +363,28 @@ def video_source(source):
         detail(body, address)
         artwork(body, address, source)
     run(source, 'detail/playable-metadata/artwork', playable)
+    def search():
+        address = base + ('search/car/' if source == 'crazyshit' else 'search/funny/')
+        require(bool(canonical_links(fetch(address, source), base, pattern)), 'search returned no canonical video links')
+    if source in ('crazyshit', 'efukt'):
+        run(source, 'search', search)
+    if source == 'crazyshit':
+        def categories():
+            address = base + 'categories/'
+            found = canonical_links(fetch(address, source), base, r'/category/[^/?#]+/')
+            require(bool(found), 'category directory returned no canonical categories')
+            category = sorted(found)[0]
+            require(bool(canonical_links(fetch(category, source), base, pattern)), 'category has no canonical content')
+        run(source, 'categories/category-listing', categories)
+    elif source == 'efukt':
+        def series():
+            address = base + 'series/'
+            body = fetch(address, source)
+            # Series links are provider catalog pages and may use a numeric id
+            # or a descriptive slug. Require a series link or direct episodes.
+            require(bool(canonical_links(body, base, r'/series/[^/?#]+/?')) or bool(canonical_links(body, base, pattern)), 'series catalog has neither series nor episode links')
+        run(source, 'series/catalog', series)
+
 
 
 def baddiehub():

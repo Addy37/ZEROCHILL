@@ -15,6 +15,7 @@ import org.robolectric.annotation.Config;
 import java.util.List;
 
 import static org.junit.Assert.*;
+import static org.junit.Assume.assumeTrue;
 
 @RunWith(RobolectricTestRunner.class)
 @Config(application = Application.class, sdk = 35)
@@ -97,6 +98,32 @@ public final class SourceExpansionTest {
         assertEquals(item.url, CreatorCatalog.matching(context, "nolantwink", false, 10).get(0).url);
     }
 
+    @Test public void currentClientParsesLiveOnlyHavenSearchAndMenCategory() throws Exception {
+        assumeTrue("true".equals(System.getenv("VERIFY_PRODUCTION_SOURCE_CONFIG")));
+        OnlyHavenRepository repository = new OnlyHavenRepository();
+        SourceConfig.OnlyHaven config = RemoteSourceConfigManager.snapshot().onlyHaven;
+        List<OnlyHavenRepository.Creator> broad = repository.searchCreators(context, "nolantwink", 20);
+        OnlyHavenRepository.Creator nolan = null;
+        for (OnlyHavenRepository.Creator creator : broad) {
+            if (CreatorNameMatcher.rank(creator.searchAlias, "nolantwink") != Integer.MAX_VALUE
+                    || CreatorNameMatcher.rank(creator.name, "nolantwink") != Integer.MAX_VALUE
+                    || "nolantwink".equalsIgnoreCase(creator.id)) { nolan = creator; break; }
+        }
+        assertNotNull("Query search should return its canonical creator", nolan);
+        assertTrue(OnlyHavenRepository.isOnlyHavenUrl(nolan.url));
+        assertTrue(nolan.url.startsWith(config.baseUrl + "creators/"));
+        assertTrue(nolan.service.matches("[A-Za-z0-9_-]+"));
+        assertTrue(nolan.id.matches("[A-Za-z0-9_-]+"));
+        assertFalse("Live result should include avatar metadata", nolan.imageUrl.isEmpty());
+        String canonicalUrl = nolan.url;
+        List<OnlyHavenRepository.Creator> men = repository.searchCategoryCreators(
+                context, "nolantwink", 20, ContentPreference.MEN);
+        assertTrue("The provider must confirm Men membership", men.stream()
+                .anyMatch(creator -> creator.url.equals(canonicalUrl)));
+        assertFalse("Second stable query must produce creator results",
+                repository.searchCreators(context, "Nolan", 20).isEmpty());
+    }
+
     @Test public void brokenOnlyHavenApiEnvelopeIsUnavailableRatherThanConfirmedEmpty() throws Exception {
         try {
             new OnlyHavenRepository().parseCreatorSearchJson("{\"error\":\"Site Unavailable\"}",
@@ -105,6 +132,19 @@ public final class SourceExpansionTest {
         } catch (java.io.IOException expected) {
             assertTrue(expected.getMessage().contains("unreadable JSON"));
         }
+    }
+
+    @Test public void malformedOnlyHavenIdentityCannotBeLearnedAsCanonicalCreator() throws Exception {
+        SourceConfig.OnlyHaven config = RemoteSourceConfigManager.snapshot().onlyHaven;
+        String json = "{\"creators\":["
+                + "{\"service\":\"onlyfans/other\",\"id\":\"nolan-1\",\"displayName\":\"Nolan\"},"
+                + "{\"service\":\"onlyfans\",\"id\":\"nolan 2\",\"displayName\":\"Nolan\"},"
+                + "{\"service\":\"onlyfans\",\"id\":\"nolan-1\",\"displayName\":\"Nolan\",\"username\":\"nolantwink\"}]}";
+        List<OnlyHavenRepository.Creator> found = new OnlyHavenRepository()
+                .parseCreatorSearchJson(json, config, "nolantwink", 20);
+        assertEquals(1, found.size());
+        assertEquals("https://cum.st/creators/onlyfans/nolan-1", found.get(0).url);
+        assertEquals("nolantwink", found.get(0).searchAlias);
     }
 
     @Test public void onlyHavenApiBuildsOriginalVariantMediaUrls() throws Exception {

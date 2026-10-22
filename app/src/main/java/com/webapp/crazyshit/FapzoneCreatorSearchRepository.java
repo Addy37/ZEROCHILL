@@ -20,6 +20,23 @@ import java.util.concurrent.TimeUnit;
 final class FapzoneCreatorSearchRepository {
     private static final ExecutorService SEARCH_IO = Executors.newFixedThreadPool(4);
     private static final long SEARCH_BUDGET_MS = 7_000L;
+    private static final long CACHE_TTL_MS = 2L * 60L * 1_000L;
+    private static final int CACHE_CAPACITY = 48;
+    private static final Map<String, CachedSearch> SHARED_CACHE = new LinkedHashMap<String, CachedSearch>(64, .75f, true) {
+        @Override protected boolean removeEldestEntry(Map.Entry<String, CachedSearch> eldest) {
+            return size() > CACHE_CAPACITY;
+        }
+    };
+
+    private static final class CachedSearch {
+        final long storedAt;
+        final List<NativeContentItem> networkItems;
+
+        CachedSearch(List<NativeContentItem> networkItems) {
+            storedAt = SystemClock.elapsedRealtime();
+            this.networkItems = new ArrayList<>(networkItems);
+        }
+    }
 
     interface ResultListener {
         void onUpdate(List<NativeContentItem> items, boolean complete);
@@ -40,6 +57,7 @@ final class FapzoneCreatorSearchRepository {
     private final ExecutorService searchIo;
     private final List<SourceSearch> sources;
     private final CategorySourceSearch categorySource;
+    private final Map<String, CachedSearch> cache;
 
     FapzoneCreatorSearchRepository() {
         searchIo = SEARCH_IO;
@@ -51,6 +69,7 @@ final class FapzoneCreatorSearchRepository {
                 context, WikiFeetRepository.Site.WIKIFEET_X, query, limit));
         sources.add(this::fromOnlyHaven);
         categorySource = this::fromOnlyHaven;
+        cache = SHARED_CACHE;
     }
 
     FapzoneCreatorSearchRepository(ExecutorService searchIo, List<SourceSearch> sources) {
@@ -62,6 +81,11 @@ final class FapzoneCreatorSearchRepository {
         this.searchIo = searchIo;
         this.sources = new ArrayList<>(sources);
         this.categorySource = categorySource == null ? this::fromOnlyHaven : categorySource;
+        cache = new LinkedHashMap<String, CachedSearch>(64, .75f, true) {
+            @Override protected boolean removeEldestEntry(Map.Entry<String, CachedSearch> eldest) {
+                return size() > CACHE_CAPACITY;
+            }
+        };
     }
 
     List<NativeContentItem> search(Context context, String query, int limit) throws IOException {
@@ -86,6 +110,15 @@ final class FapzoneCreatorSearchRepository {
             }
         }
         if (listener != null && !learned.isEmpty()) publish(listener, learned, false);
+        String cacheKey = cacheKey(cleanQuery, preference);
+        CachedSearch cached;
+        synchronized (cache) { cached = cache.get(cacheKey); }
+        if (cached != null && SystemClock.elapsedRealtime() - cached.storedAt < CACHE_TTL_MS) {
+            ArrayList<NativeContentItem> output = new ArrayList<>(OnlyFapCreatorResults.merge(
+                    learned, cached.networkItems, safeLimit));
+            if (listener != null) publish(listener, output, true);
+            return output;
+        }
         ExecutorCompletionService<List<NativeContentItem>> completed =
                 new ExecutorCompletionService<>(searchIo);
         ArrayList<Future<List<NativeContentItem>>> requests = new ArrayList<>();
@@ -93,7 +126,8 @@ final class FapzoneCreatorSearchRepository {
                 : java.util.Collections.<SourceSearch>singletonList((c, q, n) ->
                         categorySource.search(c, q, n, preference))) {
             requests.add(completed.submit(() -> {
-                List<NativeContentItem> items = source.search(context, cleanQuery, safeLimit);
+                // Fetch the full bounded page so suggestions can serve a later full-results search.
+                List<NativeContentItem> items = source.search(context, cleanQuery, 20);
                 if (items == null) throw new IOException("Creator source returned no response");
                 ArrayList<NativeContentItem> confirmed = new ArrayList<>();
                 for (NativeContentItem item : items) {
@@ -145,13 +179,24 @@ final class FapzoneCreatorSearchRepository {
             throw new IOException("OnlyFap creator search could not be reached");
         }
 
+        List<NativeContentItem> networkItems = snapshot(groups, 20);
         ArrayList<NativeContentItem> output = new ArrayList<>(
-                OnlyFapCreatorResults.merge(learned, snapshot(groups, safeLimit), safeLimit));
+                OnlyFapCreatorResults.merge(learned, networkItems, safeLimit));
         if (output.isEmpty() && successes < requests.size()) {
             throw new IOException("Creator search was incomplete; some sources were unavailable");
         }
+        // Partial and timed-out replies must never turn into a definitive cached miss.
+        if (successes == requests.size() && replies == requests.size()) {
+            synchronized (cache) { cache.put(cacheKey, new CachedSearch(networkItems)); }
+        }
         if (listener != null) publish(listener, output, true);
         return output;
+    }
+
+    private String cacheKey(String query, ContentPreference preference) {
+        SourceConfig config = RemoteSourceConfigManager.snapshotOrNull();
+        return CreatorNameMatcher.normalized(query) + "|" + preference.name() + "|"
+                + (config == null ? "unset" : config.schemaVersion + ":" + config.configVersion);
     }
 
     private ArrayList<NativeContentItem> snapshot(

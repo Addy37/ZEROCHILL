@@ -150,5 +150,24 @@ persisted user-record formats are unchanged.
   through the Android parser/activation tests. Check conditional refresh responses.
 - Live contract checks are read-only. A failed probe does not disable sources.
 
-Production deployment/publication results for this change are recorded in the PR
-and completion report. The previously active document was v10 with four core sources.
+## Production verification, 2026-10-22
+
+The previous active document was v10 with four core sources. The full seven-source
+schema-1 document is now production v11. Its four preexisting source sections are
+identical to v10; OnlyHaven adds the configured `cq` HTML and category-search routes.
+The private validator function is deployment v3. The public reader adds validation
+and version/document consistency checks. Both retain their existing auth settings.
+
+Public read-back returned the full v11 document and passed the shared validator.
+The query-based conditional refresh returned 304. The hosted gateway weakens ETags
+under content encoding, so the public reader also accepts weak/list If-None-Match
+headers using normal GET weak comparison. The opt-in Android CI test downloads,
+parses and activates the actual public production document.
+
+The real v10/v11 snapshots also passed a simulated legacy rollback to a new complete
+version. No production rollback was executed, no immutable history was changed, and
+no database migration or user-data edit was made. See PR #323 for final function
+versions, CI results and signed Beta lineage.
+
+Read-only source contracts run daily at 07:25 UTC once this workflow is on main,
+and on relevant pull requests. They never publish config or disable providers.

@@ -218,6 +218,8 @@ jobs:
 
       - name: Run supported source and preference search regressions first
         if: github.head_ref == 'feature/source-contracts-preference-search'
+        env:
+          VERIFY_PRODUCTION_SOURCE_CONFIG: 'true'
         run: >-
           gradle --no-daemon :app:testDebugUnitTest
           --tests 'com.webapp.crazyshit.SourceConfigAgreementTest'

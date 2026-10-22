@@ -48,6 +48,13 @@ final class CreatorListAdapter extends RecyclerView.Adapter<CreatorListAdapter.H
         replace(next, null);
     }
 
+    void clearNow() {
+        replaceGeneration++;
+        if (items.isEmpty()) return;
+        items = new ArrayList<>();
+        notifyDataSetChanged();
+    }
+
     void replace(List<NativeContentItem> next, Runnable committed) {
         final int token = ++replaceGeneration;
         final List<NativeContentItem> old = new ArrayList<>(items);

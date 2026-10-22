@@ -34,6 +34,11 @@ test("public config serves validated full config and conditional refresh", async
   const unchanged = await publicHandler(new Request("https://test.invalid/app-config", { headers: { "if-none-match": response.headers.get("etag") } }));
   assert.equal(unchanged.status, 304);
   assert.equal(await unchanged.text(), "");
+  for (const tag of [`W/${response.headers.get("etag")}`, `"0", W/${response.headers.get("etag")}`, "*"]) {
+    assert.equal((await publicHandler(new Request("https://test.invalid/app-config", {
+      headers: { "if-none-match": tag },
+    }))).status, 304);
+  }
 });
 
 test("incomplete or mismatched active config never reaches a client", async () => {

@@ -34,7 +34,7 @@ final class CreatorSuggestionsController {
     private final ExecutorService io = Executors.newFixedThreadPool(2);
     private Future<?> request;
     private Future<?> localRequest;
-    private int generation;
+    private volatile int generation;
     private ContentPreference mode;
     private boolean closed;
     private boolean active = true;
@@ -129,7 +129,7 @@ final class CreatorSuggestionsController {
         cancel();
         mode = ContentPreference.get(activity);
         final ContentPreference requestedMode = mode;
-        adapter.replace(new ArrayList<>());
+        adapter.clearNow();
         String query = value.trim();
         searchAll.setVisibility(query.length() >= 2 ? View.VISIBLE : View.GONE);
         searchAll.setText(floating ? "Search all results  ›" : "Search all results for " + query + "  ›");
@@ -147,7 +147,10 @@ final class CreatorSuggestionsController {
             String error = null;
             try {
                 List<NativeContentItem> results = lookup.find(activity.getApplicationContext(), query);
-                if (!Thread.currentThread().isInterrupted()) CreatorCatalog.remember(activity, results);
+                if (!Thread.currentThread().isInterrupted() && token == generation
+                        && requestedMode == ContentPreference.get(activity)) {
+                    CreatorCatalog.remember(activity, results);
+                }
             } catch (Exception failure) { error = "Live suggestions unavailable"; }
             String finalError = error;
             main.post(() -> {

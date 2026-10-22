@@ -280,7 +280,8 @@ final class OnlyHavenRepository {
                 String id = firstJsonText(row, "id", "creatorId", "creator_id", "user");
                 String name = firstJsonText(row, "displayName", "display_name", "name", "username");
                 String alias = firstJsonText(row, "username", "user", "handle");
-                if (service.isEmpty() || id.isEmpty()) continue;
+                // Only accept the provider's canonical service/id path segments.
+                if (!service.matches("[A-Za-z0-9_-]+") || !id.matches("[A-Za-z0-9_-]+")) continue;
                 if (name.isEmpty()) name = id;
                 if (!matchesCreatorQuery(query, name, id, alias)) continue;
 

@@ -28,20 +28,30 @@ accounts and notification settings keep their existing persistence formats.
 | Groups | OnlyHaven creators with content | `group` |
 
 Filtered discovery requests up to 50 creators in the provider's default ordering.
-There is no unfiltered fallback in a filtered discovery surface. Search, favorites,
-Library and manually opened creator galleries retain their normal access.
+There is no unfiltered fallback in a filtered discovery surface. Creator suggestions
+and full creator search follow the selected OnlyHaven provider category; All keeps
+the broad existing sources. Favorites, Library, history and a specifically opened
+creator's complete merged gallery retain their normal access.
 
 OnlyHaven's public frontend was inspected in CI on 2026-10-21. Its creator request
 builder uses `gender` and `content=imported`; its category enum supplies the tokens
-above. The bundled configuration adds optional `creatorCategoryApi` and
-`categoryValues` data. Older valid remote documents retain the same compiled
-fallback contract. No live configuration is published and no backend is changed.
-The live endpoint returned config v10 without the expanded source objects; the
-existing Android validation/fallback behavior remains unchanged.
+above. The bundled configuration includes provider category and category-search
+routes. Production config v11 contains all seven supported sources, and the
+deployed validator and app-config endpoints accept the same schema. Incomplete
+older cached documents fail validation and safely fall back to bundled defaults
+without deleting persisted app data.
 `tools/verify_onlyhaven_categories.py` audits the current public category contract
 and real creator portrait responses for all six categories without modifying the source.
 Creator avatars use the configured image CDN's creator service/id endpoint;
 `avatarThumbhash` is Base64 placeholder metadata, not an image path.
+
+Confirmed live creator matches, including provider-returned search aliases, are
+learned into the existing catalog under canonical profile URLs. Successful queries
+share a bounded two-minute result cache by query, preference and config version,
+so suggestions can reuse results in full search. Incomplete requests are retried.
+Mode changes clear visible suggestions immediately and invalidate old search and
+discovery snapshots and callbacks. Category membership comes only from OnlyHaven's
+returned category lists, never inferred from names.
 
 ShitTok All content uses the existing pool and ordering. In other modes, the
 OnlyHaven uses the selected category on one process-wide preference worker after

@@ -60,7 +60,11 @@ Deno.serve(async (request) => {
     }
     const etag = `\"${version}\"`;
     const current = Number(new URL(request.url).searchParams.get("currentVersion") ?? "0");
-    if (request.headers.get("if-none-match") === etag || current >= version) {
+    // The gateway may weaken the ETag when applying HTTP content encoding.
+    // If-None-Match uses weak comparison for GET and can contain a list.
+    const unchanged = (request.headers.get("if-none-match") ?? "").split(",")
+      .some((tag) => tag.trim() === "*" || tag.trim().replace(/^W\//, "") === etag);
+    if (unchanged || current >= version) {
       return response(null, 304, { ETag: etag });
     }
 

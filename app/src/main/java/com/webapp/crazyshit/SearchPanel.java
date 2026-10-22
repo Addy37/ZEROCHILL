@@ -606,10 +606,9 @@ final class SearchPanel {
                 });
             } catch (Exception ignored) { }
             List<NativeContentItem> creators = result;
-            if (creators != null && !Thread.currentThread().isInterrupted())
-                CreatorCatalog.remember(activity.getApplicationContext(), creators);
             activity.runOnUiThread(() -> {
                 if (!current(token, requestedQuery)) return;
+                if (creators != null) CreatorCatalog.remember(activity.getApplicationContext(), creators);
                 pendingSources = 0;
                 publishCreators(creators);
                 progress.setVisibility(View.GONE);

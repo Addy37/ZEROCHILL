@@ -36,4 +36,44 @@ public final class SearchPreferenceTest {
             }
         }
     }
+
+    @Test public void modeChangeClearsVisibleCreatorCardsSynchronouslyInBothSearchSurfaces() {
+        try (org.robolectric.android.controller.ActivityController<Activity> host =
+                Robolectric.buildActivity(Activity.class).setup()) {
+            ContentPreference.set(host.get(), ContentPreference.ALL);
+            NativeContentItem card = new NativeContentItem(NativeContentItem.KIND_CREATOR,
+                    "Nolan", "https://cum.st/creators/onlyfans/nolan-1", "", "", "", "",
+                    "OnlyHaven", "nolantwink");
+            SearchPanel creatorPanel = new SearchPanel(host.get(), new Intent(), true, () -> { });
+            SearchPanel globalPanel = new SearchPanel(host.get(), new Intent(), false, () -> { });
+            try {
+                creatorPanel.create(null);
+                OnlyFapCreatorSearchAdapter creatorAdapter =
+                        ReflectionHelpers.getField(creatorPanel, "onlyFapAdapter");
+                creatorAdapter.replace(java.util.Collections.singletonList(card));
+                assertEquals(1, creatorAdapter.getItemCount());
+                ContentPreference.set(host.get(), ContentPreference.MEN);
+                ReflectionHelpers.callInstanceMethod(creatorPanel, "startOnlyFapSearch",
+                        from(String.class, "nolan"));
+                assertEquals(0, creatorAdapter.getItemCount());
+
+                ContentPreference.set(host.get(), ContentPreference.ALL);
+                globalPanel.create(null);
+                GlobalSearchAdapter globalAdapter = ReflectionHelpers.getField(globalPanel, "adapter");
+                globalAdapter.replace(java.util.Collections.singletonList(GlobalSearchAdapter.Entry.item(
+                        card, GlobalSearchAdapter.SOURCE_REMOTE)));
+                assertEquals(1, globalAdapter.getItemCount());
+                ReflectionHelpers.setField(globalPanel, "activeQuery", "nolan");
+                ReflectionHelpers.setField(globalPanel, "searchPreference", ContentPreference.ALL);
+                ContentPreference.set(host.get(), ContentPreference.MEN);
+                ReflectionHelpers.callInstanceMethod(globalPanel, "startGlobalSearch",
+                        from(String.class, "nolan"), from(boolean.class, true));
+                assertEquals(0, globalAdapter.getItemCount());
+            } finally {
+                creatorPanel.close();
+                globalPanel.close();
+                ContentPreference.set(host.get(), ContentPreference.ALL);
+            }
+        }
+    }
 }
