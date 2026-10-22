@@ -123,7 +123,11 @@ public final class OnlyFapTransitionProbeActivity extends Activity {
     private void change(ContentPreference mode, String title) {
         ContentPreference.set(this, mode);
         hub.preparePreference(mode); hub.clear(); // Actual pager refresh's double clear.
-        hub.setPreferenceCreators(Collections.singletonList(creator(title, true)));
+        if (mode == ContentPreference.ALL) {
+            // All-content heroes exclude Discover creators, so use its normal qualified path.
+            try { deliverQualified(creator(title, false), "https://transition.invalid/all.png"); }
+            catch (Exception error) { throw new IllegalStateException(error); }
+        } else hub.setPreferenceCreators(Collections.singletonList(creator(title, true)));
     }
     private NativeContentItem creator(String title, boolean thumbnail) {
         return new NativeContentItem(NativeContentItem.KIND_CREATOR, title,
@@ -136,6 +140,9 @@ public final class OnlyFapTransitionProbeActivity extends Activity {
         hub.preparePreference(ContentPreference.TRANS_WOMEN); hub.clear();
         NativeContentItem creator = creator("Qualified gallery", false);
         hub.setPreferenceCreators(Collections.singletonList(creator));
+        deliverQualified(creator, "https://transition.invalid/qualified.png");
+    }
+    private void deliverQualified(NativeContentItem creator, String imageUrl) throws Exception {
         int generation = (int) field("heroGeneration");
         Method finish = OnlyFapHubView.class.getDeclaredMethod("finishHeroResolution", int.class,
                 NativeContentItem.class, List.class);
@@ -143,7 +150,7 @@ public final class OnlyFapTransitionProbeActivity extends Activity {
         // Through the production page queue, not the image-ready or commit method.
         queue.submit(3, "hero-resolution", () -> {
             try { finish.invoke(hub, generation, creator, Collections.singletonList(
-                    new OnlyFapHeroPolicy.Artwork("https://transition.invalid/qualified.png", creator.url, false))); }
+                    new OnlyFapHeroPolicy.Artwork(imageUrl, creator.url, false))); }
             catch (Exception error) { throw new IllegalStateException(error); }
         });
     }
