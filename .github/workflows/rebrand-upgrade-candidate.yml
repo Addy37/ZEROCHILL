@@ -99,6 +99,15 @@ jobs:
           --tests 'com.webapp.crazyshit.ShitTokOrientationAdmissionTest'
           --tests 'com.webapp.crazyshit.ShitTokAspectPriorityTest'
 
+      - name: Run Liquid Rift hero regressions first
+        if: github.head_ref == 'feature/onlyfap-liquid-rift'
+        run: >-
+          gradle --no-daemon :app:testDebugUnitTest
+          --tests 'com.webapp.crazyshit.OnlyFapFilteredHeroTest'
+          --tests 'com.webapp.crazyshit.OnlyFapHeroRotationTest'
+          --tests 'com.webapp.crazyshit.OnlyFapDiscoverLifecycleTest'
+          --tests 'com.webapp.crazyshit.ContentPreferenceTest'
+
       - name: Resolve candidate version above latest stable
         env:
           GH_TOKEN: ${{ github.token }}
@@ -132,7 +141,7 @@ jobs:
           if release_code >= code:
               code = release_code
               name = release_version
-          if "${{ github.head_ref || github.ref_name }}" in ("feature/zerochill-5.1.0", "feature/source-contracts-preference-search", "feature/shittok-scrubber-edge"):
+          if "${{ github.head_ref || github.ref_name }}" in ("feature/zerochill-5.1.0", "feature/source-contracts-preference-search", "feature/shittok-scrubber-edge", "feature/onlyfap-liquid-rift"):
               beta = "5.1.0-beta.1"
               beta_match = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)-beta\.(\d+)", beta)
               if not beta_match:
@@ -479,7 +488,7 @@ jobs:
           test "$BEFORE" = "$AFTER"
           grep -m1 "versionCode=$APP_VERSION_CODE" /tmp/zc-after.txt
           echo "In-place upgrade installed; Android preserved the package's first-install record."
-          if [ "${{ github.head_ref }}" = "feature/zerochill-5.1.0" ]; then
+          if [ "${{ github.head_ref }}" = "feature/zerochill-5.1.0" ] || [ "${{ github.head_ref }}" = "feature/onlyfap-liquid-rift" ]; then
             python3 tools/capture_preference_glass.py
           fi
           SH
@@ -494,7 +503,7 @@ jobs:
           script: bash "$RUNNER_TEMP/verify-upgrade.sh"
 
       - name: Upload native preference glass GPU check
-        if: always() && github.head_ref == 'feature/zerochill-5.1.0'
+        if: always() && (github.head_ref == 'feature/zerochill-5.1.0' || github.head_ref == 'feature/onlyfap-liquid-rift')
         uses: actions/upload-artifact@v4
         with:
           name: ZeroChill-preference-glass-check

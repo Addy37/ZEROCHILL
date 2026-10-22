@@ -87,6 +87,7 @@ final class OnlyFapHubView extends FrameLayout {
 
     void preparePreference(ContentPreference mode) {
         if (discoveryPreference != mode) {
+            cancelHeroMorphForSelection();
             preferenceHeroPending = preferenceHeroPending || heroArtworkReady;
             discoveryPreference = mode;
             pendingRestoreState = null;
@@ -94,6 +95,7 @@ final class OnlyFapHubView extends FrameLayout {
             clear();
         }
         ContentPreferenceUi.bindSelector(preferenceSelector);
+        pulsePreferenceSelector();
         if (trendingShelf != null) {
             ((TextView) trendingShelf.container.getChildAt(0)).setText(mode == ContentPreference.ALL
                     ? "Discover" : mode.label);
@@ -104,7 +106,7 @@ final class OnlyFapHubView extends FrameLayout {
     }
 
     private void presentPreference() {
-        if (active && heroArtworkReady && !preferenceHeroPending
+        if (active && heroMorph == null && heroArtworkReady && !preferenceHeroPending
                 && discoveryPreference == ContentPreference.get(getContext()))
             ContentPreferenceUi.present(this, false, preferenceSelector);
     }
@@ -146,6 +148,11 @@ final class OnlyFapHubView extends FrameLayout {
     private boolean preferenceHeroPending;
     private boolean heroArtworkReady;
     private android.animation.ValueAnimator heroMorph;
+    private android.animation.ValueAnimator selectorPulse;
+    private float riftProgress;
+    private int deferredHeroIndex = -1;
+    private final android.animation.ArgbEvaluator selectorColors = new android.animation.ArgbEvaluator();
+    private static final long LIQUID_RIFT_MS = 1040L;
     private android.widget.ProgressBar preferenceLoading;
     private TextView previousHeroTitle, previousHeroHint;
     private FrameLayout heroFrame, heroImages;
@@ -245,12 +252,12 @@ final class OnlyFapHubView extends FrameLayout {
 
         heroImages = new FrameLayout(context);
         heroFrame.addView(heroImages, new FrameLayout.LayoutParams(-1, -1));
-        heroImage = new ImageView(context);
+        heroImage = new LiquidRiftImageView(context);
         heroImage.setScaleType(ImageView.ScaleType.CENTER_CROP);
         heroImage.setBackground(new ColorDrawable(Color.rgb(13, 16, 19)));
         heroImage.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
         heroImages.addView(heroImage, new FrameLayout.LayoutParams(-1, -1));
-        preferenceImage = new ImageView(context);
+        preferenceImage = new LiquidRiftImageView(context);
         preferenceImage.setScaleType(ImageView.ScaleType.CENTER_CROP);
         preferenceImage.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
         preferenceImage.setAlpha(0f);
@@ -593,6 +600,7 @@ final class OnlyFapHubView extends FrameLayout {
     }
 
     void clear() {
+        deferredHeroIndex = -1;
         finishHeroMorph();
         publishedPreference = null;
         heroGeneration++;
@@ -1448,6 +1456,7 @@ final class OnlyFapHubView extends FrameLayout {
 
     private void showHero(int requestedIndex, boolean animate) {
         if (heroItems.isEmpty()) return;
+        if (heroMorph != null) { deferredHeroIndex = requestedIndex; return; }
         int index = Math.floorMod(requestedIndex, heroItems.size());
         HeroCandidate next = heroItems.get(index);
         while (rejectedHeroUrls.contains(next.currentImageUrl()) && next.advance()) { }
@@ -1631,42 +1640,100 @@ final class OnlyFapHubView extends FrameLayout {
             String image = candidate.currentImageUrl(), referer = candidate.currentReferer();
             metadataIo.execute(() -> OnlyFapHeroMemory.remember(getContext(), candidate.creator, image, referer));
         }
-        presentPreference();
+        ContentPreference.acknowledge(getContext(), "onlyfap");
         if (!active || !isAttachedToWindow() || !ZeroChillMotion.animationsEnabled(getContext())) {
             settleHeroMorph();
             return;
         }
         heroMorph = android.animation.ValueAnimator.ofFloat(0f, 1f);
-        heroMorph.setDuration(420L);
-        heroMorph.setInterpolator(ZeroChillMotion.EASE_OUT);
-        heroMorph.addUpdateListener(animation -> {
-            float progress = (float) animation.getAnimatedValue();
-            heroImage.setAlpha(progress);
-            // Fade the old copy out before introducing the new copy. Never ghost two names.
-            float incoming = Math.max(0f, (progress - .5f) * 2f);
-            float outgoingAlpha = Math.max(0f, 1f - progress * 2f);
-            heroTitle.setAlpha(incoming); heroHint.setAlpha(incoming);
-            previousHeroTitle.setAlpha(outgoingAlpha); previousHeroHint.setAlpha(outgoingAlpha);
-        });
+        heroMorph.setDuration(LIQUID_RIFT_MS);
+        heroMorph.setInterpolator(new android.view.animation.LinearInterpolator());
+        heroMorph.addUpdateListener(animation -> applyLiquidRift((float) animation.getAnimatedValue()));
         heroMorph.addListener(new android.animation.AnimatorListenerAdapter() {
             @Override public void onAnimationEnd(android.animation.Animator animation) { settleHeroMorph(); }
         });
+        applyLiquidRift(0f);
         heroMorph.start();
+    }
+
+    private static float phase(float p, float start, float end) {
+        float t = Math.max(0f, Math.min(1f, (p - start) / (end - start)));
+        return t * t * (3f - 2f * t);
+    }
+
+    private void applyLiquidRift(float p) {
+        riftProgress = p;
+        float collapse = phase(p, .08f, .35f);
+        float reveal = phase(p, .35f, .82f);
+        preferenceImage.setAlpha(1f - collapse);
+        preferenceImage.setScaleX(1f + .03f * collapse);
+        preferenceImage.setScaleY(1f + .03f * collapse);
+        ((LiquidRiftImageView) preferenceImage).rift(1f, collapse);
+        heroImage.setAlpha(p < .35f ? 0f : 1f);
+        heroImage.setScaleX(1.03f - .03f * reveal);
+        heroImage.setScaleY(1.03f - .03f * reveal);
+        ((LiquidRiftImageView) heroImage).rift(reveal, 1f - reveal);
+        float title = phase(p, .72f, .92f), hint = phase(p, .79f, .98f);
+        heroTitle.setAlpha(title); heroHint.setAlpha(hint);
+        heroTitle.setTranslationY(dp(5) * (1f - title));
+        heroHint.setTranslationY(dp(4) * (1f - hint));
+        float oldCopy = 1f - phase(p, .02f, .25f);
+        previousHeroTitle.setAlpha(oldCopy); previousHeroHint.setAlpha(oldCopy);
+        // Controls stay in place and usable. Only the gallery ink settles last.
+        heroAction.setAlpha(phase(p, .84f, 1f));
+    }
+
+    private void pulsePreferenceSelector() {
+        if (selectorPulse != null) { selectorPulse.cancel(); selectorPulse = null; }
+        preferenceSelector.setTextColor(UiPalette.PRIMARY);
+        if (!active || !ZeroChillMotion.animationsEnabled(getContext())) return;
+        selectorPulse = android.animation.ValueAnimator.ofFloat(0f, 1f);
+        selectorPulse.setDuration(150L);
+        selectorPulse.addUpdateListener(a -> {
+            float pulse = (float) Math.sin(Math.PI * (float) a.getAnimatedValue());
+            preferenceSelector.setTextColor((int) selectorColors.evaluate(
+                    pulse * .7f, UiPalette.PRIMARY, 0xFF0892D0));
+        });
+        selectorPulse.start();
+    }
+
+    /** Cancel without ending the animator, which would flash a superseded incoming hero. */
+    private void cancelHeroMorphForSelection() {
+        if (heroMorph == null) return;
+        heroMorph.removeAllListeners(); heroMorph.removeAllUpdateListeners(); heroMorph.cancel(); heroMorph = null;
+        deferredHeroIndex = -1;
+        if (riftProgress < .35f) {
+            ImageView incoming = heroImage; heroImage = preferenceImage; preferenceImage = incoming;
+            heroTitle.setText(previousHeroTitle.getText()); heroHint.setText(previousHeroHint.getText());
+            heroImage.bringToFront();
+            if (coldSnapshot != null) coldSnapshot.setHero(heroImage);
+        }
+        settleHeroMorph();
     }
 
     private void finishHeroMorph() {
         if (heroMorph != null) heroMorph.end();
+        if (selectorPulse != null) { selectorPulse.cancel(); selectorPulse = null; }
+        preferenceSelector.setTextColor(UiPalette.PRIMARY);
     }
 
     private void settleHeroMorph() {
         if (heroMorph != null) {
             heroMorph.removeAllUpdateListeners(); heroMorph.removeAllListeners(); heroMorph = null;
         }
+        ((LiquidRiftImageView) heroImage).resetRift();
+        ((LiquidRiftImageView) preferenceImage).resetRift();
+        heroTitle.setTranslationY(0f); heroHint.setTranslationY(0f); heroAction.setAlpha(1f);
         heroImage.setAlpha(1f); heroTitle.setAlpha(1f); heroHint.setAlpha(1f);
         previousHeroTitle.setVisibility(View.GONE); previousHeroHint.setVisibility(View.GONE);
         preferenceImage.setAlpha(0f);
         Glide.with(preferenceImage).clear(preferenceImage);
         scheduleHeroRotation();
+        if (deferredHeroIndex >= 0) {
+            final int index = deferredHeroIndex, generation = heroGeneration;
+            deferredHeroIndex = -1;
+            post(() -> { if (!closed && active && generation == heroGeneration) showHero(index, false); });
+        }
     }
 
     private void showPreferenceEmptyState() {
