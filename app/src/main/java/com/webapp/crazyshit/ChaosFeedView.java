@@ -4312,7 +4312,7 @@ public final class ChaosFeedView extends FrameLayout {
             actions.bottomMargin = safeBottom;
             landscapeActions.setLayoutParams(actions);
             FrameLayout.LayoutParams progress = (FrameLayout.LayoutParams) progressRow.getLayoutParams();
-            progress.bottomMargin = landscape ? safeBottom + dp(48) : dp(1);
+            progress.bottomMargin = landscape ? safeBottom + dp(48) : -dp(15);
             progressRow.setLayoutParams(progress);
             elapsedTime.setVisibility(landscape ? View.VISIBLE : View.GONE);
             remainingTime.setVisibility(landscape ? View.VISIBLE : View.GONE);
