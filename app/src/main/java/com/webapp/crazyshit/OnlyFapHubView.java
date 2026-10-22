@@ -802,6 +802,12 @@ final class OnlyFapHubView extends FrameLayout {
         pendingRestoreState = state == null ? null : new Bundle(state);
     }
 
+    @Override protected void onDetachedFromWindow() {
+        finishHeroMorph();
+        ContentPreferenceUi.clearPresentation(this);
+        super.onDetachedFromWindow();
+    }
+
     void close() {
         onOpenCancelled();
         if (profileAvatar != null) profileAvatar.close();
@@ -1090,11 +1096,11 @@ final class OnlyFapHubView extends FrameLayout {
         if (discoveryPreference != ContentPreference.ALL) return;
         if (closed || !active || heroDiscoveryLoading || heroDiscoveryExhausted ||
                 heroDiscoveryNextPage > HERO_DISCOVERY_LAST_PAGE) {
-            if (heroDiscoveryExhausted && heroItems.isEmpty() && !heroSelectionLoading && heroResolveInFlight == 0)
+            if (heroDiscoveryExhausted && !heroDiscoveryLoading && heroItems.isEmpty() && !heroSelectionLoading && heroResolveInFlight == 0)
                 showPreferenceEmptyState();
             if (heroDiscoveryNextPage > HERO_DISCOVERY_LAST_PAGE) {
                 heroDiscoveryExhausted = true;
-                if (heroItems.isEmpty()) showPreferenceEmptyState();
+                if (!heroDiscoveryLoading && heroItems.isEmpty() && heroResolveInFlight == 0) showPreferenceEmptyState();
             }
             return;
         }
@@ -1593,7 +1599,7 @@ final class OnlyFapHubView extends FrameLayout {
             metadataIo.execute(() -> OnlyFapHeroMemory.remember(getContext(), candidate.creator, image, referer));
         }
         presentPreference();
-        if (!active || !ZeroChillMotion.animationsEnabled(getContext())) {
+        if (!active || !isAttachedToWindow() || !ZeroChillMotion.animationsEnabled(getContext())) {
             settleHeroMorph();
             return;
         }

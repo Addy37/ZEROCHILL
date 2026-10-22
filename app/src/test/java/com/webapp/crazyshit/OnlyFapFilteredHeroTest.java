@@ -357,6 +357,29 @@ public class OnlyFapFilteredHeroTest {
         assertEquals(1f, ((View) ReflectionHelpers.getField(hub, "heroImage")).getAlpha(), 0f);
         assertNull(hub.findViewWithTag("content_preference_presentation"));
     }
+    @Test public void lastFallbackPageInFlightCannotRetireTheRetainedAllContentHero() {
+        seedVisibleHero(); changeMode(ContentPreference.ALL);
+        ReflectionHelpers.setField(hub, "heroDiscoveryLoading", true);
+        ReflectionHelpers.setField(hub, "heroDiscoveryExhausted", true);
+        ReflectionHelpers.setField(hub, "heroDiscoveryNextPage", 9);
+        call("requestMoreHeroDiscovery");
+        assertTrue((boolean) ReflectionHelpers.getField(hub, "preferenceHeroPending"));
+        assertEquals("Outgoing creator", title());
+        ReflectionHelpers.setField(hub, "heroDiscoveryLoading", false);
+        call("requestMoreHeroDiscovery");
+        assertFalse((boolean) ReflectionHelpers.getField(hub, "preferenceHeroPending"));
+        assertEquals("No featured creator", title());
+    }
+    @Test public void detachingTheHubSettlesTheFadeAndReleasesTransientUi() throws Exception {
+        seedVisibleHero(); changeMode(ContentPreference.MEN);
+        Object current = pendingHero("Current");
+        ReflectionHelpers.setField(hub, "active", true);
+        ready(generation(), current);
+        activity.setContentView(new android.widget.FrameLayout(activity));
+        assertNull(ReflectionHelpers.getField(hub, "heroMorph"));
+        assertEquals(1f, ((View) ReflectionHelpers.getField(hub, "heroImage")).getAlpha(), 0f);
+        assertNull(hub.findViewWithTag("content_preference_presentation"));
+    }
     @Test @org.robolectric.annotation.GraphicsMode(org.robolectric.annotation.GraphicsMode.Mode.NATIVE)
     @Config(qualifiers = "w411dp-h891dp-xhdpi")
     public void renderPreferenceMorphLoadingMidpointAndSettled() throws Exception {
