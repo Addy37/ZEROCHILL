@@ -147,9 +147,42 @@ public class CreatorSuggestionsTest {
         assertEquals(View.GONE, panel.getVisibility());
     }
 
+    @Test public void rapidModeChangesClearOldSuggestionsAndRestoreOnlyConfirmedMatches() throws Exception {
+        activity = Robolectric.buildActivity(Activity.class).setup();
+        ContentPreference.set(activity.get(), ContentPreference.ALL);
+        input = new EditText(activity.get());
+        panel = new LinearLayout(activity.get());
+        String url = "https://cum.st/creators/onlyfans/nolan-1";
+        NativeContentItem creator = new NativeContentItem(NativeContentItem.KIND_CREATOR,
+                "Nolan", url, "", "", "", "", "OnlyHaven", "nolantwink");
+        CreatorCategoryIndex.remember(activity.get(), ContentPreference.MEN,
+                Collections.singletonList(new OnlyHavenRepository.Creator("onlyfans", "nolan-1", "Nolan", url, "")));
+        controller = new CreatorSuggestionsController(activity.get(), input, panel, item -> { },
+                (context, query) -> Collections.emptyList(),
+                (context, query) -> Collections.singletonList(creator));
+        input.setText("nolantwink");
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(70));
+        await(() -> items().size() == 1);
+        ContentPreference.set(activity.get(), ContentPreference.MEN);
+        controller.show("nolantwink");
+        assertTrue(items().isEmpty());
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(70));
+        await(() -> items().size() == 1);
+        ContentPreference.set(activity.get(), ContentPreference.WOMEN);
+        controller.show("nolantwink");
+        assertTrue(items().isEmpty());
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(70));
+        await(() -> items().isEmpty());
+        ContentPreference.set(activity.get(), ContentPreference.MEN);
+        controller.show("nolantwink");
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(70));
+        await(() -> items().size() == 1 && items().get(0).url.equals(url));
+    }
+
     @After public void cleanUp() {
         oldReply.countDown();
         if (controller != null) controller.close();
+        if (activity != null) ContentPreference.set(activity.get(), ContentPreference.ALL);
         if (activity != null) activity.pause().stop().destroy();
     }
 }

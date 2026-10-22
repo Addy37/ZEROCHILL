@@ -54,16 +54,14 @@ public final class RemoteSourceConfigManagerTest {
 
     }
 
-    @Test public void olderConfigWithoutBaddieHubKeepsCompiledBaddieHubFallback() throws Exception {
+    @Test public void incompleteLegacyConfigKeepsBundledFallback() throws Exception {
         JSONObject legacy = defaults();
         legacy.getJSONObject("sources").remove("baddiehub");
-
-        SourceConfig parsed = SourceConfig.parseAndValidate(legacy.toString());
-
-        assertTrue(parsed.baddieHub.enabled);
-        assertEquals("https://baddiehub.com/", parsed.baddieHub.baseUrl);
-        assertEquals("categories/page/{page}/", parsed.baddieHub.categoriesPageRoute);
-        assertTrue(parsed.kaotic.enabled);
+        context.getSharedPreferences("remote_source_config", Context.MODE_PRIVATE).edit()
+                .putString("active_json", legacy.toString()).commit();
+        RemoteSourceConfigManager.initialize(context);
+        assertEquals("bundled", RemoteSourceConfigManager.activeOrigin());
+        assertTrue(RemoteSourceConfigManager.snapshot().baddieHub.enabled);
     }
 
     @Test public void presentInvalidBaddieHubObjectIsRejected() throws Exception {
@@ -253,8 +251,6 @@ public final class RemoteSourceConfigManagerTest {
                         "https://baddie.example/topic/sample/",
                         3
                 ));
-        assertTrue(RemoteSourceConfigManager.snapshot().theYnc.enabled);
-        assertTrue(RemoteSourceConfigManager.snapshot().itemFix.enabled);
     }
 
     private void assertRejected(JSONObject value) throws Exception {

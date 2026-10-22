@@ -32,6 +32,7 @@ final class OnlyHavenRepository {
         final String url;
         final String imageUrl;
         final String headerImageUrl;
+        final String searchAlias;
         final int postCount;
         final int dmCount;
 
@@ -53,7 +54,13 @@ final class OnlyHavenRepository {
 
         Creator(String service, String id, String name, String url, String imageUrl,
                 int postCount, int dmCount, String headerImageUrl) {
+            this(service, id, name, url, imageUrl, postCount, dmCount, headerImageUrl, name);
+        }
+
+        Creator(String service, String id, String name, String url, String imageUrl,
+                int postCount, int dmCount, String headerImageUrl, String searchAlias) {
             this.headerImageUrl = cleanStatic(headerImageUrl);
+            this.searchAlias = cleanStatic(searchAlias);
             this.service = cleanStatic(service);
             this.id = cleanStatic(id);
             this.name = cleanStatic(name);
@@ -91,8 +98,6 @@ final class OnlyHavenRepository {
 
         ArrayList<String> routes = new ArrayList<>();
         routes.add(config.creatorSearchRoute.replace("{query}", encoded));
-        routes.add("creators?q=" + encoded);
-        routes.add("creators?query=" + encoded);
 
         IOException lastError = apiError;
         LinkedHashMap<String, Creator> creators = new LinkedHashMap<>();
@@ -100,6 +105,8 @@ final class OnlyHavenRepository {
             try {
                 Document document = fetchConfigured(context, config, config.baseUrl + route);
                 parseCreators(document, config, creators, Math.max(1, limit));
+                creators.values().removeIf(creator -> !matchesCreatorQuery(value, creator.name,
+                        creator.id, creator.searchAlias));
                 if (!creators.isEmpty()) break;
             } catch (IOException error) {
                 lastError = error;
@@ -118,6 +125,8 @@ final class OnlyHavenRepository {
                             "/creators/"
                     );
                     parseCreators(rendered, config, creators, Math.max(1, limit));
+                    creators.values().removeIf(creator -> !matchesCreatorQuery(value, creator.name,
+                            creator.id, creator.searchAlias));
                     if (!creators.isEmpty()) break;
                 } catch (IOException error) {
                     lastError = error;
@@ -127,6 +136,26 @@ final class OnlyHavenRepository {
 
         if (creators.isEmpty() && lastError != null) throw lastError;
         return new ArrayList<>(creators.values());
+    }
+
+    /** The category filter is supplied by OnlyHaven itself, never inferred from a name. */
+    List<Creator> searchCategoryCreators(Context context, String query, int limit,
+                                         ContentPreference preference) throws IOException {
+        if (preference == ContentPreference.ALL) return searchCreators(context, query, limit);
+        SourceConfig.OnlyHaven config = config();
+        if (!config.enabled) throw new IOException("OnlyHaven is temporarily unavailable");
+        String category = config.categoryValues.get(preference.value);
+        if (category == null) throw new IOException("OnlyHaven category is not configured");
+        String encoded = URLEncoder.encode(query == null ? "" : query.trim(), "UTF-8").replace("+", "%20");
+        String route = config.creatorCategorySearchApiRoute
+                .replace("{query}", encoded).replace("{category}", category)
+                .replace("{limit}", String.valueOf(Math.max(1, Math.min(50, limit))))
+                .replace("{offset}", "0");
+        List<Creator> creators = parseCreatorSearchJson(fetchConfiguredText(context, config,
+                config.baseUrl + route), config, query, Math.max(1, limit));
+        CreatorCategoryIndex.remember(context, preference, creators);
+        rememberConfirmedCreators(context, creators);
+        return creators;
     }
 
     /**
@@ -205,12 +234,22 @@ final class OnlyHavenRepository {
         List<Creator> creators = parseCreatorSearchJson(
                 fetchConfiguredText(context, config, config.baseUrl + route), config, "", Math.max(1, limit));
         creators.removeIf(Creator::isKnownEmpty);
+        CreatorCategoryIndex.remember(context, preference, creators);
+        rememberConfirmedCreators(context, creators);
         return creators;
+    }
+
+    private static void rememberConfirmedCreators(Context context, List<Creator> creators) {
+        if (context == null || creators.isEmpty()) return;
+        ArrayList<NativeContentItem> items = new ArrayList<>();
+        for (Creator creator : creators) if (creator != null && !creator.url.isEmpty()
+                && !creator.name.isEmpty()) items.add(creatorItem(creator));
+        CreatorCatalog.remember(context, items);
     }
 
     static NativeContentItem creatorItem(Creator creator) {
         return new NativeContentItem(NativeContentItem.KIND_CREATOR, creator.name, creator.url,
-                creator.imageUrl, "", creator.url, "", "OnlyHaven", creator.name);
+                creator.imageUrl, "", creator.url, "", "OnlyHaven", creator.searchAlias);
     }
 
     List<Creator> parseCreatorSearchJson(
@@ -231,7 +270,7 @@ final class OnlyHavenRepository {
                     if (creators != null) break;
                 }
             }
-            if (creators == null) return new ArrayList<>();
+            if (creators == null) throw new IOException("OnlyHaven creator API response lacked a creator list");
 
             LinkedHashMap<String, Creator> result = new LinkedHashMap<>();
             for (int index = 0; index < creators.length() && result.size() < limit; index++) {
@@ -240,9 +279,10 @@ final class OnlyHavenRepository {
                 String service = firstJsonText(row, "service");
                 String id = firstJsonText(row, "id", "creatorId", "creator_id", "user");
                 String name = firstJsonText(row, "displayName", "display_name", "name", "username");
+                String alias = firstJsonText(row, "username", "user", "handle");
                 if (service.isEmpty() || id.isEmpty()) continue;
                 if (name.isEmpty()) name = id;
-                if (!matchesCreatorQuery(query, name, id)) continue;
+                if (!matchesCreatorQuery(query, name, id, alias)) continue;
 
                 String url = config.baseUrl + "creators/" + urlToken(service) + "/" + urlToken(id);
                 String image = creatorImageUrl(config, row, service, id);
@@ -265,7 +305,9 @@ final class OnlyHavenRepository {
                 String key = service.toLowerCase(Locale.US) + ":" + id.toLowerCase(Locale.US);
                 result.putIfAbsent(
                         key,
-                        new Creator(service, id, name, url, image, postCount, dmCount, creatorHeaderImage(config, row, service, id))
+                        new Creator(service, id, name, url, image, postCount, dmCount,
+                                creatorHeaderImage(config, row, service, id),
+                                alias.isEmpty() ? name : alias)
                 );
             }
             return new ArrayList<>(result.values());
@@ -274,12 +316,12 @@ final class OnlyHavenRepository {
         }
     }
 
-    private boolean matchesCreatorQuery(String query, String name, String id) {
+    private boolean matchesCreatorQuery(String query, String name, String id, String alias) {
         String wanted = compactName(query);
         if (wanted.isEmpty()) return true;
-        String named = compactName(name);
-        String identifier = compactName(id);
-        return named.contains(wanted) || wanted.contains(named) || identifier.equals(wanted);
+        return CreatorNameMatcher.rank(name, query) != Integer.MAX_VALUE
+                || CreatorNameMatcher.rank(alias, query) != Integer.MAX_VALUE
+                || compactName(id).equals(wanted);
     }
 
     private String compactName(String value) {
@@ -754,7 +796,10 @@ final class OnlyHavenRepository {
                         if (cookies != null && !cookies.trim().isEmpty()) connection.header("Cookie", cookies);
                     } catch (Exception ignored) {
                     }
-                    return connection.execute().body();
+                    String body = connection.execute().body();
+                    if (body.toLowerCase(Locale.US).contains("<h1>site unavailable</h1>"))
+                        throw new IOException("OnlyHaven upstream is unavailable");
+                    return body;
                 } catch (IOException error) {
                     failure = error;
                 }

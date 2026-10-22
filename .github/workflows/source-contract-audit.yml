@@ -1,0 +1,53 @@
+name: Supported source contract audit
+on:
+  schedule:
+    - cron: '25 7 * * 2,5'
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'app/src/main/assets/source_config_defaults.json'
+      - 'app/src/main/java/com/webapp/crazyshit/*Repository.java'
+      - 'tools/audit_source_contracts.py'
+      - 'tools/verify_onlyhaven_categories.py'
+      - 'supabase/functions/app-config*/**'
+      - 'supabase/functions/_shared/**'
+      - 'supabase/tests/source-config-*'
+      - '.github/workflows/source-contract-audit.yml'
+permissions:
+  contents: read
+jobs:
+  validate-schema:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: node --test supabase/tests/source-config-*.test.mjs
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.5.6
+      - name: Check shared validation and deployed function entrypoints
+        run: >-
+          deno check supabase/functions/_shared/source-config-validation.ts
+          supabase/functions/_shared/source-config-rollback.ts
+          supabase/functions/app-config/index.ts supabase/functions/app-config-admin/index.ts
+  probe-metadata:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    strategy:
+      fail-fast: false
+      matrix:
+        source: [onlyhaven, fapello, bunkr, wikifeet, wikifeetx, kaotic, baddiehub, crazyshit, efukt]
+    steps:
+      - uses: actions/checkout@v6
+      - name: Check source contracts without fetching media
+        run: python3 tools/audit_source_contracts.py --source '${{ matrix.source }}' --output 'contracts-${{ matrix.source }}.json'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: source-contracts-${{ matrix.source }}
+          path: contracts-${{ matrix.source }}.json
+          if-no-files-found: error
+          retention-days: 14

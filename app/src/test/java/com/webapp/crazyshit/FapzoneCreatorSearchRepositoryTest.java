@@ -159,6 +159,35 @@ public final class FapzoneCreatorSearchRepositoryTest {
         } finally { executor.shutdownNow(); }
     }
 
+    @Test public void selectedModeSearchUsesOnlyProviderCategoryAndRetainsAlias() throws Exception {
+        Context context = RuntimeEnvironment.getApplication();
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        ContentPreference.set(context, ContentPreference.MEN);
+        String profile = "https://cum.st/creators/onlyfans/nolan-1";
+        OnlyHavenRepository.Creator creator = new OnlyHavenRepository.Creator("onlyfans", "nolan-1",
+                "Nolan", profile, "", 17, 0, "", "nolantwink");
+        CreatorCategoryIndex.remember(context, ContentPreference.MEN, Collections.singletonList(creator));
+        FapzoneCreatorSearchRepository repository = new FapzoneCreatorSearchRepository(executor,
+                Collections.singletonList((ignored, query, limit) -> {
+                    fail("A non-OnlyHaven source must not run in a selected mode");
+                    return Collections.emptyList();
+                }), (ignored, query, limit, category) -> {
+                    assertEquals(ContentPreference.MEN, category);
+                    return Collections.singletonList(
+                            FapzoneCreatorSearchRepository.onlyHavenItem(creator, query));
+                });
+        try {
+            List<NativeContentItem> found = repository.search(context, "nolantwink", 8);
+            assertEquals(1, found.size());
+            assertEquals(profile, found.get(0).url);
+            assertEquals("Nolan", found.get(0).title);
+            assertEquals("nolantwink", found.get(0).searchQuery);
+        } finally {
+            ContentPreference.set(context, ContentPreference.ALL);
+            executor.shutdownNow();
+        }
+    }
+
     @Test public void sharedSearchIncludesLearnedProfilesEvenWhenEveryLiveSourceFails() throws Exception {
         Context context = RuntimeEnvironment.getApplication();
         context.getSharedPreferences(CreatorCatalog.PREFS, 0).edit().clear().commit();

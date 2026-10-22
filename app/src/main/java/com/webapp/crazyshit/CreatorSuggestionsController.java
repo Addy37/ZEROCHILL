@@ -35,6 +35,7 @@ final class CreatorSuggestionsController {
     private Future<?> request;
     private Future<?> localRequest;
     private int generation;
+    private ContentPreference mode;
     private boolean closed;
     private boolean active = true;
     private Runnable debounce;
@@ -126,6 +127,9 @@ final class CreatorSuggestionsController {
         if (visibilityChanged != null) visibilityChanged.accept(true);
         panel.setVisibility(View.VISIBLE);
         cancel();
+        mode = ContentPreference.get(activity);
+        final ContentPreference requestedMode = mode;
+        adapter.replace(new ArrayList<>());
         String query = value.trim();
         searchAll.setVisibility(query.length() >= 2 ? View.VISIBLE : View.GONE);
         searchAll.setText(floating ? "Search all results  ›" : "Search all results for " + query + "  ›");
@@ -147,7 +151,7 @@ final class CreatorSuggestionsController {
             } catch (Exception failure) { error = "Live suggestions unavailable"; }
             String finalError = error;
             main.post(() -> {
-                if (closed || !active || token != generation || activity.isFinishing()
+                if (closed || !active || token != generation || requestedMode != ContentPreference.get(activity) || activity.isFinishing()
                         || activity.isDestroyed() || !query.equals(input.getText().toString().trim())) return;
                 scheduleLocal(query, token, 0L, count -> hint.setText(finalError != null
                         ? finalError + (count > 0 ? " · Saved matches shown" : " · You can still tap Search")
@@ -160,6 +164,10 @@ final class CreatorSuggestionsController {
 
     void refreshLocal() {
         if (closed || !active) return;
+        if (mode != ContentPreference.get(activity)) {
+            show(input.getText().toString());
+            return;
+        }
         scheduleLocal(input.getText().toString().trim(), generation, 0L, null);
     }
 
@@ -167,6 +175,7 @@ final class CreatorSuggestionsController {
                                java.util.function.Consumer<Integer> afterApplied) {
         if (closed || !active || token != generation) return;
         String requestedQuery = query == null ? "" : query.trim();
+        final ContentPreference requestedMode = mode;
         if (localDebounce != null) main.removeCallbacks(localDebounce);
         if (localRequest != null) localRequest.cancel(true);
         if (requestedQuery.length() < 2) {
@@ -179,9 +188,10 @@ final class CreatorSuggestionsController {
             List<NativeContentItem> local = localLookup.find(
                     activity.getApplicationContext(), requestedQuery);
             if (Thread.currentThread().isInterrupted()) return;
-            List<NativeContentItem> visible = OnlyFapCreatorResults.merge(local, null, 8);
+            List<NativeContentItem> visible = OnlyFapCreatorResults.merge(
+                    CreatorCategoryIndex.filter(activity, requestedMode, local), null, 8);
             main.post(() -> {
-                if (closed || !active || token != generation || activity.isFinishing()
+                if (closed || !active || token != generation || requestedMode != ContentPreference.get(activity) || activity.isFinishing()
                         || activity.isDestroyed()
                         || !requestedQuery.equals(input.getText().toString().trim())) return;
                 adapter.replace(visible, () -> {

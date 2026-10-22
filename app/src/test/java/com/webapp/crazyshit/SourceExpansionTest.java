@@ -35,12 +35,6 @@ public final class SourceExpansionTest {
         RemoteSourceConfigManager.resetForTests();
     }
 
-    @Test public void itemFixDefaultsUseNewestListingAndRealPagination() {
-        SourceConfig.WebVideo config = RemoteSourceConfigManager.snapshot().itemFix;
-        assertEquals("list?order_by=newest_added", config.feedFirstRoute);
-        assertEquals("list?order_by=newest_added&page={page}", config.feedPageRoute);
-    }
-
     @Test public void kaoticParserKeepsDateSectionHeaders() {
         String html = "<main>"
                 + "<h2>Sunday September 21st, 2026</h2>"
@@ -84,6 +78,35 @@ public final class SourceExpansionTest {
         assertEquals("https://cum.st/creators/onlyfans/30340311", creators.get(0).url);
     }
 
+    @Test public void onlyHavenSearchRoutesKeepProviderQueryAndCategoryTokens() throws Exception {
+        SourceConfig.OnlyHaven config = RemoteSourceConfigManager.snapshot().onlyHaven;
+        assertEquals("creators?cq={query}", config.creatorSearchRoute);
+        assertEquals("api/v1/creators?q={query}&gender={category}&content=imported&n={limit}&o={offset}",
+                config.creatorCategorySearchApiRoute);
+        String json = "{\"creators\":[{\"service\":\"onlyfans\",\"id\":\"nolan-1\","
+                + "\"displayName\":\"Nolan\",\"username\":\"nolantwink\"},{\"service\":\"onlyfans\","
+                + "\"id\":\"unrelated\",\"displayName\":\"Other Creator\"}]}";
+        List<OnlyHavenRepository.Creator> result = new OnlyHavenRepository()
+                .parseCreatorSearchJson(json, config, "nolantwink", 20);
+        assertEquals(1, result.size());
+        assertEquals("https://cum.st/creators/onlyfans/nolan-1", result.get(0).url);
+        assertEquals("Nolan", result.get(0).name);
+        NativeContentItem item = FapzoneCreatorSearchRepository.onlyHavenItem(result.get(0), "nolantwink");
+        assertEquals("nolantwink", item.searchQuery);
+        CreatorCatalog.remember(context, java.util.Collections.singletonList(item));
+        assertEquals(item.url, CreatorCatalog.matching(context, "nolantwink", false, 10).get(0).url);
+    }
+
+    @Test public void brokenOnlyHavenApiEnvelopeIsUnavailableRatherThanConfirmedEmpty() throws Exception {
+        try {
+            new OnlyHavenRepository().parseCreatorSearchJson("{\"error\":\"Site Unavailable\"}",
+                    RemoteSourceConfigManager.snapshot().onlyHaven, "nolantwink", 20);
+            fail("Malformed API envelope must not claim no creator matches");
+        } catch (java.io.IOException expected) {
+            assertTrue(expected.getMessage().contains("unreadable JSON"));
+        }
+    }
+
     @Test public void onlyHavenApiBuildsOriginalVariantMediaUrls() throws Exception {
         OnlyHavenRepository repository = new OnlyHavenRepository();
         OnlyHavenRepository.Creator creator = new OnlyHavenRepository.Creator(
@@ -117,46 +140,6 @@ public final class SourceExpansionTest {
                 items.get(1).imageUrl);
     }
 
-    @Test public void theYncPlayerParserPrefersActualMediaTheYncVideo() {
-        String html = "<div class='stage-video'><div class='inner-stage'>"
-                + "<video src='https://media.theync.com/videos/real-video.mp4'></video>"
-                + "</div></div>"
-                + "<video src='https://ads.example/ad.mp4'></video>"
-                + "<div id='thisPlayer'></div>"
-                + "<script>player.setup({file: \"https://media.theync.com/videos/script-video.mp4\"});</script>";
-        String media = new WebVideoSourceRepository().theYncPlayableFromDocument(
-                Jsoup.parse(html, "https://theync.com/video/12345/sample-title")
-        );
-        assertEquals("https://media.theync.com/videos/real-video.mp4", media);
-    }
-
-    @Test public void theYncPlayerParserUsesRenderedPlayerMedia() {
-        String html = "<source data-player-media='1' "
-                + "src='https://media.theync.com/videos/rendered.mp4'>"
-                + "<source data-resource-media='1' src='https://ads.example/ad.mp4'>";
-        String media = new WebVideoSourceRepository().theYncPlayableFromDocument(
-                Jsoup.parse(html, "https://theync.com/video/12345/sample-title")
-        );
-        assertEquals("https://media.theync.com/videos/rendered.mp4", media);
-    }
-
-    @Test public void theYncThumbnailCanRecoverLegacyVideoUrl() {
-        String media = new WebVideoSourceRepository().theYncVideoFromThumbnail(
-                "https://media.theync.com/thumbs/6/5/4/2/8/65428412ba3de.mp4.jpg"
-        );
-        assertEquals("https://media.theync.com/videos/6/5/4/2/8/65428412ba3de.mp4", media);
-    }
-
-    @Test public void theYncPlayerParserReadsThisPlayerSetupScript() {
-        String html = "<video src='https://ads.example/ad.mp4'></video>"
-                + "<div id='thisPlayer'></div>"
-                + "<script>jwplayer('thisPlayer').setup({file: \"https://media.theync.com/videos/actual.mp4\"});</script>";
-        String media = new WebVideoSourceRepository().theYncPlayableFromDocument(
-                Jsoup.parse(html, "https://theync.com/video/12345/sample-title")
-        );
-        assertEquals("https://media.theync.com/videos/actual.mp4", media);
-    }
-
     @Test public void onlyHavenDirectImagesAreRecognizedWithoutPageResolution() {
         assertTrue(OnlyHavenRepository.isDirectImageUrl(
                 "https://e1.cum.st/media/abc/original.jpg"
@@ -169,19 +152,4 @@ public final class SourceExpansionTest {
         ));
     }
 
-    @Test public void theYncParserDeduplicatesLinksForOneVideoAndKeepsRealTitle() {
-        String html = "<article>"
-                + "<a href='/video/12345/comments'>59</a>"
-                + "<a href='/video/12345/sample-title?ref=home#player' title='Sample title'>"
-                + "<img src='/sample.jpg'></a>"
-                + "</article>";
-        List<NativeContentItem> items = new WebVideoSourceRepository().parseFeed(
-                Jsoup.parse(html, "https://theync.com/"),
-                WebVideoSourceRepository.Source.THEYNC,
-                1
-        );
-        assertEquals(1, items.size());
-        assertEquals("Sample title", items.get(0).title);
-        assertEquals("https://theync.com/video/12345/sample-title", items.get(0).url);
-    }
 }

@@ -23,9 +23,7 @@ final class WebVideoSourceRepository {
     private final Map<String, String> kaoticPaginationTemplates = new java.util.concurrent.ConcurrentHashMap<>();
 
     enum Source {
-        KAOTIC("Kaotic"),
-        THEYNC("TheYNC"),
-        ITEMFIX("ItemFix");
+        KAOTIC("Kaotic");
 
         final String label;
 
@@ -41,9 +39,6 @@ final class WebVideoSourceRepository {
             "(?i)^(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)\\s+"
                     + "(?:january|february|march|april|may|june|july|august|september|october|november|december)\\s+"
                     + "\\d{1,2}(?:st|nd|rd|th)?(?:,?\\s+\\d{4})?$"
-    );
-    private static final Pattern THEYNC_VIDEO_ID = Pattern.compile(
-            "(?i)^https?://(?:www\\.)?theync\\.com/video/(\\d+)(?:/[^?#]*)?"
     );
 
     List<NativeContentItem> fetchFeed(Context context, Source source, int page) throws IOException {
@@ -64,22 +59,6 @@ final class WebVideoSourceRepository {
         List<NativeContentItem> result = document == null
                 ? new ArrayList<>()
                 : parseFeed(document, source, page, config);
-
-        if (source == Source.THEYNC && result.isEmpty()) {
-            try {
-                Document rendered = RenderedSourcePageFetcher.fetch(
-                        context,
-                        requested,
-                        config.userAgent,
-                        config.requestHeaders,
-                        config.refererOverride.isEmpty() ? config.baseUrl : config.refererOverride,
-                        "/video/"
-                );
-                result = parseFeed(rendered, source, page, config);
-            } catch (IOException browserFailure) {
-                if (directFailure == null) directFailure = browserFailure;
-            }
-        }
 
         if (page <= 1 && result.isEmpty()) {
             throw directFailure == null
@@ -266,9 +245,6 @@ final class WebVideoSourceRepository {
                                 System.currentTimeMillis()
                         );
                     }
-                } else if (source == Source.ITEMFIX && mediaCount > 0 &&
-                        "popular fixes".equalsIgnoreCase(clean(node.ownText()))) {
-                    break;
                 }
                 continue;
             }
@@ -276,7 +252,6 @@ final class WebVideoSourceRepository {
             if (!node.is(config.cardLinksSelector)) continue;
             String pageUrl = absolute(node, "href", document.location());
             if (pageUrl.isEmpty() || !config.pageUrlPattern.matcher(pageUrl).find()) continue;
-            if (source == Source.THEYNC) pageUrl = canonicalTheYncPageUrl(pageUrl);
 
             Element scope = cardScope(node);
             String title = title(node, scope, pageUrl);
@@ -302,13 +277,11 @@ final class WebVideoSourceRepository {
                     publishedAt
             );
 
-            String feedKey = feedKey(source, pageUrl);
+            String feedKey = pageUrl;
             Integer oldPosition = positions.get(feedKey);
             if (oldPosition != null) {
                 NativeContentItem old = result.get(oldPosition);
-                result.set(oldPosition, source == Source.THEYNC
-                        ? mergeTheYnc(old, candidate)
-                        : old.merge(candidate));
+                result.set(oldPosition, old.merge(candidate));
                 continue;
             }
 
@@ -332,60 +305,6 @@ final class WebVideoSourceRepository {
             if (mediaCount >= 60) break;
         }
         return result;
-    }
-
-    private String feedKey(Source source, String pageUrl) {
-        if (source != Source.THEYNC) return pageUrl;
-        Matcher matcher = THEYNC_VIDEO_ID.matcher(pageUrl);
-        return matcher.find() ? "theync:" + matcher.group(1) : pageUrl;
-    }
-
-    private String canonicalTheYncPageUrl(String pageUrl) {
-        try {
-            URI uri = new URI(pageUrl);
-            Matcher matcher = THEYNC_VIDEO_ID.matcher(pageUrl);
-            if (!matcher.find()) return pageUrl;
-            String path = uri.getPath();
-            return new URI(uri.getScheme(), uri.getAuthority(), path, null, null).toASCIIString();
-        } catch (Exception ignored) {
-            int query = pageUrl.indexOf('?');
-            int fragment = pageUrl.indexOf('#');
-            int end = pageUrl.length();
-            if (query >= 0) end = Math.min(end, query);
-            if (fragment >= 0) end = Math.min(end, fragment);
-            return pageUrl.substring(0, end);
-        }
-    }
-
-    private NativeContentItem mergeTheYnc(NativeContentItem old, NativeContentItem candidate) {
-        if (old == null) return candidate;
-        if (candidate == null) return old;
-        String title = betterTheYncTitle(old.title, candidate.title);
-        boolean candidateHasBetterTitle = title.equals(clean(candidate.title)) &&
-                !title.equals(clean(old.title));
-        return new NativeContentItem(
-                old.kind,
-                title,
-                candidateHasBetterTitle || old.url.isEmpty() ? candidate.url : old.url,
-                old.imageUrl.isEmpty() ? candidate.imageUrl : old.imageUrl,
-                old.views.isEmpty() ? candidate.views : old.views,
-                old.uploader.isEmpty() ? candidate.uploader : old.uploader,
-                old.comments.isEmpty() ? candidate.comments : old.comments,
-                old.description.isEmpty() ? candidate.description : old.description,
-                old.searchQuery.isEmpty() ? candidate.searchQuery : old.searchQuery
-        );
-    }
-
-    private String betterTheYncTitle(String first, String second) {
-        String left = clean(first);
-        String right = clean(second);
-        boolean leftNumeric = left.matches("[0-9,.]+");
-        boolean rightNumeric = right.matches("[0-9,.]+");
-        if (leftNumeric && !rightNumeric) return right;
-        if (rightNumeric && !leftNumeric) return left;
-        if (left.isEmpty()) return right;
-        if (right.isEmpty()) return left;
-        return left.length() >= right.length() ? left : right;
     }
 
     private String kaoticSection(Element element) {
@@ -425,40 +344,9 @@ final class WebVideoSourceRepository {
         }
         SourceConfig.WebVideo config = config(source);
         if (!config.enabled) throw new IOException(source.label + " is temporarily unavailable");
-        Document page;
-        try {
-            page = fetchConfigured(context, config, pageUrl);
-        } catch (IOException error) {
-            if (source != Source.THEYNC) throw error;
-            page = RenderedSourcePageFetcher.fetchMedia(
-                    context,
-                    pageUrl,
-                    config.userAgent,
-                    config.requestHeaders,
-                    config.refererOverride.isEmpty() ? config.baseUrl : config.refererOverride
-            );
-        }
+        Document page = fetchConfigured(context, config, pageUrl);
         String title = clean(page.title());
-        String media = source == Source.THEYNC
-                ? theYncPlayableFromDocument(page)
-                : playableFromDocument(page, config);
-        if (media.isEmpty() && source == Source.THEYNC) {
-            try {
-                Document rendered = RenderedSourcePageFetcher.fetchMedia(
-                        context,
-                        pageUrl,
-                        config.userAgent,
-                        config.requestHeaders,
-                        config.refererOverride.isEmpty() ? config.baseUrl : config.refererOverride
-                );
-                media = theYncPlayableFromDocument(rendered);
-                if (title.isEmpty()) title = clean(rendered.title());
-            } catch (IOException ignored) {
-            }
-        }
-        if (media.isEmpty() && source == Source.THEYNC) {
-            media = theYncVideoFromThumbnail(thumbnailUrl);
-        }
+        String media = playableFromDocument(page, config);
         if (media.isEmpty()) {
             int checked = 0;
             for (Element frame : page.select("iframe[src]")) {
@@ -476,78 +364,6 @@ final class WebVideoSourceRepository {
         return media.isEmpty()
                 ? null
                 : new CrazyShitRepository.StreamInfo(media, pageUrl, title.isEmpty() ? source.label : title);
-    }
-
-    String theYncPlayableFromDocument(Document document) {
-        if (document == null) return "";
-
-        for (Element video : document.select(
-                "source[data-player-media][src],"
-                        + ".stage-video > .inner-stage video[data-current-src],"
-                        + ".stage-video > .inner-stage video[src],"
-                        + "#thisPlayer video[data-current-src],#thisPlayer video[src],#thisPlayer source[src]"
-        )) {
-            String attr = video.hasAttr("data-current-src") ? "data-current-src" : "src";
-            String candidate = absolute(video, attr, document.location());
-            if (isDirectMedia(candidate) && isTheYncVideoMedia(candidate)) return candidate;
-        }
-
-        Element player = document.getElementById("thisPlayer");
-        if (player != null) {
-            Element sibling = player.nextElementSibling();
-            if (sibling != null && "script".equalsIgnoreCase(sibling.tagName())) {
-                String candidate = theYncMediaFromScript(sibling.data().isEmpty()
-                        ? sibling.html()
-                        : sibling.data());
-                if (!candidate.isEmpty()) return candidate;
-            }
-        }
-
-        for (Element script : document.select("script")) {
-            String body = script.data();
-            if (body == null || body.isEmpty()) body = script.html();
-            String candidate = theYncMediaFromScript(body);
-            if (!candidate.isEmpty()) return candidate;
-        }
-
-        return "";
-    }
-
-    String theYncVideoFromThumbnail(String thumbnailUrl) {
-        String clean = cleanUrl(thumbnailUrl);
-        if (clean.isEmpty()) return "";
-        Pattern thumbnail = Pattern.compile(
-                "(?i)^https?://(?:media\\.theync\\.(?:com|org|net)|"
-                        + "(?:www\\.)?theync\\.(?:com|org|net)/media)/thumbs/"
-                        + "(.+?)\\.(?:flv|mpg|wmv|avi|3gp|qt|mp4|mov|m4v|f4v)"
-        );
-        Matcher matcher = thumbnail.matcher(clean);
-        if (!matcher.find()) return "";
-        return "https://media.theync.com/videos/" + matcher.group(1) + ".mp4";
-    }
-
-    private String theYncMediaFromScript(String body) {
-        if (body == null || body.isEmpty()) return "";
-        String normalized = body.replace("\\/", "/").replace("&amp;", "&");
-        Pattern direct = Pattern.compile(
-                "(?i)(https?://(?:(?:www\\.)?theync\\.(?:com|org|net)/media|"
-                        + "media\\.theync\\.(?:com|org|net))/videos/"
-                        + "[^\\s\\\"'<>]+?\\.(?:mp4|m4v|mov|f4v)(?:\\?[^\\s\\\"'<>]*)?)"
-        );
-        Matcher matcher = direct.matcher(normalized);
-        if (!matcher.find()) return "";
-        try {
-            return java.net.URLDecoder.decode(matcher.group(1), "UTF-8");
-        } catch (Exception ignored) {
-            return matcher.group(1);
-        }
-    }
-
-    private boolean isTheYncVideoMedia(String value) {
-        if (value == null) return false;
-        String lower = value.toLowerCase(Locale.US);
-        return (lower.contains("media.theync.") || lower.contains("/media/videos/"))
-                && lower.contains("/videos/");
     }
 
     private String playableFromDocument(Document document, SourceConfig.WebVideo config) {
@@ -632,9 +448,7 @@ final class WebVideoSourceRepository {
 
     private SourceConfig.WebVideo config(Source source) {
         SourceConfig current = RemoteSourceConfigManager.snapshot();
-        if (source == Source.KAOTIC) return current.kaotic;
-        if (source == Source.THEYNC) return current.theYnc;
-        return current.itemFix;
+        return current.kaotic;
     }
 
     private Element cardScope(Element link) {
@@ -747,14 +561,6 @@ final class WebVideoSourceRepository {
 
     static boolean isKaoticUrl(String url) {
         return hostMatches(url, "kaotic.com");
-    }
-
-    static boolean isTheYncUrl(String url) {
-        return hostMatches(url, "theync.com");
-    }
-
-    static boolean isItemFixUrl(String url) {
-        return hostMatches(url, "itemfix.com");
     }
 
     private static boolean hostMatches(String url, String host) {

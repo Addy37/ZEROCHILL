@@ -32,8 +32,14 @@ final class FapzoneCreatorSearchRepository {
     /** Implementations verify names or profile aliases before returning creator results. */
     interface ConfirmedSourceSearch extends SourceSearch { }
 
+    interface CategorySourceSearch {
+        List<NativeContentItem> search(Context context, String query, int limit,
+                                       ContentPreference preference) throws IOException;
+    }
+
     private final ExecutorService searchIo;
     private final List<SourceSearch> sources;
+    private final CategorySourceSearch categorySource;
 
     FapzoneCreatorSearchRepository() {
         searchIo = SEARCH_IO;
@@ -44,11 +50,18 @@ final class FapzoneCreatorSearchRepository {
         sources.add((context, query, limit) -> fromWikiFeet(
                 context, WikiFeetRepository.Site.WIKIFEET_X, query, limit));
         sources.add(this::fromOnlyHaven);
+        categorySource = this::fromOnlyHaven;
     }
 
     FapzoneCreatorSearchRepository(ExecutorService searchIo, List<SourceSearch> sources) {
+        this(searchIo, sources, null);
+    }
+
+    FapzoneCreatorSearchRepository(ExecutorService searchIo, List<SourceSearch> sources,
+                                   CategorySourceSearch categorySource) {
         this.searchIo = searchIo;
         this.sources = new ArrayList<>(sources);
+        this.categorySource = categorySource == null ? this::fromOnlyHaven : categorySource;
     }
 
     List<NativeContentItem> search(Context context, String query, int limit) throws IOException {
@@ -64,17 +77,21 @@ final class FapzoneCreatorSearchRepository {
         String cleanQuery = query == null ? "" : query.trim();
         if (cleanQuery.length() < 2) return new ArrayList<>();
         int safeLimit = Math.max(1, Math.min(20, limit));
+        ContentPreference preference = context == null ? ContentPreference.ALL : ContentPreference.get(context);
         ArrayList<NativeContentItem> learned = new ArrayList<>();
         if (context != null) {
             for (NativeContentItem item : CreatorCatalog.matching(context, cleanQuery, false, safeLimit)) {
-                if (matchesQuery(item, cleanQuery) && hasUsableDisplayName(item)) learned.add(item);
+                if (matchesQuery(item, cleanQuery) && hasUsableDisplayName(item)
+                        && CreatorCategoryIndex.includes(context, preference, item)) learned.add(item);
             }
         }
         if (listener != null && !learned.isEmpty()) publish(listener, learned, false);
         ExecutorCompletionService<List<NativeContentItem>> completed =
                 new ExecutorCompletionService<>(searchIo);
         ArrayList<Future<List<NativeContentItem>>> requests = new ArrayList<>();
-        for (SourceSearch source : sources) {
+        for (SourceSearch source : preference == ContentPreference.ALL ? sources
+                : java.util.Collections.<SourceSearch>singletonList((c, q, n) ->
+                        categorySource.search(c, q, n, preference))) {
             requests.add(completed.submit(() -> {
                 List<NativeContentItem> items = source.search(context, cleanQuery, safeLimit);
                 if (items == null) throw new IOException("Creator source returned no response");
@@ -191,30 +208,41 @@ final class FapzoneCreatorSearchRepository {
             String query,
             int limit
     ) throws IOException {
+        return fromOnlyHaven(context, query, limit, ContentPreference.ALL);
+    }
+
+    private List<NativeContentItem> fromOnlyHaven(Context context, String query, int limit,
+                                                  ContentPreference preference) throws IOException {
         ArrayList<NativeContentItem> result = new ArrayList<>();
         for (OnlyHavenRepository.Creator creator :
-                new OnlyHavenRepository().searchCreators(context, query, limit)) {
-            StringBuilder description = new StringBuilder("OnlyHaven");
-            String service = serviceLabel(creator.service);
-            if (!service.isEmpty()) description.append(" · ").append(service);
-            if (creator.postCount >= 0) {
-                description.append(" · ")
-                        .append(String.format(java.util.Locale.US, "%,d", creator.postCount))
-                        .append(creator.postCount == 1 ? " post" : " posts");
-            }
-            result.add(new NativeContentItem(
-                    NativeContentItem.KIND_CREATOR,
-                    creator.name,
-                    creator.url,
-                    creator.imageUrl,
-                    creator.postCount >= 0 ? String.valueOf(creator.postCount) : "",
-                    creator.url,
-                    "",
-                    description.toString(),
-                    creator.name
-            ));
+                new OnlyHavenRepository().searchCategoryCreators(context, query, limit, preference)) {
+            result.add(onlyHavenItem(creator, query));
         }
         return result;
+    }
+
+    static NativeContentItem onlyHavenItem(OnlyHavenRepository.Creator creator, String query) {
+        StringBuilder description = new StringBuilder("OnlyHaven");
+        String service = serviceLabel(creator.service);
+        if (!service.isEmpty()) description.append(" · ").append(service);
+        if (creator.postCount >= 0) {
+            description.append(" · ")
+                    .append(String.format(java.util.Locale.US, "%,d", creator.postCount))
+                    .append(creator.postCount == 1 ? " post" : " posts");
+        }
+        return new NativeContentItem(
+                NativeContentItem.KIND_CREATOR,
+                creator.name,
+                creator.url,
+                creator.imageUrl,
+                creator.postCount >= 0 ? String.valueOf(creator.postCount) : "",
+                creator.url,
+                "",
+                description.toString(),
+                CreatorNameMatcher.rank(creator.searchAlias, query) != Integer.MAX_VALUE
+                        || CreatorNameMatcher.rank(creator.name, query) != Integer.MAX_VALUE
+                        ? creator.searchAlias : creator.id
+        );
     }
 
     private boolean matchesQuery(NativeContentItem item, String query) {

@@ -46,8 +46,6 @@ final class SourceConfig {
     final WikiFeet wikiFeet;
     final WikiFeet wikiFeetX;
     final WebVideo kaotic;
-    final WebVideo theYnc;
-    final WebVideo itemFix;
     final OnlyHaven onlyHaven;
     final BaddieHub baddieHub;
     private final String serialized;
@@ -63,8 +61,6 @@ final class SourceConfig {
             WikiFeet wikiFeet,
             WikiFeet wikiFeetX,
             WebVideo kaotic,
-            WebVideo theYnc,
-            WebVideo itemFix,
             OnlyHaven onlyHaven,
             BaddieHub baddieHub,
             String serialized
@@ -79,8 +75,6 @@ final class SourceConfig {
         this.wikiFeet = wikiFeet;
         this.wikiFeetX = wikiFeetX;
         this.kaotic = kaotic;
-        this.theYnc = theYnc;
-        this.itemFix = itemFix;
         this.onlyHaven = onlyHaven;
         this.baddieHub = baddieHub;
         this.serialized = serialized;
@@ -115,24 +109,20 @@ final class SourceConfig {
             JSONObject sources = requiredObject(root, "sources");
             rejectUnknown(sources, set(
                     "fapello", "bunkr", "wikifeet", "wikifeetx",
-                    "kaotic", "theync", "itemfix", "onlyhaven", "baddiehub"
+                    "kaotic", "onlyhaven", "baddiehub"
             ), "sources");
             Fapello fapello = parseFapello(requiredObject(sources, "fapello"));
             Bunkr bunkr = parseBunkr(requiredObject(sources, "bunkr"));
             WikiFeet wikiFeet = parseWikiFeet(requiredObject(sources, "wikifeet"), "wikifeet");
             WikiFeet wikiFeetX = parseWikiFeet(requiredObject(sources, "wikifeetx"), "wikifeetx");
             WebVideo kaotic = parseWebVideo(requiredObject(sources, "kaotic"), "kaotic");
-            WebVideo theYnc = parseWebVideo(requiredObject(sources, "theync"), "theync");
-            WebVideo itemFix = parseWebVideo(requiredObject(sources, "itemfix"), "itemfix");
             OnlyHaven onlyHaven = parseOnlyHaven(requiredObject(sources, "onlyhaven"));
-            BaddieHub baddieHub = sources.has("baddiehub")
-                    ? parseBaddieHub(requiredObject(sources, "baddiehub"))
-                    : defaultBaddieHub();
+            BaddieHub baddieHub = parseBaddieHub(requiredObject(sources, "baddiehub"));
             String canonical = root.toString();
             return new SourceConfig(schemaVersion, configVersion, updatedAt,
                     sourceKillSwitchesEnabled, fallbacksEnabled,
                     fapello, bunkr, wikiFeet, wikiFeetX,
-                    kaotic, theYnc, itemFix, onlyHaven, baddieHub, canonical);
+                    kaotic, onlyHaven, baddieHub, canonical);
         } catch (ValidationException error) {
             throw error;
         } catch (JSONException error) {
@@ -282,7 +272,7 @@ final class SourceConfig {
                 "refererOverride", "requestTimeoutMs", "retryCount", "routes", "selectors", "patterns"
         ), "sources.onlyhaven");
         JSONObject routes = requiredObject(value, "routes");
-        rejectUnknown(routes, set("creatorSearch", "creatorSearchApi", "creatorCategoryApi", "creatorPage", "creatorPostsApi"),
+        rejectUnknown(routes, set("creatorSearch", "creatorSearchApi", "creatorCategoryApi", "creatorCategorySearchApi", "creatorPage", "creatorPostsApi"),
                 "sources.onlyhaven.routes");
         JSONObject selectors = requiredObject(value, "selectors");
         rejectUnknown(selectors, set(
@@ -315,6 +305,8 @@ final class SourceConfig {
         );
         if (routes.has("creatorCategoryApi")) result.creatorCategoryApiRoute =
                 route(routes, "creatorCategoryApi", set("category", "limit", "offset"));
+        if (routes.has("creatorCategorySearchApi")) result.creatorCategorySearchApiRoute =
+                route(routes, "creatorCategorySearchApi", set("query", "category", "limit", "offset"));
         if (value.has("categoryValues")) {
             JSONObject categories = requiredObject(value, "categoryValues");
             rejectUnknown(categories, set("women", "men", "trans_women", "trans_men", "non_binary", "groups"), "onlyhaven.categoryValues");
@@ -712,6 +704,7 @@ final class SourceConfig {
     static final class OnlyHaven {
         // Optional data extension. Older remote snapshots keep these known-good defaults.
         String creatorCategoryApiRoute = "api/v1/creators?gender={category}&content=imported&n={limit}&o={offset}";
+        String creatorCategorySearchApiRoute = "api/v1/creators?q={query}&gender={category}&content=imported&n={limit}&o={offset}";
         Map<String, String> categoryValues = defaultCategoryValues();
         private static Map<String, String> defaultCategoryValues() {
             Map<String, String> values = new LinkedHashMap<>();
