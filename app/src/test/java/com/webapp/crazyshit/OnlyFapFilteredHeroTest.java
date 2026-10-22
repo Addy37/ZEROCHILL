@@ -205,7 +205,7 @@ public class OnlyFapFilteredHeroTest {
         assertSame(gallery, row.getChildAt(0));
         assertSame(pill, row.getChildAt(1));
         LinearLayout copy = (LinearLayout) row.getParent();
-        assertSame(ReflectionHelpers.getField(hub, "heroHint"), copy.getChildAt(copy.indexOfChild(row) - 1));
+        assertSame(((View) ReflectionHelpers.getField(hub, "heroHint")).getParent(), copy.getChildAt(copy.indexOfChild(row) - 1));
         assertTrue(pill.isClickable()); assertTrue(pill.isFocusable());
         assertTrue(pill.getMinimumHeight() >= BrowseUi.dp(activity, 48));
         android.graphics.drawable.GradientDrawable first = (android.graphics.drawable.GradientDrawable) pill.getBackground();
@@ -253,6 +253,122 @@ public class OnlyFapFilteredHeroTest {
             image.compress(Bitmap.CompressFormat.PNG, 100, stream);
         }
         image.recycle();
+    }
+
+    private void seedVisibleHero() {
+        ((android.widget.ImageView) ReflectionHelpers.getField(hub, "heroImage"))
+                .setImageDrawable(new android.graphics.drawable.ColorDrawable(Color.BLUE));
+        ((android.widget.TextView) ReflectionHelpers.getField(hub, "heroTitle")).setText("Outgoing creator");
+        ((android.widget.TextView) ReflectionHelpers.getField(hub, "heroHint")).setText("Outgoing source");
+        ((View) ReflectionHelpers.getField(hub, "heroAction")).setVisibility(View.VISIBLE);
+        ReflectionHelpers.setField(hub, "heroArtworkReady", true);
+    }
+    private void changeMode(ContentPreference mode) {
+        ContentPreference.set(activity, mode);
+        hub.preparePreference(mode);
+    }
+    private Object pendingHero(String title) throws Exception {
+        NativeContentItem creator = new NativeContentItem(NativeContentItem.KIND_CREATOR,
+                title, "https://cum.st/creators/onlyfans/" + title, "", "New source", "", "");
+        hub.setPreferenceCreators(Collections.singletonList(creator));
+        Class<?> type = Class.forName("com.webapp.crazyshit.OnlyFapHubView$HeroCandidate");
+        java.lang.reflect.Constructor<?> constructor = type.getDeclaredConstructor(NativeContentItem.class, String.class, String.class);
+        constructor.setAccessible(true);
+        Object candidate = constructor.newInstance(creator, "https://cdn.example.invalid/" + title + ".jpg", creator.url);
+        ReflectionHelpers.setField(hub, "heroItem", candidate);
+        ((List<Object>) ReflectionHelpers.getField(hub, "heroItems")).add(candidate);
+        return candidate;
+    }
+    private void ready(int token, Object candidate) throws Exception {
+        java.lang.reflect.Method commit = OnlyFapHubView.class.getDeclaredMethod("commitPreferenceArtwork",
+                int.class, candidate.getClass(), android.graphics.drawable.Drawable.class);
+        commit.setAccessible(true);
+        commit.invoke(hub, token, candidate, new android.graphics.drawable.ColorDrawable(Color.RED));
+    }
+    private String title() { return ((android.widget.TextView) ReflectionHelpers.getField(hub, "heroTitle")).getText().toString(); }
+
+    @Test public void modeChangeAndSecondRefreshRetainPixelsAndCopyButDiscardOldCandidates() {
+        seedVisibleHero();
+        Object originalImage = ReflectionHelpers.getField(hub, "heroImage");
+        android.graphics.drawable.Drawable original = ((android.widget.ImageView) originalImage).getDrawable();
+        changeMode(ContentPreference.MEN);
+        hub.clear(); // MainPagerAdapter's existing second clear must not expose a blank hero.
+        assertSame(originalImage, ReflectionHelpers.getField(hub, "heroImage"));
+        assertSame(original, ((android.widget.ImageView) originalImage).getDrawable());
+        assertEquals("Outgoing creator", title());
+        assertTrue(heroes().isEmpty());
+        assertNull(ReflectionHelpers.getField(hub, "heroItem"));
+        assertFalse(((View) ReflectionHelpers.getField(hub, "heroAction")).isEnabled());
+        assertTrue(((View) ReflectionHelpers.getField(hub, "preferenceSelector")).isEnabled());
+        assertEquals(View.VISIBLE, ((View) ReflectionHelpers.getField(hub, "preferenceLoading")).getVisibility());
+        assertNull(hub.findViewWithTag("content_preference_presentation"));
+    }
+    @Test public void imageReadyPublishesNewCopyAndImageTogetherThenSettlesAndCleansUp() throws Exception {
+        seedVisibleHero(); changeMode(ContentPreference.MEN);
+        Object outgoingImage = ReflectionHelpers.getField(hub, "heroImage");
+        Object candidate = pendingHero("Incoming");
+        assertEquals("Outgoing creator", title());
+        ReflectionHelpers.setField(hub, "active", true);
+        ready(generation(), candidate);
+        assertEquals("Incoming", title());
+        assertNotSame(outgoingImage, ReflectionHelpers.getField(hub, "heroImage"));
+        assertEquals("Outgoing creator", ((android.widget.TextView) ReflectionHelpers.getField(hub, "previousHeroTitle")).getText().toString());
+        assertEquals(0f, ((View) ReflectionHelpers.getField(hub, "heroImage")).getAlpha(), .001f);
+        assertEquals(0f, ((View) ReflectionHelpers.getField(hub, "heroTitle")).getAlpha(), .001f);
+        ShadowLooper.idleMainLooper(650, TimeUnit.MILLISECONDS);
+        assertNull(ReflectionHelpers.getField(hub, "heroMorph"));
+        assertEquals(1f, ((View) ReflectionHelpers.getField(hub, "heroImage")).getAlpha(), 0f);
+        assertEquals(1f, ((View) ReflectionHelpers.getField(hub, "heroTitle")).getAlpha(), 0f);
+        assertEquals(View.GONE, ((View) ReflectionHelpers.getField(hub, "preferenceLoading")).getVisibility());
+        assertNull(hub.findViewWithTag("content_preference_presentation"));
+        assertTrue(((View) ReflectionHelpers.getField(hub, "heroAction")).isEnabled());
+    }
+    @Test public void staleReadyCannotPublishAfterRapidModeSwitchAndReducedMotionCommitsImmediately() throws Exception {
+        seedVisibleHero(); changeMode(ContentPreference.MEN);
+        Object stale = pendingHero("Stale"); int oldGeneration = generation();
+        changeMode(ContentPreference.GROUPS);
+        ready(oldGeneration, stale);
+        assertEquals("Outgoing creator", title());
+        Object current = pendingHero("Current");
+        ContentPreference.prefs(activity).edit().putBoolean("immersive_motion_enabled", false).commit();
+        ReflectionHelpers.setField(hub, "active", true);
+        ready(generation(), current);
+        assertEquals("Current", title());
+        assertNull(ReflectionHelpers.getField(hub, "heroMorph"));
+        assertEquals(1f, ((View) ReflectionHelpers.getField(hub, "heroImage")).getAlpha(), 0f);
+        assertEquals(1f, ((View) ReflectionHelpers.getField(hub, "heroTitle")).getAlpha(), 0f);
+    }
+    @Test public void emptyCategoryRetiresTheOldHeroWithoutAnUnfilteredFallback() {
+        seedVisibleHero(); changeMode(ContentPreference.GROUPS);
+        hub.setPreferenceCreators(Collections.emptyList());
+        assertFalse((boolean) ReflectionHelpers.getField(hub, "preferenceHeroPending"));
+        assertEquals("No featured creator", title());
+        assertEquals(View.GONE, ((View) ReflectionHelpers.getField(hub, "heroAction")).getVisibility());
+        assertEquals(View.GONE, ((View) ReflectionHelpers.getField(hub, "preferenceLoading")).getVisibility());
+        assertTrue(heroes().isEmpty());
+    }
+    @Test public void leavingTabSettlesTheFadeAndRemovesTheNotice() throws Exception {
+        seedVisibleHero(); changeMode(ContentPreference.MEN);
+        Object current = pendingHero("Current");
+        ReflectionHelpers.setField(hub, "active", true);
+        ready(generation(), current);
+        hub.setActive(false);
+        assertNull(ReflectionHelpers.getField(hub, "heroMorph"));
+        assertEquals(1f, ((View) ReflectionHelpers.getField(hub, "heroImage")).getAlpha(), 0f);
+        assertNull(hub.findViewWithTag("content_preference_presentation"));
+    }
+    @Test @org.robolectric.annotation.GraphicsMode(org.robolectric.annotation.GraphicsMode.Mode.NATIVE)
+    @Config(qualifiers = "w411dp-h891dp-xhdpi")
+    public void renderPreferenceMorphLoadingMidpointAndSettled() throws Exception {
+        seedVisibleHero(); changeMode(ContentPreference.MEN);
+        capture(hub, "onlyfap-morph-loading", 411, 700);
+        Object current = pendingHero("Incoming creator");
+        ReflectionHelpers.setField(hub, "active", true);
+        ready(generation(), current);
+        ShadowLooper.idleMainLooper(140, TimeUnit.MILLISECONDS);
+        capture(hub, "onlyfap-morph-midpoint", 411, 700);
+        ShadowLooper.idleMainLooper(500, TimeUnit.MILLISECONDS);
+        capture(hub, "onlyfap-morph-settled", 411, 700);
     }
 
     private int generation() { return ReflectionHelpers.getField(hub, "heroGeneration"); }
