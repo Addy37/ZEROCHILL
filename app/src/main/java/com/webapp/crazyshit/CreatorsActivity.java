@@ -42,6 +42,11 @@ import java.util.HashMap;
 public final class CreatorsActivity extends Activity {
     private static final int REQUEST_PICK_AVATAR = 4106;
 
+    private static final java.util.concurrent.ExecutorService ARTWORK_IO = java.util.concurrent.Executors.newSingleThreadExecutor();
+    private java.util.concurrent.Future<?> artworkTask;
+    private android.app.AlertDialog artworkDialog;
+    private java.util.concurrent.atomic.AtomicBoolean artworkCancelled = new java.util.concurrent.atomic.AtomicBoolean();
+    private int artworkRun;
     private EditText input;
     private TextView empty, count;
     private RecyclerView recycler;
@@ -92,6 +97,11 @@ public final class CreatorsActivity extends Activity {
         header.addView(title, new LinearLayout.LayoutParams(0, -2, 1));
         header.addView(BrowseUi.action(this, "+", "Find creators", v -> startActivity(SearchActivity.createBunkrSearch(this))),
                 new LinearLayout.LayoutParams(dp(48), dp(48)));
+        header.addView(BrowseUi.action(this, "⋮", "Favorite creators menu", v -> {
+            new ZeroChillDialog.Builder(this).setTitle("Favorite creators")
+                    .setItems(new String[]{"Fetch missing artwork"}, (dialog, which) -> fetchMissingArtwork())
+                    .setNegativeButton("Cancel", null).show();
+        }), new LinearLayout.LayoutParams(dp(48), dp(48)));
         root.addView(header);
         input = new ZeroChillEditText(this);
         input.setHint("Search your favorite creators");
@@ -195,6 +205,46 @@ public final class CreatorsActivity extends Activity {
         }
         getWindow().setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN
                 | android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
+    }
+
+    private void fetchMissingArtwork() {
+        if (artworkTask != null && !artworkTask.isDone()) return;
+        artworkCancelled = new java.util.concurrent.atomic.AtomicBoolean();
+        final java.util.concurrent.atomic.AtomicBoolean cancelled = artworkCancelled;
+        final int run = ++artworkRun;
+        artworkDialog = new ZeroChillDialog.Builder(this).setTitle("Fetch missing artwork")
+                .setMessage("Checking favorite creators…")
+                .setNegativeButton("Cancel", (dialog, which) -> cancelArtwork()).show();
+        artworkDialog.setOnCancelListener(dialog -> cancelArtwork());
+        artworkTask = ARTWORK_IO.submit(() -> {
+            FavoriteCreatorArtworkHydrator.Result result = new FavoriteCreatorArtworkHydrator()
+                    .fetchMissing(this, cancelled::get, progress -> runOnUiThread(() -> {
+                        if (stopped || cancelled.get() || run != artworkRun) return;
+                        if (artworkDialog != null) artworkDialog.setMessage(
+                                "Fetching artwork " + progress.completed + " of " + progress.total + "…");
+                        render();
+                    }));
+            runOnUiThread(() -> {
+                if (stopped || cancelled.get() || run != artworkRun) return;
+                if (artworkDialog != null) artworkDialog.dismiss();
+                artworkDialog = null;
+                render();
+                String summary = result.total == 0 ? "All favorite creators already have artwork."
+                        : "Artwork restored for " + result.restored + " creators. "
+                        + result.unresolved + " could not be matched."
+                        + (result.errors == 0 ? "" : " " + result.errors + " lookups failed. Try again later.");
+                new ZeroChillDialog.Builder(this).setTitle("Artwork fetch complete")
+                        .setMessage(summary).setPositiveButton("Done", null).show();
+            });
+        });
+    }
+
+    private void cancelArtwork() {
+        artworkRun++;
+        artworkCancelled.set(true);
+        if (artworkTask != null) artworkTask.cancel(true);
+        if (artworkDialog != null) artworkDialog.dismiss();
+        artworkDialog = null;
     }
 
     private void render() {
@@ -657,6 +707,7 @@ public final class CreatorsActivity extends Activity {
         render();
     }
     @Override protected void onStop() {
+        cancelArtwork();
         stopped = true;
         UpdateInboxStore.unregisterChangeListener(this, inboxListener);
         recycler.removeCallbacks(avatarPrefetch);
@@ -697,5 +748,10 @@ public final class CreatorsActivity extends Activity {
         }
         super.onSaveInstanceState(state);
     }
+    @Override protected void onDestroy() {
+        cancelArtwork();
+        super.onDestroy();
+    }
+
     private int dp(int value) { return BrowseUi.dp(this, value); }
 }

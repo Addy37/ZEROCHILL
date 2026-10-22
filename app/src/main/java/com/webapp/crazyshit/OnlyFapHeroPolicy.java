@@ -62,6 +62,21 @@ final class OnlyFapHeroPolicy {
         return new ArrayList<>(selected.values());
     }
 
+    /** Filtered shelves are the complete membership authority, without All-mode exclusions. */
+    static List<NativeContentItem> selectCategory(List<NativeContentItem> category, int limit) {
+        LinkedHashMap<String, NativeContentItem> selected = new LinkedHashMap<>();
+        append(selected, category, Collections.emptySet(), limit);
+        return new ArrayList<>(selected.values());
+    }
+
+    static boolean inCategory(NativeContentItem creator, List<NativeContentItem> category) {
+        if (creator == null || !creator.isCreator() || category == null) return false;
+        for (NativeContentItem member : category)
+            if (member != null && member.isCreator() && !creator.url.isEmpty()
+                    && creator.url.equals(member.url)) return true;
+        return false;
+    }
+
     static void appendUniqueCreators(
             List<NativeContentItem> destination,
             List<NativeContentItem> source

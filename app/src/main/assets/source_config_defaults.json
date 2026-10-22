@@ -241,7 +241,8 @@
         "creatorSearch": "creators?search={query}",
         "creatorSearchApi": "api/v1/creators?q={query}&n={limit}&o={offset}",
         "creatorPage": "creators/{service}/{id}?page={page}",
-        "creatorPostsApi": "api/v1/{service}/user/{id}/posts?o={offset}&n={limit}"
+        "creatorPostsApi": "api/v1/{service}/user/{id}/posts?o={offset}&n={limit}",
+        "creatorCategoryApi": "api/v1/creators?gender={category}&content=imported&n={limit}&o={offset}"
       },
       "selectors": {
         "creatorLinks": "a[href*=/creators/]",
@@ -254,7 +255,15 @@
         "scriptMediaUrl": "(?i)https?://[^\\s\\\"'<>]+?\\.(?:jpg|jpeg|png|webp|gif|mp4|webm|m4v|m3u8)(?:\\?[^\\s\\\"'<>]*)?"
       },
       "mediaBaseUrl": "https://e1.cum.st/media/",
-      "imageBaseUrl": "https://img.cum.st/"
+      "imageBaseUrl": "https://img.cum.st/",
+      "categoryValues": {
+        "women": "woman",
+        "men": "man",
+        "trans_women": "trans_woman",
+        "trans_men": "trans_man",
+        "non_binary": "nonbinary",
+        "groups": "group"
+      }
     },
     "baddiehub": {
       "enabled": true,

@@ -11,6 +11,10 @@ on:
       - ".github/workflows/performance.yml"
       - "tools/run_performance_audit.sh"
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: ${{ github.head_ref == 'feature/zerochill-5.1.0' }}
+
 permissions:
   contents: read
 
@@ -51,7 +55,7 @@ jobs:
           done
   macrobenchmark:
     # This candidate uses the paired short-scroll audit instead of ten full flows.
-    if: ${{ github.head_ref != 'release/zerochill-5.0.0' && github.head_ref != 'feature/shittok-dynamic-pinch' && github.head_ref != 'feature/primary-tab-activation' && github.head_ref != 'fix/notification-entry-latency' && github.head_ref != 'feature/spotlight-glass-search' && github.head_ref != 'feature/shittok-speed-mute' && github.head_ref != 'feature/shittok-deep-source-exploration' && github.head_ref != 'fix/shittok-async-creator-metadata' && github.head_ref != 'fix/shittok-startup-handoff' && github.head_ref != 'fix/onlyfap-first-open' && github.head_ref != 'feature/phone-content-grid-layout' && github.head_ref != 'feature/library-profile-redesign' && github.head_ref != 'fix/library-onlyfap-creator-context' && github.head_ref != 'fix/baddiehub-view-count-titles' && github.head_ref != 'feature/search-results-polish' }}
+    if: ${{ github.head_ref != 'feature/zerochill-5.1.0' && github.head_ref != 'release/zerochill-5.0.0' && github.head_ref != 'feature/shittok-dynamic-pinch' && github.head_ref != 'feature/primary-tab-activation' && github.head_ref != 'fix/notification-entry-latency' && github.head_ref != 'feature/spotlight-glass-search' && github.head_ref != 'feature/shittok-speed-mute' && github.head_ref != 'feature/shittok-deep-source-exploration' && github.head_ref != 'fix/shittok-async-creator-metadata' && github.head_ref != 'fix/shittok-startup-handoff' && github.head_ref != 'fix/onlyfap-first-open' && github.head_ref != 'feature/phone-content-grid-layout' && github.head_ref != 'feature/library-profile-redesign' && github.head_ref != 'fix/library-onlyfap-creator-context' && github.head_ref != 'fix/baddiehub-view-count-titles' && github.head_ref != 'feature/search-results-polish' }}
     name: performance (${{ matrix.flow }})
     runs-on: ubuntu-latest
     timeout-minutes: 60

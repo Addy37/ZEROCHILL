@@ -68,10 +68,33 @@ final class ChaosSourceMixer {
     private final ArrayDeque<String> sourceDeck = new ArrayDeque<>();
     private final Set<String> usedSourcePages = new HashSet<>();
     private final Object catalogLock = new Object();
+    private final Object onlyHavenLock = new Object();
     private boolean catalogLoaded;
     private boolean catalogLoading;
     private boolean efuktCatalogAttempted;
     private boolean onlyHavenCatalogAttempted;
+    private final java.util.concurrent.atomic.AtomicBoolean onlyHavenDeckReset = new java.util.concurrent.atomic.AtomicBoolean();
+    private ContentPreference onlyHavenCatalogPreference = ContentPreference.ALL;
+    private long categoryRetryAfter;
+    private final Set<String> preferenceMatches = java.util.concurrent.ConcurrentHashMap.newKeySet();
+
+    boolean matchesPreference(NativeContentItem item, ContentPreference mode) {
+        return mode != ContentPreference.ALL && preferenceMatches.contains(mode.value + "|" + item.url);
+    }
+    private final ShitTokPreferenceBuffer preferenceBuffer = new ShitTokPreferenceBuffer();
+
+    void requestPreference(Context context, Runnable available) {
+        ContentPreference mode = ContentPreference.get(context);
+        if (!explorationAllowed && mode != ContentPreference.ALL) return;
+        Context app = context.getApplicationContext();
+        preferenceBuffer.request(mode, () -> provider(BATCH_ONLY_HAVEN,
+                () -> loadOnlyHavenBatch(app, mode)).call().items, available);
+    }
+
+    boolean hasPreference(ContentPreference mode) { return preferenceBuffer.hasReady(mode); }
+    List<NativeContentItem> takePreference(ContentPreference mode) { return preferenceBuffer.take(mode); }
+    void stopPreference() { preferenceBuffer.stop(); }
+
     private boolean starterPending = true;
     private volatile boolean explorationAllowed;
     private final java.util.concurrent.atomic.AtomicInteger activeFetches = new java.util.concurrent.atomic.AtomicInteger();
@@ -154,6 +177,7 @@ final class ChaosSourceMixer {
                 new ExecutorCompletionService<>(continuityOnly ? CONTINUITY_SOURCE_IO : SOURCE_IO);
         ArrayList<Future<SourceBatch>> work = new ArrayList<>();
         ArrayList<java.util.concurrent.Callable<SourceBatch>> requests = new ArrayList<>();
+        final ContentPreference preference = ContentPreference.get(context);
         // Fast independent listings enter the bounded three-worker pool before multi-page catalogs.
         requests.add(provider(BATCH_KAOTIC, () -> loadKaoticBatch(context)));
         requests.add(provider(BATCH_FAPELLO, () -> loadFapelloBatch(context)));
@@ -162,7 +186,8 @@ final class ChaosSourceMixer {
         // eFukt remains bounded before the first frame. No new sources are introduced.
         requests.add(provider(BATCH_EFUKT,
                 () -> explorationAllowed ? loadEfuktBatch(context) : efukt.fetchLatest(context)));
-        if (explorationAllowed) requests.add(provider(BATCH_ONLY_HAVEN, () -> loadOnlyHavenBatch(context)));
+        if (explorationAllowed && preference == ContentPreference.ALL)
+            requests.add(provider(BATCH_ONLY_HAVEN, () -> loadOnlyHavenBatch(context)));
         for (java.util.concurrent.Callable<SourceBatch> request : requests) work.add(completions.submit(request));
 
         ArrayList<NativeContentItem> regularItems = new ArrayList<>();
@@ -308,8 +333,7 @@ final class ChaosSourceMixer {
         shitShow.resetDeck();
         efuktSeriesDeck.clear();
         if (efuktSeries.isEmpty()) efuktCatalogAttempted = false;
-        onlyHavenCreatorDeck.clear();
-        if (onlyHavenCreators.isEmpty()) onlyHavenCatalogAttempted = false;
+        onlyHavenDeckReset.set(true);
     }
 
     private List<NativeContentItem> withKnownStarter(List<NativeContentItem> starter) {
@@ -436,14 +460,29 @@ final class ChaosSourceMixer {
     }
 
     private List<NativeContentItem> loadOnlyHavenBatch(Context context) {
-        ensureOnlyHavenCatalog(context);
+        return loadOnlyHavenBatch(context, ContentPreference.ALL);
+    }
+
+    private List<NativeContentItem> loadOnlyHavenBatch(Context context, ContentPreference mode) {
+        // Catalog serialization must not hold this mixer's nextPage() monitor across IO.
+        synchronized (onlyHavenLock) { return harvestOnlyHavenBatch(context, mode); }
+    }
+
+    private List<NativeContentItem> harvestOnlyHavenBatch(Context context, ContentPreference mode) {
+        if (onlyHavenDeckReset.getAndSet(false)) {
+            onlyHavenCreatorDeck.clear();
+            if (onlyHavenCreators.isEmpty()) onlyHavenCatalogAttempted = false;
+        }
+        ensureOnlyHavenCatalog(context, mode);
         if (onlyHavenCreators.isEmpty()) return new ArrayList<>();
 
         LinkedHashMap<String, NativeContentItem> combined = new LinkedHashMap<>();
         HashSet<String> usedCreators = new HashSet<>();
         int attempts = Math.min(4, onlyHavenCreators.size());
-
-        while (combined.size() < ONLY_HAVEN_ITEMS_PER_BATCH && attempts-- > 0) {
+        // The independent preference buffer holds at most two raw matching clips.
+        // Ordinary providers keep their normal fetch/admission path.
+        int batchLimit = mode == ContentPreference.ALL ? ONLY_HAVEN_ITEMS_PER_BATCH : 2;
+        while (combined.size() < batchLimit && attempts-- > 0) {
             if (Thread.currentThread().isInterrupted()) break;
             if (onlyHavenCreatorDeck.isEmpty()) refillOnlyHavenDeck();
             OnlyHavenRepository.Creator creator = onlyHavenCreatorDeck.pollFirst();
@@ -466,7 +505,11 @@ final class ChaosSourceMixer {
                 NativeContentItem item = candidates.get(i);
                 if (item.url == null || item.url.isEmpty()) continue;
                 combined.putIfAbsent(item.url, item);
-                if (combined.size() >= ONLY_HAVEN_ITEMS_PER_BATCH) break;
+                if (mode != ContentPreference.ALL) {
+                    if (preferenceMatches.size() > 4096) preferenceMatches.clear();
+                    preferenceMatches.add(mode.value + "|" + item.url);
+                }
+                if (combined.size() >= batchLimit) break;
             }
         }
 
@@ -484,13 +527,20 @@ final class ChaosSourceMixer {
         );
     }
 
-    private void ensureOnlyHavenCatalog(Context context) {
-        if (onlyHavenCatalogAttempted) return;
+    private void ensureOnlyHavenCatalog(Context context, ContentPreference mode) {
+        if (onlyHavenCatalogPreference != mode) {
+            onlyHavenCreators.clear(); onlyHavenCreatorDeck.clear();
+            onlyHavenCatalogAttempted = false;
+            onlyHavenCatalogPreference = mode;
+            categoryRetryAfter = 0;
+        }
+        if (onlyHavenCatalogAttempted || (mode != ContentPreference.ALL
+                && android.os.SystemClock.elapsedRealtime() < categoryRetryAfter)) return;
         onlyHavenCatalogAttempted = true;
         boolean loaded = false;
         try {
             for (OnlyHavenRepository.Creator creator :
-                    onlyHaven.fetchTrendingCreators(context, ONLY_HAVEN_TRENDING_CREATORS)) {
+                    onlyHaven.fetchCategoryCreators(context, mode, ONLY_HAVEN_TRENDING_CREATORS)) {
                 if (Thread.currentThread().isInterrupted()) break;
                 if (creator == null || creator.url == null || creator.url.isEmpty()) continue;
                 if (creator.isKnownEmpty()) continue;
@@ -499,7 +549,12 @@ final class ChaosSourceMixer {
             loaded = !Thread.currentThread().isInterrupted();
         } catch (Exception ignored) {
         }
-        if (!loaded && onlyHavenCreators.isEmpty()) onlyHavenCatalogAttempted = false;
+        if (onlyHavenCreators.isEmpty() && mode != ContentPreference.ALL) {
+            onlyHavenCatalogAttempted = false;
+            // Cancellation is navigation, not evidence of a failing provider.
+            categoryRetryAfter = Thread.currentThread().isInterrupted() ? 0L
+                    : android.os.SystemClock.elapsedRealtime() + 60_000L;
+        } else if (!loaded && onlyHavenCreators.isEmpty()) onlyHavenCatalogAttempted = false;
         refillOnlyHavenDeck();
     }
 

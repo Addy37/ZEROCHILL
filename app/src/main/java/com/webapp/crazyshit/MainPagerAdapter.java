@@ -91,8 +91,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
     private final BunkrRepository bunkrRepository = new BunkrRepository();
     private final FapzoneCreatorRepository fapzoneCreatorRepository =
             new FapzoneCreatorRepository();
-    private final FavoriteCreatorArtworkHydrator favoriteCreatorArtworkHydrator =
-            new FavoriteCreatorArtworkHydrator();
+    private ContentPreference onlyFapPreference;
     private final BrowseArtworkResolver browseArtworkResolver;
     private final ExecutorService io = Executors.newFixedThreadPool(5);
     private final ExecutorService baddieHubIo = Executors.newSingleThreadExecutor();
@@ -242,6 +241,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
             page.showsHub.clear();
         }
         if (page.kind == PageKind.ONLYFAP && page.onlyFapHub != null) {
+            page.onlyFapHub.preparePreference(ContentPreference.get(activity));
             page.onlyFapHub.clear();
             page.currentPage = 0;
             page.endReached = false;
@@ -300,6 +300,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                 pages[PAGE_SERIES].showsHub.setActive(true);
                 pages[PAGE_SERIES].showsHub.refreshContinueWatching();
             } else if (position == PAGE_ONLYFAP) {
+                if (onlyFapPreference != ContentPreference.get(activity)) refresh(PAGE_ONLYFAP);
                 pages[PAGE_ONLYFAP].onlyFapHub.setActive(true);
             }
             if (position == PAGE_CHAOS || position == PAGE_LIBRARY) return;
@@ -920,6 +921,8 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                         }
                     }
             );
+            page.onlyFapHub.preparePreference(ContentPreference.get(activity));
+            page.onlyFapHub.setPreferenceChanged(() -> refresh(PAGE_ONLYFAP));
             page.onlyFapHub.setNavigationScrollListener(
                     (v, scrollX, scrollY, oldScrollX, oldScrollY) ->
                             host.onNavigationScroll(
@@ -1153,19 +1156,32 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         page.empty.setVisibility(View.GONE);
         page.progress.setVisibility(View.GONE);
 
+        onlyFapPreference = ContentPreference.get(activity);
+        page.onlyFapHub.preparePreference(onlyFapPreference);
         page.onlyFapHub.beginRefresh();
         final int generation = page.generation;
-        page.onlyFapFavoriteArtworkTask = io.submit(() ->
-                favoriteCreatorArtworkHydrator.hydrate(
-                        activity,
-                        10,
-                        () -> postPrimaryResult(page, generation, "favorites", () -> {
-                            if (generation == page.generation && page.onlyFapHub != null) {
-                                page.onlyFapHub.refreshFavorites();
-                            }
-                        })
-                )
-        );
+        final ContentPreference preference = onlyFapPreference;
+        if (preference != ContentPreference.ALL) {
+            page.onlyFapHubTasks.add(io.submit(() -> {
+                List<NativeContentItem> category = new java.util.ArrayList<>();
+                try {
+                    OnlyHavenRepository haven = new OnlyHavenRepository();
+                    for (OnlyHavenRepository.Creator creator : haven.fetchCategoryCreators(activity, preference, 50))
+                        category.add(OnlyHavenRepository.creatorItem(creator));
+                    if (!Thread.currentThread().isInterrupted()) CreatorCatalog.remember(activity, category);
+                } catch (Exception ignored) { }
+                final List<NativeContentItem> result = category;
+                postPrimaryResult(page, generation, "category", () -> {
+                    if (generation != page.generation) return;
+                    page.loading = false;
+                    page.endReached = true;
+                    page.onlyFapLastLoadedElapsedMs = android.os.SystemClock.elapsedRealtime();
+                    page.onlyFapHubTasks.clear();
+                    page.onlyFapHub.setPreferenceCreators(result);
+                });
+            }));
+            return;
+        }
         AtomicInteger remaining = new AtomicInteger(2);
         java.util.concurrent.CountDownLatch regularShelvesReady =
                 new java.util.concurrent.CountDownLatch(1);
@@ -1282,10 +1298,6 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
 
     private void cancelOnlyFapHubTasks(Page page) {
         if (page == null) return;
-        if (page.onlyFapFavoriteArtworkTask != null) {
-            page.onlyFapFavoriteArtworkTask.cancel(true);
-            page.onlyFapFavoriteArtworkTask = null;
-        }
         for (java.util.concurrent.Future<?> task : page.onlyFapHubTasks) {
             if (task != null) task.cancel(true);
         }
@@ -1549,7 +1561,6 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                 new java.util.ArrayList<>();
         final java.util.List<java.util.concurrent.Future<?>> onlyFapHubTasks =
                 new java.util.ArrayList<>();
-        java.util.concurrent.Future<?> onlyFapFavoriteArtworkTask;
         final java.util.List<TextView> homeChips = new java.util.ArrayList<>();
         int currentPage;
         boolean loading;

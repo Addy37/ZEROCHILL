@@ -188,6 +188,31 @@ final class OnlyHavenRepository {
         throw new IOException("OnlyHaven returned no trending creators");
     }
 
+    static String categoryRoute(SourceConfig.OnlyHaven config, ContentPreference preference, int limit, int offset) {
+        String category = config.categoryValues.get(preference.value);
+        if (category == null) throw new IllegalArgumentException("A category preference is required");
+        return config.creatorCategoryApiRoute.replace("{category}", category)
+                .replace("{limit}", String.valueOf(Math.max(1, Math.min(50, limit))))
+                .replace("{offset}", String.valueOf(Math.max(0, offset)));
+    }
+
+    List<Creator> fetchCategoryCreators(Context context, ContentPreference preference, int limit) throws IOException {
+        if (preference == ContentPreference.ALL) return fetchTrendingCreators(context, limit);
+        SourceConfig.OnlyHaven config = config();
+        if (!config.enabled) throw new IOException("OnlyHaven is temporarily unavailable");
+        String route = categoryRoute(config, preference, limit, 0);
+        // No unfiltered fallback: only the provider's category endpoint can classify these results.
+        List<Creator> creators = parseCreatorSearchJson(
+                fetchConfiguredText(context, config, config.baseUrl + route), config, "", Math.max(1, limit));
+        creators.removeIf(Creator::isKnownEmpty);
+        return creators;
+    }
+
+    static NativeContentItem creatorItem(Creator creator) {
+        return new NativeContentItem(NativeContentItem.KIND_CREATOR, creator.name, creator.url,
+                creator.imageUrl, "", creator.url, "", "OnlyHaven", creator.name);
+    }
+
     List<Creator> parseCreatorSearchJson(
             String body,
             SourceConfig.OnlyHaven config,
@@ -412,24 +437,10 @@ final class OnlyHavenRepository {
         String direct = firstJsonText(row, "avatarUrl", "avatar_url", "imageUrl", "image_url");
         if (direct.startsWith("https://")) return direct;
 
-        String thumbHash = firstJsonText(
-                row,
-                "avatarThumbhash",
-                "avatar_thumbhash",
-                "avatar",
-                "avatar_hash"
-        );
-        if (thumbHash.startsWith("https://")) return thumbHash;
-        String cleanHash = clean(thumbHash)
-                .replaceFirst("^/+", "")
-                .replaceFirst("^data/", "")
-                .replaceFirst("^media/", "")
-                .replaceFirst("^thumbnail/", "");
-        int slash = cleanHash.indexOf('/');
-        if (slash >= 0) cleanHash = cleanHash.substring(0, slash);
-        if (!cleanHash.isEmpty()) {
-            return imageBase(config) + "thumbnail/" + cleanHash + "/preview.webp";
-        }
+        // avatarThumbhash is Base64 placeholder metadata, never a CDN asset key.
+        // The provider serves creator portraits by service/id, like creator headers.
+        String avatar = firstJsonText(row, "avatar");
+        if (avatar.startsWith("https://")) return avatar;
 
         if (!clean(service).isEmpty() && !clean(id).isEmpty()) {
             return imageBase(config) + "creator/" + urlToken(service) + "/" +

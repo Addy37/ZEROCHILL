@@ -1,0 +1,19 @@
+name: OnlyHaven category contract audit
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/onlyhaven-contract-audit.yml'
+      - 'tools/verify_onlyhaven_categories.py'
+      - 'app/src/main/java/com/webapp/crazyshit/OnlyHavenRepository.java'
+      - 'app/src/main/assets/source_config_defaults.json'
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+      - name: Verify current public category contract
+        run: python3 tools/verify_onlyhaven_categories.py
