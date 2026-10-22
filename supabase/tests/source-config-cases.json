@@ -1,0 +1,23 @@
+[
+  {"name":"full current document", "valid":true},
+  {"name":"missing supported source", "delete":"sources.kaotic", "valid":false},
+  {"name":"missing gallery source", "delete":"sources.baddiehub", "valid":false},
+  {"name":"unknown source rejected", "set":"sources.retired_source", "value":{}, "valid":false},
+  {"name":"incomplete legacy document", "delete":"sources.onlyhaven", "valid":false},
+  {"name":"category search route", "set":"sources.onlyhaven.routes.creatorCategorySearchApi", "value":"api/v1/creators?q={query}&gender={category}&n={limit}&o={offset}", "valid":true},
+  {"name":"unknown category route token", "set":"sources.onlyhaven.routes.creatorCategorySearchApi", "value":"api/v1/creators?gender={script}", "valid":false},
+  {"name":"optional category search compiled fallback", "delete":"sources.onlyhaven.routes.creatorCategorySearchApi", "valid":true},
+  {"name":"optional category compiled fallback", "delete":"sources.onlyhaven.routes.creatorCategoryApi", "valid":true},
+  {"name":"optional category values compiled fallback", "delete":"sources.onlyhaven.categoryValues", "valid":true},
+  {"name":"invalid category token", "set":"sources.onlyhaven.categoryValues.men", "value":"man&gender=woman", "valid":false},
+  {"name":"missing category mapping", "delete":"sources.onlyhaven.categoryValues.men", "valid":false},
+  {"name":"unknown category mapping", "set":"sources.onlyhaven.categoryValues.unknown", "value":"man", "valid":false},
+  {"name":"invalid category pagination token", "set":"sources.baddiehub.routes.categoryPage", "value":"category/{script}/", "valid":false},
+  {"name":"missing gallery selector", "delete":"sources.baddiehub.selectors.playableFrame", "valid":false},
+  {"name":"unknown source field", "set":"sources.kaotic.executable", "value":"code", "valid":false},
+  {"name":"insecure source URL", "set":"sources.kaotic.baseUrl", "value":"http://kaotic.com/", "valid":false},
+  {"name":"unsafe header", "set":"sources.kaotic.requestHeaders.Authorization", "value":"private", "valid":false},
+  {"name":"out of bounds timeout", "set":"sources.onlyhaven.requestTimeoutMs", "value":60000, "valid":false},
+  {"name":"unsafe version integer", "set":"configVersion", "value":9007199254740992, "valid":false},
+  {"name":"unsafe media regex", "set":"sources.kaotic.patterns.scriptMediaUrl", "value":"(a+)+", "valid":false}
+]

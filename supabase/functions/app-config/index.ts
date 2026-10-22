@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { validateSourceConfig } from "../_shared/source-config-validation.ts";
 
 function response(body: unknown, status = 200, headers: Record<string, string> = {}) {
   return new Response(status === 304 ? null : JSON.stringify(body), {
@@ -52,6 +53,11 @@ Deno.serve(async (request) => {
     if (!data) return response({ error: "No configuration has been published." }, 404);
 
     const version = Number(data.config_version);
+    const validation = validateSourceConfig(data.config);
+    if (!validation.valid || data.config.configVersion !== version) {
+      console.error("Active source configuration failed validation.");
+      return response({ error: "Active configuration is incompatible. Keep the last valid configuration." }, 503);
+    }
     const etag = `\"${version}\"`;
     const current = Number(new URL(request.url).searchParams.get("currentVersion") ?? "0");
     if (request.headers.get("if-none-match") === etag || current >= version) {
