@@ -10,7 +10,6 @@ enum ContentPreference {
     MEN("men", "Men", "♂"),
     TRANS_WOMEN("trans_women", "Trans women", "⚧"),
     TRANS_MEN("trans_men", "Trans men", "⚧"),
-    NON_BINARY("non_binary", "Non-binary", ""),
     GROUPS("groups", "Groups", "");
 
     static final String KEY = "content_preference";
@@ -43,7 +42,6 @@ enum ContentPreference {
         return prefs.edit().putLong(key, revision).commit();
     }
     int icon() {
-        return this == NON_BINARY ? R.drawable.ic_content_non_binary
-                : this == GROUPS ? R.drawable.ic_content_groups : 0;
+        return this == GROUPS ? R.drawable.ic_content_groups : 0;
     }
 }

@@ -9,6 +9,9 @@ this work adds native Java views only.
 
 One optional string in `app_prefs`, default `all`, shared by Settings and the
 OnlyFap header. No login required. Unknown values safely read as All content.
+Non-binary is no longer selectable. A saved `non_binary` value reads as All content
+through the existing unknown-value fallback, without rewriting unrelated data.
+The unused provider mapping stays accepted for remote-document compatibility.
 Existing backup whitelists/formats are unchanged; this new device preference is
 not added to backup exports. Favorites, history, downloads, blocks, creator groups,
 accounts and notification settings keep their existing persistence formats.
@@ -20,7 +23,6 @@ accounts and notification settings keep their existing persistence formats.
 | Men | OnlyHaven creators with content | `man` |
 | Trans women | OnlyHaven creators with content | `trans_woman` |
 | Trans men | OnlyHaven creators with content | `trans_man` |
-| Non-binary | OnlyHaven creators with content | `nonbinary` |
 | Groups | OnlyHaven creators with content | `group` |
 
 Filtered discovery requests up to 50 creators in the provider's default ordering.
@@ -67,7 +69,7 @@ fade/scale overlay. Initial installs, unchanged selections and recreation do not
 replay it. OnlyFap presents over its refreshed category surface; ShitTok's copy
 explicitly says matching content is prioritized. Playback is not paused. All uses
 an ALL treatment; women/men use the standard symbols; trans modes use the trans
-symbol with explicit labels; non-binary and groups use local vector icons. Every
+symbol with explicit labels; groups uses a local vector icon. Every
 mode retains visible text.
 
 ## Filtered heroes and preference glass follow-up
@@ -94,7 +96,7 @@ Both controls share the gallery button's dark translucent fill, white border and
 48dp height. OnlyFap shows the mode symbol/local icon and dropdown arrow; the
 accessibility label and tooltip retain the full mode name. The picker and Settings
 keep full labels. All content uses ALL, trans modes share their identity symbol,
-and non-binary/groups use existing local vectors. The shared button treatment
+and Groups uses its existing local vector. The shared button treatment
 replaces the previous mode-specific pill highlights and corners at the user's request.
 The picker retains its native liquid glass and short forming entrance, detailed below.
 Preference persistence, hero loading and rotation are unchanged.

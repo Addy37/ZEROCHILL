@@ -24,12 +24,15 @@ public class ContentPreferenceTest {
     private final Context context = RuntimeEnvironment.getApplication();
     @Before public void clean() { ContentPreference.prefs(context).edit().clear().commit(); }
 
-    @Test public void upgradeDefaultAndUnknownValueAreAll() {
+    @Test public void upgradeDefaultUnknownAndRemovedModeAreAll() {
         assertEquals(ContentPreference.ALL, ContentPreference.get(context));
         assertFalse(ContentPreference.acknowledge(context, "onlyfap"));
         assertFalse(ContentPreference.set(context, ContentPreference.ALL));
         ContentPreference.prefs(context).edit().putString(ContentPreference.KEY, "future").commit();
         assertEquals(ContentPreference.ALL, ContentPreference.get(context));
+        ContentPreference.prefs(context).edit().putString(ContentPreference.KEY, "non_binary").commit();
+        assertEquals(ContentPreference.ALL, ContentPreference.get(context));
+        assertEquals(6, ContentPreference.values().length);
     }
     @Test public void actualChangesAreAcknowledgedOncePerSurfaceAcrossRecreation() {
         assertTrue(ContentPreference.set(context, ContentPreference.MEN));
@@ -48,6 +51,7 @@ public class ContentPreferenceTest {
         int[] changed = {0};
         ContentPreferenceUi.choose(activity, () -> changed[0]++);
         AlertDialog dialog = ShadowAlertDialog.getLatestAlertDialog();
+        assertNull(dialog.getWindow().getDecorView().findViewWithTag("preference_non_binary"));
         dialog.getWindow().getDecorView().findViewWithTag("preference_men").performClick();
         assertEquals(ContentPreference.MEN, ContentPreference.get(context));
         assertEquals(1, changed[0]);
@@ -144,7 +148,7 @@ public class ContentPreferenceTest {
 
     @Test public void categoryMappingUsesVerifiedProviderTokensAndConfiguredRoute() throws Exception {
         JSONObject document = new JSONObject(new String(Files.readAllBytes(Paths.get("src/main/assets/source_config_defaults.json")), java.nio.charset.StandardCharsets.UTF_8));
-        String[] tokens = {"woman", "man", "trans_woman", "trans_man", "nonbinary", "group"};
+        String[] tokens = {"woman", "man", "trans_woman", "trans_man", "group"};
         SourceConfig.OnlyHaven config = SourceConfig.parseAndValidate(document.toString()).onlyHaven;
         for (int i = 1; i < ContentPreference.values().length; i++) {
             String route = OnlyHavenRepository.categoryRoute(config, ContentPreference.values()[i], 100, 50);
