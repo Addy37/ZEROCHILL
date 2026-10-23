@@ -926,6 +926,7 @@ public class VideoDetailActivity extends Activity {
                     RatingFeedbackPrompt.recordSuccessfulPlayback(VideoDetailActivity.this, mediaUrl);
                 } else if (playbackState == Player.STATE_ENDED) {
                     savePlaybackState(true);
+                    playPendingShowsNext();
                 }
             }
 
@@ -1488,19 +1489,66 @@ public class VideoDetailActivity extends Activity {
         return new GlideUrl(imageUrl, headers.build());
     }
 
+    // A single persisted handoff into the existing related-video switch, not a second player queue.
+    private static final String SHOWS_NEXT = "shows_play_next";
+    private boolean showsNextResolving;
+
+    static void setShowsPlayNext(android.content.Context context, NativeContentItem item, String source, String feed) {
+        if (!ShowsEpisodePlayback.playable(item)) return;
+        try {
+            org.json.JSONObject value = ContentItemCodec.encode(item).put("source", source).put("feed", feed);
+            context.getSharedPreferences("player_positions", MODE_PRIVATE).edit()
+                    .putString(SHOWS_NEXT, value.toString()).apply();
+        } catch (org.json.JSONException ignored) { }
+    }
+
+    static org.json.JSONObject pendingShowsNext(android.content.Context context, String currentUrl) {
+        String raw = context.getSharedPreferences("player_positions", MODE_PRIVATE).getString(SHOWS_NEXT, "");
+        try {
+            org.json.JSONObject value = new org.json.JSONObject(raw);
+            NativeContentItem next = ContentItemCodec.decode(value);
+            if (!ShowsEpisodePlayback.playable(next)) return null;
+            if (next.url.equals(currentUrl)) {
+                clearShowsNext(context, raw);
+                return null;
+            }
+            return value;
+        } catch (org.json.JSONException ignored) { return null; }
+    }
+
+    static void clearShowsNext(android.content.Context context, String expected) {
+        android.content.SharedPreferences prefs = context.getSharedPreferences("player_positions", MODE_PRIVATE);
+        if (expected.equals(prefs.getString(SHOWS_NEXT, ""))) prefs.edit().remove(SHOWS_NEXT).apply();
+    }
+
+    private void playPendingShowsNext() {
+        if ((!manualLandscapeFullscreen && !showsOrigin) || !recoveryResumed || showsNextResolving
+                || relatedTransitionRunning || isFinishing() || isDestroyed()) return;
+        org.json.JSONObject next = pendingShowsNext(this, pageUrl);
+        if (next != null) playRelated(ContentItemCodec.decode(next), next);
+    }
+
     private void playRelated(NativeContentItem item) {
+        playRelated(item, null);
+    }
+
+    private void playRelated(NativeContentItem item, org.json.JSONObject queued) {
         if (item == null || item.url == null || item.url.isEmpty() || relatedTransitionRunning) return;
         loading.setVisibility(View.VISIBLE);
+        if (queued != null) showsNextResolving = true;
         final int requestGeneration = ++relatedPlayGeneration;
         io.execute(() -> {
             CrazyShitRepository.StreamInfo stream = null;
             try {
-                stream = PlayableSourceRouter.resolve(this, item.url);
+                stream = queued == null ? PlayableSourceRouter.resolve(this, item.url)
+                        : PlayableSourceRouter.resolve(this, item);
             } catch (Exception ignored) {
             }
             CrazyShitRepository.StreamInfo resolved = stream;
             runOnUiThread(() -> {
-                if (isFinishing() || requestGeneration != relatedPlayGeneration) return;
+                if (queued != null) showsNextResolving = false;
+                if (isFinishing() || isDestroyed() || requestGeneration != relatedPlayGeneration) return;
+                if (queued != null && !recoveryResumed) { loading.setVisibility(View.GONE); return; }
                 loading.setVisibility(View.GONE);
                 if (resolved == null || resolved.mediaUrl == null || resolved.mediaUrl.isEmpty()) {
                     ZeroChillToast.makeText(
@@ -1513,6 +1561,11 @@ public class VideoDetailActivity extends Activity {
                 pushCurrentVideo();
                 savePlaybackState(false);
                 Runnable swap = () -> {
+                    if (queued != null) {
+                        clearShowsNext(this, queued.toString());
+                        source = queued.optString("source", source);
+                        relatedFeedUrl = queued.optString("feed", relatedFeedUrl);
+                    }
                     mediaUrl = resolved.mediaUrl;
                     pageUrl = item.url;
                     onlyFapContent = item;
@@ -2047,7 +2100,7 @@ public class VideoDetailActivity extends Activity {
                 "Send the video page",
                 this::sharePage
         ));
-        actions.add(VideoActionSheet.action(
+        if (!manualLandscapeFullscreen && !showsOrigin) actions.add(VideoActionSheet.action(
                 R.drawable.ic_more_website,
                 "Open source website",
                 "Open the original video page",
@@ -2598,7 +2651,7 @@ public class VideoDetailActivity extends Activity {
                 position,
                 duration,
                 ended,
-                showsOrigin
+                showsOrigin || manualLandscapeFullscreen
         );
         updateShowsContinueFrame(ended, position, duration);
 
@@ -2720,6 +2773,7 @@ public class VideoDetailActivity extends Activity {
     protected void onResume() {
         super.onResume();
         recoveryResumed = true;
+        if (player != null && player.getPlaybackState() == Player.STATE_ENDED) playPendingShowsNext();
         if (orientationListener != null) orientationListener.enable();
         if (socialNavigationPendingReturn) {
             socialNavigationPendingReturn = false;

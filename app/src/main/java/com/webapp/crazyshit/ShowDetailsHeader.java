@@ -28,6 +28,7 @@ final class ShowDetailsHeader extends FrameLayout {
 
     private final ImageView artwork;
     private final TextView count;
+    private final TextView action;
     private final String collectionUrl;
 
     ShowDetailsHeader(
@@ -103,16 +104,17 @@ final class ShowDetailsHeader extends FrameLayout {
         copy.addView(metaRow, metaParams);
 
         count = text(
-                "Loading videos…",
+                "Loading episodes…",
                 12f,
                 ZeroChillUi.color(context, R.color.zc_text_secondary)
         );
         metaRow.addView(count, new LinearLayout.LayoutParams(0, -2, 1f));
 
-        TextView action = text("BROWSE VIDEOS", 12f, Color.BLACK);
+        action = text("PLAY FIRST", 12f, Color.BLACK);
         action.setTypeface(null, android.graphics.Typeface.BOLD);
         action.setGravity(Gravity.CENTER);
-        action.setContentDescription("Browse videos in " + clean(title, "this show"));
+        action.setContentDescription("Play first episode");
+        action.setEnabled(false);
         GradientDrawable actionBackground = new GradientDrawable();
         actionBackground.setColor(UiPalette.PRIMARY);
         actionBackground.setCornerRadius(dp(19));
@@ -128,13 +130,20 @@ final class ShowDetailsHeader extends FrameLayout {
         loadArtwork(imageUrl);
     }
 
+    void setPlaybackAction(boolean resumable, boolean available) {
+        action.setText(resumable ? "RESUME" : "PLAY FIRST");
+        action.setContentDescription(resumable ? "Resume episode" : "Play first episode");
+        action.setEnabled(available);
+        action.setAlpha(available ? 1f : 0.45f);
+    }
+
     void setItemCount(int itemCount) {
         if (itemCount <= 0) {
-            count.setText("No videos loaded yet");
+            count.setText("No episodes loaded yet");
         } else if (itemCount == 1) {
-            count.setText("1 video");
+            count.setText("1 episode");
         } else {
-            count.setText(itemCount + " videos");
+            count.setText(itemCount + " episodes");
         }
     }
 

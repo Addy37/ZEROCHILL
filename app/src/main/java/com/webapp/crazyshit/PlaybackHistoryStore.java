@@ -339,7 +339,7 @@ public final class PlaybackHistoryStore {
         return item.durationMs <= 0L || !isComplete(item.positionMs, item.durationMs);
     }
 
-    private static boolean isShowsContinueCandidate(Item item) {
+    static boolean isShowsContinueCandidate(Item item) {
         if (item == null || item.complete) return false;
         if (item.positionMs < MIN_HISTORY_MS) return false;
         return item.durationMs <= 0L || !isComplete(item.positionMs, item.durationMs);

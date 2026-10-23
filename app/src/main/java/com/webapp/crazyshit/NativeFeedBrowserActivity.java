@@ -477,7 +477,7 @@ public final class NativeFeedBrowserActivity extends Activity {
         options.setGravity(Gravity.CENTER);
         options.setContentDescription("Feed options");
         options.setOnClickListener(this::showOptions);
-        top.addView(options, new LinearLayout.LayoutParams(dp(48), actionHeight));
+        if (!showDetailsMode) top.addView(options, new LinearLayout.LayoutParams(dp(48), actionHeight));
         shell.addView(top, new LinearLayout.LayoutParams(-1, dp(isCreatorGallery() ? 56 : 64)));
 
         FrameLayout body = new FrameLayout(this);
@@ -586,12 +586,7 @@ public final class NativeFeedBrowserActivity extends Activity {
                     showDescription,
                     baseUrl,
                     showImageUrl,
-                    () -> {
-                        if (showDetailsAppBar != null) {
-                            showDetailsAppBar.setExpanded(false, true);
-                        }
-                        if (recycler != null) recycler.scrollToPosition(0);
-                    }
+                    this::playSeries
             );
             AppBarLayout.LayoutParams headerParams =
                     new AppBarLayout.LayoutParams(-1, dp(286));
@@ -625,7 +620,7 @@ public final class NativeFeedBrowserActivity extends Activity {
             detailsFeed.setOrientation(LinearLayout.VERTICAL);
             detailsFeed.setBackgroundColor(Color.BLACK);
 
-            TextView section = text("VIDEOS", 12, UiPalette.PRIMARY);
+            TextView section = text("EPISODES", 12, UiPalette.PRIMARY);
             section.setTypeface(null, android.graphics.Typeface.BOLD);
             section.setLetterSpacing(0.12f);
             section.setGravity(Gravity.CENTER_VERTICAL);
@@ -694,6 +689,7 @@ public final class NativeFeedBrowserActivity extends Activity {
                     ).show();
                 }
             });
+            adapter.setEpisodePresentation(showDetailsMode);
             recycler.setAdapter(adapter);
             refresh.addView(recycler, new SwipeRefreshLayout.LayoutParams(-1, -1));
             attachFeedScrollListener(recycler);
@@ -722,6 +718,7 @@ public final class NativeFeedBrowserActivity extends Activity {
                 if (itemCount() == 0) reload();
                 else if (!endReached) load(true);
             }
+            else if (showDetailsMode) reload();
             else openWebsite(baseUrl);
         });
         body.addView(empty, new FrameLayout.LayoutParams(-1, -1));
@@ -1345,6 +1342,7 @@ public final class NativeFeedBrowserActivity extends Activity {
                                 ? "No matching pictures or videos loaded.\nTap to try again."
                                 : isBunkr()
                                 ? "No supported pictures or videos were found.\nTap to open the album."
+                                : showDetailsMode ? "Couldn't load episodes.\nTap to try again."
                                 : "Couldn't render this feed natively.\nTap to open the website.");
                         empty.setVisibility(View.VISIBLE);
                     }
@@ -1373,6 +1371,7 @@ public final class NativeFeedBrowserActivity extends Activity {
                     } else if (itemCount() == 0) {
                         empty.setText(isCreatorGallery()
                                 ? "Couldn't build this creator gallery.\nTap to try again."
+                                : showDetailsMode ? "Couldn't load episodes.\nTap to try again."
                                 : "Couldn't load this feed.\nTap to open the website.");
                         empty.setVisibility(View.VISIBLE);
                     } else {
@@ -1581,6 +1580,10 @@ public final class NativeFeedBrowserActivity extends Activity {
     }
 
     private void openVideo(NativeContentItem item) {
+        openVideo(item, -1L);
+    }
+
+    private void openVideo(NativeContentItem item, long startPosition) {
         progress.setVisibility(View.VISIBLE);
         final int requestGeneration = generation;
         io.execute(() -> {
@@ -1610,6 +1613,7 @@ public final class NativeFeedBrowserActivity extends Activity {
                 intent.putExtra(VideoDetailActivity.EXTRA_COMMENTS, item.comments);
                 intent.putExtra(VideoDetailActivity.EXTRA_RELATED_FEED_URL, baseUrl);
                 intent.putExtra(VideoDetailActivity.EXTRA_SOURCE, source);
+                if (startPosition >= 0L) intent.putExtra(PlayerActivity.EXTRA_START_POSITION, startPosition);
                 if (showDetailsMode) {
                     ShowsPlaybackOrientationPolicy.requireManualLandscapeFullscreen(intent);
                 }
@@ -1828,29 +1832,49 @@ public final class NativeFeedBrowserActivity extends Activity {
                 "Send the video page",
                 () -> shareItem(item)
         ));
-        actions.add(VideoActionSheet.action(
+        if (!showDetailsMode) actions.add(VideoActionSheet.action(
                 R.drawable.ic_player_play,
                 "Video details",
                 "Open the ZEROCHILL player, actions, and related videos",
                 () -> openVideo(item)
         ));
-        actions.add(VideoActionSheet.action(
+        if (!showDetailsMode) actions.add(VideoActionSheet.action(
                 R.drawable.ic_more_website,
                 "Open source website",
                 "Open the original video page",
                 () -> openWebsite(item.url)
         ));
 
-        VideoActionSheet.show(
+        if (showDetailsMode) actions.add(0, VideoActionSheet.action(
+                R.drawable.ic_player_play, "Play Next", "Play after the current Shows video",
+                () -> {
+                    VideoDetailActivity.setShowsPlayNext(this, item, source, baseUrl);
+                    ZeroChillToast.makeText(this, "Episode will play next in Shows.", ZeroChillToast.LENGTH_SHORT).show();
+                }));
+        VideoDownloadStore.Entry savedDownload = null;
+        if (showDetailsMode) for (VideoDownloadStore.Entry entry : VideoDownloadStore.entries(this)) {
+            if (item.url.equals(entry.pageUrl)) { savedDownload = entry; break; }
+        }
+        final VideoDownloadStore.Entry download = savedDownload;
+        VideoActionSheet.showEpisodeAware(
                 this,
                 item.title,
+                showDetailsMode,
                 VideoActionSheet.section(
                         "SAVE",
                         VideoActionSheet.action(
                                 R.drawable.ic_action_download,
-                                "Download",
-                                "Save this video for offline playback",
-                                () -> VideoDownloadStore.downloadPage(this, item)
+                                download == null ? "Download" : download.status == android.app.DownloadManager.STATUS_SUCCESSFUL
+                                        ? "Delete download" : "Manage download",
+                                download == null ? "Save this video for offline playback" : VideoDownloadStore.statusText(download),
+                                () -> {
+                                    if (download == null) VideoDownloadStore.downloadPage(this, item);
+                                    else if (download.status == android.app.DownloadManager.STATUS_SUCCESSFUL) {
+                                        new ZeroChillDialog.Builder(this).setTitle("Delete download?")
+                                                .setMessage(item.title).setPositiveButton("Delete", (d, w) -> VideoDownloadStore.remove(this, download))
+                                                .setNegativeButton("Cancel", null).show();
+                                    } else startActivity(new Intent(this, DownloadedActivity.class));
+                                }
                         ),
                         VideoActionSheet.action(
                                 R.drawable.ic_more_library,
@@ -1885,6 +1909,7 @@ public final class NativeFeedBrowserActivity extends Activity {
     }
 
     private void showOptions(View anchor) {
+        if (showDetailsMode) return;
         ZeroChillMenu menu = new ZeroChillMenu(this, anchor);
         if (!isBunkr()) menu.getMenu().add(Menu.NONE, 1, 0, "View style");
         menu.getMenu().add(Menu.NONE, 2, 1, "Open website");
@@ -1903,6 +1928,7 @@ public final class NativeFeedBrowserActivity extends Activity {
     }
 
     private void showViewStyleDialog() {
+        if (showDetailsMode) return;
         String[] choices = {"Cards", "List", "Grid", "Posters"};
         int selected = viewMode();
         new ZeroChillDialog.Builder(this)
@@ -1920,6 +1946,7 @@ public final class NativeFeedBrowserActivity extends Activity {
     }
 
     private int viewMode() {
+        if (showDetailsMode) return NativeFeedAdapter.VIEW_LIST;
         int mode = getSharedPreferences("app_prefs", MODE_PRIVATE)
                 .getInt("native_view_collection", NativeFeedAdapter.VIEW_LIST);
         if (mode < NativeFeedAdapter.VIEW_CARDS || mode > NativeFeedAdapter.VIEW_POSTERS) {
@@ -2429,7 +2456,16 @@ public final class NativeFeedBrowserActivity extends Activity {
     }
 
     private void updateShowDetailsHeader() {
-        if (showDetailsHeader != null) showDetailsHeader.setItemCount(itemCount());
+        if (showDetailsHeader == null || adapter == null) return;
+        showDetailsHeader.setItemCount((int) adapter.snapshot().stream().filter(ShowsEpisodePlayback::playable).count());
+        ShowsEpisodePlayback.Selection selection = ShowsEpisodePlayback.select(adapter.snapshot(), PlaybackHistoryStore.load(this));
+        showDetailsHeader.setPlaybackAction(selection.positionMs > 0L, selection.item != null);
+    }
+
+    private void playSeries() {
+        if (adapter == null) return;
+        ShowsEpisodePlayback.Selection selection = ShowsEpisodePlayback.select(adapter.snapshot(), PlaybackHistoryStore.load(this));
+        if (selection.item != null) openVideo(selection.item, selection.positionMs);
     }
 
     private int itemCount() {
@@ -2543,6 +2579,7 @@ public final class NativeFeedBrowserActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
+        updateShowDetailsHeader();
         if (creatorProfile != null) creatorProfile.refresh();
         if (isBunkr() && bunkrGalleryAdapter != null) {
             BunkrGallerySessionStore.Snapshot snapshot =
