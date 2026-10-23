@@ -73,6 +73,8 @@ final class LibraryProfileHeader extends LinearLayout {
         actions.setBackground(BrowseUi.rounded(activity, UiPalette.SURFACE, 18));
         messages = action(actions, "Messages", R.drawable.ic_action_message, ZeroChillInboxActivity.class);
         notifications = action(actions, "Notifications", R.drawable.ic_more_update, UpdateInboxActivity.class);
+        ((View) messages.getParent()).setContentDescription("Messages. Open your inbox");
+        ((View) notifications.getParent()).setContentDescription("Notifications. Open notifications");
         action(actions, "Settings", R.drawable.ic_more_settings, SettingsActivity.class);
         addView(actions, new LayoutParams(-1, -2));
         if (reader == null) { observe(); refresh(); }

@@ -115,6 +115,7 @@ jobs:
           --tests 'com.webapp.crazyshit.PrimaryTabLibraryTest'
           --tests 'com.webapp.crazyshit.PrimaryTabWorkQueueTest'
           --tests 'com.webapp.crazyshit.LibraryProfileTest'
+          --tests 'com.webapp.crazyshit.LibrarySocialHubTest'
           --tests 'com.webapp.crazyshit.RenderedThumbnailLifecycleTest'
           --tests 'com.webapp.crazyshit.PrimaryTabNavigationTest'
           --tests 'com.webapp.crazyshit.OnlyFapFilteredHeroTest'
