@@ -44,6 +44,10 @@ public class SearchRecentGlassTest {
                 ScrollView scroll = ReflectionHelpers.getField(panel, "recentLayer");
                 LinearLayout history = ReflectionHelpers.getField(panel, "recentPanel");
                 assertEquals(count + 1, history.getChildCount());
+                android.widget.TextView title = (android.widget.TextView) ((LinearLayout) history.getChildAt(0)).getChildAt(0);
+                assertEquals(2f, title.getShadowRadius(), 0f);
+                assertEquals(0xE6000000, title.getShadowColor());
+                assertEquals(16f, title.getTextSize(), 0f);
                 for (int windowHeight : new int[]{800, 420}) for (int ime : new int[]{0, 300}) {
                     ViewCompat.dispatchApplyWindowInsets(panel.view, insets(ime));
                     layout(panel.view, 400, windowHeight);

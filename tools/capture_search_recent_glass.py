@@ -59,6 +59,44 @@ for count, reduced, no_lens in [(0, False, False), (1, False, False), (3, False,
         (out / f'removed-reduced-{reduced}.png').write_bytes(adb('exec-out', 'screencap', '-p'))
 print('Recent Search GPU fixture: 0/1/3/10, reduced motion, lens control, IME and removal captured.')
 
+# Use the same production results surface and renderer over bright/colorful and dark pages.
+for mode in (0, 1):
+    for no_lens in (False, True):
+        adb('shell', 'am', 'force-stop', package)
+        adb('logcat', '-c')
+        launch = adb('shell', 'am', 'start', '-W', '-n',
+            package + '/com.webapp.crazyshit.GlassRenderProbeActivity',
+            '--ez', 'recent_search', 'true', '--ez', 'search_results', 'true',
+            '--ei', 'mode', str(mode), '--ez', 'probe_no_lens', str(no_lens).lower())
+        assert b'Error' not in launch, launch
+        deadline = time.monotonic() + 15
+        while True:
+            log = adb('logcat', '-d', '-s', 'ZeroChillSearch:I', 'AndroidRuntime:E').decode(errors='replace')
+            if 'PASS result geometry' in log or 'FAIL' in log or 'FATAL EXCEPTION' in log or time.monotonic() >= deadline:
+                break
+            time.sleep(.25)
+        name = f'results-mode-{mode}-no-lens-{no_lens}'
+        (out / (name + '.txt')).write_text(log)
+        (out / (name + '.png')).write_bytes(adb('exec-out', 'screencap', '-p'))
+        assert 'PASS result geometry' in log and 'FAIL' not in log and 'FATAL EXCEPTION' not in log, log
+        if not no_lens:
+            adb('shell', 'input', 'swipe', '330', '1000', '330', '300', '350')
+            time.sleep(.5)
+            (out / (name + '-scrolled.png')).write_bytes(adb('exec-out', 'screencap', '-p'))
+
+# Static paired captures verify that the shared shader visibly bends each panel.
+from PIL import Image, ImageChops
+for normal, control in (
+    ('count-3-reduced-False-no-lens-False', 'count-3-reduced-False-no-lens-True'),
+    ('results-mode-0-no-lens-False', 'results-mode-0-no-lens-True'),
+):
+    first = Image.open(out / (normal + '.png')).convert('RGB')
+    second = Image.open(out / (control + '.png')).convert('RGB')
+    diff = ImageChops.difference(first.crop((28, 220, 690, 560)), second.crop((28, 220, 690, 560)))
+    changed = sum(max(pixel) > 8 for pixel in diff.getdata())
+    assert changed > 100, f'No visible panel refraction: {normal}: {changed}'
+    print(f'Panel lens comparison {normal}: {changed} changed pixels')
+
 # Use the real production ShitTok player and TextureView with a local fixture clip.
 for paused in (False, True):
     adb('shell', 'am', 'force-stop', package)

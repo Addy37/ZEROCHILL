@@ -272,6 +272,7 @@ final class SearchPanel {
         searchFooter = footer;
         resultsControls.addView(footer);
         showRecentSearches();
+        SearchTextContrast.apply(shell);
         view = shell;
         updateContentVisibility();
     }
@@ -316,6 +317,7 @@ final class SearchPanel {
             row.addView(remove, new LinearLayout.LayoutParams(dp(48), dp(48)));
             recentPanel.addView(row);
         }
+        SearchTextContrast.apply(recentPanel);
         boolean recent = showingRecent();
         recentLayer.setVisibility(recent ? View.VISIBLE : View.GONE);
         resultLayer.setVisibility(recent ? View.INVISIBLE : View.VISIBLE);

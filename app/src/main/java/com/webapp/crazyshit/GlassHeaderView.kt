@@ -97,10 +97,15 @@ internal class GlassHeaderView @JvmOverloads constructor(
 internal fun headerGlassConfig(activity: Activity): GlassEffectConfig =
     navigationGlassConfig(activity).copy(surfaceTintColor = Color.Black, lensSideEdges = false)
 
-/** Soften busy page artwork behind result text without adding another blur layer. */
+/** Search keeps the navbar lens and rim, with a little local diffusion for native text.
+ * Both states deliberately use one material; geometry and recording stay native-owned.
+ */
 internal fun searchResultsGlassConfig(activity: Activity): GlassEffectConfig =
-    headerGlassConfig(activity).copy(blurRadius = 12f, surfaceOpacity = .40f)
+    navigationGlassConfig(activity).copy(
+        surfaceTintColor = Color.Black,
+        blurRadius = 1.5f,
+        surfaceOpacity = .20f,
+    )
 
-/** Keep the dark film, with the preference panel's blur so the shared lens stays visible. */
 internal fun recentSearchGlassConfig(activity: Activity): GlassEffectConfig =
-    searchResultsGlassConfig(activity).copy(blurRadius = 3f)
+    searchResultsGlassConfig(activity)
