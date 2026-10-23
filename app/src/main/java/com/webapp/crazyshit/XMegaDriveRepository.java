@@ -11,14 +11,14 @@ import java.net.URI;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Locale;
 
 /**
  * Isolated supplemental ShitTok provider for the public XMegaDrive site.
  *
- * Compiled (not remote-config). Listing scrapes /videos/ pages; playback resolves the
- * direct MP4 from the video page without changing the shared Media3 path.
- * Failure is contained so other providers continue.
+ * Compiled, not remote-config. Schema 1 has exactly seven configurable sources and does
+ * not include XMegaDrive, so this provider stays in code. Listing scrapes public
+ * /videos/ pages; playback resolves the direct MP4 from the video page without
+ * changing the shared Media3 path. Failure is contained so other providers continue.
  */
 final class XMegaDriveRepository {
     static final String LABEL = "XMegaDrive";
@@ -62,6 +62,17 @@ final class XMegaDriveRepository {
                 .referrer(BASE)
                 .timeout(12000)
                 .get();
+    }
+
+    /** Offline fixture entry for listing HTML. Does not fetch the network. */
+    static List<NativeContentItem> parseListingHtml(String html) {
+        return parseListing(Jsoup.parse(html == null ? "" : html, BASE));
+    }
+
+    /** Offline fixture entry for a video page. Returns the playable MP4 or empty. */
+    static String mediaFromHtml(String html, String pageUrl) {
+        String base = pageUrl == null || pageUrl.isEmpty() ? BASE : pageUrl;
+        return extractMedia(Jsoup.parse(html == null ? "" : html, base));
     }
 
     private static List<NativeContentItem> parseListing(Document document) {
