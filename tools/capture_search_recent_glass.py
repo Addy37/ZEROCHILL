@@ -58,3 +58,32 @@ for count, reduced, no_lens in [(0, False, False), (1, False, False), (3, False,
         adb('pull', '/sdcard/recent-height.mp4', str(out / f'remove-reduced-{reduced}.mp4'))
         (out / f'removed-reduced-{reduced}.png').write_bytes(adb('exec-out', 'screencap', '-p'))
 print('Recent Search GPU fixture: 0/1/3/10, reduced motion, lens control, IME and removal captured.')
+
+# Use the real production ShitTok player and TextureView with a local fixture clip.
+for paused in (False, True):
+    adb('shell', 'am', 'force-stop', package)
+    adb('logcat', '-c')
+    launch = adb('shell', 'am', 'start', '-W', '-n',
+        package + '/com.webapp.crazyshit.SearchShitTokProbeActivity',
+        '--ez', 'manual_pause', str(paused).lower())
+    assert b'Error' not in launch, launch
+    deadline = time.monotonic() + 22
+    while True:
+        log = adb('logcat', '-d', '-s', 'ZeroChillSearchVideo:I', 'AndroidRuntime:E').decode(errors='replace')
+        if 'READY retained paused video' in log or 'FAIL' in log or 'FATAL EXCEPTION' in log or time.monotonic() >= deadline:
+            break
+        time.sleep(.2)
+    (out / f'shittok-search-manual-{paused}.png').write_bytes(adb('exec-out', 'screencap', '-p'))
+    assert 'READY retained paused video' in log and 'FAIL' not in log and 'FATAL EXCEPTION' not in log, log
+    adb('shell', 'input', 'tap', '180', '145')
+    time.sleep(1)
+    (out / f'shittok-search-keyboard-manual-{paused}.png').write_bytes(adb('exec-out', 'screencap', '-p'))
+    adb('shell', 'input', 'keyevent', 'KEYCODE_BACK')
+    time.sleep(.5)
+    adb('shell', 'input', 'keyevent', 'KEYCODE_BACK')
+    time.sleep(1)
+    log = adb('logcat', '-d', '-s', 'ZeroChillSearchVideo:I', 'AndroidRuntime:E').decode(errors='replace')
+    (out / f'shittok-search-manual-{paused}.txt').write_text(log)
+    (out / f'shittok-return-manual-{paused}.png').write_bytes(adb('exec-out', 'screencap', '-p'))
+    assert 'PASS retained frame' in log and 'FAIL' not in log and 'FATAL EXCEPTION' not in log, log
+print('Real ShitTok TextureView retained behind Search with keyboard; manual pause and same-player return passed.')

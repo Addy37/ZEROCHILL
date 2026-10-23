@@ -96,6 +96,9 @@ jobs:
         run: >-
           gradle --no-daemon :app:testDebugUnitTest
           --tests 'com.webapp.crazyshit.Search*Test'
+          --tests 'com.webapp.crazyshit.ShitTokAudioOwnershipTest'
+          --tests 'com.webapp.crazyshit.ShitTokPlayerPoolTest'
+          --tests 'com.webapp.crazyshit.PrimaryTabNavigationTest'
           --tests 'com.webapp.crazyshit.HeaderGlassMaterialTest'
           --tests 'com.webapp.crazyshit.GlassHeaderLayoutTest'
           --tests 'com.webapp.crazyshit.glass.backdrop.ClearGlassLensTest'

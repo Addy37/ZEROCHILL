@@ -356,11 +356,20 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
     }
 
     public void onHostPause() {
+        pauseHost(false);
+    }
+
+    public void onSearchOpened() {
+        pauseHost(true);
+    }
+
+    private void pauseHost(boolean retainVideoFrame) {
         hostResumed = false;
         pages[PAGE_ONLYFAP].onlyFapHub.onOpenCancelled();
         primaryWork.setResumed(false);
         deactivateHubs();
-        chaosView.onHostPause();
+        if (retainVideoFrame) chaosView.onSearchOpened();
+        else chaosView.onHostPause();
         Page profilePage = pageAt(PAGE_ONLYFAP);
         if (profilePage != null && profilePage.onlyFapHub != null) profilePage.onlyFapHub.setProfileActive(false);
         libraryView.setSocialActive(false);

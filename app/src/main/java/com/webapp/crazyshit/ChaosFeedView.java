@@ -690,6 +690,15 @@ public final class ChaosFeedView extends FrameLayout {
     }
 
     public void onHostPause() {
+        pauseHost(false);
+    }
+
+    /** Search covers the feed in this window; retain its silent, paused texture. */
+    public void onSearchOpened() {
+        pauseHost(true);
+    }
+
+    private void pauseHost(boolean retainVideoFrame) {
         ChaosStartupPreloader.stopPreparation();
         if (active) { recordRunway("hostPause"); pauseRunwayClock(); }
         resetTemporaryPinch();
@@ -708,7 +717,8 @@ public final class ChaosFeedView extends FrameLayout {
         if (!creatorGalleryHandoff) resetCreatorSwipePreview();
         pauseAll();
         rememberSelectedPosition();
-        releaseAllPlayers();
+        // Actual backgrounding still releases everything, even after Search paused us.
+        if (!retainVideoFrame) releaseAllPlayers();
         flushRecent();
     }
 

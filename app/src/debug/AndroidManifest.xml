@@ -1,5 +1,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <application>
+        <activity android:name="com.webapp.crazyshit.SearchShitTokProbeActivity"
+            android:exported="true" android:theme="@style/Theme.CrazyShit" />
         <activity android:name="com.webapp.crazyshit.LibraryLifecycleProbeActivity"
             android:exported="true" android:theme="@style/Theme.CrazyShit" />
         <activity android:name="com.webapp.crazyshit.OnlyFapTransitionProbeActivity"

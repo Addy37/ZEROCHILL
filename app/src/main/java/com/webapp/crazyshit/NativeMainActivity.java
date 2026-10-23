@@ -610,7 +610,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         shell.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);
         topBar.setAlpha(0f);
         searchOriginBar.setAlpha(0f);
-        if (primaryPagerAdapter != null) primaryPagerAdapter.onHostPause();
+        if (primaryPagerAdapter != null) primaryPagerAdapter.onSearchOpened();
         searchPanel.morph(searchOrigin, true, () -> {});
     }
 
