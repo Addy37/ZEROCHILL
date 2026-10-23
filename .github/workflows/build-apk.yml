@@ -274,6 +274,8 @@ jobs:
           gradle --no-daemon :app:testDebugUnitTest
           --tests 'com.webapp.crazyshit.Search*Test'
           --tests 'com.webapp.crazyshit.ShitTokAudioOwnershipTest'
+          --tests 'com.webapp.crazyshit.ShitTokTransitionSnapshotStoreTest'
+          --tests 'com.webapp.crazyshit.ShitTokCreatorGalleryHandoffTest'
           --tests 'com.webapp.crazyshit.ShitTokPlayerPoolTest'
           --tests 'com.webapp.crazyshit.PrimaryTabNavigationTest'
           --tests 'com.webapp.crazyshit.HeaderGlassMaterialTest'
@@ -407,6 +409,8 @@ jobs:
           --tests 'com.webapp.crazyshit.ShitTokOrientation*'
           --tests 'com.webapp.crazyshit.ShitTokAspectPriorityTest'
           --tests 'com.webapp.crazyshit.ShitTokAudioOwnershipTest'
+          --tests 'com.webapp.crazyshit.ShitTokTransitionSnapshotStoreTest'
+          --tests 'com.webapp.crazyshit.ShitTokCreatorGalleryHandoffTest'
           --tests 'com.webapp.crazyshit.ShitTokPlayerPoolTest'
           --tests 'com.webapp.crazyshit.ShitTokSettledSwipeTest'
           --tests 'com.webapp.crazyshit.ShitTokDynamicPinchTest'
@@ -433,6 +437,8 @@ jobs:
         run: >-
           gradle --no-daemon :app:testDebugUnitTest
           --tests 'com.webapp.crazyshit.ShitTokAudioOwnershipTest'
+          --tests 'com.webapp.crazyshit.ShitTokTransitionSnapshotStoreTest'
+          --tests 'com.webapp.crazyshit.ShitTokCreatorGalleryHandoffTest'
           --tests 'com.webapp.crazyshit.ShitTokSettledSwipeTest'
           --tests 'com.webapp.crazyshit.ShitTokSelectedPreparationTest'
           --tests 'com.webapp.crazyshit.ShitTokSwipeStartTest'

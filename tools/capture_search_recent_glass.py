@@ -81,9 +81,13 @@ for paused in (False, True):
     adb('shell', 'input', 'keyevent', 'KEYCODE_BACK')
     time.sleep(.5)
     adb('shell', 'input', 'keyevent', 'KEYCODE_BACK')
-    time.sleep(1)
-    log = adb('logcat', '-d', '-s', 'ZeroChillSearchVideo:I', 'AndroidRuntime:E').decode(errors='replace')
+    deadline = time.monotonic() + 17
+    while True:
+        log = adb('logcat', '-d', '-s', 'ZeroChillSearchVideo:I', 'AndroidRuntime:E').decode(errors='replace')
+        if 'PASS retained frame' in log or 'FAIL' in log or 'FATAL EXCEPTION' in log or time.monotonic() >= deadline:
+            break
+        time.sleep(.2)
     (out / f'shittok-search-manual-{paused}.txt').write_text(log)
     (out / f'shittok-return-manual-{paused}.png').write_bytes(adb('exec-out', 'screencap', '-p'))
     assert 'PASS retained frame' in log and 'FAIL' not in log and 'FATAL EXCEPTION' not in log, log
-print('Real ShitTok TextureView retained behind Search with keyboard; manual pause and same-player return passed.')
+print('Real ShitTok frame retained behind Search with keyboard; manual pause and fresh-frame return passed.')

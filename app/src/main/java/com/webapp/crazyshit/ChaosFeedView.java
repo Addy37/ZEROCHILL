@@ -204,6 +204,9 @@ public final class ChaosFeedView extends FrameLayout {
     private int autoAdvanceIssuedFrom = -1;
     private int autoAdvanceGeneration;
     private boolean chaosMuted;
+    private ImageView searchVideoFrame;
+    private String searchVideoFrameUrl = "";
+    private boolean searchCoverActive;
     private boolean manualFullscreen;
     private boolean clearDisplay;
     private ChaosHolder pinchingHolder;
@@ -345,7 +348,7 @@ public final class ChaosFeedView extends FrameLayout {
                 cancelSwipePlayerMaintenance();
                 int previousPosition = selectedPosition;
                 boolean changed = position != previousPosition;
-                if (changed) resetTemporaryPinch();
+                if (changed) { resetTemporaryPinch(); clearSearchVideoFrame(); }
                 if (changed) {
                     maintenancePosition = position;
                     consecutiveDryLoads = 0;
@@ -626,6 +629,7 @@ public final class ChaosFeedView extends FrameLayout {
     }
 
     public void setActive(boolean value) {
+        if (!value) { searchCoverActive = false; clearSearchVideoFrame(); }
         if (value) applyContentPreference();
         if (!value && active) { recordRunway("leavingFeed"); pauseRunwayClock(); }
         if (!value) resetTemporaryPinch();
@@ -667,6 +671,7 @@ public final class ChaosFeedView extends FrameLayout {
     }
 
     public void onHostResume() {
+        searchCoverActive = false;
         if (!hostResumed) consecutiveDryLoads = 0;
         hostResumed = true;
         if (active) { applyContentPreference(); post(() -> ContentPreferenceUi.present(this, true)); }
@@ -690,15 +695,6 @@ public final class ChaosFeedView extends FrameLayout {
     }
 
     public void onHostPause() {
-        pauseHost(false);
-    }
-
-    /** Search covers the feed in this window; retain its silent, paused texture. */
-    public void onSearchOpened() {
-        pauseHost(true);
-    }
-
-    private void pauseHost(boolean retainVideoFrame) {
         ChaosStartupPreloader.stopPreparation();
         if (active) { recordRunway("hostPause"); pauseRunwayClock(); }
         resetTemporaryPinch();
@@ -717,9 +713,39 @@ public final class ChaosFeedView extends FrameLayout {
         if (!creatorGalleryHandoff) resetCreatorSwipePreview();
         pauseAll();
         rememberSelectedPosition();
-        // Actual backgrounding still releases everything, even after Search paused us.
-        if (!retainVideoFrame) releaseAllPlayers();
+        releaseAllPlayers();
         flushRecent();
+    }
+
+    /** A single frozen frame survives decoder release and samples through the shared glass. */
+    public void onSearchOpened() {
+        resetTemporaryPinch();
+        if (!searchCoverActive && searchVideoFrame == null && active) {
+            ChaosHolder holder = holderAt(selectedPosition);
+            if (holder != null && holder.item != null && holder.player != null) {
+                Bitmap frame = ShitTokTransitionSnapshotStore.captureFrame(
+                        this, holder.playerView.getVideoSurfaceView(), 720);
+                if (frame != null) {
+                    ImageView frozen = new ImageView(activity);
+                    frozen.setScaleType(ImageView.ScaleType.FIT_XY);
+                    frozen.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+                    frozen.setImageBitmap(frame);
+                    searchVideoFrameUrl = holder.item.url;
+                    searchVideoFrame = frozen;
+                    addView(frozen, new FrameLayout.LayoutParams(-1, -1));
+                }
+            }
+        }
+        searchCoverActive = true;
+        onHostPause();
+    }
+
+    private void clearSearchVideoFrame() {
+        if (searchVideoFrame == null) return;
+        removeView(searchVideoFrame);
+        searchVideoFrame.setImageDrawable(null);
+        searchVideoFrame = null;
+        searchVideoFrameUrl = "";
     }
 
     public void onConfigurationChanged() {
@@ -730,6 +756,8 @@ public final class ChaosFeedView extends FrameLayout {
     }
 
     public void refresh() {
+    searchCoverActive = false;
+    clearSearchVideoFrame();
     if (isPaging()) { deferUiApply(this::refresh); return; }
     resetTemporaryPinch();
     feedGeneration++;
@@ -772,6 +800,8 @@ public final class ChaosFeedView extends FrameLayout {
 }
 
     public void close() {
+        searchCoverActive = false;
+        clearSearchVideoFrame();
         resetTemporaryPinch();
         cancelPendingAutoAdvance();
         resetCreatorSwipePreview();
@@ -3794,6 +3824,11 @@ public final class ChaosFeedView extends FrameLayout {
                     if (listenerGeneration != feedGeneration || !validUiCallback(createdPlayer, listenerUrl, listenerToken)) return;
                     postOwnerUi(createdPlayer, listenerUrl, listenerToken, () -> {
                         if (boundPosition != selectedPosition) return;
+                        if (!searchCoverActive && searchVideoFrame != null
+                                && listenerUrl.equals(searchVideoFrameUrl)) root.postOnAnimation(() -> {
+                            if (!searchCoverActive && validUiCallback(createdPlayer, listenerUrl, listenerToken))
+                                clearSearchVideoFrame();
+                        });
                         syncLoading();
                         sourceMixer.onFirstFrame();
                         requestPreferenceCandidates();
