@@ -10,7 +10,7 @@ def main():
     source = CONFIG['onlyhaven']
     base = source['baseUrl']
     html = fetch(url.urljoin(base, source['routes']['creatorSearch'].replace('{query}', '')), 'onlyhaven')
-    assets = re.findall(r'[\"\']([^\"\']*?/js/[^\"\']+\.js)[\"\']', html)
+    assets = re.findall(r'[\"\']([^\"\']+\.js)[\"\']', html)
     queue = [url.urljoin(base, path) for path in assets]
     seen = set()
     # Follow same-origin frontend module imports only, with finite request/body caps.

@@ -27,7 +27,10 @@ accounts and notification settings keep their existing persistence formats.
 | Trans men | OnlyHaven creators with content | `trans_man` |
 | Groups | OnlyHaven creators with content | `group` |
 
-Filtered discovery requests up to 50 creators in the provider's default ordering.
+Filtered discovery loads up to three category pages of 16 creators sequentially in the
+provider's default ordering, using offsets 0, 16 and 32. Each shelf publishes independently.
+The first batch starts startup artwork and the existing eight-slot hero qualifier immediately;
+later pages extend the same confirmed category pool without clearing slots or replaying Liquid Rift.
 There is no unfiltered fallback in a filtered discovery surface. Creator suggestions
 and full creator search follow the selected OnlyHaven provider category; All keeps
 the broad existing sources. Favorites, Library, history and a specifically opened
@@ -260,3 +263,41 @@ no measured performance improvement is claimed. The probe covers Female → Male
 Trans → All Content → Female plus stale delivery and qualified artwork. CI results
 and physical-device approval are tracked in PR #325; do not treat this document as
 a passed test record.
+
+## Filtered OnlyFap shelves
+
+`feature/onlyfap-gender-shelves` starts from native main
+`d9952f26fc7ca5acb88f8c4e3e9dce957c6f2933`, including merged PR #326.
+Women, Men, Trans women, Trans men and Groups use Featured, Explore and More titles
+with the selected mode appended. These are neutral collections, not invented popularity
+or recency rankings. All content retains its existing Fapello Discover/New/Hot/Popular
+providers and semantics; Favorite Creators remains independent of the preference.
+
+The bounded live read-only probe `tools/verify_onlyhaven_shelves.py` uses bundled configured
+category routes and headers. It confirms gender tokens, `content=imported`, `n`/`o` paging,
+post/DM counts, `bookmarked`, `indexed`, `updated` and `contentUpdated` metadata. Sampled
+category results descend by bookmarks. The public frontend has a Recent page, but no
+verified category-aware recency/sort contract is used by this feature. We do not re-sort
+arbitrary chunks or label them Popular/Recent. No new route, remote field, backend deployment
+or schema change is required. Unsupported canonical IDs keep the existing parser rejection.
+
+One existing IO worker makes at most three sequential category requests per refresh.
+Raw provider row counts determine exhaustion, so empty creators or unsupported IDs do not
+rewind paging. Canonical profile service/ID identities deduplicate shelves. Contradictory
+explicit provider genders are rejected; missing gender metadata continues to rely only on
+the configured selected-category endpoint. No names or artwork classify membership.
+A failed page leaves other shelves intact and permits the next bounded page. Sparse
+categories hide empty shelves. The error/empty message offers tap-to-retry through the
+existing refresh path. Transient failures never disable OnlyHaven.
+
+Cancellation and the page generation gate reject superseded in-flight results; the view
+also checks the selected preference before every shelf/completion publish. Real mode changes
+reset scroll positions, and deferred restoration callbacks check the hero generation before
+moving a rail or the page. Hero qualification, eight slots, 13-second rotation, Liquid Rift,
+gallery routing, startup portraits and reduced-motion behavior retain their existing paths.
+No persisted format, application ID, signing identity or user-data migration changes.
+
+Focused OnlyFap/OnlyHaven/preference regressions run before full debug/release tests and
+APK builds. Lint remains an audit. This branch skips the unrelated macrobenchmark matrix;
+no measured device performance improvement is claimed. PR #327 records actual CI results
+and remaining physical-device validation.

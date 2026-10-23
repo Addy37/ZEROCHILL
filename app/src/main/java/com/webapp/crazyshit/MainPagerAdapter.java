@@ -1163,21 +1163,31 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         final ContentPreference preference = onlyFapPreference;
         if (preference != ContentPreference.ALL) {
             page.onlyFapHubTasks.add(io.submit(() -> {
-                List<NativeContentItem> category = new java.util.ArrayList<>();
-                try {
-                    OnlyHavenRepository haven = new OnlyHavenRepository();
-                    for (OnlyHavenRepository.Creator creator : haven.fetchCategoryCreators(activity, preference, 50))
-                        category.add(OnlyHavenRepository.creatorItem(creator));
-                    if (!Thread.currentThread().isInterrupted()) CreatorCatalog.remember(activity, category);
-                } catch (Exception ignored) { }
-                final List<NativeContentItem> result = category;
-                postPrimaryResult(page, generation, "category", () -> {
-                    if (generation != page.generation) return;
-                    page.loading = false;
-                    page.endReached = true;
-                    page.onlyFapLastLoadedElapsedMs = android.os.SystemClock.elapsedRealtime();
-                    page.onlyFapHubTasks.clear();
-                    page.onlyFapHub.setPreferenceCreators(result);
+                OnlyHavenRepository haven = new OnlyHavenRepository();
+                OnlyFapCategoryLoader.load(preference, (mode, limit, offset) -> {
+                    OnlyHavenRepository.CategoryPage batch = haven.fetchCategoryPage(activity, mode, limit, offset);
+                    List<NativeContentItem> items = new java.util.ArrayList<>();
+                    for (OnlyHavenRepository.Creator creator : batch.creators)
+                        items.add(OnlyHavenRepository.creatorItem(creator));
+                    return new OnlyFapCategoryLoader.Batch(items, batch.hasMore);
+                }, () -> generation == page.generation && preference == ContentPreference.get(activity),
+                new OnlyFapCategoryLoader.Listener() {
+                    @Override public void shelf(int index, List<NativeContentItem> items, boolean failed) {
+                        postPrimaryResult(page, generation, "category-shelf-" + index, () -> {
+                            if (preference != ContentPreference.get(activity)) return;
+                            page.onlyFapHub.setPreferenceShelf(preference, index, items, failed);
+                        });
+                    }
+                    @Override public void finished(boolean failed) {
+                        postPrimaryResult(page, generation, "category-finished", () -> {
+                            if (preference != ContentPreference.get(activity)) return;
+                            page.loading = false;
+                            page.endReached = true;
+                            page.onlyFapLastLoadedElapsedMs = android.os.SystemClock.elapsedRealtime();
+                            page.onlyFapHubTasks.clear();
+                            page.onlyFapHub.finishPreferenceShelves(preference, failed);
+                        });
+                    }
                 });
             }));
             return;
