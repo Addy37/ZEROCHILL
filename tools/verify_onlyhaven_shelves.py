@@ -29,12 +29,13 @@ def main():
             print(json.dumps({'asset': address, 'error': str(error)}), flush=True)
             continue
         snippets = [body[max(0, m.start()-160):m.end()+220] for m in re.finditer(
-            r'api/v1/creators|bookmarked|contentUpdated|orderBy|sortBy|content.{0,30}imported|gender:', body)]
+            r'api/v1/creators|bookmarked|contentUpdated|orderBy|sortBy|sort:|URLSearchParams|content.{0,30}imported|gender', body)]
         print(json.dumps({'asset': address, 'evidence': snippets[:35]}), flush=True)
         imports = re.findall(r'(?:from\s*|import\s*)[\"\']([^\"\']+\.js)[\"\']', body)
         imports += re.findall(r'[\"\']((?:\./|\.\./)[^\"\']+\.js)[\"\']', body)
         imported = [url.urljoin(address, path) for path in imports]
-        priority = [path for path in imported if any(f'/nodes/{n}.' in path for n in node_ids)]
+        priority = imported if any(f'/nodes/{n}.' in address for n in node_ids) else [
+            path for path in imported if any(f'/nodes/{n}.' in path for n in node_ids)]
         queue = priority + queue + [path for path in imported if path not in priority]
     for mode, token in source['categoryValues'].items():
         if mode == 'non_binary':

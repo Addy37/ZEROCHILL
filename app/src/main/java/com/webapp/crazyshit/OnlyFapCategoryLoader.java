@@ -48,13 +48,17 @@ final class OnlyFapCategoryLoader {
             for (NativeContentItem item : batch.items) {
                 if (item == null) continue;
                 // Canonical OnlyHaven URLs encode service + provider ID. Never deduplicate by display name.
-                String identity = item.url.split("[?#]", 2)[0].replaceAll("/+$", "");
+                String identity = identity(item);
                 if (!identity.isEmpty() && seen.add(identity)) unique.add(item);
             }
             listener.shelf(index, Collections.unmodifiableList(unique), false);
             if (!batch.hasMore) break;
         }
         if (live(current)) listener.finished(failed);
+    }
+
+    static String identity(NativeContentItem item) {
+        return item.url.split("[?#]", 2)[0].replaceAll("/+$", "").toLowerCase(java.util.Locale.US);
     }
 
     private static boolean live(BooleanSupplier current) {

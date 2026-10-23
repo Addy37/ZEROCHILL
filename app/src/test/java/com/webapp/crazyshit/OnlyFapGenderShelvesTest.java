@@ -82,6 +82,20 @@ public class OnlyFapGenderShelvesTest {
         for (NativeContentItem item : candidates()) assertTrue(identities.add(item.url.split("[?#]", 2)[0]));
         assertEquals(47, candidates().size());
     }
+    @Test public void sameModeRefreshCannotDuplicateCreatorsAcrossOldAndNewPageBoundaries() {
+        mode(ContentPreference.MEN);
+        hub.setPreferenceShelf(ContentPreference.MEN, 0, creators("men", 0, 16), false);
+        hub.setPreferenceShelf(ContentPreference.MEN, 1, creators("men", 16, 16), false);
+        hub.finishPreferenceShelves(ContentPreference.MEN, false);
+        hub.beginRefresh();
+        hub.setPreferenceShelf(ContentPreference.MEN, 0, creators("men", 8, 16), false);
+        assertEquals(24, hub.itemCount());
+        assertEquals(8, rail("newShelf").getAdapter().getItemCount());
+        assertEquals(24, new HashSet<>(candidates()).size());
+        hub.setPreferenceShelf(ContentPreference.MEN, 1, Collections.emptyList(), true);
+        assertEquals(24, hub.itemCount());
+    }
+
     @Test public void differentProviderIdsWithTheSameDisplayNameAreNotMerged() {
         mode(ContentPreference.MEN);
         OnlyFapCategoryLoader.load(ContentPreference.MEN, (selected, limit, offset) ->

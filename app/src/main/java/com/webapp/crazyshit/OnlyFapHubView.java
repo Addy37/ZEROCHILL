@@ -142,6 +142,11 @@ final class OnlyFapHubView extends FrameLayout {
         else { hotItems = result; shelf = hotShelf; }
         shelf.adapter.replace(result);
         shelf.container.setVisibility(result.isEmpty() ? View.GONE : View.VISIBLE);
+        // A same-mode background refresh may overlap the previous page boundaries.
+        Set<String> visible = new HashSet<>();
+        trendingItems = uniquePreferenceShelf(trendingItems, trendingShelf, visible);
+        newItems = uniquePreferenceShelf(newItems, newShelf, visible);
+        hotItems = uniquePreferenceShelf(hotItems, hotShelf, visible);
         // Hero membership grows without clearing qualified slots or restarting Liquid Rift.
         List<NativeContentItem> category = new ArrayList<>(trendingItems);
         category.addAll(newItems);
@@ -154,6 +159,18 @@ final class OnlyFapHubView extends FrameLayout {
             refreshHeroCandidates();
         }
         refreshFavorites();
+    }
+
+    private List<NativeContentItem> uniquePreferenceShelf(List<NativeContentItem> items,
+            CreatorShelf shelf, Set<String> visible) {
+        List<NativeContentItem> unique = new ArrayList<>();
+        for (NativeContentItem item : items)
+            if (visible.add(OnlyFapCategoryLoader.identity(item))) unique.add(item);
+        if (unique.size() != items.size()) {
+            shelf.adapter.replace(unique);
+            shelf.container.setVisibility(unique.isEmpty() ? View.GONE : View.VISIBLE);
+        }
+        return unique;
     }
 
     void finishPreferenceShelves(ContentPreference mode, boolean failed) {
