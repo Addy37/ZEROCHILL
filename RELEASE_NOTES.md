@@ -1,10 +1,11 @@
-# ZEROCHILL 5.0.1
+# ZEROCHILL 5.2
 
-- Larger search avatars, thumbnails, and titles, with the existing glass appearance preserved.
-- Search results fade in as matches arrive, with consistent three-dot loading and round creator placeholders.
-- Recent searches with quick rerun, individual removal, and Clear all.
-- More reliable creator lookup and exact gallery opening from ShitTok.
-- OnlyFap videos retain their creator names and gallery links in Library and playback.
-- BaddieHub titles no longer include view counts or duration overlays.
+- **Search got a major liquid-glass upgrade** with clearer backgrounds, stronger refraction, dynamic Recent Searches sizing, and improved readability.
+- **OnlyFap category browsing is better** with multiple creator shelves per category and the new Liquid Rift transition between content preferences.
+- **Shows episodes were redesigned** into a cleaner permanent list with Resume, Play First, and Play Next controls.
+- **Library startup was improved** to eliminate the blank-screen delay and reduce unnecessary background work when leaving the tab.
+- **ShitTok received more playback polish** with a cleaner edge-aligned progress bar and improved Search/playback interaction.
+- **Content sources and creator discovery were cleaned up**, including better OnlyHaven search behavior, an expanded creator catalog, and improved source-health checks.
+- **More stability and UI polish** across navigation, loading, source switching, playback handoffs, and saved state.
 
 Install over your existing app without uninstalling to keep your data and settings.
