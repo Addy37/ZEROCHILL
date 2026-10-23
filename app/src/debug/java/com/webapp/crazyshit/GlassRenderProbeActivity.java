@@ -103,13 +103,40 @@ public final class GlassRenderProbeActivity extends Activity {
             searchPanel.setEmptyBackdrop(shell.pageBackdropForOverlay());
             root.addView(searchPanel.view, new FrameLayout.LayoutParams(-1, -1));
             searchPanel.field().clearFocus();
-            handler.postDelayed(() -> checkRecentGeometry(shell), 1200);
+            if (getIntent().getBooleanExtra("search_results", false)) {
+                seedSearchResults();
+            } else handler.postDelayed(() -> checkRecentGeometry(shell), 1200);
         } else setContentView(shell);
         nav.setCollapsed(getIntent().getBooleanExtra("collapsed", false), false);
         if (getIntent().getBooleanExtra("preference", false))
             shell.postDelayed(() -> ContentPreferenceUi.choose(this, null), 500);
         alive = true; start = SystemClock.uptimeMillis();
         if(getIntent().getBooleanExtra("moving",false))handler.post(animate);
+    }
+    /** Seed native rows locally; no provider requests or explicit media in render checks. */
+    private void seedSearchResults() {
+        try {
+            searchPanel.field().setText("Fixture");
+            java.lang.reflect.Method cancel = SearchPanel.class.getDeclaredMethod("cancelSearchWork");
+            cancel.setAccessible(true); cancel.invoke(searchPanel);
+            java.lang.reflect.Field adapterField = SearchPanel.class.getDeclaredField("adapter");
+            adapterField.setAccessible(true);
+            GlobalSearchAdapter adapter = (GlobalSearchAdapter) adapterField.get(searchPanel);
+            java.util.List<GlobalSearchAdapter.Entry> entries = new java.util.ArrayList<>();
+            entries.add(GlobalSearchAdapter.Entry.section("Local results"));
+            for (int i = 0; i < 12; i++) entries.add(GlobalSearchAdapter.Entry.item(
+                new NativeContentItem(NativeContentItem.KIND_MEDIA, "Fixture result " + (i + 1),
+                    "https://example.invalid/result/" + i, "", "", "", ""), GlobalSearchAdapter.SOURCE_LIBRARY));
+            adapter.replace(entries);
+            handler.postDelayed(() -> {
+                SearchGlassLayout search = (SearchGlassLayout) searchPanel.view;
+                View pane = search.getChildAt(0), rows = search.getChildAt(1);
+                boolean aligned = pane.getLeft() == rows.getLeft() && pane.getTop() == rows.getTop()
+                    && pane.getWidth() == rows.getWidth() && pane.getHeight() == rows.getHeight()
+                    && pane.getVisibility() == View.VISIBLE && rows.getClipToOutline();
+                android.util.Log.i("ZeroChillSearch", (aligned ? "PASS" : "FAIL") + " result geometry and clip");
+            }, 1200);
+        } catch (Exception error) { android.util.Log.e("ZeroChillSearch", "FAIL result fixture", error); }
     }
     @Override protected void onSaveInstanceState(Bundle state) {
         if (searchPanel != null) searchPanel.save(state);

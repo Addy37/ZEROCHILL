@@ -195,6 +195,7 @@ final class OnlyFapCreatorSearchAdapter
 
         TextView favorite = SearchResultFavorites.create(context);
         row.addView(favorite, new LinearLayout.LayoutParams(dp(context, 48), dp(context, 48)));
+        SearchTextContrast.apply(card);
         return new Holder(card, avatar, preview, name, handle, meta, favorite);
     }
 
