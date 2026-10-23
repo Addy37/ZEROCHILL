@@ -14,6 +14,8 @@ import java.lang.reflect.Field;
 import java.util.*;
 
 /** Real feed/player/texture and Search, with the existing local video and no source requests. */
+@androidx.media3.common.util.UnstableApi
+@android.annotation.SuppressLint("SetTextI18n")
 public final class SearchShitTokProbeActivity extends Activity {
     private final Handler handler = new Handler(Looper.getMainLooper());
     private ChaosFeedView feed;
@@ -53,7 +55,7 @@ public final class SearchShitTokProbeActivity extends Activity {
             String mediaUrl = "https://example.invalid/local-search-probe.mp4";
             seedVideoCache(mediaUrl);
             cache.put(url, new CrazyShitRepository.StreamInfo(mediaUrl, url, "Local video"));
-            ViewPager2 pager = field(feed, "pager"); pager.getAdapter().notifyDataSetChanged();
+            ViewPager2 pager = field(feed, "pager"); pager.getAdapter().notifyItemInserted(0);
             feed.setActive(true);
             deadline = SystemClock.uptimeMillis() + 15000;
             handler.postDelayed(this::awaitVideo, 100);
@@ -96,7 +98,12 @@ public final class SearchShitTokProbeActivity extends Activity {
     }
     private void seedVideoCache(String mediaUrl) throws Exception {
         byte[] bytes;
-        try (java.io.InputStream input = getAssets().open("glass-probe.mp4")) { bytes = input.readAllBytes(); }
+        try (java.io.InputStream input = getAssets().open("glass-probe.mp4");
+                java.io.ByteArrayOutputStream output = new java.io.ByteArrayOutputStream()) {
+            byte[] buffer = new byte[8192];
+            for (int count; (count = input.read(buffer)) != -1;) output.write(buffer, 0, count);
+            bytes = output.toByteArray();
+        }
         androidx.media3.datasource.cache.Cache cache = ShitTokMediaCache.get(this);
         androidx.media3.datasource.cache.CacheDataSink sink = new androidx.media3.datasource.cache.CacheDataSink(cache, 1024 * 1024);
         sink.open(new androidx.media3.datasource.DataSpec.Builder().setUri(mediaUrl).setLength(bytes.length).build());

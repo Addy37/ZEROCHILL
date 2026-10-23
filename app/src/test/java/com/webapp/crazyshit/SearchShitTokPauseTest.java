@@ -63,6 +63,18 @@ public class SearchShitTokPauseTest {
         }
     }
 
+    @Test public void mutedVideoReturnsPlayingWithoutRestoringAudio() {
+        try (var f = new ShitTokAudioOwnershipTest.Fixture()) {
+            ReflectionHelpers.setField(f.feed, "chaosMuted", true);
+            ReflectionHelpers.callInstanceMethod(f.selected, "attachLease");
+            f.feed.onSearchOpened();
+            f.feed.onHostResume();
+            assertTrue(f.selectedPlayer.readyToPlay);
+            assertEquals(0f, f.selectedPlayer.volume, 0f);
+            assertEquals(0, f.selectedPlayer.seeks);
+        }
+    }
+
     @Test public void nativeSearchEntryPreservesTheSurfaceAndRealActivityPauseReleasesIt() {
         try (var f = new ShitTokAudioOwnershipTest.Fixture()) {
             android.content.Context context = org.robolectric.RuntimeEnvironment.getApplication();
