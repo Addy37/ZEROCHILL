@@ -56,6 +56,7 @@ public class SearchRecentGlassTest {
                     assertEquals(24 + 76, pane.getTop());
                     assertEquals(count == 0 ? View.INVISIBLE : View.VISIBLE, pane.getVisibility());
                     assertTrue(rows.getClipToOutline());
+                    assertEquals(new android.graphics.Rect(0, 0, rows.getWidth(), rows.getHeight()), rows.getClipBounds());
                     assertTrue(pane.getBottom() <= windowHeight - Math.max(20, ime) - gap);
                     if (count > 0 && available > 14) {
                         scroll.setSmoothScrollingEnabled(false);

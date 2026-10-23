@@ -33,6 +33,7 @@ final class SearchGlassLayout extends FrameLayout {
     private final Path rowClip = new Path();
     private final Outline resultOutline = new Outline();
     private final Rect resultRect = new Rect();
+    private final Rect rowsClipBounds = new Rect();
     private final RectF clipBounds = new RectF();
     private int imeBottom;
     private int systemBottom;
@@ -210,6 +211,11 @@ final class SearchGlassLayout extends FrameLayout {
 
     @Override protected void onLayout(boolean changed, int l, int t, int r, int b) {
         super.onLayout(changed, l, t, r, b);
+        // This parent lets the floating pill extend beyond its bounds. Give the
+        // rows their own RenderNode clip as well as the rounded outline: a
+        // ScrollView's fading-edge layers otherwise escape the top on the GPU.
+        rowsClipBounds.set(0, 0, rows.getWidth(), rows.getHeight());
+        rows.setClipBounds(rowsClipBounds);
         // Child sizes can change while this full-window layout keeps the same bounds.
         rows.invalidateOutline();
         results.invalidateOutline();
