@@ -1596,7 +1596,8 @@ public class VideoDetailActivity extends Activity {
                     if (detailsScroll != null) detailsScroll.smoothScrollTo(0, 0);
                     loadRelated();
                 };
-                animateRelatedTransition(true, swap);
+                if (queued == null) animateRelatedTransition(true, swap);
+                else swap.run();
             });
         });
     }
