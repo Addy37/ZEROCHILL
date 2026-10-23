@@ -179,7 +179,7 @@ jobs:
           if release_code >= code:
               code = release_code
               name = release_version
-          if "${{ github.head_ref || github.ref_name }}" in ("feature/search-liquid-material", "feature/search-recent-glass", "feature/zerochill-5.1.0", "feature/source-contracts-preference-search", "feature/shittok-scrubber-edge", "feature/onlyfap-liquid-rift", "fix/library-startup-navigation", "feature/onlyfap-gender-shelves", "feature/shows-episode-list"):
+          if "${{ github.head_ref || github.ref_name }}" in ("feature/search-liquid-material", "feature/search-recent-glass", "feature/zerochill-5.1.0", "feature/source-contracts-preference-search", "feature/shittok-scrubber-edge", "feature/onlyfap-liquid-rift", "fix/library-startup-navigation", "feature/onlyfap-gender-shelves", "feature/shows-episode-list", "feature/xmegadrive-provider"):
               beta = "5.1.0-beta.1"
               beta_match = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)-beta\.(\d+)", beta)
               if not beta_match:
