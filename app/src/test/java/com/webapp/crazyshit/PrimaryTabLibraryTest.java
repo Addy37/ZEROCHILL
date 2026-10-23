@@ -21,16 +21,16 @@ import static org.robolectric.Shadows.shadowOf;
 @RunWith(RobolectricTestRunner.class)
 @Config(application = Application.class, sdk = 35)
 public class PrimaryTabLibraryTest {
-    @Test public void deferredLibraryBuildsOnEntryAndReadsChangesMadeBeforeEntry() throws Exception {
+    @Test public void deferredLibraryShowsShellImmediatelyAndReadsChangesMadeBeforeEntry() throws Exception {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
         LibraryHubView library = new LibraryHubView(activity, null, true);
         activity.setContentView(library);
         Map<String, Runnable> work = new LinkedHashMap<>(); library.setWorkScheduler(work::put);
         try {
-            assertNull(ReflectionHelpers.getField(library, "socialHub"));
+            assertNotNull(ReflectionHelpers.getField(library, "socialHub"));
             assertTrue(((java.util.List<?>) ReflectionHelpers.getField(library, "observedPreferences")).isEmpty());
             library.setSocialActive(false);
-            assertNull(ReflectionHelpers.getField(library, "socialHub"));
+            assertNotNull(ReflectionHelpers.getField(library, "socialHub"));
             FavoriteStore.add(activity, "Saved before entry", "https://fixture.invalid/saved-before-entry");
             library.setSocialActive(true); refresh(library, work);
             Object social = ReflectionHelpers.getField(library, "socialHub");
@@ -46,7 +46,7 @@ public class PrimaryTabLibraryTest {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
         LibraryHubView library = new LibraryHubView(activity, null, true);
         library.close(); library.close(); library.setSocialActive(true);
-        assertNull(ReflectionHelpers.getField(library, "socialHub"));
+        assertNotNull(ReflectionHelpers.getField(library, "socialHub"));
     }
 
     @Test public void unchangedReturnKeepsViewsAndFavoriteMutationRefreshesAfterEntry() throws Exception {
@@ -159,6 +159,45 @@ public class PrimaryTabLibraryTest {
             Object snapshot = ReflectionHelpers.getField(library, "displayed");
             assertEquals(10, ((java.util.List<?>) ReflectionHelpers.getField(snapshot, "watchLater")).size());
             assertEquals(25, FavoriteStore.load(activity).size());
+        } finally { library.close(); }
+    }
+
+    @Test public void inactiveSnapshotCompletionDoesNotRebuildAndDoesNotBlockNextEntry() throws Exception {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        LibraryHubView library = new LibraryHubView(activity, null, true);
+        activity.setContentView(library);
+        Map<String, Runnable> work = new LinkedHashMap<>(); library.setWorkScheduler(work::put);
+        try {
+            library.setSocialActive(true);
+            work.remove("library-refresh").run();
+            library.setSocialActive(false);
+            ExecutorService io = ReflectionHelpers.getField(library, "refreshIo");
+            io.submit(() -> {}).get(5, TimeUnit.SECONDS);
+            shadowOf(Looper.getMainLooper()).idle();
+            assertNull(ReflectionHelpers.getField(library, "displayed"));
+            assertFalse((boolean) ReflectionHelpers.getField(library, "loading"));
+            assertFalse(work.containsKey("library-publish"));
+            library.setSocialActive(true); refresh(library, work);
+            assertNotNull(ReflectionHelpers.getField(library, "displayed"));
+        } finally { library.close(); }
+    }
+
+    @Test public void loadingShellDoesNotWaitForTheWorkerOrActivationQueue() throws Exception {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        LibraryHubView library = new LibraryHubView(activity, null, true);
+        activity.setContentView(library);
+        try {
+            library.measure(View.MeasureSpec.makeMeasureSpec(500, View.MeasureSpec.EXACTLY),
+                    View.MeasureSpec.makeMeasureSpec(900, View.MeasureSpec.EXACTLY));
+            library.layout(0, 0, 500, 900);
+            LinearLayout media = ReflectionHelpers.getField(library, "mediaContent");
+            assertNotNull(media.findViewWithTag("library-loading-label"));
+            assertTrue(media.getHeight() > 0);
+            LibraryProfileHeader header = ReflectionHelpers.getField(library, "socialHub");
+            assertTrue(header.getHeight() > 0);
+            assertTrue(((java.util.List<?>) ReflectionHelpers.getField(header, "observed")).isEmpty());
+            assertEquals(0, ((RenderedThumbnailResolver[]) ReflectionHelpers.getField(library, "thumbnailResolvers")).length);
+            assertFalse((boolean) ReflectionHelpers.getField(library, "contentPrepared"));
         } finally { library.close(); }
     }
 

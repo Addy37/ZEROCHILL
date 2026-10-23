@@ -20,27 +20,32 @@ final class PrimaryTabWorkQueue {
     private boolean resumed = true;
     private boolean closed;
     private boolean scheduled;
-    private final MessageQueue.IdleHandler idle = () -> {
+    // Prefer idle time, but continuous player/animation messages must not starve first content.
+    private static final long MAX_IDLE_WAIT_MS = 32L;
+    private final Runnable fallback = this::runNext;
+    private final MessageQueue.IdleHandler idle = () -> { runNext(); return false; };
+    private final Runnable enqueueIdle = () -> {
+        if (ready()) {
+            Looper.myQueue().addIdleHandler(idle);
+            handler.postDelayed(fallback, MAX_IDLE_WAIT_MS);
+        } else scheduled = false;
+    };
+
+    private void runNext() {
+        if (!scheduled) return;
         scheduled = false;
-        if (!ready()) return false;
+        handler.removeCallbacks(fallback);
+        Looper.myQueue().removeIdleHandler(idle);
+        if (!ready()) return;
         Entry next = null;
         String key = null;
         for (Map.Entry<String, Entry> entry : pending.entrySet()) {
-            if (entry.getValue().page == selected) {
-                key = entry.getKey();
-                next = entry.getValue();
-                break;
-            }
+            if (entry.getValue().page == selected) { key = entry.getKey(); next = entry.getValue(); break; }
         }
         if (key != null) pending.remove(key);
         if (next != null) next.task.run();
         schedule();
-        return false;
-    };
-    private final Runnable enqueueIdle = () -> {
-        if (ready()) Looper.myQueue().addIdleHandler(idle);
-        else scheduled = false;
-    };
+    }
     private final Runnable frame = () -> handler.post(enqueueIdle);
 
     PrimaryTabWorkQueue(View anchor) { this.anchor = anchor; }
@@ -73,6 +78,7 @@ final class PrimaryTabWorkQueue {
     private void cancelDispatch() {
         anchor.removeCallbacks(frame);
         handler.removeCallbacks(enqueueIdle);
+        handler.removeCallbacks(fallback);
         Looper.myQueue().removeIdleHandler(idle);
         scheduled = false;
     }

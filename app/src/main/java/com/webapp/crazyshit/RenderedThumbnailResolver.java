@@ -69,7 +69,10 @@ final class RenderedThumbnailResolver {
     private WebView webView;
     private String currentPage;
     private boolean busy;
-    private boolean closed;
+    private volatile boolean closed;
+    private boolean active = true;
+    private int generation;
+    private java.util.concurrent.Future<?> task;
     private int attempt;
 
     RenderedThumbnailResolver(Context context, Callback callback) {
@@ -110,9 +113,35 @@ final class RenderedThumbnailResolver {
         });
     }
 
+    /** Pause Library repair work without destroying Chromium during a tab gesture. */
+    void setActive(boolean value) {
+        if (closed || active == value) return;
+        active = value;
+        generation++;
+        if (!value) {
+            if (task != null) task.cancel(true);
+            task = null;
+            if (busy && currentPage != null) queue.addFirst(currentPage);
+            currentPage = null;
+            busy = false;
+            if (webView != null) {
+                webView.stopLoading();
+                webView.onPause();
+            }
+        } else {
+            if (webView != null) webView.onResume();
+            startNext();
+        }
+    }
+
+    private boolean current(int token, String page) {
+        return !closed && active && busy && token == generation && page != null && page.equals(currentPage);
+    }
+
     void close() {
         if (closed) return;
         closed = true;
+        generation++;
         busy = false;
         currentPage = null;
         queue.clear();
@@ -152,7 +181,7 @@ final class RenderedThumbnailResolver {
 
     private void createWebView() {
         main.post(() -> {
-            if (closed || webView != null) return;
+            if (closed || !active || webView != null) return;
             webView = new WebView(context);
             WebSettings settings = webView.getSettings();
             settings.setJavaScriptEnabled(true);
@@ -166,26 +195,19 @@ final class RenderedThumbnailResolver {
                 CookieManager.getInstance().setAcceptThirdPartyCookies(webView, false);
             } catch (Exception ignored) {
             }
-            webView.setWebViewClient(new WebViewClient() {
-                @Override
-                public void onPageFinished(WebView view, String url) {
-                    if (closed || !busy || currentPage == null) return;
-                    attempt = 0;
-                    main.postDelayed(RenderedThumbnailResolver.this::probeRenderedPage, 250L);
-                }
-            });
         });
     }
 
     private void startNext() {
-        if (closed || busy) return;
+        if (closed || !active || busy) return;
         currentPage = queue.poll();
         if (currentPage == null) return;
         busy = true;
         attempt = 0;
 
         final String page = currentPage;
-        io.execute(() -> {
+        final int token = ++generation;
+        task = io.submit(() -> {
             if (closed) return;
             String staticThumbnail = "";
             try {
@@ -194,62 +216,65 @@ final class RenderedThumbnailResolver {
             }
             final String resolved = staticThumbnail;
             main.post(() -> {
-                if (closed || !busy || currentPage == null || !page.equals(currentPage)) return;
+                if (!current(token, page)) return;
                 if (isUsable(resolved) && !isRejected(page, resolved)) {
-                    finish(page, resolved);
+                    finish(token, page, resolved);
                 } else {
-                    loadRenderedPage(page);
+                    loadRenderedPage(token, page);
                 }
             });
         });
     }
 
-    private void loadRenderedPage(String page) {
-        if (closed || !busy || page == null || !page.equals(currentPage)) return;
+    private void loadRenderedPage(int token, String page) {
+        if (!current(token, page)) return;
         if (webView == null) {
             createWebView();
-            main.postDelayed(() -> loadRenderedPage(page), 50L);
+            main.postDelayed(() -> loadRenderedPage(token, page), 50L);
             return;
         }
         try {
             webView.stopLoading();
+            webView.setWebViewClient(new WebViewClient() {
+                @Override public void onPageFinished(WebView view, String url) {
+                    if (!current(token, page) || url == null || url.startsWith("about:")
+                            || !url.equals(view.getUrl())) return;
+                    attempt = 0;
+                    main.postDelayed(() -> probeRenderedPage(token, page), 250L);
+                }
+            });
             webView.loadUrl(page);
         } catch (Exception e) {
-            fallbackToVideo(page);
+            fallbackToVideo(token, page);
         }
     }
 
-    private void probeRenderedPage() {
-        if (closed || !busy || webView == null || currentPage == null) return;
-        final String page = currentPage;
+    private void probeRenderedPage(int token, String page) {
+        if (!current(token, page) || webView == null) return;
         try {
             String script = String.format(Locale.US, THUMB_JS, rejectedJson(page));
             webView.evaluateJavascript(script, raw -> {
-                if (closed) return;
+                if (!current(token, page)) return;
                 String resolved = decodeJsString(raw);
                 if (isUsable(resolved)) {
-                    finish(page, resolved);
+                    finish(token, page, resolved);
                     return;
                 }
                 attempt++;
                 if (attempt < 3) {
-                    main.postDelayed(this::probeRenderedPage, attempt == 1 ? 350L : 650L);
+                    main.postDelayed(() -> probeRenderedPage(token, page), attempt == 1 ? 350L : 650L);
                 } else {
-                    fallbackToVideo(page);
+                    fallbackToVideo(token, page);
                 }
             });
         } catch (Exception e) {
-            fallbackToVideo(page);
+            fallbackToVideo(token, page);
         }
     }
 
-    private void fallbackToVideo(String page) {
-        if (closed) return;
-        if (page == null) {
-            finish(null, "");
-            return;
-        }
-        io.execute(() -> {
+    private void fallbackToVideo(int token, String page) {
+        if (!current(token, page)) return;
+        task = io.submit(() -> {
             if (closed) return;
             String result = "";
             try {
@@ -261,7 +286,7 @@ final class RenderedThumbnailResolver {
             }
             final String resolved = result;
             main.post(() -> {
-                if (!closed) finish(page, resolved);
+                if (current(token, page)) finish(token, page, resolved);
             });
         });
     }
@@ -304,8 +329,8 @@ final class RenderedThumbnailResolver {
         }
     }
 
-    private void finish(String page, String result) {
-        if (closed) return;
+    private void finish(int token, String page, String result) {
+        if (!current(token, page)) return;
         if (page != null && isRejected(page, result)) result = "";
         if (page != null && isUsable(result)) {
             if (result.startsWith("http://") || result.startsWith("https://")) {

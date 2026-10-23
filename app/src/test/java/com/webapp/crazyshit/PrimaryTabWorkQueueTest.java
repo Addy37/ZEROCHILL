@@ -57,6 +57,22 @@ public class PrimaryTabWorkQueueTest {
         tick();
     }
 
+    @Test public void boundedFallbackRunsOnceAndDepartureCancelsIt() {
+        Fixture f = new Fixture();
+        f.queue.select(4); f.queue.setSettled(true);
+        f.queue.submit(4, "publish", () -> f.calls.add("library"));
+        // Simulate a busy message queue that has not delivered its idle callback.
+        Runnable fallback = org.robolectric.util.ReflectionHelpers.getField(f.queue, "fallback");
+        fallback.run(); fallback.run();
+        tick();
+        assertEquals(Arrays.asList("library"), f.calls);
+        f.queue.submit(4, "later", () -> fail("Library work crossed departure"));
+        f.queue.setSettled(false); f.queue.select(1);
+        fallback.run(); tick();
+        assertEquals(Arrays.asList("library"), f.calls);
+        f.queue.close();
+    }
+
     static void tick() { shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(100)); }
     private static class Fixture {
         final List<String> calls = new ArrayList<>();
