@@ -41,7 +41,7 @@ public final class LibraryLifecycleProbeActivity extends Activity {
                 android.util.Log.i("ZeroChillLibrary", "first frame has header and loading shell before activation/data");
                 queue.submit(4, "activation", () -> library.setSocialActive(true));
                 queue.setSettled(true);
-                handler.postDelayed(this::depart, 400);
+                handler.postDelayed(LibraryLifecycleProbeActivity.this::depart, 400);
             } catch (Exception error) { fail(error); }
                 });
                 return true;
