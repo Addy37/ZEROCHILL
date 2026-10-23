@@ -188,7 +188,8 @@ public class ShowsEpisodeListTest {
         ReflectionHelpers.setField(browser, "showDetailsMode", true);
         for (int mode = 0; mode <= 3; mode++) {
             browser.getSharedPreferences("app_prefs", 0).edit().putInt("native_view_collection", mode).commit();
-            assertEquals((Integer) NativeFeedAdapter.VIEW_LIST, ReflectionHelpers.callInstanceMethod(browser, "viewMode"));
+            int actual = ReflectionHelpers.callInstanceMethod(browser, "viewMode");
+            assertEquals(NativeFeedAdapter.VIEW_LIST, actual);
         }
         android.app.Dialog before = org.robolectric.shadows.ShadowDialog.getLatestDialog();
         ReflectionHelpers.callInstanceMethod(browser, "showViewStyleDialog");

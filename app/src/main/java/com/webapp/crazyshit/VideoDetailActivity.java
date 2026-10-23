@@ -1540,8 +1540,7 @@ public class VideoDetailActivity extends Activity {
         io.execute(() -> {
             CrazyShitRepository.StreamInfo stream = null;
             try {
-                stream = queued == null ? PlayableSourceRouter.resolve(this, item.url)
-                        : PlayableSourceRouter.resolve(this, item);
+                stream = PlayableSourceRouter.resolve(this, item.url);
             } catch (Exception ignored) {
             }
             CrazyShitRepository.StreamInfo resolved = stream;
