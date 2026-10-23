@@ -12,7 +12,7 @@ on:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
-  cancel-in-progress: ${{ github.head_ref == 'feature/shows-episode-list' || (github.head_ref == 'feature/onlyfap-gender-shelves' || github.head_ref == 'fix/library-startup-navigation' || github.head_ref == 'feature/onlyfap-liquid-rift' || github.head_ref == 'feature/zerochill-5.1.0' || github.head_ref == 'feature/source-contracts-preference-search') }}
+  cancel-in-progress: ${{ github.head_ref == 'feature/search-recent-glass' || github.head_ref == 'feature/shows-episode-list' || (github.head_ref == 'feature/onlyfap-gender-shelves' || github.head_ref == 'fix/library-startup-navigation' || github.head_ref == 'feature/onlyfap-liquid-rift' || github.head_ref == 'feature/zerochill-5.1.0' || github.head_ref == 'feature/source-contracts-preference-search') }}
 
 permissions:
   contents: read
