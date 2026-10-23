@@ -58,6 +58,7 @@ public class SearchRecentGlassTest {
                     assertTrue(rows.getClipToOutline());
                     assertTrue(pane.getBottom() <= windowHeight - Math.max(20, ime) - gap);
                     if (count > 0 && available > 14) {
+                        scroll.setSmoothScrollingEnabled(false);
                         scroll.fullScroll(View.FOCUS_DOWN); layout(panel.view, 400, windowHeight);
                         assertFalse(scroll.canScrollVertically(1));
                         assertEquals(Math.max(0, history.getHeight() - scroll.getHeight()), scroll.getScrollY());
@@ -105,7 +106,7 @@ public class SearchRecentGlassTest {
         RecentSearchStore.remember(host.get(), "Persisted query"); host.get().panel.resume();
         Bundle state = new Bundle(); host.get().panel.save(state);
         host.pause().stop().destroy();
-        var recreated = Robolectric.buildActivity(SearchActivity.class).create(state).start().resume();
+        var recreated = Robolectric.buildActivity(SearchActivity.class).create(state).start().resume().visible();
         try {
             layout(recreated.get().panel.view, 800, 400);
             View pane = ReflectionHelpers.getField(recreated.get().panel, "resultSurface");

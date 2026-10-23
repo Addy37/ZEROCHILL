@@ -124,12 +124,17 @@ public final class GlassRenderProbeActivity extends Activity {
             if (pane.getHeight() > desired || pane.getHeight() != rows.getHeight()
                     || (count == 0 && pane.getVisibility() == View.VISIBLE))
                 throw new IllegalStateException("Incorrect recent geometry " + pane.getHeight() + "/" + desired);
+            java.lang.reflect.Field pageField = SearchGlassLayout.class.getDeclaredField("page");
+            pageField.setAccessible(true);
+            ViewPageBackdrop searchPage = (ViewPageBackdrop) pageField.get(search);
+            int searchRecordings = searchPage.getRecordings();
             int recordings = source.pageBackdropForOverlay().getRecordings();
             handler.postDelayed(() -> {
                 int extra = source.pageBackdropForOverlay().getRecordings() - recordings;
-                android.util.Log.i("ZeroChillSearch", (extra <= 2 ? "PASS" : "FAIL")
+                int searchExtra = searchPage.getRecordings() - searchRecordings;
+                android.util.Log.i("ZeroChillSearch", (extra <= 2 && searchExtra <= 2 ? "PASS" : "FAIL")
                         + " natural height=" + pane.getHeight() + " desired=" + desired
-                        + " source recordings during idle=" + extra);
+                        + " source recordings during idle=" + extra + " search recordings=" + searchExtra);
             }, 1000);
         } catch (Exception error) { android.util.Log.e("ZeroChillSearch", "FAIL", error); }
     }
