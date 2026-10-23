@@ -29,7 +29,7 @@ internal class GlassHeaderView @JvmOverloads constructor(
         setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnDetachedFromWindow)
     }
     private var backdrop by mutableStateOf<ViewPageBackdrop?>(null)
-    private var recentSurface by mutableStateOf(false)
+    private var recentMaterial by mutableStateOf(false)
 
     init {
         if (cornerRadius > 0f) {
@@ -66,7 +66,7 @@ internal class GlassHeaderView @JvmOverloads constructor(
     }
 
     fun setPageBackdrop(page: ViewPageBackdrop) { backdrop = page }
-    fun setRecentSurface(recent: Boolean) { recentSurface = recent }
+    fun setRecentSurface(recent: Boolean) { recentMaterial = recent }
 
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
@@ -74,7 +74,7 @@ internal class GlassHeaderView @JvmOverloads constructor(
         post {
             if (!isAttachedToWindow) return@post
             glass.setContent {
-                val config = remember(recentSurface) { (if (resultsSurface && recentSurface) recentSearchGlassConfig(activity)
+                val config = remember(recentMaterial) { (if (resultsSurface && recentMaterial) recentSearchGlassConfig(activity)
                     else if (resultsSurface) searchResultsGlassConfig(activity)
                     else headerGlassConfig(activity)).let {
                     if (cornerRadius > 0f) it.copy(lensSideEdges = true) else it
