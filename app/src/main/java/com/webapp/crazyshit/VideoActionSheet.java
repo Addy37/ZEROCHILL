@@ -41,6 +41,10 @@ final class VideoActionSheet {
     }
 
     static void show(Activity activity, String videoTitle, Section... sections) {
+        showEpisodeAware(activity, videoTitle, false, sections);
+    }
+
+    static void showEpisodeAware(Activity activity, String videoTitle, boolean episode, Section... sections) {
         if (activity == null || activity.isFinishing() || activity.isDestroyed()) return;
         boolean sidePanel = activity.getResources().getConfiguration().orientation ==
                 Configuration.ORIENTATION_LANDSCAPE;
@@ -65,7 +69,7 @@ final class VideoActionSheet {
         panel.setClipToOutline(true);
 
         if (!sidePanel) addDragHandle(activity, panel);
-        addHeader(activity, dialog, panel, videoTitle);
+        addHeader(activity, dialog, panel, videoTitle, episode);
 
         ScrollView scroll = new ScrollView(activity);
         scroll.setFillViewport(false);
@@ -286,7 +290,8 @@ final class VideoActionSheet {
             Activity activity,
             Dialog dialog,
             LinearLayout panel,
-            String videoTitle
+            String videoTitle,
+            boolean episode
     ) {
         LinearLayout header = new LinearLayout(activity);
         header.setOrientation(LinearLayout.HORIZONTAL);
@@ -300,7 +305,10 @@ final class VideoActionSheet {
         LinearLayout labels = new LinearLayout(activity);
         labels.setOrientation(LinearLayout.VERTICAL);
         labels.setPadding(dp(activity, 10), 0, dp(activity, 8), 0);
-        labels.addView(text(activity, "Video actions", 21, Color.WHITE, true));
+        TextView heading = text(activity, episode ? videoTitle : "Video actions", 21, Color.WHITE, true);
+        heading.setMaxLines(2);
+        heading.setEllipsize(TextUtils.TruncateAt.END);
+        labels.addView(heading);
         TextView subtitle = text(activity,
                 TextUtils.isEmpty(videoTitle) ? "Current video" : videoTitle,
                 11,
@@ -308,7 +316,7 @@ final class VideoActionSheet {
                 false);
         subtitle.setSingleLine(true);
         subtitle.setEllipsize(TextUtils.TruncateAt.END);
-        labels.addView(subtitle);
+        if (!episode) labels.addView(subtitle);
         header.addView(labels, new LinearLayout.LayoutParams(0, -2, 1f));
 
         ImageView close = icon(activity, R.drawable.ic_more_close, 40, 10);

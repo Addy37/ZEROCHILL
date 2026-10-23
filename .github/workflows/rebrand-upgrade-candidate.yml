@@ -12,7 +12,7 @@ on:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
-  cancel-in-progress: ${{ (github.head_ref == 'feature/onlyfap-gender-shelves' || github.head_ref == 'fix/library-startup-navigation' || github.head_ref == 'feature/onlyfap-liquid-rift' || github.head_ref == 'feature/zerochill-5.1.0' || github.head_ref == 'feature/source-contracts-preference-search') }}
+  cancel-in-progress: ${{ github.head_ref == 'feature/shows-episode-list' || (github.head_ref == 'feature/onlyfap-gender-shelves' || github.head_ref == 'fix/library-startup-navigation' || github.head_ref == 'feature/onlyfap-liquid-rift' || github.head_ref == 'feature/zerochill-5.1.0' || github.head_ref == 'feature/source-contracts-preference-search') }}
 
 permissions:
   contents: read
@@ -57,6 +57,15 @@ jobs:
           gradle-version: '8.11.1'
           cache-provider: basic
 
+      - name: Run focused Shows episode regressions first
+        if: github.head_ref == 'feature/shows-episode-list'
+        run: >-
+          gradle --no-daemon :app:testDebugUnitTest
+          --tests 'com.webapp.crazyshit.ShowsEpisodeListTest'
+          --tests 'com.webapp.crazyshit.PlaybackHistoryStoreTest'
+          --tests 'com.webapp.crazyshit.VideoDetailProgressTest'
+          --tests 'com.webapp.crazyshit.ShowsFullscreen*'
+
       - name: Run focused category shelf and hero regressions first
         if: github.head_ref == 'feature/onlyfap-gender-shelves'
         run: >-
@@ -95,11 +104,11 @@ jobs:
 
 
       - name: Run focused BaddieHub title parsing first
-        if: ${{ github.head_ref != 'feature/source-contracts-preference-search' && github.head_ref != 'feature/zerochill-5.1.0' && github.head_ref != 'feature/search-results-polish' && github.head_ref != 'feature/onlyfap-liquid-rift' && github.head_ref != 'fix/library-startup-navigation' && github.head_ref != 'feature/onlyfap-gender-shelves' && (github.head_ref == 'fix/baddiehub-view-count-titles') }}
+        if: ${{ github.head_ref != 'feature/source-contracts-preference-search' && github.head_ref != 'feature/zerochill-5.1.0' && github.head_ref != 'feature/search-results-polish' && github.head_ref != 'feature/onlyfap-liquid-rift' && github.head_ref != 'fix/library-startup-navigation' && github.head_ref != 'feature/shows-episode-list' && github.head_ref != 'feature/onlyfap-gender-shelves' && (github.head_ref == 'fix/baddiehub-view-count-titles') }}
         run: gradle --no-daemon :app:testDebugUnitTest --tests 'com.webapp.crazyshit.BaddieHubRepositoryTest'
 
       - name: Run related BaddieHub source and admission regressions
-        if: ${{ github.head_ref != 'feature/source-contracts-preference-search' && github.head_ref != 'feature/zerochill-5.1.0' && github.head_ref != 'feature/search-results-polish' && github.head_ref != 'feature/onlyfap-liquid-rift' && github.head_ref != 'fix/library-startup-navigation' && github.head_ref != 'feature/onlyfap-gender-shelves' && (github.head_ref == 'fix/baddiehub-view-count-titles') }}
+        if: ${{ github.head_ref != 'feature/source-contracts-preference-search' && github.head_ref != 'feature/zerochill-5.1.0' && github.head_ref != 'feature/search-results-polish' && github.head_ref != 'feature/onlyfap-liquid-rift' && github.head_ref != 'fix/library-startup-navigation' && github.head_ref != 'feature/shows-episode-list' && github.head_ref != 'feature/onlyfap-gender-shelves' && (github.head_ref == 'fix/baddiehub-view-count-titles') }}
         run: >-
           gradle --no-daemon :app:testDebugUnitTest
           --tests 'com.webapp.crazyshit.RemoteSourceConfigManagerTest'
@@ -162,7 +171,7 @@ jobs:
           if release_code >= code:
               code = release_code
               name = release_version
-          if "${{ github.head_ref || github.ref_name }}" in ("feature/zerochill-5.1.0", "feature/source-contracts-preference-search", "feature/shittok-scrubber-edge", "feature/onlyfap-liquid-rift", "fix/library-startup-navigation", "feature/onlyfap-gender-shelves"):
+          if "${{ github.head_ref || github.ref_name }}" in ("feature/zerochill-5.1.0", "feature/source-contracts-preference-search", "feature/shittok-scrubber-edge", "feature/onlyfap-liquid-rift", "fix/library-startup-navigation", "feature/onlyfap-gender-shelves", "feature/shows-episode-list"):
               beta = "5.1.0-beta.1"
               beta_match = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)-beta\.(\d+)", beta)
               if not beta_match:
@@ -244,7 +253,7 @@ jobs:
           fi
 
       - name: Verify ShitTok continuity without weakening rebuffer protection
-        if: ${{ github.head_ref != 'feature/source-contracts-preference-search' && github.head_ref != 'feature/zerochill-5.1.0' && github.head_ref != 'feature/search-results-polish' && github.head_ref != 'feature/onlyfap-liquid-rift' && github.head_ref != 'fix/library-startup-navigation' && github.head_ref != 'feature/onlyfap-gender-shelves' && (github.head_ref != 'release/zerochill-5.0.0') }}
+        if: ${{ github.head_ref != 'feature/source-contracts-preference-search' && github.head_ref != 'feature/zerochill-5.1.0' && github.head_ref != 'feature/search-results-polish' && github.head_ref != 'feature/onlyfap-liquid-rift' && github.head_ref != 'fix/library-startup-navigation' && github.head_ref != 'feature/shows-episode-list' && github.head_ref != 'feature/onlyfap-gender-shelves' && (github.head_ref != 'release/zerochill-5.0.0') }}
         run: >-
           gradle --no-daemon :app:testDebugUnitTest
           --tests com.webapp.crazyshit.ShitTokContinuityTest
@@ -263,7 +272,7 @@ jobs:
           --tests com.webapp.crazyshit.ShitTokOrientationAdmissionTest
 
       - name: Run ShitTok buffering and orientation regressions first
-        if: ${{ github.head_ref != 'feature/source-contracts-preference-search' && github.head_ref != 'feature/zerochill-5.1.0' && github.head_ref != 'feature/search-results-polish' && github.head_ref != 'feature/onlyfap-liquid-rift' && github.head_ref != 'fix/library-startup-navigation' && github.head_ref != 'feature/onlyfap-gender-shelves' && (github.head_ref != 'release/zerochill-5.0.0' && github.event.pull_request.number != 295 && github.event.pull_request.number != 304 && github.head_ref != 'fix/shittok-async-creator-metadata' && github.head_ref != 'fix/shittok-startup-handoff' && github.head_ref != 'fix/onlyfap-first-open' && github.head_ref != 'feature/phone-content-grid-layout' && github.head_ref != 'feature/library-profile-redesign') }}
+        if: ${{ github.head_ref != 'feature/source-contracts-preference-search' && github.head_ref != 'feature/zerochill-5.1.0' && github.head_ref != 'feature/search-results-polish' && github.head_ref != 'feature/onlyfap-liquid-rift' && github.head_ref != 'fix/library-startup-navigation' && github.head_ref != 'feature/shows-episode-list' && github.head_ref != 'feature/onlyfap-gender-shelves' && (github.head_ref != 'release/zerochill-5.0.0' && github.event.pull_request.number != 295 && github.event.pull_request.number != 304 && github.head_ref != 'fix/shittok-async-creator-metadata' && github.head_ref != 'fix/shittok-startup-handoff' && github.head_ref != 'fix/onlyfap-first-open' && github.head_ref != 'feature/phone-content-grid-layout' && github.head_ref != 'feature/library-profile-redesign') }}
         run: >-
           gradle --no-daemon :app:testDebugUnitTest
           --tests 'com.webapp.crazyshit.ShitTokBuffer*'
@@ -275,7 +284,7 @@ jobs:
           --tests 'com.webapp.crazyshit.ShitTokDynamicPinchTest'
 
       - name: Verify Library profile, account isolation and existing collections
-        if: ${{ github.head_ref != 'feature/source-contracts-preference-search' && github.head_ref != 'feature/zerochill-5.1.0' && github.head_ref != 'feature/search-results-polish' && github.head_ref != 'feature/onlyfap-liquid-rift' && github.head_ref != 'fix/library-startup-navigation' && github.head_ref != 'feature/onlyfap-gender-shelves' && (github.head_ref != 'release/zerochill-5.0.0' && github.head_ref == 'feature/library-profile-redesign') }}
+        if: ${{ github.head_ref != 'feature/source-contracts-preference-search' && github.head_ref != 'feature/zerochill-5.1.0' && github.head_ref != 'feature/search-results-polish' && github.head_ref != 'feature/onlyfap-liquid-rift' && github.head_ref != 'fix/library-startup-navigation' && github.head_ref != 'feature/shows-episode-list' && github.head_ref != 'feature/onlyfap-gender-shelves' && (github.head_ref != 'release/zerochill-5.0.0' && github.head_ref == 'feature/library-profile-redesign') }}
         run: >-
           gradle --no-daemon :app:testDebugUnitTest
           --tests 'com.webapp.crazyshit.LibraryProfileTest'
@@ -289,7 +298,7 @@ jobs:
           --tests 'com.webapp.crazyshit.OnlyFapFavoriteAvatarTest'
 
       - name: Verify phone content grids and retained hub behavior
-        if: ${{ github.head_ref != 'feature/source-contracts-preference-search' && github.head_ref != 'feature/zerochill-5.1.0' && github.head_ref != 'feature/search-results-polish' && github.head_ref != 'feature/onlyfap-liquid-rift' && github.head_ref != 'fix/library-startup-navigation' && github.head_ref != 'feature/onlyfap-gender-shelves' && (github.head_ref != 'release/zerochill-5.0.0' && github.head_ref == 'feature/phone-content-grid-layout') }}
+        if: ${{ github.head_ref != 'feature/source-contracts-preference-search' && github.head_ref != 'feature/zerochill-5.1.0' && github.head_ref != 'feature/search-results-polish' && github.head_ref != 'feature/onlyfap-liquid-rift' && github.head_ref != 'fix/library-startup-navigation' && github.head_ref != 'feature/shows-episode-list' && github.head_ref != 'feature/onlyfap-gender-shelves' && (github.head_ref != 'release/zerochill-5.0.0' && github.head_ref == 'feature/phone-content-grid-layout') }}
         run: >-
           gradle --no-daemon :app:testDebugUnitTest
           --tests 'com.webapp.crazyshit.PhoneContentGridLayoutTest'
@@ -301,7 +310,7 @@ jobs:
           --tests 'com.webapp.crazyshit.OnlyFapFavoriteAvatarTest'
 
       - name: Verify OnlyFap progressive first-open readiness
-        if: ${{ github.head_ref != 'feature/source-contracts-preference-search' && github.head_ref != 'feature/zerochill-5.1.0' && github.head_ref != 'feature/search-results-polish' && github.head_ref != 'feature/onlyfap-liquid-rift' && github.head_ref != 'fix/library-startup-navigation' && github.head_ref != 'feature/onlyfap-gender-shelves' && (github.head_ref != 'release/zerochill-5.0.0' && github.head_ref == 'fix/onlyfap-first-open') }}
+        if: ${{ github.head_ref != 'feature/source-contracts-preference-search' && github.head_ref != 'feature/zerochill-5.1.0' && github.head_ref != 'feature/search-results-polish' && github.head_ref != 'feature/onlyfap-liquid-rift' && github.head_ref != 'fix/library-startup-navigation' && github.head_ref != 'feature/shows-episode-list' && github.head_ref != 'feature/onlyfap-gender-shelves' && (github.head_ref != 'release/zerochill-5.0.0' && github.head_ref == 'fix/onlyfap-first-open') }}
         run: >-
           gradle --no-daemon :app:testDebugUnitTest
           --tests 'com.webapp.crazyshit.ColdTabSnapshotTest'
@@ -311,7 +320,7 @@ jobs:
           --tests 'com.webapp.crazyshit.PrimaryTab*'
 
       - name: Run focused notification entry regressions
-        if: ${{ github.head_ref != 'feature/source-contracts-preference-search' && github.head_ref != 'feature/zerochill-5.1.0' && github.head_ref != 'feature/search-results-polish' && github.head_ref != 'feature/onlyfap-liquid-rift' && github.head_ref != 'fix/library-startup-navigation' && github.head_ref != 'feature/onlyfap-gender-shelves' && (github.head_ref != 'release/zerochill-5.0.0' && github.event.pull_request.number != 295 && github.event.pull_request.number != 304 && github.head_ref != 'fix/shittok-async-creator-metadata' && github.head_ref != 'fix/shittok-startup-handoff' && github.head_ref != 'fix/onlyfap-first-open' && github.head_ref != 'feature/phone-content-grid-layout' && github.head_ref != 'feature/library-profile-redesign') }}
+        if: ${{ github.head_ref != 'feature/source-contracts-preference-search' && github.head_ref != 'feature/zerochill-5.1.0' && github.head_ref != 'feature/search-results-polish' && github.head_ref != 'feature/onlyfap-liquid-rift' && github.head_ref != 'fix/library-startup-navigation' && github.head_ref != 'feature/shows-episode-list' && github.head_ref != 'feature/onlyfap-gender-shelves' && (github.head_ref != 'release/zerochill-5.0.0' && github.event.pull_request.number != 295 && github.event.pull_request.number != 304 && github.head_ref != 'fix/shittok-async-creator-metadata' && github.head_ref != 'fix/shittok-startup-handoff' && github.head_ref != 'fix/onlyfap-first-open' && github.head_ref != 'feature/phone-content-grid-layout' && github.head_ref != 'feature/library-profile-redesign') }}
         run: >-
           gradle --no-daemon :app:testDebugUnitTest
           --tests 'com.webapp.crazyshit.NotificationCenterUiTest'
@@ -320,7 +329,7 @@ jobs:
           --tests 'com.webapp.crazyshit.UpdateInboxStoreTest'
 
       - name: Run focused primary-tab activation regressions
-        if: ${{ github.head_ref != 'feature/source-contracts-preference-search' && github.head_ref != 'feature/zerochill-5.1.0' && github.head_ref != 'feature/search-results-polish' && github.head_ref != 'feature/onlyfap-liquid-rift' && github.head_ref != 'fix/library-startup-navigation' && github.head_ref != 'feature/onlyfap-gender-shelves' && (github.head_ref != 'release/zerochill-5.0.0' && github.event.pull_request.number != 295 && github.event.pull_request.number != 304 && github.head_ref != 'fix/shittok-async-creator-metadata' && github.head_ref != 'fix/shittok-startup-handoff' && github.head_ref != 'fix/onlyfap-first-open' && github.head_ref != 'feature/phone-content-grid-layout' && github.head_ref != 'feature/library-profile-redesign') }}
+        if: ${{ github.head_ref != 'feature/source-contracts-preference-search' && github.head_ref != 'feature/zerochill-5.1.0' && github.head_ref != 'feature/search-results-polish' && github.head_ref != 'feature/onlyfap-liquid-rift' && github.head_ref != 'fix/library-startup-navigation' && github.head_ref != 'feature/shows-episode-list' && github.head_ref != 'feature/onlyfap-gender-shelves' && (github.head_ref != 'release/zerochill-5.0.0' && github.event.pull_request.number != 295 && github.event.pull_request.number != 304 && github.head_ref != 'fix/shittok-async-creator-metadata' && github.head_ref != 'fix/shittok-startup-handoff' && github.head_ref != 'fix/onlyfap-first-open' && github.head_ref != 'feature/phone-content-grid-layout' && github.head_ref != 'feature/library-profile-redesign') }}
         run: >-
           gradle --no-daemon :app:testDebugUnitTest
           --tests 'com.webapp.crazyshit.PrimaryTab*'
@@ -328,7 +337,7 @@ jobs:
           --tests 'com.webapp.crazyshit.OnlyFapFavoriteAvatarTest'
 
       - name: Run focused ShitTok swipe and audio regressions
-        if: ${{ github.head_ref != 'feature/source-contracts-preference-search' && github.head_ref != 'feature/zerochill-5.1.0' && github.head_ref != 'feature/search-results-polish' && github.head_ref != 'feature/onlyfap-liquid-rift' && github.head_ref != 'fix/library-startup-navigation' && github.head_ref != 'feature/onlyfap-gender-shelves' && (github.head_ref != 'release/zerochill-5.0.0' && github.event.pull_request.number != 295 && github.event.pull_request.number != 304 && github.head_ref != 'fix/shittok-async-creator-metadata' && github.head_ref != 'fix/shittok-startup-handoff' && github.head_ref != 'fix/onlyfap-first-open' && github.head_ref != 'feature/phone-content-grid-layout' && github.head_ref != 'feature/library-profile-redesign') }}
+        if: ${{ github.head_ref != 'feature/source-contracts-preference-search' && github.head_ref != 'feature/zerochill-5.1.0' && github.head_ref != 'feature/search-results-polish' && github.head_ref != 'feature/onlyfap-liquid-rift' && github.head_ref != 'fix/library-startup-navigation' && github.head_ref != 'feature/shows-episode-list' && github.head_ref != 'feature/onlyfap-gender-shelves' && (github.head_ref != 'release/zerochill-5.0.0' && github.event.pull_request.number != 295 && github.event.pull_request.number != 304 && github.head_ref != 'fix/shittok-async-creator-metadata' && github.head_ref != 'fix/shittok-startup-handoff' && github.head_ref != 'fix/onlyfap-first-open' && github.head_ref != 'feature/phone-content-grid-layout' && github.head_ref != 'feature/library-profile-redesign') }}
         run: >-
           gradle --no-daemon :app:testDebugUnitTest
           --tests 'com.webapp.crazyshit.ShitTokAudioOwnershipTest'
@@ -339,7 +348,7 @@ jobs:
           --tests 'com.webapp.crazyshit.ShitTokSessionResumeTest'
 
       - name: Run focused Favorite Creators cache-first regressions
-        if: ${{ github.head_ref != 'feature/source-contracts-preference-search' && github.head_ref != 'feature/zerochill-5.1.0' && github.head_ref != 'feature/search-results-polish' && github.head_ref != 'feature/onlyfap-liquid-rift' && github.head_ref != 'fix/library-startup-navigation' && github.head_ref != 'feature/onlyfap-gender-shelves' && (github.head_ref != 'release/zerochill-5.0.0' && github.event.pull_request.number != 295 && github.event.pull_request.number != 304 && github.head_ref != 'fix/shittok-async-creator-metadata' && github.head_ref != 'fix/shittok-startup-handoff' && github.head_ref != 'fix/onlyfap-first-open' && github.head_ref != 'feature/phone-content-grid-layout' && github.head_ref != 'feature/library-profile-redesign') }}
+        if: ${{ github.head_ref != 'feature/source-contracts-preference-search' && github.head_ref != 'feature/zerochill-5.1.0' && github.head_ref != 'feature/search-results-polish' && github.head_ref != 'feature/onlyfap-liquid-rift' && github.head_ref != 'fix/library-startup-navigation' && github.head_ref != 'feature/shows-episode-list' && github.head_ref != 'feature/onlyfap-gender-shelves' && (github.head_ref != 'release/zerochill-5.0.0' && github.event.pull_request.number != 295 && github.event.pull_request.number != 304 && github.head_ref != 'fix/shittok-async-creator-metadata' && github.head_ref != 'fix/shittok-startup-handoff' && github.head_ref != 'fix/onlyfap-first-open' && github.head_ref != 'feature/phone-content-grid-layout' && github.head_ref != 'feature/library-profile-redesign') }}
         run: >-
           gradle --no-daemon :app:testDebugUnitTest
           --tests 'com.webapp.crazyshit.FavoriteCreatorsScrollTest'
@@ -348,7 +357,7 @@ jobs:
           --tests 'com.webapp.crazyshit.UpdateInboxStoreTest'
 
       - name: Run focused ShitTok block and BaddieHub Shows regressions first
-        if: ${{ github.head_ref != 'feature/source-contracts-preference-search' && github.head_ref != 'feature/zerochill-5.1.0' && github.head_ref != 'feature/search-results-polish' && github.head_ref != 'feature/onlyfap-liquid-rift' && github.head_ref != 'fix/library-startup-navigation' && github.head_ref != 'feature/onlyfap-gender-shelves' && (github.head_ref != 'release/zerochill-5.0.0' && github.event.pull_request.number != 295 && github.event.pull_request.number != 304 && github.head_ref != 'fix/shittok-async-creator-metadata' && github.head_ref != 'fix/shittok-startup-handoff' && github.head_ref != 'fix/onlyfap-first-open' && github.head_ref != 'feature/phone-content-grid-layout' && github.head_ref != 'feature/library-profile-redesign') }}
+        if: ${{ github.head_ref != 'feature/source-contracts-preference-search' && github.head_ref != 'feature/zerochill-5.1.0' && github.head_ref != 'feature/search-results-polish' && github.head_ref != 'feature/onlyfap-liquid-rift' && github.head_ref != 'fix/library-startup-navigation' && github.head_ref != 'feature/shows-episode-list' && github.head_ref != 'feature/onlyfap-gender-shelves' && (github.head_ref != 'release/zerochill-5.0.0' && github.event.pull_request.number != 295 && github.event.pull_request.number != 304 && github.head_ref != 'fix/shittok-async-creator-metadata' && github.head_ref != 'fix/shittok-startup-handoff' && github.head_ref != 'fix/onlyfap-first-open' && github.head_ref != 'feature/phone-content-grid-layout' && github.head_ref != 'feature/library-profile-redesign') }}
         run: >-
           gradle --no-daemon :app:testDebugUnitTest
           --tests 'com.webapp.crazyshit.ShitTokQueuePrunerTest'
@@ -359,7 +368,7 @@ jobs:
           --tests 'com.webapp.crazyshit.ShowsHeroDesignTest'
 
       - name: Run focused fullscreen regressions first
-        if: ${{ github.head_ref != 'feature/source-contracts-preference-search' && github.head_ref != 'feature/zerochill-5.1.0' && github.head_ref != 'feature/search-results-polish' && github.head_ref != 'feature/onlyfap-liquid-rift' && github.head_ref != 'fix/library-startup-navigation' && github.head_ref != 'feature/onlyfap-gender-shelves' && (github.head_ref != 'release/zerochill-5.0.0' && github.event.pull_request.number != 295 && github.event.pull_request.number != 304 && github.head_ref != 'fix/shittok-async-creator-metadata' && github.head_ref != 'fix/shittok-startup-handoff' && github.head_ref != 'fix/onlyfap-first-open' && github.head_ref != 'feature/phone-content-grid-layout' && github.head_ref != 'feature/library-profile-redesign') }}
+        if: ${{ github.head_ref != 'feature/source-contracts-preference-search' && github.head_ref != 'feature/zerochill-5.1.0' && github.head_ref != 'feature/search-results-polish' && github.head_ref != 'feature/onlyfap-liquid-rift' && github.head_ref != 'fix/library-startup-navigation' && github.head_ref != 'feature/shows-episode-list' && github.head_ref != 'feature/onlyfap-gender-shelves' && (github.head_ref != 'release/zerochill-5.0.0' && github.event.pull_request.number != 295 && github.event.pull_request.number != 304 && github.head_ref != 'fix/shittok-async-creator-metadata' && github.head_ref != 'fix/shittok-startup-handoff' && github.head_ref != 'fix/onlyfap-first-open' && github.head_ref != 'feature/phone-content-grid-layout' && github.head_ref != 'feature/library-profile-redesign') }}
         run: >-
           gradle --no-daemon :app:testDebugUnitTest
           --tests 'com.webapp.crazyshit.ShowsFullscreen*'
@@ -367,7 +376,7 @@ jobs:
           --tests 'com.webapp.crazyshit.PhoneOrientationPolicyTest'
 
       - name: Run focused navigation and gallery regressions first
-        if: ${{ github.head_ref != 'feature/source-contracts-preference-search' && github.head_ref != 'feature/zerochill-5.1.0' && github.head_ref != 'feature/search-results-polish' && github.head_ref != 'feature/onlyfap-liquid-rift' && github.head_ref != 'fix/library-startup-navigation' && github.head_ref != 'feature/onlyfap-gender-shelves' && (github.head_ref != 'release/zerochill-5.0.0' && github.event.pull_request.number != 295 && github.event.pull_request.number != 304 && github.head_ref != 'fix/shittok-async-creator-metadata' && github.head_ref != 'fix/shittok-startup-handoff' && github.head_ref != 'fix/onlyfap-first-open' && github.head_ref != 'feature/phone-content-grid-layout' && github.head_ref != 'feature/library-profile-redesign') }}
+        if: ${{ github.head_ref != 'feature/source-contracts-preference-search' && github.head_ref != 'feature/zerochill-5.1.0' && github.head_ref != 'feature/search-results-polish' && github.head_ref != 'feature/onlyfap-liquid-rift' && github.head_ref != 'fix/library-startup-navigation' && github.head_ref != 'feature/shows-episode-list' && github.head_ref != 'feature/onlyfap-gender-shelves' && (github.head_ref != 'release/zerochill-5.0.0' && github.event.pull_request.number != 295 && github.event.pull_request.number != 304 && github.head_ref != 'fix/shittok-async-creator-metadata' && github.head_ref != 'fix/shittok-startup-handoff' && github.head_ref != 'fix/onlyfap-first-open' && github.head_ref != 'feature/phone-content-grid-layout' && github.head_ref != 'feature/library-profile-redesign') }}
         run: >-
           gradle --no-daemon :app:testDebugUnitTest
           --tests 'com.webapp.crazyshit.BottomNavigationInsetsTest'
@@ -382,7 +391,7 @@ jobs:
           --tests 'com.webapp.crazyshit.CreatorMergedGalleryTest'
 
       - name: Run focused DM regressions before build
-        if: ${{ github.head_ref != 'feature/source-contracts-preference-search' && github.head_ref != 'feature/zerochill-5.1.0' && github.head_ref != 'feature/search-results-polish' && github.head_ref != 'feature/onlyfap-liquid-rift' && github.head_ref != 'fix/library-startup-navigation' && github.head_ref != 'feature/onlyfap-gender-shelves' && (github.head_ref != 'release/zerochill-5.0.0' && github.event.pull_request.number != 295 && github.event.pull_request.number != 304 && github.head_ref != 'fix/shittok-async-creator-metadata' && github.head_ref != 'fix/shittok-startup-handoff' && github.head_ref != 'fix/onlyfap-first-open' && github.head_ref != 'feature/phone-content-grid-layout' && github.head_ref != 'feature/library-profile-redesign') }}
+        if: ${{ github.head_ref != 'feature/source-contracts-preference-search' && github.head_ref != 'feature/zerochill-5.1.0' && github.head_ref != 'feature/search-results-polish' && github.head_ref != 'feature/onlyfap-liquid-rift' && github.head_ref != 'fix/library-startup-navigation' && github.head_ref != 'feature/shows-episode-list' && github.head_ref != 'feature/onlyfap-gender-shelves' && (github.head_ref != 'release/zerochill-5.0.0' && github.event.pull_request.number != 295 && github.event.pull_request.number != 304 && github.head_ref != 'fix/shittok-async-creator-metadata' && github.head_ref != 'fix/shittok-startup-handoff' && github.head_ref != 'fix/onlyfap-first-open' && github.head_ref != 'feature/phone-content-grid-layout' && github.head_ref != 'feature/library-profile-redesign') }}
         run: >-
           gradle --no-daemon :app:testDebugUnitTest :app:testReleaseUnitTest
           --tests 'com.webapp.crazyshit.ZeroChillMessageThreadUiTest'
@@ -398,7 +407,7 @@ jobs:
           PY
 
       - name: Run focused OnlyFap Discover release regressions first
-        if: ${{ github.head_ref != 'feature/source-contracts-preference-search' && github.head_ref != 'feature/zerochill-5.1.0' && github.head_ref != 'feature/search-results-polish' && github.head_ref != 'feature/onlyfap-liquid-rift' && github.head_ref != 'fix/library-startup-navigation' && github.head_ref != 'feature/onlyfap-gender-shelves' && (github.head_ref != 'release/zerochill-5.0.0' && github.event.pull_request.number != 295 && github.event.pull_request.number != 304 && github.head_ref != 'fix/shittok-async-creator-metadata' && github.head_ref != 'fix/shittok-startup-handoff' && github.head_ref != 'fix/onlyfap-first-open' && github.head_ref != 'feature/phone-content-grid-layout' && github.head_ref != 'feature/library-profile-redesign') }}
+        if: ${{ github.head_ref != 'feature/source-contracts-preference-search' && github.head_ref != 'feature/zerochill-5.1.0' && github.head_ref != 'feature/search-results-polish' && github.head_ref != 'feature/onlyfap-liquid-rift' && github.head_ref != 'fix/library-startup-navigation' && github.head_ref != 'feature/shows-episode-list' && github.head_ref != 'feature/onlyfap-gender-shelves' && (github.head_ref != 'release/zerochill-5.0.0' && github.event.pull_request.number != 295 && github.event.pull_request.number != 304 && github.head_ref != 'fix/shittok-async-creator-metadata' && github.head_ref != 'fix/shittok-startup-handoff' && github.head_ref != 'fix/onlyfap-first-open' && github.head_ref != 'feature/phone-content-grid-layout' && github.head_ref != 'feature/library-profile-redesign') }}
         run: >-
           gradle --no-daemon :app:testReleaseUnitTest
           --tests 'com.webapp.crazyshit.OnlyFapDiscoverTest'
@@ -406,7 +415,7 @@ jobs:
           --tests 'com.webapp.crazyshit.FapelloRepositoryTest'
 
       - name: Focused glass optics and navigation regressions
-        if: ${{ github.head_ref != 'feature/source-contracts-preference-search' && github.head_ref != 'feature/zerochill-5.1.0' && github.head_ref != 'feature/search-results-polish' && github.head_ref != 'feature/onlyfap-liquid-rift' && github.head_ref != 'fix/library-startup-navigation' && github.head_ref != 'feature/onlyfap-gender-shelves' && (github.head_ref != 'release/zerochill-5.0.0' && github.event.pull_request.number == 295) }}
+        if: ${{ github.head_ref != 'feature/source-contracts-preference-search' && github.head_ref != 'feature/zerochill-5.1.0' && github.head_ref != 'feature/search-results-polish' && github.head_ref != 'feature/onlyfap-liquid-rift' && github.head_ref != 'fix/library-startup-navigation' && github.head_ref != 'feature/shows-episode-list' && github.head_ref != 'feature/onlyfap-gender-shelves' && (github.head_ref != 'release/zerochill-5.0.0' && github.event.pull_request.number == 295) }}
         run: >-
           gradle --no-daemon :app:testDebugUnitTest
           --tests 'com.webapp.crazyshit.glass.backdrop.ClearGlassLensTest'
@@ -419,7 +428,7 @@ jobs:
         # These focused candidates run complete suites once instead of repeatedly
         # starting Gradle for overlapping filters. Signing/upgrade gates remain.
         run: |
-          if [ "${{ github.head_ref }}" = "feature/onlyfap-gender-shelves" ] || [ "${{ github.head_ref }}" = "feature/source-contracts-preference-search" ] || [ "${{ github.head_ref }}" = "feature/zerochill-5.1.0" ] || [ "${{ github.head_ref }}" = "release/zerochill-5.0.0" ] || [ "${{ github.event.pull_request.number }}" = "295" ] || [ "${{ github.event.pull_request.number }}" = "304" ] || [ "${{ github.head_ref }}" = "fix/shittok-async-creator-metadata" ] || [ "${{ github.head_ref }}" = "fix/shittok-startup-handoff" ] || [ "${{ github.head_ref }}" = "fix/onlyfap-first-open" ] || [ "${{ github.head_ref }}" = "feature/library-profile-redesign" ]; then
+          if [ "${{ github.head_ref }}" = "feature/shows-episode-list" ] || [ "${{ github.head_ref }}" = "feature/onlyfap-gender-shelves" ] || [ "${{ github.head_ref }}" = "feature/source-contracts-preference-search" ] || [ "${{ github.head_ref }}" = "feature/zerochill-5.1.0" ] || [ "${{ github.head_ref }}" = "release/zerochill-5.0.0" ] || [ "${{ github.event.pull_request.number }}" = "295" ] || [ "${{ github.event.pull_request.number }}" = "304" ] || [ "${{ github.head_ref }}" = "fix/shittok-async-creator-metadata" ] || [ "${{ github.head_ref }}" = "fix/shittok-startup-handoff" ] || [ "${{ github.head_ref }}" = "fix/onlyfap-first-open" ] || [ "${{ github.head_ref }}" = "feature/library-profile-redesign" ]; then
             gradle --no-daemon :app:testDebugUnitTest :app:testReleaseUnitTest :app:assembleDebug :app:assembleRelease
           else
             gradle --no-daemon :app:testReleaseUnitTest :app:assembleRelease :app:assembleDebug

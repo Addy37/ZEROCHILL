@@ -85,6 +85,12 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
     private int resolverCursor;
     private int viewMode = VIEW_LIST;
     private boolean closed;
+    private boolean episodePresentation;
+
+    void setEpisodePresentation(boolean episode) {
+        episodePresentation = episode;
+        if (episode) setViewMode(VIEW_LIST);
+    }
 
     public NativeFeedAdapter(Context context, Listener listener) {
         this(context, listener, false);
@@ -109,7 +115,7 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
     }
 
     public void setViewMode(int mode) {
-        int next = mode;
+        int next = episodePresentation ? VIEW_LIST : mode;
         if (next < VIEW_CARDS || next > VIEW_POSTERS) next = VIEW_LIST;
         if (viewMode == next) return;
         viewMode = next;
@@ -321,17 +327,18 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
 
     private Holder createListHolder(ViewGroup parent) {
         boolean landscape = isLandscape(parent);
-        int height = landscape ? 106 : 118;
+        int height = episodePresentation ? Math.max(96, Math.round(88 * parent.getResources().getConfiguration().fontScale)) : landscape ? 106 : 118;
         int width = homePresentation
                 ? responsiveHomeListMediaWidthDp(parent, height)
                 : landscape ? 150 : 166;
+        if (episodePresentation) width = Math.min(144, Math.round(parent.getResources().getConfiguration().screenWidthDp * 0.38f));
         MaterialCardView card = baseCard(parent, 12, 4, 15, height);
         LinearLayout row = new LinearLayout(parent.getContext());
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
         card.addView(row, new MaterialCardView.LayoutParams(-1, -1));
 
-        MediaViews media = addMedia(parent, row, height, width);
+        MediaViews media = addMedia(parent, row, episodePresentation ? Math.round(width * 9f / 16f) : height, width);
         CopyViews copy = addCopy(
                 parent,
                 row,
@@ -635,11 +642,11 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
         boolean meme = item.isMeme();
         holder.title.setText(displayTitle(item));
         holder.info.setText(buildInfo(item));
-        boolean showDescription = viewMode != VIEW_CARDS && viewMode != VIEW_POSTERS && item.description != null &&
+        boolean showDescription = !episodePresentation && viewMode != VIEW_CARDS && viewMode != VIEW_POSTERS && item.description != null &&
                 !item.description.trim().isEmpty();
         holder.description.setVisibility(showDescription ? View.VISIBLE : View.GONE);
         holder.description.setText(showDescription ? item.description.trim() : "");
-        holder.play.setVisibility(meme ? View.GONE : View.VISIBLE);
+        holder.play.setVisibility(meme || episodePresentation ? View.GONE : View.VISIBLE);
         holder.image.setScaleType(meme ? ImageView.ScaleType.FIT_CENTER : ImageView.ScaleType.CENTER_CROP);
         bindPlaybackState(holder, item);
 
@@ -648,7 +655,7 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
         holder.overlayComments.setVisibility(View.GONE);
         holder.overlayComments.setOnClickListener(null);
 
-        if (!meme && item.isVideo() && item.url != null && !item.url.isEmpty()) {
+        if (!episodePresentation && !meme && item.isVideo() && item.url != null && !item.url.isEmpty()) {
             if (viewMode == VIEW_CARDS || viewMode == VIEW_POSTERS) {
                 holder.overlayComments.setVisibility(View.VISIBLE);
                 holder.overlayComments.setText(viewMode == VIEW_CARDS ? "Comments" : "💬");

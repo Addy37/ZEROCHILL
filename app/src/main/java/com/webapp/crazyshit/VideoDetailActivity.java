@@ -241,6 +241,8 @@ public class VideoDetailActivity extends Activity {
         final long positionMs;
         final Bitmap previewBitmap;
         final NativeContentItem content;
+        final String source;
+        final String relatedFeedUrl;
 
         VideoHistoryEntry(
                 String mediaUrl,
@@ -254,7 +256,7 @@ public class VideoDetailActivity extends Activity {
                 String mediaReferer,
                 String posterUrl,
                 long positionMs,
-                Bitmap previewBitmap, NativeContentItem content
+                Bitmap previewBitmap, NativeContentItem content, String source, String relatedFeedUrl
         ) {
             this.mediaUrl = mediaUrl;
             this.pageUrl = pageUrl;
@@ -269,6 +271,8 @@ public class VideoDetailActivity extends Activity {
             this.positionMs = positionMs;
             this.previewBitmap = previewBitmap;
             this.content = content;
+            this.source = source;
+            this.relatedFeedUrl = relatedFeedUrl;
         }
     }
 
@@ -926,6 +930,7 @@ public class VideoDetailActivity extends Activity {
                     RatingFeedbackPrompt.recordSuccessfulPlayback(VideoDetailActivity.this, mediaUrl);
                 } else if (playbackState == Player.STATE_ENDED) {
                     savePlaybackState(true);
+                    playPendingShowsNext();
                 }
             }
 
@@ -1488,9 +1493,53 @@ public class VideoDetailActivity extends Activity {
         return new GlideUrl(imageUrl, headers.build());
     }
 
+    // A single persisted handoff into the existing related-video switch, not a second player queue.
+    private static final String SHOWS_NEXT = "shows_play_next";
+    private boolean showsNextResolving;
+
+    static void setShowsPlayNext(android.content.Context context, NativeContentItem item, String source, String feed) {
+        if (!ShowsEpisodePlayback.playable(item)) return;
+        try {
+            org.json.JSONObject value = ContentItemCodec.encode(item).put("source", source).put("feed", feed);
+            context.getSharedPreferences("player_positions", MODE_PRIVATE).edit()
+                    .putString(SHOWS_NEXT, value.toString()).apply();
+        } catch (org.json.JSONException ignored) { }
+    }
+
+    static org.json.JSONObject pendingShowsNext(android.content.Context context, String currentUrl) {
+        String raw = context.getSharedPreferences("player_positions", MODE_PRIVATE).getString(SHOWS_NEXT, "");
+        try {
+            org.json.JSONObject value = new org.json.JSONObject(raw);
+            NativeContentItem next = ContentItemCodec.decode(value);
+            if (!ShowsEpisodePlayback.playable(next)) return null;
+            if (next.url.equals(currentUrl)) {
+                clearShowsNext(context, raw);
+                return null;
+            }
+            return value;
+        } catch (org.json.JSONException ignored) { return null; }
+    }
+
+    static void clearShowsNext(android.content.Context context, String expected) {
+        android.content.SharedPreferences prefs = context.getSharedPreferences("player_positions", MODE_PRIVATE);
+        if (expected.equals(prefs.getString(SHOWS_NEXT, ""))) prefs.edit().remove(SHOWS_NEXT).apply();
+    }
+
+    private void playPendingShowsNext() {
+        if ((!manualLandscapeFullscreen && !showsOrigin) || !recoveryResumed || showsNextResolving
+                || relatedTransitionRunning || isFinishing() || isDestroyed()) return;
+        org.json.JSONObject next = pendingShowsNext(this, pageUrl);
+        if (next != null) playRelated(ContentItemCodec.decode(next), next);
+    }
+
     private void playRelated(NativeContentItem item) {
+        playRelated(item, null);
+    }
+
+    private void playRelated(NativeContentItem item, org.json.JSONObject queued) {
         if (item == null || item.url == null || item.url.isEmpty() || relatedTransitionRunning) return;
         loading.setVisibility(View.VISIBLE);
+        if (queued != null) showsNextResolving = true;
         final int requestGeneration = ++relatedPlayGeneration;
         io.execute(() -> {
             CrazyShitRepository.StreamInfo stream = null;
@@ -1500,7 +1549,15 @@ public class VideoDetailActivity extends Activity {
             }
             CrazyShitRepository.StreamInfo resolved = stream;
             runOnUiThread(() -> {
-                if (isFinishing() || requestGeneration != relatedPlayGeneration) return;
+                if (queued != null) showsNextResolving = false;
+                if (isFinishing() || isDestroyed() || requestGeneration != relatedPlayGeneration) return;
+                if (queued != null && !queued.toString().equals(getSharedPreferences("player_positions", MODE_PRIVATE)
+                        .getString(SHOWS_NEXT, ""))) {
+                    loading.setVisibility(View.GONE);
+                    playPendingShowsNext();
+                    return;
+                }
+                if (queued != null && !recoveryResumed) { loading.setVisibility(View.GONE); return; }
                 loading.setVisibility(View.GONE);
                 if (resolved == null || resolved.mediaUrl == null || resolved.mediaUrl.isEmpty()) {
                     ZeroChillToast.makeText(
@@ -1513,6 +1570,11 @@ public class VideoDetailActivity extends Activity {
                 pushCurrentVideo();
                 savePlaybackState(false);
                 Runnable swap = () -> {
+                    if (queued != null) {
+                        clearShowsNext(this, queued.toString());
+                        source = queued.optString("source", source);
+                        relatedFeedUrl = queued.optString("feed", relatedFeedUrl);
+                    }
                     mediaUrl = resolved.mediaUrl;
                     pageUrl = item.url;
                     onlyFapContent = item;
@@ -1528,14 +1590,31 @@ public class VideoDetailActivity extends Activity {
                     userAgent = defaultUserAgent();
                     cookies = cookiesFor(mediaUrl, pageUrl);
                     requestedStartPosition = -1L;
+                    if (queued != null) syncShowsPlaybackIntent();
                     updateMetadataUi();
                     buildPlayer(-1L);
                     if (detailsScroll != null) detailsScroll.smoothScrollTo(0, 0);
                     loadRelated();
                 };
-                animateRelatedTransition(true, swap);
+                if (queued == null) animateRelatedTransition(true, swap);
+                else swap.run();
             });
         });
+    }
+
+    private void syncShowsPlaybackIntent() {
+        getIntent().putExtra(PlayerActivity.EXTRA_MEDIA_URL, mediaUrl)
+                .putExtra(PlayerActivity.EXTRA_PAGE_URL, pageUrl)
+                .putExtra(PlayerActivity.EXTRA_TITLE, title)
+                .putExtra(EXTRA_POSTER_URL, posterUrl)
+                .putExtra(EXTRA_SOURCE, source)
+                .putExtra(EXTRA_RELATED_FEED_URL, relatedFeedUrl)
+                .putExtra(EXTRA_MEDIA_REFERER, mediaReferer)
+                .putExtra(EXTRA_VIEWS, views).putExtra(EXTRA_UPLOADER, uploader)
+                .putExtra(EXTRA_COMMENTS, comments)
+                .putExtra(PlayerActivity.EXTRA_USER_AGENT, userAgent)
+                .putExtra(PlayerActivity.EXTRA_COOKIES, cookies)
+                .putExtra(PlayerActivity.EXTRA_START_POSITION, -1L);
     }
 
     private void pushCurrentVideo() {
@@ -1553,7 +1632,7 @@ public class VideoDetailActivity extends Activity {
                 mediaReferer,
                 posterUrl,
                 position,
-                capturePlayerFrame(), currentContent()
+                capturePlayerFrame(), currentContent(), source, relatedFeedUrl
         ));
         while (relatedHistory.size() > RELATED_HISTORY_LIMIT) {
             recycleHistoryPreview(relatedHistory.removeFirst());
@@ -1589,6 +1668,9 @@ public class VideoDetailActivity extends Activity {
         cookies = previous.cookies;
         mediaReferer = previous.mediaReferer;
         posterUrl = previous.posterUrl;
+        source = previous.source;
+        relatedFeedUrl = previous.relatedFeedUrl;
+        if (manualLandscapeFullscreen || showsOrigin) syncShowsPlaybackIntent();
         requestedStartPosition = previous.positionMs;
         updateMetadataUi();
         buildPlayer(previous.positionMs);
@@ -2047,7 +2129,7 @@ public class VideoDetailActivity extends Activity {
                 "Send the video page",
                 this::sharePage
         ));
-        actions.add(VideoActionSheet.action(
+        if (!manualLandscapeFullscreen && !showsOrigin) actions.add(VideoActionSheet.action(
                 R.drawable.ic_more_website,
                 "Open source website",
                 "Open the original video page",
@@ -2192,13 +2274,17 @@ public class VideoDetailActivity extends Activity {
         failureShown = true;
         dismissShowsLaunchCurtain(true);
         RatingFeedbackPrompt.recordPlaybackError(this);
-        new ZeroChillDialog.Builder(this)
+        android.app.AlertDialog.Builder failure = new ZeroChillDialog.Builder(this)
                 .setTitle("Couldn't play this stream")
-                .setMessage("The native player couldn't continue this video. You can open the normal webpage instead.")
+                .setMessage(manualLandscapeFullscreen || showsOrigin
+                        ? "The native player couldn't continue this episode. Try again."
+                        : "The native player couldn't continue this video. You can open the normal webpage instead.")
                 .setNegativeButton("Close", null)
-                .setNeutralButton("Retry", (dialog, which) -> recoverPlayback(null))
-                .setPositiveButton("Open page", (dialog, which) -> openWebsite(pageUrl))
-                .show();
+                .setNeutralButton("Retry", (dialog, which) -> recoverPlayback(null));
+        if (!manualLandscapeFullscreen && !showsOrigin) {
+            failure.setPositiveButton("Open page", (dialog, which) -> openWebsite(pageUrl));
+        }
+        failure.show();
     }
 
     private void openWebsite(String url) {
@@ -2559,6 +2645,7 @@ public class VideoDetailActivity extends Activity {
         result.putExtra(EXTRA_SOURCE, source);
         OnlyFapVideoMetadata.put(result, currentContent());
         result.putExtra(EXTRA_SHOWS_ORIGIN, showsOrigin);
+        result.putExtra(EXTRA_MANUAL_LANDSCAPE_FULLSCREEN, manualLandscapeFullscreen);
         if (!posterUrl.isEmpty()) result.putExtra(EXTRA_POSTER_URL, posterUrl);
         if (player != null) result.putExtra(PlayerActivity.EXTRA_START_POSITION, player.getCurrentPosition());
         setResult(RESULT_OK, result);
@@ -2598,7 +2685,7 @@ public class VideoDetailActivity extends Activity {
                 position,
                 duration,
                 ended,
-                showsOrigin
+                showsOrigin || manualLandscapeFullscreen
         );
         updateShowsContinueFrame(ended, position, duration);
 
@@ -2720,6 +2807,7 @@ public class VideoDetailActivity extends Activity {
     protected void onResume() {
         super.onResume();
         recoveryResumed = true;
+        if (player != null && player.getPlaybackState() == Player.STATE_ENDED) playPendingShowsNext();
         if (orientationListener != null) orientationListener.enable();
         if (socialNavigationPendingReturn) {
             socialNavigationPendingReturn = false;
