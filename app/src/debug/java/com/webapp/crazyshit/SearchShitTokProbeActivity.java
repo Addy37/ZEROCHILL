@@ -105,12 +105,13 @@ public final class SearchShitTokProbeActivity extends Activity {
             bytes = output.toByteArray();
         }
         androidx.media3.datasource.cache.Cache cache = ShitTokMediaCache.get(this);
-        androidx.media3.datasource.cache.CacheDataSink sink = new androidx.media3.datasource.cache.CacheDataSink(cache, 2 * 1024 * 1024);
-        sink.open(new androidx.media3.datasource.DataSpec.Builder().setUri(mediaUrl).setKey(mediaUrl).setLength(bytes.length).build());
-        try { sink.write(bytes, 0, bytes.length); } finally { sink.close(); }
-        androidx.media3.datasource.cache.ContentMetadataMutations metadata = new androidx.media3.datasource.cache.ContentMetadataMutations();
-        androidx.media3.datasource.cache.ContentMetadataMutations.setContentLength(metadata, bytes.length);
-        cache.applyContentMetadataMutations(mediaUrl, metadata);
+        androidx.media3.datasource.cache.CacheDataSource source = new androidx.media3.datasource.cache.CacheDataSource.Factory()
+                .setCache(cache)
+                .setUpstreamDataSourceFactory(() -> new androidx.media3.datasource.ByteArrayDataSource(bytes))
+                .createDataSource();
+        new androidx.media3.datasource.cache.CacheWriter(source,
+                new androidx.media3.datasource.DataSpec.Builder().setUri(mediaUrl).setKey(mediaUrl).setLength(bytes.length).build(),
+                null, null).cache();
     }
     private boolean hasVideo() {
         if (surface == null || !(surface.getVideoSurfaceView() instanceof TextureView)) return false;
