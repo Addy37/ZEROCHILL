@@ -28,6 +28,7 @@ final class LibraryProfileHeader extends LinearLayout {
     private boolean active;
     private final java.util.concurrent.ExecutorService reader;
     private int readRevision;
+    private java.util.concurrent.Future<?> pendingRead;
     private boolean closed;
     private String boundOwner = "", boundPath = "";
 
@@ -123,7 +124,8 @@ final class LibraryProfileHeader extends LinearLayout {
             avatar.setPadding(dp(14), dp(14), dp(14), dp(14));
         }
         final int token = ++readRevision;
-        reader.execute(() -> {
+        if (pendingRead != null) pendingRead.cancel(false);
+        pendingRead = reader.submit(() -> {
             Identity identity = new Identity(activity);
             post(() -> {
                 if (!closed && active && token == readRevision
@@ -184,7 +186,10 @@ final class LibraryProfileHeader extends LinearLayout {
             else prefs.unregisterOnSharedPreferenceChangeListener(changed);
         }
         if (value) refresh();
-        else removeCallbacks(update);
+        else {
+            removeCallbacks(update);
+            if (pendingRead != null) pendingRead.cancel(false);
+        }
     }
 
     void close() {
