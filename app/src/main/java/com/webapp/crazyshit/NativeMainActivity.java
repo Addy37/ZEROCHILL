@@ -629,7 +629,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
             searchOriginBar = null;
             shell.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_AUTO);
             getWindow().setSoftInputMode(searchSoftInputMode);
-            if (primaryPagerAdapter != null) primaryPagerAdapter.onHostResume();
+            if (primaryPagerAdapter != null) primaryPagerAdapter.onSearchClosed();
         });
     }
 
@@ -1455,7 +1455,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         if (headerProfileAvatar != null) headerProfileAvatar.resume();
         if (miniPlayer != null) miniPlayer.onResume();
         if (searchPanel != null) searchPanel.resume();
-        if (primaryPagerAdapter != null && searchPanel == null) primaryPagerAdapter.onHostResume();
+        if (primaryPagerAdapter != null) primaryPagerAdapter.onHostResume();
         if (appUpdater != null) {
             appUpdater.onHostResume();
         }

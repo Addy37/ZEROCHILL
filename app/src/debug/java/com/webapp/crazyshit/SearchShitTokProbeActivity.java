@@ -26,8 +26,8 @@ public final class SearchShitTokProbeActivity extends Activity {
     private PlayerView surface;
     private ExoPlayer player;
     private boolean manualPause;
-    private ImageView frozen;
-    private Bitmap frozenBitmap;
+    private Bitmap motionFrame;
+    private long openedAt;
     private long pausedAt;
     private long deadline;
     private final String url = "https://example.invalid/search-video";
@@ -77,12 +77,10 @@ public final class SearchShitTokProbeActivity extends Activity {
             if (manualPause) ((ShitTokPlaybackOwner) field(feed, "playbackOwner")).setUserPaused(url, true);
             pausedAt = player.getCurrentPosition();
             feed.onSearchOpened();
-            frozen = field(feed, "searchVideoFrame");
-            check(frozen != null, "Search did not capture video");
-            frozenBitmap = ((android.graphics.drawable.BitmapDrawable) frozen.getDrawable()).getBitmap();
-            check(frozenBitmap.getWidth() <= 720 && hasFrozenVideo(), "Search captured a black frame");
-            ShitTokPlaybackOwner owner = field(feed, "playbackOwner");
-            check(surface.getPlayer() == null && owner.player(url) == null, "Search retained decoder");
+            check(surface.getPlayer() == player, "Search detached selected surface");
+            check(player.getVolume() == 0f, "Search audio is not silent");
+            motionFrame = ((TextureView) surface.getVideoSurfaceView()).getBitmap(48, 80);
+            openedAt = player.getCurrentPosition();
             RecentSearchStore.clear(this);
             for (String query : new String[]{"One", "Two", "Three"}) RecentSearchStore.remember(this, query);
             search = new SearchPanel(this, new android.content.Intent(), true, this::closeSearch);
@@ -91,23 +89,26 @@ public final class SearchShitTokProbeActivity extends Activity {
             search.field().clearFocus();
             handler.postDelayed(() -> {
                 try {
-                    check(hasFrozenVideo(), "Search blacked out video");
-                    check(owner.player(url) == null, "audio remained active");
-                    handler.postDelayed(() -> {
-                        try {
-                            check(frozen == field(feed, "searchVideoFrame") && hasFrozenVideo(), "frozen frame was cleared");
-                            check(frozenBitmap == ((android.graphics.drawable.BitmapDrawable) frozen.getDrawable()).getBitmap(),
-                                    "Search repeated frame capture");
-                            android.util.Log.i("ZeroChillSearchVideo", "READY retained paused video; manual=" + manualPause);
-                        } catch (Exception e) { fail(e); }
-                    }, 500);
+                    check(hasVideo(), "Search blacked out video");
+                    ShitTokPlaybackOwner owner = field(feed, "playbackOwner");
+                    check(surface.getPlayer() == player && owner.player(url) == player, "Search changed engine");
+                    check(player.getVolume() == 0f, "Search leaked audio");
+                    Bitmap current = ((TextureView) surface.getVideoSurfaceView()).getBitmap(48, 80);
+                    long delta = player.getCurrentPosition() - openedAt;
+                    if (manualPause) check(Math.abs(delta) < 50, "manual pause moved");
+                    else {
+                        check(delta > 200, "playback did not advance underneath Search");
+                        check(!motionFrame.sameAs(current), "video texture did not move");
+                    }
+                    current.recycle(); motionFrame.recycle(); motionFrame = null;
+                    android.util.Log.i("ZeroChillSearchVideo", "READY live selected video; delta=" + delta + "; manual=" + manualPause);
                 } catch (Exception e) { fail(e); }
             }, 500);
         } catch (Exception e) { fail(e); }
     }
     private void seedVideoCache(String mediaUrl) throws Exception {
         byte[] bytes;
-        try (java.io.InputStream input = getAssets().open("glass-probe.mp4");
+        try (java.io.InputStream input = getAssets().open("search-probe.mp4");
                 java.io.ByteArrayOutputStream output = new java.io.ByteArrayOutputStream()) {
             byte[] buffer = new byte[8192];
             for (int count; (count = input.read(buffer)) != -1;) output.write(buffer, 0, count);
@@ -137,20 +138,10 @@ public final class SearchShitTokProbeActivity extends Activity {
         bitmap.recycle();
         return lit > 100;
     }
-    private boolean hasFrozenVideo() {
-        if (frozenBitmap == null || frozenBitmap.isRecycled()) return false;
-        int lit = 0;
-        // Only the middle of the video, excluding the feed controls.
-        for (int y=2; y<8; y++) for (int x=2; x<8; x++) {
-            int c = frozenBitmap.getPixel(frozenBitmap.getWidth()*x/10, frozenBitmap.getHeight()*y/10);
-            if (Color.red(c)+Color.green(c)+Color.blue(c)>90) lit++;
-        }
-        return lit > 12;
-    }
     private void closeSearch() {
         if (search == null) return;
         root.removeView(search.view); search.close(); search = null;
-        feed.onHostResume();
+        feed.onSearchClosed();
         deadline = SystemClock.uptimeMillis() + 15000;
         handler.postDelayed(this::awaitReturn, 100);
     }
@@ -158,17 +149,29 @@ public final class SearchShitTokProbeActivity extends Activity {
         try {
             ExoPlayer resumed = (ExoPlayer) surface.getPlayer();
             if (resumed == null || resumed.getPlaybackState() != androidx.media3.common.Player.STATE_READY
-                    || !hasVideo() || field(feed, "searchVideoFrame") != null) {
+                    || !hasVideo()) {
                 check(SystemClock.uptimeMillis() < deadline, "video never returned after Search");
                 handler.postDelayed(this::awaitReturn, 100); return;
             }
+            check(resumed == player, "Search close recreated selected engine");
+            check(resumed.getVolume() == 1f, "Search close did not restore audio");
             check(manualPause ? !resumed.getPlayWhenReady() : resumed.getPlayWhenReady(), "manual pause intent changed");
             if (manualPause) check(Math.abs(resumed.getCurrentPosition()-pausedAt)<50, "manual pause position changed");
-            android.util.Log.i("ZeroChillSearchVideo", "PASS retained frame, silent Search, fresh-frame return; manual=" + manualPause);
+            android.util.Log.i("ZeroChillSearchVideo", "PASS live video, silent Search, same-surface return; manual=" + manualPause);
         } catch (Exception e) { fail(e); }
     }
     @Override public void onBackPressed() { if (search != null) search.back(); else super.onBackPressed(); }
-    @Override protected void onPause() { super.onPause(); if (feed != null) feed.onHostPause(); }
+    @Override protected void onPause() {
+        super.onPause();
+        if (feed != null) {
+            feed.onHostPause();
+            try {
+                check(surface == null || surface.getPlayer() == null, "background retained surface");
+                check(((ShitTokPlaybackOwner) field(feed, "playbackOwner")).player(url) == null, "background retained player");
+                android.util.Log.i("ZeroChillSearchVideo", "PASS background released playback");
+            } catch (Exception e) { fail(e); }
+        }
+    }
     @Override protected void onDestroy() {
         handler.removeCallbacksAndMessages(null);
         if (search != null) search.close();

@@ -70,11 +70,25 @@ for paused in (False, True):
     deadline = time.monotonic() + 22
     while True:
         log = adb('logcat', '-d', '-s', 'ZeroChillSearchVideo:I', 'AndroidRuntime:E').decode(errors='replace')
-        if 'READY retained paused video' in log or 'FAIL' in log or 'FATAL EXCEPTION' in log or time.monotonic() >= deadline:
+        if 'READY live selected video' in log or 'FAIL' in log or 'FATAL EXCEPTION' in log or time.monotonic() >= deadline:
             break
         time.sleep(.2)
     (out / f'shittok-search-manual-{paused}.png').write_bytes(adb('exec-out', 'screencap', '-p'))
-    assert 'READY retained paused video' in log and 'FAIL' not in log and 'FATAL EXCEPTION' not in log, log
+    assert 'READY live selected video' in log and 'FAIL' not in log and 'FATAL EXCEPTION' not in log, log
+    # Two settled frames prove the glass is sampling moving content, not just a moving
+    # TextureView hidden behind a stale glass recording. Ignore the native row ink.
+    import io
+    from PIL import Image, ImageChops
+    first = Image.open(io.BytesIO(adb('exec-out', 'screencap', '-p'))).convert('RGB')
+    time.sleep(.43)
+    second = Image.open(io.BytesIO(adb('exec-out', 'screencap', '-p'))).convert('RGB')
+    first.save(out / f'shittok-motion-a-{paused}.png')
+    second.save(out / f'shittok-motion-b-{paused}.png')
+    if not paused:
+        # Right edge inside the Recent Searches pane, clear of labels and buttons.
+        diff = ImageChops.difference(first.crop((620, 230, 652, 560)), second.crop((620, 230, 652, 560)))
+        changed = sum(max(pixel) > 4 for pixel in diff.getdata())
+        assert changed > 20, f'Search glass did not sample motion: {changed} changed pixels'
     adb('shell', 'input', 'tap', '180', '145')
     time.sleep(1)
     (out / f'shittok-search-keyboard-manual-{paused}.png').write_bytes(adb('exec-out', 'screencap', '-p'))
@@ -84,10 +98,26 @@ for paused in (False, True):
     deadline = time.monotonic() + 17
     while True:
         log = adb('logcat', '-d', '-s', 'ZeroChillSearchVideo:I', 'AndroidRuntime:E').decode(errors='replace')
-        if 'PASS retained frame' in log or 'FAIL' in log or 'FATAL EXCEPTION' in log or time.monotonic() >= deadline:
+        if 'PASS live video' in log or 'FAIL' in log or 'FATAL EXCEPTION' in log or time.monotonic() >= deadline:
             break
         time.sleep(.2)
     (out / f'shittok-search-manual-{paused}.txt').write_text(log)
     (out / f'shittok-return-manual-{paused}.png').write_bytes(adb('exec-out', 'screencap', '-p'))
-    assert 'PASS retained frame' in log and 'FAIL' not in log and 'FATAL EXCEPTION' not in log, log
-print('Real ShitTok frame retained behind Search with keyboard; manual pause and fresh-frame return passed.')
+    assert 'PASS live video' in log and 'FAIL' not in log and 'FATAL EXCEPTION' not in log, log
+# Actual background while Search is open, separate from overlay dismissal.
+adb('shell', 'am', 'force-stop', package)
+adb('logcat', '-c')
+adb('shell', 'am', 'start', '-W', '-n', package + '/com.webapp.crazyshit.SearchShitTokProbeActivity')
+deadline = time.monotonic() + 22
+while time.monotonic() < deadline:
+    log = adb('logcat', '-d', '-s', 'ZeroChillSearchVideo:I', 'AndroidRuntime:E').decode(errors='replace')
+    if 'READY live selected video' in log or 'FAIL' in log:
+        break
+    time.sleep(.2)
+assert 'READY live selected video' in log and 'FAIL' not in log, log
+adb('shell', 'input', 'keyevent', 'KEYCODE_HOME')
+time.sleep(.5)
+log = adb('logcat', '-d', '-s', 'ZeroChillSearchVideo:I', 'AndroidRuntime:E').decode(errors='replace')
+(out / 'shittok-background.txt').write_text(log)
+assert 'PASS background released playback' in log and 'FAIL' not in log, log
+print('Live ShitTok texture, advancing position, moving glass, silence, same-surface return and background release passed.')

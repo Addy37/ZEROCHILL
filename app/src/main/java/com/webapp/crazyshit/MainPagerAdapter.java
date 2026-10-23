@@ -100,6 +100,8 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
     private final LibraryHubView libraryView;
     private int primaryPage = -1;
     private boolean hostResumed = true;
+    private boolean searchOpen;
+    private boolean activityResumed = true;
     private boolean primarySettled;
     private final PrimaryTabWorkQueue primaryWork;
 
@@ -319,9 +321,11 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
     }
 
     public void onHostResume() {
+        activityResumed = true;
         hostResumed = true;
         if (primaryPage == PAGE_ONLYFAP) pages[PAGE_ONLYFAP].onlyFapHub.onOpenRequested();
         chaosView.onHostResume();
+        if (searchOpen) { pauseHost(true); return; }
         primaryWork.setResumed(true);
         schedulePrimaryRefresh();
     }
@@ -356,20 +360,32 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
     }
 
     public void onHostPause() {
+        activityResumed = false;
         pauseHost(false);
     }
 
     public void onSearchOpened() {
+        searchOpen = true;
         pauseHost(true);
     }
 
+    public void onSearchClosed() {
+        searchOpen = false;
+        chaosView.onSearchClosed();
+        // A closing animation can finish after Activity.onPause.
+        if (!activityResumed) return;
+        hostResumed = true;
+        primaryWork.setResumed(true);
+        schedulePrimaryRefresh();
+    }
+
     @androidx.annotation.OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)
-    private void pauseHost(boolean retainVideoFrame) {
+    private void pauseHost(boolean searchOverlay) {
         hostResumed = false;
         pages[PAGE_ONLYFAP].onlyFapHub.onOpenCancelled();
         primaryWork.setResumed(false);
         deactivateHubs();
-        if (retainVideoFrame) chaosView.onSearchOpened();
+        if (searchOverlay) chaosView.onSearchOpened();
         else chaosView.onHostPause();
         Page profilePage = pageAt(PAGE_ONLYFAP);
         if (profilePage != null && profilePage.onlyFapHub != null) profilePage.onlyFapHub.setProfileActive(false);
