@@ -409,6 +409,25 @@ public class OnlyFapFilteredHeroTest {
         assertNotNull(((android.widget.ImageView) ReflectionHelpers.getField(hub, "heroImage")).getDrawable());
     }
 
+    @Test public void realGlideFirstCategoryShelfShowsStartupBeforeLaterShelvesFinish() throws Exception {
+        seedVisibleHero(); changeMode(ContentPreference.MEN);
+        ReflectionHelpers.setField(hub, "active", true);
+        NativeContentItem creator = thumbnailCreator("Progressive startup");
+        hub.setPreferenceShelf(ContentPreference.MEN, 0, Collections.singletonList(creator), false);
+        layoutHero();
+        awaitStartup("Progressive startup");
+        assertFalse((boolean) ReflectionHelpers.getField(hub, "shelvesFinished"));
+        int before = generation();
+        Object startup = ReflectionHelpers.getField(hub, "startupHero");
+        Object morph = ReflectionHelpers.getField(hub, "heroMorph");
+        hub.setPreferenceShelf(ContentPreference.MEN, 1,
+                Collections.singletonList(thumbnailCreator("Later shelf")), false);
+        assertEquals(before, generation());
+        assertSame(startup, ReflectionHelpers.getField(hub, "startupHero"));
+        assertSame(morph, ReflectionHelpers.getField(hub, "heroMorph"));
+        assertTrue(heroes().isEmpty()); // Startup artwork still never bypasses gallery qualification.
+    }
+
     @Test public void realGlideRapidSwitchCannotPublishPreviousCategoryStartup() throws Exception {
         seedVisibleHero(); changeMode(ContentPreference.MEN);
         ReflectionHelpers.setField(hub, "active", true);

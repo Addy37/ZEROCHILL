@@ -1,0 +1,18 @@
+name: OnlyHaven shelf contract
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'tools/verify_onlyhaven_shelves.py'
+      - 'app/src/main/java/com/webapp/crazyshit/OnlyHavenRepository.java'
+      - '.github/workflows/onlyhaven-shelf-contract.yml'
+permissions:
+  contents: read
+jobs:
+  category-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v6
+      - name: Inspect live category paging and frontend metadata without media downloads
+        run: python3 tools/verify_onlyhaven_shelves.py

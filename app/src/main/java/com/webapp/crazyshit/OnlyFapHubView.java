@@ -91,18 +91,32 @@ final class OnlyFapHubView extends FrameLayout {
             preferenceHeroPending = preferenceHeroPending || heroArtworkReady;
             discoveryPreference = mode;
             pendingRestoreState = null;
+            scroll.scrollTo(0, 0);
+            for (CreatorShelf shelf : new CreatorShelf[]{trendingShelf, newShelf, hotShelf, popularShelf})
+                ((LinearLayoutManager) shelf.rail.getLayoutManager()).scrollToPositionWithOffset(0, 0);
             ContentPreferenceUi.clearPresentation(this);
             clear();
         }
         ContentPreferenceUi.bindSelector(preferenceSelector);
         pulsePreferenceSelector();
         if (trendingShelf != null) {
-            ((TextView) trendingShelf.container.getChildAt(0)).setText(mode == ContentPreference.ALL
-                    ? "Discover" : mode.label);
-            ((TextView) trendingShelf.container.getChildAt(1)).setText(mode == ContentPreference.ALL
-                    ? FapzoneCreatorRepository.hintFor(FapzoneCreatorRepository.MODE_TOP_50)
-                    : "OnlyHaven · " + mode.label);
+            if (mode == ContentPreference.ALL) {
+                shelfCopy(trendingShelf, "Discover", FapzoneCreatorRepository.hintFor(FapzoneCreatorRepository.MODE_TOP_50));
+                shelfCopy(newShelf, "New Creators", "Recently added creators");
+                shelfCopy(hotShelf, "Hot", "Creators getting attention right now");
+                shelfCopy(popularShelf, "Popular", "Popular across OnlyFap sources");
+            } else {
+                shelfCopy(trendingShelf, "Featured " + mode.label, "OnlyHaven · " + mode.label);
+                shelfCopy(newShelf, "Explore " + mode.label, "More creators from OnlyHaven");
+                shelfCopy(hotShelf, "More " + mode.label, "Keep exploring " + mode.label);
+            }
         }
+    }
+
+    private void shelfCopy(CreatorShelf shelf, String title, String subtitle) {
+        ((TextView) shelf.container.getChildAt(0)).setText(title);
+        ((TextView) shelf.container.getChildAt(1)).setText(subtitle);
+        shelf.rail.setContentDescription(title.equals("New Creators") ? "New creators shelf" : title + " creators shelf");
     }
 
     private void presentPreference() {
@@ -111,20 +125,67 @@ final class OnlyFapHubView extends FrameLayout {
             ContentPreferenceUi.present(this, false, preferenceSelector);
     }
 
+    // Compatibility entry point for a complete single category batch, including existing hero probes.
     void setPreferenceCreators(List<NativeContentItem> items) {
-        discoverCandidates = safe(items);
-        trendingItems = safe(items);
-        trendingShelf.adapter.replace(trendingItems);
-        trendingShelf.container.setVisibility(items.isEmpty() ? View.GONE : View.VISIBLE);
+        setPreferenceShelf(discoveryPreference, 0, items, false);
+        finishPreferenceShelves(discoveryPreference, false);
+    }
+
+    void setPreferenceShelf(ContentPreference mode, int index, List<NativeContentItem> items, boolean failed) {
+        if (closed || mode == ContentPreference.ALL || mode != discoveryPreference
+                || mode != ContentPreference.get(getContext())) return;
+        if (index < 0 || index >= OnlyFapCategoryLoader.SHELF_COUNT || failed) return;
+        List<NativeContentItem> result = safe(items);
+        CreatorShelf shelf;
+        if (index == 0) { trendingItems = result; shelf = trendingShelf; }
+        else if (index == 1) { newItems = result; shelf = newShelf; }
+        else { hotItems = result; shelf = hotShelf; }
+        shelf.adapter.replace(result);
+        shelf.container.setVisibility(result.isEmpty() ? View.GONE : View.VISIBLE);
+        // A same-mode background refresh may overlap the previous page boundaries.
+        Set<String> visible = new HashSet<>();
+        trendingItems = uniquePreferenceShelf(trendingItems, trendingShelf, visible);
+        newItems = uniquePreferenceShelf(newItems, newShelf, visible);
+        hotItems = uniquePreferenceShelf(hotItems, hotShelf, visible);
+        // Hero membership grows without clearing qualified slots or restarting Liquid Rift.
+        List<NativeContentItem> category = new ArrayList<>(trendingItems);
+        category.addAll(newItems);
+        category.addAll(hotItems);
+        discoverCandidates = category;
+        if (!category.isEmpty()) {
+            publishedPreference = mode;
+            loadingLabel.setVisibility(View.GONE);
+            requestStartupHero();
+            refreshHeroCandidates();
+        }
+        refreshFavorites();
+    }
+
+    private List<NativeContentItem> uniquePreferenceShelf(List<NativeContentItem> items,
+            CreatorShelf shelf, Set<String> visible) {
+        List<NativeContentItem> unique = new ArrayList<>();
+        for (NativeContentItem item : items)
+            if (visible.add(OnlyFapCategoryLoader.identity(item))) unique.add(item);
+        if (unique.size() != items.size()) {
+            shelf.adapter.replace(unique);
+            shelf.container.setVisibility(unique.isEmpty() ? View.GONE : View.VISIBLE);
+        }
+        return unique;
+    }
+
+    void finishPreferenceShelves(ContentPreference mode, boolean failed) {
+        if (closed || mode == ContentPreference.ALL || mode != discoveryPreference
+                || mode != ContentPreference.get(getContext())) return;
         shelvesFinished = true;
-        publishedPreference = discoveryPreference;
-        loadingLabel.setText("No creators available for " + discoveryPreference.label + ". Pull down to retry.");
-        loadingLabel.setVisibility(items.isEmpty() ? View.VISIBLE : View.GONE);
-        requestStartupHero();
+        publishedPreference = mode;
+        loadingLabel.setText(failed
+                ? "Some creators could not load. Tap to retry."
+                : "No creators available for " + mode.label + ". Tap to retry.");
+        loadingLabel.setMinimumHeight(dp(48));
+        loadingLabel.setVisibility(failed || itemCount() == 0 ? View.VISIBLE : View.GONE);
         refreshHeroCandidates();
         applyPendingRestoreState();
-        refreshFavorites();
-        if (items.isEmpty()) showPreferenceEmptyState();
+        if (discoverCandidates.isEmpty()) showPreferenceEmptyState();
         if (active) post(this::presentPreference);
     }
 
@@ -511,6 +572,10 @@ final class OnlyFapHubView extends FrameLayout {
                 ZeroChillUi.color(context, R.color.zc_text_muted)
         );
         loadingLabel.setGravity(Gravity.CENTER_HORIZONTAL);
+        loadingLabel.setOnClickListener(v -> {
+            if (shelvesFinished && discoveryPreference != ContentPreference.ALL && preferenceChanged != null)
+                preferenceChanged.run();
+        });
         LinearLayout.LayoutParams loadingParams = new LinearLayout.LayoutParams(-1, -2);
         loadingParams.setMargins(0, 0, 0, dp(10));
         body.addView(loadingLabel, loadingParams);
@@ -658,6 +723,7 @@ final class OnlyFapHubView extends FrameLayout {
             heroHint.setText("Your next favorite creator.");
             heroAction.setVisibility(View.GONE);
         }
+        loadingLabel.setMinimumHeight(0);
         loadingLabel.setText("Loading creators…");
         loadingLabel.setVisibility(View.VISIBLE);
         refreshFavorites();
@@ -1962,8 +2028,11 @@ final class OnlyFapHubView extends FrameLayout {
         if (!(manager instanceof LinearLayoutManager)) return;
         int position = state.getInt(key + "_position", 0);
         int offset = state.getInt(key + "_offset", 0);
-        rail.post(() -> ((LinearLayoutManager) manager)
-                .scrollToPositionWithOffset(position, offset));
+        int generation = heroGeneration;
+        rail.post(() -> {
+            if (!closed && generation == heroGeneration)
+                ((LinearLayoutManager) manager).scrollToPositionWithOffset(position, offset);
+        });
     }
 
     private void applyPendingRestoreState() {
@@ -1982,7 +2051,10 @@ final class OnlyFapHubView extends FrameLayout {
         restoreRailState(state, "popular", popularShelf.rail);
 
         int y = Math.max(0, state.getInt("scroll_y", 0));
-        scroll.post(() -> scroll.scrollTo(0, y));
+        int generation = heroGeneration;
+        scroll.post(() -> {
+            if (!closed && generation == heroGeneration) scroll.scrollTo(0, y);
+        });
     }
 
     private int dp(int value) {

@@ -225,18 +225,62 @@ final class OnlyHavenRepository {
                 .replace("{offset}", String.valueOf(Math.max(0, offset)));
     }
 
+    static final class CategoryPage {
+        final List<Creator> creators;
+        final boolean hasMore;
+        CategoryPage(List<Creator> creators, boolean hasMore) {
+            this.creators = creators;
+            this.hasMore = hasMore;
+        }
+    }
+
     List<Creator> fetchCategoryCreators(Context context, ContentPreference preference, int limit) throws IOException {
         if (preference == ContentPreference.ALL) return fetchTrendingCreators(context, limit);
+        return fetchCategoryPage(context, preference, limit, 0).creators;
+    }
+
+    CategoryPage fetchCategoryPage(Context context, ContentPreference preference, int limit, int offset) throws IOException {
         SourceConfig.OnlyHaven config = config();
         if (!config.enabled) throw new IOException("OnlyHaven is temporarily unavailable");
-        String route = categoryRoute(config, preference, limit, 0);
-        // No unfiltered fallback: only the provider's category endpoint can classify these results.
-        List<Creator> creators = parseCreatorSearchJson(
-                fetchConfiguredText(context, config, config.baseUrl + route), config, "", Math.max(1, limit));
-        creators.removeIf(Creator::isKnownEmpty);
-        CreatorCategoryIndex.remember(context, preference, creators);
-        rememberConfirmedCreators(context, creators);
-        return creators;
+        int size = Math.max(1, Math.min(50, limit));
+        String route = categoryRoute(config, preference, size, offset);
+        // No unfiltered fallback: only the configured category endpoint classifies these results.
+        String body = fetchConfiguredText(context, config, config.baseUrl + route);
+        CategoryPage page = parseCategoryPage(body, config, preference, size);
+        if (Thread.currentThread().isInterrupted()) throw new java.io.InterruptedIOException();
+        CreatorCategoryIndex.remember(context, preference, page.creators);
+        rememberConfirmedCreators(context, page.creators);
+        return page;
+    }
+
+    CategoryPage parseCategoryPage(String body, SourceConfig.OnlyHaven config,
+            ContentPreference preference, int limit) throws IOException {
+        try {
+            Object root = new JSONTokener(body).nextValue();
+            JSONArray rows = root instanceof JSONArray ? (JSONArray) root : null;
+            if (root instanceof JSONObject) {
+                for (String key : new String[]{"creators", "items", "results", "data"}) {
+                    rows = ((JSONObject) root).optJSONArray(key);
+                    if (rows != null) break;
+                }
+            }
+            if (rows == null) throw new IOException("OnlyHaven category response lacked a creator list");
+            JSONArray confirmed = new JSONArray();
+            String category = config.categoryValues.get(preference.value);
+            for (int i = 0; i < Math.min(rows.length(), limit); i++) {
+                JSONObject row = rows.optJSONObject(i);
+                if (row == null) continue;
+                String gender = row.optString("gender", "");
+                if (!gender.isEmpty() && !gender.equals(category)) continue;
+                confirmed.put(row);
+            }
+            List<Creator> creators = parseCreatorSearchJson(confirmed.toString(), config, "", limit);
+            creators.removeIf(Creator::isKnownEmpty);
+            // Count raw rows, including unusable identities/empty creators, so filtering never rewinds paging.
+            return new CategoryPage(creators, rows.length() >= limit);
+        } catch (Exception error) {
+            throw new IOException("OnlyHaven category API returned unreadable JSON", error);
+        }
     }
 
     private static void rememberConfirmedCreators(Context context, List<Creator> creators) {
