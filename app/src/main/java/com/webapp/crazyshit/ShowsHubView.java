@@ -81,6 +81,7 @@ final class ShowsHubView extends FrameLayout {
     private final Shelf categoryShelf;
     private final Shelf kaoticCategoryShelf;
     private final Shelf baddieHubCategoryShelf;
+    private final Shelf xMegaDriveCategoryShelf;
 
     private List<NativeContentItem> thisWeekItems = Collections.emptyList();
     private List<NativeContentItem> crazyItems = Collections.emptyList();
@@ -88,6 +89,7 @@ final class ShowsHubView extends FrameLayout {
     private List<NativeContentItem> categoryItems = Collections.emptyList();
     private List<NativeContentItem> kaoticCategoryItems = Collections.emptyList();
     private List<NativeContentItem> baddieHubCategoryItems = Collections.emptyList();
+    private List<NativeContentItem> xMegaDriveCategoryItems = Collections.emptyList();
     private List<NativeContentItem> heroItems = Collections.emptyList();
     private NativeContentItem heroItem;
     private int heroIndex = -1;
@@ -341,6 +343,11 @@ final class ShowsHubView extends FrameLayout {
                 "Browse BaddieHub by category",
                 true
         );
+        xMegaDriveCategoryShelf = addShelf(
+                "XMegaDrive",
+                "Browse XMegaDrive by category",
+                true
+        );
 
         heroCard.setOnClickListener(v -> openHero());
         heroAction.setOnClickListener(v -> openHero());
@@ -356,6 +363,7 @@ final class ShowsHubView extends FrameLayout {
         categoryItems = Collections.emptyList();
         kaoticCategoryItems = Collections.emptyList();
         baddieHubCategoryItems = Collections.emptyList();
+        xMegaDriveCategoryItems = Collections.emptyList();
         heroHandler.removeCallbacksAndMessages(null);
         heroCard.animate().cancel();
         heroCard.setAlpha(1f);
@@ -369,12 +377,14 @@ final class ShowsHubView extends FrameLayout {
         categoryShelf.adapter.replace(Collections.emptyList());
         kaoticCategoryShelf.adapter.replace(Collections.emptyList());
         baddieHubCategoryShelf.adapter.replace(Collections.emptyList());
+        xMegaDriveCategoryShelf.adapter.replace(Collections.emptyList());
         thisWeekShelf.container.setVisibility(View.GONE);
         crazyShelf.container.setVisibility(View.GONE);
         efuktShelf.container.setVisibility(View.GONE);
         categoryShelf.container.setVisibility(View.GONE);
         kaoticCategoryShelf.container.setVisibility(View.GONE);
         baddieHubCategoryShelf.container.setVisibility(View.GONE);
+        xMegaDriveCategoryShelf.container.setVisibility(View.GONE);
         loadingLabel.setText("Loading Shows…");
         loadingLabel.setVisibility(View.VISIBLE);
         heroSource.setText("FEATURED");
@@ -432,6 +442,15 @@ final class ShowsHubView extends FrameLayout {
         );
     }
 
+    void setXMegaDriveCategories(List<NativeContentItem> items) {
+        xMegaDriveCategoryItems = safe(items);
+        xMegaDriveCategoryShelf.adapter.replace(xMegaDriveCategoryItems);
+        xMegaDriveCategoryShelf.container.setVisibility(
+                xMegaDriveCategoryItems.isEmpty() ? View.GONE : View.VISIBLE
+        );
+        if (!xMegaDriveCategoryItems.isEmpty()) loadingLabel.setVisibility(View.GONE);
+    }
+
     void finishLoading() {
         loadingLabel.setVisibility(itemCount() == 0 ? View.VISIBLE : View.GONE);
         if (itemCount() == 0) {
@@ -451,6 +470,7 @@ final class ShowsHubView extends FrameLayout {
         saveRailState(out, "categories", categoryShelf.rail);
         saveRailState(out, "kaotic_categories", kaoticCategoryShelf.rail);
         saveRailState(out, "baddiehub_categories", baddieHubCategoryShelf.rail);
+        saveRailState(out, "xmegadrive_categories", xMegaDriveCategoryShelf.rail);
     }
 
     void restoreState(Bundle state) {
@@ -460,7 +480,8 @@ final class ShowsHubView extends FrameLayout {
     int itemCount() {
         return thisWeekItems.size() + crazyItems.size() + efuktItems.size()
                 + categoryItems.size() + kaoticCategoryItems.size()
-                + baddieHubCategoryItems.size();
+                + baddieHubCategoryItems.size()
+                + xMegaDriveCategoryItems.size();
     }
 
     void setNavigationScrollListener(View.OnScrollChangeListener listener) {
@@ -669,6 +690,7 @@ final class ShowsHubView extends FrameLayout {
         restoreRailState(state, "categories", categoryShelf.rail);
         restoreRailState(state, "kaotic_categories", kaoticCategoryShelf.rail);
         restoreRailState(state, "baddiehub_categories", baddieHubCategoryShelf.rail);
+        restoreRailState(state, "xmegadrive_categories", xMegaDriveCategoryShelf.rail);
 
         int y = Math.max(0, state.getInt("scroll_y", 0));
         scroll.post(() -> scroll.scrollTo(0, y));

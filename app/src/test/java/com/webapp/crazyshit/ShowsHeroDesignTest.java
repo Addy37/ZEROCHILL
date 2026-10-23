@@ -107,6 +107,24 @@ public class ShowsHeroDesignTest {
         assertEquals(RecyclerView.HORIZONTAL, baddieManager.getOrientation());
         assertTrue(!baddieManager.canScrollVertically());
 
+        RecyclerView xMega = shelfRail(hub, "xMegaDriveCategoryShelf");
+        RecyclerView.ViewHolder xMegaHolder = xMega.getAdapter().createViewHolder(xMega, 0);
+        assertEquals(baddieHolder.itemView.getLayoutParams().width,
+                xMegaHolder.itemView.getLayoutParams().width);
+        assertEquals(baddieHolder.itemView.getLayoutParams().height,
+                xMegaHolder.itemView.getLayoutParams().height);
+        assertEquals(baddie.getLayoutParams().height, xMega.getLayoutParams().height);
+        assertEquals(
+                ((com.google.android.material.card.MaterialCardView) baddieHolder.itemView).getRadius(),
+                ((com.google.android.material.card.MaterialCardView) xMegaHolder.itemView).getRadius(),
+                0.5f
+        );
+        androidx.recyclerview.widget.GridLayoutManager xMegaManager =
+                (androidx.recyclerview.widget.GridLayoutManager) xMega.getLayoutManager();
+        assertEquals(2, xMegaManager.getSpanCount());
+        assertEquals(RecyclerView.HORIZONTAL, xMegaManager.getOrientation());
+        assertTrue(!xMegaManager.canScrollVertically());
+
         RecyclerView continueRail = shelfRail(hub, "continueShelf");
         RecyclerView.ViewHolder continueHolder = continueRail.getAdapter().createViewHolder(
                 continueRail,

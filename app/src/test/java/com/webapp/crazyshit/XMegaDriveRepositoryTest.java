@@ -11,6 +11,8 @@ import static org.junit.Assert.assertTrue;
 public final class XMegaDriveRepositoryTest {
     private static final String PAGE =
             "https://www.xmegadrive.com/videos/example-clip/";
+    private static final String FEMDOM =
+            "https://www.xmegadrive.com/categories/femdom/";
 
     @Test public void acceptsOnlyXMegaDriveHosts() {
         assertTrue(XMegaDriveRepository.isXMegaDriveUrl(PAGE));
@@ -76,5 +78,181 @@ public final class XMegaDriveRepositoryTest {
         assertEquals("", XMegaDriveRepository.mediaFromHtml("<h1>No player</h1>", PAGE));
         assertEquals("", XMegaDriveRepository.mediaFromHtml("", PAGE));
         assertEquals("", XMegaDriveRepository.mediaFromHtml(null, PAGE));
+    }
+
+    @Test public void categoryDiscoveryUsesRealCategoryCardsAndArtwork() {
+        List<NativeContentItem> items = XMegaDriveRepository.parseCategoriesHtml(categoryDirectoryHtml());
+
+        assertEquals(3, items.size());
+        NativeContentItem femdom = items.get(0);
+        assertEquals(NativeContentItem.KIND_CATEGORY, femdom.kind);
+        assertEquals("FemDom", femdom.title);
+        assertEquals(FEMDOM, femdom.url);
+        assertEquals(
+                "https://www.xmegadrive.com/contents/categories/10/s1_cover.jpg",
+                femdom.imageUrl
+        );
+        assertEquals(XMegaDriveRepository.LABEL, femdom.uploader);
+
+        NativeContentItem tickling = items.get(1);
+        assertEquals("Tickling", tickling.title);
+        assertEquals("https://www.xmegadrive.com/categories/tickling/", tickling.url);
+        assertEquals("", tickling.imageUrl);
+
+        NativeContentItem dildos = items.get(2);
+        assertEquals("Big Dildos", dildos.title);
+        assertEquals("https://www.xmegadrive.com/categories/big-dildos/", dildos.url);
+        assertEquals(
+                "https://www.xmegadrive.com/contents/categories/4/cover.jpg",
+                dildos.imageUrl
+        );
+        assertFalse(dildos.imageUrl.contains("data:image"));
+    }
+
+    @Test public void categoryDiscoveryFiltersDuplicatesAndNonCategories() {
+        List<NativeContentItem> items = XMegaDriveRepository.parseCategoriesHtml(categoryDirectoryHtml());
+        assertEquals(1, items.stream().filter(item -> FEMDOM.equals(item.url)).count());
+        for (NativeContentItem item : items) {
+            assertTrue(item.url.contains("/categories/"));
+            assertFalse(item.url.contains("/tags/"));
+            assertFalse(item.url.contains("/videos/"));
+            assertFalse(item.url.contains("/playlists/"));
+            assertFalse(item.url.endsWith("/categories/"));
+            assertFalse(item.url.contains("/categories/2/"));
+            assertFalse(item.title.contains("videos"));
+        }
+    }
+
+    @Test public void categoryUrlsNormalizeHostSlugAndQuery() {
+        assertEquals(FEMDOM, XMegaDriveRepository.normalizeCategoryUrl(
+                "https://xmegadrive.com/categories/FemDom/?ref=nav"));
+        assertEquals(FEMDOM, XMegaDriveRepository.normalizeCategoryUrl(
+                "https://www.xmegadrive.com/categories/femdom"));
+        assertEquals("", XMegaDriveRepository.normalizeCategoryUrl(
+                "https://www.xmegadrive.com/categories/"));
+        assertEquals("", XMegaDriveRepository.normalizeCategoryUrl(
+                "https://www.xmegadrive.com/categories/2/"));
+        assertEquals("", XMegaDriveRepository.normalizeCategoryUrl(
+                "https://www.xmegadrive.com/categories/femdom/2/"));
+        assertEquals("", XMegaDriveRepository.normalizeCategoryUrl(
+                "https://www.xmegadrive.com/tags/femdom/"));
+        assertEquals("", XMegaDriveRepository.normalizeCategoryUrl(
+                "https://www.xmegadrive.com/videos/example-clip/"));
+        assertEquals("", XMegaDriveRepository.normalizeCategoryUrl(
+                "http://www.xmegadrive.com/categories/femdom/"));
+        assertEquals("", XMegaDriveRepository.normalizeCategoryUrl(
+                "https://ads.example/categories/femdom/"));
+        assertEquals("", XMegaDriveRepository.normalizeCategoryUrl(null));
+        assertFalse(XMegaDriveRepository.isCategoryUrl("https://www.xmegadrive.com/videos/example/"));
+        assertTrue(XMegaDriveRepository.isCategoryUrl(FEMDOM));
+    }
+
+    @Test public void categoryPageUrlUsesPathPagination() {
+        assertEquals(FEMDOM, XMegaDriveRepository.categoryPageUrl(FEMDOM, 1));
+        assertEquals(FEMDOM, XMegaDriveRepository.categoryPageUrl(
+                "https://xmegadrive.com/categories/femdom/?from=9", 0));
+        assertEquals(
+                "https://www.xmegadrive.com/categories/femdom/2/",
+                XMegaDriveRepository.categoryPageUrl(FEMDOM, 2)
+        );
+        assertEquals("", XMegaDriveRepository.categoryPageUrl(PAGE, 2));
+        assertEquals("", XMegaDriveRepository.categoryPageUrl("", 1));
+    }
+
+    @Test public void categoryPageExtractsVideosAndPrefersLazyArtwork() {
+        List<NativeContentItem> items = XMegaDriveRepository.parseCategoryVideosHtml(categoryPageHtml());
+
+        assertEquals(2, items.size());
+        NativeContentItem first = items.get(0);
+        assertEquals("https://www.xmegadrive.com/videos/clip-one/", first.url);
+        assertEquals("Clip One", first.title);
+        assertEquals(
+                "https://www.xmegadrive.com/contents/videos_screenshots/1/1/320x180/1.jpg",
+                first.imageUrl
+        );
+        assertTrue(first.isVideo());
+        assertEquals(XMegaDriveRepository.LABEL, first.uploader);
+
+        NativeContentItem second = items.get(1);
+        assertEquals("https://www.xmegadrive.com/videos/clip-two/", second.url);
+        assertEquals("Clip Two", second.title);
+        assertEquals(
+                "https://www.xmegadrive.com/contents/videos_screenshots/2/2/preview.jpg",
+                second.imageUrl
+        );
+    }
+
+    @Test public void categoryPageFiltersDuplicateVideos() {
+        List<NativeContentItem> items = XMegaDriveRepository.parseCategoryVideosHtml(categoryPageHtml());
+        assertEquals(1, items.stream()
+                .filter(item -> "https://www.xmegadrive.com/videos/clip-one/".equals(item.url))
+                .count());
+    }
+
+    @Test public void malformedCategoryHtmlDoesNotThrow() {
+        String broken = "<a href=\"/categories/femdom/\"><strong class=\"title\">FemDom";
+        List<NativeContentItem> categories = XMegaDriveRepository.parseCategoriesHtml(broken);
+        assertEquals(1, categories.size());
+        assertEquals(FEMDOM, categories.get(0).url);
+
+        List<NativeContentItem> videos = XMegaDriveRepository.parseCategoryVideosHtml(
+                "<a href=\"/videos/broken<div>no");
+        assertTrue(videos.size() <= 1);
+        assertEquals("", XMegaDriveRepository.mediaFromHtml("<video src=\"/nope", PAGE));
+    }
+
+    @Test public void emptyCategoryPageReturnsNothing() {
+        assertTrue(XMegaDriveRepository.parseCategoryVideosHtml(
+                "<div class=\"list-videos\"></div>").isEmpty());
+        assertTrue(XMegaDriveRepository.parseCategoryVideosHtml("").isEmpty());
+        assertTrue(XMegaDriveRepository.parseCategoryVideosHtml(null).isEmpty());
+        assertTrue(XMegaDriveRepository.parseCategoriesHtml("<div>no categories</div>").isEmpty());
+        assertTrue(XMegaDriveRepository.parseCategoriesHtml(null).isEmpty());
+    }
+
+    private static String categoryDirectoryHtml() {
+        return ""
+                + "<a class=\"item\" href=\"/categories/femdom/?ref=home\" title=\"FemDom\">"
+                + "<div class=\"img\"><img class=\"thumb\" src=\"/contents/categories/10/s1_cover.jpg\" alt=\"FemDom\"></div>"
+                + "<strong class=\"title\">FemDom</strong>"
+                + "<div class=\"wrap\"><div class=\"videos\">205796 videos</div><div class=\"rating\">94%</div></div>"
+                + "</a>"
+                + "<a class=\"item\" href=\"https://xmegadrive.com/categories/femdom/\">FemDom duplicate</a>"
+                + "<a class=\"item\" href=\"https://xmegadrive.com/categories/Tickling/\" title=\"Tickling\">"
+                + "<span class=\"no-thumb\">no image</span>"
+                + "<strong class=\"title\">Tickling</strong>"
+                + "<div class=\"videos\">1744 videos</div>"
+                + "</a>"
+                + "<a class=\"item\" href=\"/categories/\">All categories</a>"
+                + "<a class=\"item\" href=\"/categories/2/\">2</a>"
+                + "<a href=\"/tags/femdom/\">Femdom tag</a>"
+                + "<a href=\"/videos/example-clip/\">Example clip</a>"
+                + "<a href=\"/playlists/\">Playlists</a>"
+                + "<a href=\"https://ads.example/categories/femdom/\">External</a>"
+                + "<a class=\"item\" href=\"/categories/big-dildos/\">"
+                + "<img src=\"data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7\" "
+                + "data-original=\"/contents/categories/4/cover.jpg\" alt=\"ignored\">"
+                + "<strong class=\"title\">Big Dildos</strong>"
+                + "<div class=\"videos\">10 videos</div>"
+                + "</a>";
+    }
+
+    private static String categoryPageHtml() {
+        return ""
+                + "<div class=\"item\"><a href=\"/videos/clip-one/?ref=1\" title=\"Clip One attribute\">"
+                + "<img class=\"thumb lazy-load\" src=\"data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7\" "
+                + "data-original=\"/contents/videos_screenshots/1/1/320x180/1.jpg\" alt=\"Clip One\">"
+                + "<strong class=\"title\">Clip One</strong>"
+                + "<span class=\"is-hd\">HD</span>"
+                + "</a></div>"
+                + "<a href=\"https://xmegadrive.com/videos/clip-one/\">Clip One duplicate</a>"
+                + "<a href=\"/videos/?page=2\">Next</a>"
+                + "<a href=\"/categories/femdom/\">FemDom</a>"
+                + "<a href=\"/tags/feet/\">Feet</a>"
+                + "<a href=\"https://ads.example/videos/nope/\">Ad</a>"
+                + "<div class=\"item\"><a href=\"https://xmegadrive.com/videos/clip-two/\" title=\"Clip Two\">"
+                + "<img src=\"/contents/videos_screenshots/2/2/preview.jpg\">"
+                + "<strong class=\"title\">Clip Two</strong>"
+                + "</a></div>";
     }
 }

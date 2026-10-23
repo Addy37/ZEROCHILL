@@ -81,6 +81,17 @@ public class PhoneContentGridLayoutTest {
         assertEquals(baddieHolder.itemView.getWidth(), baddieImage.getWidth());
         assertEquals(baddieHolder.itemView.getHeight(), baddieImage.getHeight());
         render(baddieRail, "baddie-grid-" + widthDp);
+
+        shows.setXMegaDriveCategories(showsItems);
+        RecyclerView xMegaRail = rail(shows, "xMegaDriveCategoryShelf");
+        layout(xMegaRail, dp(activity, widthDp));
+        checkGrid(xMegaRail);
+        RecyclerView.ViewHolder xMegaHolder = xMegaRail.findViewHolderForAdapterPosition(0);
+        ImageView xMegaImage = ReflectionHelpers.getField(xMegaHolder, "image");
+        assertEquals(baddieHolder.itemView.getWidth(), xMegaHolder.itemView.getWidth());
+        assertEquals(baddieHolder.itemView.getHeight(), xMegaHolder.itemView.getHeight());
+        assertEquals(xMegaHolder.itemView.getWidth(), xMegaImage.getWidth());
+        assertEquals(xMegaHolder.itemView.getHeight(), xMegaImage.getHeight());
         shows.setActive(false);
 
         OnlyFapHubView only = new OnlyFapHubView(activity, new OnlyFapHubView.Listener() {
