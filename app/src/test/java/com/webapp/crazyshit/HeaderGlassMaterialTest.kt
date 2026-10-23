@@ -26,6 +26,21 @@ class HeaderGlassMaterialTest {
         controller.pause().stop().destroy()
     }
 
+    @Test fun recentSearchesKeepTheSharedLensAndDarkFilmWithLessObscuringBlur() {
+        val controller = Robolectric.buildActivity(Activity::class.java).setup()
+        val activity = controller.get()
+        val recent = recentSearchGlassConfig(activity)
+        val nav = navigationGlassConfig(activity)
+        assertEquals(3f, recent.blurRadius)
+        assertEquals(.40f, recent.surfaceOpacity)
+        assertEquals(Color.Black, recent.surfaceTintColor)
+        assertEquals(nav.lensHeight, recent.lensHeight)
+        assertEquals(nav.lensAmount, recent.lensAmount)
+        assertEquals(nav.centerMagnification, recent.centerMagnification)
+        assertEquals(searchResultsGlassConfig(activity), recent.copy(blurRadius = 12f))
+        controller.pause().stop().destroy()
+    }
+
     @Test fun headerUsesBlackFilmWithoutChangingNavbarOptics() {
         val controller = Robolectric.buildActivity(Activity::class.java).setup()
         val activity = controller.get()

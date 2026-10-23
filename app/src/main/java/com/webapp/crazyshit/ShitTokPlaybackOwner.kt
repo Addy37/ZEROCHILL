@@ -52,12 +52,13 @@ class ShitTokPlaybackOwner(context: Context, private val callbacks: Callbacks) {
     private var continuityReady = false
     private var permitted = false
     private var muted = false
+    private var searchCovered = false
     private data class SpeedBoost(val player: ExoPlayer, val previous: PlaybackParameters, val ended: Runnable)
     private var speedBoost: SpeedBoost? = null
 
     /** Temporary interaction on the current attached lease, without changing playback intent. */
     fun beginSpeedBoost(url: String, expected: ExoPlayer, ended: Runnable): Boolean {
-        if (speedBoost != null || !canPlay(url) || leases[url]?.player !== expected ||
+        if (searchCovered || speedBoost != null || !canPlay(url) || leases[url]?.player !== expected ||
             leases[url]?.stream == null || !expected.isPlaying || expected.playerError != null) return false
         speedBoost = SpeedBoost(expected, expected.playbackParameters, ended)
         expected.setPlaybackSpeed(2f)
@@ -73,7 +74,24 @@ class ShitTokPlaybackOwner(context: Context, private val callbacks: Callbacks) {
     }
     fun setMuted(value: Boolean) {
         muted = value
-        leases.forEach { (url, lease) -> lease.player.volume = if (canPlay(url) && !value) 1f else 0f }
+        leases.forEach { (url, lease) -> lease.player.volume = if (canPlay(url) && !value && !searchCovered) 1f else 0f }
+    }
+    /** Overlay policy on the existing lease. Never pause, detach or re-source the selected video. */
+    fun setSearchCovered(value: Boolean) {
+        if (searchCovered == value) return
+        searchCovered = value
+        endSpeedBoost()
+        if (value) {
+            acquisition?.cancel()
+            window = listOfNotNull(selected)
+            immediateNext = null
+            control.continuityId = null
+            leases.keys.toList().filter { it != selected }.forEach { retire(it); removeSource(it) }
+            waitingSources.clear()
+        }
+        setMuted(muted)
+        publishProtection()
+        manager?.invalidate()
     }
     private var preparedLimit = 3
     private var created = 0
@@ -127,10 +145,12 @@ class ShitTokPlaybackOwner(context: Context, private val callbacks: Callbacks) {
         try { selectWindow(current, next, previous, neighbors) } finally { Trace.endSection() }
     }
     private fun selectWindow(current: String, next: String?, previous: String?, neighbors: Boolean) {
+        if (searchCovered) return
         val wanted = listOfNotNull(current, next.takeIf { neighbors }, previous.takeIf { neighbors })
             .distinct().take(preparedLimit)
         if (selected == current && window == wanted && pool != null) { syncAudio(); return }
-        revokeAudio()
+        if (selected != current) revokeAudio()
+        else leases.filterKeys { it != current }.values.forEach { silence(it.player) }
         if (selected != current) {
             bandwidthEstimate = -1L
             protection.select(current)
@@ -257,7 +277,7 @@ class ShitTokPlaybackOwner(context: Context, private val callbacks: Callbacks) {
     fun syncAudio() {
         leases.forEach { (url, lease) -> if (!canPlay(url)) silence(lease.player) }
         selected?.let { url -> leases[url]?.takeIf { canPlay(url) && it.stream != null }?.let {
-            it.player.volume = if (muted) 0f else 1f
+            it.player.volume = if (muted || searchCovered) 0f else 1f
             if (it.player.playbackState != Player.STATE_ENDED && !it.player.playWhenReady) it.player.play()
         } }
         updateBufferPriority()
@@ -285,7 +305,7 @@ class ShitTokPlaybackOwner(context: Context, private val callbacks: Callbacks) {
         flushWaitingSources()
     }
     fun allowsContinuityPreparation(url: String): Boolean =
-        permitted && !control.currentNeedsBuffer && url == control.continuityId && url == immediateNext
+        !searchCovered && permitted && !control.currentNeedsBuffer && url == control.continuityId && url == immediateNext
     private fun observeSelected(url: String, player: ExoPlayer) {
         if (url != selected) return
         protection.observe(SystemClock.elapsedRealtime(), player.playbackState, player.isPlaying,
@@ -298,8 +318,8 @@ class ShitTokPlaybackOwner(context: Context, private val callbacks: Callbacks) {
         control.starving = protection.isProtected()
         control.recoveryTargetUs = protection.recoveryTargetMs() * 1_000L
         control.recoveryDeadlineMs = protection.recoveryDeadlineMs()
-        val allowed = permitted && !control.currentNeedsBuffer && !control.starving
-        val nextReady = permitted && !control.currentNeedsBuffer
+        val allowed = !searchCovered && permitted && !control.currentNeedsBuffer && !control.starving
+        val nextReady = !searchCovered && permitted && !control.currentNeedsBuffer
         if (speculativeAllowed == allowed && continuityReady == nextReady) return
         speculativeAllowed = allowed
         continuityReady = nextReady
@@ -325,13 +345,13 @@ class ShitTokPlaybackOwner(context: Context, private val callbacks: Callbacks) {
     fun attach(url: String, view: PlayerView): ExoPlayer? {
         val lease = leases[url] ?: return null
         if (lease.view !== view) {
-            revokeAudio()
+            if (url == selected) revokeAudio() else silence(lease.player)
             Trace.beginSection("zc.shittok.surface_handoff")
             try { PlayerView.switchTargetView(lease.player, lease.view, view) } finally { Trace.endSection() }
             lease.view = view
             ShitTokPoolDiagnostics.record("surface", url)
         }
-        lease.player.volume = if (canPlay(url) && !muted) 1f else 0f
+        lease.player.volume = if (canPlay(url) && !muted && !searchCovered) 1f else 0f
         return lease.player
     }
     fun detach(url: String, view: PlayerView) {
@@ -342,6 +362,7 @@ class ShitTokPlaybackOwner(context: Context, private val callbacks: Callbacks) {
         lease.view = null
     }
     fun source(url: String, stream: CrazyShitRepository.StreamInfo, token: Int): Boolean {
+        if (searchCovered) return leases[url]?.stream?.mediaUrl == stream.mediaUrl
         val lease = leases[url]
         if (lease == null || !accepts(url, token) || !permitted) {
             ShitTokPoolDiagnostics.record("staleSource", url); return false
@@ -354,7 +375,7 @@ class ShitTokPlaybackOwner(context: Context, private val callbacks: Callbacks) {
         }
         waitingSources.remove(url)
         // Warming a silent next lease must not pause/restart the recovering current player.
-        if (url != selected && allowsContinuityPreparation(url)) silence(lease.player) else revokeAudio()
+        if (url != selected) silence(lease.player) else revokeAudio()
         if (lease.stream != null) runCatching { remember(url, lease.player.currentPosition) }
         removeSource(url)
         val mediaSource = ShitTokMediaSources.create(app, url, stream)
@@ -393,6 +414,7 @@ class ShitTokPlaybackOwner(context: Context, private val callbacks: Callbacks) {
         while (positions.size > 32) positions.remove(positions.keys.first())
     }
     fun recoverDecoder(player: ExoPlayer, error: PlaybackException): Boolean {
+        if (searchCovered) return false
         if (recoveryHandled[player] === error) return true
         if (error.errorCode != PlaybackException.ERROR_CODE_DECODER_INIT_FAILED || preparedLimit <= 1 || leases.size <= 1) return false
         val failed = leases.entries.firstOrNull { it.value.player === player } ?: return false

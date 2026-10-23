@@ -26,9 +26,15 @@ final class SearchGlassLayout extends FrameLayout {
     private int resultRowHeightDp = 76;
     private android.animation.ValueAnimator heightAnimator;
     private int animatedHeight;
+    private View recentContent;
+    private int lastDesiredHeight = -1;
+    private int lastAvailableHeight = -1;
+    private int lastPanelWidth = -1;
     private final Path rowClip = new Path();
     private final Outline resultOutline = new Outline();
     private final Rect resultRect = new Rect();
+    private final Rect rowsClipBounds = new Rect();
+    private final RectF clipBounds = new RectF();
     private int imeBottom;
     private int systemBottom;
     private int imeAnimations;
@@ -103,28 +109,67 @@ final class SearchGlassLayout extends FrameLayout {
     void setResultCount(int count) { setResultCount(count, 76); }
 
     void setResultCount(int count, int rowHeightDp) {
-        if (resultCount == count && resultRowHeightDp == rowHeightDp) return;
+        if (recentContent == null && resultCount == count && resultRowHeightDp == rowHeightDp) return;
+        recentContent = null;
         resultCount = count;
         resultRowHeightDp = rowHeightDp;
-        if (heightAnimator != null) { heightAnimator.removeAllListeners(); heightAnimator.cancel(); }
-        if (getHeight() > 0 && rows.getVisibility() == VISIBLE && ZeroChillMotion.animationsEnabled(getContext())) {
-            heightAnimator = android.animation.ValueAnimator.ofInt(rows.getHeight(), resultHeight());
-            heightAnimator.setDuration(180L);
-            heightAnimator.setInterpolator(new android.view.animation.DecelerateInterpolator());
-            heightAnimator.addUpdateListener(a -> { animatedHeight = (int) a.getAnimatedValue(); dirty = true; requestLayout(); });
-            heightAnimator.addListener(new android.animation.AnimatorListenerAdapter() {
-                @Override public void onAnimationEnd(android.animation.Animator a) { heightAnimator = null; requestLayout(); }
-            });
-            heightAnimator.start();
-        }
         dirty = true;
         requestLayout();
     }
 
+    void setRecentContent(View content) {
+        recentContent = content;
+        // The same panel is rebuilt after removal; measure its current children.
+        dirty = true;
+        requestLayout();
+    }
+
+    private void cancelHeightAnimation() {
+        if (heightAnimator == null) return;
+        heightAnimator.removeAllListeners();
+        heightAnimator.removeAllUpdateListeners();
+        heightAnimator.cancel();
+        heightAnimator = null;
+    }
+
+    private void updateHeight(int desired, int available, int width) {
+        boolean geometryChanged = available != lastAvailableHeight || width != lastPanelWidth;
+        if (geometryChanged || !ZeroChillMotion.animationsEnabled(getContext())) cancelHeightAnimation();
+        if (desired != lastDesiredHeight) {
+            cancelHeightAnimation();
+            int target = Math.min(available, desired);
+            // First layout and a hidden pane commit their final geometry immediately.
+            if (!geometryChanged && rows.isLaidOut() && rows.getVisibility() == VISIBLE
+                    && rows.getAlpha() > 0f && rows.getHeight() != target
+                    && ZeroChillMotion.animationsEnabled(getContext())) {
+                animatedHeight = rows.getHeight();
+                heightAnimator = android.animation.ValueAnimator.ofInt(animatedHeight, target);
+                heightAnimator.setDuration(180L);
+                heightAnimator.setInterpolator(new android.view.animation.DecelerateInterpolator());
+                heightAnimator.addUpdateListener(a -> { animatedHeight = (int) a.getAnimatedValue(); dirty = true; requestLayout(); });
+                heightAnimator.addListener(new android.animation.AnimatorListenerAdapter() {
+                    @Override public void onAnimationEnd(android.animation.Animator a) { heightAnimator = null; requestLayout(); }
+                });
+                heightAnimator.start();
+            }
+        }
+        lastDesiredHeight = desired;
+        lastAvailableHeight = available;
+        lastPanelWidth = width;
+    }
+
     @Override protected void onMeasure(int widthSpec, int heightSpec) {
         int width = MeasureSpec.getSize(widthSpec) - getPaddingLeft() - getPaddingRight();
-        int height = resultHeight(MeasureSpec.getSize(heightSpec),
-                heightAnimator != null && heightAnimator.isRunning() ? animatedHeight : dp(96 + resultCount * resultRowHeightDp));
+        int panelWidth = Math.max(0, width - dp(28));
+        int desired = dp(96 + resultCount * resultRowHeightDp);
+        if (recentContent != null) {
+            recentContent.measure(MeasureSpec.makeMeasureSpec(panelWidth, MeasureSpec.EXACTLY),
+                    MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED));
+            desired = recentContent.getMeasuredHeight() + rows.getPaddingTop() + rows.getPaddingBottom();
+        }
+        int available = resultHeight(MeasureSpec.getSize(heightSpec), Integer.MAX_VALUE);
+        updateHeight(desired, available, panelWidth);
+        int height = Math.min(available, heightAnimator != null ? animatedHeight : desired);
         if (pillBounds == null) place(pill, width - dp(88), dp(56), dp(14), dp(8));
         else place(pill, Math.round(pillBounds.width()), Math.round(pillBounds.height()),
                 Math.round(pillBounds.left) - getPaddingLeft(), Math.round(pillBounds.top) - getPaddingTop());
@@ -132,10 +177,6 @@ final class SearchGlassLayout extends FrameLayout {
         place(results, width - dp(28), height, dp(14), dp(76));
         place(rows, width - dp(28), height, dp(14), dp(76));
         super.onMeasure(widthSpec, heightSpec);
-    }
-
-    private int resultHeight() {
-        return resultHeight(getHeight(), dp(96 + resultCount * resultRowHeightDp));
     }
 
     private int resultHeight(int windowHeight, int desired) {
@@ -170,6 +211,11 @@ final class SearchGlassLayout extends FrameLayout {
 
     @Override protected void onLayout(boolean changed, int l, int t, int r, int b) {
         super.onLayout(changed, l, t, r, b);
+        // This parent lets the floating pill extend beyond its bounds. Give the
+        // rows their own RenderNode clip as well as the rounded outline: a
+        // ScrollView's fading-edge layers otherwise escape the top on the GPU.
+        rowsClipBounds.set(0, 0, rows.getWidth(), rows.getHeight());
+        rows.setClipBounds(rowsClipBounds);
         // Child sizes can change while this full-window layout keeps the same bounds.
         rows.invalidateOutline();
         results.invalidateOutline();
@@ -200,9 +246,9 @@ final class SearchGlassLayout extends FrameLayout {
         rowClip.reset();
         results.getOutlineProvider().getOutline(results, resultOutline);
         if (!resultOutline.getRect(resultRect)) { canvas.restoreToCount(checkpoint); return; }
-        RectF bounds = new RectF(resultRect);
-        bounds.offset(results.getX(), results.getY());
-        rowClip.addRoundRect(bounds, resultOutline.getRadius(), resultOutline.getRadius(), Path.Direction.CW);
+        clipBounds.set(resultRect);
+        clipBounds.offset(results.getX(), results.getY());
+        rowClip.addRoundRect(clipBounds, resultOutline.getRadius(), resultOutline.getRadius(), Path.Direction.CW);
         canvas.clipPath(rowClip);
         drawChild(canvas, rows, getDrawingTime());
         canvas.restoreToCount(checkpoint);
@@ -214,7 +260,8 @@ final class SearchGlassLayout extends FrameLayout {
     }
 
     @Override protected void onDetachedFromWindow() {
-        if (heightAnimator != null) { heightAnimator.removeAllListeners(); heightAnimator.cancel(); }
+        cancelHeightAnimation();
+        lastDesiredHeight = lastAvailableHeight = lastPanelWidth = -1;
         page.release(); empty.release(); dirty = true;
         super.onDetachedFromWindow();
     }

@@ -12,6 +12,7 @@ public final class GlassRenderProbeActivity extends Activity {
     private Backdrop backdrop;
     private ScrollView showsScroll;
     private int mode;
+    private SearchPanel searchPanel;
     private androidx.media3.exoplayer.ExoPlayer probePlayer;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private boolean alive;
@@ -85,14 +86,59 @@ public final class GlassRenderProbeActivity extends Activity {
         floating.setMargins(dp(10),-dp(70),dp(10),dp(6));
         shell.addView(nav,floating);
         StableBottomNavigationController.styleBar(nav); nav.reapplyCurrentGeometry();
-        setContentView(shell);
+        if (getIntent().getBooleanExtra("recent_search", false)) {
+            getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING);
+            int count = getIntent().getIntExtra("recent_count", 3);
+            if (state == null) {
+                RecentSearchStore.clear(this);
+                for (int i = 0; i < count; i++) RecentSearchStore.remember(this, "Saved search " + (i + 1));
+            }
+            getSharedPreferences("app_prefs", 0).edit().putBoolean("immersive_motion_enabled",
+                    !getIntent().getBooleanExtra("reduced_motion", false)).apply();
+            FrameLayout root = new FrameLayout(this);
+            root.addView(shell, new FrameLayout.LayoutParams(-1, -1));
+            setContentView(root);
+            searchPanel = new SearchPanel(this, new android.content.Intent(), true, () -> {});
+            searchPanel.create(state);
+            searchPanel.setEmptyBackdrop(shell.pageBackdropForOverlay());
+            root.addView(searchPanel.view, new FrameLayout.LayoutParams(-1, -1));
+            searchPanel.field().clearFocus();
+            handler.postDelayed(() -> checkRecentGeometry(shell), 1200);
+        } else setContentView(shell);
         nav.setCollapsed(getIntent().getBooleanExtra("collapsed", false), false);
         if (getIntent().getBooleanExtra("preference", false))
             shell.postDelayed(() -> ContentPreferenceUi.choose(this, null), 500);
         alive = true; start = SystemClock.uptimeMillis();
         if(getIntent().getBooleanExtra("moving",false))handler.post(animate);
     }
-    @Override protected void onDestroy(){alive=false;handler.removeCallbacksAndMessages(null);if (probePlayer != null) probePlayer.release();super.onDestroy();}
+    @Override protected void onSaveInstanceState(Bundle state) {
+        if (searchPanel != null) searchPanel.save(state);
+        super.onSaveInstanceState(state);
+    }
+    private void checkRecentGeometry(FrostedNavigationLayout source) {
+        try {
+            SearchGlassLayout search = (SearchGlassLayout) searchPanel.view;
+            View pane = search.getChildAt(0), rows = search.getChildAt(1);
+            int count = RecentSearchStore.load(this).size();
+            int desired = dp(48 + 56 * count + 14);
+            if (pane.getHeight() > desired || pane.getHeight() != rows.getHeight()
+                    || (count == 0 && pane.getVisibility() == View.VISIBLE))
+                throw new IllegalStateException("Incorrect recent geometry " + pane.getHeight() + "/" + desired);
+            java.lang.reflect.Field pageField = SearchGlassLayout.class.getDeclaredField("page");
+            pageField.setAccessible(true);
+            ViewPageBackdrop searchPage = (ViewPageBackdrop) pageField.get(search);
+            int searchRecordings = searchPage.getRecordings();
+            int recordings = source.pageBackdropForOverlay().getRecordings();
+            handler.postDelayed(() -> {
+                int extra = source.pageBackdropForOverlay().getRecordings() - recordings;
+                int searchExtra = searchPage.getRecordings() - searchRecordings;
+                android.util.Log.i("ZeroChillSearch", (extra <= 2 && searchExtra <= 2 ? "PASS" : "FAIL")
+                        + " natural height=" + pane.getHeight() + " desired=" + desired
+                        + " source recordings during idle=" + extra + " search recordings=" + searchExtra);
+            }, 1000);
+        } catch (Exception error) { android.util.Log.e("ZeroChillSearch", "FAIL", error); }
+    }
+    @Override protected void onDestroy(){if (searchPanel != null) searchPanel.close();alive=false;handler.removeCallbacksAndMessages(null);if (probePlayer != null) probePlayer.release();super.onDestroy();}
     private void bindArtwork(View view) {
         if (view instanceof ImageView) {
             ImageView image = (ImageView) view;
