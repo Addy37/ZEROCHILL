@@ -19,3 +19,29 @@ Library opens locally. LikedVideosActivity is a recycled list, with explicit Ref
 No schema migration, duplicate authoritative likes database, source configuration, backend deployment, dependency, package/signing identity, existing store rename, download location, backup format or auth behavior change. Existing saves, favorites, downloads and history remain owned by their original stores.
 
 Physical-device checks remain necessary for uploaded artwork, live authenticated sync/pagination, playback resume and portrait/landscape gestures. Native fixture renders use synthetic metadata and fallback artwork.
+
+
+## Startup and navigation lifecycle follow-up
+
+The Library shell now creates its profile controls and loading placeholder before
+activation, without reading account/inbox state or collection stores. Profile/badge
+reads share the Library background reader; inactive/account-stale results cannot
+replace the visible identity. Snapshot completion releases the loading flag even
+when Library has become inactive, and does not build off-screen media views.
+A local-read failure retains content or presents a retry message on the shell.
+
+PrimaryTabWorkQueue still starts after a settled frame and prefers idle work, with
+a 32ms fallback when a busy message queue does not become idle. It runs one task
+per frame and cancels idle/fallback dispatch during motion, pause and close.
+Library pauses its thumbnail repair resolvers during exit rather than allowing
+hidden WebViews to start more work. Pausing cancels/requeues the current request;
+generation checks reject old static, WebView/JavaScript and video-frame callbacks,
+including a resumed request for the same URL. Other resolver callers remain active
+by default. Existing caches, source configuration, store formats and routes remain.
+
+Focused regressions and the signed workflow's Library lifecycle fixture cover
+first-frame shell visibility while a local reader is blocked, exit/return, finite
+publication, resolver suspension, stale completion and queue cancellation. The
+fixture uses production Library views/queue and synthetic local conditions; it is
+not a physical-device performance benchmark. No timing improvement is claimed
+until the supplied recordings are checked against the new Beta on the user's device.

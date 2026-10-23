@@ -84,6 +84,7 @@ final class LibraryHubView extends ScrollView {
     private PrimaryTabWorkQueue.Scheduler work = (key, task) -> post(task);
     private boolean active;
     private boolean loading;
+    private boolean contentPrepared;
     private int revision;
     private Snapshot displayed;
     private Map<String, NativeContentItem> videoMetadata = java.util.Collections.emptyMap();
@@ -110,24 +111,32 @@ final class LibraryHubView extends ScrollView {
         content.setPadding(dp(16), dp(16), dp(16),
                 ZeroChillUi.dimension(activity, R.dimen.zc_bottom_nav_height) + dp(32));
         addView(content, new ScrollView.LayoutParams(-1, -2));
+        // Always provide a visible first frame, even while activation waits for the pager.
+        prepareForDisplay();
         if (!deferContent) ensureContent();
     }
 
-    private void ensureContent() {
+    void prepareForDisplay() {
         if (closed || socialHub != null) return;
-        long started = android.os.SystemClock.elapsedRealtime();
-        socialHub = new LibraryProfileHeader(activity);
+        socialHub = new LibraryProfileHeader(activity, refreshIo);
         content.addView(socialHub, new LinearLayout.LayoutParams(-1, -2));
 
-        thumbnailResolvers = new RenderedThumbnailResolver[] {
-                new RenderedThumbnailResolver(activity, this::onThumbnailResolved),
-                new RenderedThumbnailResolver(activity, this::onThumbnailResolved)
-        };
-        ShowsContinueFrameStore.addListener(frameListener);
         mediaContent = new LinearLayout(activity);
         mediaContent.setOrientation(LinearLayout.VERTICAL);
         content.addView(mediaContent, new LinearLayout.LayoutParams(-1, -2));
         addLoadingState();
+    }
+
+    private void ensureContent() {
+        if (closed || contentPrepared) return;
+        contentPrepared = true;
+        long started = android.os.SystemClock.elapsedRealtime();
+        thumbnailResolvers = new RenderedThumbnailResolver[] {
+                new RenderedThumbnailResolver(activity, this::onThumbnailResolved),
+                new RenderedThumbnailResolver(activity, this::onThumbnailResolved)
+        };
+        for (RenderedThumbnailResolver resolver : thumbnailResolvers) resolver.setActive(active);
+        ShowsContinueFrameStore.addListener(frameListener);
         for (String name : new String[] {"playback_history", "watch_later", "creator_favorites",
                 "creator_catalog_v1", "creator_avatar_overrides_v1", "manual_creator_merges_v1",
                 "native_video_downloads", "zerochill_account_secure_state", "popular_creator_feed_v3",
@@ -151,11 +160,25 @@ final class LibraryHubView extends ScrollView {
         final int requestedRevision = revision;
         final Snapshot previous = displayed;
         refreshIo.execute(() -> {
-            Snapshot snapshot = new Snapshot(activity, observedPreferences, previous);
+            final Snapshot snapshot;
+            try { snapshot = new Snapshot(activity, observedPreferences, previous); }
+            catch (RuntimeException error) {
+                post(() -> {
+                    loading = false;
+                    if (!closed && displayed == null) {
+                        View label = mediaContent.findViewWithTag("library-loading-label");
+                        if (label instanceof TextView) ((TextView) label).setText(
+                                "Couldn't load your Library. Reopen Library to retry.");
+                    }
+                });
+                return;
+            }
             if (closed) return;
-            post(() -> work.schedule("library-publish", () -> {
+            post(() -> {
                 loading = false;
-                if (closed) return;
+                if (closed || !active) return;
+                work.schedule("library-publish", () -> {
+                if (closed || !active) return;
                 if (requestedRevision != revision || !snapshot.owner.equals(ZeroChillSessionStore.currentUserId(activity))) {
                     if (active) scheduleRefresh();
                     return;
@@ -164,7 +187,8 @@ final class LibraryHubView extends ScrollView {
                 android.os.Trace.beginSection("ZeroChill.Library.publish");
                 try { render(snapshot); } finally { android.os.Trace.endSection(); }
                 displayed = snapshot;
-            }));
+                });
+            });
         });
     }
 
@@ -357,6 +381,7 @@ final class LibraryHubView extends ScrollView {
         this.active = active;
         if (active) ensureContent();
         if (socialHub != null) socialHub.setActive(active);
+        for (RenderedThumbnailResolver resolver : thumbnailResolvers) resolver.setActive(active);
         // DownloadManager can change without a preference write. Check once on settled entry.
         if (active) scheduleRefresh();
     }
@@ -755,6 +780,7 @@ final class LibraryHubView extends ScrollView {
         loadingState.setContentDescription("Loading your Library");
         TextView label = text("Loading your Library…", 13f, UiPalette.TEXT_MUTED);
         label.setPadding(dp(4), dp(16), 0, dp(12));
+        label.setTag("library-loading-label");
         loadingState.addView(label);
         View placeholder = new View(activity);
         placeholder.setBackground(BrowseUi.rounded(activity, UiPalette.SURFACE, 16));
@@ -895,7 +921,8 @@ final class LibraryHubView extends ScrollView {
     }
 
     private void requestThumbnail(String pageUrl) {
-        if (pageUrl.isEmpty() || closed || !requestedThumbnails.add(pageUrl)) return;
+        if (pageUrl.isEmpty() || closed || !active || thumbnailResolvers.length == 0
+                || !requestedThumbnails.add(pageUrl)) return;
         RenderedThumbnailResolver resolver =
                 thumbnailResolvers[resolverCursor++ % thumbnailResolvers.length];
         resolver.request(pageUrl);
@@ -909,7 +936,7 @@ final class LibraryHubView extends ScrollView {
     }
 
     private void applyResolvedThumbnail(String pageUrl, String thumbnailUrl) {
-        if (closed) return;
+        if (closed || !active) return;
         List<ImageView> targets = thumbnailTargets.get(pageUrl);
         if (targets == null) return;
         for (ImageView image : new ArrayList<>(targets)) {
@@ -969,7 +996,7 @@ final class LibraryHubView extends ScrollView {
         Boolean previous = portraitThumbnails.put(pageUrl, portrait);
         if (previous != null && previous == portrait) return;
         work.schedule("library-orientation:" + pageUrl, () -> {
-            if (closed || mediaContent == null) return;
+            if (closed || !active || mediaContent == null) return;
             for (int i = 0; i < mediaContent.getChildCount(); i++) {
                 View section = mediaContent.getChildAt(i);
                 if (!(section instanceof ViewGroup) || ((ViewGroup) section).getChildCount() < 2) continue;
