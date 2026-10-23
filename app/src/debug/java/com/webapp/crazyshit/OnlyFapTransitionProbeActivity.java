@@ -43,7 +43,12 @@ public final class OnlyFapTransitionProbeActivity extends Activity {
                         "overlapping creator names");
                 if (controls != null) check(Arrays.equals(controls, bounds()), "controls moved during transition");
                 String expected = step == 0 ? "Initial creator" : step == 1 ? "Fast category" :
-                        step == 2 ? "Latest category with a longer name across two lines" : "Qualified gallery";
+                        step == 2 ? "Latest category with a longer name across two lines" :
+                        step == 3 ? "All content creator" : step == 4 ? "Female again" : "Qualified gallery";
+                if (field("heroMorph") != null) {
+                    View oldImage = (View) field("preferenceImage"), newImage = (View) field("heroImage");
+                    check(oldImage.getAlpha() * newImage.getAlpha() < .001f, "stacked hero artwork");
+                }
                 if (expected.equals(((TextView) title).getText().toString()) &&
                         !(boolean) field("preferenceHeroPending") && field("heroMorph") == null) {
                     if (step == 0 && controls == null) {
@@ -60,7 +65,9 @@ public final class OnlyFapTransitionProbeActivity extends Activity {
                         }
                     }
                     android.util.Log.i("ZeroChillTransition", "stage=" + step + " ready " + expected);
-                    if (step == 3) {
+                    LiquidRiftImageView image = (LiquidRiftImageView) field("heroImage");
+                    check(image.getScaleX() == 1f && image.getScaleY() == 1f, "stuck hero scale");
+                    if (step == 5) {
                         check(frames > 10, "insufficient observed animation frames");
                         android.util.Log.i("ZeroChillTransition", "PASS real Glide startup, rapid switch, qualified artwork, stable bounds; frames=" + frames);
                         return;
@@ -69,9 +76,11 @@ public final class OnlyFapTransitionProbeActivity extends Activity {
                     if (step == 0) change(ContentPreference.MEN, "Fast category");
                     else if (step == 1) {
                         change(ContentPreference.TRANS_MEN, "Superseded slow category");
-                        handler.postDelayed(() -> change(ContentPreference.GROUPS,
+                        handler.postDelayed(() -> change(ContentPreference.TRANS_WOMEN,
                                 "Latest category with a longer name across two lines"), 40);
-                    } else qualified();
+                    } else if (step == 2) change(ContentPreference.ALL, "All content creator");
+                    else if (step == 3) change(ContentPreference.WOMEN, "Female again");
+                    else qualified();
                     step++;
                     deadline = SystemClock.uptimeMillis() + 6000;
                 }
@@ -114,7 +123,11 @@ public final class OnlyFapTransitionProbeActivity extends Activity {
     private void change(ContentPreference mode, String title) {
         ContentPreference.set(this, mode);
         hub.preparePreference(mode); hub.clear(); // Actual pager refresh's double clear.
-        hub.setPreferenceCreators(Collections.singletonList(creator(title, true)));
+        if (mode == ContentPreference.ALL) {
+            // All-content heroes exclude Discover creators, so use its normal qualified path.
+            try { deliverQualified(creator(title, false), "https://transition.invalid/all.png"); }
+            catch (Exception error) { throw new IllegalStateException(error); }
+        } else hub.setPreferenceCreators(Collections.singletonList(creator(title, true)));
     }
     private NativeContentItem creator(String title, boolean thumbnail) {
         return new NativeContentItem(NativeContentItem.KIND_CREATOR, title,
@@ -127,6 +140,9 @@ public final class OnlyFapTransitionProbeActivity extends Activity {
         hub.preparePreference(ContentPreference.TRANS_WOMEN); hub.clear();
         NativeContentItem creator = creator("Qualified gallery", false);
         hub.setPreferenceCreators(Collections.singletonList(creator));
+        deliverQualified(creator, "https://transition.invalid/qualified.png");
+    }
+    private void deliverQualified(NativeContentItem creator, String imageUrl) throws Exception {
         int generation = (int) field("heroGeneration");
         Method finish = OnlyFapHubView.class.getDeclaredMethod("finishHeroResolution", int.class,
                 NativeContentItem.class, List.class);
@@ -134,7 +150,7 @@ public final class OnlyFapTransitionProbeActivity extends Activity {
         // Through the production page queue, not the image-ready or commit method.
         queue.submit(3, "hero-resolution", () -> {
             try { finish.invoke(hub, generation, creator, Collections.singletonList(
-                    new OnlyFapHeroPolicy.Artwork("https://transition.invalid/qualified.png", creator.url, false))); }
+                    new OnlyFapHeroPolicy.Artwork(imageUrl, creator.url, false))); }
             catch (Exception error) { throw new IllegalStateException(error); }
         });
     }

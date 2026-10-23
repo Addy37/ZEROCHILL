@@ -225,3 +225,38 @@ visible names, fixed control bounds and finite completion. It records a device v
 Synthetic local portraits isolate UI behavior from provider/network availability.
 No backend, provider route, remote configuration, persistence format or dependency
 changes. This follow-up does not claim measured performance improvement.
+
+
+## Liquid Rift category hero transition
+
+`feature/onlyfap-liquid-rift` starts from approved main
+`ca3e2e9a0d90a94f828436bd0b0395955dded4a5`, without Compose experiment code.
+The image-ready callback now starts one 1,040ms native animator. Outgoing artwork
+collapses from 83–364ms with up to 1.03 scale and 8dp hero-only blur. Incoming
+artwork reveals from 364–853ms through an asymmetric cubic wave, a narrow displaced
+strip of the same drawable, and the existing #0892D0 glass accent. No two portrait
+layers have positive opacity together. Title settles at 749–957ms, supporting copy
+at 822–1019ms, and gallery opacity at 874–1040ms. A separate 150ms selector ink
+pulse responds to selection. Artwork readiness still gates the animation, retaining
+the existing loading indicator while the network is pending.
+
+The hero animator owns completion and rotation scheduling. Qualified artwork waits
+until a startup portrait's sequence finishes. New selections cancel the running
+animator without calling end: before reveal they retain the outgoing portrait,
+after reveal begins they retain the incoming portrait. The selected placeholder
+settles immediately, then the existing generation/candidate/URL checks admit only
+the latest category. Repeated same-mode selection does not restart the hero.
+Detach, close, reduced motion and tab departure reset effects, scale, text offsets
+and unused Glide targets. Image masks and Paint/Path objects are reused; the finite
+blur ladder contains eight RenderEffects per image and is released on settlement.
+Pre-Android 12 uses the same scale, curved mask and displaced-edge fallback without
+blur. No full-screen render surface, bitmap snapshots, shaders or dependencies are
+added. The header, favorites, navbar, control bounds and source/gallery routing stay
+unchanged. No backend, remote-config or data migration changes are required.
+
+The signed workflow opts this branch into 5.1 Beta naming, focused hero tests and
+the existing GPU render/Glide probe. It skips the unrelated ten-flow macrobenchmark;
+no measured performance improvement is claimed. The probe covers Female → Male →
+Trans → All Content → Female plus stale delivery and qualified artwork. CI results
+and physical-device approval are tracked in PR #325; do not treat this document as
+a passed test record.

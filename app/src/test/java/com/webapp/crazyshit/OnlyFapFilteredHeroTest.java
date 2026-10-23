@@ -315,7 +315,7 @@ public class OnlyFapFilteredHeroTest {
         assertEquals("Outgoing creator", ((android.widget.TextView) ReflectionHelpers.getField(hub, "previousHeroTitle")).getText().toString());
         assertEquals(0f, ((View) ReflectionHelpers.getField(hub, "heroImage")).getAlpha(), .001f);
         assertEquals(0f, ((View) ReflectionHelpers.getField(hub, "heroTitle")).getAlpha(), .001f);
-        ShadowLooper.idleMainLooper(650, TimeUnit.MILLISECONDS);
+        ShadowLooper.idleMainLooper(1200, TimeUnit.MILLISECONDS);
         assertNull(ReflectionHelpers.getField(hub, "heroMorph"));
         assertEquals(1f, ((View) ReflectionHelpers.getField(hub, "heroImage")).getAlpha(), 0f);
         assertEquals(1f, ((View) ReflectionHelpers.getField(hub, "heroTitle")).getAlpha(), 0f);
@@ -390,7 +390,7 @@ public class OnlyFapFilteredHeroTest {
         ready(generation(), current);
         ShadowLooper.idleMainLooper(140, TimeUnit.MILLISECONDS);
         capture(hub, "onlyfap-morph-midpoint", 411, 700);
-        ShadowLooper.idleMainLooper(500, TimeUnit.MILLISECONDS);
+        ShadowLooper.idleMainLooper(1100, TimeUnit.MILLISECONDS);
         capture(hub, "onlyfap-morph-settled", 411, 700);
     }
 
@@ -447,6 +447,47 @@ public class OnlyFapFilteredHeroTest {
         assertSame(((View) ReflectionHelpers.getField(hub, "heroImage")).getParent(),
                 ((View) ReflectionHelpers.getField(hub, "preferenceImage")).getParent());
     }
+    @Test public void liquidRiftUsesHeroClockAndNeverStacksFaces() throws Exception {
+        seedVisibleHero(); changeMode(ContentPreference.MEN);
+        Object incoming = pendingHero("Rift creator");
+        ReflectionHelpers.setField(hub, "active", true);
+        ready(generation(), incoming);
+        android.animation.ValueAnimator animator = ReflectionHelpers.getField(hub, "heroMorph");
+        assertEquals(1040L, animator.getDuration());
+        View old = ReflectionHelpers.getField(hub, "preferenceImage");
+        View image = ReflectionHelpers.getField(hub, "heroImage");
+        for (float fraction : new float[]{.1f, .3f, .35f, .4f, .6f, .8f, .95f}) {
+            animator.setCurrentFraction(fraction);
+            assertEquals("Faces overlap at " + fraction, 0f, old.getAlpha() * image.getAlpha(), .001f);
+            assertNotNull(ReflectionHelpers.getField(hub, "heroMorph"));
+        }
+        animator.end();
+        assertEquals(1f, image.getScaleX(), 0f);
+        assertEquals(1f, (float) ReflectionHelpers.getField(image, "reveal"), 0f);
+        assertEquals(0, (int) ReflectionHelpers.getField(image, "blurLevel"));
+        assertNull(ReflectionHelpers.getField(image, "blurs"));
+    }
+
+    @Test public void rapidSelectionDuringCollapseDoesNotFinishSupersededReveal() throws Exception {
+        seedVisibleHero(); changeMode(ContentPreference.MEN);
+        Object incoming = pendingHero("Superseded");
+        ReflectionHelpers.setField(hub, "active", true);
+        ready(generation(), incoming);
+        android.animation.ValueAnimator animator = ReflectionHelpers.getField(hub, "heroMorph");
+        animator.setCurrentFraction(.2f);
+        changeMode(ContentPreference.TRANS_WOMEN);
+        assertNull(ReflectionHelpers.getField(hub, "heroMorph"));
+        assertEquals("Outgoing creator", title());
+        Object latest = pendingHero("Latest");
+        ready(generation(), latest);
+        android.animation.ValueAnimator current = ReflectionHelpers.getField(hub, "heroMorph");
+        changeMode(ContentPreference.TRANS_WOMEN); // Same-category tap must leave it running.
+        assertSame(current, ReflectionHelpers.getField(hub, "heroMorph"));
+        current.end();
+        assertEquals("Latest", title());
+        assertEquals(0, (int) ReflectionHelpers.getField(ReflectionHelpers.getField(hub, "heroImage"), "blurLevel"));
+    }
+
     private NativeContentItem thumbnailCreator(String title) {
         return new NativeContentItem(NativeContentItem.KIND_CREATOR, title,
                 "https://cum.st/creators/onlyfans/" + title.replace(' ', '-'),
