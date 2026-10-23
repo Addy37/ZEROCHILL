@@ -112,6 +112,9 @@ public final class SearchShitTokProbeActivity extends Activity {
         new androidx.media3.datasource.cache.CacheWriter(source,
                 new androidx.media3.datasource.DataSpec.Builder().setUri(mediaUrl).setKey(mediaUrl).setLength(bytes.length).build(),
                 null, null).cache();
+        androidx.media3.datasource.cache.ContentMetadataMutations metadata = new androidx.media3.datasource.cache.ContentMetadataMutations();
+        androidx.media3.datasource.cache.ContentMetadataMutations.setContentLength(metadata, bytes.length);
+        cache.applyContentMetadataMutations(mediaUrl, metadata);
     }
     private boolean hasVideo() {
         if (surface == null || !(surface.getVideoSurfaceView() instanceof TextureView)) return false;

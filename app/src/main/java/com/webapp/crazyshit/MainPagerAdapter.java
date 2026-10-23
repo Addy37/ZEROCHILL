@@ -363,6 +363,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         pauseHost(true);
     }
 
+    @androidx.annotation.OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)
     private void pauseHost(boolean retainVideoFrame) {
         hostResumed = false;
         pages[PAGE_ONLYFAP].onlyFapHub.onOpenCancelled();
