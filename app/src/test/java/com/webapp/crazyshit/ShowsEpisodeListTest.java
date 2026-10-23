@@ -71,6 +71,37 @@ public class ShowsEpisodeListTest {
         assertNull(VideoDetailActivity.pendingShowsNext(context, episode("two").url));
         assertNull(VideoDetailActivity.pendingShowsNext(context, "current"));
     }
+    @Test public void switchedEpisodeLaunchIdentityAndBackContextSurvive() {
+        VideoDetailActivity activity = Robolectric.buildActivity(VideoDetailActivity.class).get();
+        activity.setIntent(new android.content.Intent());
+        String[][] values = {{"mediaUrl", "https://cdn.test/new.mp4"}, {"pageUrl", episode("new").url},
+                {"title", "New episode"}, {"posterUrl", "poster"}, {"source", "efukt"},
+                {"relatedFeedUrl", "series2"}, {"mediaReferer", "referer"}, {"views", "123"},
+                {"uploader", "author"}, {"comments", "1"}, {"userAgent", "agent"}, {"cookies", ""}};
+        for (String[] value : values) ReflectionHelpers.setField(activity, value[0], value[1]);
+        ReflectionHelpers.callInstanceMethod(activity, "syncShowsPlaybackIntent");
+        assertEquals(episode("new").url, activity.getIntent().getStringExtra(PlayerActivity.EXTRA_PAGE_URL));
+        assertEquals("series2", activity.getIntent().getStringExtra(VideoDetailActivity.EXTRA_RELATED_FEED_URL));
+        ReflectionHelpers.callInstanceMethod(activity, "pushCurrentVideo");
+        java.util.ArrayDeque<?> history = ReflectionHelpers.getField(activity, "relatedHistory");
+        Object previous = history.peekLast();
+        assertEquals("efukt", ReflectionHelpers.getField(previous, "source"));
+        assertEquals("series2", ReflectionHelpers.getField(previous, "relatedFeedUrl"));
+    }
+
+    @Test public void pendingNextDoesNotStartInNonShowsOrStoppedPlayer() {
+        VideoDetailActivity activity = Robolectric.buildActivity(VideoDetailActivity.class).get();
+        VideoDetailActivity.setShowsPlayNext(context, episode("one"), "efukt", "series");
+        ReflectionHelpers.setField(activity, "recoveryResumed", true);
+        ReflectionHelpers.callInstanceMethod(activity, "playPendingShowsNext");
+        assertFalse((boolean) ReflectionHelpers.getField(activity, "showsNextResolving"));
+        ReflectionHelpers.setField(activity, "manualLandscapeFullscreen", true);
+        ReflectionHelpers.setField(activity, "recoveryResumed", false);
+        ReflectionHelpers.callInstanceMethod(activity, "playPendingShowsNext");
+        assertFalse((boolean) ReflectionHelpers.getField(activity, "showsNextResolving"));
+        assertNotNull(VideoDetailActivity.pendingShowsNext(context, "current"));
+    }
+
     @Test public void invalidNextDoesNotReplacePendingEpisodeAndFailureLeavesItPending() {
         VideoDetailActivity.setShowsPlayNext(context, episode("one"), "efukt", "series");
         VideoDetailActivity.setShowsPlayNext(context, null, "", "");

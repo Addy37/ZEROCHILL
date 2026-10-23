@@ -241,6 +241,8 @@ public class VideoDetailActivity extends Activity {
         final long positionMs;
         final Bitmap previewBitmap;
         final NativeContentItem content;
+        final String source;
+        final String relatedFeedUrl;
 
         VideoHistoryEntry(
                 String mediaUrl,
@@ -254,7 +256,7 @@ public class VideoDetailActivity extends Activity {
                 String mediaReferer,
                 String posterUrl,
                 long positionMs,
-                Bitmap previewBitmap, NativeContentItem content
+                Bitmap previewBitmap, NativeContentItem content, String source, String relatedFeedUrl
         ) {
             this.mediaUrl = mediaUrl;
             this.pageUrl = pageUrl;
@@ -269,6 +271,8 @@ public class VideoDetailActivity extends Activity {
             this.positionMs = positionMs;
             this.previewBitmap = previewBitmap;
             this.content = content;
+            this.source = source;
+            this.relatedFeedUrl = relatedFeedUrl;
         }
     }
 
@@ -1586,21 +1590,7 @@ public class VideoDetailActivity extends Activity {
                     userAgent = defaultUserAgent();
                     cookies = cookiesFor(mediaUrl, pageUrl);
                     requestedStartPosition = -1L;
-                    if (queued != null) {
-                        // Recreation must reopen the episode that actually replaced the original.
-                        getIntent().putExtra(PlayerActivity.EXTRA_MEDIA_URL, mediaUrl)
-                                .putExtra(PlayerActivity.EXTRA_PAGE_URL, pageUrl)
-                                .putExtra(PlayerActivity.EXTRA_TITLE, title)
-                                .putExtra(EXTRA_POSTER_URL, posterUrl)
-                                .putExtra(EXTRA_SOURCE, source)
-                                .putExtra(EXTRA_RELATED_FEED_URL, relatedFeedUrl)
-                                .putExtra(EXTRA_MEDIA_REFERER, mediaReferer)
-                                .putExtra(EXTRA_VIEWS, views).putExtra(EXTRA_UPLOADER, uploader)
-                                .putExtra(EXTRA_COMMENTS, comments)
-                                .putExtra(PlayerActivity.EXTRA_USER_AGENT, userAgent)
-                                .putExtra(PlayerActivity.EXTRA_COOKIES, cookies)
-                                .putExtra(PlayerActivity.EXTRA_START_POSITION, -1L);
-                    }
+                    if (queued != null) syncShowsPlaybackIntent();
                     updateMetadataUi();
                     buildPlayer(-1L);
                     if (detailsScroll != null) detailsScroll.smoothScrollTo(0, 0);
@@ -1609,6 +1599,21 @@ public class VideoDetailActivity extends Activity {
                 animateRelatedTransition(true, swap);
             });
         });
+    }
+
+    private void syncShowsPlaybackIntent() {
+        getIntent().putExtra(PlayerActivity.EXTRA_MEDIA_URL, mediaUrl)
+                .putExtra(PlayerActivity.EXTRA_PAGE_URL, pageUrl)
+                .putExtra(PlayerActivity.EXTRA_TITLE, title)
+                .putExtra(EXTRA_POSTER_URL, posterUrl)
+                .putExtra(EXTRA_SOURCE, source)
+                .putExtra(EXTRA_RELATED_FEED_URL, relatedFeedUrl)
+                .putExtra(EXTRA_MEDIA_REFERER, mediaReferer)
+                .putExtra(EXTRA_VIEWS, views).putExtra(EXTRA_UPLOADER, uploader)
+                .putExtra(EXTRA_COMMENTS, comments)
+                .putExtra(PlayerActivity.EXTRA_USER_AGENT, userAgent)
+                .putExtra(PlayerActivity.EXTRA_COOKIES, cookies)
+                .putExtra(PlayerActivity.EXTRA_START_POSITION, -1L);
     }
 
     private void pushCurrentVideo() {
@@ -1626,7 +1631,7 @@ public class VideoDetailActivity extends Activity {
                 mediaReferer,
                 posterUrl,
                 position,
-                capturePlayerFrame(), currentContent()
+                capturePlayerFrame(), currentContent(), source, relatedFeedUrl
         ));
         while (relatedHistory.size() > RELATED_HISTORY_LIMIT) {
             recycleHistoryPreview(relatedHistory.removeFirst());
@@ -1662,6 +1667,9 @@ public class VideoDetailActivity extends Activity {
         cookies = previous.cookies;
         mediaReferer = previous.mediaReferer;
         posterUrl = previous.posterUrl;
+        source = previous.source;
+        relatedFeedUrl = previous.relatedFeedUrl;
+        if (manualLandscapeFullscreen || showsOrigin) syncShowsPlaybackIntent();
         requestedStartPosition = previous.positionMs;
         updateMetadataUi();
         buildPlayer(previous.positionMs);
@@ -2265,13 +2273,17 @@ public class VideoDetailActivity extends Activity {
         failureShown = true;
         dismissShowsLaunchCurtain(true);
         RatingFeedbackPrompt.recordPlaybackError(this);
-        new ZeroChillDialog.Builder(this)
+        android.app.AlertDialog.Builder failure = new ZeroChillDialog.Builder(this)
                 .setTitle("Couldn't play this stream")
-                .setMessage("The native player couldn't continue this video. You can open the normal webpage instead.")
+                .setMessage(manualLandscapeFullscreen || showsOrigin
+                        ? "The native player couldn't continue this episode. Try again."
+                        : "The native player couldn't continue this video. You can open the normal webpage instead.")
                 .setNegativeButton("Close", null)
-                .setNeutralButton("Retry", (dialog, which) -> recoverPlayback(null))
-                .setPositiveButton("Open page", (dialog, which) -> openWebsite(pageUrl))
-                .show();
+                .setNeutralButton("Retry", (dialog, which) -> recoverPlayback(null));
+        if (!manualLandscapeFullscreen && !showsOrigin) {
+            failure.setPositiveButton("Open page", (dialog, which) -> openWebsite(pageUrl));
+        }
+        failure.show();
     }
 
     private void openWebsite(String url) {
