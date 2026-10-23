@@ -102,6 +102,57 @@ public class ShowsEpisodeListTest {
         assertNotNull(VideoDetailActivity.pendingShowsNext(context, "current"));
     }
 
+    private androidx.media3.exoplayer.ExoPlayer miniPlayerStub() {
+        return (androidx.media3.exoplayer.ExoPlayer) java.lang.reflect.Proxy.newProxyInstance(
+                androidx.media3.exoplayer.ExoPlayer.class.getClassLoader(),
+                new Class<?>[] {androidx.media3.exoplayer.ExoPlayer.class}, (proxy, method, args) -> {
+                    if (method.getName().equals("getCurrentPosition")) return 5_000L;
+                    if (method.getName().equals("getDuration")) return 100_000L;
+                    if (method.getReturnType() == boolean.class) return false;
+                    if (method.getReturnType() == int.class) return 0;
+                    if (method.getReturnType() == long.class) return 0L;
+                    if (method.getReturnType() == float.class) return 0f;
+                    return null;
+                });
+    }
+
+    @Test public void minimizedShowsRetainTheirIdentityWhenReopened() {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        final android.content.Intent[] reopened = {null};
+        NativeMiniPlayer mini = new NativeMiniPlayer(activity, new FrameLayout(activity), intent -> reopened[0] = intent);
+        ReflectionHelpers.setField(mini, "player", miniPlayerStub());
+        ReflectionHelpers.setField(mini, "mediaUrl", "https://cdn.test/episode.mp4");
+        ReflectionHelpers.setField(mini, "pageUrl", episode("mini").url);
+        ReflectionHelpers.setField(mini, "showsPlayback", true);
+        ReflectionHelpers.setField(mini, "reopenDetail", true);
+        ReflectionHelpers.callInstanceMethod(mini, "reopen");
+        assertNotNull(reopened[0]);
+        assertTrue(reopened[0].getBooleanExtra(VideoDetailActivity.EXTRA_MANUAL_LANDSCAPE_FULLSCREEN, false));
+        assertEquals(episode("mini").url, reopened[0].getStringExtra(PlayerActivity.EXTRA_PAGE_URL));
+        activity.finish();
+    }
+
+    @Test public void minimizedNextCannotResolveOutsideShowsAndPauseCancelsStaleWork() {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        NativeMiniPlayer mini = new NativeMiniPlayer(activity, new FrameLayout(activity), intent -> {});
+        ReflectionHelpers.setField(mini, "player", miniPlayerStub());
+        ReflectionHelpers.setField(mini, "pageUrl", episode("current").url);
+        VideoDetailActivity.setShowsPlayNext(context, episode("next"), "efukt", "series");
+        ReflectionHelpers.callInstanceMethod(mini, "playPendingShowsNext");
+        assertNull(ReflectionHelpers.getField(mini, "nextTask"));
+        ReflectionHelpers.setField(mini, "showsPlayback", true);
+        ReflectionHelpers.setField(mini, "hostResumed", false);
+        ReflectionHelpers.callInstanceMethod(mini, "playPendingShowsNext");
+        assertNull(ReflectionHelpers.getField(mini, "nextTask"));
+        java.util.concurrent.CompletableFuture<Void> task = new java.util.concurrent.CompletableFuture<>();
+        ReflectionHelpers.setField(mini, "nextTask", task);
+        mini.onPause();
+        assertTrue(task.isCancelled());
+        assertNull(ReflectionHelpers.getField(mini, "nextTask"));
+        assertNotNull(VideoDetailActivity.pendingShowsNext(context, "current"));
+        mini.stop(); activity.finish();
+    }
+
     @Test public void invalidNextDoesNotReplacePendingEpisodeAndFailureLeavesItPending() {
         VideoDetailActivity.setShowsPlayNext(context, episode("one"), "efukt", "series");
         VideoDetailActivity.setShowsPlayNext(context, null, "", "");

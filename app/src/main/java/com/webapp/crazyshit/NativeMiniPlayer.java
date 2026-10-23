@@ -73,6 +73,12 @@ public final class NativeMiniPlayer {
     private boolean playerReady;
     private boolean travelActive;
     private boolean travelFinished;
+    private boolean showsPlayback;
+    private boolean hostResumed = true;
+    private int nextGeneration;
+    private java.util.concurrent.Future<?> nextTask;
+    private static final java.util.concurrent.ExecutorService NEXT_RESOLVER =
+            java.util.concurrent.Executors.newSingleThreadExecutor();
 
     private final Runnable progressTicker = new Runnable() {
         @Override
@@ -107,6 +113,8 @@ public final class NativeMiniPlayer {
         userAgent = data.getStringExtra(PlayerActivity.EXTRA_USER_AGENT);
         cookies = data.getStringExtra(PlayerActivity.EXTRA_COOKIES);
         reopenDetail = data.getBooleanExtra(VideoDetailActivity.EXTRA_REOPEN_DETAIL, false);
+        showsPlayback = data.getBooleanExtra(VideoDetailActivity.EXTRA_SHOWS_ORIGIN, false)
+                || data.getBooleanExtra(VideoDetailActivity.EXTRA_MANUAL_LANDSCAPE_FULLSCREEN, false);
         views = data.getStringExtra(VideoDetailActivity.EXTRA_VIEWS);
         uploader = data.getStringExtra(VideoDetailActivity.EXTRA_UPLOADER);
         comments = data.getStringExtra(VideoDetailActivity.EXTRA_COMMENTS);
@@ -180,7 +188,10 @@ public final class NativeMiniPlayer {
                             handoffPoster.postDelayed(NativeMiniPlayer.this::fadeHandoffPoster, 80L);
                         }
                     }
-                    if (playbackState == Player.STATE_ENDED) recordHistory(true);
+                    if (playbackState == Player.STATE_ENDED) {
+                        recordHistory(true);
+                        playPendingShowsNext();
+                    }
                 }
             });
             resumeAfterPause = true;
@@ -206,6 +217,8 @@ public final class NativeMiniPlayer {
     }
 
     public void onPause() {
+        hostResumed = false;
+        cancelPendingShowsResolution();
         if (player == null) return;
         resumeAfterPause = player.isPlaying();
         recordHistory(false);
@@ -213,10 +226,68 @@ public final class NativeMiniPlayer {
     }
 
     public void onResume() {
-        if (player != null && resumeAfterPause) player.play();
+        hostResumed = true;
+        if (player != null && player.getPlaybackState() == Player.STATE_ENDED) playPendingShowsNext();
+        else if (player != null && resumeAfterPause) player.play();
+    }
+
+    private void cancelPendingShowsResolution() {
+        nextGeneration++;
+        if (nextTask != null) nextTask.cancel(true);
+        nextTask = null;
+    }
+
+    private void playPendingShowsNext() {
+        if (!showsPlayback || !hostResumed || player == null || nextTask != null) return;
+        org.json.JSONObject next = VideoDetailActivity.pendingShowsNext(activity, pageUrl);
+        if (next == null) return;
+        final int generation = nextGeneration;
+        final String expectedPage = pageUrl;
+        final String expectedNext = next.toString();
+        final String requestAgent = userAgent;
+        nextTask = NEXT_RESOLVER.submit(() -> {
+            CrazyShitRepository.StreamInfo stream = null;
+            try { stream = PlayableSourceRouter.resolve(activity, ContentItemCodec.decode(next)); }
+            catch (Exception ignored) { }
+            CrazyShitRepository.StreamInfo resolved = stream;
+            activity.runOnUiThread(() -> {
+                if (generation != nextGeneration) return;
+                nextTask = null;
+                if (!hostResumed || player == null || activity.isFinishing() || activity.isDestroyed()
+                        || !expectedPage.equals(pageUrl)) return;
+                org.json.JSONObject current = VideoDetailActivity.pendingShowsNext(activity, pageUrl);
+                if (current == null) return;
+                if (!expectedNext.equals(current.toString())) { playPendingShowsNext(); return; }
+                if (resolved == null || resolved.mediaUrl == null || resolved.mediaUrl.isEmpty()) {
+                    ZeroChillToast.makeText(activity, "Couldn't load the next episode. Try again.", ZeroChillToast.LENGTH_SHORT).show();
+                    return;
+                }
+                NativeContentItem item = ContentItemCodec.decode(next);
+                Intent handoff = new Intent();
+                handoff.putExtra(PlayerActivity.EXTRA_MEDIA_URL, resolved.mediaUrl);
+                handoff.putExtra(PlayerActivity.EXTRA_PAGE_URL, item.url);
+                handoff.putExtra(PlayerActivity.EXTRA_TITLE, item.title);
+                handoff.putExtra(PlayerActivity.EXTRA_USER_AGENT, requestAgent);
+                handoff.putExtra(VideoDetailActivity.EXTRA_MEDIA_REFERER, resolved.requestReferer);
+                handoff.putExtra(VideoDetailActivity.EXTRA_REOPEN_DETAIL, true);
+                handoff.putExtra(VideoDetailActivity.EXTRA_MANUAL_LANDSCAPE_FULLSCREEN, true);
+                handoff.putExtra(VideoDetailActivity.EXTRA_SOURCE, next.optString("source"));
+                handoff.putExtra(VideoDetailActivity.EXTRA_RELATED_FEED_URL, next.optString("feed"));
+                handoff.putExtra(VideoDetailActivity.EXTRA_POSTER_URL, item.imageUrl);
+                handoff.putExtra(VideoDetailActivity.EXTRA_VIEWS, item.views);
+                handoff.putExtra(VideoDetailActivity.EXTRA_UPLOADER, item.uploader);
+                handoff.putExtra(VideoDetailActivity.EXTRA_COMMENTS, item.comments);
+                try { handoff.putExtra(PlayerActivity.EXTRA_COOKIES,
+                        android.webkit.CookieManager.getInstance().getCookie(resolved.mediaUrl)); }
+                catch (Exception ignored) { }
+                start(handoff);
+                if (player != null && item.url.equals(pageUrl)) VideoDetailActivity.clearShowsNext(activity, expectedNext);
+            });
+        });
     }
 
     public void stop() {
+        cancelPendingShowsResolution();
         resumeAfterPause = false;
         recordHistory(false);
         if (card != null) card.removeCallbacks(progressTicker);
@@ -258,6 +329,7 @@ public final class NativeMiniPlayer {
         intent.putExtra(PlayerActivity.EXTRA_USER_AGENT, userAgent);
         intent.putExtra(PlayerActivity.EXTRA_COOKIES, cookies);
         intent.putExtra(PlayerActivity.EXTRA_START_POSITION, position);
+        if (showsPlayback) ShowsPlaybackOrientationPolicy.requireManualLandscapeFullscreen(intent);
         if (reopenDetail) {
             intent.putExtra(VideoDetailActivity.EXTRA_REOPEN_DETAIL, true);
             intent.putExtra(VideoDetailActivity.EXTRA_VIEWS, views);
@@ -277,13 +349,16 @@ public final class NativeMiniPlayer {
                 activity,
                 title,
                 pageUrl,
+                "",
                 player.getCurrentPosition(),
                 Math.max(0L, player.getDuration()),
-                ended
+                ended,
+                showsPlayback
         );
     }
 
     private void stopWithoutRecording() {
+        cancelPendingShowsResolution();
         resumeAfterPause = false;
         if (card != null) card.removeCallbacks(progressTicker);
         if (playerView != null) playerView.setPlayer(null);

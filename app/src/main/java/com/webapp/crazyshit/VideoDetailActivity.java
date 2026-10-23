@@ -2644,6 +2644,7 @@ public class VideoDetailActivity extends Activity {
         result.putExtra(EXTRA_SOURCE, source);
         OnlyFapVideoMetadata.put(result, currentContent());
         result.putExtra(EXTRA_SHOWS_ORIGIN, showsOrigin);
+        result.putExtra(EXTRA_MANUAL_LANDSCAPE_FULLSCREEN, manualLandscapeFullscreen);
         if (!posterUrl.isEmpty()) result.putExtra(EXTRA_POSTER_URL, posterUrl);
         if (player != null) result.putExtra(PlayerActivity.EXTRA_START_POSITION, player.getCurrentPosition());
         setResult(RESULT_OK, result);
