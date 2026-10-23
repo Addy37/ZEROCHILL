@@ -13,7 +13,7 @@ def main():
     bootstrap = re.findall(r'.{0,40}node_ids.{0,150}', html)
     print(json.dumps({'frontendBootstrap': bootstrap}), flush=True)
     active_nodes = set(re.findall(r'node_ids:\s*\[([\d,\s]+)\]', html))
-    node_ids = {int(n) for group in active_nodes for n in re.findall(r'\d+', group)}
+    node_ids = {int(n) for group in active_nodes for n in re.findall(r'\d+', group)} - {0}
     assets = re.findall(r'[\"\']([^\"\']+\.js)[\"\']', html)
     queue = [url.urljoin(base, path) for path in assets]
     seen = set()

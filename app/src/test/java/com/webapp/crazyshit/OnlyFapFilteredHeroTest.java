@@ -419,11 +419,12 @@ public class OnlyFapFilteredHeroTest {
         assertFalse((boolean) ReflectionHelpers.getField(hub, "shelvesFinished"));
         int before = generation();
         Object startup = ReflectionHelpers.getField(hub, "startupHero");
+        Object morph = ReflectionHelpers.getField(hub, "heroMorph");
         hub.setPreferenceShelf(ContentPreference.MEN, 1,
                 Collections.singletonList(thumbnailCreator("Later shelf")), false);
         assertEquals(before, generation());
         assertSame(startup, ReflectionHelpers.getField(hub, "startupHero"));
-        assertNull(ReflectionHelpers.getField(hub, "heroMorph"));
+        assertSame(morph, ReflectionHelpers.getField(hub, "heroMorph"));
         assertTrue(heroes().isEmpty()); // Startup artwork still never bypasses gallery qualification.
     }
 

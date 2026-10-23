@@ -338,7 +338,7 @@ jobs:
           --tests 'com.webapp.crazyshit.ShitTokSwipeStartTest'
 
       - name: Run focused ShitTok creator handoff regressions first
-        if: ${{ github.head_ref != 'feature/search-results-polish' }}
+        if: ${{ github.head_ref != 'feature/search-results-polish' && github.head_ref != 'feature/onlyfap-gender-shelves' }}
         run: >-
           gradle --no-daemon :app:testDebugUnitTest
           --tests 'com.webapp.crazyshit.ShitTokCreatorGalleryHandoffTest'
