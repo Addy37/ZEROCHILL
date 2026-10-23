@@ -1548,6 +1548,12 @@ public class VideoDetailActivity extends Activity {
             runOnUiThread(() -> {
                 if (queued != null) showsNextResolving = false;
                 if (isFinishing() || isDestroyed() || requestGeneration != relatedPlayGeneration) return;
+                if (queued != null && !queued.toString().equals(getSharedPreferences("player_positions", MODE_PRIVATE)
+                        .getString(SHOWS_NEXT, ""))) {
+                    loading.setVisibility(View.GONE);
+                    playPendingShowsNext();
+                    return;
+                }
                 if (queued != null && !recoveryResumed) { loading.setVisibility(View.GONE); return; }
                 loading.setVisibility(View.GONE);
                 if (resolved == null || resolved.mediaUrl == null || resolved.mediaUrl.isEmpty()) {
@@ -1581,6 +1587,21 @@ public class VideoDetailActivity extends Activity {
                     userAgent = defaultUserAgent();
                     cookies = cookiesFor(mediaUrl, pageUrl);
                     requestedStartPosition = -1L;
+                    if (queued != null) {
+                        // Recreation must reopen the episode that actually replaced the original.
+                        getIntent().putExtra(PlayerActivity.EXTRA_MEDIA_URL, mediaUrl)
+                                .putExtra(PlayerActivity.EXTRA_PAGE_URL, pageUrl)
+                                .putExtra(PlayerActivity.EXTRA_TITLE, title)
+                                .putExtra(EXTRA_POSTER_URL, posterUrl)
+                                .putExtra(EXTRA_SOURCE, source)
+                                .putExtra(EXTRA_RELATED_FEED_URL, relatedFeedUrl)
+                                .putExtra(EXTRA_MEDIA_REFERER, mediaReferer)
+                                .putExtra(EXTRA_VIEWS, views).putExtra(EXTRA_UPLOADER, uploader)
+                                .putExtra(EXTRA_COMMENTS, comments)
+                                .putExtra(PlayerActivity.EXTRA_USER_AGENT, userAgent)
+                                .putExtra(PlayerActivity.EXTRA_COOKIES, cookies)
+                                .putExtra(PlayerActivity.EXTRA_START_POSITION, -1L);
+                    }
                     updateMetadataUi();
                     buildPlayer(-1L);
                     if (detailsScroll != null) detailsScroll.smoothScrollTo(0, 0);
