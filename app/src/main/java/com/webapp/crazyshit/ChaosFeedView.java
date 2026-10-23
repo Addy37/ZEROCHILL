@@ -723,6 +723,9 @@ public final class ChaosFeedView extends FrameLayout {
     /** Search owns input; the current owner keeps only its silent visible lease. */
     public void onSearchOpened() {
         if (searchCoverActive) return;
+        ChaosStartupPreloader.stopPreparation();
+        ChaosHolder selected = holderAt(selectedPosition);
+        if (selected != null) selected.cancelInteractionUi();
         resetTemporaryPinch();
         resetCreatorSwipePreview();
         searchCoverActive = true;

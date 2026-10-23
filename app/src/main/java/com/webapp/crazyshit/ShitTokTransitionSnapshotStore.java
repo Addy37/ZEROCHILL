@@ -92,26 +92,7 @@ final class ShitTokTransitionSnapshotStore {
     }
 
     private static void captureFrame(String token, View view, View videoSurface, Bitmap target) {
-        drawFrame(view, videoSurface, target);
-        setBitmap(token, target);
-    }
-
-    /** One bounded foreground-overlay frame, sharing the creator-transition capture path. */
-    static Bitmap captureFrame(View view, View videoSurface, int maxWidth) {
-        if (view == null || view.getWidth() <= 0 || view.getHeight() <= 0) return null;
-        float scale = Math.min(1f, Math.max(1, maxWidth) / (float) view.getWidth());
-        try {
-            Bitmap target = Bitmap.createBitmap(Math.max(1, Math.round(view.getWidth() * scale)),
-                    Math.max(1, Math.round(view.getHeight() * scale)), Bitmap.Config.ARGB_8888);
-            drawFrame(view, videoSurface, target);
-            return target;
-        } catch (RuntimeException | OutOfMemoryError ignored) { return null; }
-    }
-
-    private static void drawFrame(View view, View videoSurface, Bitmap target) {
         Canvas canvas = new Canvas(target);
-        float scale = target.getWidth() / (float) view.getWidth();
-        canvas.scale(scale, scale);
         try {
             view.draw(canvas);
         } catch (RuntimeException ignored) {
@@ -121,14 +102,15 @@ final class ShitTokTransitionSnapshotStore {
         // preloaded ViewPager also draws offscreen pages over the selected video.
         if (videoSurface instanceof TextureView) {
             try {
-                drawTexture(view, (TextureView) videoSurface, canvas, scale);
+                drawTexture(view, (TextureView) videoSurface, canvas);
             } catch (RuntimeException ignored) {
                 // The drawn view/poster remains a usable return frame.
             }
         }
+        setBitmap(token, target);
     }
 
-    private static void drawTexture(View root, TextureView texture, Canvas canvas, float scale) {
+    private static void drawTexture(View root, TextureView texture, Canvas canvas) {
         if (!texture.isAvailable() || !texture.isShown()
                 || texture.getWidth() <= 0 || texture.getHeight() <= 0) return;
         int[] origin = new int[2];
@@ -139,14 +121,11 @@ final class ShitTokTransitionSnapshotStore {
         float y = position[1] - origin[1];
         if (x >= root.getWidth() || x + texture.getWidth() <= 0
                 || y >= root.getHeight() || y + texture.getHeight() <= 0) return;
-        Bitmap frame = scale == 1f ? texture.getBitmap() : texture.getBitmap(
-                Math.max(1, Math.round(texture.getWidth() * scale)),
-                Math.max(1, Math.round(texture.getHeight() * scale)));
+        Bitmap frame = texture.getBitmap();
         if (frame == null) return;
         int save = canvas.save();
         canvas.clipRect(x, y, x + texture.getWidth(), y + texture.getHeight());
-        canvas.drawBitmap(frame, null, new android.graphics.RectF(x, y,
-                x + texture.getWidth(), y + texture.getHeight()), null);
+        canvas.drawBitmap(frame, x, y, null);
         canvas.restoreToCount(save);
         frame.recycle();
         redrawViewsAbove(root, texture, canvas);

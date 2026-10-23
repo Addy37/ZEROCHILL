@@ -345,7 +345,7 @@ class ShitTokPlaybackOwner(context: Context, private val callbacks: Callbacks) {
     fun attach(url: String, view: PlayerView): ExoPlayer? {
         val lease = leases[url] ?: return null
         if (lease.view !== view) {
-            revokeAudio()
+            if (url == selected) revokeAudio() else silence(lease.player)
             Trace.beginSection("zc.shittok.surface_handoff")
             try { PlayerView.switchTargetView(lease.player, lease.view, view) } finally { Trace.endSection() }
             lease.view = view

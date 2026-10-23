@@ -63,6 +63,7 @@ print('Recent Search GPU fixture: 0/1/3/10, reduced motion, lens control, IME an
 for paused in (False, True):
     adb('shell', 'am', 'force-stop', package)
     adb('logcat', '-c')
+    video = subprocess.Popen(['adb', 'shell', 'screenrecord', '--time-limit', '14', '/sdcard/search-live.mp4'])
     launch = adb('shell', 'am', 'start', '-W', '-n',
         package + '/com.webapp.crazyshit.SearchShitTokProbeActivity',
         '--ez', 'manual_pause', str(paused).lower())
@@ -104,6 +105,8 @@ for paused in (False, True):
     (out / f'shittok-search-manual-{paused}.txt').write_text(log)
     (out / f'shittok-return-manual-{paused}.png').write_bytes(adb('exec-out', 'screencap', '-p'))
     assert 'PASS live video' in log and 'FAIL' not in log and 'FATAL EXCEPTION' not in log, log
+    video.wait(timeout=16)
+    adb('pull', '/sdcard/search-live.mp4', str(out / f'shittok-open-close-{paused}.mp4'))
 # Actual background while Search is open, separate from overlay dismissal.
 adb('shell', 'am', 'force-stop', package)
 adb('logcat', '-c')
