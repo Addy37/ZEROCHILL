@@ -104,7 +104,7 @@ public final class GlassRenderProbeActivity extends Activity {
             root.addView(searchPanel.view, new FrameLayout.LayoutParams(-1, -1));
             searchPanel.field().clearFocus();
             if (getIntent().getBooleanExtra("search_results", false)) {
-                seedSearchResults();
+                handler.postDelayed(this::seedSearchResults, 1200);
             } else handler.postDelayed(() -> checkRecentGeometry(shell), 1200);
         } else setContentView(shell);
         nav.setCollapsed(getIntent().getBooleanExtra("collapsed", false), false);
