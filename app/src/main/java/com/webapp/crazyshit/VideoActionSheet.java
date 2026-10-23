@@ -388,7 +388,7 @@ final class VideoActionSheet {
         subtitle.setMaxLines(1);
         subtitle.setEllipsize(TextUtils.TruncateAt.END);
         subtitle.setPadding(0, dp(activity, 1), 0, 0);
-        if (!episode) labels.addView(subtitle);
+        labels.addView(subtitle);
         row.addView(labels, new LinearLayout.LayoutParams(0, -2, 1f));
 
         ImageView chevron = icon(activity, R.drawable.ic_more_chevron, 28, 6);

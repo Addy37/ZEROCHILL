@@ -28,6 +28,7 @@ public class ShowsEpisodeListTest {
     @Before public void clear() {
         context = RuntimeEnvironment.getApplication();
         context.getSharedPreferences("player_positions", 0).edit().clear().commit();
+        context.getSharedPreferences("native_video_downloads", 0).edit().clear().commit();
     }
     private NativeContentItem episode(String id) {
         return new NativeContentItem(NativeContentItem.KIND_MEDIA, "Episode " + id,
@@ -160,6 +161,25 @@ public class ShowsEpisodeListTest {
         sheet = org.robolectric.shadows.ShadowDialog.getLatestDialog();
         assertTrue(dialogText(sheet.getWindow().getDecorView()).contains("Remove from Watch Later"));
         sheet.dismiss(); FavoriteStore.remove(browser, item.url);
+    }
+
+    @Test public void episodeDownloadActionUsesExistingCompletedAndActiveStates() throws Exception {
+        NativeFeedBrowserActivity browser = Robolectric.buildActivity(NativeFeedBrowserActivity.class).get();
+        browser.setTheme(R.style.Theme_CrazyShit);
+        ReflectionHelpers.setField(browser, "showDetailsMode", true);
+        NativeContentItem item = episode("download");
+        for (int status : new int[] {android.app.DownloadManager.STATUS_SUCCESSFUL, android.app.DownloadManager.STATUS_RUNNING}) {
+            String metadata = new org.json.JSONObject().put("id", -99).put("page", item.url)
+                    .put("title", item.title).put("status", status).toString();
+            context.getSharedPreferences("native_video_downloads", 0).edit()
+                    .putStringSet("ids", Collections.singleton("-99")).putString("entry_-99", metadata).commit();
+            ReflectionHelpers.callInstanceMethod(browser, "showVideoItemMenu",
+                    ReflectionHelpers.ClassParameter.from(NativeContentItem.class, item));
+            android.app.Dialog sheet = org.robolectric.shadows.ShadowDialog.getLatestDialog();
+            String text = dialogText(sheet.getWindow().getDecorView());
+            assertTrue(text, text.contains(status == android.app.DownloadManager.STATUS_SUCCESSFUL ? "Delete download" : "Manage download"));
+            sheet.dismiss();
+        }
     }
 
     @Test public void seriesSettingsIgnoreLegacyStylesAndOptionsCannotOpen() {

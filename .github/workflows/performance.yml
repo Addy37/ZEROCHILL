@@ -21,7 +21,7 @@ permissions:
 jobs:
   cancel-superseded-matrix:
     # This focused follow-up must not launch the general ten-flow benchmark.
-    if: ${{ github.head_ref == 'fix/shittok-async-creator-metadata' || github.head_ref == 'fix/shittok-startup-handoff' || github.head_ref == 'fix/onlyfap-first-open' || github.head_ref == 'fix/library-onlyfap-creator-context' || github.head_ref == 'feature/onlyfap-liquid-rift' }}
+    if: ${{ github.head_ref == 'feature/shows-episode-list' || github.head_ref == 'fix/shittok-async-creator-metadata' || github.head_ref == 'fix/shittok-startup-handoff' || github.head_ref == 'fix/onlyfap-first-open' || github.head_ref == 'fix/library-onlyfap-creator-context' || github.head_ref == 'feature/onlyfap-liquid-rift' }}
     runs-on: ubuntu-latest
     permissions:
       actions: write

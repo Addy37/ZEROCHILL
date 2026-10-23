@@ -15,7 +15,7 @@ permissions:
 
 jobs:
   cancel-superseded-native-5-1:
-    if: github.head_ref == 'feature/zerochill-5.1.0' || github.head_ref == 'feature/onlyfap-gender-shelves'
+    if: github.head_ref == 'feature/shows-episode-list' || github.head_ref == 'feature/zerochill-5.1.0' || github.head_ref == 'feature/onlyfap-gender-shelves'
     runs-on: ubuntu-latest
     permissions:
       actions: write
