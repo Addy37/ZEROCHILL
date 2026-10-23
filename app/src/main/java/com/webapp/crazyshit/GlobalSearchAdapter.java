@@ -213,6 +213,7 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
             title.setGravity(Gravity.CENTER_VERTICAL);
             title.setPadding(dp(parent, 12), dp(parent, 5), dp(parent, 12), dp(parent, 3));
             title.setLayoutParams(new RecyclerView.LayoutParams(-1, dp(parent, 28)));
+            SearchTextContrast.apply(title);
             return new SectionHolder(title);
         }
 
@@ -268,6 +269,7 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
         TextView favorite = SearchResultFavorites.create(parent.getContext());
         row.addView(favorite, new LinearLayout.LayoutParams(dp(parent, 48), dp(parent, 48)));
         favorite.setVisibility(View.GONE);
+        SearchTextContrast.apply(card);
         return new ResultHolder(card, image, title, meta, favorite);
     }
 
