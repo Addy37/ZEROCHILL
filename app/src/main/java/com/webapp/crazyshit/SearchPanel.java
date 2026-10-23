@@ -381,10 +381,14 @@ final class SearchPanel {
 
     private void updateResultSize() {
         if (shell == null || recycler == null) return;
-        int count = showingRecent() ? RecentSearchStore.load(activity).size() + 1
-                : recycler.getAdapter().getItemCount();
-        boolean shortQuery = !showingRecent() && input.getText().toString().trim().length() < 2;
-        shell.setResultCount(shortQuery ? 0 : Math.max(1, count), showingRecent() ? 56 : 104);
+        boolean recent = showingRecent();
+        resultSurface.setRecentSurface(recent);
+        if (recent) shell.setRecentContent(recentPanel);
+        else {
+            int count = recycler.getAdapter().getItemCount();
+            boolean shortQuery = input.getText().toString().trim().length() < 2;
+            shell.setResultCount(shortQuery ? 0 : Math.max(1, count), 104);
+        }
     }
 
     private void updateContentVisibility() {

@@ -29,6 +29,7 @@ internal class GlassHeaderView @JvmOverloads constructor(
         setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnDetachedFromWindow)
     }
     private var backdrop by mutableStateOf<ViewPageBackdrop?>(null)
+    private var recentSurface by mutableStateOf(false)
 
     init {
         if (cornerRadius > 0f) {
@@ -65,6 +66,7 @@ internal class GlassHeaderView @JvmOverloads constructor(
     }
 
     fun setPageBackdrop(page: ViewPageBackdrop) { backdrop = page }
+    fun setRecentSurface(recent: Boolean) { recentSurface = recent }
 
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
@@ -72,7 +74,8 @@ internal class GlassHeaderView @JvmOverloads constructor(
         post {
             if (!isAttachedToWindow) return@post
             glass.setContent {
-                val config = remember { (if (resultsSurface) searchResultsGlassConfig(activity)
+                val config = remember(recentSurface) { (if (resultsSurface && recentSurface) recentSearchGlassConfig(activity)
+                    else if (resultsSurface) searchResultsGlassConfig(activity)
                     else headerGlassConfig(activity)).let {
                     if (cornerRadius > 0f) it.copy(lensSideEdges = true) else it
                 } }
@@ -97,3 +100,7 @@ internal fun headerGlassConfig(activity: Activity): GlassEffectConfig =
 /** Soften busy page artwork behind result text without adding another blur layer. */
 internal fun searchResultsGlassConfig(activity: Activity): GlassEffectConfig =
     headerGlassConfig(activity).copy(blurRadius = 12f, surfaceOpacity = .40f)
+
+/** Keep the dark film, with the preference panel's blur so the shared lens stays visible. */
+internal fun recentSearchGlassConfig(activity: Activity): GlassEffectConfig =
+    searchResultsGlassConfig(activity).copy(blurRadius = 3f)
