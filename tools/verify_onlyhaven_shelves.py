@@ -10,6 +10,10 @@ def main():
     source = CONFIG['onlyhaven']
     base = source['baseUrl']
     html = fetch(url.urljoin(base, source['routes']['creatorSearch'].replace('{query}', '')), 'onlyhaven')
+    bootstrap = re.findall(r'.{0,40}node_ids.{0,150}', html)
+    print(json.dumps({'frontendBootstrap': bootstrap}), flush=True)
+    active_nodes = set(re.findall(r'node_ids:\s*\[([\d,\s]+)\]', html))
+    node_ids = {int(n) for group in active_nodes for n in re.findall(r'\d+', group)}
     assets = re.findall(r'[\"\']([^\"\']+\.js)[\"\']', html)
     queue = [url.urljoin(base, path) for path in assets]
     seen = set()
@@ -28,8 +32,10 @@ def main():
             r'api/v1/creators|bookmarked|contentUpdated|orderBy|sortBy|content.{0,30}imported|gender:', body)]
         print(json.dumps({'asset': address, 'evidence': snippets[:35]}), flush=True)
         imports = re.findall(r'(?:from\s*|import\s*)[\"\']([^\"\']+\.js)[\"\']', body)
-        imports += re.findall(r'[\"\'](\./[^\"\']+\.js)[\"\']', body)
-        queue.extend(url.urljoin(address, path) for path in imports)
+        imports += re.findall(r'[\"\']((?:\./|\.\./)[^\"\']+\.js)[\"\']', body)
+        imported = [url.urljoin(address, path) for path in imports]
+        priority = [path for path in imported if any(f'/nodes/{n}.' in path for n in node_ids)]
+        queue = priority + queue + [path for path in imported if path not in priority]
     for mode, token in source['categoryValues'].items():
         if mode == 'non_binary':
             continue

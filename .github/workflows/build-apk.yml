@@ -15,7 +15,7 @@ permissions:
 
 jobs:
   cancel-superseded-native-5-1:
-    if: github.head_ref == 'feature/zerochill-5.1.0'
+    if: github.head_ref == 'feature/zerochill-5.1.0' || github.head_ref == 'feature/onlyfap-gender-shelves'
     runs-on: ubuntu-latest
     permissions:
       actions: write
@@ -26,8 +26,9 @@ jobs:
           GH_REPO: ${{ github.repository }}
           CURRENT_RUN: ${{ github.run_id }}
           CURRENT_SHA: ${{ github.event.pull_request.head.sha }}
+          CANDIDATE_BRANCH: ${{ github.head_ref }}
         run: |
-          gh api --method GET "repos/$GH_REPO/actions/runs" -f branch=feature/zerochill-5.1.0 -f per_page=100 \
+          gh api --method GET "repos/$GH_REPO/actions/runs" -f branch="$CANDIDATE_BRANCH" -f per_page=100 \
             --jq ".workflow_runs[] | select(.id < $CURRENT_RUN and .head_sha != \"$CURRENT_SHA\" and (.status == \"queued\" or .status == \"in_progress\")) | .id" |
           while read -r run_id; do
             gh api --method POST "repos/$GH_REPO/actions/runs/$run_id/cancel" || true
