@@ -26,7 +26,7 @@ class HeaderGlassMaterialTest {
         controller.pause().stop().destroy()
     }
 
-    @Test fun recentSearchesKeepTheSharedLensAndDarkFilmWithLessObscuringBlur() {
+    @Test fun recentSearchesUseStrongerLocalWarpWithoutChangingFilmOrBlur() {
         val controller = Robolectric.buildActivity(Activity::class.java).setup()
         val activity = controller.get()
         val recent = recentSearchGlassConfig(activity)
@@ -34,10 +34,16 @@ class HeaderGlassMaterialTest {
         assertEquals(3f, recent.blurRadius)
         assertEquals(.40f, recent.surfaceOpacity)
         assertEquals(Color.Black, recent.surfaceTintColor)
-        assertEquals(nav.lensHeight, recent.lensHeight)
+        assertEquals(.52f, recent.lensHeight)
         assertEquals(nav.lensAmount, recent.lensAmount)
-        assertEquals(nav.centerMagnification, recent.centerMagnification)
-        assertEquals(searchResultsGlassConfig(activity), recent.copy(blurRadius = 12f))
+        assertEquals(1.04f, recent.centerMagnification)
+        assertTrue(recent.lensHeight > nav.lensHeight)
+        assertTrue(recent.centerMagnification > nav.centerMagnification)
+        assertEquals(searchResultsGlassConfig(activity), recent.copy(
+            blurRadius = 12f,
+            lensHeight = nav.lensHeight,
+            centerMagnification = nav.centerMagnification,
+        ))
         controller.pause().stop().destroy()
     }
 

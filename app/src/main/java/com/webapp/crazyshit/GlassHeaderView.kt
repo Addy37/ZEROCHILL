@@ -101,6 +101,10 @@ internal fun headerGlassConfig(activity: Activity): GlassEffectConfig =
 internal fun searchResultsGlassConfig(activity: Activity): GlassEffectConfig =
     headerGlassConfig(activity).copy(blurRadius = 12f, surfaceOpacity = .40f)
 
-/** Keep the dark film, with the preference panel's blur so the shared lens stays visible. */
+/** Keep the dark film and low blur, with a slightly stronger Search-only lens. */
 internal fun recentSearchGlassConfig(activity: Activity): GlassEffectConfig =
-    searchResultsGlassConfig(activity).copy(blurRadius = 3f)
+    searchResultsGlassConfig(activity).copy(
+        blurRadius = 3f,
+        lensHeight = .52f,
+        centerMagnification = 1.04f,
+    )
