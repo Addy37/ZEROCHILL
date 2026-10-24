@@ -244,7 +244,7 @@ public class SearchShitTokPauseTest {
         }
     }
 
-    @Test public void nativeActivitySearchAndRealPauseUseDifferentPaths() {
+    @Test public void nativeSearchResultNavigationUsesRealActivityPause() {
         try (var f = new ShitTokAudioOwnershipTest.Fixture()) {
             android.content.Context context = org.robolectric.RuntimeEnvironment.getApplication();
             context.getSharedPreferences("app_prefs", 0).edit().putBoolean("access_notice_2_8_3_accepted", true)
@@ -259,6 +259,12 @@ public class SearchShitTokPauseTest {
                 assertSame(f.selectedPlayer.player, surface.getPlayer());
                 assertEquals(1f, f.selectedPlayer.volume, 0f);
                 assertTrue(ReflectionHelpers.getField(adapter, "hostResumed"));
+                SearchPanel panel = ReflectionHelpers.getField(host.get(), "searchPanel");
+                ReflectionHelpers.callInstanceMethod(panel, "openResult", from(NativeContentItem.class,
+                        new NativeContentItem(NativeContentItem.KIND_CATEGORY, "Fixture category",
+                                "https://example.invalid/category", "", "", "", "")));
+                assertNotNull(org.robolectric.Shadows.shadowOf(host.get()).getNextStartedActivity());
+                // Robolectric does not automatically pause the source Activity after startActivity.
                 host.pause();
                 assertNull(surface.getPlayer()); assertNull(owner(f).player(URL));
                 ReflectionHelpers.callInstanceMethod(host.get(), "closeSearch");
