@@ -35,8 +35,11 @@ import org.jsoup.nodes.Entities;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -47,10 +50,12 @@ import java.util.concurrent.atomic.AtomicReference;
 /**
  * Loads an XMegaDrive page in a full-size WebView and reads it there.
  * The WebView stays off-screen so a cold start does not cover the app. It is
- * only brought on-screen when a person has to tap a challenge or the age check.
- * The "; wv" token is removed from the user-agent string. Client hints are not
- * rewritten, because that does not make this WebView the same as Chrome.
- * cf_clearance and __cf_bm are left in place so a valid session is not discarded.
+ * only brought on-screen for a Cloudflare or human challenge that a person must
+ * finish. The site age confirmation is accepted in the background and is never
+ * revealed. The "; wv" token is removed from the user-agent string. Client hints
+ * are not rewritten, because that does not make this WebView the same as Chrome.
+ * cf_clearance and __cf_bm are left in place for a valid session. They are cleared
+ * only for XMegaDrive, and only after one declined or empty result.
  */
 final class XMegaDriveBrowserFetch {
     private static final String TAG = "XMegaDrive";
@@ -58,6 +63,8 @@ final class XMegaDriveBrowserFetch {
             "(function(){window.open=function(){return null;};})();";
     private static final long TIMEOUT_SECONDS = 45L;
     private static final long EXTRACTION_RETRY_MS = 800L;
+    /** Background Continue clicks while the age dialog is still open. */
+    static final int AGE_ACCEPT_ATTEMPTS = 8;
     private static volatile String sessionUserAgent = "";
 
     private XMegaDriveBrowserFetch() {
@@ -152,6 +159,7 @@ final class XMegaDriveBrowserFetch {
                     new IOException("XMegaDrive screen closed before loading"));
             return;
         }
+        AtomicBoolean recovered = new AtomicBoolean();
         try {
             CookieManager cookies = CookieManager.getInstance();
             cookies.setAcceptCookie(true);
@@ -276,10 +284,12 @@ final class XMegaDriveBrowserFetch {
                                     view,
                                     overlay,
                                     url,
+                                    referer,
                                     seen,
                                     generation,
                                     identityLogged,
                                     completed,
+                                    recovered,
                                     result,
                                     error,
                                     finished
@@ -391,10 +401,12 @@ final class XMegaDriveBrowserFetch {
             WebView webView,
             FrameLayout overlay,
             String requestedUrl,
+            String referer,
             int seen,
             AtomicInteger generation,
             AtomicBoolean identityLogged,
             AtomicBoolean completed,
+            AtomicBoolean recovered,
             AtomicReference<Document> result,
             AtomicReference<IOException> error,
             CountDownLatch finished
@@ -406,16 +418,18 @@ final class XMegaDriveBrowserFetch {
         logPage(waiting ? "interstitial" : "checking", locationNow, titleNow, waiting);
         if (identityLogged.compareAndSet(false, true)) logIdentity(webView);
         if (waiting) {
-            if (needsPerson(titleNow, "")) reveal(overlay, webView);
+            if (shouldReveal(titleNow, "")) reveal(overlay, webView);
             webView.postDelayed(
                     () -> consider(
                             webView,
                             overlay,
                             requestedUrl,
+                            referer,
                             seen,
                             generation,
                             identityLogged,
                             completed,
+                            recovered,
                             result,
                             error,
                             finished
@@ -443,7 +457,7 @@ final class XMegaDriveBrowserFetch {
             if (isInterstitial(title, text, location) || isForbidden(title, text)) {
                 boolean blocked = permanentlyBlocked(title, text);
                 logPage(blocked ? "blocked" : "interstitial", location, title, true);
-                if (needsPerson(title, text)) reveal(overlay, webView);
+                if (shouldReveal(title, text)) reveal(overlay, webView);
                 if (blocked) {
                     complete(completed, error, finished,
                             new IOException("XMegaDrive blocked this device"));
@@ -454,10 +468,12 @@ final class XMegaDriveBrowserFetch {
                                 webView,
                                 overlay,
                                 requestedUrl,
+                                referer,
                                 seen,
                                 generation,
                                 identityLogged,
                                 completed,
+                                recovered,
                                 result,
                                 error,
                                 finished
@@ -470,10 +486,12 @@ final class XMegaDriveBrowserFetch {
                     webView,
                     overlay,
                     requestedUrl,
+                    referer,
                     seen,
                     generation,
                     1,
                     completed,
+                    recovered,
                     result,
                     error,
                     finished
@@ -485,10 +503,12 @@ final class XMegaDriveBrowserFetch {
             WebView webView,
             FrameLayout overlay,
             String requestedUrl,
+            String referer,
             int seen,
             AtomicInteger generation,
             int attempt,
             AtomicBoolean completed,
+            AtomicBoolean recovered,
             AtomicReference<Document> result,
             AtomicReference<IOException> error,
             CountDownLatch finished
@@ -555,11 +575,7 @@ final class XMegaDriveBrowserFetch {
                 + "if(e.tagName==='H1')o.text=e.textContent||'';"
                 + "return o;};"
                 + "const bodyText=(document.body&&document.body.innerText)||'';"
-                + "const age=/age confirmation/i.test(bodyText);"
-                + "if(age){const controls=document.querySelectorAll('button,input,a');"
-                + "for(let i=0;i<controls.length;i++){const el=controls[i];"
-                + "const label=(el.innerText||el.value||el.getAttribute('value')||'');"
-                + "if(/continue/i.test(label)){el.click(); break;}}}"
+                + ageAcceptScript()
                 + "const scripts=[]; const list=document.scripts||[];"
                 + "for(let i=0;i<list.length&&scripts.length<3;i++){"
                 + "const t=list[i].textContent||'';"
@@ -607,48 +623,49 @@ final class XMegaDriveBrowserFetch {
                             new IOException("XMegaDrive blocked this device"));
                     return;
                 }
-                boolean age = payload.optBoolean("age")
-                        || (body != null && body.toLowerCase(java.util.Locale.US).contains("age confirmation"));
-                if (age && attempt >= 4) {
+                boolean age = isAgeConfirmation(title, body);
+                boolean human = shouldReveal(title, body);
+                if (human) {
                     reveal(overlay, webView);
-                    if (overlay != null && overlay.getChildCount() > 0
-                            && overlay.getChildAt(0) instanceof TextView) {
-                        ((TextView) overlay.getChildAt(0)).setText(
-                                "XMegaDrive needs a quick check. Tap Continue if it stays open.");
-                    }
+                    scheduleExtract(
+                            webView, overlay, requestedUrl, referer, seen, generation,
+                            attempt + 1, completed, recovered, result, error, finished);
+                    return;
                 }
-                webView.postDelayed(
-                        () -> extract(
-                                webView,
-                                overlay,
-                                requestedUrl,
-                                seen,
-                                generation,
-                                attempt + 1,
-                                completed,
-                                result,
-                                error,
-                                finished
-                        ),
-                        EXTRACTION_RETRY_MS
-                );
+                // The age dialog stays parked. Keep clicking Continue until it leaves.
+                if (age && attempt <= AGE_ACCEPT_ATTEMPTS) {
+                    scheduleExtract(
+                            webView, overlay, requestedUrl, referer, seen, generation,
+                            attempt + 1, completed, recovered, result, error, finished);
+                    return;
+                }
+                if (shouldRecoverNonContent(
+                        false,
+                        false,
+                        false,
+                        isOffsite(finalUrl) || age,
+                        attempt,
+                        recovered.get())) {
+                    recoverSiteOnce(
+                            webView, requestedUrl, referer, generation,
+                            completed, recovered, error, finished);
+                    return;
+                }
+                if (age || attempt >= AGE_ACCEPT_ATTEMPTS) {
+                    logPage(age ? "age-unresolved" : "empty", finalUrl, title, false);
+                    complete(completed, error, finished, new IOException(age
+                            ? "XMegaDrive age check did not finish"
+                            : "XMegaDrive returned no content"));
+                    return;
+                }
+                scheduleExtract(
+                        webView, overlay, requestedUrl, referer, seen, generation,
+                        attempt + 1, completed, recovered, result, error, finished);
             } catch (Exception ignored) {
                 if (completed.get() || seen != generation.get()) return;
-                webView.postDelayed(
-                        () -> extract(
-                                webView,
-                                overlay,
-                                requestedUrl,
-                                seen,
-                                generation,
-                                attempt + 1,
-                                completed,
-                                result,
-                                error,
-                                finished
-                        ),
-                        EXTRACTION_RETRY_MS
-                );
+                scheduleExtract(
+                        webView, overlay, requestedUrl, referer, seen, generation,
+                        attempt + 1, completed, recovered, result, error, finished);
             }
         });
     }
@@ -918,6 +935,242 @@ final class XMegaDriveBrowserFetch {
             overlay.setClickable(true);
         }
         if (webView != null) webView.requestFocus();
+    }
+
+    /**
+     * Keep in sync with {@link #acceptsAgeControl(String)}. Clicks an accept control
+     * only while the age confirmation dialog is open, and never Exit or another decline.
+     */
+    static String ageAcceptScript() {
+        return "const ageNorm=s=>String(s||'').replace(String.fromCharCode(8217),\"'\").replace(/\\s+/g,' ').trim().toLowerCase();"
+                + "const ageDecline=s=>/\\b(exit|leave|decline)\\b/.test(s)||/under\\s*18/.test(s)"
+                + "||/\\bi(?:'m| am|m) not\\b/.test(s)||s==='no'||s==='no thanks'||s==='not 18';"
+                + "const ageAccept=s=>!!s&&!ageDecline(s)&&(/\\bcontinue\\b/.test(s)||/\\benter\\b/.test(s)"
+                + "||s==='yes'||/\\bi(?:'m| am|m) 18\\b/.test(s));"
+                + "const age=/age confirmation/i.test(bodyText);"
+                + "if(age){const controls=document.querySelectorAll('button,input[type=\"button\"],input[type=\"submit\"],a,[role=\"button\"]');"
+                + "for(let i=0;i<controls.length;i++){const el=controls[i];"
+                + "const label=ageNorm(el.innerText||el.textContent||el.value||el.getAttribute('value')||el.getAttribute('aria-label')||'');"
+                + "if(!ageAccept(label))continue;el.click();break;}}";
+    }
+
+    static boolean isAgeConfirmation(String title, String text) {
+        String blob = ((title == null ? "" : title) + "\n" + (text == null ? "" : text))
+                .toLowerCase(Locale.US);
+        return blob.contains("age confirmation");
+    }
+
+    /** Real human challenges only. Age confirmation stays parked off-screen. */
+    static boolean shouldReveal(String title, String text) {
+        return needsPerson(title, text);
+    }
+
+    static boolean acceptsAgeControl(String label) {
+        String value = normalizeAgeLabel(label);
+        if (value.isEmpty() || declinesAgeControl(value)) return false;
+        if ("yes".equals(value)) return true;
+        return value.matches(".*\\bi(?:'m| am|m) 18\\b.*")
+                || value.matches(".*\\bcontinue\\b.*")
+                || value.matches(".*\\benter\\b.*");
+    }
+
+    static boolean declinesAgeControl(String label) {
+        String value = normalizeAgeLabel(label);
+        if (value.isEmpty()) return false;
+        if ("no".equals(value) || "no thanks".equals(value) || "not 18".equals(value)) return true;
+        return value.matches(".*\\b(exit|leave|decline)\\b.*")
+                || value.matches(".*under\\s*18.*")
+                || value.matches(".*\\bi(?:'m| am|m) not\\b.*");
+    }
+
+    private static String normalizeAgeLabel(String label) {
+        if (label == null) return "";
+        return label.replace('\u2019', '\'')
+                .replaceAll("\\s+", " ")
+                .trim()
+                .toLowerCase(Locale.US);
+    }
+
+    static boolean looksDeclined(String title, String text, String url) {
+        if (isOffsite(url)) return true;
+        String blob = ((title == null ? "" : title) + "\n" + (text == null ? "" : text))
+                .toLowerCase(Locale.US)
+                .replace('\u2019', '\'');
+        return blob.contains("under 18")
+                || blob.contains("underage")
+                || blob.contains("not old enough")
+                || blob.contains("chosen to leave")
+                || blob.contains("leave this site")
+                || blob.contains("age verification declined")
+                || (blob.contains("access denied") && (blob.contains("age") || blob.contains("18")));
+    }
+
+    static boolean isOffsite(String url) {
+        if (url == null) return false;
+        String value = url.trim();
+        if (value.isEmpty() || value.startsWith("about:")) return false;
+        return !XMegaDriveRepository.allowsMainFrame(value);
+    }
+
+    /**
+     * One recovery when Continue did not produce content. Age-dialog clicks get a
+     * full budget first. An off-site landing can recover immediately. A human
+     * challenge is never cleared.
+     */
+    static boolean shouldRecoverNonContent(
+            boolean ageDialogVisible,
+            boolean pageReady,
+            boolean humanChallenge,
+            boolean recoverNow,
+            int attempt,
+            boolean alreadyRetried
+    ) {
+        if (alreadyRetried || pageReady || ageDialogVisible || humanChallenge) return false;
+        if (recoverNow) return true;
+        return attempt >= AGE_ACCEPT_ATTEMPTS;
+    }
+
+    static boolean isSiteHost(String host) {
+        if (host == null) return false;
+        String value = host.toLowerCase(Locale.US);
+        return "xmegadrive.com".equals(value) || value.endsWith(".xmegadrive.com");
+    }
+
+    /** Known XMegaDrive origins, plus the current page when it is still on that site. */
+    static List<String> siteCookieUrls(String pageUrl) {
+        LinkedHashSet<String> urls = new LinkedHashSet<>();
+        urls.add("https://xmegadrive.com/");
+        urls.add("https://www.xmegadrive.com/");
+        urls.add("https://xmegadrive.com");
+        urls.add("https://www.xmegadrive.com");
+        String host = hostOnly(pageUrl);
+        if (isSiteHost(host)) {
+            urls.add("https://" + host.toLowerCase(Locale.US) + "/");
+            urls.add("https://" + host.toLowerCase(Locale.US));
+        }
+        return new ArrayList<>(urls);
+    }
+
+    /** Expiry directives for one cookie header. Values are not copied. */
+    static List<String> expireDirectives(String cookieHeader) {
+        ArrayList<String> directives = new ArrayList<>();
+        if (cookieHeader == null || cookieHeader.trim().isEmpty()) return directives;
+        LinkedHashSet<String> names = new LinkedHashSet<>();
+        for (String part : cookieHeader.split(";")) {
+            String name = part.trim();
+            if (name.isEmpty()) continue;
+            int split = name.indexOf('=');
+            if (split >= 0) name = name.substring(0, split).trim();
+            if (name.isEmpty() || name.indexOf(' ') >= 0 || name.indexOf(';') >= 0) continue;
+            names.add(name);
+        }
+        for (String name : names) {
+            String expiry = name + "=; Expires=Thu, 01 Jan 1970 00:00:00 GMT; Max-Age=0; Path=/";
+            directives.add(expiry);
+            directives.add(expiry + "; Domain=.xmegadrive.com");
+            directives.add(expiry + "; Domain=xmegadrive.com");
+        }
+        return directives;
+    }
+
+    static void clearSiteCookies(String pageUrl) {
+        CookieManager cookies;
+        try {
+            cookies = CookieManager.getInstance();
+        } catch (Exception failure) {
+            return;
+        }
+        for (String url : siteCookieUrls(pageUrl)) {
+            String header;
+            try {
+                header = cookies.getCookie(url);
+            } catch (Exception ignored) {
+                continue;
+            }
+            for (String directive : expireDirectives(header)) {
+                try {
+                    cookies.setCookie(url, directive);
+                } catch (Exception ignored) {
+                }
+            }
+        }
+        try {
+            cookies.flush();
+        } catch (Exception ignored) {
+        }
+        Log.i(TAG, "xmegadrive cookies cleared");
+    }
+
+    private static void scheduleExtract(
+            WebView webView,
+            FrameLayout overlay,
+            String requestedUrl,
+            String referer,
+            int seen,
+            AtomicInteger generation,
+            int attempt,
+            AtomicBoolean completed,
+            AtomicBoolean recovered,
+            AtomicReference<Document> result,
+            AtomicReference<IOException> error,
+            CountDownLatch finished
+    ) {
+        webView.postDelayed(
+                () -> extract(
+                        webView,
+                        overlay,
+                        requestedUrl,
+                        referer,
+                        seen,
+                        generation,
+                        attempt,
+                        completed,
+                        recovered,
+                        result,
+                        error,
+                        finished
+                ),
+                EXTRACTION_RETRY_MS
+        );
+    }
+
+    private static void recoverSiteOnce(
+            WebView webView,
+            String requestedUrl,
+            String referer,
+            AtomicInteger generation,
+            AtomicBoolean completed,
+            AtomicBoolean recovered,
+            AtomicReference<IOException> error,
+            CountDownLatch finished
+    ) {
+        if (completed.get()) return;
+        if (!recovered.compareAndSet(false, true)) {
+            complete(completed, error, finished,
+                    new IOException("XMegaDrive returned no content"));
+            return;
+        }
+        Log.i(TAG, "xmegadrive session retrying once");
+        try {
+            clearSiteCookies(requestedUrl);
+            clearSiteCookies(webView == null ? "" : webView.getUrl());
+        } catch (Exception ignored) {
+        }
+        generation.incrementAndGet();
+        if (webView == null || requestedUrl == null || requestedUrl.trim().isEmpty()) {
+            complete(completed, error, finished,
+                    new IOException("XMegaDrive returned no content"));
+            return;
+        }
+        HashMap<String, String> headers = new HashMap<>();
+        headers.put("Accept-Language", "en-US,en;q=0.9");
+        if (referer != null && !referer.trim().isEmpty()) headers.put("Referer", referer);
+        try {
+            webView.loadUrl(requestedUrl, headers);
+        } catch (Exception failure) {
+            complete(completed, error, finished,
+                    new IOException("XMegaDrive returned no content", failure));
+        }
     }
 
     private static boolean permanentlyBlocked(String title, String body) {
