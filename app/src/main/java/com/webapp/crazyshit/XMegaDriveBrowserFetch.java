@@ -44,7 +44,9 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
- * Loads an XMegaDrive page in the full-size WebView and reads it there.
+ * Loads an XMegaDrive page in a full-size WebView and reads it there.
+ * The WebView stays off-screen so a cold start does not cover the app. It is
+ * only brought on-screen when a person has to tap a challenge or the age check.
  * The "; wv" token is removed from the user-agent string. Client hints are not
  * rewritten, because that does not make this WebView the same as Chrome.
  * cf_clearance and __cf_bm are left in place so a valid session is not discarded.
@@ -56,7 +58,6 @@ final class XMegaDriveBrowserFetch {
     private static final long TIMEOUT_SECONDS = 45L;
     private static final long EXTRACTION_RETRY_MS = 800L;
     private static volatile String sessionUserAgent = "";
-    private static volatile boolean passedOnce;
 
     private XMegaDriveBrowserFetch() {
     }
@@ -151,12 +152,10 @@ final class XMegaDriveBrowserFetch {
             cookies.setAcceptCookie(true);
             FrameLayout overlay = new FrameLayout(activity);
             overlay.setBackgroundColor(0xFF101014);
-            overlay.setClickable(true);
+            overlay.setClickable(false);
+            overlay.setFocusable(false);
             overlay.setElevation(80f);
-            if (passedOnce) {
-                overlay.setVisibility(View.INVISIBLE);
-                overlay.setClickable(false);
-            }
+            park(overlay);
             activeOverlay.set(overlay);
 
             TextView label = new TextView(activity);
@@ -329,7 +328,7 @@ final class XMegaDriveBrowserFetch {
                     ViewGroup.LayoutParams.MATCH_PARENT,
                     ViewGroup.LayoutParams.MATCH_PARENT
             ));
-            if (!passedOnce) webView.requestFocus();
+            park(overlay);
             try {
                 if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
                     WebViewCompat.addDocumentStartJavaScript(
@@ -392,7 +391,7 @@ final class XMegaDriveBrowserFetch {
         logPage(waiting ? "interstitial" : "checking", locationNow, titleNow, waiting);
         if (identityLogged.compareAndSet(false, true)) logIdentity(webView);
         if (waiting) {
-            reveal(overlay, webView);
+            if (needsPerson(titleNow, "")) reveal(overlay, webView);
             webView.postDelayed(
                     () -> consider(
                             webView,
@@ -429,7 +428,7 @@ final class XMegaDriveBrowserFetch {
             if (isInterstitial(title, text, location) || isForbidden(title, text)) {
                 boolean blocked = permanentlyBlocked(title, text);
                 logPage(blocked ? "blocked" : "interstitial", location, title, true);
-                reveal(overlay, webView);
+                if (needsPerson(title, text)) reveal(overlay, webView);
                 if (blocked) {
                     complete(completed, error, finished,
                             new IOException("XMegaDrive blocked this device"));
@@ -583,7 +582,6 @@ final class XMegaDriveBrowserFetch {
                         CookieManager.getInstance().flush();
                     } catch (Exception ignored) {
                     }
-                    passedOnce = true;
                     result.set(document);
                     complete(completed, error, finished, null);
                     return;
@@ -596,10 +594,10 @@ final class XMegaDriveBrowserFetch {
                 }
                 boolean age = payload.optBoolean("age")
                         || (body != null && body.toLowerCase(java.util.Locale.US).contains("age confirmation"));
-                if (overlay != null && (attempt >= 5 || age)) {
-                    overlay.setVisibility(View.VISIBLE);
-                    overlay.setClickable(true);
-                    if (age && overlay.getChildCount() > 0 && overlay.getChildAt(0) instanceof TextView) {
+                if (age && attempt >= 4) {
+                    reveal(overlay, webView);
+                    if (overlay != null && overlay.getChildCount() > 0
+                            && overlay.getChildAt(0) instanceof TextView) {
                         ((TextView) overlay.getChildAt(0)).setText(
                                 "XMegaDrive needs a quick check. Tap Continue if it stays open.");
                     }
@@ -881,8 +879,26 @@ final class XMegaDriveBrowserFetch {
                 || body.contains("error 1015");
     }
 
+    private static boolean needsPerson(String title, String text) {
+        String blob = ((title == null ? "" : title) + "\n" + (text == null ? "" : text))
+                .toLowerCase(Locale.US);
+        return blob.contains("verify you are human")
+                || blob.contains("turnstile");
+    }
+
+    /** Full-size, but shifted off the display. A 1px WebView is rejected by the check. */
+    private static void park(View overlay) {
+        if (overlay == null) return;
+        int width = overlay.getResources().getDisplayMetrics().widthPixels;
+        if (width < 1) width = 1080;
+        overlay.setTranslationX(width * 3f);
+        overlay.setVisibility(View.VISIBLE);
+        overlay.setClickable(false);
+    }
+
     private static void reveal(FrameLayout overlay, WebView webView) {
         if (overlay != null) {
+            overlay.setTranslationX(0f);
             overlay.setVisibility(View.VISIBLE);
             overlay.setClickable(true);
         }
