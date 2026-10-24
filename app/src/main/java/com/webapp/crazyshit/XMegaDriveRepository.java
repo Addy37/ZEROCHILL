@@ -21,8 +21,8 @@ import java.util.Locale;
  * Compiled, not remote-config. Schema 1 has exactly seven configurable sources and does
  * not include XMegaDrive, so this provider stays in code. ShitTok scrapes public /videos/
  * listings. Shows discovers /categories/ and opens each category inside the existing
- * gallery. A direct request that only receives the edge challenge is retried once in a
- * hidden WebView so the Shows shelf can read the real category cards. Playback resolves the
+ * gallery. A direct request that only receives the edge check is opened in a full-size WebView.
+ * That check can stay on screen until the listing is readable. Playback resolves the
  * direct MP4 from the video page without changing the shared Media3 path. Failure is contained
  * so other providers continue.
  */
@@ -184,20 +184,22 @@ final class XMegaDriveRepository {
                 if (hasUsefulMarkup(retry)) return retry;
             } catch (IOException ignored) {
             }
-            Document rendered = XMegaDriveBrowserFetch.fetch(context, url, USER_AGENT, BASE);
+            Document rendered = XMegaDriveBrowserFetch.fetch(context, url, BASE);
+            if (hasUsefulMarkup(rendered)) return rendered;
             try {
                 Document after = fetchDirect(context, url);
                 if (hasUsefulMarkup(after)) return after;
             } catch (IOException ignored) {
             }
-            if (hasUsefulMarkup(rendered)) return rendered;
             throw new IOException("XMegaDrive stayed blocked after the browser check");
         }
     }
 
     private static Document fetchDirect(Context context, String url) throws IOException {
+        String agent = XMegaDriveBrowserFetch.sessionUserAgent();
+        if (agent.isEmpty()) agent = USER_AGENT;
         Connection connection = Jsoup.connect(url)
-                .userAgent(USER_AGENT)
+                .userAgent(agent)
                 .referrer(BASE)
                 .timeout(8000)
                 .maxBodySize(4 * 1024 * 1024)
