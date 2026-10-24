@@ -273,8 +273,19 @@ internal fun MacrobenchmarkScope.openCreatorProfileAndGallery() {
         val creatorDeadline = SystemClock.uptimeMillis() + if (attempt == 0) 90_000L else 15_000L
         var creator: androidx.test.uiautomator.UiObject2? = null
         while (creator == null && SystemClock.uptimeMillis() < creatorDeadline) {
+            // Retained/offscreen shelves can expose nodes underneath the floating nav.
+            // UiAutomator clicks their coordinates, which would select Shows instead of a gallery.
+            val navigationTop = listOf("Shows", "ShitTok", "OnlyFap", "Library")
+                .mapNotNull { findPrimaryTab("$it tab", it)?.visibleBounds?.top }
+                .minOrNull() ?: device.displayHeight
+            val contentBottom = minOf(navigationTop, (device.displayHeight * 0.88f).toInt())
             val candidates = device.findObjects(By.desc(creatorPattern))
-                .filter { it.isClickable && it.contentDescription !in attemptedCreators }
+                .filter {
+                    val bounds = it.visibleBounds
+                    it.isClickable && it.contentDescription !in attemptedCreators &&
+                        bounds.width() > 0 && bounds.height() > 0 &&
+                        bounds.centerY() < contentBottom
+                }
             // Shelf cards keep their creator identity while the featured hero rotates.
             creator = candidates.firstOrNull {
                 it.visibleBounds.width() < device.displayWidth * 0.7f &&
