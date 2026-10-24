@@ -191,6 +191,145 @@ public final class XMegaDriveRepositoryTest {
         );
     }
 
+    @Test public void higherQualityLabelBeatsAnEarlierLowerFile() {
+        String html = ""
+                + "<script>var flashvars = {"
+                + "video_alt_url2_text: '1080p',"
+                + "video_url: 'https://www.xmegadrive.com/get_file/1/low/100/101/101.mp4/',"
+                + "video_url_text: '480p',"
+                + "video_alt_url: 'https://www.xmegadrive.com/get_file/1/mid/100/101/101.mp4/',"
+                + "video_alt_url_text: '720p',"
+                + "video_alt_url2: 'https://www.xmegadrive.com/get_file/1/high/100/101/101.mp4/'"
+                + "};</script>";
+        assertEquals(
+                "https://www.xmegadrive.com/get_file/1/high/100/101/101.mp4/",
+                XMegaDriveRepository.mediaFromHtml(html, PAGE)
+        );
+    }
+
+    @Test public void lowerQualityLabelDoesNotReplaceAHigherFile() {
+        String html = ""
+                + "<script>"
+                + "video_url: 'https://www.xmegadrive.com/get_file/1/high/100/101/101.mp4/';"
+                + "video_url_text: '1080';"
+                + "video_alt_url: 'https://www.xmegadrive.com/get_file/1/low/100/101/101.mp4/';"
+                + "video_alt_url_text: '480p';"
+                + "</script>";
+        assertEquals(
+                "https://www.xmegadrive.com/get_file/1/high/100/101/101.mp4/",
+                XMegaDriveRepository.mediaFromHtml(html, PAGE)
+        );
+    }
+
+    @Test public void singleQualityCandidateStillPlays() {
+        String html = ""
+                + "<script>"
+                + "video_url: 'https://www.xmegadrive.com/get_file/1/only/100/101/101.mp4/';"
+                + "video_url_text: '720p';"
+                + "</script>";
+        assertEquals(
+                "https://www.xmegadrive.com/get_file/1/only/100/101/101.mp4/",
+                XMegaDriveRepository.mediaFromHtml(html, PAGE)
+        );
+    }
+
+    @Test public void missingQualityLabelsKeepTheFirstPreferredFile() {
+        String html = ""
+                + "<script>"
+                + "video_url: 'https://www.xmegadrive.com/get_file/1/first/100/101/first.mp4/';"
+                + "video_alt_url: 'https://www.xmegadrive.com/get_file/1/second/100/101/second.mp4/';"
+                + "video_alt_url2: 'https://www.xmegadrive.com/get_file/1/third/100/101/third.mp4/';"
+                + "</script>";
+        assertEquals(
+                "https://www.xmegadrive.com/get_file/1/first/100/101/first.mp4/",
+                XMegaDriveRepository.mediaFromHtml(html, PAGE)
+        );
+    }
+
+    @Test public void equalQualityKeepsTheEarlierPreferredFile() {
+        String html = ""
+                + "<script>"
+                + "video_url: 'https://www.xmegadrive.com/get_file/1/first/100/101/first.mp4/';"
+                + "video_url_text: '720p';"
+                + "video_alt_url: 'https://www.xmegadrive.com/get_file/1/second/100/101/second.mp4/';"
+                + "video_alt_url_text: '720p';"
+                + "</script>";
+        assertEquals(
+                "https://www.xmegadrive.com/get_file/1/first/100/101/first.mp4/",
+                XMegaDriveRepository.mediaFromHtml(html, PAGE)
+        );
+    }
+
+    @Test public void urlResolutionHintPrefersTheHigherFileWhenLabelsAreAbsent() {
+        String html = ""
+                + "<script>"
+                + "video_url: 'https://www.xmegadrive.com/get_file/1/low/100/101/101_480p.mp4/';"
+                + "video_alt_url: 'https://www.xmegadrive.com/get_file/1/high/100/101/101_1080p.mp4/';"
+                + "</script>";
+        assertEquals(
+                "https://www.xmegadrive.com/get_file/1/high/100/101/101_1080p.mp4/",
+                XMegaDriveRepository.mediaFromHtml(html, PAGE)
+        );
+    }
+
+    @Test public void higherHashLabelBeatsAnEarlierLowerHash() {
+        String html = ""
+                + "<script>"
+                + "video_url: 'https://www.xmegadrive.com/101700f2271c923fdaa06cdf0a52f447.mp4';"
+                + "video_url_text: '360p';"
+                + "video_alt_url: 'https://www.xmegadrive.com/00112233445566778899aabbccddeeff.mp4';"
+                + "video_alt_url_text: 'Full HD';"
+                + "</script>";
+        assertEquals(
+                "https://www.xmegadrive.com/00112233445566778899aabbccddeeff.mp4",
+                XMegaDriveRepository.mediaFromHtml(html, PAGE)
+        );
+    }
+
+    @Test public void plainHighFileDoesNotBeatALowerPreferredGetFile() {
+        String html = ""
+                + "<script>"
+                + "video_url: 'https://www.xmegadrive.com/plain-1080p.mp4';"
+                + "video_url_text: '1080p';"
+                + "video_alt_url: 'https://www.xmegadrive.com/get_file/1/real/100/101/101.mp4/';"
+                + "video_alt_url_text: '480p';"
+                + "</script>";
+        assertEquals(
+                "https://www.xmegadrive.com/get_file/1/real/100/101/101.mp4/",
+                XMegaDriveRepository.mediaFromHtml(html, PAGE)
+        );
+    }
+
+    @Test public void decodedHigherFileBeatsAnEarlierLowerGetFile() {
+        String html = ""
+                + "<script>var flashvars = {"
+                + "video_url: 'https://www.xmegadrive.com/get_file/1/low/100/101/101.mp4/',"
+                + "video_url_text: '480p',"
+                + "video_alt_url: 'function/0/https://www.xmegadrive.com/get_file/4/0123456789abcdef0123456789abcdefEXTRA/459000/459766/459766.mp4/',"
+                + "video_alt_url_text: '4K',"
+                + "license_code: '86123456789012345678901234567890'"
+                + "};</script>";
+        assertEquals(
+                "https://www.xmegadrive.com/get_file/4/29bb1ccd988407a16f753540deea2f36EXTRA/459000/459766/459766.mp4/",
+                XMegaDriveRepository.mediaFromHtml(html, PAGE)
+        );
+    }
+
+    @Test public void prerollAndPopunderDoNotWinAQualityComparison() {
+        String html = ""
+                + "<video src=\"https://www.xmegadrive.com/ads/preroll-1080p.mp4\"></video>"
+                + "<script>"
+                + "video_url: 'https://www.xmegadrive.com/get_file/1/low/100/101/101.mp4/';"
+                + "video_url_text: '480p';"
+                + "video_alt_url: 'https://www.xmegadrive.com/contents/chaturbate-720p.mp4';"
+                + "video_alt_url_text: '720p';"
+                + "</script>";
+        assertEquals(
+                "https://www.xmegadrive.com/get_file/1/low/100/101/101.mp4/",
+                XMegaDriveRepository.mediaFromHtml(html, PAGE)
+        );
+    }
+
     @Test public void artworkKeepsResizedPhotoAndDropsChallengeLogo() {
         String html = ""
                 + "<a href=\"/categories/hairy/\">"
