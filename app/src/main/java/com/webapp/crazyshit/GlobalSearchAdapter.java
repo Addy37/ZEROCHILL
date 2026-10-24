@@ -240,7 +240,7 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
         ImageView image = new ImageView(parent.getContext());
         image.setScaleType(ImageView.ScaleType.CENTER_CROP);
         image.setBackgroundColor(Color.rgb(31, 31, 36));
-        LinearLayout.LayoutParams imageParams = new LinearLayout.LayoutParams(dp(parent, 88), dp(parent, 66));
+        LinearLayout.LayoutParams imageParams = new LinearLayout.LayoutParams(dp(parent, 100), dp(parent, 75));
         row.addView(image, imageParams);
 
         LinearLayout text = new LinearLayout(parent.getContext());
@@ -251,7 +251,7 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
 
         TextView title = new TextView(parent.getContext());
         title.setTextColor(Color.WHITE);
-        title.setTextSize(18f);
+        title.setTextSize(17f);
         title.setTypeface(null, android.graphics.Typeface.BOLD);
         title.setMaxLines(2);
         title.setEllipsize(android.text.TextUtils.TruncateAt.END);
@@ -312,10 +312,10 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
         result.boundUrl = item.url == null ? "" : item.url;
         fades.show(result.card, itemKey(entry));
         LinearLayout.LayoutParams imageSize = (LinearLayout.LayoutParams) result.image.getLayoutParams();
-        imageSize.width = dp(result.image, item.isCreator() ? 64 : 88);
-        imageSize.height = dp(result.image, item.isCreator() ? 64 : 66);
+        imageSize.width = dp(result.image, item.isCreator() ? 72 : 100);
+        imageSize.height = dp(result.image, item.isCreator() ? 72 : 75);
         result.image.setLayoutParams(imageSize);
-        result.image.setBackground(BrowseUi.rounded(result.image.getContext(), Color.rgb(31, 31, 36), item.isCreator() ? 32 : 8));
+        result.image.setBackground(BrowseUi.rounded(result.image.getContext(), Color.rgb(31, 31, 36), item.isCreator() ? 36 : 8));
         result.image.setClipToOutline(true);
         result.title.setText(item.title);
         result.meta.setText(metaText(item, entry.source));

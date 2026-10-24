@@ -21,14 +21,33 @@ class HeaderGlassMaterialTest {
         val recent = recentSearchGlassConfig(activity)
         assertEquals(results, recent)
         assertEquals(1.5f, results.blurRadius)
-        assertEquals(.20f, results.surfaceOpacity)
-        assertTrue(results.surfaceOpacity > 0f && results.surfaceOpacity <= .40f / 2f)
+        assertEquals(.25f, results.surfaceOpacity)
+        assertTrue(results.surfaceOpacity > 0f && results.surfaceOpacity < .40f)
         assertTrue(results.blurRadius < 3f)
         assertEquals(Color.Black, results.surfaceTintColor)
         // The complete optics recipe, fallback and rim come from the navbar.
         assertEquals(nav, results.copy(blurRadius = nav.blurRadius,
             surfaceOpacity = nav.surfaceOpacity, surfaceTintColor = nav.surfaceTintColor))
         assertTrue(results.lensSideEdges)
+        controller.pause().stop().destroy()
+    }
+
+    @Test fun searchControlsKeepHeaderOpticsAndDoNotDimOtherHeaders() {
+        val controller = Robolectric.buildActivity(Activity::class.java).setup()
+        val activity = controller.get()
+        val header = headerGlassConfig(activity)
+        val controls = searchControlsGlassConfig(activity)
+        assertEquals(.20f, controls.surfaceOpacity)
+        assertEquals(.16f, header.surfaceOpacity)
+        assertEquals(.16f, navigationGlassConfig(activity).surfaceOpacity)
+        assertEquals(header, controls.copy(surfaceOpacity = header.surfaceOpacity))
+        val panel = SearchPanel(activity, android.content.Intent(), true) {}
+        panel.create(null)
+        for (field in listOf("header", "scopeSurface", "favoriteSurface")) {
+            val surface: GlassHeaderView = org.robolectric.util.ReflectionHelpers.getField(panel, field)
+            assertTrue(org.robolectric.util.ReflectionHelpers.getField<Boolean>(surface, "searchControlSurface"))
+        }
+        panel.close()
         controller.pause().stop().destroy()
     }
 

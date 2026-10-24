@@ -219,12 +219,12 @@ final class SearchPanel {
         headerControls = new LinearLayout(activity);
         headerControls.setOrientation(LinearLayout.VERTICAL);
         headerControls.addView(buildSearchRow(), new LinearLayout.LayoutParams(-1, dp(56)));
-        header = new GlassHeaderView(activity, headerControls, 28f);
-        scopeSurface = new GlassHeaderView(activity, buildScopeBar(), 20f);
+        header = new GlassHeaderView(activity, headerControls, 28f, false, true);
+        scopeSurface = new GlassHeaderView(activity, buildScopeBar(), 20f, false, true);
         if (overlay) scopeSurface.setAlpha(0f);
         View favorites = searchAction("★", "Favorite creators", v ->
                 activity.startActivity(new Intent(activity, CreatorsActivity.class)));
-        favoriteSurface = new GlassHeaderView(activity, favorites, 24f);
+        favoriteSurface = new GlassHeaderView(activity, favorites, 24f, false, true);
         resultSurface = new GlassHeaderView(activity, new FrameLayout(activity), 24f, true);
         resultsControls = new LinearLayout(activity);
         resultsControls.setOrientation(LinearLayout.VERTICAL);

@@ -146,9 +146,9 @@ public class SearchResultsPolishTest {
             var holder = adapter.onCreateViewHolder(new FrameLayout(host.get()), 0);
             adapter.onBindViewHolder(holder, 0);
             assertTrue(holder.avatar.getClipToOutline());
-            assertEquals(BrowseUi.dp(host.get(), 64), holder.avatar.getLayoutParams().width);
-            assertEquals(18f, holder.name.getTextSize() / host.get().getResources().getDisplayMetrics().scaledDensity, .1f);
-            assertEquals(BrowseUi.dp(host.get(), 32),
+            assertEquals(BrowseUi.dp(host.get(), 72), holder.avatar.getLayoutParams().width);
+            assertEquals(17f, holder.name.getTextSize() / host.get().getResources().getDisplayMetrics().scaledDensity, .1f);
+            assertEquals(BrowseUi.dp(host.get(), 36),
                     ((android.graphics.drawable.GradientDrawable) holder.avatar.getBackground()).getCornerRadius(), 1f);
             holder.favorite.performClick();
             assertEquals("★", holder.favorite.getText().toString());
@@ -157,6 +157,56 @@ public class SearchResultsPolishTest {
             adapter.onViewRecycled(holder);
             assertEquals(1f, holder.card.getAlpha(), 0f);
         } finally { host.pause().stop().destroy(); }
+    }
+
+    @Test public void artworkFitsExistingRowsAndRecycledCreatorsReturnToThumbnailGeometry() {
+        var host = Robolectric.buildActivity(Activity.class).setup();
+        GlobalSearchAdapter adapter = new GlobalSearchAdapter(item -> {});
+        try {
+            NativeContentItem normal = new NativeContentItem(NativeContentItem.KIND_CATEGORY,
+                    "A long result title that still wraps to at most two lines", "https://example.com/category", "", "", "", "");
+            adapter.replace(Arrays.asList(GlobalSearchAdapter.Entry.item(normal, 0),
+                    GlobalSearchAdapter.Entry.item(creator("A long creator name that wraps"), 0)));
+            var holder = (GlobalSearchAdapter.ResultHolder) adapter.onCreateViewHolder(new FrameLayout(host.get()), 1);
+            for (int position : new int[]{0, 1, 0}) {
+                adapter.onBindViewHolder(holder, position);
+                boolean creator = position == 1;
+                assertEquals(BrowseUi.dp(host.get(), creator ? 72 : 100), holder.image.getLayoutParams().width);
+                assertEquals(BrowseUi.dp(host.get(), creator ? 72 : 75), holder.image.getLayoutParams().height);
+                assertTrue(holder.image.getClipToOutline());
+                assertEquals(BrowseUi.dp(host.get(), creator ? 36 : 8),
+                        ((android.graphics.drawable.GradientDrawable) holder.image.getBackground()).getCornerRadius(), 1f);
+                assertEquals(17f, holder.title.getTextSize() / host.get().getResources().getDisplayMetrics().scaledDensity, .1f);
+                assertEquals(2, holder.title.getMaxLines());
+                assertEquals(android.text.TextUtils.TruncateAt.END, holder.title.getEllipsize());
+                assertTrue((holder.title.getTypeface().getStyle() & android.graphics.Typeface.BOLD) != 0 || holder.title.getPaint().isFakeBoldText());
+                assertEquals(BrowseUi.dp(host.get(), 48), holder.favorite.getLayoutParams().width);
+                assertEquals(BrowseUi.dp(host.get(), 104), holder.card.getMinimumHeight());
+                assertArtworkFits(host.get(), holder.card, holder.image);
+            }
+            OnlyFapCreatorSearchAdapter creators = new OnlyFapCreatorSearchAdapter(item -> {});
+            creators.replace(Collections.singletonList(creator("A long creator name that wraps")));
+            var creatorHolder = creators.onCreateViewHolder(new FrameLayout(host.get()), 0);
+            creators.onBindViewHolder(creatorHolder, 0);
+            assertEquals(BrowseUi.dp(host.get(), 72), creatorHolder.avatar.getLayoutParams().height);
+            assertEquals(BrowseUi.dp(host.get(), 104), creatorHolder.card.getMinimumHeight());
+            assertEquals(BrowseUi.dp(host.get(), 48), creatorHolder.favorite.getLayoutParams().width);
+            assertEquals(2, creatorHolder.name.getMaxLines());
+            assertEquals(android.text.TextUtils.TruncateAt.END, creatorHolder.name.getEllipsize());
+            assertArtworkFits(host.get(), creatorHolder.card, creatorHolder.avatar);
+        } finally { adapter.close(); host.pause().stop().destroy(); }
+    }
+
+    private static void assertArtworkFits(Activity activity, View card, View artwork) {
+        for (int width : new int[]{320, 400}) {
+            card.measure(View.MeasureSpec.makeMeasureSpec(BrowseUi.dp(activity, width), View.MeasureSpec.EXACTLY),
+                    View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
+            card.layout(0, 0, card.getMeasuredWidth(), card.getMeasuredHeight());
+            View row = (View) artwork.getParent();
+            assertEquals(artwork.getLayoutParams().height, artwork.getHeight());
+            assertTrue(artwork.getTop() >= row.getPaddingTop());
+            assertTrue(artwork.getBottom() <= row.getHeight() - row.getPaddingBottom());
+        }
     }
 
     @Test public void globalRowsKeepTheirOrderWhenAnotherSourceArrives() {
