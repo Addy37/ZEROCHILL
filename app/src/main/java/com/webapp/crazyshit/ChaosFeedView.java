@@ -720,7 +720,7 @@ public final class ChaosFeedView extends FrameLayout {
         flushRecent();
     }
 
-    /** Search owns input; the current owner keeps only its silent visible lease. */
+    /** Search owns input and defers feed work; selected playback keeps its foreground lease. */
     public void onSearchOpened() {
         if (searchCoverActive) return;
         ChaosStartupPreloader.stopPreparation();
