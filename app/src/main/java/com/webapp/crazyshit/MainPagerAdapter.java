@@ -758,10 +758,12 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                     intent.putExtra(VideoDetailActivity.EXTRA_POSTER_URL, item.imageUrl);
                 }
                 try {
-                    intent.putExtra(
-                            PlayerActivity.EXTRA_USER_AGENT,
-                            android.webkit.WebSettings.getDefaultUserAgent(activity)
-                    );
+                    String agent = android.webkit.WebSettings.getDefaultUserAgent(activity);
+                    if (XMegaDriveRepository.isXMegaDriveUrl(resolvedPage)) {
+                        String session = XMegaDriveBrowserFetch.sessionUserAgent();
+                        if (session != null && !session.isEmpty()) agent = session;
+                    }
+                    intent.putExtra(PlayerActivity.EXTRA_USER_AGENT, agent);
                 } catch (Exception ignored) {
                 }
                 try {
@@ -844,10 +846,12 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                     intent.putExtra(VideoDetailActivity.EXTRA_POSTER_URL, history.posterUrl);
                 }
                 try {
-                    intent.putExtra(
-                            PlayerActivity.EXTRA_USER_AGENT,
-                            android.webkit.WebSettings.getDefaultUserAgent(activity)
-                    );
+                    String agent = android.webkit.WebSettings.getDefaultUserAgent(activity);
+                    if (XMegaDriveRepository.isXMegaDriveUrl(resolvedPage)) {
+                        String session = XMegaDriveBrowserFetch.sessionUserAgent();
+                        if (session != null && !session.isEmpty()) agent = session;
+                    }
+                    intent.putExtra(PlayerActivity.EXTRA_USER_AGENT, agent);
                 } catch (Exception ignored) {
                 }
                 try {

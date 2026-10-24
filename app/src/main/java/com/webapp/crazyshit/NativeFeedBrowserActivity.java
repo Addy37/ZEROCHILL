@@ -1627,7 +1627,14 @@ public final class NativeFeedBrowserActivity extends Activity {
                 }
                 intent.putExtra(VideoDetailActivity.EXTRA_MEDIA_REFERER, resolved.requestReferer);
                 try {
-                    intent.putExtra(PlayerActivity.EXTRA_USER_AGENT, WebSettings.getDefaultUserAgent(this));
+                    String agent = WebSettings.getDefaultUserAgent(this);
+                    if (XMegaDriveRepository.isXMegaDriveUrl(item.url)
+                            || (resolved.pageUrl != null
+                            && XMegaDriveRepository.isXMegaDriveUrl(resolved.pageUrl))) {
+                        String session = XMegaDriveBrowserFetch.sessionUserAgent();
+                        if (session != null && !session.trim().isEmpty()) agent = session.trim();
+                    }
+                    intent.putExtra(PlayerActivity.EXTRA_USER_AGENT, agent);
                 } catch (Exception ignored) {
                 }
                 try {

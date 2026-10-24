@@ -120,6 +120,53 @@ public final class XMegaDriveRepositoryTest {
         );
     }
 
+    @Test public void playerFixtureDecodesEqualsForm() {
+        String html = ""
+                + "<script>"
+                + "video_url = 'function/0/https://www.xmegadrive.com/get_file/4/0123456789abcdef0123456789abcdefEXTRA/459000/459766/459766.mp4/';"
+                + "license_code = '86123456789012345678901234567890';"
+                + "</script>";
+        assertEquals(
+                "https://www.xmegadrive.com/get_file/4/29bb1ccd988407a16f753540deea2f36EXTRA/459000/459766/459766.mp4/",
+                XMegaDriveRepository.mediaFromHtml(html, PAGE)
+        );
+    }
+
+    @Test public void artworkKeepsResizedPhotoAndDropsChallengeLogo() {
+        String html = ""
+                + "<a href=\"/categories/hairy/\">"
+                + "<img src=\"https://www.xmegadrive.com/cdn-cgi/image/width=400/contents/categories/9/s1_cover.jpg\">"
+                + "<strong class=\"title\">Hairy</strong>"
+                + "</a>"
+                + "<a href=\"/categories/feet/\">"
+                + "<img src=\"https://www.xmegadrive.com/cdn-cgi/images/logo.png\">"
+                + "<strong class=\"title\">Feet</strong>"
+                + "</a>";
+        List<NativeContentItem> items = XMegaDriveRepository.parseCategoriesHtml(html);
+        assertEquals(2, items.size());
+        assertEquals(
+                "https://www.xmegadrive.com/cdn-cgi/image/width=400/contents/categories/9/s1_cover.jpg",
+                items.get(0).imageUrl
+        );
+        assertEquals("Feet", items.get(1).title);
+        assertEquals("", items.get(1).imageUrl);
+    }
+
+    @Test public void categoryArtworkUsesThePhotoOnTheCardAroundTheTitle() {
+        String html = ""
+                + "<div class=\"item\">"
+                + "<img src=\"/contents/categories/9/hairy.jpg\" alt=\"Hairy\">"
+                + "<a href=\"/categories/hairy/\"><strong class=\"title\">Hairy</strong></a>"
+                + "</div>";
+        List<NativeContentItem> items = XMegaDriveRepository.parseCategoriesHtml(html);
+        assertEquals(1, items.size());
+        assertEquals("Hairy", items.get(0).title);
+        assertEquals(
+                "https://www.xmegadrive.com/contents/categories/9/hairy.jpg",
+                items.get(0).imageUrl
+        );
+    }
+
     @Test public void categoryArtworkPrefersBackgroundAndSkipsPlaceholder() {
         String html = ""
                 + "<a href=\"/categories/hairy/\">"

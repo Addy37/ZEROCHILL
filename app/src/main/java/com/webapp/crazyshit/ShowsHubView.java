@@ -641,7 +641,7 @@ final class ShowsHubView extends FrameLayout {
         if (imageUrl.isEmpty()) return;
 
         LazyHeaders.Builder headers = new LazyHeaders.Builder()
-                .addHeader("User-Agent", USER_AGENT);
+                .addHeader("User-Agent", artworkAgent(imageUrl, item.url));
         if (item.url != null && item.url.startsWith("http")) {
             headers.addHeader("Referer", item.url);
         }
@@ -863,7 +863,7 @@ final class ShowsHubView extends FrameLayout {
         }
 
         LazyHeaders.Builder headers = new LazyHeaders.Builder()
-                .addHeader("User-Agent", USER_AGENT);
+                .addHeader("User-Agent", artworkAgent(imageUrl, item.url));
         if (item.url != null && item.url.startsWith("http")) {
             headers.addHeader("Referer", item.url);
         }
@@ -882,6 +882,14 @@ final class ShowsHubView extends FrameLayout {
         if (fullHeroArtwork) request.fitCenter();
         else request.centerCrop();
         request.into(view);
+    }
+
+    private static String artworkAgent(String imageUrl, String pageUrl) {
+        if (isXMegaDriveHost(imageUrl) || isXMegaDriveHost(pageUrl)) {
+            String session = XMegaDriveBrowserFetch.sessionUserAgent();
+            if (session != null && !session.trim().isEmpty()) return session.trim();
+        }
+        return USER_AGENT;
     }
 
     private static void addXMegaDriveArtworkHeaders(
@@ -903,9 +911,15 @@ final class ShowsHubView extends FrameLayout {
     }
 
     private static boolean isXMegaDriveHost(String value) {
-        if (value == null) return false;
-        String lower = value.toLowerCase(java.util.Locale.US);
-        return lower.contains("://xmegadrive.com") || lower.contains("://www.xmegadrive.com");
+        if (value == null || value.trim().isEmpty()) return false;
+        try {
+            String host = java.net.URI.create(value.trim()).getHost();
+            if (host == null) return false;
+            host = host.toLowerCase(java.util.Locale.US);
+            return "xmegadrive.com".equals(host) || host.endsWith(".xmegadrive.com");
+        } catch (Exception ignored) {
+            return false;
+        }
     }
 
     private void loadContinueArtwork(

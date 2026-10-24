@@ -62,9 +62,9 @@ final class XMegaDriveRepository {
     }
 
     private static final Pattern PLAYER_URL = Pattern.compile(
-            "video_(?:url|alt_url\\d*)\\s*:\\s*['\"]([^'\"]+)['\"]");
+            "video_(?:url|alt_url\\d*)\\s*[:=]\\s*['\"]([^'\"]+)['\"]");
     private static final Pattern LICENSE_CODE = Pattern.compile(
-            "license_code\\s*:\\s*['\"]([^'\"]+)['\"]");
+            "license_code\\s*[:=]\\s*['\"]([^'\"]+)['\"]");
     private static final Pattern RAW_FILE = Pattern.compile(
             "https?://[^\\s'\"<>]+/get_file/[^\\s'\"<>]+\\.mp4[^\\s'\"<>]*");
     private static final Object BROWSER_FALLBACK = new Object();
@@ -236,8 +236,7 @@ final class XMegaDriveRepository {
         for (Element anchor : document.select("a[href*=/categories/]")) {
             String canonical = normalizeCategoryUrl(anchor.absUrl("href"));
             if (canonical.isEmpty()) continue;
-            Element image = anchor.selectFirst("img");
-            String imageUrl = imageUrl(image);
+            String imageUrl = cardImageUrl(anchor);
             String slug = canonical.substring(CATEGORIES.length(), canonical.length() - 1);
             NativeContentItem candidate = new NativeContentItem(
                     NativeContentItem.KIND_CATEGORY,
@@ -286,7 +285,7 @@ final class XMegaDriveRepository {
                     NativeContentItem.KIND_MEDIA,
                     title.isEmpty() ? LABEL : title,
                     canonical,
-                    imageUrl(anchor.selectFirst("img")),
+                    cardImageUrl(anchor),
                     "",
                     LABEL,
                     "",
@@ -354,6 +353,9 @@ final class XMegaDriveRepository {
                 || lower.contains("no_image")
                 || lower.contains("no-thumb")
                 || lower.contains("nothumb")
+                || lower.contains("/cdn-cgi/challenge")
+                || lower.contains("/cdn-cgi/images/")
+                || lower.contains("/cdn-cgi/styles/")
                 || lower.endsWith(".gif")
                 || lower.contains(".gif?")) {
             return "";
@@ -362,9 +364,27 @@ final class XMegaDriveRepository {
                 || lower.contains(".jpeg")
                 || lower.contains(".png")
                 || lower.contains(".webp")
+                || lower.contains(".avif")
                 || lower.contains("/contents/")
                 || lower.contains("videos_screenshots");
         return image ? trimmed : "";
+    }
+
+    /** Photo on the anchor, or on the single card wrapped around that anchor. */
+    private static String cardImageUrl(Element anchor) {
+        if (anchor == null) return "";
+        String direct = imageUrl(anchor.selectFirst("img"));
+        if (!direct.isEmpty()) return direct;
+        Element parent = anchor.parent();
+        for (int depth = 0; depth < 4 && parent != null; depth++) {
+            String tag = parent.tagName();
+            if ("body".equalsIgnoreCase(tag) || "html".equalsIgnoreCase(tag)) break;
+            if (parent.select("a[href*=/categories/], a[href*=/videos/]").size() > 4) break;
+            String found = imageUrl(parent.selectFirst("img"));
+            if (!found.isEmpty()) return found;
+            parent = parent.parent();
+        }
+        return "";
     }
 
     private static String imageUrl(Element image) {

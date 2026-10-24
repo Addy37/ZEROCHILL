@@ -247,6 +247,7 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
 
     private void requestThumbnail(NativeContentItem item, String rejectedUrl) {
         if (closed || item == null || item.isSection() || item.url == null || item.url.isEmpty()) return;
+        if (XMegaDriveRepository.isXMegaDriveUrl(item.url)) return;
         if ((rejectedUrl == null || rejectedUrl.isEmpty()) &&
                 item.imageUrl != null && !item.imageUrl.trim().isEmpty() &&
                 !failedDirectThumbnails.contains(item.url)) return;
@@ -879,8 +880,14 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
     }
 
     private GlideUrl withSiteHeaders(String imageUrl, String pageUrl) {
+        String agent = USER_AGENT;
+        if (XMegaDriveRepository.isXMegaDriveUrl(imageUrl)
+                || XMegaDriveRepository.isXMegaDriveUrl(pageUrl)) {
+            String session = XMegaDriveBrowserFetch.sessionUserAgent();
+            if (session != null && !session.trim().isEmpty()) agent = session.trim();
+        }
         LazyHeaders.Builder headers = new LazyHeaders.Builder()
-                .addHeader("User-Agent", USER_AGENT)
+                .addHeader("User-Agent", agent)
                 .addHeader("Referer", pageUrl == null || pageUrl.isEmpty() ? SITE : pageUrl)
                 .addHeader("Accept", "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8");
 

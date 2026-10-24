@@ -47,9 +47,14 @@ final class XMegaDriveBrowserFetch {
     private static final String TAG = "XMegaDrive";
     private static final long TIMEOUT_SECONDS = 45L;
     private static final long EXTRACTION_RETRY_MS = 800L;
+    private static volatile String sessionUserAgent = "";
     private static volatile boolean passedOnce;
 
     private XMegaDriveBrowserFetch() {
+    }
+
+    static String sessionUserAgent() {
+        return sessionUserAgent == null ? "" : sessionUserAgent;
     }
 
     static Document fetch(Context context, String url, String referer) throws IOException {
@@ -194,7 +199,10 @@ final class XMegaDriveBrowserFetch {
             String agent = XMegaDriveRepository.browserIdentity(rawAgent);
             Log.i(TAG, "userAgent default=" + oneLine(rawAgent));
             Log.i(TAG, "userAgent applied=" + oneLine(agent));
-            if (!agent.isEmpty()) settings.setUserAgentString(agent);
+            if (!agent.isEmpty()) {
+                settings.setUserAgentString(agent);
+                sessionUserAgent = agent;
+            }
             Log.i(TAG, "session cleared=false " + cookieReport(url));
             AtomicBoolean identityLogged = new AtomicBoolean();
             HashMap<String, String> headers = new HashMap<>();
@@ -328,9 +336,15 @@ final class XMegaDriveBrowserFetch {
             } catch (Exception ignored) {
             }
             String location = webView.getUrl();
-            if (isInterstitial(title, text, location)) {
-                logPage("interstitial", location, title, true);
+            if (isInterstitial(title, text, location) || isForbidden(title, text)) {
+                boolean blocked = permanentlyBlocked(title, text);
+                logPage(blocked ? "blocked" : "interstitial", location, title, true);
                 reveal(overlay, webView);
+                if (blocked) {
+                    complete(completed, error, finished,
+                            new IOException("XMegaDrive blocked this device"));
+                    return;
+                }
                 webView.postDelayed(
                         () -> consider(
                                 webView,
@@ -346,13 +360,6 @@ final class XMegaDriveBrowserFetch {
                         ),
                         EXTRACTION_RETRY_MS
                 );
-                return;
-            }
-            if (isForbidden(title, text)) {
-                logPage("forbidden", location, title, false);
-                reveal(overlay, webView);
-                complete(completed, error, finished,
-                        new IOException("XMegaDrive blocked this device"));
                 return;
             }
             extract(
@@ -398,21 +405,37 @@ final class XMegaDriveBrowserFetch {
                 + "if(quote==='\\''||quote===q){value=value.slice(1);"
                 + "if(value.charAt(value.length-1)===quote)value=value.slice(0,value.length-1);}"
                 + "return abs(value);};"
+                + "const bad=u=>!u||u.indexOf('data:')===0||u.indexOf('/cdn-cgi/challenge')>=0||u.indexOf('/cdn-cgi/images/')>=0||u.indexOf('/cdn-cgi/styles/')>=0;"
                 + "const imgFields=(img,host)=>{"
                 + "const o={};"
-                + "if(img){['src','data-src','data-original','data-lazy-src','alt'].forEach(k=>{"
+                + "if(img){['src','data-src','data-original','data-lazy-src','data-thumb','alt'].forEach(k=>{"
                 + "const v=img.getAttribute(k); if(v)o[k]=v;});"
+                + "const set=img.getAttribute('srcset')||img.getAttribute('data-srcset')||'';"
+                + "if(set){const first=set.split(',')[0].trim().split(/\\s+/)[0]; if(first&&!o['data-src'])o['data-src']=abs(first);}"
                 + "const current=img.currentSrc||img.src||'';"
-                + "if(current && current.indexOf('data:')!==0)o.src=abs(current);}"
-                + "const bg=bgOf(img)||bgOf(host)||bgOf(img&&img.parentElement)||bgOf(host&&host.querySelector('.img'));"
-                + "if(bg)o['data-bg']=bg; return o;};"
+                + "if(!bad(current))o.src=abs(current);}"
+                + "let bg=bgOf(img)||bgOf(host)||bgOf(img&&img.parentElement);"
+                + "if((!bg||bad(bg))&&host&&host.querySelectorAll){"
+                + "const nodes=host.querySelectorAll('*');"
+                + "for(let i=0;i<nodes.length&&i<24;i++){const found=bgOf(nodes[i]); if(found&&!bad(found)){bg=found; break;}}}"
+                + "if(bg&&!bad(bg))o['data-bg']=bg; return o;};"
+                + "const singleCard=e=>{"
+                + "let node=e; let best=e;"
+                + "for(let depth=0; depth<6 && node && node!==document.body && node!==document.documentElement; depth++){"
+                + "const seen={}; let count=0;"
+                + "const links=node.querySelectorAll?node.querySelectorAll('a[href*=\"/videos/\"],a[href*=\"/categories/\"]'):[];"
+                + "for(let i=0;i<links.length;i++){"
+                + "const key=(links[i].getAttribute('href')||'').split('?')[0].split('#')[0];"
+                + "if(!key||seen[key])continue; seen[key]=1; count++; if(count>2)return best;}"
+                + "best=node; node=node.parentElement;} return best;};"
                 + "const pick=e=>{"
                 + "const o={tag:e.tagName.toLowerCase()};"
                 + "const href=e.getAttribute('href'); if(href)o.href=href;"
                 + "const title=e.getAttribute('title'); if(title)o.title=title;"
                 + "if(e.tagName==='A'){"
-                + "const img=e.querySelector('img');"
-                + "const box=e.querySelector('.img')||e;"
+                + "const card=singleCard(e);"
+                + "const img=e.querySelector('img')||(card&&card.querySelector('img'));"
+                + "const box=e.querySelector('.img,.thumb,.image')||(card&&card.querySelector('.img,.thumb,.image'))||card||e;"
                 + "const info=imgFields(img, box);"
                 + "if(info.src||info['data-original']||info['data-src']||info['data-bg']||info['data-lazy-src'])o.img=info;"
                 + "const strong=e.querySelector('strong.title'); if(strong)o.label=strong.textContent||'';}"
@@ -610,26 +633,36 @@ final class XMegaDriveBrowserFetch {
     }
 
     private static boolean hasArtwork(Document document) {
-        for (org.jsoup.nodes.Element image : document.select("img")) {
-            String[] values = {
-                    image.attr("data-bg"),
-                    image.attr("data-original"),
-                    image.attr("data-src"),
-                    image.attr("data-lazy-src"),
-                    image.attr("src")
-            };
-            for (String value : values) {
-                String lower = value == null ? "" : value.toLowerCase(java.util.Locale.US);
-                if (lower.contains("blank.gif") || lower.contains("placeholder")
-                        || lower.contains("noimage") || lower.contains("no-thumb")
-                        || lower.contains("no_image") || lower.endsWith(".gif")) {
-                    continue;
-                }
-                if (lower.contains(".jpg") || lower.contains(".jpeg") || lower.contains(".png")
-                        || lower.contains(".webp") || lower.contains("/contents/")
-                        || lower.contains("videos_screenshots")) {
-                    return true;
-                }
+        for (org.jsoup.nodes.Element anchor : document.select("a[href*=/categories/], a[href*=/videos/]")) {
+            for (org.jsoup.nodes.Element image : anchor.select("img")) {
+                if (imageLooksReal(image)) return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean imageLooksReal(org.jsoup.nodes.Element image) {
+        String[] values = {
+                image.attr("data-bg"),
+                image.attr("data-original"),
+                image.attr("data-src"),
+                image.attr("data-lazy-src"),
+                image.attr("src")
+        };
+        for (String value : values) {
+            String lower = value == null ? "" : value.toLowerCase(java.util.Locale.US);
+            if (lower.contains("blank.gif") || lower.contains("placeholder")
+                    || lower.contains("noimage") || lower.contains("no-thumb")
+                    || lower.contains("no_image") || lower.contains("/cdn-cgi/challenge")
+                    || lower.contains("/cdn-cgi/images/") || lower.contains("/cdn-cgi/styles/")
+                    || lower.endsWith(".gif")) {
+                continue;
+            }
+            if (lower.contains(".jpg") || lower.contains(".jpeg") || lower.contains(".png")
+                    || lower.contains(".webp") || lower.contains(".avif")
+                    || lower.contains("/contents/")
+                    || lower.contains("videos_screenshots")) {
+                return true;
             }
         }
         return false;
