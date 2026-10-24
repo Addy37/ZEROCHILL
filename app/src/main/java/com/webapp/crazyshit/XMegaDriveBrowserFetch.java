@@ -551,9 +551,15 @@ final class XMegaDriveBrowserFetch {
                 + "const t=list[i].textContent||'';"
                 + "if(t.indexOf('video_url')>=0||t.indexOf('license_code')>=0||t.indexOf('/get_file/')>=0){"
                 + "scripts.push(t.slice(0,12000));}}"
+                + "const files=[];"
+                + "const raw=document.documentElement?document.documentElement.innerHTML:'';"
+                + "const fileRe=/https?:\\/\\/[^\"'\\s<>]{0,500}(?:\\/get_file\\/[^\"'\\s<>]{0,300}\\.mp4|\\/[0-9a-fA-F]{32}\\.mp4)[^\"'\\s<>]*/gi;"
+                + "let fm; let guard=0;"
+                + "while((fm=fileRe.exec(raw))&&files.length<8&&guard<40){"
+                + "guard++; files.push(fm[0]);}"
                 + "const nodes=Array.from(document.querySelectorAll('a[href],video,source,h1')).slice(0,1500).map(pick);"
                 + "return JSON.stringify({url:location.href,title:document.title||'',"
-                + "text:bodyText.slice(0,1500),age:age,nodes:nodes,scripts:scripts});})()";
+                + "text:bodyText.slice(0,1500),age:age,nodes:nodes,scripts:scripts,files:files});})()";
         webView.evaluateJavascript(script, encoded -> {
             if (completed.get() || seen != generation.get()) return;
             try {
@@ -697,6 +703,14 @@ final class XMegaDriveBrowserFetch {
                 String script = rawScript(scripts.optString(index));
                 if (script.isEmpty()) continue;
                 html.append("<script>").append(script).append("</script>");
+            }
+        }
+        JSONArray files = payload.optJSONArray("files");
+        if (files != null) {
+            for (int index = 0; index < files.length(); index++) {
+                String file = files.optString(index);
+                if (file.isEmpty()) continue;
+                html.append("<a href=\"").append(Entities.escape(file)).append("\"></a>");
             }
         }
         html.append("</body></html>");

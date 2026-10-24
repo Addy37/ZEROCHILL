@@ -1445,6 +1445,7 @@ public class VideoDetailActivity extends Activity {
         if (page == null || page.isEmpty() || thumbnailResolvers == null || thumbnailResolvers.length == 0) {
             return;
         }
+        if (XMegaDriveRepository.isXMegaDriveUrl(page)) return;
         if (resolvedRelatedThumbnails.containsKey(page)) return;
         if (!requestedRelatedThumbnails.add(page)) return;
         RenderedThumbnailResolver resolver =
@@ -1494,8 +1495,14 @@ public class VideoDetailActivity extends Activity {
     }
 
     private GlideUrl withHeaders(String imageUrl, String referer) {
+        String agent = THUMB_UA;
+        if (XMegaDriveRepository.isXMegaDriveUrl(imageUrl)
+                || XMegaDriveRepository.isXMegaDriveUrl(referer)) {
+            String session = XMegaDriveBrowserFetch.sessionUserAgent();
+            if (session != null && !session.trim().isEmpty()) agent = session.trim();
+        }
         LazyHeaders.Builder headers = new LazyHeaders.Builder()
-                .addHeader("User-Agent", THUMB_UA)
+                .addHeader("User-Agent", agent)
                 .addHeader("Referer", referer == null || referer.isEmpty() ? SITE : referer)
                 .addHeader("Accept", "image/avif,image/webp,image/apng,image/*,*/*;q=0.8");
         try {

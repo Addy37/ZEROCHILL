@@ -106,7 +106,11 @@ final class XMegaDriveRepository {
             "googleadservices.com"
     };
     private static final Pattern RAW_FILE = Pattern.compile(
-            "https?://[^\\s'\"<>]+/get_file/[^\\s'\"<>]+\\.mp4[^\\s'\"<>]*");
+            "https?://[^\\s'\"<>]+/get_file/[^\\s'\"<>]+\\.mp4[^\\s'\"<>]*",
+            Pattern.CASE_INSENSITIVE);
+    private static final Pattern HASH_FILE = Pattern.compile(
+            "https?://[^\\s'\"<>]*[0-9a-f]{32}\\.mp4[^\\s'\"<>]*",
+            Pattern.CASE_INSENSITIVE);
     private static final Object BROWSER_FALLBACK = new Object();
     private static final int MAX_CANDIDATES = 12;
     private static final int MAX_RETURNED = 8;
@@ -481,33 +485,86 @@ final class XMegaDriveRepository {
 
     private static String extractMedia(Document page) {
         if (page == null) return "";
-        Element video = page.selectFirst("video[src*=.mp4], source[src*=.mp4]");
-        if (video != null) {
-            String src = ownMedia(video.absUrl("src"));
-            if (!src.isEmpty() && !src.contains("function/0/")) return src;
-        }
+        String source = pageSource(page);
+        String license = firstMatch(LICENSE_CODE, source);
+        String location = page.location();
+        String preferred = firstPlayerFile(source, license, location, true);
+        if (!preferred.isEmpty()) return preferred;
+        String raw = firstPatternFile(RAW_FILE, source);
+        if (!raw.isEmpty()) return raw;
+        String hash = firstPatternFile(HASH_FILE, source);
+        if (!hash.isEmpty()) return hash;
+        String tagged = firstTagFile(page, true);
+        if (!tagged.isEmpty()) return tagged;
+        String plain = firstPlayerFile(source, license, location, false);
+        if (!plain.isEmpty()) return plain;
+        return firstTagFile(page, false);
+    }
+
+    private static String pageSource(Document page) {
         StringBuilder blob = new StringBuilder(page.html() == null ? "" : page.html());
         for (Element script : page.select("script")) {
             blob.append('\n').append(script.data());
         }
-        String source = blob.toString();
-        String license = firstMatch(LICENSE_CODE, source);
+        return blob.toString();
+    }
+
+    /** Flashvars first. A preroll video tag must not beat get_file or a 32-hex MP4. */
+    private static String firstPlayerFile(
+            String source, String license, String pageUrl, boolean preferredOnly) {
         Matcher playerUrls = PLAYER_URL.matcher(source);
-        String fallback = "";
         while (playerUrls.find()) {
-            String decoded = ownMedia(decodePlayerUrl(playerUrls.group(1), license, page.location()));
-            if (!decoded.isEmpty()) return decoded;
+            String decoded = ownMedia(decodePlayerUrl(playerUrls.group(1), license, pageUrl));
+            if (decoded.isEmpty() || decoded.contains("function/0/") || isAdMedia(decoded)) continue;
+            if (preferredOnly && !isPreferredFile(decoded)) continue;
+            return decoded;
         }
-        Matcher raw = RAW_FILE.matcher(source);
-        if (raw.find()) {
-            String file = ownMedia(raw.group());
-            if (!file.isEmpty()) return file;
+        return "";
+    }
+
+    private static String firstPatternFile(Pattern pattern, String source) {
+        Matcher matcher = pattern.matcher(source);
+        while (matcher.find()) {
+            String file = ownMedia(matcher.group());
+            if (file.isEmpty() || file.contains("function/0/") || isAdMedia(file)) continue;
+            return file;
         }
-        for (Element el : page.select("[src*=.mp4]")) {
-            String src = ownMedia(el.absUrl("src"));
-            if (!src.isEmpty()) return src;
+        return "";
+    }
+
+    private static String firstTagFile(Document page, boolean preferredOnly) {
+        for (Element el : page.select("video[src], source[src], a[href]")) {
+            boolean videoTag = "video".equalsIgnoreCase(el.tagName())
+                    || "source".equalsIgnoreCase(el.tagName());
+            if (!videoTag && preferredOnly == false) continue;
+            String raw = el.hasAttr("src") ? el.absUrl("src") : el.absUrl("href");
+            String src = ownMedia(raw);
+            if (src.isEmpty() || src.contains("function/0/") || isAdMedia(src)) continue;
+            if (preferredOnly && !isPreferredFile(src)) continue;
+            if (!preferredOnly && !videoTag) continue;
+            return src;
         }
-        return fallback;
+        return "";
+    }
+
+    private static boolean isPreferredFile(String url) {
+        String lower = url.toLowerCase(Locale.US);
+        if (lower.contains("/get_file/")) return true;
+        return HASH_FILE.matcher(url).find();
+    }
+
+    /** On-site sponsor clips. The real file is the get_file or 32-hex MP4, not these. */
+    private static boolean isAdMedia(String url) {
+        String lower = url.toLowerCase(Locale.US);
+        return lower.contains("preroll")
+                || lower.contains("/ads/")
+                || lower.contains("/ad/")
+                || lower.contains("vast")
+                || lower.contains("advert")
+                || lower.contains("chaturbate")
+                || lower.contains("exoclick")
+                || lower.contains("trafficjunky")
+                || lower.contains("popunder");
     }
 
     private static String ownMedia(String url) {

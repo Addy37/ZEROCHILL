@@ -151,6 +151,34 @@ public final class XMegaDriveRepositoryTest {
         );
     }
 
+    @Test public void onSitePrerollDoesNotReplaceTheRealFile() {
+        String decoded = ""
+                + "<video src=\"https://www.xmegadrive.com/ads/chaturbate-preroll.mp4\"></video>"
+                + "<script>var flashvars = {"
+                + "video_url: 'function/0/https://www.xmegadrive.com/get_file/4/0123456789abcdef0123456789abcdefEXTRA/459000/459766/459766.mp4/',"
+                + "license_code: '86123456789012345678901234567890'"
+                + "};</script>";
+        assertEquals(
+                "https://www.xmegadrive.com/get_file/4/29bb1ccd988407a16f753540deea2f36EXTRA/459000/459766/459766.mp4/",
+                XMegaDriveRepository.mediaFromHtml(decoded, PAGE)
+        );
+
+        String hash = ""
+                + "<video src=\"https://www.xmegadrive.com/contents/preroll.mp4\"></video>"
+                + "<a href=\"https://www.xmegadrive.com/101700f2271c923fdaa06cdf0a52f447.MP4\">file</a>";
+        assertEquals(
+                "https://www.xmegadrive.com/101700f2271c923fdaa06cdf0a52f447.MP4",
+                XMegaDriveRepository.mediaFromHtml(hash, PAGE)
+        );
+        assertEquals(
+                "",
+                XMegaDriveRepository.mediaFromHtml(
+                        "<video src=\"https://www.xmegadrive.com/ads/preroll.mp4\"></video>",
+                        PAGE
+                )
+        );
+    }
+
     @Test public void playerFixtureDecodesEqualsForm() {
         String html = ""
                 + "<script>"
