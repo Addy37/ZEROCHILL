@@ -132,10 +132,10 @@ final class OnlyFapCreatorSearchAdapter
 
         ImageView avatar = new ImageView(context);
         avatar.setScaleType(ImageView.ScaleType.CENTER_CROP);
-        avatar.setBackground(BrowseUi.rounded(context, ZeroChillUi.color(context, R.color.zc_surface_pressed), 32));
+        avatar.setBackground(BrowseUi.rounded(context, ZeroChillUi.color(context, R.color.zc_surface_pressed), 36));
         avatar.setClipToOutline(true);
         avatar.setContentDescription(null);
-        row.addView(avatar, new LinearLayout.LayoutParams(dp(context, 64), dp(context, 64)));
+        row.addView(avatar, new LinearLayout.LayoutParams(dp(context, 72), dp(context, 72)));
 
         LinearLayout copy = new LinearLayout(context);
         copy.setOrientation(LinearLayout.VERTICAL);
@@ -158,7 +158,7 @@ final class OnlyFapCreatorSearchAdapter
 
         TextView name = new TextView(context);
         name.setTextColor(Color.WHITE);
-        name.setTextSize(18f);
+        name.setTextSize(17f);
         name.setTypeface(null, android.graphics.Typeface.BOLD);
         name.setMaxLines(2);
         name.setEllipsize(TextUtils.TruncateAt.END);

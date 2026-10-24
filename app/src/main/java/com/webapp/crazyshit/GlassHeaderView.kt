@@ -22,7 +22,8 @@ import com.webapp.crazyshit.glass.*
 /** Native controls stay above a single pane sampling the navbar's live page recording. */
 internal class GlassHeaderView @JvmOverloads constructor(
     private val activity: Activity, private val controls: View, private val cornerRadius: Float = 0f,
-    private val resultsSurface: Boolean = false
+    private val resultsSurface: Boolean = false,
+    private val searchControlSurface: Boolean = false
 ) : FrameLayout(activity) {
     private val glass = ComposeView(activity).apply {
         importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO
@@ -78,6 +79,7 @@ internal class GlassHeaderView @JvmOverloads constructor(
             glass.setContent {
                 val config = remember(recentMaterial) { (if (resultsSurface && recentMaterial) recentSearchGlassConfig(activity)
                     else if (resultsSurface) searchResultsGlassConfig(activity)
+                    else if (searchControlSurface) searchControlsGlassConfig(activity)
                     else headerGlassConfig(activity)).let {
                     if (cornerRadius > 0f) it.copy(lensSideEdges = true) else it
                 } }
@@ -106,8 +108,12 @@ internal fun searchResultsGlassConfig(activity: Activity): GlassEffectConfig =
     navigationGlassConfig(activity).copy(
         surfaceTintColor = Color.Black,
         blurRadius = 1.5f,
-        surfaceOpacity = .20f,
+        surfaceOpacity = .25f,
     )
+
+/** Search capsules add a local black film without changing shared header/navbar material. */
+internal fun searchControlsGlassConfig(activity: Activity): GlassEffectConfig =
+    headerGlassConfig(activity).copy(surfaceOpacity = .20f)
 
 internal fun recentSearchGlassConfig(activity: Activity): GlassEffectConfig =
     searchResultsGlassConfig(activity)

@@ -92,7 +92,7 @@ jobs:
           --tests 'com.webapp.crazyshit.CreatorMergedGalleryTest'
 
       - name: Run search results and glass regressions first
-        if: ${{ github.head_ref == 'feature/search-results-polish' || (github.head_ref == 'feature/search-recent-glass' || github.head_ref == 'feature/search-liquid-material') }}
+        if: ${{ github.head_ref == 'fix/search-results-visual-polish' || github.head_ref == 'feature/search-results-polish' || (github.head_ref == 'feature/search-recent-glass' || github.head_ref == 'feature/search-liquid-material') }}
         run: >-
           gradle --no-daemon :app:testDebugUnitTest
           --tests 'com.webapp.crazyshit.Search*Test'
@@ -440,7 +440,7 @@ jobs:
         # These focused candidates run complete suites once instead of repeatedly
         # starting Gradle for overlapping filters. Signing/upgrade gates remain.
         run: |
-          if [ "${{ github.head_ref }}" = "feature/search-recent-glass" ] || [ "${{ github.head_ref }}" = "feature/shows-episode-list" ] || [ "${{ github.head_ref }}" = "feature/onlyfap-gender-shelves" ] || [ "${{ github.head_ref }}" = "feature/source-contracts-preference-search" ] || [ "${{ github.head_ref }}" = "feature/zerochill-5.1.0" ] || [ "${{ github.head_ref }}" = "release/zerochill-5.0.0" ] || [ "${{ github.event.pull_request.number }}" = "295" ] || [ "${{ github.event.pull_request.number }}" = "304" ] || [ "${{ github.head_ref }}" = "fix/shittok-async-creator-metadata" ] || [ "${{ github.head_ref }}" = "fix/shittok-startup-handoff" ] || [ "${{ github.head_ref }}" = "fix/onlyfap-first-open" ] || [ "${{ github.head_ref }}" = "feature/library-profile-redesign" ]; then
+          if [ "${{ github.head_ref }}" = "fix/search-results-visual-polish" ] || [ "${{ github.head_ref }}" = "feature/search-recent-glass" ] || [ "${{ github.head_ref }}" = "feature/shows-episode-list" ] || [ "${{ github.head_ref }}" = "feature/onlyfap-gender-shelves" ] || [ "${{ github.head_ref }}" = "feature/source-contracts-preference-search" ] || [ "${{ github.head_ref }}" = "feature/zerochill-5.1.0" ] || [ "${{ github.head_ref }}" = "release/zerochill-5.0.0" ] || [ "${{ github.event.pull_request.number }}" = "295" ] || [ "${{ github.event.pull_request.number }}" = "304" ] || [ "${{ github.head_ref }}" = "fix/shittok-async-creator-metadata" ] || [ "${{ github.head_ref }}" = "fix/shittok-startup-handoff" ] || [ "${{ github.head_ref }}" = "fix/onlyfap-first-open" ] || [ "${{ github.head_ref }}" = "feature/library-profile-redesign" ]; then
             gradle --no-daemon :app:testDebugUnitTest :app:testReleaseUnitTest :app:assembleDebug :app:assembleRelease
           else
             gradle --no-daemon :app:testReleaseUnitTest :app:assembleRelease :app:assembleDebug
@@ -540,7 +540,7 @@ jobs:
           if [ "${{ github.head_ref }}" = "fix/library-startup-navigation" ]; then
             python3 tools/capture_library_lifecycle.py
           fi
-          if [ "${{ github.head_ref }}" = "feature/search-recent-glass" ] || [ "${{ github.head_ref }}" = "feature/search-liquid-material" ]; then
+          if [ "${{ github.head_ref }}" = "fix/search-results-visual-polish" ] || [ "${{ github.head_ref }}" = "feature/search-recent-glass" ] || [ "${{ github.head_ref }}" = "feature/search-liquid-material" ]; then
             python3 tools/capture_search_recent_glass.py
           fi
           SH
