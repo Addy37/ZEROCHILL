@@ -446,7 +446,14 @@ final class ShowsHubView extends FrameLayout {
     }
 
     void setXMegaDriveCategories(List<NativeContentItem> items) {
-        xMegaDriveCategoryItems = safe(items);
+        xMegaDriveCategoryItems = new ArrayList<>();
+        if (items != null) {
+            for (NativeContentItem item : items) {
+                if (item != null && item.imageUrl != null && !item.imageUrl.trim().isEmpty()) {
+                    xMegaDriveCategoryItems.add(item);
+                }
+            }
+        }
         xMegaDriveCategoryShelf.adapter.replace(xMegaDriveCategoryItems);
         xMegaDriveCategoryShelf.container.setVisibility(
                 xMegaDriveCategoryItems.isEmpty() ? View.GONE : View.VISIBLE

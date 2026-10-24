@@ -80,12 +80,21 @@ public class ShowsHubStateTest {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
         ShowsHubView hub = hub(activity);
         hub.setCrazyShit(items(2, "/series/"));
-        hub.setXMegaDriveCategories(items(4, "https://www.xmegadrive.com/categories/test-"));
+        List<NativeContentItem> categories = items(4, "https://example.invalid/category/no-art-");
+        categories.add(new NativeContentItem(NativeContentItem.KIND_CATEGORY,
+                "Blank artwork", "https://example.invalid/category/blank/", "   ", "", "", ""));
+        for (int index = 0; index < 4; index++) {
+            categories.add(new NativeContentItem(NativeContentItem.KIND_CATEGORY,
+                    "Category " + index, "https://example.invalid/category/" + index,
+                    "https://example.invalid/image-" + index + ".jpg", "", "", ""));
+        }
+        hub.setXMegaDriveCategories(categories);
+        assertEquals(9, categories.size()); // Filtering must not mutate the cached directory.
 
         assertEquals(6, hub.itemCount());
         assertEquals(View.VISIBLE, xMegaDriveShelf(hub).getVisibility());
 
-        hub.setXMegaDriveCategories(new ArrayList<>());
+        hub.setXMegaDriveCategories(items(4, "https://example.invalid/category/no-art-"));
         assertEquals(2, hub.itemCount());
         assertEquals(View.GONE, xMegaDriveShelf(hub).getVisibility());
         hub.clear();
