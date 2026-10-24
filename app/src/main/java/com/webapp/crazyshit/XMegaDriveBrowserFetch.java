@@ -6,20 +6,20 @@ import android.content.Context;
 import android.graphics.Color;
 import android.os.Handler;
 import android.os.Looper;
+import android.util.Log;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewParent;
 import android.webkit.CookieManager;
+import android.webkit.WebResourceError;
+import android.webkit.WebResourceRequest;
+import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.FrameLayout;
 import android.widget.TextView;
-
-import androidx.webkit.UserAgentMetadata;
-import androidx.webkit.WebSettingsCompat;
-import androidx.webkit.WebViewFeature;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -29,41 +29,27 @@ import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Entities;
 
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 /**
- * Loads an XMegaDrive page in the real WebView when a direct request cannot.
- * The view stays full size because a hidden client is rejected. Its identity is this
- * device's Chrome, not the embedded-WebView tag, so the site's own check can finish.
+ * Loads an XMegaDrive page in the full-size WebView and reads it there.
+ * The "; wv" token is removed from the user-agent string. Client hints are not
+ * rewritten, because that does not make this WebView the same as Chrome.
+ * cf_clearance and __cf_bm are left in place so a valid session is not discarded.
  */
 final class XMegaDriveBrowserFetch {
+    private static final String TAG = "XMegaDrive";
     private static final long TIMEOUT_SECONDS = 45L;
     private static final long EXTRACTION_RETRY_MS = 800L;
-    private static final Pattern CHROME_VERSION = Pattern.compile("Chrome/([0-9.]+)");
-    private static final Pattern ANDROID_MODEL = Pattern.compile(
-            "Android\\s+[0-9.]+;\\s+(.*?)\\s+Build/");
-    private static volatile String sessionUserAgent = "";
     private static volatile boolean passedOnce;
 
     private XMegaDriveBrowserFetch() {
-    }
-
-    static String sessionUserAgent() {
-        return sessionUserAgent == null ? "" : sessionUserAgent;
-    }
-
-    static boolean passedBrowserCheck() {
-        return passedOnce && sessionUserAgent != null && !sessionUserAgent.isEmpty();
     }
 
     static Document fetch(Context context, String url, String referer) throws IOException {
@@ -204,14 +190,13 @@ final class XMegaDriveBrowserFetch {
             settings.setAllowFileAccess(false);
             settings.setAllowContentAccess(false);
             settings.setCacheMode(WebSettings.LOAD_DEFAULT);
-            String agent = XMegaDriveRepository.browserIdentity(settings.getUserAgentString());
-            if (!agent.isEmpty()) {
-                settings.setUserAgentString(agent);
-                sessionUserAgent = agent;
-                applyClientHints(settings, agent);
-            }
-            if (!passedOnce) clearChallengeCookies();
-            AtomicBoolean reloaded = new AtomicBoolean();
+            String rawAgent = settings.getUserAgentString();
+            String agent = XMegaDriveRepository.browserIdentity(rawAgent);
+            Log.i(TAG, "userAgent default=" + oneLine(rawAgent));
+            Log.i(TAG, "userAgent applied=" + oneLine(agent));
+            if (!agent.isEmpty()) settings.setUserAgentString(agent);
+            Log.i(TAG, "session cleared=false " + cookieReport(url));
+            AtomicBoolean identityLogged = new AtomicBoolean();
             HashMap<String, String> headers = new HashMap<>();
             headers.put("Accept-Language", "en-US,en;q=0.9");
             if (referer != null && !referer.trim().isEmpty()) headers.put("Referer", referer);
@@ -220,15 +205,16 @@ final class XMegaDriveBrowserFetch {
                 public void onPageFinished(WebView view, String finalUrl) {
                     if (completed.get()) return;
                     int seen = generation.incrementAndGet();
+                    logPage("finished", finalUrl, view.getTitle(), isInterstitial(
+                            view.getTitle(), "", finalUrl));
                     view.postDelayed(
                             () -> consider(
                                     view,
                                     overlay,
                                     url,
-                                    headers,
                                     seen,
                                     generation,
-                                    reloaded,
+                                    identityLogged,
                                     completed,
                                     result,
                                     error,
@@ -236,6 +222,39 @@ final class XMegaDriveBrowserFetch {
                             ),
                             EXTRACTION_RETRY_MS
                     );
+                }
+
+                @Override
+                public void onReceivedHttpError(
+                        WebView view,
+                        WebResourceRequest request,
+                        WebResourceResponse response
+                ) {
+                    if (request != null && !request.isForMainFrame()) return;
+                    int status = response == null ? 0 : response.getStatusCode();
+                    String reason = response == null || response.getReasonPhrase() == null
+                            ? ""
+                            : response.getReasonPhrase();
+                    Log.i(TAG, "httpError status=" + status
+                            + " reason=" + oneLine(reason)
+                            + " url=" + redactUrl(request == null || request.getUrl() == null
+                            ? ""
+                            : request.getUrl().toString()));
+                }
+
+                @Override
+                public void onReceivedError(
+                        WebView view,
+                        WebResourceRequest request,
+                        WebResourceError error
+                ) {
+                    if (request != null && !request.isForMainFrame()) return;
+                    CharSequence description = error == null ? "" : error.getDescription();
+                    Log.i(TAG, "loadError code=" + (error == null ? 0 : error.getErrorCode())
+                            + " desc=" + oneLine(description == null ? "" : description.toString())
+                            + " url=" + redactUrl(request == null || request.getUrl() == null
+                            ? ""
+                            : request.getUrl().toString()));
                 }
             });
             FrameLayout.LayoutParams webParams = new FrameLayout.LayoutParams(
@@ -260,10 +279,9 @@ final class XMegaDriveBrowserFetch {
             WebView webView,
             FrameLayout overlay,
             String requestedUrl,
-            HashMap<String, String> headers,
             int seen,
             AtomicInteger generation,
-            AtomicBoolean reloaded,
+            AtomicBoolean identityLogged,
             AtomicBoolean completed,
             AtomicReference<Document> result,
             AtomicReference<IOException> error,
@@ -271,17 +289,20 @@ final class XMegaDriveBrowserFetch {
     ) {
         if (completed.get() || seen != generation.get()) return;
         String titleNow = webView.getTitle() == null ? "" : webView.getTitle();
-        if (isInterstitial(titleNow, "", webView.getUrl())) {
+        String locationNow = webView.getUrl();
+        boolean waiting = isInterstitial(titleNow, "", locationNow);
+        logPage(waiting ? "interstitial" : "checking", locationNow, titleNow, waiting);
+        if (identityLogged.compareAndSet(false, true)) logIdentity(webView);
+        if (waiting) {
             reveal(overlay, webView);
             webView.postDelayed(
                     () -> consider(
                             webView,
                             overlay,
                             requestedUrl,
-                            headers,
                             seen,
                             generation,
-                            reloaded,
+                            identityLogged,
                             completed,
                             result,
                             error,
@@ -308,16 +329,16 @@ final class XMegaDriveBrowserFetch {
             }
             String location = webView.getUrl();
             if (isInterstitial(title, text, location)) {
+                logPage("interstitial", location, title, true);
                 reveal(overlay, webView);
                 webView.postDelayed(
                         () -> consider(
                                 webView,
                                 overlay,
                                 requestedUrl,
-                                headers,
                                 seen,
                                 generation,
-                                reloaded,
+                                identityLogged,
                                 completed,
                                 result,
                                 error,
@@ -328,13 +349,8 @@ final class XMegaDriveBrowserFetch {
                 return;
             }
             if (isForbidden(title, text)) {
+                logPage("forbidden", location, title, false);
                 reveal(overlay, webView);
-                if (reloaded.compareAndSet(false, true)) {
-                    setLabel(overlay, "That check was blocked. One more try.");
-                    clearChallengeCookies();
-                    webView.loadUrl(requestedUrl, headers);
-                    return;
-                }
                 complete(completed, error, finished,
                         new IOException("XMegaDrive blocked this device"));
                 return;
@@ -436,6 +452,7 @@ final class XMegaDriveBrowserFetch {
                         ? finalUrl
                         : requestedUrl;
                 if (ready(document, title, body, pageUrl, attempt)) {
+                    logPage("ready", finalUrl, title, false);
                     try {
                         CookieManager.getInstance().flush();
                     } catch (Exception ignored) {
@@ -446,6 +463,7 @@ final class XMegaDriveBrowserFetch {
                     return;
                 }
                 if (permanentlyBlocked(title, body)) {
+                    logPage("blocked", finalUrl, title, false);
                     complete(completed, error, finished,
                             new IOException("XMegaDrive blocked this device"));
                     return;
@@ -617,51 +635,85 @@ final class XMegaDriveBrowserFetch {
         return false;
     }
 
-    private static void applyClientHints(WebSettings settings, String agent) {
-        try {
-            if (!WebViewFeature.isFeatureSupported(WebViewFeature.USER_AGENT_METADATA)) return;
-            Matcher matcher = CHROME_VERSION.matcher(agent == null ? "" : agent);
-            if (!matcher.find()) return;
-            String full = matcher.group(1);
-            String major = full.contains(".") ? full.substring(0, full.indexOf('.')) : full;
-            List<UserAgentMetadata.BrandVersion> brands = new ArrayList<>();
-            brands.add(brand("Chromium", major, full));
-            brands.add(brand("Google Chrome", major, full));
-            brands.add(brand("Not_A Brand", "24", "24.0.0.0"));
-            UserAgentMetadata.Builder metadata = new UserAgentMetadata.Builder()
-                    .setBrandVersionList(brands)
-                    .setMobile(true)
-                    .setPlatform("Android");
-            Matcher model = ANDROID_MODEL.matcher(agent);
-            if (model.find() && !model.group(1).trim().isEmpty()) {
-                metadata.setModel(model.group(1).trim());
+    private static void logIdentity(WebView webView) {
+        String script = "(() => {"
+                + "const data=navigator.userAgentData||null;"
+                + "const brands=[];"
+                + "if(data&&data.brands){for(let i=0;i<data.brands.length;i++){"
+                + "const b=data.brands[i]||{}; brands.push((b.brand||'')+'/'+(b.version||''));}}"
+                + "const base={ua:navigator.userAgent||'',brands:brands,"
+                + "mobile:!!(data&&data.mobile),platform:(data&&data.platform)||''};"
+                + "if(!data||!data.getHighEntropyValues) return JSON.stringify(base);"
+                + "return data.getHighEntropyValues(['model','platform','platformVersion']).then(high=>{"
+                + "base.model=(high&&high.model)||'';"
+                + "base.platform=(high&&high.platform)||base.platform;"
+                + "base.platformVersion=(high&&high.platformVersion)||'';"
+                + "return JSON.stringify(base);"
+                + "}).catch(()=>JSON.stringify(base));})()";
+        webView.evaluateJavascript(script, encoded -> {
+            String ua = "";
+            String brands = "";
+            String mobile = "";
+            String platform = "";
+            String platformVersion = "";
+            String model = "";
+            try {
+                Object decoded = new JSONTokener(encoded == null ? "null" : encoded).nextValue();
+                if (decoded instanceof String) {
+                    JSONObject json = new JSONObject((String) decoded);
+                    ua = json.optString("ua");
+                    brands = String.valueOf(json.opt("brands"));
+                    mobile = String.valueOf(json.opt("mobile"));
+                    platform = json.optString("platform");
+                    platformVersion = json.optString("platformVersion");
+                    model = json.optString("model");
+                }
+            } catch (Exception ignored) {
             }
-            WebSettingsCompat.setUserAgentMetadata(settings, metadata.build());
-        } catch (Throwable ignored) {
-        }
+            Log.i(TAG, "identity url=" + redactUrl(webView.getUrl())
+                    + " ua=" + oneLine(ua)
+                    + " brands=" + oneLine(brands)
+                    + " mobile=" + oneLine(mobile)
+                    + " platform=" + oneLine(platform)
+                    + " platformVersion=" + oneLine(platformVersion)
+                    + " model=" + oneLine(model)
+                    + " " + cookieReport(webView.getUrl()));
+        });
     }
 
-    private static UserAgentMetadata.BrandVersion brand(String name, String major, String full) {
-        return new UserAgentMetadata.BrandVersion.Builder()
-                .setBrand(name)
-                .setMajorVersion(major)
-                .setFullVersion(full)
-                .build();
+    private static volatile String lastLoggedPage = "";
+
+    private static void logPage(String phase, String url, String title, boolean interstitial) {
+        String line = phase
+                + " url=" + redactUrl(url)
+                + " title=" + oneLine(title)
+                + " interstitial=" + interstitial
+                + " " + cookieReport(url);
+        if (line.equals(lastLoggedPage)) return;
+        lastLoggedPage = line;
+        Log.i(TAG, line);
     }
 
-    private static void clearChallengeCookies() {
-        CookieManager manager = CookieManager.getInstance();
-        String[] urls = {"https://www.xmegadrive.com/", "https://xmegadrive.com/"};
-        String[] names = {"cf_clearance", "__cf_bm", "cf_chl_2", "cf_chl_prog"};
-        for (String page : urls) {
-            for (String name : names) {
-                manager.setCookie(page, name + "=; Max-Age=0; Path=/; Secure");
-            }
-        }
+    private static String cookieReport(String url) {
         try {
-            manager.flush();
+            return XMegaDriveRepository.cookiePresence(
+                    CookieManager.getInstance().getCookie(url));
         } catch (Exception ignored) {
+            return "cf_clearance=unavailable __cf_bm=unavailable";
         }
+    }
+
+    private static String redactUrl(String url) {
+        if (url == null) return "";
+        int query = url.indexOf('?');
+        int fragment = url.indexOf('#');
+        int cut = query < 0 ? fragment : (fragment < 0 ? query : Math.min(query, fragment));
+        return cut < 0 ? url : url.substring(0, cut);
+    }
+
+    private static String oneLine(String value) {
+        if (value == null) return "";
+        return value.replace('\n', ' ').replace('\r', ' ').trim();
     }
 
     private static boolean isInterstitial(String title, String text, String url) {
@@ -691,13 +743,6 @@ final class XMegaDriveBrowserFetch {
             overlay.setClickable(true);
         }
         if (webView != null) webView.requestFocus();
-    }
-
-    private static void setLabel(FrameLayout overlay, String message) {
-        if (overlay == null || overlay.getChildCount() == 0) return;
-        if (overlay.getChildAt(0) instanceof TextView) {
-            ((TextView) overlay.getChildAt(0)).setText(message);
-        }
     }
 
     private static boolean permanentlyBlocked(String title, String body) {

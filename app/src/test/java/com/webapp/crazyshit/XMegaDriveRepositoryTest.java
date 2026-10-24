@@ -28,6 +28,26 @@ public final class XMegaDriveRepositoryTest {
         assertEquals("", XMegaDriveRepository.browserIdentity("  "));
     }
 
+    @Test public void cookiePresenceReportsNamesWithoutValues() {
+        String header = "cf_clearance=secret-value; __cf_bm=other-secret; theme=dark";
+        String report = XMegaDriveRepository.cookiePresence(header);
+        assertEquals("cf_clearance=present __cf_bm=present", report);
+        assertFalse(report.contains("secret"));
+        assertFalse(report.contains("dark"));
+        assertEquals(
+                "cf_clearance=absent __cf_bm=absent",
+                XMegaDriveRepository.cookiePresence(null)
+        );
+        assertEquals(
+                "cf_clearance=absent __cf_bm=present",
+                XMegaDriveRepository.cookiePresence("__cf_bm=value")
+        );
+        assertEquals(
+                "cf_clearance=absent __cf_bm=absent",
+                XMegaDriveRepository.cookiePresence("cf_clearance=")
+        );
+    }
+
     @Test public void acceptsOnlyXMegaDriveHosts() {
         assertTrue(XMegaDriveRepository.isXMegaDriveUrl(PAGE));
         assertTrue(XMegaDriveRepository.isXMegaDriveUrl("https://xmegadrive.com/videos/example/"));

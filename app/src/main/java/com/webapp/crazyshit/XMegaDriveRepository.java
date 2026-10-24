@@ -1,9 +1,7 @@
 package com.webapp.crazyshit;
 
 import android.content.Context;
-import android.webkit.CookieManager;
 
-import org.jsoup.Connection;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
@@ -23,9 +21,8 @@ import java.util.regex.Pattern;
  * Compiled, not remote-config. Schema 1 has exactly seven configurable sources and does
  * not include XMegaDrive, so this provider stays in code. ShitTok scrapes public /videos/
  * listings. Shows discovers /categories/ and opens each category inside the existing
- * gallery. The site's browser check runs in a full-size WebView using this device's Chrome,
- * without the WebView marker that makes that check return Forbidden. A direct request is
- * only reused after the check has succeeded. Playback resolves the
+ * gallery. Pages are read in the WebView session that passed the site's browser check.
+ * A direct client is not given that session's cookies or user agent. Playback resolves the
  * direct MP4 from the video page without changing the shared Media3 path. Failure is contained
  * so other providers continue.
  */
@@ -34,11 +31,8 @@ final class XMegaDriveRepository {
     private static final String BASE = "https://www.xmegadrive.com/";
     private static final String LISTING = BASE + "videos/";
     private static final String CATEGORIES = BASE + "categories/";
-    private static final String USER_AGENT =
-            "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) " +
-                    "Chrome/120.0.0.0 Mobile Safari/537.36";
 
-    /** Device Chrome UA with the embedded-WebView marker removed. */
+    /** Device Chrome UA with the embedded-WebView marker removed. Client hints are left alone. */
     static String browserIdentity(String webViewUserAgent) {
         if (webViewUserAgent == null) return "";
         String agent = webViewUserAgent.trim();
@@ -46,6 +40,25 @@ final class XMegaDriveRepository {
         agent = agent.replace("; wv)", ")").replace("; wv", "");
         agent = agent.replace("Version/4.0 ", "");
         return agent.replaceAll("\\s+", " ").trim();
+    }
+
+    /** Names only. Never returns cookie values. */
+    static String cookiePresence(String cookieHeader) {
+        return "cf_clearance=" + presence(cookieHeader, "cf_clearance")
+                + " __cf_bm=" + presence(cookieHeader, "__cf_bm");
+    }
+
+    private static String presence(String header, String name) {
+        if (header == null || name == null || name.isEmpty()) return "absent";
+        for (String part : header.split(";")) {
+            String trimmed = part.trim();
+            int split = trimmed.indexOf('=');
+            String key = split < 0 ? trimmed : trimmed.substring(0, split).trim();
+            if (!name.equals(key)) continue;
+            String value = split < 0 ? "" : trimmed.substring(split + 1).trim();
+            return value.isEmpty() ? "absent" : "present";
+        }
+        return "absent";
     }
 
     private static final Pattern PLAYER_URL = Pattern.compile(
@@ -196,44 +209,11 @@ final class XMegaDriveRepository {
     }
 
     private static Document fetch(Context context, String url) throws IOException {
-        if (XMegaDriveBrowserFetch.passedBrowserCheck()) {
-            try {
-                Document direct = fetchDirect(context, url);
-                if (hasUsefulMarkup(direct, url)) return direct;
-            } catch (IOException direct) {
-                if (!isBlocked(direct)) throw direct;
-            }
-        }
         synchronized (BROWSER_FALLBACK) {
             Document rendered = XMegaDriveBrowserFetch.fetch(context, url, BASE);
             if (hasUsefulMarkup(rendered, url)) return rendered;
             throw new IOException("XMegaDrive stayed blocked after the browser check");
         }
-    }
-
-    private static Document fetchDirect(Context context, String url) throws IOException {
-        String agent = XMegaDriveBrowserFetch.sessionUserAgent();
-        if (agent.isEmpty()) agent = USER_AGENT;
-        Connection connection = Jsoup.connect(url)
-                .userAgent(agent)
-                .referrer(BASE)
-                .timeout(8000)
-                .maxBodySize(4 * 1024 * 1024)
-                .followRedirects(true)
-                .ignoreHttpErrors(true)
-                .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
-                .header("Accept-Language", "en-US,en;q=0.9");
-        String cookies = cookiesFor(url);
-        if (!cookies.isEmpty()) connection.header("Cookie", cookies);
-        Connection.Response response = connection.execute();
-        int status = response.statusCode();
-        Document document = response.parse();
-        document.setBaseUri(url);
-        if (status == 404) throw new IOException("XMegaDrive returned HTTP 404");
-        if (status >= 400 || looksBlocked(document)) {
-            throw new IOException("XMegaDrive blocked the direct request (" + status + ")");
-        }
-        return document;
     }
 
     private static boolean hasUsefulMarkup(Document document, String url) {
@@ -249,22 +229,6 @@ final class XMegaDriveRepository {
     private static boolean ageGate(Document document) {
         String text = document.text() == null ? "" : document.text().toLowerCase(Locale.US);
         return text.contains("age confirmation");
-    }
-
-    private static boolean isBlocked(IOException error) {
-        String message = error == null || error.getMessage() == null
-                ? ""
-                : error.getMessage().toLowerCase(Locale.US);
-        return message.contains("blocked");
-    }
-
-    private static String cookiesFor(String url) {
-        try {
-            String cookies = CookieManager.getInstance().getCookie(url);
-            return cookies == null ? "" : cookies.trim();
-        } catch (Exception ignored) {
-            return "";
-        }
     }
 
     private static void parseCategories(Document document, LinkedHashMap<String, NativeContentItem> found) {
