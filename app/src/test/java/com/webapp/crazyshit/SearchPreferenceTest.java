@@ -14,7 +14,13 @@ import static org.junit.Assert.*;
 import static org.robolectric.util.ReflectionHelpers.ClassParameter.from;
 
 @RunWith(RobolectricTestRunner.class)
-@Config(application = Application.class, sdk = 35)
+@Config(application = Application.class, sdk = 35, shadows = {
+        SearchScopeTest.QuietCrazy.class,
+        SearchScopeTest.QuietEfukt.class,
+        SearchScopeTest.QuietKaotic.class,
+        SearchScopeTest.QuietXMega.class,
+        SearchScopeTest.QuietBaddie.class
+})
 public final class SearchPreferenceTest {
     @Test public void snapshotCannotReviveCreatorsFromEarlierMode() throws Exception {
         try (org.robolectric.android.controller.ActivityController<Activity> host =
@@ -67,8 +73,8 @@ public final class SearchPreferenceTest {
                 ReflectionHelpers.setField(globalPanel, "activeQuery", "nolan");
                 ReflectionHelpers.setField(globalPanel, "searchPreference", ContentPreference.ALL);
                 ContentPreference.set(host.get(), ContentPreference.MEN);
-                ReflectionHelpers.callInstanceMethod(globalPanel, "startGlobalSearch",
-                        from(String.class, "nolan"), from(boolean.class, true));
+                ReflectionHelpers.callInstanceMethod(globalPanel, "startShowsSearch",
+                        from(String.class, "nolan"));
                 assertEquals(0, globalAdapter.getItemCount());
             } finally {
                 creatorPanel.close();

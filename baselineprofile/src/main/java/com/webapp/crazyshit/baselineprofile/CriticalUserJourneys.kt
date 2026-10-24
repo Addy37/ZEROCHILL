@@ -230,14 +230,14 @@ internal fun MacrobenchmarkScope.search() {
         device.click(searchX, bounds.centerY())
     }
     val field = checkNotNull(
-        device.wait(Until.findObject(By.desc("Search creators, albums and videos")), 5_000)
+        device.wait(Until.findObject(By.desc("Search Shows")), 5_000)
     ) {
         "Search field did not open"
     }
     field.click()
     field.text = "mia"
     device.pressEnter()
-    val terminalSearchState = Pattern.compile("(?i)(Search complete|Unavailable:.*)")
+    val terminalSearchState = Pattern.compile("(?i).*(Search complete|Unavailable:).*")
     checkNotNull(
         device.wait(Until.findObject(By.text(terminalSearchState)), 15_000)
             ?: device.wait(Until.findObject(By.desc(terminalSearchState)), 1_000)

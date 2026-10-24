@@ -156,6 +156,98 @@ final class XMegaDriveRepository {
         return parseVideos(fetch(context, url), MAX_CATEGORY_VIDEOS);
     }
 
+    /** KVS search path. Empty when the query has no searchable characters. */
+    static String searchUrl(String query) {
+        String slug = query == null ? "" : query.toLowerCase(Locale.US).trim();
+        slug = slug.replaceAll("[^a-z0-9]+", "-");
+        slug = slug.replaceAll("(^-+|-+$)", "");
+        if (slug.isEmpty()) return "";
+        return BASE + "search/" + slug + "/";
+    }
+
+    /**
+     * One search page, plus the existing bounded category directory when the search page has no
+     * category matches. A failed search page falls back to one listing page. Nothing here runs
+     * unless Search has selected XMegaDrive and the query is non-empty.
+     */
+    List<NativeContentItem> search(Context context, String query) throws IOException {
+        String url = searchUrl(query);
+        if (url.isEmpty()) return new ArrayList<>();
+        if (Thread.currentThread().isInterrupted()) {
+            throw new IOException("XMegaDrive search was cancelled");
+        }
+        ArrayList<NativeContentItem> found = new ArrayList<>();
+        IOException failure = null;
+        boolean siteSearch = false;
+        try {
+            Document document = fetch(context, url);
+            siteSearch = true;
+            for (NativeContentItem video : parseVideos(document, MAX_CATEGORY_VIDEOS)) {
+                addSearchItem(found, video);
+            }
+            addMatchingCategories(categoriesOn(document), query, found);
+        } catch (IOException error) {
+            failure = error;
+            if (Thread.currentThread().isInterrupted()) throw error;
+        }
+        if (!siteSearch) {
+            if (Thread.currentThread().isInterrupted()) {
+                throw new IOException("XMegaDrive search was cancelled");
+            }
+            try {
+                for (NativeContentItem video : parseVideos(fetch(context, LISTING), MAX_CANDIDATES)) {
+                    if (matchesQuery(video, query)) addSearchItem(found, video);
+                }
+            } catch (IOException error) {
+                if (found.isEmpty()) throw failure == null ? error : failure;
+            }
+        }
+        if (!hasCategory(found) && !Thread.currentThread().isInterrupted()) {
+            try {
+                addMatchingCategories(fetchCategories(context), query, found);
+            } catch (IOException error) {
+                if (found.isEmpty()) throw failure == null ? error : failure;
+            }
+        }
+        if (found.isEmpty() && failure != null && !siteSearch) throw failure;
+        return found;
+    }
+
+    private static List<NativeContentItem> categoriesOn(Document document) {
+        LinkedHashMap<String, NativeContentItem> found = new LinkedHashMap<>();
+        parseCategories(document, found);
+        return new ArrayList<>(found.values());
+    }
+
+    private static void addMatchingCategories(
+            List<NativeContentItem> categories,
+            String query,
+            List<NativeContentItem> found
+    ) {
+        if (categories == null) return;
+        for (NativeContentItem category : categories) {
+            if (matchesQuery(category, query)) addSearchItem(found, category);
+        }
+    }
+
+    private static boolean hasCategory(List<NativeContentItem> items) {
+        for (NativeContentItem item : items) if (item != null && item.isCategory()) return true;
+        return false;
+    }
+
+    private static void addSearchItem(List<NativeContentItem> found, NativeContentItem item) {
+        if (item == null || item.url == null || item.url.isEmpty() || found.size() >= 40) return;
+        for (NativeContentItem existing : found) {
+            if (item.url.equals(existing.url)) return;
+        }
+        found.add(item);
+    }
+
+    static boolean matchesQuery(NativeContentItem item, String query) {
+        if (item == null) return false;
+        return LibrarySearch.matches(query, item.title, item.url, item.description, item.uploader);
+    }
+
     CrazyShitRepository.StreamInfo resolvePlayable(Context context, String pageUrl) throws IOException {
         if (!isXMegaDriveUrl(pageUrl)) return null;
         Document page = fetch(context, pageUrl);
