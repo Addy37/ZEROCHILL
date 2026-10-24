@@ -1,7 +1,9 @@
 package com.webapp.crazyshit;
 
 import android.content.Context;
+import android.webkit.CookieManager;
 
+import org.jsoup.Connection;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
@@ -19,14 +21,20 @@ import java.util.Locale;
  * Compiled, not remote-config. Schema 1 has exactly seven configurable sources and does
  * not include XMegaDrive, so this provider stays in code. ShitTok scrapes public /videos/
  * listings. Shows discovers /categories/ and opens each category inside the existing
- * gallery. Playback resolves the direct MP4 from the video page without changing the
- * shared Media3 path. Failure is contained so other providers continue.
+ * gallery. A direct request that only receives the edge challenge is retried once in a
+ * hidden WebView so the Shows shelf can read the real category cards. Playback resolves the
+ * direct MP4 from the video page without changing the shared Media3 path. Failure is contained
+ * so other providers continue.
  */
 final class XMegaDriveRepository {
     static final String LABEL = "XMegaDrive";
     private static final String BASE = "https://www.xmegadrive.com/";
     private static final String LISTING = BASE + "videos/";
     private static final String CATEGORIES = BASE + "categories/";
+    private static final String USER_AGENT =
+            "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) " +
+                    "Chrome/120.0.0.0 Mobile Safari/537.36";
+    private static final Object BROWSER_FALLBACK = new Object();
     private static final int MAX_CANDIDATES = 12;
     private static final int MAX_RETURNED = 8;
     private static final int MAX_CATEGORY_VIDEOS = 36;
@@ -143,12 +151,96 @@ final class XMegaDriveRepository {
         return extractMedia(Jsoup.parse(html == null ? "" : html, base));
     }
 
+    /** True when the body is an edge challenge instead of a listing. */
+    static boolean looksBlocked(String html) {
+        return looksBlocked(Jsoup.parse(html == null ? "" : html, BASE));
+    }
+
+    static boolean looksBlocked(Document document) {
+        if (document == null) return true;
+        String title = document.title() == null ? "" : document.title().toLowerCase(Locale.US);
+        if (title.contains("just a moment")
+                || title.contains("attention required")
+                || title.contains("cloudflare")) {
+            return true;
+        }
+        String html = document.html().toLowerCase(Locale.US);
+        return html.contains("cf-challenge")
+                || html.contains("challenge-platform")
+                || html.contains("checking your browser")
+                || html.contains("/cdn-cgi/challenge");
+    }
+
     private static Document fetch(Context context, String url) throws IOException {
-        return Jsoup.connect(url)
-                .userAgent("Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36")
+        try {
+            Document direct = fetchDirect(context, url);
+            if (hasUsefulMarkup(direct)) return direct;
+        } catch (IOException direct) {
+            if (!isBlocked(direct)) throw direct;
+        }
+        synchronized (BROWSER_FALLBACK) {
+            try {
+                Document retry = fetchDirect(context, url);
+                if (hasUsefulMarkup(retry)) return retry;
+            } catch (IOException ignored) {
+            }
+            Document rendered = XMegaDriveBrowserFetch.fetch(context, url, USER_AGENT, BASE);
+            try {
+                Document after = fetchDirect(context, url);
+                if (hasUsefulMarkup(after)) return after;
+            } catch (IOException ignored) {
+            }
+            if (hasUsefulMarkup(rendered)) return rendered;
+            throw new IOException("XMegaDrive stayed blocked after the browser check");
+        }
+    }
+
+    private static Document fetchDirect(Context context, String url) throws IOException {
+        Connection connection = Jsoup.connect(url)
+                .userAgent(USER_AGENT)
                 .referrer(BASE)
-                .timeout(12000)
-                .get();
+                .timeout(8000)
+                .maxBodySize(4 * 1024 * 1024)
+                .followRedirects(true)
+                .ignoreHttpErrors(true)
+                .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+                .header("Accept-Language", "en-US,en;q=0.9");
+        String cookies = cookiesFor(url);
+        if (!cookies.isEmpty()) connection.header("Cookie", cookies);
+        Connection.Response response = connection.execute();
+        int status = response.statusCode();
+        Document document = response.parse();
+        document.setBaseUri(url);
+        if (status == 404) throw new IOException("XMegaDrive returned HTTP 404");
+        if (status >= 400 || looksBlocked(document)) {
+            throw new IOException("XMegaDrive blocked the direct request (" + status + ")");
+        }
+        return document;
+    }
+
+    private static boolean hasUsefulMarkup(Document document) {
+        if (document == null || looksBlocked(document)) return false;
+        LinkedHashMap<String, NativeContentItem> categories = new LinkedHashMap<>();
+        parseCategories(document, categories);
+        if (!categories.isEmpty()) return true;
+        if (!parseVideos(document, 1).isEmpty()) return true;
+        return !extractMedia(document).isEmpty();
+    }
+
+    private static boolean isBlocked(IOException error) {
+        String message = error == null || error.getMessage() == null
+                ? ""
+                : error.getMessage().toLowerCase(Locale.US);
+        return message.contains("blocked");
+    }
+
+    private static String cookiesFor(String url) {
+        try {
+            String cookies = CookieManager.getInstance().getCookie(url);
+            return cookies == null ? "" : cookies.trim();
+        } catch (Exception ignored) {
+            return "";
+        }
     }
 
     private static void parseCategories(Document document, LinkedHashMap<String, NativeContentItem> found) {

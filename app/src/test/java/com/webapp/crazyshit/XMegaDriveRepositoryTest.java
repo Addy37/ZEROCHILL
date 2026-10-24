@@ -80,6 +80,17 @@ public final class XMegaDriveRepositoryTest {
         assertEquals("", XMegaDriveRepository.mediaFromHtml(null, PAGE));
     }
 
+    @Test public void challengeHtmlIsBlockedAndYieldsNoCategories() {
+        String challenge = ""
+                + "<html><head><title>Just a moment...</title></head><body>"
+                + "Checking your browser before accessing www.xmegadrive.com"
+                + "<script src=\"https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/g/orchestrate/chl_page\"></script>"
+                + "</body></html>";
+        assertTrue(XMegaDriveRepository.looksBlocked(challenge));
+        assertTrue(XMegaDriveRepository.parseCategoriesHtml(challenge).isEmpty());
+        assertFalse(XMegaDriveRepository.looksBlocked(categoryDirectoryHtml()));
+    }
+
     @Test public void categoryDiscoveryUsesRealCategoryCardsAndArtwork() {
         List<NativeContentItem> items = XMegaDriveRepository.parseCategoriesHtml(categoryDirectoryHtml());
 
