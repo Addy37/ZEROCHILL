@@ -10,6 +10,7 @@ import org.jsoup.nodes.Element;
 
 import java.io.IOException;
 import java.net.URI;
+import java.net.URLEncoder;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -121,6 +122,66 @@ final class WebVideoSourceRepository {
         document = fetchConfigured(context, config, requested);
         if (requestedPage == 1) rememberKaoticPaginationTemplate(base, document);
         return parseFeed(document, source, requestedPage, config);
+    }
+
+    /**
+     * Kaotic has no remote search route. The path is compiled. The origin, headers, timeouts,
+     * retries and card parser all come from the current Kaotic configuration. At most one search
+     * request, then the first configured feed page if that request misses.
+     */
+    static String kaoticSearchUrl(String baseUrl, String query) {
+        String value = query == null ? "" : query.trim();
+        if (value.length() < 2 || baseUrl == null || baseUrl.trim().isEmpty()) return "";
+        try {
+            String encoded = URLEncoder.encode(value, "UTF-8").replace("+", "%20");
+            return URI.create(baseUrl).resolve("search/" + encoded).toString();
+        } catch (Exception ignored) {
+            return "";
+        }
+    }
+
+    List<NativeContentItem> search(Context context, String query) throws IOException {
+        SourceConfig.WebVideo config = config(Source.KAOTIC);
+        if (!config.enabled) throw new IOException(Source.KAOTIC.label + " is temporarily unavailable");
+        String value = query == null ? "" : query.trim();
+        if (value.length() < 2) return new ArrayList<>();
+        if (Thread.currentThread().isInterrupted()) throw new IOException("Kaotic search was cancelled");
+        String url = kaoticSearchUrl(config.baseUrl, value);
+        ArrayList<NativeContentItem> found = new ArrayList<>();
+        IOException failure = null;
+        if (!url.isEmpty()) {
+            try {
+                addKaoticMatches(found, parseFeed(
+                        fetchConfigured(context, config, url), Source.KAOTIC, 1, config), value);
+            } catch (IOException error) {
+                failure = error;
+            }
+        }
+        if (!found.isEmpty()) return found;
+        if (Thread.currentThread().isInterrupted()) {
+            throw failure == null ? new IOException("Kaotic search was cancelled") : failure;
+        }
+        try {
+            addKaoticMatches(found, fetchFeed(context, Source.KAOTIC, 1), value);
+        } catch (IOException error) {
+            if (failure != null) throw failure;
+            throw error;
+        }
+        return found;
+    }
+
+    private static void addKaoticMatches(
+            List<NativeContentItem> found,
+            List<NativeContentItem> items,
+            String query
+    ) {
+        if (items == null) return;
+        for (NativeContentItem item : items) {
+            if (item == null || item.isSection()) continue;
+            if (!LibrarySearch.matches(query, item.title, item.url, item.description, item.uploader)) continue;
+            found.add(item);
+            if (found.size() >= 40) return;
+        }
     }
 
     List<NativeContentItem> parseKaoticCategories(Document document) {

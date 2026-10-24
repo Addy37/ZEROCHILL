@@ -67,6 +67,8 @@ internal class GlassHeaderView @JvmOverloads constructor(
 
     fun setPageBackdrop(page: ViewPageBackdrop) { backdrop = page }
     fun setRecentSurface(recent: Boolean) { recentMaterial = recent }
+    fun sharesBackdropWith(other: GlassHeaderView): Boolean = backdrop === other.backdrop
+    fun usesHeaderGlass(): Boolean = !resultsSurface
 
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()

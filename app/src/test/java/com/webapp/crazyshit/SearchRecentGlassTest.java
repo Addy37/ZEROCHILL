@@ -52,12 +52,15 @@ public class SearchRecentGlassTest {
                     ViewCompat.dispatchApplyWindowInsets(panel.view, insets(ime));
                     layout(panel.view, 400, windowHeight);
                     int gap = ime > 20 ? 8 : 12;
-                    int available = Math.max(0, windowHeight - 24 - Math.max(20, ime) - 76 - gap);
+                    int reserved = SearchGlassLayout.SCOPED_RESULTS_TOP_DP;
+                    int maxBottom = windowHeight - Math.max(20, ime) - gap;
+                    int expectedTop = Math.min(24 + reserved, Math.max(24, maxBottom));
+                    int available = Math.max(0, maxBottom - expectedTop);
                     int expected = Math.min(48 + 56 * count + 14, available);
                     assertEquals(expected, pane.getHeight());
                     assertEquals(pane.getHeight(), rows.getHeight());
                     assertEquals(pane.getTop(), rows.getTop());
-                    assertEquals(24 + 76, pane.getTop());
+                    assertEquals(expectedTop, pane.getTop());
                     assertEquals(count == 0 ? View.INVISIBLE : View.VISIBLE, pane.getVisibility());
                     assertTrue(rows.getClipToOutline());
                     assertEquals(new android.graphics.Rect(0, 0, rows.getWidth(), rows.getHeight()), rows.getClipBounds());
@@ -94,7 +97,7 @@ public class SearchRecentGlassTest {
             RecentSearchStore.remove(host.get(), "Query 1"); panel.resume(); layout(panel.view, 400, 800);
             ViewCompat.dispatchApplyWindowInsets(panel.view, insets(300)); layout(panel.view, 400, 420);
             assertNull(ReflectionHelpers.getField(panel.view, "heightAnimator"));
-            assertEquals(12, pane.getHeight());
+            assertEquals(0, pane.getHeight());
             ViewCompat.dispatchApplyWindowInsets(panel.view, insets(0)); layout(panel.view, 400, 800);
             assertEquals(118, pane.getHeight());
             host.get().getSharedPreferences("app_prefs", 0).edit().putBoolean("immersive_motion_enabled", false).commit();

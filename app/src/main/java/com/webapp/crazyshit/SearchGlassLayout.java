@@ -18,7 +18,7 @@ final class SearchGlassLayout extends FrameLayout {
     private ViewPageBackdrop underlay;
     private final ViewPageBackdrop empty = new ViewPageBackdrop(this);
     private RectF pillBounds;
-    private GlassHeaderView pill, favorites, results;
+    private GlassHeaderView pill, favorites, results, scopes;
     private View rows;
     private boolean dirty = true;
     private int underlayRevision = -1;
@@ -86,16 +86,29 @@ final class SearchGlassLayout extends FrameLayout {
         setClipToPadding(false);
     }
 
+    static final int LEGACY_RESULTS_TOP_DP = 76;
+    static final int SCOPE_TOP_DP = 72;
+    static final int SCOPE_HEIGHT_DP = 40;
+    static final int SCOPED_RESULTS_TOP_DP = 120;
+
     void install(GlassHeaderView pill, GlassHeaderView favorites,
                  GlassHeaderView results, View rows) {
+        install(pill, favorites, results, rows, null);
+    }
+
+    void install(GlassHeaderView pill, GlassHeaderView favorites,
+                 GlassHeaderView results, View rows, GlassHeaderView scopes) {
         this.pill = pill; this.favorites = favorites; this.results = results; this.rows = rows;
+        this.scopes = scopes;
         addView(results); addView(rows); addView(pill); addView(favorites);
+        if (scopes != null) addView(scopes);
         // Share the glass outline itself, including its radius and current size.
         // This clips the complete native subtree on the hardware rendering path.
         rows.setOutlineProvider(results.getOutlineProvider());
         rows.setClipToOutline(true);
         pill.setPageBackdrop(page);
         favorites.setPageBackdrop(page);
+        if (scopes != null) scopes.setPageBackdrop(page);
         results.setPageBackdrop(empty);
     }
 
@@ -170,21 +183,36 @@ final class SearchGlassLayout extends FrameLayout {
         int available = resultHeight(MeasureSpec.getSize(heightSpec), Integer.MAX_VALUE);
         updateHeight(desired, available, panelWidth);
         int height = Math.min(available, heightAnimator != null ? animatedHeight : desired);
+        int resultsTop = resultsTopMargin(MeasureSpec.getSize(heightSpec));
         if (pillBounds == null) place(pill, width - dp(88), dp(56), dp(14), dp(8));
         else place(pill, Math.round(pillBounds.width()), Math.round(pillBounds.height()),
                 Math.round(pillBounds.left) - getPaddingLeft(), Math.round(pillBounds.top) - getPaddingTop());
         place(favorites, dp(48), dp(48), width - dp(62), dp(12));
-        place(results, width - dp(28), height, dp(14), dp(76));
-        place(rows, width - dp(28), height, dp(14), dp(76));
+        if (scopes != null) place(scopes, width - dp(28), dp(SCOPE_HEIGHT_DP), dp(14), dp(SCOPE_TOP_DP));
+        place(results, width - dp(28), height, dp(14), resultsTop);
+        place(rows, width - dp(28), height, dp(14), resultsTop);
         super.onMeasure(widthSpec, heightSpec);
     }
 
-    private int resultHeight(int windowHeight, int desired) {
+    private int resultsTopMargin(int windowHeight) {
+        int reserved = dp(scopes == null ? LEGACY_RESULTS_TOP_DP : SCOPED_RESULTS_TOP_DP);
+        int bottomGap = bottomGap();
+        int maxBottom = windowHeight - getPaddingBottom() - bottomGap;
+        int desiredTop = getPaddingTop() + reserved;
+        if (desiredTop <= maxBottom) return reserved;
+        return Math.max(0, maxBottom - getPaddingTop());
+    }
+
+    private int bottomGap() {
         // Close the 4dp gap difference continuously as IME crosses the nav inset.
         // Switching gaps on visibility alone would briefly expand the pane.
-        int bottomGap = dp(12) - Math.min(dp(4), Math.max(0, imeBottom - systemBottom));
+        return dp(12) - Math.min(dp(4), Math.max(0, imeBottom - systemBottom));
+    }
+
+    private int resultHeight(int windowHeight, int desired) {
+        int reserved = dp(scopes == null ? LEGACY_RESULTS_TOP_DP : SCOPED_RESULTS_TOP_DP);
         return Math.max(0, Math.min(windowHeight - getPaddingTop() - getPaddingBottom()
-                - dp(76) - bottomGap, desired));
+                - reserved - bottomGap(), desired));
     }
 
     void setPillBounds(RectF bounds) {
@@ -236,6 +264,7 @@ final class SearchGlassLayout extends FrameLayout {
         }
         if (results.getVisibility() == VISIBLE) drawChild(canvas, results, getDrawingTime());
         drawRows(canvas);
+        if (scopes != null) drawChild(canvas, scopes, getDrawingTime());
         drawChild(canvas, pill, getDrawingTime());
         drawChild(canvas, favorites, getDrawingTime());
     }

@@ -33,10 +33,12 @@ class SearchImeSmokeBenchmark {
             val bounds = bar.visibleBounds
             device.click((bounds.right - bounds.height() * 80 / 56), bounds.centerY())
         }
-        val field = checkNotNull(device.wait(Until.findObject(
-            By.desc("Search creators, albums and videos")), 3_000))
+        checkNotNull(device.wait(Until.findObject(By.desc("Search Shows")), 3_000))
+        checkNotNull(device.wait(Until.findObject(By.desc("OnlyFap search")), 2_000)).click()
+        val creatorField = checkNotNull(device.wait(Until.findObject(
+            By.desc("Search OnlyFap creators")), 2_000))
         // The real pill owns keyboard timing. Keep it focused and do not submit.
-        field.text = "an"
+        creatorField.text = "an"
         val deadline = SystemClock.uptimeMillis() + 4_000
         var imeShown = false
         while (!imeShown && SystemClock.uptimeMillis() < deadline) {
@@ -55,6 +57,6 @@ class SearchImeSmokeBenchmark {
         device.pressBack() // IME
         SystemClock.sleep(350)
         device.pressBack() // collapse
-        check(device.wait(Until.gone(By.desc("Search creators, albums and videos")), 2_000))
+        check(device.wait(Until.gone(By.desc("Search OnlyFap creators")), 2_000))
     }
 }

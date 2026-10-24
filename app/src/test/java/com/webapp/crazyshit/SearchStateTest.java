@@ -35,44 +35,30 @@ public class SearchStateTest {
         controller.pause().stop().destroy();
     }
 
-    @Test public void onlyFapFilterShowsOnlyRelevantFailuresAndCleanNoResults() {
+    @Test public void showsScopeKeepsItsOwnFailuresAndCleanNoResults() {
         ActivityController<SearchActivity> controller =
                 Robolectric.buildActivity(SearchActivity.class).create().start().resume();
         try {
             SearchPanel activity = controller.get().panel;
-            @SuppressWarnings("unchecked")
-            List<TextView> filters = ReflectionHelpers.getField(activity, "filterViews");
-            TextView onlyFap = null;
-            for (TextView filter : filters) {
-                if ("OnlyFap".contentEquals(filter.getText())) {
-                    onlyFap = filter;
-                    break;
-                }
-            }
-            assertNotNull(onlyFap);
-            onlyFap.performClick();
-
+            ReflectionHelpers.setField(activity, "scope", SearchPanel.Scope.SHOWS);
             ReflectionHelpers.setField(activity, "activeQuery", "fbdijdnd");
             ReflectionHelpers.setField(activity, "pendingSources", 0);
             @SuppressWarnings("unchecked")
             Map<Integer, String> errors = ReflectionHelpers.getField(activity, "errors");
-            errors.put(0, "CrazyShit videos");
-            errors.put(1, "EFukt videos");
-            errors.put(3, "EFukt series");
+            errors.put(0, "CrazyShit");
+            errors.put(1, "EFukt");
 
             ReflectionHelpers.callInstanceMethod(activity, "renderResults");
 
             TextView searchState = ReflectionHelpers.getField(activity, "searchState");
             TextView status = ReflectionHelpers.getField(activity, "status");
-            assertEquals("Search complete", searchState.getText().toString());
-            assertTrue(status.getText().toString().startsWith("No matches for “fbdijdnd”"));
+            assertEquals("Unavailable: CrazyShit, EFukt · Tap to retry", searchState.getText().toString());
+            assertTrue(status.getText().toString().startsWith("Some sources could not be reached."));
 
-            errors.put(7, "OnlyFap creators");
+            errors.clear();
             ReflectionHelpers.callInstanceMethod(activity, "renderResults");
-            assertEquals("Unavailable: OnlyFap creators · Tap to retry",
-                    searchState.getText().toString());
-            assertTrue(status.getText().toString().startsWith(
-                    "Some sources could not be reached."));
+            assertEquals("Shows search complete", searchState.getText().toString());
+            assertTrue(status.getText().toString().startsWith("No matches for “fbdijdnd”"));
         } finally {
             controller.pause().stop().destroy();
         }

@@ -13,6 +13,7 @@ import org.jsoup.nodes.Element;
 import java.io.IOException;
 import java.net.URI;
 import java.net.URLDecoder;
+import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -166,6 +167,88 @@ final class BaddieHubRepository {
                 MAX_SHOWS_PAGE_ITEMS
         );
         return toShowsItems(candidates);
+    }
+
+    /**
+     * WordPress search on the configured origin. There is no search route in schema 1, so the
+     * query string stays compiled and every other value comes from the current BaddieHub config.
+     * One search response, or one latest page if that response fails, plus one category page.
+     */
+    static String searchUrl(String baseUrl, String query) {
+        String value = query == null ? "" : query.trim();
+        if (value.length() < 2 || baseUrl == null || baseUrl.trim().isEmpty()) return "";
+        try {
+            return URI.create(baseUrl).resolve("?s=" + URLEncoder.encode(value, "UTF-8")).toString();
+        } catch (Exception ignored) {
+            return "";
+        }
+    }
+
+    List<NativeContentItem> search(Context context, String query) throws IOException {
+        SourceConfig.BaddieHub config = config(context);
+        if (!enabled(config)) return new ArrayList<>();
+        String value = query == null ? "" : query.trim();
+        if (value.length() < 2) return new ArrayList<>();
+        if (Thread.currentThread().isInterrupted()) {
+            throw new IOException("BaddieHub search was cancelled");
+        }
+        ArrayList<NativeContentItem> found = new ArrayList<>();
+        String searchUrl = searchUrl(config.baseUrl, value);
+        IOException failure = null;
+        boolean siteSearch = false;
+        if (!searchUrl.isEmpty()) {
+            try {
+                Document document = fetch(context, searchUrl, config.baseUrl, config);
+                siteSearch = true;
+                addSearchItems(found, toShowsItems(parseListing(
+                        document, config.cardLinksSelector, 40)));
+            } catch (IOException error) {
+                failure = error;
+            }
+        }
+        if (!siteSearch) {
+            if (Thread.currentThread().isInterrupted()) {
+                throw new IOException("BaddieHub search was cancelled");
+            }
+            String listingUrl = routeUrl(config, config.listingFirstRoute, "", 1);
+            Document document = fetch(context, listingUrl, config.baseUrl, config);
+            for (NativeContentItem item : toShowsItems(parseListing(
+                    document, config.cardLinksSelector, 40))) {
+                if (LibrarySearch.matches(value, item.title, item.url, item.description)) {
+                    addSearchItem(found, item);
+                }
+            }
+        }
+        if (!Thread.currentThread().isInterrupted()) {
+            try {
+                String categoriesUrl = routeUrl(config, config.categoriesFirstRoute, "", 1);
+                Document categories = fetch(context, categoriesUrl, config.baseUrl, config);
+                LinkedHashMap<String, NativeContentItem> directory = new LinkedHashMap<>();
+                parseCategories(categories, config, directory);
+                for (NativeContentItem category : directory.values()) {
+                    if (LibrarySearch.matches(value, category.title, category.url, category.description)) {
+                        addSearchItem(found, category);
+                    }
+                }
+            } catch (IOException error) {
+                if (found.isEmpty()) throw failure == null ? error : failure;
+            }
+        }
+        if (found.isEmpty() && failure != null && !siteSearch) throw failure;
+        return found;
+    }
+
+    private static void addSearchItems(List<NativeContentItem> found, List<NativeContentItem> items) {
+        if (items == null) return;
+        for (NativeContentItem item : items) addSearchItem(found, item);
+    }
+
+    private static void addSearchItem(List<NativeContentItem> found, NativeContentItem item) {
+        if (item == null || item.url == null || item.url.isEmpty() || found.size() >= 48) return;
+        for (NativeContentItem existing : found) {
+            if (item.url.equals(existing.url)) return;
+        }
+        found.add(item);
     }
 
     List<NativeContentItem> fetchRelated(Context context, String pageUrl) throws IOException {

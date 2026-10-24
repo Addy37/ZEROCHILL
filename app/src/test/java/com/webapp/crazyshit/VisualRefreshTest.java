@@ -534,23 +534,27 @@ public class VisualRefreshTest {
         input.setText("Alex");
         SearchPanel panel = screen.get().panel;
         ReflectionHelpers.callInstanceMethod(panel, "cancelSearchWork");
+        ReflectionHelpers.setField(panel, "scope", SearchPanel.Scope.ONLYFAP);
         ReflectionHelpers.setField(panel, "activeQuery", "Alex");
+        ReflectionHelpers.callInstanceMethod(panel, "applyScopeAdapter");
         ReflectionHelpers.callInstanceMethod(panel, "publishCreators",
                 ReflectionHelpers.ClassParameter.from(List.class, Collections.singletonList(creator())));
-        GlobalSearchAdapter adapter = ReflectionHelpers.getField(panel, "adapter");
-        assertEquals(2, adapter.getItemCount()); // Section heading and creator row.
+        OnlyFapCreatorSearchAdapter creators = ReflectionHelpers.getField(panel, "onlyFapAdapter");
+        assertEquals(1, creators.getItemCount());
         View root = ((android.view.ViewGroup) screen.get().findViewById(android.R.id.content)).getChildAt(0);
         shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(220));
         capture(root, "creator-search", 411, 891);
         capture(root, "creator-search-keyboard-space", 360, 380);
         RecyclerView suggestionList = ReflectionHelpers.getField(panel, "recycler");
         assertTrue(suggestionList.getHeight() - suggestionList.getPaddingTop() >= BrowseUi.dp(screen.get(), 104));
-        TextView action = ReflectionHelpers.getField(panel, "searchAll");
-        assertEquals(View.VISIBLE, action.getVisibility());
-        assertTrue(action.getHeight() >= BrowseUi.dp(screen.get(), 48));
-        assertEquals(View.GONE, ((View) ReflectionHelpers.getField(screen.get().panel, "filterBar")).getVisibility());
-        RecyclerView.ViewHolder row = adapter.onCreateViewHolder(new RecyclerView(screen.get()), adapter.getItemViewType(1));
-        adapter.onBindViewHolder(row, 1); row.itemView.performClick();
+        GlassHeaderView scopes = ReflectionHelpers.getField(panel, "scopeSurface");
+        GlassHeaderView header = ReflectionHelpers.getField(panel, "header");
+        assertEquals(View.VISIBLE, scopes.getVisibility());
+        assertTrue(scopes.sharesBackdropWith(header));
+        assertTrue(scopes.usesHeaderGlass());
+        OnlyFapCreatorSearchAdapter.Holder row = creators.onCreateViewHolder(new RecyclerView(screen.get()), 0);
+        creators.onBindViewHolder(row, 0);
+        row.card.performClick();
         assertEquals(NativeFeedBrowserActivity.class.getName(), shadowOf(screen.get()).getNextStartedActivity().getComponent().getClassName());
         screen.pause().stop().destroy();
     }
