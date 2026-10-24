@@ -62,7 +62,14 @@ final class XMegaDriveRepository {
     }
 
     private static final Pattern PLAYER_URL = Pattern.compile(
-            "video_(?:url|alt_url\\d*)\\s*[:=]\\s*['\"]([^'\"]+)['\"]");
+            "video_(url|alt_url\\d*)\\s*[:=]\\s*['\"]([^'\"]+)['\"]");
+    private static final Pattern PLAYER_TEXT = Pattern.compile(
+            "video_(url|alt_url\\d*)_text\\s*[:=]\\s*['\"]([^'\"]+)['\"]");
+    private static final Pattern LABEL_HEIGHT = Pattern.compile(
+            "(?i)(?<![0-9])(2160|1440|1080|720|480|360|240|144)\\s*p?(?![0-9])");
+    private static final Pattern URL_HEIGHT = Pattern.compile(
+            "(?i)(?<![0-9])(2160|1440|1080|720|480|360|240|144)\\s*p(?![0-9])"
+                    + "|(?<![0-9])(2160|1440|1080|720|480|360|240|144)(?=\\.mp4(?:[^0-9a-z]|$))");
     private static final Pattern LICENSE_CODE = Pattern.compile(
             "license_code\\s*[:=]\\s*['\"]([^'\"]+)['\"]");
     private static final String[] POPUNDER_HOSTS = {
@@ -601,30 +608,43 @@ final class XMegaDriveRepository {
         return blob.toString();
     }
 
-    /** Flashvars first. A preroll video tag must not beat get_file or a 32-hex MP4. */
+    /**
+     * Flashvars first. A preroll video tag must not beat get_file or a 32-hex MP4.
+     * Among those preferred files, a higher detectable resolution wins. Labels such as
+     * video_url_text / video_alt_urlN_text are used when present, then a resolution token
+     * in the URL. With no detectable resolution, the first preferred file stays.
+     */
     private static String firstPlayerFile(
             String source, String license, String pageUrl, boolean preferredOnly) {
+        LinkedHashMap<String, Integer> labels = qualityByKey(source);
         Matcher playerUrls = PLAYER_URL.matcher(source);
+        RankedFile ranked = new RankedFile();
         while (playerUrls.find()) {
-            String decoded = ownMedia(decodePlayerUrl(playerUrls.group(1), license, pageUrl));
+            String decoded = ownMedia(decodePlayerUrl(playerUrls.group(2), license, pageUrl));
             if (decoded.isEmpty() || decoded.contains("function/0/") || isAdMedia(decoded)) continue;
             if (preferredOnly && !isPreferredFile(decoded)) continue;
-            return decoded;
+            String key = playerUrls.group(1).toLowerCase(Locale.US);
+            Integer labeled = labels.get(key);
+            int rank = labeled == null ? 0 : labeled;
+            if (rank <= 0) rank = resolutionFromUrl(decoded);
+            ranked.add(decoded, rank);
         }
-        return "";
+        return ranked.selected();
     }
 
     private static String firstPatternFile(Pattern pattern, String source) {
         Matcher matcher = pattern.matcher(source);
+        RankedFile ranked = new RankedFile();
         while (matcher.find()) {
             String file = ownMedia(matcher.group());
             if (file.isEmpty() || file.contains("function/0/") || isAdMedia(file)) continue;
-            return file;
+            ranked.add(file, resolutionFromUrl(file));
         }
-        return "";
+        return ranked.selected();
     }
 
     private static String firstTagFile(Document page, boolean preferredOnly) {
+        RankedFile ranked = new RankedFile();
         for (Element el : page.select("video[src], source[src], a[href]")) {
             boolean videoTag = "video".equalsIgnoreCase(el.tagName())
                     || "source".equalsIgnoreCase(el.tagName());
@@ -634,9 +654,74 @@ final class XMegaDriveRepository {
             if (src.isEmpty() || src.contains("function/0/") || isAdMedia(src)) continue;
             if (preferredOnly && !isPreferredFile(src)) continue;
             if (!preferredOnly && !videoTag) continue;
-            return src;
+            ranked.add(src, resolutionFromUrl(src));
         }
-        return "";
+        return ranked.selected();
+    }
+
+    /** Keeps source order unless a candidate has a real, higher resolution. */
+    private static final class RankedFile {
+        private String first = "";
+        private String best = "";
+        private int bestRank;
+
+        void add(String file, int rank) {
+            if (file == null || file.isEmpty()) return;
+            if (first.isEmpty()) first = file;
+            if (rank > bestRank) {
+                bestRank = rank;
+                best = file;
+            }
+        }
+
+        String selected() {
+            return bestRank > 0 ? best : first;
+        }
+    }
+
+    private static LinkedHashMap<String, Integer> qualityByKey(String source) {
+        LinkedHashMap<String, Integer> ranks = new LinkedHashMap<>();
+        Matcher texts = PLAYER_TEXT.matcher(source == null ? "" : source);
+        while (texts.find()) {
+            int rank = resolutionFromLabel(texts.group(2));
+            if (rank <= 0) continue;
+            String key = texts.group(1).toLowerCase(Locale.US);
+            Integer existing = ranks.get(key);
+            if (existing == null || rank > existing) ranks.put(key, rank);
+        }
+        return ranks;
+    }
+
+    private static int resolutionFromLabel(String label) {
+        int height = highestResolution(LABEL_HEIGHT, label);
+        if (height > 0) return height;
+        if (label == null || label.isEmpty()) return 0;
+        String value = label.toLowerCase(Locale.US);
+        if (value.matches("(?s).*(\\b4k\\b|\\buhd\\b).*")) return 2160;
+        if (value.matches("(?s).*(full\\s*hd|\\bfhd\\b|fullhd).*")) return 1080;
+        return 0;
+    }
+
+    private static int resolutionFromUrl(String url) {
+        int height = highestResolution(URL_HEIGHT, url);
+        if (height > 0) return height;
+        if (url == null || url.isEmpty()) return 0;
+        String value = url.toLowerCase(Locale.US);
+        if (value.matches("(?s).*(\\b4k\\b|\\buhd\\b).*")) return 2160;
+        return 0;
+    }
+
+    private static int highestResolution(Pattern pattern, String value) {
+        if (pattern == null || value == null || value.isEmpty()) return 0;
+        Matcher matcher = pattern.matcher(value);
+        int best = 0;
+        while (matcher.find()) {
+            String token = matcher.group(1) != null ? matcher.group(1) : matcher.group(2);
+            if (token == null) continue;
+            int height = Integer.parseInt(token);
+            if (height > best) best = height;
+        }
+        return best;
     }
 
     private static boolean isPreferredFile(String url) {
