@@ -540,7 +540,7 @@ jobs:
           if [ "${{ github.head_ref }}" = "fix/library-startup-navigation" ]; then
             python3 tools/capture_library_lifecycle.py
           fi
-          if [ "${{ github.head_ref }}" = "fix/search-results-visual-polish" ] || [ "${{ github.head_ref }}" = "feature/search-recent-glass" ] || [ "${{ github.head_ref }}" = "feature/search-liquid-material" ]; then
+          if [ "${{ github.head_ref }}" = "feature/search-recent-glass" ] || [ "${{ github.head_ref }}" = "feature/search-liquid-material" ]; then
             python3 tools/capture_search_recent_glass.py
           fi
           SH
