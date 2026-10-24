@@ -14,6 +14,8 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Isolated supplemental provider for the public XMegaDrive site.
@@ -34,6 +36,12 @@ final class XMegaDriveRepository {
     private static final String USER_AGENT =
             "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) " +
                     "Chrome/120.0.0.0 Mobile Safari/537.36";
+    private static final Pattern PLAYER_URL = Pattern.compile(
+            "video_(?:url|alt_url\\d*)\\s*:\\s*['\"]([^'\"]+)['\"]");
+    private static final Pattern LICENSE_CODE = Pattern.compile(
+            "license_code\\s*:\\s*['\"]([^'\"]+)['\"]");
+    private static final Pattern RAW_FILE = Pattern.compile(
+            "https?://[^\\s'\"<>]+/get_file/[^\\s'\"<>]+\\.mp4[^\\s'\"<>]*");
     private static final Object BROWSER_FALLBACK = new Object();
     private static final int MAX_CANDIDATES = 12;
     private static final int MAX_RETURNED = 8;
@@ -99,6 +107,10 @@ final class XMegaDriveRepository {
         } catch (Exception ignored) {
             return false;
         }
+    }
+
+    static boolean isPlayablePage(String url) {
+        return !normalizeVideoUrl(url).isEmpty();
     }
 
     static boolean isCategoryUrl(String value) {
@@ -174,21 +186,21 @@ final class XMegaDriveRepository {
     private static Document fetch(Context context, String url) throws IOException {
         try {
             Document direct = fetchDirect(context, url);
-            if (hasUsefulMarkup(direct)) return direct;
+            if (hasUsefulMarkup(direct, url)) return direct;
         } catch (IOException direct) {
             if (!isBlocked(direct)) throw direct;
         }
         synchronized (BROWSER_FALLBACK) {
             try {
                 Document retry = fetchDirect(context, url);
-                if (hasUsefulMarkup(retry)) return retry;
+                if (hasUsefulMarkup(retry, url)) return retry;
             } catch (IOException ignored) {
             }
             Document rendered = XMegaDriveBrowserFetch.fetch(context, url, BASE);
-            if (hasUsefulMarkup(rendered)) return rendered;
+            if (hasUsefulMarkup(rendered, url)) return rendered;
             try {
                 Document after = fetchDirect(context, url);
-                if (hasUsefulMarkup(after)) return after;
+                if (hasUsefulMarkup(after, url)) return after;
             } catch (IOException ignored) {
             }
             throw new IOException("XMegaDrive stayed blocked after the browser check");
@@ -220,13 +232,19 @@ final class XMegaDriveRepository {
         return document;
     }
 
-    private static boolean hasUsefulMarkup(Document document) {
-        if (document == null || looksBlocked(document)) return false;
+    private static boolean hasUsefulMarkup(Document document, String url) {
+        if (document == null || looksBlocked(document) || ageGate(document)) return false;
+        if (isPlayablePage(url)) return !extractMedia(document).isEmpty();
         LinkedHashMap<String, NativeContentItem> categories = new LinkedHashMap<>();
         parseCategories(document, categories);
         if (!categories.isEmpty()) return true;
         if (!parseVideos(document, 1).isEmpty()) return true;
         return !extractMedia(document).isEmpty();
+    }
+
+    private static boolean ageGate(Document document) {
+        String text = document.text() == null ? "" : document.text().toLowerCase(Locale.US);
+        return text.contains("age confirmation");
     }
 
     private static boolean isBlocked(IOException error) {
@@ -356,21 +374,42 @@ final class XMegaDriveRepository {
         return clean(anchor.text());
     }
 
-    private static String imageUrl(Element image) {
-        if (image == null) return "";
-        String original = httpImage(image.absUrl("data-original"));
-        if (!original.isEmpty()) return original;
-        String dataSrc = httpImage(image.absUrl("data-src"));
-        if (!dataSrc.isEmpty()) return dataSrc;
-        return httpImage(image.absUrl("src"));
-    }
-
     private static String httpImage(String value) {
         if (value == null) return "";
         String trimmed = value.trim();
         String lower = trimmed.toLowerCase(Locale.US);
-        if (lower.startsWith("https://") || lower.startsWith("http://")) return trimmed;
-        return "";
+        if (!(lower.startsWith("https://") || lower.startsWith("http://"))) return "";
+        if (lower.contains("blank.gif")
+                || lower.contains("placeholder")
+                || lower.contains("noimage")
+                || lower.contains("no-image")
+                || lower.contains("no_image")
+                || lower.contains("no-thumb")
+                || lower.contains("nothumb")
+                || lower.endsWith(".gif")
+                || lower.contains(".gif?")) {
+            return "";
+        }
+        boolean image = lower.contains(".jpg")
+                || lower.contains(".jpeg")
+                || lower.contains(".png")
+                || lower.contains(".webp")
+                || lower.contains("/contents/")
+                || lower.contains("videos_screenshots");
+        return image ? trimmed : "";
+    }
+
+    private static String imageUrl(Element image) {
+        if (image == null) return "";
+        String background = httpImage(image.absUrl("data-bg"));
+        if (!background.isEmpty()) return background;
+        String original = httpImage(image.absUrl("data-original"));
+        if (!original.isEmpty()) return original;
+        String dataSrc = httpImage(image.absUrl("data-src"));
+        if (!dataSrc.isEmpty()) return dataSrc;
+        String lazy = httpImage(image.absUrl("data-lazy-src"));
+        if (!lazy.isEmpty()) return lazy;
+        return httpImage(image.absUrl("src"));
     }
 
     private static String extractMedia(Document page) {
@@ -378,13 +417,123 @@ final class XMegaDriveRepository {
         Element video = page.selectFirst("video[src*=.mp4], source[src*=.mp4]");
         if (video != null) {
             String src = video.absUrl("src");
-            if (src.contains(".mp4")) return src;
+            if (src.contains(".mp4") && !src.contains("function/0/")) return src;
         }
+        StringBuilder blob = new StringBuilder(page.html() == null ? "" : page.html());
+        for (Element script : page.select("script")) {
+            blob.append('\n').append(script.data());
+        }
+        String source = blob.toString();
+        String license = firstMatch(LICENSE_CODE, source);
+        Matcher playerUrls = PLAYER_URL.matcher(source);
+        String fallback = "";
+        while (playerUrls.find()) {
+            String decoded = decodePlayerUrl(playerUrls.group(1), license, page.location());
+            if (decoded.contains(".mp4")) return decoded;
+            if (fallback.isEmpty() && decoded.startsWith("http")) fallback = decoded;
+        }
+        Matcher raw = RAW_FILE.matcher(source);
+        if (raw.find()) return raw.group();
         for (Element el : page.select("[src*=.mp4]")) {
             String src = el.absUrl("src");
             if (src.contains("/get_file/") && src.contains(".mp4")) return src;
         }
-        return "";
+        return fallback;
+    }
+
+    static String decodePlayerUrl(String videoUrl, String licenseCode, String pageUrl) {
+        if (videoUrl == null) return "";
+        String value = videoUrl.trim().replace("\\/", "/").replace("&", "&");
+        if (value.startsWith("function/0/")) value = value.substring("function/0/".length());
+        if (value.startsWith("//")) value = "https:" + value;
+        if (value.startsWith("/")) {
+            String base = pageUrl == null || pageUrl.isEmpty() ? BASE : pageUrl;
+            try {
+                URI page = URI.create(base);
+                value = page.getScheme() + "://" + page.getHost() + value;
+            } catch (Exception ignored) {
+                return "";
+            }
+        }
+        if (!value.contains("/get_file/")) return value.startsWith("http") ? value : "";
+        if (licenseCode == null || licenseCode.isEmpty() || !videoUrl.contains("function/0/")) {
+            return value;
+        }
+        try {
+            URI uri = URI.create(value);
+            String path = uri.getPath();
+            if (path == null) return "";
+            String[] parts = path.split("/", -1);
+            if (parts.length < 4 || parts[3].length() < 32) return value;
+            int[] token = licenseToken(licenseCode);
+            if (token.length < 32) return "";
+            int[] indices = new int[32];
+            for (int index = 0; index < 32; index++) indices[index] = index;
+            int accum = 0;
+            for (int src = 31; src >= 0; src--) {
+                accum += token[src];
+                int dest = (src + accum) % 32;
+                int swap = indices[src];
+                indices[src] = indices[dest];
+                indices[dest] = swap;
+            }
+            String hash = parts[3].substring(0, 32);
+            StringBuilder rebuilt = new StringBuilder();
+            for (int index : indices) rebuilt.append(hash.charAt(index));
+            rebuilt.append(parts[3].substring(32));
+            parts[3] = rebuilt.toString();
+            StringBuilder newPath = new StringBuilder();
+            for (int index = 0; index < parts.length; index++) {
+                if (index > 0) newPath.append('/');
+                newPath.append(parts[index]);
+            }
+            return new URI(
+                    uri.getScheme(),
+                    uri.getUserInfo(),
+                    uri.getHost(),
+                    uri.getPort(),
+                    newPath.toString(),
+                    uri.getQuery(),
+                    uri.getFragment()
+            ).toString();
+        } catch (Exception ignored) {
+            return "";
+        }
+    }
+
+    private static int[] licenseToken(String licenseCode) {
+        String code = licenseCode.replace("$", "").trim();
+        if (code.isEmpty() || !code.chars().allMatch(Character::isDigit)) return new int[0];
+        String mod = code.replace('0', '1');
+        int center = mod.length() / 2;
+        java.math.BigInteger front = new java.math.BigInteger(mod.substring(0, center + 1));
+        java.math.BigInteger back = new java.math.BigInteger(mod.substring(center));
+        String diff = front.subtract(back).abs()
+                .multiply(java.math.BigInteger.valueOf(4))
+                .toString();
+        int take = Math.min(center + 1, diff.length());
+        String folded = diff.substring(0, take);
+        int[] values = new int[code.length()];
+        for (int index = 0; index < code.length(); index++) {
+            values[index] = code.charAt(index) - '0';
+        }
+        int[] token = new int[folded.length() * 4];
+        int cursor = 0;
+        for (int index = 0; index < folded.length(); index++) {
+            int current = folded.charAt(index) - '0';
+            for (int offset = 0; offset < 4; offset++) {
+                int valueIndex = index + offset;
+                int base = valueIndex < values.length ? values[valueIndex] : 0;
+                token[cursor++] = (base + current) % 10;
+            }
+        }
+        return token;
+    }
+
+    private static String firstMatch(Pattern pattern, String source) {
+        if (source == null) return "";
+        Matcher matcher = pattern.matcher(source);
+        return matcher.find() ? matcher.group(1) : "";
     }
 
     private static String extractTitle(Document page) {

@@ -12,6 +12,7 @@ import android.os.Handler;
 import android.os.Looper;
 import android.view.Gravity;
 import android.view.View;
+import android.webkit.CookieManager;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
@@ -644,6 +645,7 @@ final class ShowsHubView extends FrameLayout {
         if (item.url != null && item.url.startsWith("http")) {
             headers.addHeader("Referer", item.url);
         }
+        addXMegaDriveArtworkHeaders(headers, imageUrl, item.url);
         Glide.with(this)
                 .load(new GlideUrl(imageUrl, headers.build()))
                 .diskCacheStrategy(DiskCacheStrategy.ALL)
@@ -865,6 +867,7 @@ final class ShowsHubView extends FrameLayout {
         if (item.url != null && item.url.startsWith("http")) {
             headers.addHeader("Referer", item.url);
         }
+        addXMegaDriveArtworkHeaders(headers, imageUrl, item.url);
 
         com.bumptech.glide.RequestBuilder<android.graphics.drawable.Drawable> request =
                 Glide.with(view)
@@ -879,6 +882,30 @@ final class ShowsHubView extends FrameLayout {
         if (fullHeroArtwork) request.fitCenter();
         else request.centerCrop();
         request.into(view);
+    }
+
+    private static void addXMegaDriveArtworkHeaders(
+            LazyHeaders.Builder headers,
+            String imageUrl,
+            String pageUrl
+    ) {
+        if (!isXMegaDriveHost(imageUrl) && !isXMegaDriveHost(pageUrl)) return;
+        headers.addHeader("Accept", "image/avif,image/webp,image/apng,image/*,*/*;q=0.8");
+        try {
+            String lookup = imageUrl != null && imageUrl.startsWith("http") ? imageUrl : pageUrl;
+            String cookies = CookieManager.getInstance().getCookie(lookup);
+            if (cookies == null || cookies.trim().isEmpty()) {
+                cookies = CookieManager.getInstance().getCookie("https://www.xmegadrive.com/");
+            }
+            if (cookies != null && !cookies.trim().isEmpty()) headers.addHeader("Cookie", cookies);
+        } catch (Exception ignored) {
+        }
+    }
+
+    private static boolean isXMegaDriveHost(String value) {
+        if (value == null) return false;
+        String lower = value.toLowerCase(java.util.Locale.US);
+        return lower.contains("://xmegadrive.com") || lower.contains("://www.xmegadrive.com");
     }
 
     private void loadContinueArtwork(

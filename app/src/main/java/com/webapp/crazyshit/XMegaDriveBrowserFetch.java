@@ -137,7 +137,10 @@ final class XMegaDriveBrowserFetch {
             overlay.setBackgroundColor(0xFF101014);
             overlay.setClickable(true);
             overlay.setElevation(80f);
-            if (passedOnce) overlay.setVisibility(View.INVISIBLE);
+            if (passedOnce) {
+                overlay.setVisibility(View.INVISIBLE);
+                overlay.setClickable(false);
+            }
             activeOverlay.set(overlay);
 
             TextView label = new TextView(activity);
@@ -192,6 +195,7 @@ final class XMegaDriveBrowserFetch {
                             () -> extract(
                                     view,
                                     overlay,
+                                    url,
                                     seen,
                                     generation,
                                     1,
@@ -214,7 +218,7 @@ final class XMegaDriveBrowserFetch {
                     ViewGroup.LayoutParams.MATCH_PARENT,
                     ViewGroup.LayoutParams.MATCH_PARENT
             ));
-            webView.requestFocus();
+            if (!passedOnce) webView.requestFocus();
             java.util.HashMap<String, String> headers = new java.util.HashMap<>();
             headers.put("Accept-Language", "en-US,en;q=0.9");
             if (referer != null && !referer.trim().isEmpty()) headers.put("Referer", referer);
@@ -228,6 +232,7 @@ final class XMegaDriveBrowserFetch {
     private static void extract(
             WebView webView,
             FrameLayout overlay,
+            String requestedUrl,
             int seen,
             AtomicInteger generation,
             int attempt,
@@ -238,17 +243,56 @@ final class XMegaDriveBrowserFetch {
     ) {
         if (completed.get() || seen != generation.get()) return;
         String script = "(() => {"
-                + "const attrs=['href','src','data-src','data-original','data-lazy-src','poster','title','alt'];"
-                + "const pick=e=>{const o={tag:e.tagName.toLowerCase()};"
-                + "for (const k of attrs){const v=e.getAttribute(k); if(v) o[k]=v;}"
-                + "if(e.tagName==='A'){const img=e.querySelector('img');"
-                + "if(img){o.img={}; for (const k of attrs){const v=img.getAttribute(k); if(v) o.img[k]=v;}}"
-                + "const strong=e.querySelector('strong.title'); if(strong) o.label=strong.textContent||'';}"
-                + "if(e.tagName==='H1') o.text=e.textContent||'';"
+                + "const q=String.fromCharCode(34);"
+                + "const abs=u=>{if(!u)return ''; try {return new URL(u, location.href).href;} catch(e){return '';}};"
+                + "const bgOf=el=>{"
+                + "if(!el)return '';"
+                + "let raw='';"
+                + "try {raw=(el.style&&el.style.backgroundImage)||'';} catch(e){raw='';}"
+                + "if(!raw||raw==='none'){try {raw=getComputedStyle(el).backgroundImage||'';} catch(e){raw='';}}"
+                + "const start=raw.indexOf('url('); if(start<0)return '';"
+                + "let value=raw.slice(start+4); const end=value.lastIndexOf(')');"
+                + "if(end>=0)value=value.slice(0,end); value=value.trim();"
+                + "const quote=value.charAt(0);"
+                + "if(quote==='\\''||quote===q){value=value.slice(1);"
+                + "if(value.charAt(value.length-1)===quote)value=value.slice(0,value.length-1);}"
+                + "return abs(value);};"
+                + "const imgFields=(img,host)=>{"
+                + "const o={};"
+                + "if(img){['src','data-src','data-original','data-lazy-src','alt'].forEach(k=>{"
+                + "const v=img.getAttribute(k); if(v)o[k]=v;});"
+                + "const current=img.currentSrc||img.src||'';"
+                + "if(current && current.indexOf('data:')!==0)o.src=abs(current);}"
+                + "const bg=bgOf(img)||bgOf(host)||bgOf(img&&img.parentElement)||bgOf(host&&host.querySelector('.img'));"
+                + "if(bg)o['data-bg']=bg; return o;};"
+                + "const pick=e=>{"
+                + "const o={tag:e.tagName.toLowerCase()};"
+                + "const href=e.getAttribute('href'); if(href)o.href=href;"
+                + "const title=e.getAttribute('title'); if(title)o.title=title;"
+                + "if(e.tagName==='A'){"
+                + "const img=e.querySelector('img');"
+                + "const box=e.querySelector('.img')||e;"
+                + "const info=imgFields(img, box);"
+                + "if(info.src||info['data-original']||info['data-src']||info['data-bg']||info['data-lazy-src'])o.img=info;"
+                + "const strong=e.querySelector('strong.title'); if(strong)o.label=strong.textContent||'';}"
+                + "if(e.tagName==='VIDEO'||e.tagName==='SOURCE'){"
+                + "const src=e.getAttribute('src')||e.src||''; if(src)o.src=src;}"
+                + "if(e.tagName==='H1')o.text=e.textContent||'';"
                 + "return o;};"
+                + "const bodyText=(document.body&&document.body.innerText)||'';"
+                + "const age=/age confirmation/i.test(bodyText);"
+                + "if(age){const controls=document.querySelectorAll('button,input,a');"
+                + "for(let i=0;i<controls.length;i++){const el=controls[i];"
+                + "const label=(el.innerText||el.value||el.getAttribute('value')||'');"
+                + "if(/continue/i.test(label)){el.click(); break;}}}"
+                + "const scripts=[]; const list=document.scripts||[];"
+                + "for(let i=0;i<list.length&&scripts.length<3;i++){"
+                + "const t=list[i].textContent||'';"
+                + "if(t.indexOf('video_url')>=0||t.indexOf('license_code')>=0||t.indexOf('/get_file/')>=0){"
+                + "scripts.push(t.slice(0,12000));}}"
                 + "const nodes=Array.from(document.querySelectorAll('a[href],video,source,h1')).slice(0,1500).map(pick);"
                 + "return JSON.stringify({url:location.href,title:document.title||'',"
-                + "text:(document.body&&document.body.innerText||'').slice(0,500),nodes});})()";
+                + "text:bodyText.slice(0,1500),age:age,nodes:nodes,scripts:scripts});})()";
         webView.evaluateJavascript(script, encoded -> {
             if (completed.get() || seen != generation.get()) return;
             try {
@@ -259,9 +303,14 @@ final class XMegaDriveBrowserFetch {
                 JSONObject payload = new JSONObject((String) decoded);
                 String title = payload.optString("title");
                 String body = payload.optString("text");
-                String finalUrl = payload.optString("url", webView.getUrl());
+                if (payload.optBoolean("age")) body = "Age confirmation\n" + body;
+                String finalUrl = payload.optString("url");
+                if (finalUrl == null || finalUrl.trim().isEmpty()) finalUrl = requestedUrl;
                 Document document = documentFrom(payload, finalUrl);
-                if (ready(document, title, body)) {
+                String pageUrl = requestedUrl == null || requestedUrl.trim().isEmpty()
+                        ? finalUrl
+                        : requestedUrl;
+                if (ready(document, title, body, pageUrl, attempt)) {
                     try {
                         CookieManager.getInstance().flush();
                     } catch (Exception ignored) {
@@ -276,11 +325,21 @@ final class XMegaDriveBrowserFetch {
                             new IOException("XMegaDrive blocked this device"));
                     return;
                 }
-                if (overlay != null && attempt >= 5) overlay.setVisibility(View.VISIBLE);
+                boolean age = payload.optBoolean("age")
+                        || (body != null && body.toLowerCase(java.util.Locale.US).contains("age confirmation"));
+                if (overlay != null && (attempt >= 5 || age)) {
+                    overlay.setVisibility(View.VISIBLE);
+                    overlay.setClickable(true);
+                    if (age && overlay.getChildCount() > 0 && overlay.getChildAt(0) instanceof TextView) {
+                        ((TextView) overlay.getChildAt(0)).setText(
+                                "XMegaDrive needs a quick check. Tap Continue if it stays open.");
+                    }
+                }
                 webView.postDelayed(
                         () -> extract(
                                 webView,
                                 overlay,
+                                requestedUrl,
                                 seen,
                                 generation,
                                 attempt + 1,
@@ -297,6 +356,7 @@ final class XMegaDriveBrowserFetch {
                         () -> extract(
                                 webView,
                                 overlay,
+                                requestedUrl,
                                 seen,
                                 generation,
                                 attempt + 1,
@@ -340,6 +400,10 @@ final class XMegaDriveBrowserFetch {
                                 .append(Entities.escape(image.optString("data-original")))
                                 .append("\" data-src=\"")
                                 .append(Entities.escape(image.optString("data-src")))
+                                .append("\" data-lazy-src=\"")
+                                .append(Entities.escape(image.optString("data-lazy-src")))
+                                .append("\" data-bg=\"")
+                                .append(Entities.escape(image.optString("data-bg")))
                                 .append("\" alt=\"")
                                 .append(Entities.escape(image.optString("alt")))
                                 .append("\">");
@@ -363,17 +427,69 @@ final class XMegaDriveBrowserFetch {
                 }
             }
         }
+        if (payload.optBoolean("age")) html.append("<p>Age confirmation</p>");
+        JSONArray scripts = payload.optJSONArray("scripts");
+        if (scripts != null) {
+            for (int index = 0; index < scripts.length(); index++) {
+                String script = rawScript(scripts.optString(index));
+                if (script.isEmpty()) continue;
+                html.append("<script>").append(script).append("</script>");
+            }
+        }
         html.append("</body></html>");
         return Jsoup.parse(html.toString(), finalUrl == null ? "" : finalUrl);
     }
 
-    private static boolean ready(Document document, String title, String body) {
-        if (XMegaDriveRepository.looksBlocked(document)) return false;
+    private static String rawScript(String value) {
+        if (value == null || value.isEmpty()) return "";
+        return value.replace("</", "<\\/");
+    }
+
+    private static boolean ready(Document document, String title, String body, String pageUrl, int attempt) {
+        if (document == null || XMegaDriveRepository.looksBlocked(document)) return false;
         String heading = title == null ? "" : title.toLowerCase(java.util.Locale.US);
         String text = body == null ? "" : body.toLowerCase(java.util.Locale.US);
-        if (heading.contains("just a moment") || text.contains("checking your browser")) return false;
-        if (!document.select("a[href*=/categories/], a[href*=/videos/]").isEmpty()) return true;
-        return !document.select("video[src*=.mp4], source[src*=.mp4], [src*=.mp4]").isEmpty();
+        if (heading.contains("just a moment")
+                || heading.contains("attention required")
+                || text.contains("checking your browser")
+                || text.contains("age confirmation")
+                || (document.text() != null
+                && document.text().toLowerCase(java.util.Locale.US).contains("age confirmation"))) {
+            return false;
+        }
+        if (XMegaDriveRepository.isPlayablePage(pageUrl)) {
+            return !XMegaDriveRepository.mediaFromHtml(document.html(), pageUrl).isEmpty();
+        }
+        if (document.select("a[href*=/categories/], a[href*=/videos/]").isEmpty()) {
+            return !XMegaDriveRepository.mediaFromHtml(document.html(), pageUrl).isEmpty();
+        }
+        return hasArtwork(document) || attempt >= 8;
+    }
+
+    private static boolean hasArtwork(Document document) {
+        for (org.jsoup.nodes.Element image : document.select("img")) {
+            String[] values = {
+                    image.attr("data-bg"),
+                    image.attr("data-original"),
+                    image.attr("data-src"),
+                    image.attr("data-lazy-src"),
+                    image.attr("src")
+            };
+            for (String value : values) {
+                String lower = value == null ? "" : value.toLowerCase(java.util.Locale.US);
+                if (lower.contains("blank.gif") || lower.contains("placeholder")
+                        || lower.contains("noimage") || lower.contains("no-thumb")
+                        || lower.contains("no_image") || lower.endsWith(".gif")) {
+                    continue;
+                }
+                if (lower.contains(".jpg") || lower.contains(".jpeg") || lower.contains(".png")
+                        || lower.contains(".webp") || lower.contains("/contents/")
+                        || lower.contains("videos_screenshots")) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     private static boolean permanentlyBlocked(String title, String body) {

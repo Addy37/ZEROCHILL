@@ -74,6 +74,39 @@ public final class XMegaDriveRepositoryTest {
         );
     }
 
+    @Test public void playerFixtureDecodesObfuscatedGetFileUrl() {
+        String html = ""
+                + "<script>var flashvars = {"
+                + "video_url: 'function/0/https://www.xmegadrive.com/get_file/4/0123456789abcdef0123456789abcdefEXTRA/459000/459766/459766.mp4/',"
+                + "license_code: '86123456789012345678901234567890'"
+                + "};</script>";
+        assertEquals(
+                "https://www.xmegadrive.com/get_file/4/29bb1ccd988407a16f753540deea2f36EXTRA/459000/459766/459766.mp4/",
+                XMegaDriveRepository.mediaFromHtml(html, PAGE)
+        );
+    }
+
+    @Test public void categoryArtworkPrefersBackgroundAndSkipsPlaceholder() {
+        String html = ""
+                + "<a href=\"/categories/hairy/\">"
+                + "<img data-bg=\"/contents/categories/9/s1_cover.jpg\" src=\"/blank.gif\">"
+                + "<strong class=\"title\">Hairy</strong>"
+                + "</a>"
+                + "<a href=\"/categories/feet/\">"
+                + "<img src=\"https://www.xmegadrive.com/categories/feet/\" "
+                + "data-original=\"https://cdn.example/placeholder.jpg\">"
+                + "<strong class=\"title\">Feet</strong>"
+                + "</a>";
+        List<NativeContentItem> items = XMegaDriveRepository.parseCategoriesHtml(html);
+        assertEquals(2, items.size());
+        assertEquals("Hairy", items.get(0).title);
+        assertEquals(
+                "https://www.xmegadrive.com/contents/categories/9/s1_cover.jpg",
+                items.get(0).imageUrl
+        );
+        assertEquals("", items.get(1).imageUrl);
+    }
+
     @Test public void playerFixtureWithoutMp4ReturnsEmpty() {
         assertEquals("", XMegaDriveRepository.mediaFromHtml("<h1>No player</h1>", PAGE));
         assertEquals("", XMegaDriveRepository.mediaFromHtml("", PAGE));
