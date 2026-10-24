@@ -209,6 +209,7 @@ public class SearchShitTokPauseTest {
             ((android.view.ViewGroup) f.feed.getParent()).removeView(f.feed);
             root.addView(f.feed, new android.widget.FrameLayout.LayoutParams(-1, -1));
             f.host.get().setContentView(root);
+            SearchGlassOwner glassOwner = new SearchGlassOwner(f.host.get());
             SearchPanel panel = new SearchPanel(f.host.get(), new android.content.Intent(), true, () -> {});
             panel.create(null);
             root.addView(panel.view, new android.widget.FrameLayout.LayoutParams(-1, -1));
@@ -237,6 +238,7 @@ public class SearchShitTokPauseTest {
             } finally {
                 root.removeView(panel.view);
                 panel.close();
+                glassOwner.close();
                 f.feed.onSearchClosed();
             }
         }
