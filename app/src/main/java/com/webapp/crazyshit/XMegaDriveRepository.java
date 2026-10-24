@@ -65,6 +65,46 @@ final class XMegaDriveRepository {
             "video_(?:url|alt_url\\d*)\\s*[:=]\\s*['\"]([^'\"]+)['\"]");
     private static final Pattern LICENSE_CODE = Pattern.compile(
             "license_code\\s*[:=]\\s*['\"]([^'\"]+)['\"]");
+    private static final String[] POPUNDER_HOSTS = {
+            "chaturbate.com",
+            "stripchat.com",
+            "bongacams.com",
+            "livejasmin.com",
+            "cam4.com",
+            "camsoda.com",
+            "myfreecams.com",
+            "streamate.com",
+            "flirt4free.com",
+            "exoclick.com",
+            "exosrv.com",
+            "exdynsrv.com",
+            "trafficjunky.com",
+            "trafficjunky.net",
+            "juicyads.com",
+            "adsterra.com",
+            "popads.net",
+            "popcash.net",
+            "propellerads.com",
+            "hilltopads.net",
+            "clickadu.com",
+            "onclicka.com",
+            "tsyndicate.com",
+            "trafficstars.com",
+            "twinrdengine.com",
+            "twinrdsrv.com",
+            "realsrv.com",
+            "clickaine.com",
+            "adxpansion.com",
+            "evadav.com",
+            "kadam.net",
+            "plugrush.com",
+            "ero-advertising.com",
+            "adcash.com",
+            "adnxs.com",
+            "doubleclick.net",
+            "googlesyndication.com",
+            "googleadservices.com"
+    };
     private static final Pattern RAW_FILE = Pattern.compile(
             "https?://[^\\s'\"<>]+/get_file/[^\\s'\"<>]+\\.mp4[^\\s'\"<>]*");
     private static final Object BROWSER_FALLBACK = new Object();
@@ -122,15 +162,54 @@ final class XMegaDriveRepository {
     }
 
     static boolean isXMegaDriveUrl(String value) {
-        if (value == null || value.trim().isEmpty()) return false;
+        return isOwnHost(hostOf(value)) && "https".equalsIgnoreCase(schemeOf(value));
+    }
+
+    /** Main-frame navigations may stay on XMegaDrive or the Cloudflare check. Popunders may not. */
+    static boolean allowsMainFrame(String url) {
+        if (url == null) return false;
+        String value = url.trim();
+        if (value.isEmpty() || value.startsWith("about:blank")) return true;
+        String host = hostOf(value);
+        return isOwnHost(host) || isChallengeHost(host);
+    }
+
+    /** True for cam and popunder hosts. Never true for XMegaDrive itself. */
+    static boolean isPopunder(String url) {
+        String host = hostOf(url);
+        if (host.isEmpty() || isOwnHost(host) || isChallengeHost(host)) return false;
+        for (String blocked : POPUNDER_HOSTS) {
+            if (host.equals(blocked) || host.endsWith("." + blocked)) return true;
+        }
+        return false;
+    }
+
+    private static boolean isOwnHost(String host) {
+        return "xmegadrive.com".equals(host) || host.endsWith(".xmegadrive.com");
+    }
+
+    private static boolean isChallengeHost(String host) {
+        return "challenges.cloudflare.com".equals(host)
+                || host.endsWith(".challenges.cloudflare.com");
+    }
+
+    private static String schemeOf(String value) {
+        if (value == null || value.trim().isEmpty()) return "";
         try {
-            URI uri = URI.create(value.trim());
-            if (!"https".equalsIgnoreCase(uri.getScheme())) return false;
-            String host = uri.getHost();
-            return host != null && (host.equalsIgnoreCase("xmegadrive.com")
-                    || host.equalsIgnoreCase("www.xmegadrive.com"));
+            String scheme = URI.create(value.trim()).getScheme();
+            return scheme == null ? "" : scheme;
         } catch (Exception ignored) {
-            return false;
+            return "";
+        }
+    }
+
+    private static String hostOf(String value) {
+        if (value == null || value.trim().isEmpty()) return "";
+        try {
+            String host = URI.create(value.trim()).getHost();
+            return host == null ? "" : host.toLowerCase(Locale.US);
+        } catch (Exception ignored) {
+            return "";
         }
     }
 
@@ -404,8 +483,8 @@ final class XMegaDriveRepository {
         if (page == null) return "";
         Element video = page.selectFirst("video[src*=.mp4], source[src*=.mp4]");
         if (video != null) {
-            String src = video.absUrl("src");
-            if (src.contains(".mp4") && !src.contains("function/0/")) return src;
+            String src = ownMedia(video.absUrl("src"));
+            if (!src.isEmpty() && !src.contains("function/0/")) return src;
         }
         StringBuilder blob = new StringBuilder(page.html() == null ? "" : page.html());
         for (Element script : page.select("script")) {
@@ -416,17 +495,29 @@ final class XMegaDriveRepository {
         Matcher playerUrls = PLAYER_URL.matcher(source);
         String fallback = "";
         while (playerUrls.find()) {
-            String decoded = decodePlayerUrl(playerUrls.group(1), license, page.location());
-            if (decoded.contains(".mp4")) return decoded;
-            if (fallback.isEmpty() && decoded.startsWith("http")) fallback = decoded;
+            String decoded = ownMedia(decodePlayerUrl(playerUrls.group(1), license, page.location()));
+            if (!decoded.isEmpty()) return decoded;
         }
         Matcher raw = RAW_FILE.matcher(source);
-        if (raw.find()) return raw.group();
+        if (raw.find()) {
+            String file = ownMedia(raw.group());
+            if (!file.isEmpty()) return file;
+        }
         for (Element el : page.select("[src*=.mp4]")) {
-            String src = el.absUrl("src");
-            if (src.contains("/get_file/") && src.contains(".mp4")) return src;
+            String src = ownMedia(el.absUrl("src"));
+            if (!src.isEmpty()) return src;
         }
         return fallback;
+    }
+
+    private static String ownMedia(String url) {
+        if (url == null || url.isEmpty() || !isOwnHost(hostOf(url))) return "";
+        String lower = url.toLowerCase(Locale.US);
+        if (!(lower.startsWith("https://") || lower.startsWith("http://"))) return "";
+        if (lower.contains("/get_file/") || lower.contains(".mp4") || lower.contains(".m3u8")) {
+            return url;
+        }
+        return "";
     }
 
     static String decodePlayerUrl(String videoUrl, String licenseCode, String pageUrl) {

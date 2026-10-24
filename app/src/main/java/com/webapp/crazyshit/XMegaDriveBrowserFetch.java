@@ -12,6 +12,7 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewParent;
 import android.webkit.CookieManager;
+import android.webkit.WebChromeClient;
 import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
@@ -21,6 +22,9 @@ import android.webkit.WebViewClient;
 import android.widget.FrameLayout;
 import android.widget.TextView;
 
+import androidx.webkit.WebViewCompat;
+import androidx.webkit.WebViewFeature;
+
 import org.json.JSONArray;
 import org.json.JSONObject;
 import org.json.JSONTokener;
@@ -28,7 +32,9 @@ import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Entities;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Locale;
 import java.util.concurrent.CountDownLatch;
@@ -45,6 +51,8 @@ import java.util.concurrent.atomic.AtomicReference;
  */
 final class XMegaDriveBrowserFetch {
     private static final String TAG = "XMegaDrive";
+    private static final String POPUP_GUARD =
+            "(function(){window.open=function(){return null;};})();";
     private static final long TIMEOUT_SECONDS = 45L;
     private static final long EXTRACTION_RETRY_MS = 800L;
     private static volatile String sessionUserAgent = "";
@@ -195,6 +203,9 @@ final class XMegaDriveBrowserFetch {
             settings.setAllowFileAccess(false);
             settings.setAllowContentAccess(false);
             settings.setCacheMode(WebSettings.LOAD_DEFAULT);
+            settings.setJavaScriptCanOpenWindowsAutomatically(false);
+            settings.setSupportMultipleWindows(false);
+            settings.setMediaPlaybackRequiresUserGesture(true);
             String rawAgent = settings.getUserAgentString();
             String agent = XMegaDriveRepository.browserIdentity(rawAgent);
             Log.i(TAG, "userAgent default=" + oneLine(rawAgent));
@@ -209,6 +220,37 @@ final class XMegaDriveBrowserFetch {
             headers.put("Accept-Language", "en-US,en;q=0.9");
             if (referer != null && !referer.trim().isEmpty()) headers.put("Referer", referer);
             webView.setWebViewClient(new WebViewClient() {
+                @Override
+                public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
+                    if (request == null || request.getUrl() == null || !request.isForMainFrame()) {
+                        return false;
+                    }
+                    return blockOffsite(request.getUrl().toString());
+                }
+
+                @Override
+                public boolean shouldOverrideUrlLoading(WebView view, String url) {
+                    return blockOffsite(url);
+                }
+
+                @Override
+                public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
+                    if (request != null && request.getUrl() != null
+                            && XMegaDriveRepository.isPopunder(request.getUrl().toString())) {
+                        return emptyResponse();
+                    }
+                    return super.shouldInterceptRequest(view, request);
+                }
+
+                @Override
+                public void onPageStarted(WebView view, String url, android.graphics.Bitmap favicon) {
+                    if (blockOffsite(url)) {
+                        view.stopLoading();
+                        return;
+                    }
+                    view.evaluateJavascript(POPUP_GUARD, null);
+                }
+
                 @Override
                 public void onPageFinished(WebView view, String finalUrl) {
                     if (completed.get()) return;
@@ -265,6 +307,18 @@ final class XMegaDriveBrowserFetch {
                             : request.getUrl().toString()));
                 }
             });
+            webView.setWebChromeClient(new WebChromeClient() {
+                @Override
+                public boolean onCreateWindow(
+                        WebView view,
+                        boolean isDialog,
+                        boolean isUserGesture,
+                        android.os.Message resultMsg
+                ) {
+                    Log.i(TAG, "blockedWindow");
+                    return false;
+                }
+            });
             FrameLayout.LayoutParams webParams = new FrameLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
                     ViewGroup.LayoutParams.MATCH_PARENT
@@ -276,11 +330,47 @@ final class XMegaDriveBrowserFetch {
                     ViewGroup.LayoutParams.MATCH_PARENT
             ));
             if (!passedOnce) webView.requestFocus();
+            try {
+                if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
+                    WebViewCompat.addDocumentStartJavaScript(
+                            webView,
+                            POPUP_GUARD,
+                            Collections.singleton("*")
+                    );
+                }
+            } catch (Exception ignored) {
+            }
             webView.loadUrl(url, headers);
         } catch (Exception failure) {
             complete(completed, error, finished,
                     new IOException("XMegaDrive browser check could not start", failure));
         }
+    }
+
+    private static boolean blockOffsite(String url) {
+        if (url == null || url.trim().isEmpty() || XMegaDriveRepository.allowsMainFrame(url)) {
+            return false;
+        }
+        Log.i(TAG, "blockedNavigation host=" + hostOnly(url));
+        return true;
+    }
+
+    private static String hostOnly(String url) {
+        if (url == null) return "";
+        try {
+            String host = java.net.URI.create(url.trim()).getHost();
+            return host == null ? "" : host;
+        } catch (Exception ignored) {
+            return "";
+        }
+    }
+
+    private static WebResourceResponse emptyResponse() {
+        return new WebResourceResponse(
+                "text/plain",
+                "utf-8",
+                new ByteArrayInputStream(new byte[0])
+        );
     }
 
     private static void consider(
@@ -391,6 +481,13 @@ final class XMegaDriveBrowserFetch {
     ) {
         if (completed.get() || seen != generation.get()) return;
         String script = "(() => {"
+                + "window.open=function(){return null;};"
+                + "document.querySelectorAll('iframe,frame').forEach(frame=>{"
+                + "const src=frame.getAttribute('src')||'';"
+                + "if(!src||src.indexOf('about:')===0)return;"
+                + "let host=''; try{host=new URL(src, location.href).hostname.toLowerCase();}catch(e){return;}"
+                + "const ok=host==='xmegadrive.com'||host.endsWith('.xmegadrive.com')||host.endsWith('.cloudflare.com');"
+                + "if(!ok)frame.remove();});"
                 + "const q=String.fromCharCode(34);"
                 + "const abs=u=>{if(!u)return ''; try {return new URL(u, location.href).href;} catch(e){return '';}};"
                 + "const bgOf=el=>{"

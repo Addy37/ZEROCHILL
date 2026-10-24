@@ -120,6 +120,37 @@ public final class XMegaDriveRepositoryTest {
         );
     }
 
+    @Test public void popunderDoesNotReplaceTheVideo() {
+        assertFalse(XMegaDriveRepository.allowsMainFrame("https://chaturbate.com/in/?tour=x"));
+        assertFalse(XMegaDriveRepository.allowsMainFrame("https://www.chaturbate.com/in/"));
+        assertFalse(XMegaDriveRepository.allowsMainFrame("https://go.exoclick.com/click"));
+        assertTrue(XMegaDriveRepository.isPopunder("https://chaturbate.com/in/?tour=x"));
+        assertTrue(XMegaDriveRepository.isPopunder("https://www.stripchat.com/"));
+        assertFalse(XMegaDriveRepository.isPopunder("https://www.xmegadrive.com/get_file/1/a.mp4"));
+        assertFalse(XMegaDriveRepository.isPopunder(
+                "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/"));
+        assertTrue(XMegaDriveRepository.allowsMainFrame(
+                "https://www.xmegadrive.com/videos/example-clip/"));
+        assertTrue(XMegaDriveRepository.allowsMainFrame(
+                "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/"));
+        assertTrue(XMegaDriveRepository.allowsMainFrame("about:blank"));
+
+        String html = ""
+                + "<video src=\"https://chaturbate.com/ads/preroll.mp4\"></video>"
+                + "<script>video_url: 'https://www.xmegadrive.com/get_file/1/deadbeef/100/101/101.mp4/';</script>";
+        assertEquals(
+                "https://www.xmegadrive.com/get_file/1/deadbeef/100/101/101.mp4/",
+                XMegaDriveRepository.mediaFromHtml(html, PAGE)
+        );
+        assertEquals(
+                "",
+                XMegaDriveRepository.mediaFromHtml(
+                        "<video src=\"https://chaturbate.com/ads/preroll.mp4\"></video>",
+                        PAGE
+                )
+        );
+    }
+
     @Test public void playerFixtureDecodesEqualsForm() {
         String html = ""
                 + "<script>"
