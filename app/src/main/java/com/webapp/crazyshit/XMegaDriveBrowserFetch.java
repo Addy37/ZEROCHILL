@@ -940,19 +940,30 @@ final class XMegaDriveBrowserFetch {
     }
 
     private static void destroy(FrameLayout overlay, WebView webView) {
+        // A renderer exit can make stopLoading fail; hierarchy removal and destroy must still run.
         try {
             if (webView != null) {
                 webView.stopLoading();
                 webView.setWebViewClient(null);
                 webView.setWebChromeClient(null);
             }
+        } catch (Exception ignored) {
+        }
+        try {
             if (overlay != null) {
                 ViewParent parent = overlay.getParent();
                 if (parent instanceof ViewGroup) ((ViewGroup) parent).removeView(overlay);
-            } else if (webView != null) {
+            }
+        } catch (Exception ignored) {
+        }
+        try {
+            if (webView != null) {
                 ViewParent parent = webView.getParent();
                 if (parent instanceof ViewGroup) ((ViewGroup) parent).removeView(webView);
             }
+        } catch (Exception ignored) {
+        }
+        try {
             if (webView != null) webView.destroy();
         } catch (Exception ignored) {
         }

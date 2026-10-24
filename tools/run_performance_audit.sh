@@ -10,7 +10,7 @@ timeout --kill-after=5s 15s adb logcat -c || true
 gradle --no-daemon "$@"
 benchmark_status=$?
 
-timeout --kill-after=5s 15s adb logcat -d -s ZeroChillBenchmark AndroidRuntime ActivityManager > "$diagnostics/logcat.txt" 2>&1 || true
+timeout --kill-after=5s 15s adb logcat -d -s ZeroChillBenchmark AndroidRuntime ActivityManager XMegaDrive chromium cr_WebViewFactory > "$diagnostics/logcat.txt" 2>&1 || true
 timeout --kill-after=5s 15s adb shell dumpsys meminfo com.addy37.crazyshitunofficial > "$diagnostics/memory.txt" 2>&1 || true
 timeout --kill-after=5s 15s adb shell dumpsys gfxinfo com.addy37.crazyshitunofficial > "$diagnostics/frames.txt" 2>&1 || true
 timeout --kill-after=5s 15s adb shell dumpsys thermalservice > "$diagnostics/thermal.txt" 2>&1 || true

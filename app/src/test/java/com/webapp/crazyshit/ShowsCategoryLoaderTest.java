@@ -82,6 +82,32 @@ public class ShowsCategoryLoaderTest {
         assertEquals(1, f.published.size());
     }
 
+    @Test public void departureInterruptsRunningBrowserWorkerAndRejectsItsLateResult() throws Exception {
+        java.util.concurrent.ExecutorService io = java.util.concurrent.Executors.newSingleThreadExecutor();
+        java.util.concurrent.BlockingQueue<Runnable> callbacks = new java.util.concurrent.LinkedBlockingQueue<>();
+        java.util.concurrent.CountDownLatch started = new java.util.concurrent.CountDownLatch(1);
+        java.util.concurrent.CountDownLatch interrupted = new java.util.concurrent.CountDownLatch(1);
+        List<List<NativeContentItem>> published = new ArrayList<>();
+        ShowsCategoryLoader loader = new ShowsCategoryLoader(io, callbacks::add, () -> {
+            started.countDown();
+            try { new java.util.concurrent.CountDownLatch(1).await(); }
+            catch (InterruptedException cancelled) { interrupted.countDown(); }
+            // Simulate a source returning after cancellation despite the interrupt.
+            return Collections.singletonList(new NativeContentItem(NativeContentItem.KIND_CATEGORY,
+                    "Category", "https://example.invalid/", "", "", "", ""));
+        }, published::add);
+        try {
+            loader.setActive(true);
+            assertTrue(started.await(5, TimeUnit.SECONDS));
+            loader.setActive(false);
+            assertTrue(interrupted.await(5, TimeUnit.SECONDS));
+            Runnable late = callbacks.poll(5, TimeUnit.SECONDS);
+            assertNotNull(late);
+            late.run();
+            assertTrue(published.isEmpty());
+        } finally { loader.close(); io.shutdownNow(); }
+    }
+
     static final class Fixture {
         final ManualIo io = new ManualIo();
         final List<Runnable> main = new ArrayList<>();

@@ -58,6 +58,7 @@ public class XMegaDriveBrowserLifecycleTest {
         assertNull(b.web.get());
         assertNull(b.overlay.get());
         assertNull(overlay.getParent());
+        assertNull(web.getParent());
         assertTrue(shadowOf(web).wasDestroyCalled());
     }
 
