@@ -964,7 +964,10 @@ final class XMegaDriveBrowserFetch {
         } catch (Exception ignored) {
         }
         try {
-            if (webView != null) webView.destroy();
+            if (webView != null) {
+                webView.destroy();
+                Log.i(TAG, "browser released");
+            }
         } catch (Exception ignored) {
         }
     }

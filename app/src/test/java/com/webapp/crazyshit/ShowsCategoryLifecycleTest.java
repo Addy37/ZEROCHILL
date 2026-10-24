@@ -49,7 +49,7 @@ public class ShowsCategoryLifecycleTest {
             ShowsCategoryLoaderTest.Fixture f = new ShowsCategoryLoaderTest.Fixture();
             hub.closeCategoryLoader();
             hub.setCategoryLoader(f.loader);
-            activity.setContentView(hub);
+            activity.setContentView((View) hub.getParent());
             assertEquals(0, f.io.work.size());
             // Prevent unrelated live shelf IO in this lifecycle fixture.
             ReflectionHelpers.setField(pages[MainPagerAdapter.PAGE_SERIES], "loading", true);

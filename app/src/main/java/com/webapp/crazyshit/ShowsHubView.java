@@ -509,6 +509,8 @@ final class ShowsHubView extends FrameLayout {
     void setActive(boolean active) {
         if (this.active == active) return;
         this.active = active;
+        if (categoryLoader != null) android.util.Log.i("XMegaDrive",
+                "showsCategories active=" + active + " attached=" + isAttachedToWindow());
         if (categoryLoader != null) categoryLoader.setActive(active && isAttachedToWindow());
         if (!active) {
             heroHandler.removeCallbacksAndMessages(null);
