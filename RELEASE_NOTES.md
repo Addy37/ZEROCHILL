@@ -1,11 +1,9 @@
-# ZEROCHILL 5.2
+# ZEROCHILL 5.2.1
 
-- **Search got a major liquid-glass upgrade** with clearer backgrounds, stronger refraction, dynamic Recent Searches sizing, and improved readability.
-- **OnlyFap category browsing is better** with multiple creator shelves per category and the new Liquid Rift transition between content preferences.
-- **Shows episodes were redesigned** into a cleaner permanent list with Resume, Play First, and Play Next controls.
-- **Library startup was improved** to eliminate the blank-screen delay and reduce unnecessary background work when leaving the tab.
-- **ShitTok received more playback polish** with a cleaner edge-aligned progress bar and improved Search/playback interaction.
-- **Content sources and creator discovery were cleaned up**, including better OnlyHaven search behavior, an expanded creator catalog, and improved source-health checks.
-- **More stability and UI polish** across navigation, loading, source switching, playback handoffs, and saved state.
+- Search now has separate tabs for Shows, OnlyFap, XMegaDrive, BaddieHub, and Library.
+- ShitTok keeps playing while Search is open, preserving your mute and manual pause settings.
+- Search results have slightly darker liquid glass, smaller titles, larger thumbnails, and larger circular creator avatars.
+- XMegaDrive is available in ShitTok and Shows, with portrait category cards and higher-quality video selection when available.
+- XMegaDrive browsing work now follows the active Shows page lifecycle, and categories without artwork stay out of the shelf.
 
-Install over your existing app without uninstalling to keep your data and settings.
+Install over your existing ZeroChill app without uninstalling to keep your data and settings.
