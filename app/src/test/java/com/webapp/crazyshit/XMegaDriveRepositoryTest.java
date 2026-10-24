@@ -14,6 +14,20 @@ public final class XMegaDriveRepositoryTest {
     private static final String FEMDOM =
             "https://www.xmegadrive.com/categories/femdom/";
 
+    @Test public void browserIdentityDropsWebViewMarker() {
+        String raw = "Mozilla/5.0 (Linux; Android 14; Pixel 8 Build/UP1A.231005.007; wv) "
+                + "AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 "
+                + "Chrome/131.0.6778.135 Mobile Safari/537.36";
+        assertEquals(
+                "Mozilla/5.0 (Linux; Android 14; Pixel 8 Build/UP1A.231005.007) "
+                        + "AppleWebKit/537.36 (KHTML, like Gecko) "
+                        + "Chrome/131.0.6778.135 Mobile Safari/537.36",
+                XMegaDriveRepository.browserIdentity(raw)
+        );
+        assertEquals("", XMegaDriveRepository.browserIdentity(null));
+        assertEquals("", XMegaDriveRepository.browserIdentity("  "));
+    }
+
     @Test public void acceptsOnlyXMegaDriveHosts() {
         assertTrue(XMegaDriveRepository.isXMegaDriveUrl(PAGE));
         assertTrue(XMegaDriveRepository.isXMegaDriveUrl("https://xmegadrive.com/videos/example/"));

@@ -23,8 +23,9 @@ import java.util.regex.Pattern;
  * Compiled, not remote-config. Schema 1 has exactly seven configurable sources and does
  * not include XMegaDrive, so this provider stays in code. ShitTok scrapes public /videos/
  * listings. Shows discovers /categories/ and opens each category inside the existing
- * gallery. A direct request that only receives the edge check is opened in a full-size WebView.
- * That check can stay on screen until the listing is readable. Playback resolves the
+ * gallery. The site's browser check runs in a full-size WebView using this device's Chrome,
+ * without the WebView marker that makes that check return Forbidden. A direct request is
+ * only reused after the check has succeeded. Playback resolves the
  * direct MP4 from the video page without changing the shared Media3 path. Failure is contained
  * so other providers continue.
  */
@@ -36,6 +37,17 @@ final class XMegaDriveRepository {
     private static final String USER_AGENT =
             "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) " +
                     "Chrome/120.0.0.0 Mobile Safari/537.36";
+
+    /** Device Chrome UA with the embedded-WebView marker removed. */
+    static String browserIdentity(String webViewUserAgent) {
+        if (webViewUserAgent == null) return "";
+        String agent = webViewUserAgent.trim();
+        if (agent.isEmpty()) return "";
+        agent = agent.replace("; wv)", ")").replace("; wv", "");
+        agent = agent.replace("Version/4.0 ", "");
+        return agent.replaceAll("\\s+", " ").trim();
+    }
+
     private static final Pattern PLAYER_URL = Pattern.compile(
             "video_(?:url|alt_url\\d*)\\s*:\\s*['\"]([^'\"]+)['\"]");
     private static final Pattern LICENSE_CODE = Pattern.compile(
@@ -184,25 +196,17 @@ final class XMegaDriveRepository {
     }
 
     private static Document fetch(Context context, String url) throws IOException {
-        try {
-            Document direct = fetchDirect(context, url);
-            if (hasUsefulMarkup(direct, url)) return direct;
-        } catch (IOException direct) {
-            if (!isBlocked(direct)) throw direct;
+        if (XMegaDriveBrowserFetch.passedBrowserCheck()) {
+            try {
+                Document direct = fetchDirect(context, url);
+                if (hasUsefulMarkup(direct, url)) return direct;
+            } catch (IOException direct) {
+                if (!isBlocked(direct)) throw direct;
+            }
         }
         synchronized (BROWSER_FALLBACK) {
-            try {
-                Document retry = fetchDirect(context, url);
-                if (hasUsefulMarkup(retry, url)) return retry;
-            } catch (IOException ignored) {
-            }
             Document rendered = XMegaDriveBrowserFetch.fetch(context, url, BASE);
             if (hasUsefulMarkup(rendered, url)) return rendered;
-            try {
-                Document after = fetchDirect(context, url);
-                if (hasUsefulMarkup(after, url)) return after;
-            } catch (IOException ignored) {
-            }
             throw new IOException("XMegaDrive stayed blocked after the browser check");
         }
     }
