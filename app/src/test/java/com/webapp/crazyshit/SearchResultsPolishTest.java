@@ -179,7 +179,7 @@ public class SearchResultsPolishTest {
                 assertEquals(17f, holder.title.getTextSize() / host.get().getResources().getDisplayMetrics().scaledDensity, .1f);
                 assertEquals(2, holder.title.getMaxLines());
                 assertEquals(android.text.TextUtils.TruncateAt.END, holder.title.getEllipsize());
-                assertTrue(holder.title.getTypeface().isBold() || holder.title.getPaint().isFakeBoldText());
+                assertTrue((holder.title.getTypeface().getStyle() & android.graphics.Typeface.BOLD) != 0 || holder.title.getPaint().isFakeBoldText());
                 assertEquals(BrowseUi.dp(host.get(), 48), holder.favorite.getLayoutParams().width);
                 assertEquals(BrowseUi.dp(host.get(), 104), holder.card.getMinimumHeight());
                 assertArtworkFits(host.get(), holder.card, holder.image);
