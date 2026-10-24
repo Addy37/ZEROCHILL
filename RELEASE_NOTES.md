@@ -1,9 +1,8 @@
-# ZEROCHILL 5.2.1
+# ZEROCHILL 5.2.2
 
-- Search now has separate tabs for Shows, OnlyFap, XMegaDrive, BaddieHub, and Library.
-- ShitTok keeps playing while Search is open, preserving your mute and manual pause settings.
-- Search results have slightly darker liquid glass, smaller titles, larger thumbnails, and larger circular creator avatars.
-- XMegaDrive is available in ShitTok and Shows, with portrait category cards and higher-quality video selection when available.
-- XMegaDrive browsing work now follows the active Shows page lifecycle, and categories without artwork stay out of the shelf.
+- Fixed XMegaDrive age verification sometimes preventing content from loading.
+- The age confirmation now stays in the background and accepts the continue option automatically.
+- If a declined or stale XMegaDrive age cookie blocks loading, ZeroChill clears only XMegaDrive cookies and retries once.
+- Cloudflare and other manual browser checks keep their existing behavior.
 
 Install over your existing ZeroChill app without uninstalling to keep your data and settings.
