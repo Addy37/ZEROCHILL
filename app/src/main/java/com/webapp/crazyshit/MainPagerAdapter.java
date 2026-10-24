@@ -103,7 +103,6 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
     private int primaryPage = -1;
     private boolean hostResumed = true;
     private boolean searchOpen;
-    private boolean activityResumed = true;
     private boolean primarySettled;
     private final PrimaryTabWorkQueue primaryWork;
 
@@ -296,7 +295,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
     private void schedulePrimaryRefresh() {
         final int position = primaryPage;
         primaryWork.submit(position, "activation", () -> {
-            if (!hostResumed || activity.isFinishing() || activity.isDestroyed()) return;
+            if (!hostResumed || searchOpen || activity.isFinishing() || activity.isDestroyed()) return;
             host.onPrimarySettled(position);
             if (position == PAGE_LIBRARY) {
                 libraryView.setSocialActive(true);
@@ -323,11 +322,10 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
     }
 
     public void onHostResume() {
-        activityResumed = true;
         hostResumed = true;
         if (primaryPage == PAGE_ONLYFAP) pages[PAGE_ONLYFAP].onlyFapHub.onOpenRequested();
         chaosView.onHostResume();
-        if (searchOpen) { pauseHost(true); return; }
+        if (searchOpen) { suspendPrimaryWork(); return; }
         primaryWork.setResumed(true);
         schedulePrimaryRefresh();
     }
@@ -362,33 +360,36 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
     }
 
     public void onHostPause() {
-        activityResumed = false;
-        pauseHost(false);
+        pauseHost();
     }
 
     public void onSearchOpened() {
         searchOpen = true;
-        pauseHost(true);
+        suspendPrimaryWork();
+        chaosView.onSearchOpened();
     }
 
     public void onSearchClosed() {
         searchOpen = false;
         chaosView.onSearchClosed();
         // A closing animation can finish after Activity.onPause.
-        if (!activityResumed) return;
-        hostResumed = true;
+        if (!hostResumed) return;
         primaryWork.setResumed(true);
         schedulePrimaryRefresh();
     }
 
     @androidx.annotation.OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)
-    private void pauseHost(boolean searchOverlay) {
+    private void pauseHost() {
         hostResumed = false;
+        suspendPrimaryWork();
+        chaosView.onHostPause();
+    }
+
+    /** Search can suspend hub work without changing the Activity/player lifecycle. */
+    private void suspendPrimaryWork() {
         pages[PAGE_ONLYFAP].onlyFapHub.onOpenCancelled();
         primaryWork.setResumed(false);
         deactivateHubs();
-        if (searchOverlay) chaosView.onSearchOpened();
-        else chaosView.onHostPause();
         Page profilePage = pageAt(PAGE_ONLYFAP);
         if (profilePage != null && profilePage.onlyFapHub != null) profilePage.onlyFapHub.setProfileActive(false);
         libraryView.setSocialActive(false);

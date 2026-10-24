@@ -278,6 +278,18 @@ jobs:
           --tests 'com.webapp.crazyshit.ChaosSourceMixerPriorityTest'
           --tests 'com.webapp.crazyshit.ShitTokContinuityTest'
 
+      - name: Run focused Search playback coverage first
+        if: github.head_ref == 'fix/search-shittok-playback'
+        run: gradle --no-daemon :app:testDebugUnitTest --tests 'com.webapp.crazyshit.SearchShitTokPauseTest'
+
+      - name: Run related Search and ShitTok playback regressions
+        if: github.head_ref == 'fix/search-shittok-playback'
+        run: >-
+          gradle --no-daemon :app:testDebugUnitTest
+          --tests 'com.webapp.crazyshit.Search*Test'
+          --tests 'com.webapp.crazyshit.ShitTok*Test'
+          --tests 'com.webapp.crazyshit.PrimaryTab*Test'
+
       - name: Run search results and glass regressions first
         if: ${{ github.head_ref == 'feature/search-results-polish' || (github.head_ref == 'feature/search-recent-glass' || github.head_ref == 'feature/search-liquid-material') }}
         run: >-

@@ -74,7 +74,7 @@ class ShitTokPlaybackOwner(context: Context, private val callbacks: Callbacks) {
     }
     fun setMuted(value: Boolean) {
         muted = value
-        leases.forEach { (url, lease) -> lease.player.volume = if (canPlay(url) && !value && !searchCovered) 1f else 0f }
+        leases.forEach { (url, lease) -> lease.player.volume = if (canPlay(url) && !value) 1f else 0f }
     }
     /** Overlay policy on the existing lease. Never pause, detach or re-source the selected video. */
     fun setSearchCovered(value: Boolean) {
@@ -89,7 +89,7 @@ class ShitTokPlaybackOwner(context: Context, private val callbacks: Callbacks) {
             leases.keys.toList().filter { it != selected }.forEach { retire(it); removeSource(it) }
             waitingSources.clear()
         }
-        setMuted(muted)
+        // Coverage controls input/speculation, never the selected lease's audio intent.
         publishProtection()
         manager?.invalidate()
     }
@@ -277,7 +277,7 @@ class ShitTokPlaybackOwner(context: Context, private val callbacks: Callbacks) {
     fun syncAudio() {
         leases.forEach { (url, lease) -> if (!canPlay(url)) silence(lease.player) }
         selected?.let { url -> leases[url]?.takeIf { canPlay(url) && it.stream != null }?.let {
-            it.player.volume = if (muted || searchCovered) 0f else 1f
+            it.player.volume = if (muted) 0f else 1f
             if (it.player.playbackState != Player.STATE_ENDED && !it.player.playWhenReady) it.player.play()
         } }
         updateBufferPriority()
@@ -351,7 +351,7 @@ class ShitTokPlaybackOwner(context: Context, private val callbacks: Callbacks) {
             lease.view = view
             ShitTokPoolDiagnostics.record("surface", url)
         }
-        lease.player.volume = if (canPlay(url) && !muted && !searchCovered) 1f else 0f
+        lease.player.volume = if (canPlay(url) && !muted) 1f else 0f
         return lease.player
     }
     fun detach(url: String, view: PlayerView) {

@@ -78,7 +78,7 @@ public final class SearchShitTokProbeActivity extends Activity {
             pausedAt = player.getCurrentPosition();
             feed.onSearchOpened();
             check(surface.getPlayer() == player, "Search detached selected surface");
-            check(player.getVolume() == 0f, "Search audio is not silent");
+            check(player.getVolume() == (manualPause ? 0f : 1f), "Search changed audio state");
             motionFrame = ((TextureView) surface.getVideoSurfaceView()).getBitmap(48, 80);
             openedAt = player.getCurrentPosition();
             RecentSearchStore.clear(this);
@@ -154,10 +154,10 @@ public final class SearchShitTokProbeActivity extends Activity {
                 handler.postDelayed(this::awaitReturn, 100); return;
             }
             check(resumed == player, "Search close recreated selected engine");
-            check(resumed.getVolume() == 1f, "Search close did not restore audio");
+            check(resumed.getVolume() == (manualPause ? 0f : 1f), "Search close changed audio state");
             check(manualPause ? !resumed.getPlayWhenReady() : resumed.getPlayWhenReady(), "manual pause intent changed");
             if (manualPause) check(Math.abs(resumed.getCurrentPosition()-pausedAt)<50, "manual pause position changed");
-            android.util.Log.i("ZeroChillSearchVideo", "PASS live video, silent Search, same-surface return; manual=" + manualPause);
+            android.util.Log.i("ZeroChillSearchVideo", "PASS live video, foreground audio during Search, same-surface return; manual=" + manualPause);
         } catch (Exception e) { fail(e); }
     }
     @Override public void onBackPressed() { if (search != null) search.back(); else super.onBackPressed(); }
