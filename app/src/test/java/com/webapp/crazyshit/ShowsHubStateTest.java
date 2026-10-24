@@ -76,6 +76,23 @@ public class ShowsHubStateTest {
     }
 
     @Test
+    public void xMegaDriveShelfCountsAndClearsIndependently() {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        ShowsHubView hub = hub(activity);
+        hub.setCrazyShit(items(2, "/series/"));
+        hub.setXMegaDriveCategories(items(4, "https://www.xmegadrive.com/categories/test-"));
+
+        assertEquals(6, hub.itemCount());
+        assertEquals(View.VISIBLE, xMegaDriveShelf(hub).getVisibility());
+
+        hub.setXMegaDriveCategories(new ArrayList<>());
+        assertEquals(2, hub.itemCount());
+        assertEquals(View.GONE, xMegaDriveShelf(hub).getVisibility());
+        hub.clear();
+        assertEquals(0, hub.itemCount());
+    }
+
+    @Test
     public void restoresBaddieHubHorizontalShelfPosition() {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
         ShowsHubView first = hub(activity);
@@ -135,6 +152,11 @@ public class ShowsHubStateTest {
     private static RecyclerView baddieHubRail(ShowsHubView hub) {
         Object shelf = ReflectionHelpers.getField(hub, "baddieHubCategoryShelf");
         return ReflectionHelpers.getField(shelf, "rail");
+    }
+
+    private static View xMegaDriveShelf(ShowsHubView hub) {
+        Object shelf = ReflectionHelpers.getField(hub, "xMegaDriveCategoryShelf");
+        return ReflectionHelpers.getField(shelf, "container");
     }
 
     private static void layout(View view) {

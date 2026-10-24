@@ -80,6 +80,7 @@ public final class NativeFeedBrowserActivity extends Activity {
     public static final String SOURCE_EFUKT = "efukt";
     public static final String SOURCE_KAOTIC = "kaotic";
     public static final String SOURCE_BADDIEHUB = "baddiehub";
+    public static final String SOURCE_XMEGADRIVE = "xmegadrive";
     public static final String SOURCE_BUNKR = "bunkr";
 
     private static final int REQUEST_CREATOR_AVATAR_CROP = 4107;
@@ -89,6 +90,7 @@ public final class NativeFeedBrowserActivity extends Activity {
     private final EfuktRepository efuktRepository = new EfuktRepository();
     private final WebVideoSourceRepository webVideoRepository = new WebVideoSourceRepository();
     private final BaddieHubRepository baddieHubRepository = new BaddieHubRepository();
+    private final XMegaDriveRepository xMegaDriveRepository = new XMegaDriveRepository();
     private final BunkrRepository bunkrRepository = new BunkrRepository();
     private final BunkrCreatorGalleryRepository creatorGalleryRepository =
             new BunkrCreatorGalleryRepository();
@@ -378,6 +380,7 @@ public final class NativeFeedBrowserActivity extends Activity {
         } else if (BunkrRepository.isAlbumUrl(baseUrl)) source = SOURCE_BUNKR;
         else if (WebVideoSourceRepository.isKaoticUrl(baseUrl)) source = SOURCE_KAOTIC;
         else if (BaddieHubRepository.isBaddieHubUrl(baseUrl)) source = SOURCE_BADDIEHUB;
+        else if (XMegaDriveRepository.isCategoryUrl(baseUrl)) source = SOURCE_XMEGADRIVE;
         else if (EfuktRepository.isEfuktUrl(baseUrl)) source = SOURCE_EFUKT;
         restoredBrowserState = state;
         if (state != null) {
@@ -1277,6 +1280,8 @@ public final class NativeFeedBrowserActivity extends Activity {
                     );
                 } else if (isBaddieHub()) {
                     result = baddieHubRepository.fetchCategory(this, baseUrl, requestPage);
+                } else if (isXMegaDrive()) {
+                    result = xMegaDriveRepository.fetchCategory(this, baseUrl, requestPage);
                 } else {
                     result = repository.fetchFeed(this, baseUrl, requestPage);
                 }
@@ -1622,7 +1627,14 @@ public final class NativeFeedBrowserActivity extends Activity {
                 }
                 intent.putExtra(VideoDetailActivity.EXTRA_MEDIA_REFERER, resolved.requestReferer);
                 try {
-                    intent.putExtra(PlayerActivity.EXTRA_USER_AGENT, WebSettings.getDefaultUserAgent(this));
+                    String agent = WebSettings.getDefaultUserAgent(this);
+                    if (XMegaDriveRepository.isXMegaDriveUrl(item.url)
+                            || (resolved.pageUrl != null
+                            && XMegaDriveRepository.isXMegaDriveUrl(resolved.pageUrl))) {
+                        String session = XMegaDriveBrowserFetch.sessionUserAgent();
+                        if (session != null && !session.trim().isEmpty()) agent = session.trim();
+                    }
+                    intent.putExtra(PlayerActivity.EXTRA_USER_AGENT, agent);
                 } catch (Exception ignored) {
                 }
                 try {
@@ -2439,6 +2451,10 @@ public final class NativeFeedBrowserActivity extends Activity {
         return SOURCE_BADDIEHUB.equals(source) || BaddieHubRepository.isBaddieHubUrl(baseUrl);
     }
 
+    private boolean isXMegaDrive() {
+        return SOURCE_XMEGADRIVE.equals(source) || XMegaDriveRepository.isCategoryUrl(baseUrl);
+    }
+
     private boolean isCreatorGallery() {
         return creatorQuery != null && !creatorQuery.isEmpty();
     }
@@ -2449,6 +2465,7 @@ public final class NativeFeedBrowserActivity extends Activity {
 
     private String showSourceLabel() {
         if (isBaddieHub()) return "BADDIEHUB CATEGORY";
+        if (isXMegaDrive()) return "XMEGADRIVE CATEGORY";
         if (isKaotic()) return "KAOTIC CATEGORY";
         if (isEfukt()) return "EFUKT SERIES";
         if (NativeContentItem.KIND_CATEGORY.equals(showKind)) return "CRAZYSHIT CATEGORY";

@@ -26,6 +26,7 @@ import java.util.concurrent.TimeUnit;
 final class ChaosSourceMixer {
     private static final int MAX_SOURCE_PAGE = 32;
     private static final int BADDIEHUB_MAX_PAGE = 3;
+    private static final int XMEGADRIVE_MAX_PAGE = 4;
     private static final ExecutorService CRAZY_IO = Executors.newFixedThreadPool(2);
     private static final ExecutorService SOURCE_IO = Executors.newFixedThreadPool(6);
     private static final ExecutorService CONTINUITY_SOURCE_IO = Executors.newFixedThreadPool(3);
@@ -36,6 +37,7 @@ final class ChaosSourceMixer {
     private static final int BATCH_FAPELLO = 5;
     private static final int BATCH_ONLY_HAVEN = 6;
     private static final int BATCH_BADDIEHUB = 7;
+    private static final int BATCH_XMEGADRIVE = 8;
     private static final int SOURCES_PER_BATCH = 3;
     private static final int REGULAR_ITEMS_PER_SOURCE = 4;
     private static final int SHIT_SHOW_PER_BATCH = 24;
@@ -47,6 +49,7 @@ final class ChaosSourceMixer {
     private static final int ONLY_HAVEN_ITEMS_PER_CREATOR = 3;
     private static final int ONLY_HAVEN_TRENDING_CREATORS = 30;
     private static final int BADDIEHUB_ITEMS_PER_BATCH = 7;
+    private static final int XMEGADRIVE_ITEMS_PER_BATCH = 8;
     private static final String VIDEOS = CrazyShitRepository.BASE + "videos/";
     private static final String USER_UPLOADS = CrazyShitRepository.BASE + "submissions/";
 
@@ -60,6 +63,7 @@ final class ChaosSourceMixer {
     private final WebVideoSourceRepository webVideo = new WebVideoSourceRepository();
     private final OnlyHavenRepository onlyHaven = new OnlyHavenRepository();
     private final BaddieHubRepository baddieHub = new BaddieHubRepository();
+    private final XMegaDriveRepository xMegaDrive = new XMegaDriveRepository();
     private final ArrayList<NativeContentItem> efuktSeries = new ArrayList<>();
     private final ArrayDeque<NativeContentItem> efuktSeriesDeck = new ArrayDeque<>();
     private final ArrayList<OnlyHavenRepository.Creator> onlyHavenCreators = new ArrayList<>();
@@ -183,6 +187,7 @@ final class ChaosSourceMixer {
         requests.add(provider(BATCH_FAPELLO, () -> loadFapelloBatch(context)));
         requests.add(provider(BATCH_REGULAR, () -> loadRegularBatch(context, onCandidates)));
         requests.add(provider(BATCH_BADDIEHUB, () -> loadBaddieHubBatch(context)));
+        requests.add(provider(BATCH_XMEGADRIVE, () -> loadXMegaDriveBatch(context)));
         // eFukt remains bounded before the first frame. No new sources are introduced.
         requests.add(provider(BATCH_EFUKT,
                 () -> explorationAllowed ? loadEfuktBatch(context) : efukt.fetchLatest(context)));
@@ -196,6 +201,7 @@ final class ChaosSourceMixer {
         ArrayList<NativeContentItem> fapelloItems = new ArrayList<>();
         ArrayList<NativeContentItem> onlyHavenItems = new ArrayList<>();
         ArrayList<NativeContentItem> baddieHubItems = new ArrayList<>();
+        ArrayList<NativeContentItem> xMegaDriveItems = new ArrayList<>();
 
         long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(MIX_BATCH_BUDGET_MS);
         int remainingWork = work.size();
@@ -235,6 +241,9 @@ final class ChaosSourceMixer {
                         case BATCH_BADDIEHUB:
                             baddieHubItems.addAll(batch.items);
                             break;
+                        case BATCH_XMEGADRIVE:
+                            xMegaDriveItems.addAll(batch.items);
+                            break;
                         default:
                             break;
                     }
@@ -256,6 +265,7 @@ final class ChaosSourceMixer {
         Collections.shuffle(fapelloItems, random);
         Collections.shuffle(onlyHavenItems, random);
         Collections.shuffle(baddieHubItems, random);
+        Collections.shuffle(xMegaDriveItems, random);
 
         ArrayList<NativeContentItem> shitShowItems = new ArrayList<>();
         HashSet<String> regularUrls = new HashSet<>();
@@ -274,6 +284,7 @@ final class ChaosSourceMixer {
         ArrayList<NativeContentItem> result = new ArrayList<>(mixAvailable(
                 kaoticItems, shitShowItems, fapelloItems, onlyHavenItems, regularItems, efuktItems));
         addUpTo(result, baddieHubItems, BADDIEHUB_ITEMS_PER_BATCH);
+        addUpTo(result, xMegaDriveItems, XMEGADRIVE_ITEMS_PER_BATCH);
         return result;
     }
 
@@ -349,6 +360,23 @@ final class ChaosSourceMixer {
             return ChaosStartupPreloader.collect(context, onCandidates);
         } catch (InterruptedException interrupted) {
             Thread.currentThread().interrupt();
+            return new ArrayList<>();
+        }
+    }
+
+    private List<NativeContentItem> loadXMegaDriveBatch(Context context) {
+        try {
+            ArrayList<NativeContentItem> candidates = new ArrayList<>(
+                    ShitTokPoolDiagnostics.fetched(BATCH_XMEGADRIVE, xMegaDrive.fetchShitTokCandidates(
+                            context,
+                            nextPage("xmegadrive", XMEGADRIVE_MAX_PAGE)
+                    ))
+            );
+            candidates.removeIf(item -> item == null || !item.isVideo());
+            Collections.shuffle(candidates, random);
+            int take = Math.min(XMEGADRIVE_ITEMS_PER_BATCH, candidates.size());
+            return new ArrayList<>(candidates.subList(0, take));
+        } catch (Exception ignored) {
             return new ArrayList<>();
         }
     }

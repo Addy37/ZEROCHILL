@@ -106,6 +106,7 @@ public class VideoDetailActivity extends Activity {
     private final EfuktRepository efuktRepository = new EfuktRepository();
     private final BunkrRepository bunkrRepository = new BunkrRepository();
     private final BaddieHubRepository baddieHubRepository = new BaddieHubRepository();
+    private final XMegaDriveRepository xMegaDriveRepository = new XMegaDriveRepository();
     private final WebVideoSourceRepository webVideoSourceRepository = new WebVideoSourceRepository();
     private final Map<String, ImageView> relatedImages = new LinkedHashMap<>();
     private final Map<String, String> resolvedRelatedThumbnails = new LinkedHashMap<>();
@@ -1300,6 +1301,19 @@ public class VideoDetailActivity extends Activity {
                     }
                 } catch (Exception ignored) {
                 }
+            } else if (isXMegaDrive()) {
+                try {
+                    String feed = relatedFeedUrl == null ? "" : relatedFeedUrl;
+                    List<NativeContentItem> related = XMegaDriveRepository.isCategoryUrl(feed)
+                            ? xMegaDriveRepository.fetchCategory(this, feed, 1)
+                            : xMegaDriveRepository.fetchShitTokCandidates(this, 1);
+                    for (NativeContentItem item : related) {
+                        if (item != null && item.isVideo() && !item.url.equals(excludeUrl)) {
+                            merged.put(item.url, item);
+                        }
+                    }
+                } catch (Exception ignored) {
+                }
             } else {
                 try {
                     List<NativeContentItem> home = repository.fetchFeed(this, CrazyShitRepository.HOME, 1);
@@ -1431,6 +1445,7 @@ public class VideoDetailActivity extends Activity {
         if (page == null || page.isEmpty() || thumbnailResolvers == null || thumbnailResolvers.length == 0) {
             return;
         }
+        if (XMegaDriveRepository.isXMegaDriveUrl(page)) return;
         if (resolvedRelatedThumbnails.containsKey(page)) return;
         if (!requestedRelatedThumbnails.add(page)) return;
         RenderedThumbnailResolver resolver =
@@ -1480,8 +1495,14 @@ public class VideoDetailActivity extends Activity {
     }
 
     private GlideUrl withHeaders(String imageUrl, String referer) {
+        String agent = THUMB_UA;
+        if (XMegaDriveRepository.isXMegaDriveUrl(imageUrl)
+                || XMegaDriveRepository.isXMegaDriveUrl(referer)) {
+            String session = XMegaDriveBrowserFetch.sessionUserAgent();
+            if (session != null && !session.trim().isEmpty()) agent = session.trim();
+        }
         LazyHeaders.Builder headers = new LazyHeaders.Builder()
-                .addHeader("User-Agent", THUMB_UA)
+                .addHeader("User-Agent", agent)
                 .addHeader("Referer", referer == null || referer.isEmpty() ? SITE : referer)
                 .addHeader("Accept", "image/avif,image/webp,image/apng,image/*,*/*;q=0.8");
         try {
@@ -2231,6 +2252,11 @@ public class VideoDetailActivity extends Activity {
     private boolean isBaddieHub() {
         return NativeFeedBrowserActivity.SOURCE_BADDIEHUB.equals(source) ||
                 BaddieHubRepository.isBaddieHubUrl(pageUrl);
+    }
+
+    private boolean isXMegaDrive() {
+        return NativeFeedBrowserActivity.SOURCE_XMEGADRIVE.equals(source)
+                || XMegaDriveRepository.isXMegaDriveUrl(pageUrl);
     }
 
     private boolean supportsComments() {

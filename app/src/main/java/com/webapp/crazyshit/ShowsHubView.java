@@ -12,6 +12,7 @@ import android.os.Handler;
 import android.os.Looper;
 import android.view.Gravity;
 import android.view.View;
+import android.webkit.CookieManager;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
@@ -81,6 +82,7 @@ final class ShowsHubView extends FrameLayout {
     private final Shelf categoryShelf;
     private final Shelf kaoticCategoryShelf;
     private final Shelf baddieHubCategoryShelf;
+    private final Shelf xMegaDriveCategoryShelf;
 
     private List<NativeContentItem> thisWeekItems = Collections.emptyList();
     private List<NativeContentItem> crazyItems = Collections.emptyList();
@@ -88,6 +90,7 @@ final class ShowsHubView extends FrameLayout {
     private List<NativeContentItem> categoryItems = Collections.emptyList();
     private List<NativeContentItem> kaoticCategoryItems = Collections.emptyList();
     private List<NativeContentItem> baddieHubCategoryItems = Collections.emptyList();
+    private List<NativeContentItem> xMegaDriveCategoryItems = Collections.emptyList();
     private List<NativeContentItem> heroItems = Collections.emptyList();
     private NativeContentItem heroItem;
     private int heroIndex = -1;
@@ -341,6 +344,11 @@ final class ShowsHubView extends FrameLayout {
                 "Browse BaddieHub by category",
                 true
         );
+        xMegaDriveCategoryShelf = addShelf(
+                "XMegaDrive",
+                "Browse XMegaDrive by category",
+                true
+        );
 
         heroCard.setOnClickListener(v -> openHero());
         heroAction.setOnClickListener(v -> openHero());
@@ -356,6 +364,7 @@ final class ShowsHubView extends FrameLayout {
         categoryItems = Collections.emptyList();
         kaoticCategoryItems = Collections.emptyList();
         baddieHubCategoryItems = Collections.emptyList();
+        xMegaDriveCategoryItems = Collections.emptyList();
         heroHandler.removeCallbacksAndMessages(null);
         heroCard.animate().cancel();
         heroCard.setAlpha(1f);
@@ -369,12 +378,14 @@ final class ShowsHubView extends FrameLayout {
         categoryShelf.adapter.replace(Collections.emptyList());
         kaoticCategoryShelf.adapter.replace(Collections.emptyList());
         baddieHubCategoryShelf.adapter.replace(Collections.emptyList());
+        xMegaDriveCategoryShelf.adapter.replace(Collections.emptyList());
         thisWeekShelf.container.setVisibility(View.GONE);
         crazyShelf.container.setVisibility(View.GONE);
         efuktShelf.container.setVisibility(View.GONE);
         categoryShelf.container.setVisibility(View.GONE);
         kaoticCategoryShelf.container.setVisibility(View.GONE);
         baddieHubCategoryShelf.container.setVisibility(View.GONE);
+        xMegaDriveCategoryShelf.container.setVisibility(View.GONE);
         loadingLabel.setText("Loading Shows…");
         loadingLabel.setVisibility(View.VISIBLE);
         heroSource.setText("FEATURED");
@@ -432,6 +443,15 @@ final class ShowsHubView extends FrameLayout {
         );
     }
 
+    void setXMegaDriveCategories(List<NativeContentItem> items) {
+        xMegaDriveCategoryItems = safe(items);
+        xMegaDriveCategoryShelf.adapter.replace(xMegaDriveCategoryItems);
+        xMegaDriveCategoryShelf.container.setVisibility(
+                xMegaDriveCategoryItems.isEmpty() ? View.GONE : View.VISIBLE
+        );
+        if (!xMegaDriveCategoryItems.isEmpty()) loadingLabel.setVisibility(View.GONE);
+    }
+
     void finishLoading() {
         loadingLabel.setVisibility(itemCount() == 0 ? View.VISIBLE : View.GONE);
         if (itemCount() == 0) {
@@ -451,6 +471,7 @@ final class ShowsHubView extends FrameLayout {
         saveRailState(out, "categories", categoryShelf.rail);
         saveRailState(out, "kaotic_categories", kaoticCategoryShelf.rail);
         saveRailState(out, "baddiehub_categories", baddieHubCategoryShelf.rail);
+        saveRailState(out, "xmegadrive_categories", xMegaDriveCategoryShelf.rail);
     }
 
     void restoreState(Bundle state) {
@@ -460,7 +481,8 @@ final class ShowsHubView extends FrameLayout {
     int itemCount() {
         return thisWeekItems.size() + crazyItems.size() + efuktItems.size()
                 + categoryItems.size() + kaoticCategoryItems.size()
-                + baddieHubCategoryItems.size();
+                + baddieHubCategoryItems.size()
+                + xMegaDriveCategoryItems.size();
     }
 
     void setNavigationScrollListener(View.OnScrollChangeListener listener) {
@@ -619,10 +641,11 @@ final class ShowsHubView extends FrameLayout {
         if (imageUrl.isEmpty()) return;
 
         LazyHeaders.Builder headers = new LazyHeaders.Builder()
-                .addHeader("User-Agent", USER_AGENT);
+                .addHeader("User-Agent", artworkAgent(imageUrl, item.url));
         if (item.url != null && item.url.startsWith("http")) {
             headers.addHeader("Referer", item.url);
         }
+        addXMegaDriveArtworkHeaders(headers, imageUrl, item.url);
         Glide.with(this)
                 .load(new GlideUrl(imageUrl, headers.build()))
                 .diskCacheStrategy(DiskCacheStrategy.ALL)
@@ -669,6 +692,7 @@ final class ShowsHubView extends FrameLayout {
         restoreRailState(state, "categories", categoryShelf.rail);
         restoreRailState(state, "kaotic_categories", kaoticCategoryShelf.rail);
         restoreRailState(state, "baddiehub_categories", baddieHubCategoryShelf.rail);
+        restoreRailState(state, "xmegadrive_categories", xMegaDriveCategoryShelf.rail);
 
         int y = Math.max(0, state.getInt("scroll_y", 0));
         scroll.post(() -> scroll.scrollTo(0, y));
@@ -839,10 +863,11 @@ final class ShowsHubView extends FrameLayout {
         }
 
         LazyHeaders.Builder headers = new LazyHeaders.Builder()
-                .addHeader("User-Agent", USER_AGENT);
+                .addHeader("User-Agent", artworkAgent(imageUrl, item.url));
         if (item.url != null && item.url.startsWith("http")) {
             headers.addHeader("Referer", item.url);
         }
+        addXMegaDriveArtworkHeaders(headers, imageUrl, item.url);
 
         com.bumptech.glide.RequestBuilder<android.graphics.drawable.Drawable> request =
                 Glide.with(view)
@@ -857,6 +882,44 @@ final class ShowsHubView extends FrameLayout {
         if (fullHeroArtwork) request.fitCenter();
         else request.centerCrop();
         request.into(view);
+    }
+
+    private static String artworkAgent(String imageUrl, String pageUrl) {
+        if (isXMegaDriveHost(imageUrl) || isXMegaDriveHost(pageUrl)) {
+            String session = XMegaDriveBrowserFetch.sessionUserAgent();
+            if (session != null && !session.trim().isEmpty()) return session.trim();
+        }
+        return USER_AGENT;
+    }
+
+    private static void addXMegaDriveArtworkHeaders(
+            LazyHeaders.Builder headers,
+            String imageUrl,
+            String pageUrl
+    ) {
+        if (!isXMegaDriveHost(imageUrl) && !isXMegaDriveHost(pageUrl)) return;
+        headers.addHeader("Accept", "image/avif,image/webp,image/apng,image/*,*/*;q=0.8");
+        try {
+            String lookup = imageUrl != null && imageUrl.startsWith("http") ? imageUrl : pageUrl;
+            String cookies = CookieManager.getInstance().getCookie(lookup);
+            if (cookies == null || cookies.trim().isEmpty()) {
+                cookies = CookieManager.getInstance().getCookie("https://www.xmegadrive.com/");
+            }
+            if (cookies != null && !cookies.trim().isEmpty()) headers.addHeader("Cookie", cookies);
+        } catch (Exception ignored) {
+        }
+    }
+
+    private static boolean isXMegaDriveHost(String value) {
+        if (value == null || value.trim().isEmpty()) return false;
+        try {
+            String host = java.net.URI.create(value.trim()).getHost();
+            if (host == null) return false;
+            host = host.toLowerCase(java.util.Locale.US);
+            return "xmegadrive.com".equals(host) || host.endsWith(".xmegadrive.com");
+        } catch (Exception ignored) {
+            return false;
+        }
     }
 
     private void loadContinueArtwork(

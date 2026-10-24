@@ -88,6 +88,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
     private final EfuktRepository efuktRepository = new EfuktRepository();
     private final WebVideoSourceRepository webVideoRepository = new WebVideoSourceRepository();
     private final BaddieHubRepository baddieHubRepository = new BaddieHubRepository();
+    private final XMegaDriveRepository xMegaDriveRepository = new XMegaDriveRepository();
     private final BunkrRepository bunkrRepository = new BunkrRepository();
     private final FapzoneCreatorRepository fapzoneCreatorRepository =
             new FapzoneCreatorRepository();
@@ -95,6 +96,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
     private final BrowseArtworkResolver browseArtworkResolver;
     private final ExecutorService io = Executors.newFixedThreadPool(5);
     private final ExecutorService baddieHubIo = Executors.newSingleThreadExecutor();
+    private final ExecutorService xMegaDriveIo = Executors.newSingleThreadExecutor();
     private final Page[] pages = new Page[PAGE_ARRAY_COUNT];
     private final ChaosFeedView chaosView;
     private final LibraryHubView libraryView;
@@ -417,6 +419,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         }
         io.shutdownNow();
         baddieHubIo.shutdownNow();
+        xMegaDriveIo.shutdownNow();
     }
 
     static int pagerPositionForPage(int page) {
@@ -656,6 +659,8 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                 ? NativeFeedBrowserActivity.SOURCE_KAOTIC
                 : BaddieHubRepository.isBaddieHubUrl(item.url)
                 ? NativeFeedBrowserActivity.SOURCE_BADDIEHUB
+                : XMegaDriveRepository.isXMegaDriveUrl(item.url)
+                ? NativeFeedBrowserActivity.SOURCE_XMEGADRIVE
                 : EfuktRepository.isEfuktUrl(item.url)
                 ? NativeFeedBrowserActivity.SOURCE_EFUKT
                 : NativeFeedBrowserActivity.SOURCE_CRAZYSHIT;
@@ -725,6 +730,8 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                         ? NativeFeedBrowserActivity.SOURCE_KAOTIC
                         : BaddieHubRepository.isBaddieHubUrl(resolvedPage)
                         ? NativeFeedBrowserActivity.SOURCE_BADDIEHUB
+                        : XMegaDriveRepository.isXMegaDriveUrl(resolvedPage)
+                        ? NativeFeedBrowserActivity.SOURCE_XMEGADRIVE
                         : EfuktRepository.isEfuktUrl(resolvedPage)
                         ? NativeFeedBrowserActivity.SOURCE_EFUKT
                         : NativeFeedBrowserActivity.SOURCE_CRAZYSHIT;
@@ -751,10 +758,12 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                     intent.putExtra(VideoDetailActivity.EXTRA_POSTER_URL, item.imageUrl);
                 }
                 try {
-                    intent.putExtra(
-                            PlayerActivity.EXTRA_USER_AGENT,
-                            android.webkit.WebSettings.getDefaultUserAgent(activity)
-                    );
+                    String agent = android.webkit.WebSettings.getDefaultUserAgent(activity);
+                    if (XMegaDriveRepository.isXMegaDriveUrl(resolvedPage)) {
+                        String session = XMegaDriveBrowserFetch.sessionUserAgent();
+                        if (session != null && !session.isEmpty()) agent = session;
+                    }
+                    intent.putExtra(PlayerActivity.EXTRA_USER_AGENT, agent);
                 } catch (Exception ignored) {
                 }
                 try {
@@ -808,6 +817,8 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                         ? NativeFeedBrowserActivity.SOURCE_KAOTIC
                         : BaddieHubRepository.isBaddieHubUrl(resolvedPage)
                         ? NativeFeedBrowserActivity.SOURCE_BADDIEHUB
+                        : XMegaDriveRepository.isXMegaDriveUrl(resolvedPage)
+                        ? NativeFeedBrowserActivity.SOURCE_XMEGADRIVE
                         : EfuktRepository.isEfuktUrl(resolvedPage)
                         ? NativeFeedBrowserActivity.SOURCE_EFUKT
                         : NativeFeedBrowserActivity.SOURCE_CRAZYSHIT;
@@ -835,10 +846,12 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                     intent.putExtra(VideoDetailActivity.EXTRA_POSTER_URL, history.posterUrl);
                 }
                 try {
-                    intent.putExtra(
-                            PlayerActivity.EXTRA_USER_AGENT,
-                            android.webkit.WebSettings.getDefaultUserAgent(activity)
-                    );
+                    String agent = android.webkit.WebSettings.getDefaultUserAgent(activity);
+                    if (XMegaDriveRepository.isXMegaDriveUrl(resolvedPage)) {
+                        String session = XMegaDriveBrowserFetch.sessionUserAgent();
+                        if (session != null && !session.isEmpty()) agent = session;
+                    }
+                    intent.putExtra(PlayerActivity.EXTRA_USER_AGENT, agent);
                 } catch (Exception ignored) {
                 }
                 try {
@@ -1427,6 +1440,20 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                 }
             });
             finishShowsHubSource(page, generation, remaining);
+        }));
+
+        page.showsHubTasks.add(xMegaDriveIo.submit(() -> {
+            List<NativeContentItem> result = java.util.Collections.emptyList();
+            try {
+                result = xMegaDriveRepository.fetchCategories(activity);
+            } catch (Exception ignored) {
+            }
+            final List<NativeContentItem> items = result;
+            postPrimaryResult(page, generation, "xmegadrive", () -> {
+                if (generation == page.generation && page.showsHub != null) {
+                    page.showsHub.setXMegaDriveCategories(items);
+                }
+            });
         }));
 
         page.showsHubTasks.add(io.submit(() -> {

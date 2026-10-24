@@ -20,6 +20,9 @@ final class PlayableSourceRouter {
         if (BaddieHubRepository.isBaddieHubUrl(pageUrl)) {
             return new BaddieHubRepository().resolvePlayable(context, pageUrl);
         }
+        if (XMegaDriveRepository.isXMegaDriveUrl(pageUrl)) {
+            return new XMegaDriveRepository().resolvePlayable(context, pageUrl);
+        }
         if (WikiFeetRepository.isWikiFeetUrl(pageUrl)) {
             return new WikiFeetRepository().resolvePlayable(pageUrl);
         }
