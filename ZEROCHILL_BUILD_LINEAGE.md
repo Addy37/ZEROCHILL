@@ -2,6 +2,38 @@
 
 This file identifies the current approved ZEROCHILL product baseline for test APKs and future feature work.
 
+## Current release preparation: 5.2.1
+
+- Source-of-truth branch: `main`
+- Approved application baseline: `779e3752a4b2c76c0b2e8dc60aebd2a1a66eb85c` (merged PR #339)
+- Release preparation branch: `release/zerochill-5.2.1`
+- Previous stable release: `v5.2.0` (`5002000`)
+- Release target: `5.2.1` (`5002001`)
+- User publication authorization: 2026-10-24
+
+The user approved and merged the Search visual candidate from
+`bb7d1387f68c301acaaa6b47923560997d6086d6`, then authorized public release.
+Current main carries the same application tree. This release also includes the
+approved XMegaDrive integration/lifecycle/quality work and scoped Search/playback
+changes from PRs #333 and #335 through #339 since stable 5.2.0.
+
+Signed Upgrade Candidate #987 passed focused Search/material/geometry/scope/overlay
+regressions, full debug and release unit tests, both APK builds, production signing
+checks, and an Android 15 in-place upgrade from stable 5.2.0 with its first-install
+record preserved. The directly inspected signed Beta matches the final source SHA,
+CI checksum, production certificate, and prior approved Beta package/version.
+The separate automatic build and performance workflows were still running when
+publication was requested; no quantitative performance result is claimed.
+
+This preparation changes only release version, notes, and this lineage record.
+The existing production release workflow rebuilds and tests the approved code,
+verifies package `com.addy37.crazyshitunofficial`, the stable certificate, and a
+higher version code, then publishes `ZeroChill.apk` and `SHA256SUMS.txt` as `v5.2.1`.
+Use the successful publication run, tag, and checksum as the final release record.
+No data migration, backend deployment, Supabase, or remote-config change is needed.
+
+## Prior release preparation: 5.0.1
+
 - Source-of-truth branch: `main`
 - Integration branch: `main`
 - Approved product baseline commit: `c1a9e486988c99c67839670c9da120fae745c897`
