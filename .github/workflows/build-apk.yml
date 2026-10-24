@@ -551,6 +551,15 @@ jobs:
       # 2.8 starts by measuring the existing lint debt without blocking beta builds. The repository
       # currently has a large set of pre-existing lint findings. Once those are baselined/cleaned,
       # this audit can become a hard gate for new issues.
+      - name: Run focused XMegaDrive Shows lifecycle regressions
+        if: github.head_ref == 'fix/xmegadrive-shows-lifecycle'
+        run: >-
+          gradle --no-daemon :app:testDebugUnitTest
+          --tests 'com.webapp.crazyshit.ShowsCategory*'
+          --tests 'com.webapp.crazyshit.XMegaDrive*'
+          --tests 'com.webapp.crazyshit.ShowsHubStateTest'
+          --tests 'com.webapp.crazyshit.PrimaryTab*'
+
       - name: Run Android lint audit
         continue-on-error: true
         run: gradle --no-daemon :app:lintDebug

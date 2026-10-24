@@ -95,6 +95,7 @@ final class ShowsHubView extends FrameLayout {
     private NativeContentItem heroItem;
     private int heroIndex = -1;
     private boolean active;
+    private ShowsCategoryLoader categoryLoader;
     private Bundle pendingRestoreState;
 
     ShowsHubView(
@@ -396,6 +397,7 @@ final class ShowsHubView extends FrameLayout {
         Glide.with(heroImage).clear(heroImage);
         heroBackdrop.setImageDrawable(new ColorDrawable(Color.rgb(13, 16, 19)));
         heroImage.setImageDrawable(new ColorDrawable(Color.rgb(13, 16, 19)));
+        if (categoryLoader != null) categoryLoader.invalidate();
     }
 
     void setThisWeek(List<NativeContentItem> items) {
@@ -496,9 +498,18 @@ final class ShowsHubView extends FrameLayout {
         continueShelf.container.setVisibility(items.isEmpty() ? View.GONE : View.VISIBLE);
     }
 
+    void setCategoryLoader(ShowsCategoryLoader loader) {
+        categoryLoader = loader;
+    }
+
+    void closeCategoryLoader() {
+        if (categoryLoader != null) categoryLoader.close();
+    }
+
     void setActive(boolean active) {
         if (this.active == active) return;
         this.active = active;
+        if (categoryLoader != null) categoryLoader.setActive(active && isAttachedToWindow());
         if (!active) {
             heroHandler.removeCallbacksAndMessages(null);
             heroCard.animate().cancel();
@@ -701,6 +712,7 @@ final class ShowsHubView extends FrameLayout {
     @Override
     protected void onAttachedToWindow() {
         super.onAttachedToWindow();
+        if (categoryLoader != null) categoryLoader.setActive(active);
         ShowsContinueFrameStore.addListener(continueFrameListener);
         refreshContinueWatching();
         scheduleHeroRotation();
@@ -708,6 +720,7 @@ final class ShowsHubView extends FrameLayout {
 
     @Override
     protected void onDetachedFromWindow() {
+        if (categoryLoader != null) categoryLoader.setActive(false);
         ShowsContinueFrameStore.removeListener(continueFrameListener);
         heroHandler.removeCallbacksAndMessages(null);
         heroCard.animate().cancel();
