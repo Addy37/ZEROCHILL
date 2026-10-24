@@ -12,8 +12,8 @@ on:
       - "tools/run_performance_audit.sh"
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
-  cancel-in-progress: ${{ (github.head_ref == 'feature/search-recent-glass' || github.head_ref == 'feature/search-liquid-material') || github.head_ref == 'feature/shows-episode-list' || github.head_ref == 'fix/library-startup-navigation' || github.head_ref == 'feature/onlyfap-liquid-rift' || github.head_ref == 'feature/zerochill-5.1.0' }}
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}${{ github.head_ref == 'fix/xmegadrive-shows-lifecycle' && '-creator-lifecycle' || '' }}
+  cancel-in-progress: ${{ github.head_ref == 'fix/xmegadrive-shows-lifecycle' || (github.head_ref == 'feature/search-recent-glass' || github.head_ref == 'feature/search-liquid-material') || github.head_ref == 'feature/shows-episode-list' || github.head_ref == 'fix/library-startup-navigation' || github.head_ref == 'feature/onlyfap-liquid-rift' || github.head_ref == 'feature/zerochill-5.1.0' }}
 
 permissions:
   contents: read
@@ -65,47 +65,22 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - flow: startup
-            test: com.webapp.crazyshit.baselineprofile.MainFlowsBenchmark#coldStartupUncompiled
-            rules: Macrobenchmark
-            task: :baselineprofile:connectedBenchmarkReleaseAndroidTest
-          - flow: shows-scroll
-            test: com.webapp.crazyshit.baselineprofile.MainFlowsBenchmark#showsScroll
-            rules: Macrobenchmark
-            task: :baselineprofile:connectedBenchmarkReleaseAndroidTest
-          - flow: warm-startup
-            test: com.webapp.crazyshit.baselineprofile.MainFlowsBenchmark#warmStartup
-            rules: Macrobenchmark
-            task: :baselineprofile:connectedBenchmarkReleaseAndroidTest
-          - flow: tab-switching
-            test: com.webapp.crazyshit.baselineprofile.MainFlowsBenchmark#retainedTabSwitching
-            rules: Macrobenchmark
-            task: :baselineprofile:connectedBenchmarkReleaseAndroidTest
-          - flow: chaos-long-session
-            test: com.webapp.crazyshit.baselineprofile.MainFlowsBenchmark#chaosLongSession
-            rules: Macrobenchmark
-            task: :baselineprofile:connectedBenchmarkReleaseAndroidTest
-          - flow: shows-scroll-motion
-            test: com.webapp.crazyshit.baselineprofile.MainFlowsBenchmark#showsScroll
-            rules: Macrobenchmark
-            task: :baselineprofile:connectedBenchmarkReleaseAndroidTest
-          - flow: chaos-scroll
-            test: com.webapp.crazyshit.baselineprofile.MainFlowsBenchmark#chaosScroll
-            rules: Macrobenchmark
-            task: :baselineprofile:connectedBenchmarkReleaseAndroidTest
-          - flow: search
-            test: com.webapp.crazyshit.baselineprofile.MainFlowsBenchmark#searchFlow
-            rules: Macrobenchmark
-            task: :baselineprofile:connectedBenchmarkReleaseAndroidTest
-          - flow: creator-gallery-playback
-            test: com.webapp.crazyshit.baselineprofile.MainFlowsBenchmark#creatorGalleryAndPlayback
-            rules: Macrobenchmark
-            task: :baselineprofile:connectedBenchmarkReleaseAndroidTest
-          - flow: baseline-profile
-            test: com.webapp.crazyshit.baselineprofile.BaselineProfileGenerator
-            rules: BaselineProfile
-            task: :baselineprofile:connectedNonMinifiedReleaseAndroidTest
+        # This lifecycle fix validates the affected creator flow without the unrelated ten-minute soak.
+        include: >-
+          ${{ fromJSON(github.head_ref == 'fix/xmegadrive-shows-lifecycle'
+          && '[{"flow":"creator-gallery-playback","test":"com.webapp.crazyshit.baselineprofile.MainFlowsBenchmark#creatorGalleryAndPlayback","rules":"Macrobenchmark","task":":baselineprofile:connectedBenchmarkReleaseAndroidTest"}]'
+          || '[
+          {"flow":"startup","test":"com.webapp.crazyshit.baselineprofile.MainFlowsBenchmark#coldStartupUncompiled","rules":"Macrobenchmark","task":":baselineprofile:connectedBenchmarkReleaseAndroidTest"},
+          {"flow":"shows-scroll","test":"com.webapp.crazyshit.baselineprofile.MainFlowsBenchmark#showsScroll","rules":"Macrobenchmark","task":":baselineprofile:connectedBenchmarkReleaseAndroidTest"},
+          {"flow":"warm-startup","test":"com.webapp.crazyshit.baselineprofile.MainFlowsBenchmark#warmStartup","rules":"Macrobenchmark","task":":baselineprofile:connectedBenchmarkReleaseAndroidTest"},
+          {"flow":"tab-switching","test":"com.webapp.crazyshit.baselineprofile.MainFlowsBenchmark#retainedTabSwitching","rules":"Macrobenchmark","task":":baselineprofile:connectedBenchmarkReleaseAndroidTest"},
+          {"flow":"chaos-long-session","test":"com.webapp.crazyshit.baselineprofile.MainFlowsBenchmark#chaosLongSession","rules":"Macrobenchmark","task":":baselineprofile:connectedBenchmarkReleaseAndroidTest"},
+          {"flow":"shows-scroll-motion","test":"com.webapp.crazyshit.baselineprofile.MainFlowsBenchmark#showsScroll","rules":"Macrobenchmark","task":":baselineprofile:connectedBenchmarkReleaseAndroidTest"},
+          {"flow":"chaos-scroll","test":"com.webapp.crazyshit.baselineprofile.MainFlowsBenchmark#chaosScroll","rules":"Macrobenchmark","task":":baselineprofile:connectedBenchmarkReleaseAndroidTest"},
+          {"flow":"search","test":"com.webapp.crazyshit.baselineprofile.MainFlowsBenchmark#searchFlow","rules":"Macrobenchmark","task":":baselineprofile:connectedBenchmarkReleaseAndroidTest"},
+          {"flow":"creator-gallery-playback","test":"com.webapp.crazyshit.baselineprofile.MainFlowsBenchmark#creatorGalleryAndPlayback","rules":"Macrobenchmark","task":":baselineprofile:connectedBenchmarkReleaseAndroidTest"},
+          {"flow":"baseline-profile","test":"com.webapp.crazyshit.baselineprofile.BaselineProfileGenerator","rules":"BaselineProfile","task":":baselineprofile:connectedNonMinifiedReleaseAndroidTest"}
+          ]') }}
 
     steps:
       - uses: actions/checkout@v6

@@ -82,7 +82,12 @@ public class PhoneContentGridLayoutTest {
         assertEquals(baddieHolder.itemView.getHeight(), baddieImage.getHeight());
         render(baddieRail, "baddie-grid-" + widthDp);
 
-        shows.setXMegaDriveCategories(showsItems);
+        List<NativeContentItem> illustratedCategories = new ArrayList<>();
+        for (NativeContentItem item : showsItems) {
+            illustratedCategories.add(new NativeContentItem(item.kind, item.title, item.url,
+                    "android.resource://android/drawable/ic_menu_gallery", "", "", ""));
+        }
+        shows.setXMegaDriveCategories(illustratedCategories);
         RecyclerView xMegaRail = rail(shows, "xMegaDriveCategoryShelf");
         layout(xMegaRail, dp(activity, widthDp));
         checkGrid(xMegaRail);

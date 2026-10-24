@@ -301,7 +301,6 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
             if (position == PAGE_LIBRARY) {
                 libraryView.setSocialActive(true);
             } else if (position == PAGE_SERIES) {
-                pages[PAGE_SERIES].showsHub.setActive(true);
                 pages[PAGE_SERIES].showsHub.refreshContinueWatching();
             } else if (position == PAGE_ONLYFAP) {
                 if (onlyFapPreference != ContentPreference.get(activity)) refresh(PAGE_ONLYFAP);
@@ -319,6 +318,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
             } else if (page.itemCount() == 0 && !page.loading && !page.endReached) {
                 load(page, false);
             }
+            if (position == PAGE_SERIES) page.showsHub.setActive(true);
         });
     }
 
@@ -413,6 +413,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
             if (page.loadTask != null) page.loadTask.cancel(true);
             cancelShowsHubTasks(page);
             cancelOnlyFapHubTasks(page);
+            if (page.showsHub != null) page.showsHub.closeCategoryLoader();
             if (page.onlyFapHub != null) page.onlyFapHub.close();
             if (page.browseAdapter != null) page.browseAdapter.close();
             if (page.feedAdapter != null) page.feedAdapter.close();
@@ -885,6 +886,11 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                     item -> ShowsCollectionWarmCache.request(activity, item),
                     this::openShowsVideo
             );
+            android.os.Handler categoryMain = new android.os.Handler(android.os.Looper.getMainLooper());
+            page.showsHub.setCategoryLoader(new ShowsCategoryLoader(
+                    xMegaDriveIo, categoryMain::post,
+                    () -> xMegaDriveRepository.fetchCategories(activity),
+                    page.showsHub::setXMegaDriveCategories));
             page.showsHub.setNavigationScrollListener(
                     (v, scrollX, scrollY, oldScrollX, oldScrollY) ->
                             host.onNavigationScroll(
@@ -1440,20 +1446,6 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                 }
             });
             finishShowsHubSource(page, generation, remaining);
-        }));
-
-        page.showsHubTasks.add(xMegaDriveIo.submit(() -> {
-            List<NativeContentItem> result = java.util.Collections.emptyList();
-            try {
-                result = xMegaDriveRepository.fetchCategories(activity);
-            } catch (Exception ignored) {
-            }
-            final List<NativeContentItem> items = result;
-            postPrimaryResult(page, generation, "xmegadrive", () -> {
-                if (generation == page.generation && page.showsHub != null) {
-                    page.showsHub.setXMegaDriveCategories(items);
-                }
-            });
         }));
 
         page.showsHubTasks.add(io.submit(() -> {

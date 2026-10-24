@@ -12,6 +12,7 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewParent;
 import android.webkit.CookieManager;
+import android.webkit.RenderProcessGoneDetail;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
@@ -67,6 +68,10 @@ final class XMegaDriveBrowserFetch {
     }
 
     static Document fetch(Context context, String url, String referer) throws IOException {
+        // A cancelled directory request may have been waiting for another provider's browser lock.
+        if (Thread.currentThread().isInterrupted()) {
+            throw new IOException("XMegaDrive browser check was cancelled before loading");
+        }
         Activity activity = activity(context);
         if (activity == null) {
             throw new IOException("XMegaDrive browser fallback has no active screen");
@@ -105,9 +110,8 @@ final class XMegaDriveBrowserFetch {
             throw new IOException("XMegaDrive browser check was interrupted", interrupted);
         } finally {
             completed.set(true);
-            WebView webView = activeWebView.getAndSet(null);
-            FrameLayout overlay = activeOverlay.getAndSet(null);
-            main.post(() -> destroy(overlay, webView));
+            // Read ownership on main: cancellation can race with start() creating the views.
+            main.post(() -> destroy(activeOverlay.getAndSet(null), activeWebView.getAndSet(null)));
         }
 
         Document page = result.get();
@@ -142,6 +146,7 @@ final class XMegaDriveBrowserFetch {
             AtomicReference<IOException> error,
             CountDownLatch finished
     ) {
+        if (completed.get()) return;
         if (activity.isFinishing() || activity.isDestroyed()) {
             complete(completed, error, finished,
                     new IOException("XMegaDrive screen closed before loading"));
@@ -219,6 +224,16 @@ final class XMegaDriveBrowserFetch {
             headers.put("Accept-Language", "en-US,en;q=0.9");
             if (referer != null && !referer.trim().isEmpty()) headers.put("Referer", referer);
             webView.setWebViewClient(new WebViewClient() {
+                @Override
+                public boolean onRenderProcessGone(WebView view, RenderProcessGoneDetail detail) {
+                    Log.w(TAG, "rendererGone crashed=" + (detail != null && detail.didCrash()));
+                    complete(completed, error, finished,
+                            new IOException("XMegaDrive browser renderer exited"));
+                    // Remove this renderer's WebView even if completion already raced with cancel.
+                    destroy(activeOverlay.getAndSet(null), activeWebView.getAndSet(null));
+                    return true;
+                }
+
                 @Override
                 public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                     if (request == null || request.getUrl() == null || !request.isForMainFrame()) {
@@ -339,7 +354,7 @@ final class XMegaDriveBrowserFetch {
                 }
             } catch (Exception ignored) {
             }
-            webView.loadUrl(url, headers);
+            if (!completed.get()) webView.loadUrl(url, headers);
         } catch (Exception failure) {
             complete(completed, error, finished,
                     new IOException("XMegaDrive browser check could not start", failure));
@@ -925,19 +940,34 @@ final class XMegaDriveBrowserFetch {
     }
 
     private static void destroy(FrameLayout overlay, WebView webView) {
+        // A renderer exit can make stopLoading fail; hierarchy removal and destroy must still run.
         try {
             if (webView != null) {
                 webView.stopLoading();
                 webView.setWebViewClient(null);
+                webView.setWebChromeClient(null);
             }
+        } catch (Exception ignored) {
+        }
+        try {
             if (overlay != null) {
                 ViewParent parent = overlay.getParent();
                 if (parent instanceof ViewGroup) ((ViewGroup) parent).removeView(overlay);
-            } else if (webView != null) {
+            }
+        } catch (Exception ignored) {
+        }
+        try {
+            if (webView != null) {
                 ViewParent parent = webView.getParent();
                 if (parent instanceof ViewGroup) ((ViewGroup) parent).removeView(webView);
             }
-            if (webView != null) webView.destroy();
+        } catch (Exception ignored) {
+        }
+        try {
+            if (webView != null) {
+                webView.destroy();
+                Log.i(TAG, "browser released");
+            }
         } catch (Exception ignored) {
         }
     }
