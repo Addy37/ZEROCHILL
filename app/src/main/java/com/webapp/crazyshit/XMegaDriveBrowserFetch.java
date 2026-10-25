@@ -960,9 +960,9 @@ final class XMegaDriveBrowserFetch {
         return blob.contains("age confirmation");
     }
 
-    /** Real human challenges only. Age confirmation stays parked off-screen. */
+    /** Cloudflare and human challenges are visible. Age confirmation stays parked off-screen. */
     static boolean shouldReveal(String title, String text) {
-        return needsPerson(title, text);
+        return isInterstitial(title, text, "") || needsPerson(title, text);
     }
 
     static boolean acceptsAgeControl(String label) {

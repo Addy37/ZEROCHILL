@@ -28,10 +28,11 @@ public class XMegaDriveAgeGateTest {
         assertFalse(XMegaDriveBrowserFetch.isAgeConfirmation("Just a moment", "Checking your browser"));
     }
 
-    @Test public void humanChallengesAreStillRevealed() {
+    @Test public void cloudflareAndHumanChallengesAreRevealed() {
+        assertTrue(XMegaDriveBrowserFetch.shouldReveal("Just a moment", "Checking your browser"));
+        assertTrue(XMegaDriveBrowserFetch.shouldReveal("Attention Required", ""));
         assertTrue(XMegaDriveBrowserFetch.shouldReveal("Just a moment", "Verify you are human"));
         assertTrue(XMegaDriveBrowserFetch.shouldReveal("", "Complete the Turnstile challenge"));
-        assertFalse(XMegaDriveBrowserFetch.shouldReveal("Just a moment", "Checking your browser"));
     }
 
     @Test public void autoContinueMatchesAcceptControlsAndNeverExit() {
