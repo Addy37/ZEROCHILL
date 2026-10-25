@@ -14,4 +14,4 @@ verify_jwt = false
 verify_jwt = true
 
 [functions.push-dispatch]
-verify_jwt = true
+verify_jwt = false
