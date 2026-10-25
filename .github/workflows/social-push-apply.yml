@@ -29,7 +29,19 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - uses: gradle/actions/setup-gradle@v4
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v4
+        with:
+          packages: platform-tools
+
+      - name: Install Android APIs 35 and 36
+        run: sdkmanager "platforms;android-35" "platforms;android-36" "build-tools;35.0.0"
+
+      - name: Set up Gradle 8.11.1
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: '8.11.1'
+          cache-provider: basic
 
       - name: Correct staged compatibility details
         shell: python
@@ -123,14 +135,14 @@ jobs:
 
       - name: Run focused Android regressions
         run: >-
-          ./gradlew --no-daemon :app:testDebugUnitTest
-          --tests com.webapp.crazyshit.ZeroChillPushNotificationPresenterTest
-          --tests com.webapp.crazyshit.ZeroChillSocialPushRoutingTest
-          --tests com.webapp.crazyshit.UpdateInboxStoreTest
-          --tests com.webapp.crazyshit.NotificationCenterUiTest
+          gradle --no-daemon :app:testDebugUnitTest
+          --tests 'com.webapp.crazyshit.ZeroChillPushNotificationPresenterTest'
+          --tests 'com.webapp.crazyshit.ZeroChillSocialPushRoutingTest'
+          --tests 'com.webapp.crazyshit.UpdateInboxStoreTest'
+          --tests 'com.webapp.crazyshit.NotificationCenterUiTest'
 
       - name: Build debug APK
-        run: ./gradlew --no-daemon :app:assembleDebug
+        run: gradle --no-daemon :app:assembleDebug
 
       - name: Commit validated source changes
         shell: bash
