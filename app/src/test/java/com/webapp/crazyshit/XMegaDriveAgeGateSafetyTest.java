@@ -31,6 +31,7 @@ public class XMegaDriveAgeGateSafetyTest {
         assertTrue(script.contains("focus"));
         assertTrue(script.contains("document.activeElement===el"));
         assertTrue(script.contains("\\b(exit|leave|decline)\\b"));
+        assertTrue(script.contains("i(?:'m| am|m) 18"));
         assertFalse(script.contains("el.click()"));
     }
 }
