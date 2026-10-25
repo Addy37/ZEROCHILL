@@ -38,6 +38,7 @@ final class ZeroChillSessionStore {
                 .putString(VALUE, Base64.encodeToString(encrypted, Base64.NO_WRAP))
                 .putString(IV, Base64.encodeToString(cipher.getIV(), Base64.NO_WRAP))
                 .apply();
+        ZeroChillPushRegistration.onSessionAvailable(context);
     }
 
     static String read(Context context) {
@@ -63,6 +64,8 @@ final class ZeroChillSessionStore {
     }
 
     static void clear(Context context) {
+        String session = read(context);
+        if (!session.isEmpty()) ZeroChillPushRegistration.onSessionClearing(context, session);
         AccountProfileCache.clear(context);
         context.getApplicationContext()
                 .getSharedPreferences(PREFS, Context.MODE_PRIVATE)

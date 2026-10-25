@@ -12,3 +12,6 @@ verify_jwt = false
 
 [functions.account-delete]
 verify_jwt = true
+
+[functions.push-dispatch]
+verify_jwt = false

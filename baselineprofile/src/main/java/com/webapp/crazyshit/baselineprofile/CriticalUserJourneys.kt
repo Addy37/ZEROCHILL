@@ -22,14 +22,13 @@ private fun MacrobenchmarkScope.completeStartupWizardIfPresent() {
     val getStarted = device.wait(Until.findObject(By.text("GET STARTED")), 1_500) ?: return
     getStarted.click()
 
-    val age = checkNotNull(
-        device.wait(Until.findObject(By.text("I confirm that I am 18 or older.")), 4_000)
+    checkNotNull(
+        device.wait(Until.findObject(By.text("CONFIRM 18+ & SET UP ACCESS")), 4_000)
     ) {
-        "Startup wizard age confirmation did not appear"
-    }
-    if (!age.isChecked) age.click()
-    device.waitForIdle(150)
-    checkNotNull(device.findObject(By.text("CONTINUE"))) {
+        "Startup wizard unified 18+ access action did not appear"
+    }.click()
+    device.waitForIdle(250)
+    checkNotNull(device.wait(Until.findObject(By.text("CONTINUE")), 4_000)) {
         "Startup wizard age Continue action was not enabled"
     }.click()
 
@@ -205,11 +204,13 @@ internal fun MacrobenchmarkScope.browseChaosLongSession() {
 }
 
 internal fun MacrobenchmarkScope.search() {
-    // Route through Shows so ShitTok's optional clear-display chrome cannot hide search.
-    val shows = checkNotNull(awaitPrimaryTab("Shows tab", "Shows", 8_000L)) {
-        "Shows tab was not reachable before search"
+    // Library exposes the same header and default Shows search scope, without
+    // starting a live Shows category WebView that may cover it for verification.
+    // ShitTok's optional clear-display chrome can hide the header on that tab.
+    val library = checkNotNull(awaitPrimaryTab("Library tab", "Library", 8_000L)) {
+        "Library tab was not reachable before search"
     }
-    shows.click()
+    library.click()
     device.waitForIdle()
 
     val search = device.wait(Until.findObject(By.desc("Search")), 1_500)
@@ -227,12 +228,17 @@ internal fun MacrobenchmarkScope.search() {
         val density = bounds.height().coerceAtLeast(1) / 56f
         val searchX = (bounds.right - (80f * density)).toInt()
             .coerceIn(bounds.left + 1, bounds.right - 1)
+        Log.i("ZeroChillBenchmark", "SEARCH_HEADER_CLICK bounds=$bounds x=$searchX y=${bounds.centerY()}")
         device.click(searchX, bounds.centerY())
     }
     val field = checkNotNull(
         device.wait(Until.findObject(By.desc("Search Shows")), 5_000)
     ) {
-        "Search field did not open"
+        val hierarchy = ByteArrayOutputStream().also { device.dumpWindowHierarchy(it) }
+            .toString("UTF-8")
+        Log.e("ZeroChillBenchmark", "SEARCH_OPEN_FAILURE foreground=${device.currentPackageName}\n$hierarchy")
+        "Search field did not open. Foreground: ${device.currentPackageName}. " +
+            "Hierarchy: ${hierarchy.take(16_000)}"
     }
     field.click()
     field.text = "mia"

@@ -3,6 +3,7 @@ plugins {
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
     id("androidx.baselineprofile")
+    id("com.google.gms.google-services")
 }
 
 android {
@@ -19,8 +20,8 @@ android {
         applicationId = "com.addy37.crazyshitunofficial"
         minSdk = 26
         targetSdk = 35
-        versionCode = System.getenv("APP_VERSION_CODE")?.toIntOrNull() ?: 5_001_000
-        versionName = System.getenv("APP_VERSION_NAME") ?: "5.1.0-beta.1"
+        versionCode = System.getenv("APP_VERSION_CODE")?.toIntOrNull() ?: 5_003_000
+        versionName = System.getenv("APP_VERSION_NAME") ?: "5.3.0-beta.1"
         buildConfigField("boolean", "SHITTOK_POOL_DIAGNOSTICS", System.getenv("SHITTOK_POOL_DIAGNOSTICS") ?: "false")
         buildConfigField("String", "SOURCE_REVISION", "\"${System.getenv("ZEROCHILL_SOURCE_SHA") ?: "local"}\"")
         buildConfigField(
@@ -122,6 +123,9 @@ dependencies {
     implementation("androidx.compose.foundation:foundation")
     implementation("androidx.compose.animation:animation")
     implementation("androidx.compose.material3:material3")
+    implementation(platform("com.google.firebase:firebase-bom:35.1.0"))
+    implementation("com.google.firebase:firebase-messaging")
+    implementation("com.google.firebase:firebase-installations")
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.json:json:20240303")
     testImplementation("org.robolectric:robolectric:4.16")

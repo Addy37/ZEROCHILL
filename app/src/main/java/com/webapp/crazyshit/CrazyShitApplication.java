@@ -25,6 +25,8 @@ public final class CrazyShitApplication extends Application {
         RemoteSourceConfigManager.initialize(this);
         RemoteSourceConfigManager.refreshInBackground(this);
         AnalyticsTracker.initialize(this);
+        ZeroChillPushNotificationPresenter.initialize(this);
+        ZeroChillPushRegistration.initialize(this);
         boolean needsMigration = appPrefs.getBoolean("minimize_on_back", true)
                 || appPrefs.getBoolean("swipe_down_minimize", true)
                 || appPrefs.contains("collapse_header_enabled")

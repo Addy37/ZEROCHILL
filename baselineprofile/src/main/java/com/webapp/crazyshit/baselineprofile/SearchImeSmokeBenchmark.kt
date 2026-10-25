@@ -23,7 +23,9 @@ class SearchImeSmokeBenchmark {
         iterations = 3,
         setupBlock = {
             launchApp()
-            checkNotNull(device.findObject(By.desc("Shows tab"))).click()
+            // Exercise the same Search overlay without starting a Shows browser check.
+            checkNotNull(device.findObject(By.desc("Library tab"))
+                ?: device.findObject(By.desc("Library"))).click()
             device.waitForIdle(500)
         }
     ) {

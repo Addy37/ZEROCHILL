@@ -46,6 +46,11 @@ public final class StartupWizardActivity extends Activity {
     private int page;
     private boolean preview;
     private boolean ageConfirmed;
+    private boolean xmegaAccessAuthorized;
+    private boolean xmegaAccessReady;
+    private boolean accessSetupInProgress;
+    private TextView accessSetupButton;
+    private TextView accessSetupStatus;
     private boolean favoriteAlerts;
     private boolean updateAlerts;
     private boolean hapticsEnabled;
@@ -62,6 +67,9 @@ public final class StartupWizardActivity extends Activity {
                 && getIntent().getBooleanExtra(StartupWizardPolicy.EXTRA_PREVIEW, false);
         SharedPreferences prefs = getSharedPreferences("app_prefs", MODE_PRIVATE);
         ageConfirmed = AccessNoticeDialog.isAccepted(this);
+        xmegaAccessReady = XMegaDriveAgeSession.isCookieReady(this);
+        xmegaAccessAuthorized = XMegaDriveAgeSession.isSetupComplete(this)
+                || (ageConfirmed && xmegaAccessReady);
         favoriteAlerts = prefs.getBoolean(NotificationCoordinator.PREF_NEW_VIDEO_ALERTS, true);
         updateAlerts = prefs.getBoolean(NotificationCoordinator.PREF_UPDATE_ALERTS, true);
         hapticsEnabled = prefs.getBoolean("haptics_enabled", true);
@@ -121,7 +129,8 @@ public final class StartupWizardActivity extends Activity {
                 finishWizard();
                 return;
             }
-            if (page == PAGE_ACCESS && !ageConfirmed) return;
+            if (page == PAGE_ACCESS
+                    && (!ageConfirmed || !xmegaAccessAuthorized || accessSetupInProgress)) return;
             showPage(page + 1, true);
         });
         actions.addView(nextButton, new LinearLayout.LayoutParams(0, dp(52), 1f));
@@ -280,21 +289,64 @@ public final class StartupWizardActivity extends Activity {
                 "ZEROCHILL is an independent application and is not affiliated with or endorsed by the websites and services it accesses."
         ), cardParams());
 
-        ZeroChillCheckBox confirm = new ZeroChillCheckBox(this);
-        confirm.setText("I confirm that I am 18 or older.");
-        confirm.setTextColor(Color.WHITE);
-        confirm.setTextSize(15f);
-        confirm.setChecked(ageConfirmed);
-        confirm.setPadding(dp(2), dp(8), dp(2), dp(8));
-        confirm.setOnCheckedChangeListener((button, checked) -> {
-            ageConfirmed = checked;
-            updateNextButtonState();
-            haptic(button);
-        });
-        LinearLayout.LayoutParams checkParams = new LinearLayout.LayoutParams(-1, -2);
-        checkParams.topMargin = dp(5);
-        column.addView(confirm, checkParams);
+        accessSetupButton = actionButton(
+                xmegaAccessAuthorized && xmegaAccessReady
+                        ? "✓ ACCESS READY"
+                        : "CONFIRM 18+ & SET UP ACCESS",
+                true
+        );
+        accessSetupButton.setOnClickListener(v -> beginAccessSetup());
+        LinearLayout.LayoutParams setupParams = new LinearLayout.LayoutParams(-1, dp(52));
+        setupParams.topMargin = dp(9);
+        column.addView(accessSetupButton, setupParams);
+
+        accessSetupStatus = text(
+                xmegaAccessAuthorized
+                        ? (xmegaAccessReady
+                        ? "✓ Age confirmed. XMegaDrive access is ready."
+                        : "Age confirmed. ZEROCHILL will retry XMegaDrive access when needed.")
+                        : "One confirmation prepares both ZEROCHILL 18+ access and XMegaDrive.",
+                12.5f,
+                color(R.color.zc_text_muted),
+                false
+        );
+        accessSetupStatus.setGravity(Gravity.CENTER);
+        LinearLayout.LayoutParams statusParams = new LinearLayout.LayoutParams(-1, -2);
+        statusParams.topMargin = dp(10);
+        column.addView(accessSetupStatus, statusParams);
         return scroll;
+    }
+
+    private void beginAccessSetup() {
+        if (accessSetupInProgress || xmegaAccessAuthorized && xmegaAccessReady) return;
+        ageConfirmed = true;
+        xmegaAccessAuthorized = true;
+        accessSetupInProgress = true;
+        if (accessSetupButton != null) {
+            accessSetupButton.setText("SETTING UP…");
+            accessSetupButton.setEnabled(false);
+            accessSetupButton.setAlpha(0.78f);
+        }
+        if (accessSetupStatus != null) {
+            accessSetupStatus.setText("Preparing XMegaDrive access on this device…");
+        }
+        updateNextButtonState();
+        XMegaDriveAgeSession.authorize(this, ready -> runOnUiThread(() -> {
+            if (isFinishing() || isDestroyed()) return;
+            accessSetupInProgress = false;
+            xmegaAccessReady = ready;
+            if (accessSetupButton != null) {
+                accessSetupButton.setText(ready ? "✓ ACCESS READY" : "RETRY XMEGADRIVE SETUP");
+                accessSetupButton.setEnabled(!ready);
+                accessSetupButton.setAlpha(1f);
+            }
+            if (accessSetupStatus != null) {
+                accessSetupStatus.setText(ready
+                        ? "✓ Age confirmed. XMegaDrive access is ready."
+                        : "Age confirmed. ZEROCHILL will retry XMegaDrive access when needed.");
+            }
+            updateNextButtonState();
+        }));
     }
 
     private View buildMeetPage() {
@@ -609,7 +661,8 @@ public final class StartupWizardActivity extends Activity {
 
     private void updateNextButtonState() {
         if (nextButton == null) return;
-        boolean enabled = page != PAGE_ACCESS || ageConfirmed;
+        boolean enabled = page != PAGE_ACCESS
+                || (ageConfirmed && xmegaAccessAuthorized && !accessSetupInProgress);
         nextButton.setEnabled(enabled);
         nextButton.setAlpha(enabled ? 1f : 0.42f);
         nextButton.setBackground(primaryButtonBackground(enabled));
@@ -629,6 +682,7 @@ public final class StartupWizardActivity extends Activity {
                 .apply();
 
         AccessNoticeDialog.markAccepted(this);
+        if (xmegaAccessAuthorized) XMegaDriveAgeSession.markSetupComplete(this);
         GestureGuideDialog.markSeen(this);
         NotificationCoordinator.markOnboardingHandled(this);
         StartupWizardPolicy.markComplete(this);

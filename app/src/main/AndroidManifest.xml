@@ -21,9 +21,21 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.CrazyShit"
         android:usesCleartextTraffic="false">
+
+        <meta-data
+            android:name="firebase_messaging_installation_id_enabled"
+            android:value="true" />
+
         <activity android:name=".ZeroChillAccountSecurityActivity" android:exported="false" android:windowSoftInputMode="adjustResize" />
         <activity android:name=".ZeroChillSocialSettingsActivity" android:exported="false" android:windowSoftInputMode="adjustResize" />
 
+        <service
+            android:name=".ZeroChillFirebaseMessagingService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
 
         <service
             android:name=".AcceleratedDownloadService"
@@ -86,6 +98,12 @@
 
         <activity
             android:name=".StartupWizardActivity"
+            android:screenOrientation="portrait"
+            android:enableOnBackInvokedCallback="true"
+            android:exported="false" />
+
+        <activity
+            android:name=".XMegaDriveAccessSetupActivity"
             android:screenOrientation="portrait"
             android:enableOnBackInvokedCallback="true"
             android:exported="false" />
@@ -220,4 +238,3 @@
     </application>
 
 </manifest>
-
