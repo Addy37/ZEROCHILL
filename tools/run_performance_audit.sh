@@ -5,10 +5,23 @@ set -uo pipefail
 
 diagnostics=baselineprofile/build/outputs/final-pass-diagnostics
 mkdir -p "$diagnostics"
+# A missing emulator is a host failure, not an Android assertion. Preserve the
+# host's memory/process history and kernel evidence before emulator-runner cleanup.
+(
+    while :; do
+        date -u +%FT%TZ
+        free -m
+        ps -eo pid,ppid,rss,comm --sort=-rss | head -n 16
+        sleep 5
+    done
+) > "$diagnostics/host-memory.txt" 2>&1 &
+diagnostics_pid=$!
+trap 'kill "$diagnostics_pid" 2>/dev/null || true' EXIT
 # Missing emulators can leave adb waiting indefinitely; keep diagnostics bounded.
 timeout --kill-after=5s 15s adb logcat -c || true
 gradle --no-daemon "$@"
 benchmark_status=$?
+sudo -n dmesg --ctime 2>&1 | tail -n 200 > "$diagnostics/host-kernel.txt" || true
 
 timeout --kill-after=5s 15s adb logcat -d -s ZeroChillBenchmark AndroidRuntime ActivityManager XMegaDrive chromium cr_WebViewFactory > "$diagnostics/logcat.txt" 2>&1 || true
 timeout --kill-after=5s 15s adb shell dumpsys meminfo com.addy37.crazyshitunofficial > "$diagnostics/memory.txt" 2>&1 || true

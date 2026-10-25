@@ -205,11 +205,13 @@ internal fun MacrobenchmarkScope.browseChaosLongSession() {
 }
 
 internal fun MacrobenchmarkScope.search() {
-    // Route through Shows so ShitTok's optional clear-display chrome cannot hide search.
-    val shows = checkNotNull(awaitPrimaryTab("Shows tab", "Shows", 8_000L)) {
-        "Shows tab was not reachable before search"
+    // Library exposes the same header and default Shows search scope, without
+    // starting a live Shows category WebView that may cover it for verification.
+    // ShitTok's optional clear-display chrome can hide the header on that tab.
+    val library = checkNotNull(awaitPrimaryTab("Library tab", "Library", 8_000L)) {
+        "Library tab was not reachable before search"
     }
-    shows.click()
+    library.click()
     device.waitForIdle()
 
     val search = device.wait(Until.findObject(By.desc("Search")), 1_500)
