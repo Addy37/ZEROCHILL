@@ -37,16 +37,45 @@ jobs:
           from pathlib import Path
           path = Path('tools/social_push_patch.py')
           text = path.read_text(encoding='utf-8')
+
           old_grant = 'grant_type: "urn:ietf:params:oauth-type:jwt-bearer".replace("oauth-type", "oauth"),'
           new_grant = 'grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",'
           if old_grant not in text:
               raise SystemExit('staged OAuth grant type anchor missing')
           text = text.replace(old_grant, new_grant, 1)
+
           old_bytes = '''function pemToBytes(pem: string): Uint8Array {\n  const base64 = pem\n    .replace(/-----BEGIN PRIVATE KEY-----/g, "")\n    .replace(/-----END PRIVATE KEY-----/g, "")\n    .replace(/\\s+/g, "");\n  if (!base64) throw new Error("Missing Firebase private key");\n  const decoded = atob(base64);\n  const result = new Uint8Array(decoded.length);\n  for (let i = 0; i < decoded.length; i++) result[i] = decoded.charCodeAt(i);\n  return result;\n}'''
           new_bytes = '''function pemToBytes(pem: string): ArrayBuffer {\n  const base64 = pem\n    .replace(/-----BEGIN PRIVATE KEY-----/g, "")\n    .replace(/-----END PRIVATE KEY-----/g, "")\n    .replace(/\\s+/g, "");\n  if (!base64) throw new Error("Missing Firebase private key");\n  const decoded = atob(base64);\n  const buffer = new ArrayBuffer(decoded.length);\n  const result = new Uint8Array(buffer);\n  for (let i = 0; i < decoded.length; i++) result[i] = decoded.charCodeAt(i);\n  return buffer;\n}'''
           if old_bytes not in text:
               raise SystemExit('staged PEM helper anchor missing')
-          path.write_text(text.replace(old_bytes, new_bytes, 1), encoding='utf-8')
+          text = text.replace(old_bytes, new_bytes, 1)
+
+          old_fields = '''  const fields = Object.keys(record).sort();\n  const messageId = String(record.message_id ?? "").trim();\n  if (fields.length === 1 && fields[0] === "message_id" && UUID.test(messageId)) {'''
+          new_fields = '''  const fields = Object.keys(record);\n  const hasOnly = (...wanted: string[]) =>\n    fields.length === wanted.length && wanted.every((field) => fields.includes(field));\n  const messageId = String(record.message_id ?? "").trim();\n  if (hasOnly("message_id") && UUID.test(messageId)) {'''
+          if old_fields not in text:
+              raise SystemExit('staged request-field parser anchor missing')
+          text = text.replace(old_fields, new_fields, 1)
+          text = text.replace(
+              'if (fields.length === 2 && fields[0] === "event_type" && fields[1] === "reply_id" && UUID.test(replyId)) {',
+              'if (hasOnly("event_type", "reply_id") && UUID.test(replyId)) {',
+              1,
+          )
+          text = text.replace(
+              'if (fields.length === 3 && fields[0] === "comment_id" && fields[1] === "event_type"\n      && fields[2] === "user_id" && UUID.test(commentId) && UUID.test(userId)) {',
+              'if (hasOnly("event_type", "comment_id", "user_id")\n      && UUID.test(commentId) && UUID.test(userId)) {',
+              1,
+          )
+
+          replacements = {
+              '12345678-1234-4234-8234-123456789012': '550e8400-e29b-41d4-a716-446655440000',
+              '22345678-1234-4234-8234-123456789012': '6ba7b810-9dad-41d1-80b4-00c04fd430c8',
+              '32345678-1234-4234-8234-123456789012': '7d444840-9dc0-4c2d-bccf-1de3b50ac4d5',
+              '42345678-1234-4234-8234-123456789012': '8f14e45f-ea5a-4f1d-a2b3-c4d5e6f78901',
+          }
+          for old, new in replacements.items():
+              text = text.replace(old, new)
+
+          path.write_text(text, encoding='utf-8')
 
       - name: Apply social push implementation
         run: python tools/social_push_patch.py
@@ -62,6 +91,8 @@ jobs:
           grep -F 'type: "comment_reply"' supabase/functions/push-dispatch/handler.ts
           grep -F 'type: "comment_like"' supabase/functions/push-dispatch/handler.ts
           grep -F 'type: "direct_message"' supabase/functions/push-dispatch/handler.ts
+          grep -F 'hasOnly("message_id")' supabase/functions/push-dispatch/handler.ts
+          grep -F 'hasOnly("event_type", "reply_id")' supabase/functions/push-dispatch/handler.ts
           grep -F 'grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer"' supabase/functions/push-dispatch/handler.ts
           ! grep -F 'oauth-type' supabase/functions/push-dispatch/handler.ts
           grep -F 'function pemToBytes(pem: string): ArrayBuffer' supabase/functions/push-dispatch/handler.ts
