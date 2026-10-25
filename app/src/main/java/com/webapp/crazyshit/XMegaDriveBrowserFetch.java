@@ -58,7 +58,7 @@ final class XMegaDriveBrowserFetch {
             "(function(){window.open=function(){return null;};})();";
     private static final long TIMEOUT_SECONDS = 45L;
     private static final long EXTRACTION_RETRY_MS = 800L;
-    private static final long NATIVE_AGE_FALLBACK_GRACE_MS = 4500L;
+    private static final long NATIVE_AGE_FALLBACK_GRACE_MS = 6500L;
     private static volatile String sessionUserAgent = "";
 
     private XMegaDriveBrowserFetch() {
@@ -622,7 +622,7 @@ final class XMegaDriveBrowserFetch {
                 if (age && attempt >= 4) {
                     XMegaDriveAgePrompt prompt = agePrompt(webView);
                     if (prompt == null) {
-                        prompt = showNativeAgePrompt(webView, completed, error, finished);
+                        prompt = showNativeAgePrompt(webView, overlay, completed, error, finished);
                     }
                     if (prompt == null) {
                         revealRawAgeFallback(overlay, webView);
@@ -915,11 +915,9 @@ final class XMegaDriveBrowserFetch {
  * control inert before that WebView is revealed. Continue remains available.
  */
 static String ageGateSafetyScript() {
-    return "const ageNorm=s=>String(s||'').replace(String.fromCharCode(8217),\"'\").replace(/\\s+/g,' ').trim().toLowerCase();"
-            + "const ageDecline=s=>/\\b(exit|leave|decline)\\b/.test(s)||/under\\s*18/.test(s)"
-            + "||/\\bi(?:'m| am|m) not\\b/.test(s)||s==='no'||s==='no thanks'||s==='not 18';"
-            + "const ageAccept=s=>!!s&&!ageDecline(s)&&(/\\bcontinue\\b/.test(s)||/\\benter\\b/.test(s)"
-            + "||s==='yes'||/\\bi(?:'m| am|m) 18\\b/.test(s));"
+    return "const ageNorm=s=>String(s||'').replace(String.fromCharCode(8217),\"'\").replace(/\s+/g,' ').trim().toLowerCase();"
+            + "const ageDecline=s=>/\b(exit|leave|decline)\b/.test(s)||/under\s*18/.test(s)"
+            + "||/\bi(?:'m| am|m) not\b/.test(s)||s==='no'||s==='no thanks'||s==='not 18';"
             + "const age=/age confirmation/i.test(bodyText);"
             + "if(age){const controls=document.querySelectorAll('button,input[type=\"button\"],input[type=\"submit\"],a,[role=\"button\"]');"
             + "const ageLabel=el=>ageNorm(el.innerText||el.textContent||el.value||el.getAttribute('value')||el.getAttribute('aria-label')||'');"
@@ -930,8 +928,7 @@ static String ageGateSafetyScript() {
             + "if(!window.__zeroChillAgeExitGuard){window.__zeroChillAgeExitGuard=true;"
             + "document.addEventListener('click',ev=>{const el=ev.target&&ev.target.closest?ev.target.closest('button,input,a,[role=\"button\"]'):null;"
             + "if(!el)return;const text=(document.body&&document.body.innerText)||'';if(!/age confirmation/i.test(text))return;"
-            + "if(ageDecline(ageLabel(el))){ev.preventDefault();ev.stopImmediatePropagation();}},true);}"
-            + "for(let i=0;i<controls.length;i++){const el=controls[i];if(!ageAccept(ageLabel(el)))continue;el.click();break;}}";
+            + "if(ageDecline(ageLabel(el))){ev.preventDefault();ev.stopImmediatePropagation();}},true);}}";
 }
 
     static String ageGateNativeTapTargetScript() {
@@ -950,71 +947,147 @@ static String ageGateSafetyScript() {
                 + "for(let i=0;i<controls.length;i++){const el=controls[i];if(!accept(label(el)))continue;"
                 + "try{el.scrollIntoView({block:'center',inline:'center'});}catch(e){}"
                 + "const r=el.getBoundingClientRect();if(!r||r.width<=0||r.height<=0)return '';"
-                + "return JSON.stringify({x:r.left+r.width/2,y:r.top+r.height/2,vw:window.innerWidth||0,vh:window.innerHeight||0});}"
+                + "return JSON.stringify({x:r.left+r.width/2,y:r.top+r.height/2,w:r.width,h:r.height,"
+                + "vw:window.innerWidth||0,vh:window.innerHeight||0});}"
                 + "return '';})()";
     }
 
-    private static void triggerNativeAgeContinue(WebView webView) {
-        if (webView == null) return;
-        try {
-            webView.requestFocus();
-            webView.evaluateJavascript(ageGateNativeTapTargetScript(), encoded -> {
-                try {
-                    Object decoded = new JSONTokener(encoded == null ? "null" : encoded).nextValue();
-                    if (!(decoded instanceof String) || ((String) decoded).trim().isEmpty()) return;
-                    JSONObject target = new JSONObject((String) decoded);
-                    double cssX = target.optDouble("x", -1d);
-                    double cssY = target.optDouble("y", -1d);
-                    double viewportWidth = target.optDouble("vw", 0d);
-                    double viewportHeight = target.optDouble("vh", 0d);
-                    int viewWidth = webView.getWidth();
-                    int viewHeight = webView.getHeight();
-                    if (cssX < 0d || cssY < 0d || viewportWidth <= 0d || viewportHeight <= 0d
-                            || viewWidth <= 1 || viewHeight <= 1) return;
-                    final float tapX = Math.max(1f, Math.min(viewWidth - 1f,
-                            (float) (cssX * viewWidth / viewportWidth)));
-                    final float tapY = Math.max(1f, Math.min(viewHeight - 1f,
-                            (float) (cssY * viewHeight / viewportHeight)));
-                    webView.post(() -> dispatchNativeTap(webView, tapX, tapY));
-                } catch (Exception ignored) {
-                }
-            });
-        } catch (Exception ignored) {
+    private static final class AgeTapTarget {
+        final float x;
+        final float y;
+        final float width;
+        final float height;
+
+        AgeTapTarget(float x, float y, float width, float height) {
+            this.x = x;
+            this.y = y;
+            this.width = width;
+            this.height = height;
         }
     }
 
-    private static void dispatchNativeTap(WebView webView, float x, float y) {
-        if (webView == null) return;
-        long downTime = android.os.SystemClock.uptimeMillis();
-        android.view.MotionEvent down = android.view.MotionEvent.obtain(
-                downTime,
-                downTime,
-                android.view.MotionEvent.ACTION_DOWN,
-                x,
-                y,
-                0
-        );
+    private static AgeTapTarget decodeAgeTapTarget(WebView webView, String encoded) {
+        if (webView == null) return null;
         try {
-            webView.dispatchTouchEvent(down);
-        } finally {
-            down.recycle();
-        }
-        webView.postDelayed(() -> {
-            long upTime = android.os.SystemClock.uptimeMillis();
-            android.view.MotionEvent up = android.view.MotionEvent.obtain(
-                    downTime,
-                    upTime,
-                    android.view.MotionEvent.ACTION_UP,
-                    x,
-                    y,
-                    0
-            );
-            try {
-                webView.dispatchTouchEvent(up);
-            } finally {
-                up.recycle();
+            Object decoded = new JSONTokener(encoded == null ? "null" : encoded).nextValue();
+            if (!(decoded instanceof String) || ((String) decoded).trim().isEmpty()) return null;
+            JSONObject target = new JSONObject((String) decoded);
+            double cssX = target.optDouble("x", -1d);
+            double cssY = target.optDouble("y", -1d);
+            double cssWidth = target.optDouble("w", 0d);
+            double cssHeight = target.optDouble("h", 0d);
+            double viewportWidth = target.optDouble("vw", 0d);
+            double viewportHeight = target.optDouble("vh", 0d);
+            int viewWidth = webView.getWidth();
+            int viewHeight = webView.getHeight();
+            if (cssX < 0d || cssY < 0d || cssWidth <= 0d || cssHeight <= 0d
+                    || viewportWidth <= 0d || viewportHeight <= 0d
+                    || viewWidth <= 1 || viewHeight <= 1) {
+                return null;
             }
-        }, 72L);
+            float scaleX = (float) (viewWidth / viewportWidth);
+            float scaleY = (float) (viewHeight / viewportHeight);
+            return new AgeTapTarget(
+                    (float) cssX * scaleX,
+                    (float) cssY * scaleY,
+                    Math.max(1f, (float) cssWidth * scaleX),
+                    Math.max(1f, (float) cssHeight * scaleY)
+            );
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    private static void stageNativeAgeOverlay(FrameLayout overlay, WebView webView) {
+        if (overlay != null) {
+            overlay.setTranslationX(0f);
+            overlay.setVisibility(View.VISIBLE);
+            overlay.setClickable(false);
+            // Keep the actual WebView attached and rendered so Android can route the
+            // user's physical gesture to it, while keeping the raw site effectively invisible.
+            overlay.setAlpha(0.001f);
+        }
+        if (webView != null) {
+            webView.setTranslationX(0f);
+            webView.setTranslationY(0f);
+            webView.setScaleX(1f);
+            webView.setScaleY(1f);
+        }
+    }
+
+    private static float clamp(float value, float min, float max) {
+        return Math.max(min, Math.min(max, value));
+    }
+
+    private static void alignPhysicalAgeTarget(
+            FrameLayout overlay,
+            WebView webView,
+            XMegaDriveAgePrompt prompt,
+            AgeTapTarget target
+    ) {
+        if (overlay == null || webView == null || prompt == null || target == null
+                || prompt.isRawFallbackShown()) {
+            return;
+        }
+        stageNativeAgeOverlay(overlay, webView);
+        prompt.postContinueBounds((left, top, width, height) -> {
+            if (prompt.isRawFallbackShown() || webView.getParent() == null
+                    || width <= 0 || height <= 0) {
+                return;
+            }
+            stageNativeAgeOverlay(overlay, webView);
+            int[] webLocation = new int[2];
+            webView.getLocationOnScreen(webLocation);
+
+            // Enlarge the invisible real control enough to cover the complete native
+            // button. The target pivot stays fixed, then the WebView is translated so
+            // the site's real Continue control sits directly beneath the cyan button.
+            float scaleX = clamp((width * 1.10f) / target.width, 1f, 6f);
+            float scaleY = clamp((height * 1.10f) / target.height, 1f, 6f);
+            webView.setPivotX(target.x);
+            webView.setPivotY(target.y);
+            webView.setScaleX(scaleX);
+            webView.setScaleY(scaleY);
+            float buttonCenterX = left + width / 2f;
+            float buttonCenterY = top + height / 2f;
+            webView.setTranslationX(buttonCenterX - (webLocation[0] + target.x));
+            webView.setTranslationY(buttonCenterY - (webLocation[1] + target.y));
+            prompt.armPhysicalContinue();
+            Log.i(TAG, "nativeAge physical bridge armed");
+        });
+    }
+
+    private static void preparePhysicalAgeBridge(
+            FrameLayout overlay,
+            WebView webView,
+            XMegaDriveAgePrompt prompt,
+            int attempt
+    ) {
+        if (overlay == null || webView == null || prompt == null || prompt.isRawFallbackShown()) return;
+        stageNativeAgeOverlay(overlay, webView);
+        try {
+            webView.evaluateJavascript(ageGateNativeTapTargetScript(), encoded -> {
+                if (prompt.isRawFallbackShown() || webView.getParent() == null) return;
+                AgeTapTarget target = decodeAgeTapTarget(webView, encoded);
+                if (target != null) {
+                    alignPhysicalAgeTarget(overlay, webView, prompt, target);
+                    return;
+                }
+                if (attempt < 3) {
+                    webView.postDelayed(
+                            () -> preparePhysicalAgeBridge(overlay, webView, prompt, attempt + 1),
+                            250L
+                    );
+                    return;
+                }
+                Log.i(TAG, "nativeAge physical bridge target unavailable");
+                prompt.showRawFallback();
+                revealRawAgeFallback(overlay, webView);
+            });
+        } catch (Exception ignored) {
+            prompt.showRawFallback();
+            revealRawAgeFallback(overlay, webView);
+        }
     }
 
     private static XMegaDriveAgePrompt agePrompt(WebView webView) {
@@ -1025,23 +1098,25 @@ static String ageGateSafetyScript() {
 
     private static XMegaDriveAgePrompt showNativeAgePrompt(
             WebView webView,
+            FrameLayout overlay,
             AtomicBoolean completed,
             AtomicReference<IOException> error,
             CountDownLatch finished
     ) {
-        if (webView == null || completed.get()) return null;
+        if (webView == null || overlay == null || completed.get()) return null;
         XMegaDriveAgePrompt existing = agePrompt(webView);
         if (existing != null) return existing;
         Activity host = activity(webView.getContext());
         if (host == null || host.isFinishing() || host.isDestroyed()) return null;
         XMegaDriveAgePrompt created = new XMegaDriveAgePrompt(
                 host,
-                () -> triggerNativeAgeContinue(webView),
+                () -> Log.i(TAG, "nativeAge physical Continue gesture received"),
                 () -> complete(completed, error, finished,
                         new IOException("XMegaDrive check was dismissed"))
         );
         webView.setTag(created);
         created.show();
+        preparePhysicalAgeBridge(overlay, webView, created, 1);
         return created;
     }
 
@@ -1083,11 +1158,18 @@ static String ageGateSafetyScript() {
 
     private static void reveal(FrameLayout overlay, WebView webView) {
         if (overlay != null) {
+            overlay.setAlpha(1f);
             overlay.setTranslationX(0f);
             overlay.setVisibility(View.VISIBLE);
             overlay.setClickable(true);
         }
-        if (webView != null) webView.requestFocus();
+        if (webView != null) {
+            webView.setTranslationX(0f);
+            webView.setTranslationY(0f);
+            webView.setScaleX(1f);
+            webView.setScaleY(1f);
+            webView.requestFocus();
+        }
     }
 
     private static boolean permanentlyBlocked(String title, String body) {
