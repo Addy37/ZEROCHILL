@@ -1,0 +1,89 @@
+name: Apply XMegaDrive Exit Guard Patch
+
+on:
+  push:
+    branches: [ feature/zerochill-notifications-5.3.0 ]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out feature branch
+        uses: actions/checkout@v6
+        with:
+          ref: feature/zerochill-notifications-5.3.0
+          fetch-depth: 0
+
+      - name: Restore visible fallback while blocking age-decline controls
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          source = Path('app/src/main/java/com/webapp/crazyshit/XMegaDriveBrowserFetch.java')
+          text = source.read_text()
+
+          old = '''                + "const bodyText=(document.body&&document.body.innerText)||'';"
+                  + "const age=/age confirmation/i.test(bodyText);"
+                  + "if(age){const controls=document.querySelectorAll('button,input,a');"
+                  + "for(let i=0;i<controls.length;i++){const el=controls[i];"
+                  + "const label=(el.innerText||el.value||el.getAttribute('value')||'');"
+                  + "if(/continue/i.test(label)){el.click(); break;}}}"
+          '''
+          new = '''                + "const bodyText=(document.body&&document.body.innerText)||'';"
+                  + ageGateSafetyScript()
+          '''
+          if text.count(old) != 1:
+              raise SystemExit(f'expected one age-gate inline block, found {text.count(old)}')
+          text = text.replace(old, new, 1)
+
+          marker = '''    private static boolean needsPerson(String title, String text) {
+          '''
+          helper = '''    /**
+           * Keep the reliable 5.2.1 visible fallback, but make every known age-decline
+           * control inert before that WebView is revealed. Continue remains available.
+           */
+          static String ageGateSafetyScript() {
+              return "const ageNorm=s=>String(s||'').replace(String.fromCharCode(8217),\\\"'\\\").replace(/\\\\s+/g,' ').trim().toLowerCase();"
+                      + "const ageDecline=s=>/\\\\b(exit|leave|decline)\\\\b/.test(s)||/under\\\\s*18/.test(s)"
+                      + "||/\\\\bi(?:'m| am|m) not\\\\b/.test(s)||s==='no'||s==='no thanks'||s==='not 18';"
+                      + "const ageAccept=s=>!!s&&!ageDecline(s)&&(/\\\\bcontinue\\\\b/.test(s)||/\\\\benter\\\\b/.test(s)"
+                      + "||s==='yes'||/\\\\bi(?:'m| am|m) 18\\\\b/.test(s));"
+                      + "const age=/age confirmation/i.test(bodyText);"
+                      + "if(age){const controls=document.querySelectorAll('button,input[type=\\\"button\\\"],input[type=\\\"submit\\\"],a,[role=\\\"button\\\"]');"
+                      + "const ageLabel=el=>ageNorm(el.innerText||el.textContent||el.value||el.getAttribute('value')||el.getAttribute('aria-label')||'');"
+                      + "const hideDecline=el=>{const label=ageLabel(el);if(!ageDecline(label))return false;"
+                      + "el.style.display='none';el.setAttribute('aria-hidden','true');el.setAttribute('tabindex','-1');"
+                      + "try{if('disabled' in el)el.disabled=true;}catch(e){}return true;};"
+                      + "for(let i=0;i<controls.length;i++)hideDecline(controls[i]);"
+                      + "if(!window.__zeroChillAgeExitGuard){window.__zeroChillAgeExitGuard=true;"
+                      + "document.addEventListener('click',ev=>{const el=ev.target&&ev.target.closest?ev.target.closest('button,input,a,[role=\\\"button\\\"]'):null;"
+                      + "if(!el)return;const text=(document.body&&document.body.innerText)||'';if(!/age confirmation/i.test(text))return;"
+                      + "if(ageDecline(ageLabel(el))){ev.preventDefault();ev.stopImmediatePropagation();}},true);}"
+                      + "for(let i=0;i<controls.length;i++){const el=controls[i];if(!ageAccept(ageLabel(el)))continue;el.click();break;}}";
+          }
+
+          '''
+          if text.count(marker) != 1:
+              raise SystemExit(f'expected one helper insertion point, found {text.count(marker)}')
+          text = text.replace(marker, helper + marker, 1)
+          source.write_text(text)
+
+          test = Path('app/src/test/java/com/webapp/crazyshit/XMegaDriveAgeGateSafetyTest.java')
+          test.write_text('''package com.webapp.crazyshit;\n\nimport org.junit.Test;\n\nimport static org.junit.Assert.assertFalse;\nimport static org.junit.Assert.assertTrue;\n\npublic class XMegaDriveAgeGateSafetyTest {\n    @Test public void visibleFallbackHidesAndBlocksDeclineControls() {\n        String script = XMegaDriveBrowserFetch.ageGateSafetyScript();\n        assertTrue(script.contains("ageDecline"));\n        assertTrue(script.contains("style.display='none'"));\n        assertTrue(script.contains("aria-hidden"));\n        assertTrue(script.contains("stopImmediatePropagation"));\n        assertTrue(script.contains("ageAccept"));\n        assertTrue(script.contains("el.click()"));\n        assertTrue(script.contains("\\\\b(exit|leave|decline)\\\\b"));\n        assertFalse(script.contains("ageDecline(ageLabel(el)))continue;el.click()"));\n    }\n}\n''')
+          PY
+
+      - name: Remove one-time patch workflow
+        run: git rm .github/workflows/xmegadrive-exit-guard-patch.yml
+
+      - name: Commit targeted XMegaDrive safety fix
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app/src/main/java/com/webapp/crazyshit/XMegaDriveBrowserFetch.java \
+                  app/src/test/java/com/webapp/crazyshit/XMegaDriveAgeGateSafetyTest.java
+          git commit -m "Protect XMegaDrive age fallback from Exit"
+          git push origin HEAD:feature/zerochill-notifications-5.3.0
