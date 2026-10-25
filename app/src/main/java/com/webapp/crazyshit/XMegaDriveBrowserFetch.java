@@ -940,7 +940,7 @@ static String ageGateSafetyScript() {
                 + "const decline=s=>/\\b(exit|leave|decline)\\b/.test(s)||/under\\s*18/.test(s)"
                 + "||/\\bi(?:'m| am|m) not\\b/.test(s)||s==='no'||s==='no thanks'||s==='not 18';"
                 + "const accept=s=>!!s&&!decline(s)&&(/\\bcontinue\\b/.test(s)||/\\benter\\b/.test(s)"
-                + "||s==='yes'||/\\bi(?:']| am|m) 18\\b/.test(s));"
+                + "||s==='yes'||/\\bi(?:'m| am|m) 18\\b/.test(s));"
                 + "const body=(document.body&&document.body.innerText)||'';if(!/age confirmation/i.test(body))return false;"
                 + "const controls=document.querySelectorAll('button,input[type=\\\"button\\\"],input[type=\\\"submit\\\"],a,[role=\\\"button\\\"]');"
                 + "const label=el=>norm(el.innerText||el.textContent||el.value||el.getAttribute('value')||el.getAttribute('aria-label')||'');"
