@@ -1,0 +1,66 @@
+name: Build Social Push Beta
+
+on:
+  push:
+    branches:
+      - feature/zerochill-notifications-5.3.0
+    paths:
+      - .github/workflows/social-push-beta.yml
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: 05c674b0ae02e6fa9dc6c3b32e14b0b39d8c054e
+          fetch-depth: 1
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v4
+        with:
+          packages: platform-tools
+
+      - name: Install Android APIs 35 and 36
+        run: sdkmanager "platforms;android-35" "platforms;android-36" "build-tools;35.0.0"
+
+      - uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: '8.11.1'
+          cache-provider: basic
+
+      - name: Verify fixed source
+        run: |
+          test "$(git rev-parse HEAD)" = "05c674b0ae02e6fa9dc6c3b32e14b0b39d8c054e"
+          grep -F 'CHANNEL_SOCIAL = "social_v1"' app/src/main/java/com/webapp/crazyshit/ZeroChillPushNotificationPresenter.java
+          grep -F 'comment_reply_push_webhook' supabase/migrations/202610250006_social_push_webhooks.sql
+          grep -F 'comment_like_push_webhook' supabase/migrations/202610250006_social_push_webhooks.sql
+
+      - name: Run focused social push regressions
+        run: >-
+          gradle --no-daemon :app:testDebugUnitTest
+          --tests 'com.webapp.crazyshit.ZeroChillPushNotificationPresenterTest'
+          --tests 'com.webapp.crazyshit.ZeroChillSocialPushRoutingTest'
+          --tests 'com.webapp.crazyshit.UpdateInboxStoreTest'
+          --tests 'com.webapp.crazyshit.NotificationCenterUiTest'
+
+      - name: Build debug beta
+        run: gradle --no-daemon :app:assembleDebug
+
+      - name: Rename beta
+        run: cp app/build/outputs/apk/debug/app-debug.apk ZeroChill-05c674b-Social-Push-Beta.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ZeroChill-Social-Push-Beta
+          path: ZeroChill-05c674b-Social-Push-Beta.apk
+          if-no-files-found: error
+          retention-days: 7
