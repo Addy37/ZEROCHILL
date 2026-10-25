@@ -1,8 +1,9 @@
-# ZEROCHILL 5.2.2
+# ZEROCHILL 5.3.0
 
-- Fixed XMegaDrive age verification sometimes preventing content from loading.
-- The age confirmation now stays in the background and accepts the continue option automatically.
-- If a declined or stale XMegaDrive age cookie blocks loading, ZeroChill clears only XMegaDrive cookies and retries once.
-- Cloudflare and other manual browser checks keep their existing behavior.
+- Added realtime push notifications for direct messages, comment replies, and comment likes.
+- Push notifications open the correct conversation or social content and respect your existing notification settings.
+- Improved XMegaDrive age access so ZEROCHILL can establish and restore the required access state without relying on the site's raw age modal.
+- Existing XMegaDrive sessions are preserved. If an older install needs repair, ZEROCHILL guides you through a one-time 18+ confirmation.
+- Existing accounts, favorites, history, downloads, messages, and settings are preserved when updating.
 
-Install over your existing ZeroChill app without uninstalling to keep your data and settings.
+Install over your existing ZeroChill app without uninstalling. On Android 13 or newer, allow notifications when prompted if you want realtime alerts.
