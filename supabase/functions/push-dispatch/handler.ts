@@ -27,8 +27,27 @@ type DeviceRegistration = {
 export async function handlePushDispatch(request: Request): Promise<Response> {
   if (request.method !== "POST") return json(405, { error: "Use POST." });
 
-  const bearer = /^Bearer\s+([^\s]+)$/i.exec(request.headers.get("Authorization") ?? "");
-  if (!bearer) return json(401, { error: "Sign in again to send notifications." });
+  const url = Deno.env.get("SUPABASE_URL");
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!url || !serviceKey) {
+    return json(503, { error: "Push delivery is temporarily unavailable." });
+  }
+
+  const admin = createClient(url, serviceKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+
+  const webhookKey = String(request.headers.get("x-zerochill-push-key") ?? "").trim();
+  if (!webhookKey) return json(401, { error: "Unauthorized." });
+  const { data: verified, error: verifyError } = await admin.rpc(
+    "verify_zerochill_push_webhook",
+    { p_secret: webhookKey },
+  );
+  if (verifyError) {
+    console.error("Push webhook verification failed", verifyError.message);
+    return json(503, { error: "Push delivery is temporarily unavailable." });
+  }
+  if (verified !== true) return json(401, { error: "Unauthorized." });
 
   let payload: unknown;
   try {
@@ -45,37 +64,6 @@ export async function handlePushDispatch(request: Request): Promise<Response> {
     return json(400, { error: "Invalid message." });
   }
 
-  const url = Deno.env.get("SUPABASE_URL");
-  const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
-  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-  if (!url || !anonKey || !serviceKey) {
-    return json(503, { error: "Push delivery is temporarily unavailable." });
-  }
-
-  let callerId: string;
-  try {
-    const userClient = createClient(url, anonKey, {
-      global: { headers: { Authorization: `Bearer ${bearer[1]}` } },
-      auth: { persistSession: false, autoRefreshToken: false },
-    });
-    const { data: userResult, error: userError } = await userClient.auth.getUser(bearer[1]);
-    if (userError || !userResult.user) {
-      return json(401, { error: "Your session expired. Sign in and try again." });
-    }
-    const { data: sessionActive, error: sessionError } =
-      await userClient.rpc("current_zerochill_session");
-    if (sessionError || sessionActive !== true) {
-      return json(401, { error: "Your session expired. Sign in and try again." });
-    }
-    callerId = userResult.user.id;
-  } catch {
-    return json(503, { error: "Unable to verify your session." });
-  }
-
-  const admin = createClient(url, serviceKey, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
-
   const { data: message, error: messageError } = await admin
     .from("direct_messages")
     .select("id,sender_id,recipient_id")
@@ -86,8 +74,7 @@ export async function handlePushDispatch(request: Request): Promise<Response> {
     return json(500, { error: "Unable to prepare notification." });
   }
   if (!message) return json(404, { error: "Message not found." });
-  if (message.sender_id !== callerId) return json(403, { error: "Not allowed." });
-  if (message.recipient_id === callerId) return json(200, { sent: 0, skipped: "self" });
+  if (message.recipient_id === message.sender_id) return json(200, { sent: 0, skipped: "self" });
 
   const { data: preference, error: preferenceError } = await admin
     .from("notification_preferences")
@@ -105,7 +92,7 @@ export async function handlePushDispatch(request: Request): Promise<Response> {
   const { data: senderProfile, error: profileError } = await admin
     .from("profiles")
     .select("username,display_name")
-    .eq("user_id", callerId)
+    .eq("user_id", message.sender_id)
     .maybeSingle();
   if (profileError) {
     console.error("Push sender profile lookup failed", profileError.message);
@@ -128,9 +115,17 @@ export async function handlePushDispatch(request: Request): Promise<Response> {
   );
   if (!registrations.length) return json(200, { sent: 0, skipped: "no_devices" });
 
+  const { data: firebaseConfig, error: firebaseConfigError } = await admin.rpc(
+    "get_zerochill_firebase_service_account",
+  );
+  if (firebaseConfigError) {
+    console.error("Firebase credential lookup failed", firebaseConfigError.message);
+    return json(503, { error: "Push delivery is temporarily unavailable." });
+  }
+
   let serviceAccount: FirebaseServiceAccount;
   try {
-    serviceAccount = parseServiceAccount(Deno.env.get("FIREBASE_SERVICE_ACCOUNT_JSON") ?? "");
+    serviceAccount = parseServiceAccount(String(firebaseConfig ?? ""));
   } catch (error) {
     console.error("Firebase credentials unavailable", error instanceof Error ? error.message : "Unknown error");
     return json(503, { error: "Push delivery is temporarily unavailable." });
@@ -154,7 +149,7 @@ export async function handlePushDispatch(request: Request): Promise<Response> {
       {
         type: "direct_message",
         message_id: message.id,
-        sender_id: callerId,
+        sender_id: message.sender_id,
         sender_name: senderName,
         recipient_id: message.recipient_id,
       },
