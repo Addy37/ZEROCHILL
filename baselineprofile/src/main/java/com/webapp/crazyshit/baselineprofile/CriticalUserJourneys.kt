@@ -22,14 +22,13 @@ private fun MacrobenchmarkScope.completeStartupWizardIfPresent() {
     val getStarted = device.wait(Until.findObject(By.text("GET STARTED")), 1_500) ?: return
     getStarted.click()
 
-    val age = checkNotNull(
-        device.wait(Until.findObject(By.text("I confirm that I am 18 or older.")), 4_000)
+    checkNotNull(
+        device.wait(Until.findObject(By.text("CONFIRM 18+ & SET UP ACCESS")), 4_000)
     ) {
-        "Startup wizard age confirmation did not appear"
-    }
-    if (!age.isChecked) age.click()
-    device.waitForIdle(150)
-    checkNotNull(device.findObject(By.text("CONTINUE"))) {
+        "Startup wizard unified 18+ access action did not appear"
+    }.click()
+    device.waitForIdle(250)
+    checkNotNull(device.wait(Until.findObject(By.text("CONTINUE")), 4_000)) {
         "Startup wizard age Continue action was not enabled"
     }.click()
 

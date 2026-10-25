@@ -4,43 +4,37 @@ import android.app.Activity;
 import android.content.Context;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
-import android.os.SystemClock;
 import android.view.Gravity;
-import android.view.MotionEvent;
-import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewParent;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
-import java.util.concurrent.atomic.AtomicBoolean;
-
-/** Native ZEROCHILL cover for XMegaDrive's age gate while its WebView remains hidden. */
+/** Native ZEROCHILL consent prompt for XMegaDrive's explicit age-session marker. */
 final class XMegaDriveAgePrompt {
     static final String TAG_TITLE = "xmegadrive_age_prompt_title";
     static final String TAG_CONTINUE = "xmegadrive_age_prompt_continue";
     static final String TAG_CANCEL = "xmegadrive_age_prompt_cancel";
+    static final String TAG_NOTE = "xmegadrive_age_prompt_note";
 
-    interface ContinueBoundsCallback {
-        void onBounds(int left, int top, int width, int height);
+    interface ConfirmHandler {
+        void onConfirm(XMegaDriveAgePrompt prompt);
     }
 
     private final Activity activity;
-    private final Runnable onContinueGesture;
+    private final ConfirmHandler onConfirm;
     private final Runnable onCancel;
-    private final PassThroughRoot root;
+    private final FrameLayout root;
     private final TextView continueButton;
-    private final AtomicBoolean continuePressed = new AtomicBoolean();
-    private final AtomicBoolean rawFallbackShown = new AtomicBoolean();
-    private volatile long continuePressedAtMs;
+    private final TextView note;
 
-    XMegaDriveAgePrompt(Activity activity, Runnable onContinueGesture, Runnable onCancel) {
+    XMegaDriveAgePrompt(Activity activity, ConfirmHandler onConfirm, Runnable onCancel) {
         this.activity = activity;
-        this.onContinueGesture = onContinueGesture;
+        this.onConfirm = onConfirm;
         this.onCancel = onCancel;
 
-        root = new PassThroughRoot(activity);
+        root = new FrameLayout(activity);
         root.setBackgroundColor(activity.getColor(R.color.zc_scrim));
         root.setClickable(true);
         root.setFocusable(true);
@@ -64,7 +58,7 @@ final class XMegaDriveAgePrompt {
         eyebrow.setLetterSpacing(0.08f);
         card.addView(eyebrow, wrap());
 
-        TextView title = text(activity, "One quick check", 24,
+        TextView title = text(activity, "Set up XMegaDrive access", 24,
                 activity.getColor(R.color.zc_text_primary), Typeface.BOLD);
         title.setTag(TAG_TITLE);
         LinearLayout.LayoutParams titleParams = wrap();
@@ -73,7 +67,7 @@ final class XMegaDriveAgePrompt {
 
         TextView body = text(
                 activity,
-                "XMegaDrive requires age confirmation before ZEROCHILL can load this source. Continue only if you're 18 or older.",
+                "Confirm that you're 18 or older. ZEROCHILL will prepare XMegaDrive's age-access marker on this device so the site's age page stays out of the way.",
                 15,
                 activity.getColor(R.color.zc_text_secondary),
                 Typeface.NORMAL
@@ -84,15 +78,13 @@ final class XMegaDriveAgePrompt {
         bodyParams.topMargin = dp(activity, 12);
         card.addView(body, bodyParams);
 
-        continueButton = text(activity, "PREPARING…", 16,
+        continueButton = text(activity, "CONFIRM 18+ & CONTINUE", 16,
                 activity.getColor(R.color.app_on_primary), Typeface.BOLD);
         continueButton.setTag(TAG_CONTINUE);
         continueButton.setGravity(Gravity.CENTER);
         continueButton.setMinHeight(dp(activity, 52));
-        continueButton.setEnabled(false);
-        continueButton.setClickable(false);
-        continueButton.setFocusable(false);
-        continueButton.setAlpha(0.78f);
+        continueButton.setClickable(true);
+        continueButton.setFocusable(true);
         continueButton.setBackground(rounded(
                 activity,
                 activity.getColor(R.color.zc_cyan),
@@ -100,19 +92,22 @@ final class XMegaDriveAgePrompt {
                 0,
                 18
         ));
+        continueButton.setOnClickListener(view -> {
+            showVerifying();
+            if (onConfirm != null) onConfirm.onConfirm(this);
+        });
         LinearLayout.LayoutParams continueParams = matchWidthWrap();
         continueParams.topMargin = dp(activity, 22);
         card.addView(continueButton, continueParams);
-        root.setPassThroughView(continueButton);
-        root.setOnPassThroughDown(this::markContinuePressed);
 
-        TextView note = text(
+        note = text(
                 activity,
-                "The site stays hidden unless verification cannot finish.",
+                "This only prepares XMegaDrive access. It does not share your ZEROCHILL account or messages.",
                 12,
                 activity.getColor(R.color.zc_text_muted),
                 Typeface.NORMAL
         );
+        note.setTag(TAG_NOTE);
         note.setGravity(Gravity.CENTER);
         LinearLayout.LayoutParams noteParams = matchWidthWrap();
         noteParams.topMargin = dp(activity, 12);
@@ -144,10 +139,7 @@ final class XMegaDriveAgePrompt {
 
     void show() {
         if (root.getParent() != null || activity.isFinishing() || activity.isDestroyed()) return;
-        activity.addContentView(root, new FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT
-        ));
+        activity.addContentView(root, new FrameLayout.LayoutParams(-1, -1));
         root.bringToFront();
         root.requestFocus();
     }
@@ -160,56 +152,28 @@ final class XMegaDriveAgePrompt {
         }
     }
 
-    void armPhysicalContinue() {
-        if (continuePressed.get() || rawFallbackShown.get()) return;
-        continueButton.setText("CONTINUE");
-        continueButton.setEnabled(true);
-        continueButton.setAlpha(1f);
-        root.setPassThroughEnabled(true);
-    }
-
-    void postContinueBounds(ContinueBoundsCallback callback) {
-        if (callback == null) return;
-        continueButton.post(() -> {
-            if (continueButton.getWidth() <= 0 || continueButton.getHeight() <= 0) return;
-            int[] location = new int[2];
-            continueButton.getLocationOnScreen(location);
-            callback.onBounds(location[0], location[1], continueButton.getWidth(), continueButton.getHeight());
-        });
-    }
-
-    void showRawFallback() {
-        rawFallbackShown.set(true);
-        root.setPassThroughEnabled(false);
-        dismiss();
-    }
-
-    boolean isRawFallbackShown() {
-        return rawFallbackShown.get();
-    }
-
-    boolean hasContinueBeenPressed() {
-        return continuePressed.get();
-    }
-
-    long millisSinceContinue() {
-        long pressedAt = continuePressedAtMs;
-        if (pressedAt <= 0L) return 0L;
-        return Math.max(0L, SystemClock.elapsedRealtime() - pressedAt);
-    }
-
-    View rootForTest() {
-        return root;
-    }
-
-    private void markContinuePressed() {
-        if (!continuePressed.compareAndSet(false, true)) return;
-        continuePressedAtMs = SystemClock.elapsedRealtime();
-        root.setPassThroughEnabled(false);
+    void showVerifying() {
+        continueButton.setText("SETTING UP…");
         continueButton.setEnabled(false);
         continueButton.setAlpha(0.78f);
-        continueButton.setText("VERIFYING…");
-        if (onContinueGesture != null) onContinueGesture.run();
+    }
+
+    void showReady() {
+        continueButton.setText("✓ ACCESS READY");
+        continueButton.setEnabled(false);
+        continueButton.setAlpha(1f);
+        note.setText("XMegaDrive age access is ready on this device.");
+    }
+
+    void showFailure() {
+        continueButton.setText("TRY AGAIN");
+        continueButton.setEnabled(true);
+        continueButton.setAlpha(1f);
+        note.setText("Access is confirmed. ZEROCHILL couldn't store the marker yet. Try again or choose Not now.");
+    }
+
+    FrameLayout rootForTest() {
+        return root;
     }
 
     private static TextView text(Context context, String value, float sp, int color, int style) {
@@ -222,17 +186,11 @@ final class XMegaDriveAgePrompt {
     }
 
     private static LinearLayout.LayoutParams wrap() {
-        return new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
-        );
+        return new LinearLayout.LayoutParams(-2, -2);
     }
 
     private static LinearLayout.LayoutParams matchWidthWrap() {
-        return new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
-        );
+        return new LinearLayout.LayoutParams(-1, -2);
     }
 
     private static GradientDrawable rounded(
@@ -251,56 +209,5 @@ final class XMegaDriveAgePrompt {
 
     private static int dp(Context context, int value) {
         return Math.round(value * context.getResources().getDisplayMetrics().density);
-    }
-
-    private static final class PassThroughRoot extends FrameLayout {
-        private View passThroughView;
-        private Runnable onPassThroughDown;
-        private boolean passThroughEnabled;
-
-        PassThroughRoot(Context context) {
-            super(context);
-        }
-
-        void setPassThroughView(View view) {
-            passThroughView = view;
-        }
-
-        void setOnPassThroughDown(Runnable callback) {
-            onPassThroughDown = callback;
-        }
-
-        void setPassThroughEnabled(boolean enabled) {
-            passThroughEnabled = enabled;
-        }
-
-        @Override
-        public boolean dispatchTouchEvent(MotionEvent event) {
-            if (passThroughEnabled && event != null && isInsidePassThroughView(event)) {
-                if (event.getActionMasked() == MotionEvent.ACTION_DOWN && onPassThroughDown != null) {
-                    onPassThroughDown.run();
-                }
-                // Returning false on ACTION_DOWN lets the DecorView continue hit-testing
-                // lower siblings. The underlying aligned WebView then owns the original
-                // physical gesture for the rest of the pointer stream.
-                return false;
-            }
-            return super.dispatchTouchEvent(event);
-        }
-
-        private boolean isInsidePassThroughView(MotionEvent event) {
-            View target = passThroughView;
-            if (target == null || target.getWidth() <= 0 || target.getHeight() <= 0) return false;
-            int[] rootLocation = new int[2];
-            int[] targetLocation = new int[2];
-            getLocationOnScreen(rootLocation);
-            target.getLocationOnScreen(targetLocation);
-            float left = targetLocation[0] - rootLocation[0];
-            float top = targetLocation[1] - rootLocation[1];
-            float x = event.getX();
-            float y = event.getY();
-            return x >= left && x <= left + target.getWidth()
-                    && y >= top && y <= top + target.getHeight();
-        }
     }
 }

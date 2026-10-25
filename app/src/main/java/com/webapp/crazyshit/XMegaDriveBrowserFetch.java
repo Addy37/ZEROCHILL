@@ -47,7 +47,8 @@ import java.util.concurrent.atomic.AtomicReference;
 /**
  * Loads an XMegaDrive page in a full-size WebView and reads it there.
  * The WebView stays off-screen so a cold start does not cover the app. It is
- * only brought on-screen when a person has to tap a challenge or the age check.
+ * only brought on-screen for a human/browser challenge. XMegaDrive age access is
+ * handled by ZEROCHILL's explicit 18+ confirmation and the site's kt_agecheck marker.
  * The "; wv" token is removed from the user-agent string. Client hints are not
  * rewritten, because that does not make this WebView the same as Chrome.
  * cf_clearance and __cf_bm are left in place so a valid session is not discarded.
@@ -58,9 +59,6 @@ final class XMegaDriveBrowserFetch {
             "(function(){window.open=function(){return null;};})();";
     private static final long TIMEOUT_SECONDS = 45L;
     private static final long EXTRACTION_RETRY_MS = 800L;
-    private static final long NATIVE_AGE_FALLBACK_GRACE_MS = 6500L;
-    private static final long NATIVE_AGE_TARGET_DISCOVERY_TIMEOUT_MS = 12000L;
-    private static final long NATIVE_AGE_TARGET_RETRY_MS = 300L;
     private static volatile String sessionUserAgent = "";
 
     private XMegaDriveBrowserFetch() {
@@ -160,6 +158,7 @@ final class XMegaDriveBrowserFetch {
             return;
         }
         try {
+            XMegaDriveAgeSession.restoreIfAuthorized(activity);
             CookieManager cookies = CookieManager.getInstance();
             cookies.setAcceptCookie(true);
             FrameLayout overlay = new FrameLayout(activity);
@@ -200,6 +199,7 @@ final class XMegaDriveBrowserFetch {
             overlay.addView(dismiss, dismissParams);
 
             WebView webView = new WebView(activity);
+            webView.setTag(new AgeGateState());
             activeWebView.set(webView);
             cookies.setAcceptThirdPartyCookies(webView, true);
             webView.setBackgroundColor(Color.WHITE);
@@ -415,8 +415,7 @@ final class XMegaDriveBrowserFetch {
         if (identityLogged.compareAndSet(false, true)) logIdentity(webView);
         if (waiting) {
             if (needsPerson(titleNow, "")) {
-                XMegaDriveAgePrompt prompt = agePrompt(webView);
-                if (prompt != null) prompt.showRawFallback();
+                dismissAgePrompt(webView);
                 reveal(overlay, webView);
             }
             webView.postDelayed(
@@ -456,8 +455,7 @@ final class XMegaDriveBrowserFetch {
                 boolean blocked = permanentlyBlocked(title, text);
                 logPage(blocked ? "blocked" : "interstitial", location, title, true);
                 if (needsPerson(title, text)) {
-                    XMegaDriveAgePrompt prompt = agePrompt(webView);
-                    if (prompt != null) prompt.showRawFallback();
+                    dismissAgePrompt(webView);
                     reveal(overlay, webView);
                 }
                 if (blocked) {
@@ -571,7 +569,7 @@ final class XMegaDriveBrowserFetch {
                 + "if(e.tagName==='H1')o.text=e.textContent||'';"
                 + "return o;};"
                 + "const bodyText=(document.body&&document.body.innerText)||'';"
-                + ageGateSafetyScript()
+                + "const age=/age confirmation/i.test(bodyText);"
                 + "const scripts=[]; const list=document.scripts||[];"
                 + "for(let i=0;i<list.length&&scripts.length<3;i++){"
                 + "const t=list[i].textContent||'';"
@@ -609,19 +607,8 @@ final class XMegaDriveBrowserFetch {
                         CookieManager.getInstance().flush();
                     } catch (Exception ignored) {
                     }
-                    Runnable finishReady = () -> {
-                        result.set(document);
-                        complete(completed, error, finished, null);
-                    };
-                    if (BuildConfig.DEBUG && XMegaDriveAgeDiagnostics.hasBefore(webView)) {
-                        XMegaDriveAgeDiagnostics.captureAfterAndShow(
-                                webView,
-                                webView.getUrl(),
-                                finishReady
-                        );
-                    } else {
-                        finishReady.run();
-                    }
+                    result.set(document);
+                    complete(completed, error, finished, null);
                     return;
                 }
                 if (permanentlyBlocked(title, body)) {
@@ -632,19 +619,9 @@ final class XMegaDriveBrowserFetch {
                 }
                 boolean age = payload.optBoolean("age")
                         || (body != null && body.toLowerCase(java.util.Locale.US).contains("age confirmation"));
-                if (age && attempt >= 4) {
-                    XMegaDriveAgePrompt prompt = agePrompt(webView);
-                    if (prompt == null) {
-                        prompt = showNativeAgePrompt(webView, overlay, completed, error, finished);
-                    }
-                    if (prompt == null) {
-                        revealRawAgeFallback(overlay, webView);
-                    } else if (!prompt.isRawFallbackShown()
-                            && prompt.hasContinueBeenPressed()
-                            && prompt.millisSinceContinue() >= NATIVE_AGE_FALLBACK_GRACE_MS) {
-                        prompt.showRawFallback();
-                        revealRawAgeFallback(overlay, webView);
-                    }
+                if (age && attempt >= 2
+                        && handleAgeGate(webView, completed, error, finished)) {
+                    return;
                 }
                 webView.postDelayed(
                         () -> extract(
@@ -923,275 +900,99 @@ final class XMegaDriveBrowserFetch {
                 || body.contains("error 1015");
     }
 
-/**
- * Keep the reliable 5.2.1 visible fallback, but make every known age-decline
- * control inert before that WebView is revealed. Continue remains available.
- */
-static String ageGateSafetyScript() {
-    return "const ageNorm=s=>String(s||'').replace(String.fromCharCode(8217),\"'\").replace(/\s+/g,' ').trim().toLowerCase();"
-            + "const ageDecline=s=>/\b(exit|leave|decline)\b/.test(s)||/under\s*18/.test(s)"
-            + "||/\bi(?:'m| am|m) not\b/.test(s)||s==='no'||s==='no thanks'||s==='not 18';"
-            + "const age=/age confirmation/i.test(bodyText);"
-            + "if(age){const controls=document.querySelectorAll('button,input[type=\"button\"],input[type=\"submit\"],a,[role=\"button\"]');"
-            + "const ageLabel=el=>ageNorm(el.innerText||el.textContent||el.value||el.getAttribute('value')||el.getAttribute('aria-label')||'');"
-            + "const hideDecline=el=>{const label=ageLabel(el);if(!ageDecline(label))return false;"
-            + "el.style.display='none';el.setAttribute('aria-hidden','true');el.setAttribute('tabindex','-1');"
-            + "try{if('disabled' in el)el.disabled=true;}catch(e){}return true;};"
-            + "for(let i=0;i<controls.length;i++)hideDecline(controls[i]);"
-            + "if(!window.__zeroChillAgeExitGuard){window.__zeroChillAgeExitGuard=true;"
-            + "document.addEventListener('click',ev=>{const el=ev.target&&ev.target.closest?ev.target.closest('button,input,a,[role=\"button\"]'):null;"
-            + "if(!el)return;const text=(document.body&&document.body.innerText)||'';if(!/age confirmation/i.test(text))return;"
-            + "if(ageDecline(ageLabel(el))){ev.preventDefault();ev.stopImmediatePropagation();}},true);}}";
-}
-
-    static String ageGateNativeTapTargetScript() {
-        return "(() => {"
-                + "const norm=s=>String(s||'').replace(String.fromCharCode(8217),\"'\").replace(/\s+/g,' ').trim().toLowerCase();"
-                + "const decline=s=>/\b(exit|leave|decline)\b/.test(s)||/under\s*18/.test(s)"
-                + "||/\bi(?:'m| am|m) not\b/.test(s)||s==='no'||s==='no thanks'||s==='not 18';"
-                + "const accept=s=>!!s&&!decline(s)&&(/\bcontinue\b/.test(s)||/\benter\b/.test(s)"
-                + "||s==='yes'||/\bi(?:'m| am|m) 18\b/.test(s));"
-                + "const label=el=>norm(el&&((el.innerText||el.textContent||el.value||el.getAttribute('value')||el.getAttribute('aria-label'))||''));"
-                + "const controls='button,input[type=button],input[type=submit],a,[role=button]';"
-                + "const seen=[];"
-                + "const visited=root=>{for(let i=0;i<seen.length;i++)if(seen[i]===root)return true;seen.push(root);return false;};"
-                + "const scan=(root,ox,oy,depth)=>{"
-                + "if(!root||depth>5||visited(root))return null;"
-                + "let list=[];try{list=root.querySelectorAll?root.querySelectorAll(controls):[];}catch(e){list=[];}"
-                + "for(let i=0;i<list.length;i++){const el=list[i];const value=label(el);if(!decline(value))continue;"
-                + "try{el.style.display='none';el.setAttribute('aria-hidden','true');el.setAttribute('tabindex','-1');if('disabled' in el)el.disabled=true;}catch(e){}}"
-                + "for(let i=0;i<list.length;i++){const el=list[i];if(!accept(label(el)))continue;"
-                + "let r=null;try{r=el.getBoundingClientRect();}catch(e){}"
-                + "if(!r||r.width<=0||r.height<=0)continue;"
-                + "let hidden=false;try{const s=getComputedStyle(el);hidden=s.display==='none'||s.visibility==='hidden'||Number(s.opacity||1)===0;}catch(e){}"
-                + "if(hidden||el.disabled||el.getAttribute('aria-hidden')==='true')continue;"
-                + "try{el.scrollIntoView({block:'center',inline:'center'});}catch(e){}"
-                + "try{r=el.getBoundingClientRect();}catch(e){}"
-                + "return {x:ox+r.left+r.width/2,y:oy+r.top+r.height/2,w:r.width,h:r.height};}"
-                + "let all=[];try{all=root.querySelectorAll?root.querySelectorAll('*'):[];}catch(e){all=[];}"
-                + "for(let i=0;i<all.length;i++){const el=all[i];"
-                + "try{if(el.shadowRoot){const hit=scan(el.shadowRoot,ox,oy,depth+1);if(hit)return hit;}}catch(e){}"
-                + "const tag=String(el.tagName||'').toLowerCase();if(tag!=='iframe'&&tag!=='frame')continue;"
-                + "try{const doc=el.contentDocument;if(!doc)continue;const fr=el.getBoundingClientRect();"
-                + "const hit=scan(doc,ox+fr.left,oy+fr.top,depth+1);if(hit)return hit;}catch(e){}}"
-                + "return null;};"
-                + "const hit=scan(document,0,0,0);if(!hit)return '';"
-                + "hit.vw=window.innerWidth||0;hit.vh=window.innerHeight||0;return JSON.stringify(hit);})()";
+private static final class AgeGateState {
+        XMegaDriveAgePrompt prompt;
+        boolean autoRepairAttempted;
     }
 
-    private static final class AgeTapTarget {
-        final float x;
-        final float y;
-        final float width;
-        final float height;
-
-        AgeTapTarget(float x, float y, float width, float height) {
-            this.x = x;
-            this.y = y;
-            this.width = width;
-            this.height = height;
-        }
-    }
-
-    private static AgeTapTarget decodeAgeTapTarget(WebView webView, String encoded) {
+    private static AgeGateState ageState(WebView webView) {
         if (webView == null) return null;
-        try {
-            Object decoded = new JSONTokener(encoded == null ? "null" : encoded).nextValue();
-            if (!(decoded instanceof String) || ((String) decoded).trim().isEmpty()) return null;
-            JSONObject target = new JSONObject((String) decoded);
-            double cssX = target.optDouble("x", -1d);
-            double cssY = target.optDouble("y", -1d);
-            double cssWidth = target.optDouble("w", 0d);
-            double cssHeight = target.optDouble("h", 0d);
-            double viewportWidth = target.optDouble("vw", 0d);
-            double viewportHeight = target.optDouble("vh", 0d);
-            int viewWidth = webView.getWidth();
-            int viewHeight = webView.getHeight();
-            if (cssX < 0d || cssY < 0d || cssWidth <= 0d || cssHeight <= 0d
-                    || viewportWidth <= 0d || viewportHeight <= 0d
-                    || viewWidth <= 1 || viewHeight <= 1) {
-                return null;
-            }
-            float scaleX = (float) (viewWidth / viewportWidth);
-            float scaleY = (float) (viewHeight / viewportHeight);
-            return new AgeTapTarget(
-                    (float) cssX * scaleX,
-                    (float) cssY * scaleY,
-                    Math.max(1f, (float) cssWidth * scaleX),
-                    Math.max(1f, (float) cssHeight * scaleY)
-            );
-        } catch (Exception ignored) {
-            return null;
-        }
-    }
-
-    private static void stageNativeAgeOverlay(FrameLayout overlay, WebView webView) {
-        if (overlay != null) {
-            overlay.setTranslationX(0f);
-            overlay.setVisibility(View.VISIBLE);
-            overlay.setClickable(false);
-            // Keep the actual WebView attached and rendered so Android can route the
-            // user's physical gesture to it, while keeping the raw site effectively invisible.
-            overlay.setAlpha(0.001f);
-        }
-        if (webView != null) {
-            webView.setTranslationX(0f);
-            webView.setTranslationY(0f);
-            webView.setScaleX(1f);
-            webView.setScaleY(1f);
-        }
-    }
-
-    private static float clamp(float value, float min, float max) {
-        return Math.max(min, Math.min(max, value));
-    }
-
-    private static void alignPhysicalAgeTarget(
-            FrameLayout overlay,
-            WebView webView,
-            XMegaDriveAgePrompt prompt,
-            AgeTapTarget target
-    ) {
-        if (overlay == null || webView == null || prompt == null || target == null
-                || prompt.isRawFallbackShown()) {
-            return;
-        }
-        stageNativeAgeOverlay(overlay, webView);
-        prompt.postContinueBounds((left, top, width, height) -> {
-            if (prompt.isRawFallbackShown() || webView.getParent() == null
-                    || width <= 0 || height <= 0) {
-                return;
-            }
-            stageNativeAgeOverlay(overlay, webView);
-            int[] webLocation = new int[2];
-            webView.getLocationOnScreen(webLocation);
-
-            // Enlarge the invisible real control enough to cover the complete native
-            // button. The target pivot stays fixed, then the WebView is translated so
-            // the site's real Continue control sits directly beneath the cyan button.
-            float scaleX = clamp((width * 1.10f) / target.width, 1f, 6f);
-            float scaleY = clamp((height * 1.10f) / target.height, 1f, 6f);
-            webView.setPivotX(target.x);
-            webView.setPivotY(target.y);
-            webView.setScaleX(scaleX);
-            webView.setScaleY(scaleY);
-            float buttonCenterX = left + width / 2f;
-            float buttonCenterY = top + height / 2f;
-            webView.setTranslationX(buttonCenterX - (webLocation[0] + target.x));
-            webView.setTranslationY(buttonCenterY - (webLocation[1] + target.y));
-            prompt.armPhysicalContinue();
-            Log.i(TAG, "nativeAge physical bridge armed");
-        });
-    }
-
-    private static void preparePhysicalAgeBridge(
-            FrameLayout overlay,
-            WebView webView,
-            XMegaDriveAgePrompt prompt,
-            long startedAtMs
-    ) {
-        if (overlay == null || webView == null || prompt == null || prompt.isRawFallbackShown()) return;
-        stageNativeAgeOverlay(overlay, webView);
-        long started = startedAtMs > 0L ? startedAtMs : android.os.SystemClock.elapsedRealtime();
-        try {
-            webView.evaluateJavascript(ageGateNativeTapTargetScript(), encoded -> {
-                if (prompt.isRawFallbackShown() || webView.getParent() == null) return;
-                AgeTapTarget target = decodeAgeTapTarget(webView, encoded);
-                if (target != null) {
-                    alignPhysicalAgeTarget(overlay, webView, prompt, target);
-                    return;
-                }
-                retryOrRevealAgeTarget(overlay, webView, prompt, started, null);
-            });
-        } catch (Exception failure) {
-            retryOrRevealAgeTarget(overlay, webView, prompt, started, failure);
-        }
-    }
-
-    private static void retryOrRevealAgeTarget(
-            FrameLayout overlay,
-            WebView webView,
-            XMegaDriveAgePrompt prompt,
-            long startedAtMs,
-            Exception failure
-    ) {
-        if (prompt == null || prompt.isRawFallbackShown() || webView == null || webView.getParent() == null) return;
-        long elapsed = Math.max(0L, android.os.SystemClock.elapsedRealtime() - startedAtMs);
-        if (elapsed < NATIVE_AGE_TARGET_DISCOVERY_TIMEOUT_MS) {
-            webView.postDelayed(
-                    () -> preparePhysicalAgeBridge(overlay, webView, prompt, startedAtMs),
-                    NATIVE_AGE_TARGET_RETRY_MS
-            );
-            return;
-        }
-        if (failure == null) {
-            Log.i(TAG, "nativeAge physical bridge target unavailable after " + elapsed + "ms");
-        } else {
-            Log.i(TAG, "nativeAge physical bridge discovery failed after " + elapsed + "ms"
-                    + " error=" + failure.getClass().getSimpleName());
-        }
-        prompt.showRawFallback();
-        revealRawAgeFallback(overlay, webView);
+        Object tag = webView.getTag();
+        if (tag instanceof AgeGateState) return (AgeGateState) tag;
+        AgeGateState state = new AgeGateState();
+        webView.setTag(state);
+        return state;
     }
 
     private static XMegaDriveAgePrompt agePrompt(WebView webView) {
-        if (webView == null) return null;
-        Object tag = webView.getTag();
-        return tag instanceof XMegaDriveAgePrompt ? (XMegaDriveAgePrompt) tag : null;
+        AgeGateState state = ageState(webView);
+        return state == null ? null : state.prompt;
     }
 
-    private static XMegaDriveAgePrompt showNativeAgePrompt(
+    private static boolean handleAgeGate(
             WebView webView,
-            FrameLayout overlay,
             AtomicBoolean completed,
             AtomicReference<IOException> error,
             CountDownLatch finished
     ) {
-        if (webView == null || overlay == null || completed.get()) return null;
-        XMegaDriveAgePrompt existing = agePrompt(webView);
-        if (existing != null) return existing;
+        if (webView == null || completed.get()) return true;
+        Activity host = activity(webView.getContext());
+        if (host == null || host.isFinishing() || host.isDestroyed()) {
+            complete(completed, error, finished,
+                    new IOException("XMegaDrive age confirmation is unavailable"));
+            return true;
+        }
+        AgeGateState state = ageState(webView);
+        if (state != null
+                && !state.autoRepairAttempted
+                && AccessNoticeDialog.isAccepted(host)
+                && XMegaDriveAgeSession.isSetupComplete(host)) {
+            state.autoRepairAttempted = true;
+            XMegaDriveAgeSession.authorize(host, ready -> host.runOnUiThread(() -> {
+                if (completed.get() || webView.getParent() == null) return;
+                if (ready) {
+                    webView.reload();
+                } else {
+                    showNativeAgePrompt(webView, completed, error, finished);
+                }
+            }));
+            return true;
+        }
+        if (agePrompt(webView) == null) {
+            showNativeAgePrompt(webView, completed, error, finished);
+        }
+        return true;
+    }
+
+    private static XMegaDriveAgePrompt showNativeAgePrompt(
+            WebView webView,
+            AtomicBoolean completed,
+            AtomicReference<IOException> error,
+            CountDownLatch finished
+    ) {
+        if (webView == null || completed.get()) return null;
+        AgeGateState state = ageState(webView);
+        if (state != null && state.prompt != null) return state.prompt;
         Activity host = activity(webView.getContext());
         if (host == null || host.isFinishing() || host.isDestroyed()) return null;
         XMegaDriveAgePrompt created = new XMegaDriveAgePrompt(
                 host,
-                () -> Log.i(TAG, "nativeAge physical Continue gesture received"),
+                prompt -> {
+                    XMegaDriveAgeSession.markSetupComplete(host);
+                    XMegaDriveAgeSession.authorize(host, ready -> host.runOnUiThread(() -> {
+                        if (completed.get() || webView.getParent() == null) return;
+                        if (!ready) {
+                            prompt.showFailure();
+                            return;
+                        }
+                        prompt.showReady();
+                        dismissAgePrompt(webView);
+                        webView.reload();
+                    }));
+                },
                 () -> complete(completed, error, finished,
-                        new IOException("XMegaDrive check was dismissed"))
+                        new IOException("XMegaDrive age access was not confirmed"))
         );
-        webView.setTag(created);
+        if (state != null) state.prompt = created;
         created.show();
-        preparePhysicalAgeBridge(overlay, webView, created, android.os.SystemClock.elapsedRealtime());
         return created;
     }
 
     private static void dismissAgePrompt(WebView webView) {
-        XMegaDriveAgePrompt prompt = agePrompt(webView);
-        if (prompt == null) return;
-        prompt.dismiss();
-        try {
-            webView.setTag(null);
-        } catch (Exception ignored) {
-        }
-    }
-
-    private static void revealRawAgeFallback(FrameLayout overlay, WebView webView) {
-        if (BuildConfig.DEBUG && webView != null) {
-            XMegaDriveAgeDiagnostics.captureBefore(
-                    webView,
-                    () -> revealRawAgeFallbackNow(overlay, webView)
-            );
-            return;
-        }
-        revealRawAgeFallbackNow(overlay, webView);
-    }
-
-    private static void revealRawAgeFallbackNow(FrameLayout overlay, WebView webView) {
-        reveal(overlay, webView);
-        if (overlay != null && overlay.getChildCount() > 0
-                && overlay.getChildAt(0) instanceof TextView) {
-            ((TextView) overlay.getChildAt(0)).setText(
-                    "XMegaDrive diagnostic: tap the site's real Continue button once.");
-        }
+        AgeGateState state = ageState(webView);
+        if (state == null || state.prompt == null) return;
+        state.prompt.dismiss();
+        state.prompt = null;
     }
 
     private static boolean needsPerson(String title, String text) {

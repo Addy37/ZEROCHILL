@@ -59,6 +59,20 @@ public class StartupWizardUiTest {
         signedIn = false;
     }
 
+
+    @Test public void accessPageUsesUnifiedSetupActionInsteadOfCheckbox() throws Exception {
+        StartupWizardActivity activity = create();
+        Method showPage = StartupWizardActivity.class.getDeclaredMethod(
+                "showPage", int.class, boolean.class);
+        showPage.setAccessible(true);
+        showPage.invoke(activity, 1, true);
+        Shadows.shadowOf(Looper.getMainLooper()).idle();
+
+        View root = activity.getWindow().getDecorView();
+        assertNotNull(find(root, "CONFIRM 18+ & SET UP ACCESS"));
+        assertNull(find(root, "I confirm that I am 18 or older."));
+    }
+
     @Test public void finalPageOffersOptionalCreateAndSignInEntries() throws Exception {
         StartupWizardActivity activity = create();
         showSettings(activity);

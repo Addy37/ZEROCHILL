@@ -27,6 +27,7 @@ public final class SplashActivity extends Activity {
     private boolean handingOff;
     private boolean chaosHandoff;
     private boolean startupWizard;
+    private boolean xmegaAccessRepair;
     private String launchAction;
 
     @Override
@@ -36,7 +37,8 @@ public final class SplashActivity extends Activity {
         AppPerformance.startup("splash");
         launchAction = getIntent() == null ? null : getIntent().getAction();
         startupWizard = StartupWizardPolicy.shouldShow(this);
-        chaosHandoff = shouldPreload(startupWizard, launchAction);
+        xmegaAccessRepair = !startupWizard && XMegaDriveAgeSession.shouldShowRepair(this);
+        chaosHandoff = shouldPreload(startupWizard || xmegaAccessRepair, launchAction);
         if (chaosHandoff) ChaosStartupPreloader.start(getApplicationContext());
         getWindow().setStatusBarColor(Color.BLACK);
         getWindow().setNavigationBarColor(Color.BLACK);
@@ -88,13 +90,13 @@ public final class SplashActivity extends Activity {
         handler.removeCallbacks(readinessRunnable);
         cancelReveals();
 
-        Intent intent = new Intent(
-                this,
-                startupWizard ? StartupWizardActivity.class : NativeMainActivity.class
-        );
+        Class<?> destination = startupWizard
+                ? StartupWizardActivity.class
+                : (xmegaAccessRepair ? XMegaDriveAccessSetupActivity.class : NativeMainActivity.class);
+        Intent intent = new Intent(this, destination);
         if (AppShortcuts.isShortcutAction(launchAction)) {
             intent.setAction(launchAction);
-            if (!startupWizard) {
+            if (!startupWizard && !xmegaAccessRepair) {
                 intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
             }
         }

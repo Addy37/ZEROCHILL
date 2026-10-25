@@ -1,8 +1,6 @@
 package com.webapp.crazyshit;
 
 import android.app.Activity;
-import android.os.SystemClock;
-import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.TextView;
@@ -23,13 +21,13 @@ import static org.junit.Assert.assertTrue;
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = 35)
 public class XMegaDriveAgePromptTest {
-    @Test public void continueUsesPhysicalTouchThroughWithoutExposingExit() {
+    @Test public void continueIsNativeClickableAndNeverExposesSiteExit() {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
         AtomicInteger continued = new AtomicInteger();
         AtomicInteger cancelled = new AtomicInteger();
         XMegaDriveAgePrompt prompt = new XMegaDriveAgePrompt(
                 activity,
-                continued::incrementAndGet,
+                ignored -> continued.incrementAndGet(),
                 cancelled::incrementAndGet
         );
 
@@ -42,62 +40,37 @@ public class XMegaDriveAgePromptTest {
         assertNotNull(title);
         assertNotNull(button);
         assertNotNull(cancel);
-        assertEquals("One quick check", title.getText().toString());
-        assertEquals("PREPARING…", button.getText().toString());
-        assertFalse(button.isEnabled());
-        assertFalse(button.isClickable());
-        assertFalse(containsText(root, "EXIT"));
-        assertFalse(prompt.hasContinueBeenPressed());
-
-        prompt.armPhysicalContinue();
-        assertEquals("CONTINUE", button.getText().toString());
+        assertEquals("Set up XMegaDrive access", title.getText().toString());
+        assertEquals("CONFIRM 18+ & CONTINUE", button.getText().toString());
         assertTrue(button.isEnabled());
-        assertFalse(button.isClickable());
+        assertTrue(button.isClickable());
+        assertFalse(containsText(root, "EXIT"));
 
-        int widthSpec = View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY);
-        int heightSpec = View.MeasureSpec.makeMeasureSpec(1920, View.MeasureSpec.EXACTLY);
-        root.measure(widthSpec, heightSpec);
-        root.layout(0, 0, 1080, 1920);
-        int[] rootLocation = new int[2];
-        int[] buttonLocation = new int[2];
-        root.getLocationOnScreen(rootLocation);
-        button.getLocationOnScreen(buttonLocation);
-        float x = buttonLocation[0] - rootLocation[0] + button.getWidth() / 2f;
-        float y = buttonLocation[1] - rootLocation[1] + button.getHeight() / 2f;
-        long now = SystemClock.uptimeMillis();
-        MotionEvent down = MotionEvent.obtain(now, now, MotionEvent.ACTION_DOWN, x, y, 0);
-        boolean handled;
-        try {
-            handled = root.dispatchTouchEvent(down);
-        } finally {
-            down.recycle();
-        }
-
-        assertFalse(handled);
+        button.performClick();
         assertEquals(1, continued.get());
         assertEquals(0, cancelled.get());
-        assertTrue(prompt.hasContinueBeenPressed());
-        assertEquals("VERIFYING…", button.getText().toString());
+        assertEquals("SETTING UP…", button.getText().toString());
         assertFalse(button.isEnabled());
 
+        prompt.showFailure();
+        assertEquals("TRY AGAIN", button.getText().toString());
+        assertTrue(button.isEnabled());
         prompt.dismiss();
     }
 
-    @Test public void notNowCancelsWithoutTriggeringContinue() {
+    @Test public void notNowCancelsWithoutConfirming() {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
         AtomicInteger continued = new AtomicInteger();
         AtomicInteger cancelled = new AtomicInteger();
         XMegaDriveAgePrompt prompt = new XMegaDriveAgePrompt(
                 activity,
-                continued::incrementAndGet,
+                ignored -> continued.incrementAndGet(),
                 cancelled::incrementAndGet
         );
-
         prompt.show();
         TextView cancel = prompt.rootForTest().findViewWithTag(XMegaDriveAgePrompt.TAG_CANCEL);
         assertNotNull(cancel);
         cancel.performClick();
-
         assertEquals(0, continued.get());
         assertEquals(1, cancelled.get());
         prompt.dismiss();

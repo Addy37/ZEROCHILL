@@ -103,6 +103,12 @@
             android:exported="false" />
 
         <activity
+            android:name=".XMegaDriveAccessSetupActivity"
+            android:screenOrientation="portrait"
+            android:enableOnBackInvokedCallback="true"
+            android:exported="false" />
+
+        <activity
             android:name=".FeedbackActivity"
             android:screenOrientation="portrait"
             android:enableOnBackInvokedCallback="true"
