@@ -22,6 +22,12 @@ timeout --kill-after=5s 15s adb logcat -c || true
 gradle --no-daemon "$@"
 benchmark_status=$?
 sudo -n dmesg --ctime 2>&1 | tail -n 200 > "$diagnostics/host-kernel.txt" || true
+shopt -s nullglob
+crash_reports=(/tmp/android-runner/emu-crash-*.db)
+if ((${#crash_reports[@]})); then
+    tar -czf "$diagnostics/emulator-crashes.tgz" "${crash_reports[@]}" \
+        2> "$diagnostics/emulator-crashes.txt" || true
+fi
 
 timeout --kill-after=5s 15s adb logcat -d -s ZeroChillBenchmark AndroidRuntime ActivityManager XMegaDrive chromium cr_WebViewFactory > "$diagnostics/logcat.txt" 2>&1 || true
 timeout --kill-after=5s 15s adb shell dumpsys meminfo com.addy37.crazyshitunofficial > "$diagnostics/memory.txt" 2>&1 || true

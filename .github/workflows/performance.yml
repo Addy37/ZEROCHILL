@@ -112,12 +112,11 @@ jobs:
           api-level: 35
           arch: x86_64
           profile: pixel_6
-          # Chromium/SwiftShader Vulkan can terminate the host emulator. Keep
-          # real Shows work and motion enabled while using Android's GLES workaround.
-          # https://developer.android.com/studio/run/emulator-troubleshooting#cannot_open_webpage_correctly
-          emulator-options: >-
-            -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
-            ${{ startsWith(matrix.flow, 'shows-scroll') && '-feature -Vulkan' || '' }}
+          # Pin the Shows host to stable 36.6.11 after repeated 37.2.12 exits.
+          # Only the emulator binary changes: same API 35 image, GPU defaults,
+          # real source work, animations and benchmark assertions.
+          # Build/version: https://developer.android.com/studio/emulator_archive
+          emulator-build: ${{ startsWith(matrix.flow, 'shows-scroll') && '15507667' || '' }}
           disable-animations: ${{ matrix.flow != 'shows-scroll-motion' }}
           disk-size: 4096M
           # The ten-minute trace processor exhausted the default emulator RAM.
