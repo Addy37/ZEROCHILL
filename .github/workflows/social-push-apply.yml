@@ -1,0 +1,98 @@
+name: Apply Social Push Notifications
+
+on:
+  push:
+    branches:
+      - feature/zerochill-notifications-5.3.0
+    paths:
+      - tools/social_push_patch.py
+      - .github/workflows/social-push-apply.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Correct staged OAuth grant type
+        shell: python
+        run: |
+          from pathlib import Path
+          path = Path('tools/social_push_patch.py')
+          text = path.read_text(encoding='utf-8')
+          old = 'grant_type: "urn:ietf:params:oauth-type:jwt-bearer".replace("oauth-type", "oauth"),'
+          new = 'grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",'
+          if old not in text:
+              raise SystemExit('staged OAuth grant type anchor missing')
+          path.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+      - name: Apply social push implementation
+        run: python tools/social_push_patch.py
+
+      - name: Verify scoped and privacy-safe social push path
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check
+          test -f supabase/migrations/202610250006_social_push_webhooks.sql
+          grep -F 'comment_reply_push_webhook' supabase/migrations/202610250006_social_push_webhooks.sql
+          grep -F 'comment_like_push_webhook' supabase/migrations/202610250006_social_push_webhooks.sql
+          grep -F 'type: "comment_reply"' supabase/functions/push-dispatch/handler.ts
+          grep -F 'type: "comment_like"' supabase/functions/push-dispatch/handler.ts
+          grep -F 'type: "direct_message"' supabase/functions/push-dispatch/handler.ts
+          grep -F 'grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer"' supabase/functions/push-dispatch/handler.ts
+          ! grep -F 'oauth-type' supabase/functions/push-dispatch/handler.ts
+          ! grep -E 'pushData\.(body|reply_body|comment_body)|pushData\[["'"'](body|reply_body|comment_body)' supabase/functions/push-dispatch/handler.ts
+          grep -F 'CHANNEL_SOCIAL = "social_v1"' app/src/main/java/com/webapp/crazyshit/ZeroChillPushNotificationPresenter.java
+          grep -F 'recordSocialPush' app/src/main/java/com/webapp/crazyshit/UpdateInboxStore.java
+
+      - name: Test Edge Function helpers
+        run: deno test supabase/functions/push-dispatch/handler_test.ts
+
+      - name: Run focused Android regressions
+        run: >-
+          ./gradlew --no-daemon :app:testDebugUnitTest
+          --tests com.webapp.crazyshit.ZeroChillPushNotificationPresenterTest
+          --tests com.webapp.crazyshit.ZeroChillSocialPushRoutingTest
+          --tests com.webapp.crazyshit.UpdateInboxStoreTest
+          --tests com.webapp.crazyshit.NotificationCenterUiTest
+
+      - name: Build debug APK
+        run: ./gradlew --no-daemon :app:assembleDebug
+
+      - name: Commit validated source changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Addy37'
+          git config user.email '92006667+Addy37@users.noreply.github.com'
+          git add \
+            supabase/functions/push-dispatch/handler.ts \
+            supabase/functions/push-dispatch/handler_test.ts \
+            supabase/migrations/202610250006_social_push_webhooks.sql \
+            app/src/main/java/com/webapp/crazyshit/ZeroChillFirebaseMessagingService.java \
+            app/src/main/java/com/webapp/crazyshit/ZeroChillPushNotificationPresenter.java \
+            app/src/main/java/com/webapp/crazyshit/UpdateInboxStore.java \
+            app/src/main/java/com/webapp/crazyshit/UpdateInboxActivity.java \
+            app/src/test/java/com/webapp/crazyshit/ZeroChillSocialPushRoutingTest.java \
+            app/src/test/java/com/webapp/crazyshit/ZeroChillPushNotificationPresenterTest.java
+          git diff --cached --check
+          git commit -m 'Add realtime social push notifications'
+          git push origin HEAD:feature/zerochill-notifications-5.3.0
