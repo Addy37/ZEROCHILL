@@ -59,6 +59,8 @@ final class XMegaDriveBrowserFetch {
     private static final long TIMEOUT_SECONDS = 45L;
     private static final long EXTRACTION_RETRY_MS = 800L;
     private static final long NATIVE_AGE_FALLBACK_GRACE_MS = 6500L;
+    private static final long NATIVE_AGE_TARGET_DISCOVERY_TIMEOUT_MS = 12000L;
+    private static final long NATIVE_AGE_TARGET_RETRY_MS = 300L;
     private static volatile String sessionUserAgent = "";
 
     private XMegaDriveBrowserFetch() {
@@ -938,18 +940,32 @@ static String ageGateSafetyScript() {
                 + "||/\bi(?:'m| am|m) not\b/.test(s)||s==='no'||s==='no thanks'||s==='not 18';"
                 + "const accept=s=>!!s&&!decline(s)&&(/\bcontinue\b/.test(s)||/\benter\b/.test(s)"
                 + "||s==='yes'||/\bi(?:'m| am|m) 18\b/.test(s));"
-                + "const body=(document.body&&document.body.innerText)||'';if(!/age confirmation/i.test(body))return '';"
-                + "const controls=document.querySelectorAll('button,input[type=button],input[type=submit],a,[role=button]');"
-                + "const label=el=>norm(el.innerText||el.textContent||el.value||el.getAttribute('value')||el.getAttribute('aria-label')||'');"
-                + "for(let i=0;i<controls.length;i++){const el=controls[i];if(!decline(label(el)))continue;"
-                + "el.style.display='none';el.setAttribute('aria-hidden','true');el.setAttribute('tabindex','-1');"
-                + "try{if('disabled' in el)el.disabled=true;}catch(e){}}"
-                + "for(let i=0;i<controls.length;i++){const el=controls[i];if(!accept(label(el)))continue;"
+                + "const label=el=>norm(el&&((el.innerText||el.textContent||el.value||el.getAttribute('value')||el.getAttribute('aria-label'))||''));"
+                + "const controls='button,input[type=button],input[type=submit],a,[role=button]';"
+                + "const seen=[];"
+                + "const visited=root=>{for(let i=0;i<seen.length;i++)if(seen[i]===root)return true;seen.push(root);return false;};"
+                + "const scan=(root,ox,oy,depth)=>{"
+                + "if(!root||depth>5||visited(root))return null;"
+                + "let list=[];try{list=root.querySelectorAll?root.querySelectorAll(controls):[];}catch(e){list=[];}"
+                + "for(let i=0;i<list.length;i++){const el=list[i];const value=label(el);if(!decline(value))continue;"
+                + "try{el.style.display='none';el.setAttribute('aria-hidden','true');el.setAttribute('tabindex','-1');if('disabled' in el)el.disabled=true;}catch(e){}}"
+                + "for(let i=0;i<list.length;i++){const el=list[i];if(!accept(label(el)))continue;"
+                + "let r=null;try{r=el.getBoundingClientRect();}catch(e){}"
+                + "if(!r||r.width<=0||r.height<=0)continue;"
+                + "let hidden=false;try{const s=getComputedStyle(el);hidden=s.display==='none'||s.visibility==='hidden'||Number(s.opacity||1)===0;}catch(e){}"
+                + "if(hidden||el.disabled||el.getAttribute('aria-hidden')==='true')continue;"
                 + "try{el.scrollIntoView({block:'center',inline:'center'});}catch(e){}"
-                + "const r=el.getBoundingClientRect();if(!r||r.width<=0||r.height<=0)return '';"
-                + "return JSON.stringify({x:r.left+r.width/2,y:r.top+r.height/2,w:r.width,h:r.height,"
-                + "vw:window.innerWidth||0,vh:window.innerHeight||0});}"
-                + "return '';})()";
+                + "try{r=el.getBoundingClientRect();}catch(e){}"
+                + "return {x:ox+r.left+r.width/2,y:oy+r.top+r.height/2,w:r.width,h:r.height};}"
+                + "let all=[];try{all=root.querySelectorAll?root.querySelectorAll('*'):[];}catch(e){all=[];}"
+                + "for(let i=0;i<all.length;i++){const el=all[i];"
+                + "try{if(el.shadowRoot){const hit=scan(el.shadowRoot,ox,oy,depth+1);if(hit)return hit;}}catch(e){}"
+                + "const tag=String(el.tagName||'').toLowerCase();if(tag!=='iframe'&&tag!=='frame')continue;"
+                + "try{const doc=el.contentDocument;if(!doc)continue;const fr=el.getBoundingClientRect();"
+                + "const hit=scan(doc,ox+fr.left,oy+fr.top,depth+1);if(hit)return hit;}catch(e){}}"
+                + "return null;};"
+                + "const hit=scan(document,0,0,0);if(!hit)return '';"
+                + "hit.vw=window.innerWidth||0;hit.vh=window.innerHeight||0;return JSON.stringify(hit);})()";
     }
 
     private static final class AgeTapTarget {
@@ -1061,10 +1077,11 @@ static String ageGateSafetyScript() {
             FrameLayout overlay,
             WebView webView,
             XMegaDriveAgePrompt prompt,
-            int attempt
+            long startedAtMs
     ) {
         if (overlay == null || webView == null || prompt == null || prompt.isRawFallbackShown()) return;
         stageNativeAgeOverlay(overlay, webView);
+        long started = startedAtMs > 0L ? startedAtMs : android.os.SystemClock.elapsedRealtime();
         try {
             webView.evaluateJavascript(ageGateNativeTapTargetScript(), encoded -> {
                 if (prompt.isRawFallbackShown() || webView.getParent() == null) return;
@@ -1073,21 +1090,37 @@ static String ageGateSafetyScript() {
                     alignPhysicalAgeTarget(overlay, webView, prompt, target);
                     return;
                 }
-                if (attempt < 3) {
-                    webView.postDelayed(
-                            () -> preparePhysicalAgeBridge(overlay, webView, prompt, attempt + 1),
-                            250L
-                    );
-                    return;
-                }
-                Log.i(TAG, "nativeAge physical bridge target unavailable");
-                prompt.showRawFallback();
-                revealRawAgeFallback(overlay, webView);
+                retryOrRevealAgeTarget(overlay, webView, prompt, started, null);
             });
-        } catch (Exception ignored) {
-            prompt.showRawFallback();
-            revealRawAgeFallback(overlay, webView);
+        } catch (Exception failure) {
+            retryOrRevealAgeTarget(overlay, webView, prompt, started, failure);
         }
+    }
+
+    private static void retryOrRevealAgeTarget(
+            FrameLayout overlay,
+            WebView webView,
+            XMegaDriveAgePrompt prompt,
+            long startedAtMs,
+            Exception failure
+    ) {
+        if (prompt == null || prompt.isRawFallbackShown() || webView == null || webView.getParent() == null) return;
+        long elapsed = Math.max(0L, android.os.SystemClock.elapsedRealtime() - startedAtMs);
+        if (elapsed < NATIVE_AGE_TARGET_DISCOVERY_TIMEOUT_MS) {
+            webView.postDelayed(
+                    () -> preparePhysicalAgeBridge(overlay, webView, prompt, startedAtMs),
+                    NATIVE_AGE_TARGET_RETRY_MS
+            );
+            return;
+        }
+        if (failure == null) {
+            Log.i(TAG, "nativeAge physical bridge target unavailable after " + elapsed + "ms");
+        } else {
+            Log.i(TAG, "nativeAge physical bridge discovery failed after " + elapsed + "ms"
+                    + " error=" + failure.getClass().getSimpleName());
+        }
+        prompt.showRawFallback();
+        revealRawAgeFallback(overlay, webView);
     }
 
     private static XMegaDriveAgePrompt agePrompt(WebView webView) {
@@ -1116,7 +1149,7 @@ static String ageGateSafetyScript() {
         );
         webView.setTag(created);
         created.show();
-        preparePhysicalAgeBridge(overlay, webView, created, 1);
+        preparePhysicalAgeBridge(overlay, webView, created, android.os.SystemClock.elapsedRealtime());
         return created;
     }
 

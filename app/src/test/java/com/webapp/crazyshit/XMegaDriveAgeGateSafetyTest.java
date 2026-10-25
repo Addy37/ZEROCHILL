@@ -31,6 +31,9 @@ public class XMegaDriveAgeGateSafetyTest {
         assertTrue(script.contains("window.innerWidth"));
         assertTrue(script.contains("window.innerHeight"));
         assertTrue(script.contains("JSON.stringify"));
+        assertTrue(script.contains("shadowRoot"));
+        assertTrue(script.contains("contentDocument"));
+        assertTrue(script.contains("depth>5"));
         assertFalse(script.contains("el.click()"));
         assertFalse(script.contains("document.activeElement"));
     }
