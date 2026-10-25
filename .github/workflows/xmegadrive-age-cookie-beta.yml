@@ -1,0 +1,57 @@
+name: Build XMegaDrive Age Cookie Beta
+
+on:
+  push:
+    branches:
+      - feature/zerochill-notifications-5.3.0
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: 34216f6981183ba3d04a6598970a98c7f66d3c51
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+          cache-read-only: true
+
+      - name: Verify clean age-cookie path
+        run: |
+          grep -q 'kt_agecheck' app/src/main/java/com/webapp/crazyshit/XMegaDriveAgeSession.java
+          grep -q 'CONFIRM 18+ & SET UP ACCESS' app/src/main/java/com/webapp/crazyshit/StartupWizardActivity.java
+          ! grep -q 'ageGateNativeTapTargetScript' app/src/main/java/com/webapp/crazyshit/XMegaDriveBrowserFetch.java
+          ! grep -q 'revealRawAgeFallback' app/src/main/java/com/webapp/crazyshit/XMegaDriveBrowserFetch.java
+          test ! -e app/src/main/java/com/webapp/crazyshit/XMegaDriveAgeDiagnostics.java
+
+      - name: Run focused regressions
+        run: >-
+          gradle --no-daemon :app:testDebugUnitTest
+          --tests com.webapp.crazyshit.XMegaDriveAgeGateSafetyTest
+          --tests com.webapp.crazyshit.XMegaDriveAgePromptTest
+          --tests com.webapp.crazyshit.XMegaDriveAgeSessionTest
+          --tests com.webapp.crazyshit.StartupWizardUiTest
+          --tests com.webapp.crazyshit.StartupWizardPolicyTest
+          --tests com.webapp.crazyshit.ChaosStartupPreloaderTest
+
+      - name: Build debug beta
+        run: gradle --no-daemon :app:assembleDebug
+
+      - name: Rename beta
+        run: cp app/build/outputs/apk/debug/app-debug.apk ZeroChill-34216f6-XMegaDrive-Age-Cookie-Beta.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ZeroChill-XMegaDrive-Age-Cookie-Beta
+          path: ZeroChill-34216f6-XMegaDrive-Age-Cookie-Beta.apk
+          retention-days: 7
