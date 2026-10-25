@@ -24,6 +24,13 @@
         <activity android:name=".ZeroChillAccountSecurityActivity" android:exported="false" android:windowSoftInputMode="adjustResize" />
         <activity android:name=".ZeroChillSocialSettingsActivity" android:exported="false" android:windowSoftInputMode="adjustResize" />
 
+        <service
+            android:name=".ZeroChillFirebaseMessagingService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
 
         <service
             android:name=".AcceleratedDownloadService"
