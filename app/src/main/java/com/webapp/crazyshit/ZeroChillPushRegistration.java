@@ -4,6 +4,7 @@ import android.content.Context;
 import android.content.SharedPreferences;
 import android.util.Base64;
 
+import com.google.firebase.installations.FirebaseInstallations;
 import com.google.firebase.messaging.FirebaseMessaging;
 
 import org.json.JSONObject;
@@ -14,42 +15,52 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
 import java.time.Instant;
-import java.util.Locale;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
 
-/** Keeps the current account's FCM token registered without exposing account credentials to Firebase. */
+/** Keeps the current account's Firebase installation registered without exposing account credentials to Firebase. */
 final class ZeroChillPushRegistration {
     private static final String PREFS = "zerochill_push_registration";
     private static final String KEY_INSTALLATION_ID = "installation_id";
-    private static final String KEY_LAST_OWNER = "last_owner";
-    private static final String KEY_LAST_APP = "last_app";
-    private static final String KEY_LAST_TOKEN_HASH = "last_token_hash";
-    private static final String KEY_LAST_SYNC_AT = "last_sync_at";
-    private static final String KEY_TOKEN_RESET_PENDING = "token_reset_pending";
-    private static final long REFRESH_REGISTRATION_MS = TimeUnit.HOURS.toMillis(24);
+    private static final String KEY_REGISTRATION_SUSPENDED = "registration_suspended";
+    private static final String KEY_ROTATION_IN_PROGRESS = "rotation_in_progress";
     private static final ExecutorService NETWORK = Executors.newSingleThreadExecutor();
 
     private ZeroChillPushRegistration() { }
 
     static void initialize(Context context) {
         Context app = context.getApplicationContext();
-        if (sessionCredentials(ZeroChillSessionStore.read(app)) == null) return;
-        syncCurrent(app, null);
+        if (sessionCredentials(ZeroChillSessionStore.read(app)) == null || !configured()) return;
+        prefs(app).edit().putBoolean(KEY_REGISTRATION_SUSPENDED, false).apply();
+        registerWithFirebase(app);
     }
 
     static void onSessionAvailable(Context context) {
-        syncCurrent(context.getApplicationContext(), null);
+        Context app = context.getApplicationContext();
+        if (!configured()) return;
+        prefs(app).edit().putBoolean(KEY_REGISTRATION_SUSPENDED, false).apply();
+        registerWithFirebase(app);
     }
 
-    static void onTokenRefreshed(Context context, String token) {
-        String cleanToken = clean(token);
-        if (cleanToken.isEmpty()) return;
-        syncCurrent(context.getApplicationContext(), cleanToken);
+    static void onRegistered(Context context, String firebaseInstallationId) {
+        Context app = context.getApplicationContext();
+        String fid = clean(firebaseInstallationId);
+        if (!validFirebaseInstallationId(fid) || !configured()) return;
+        if (prefs(app).getBoolean(KEY_REGISTRATION_SUSPENDED, false)) return;
+
+        SessionCredentials expected = sessionCredentials(ZeroChillSessionStore.read(app));
+        if (expected == null) return;
+        queueUpsert(app, expected.userId, fid, true);
+    }
+
+    static void onUnregistered(Context context, String firebaseInstallationId) {
+        Context app = context.getApplicationContext();
+        if (!prefs(app).getBoolean(KEY_REGISTRATION_SUSPENDED, false)
+                && sessionCredentials(ZeroChillSessionStore.read(app)) != null) {
+            registerWithFirebase(app);
+        }
     }
 
     static void onSessionClearing(Context context, String sessionJson) {
@@ -57,19 +68,15 @@ final class ZeroChillPushRegistration {
         SessionCredentials credentials = sessionCredentials(sessionJson);
         if (credentials == null) return;
 
-        SharedPreferences prefs = prefs(app);
-        prefs.edit()
-                .putBoolean(KEY_TOKEN_RESET_PENDING, true)
-                .remove(KEY_LAST_OWNER)
-                .remove(KEY_LAST_APP)
-                .remove(KEY_LAST_TOKEN_HASH)
-                .remove(KEY_LAST_SYNC_AT)
+        prefs(app).edit()
+                .putBoolean(KEY_REGISTRATION_SUSPENDED, true)
+                .putBoolean(KEY_ROTATION_IN_PROGRESS, true)
                 .apply();
 
         String installationId = installationId(app);
         String applicationId = app.getPackageName();
-        NETWORK.execute(() -> deleteRegistration(app, credentials, installationId, applicationId));
-        resetFirebaseToken(app);
+        NETWORK.execute(() -> deleteRegistration(credentials, installationId, applicationId));
+        invalidateFirebaseInstallation(app, false);
     }
 
     static String installationId(Context context) {
@@ -97,67 +104,43 @@ final class ZeroChillPushRegistration {
         }
     }
 
-    private static void syncCurrent(Context app, String suppliedToken) {
-        SessionCredentials expected = sessionCredentials(ZeroChillSessionStore.read(app));
-        if (expected == null || !configured()) return;
-
-        if (prefs(app).getBoolean(KEY_TOKEN_RESET_PENDING, false)) {
-            resetFirebaseToken(app);
-            return;
-        }
-
-        if (!clean(suppliedToken).isEmpty()) {
-            queueUpsert(app, expected.userId, suppliedToken, false);
-            return;
-        }
-
-        FirebaseMessaging.getInstance().getToken().addOnCompleteListener(task -> {
+    private static void registerWithFirebase(Context app) {
+        FirebaseMessaging.getInstance().register().addOnCompleteListener(task -> {
             if (!task.isSuccessful()) return;
-            String token = clean(task.getResult());
-            if (!token.isEmpty()) queueUpsert(app, expected.userId, token, false);
+            // onRegistered() supplies the current FID and performs the authenticated upload.
         });
     }
 
-    private static void queueUpsert(Context app, String expectedOwner, String token, boolean retryAfterConflict) {
-        String applicationId = app.getPackageName();
-        String tokenHash = tokenHash(token);
-        SharedPreferences prefs = prefs(app);
-        long lastSyncAt = prefs.getLong(KEY_LAST_SYNC_AT, 0L);
-        boolean freshRegistration = lastSyncAt > 0L
-                && System.currentTimeMillis() - lastSyncAt < REFRESH_REGISTRATION_MS;
-        if (!retryAfterConflict
-                && freshRegistration
-                && expectedOwner.equals(clean(prefs.getString(KEY_LAST_OWNER, "")))
-                && applicationId.equals(clean(prefs.getString(KEY_LAST_APP, "")))
-                && tokenHash.equals(clean(prefs.getString(KEY_LAST_TOKEN_HASH, "")))) {
-            return;
-        }
-
+    private static void queueUpsert(
+            Context app,
+            String expectedOwner,
+            String firebaseInstallationId,
+            boolean allowConflictRotation
+    ) {
         NETWORK.execute(() -> {
             SessionCredentials current = sessionCredentials(ZeroChillSessionStore.read(app));
             if (current == null || !expectedOwner.equals(current.userId)) return;
-            int status = upsertRegistration(app, current, installationId(app), applicationId, token);
-            if (status >= 200 && status < 300) {
-                prefs.edit()
-                        .putString(KEY_LAST_OWNER, current.userId)
-                        .putString(KEY_LAST_APP, applicationId)
-                        .putString(KEY_LAST_TOKEN_HASH, tokenHash)
-                        .putLong(KEY_LAST_SYNC_AT, System.currentTimeMillis())
-                        .apply();
-            } else if (status == 409 && !retryAfterConflict) {
-                // A token left behind by an interrupted logout must never remain shared by accounts.
-                prefs.edit().putBoolean(KEY_TOKEN_RESET_PENDING, true).apply();
-                resetFirebaseToken(app);
+            if (prefs(app).getBoolean(KEY_REGISTRATION_SUSPENDED, false)) return;
+
+            int status = upsertRegistration(
+                    current,
+                    installationId(app),
+                    app.getPackageName(),
+                    firebaseInstallationId
+            );
+            if (status == 409 && allowConflictRotation) {
+                // If a prior account's best-effort server cleanup failed, create a new FID so
+                // the shared device can never inherit that account's direct-send registration.
+                invalidateFirebaseInstallation(app, true);
             }
         });
     }
 
     private static int upsertRegistration(
-            Context app,
             SessionCredentials credentials,
             String installationId,
             String applicationId,
-            String token
+            String firebaseInstallationId
     ) {
         HttpURLConnection connection = null;
         try {
@@ -165,7 +148,7 @@ final class ZeroChillPushRegistration {
                     .put("user_id", credentials.userId)
                     .put("installation_id", installationId)
                     .put("application_id", applicationId)
-                    .put("fcm_token", token)
+                    .put("firebase_installation_id", firebaseInstallationId)
                     .put("updated_at", Instant.now().toString());
             String path = "/rest/v1/push_device_tokens?on_conflict=user_id%2Cinstallation_id%2Capplication_id";
             connection = open("POST", path, credentials.accessToken);
@@ -188,41 +171,50 @@ final class ZeroChillPushRegistration {
     }
 
     private static void deleteRegistration(
-            Context app,
             SessionCredentials credentials,
             String installationId,
             String applicationId
     ) {
         if (!configured()) return;
-        HttpURLConnection connection = null;
-        try {
-            String path = "/rest/v1/push_device_tokens"
-                    + "?user_id=eq." + encode(credentials.userId)
-                    + "&installation_id=eq." + encode(installationId)
-                    + "&application_id=eq." + encode(applicationId);
-            connection = open("DELETE", path, credentials.accessToken);
-            connection.setRequestProperty("Prefer", "return=minimal");
-            int status = connection.getResponseCode();
-            closeResponse(connection, status);
-        } catch (Exception ignored) {
-            // The Firebase token is rotated separately, so a failed cleanup cannot leak future pushes.
-        } finally {
-            if (connection != null) connection.disconnect();
+        for (int attempt = 0; attempt < 3; attempt++) {
+            HttpURLConnection connection = null;
+            try {
+                String path = "/rest/v1/push_device_tokens"
+                        + "?user_id=eq." + encode(credentials.userId)
+                        + "&installation_id=eq." + encode(installationId)
+                        + "&application_id=eq." + encode(applicationId);
+                connection = open("DELETE", path, credentials.accessToken);
+                connection.setRequestProperty("Prefer", "return=minimal");
+                int status = connection.getResponseCode();
+                closeResponse(connection, status);
+                if (status >= 200 && status < 300) return;
+            } catch (Exception ignored) {
+            } finally {
+                if (connection != null) connection.disconnect();
+            }
+            try {
+                Thread.sleep(250L * (attempt + 1));
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+                return;
+            }
         }
     }
 
-    private static void resetFirebaseToken(Context app) {
-        FirebaseMessaging.getInstance().deleteToken().addOnCompleteListener(task -> {
-            if (!task.isSuccessful()) return;
-            prefs(app).edit().putBoolean(KEY_TOKEN_RESET_PENDING, false).apply();
-            SessionCredentials current = sessionCredentials(ZeroChillSessionStore.read(app));
-            if (current == null) return;
-            FirebaseMessaging.getInstance().getToken().addOnCompleteListener(tokenTask -> {
-                if (!tokenTask.isSuccessful()) return;
-                String token = clean(tokenTask.getResult());
-                if (!token.isEmpty()) queueUpsert(app, current.userId, token, true);
-            });
-        });
+    private static void invalidateFirebaseInstallation(Context app, boolean registerAgain) {
+        SharedPreferences prefs = prefs(app);
+        if (registerAgain && prefs.getBoolean(KEY_ROTATION_IN_PROGRESS, false)) return;
+        prefs.edit().putBoolean(KEY_ROTATION_IN_PROGRESS, true).apply();
+
+        FirebaseMessaging.getInstance().unregister().addOnCompleteListener(unregisterTask ->
+                FirebaseInstallations.getInstance().delete().addOnCompleteListener(deleteTask -> {
+                    prefs.edit().putBoolean(KEY_ROTATION_IN_PROGRESS, false).apply();
+                    if (!registerAgain) return;
+                    if (prefs.getBoolean(KEY_REGISTRATION_SUSPENDED, false)) return;
+                    if (sessionCredentials(ZeroChillSessionStore.read(app)) == null) return;
+                    registerWithFirebase(app);
+                })
+        );
     }
 
     private static HttpURLConnection open(String method, String path, String accessToken) throws Exception {
@@ -258,16 +250,10 @@ final class ZeroChillPushRegistration {
         return context.getApplicationContext().getSharedPreferences(PREFS, Context.MODE_PRIVATE);
     }
 
-    private static String tokenHash(String token) {
-        try {
-            byte[] digest = MessageDigest.getInstance("SHA-256")
-                    .digest(token.getBytes(StandardCharsets.UTF_8));
-            StringBuilder result = new StringBuilder(digest.length * 2);
-            for (byte part : digest) result.append(String.format(Locale.US, "%02x", part & 0xff));
-            return result.toString();
-        } catch (Exception ignored) {
-            return "";
-        }
+    private static boolean validFirebaseInstallationId(String value) {
+        String clean = clean(value);
+        return clean.length() >= 20 && clean.length() <= 256
+                && clean.matches("[A-Za-z0-9_\\-:.]+$" );
     }
 
     private static String encode(String value) {
