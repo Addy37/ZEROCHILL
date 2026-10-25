@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "817133922444",
+    "project_id": "zerochill-7978c",
+    "storage_bucket": "zerochill-7978c.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:817133922444:android:d82bd90d8f3794eb48f3a9",
+        "android_client_info": {
+          "package_name": "com.addy37.crazyshitunofficial"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBJgVID_JEpMtNWevEJD5gdjBK5NwtrENY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:817133922444:android:61c93a037f2ed24348f3a9",
+        "android_client_info": {
+          "package_name": "com.addy37.crazyshitunofficial.dev"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBJgVID_JEpMtNWevEJD5gdjBK5NwtrENY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
