@@ -6,6 +6,7 @@ import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.os.SystemClock;
 import android.view.Gravity;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewParent;
@@ -21,21 +22,25 @@ final class XMegaDriveAgePrompt {
     static final String TAG_CONTINUE = "xmegadrive_age_prompt_continue";
     static final String TAG_CANCEL = "xmegadrive_age_prompt_cancel";
 
+    interface ContinueBoundsCallback {
+        void onBounds(int left, int top, int width, int height);
+    }
+
     private final Activity activity;
-    private final Runnable onContinue;
+    private final Runnable onContinueGesture;
     private final Runnable onCancel;
-    private final FrameLayout root;
+    private final PassThroughRoot root;
     private final TextView continueButton;
     private final AtomicBoolean continuePressed = new AtomicBoolean();
     private final AtomicBoolean rawFallbackShown = new AtomicBoolean();
     private volatile long continuePressedAtMs;
 
-    XMegaDriveAgePrompt(Activity activity, Runnable onContinue, Runnable onCancel) {
+    XMegaDriveAgePrompt(Activity activity, Runnable onContinueGesture, Runnable onCancel) {
         this.activity = activity;
-        this.onContinue = onContinue;
+        this.onContinueGesture = onContinueGesture;
         this.onCancel = onCancel;
 
-        root = new FrameLayout(activity);
+        root = new PassThroughRoot(activity);
         root.setBackgroundColor(activity.getColor(R.color.zc_scrim));
         root.setClickable(true);
         root.setFocusable(true);
@@ -79,11 +84,15 @@ final class XMegaDriveAgePrompt {
         bodyParams.topMargin = dp(activity, 12);
         card.addView(body, bodyParams);
 
-        continueButton = text(activity, "CONTINUE", 16,
+        continueButton = text(activity, "PREPARING…", 16,
                 activity.getColor(R.color.app_on_primary), Typeface.BOLD);
         continueButton.setTag(TAG_CONTINUE);
         continueButton.setGravity(Gravity.CENTER);
         continueButton.setMinHeight(dp(activity, 52));
+        continueButton.setEnabled(false);
+        continueButton.setClickable(false);
+        continueButton.setFocusable(false);
+        continueButton.setAlpha(0.78f);
         continueButton.setBackground(rounded(
                 activity,
                 activity.getColor(R.color.zc_cyan),
@@ -91,17 +100,11 @@ final class XMegaDriveAgePrompt {
                 0,
                 18
         ));
-        continueButton.setOnClickListener(view -> {
-            if (!continuePressed.compareAndSet(false, true)) return;
-            continuePressedAtMs = SystemClock.elapsedRealtime();
-            continueButton.setEnabled(false);
-            continueButton.setAlpha(0.78f);
-            continueButton.setText("VERIFYING…");
-            if (onContinue != null) onContinue.run();
-        });
         LinearLayout.LayoutParams continueParams = matchWidthWrap();
         continueParams.topMargin = dp(activity, 22);
         card.addView(continueButton, continueParams);
+        root.setPassThroughView(continueButton);
+        root.setOnPassThroughDown(this::markContinuePressed);
 
         TextView note = text(
                 activity,
@@ -157,8 +160,27 @@ final class XMegaDriveAgePrompt {
         }
     }
 
+    void armPhysicalContinue() {
+        if (continuePressed.get() || rawFallbackShown.get()) return;
+        continueButton.setText("CONTINUE");
+        continueButton.setEnabled(true);
+        continueButton.setAlpha(1f);
+        root.setPassThroughEnabled(true);
+    }
+
+    void postContinueBounds(ContinueBoundsCallback callback) {
+        if (callback == null) return;
+        continueButton.post(() -> {
+            if (continueButton.getWidth() <= 0 || continueButton.getHeight() <= 0) return;
+            int[] location = new int[2];
+            continueButton.getLocationOnScreen(location);
+            callback.onBounds(location[0], location[1], continueButton.getWidth(), continueButton.getHeight());
+        });
+    }
+
     void showRawFallback() {
         rawFallbackShown.set(true);
+        root.setPassThroughEnabled(false);
         dismiss();
     }
 
@@ -178,6 +200,16 @@ final class XMegaDriveAgePrompt {
 
     View rootForTest() {
         return root;
+    }
+
+    private void markContinuePressed() {
+        if (!continuePressed.compareAndSet(false, true)) return;
+        continuePressedAtMs = SystemClock.elapsedRealtime();
+        root.setPassThroughEnabled(false);
+        continueButton.setEnabled(false);
+        continueButton.setAlpha(0.78f);
+        continueButton.setText("VERIFYING…");
+        if (onContinueGesture != null) onContinueGesture.run();
     }
 
     private static TextView text(Context context, String value, float sp, int color, int style) {
@@ -219,5 +251,56 @@ final class XMegaDriveAgePrompt {
 
     private static int dp(Context context, int value) {
         return Math.round(value * context.getResources().getDisplayMetrics().density);
+    }
+
+    private static final class PassThroughRoot extends FrameLayout {
+        private View passThroughView;
+        private Runnable onPassThroughDown;
+        private boolean passThroughEnabled;
+
+        PassThroughRoot(Context context) {
+            super(context);
+        }
+
+        void setPassThroughView(View view) {
+            passThroughView = view;
+        }
+
+        void setOnPassThroughDown(Runnable callback) {
+            onPassThroughDown = callback;
+        }
+
+        void setPassThroughEnabled(boolean enabled) {
+            passThroughEnabled = enabled;
+        }
+
+        @Override
+        public boolean dispatchTouchEvent(MotionEvent event) {
+            if (passThroughEnabled && event != null && isInsidePassThroughView(event)) {
+                if (event.getActionMasked() == MotionEvent.ACTION_DOWN && onPassThroughDown != null) {
+                    onPassThroughDown.run();
+                }
+                // Returning false on ACTION_DOWN lets the DecorView continue hit-testing
+                // lower siblings. The underlying aligned WebView then owns the original
+                // physical gesture for the rest of the pointer stream.
+                return false;
+            }
+            return super.dispatchTouchEvent(event);
+        }
+
+        private boolean isInsidePassThroughView(MotionEvent event) {
+            View target = passThroughView;
+            if (target == null || target.getWidth() <= 0 || target.getHeight() <= 0) return false;
+            int[] rootLocation = new int[2];
+            int[] targetLocation = new int[2];
+            getLocationOnScreen(rootLocation);
+            target.getLocationOnScreen(targetLocation);
+            float left = targetLocation[0] - rootLocation[0];
+            float top = targetLocation[1] - rootLocation[1];
+            float x = event.getX();
+            float y = event.getY();
+            return x >= left && x <= left + target.getWidth()
+                    && y >= top && y <= top + target.getHeight();
+        }
     }
 }
