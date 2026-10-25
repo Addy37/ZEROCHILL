@@ -20,6 +20,7 @@ import java.util.Locale;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 /** Keeps the current account's FCM token registered without exposing account credentials to Firebase. */
 final class ZeroChillPushRegistration {
@@ -28,7 +29,9 @@ final class ZeroChillPushRegistration {
     private static final String KEY_LAST_OWNER = "last_owner";
     private static final String KEY_LAST_APP = "last_app";
     private static final String KEY_LAST_TOKEN_HASH = "last_token_hash";
+    private static final String KEY_LAST_SYNC_AT = "last_sync_at";
     private static final String KEY_TOKEN_RESET_PENDING = "token_reset_pending";
+    private static final long REFRESH_REGISTRATION_MS = TimeUnit.HOURS.toMillis(24);
     private static final ExecutorService NETWORK = Executors.newSingleThreadExecutor();
 
     private ZeroChillPushRegistration() { }
@@ -60,6 +63,7 @@ final class ZeroChillPushRegistration {
                 .remove(KEY_LAST_OWNER)
                 .remove(KEY_LAST_APP)
                 .remove(KEY_LAST_TOKEN_HASH)
+                .remove(KEY_LAST_SYNC_AT)
                 .apply();
 
         String installationId = installationId(app);
@@ -118,7 +122,11 @@ final class ZeroChillPushRegistration {
         String applicationId = app.getPackageName();
         String tokenHash = tokenHash(token);
         SharedPreferences prefs = prefs(app);
+        long lastSyncAt = prefs.getLong(KEY_LAST_SYNC_AT, 0L);
+        boolean freshRegistration = lastSyncAt > 0L
+                && System.currentTimeMillis() - lastSyncAt < REFRESH_REGISTRATION_MS;
         if (!retryAfterConflict
+                && freshRegistration
                 && expectedOwner.equals(clean(prefs.getString(KEY_LAST_OWNER, "")))
                 && applicationId.equals(clean(prefs.getString(KEY_LAST_APP, "")))
                 && tokenHash.equals(clean(prefs.getString(KEY_LAST_TOKEN_HASH, "")))) {
@@ -134,6 +142,7 @@ final class ZeroChillPushRegistration {
                         .putString(KEY_LAST_OWNER, current.userId)
                         .putString(KEY_LAST_APP, applicationId)
                         .putString(KEY_LAST_TOKEN_HASH, tokenHash)
+                        .putLong(KEY_LAST_SYNC_AT, System.currentTimeMillis())
                         .apply();
             } else if (status == 409 && !retryAfterConflict) {
                 // A token left behind by an interrupted logout must never remain shared by accounts.
@@ -159,7 +168,7 @@ final class ZeroChillPushRegistration {
                     .put("fcm_token", token)
                     .put("updated_at", Instant.now().toString());
             String path = "/rest/v1/push_device_tokens?on_conflict=user_id%2Cinstallation_id%2Capplication_id";
-            connection = open(app, "POST", path, credentials.accessToken);
+            connection = open("POST", path, credentials.accessToken);
             connection.setRequestProperty("Content-Type", "application/json");
             connection.setRequestProperty("Prefer", "resolution=merge-duplicates,return=minimal");
             byte[] bytes = body.toString().getBytes(StandardCharsets.UTF_8);
@@ -191,7 +200,7 @@ final class ZeroChillPushRegistration {
                     + "?user_id=eq." + encode(credentials.userId)
                     + "&installation_id=eq." + encode(installationId)
                     + "&application_id=eq." + encode(applicationId);
-            connection = open(app, "DELETE", path, credentials.accessToken);
+            connection = open("DELETE", path, credentials.accessToken);
             connection.setRequestProperty("Prefer", "return=minimal");
             int status = connection.getResponseCode();
             closeResponse(connection, status);
@@ -216,7 +225,7 @@ final class ZeroChillPushRegistration {
         });
     }
 
-    private static HttpURLConnection open(Context app, String method, String path, String accessToken) throws Exception {
+    private static HttpURLConnection open(String method, String path, String accessToken) throws Exception {
         String base = clean(BuildConfig.ACCOUNT_SUPABASE_URL);
         while (base.endsWith("/")) base = base.substring(0, base.length() - 1);
         HttpURLConnection connection = (HttpURLConnection) new URL(base + path).openConnection();
