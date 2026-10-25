@@ -15,6 +15,3 @@ verify_jwt = true
 
 [functions.push-dispatch]
 verify_jwt = false
-
-[functions.notification-test-bot]
-verify_jwt = false
