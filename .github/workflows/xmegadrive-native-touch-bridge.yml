@@ -2,8 +2,8 @@ name: Apply XMegaDrive Native Touch Bridge
 
 on:
   push:
-    branches: [ feature/zerochill-notifications-5.3.0 ]
-  workflow_dispatch:
+    branches:
+      - feature/zerochill-notifications-5.3.0
 
 permissions:
   contents: write
@@ -12,180 +12,37 @@ jobs:
   patch:
     runs-on: ubuntu-latest
     steps:
-      - name: Check out feature branch
-        uses: actions/checkout@v6
+      - uses: actions/checkout@v6
         with:
           ref: feature/zerochill-notifications-5.3.0
           fetch-depth: 0
 
-      - name: Set up Java 17
-        uses: actions/setup-java@v5
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+      - uses: android-actions/setup-android@v3
 
-      - name: Install Android APIs 35 and 36
-        run: sdkmanager "platforms;android-35" "platforms;android-36" "build-tools;35.0.0"
+      - run: sdkmanager "platforms;android-35" "platforms;android-36" "build-tools;35.0.0"
 
-      - name: Set up Gradle 8.11.1
-        uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.11.1'
 
-      - name: Replace Enter bridge with native WebView touch
-        shell: bash
+      - name: Patch source and test
+        env:
+          PATCH_B64: CmZyb20gcGF0aGxpYiBpbXBvcnQgUGF0aAppbXBvcnQgcmUKCnBhdGggPSBQYXRoKCJhcHAvc3JjL21haW4vamF2YS9jb20vd2ViYXBwL2NyYXp5c2hpdC9YTWVnYURyaXZlQnJvd3NlckZldGNoLmphdmEiKQp0ZXh0ID0gcGF0aC5yZWFkX3RleHQoKQpwYXR0ZXJuID0gcmUuY29tcGlsZSgKICAgIHIiICAgIHN0YXRpYyBTdHJpbmcgYWdlR2F0ZU5hdGl2ZUZvY3VzU2NyaXB0XChcKSBcey4qP1xuICAgIFx9XG5cbiIKICAgIHIiICAgIHByaXZhdGUgc3RhdGljIHZvaWQgdHJpZ2dlck5hdGl2ZUFnZUNvbnRpbnVlXChXZWJWaWV3IHdlYlZpZXdcKSBcey4qP1xuICAgIFx9XG5cbiIKICAgIHIiICAgIHByaXZhdGUgc3RhdGljIFhNZWdhRHJpdmVBZ2VQcm9tcHQgYWdlUHJvbXB0IiwKICAgIHJlLlMsCikKcmVwbGFjZW1lbnQgPSByJycnICAgIHN0YXRpYyBTdHJpbmcgYWdlR2F0ZU5hdGl2ZVRhcFRhcmdldFNjcmlwdCgpIHsKICAgICAgICByZXR1cm4gIigoKSA9PiB7IgogICAgICAgICAgICAgICAgKyAiY29uc3Qgbm9ybT1zPT5TdHJpbmcoc3x8JycpLnJlcGxhY2UoU3RyaW5nLmZyb21DaGFyQ29kZSg4MjE3KSxcIidcIikucmVwbGFjZSgvXFxzKy9nLCcgJykudHJpbSgpLnRvTG93ZXJDYXNlKCk7IgogICAgICAgICAgICAgICAgKyAiY29uc3QgZGVjbGluZT1zPT4vXFxiKGV4aXR8bGVhdmV8ZGVjbGluZSlcXGIvLnRlc3Qocyl8fC91bmRlclxccyoxOC8udGVzdChzKSIKICAgICAgICAgICAgICAgICsgInx8L1xcYmkoPDonbXwgYW18bSkgbm90XFxiLy50ZXN0KHMpfHxzPT09J25vJ3x8cz09PSdubyB0aGFua3MnfHxzPT09J25vdCAxOCc7IgogICAgICAgICAgICAgICAgKyAiY29uc3QgYWNjZXB0PXM9PiEhcyYmIWRlY2xpbmUocykmJigvXFxiY29udGludWVcXGIvLnRlc3Qocyl8fC9cXGJlbnRlclxcYi8udGVzdChzKSIKICAgICAgICAgICAgICAgICsgInx8cz09PSd5ZXMnfHwvXFxiaSg/OidtfCBhbXxtKSAxOFxcYi8udGVzdChzKSk7IgogICAgICAgICAgICAgICAgKyAiY29uc3QgYm9keT0oZG9jdW1lbnQuYm9keSYmZG9jdW1lbnQuYm9keS5pbm5lclRleHQpfHwnJztpZighL2FnZSBjb25maXJtYXRpb24vaS50ZXN0KGJvZHkpKXJldHVybiAnJzsiCiAgICAgICAgICAgICAgICArICJjb25zdCBjb250cm9scz1kb2N1bWVudC5xdWVyeVNlbGVjdG9yQWxsKCdidXR0b24saW5wdXRbdHlwZT1cXFwiYnV0dG9uXFxcIl0saW5wdXRbdHlwZT1cXFwic3VibWl0XFxcIl0sYSxbcm9sZT1cXFwiYnV0dG9uXFxcIl0nKTsiCiAgICAgICAgICAgICAgICArICJjb25zdCBsYWJlbD1lbD0+bm9ybShlbC5pbm5lclRleHR8fGVsLnRleHRDb250ZW50fHxlbC52YWx1ZXx8ZWwuZ2V0QXR0cmlidXRlKCd2YWx1ZScpfHxlbC5nZXRBdHRyaWJ1dGUoJ2FyaWEtbGFiZWwnKXx8JycpOyIKICAgICAgICAgICAgICAgICsgImZvcihsZXQgaT0wO2k8Y29udHJvbHMubGVuZ3RoO2krKyl7Y29uc3QgZWw9Y29udHJvbHNbaV07aWYoIWRlY2xpbmUobGFiZWwoZWwpKSljb250aW51ZTsiCiAgICAgICAgICAgICAgICArICJlbC5zdHlsZS5kaXNwbGF5PSdub25lJztlbC5zZXRBdHRyaWJ1dGUoJ2FyaWEtaGlkZGVuJywndHJ1ZScpO2VsLnNldEF0dHJpYnV0ZSgndGFiaW5kZXgnLCctMScpOyIKICAgICAgICAgICAgICAgICsgInRyeXtpZignZGlzYWJsZWQnIGluIGVsKWVsLmRpc2FibGVkPXRydWU7fWNhdGNoKGUpe319IgogICAgICAgICAgICAgICAgKyAiZm9yKGxldCBpPTA7aTxjb250cm9scy5sZW5ndGg7aSsrKXtjb25zdCBlbD1jb250cm9sc1tpXTtpZighYWNjZXB0KGxhYmVsKGVsKSkpY29udGludWU7IgogICAgICAgICAgICAgICAgKyAidHJ5e2VsLnNjcm9sbEludG9WaWV3KHtibG9jazonY2VudGVyJyxpbmxpbmU6J2NlbnRlcid9KTt9Y2F0Y2goZSl7fSIKICAgICAgICAgICAgICAgICsgImNvbnN0IHI9ZWwuZ2V0Qm91bmRpbmdDbGllbnRSZWN0KCk7aWYoIXJ8fHIud2lkdGg8PTB8fHIuaGVpZ2h0PD0wKXJldHVybiAnJzsiCiAgICAgICAgICAgICAgICArICJyZXR1cm4gSlNPTi5zdHJpbmdpZnkoe3g6ci5sZWZ0K3Iud2lkdGgvMix5OnIudG9wK3IuaGVpZ2h0LzIsdnc6d2luZG93LmlubmVyV2lkdGh8fDAsdmg6d2luZG93LmlubmVySGVpZ2h0fHwwfSk7fSIKICAgICAgICAgICAgICAgICsgInJldHVybiAnJzt9KSgpIjsKICAgIH0KCiAgICBwcml2YXRlIHN0YXRpYyB2b2lkIHRyaWdnZXJOYXRpdmVBZ2VDb250aW51ZShXZWJWaWV3IHdlYlZpZXcpIHsKICAgICAgICBpZiAod2ViVmlldyA9PSBudWxsKSByZXR1cm47CiAgICAgICAgdHJ5IHsKICAgICAgICAgICAgd2ViVmlldy5yZXF1ZXN0Rm9jdXMoKTsKICAgICAgICAgICAgd2ViVmlldy5ldmFsdWF0ZUphdmFzY3JpcHQoYWdlR2F0ZU5hdGl2ZVRhcFRhcmdldFNjcmlwdCgpLCBlbmNvZGVkIC0+IHsKICAgICAgICAgICAgICAgIHRyeSB7CiAgICAgICAgICAgICAgICAgICAgT2JqZWN0IGRlY29kZWQgPSBuZXcgSlNPTlRva2VuZXIoZW5jb2RlZCA9PSBudWxsID8gIm51bGwiIDogZW5jb2RlZCkubmV4dFZhbHVlKCk7CiAgICAgICAgICAgICAgICAgICAgaWYgKCEoZGVjb2RlZCBpbnN0YW5jZW9mIFN0cmluZykgfHwgKChTdHJpbmcpIGRlY29kZWQpLnRyaW0oKS5pc0VtcHR5KCkpIHJldHVybjsKICAgICAgICAgICAgICAgICAgICBKU09OT2JqZWN0IHRhcmdldCA9IG5ldyBKU09OT2JqZWN0KChTdHJpbmcpIGRlY29kZWQpOwogICAgICAgICAgICAgICAgICAgIGRvdWJsZSBjc3NYID0gdGFyZ2V0Lm9wdERvdWJsZSgieCIsIC0xZCk7CiAgICAgICAgICAgICAgICAgICAgZG91YmxlIGNzc1kgPSB0YXJnZXQub3B0RG91YmxlKCJ5IiwgLTFkKTsKICAgICAgICAgICAgICAgICAgICBkb3VibGUgdmlld3BvcnRXaWR0aCA9IHRhcmdldC5vcHREb3VibGUoInZ3IiwgMGQpOwogICAgICAgICAgICAgICAgICAgIGRvdWJsZSB2aWV3cG9ydEhlaWdodCA9IHRhcmdldC5vcHREb3VibGUoInZoIiwgMGQpOwogICAgICAgICAgICAgICAgICAgIGludCB2aWV3V2lkdGggPSB3ZWJWaWV3LmdldFdpZHRoKCk7CiAgICAgICAgICAgICAgICAgICAgaW50IHZpZXdIZWlnaHQgPSB3ZWJWaWV3LmdldEhlaWdodCgpOwogICAgICAgICAgICAgICAgICAgIGlmIChjc3NYIDwgMGQgfHwgY3NzWSA8IDBkIHx8IHZpZXdwb3J0V2lkdGggPD0gMGQgfHwgdmlld3BvcnRIZWlnaHQgPD0gMGQKICAgICAgICAgICAgICAgICAgICAgICAgICAgIHx8IHZpZXdXaWR0aCA8PSAxIHx8IHZpZXdIZWlnaHQgPD0gMSkgcmV0dXJuOwogICAgICAgICAgICAgICAgICAgIGZpbmFsIGZsb2F0IHRhcFggPSBNYXRoLm1heCgxZiwgTWF0aC5taW4odmlld1dpZHRoIC0gMWYsCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAoZmxvYXQpIChjc3NYICogdmlld1dpZHRoIC8gdmlld3BvcnRXaWR0aCkpKTsKICAgICAgICAgICAgICAgICAgICBmaW5hbCBmbG9hdCB0YXBZID0gTWF0aC5tYXgoMWYsIE1hdGgubWluKHZpZXdIZWlnaHQgLSAxZiwKICAgICAgICAgICAgICAgICAgICAgICAgICAgIChmbG9hdCkgKGNzc1kgKiB2aWV3SGVpZ2h0IC8gdmlld3BvcnRIZWlnaHQpKSk7CiAgICAgICAgICAgICAgICAgICAgd2ViVmlldy5wb3N0KCgpIC0+IGRpc3BhdGNoTmF0aXZlVGFwKHdlYlZpZXcsIHRhcFgsIHRhcFkpKTsKICAgICAgICAgICAgICAgIH0gY2F0Y2ggKEV4Y2VwdGlvbiBpZ25vcmVkKSB7CiAgICAgICAgICAgICAgICB9CiAgICAgICAgICAgIH0pOwogICAgICAgIH0gY2F0Y2ggKEV4Y2VwdGlvbiBpZ25vcmVkKSB7CiAgICAgICAgfQogICAgfQoKICAgIHByaXZhdGUgc3RhdGljIHZvaWQgZGlzcGF0Y2hOYXRpdmVUYXAoV2ViVmlldyB3ZWJWaWV3LCBmbG9hdCB4LCBmbG9hdCB5KSB7CiAgICAgICAgaWYgKHdlYlZpZXcgPT0gbnVsbCkgcmV0dXJuOwogICAgICAgIGxvbmcgZG93blRpbWUgPSBhbmRyb2lkLm9zLlN5c3RlbUNsb2NrLnVwdGltZU1pbGxpcygpOwogICAgICAgIGFuZHJvaWQudmlldy5Nb3Rpb25FdmVudCBkb3duID0gYW5kcm9pZC52aWV3Lk1vdGlvbkV2ZW50Lm9idGFpbigKICAgICAgICAgICAgICAgIGRvd25UaW1lLAogICAgICAgICAgICAgICAgZG93blRpbWUsCiAgICAgICAgICAgICAgICBhbmRyb2lkLnZpZXcuTW90aW9uRXZlbnQuQUNUSU9OX0RPV04sCiAgICAgICAgICAgICAgICB4LAogICAgICAgICAgICAgICAgeSwKICAgICAgICAgICAgICAgIDAKICAgICAgICApOwogICAgICAgIHRyeSB7CiAgICAgICAgICAgIHdlYlZpZXcuZGlzcGF0Y2hUb3VjaEV2ZW50KGRvd24pOwogICAgICAgIH0gZmluYWxseSB7CiAgICAgICAgICAgIGRvd24ucmVjeWNsZSgpOwogICAgICAgIH0KICAgICAgICB3ZWJWaWV3LnBvc3REZWxheWVkKCgpIC0+IHsKICAgICAgICAgICAgbG9uZyB1cFRpbWUgPSBhbmRyb2lkLm9zLlN5c3RlbUNsb2NrLnVwdGltZU1pbGxpcygpOwogICAgICAgICAgICBhbmRyb2lkLnZpZXcuTW90aW9uRXZlbnQgdXAgPSBhbmRyb2lkLnZpZXcuTW90aW9uRXZlbnQub2J0YWluKAogICAgICAgICAgICAgICAgICAgIGRvd25UaW1lLAogICAgICAgICAgICAgICAgICAgIHVwVGltZSwKICAgICAgICAgICAgICAgICAgICBhbmRyb2lkLnZpZXcuTW90aW9uRXZlbnQuQUNUSU9OX1VQLAogICAgICAgICAgICAgICAgICAgIHgsCiAgICAgICAgICAgICAgICAgICAgeSwKICAgICAgICAgICAgICAgICAgICAwCiAgICAgICAgICAgICk7CiAgICAgICAgICAgIHRyeSB7CiAgICAgICAgICAgICAgICB3ZWJWaWV3LmRpc3BhdGNoVG91Y2hFdmVudCh1cCk7CiAgICAgICAgICAgIH0gZmluYWxseSB7CiAgICAgICAgICAgICAgICB1cC5yZWN5Y2xlKCk7CiAgICAgICAgICAgIH0KICAgICAgICB9LCA3MkwpOwogICAgfQoKICAgIHByaXZhdGUgc3RhdGljIFhNZWdhRHJpdmVBZ2VQcm9tcHQgYWdlUHJvbXB0JycnCnVwZGF0ZWQsIGNvdW50ID0gcGF0dGVybi5zdWJuKHJlcGxhY2VtZW50LCB0ZXh0LCBjb3VudD0xKQppZiBjb3VudCAhPSAxOgogICAgcmFpc2UgU3lzdGVtRXhpdChmIkV4cGVjdGVkIG9uZSBuYXRpdmUgYWdlIGJyaWRnZSBibG9jaywgcmVwbGFjZWQge2NvdW50fSIpCnBhdGgud3JpdGVfdGV4dCh1cGRhdGVkKQoKdGVzdF9wYXRoID0gUGF0aCgiYXBwL3NyYy90ZXN0L2phdmEvY29tL3dlYmFwcC9jcmF6eXNoaXQvWE1lZ2FEcml2ZUFnZUdhdGVTYWZldHlUZXN0LmphdmEiKQp0ZXN0ID0gdGVzdF9wYXRoLnJlYWRfdGV4dCgpCm9sZCA9ICcnJyAgICBAVGVzdCBwdWJsaWMgdm9pZCBuYXRpdmVQcm9tcHRGb2N1c2VzQWNjZXB0Q29udHJvbFdpdGhvdXRTeW50aGV0aWNDbGljaygpIHsKICAgICAgICBTdHJpbmcgc2NyaXB0ID0gWE1lZ2FEcml2ZUJyb3dzZXJGZXRjaC5hZ2VHYXRlTmF0aXZlRm9jdXNTY3JpcHQoKTsKICAgICAgICBhc3NlcnRUcnVlKHNjcmlwdC5jb250YWlucygic3R5bGUuZGlzcGxheT0nbm9uZSciKSk7CiAgICAgICAgYXNzZXJ0VHJ1ZShzY3JpcHQuY29udGFpbnMoImFyaWEtaGlkZGVuIikpOwogICAgICAgIGFzc2VydFRydWUoc2NyaXB0LmNvbnRhaW5zKCJkaXNhYmxlZCIpKTsKICAgICAgICBhc3NlcnRUcnVlKHNjcmlwdC5jb250YWlucygic2Nyb2xsSW50b1ZpZXciKSk7CiAgICAgICAgYXNzZXJ0VHJ1ZShzY3JpcHQuY29udGFpbnMoImZvY3VzIikpOwogICAgICAgIGFzc2VydFRydWUoc2NyaXB0LmNvbnRhaW5zKCJkb2N1bWVudC5hY3RpdmVFbGVtZW50PT09ZWwiKSk7CiAgICAgICAgYXNzZXJ0VHJ1ZShzY3JpcHQuY29udGFpbnMoIlxcXFxiKGV4aXR8bGVhdmV8ZGVjbGluZSlcXFxcYiIpKTsKICAgICAgICBhc3NlcnRUcnVlKHNjcmlwdC5jb250YWlucygiaSg/OidtfCBhbXxtKSAxOCIpKTsKICAgICAgICBhc3NlcnRGYWxzZShzY3JpcHQuY29udGFpbnMoImVsLmNsaWNrKCkiKSk7CiAgICB9CicnJwpuZXcgPSAnJycgICAgQFRlc3QgcHVibGljIHZvaWQgbmF0aXZlUHJvbXB0TG9jYXRlc0FjY2VwdENvbnRyb2xGb3JBbmRyb2lkVG91Y2hXaXRob3V0U3ludGhldGljQ2xpY2soKSB7CiAgICAgICAgU3RyaW5nIHNjcmlwdCA9IFhNZWdhRHJpdmVCcm93c2VyRmV0Y2guYWdlR2F0ZU5hdGl2ZVRhcFRhcmdldFNjcmlwdCgpOwogICAgICAgIGFzc2VydFRydWUoc2NyaXB0LmNvbnRhaW5zKCJzdHlsZS5kaXNwbGF5PSdub25lJyIpKTsKICAgICAgICBhc3NlcnRUcnVlKHNjcmlwdC5jb250YWlucygiYXJpYS1oaWRkZW4iKSk7CiAgICAgICAgYXNzZXJ0VHJ1ZShzY3JpcHQuY29udGFpbnMoImRpc2FibGVkIikpOwogICAgICAgIGFzc2VydFRydWUoc2NyaXB0LmNvbnRhaW5zKCJzY3JvbGxJbnRvVmlldyIpKTsKICAgICAgICBhc3NlcnRUcnVlKHNjcmlwdC5jb250YWlucygiZ2V0Qm91bmRpbmdDbGllbnRSZWN0IikpOwogICAgICAgIGFzc2VydFRydWUoc2NyaXB0LmNvbnRhaW5zKCJ3aW5kb3cuaW5uZXJXaWR0aCIpKTsKICAgICAgICBhc3NlcnRUcnVlKHNjcmlwdC5jb250YWlucygid2luZG93LmlubmVySGVpZ2h0IikpOwogICAgICAgIGFzc2VydFRydWUoc2NyaXB0LmNvbnRhaW5zKCJKU09OLnN0cmluZ2lmeSIpKTsKICAgICAgICBhc3NlcnRUcnVlKHNjcmlwdC5jb250YWlucygiXFxcXGIoZXhpdHxsZWF2ZXxkZWNsaW5lKVxcXFxiIikpOwogICAgICAgIGFzc2VydFRydWUoc2NyaXB0LmNvbnRhaW5zKCJpKD86J218IGFtfG0pIDE4IikpOwogICAgICAgIGFzc2VydEZhbHNlKHNjcmlwdC5jb250YWlucygiZWwuY2xpY2soKSIpKTsKICAgICAgICBhc3NlcnRGYWxzZShzY3JpcHQuY29udGFpbnMoImRvY3VtZW50LmFjdGl2ZUVsZW1lbnQiKSk7CiAgICB9CicnJwppZiBvbGQgbm90IGluIHRlc3Q6CiAgICByYWlzZSBTeXN0ZW1FeGl0KCJFeHBlY3RlZCBuYXRpdmUgcHJvbXB0IHRlc3QgYmxvY2sgbm90IGZvdW5kIikKdGVzdF9wYXRoLndyaXRlX3RleHQodGVzdC5yZXBsYWNlKG9sZCwgbmV3LCAxKSkK
         run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          import re
-
-          path = Path('app/src/main/java/com/webapp/crazyshit/XMegaDriveBrowserFetch.java')
-          text = path.read_text()
-          pattern = re.compile(
-              r"    static String ageGateNativeFocusScript\(\) \{.*?\n    \}\n\n"
-              r"    private static void triggerNativeAgeContinue\(WebView webView\) \{.*?\n    \}\n\n"
-              r"    private static XMegaDriveAgePrompt agePrompt",
-              re.S,
-          )
-          replacement = r'''    static String ageGateNativeTapTargetScript() {
-              return "(() => {"
-                      + "const norm=s=>String(s||'').replace(String.fromCharCode(8217),\"'\").replace(/\\s+/g,' ').trim().toLowerCase();"
-                      + "const decline=s=>/\\b(exit|leave|decline)\\b/.test(s)||/under\\s*18/.test(s)"
-                      + "||/\\bi(?:'m| am|m) not\\b/.test(s)||s==='no'||s==='no thanks'||s==='not 18';"
-                      + "const accept=s=>!!s&&!decline(s)&&(/\\bcontinue\\b/.test(s)||/\\benter\\b/.test(s)"
-                      + "||s==='yes'||/\\bi(?:'m| am|m) 18\\b/.test(s));"
-                      + "const body=(document.body&&document.body.innerText)||'';if(!/age confirmation/i.test(body))return '';"
-                      + "const controls=document.querySelectorAll('button,input[type=\\\"button\\\"],input[type=\\\"submit\\\"],a,[role=\\\"button\\\"]');"
-                      + "const label=el=>norm(el.innerText||el.textContent||el.value||el.getAttribute('value')||el.getAttribute('aria-label')||'');"
-                      + "for(let i=0;i<controls.length;i++){const el=controls[i];if(!decline(label(el)))continue;"
-                      + "el.style.display='none';el.setAttribute('aria-hidden','true');el.setAttribute('tabindex','-1');"
-                      + "try{if('disabled' in el)el.disabled=true;}catch(e){}}"
-                      + "for(let i=0;i<controls.length;i++){const el=controls[i];if(!accept(label(el)))continue;"
-                      + "try{el.scrollIntoView({block:'center',inline:'center'});}catch(e){}"
-                      + "const r=el.getBoundingClientRect();if(!r||r.width<=0||r.height<=0)return '';"
-                      + "return JSON.stringify({x:r.left+r.width/2,y:r.top+r.height/2,vw:window.innerWidth||0,vh:window.innerHeight||0});}"
-                      + "return '';})()";
-          }
-
-          private static void triggerNativeAgeContinue(WebView webView) {
-              if (webView == null) return;
-              try {
-                  webView.requestFocus();
-                  webView.evaluateJavascript(ageGateNativeTapTargetScript(), encoded -> {
-                      try {
-                          Object decoded = new JSONTokener(encoded == null ? "null" : encoded).nextValue();
-                          if (!(decoded instanceof String) || ((String) decoded).trim().isEmpty()) return;
-                          JSONObject target = new JSONObject((String) decoded);
-                          double cssX = target.optDouble("x", -1d);
-                          double cssY = target.optDouble("y", -1d);
-                          double viewportWidth = target.optDouble("vw", 0d);
-                          double viewportHeight = target.optDouble("vh", 0d);
-                          int viewWidth = webView.getWidth();
-                          int viewHeight = webView.getHeight();
-                          if (cssX < 0d || cssY < 0d || viewportWidth <= 0d || viewportHeight <= 0d
-                                  || viewWidth <= 1 || viewHeight <= 1) return;
-                          final float tapX = Math.max(1f, Math.min(viewWidth - 1f,
-                                  (float) (cssX * viewWidth / viewportWidth)));
-                          final float tapY = Math.max(1f, Math.min(viewHeight - 1f,
-                                  (float) (cssY * viewHeight / viewportHeight)));
-                          webView.post(() -> dispatchNativeTap(webView, tapX, tapY));
-                      } catch (Exception ignored) {
-                      }
-                  });
-              } catch (Exception ignored) {
-              }
-          }
-
-          private static void dispatchNativeTap(WebView webView, float x, float y) {
-              if (webView == null) return;
-              long downTime = android.os.SystemClock.uptimeMillis();
-              android.view.MotionEvent down = android.view.MotionEvent.obtain(
-                      downTime,
-                      downTime,
-                      android.view.MotionEvent.ACTION_DOWN,
-                      x,
-                      y,
-                      0
-              );
-              try {
-                  webView.dispatchTouchEvent(down);
-              } finally {
-                  down.recycle();
-              }
-              webView.postDelayed(() -> {
-                  long upTime = android.os.SystemClock.uptimeMillis();
-                  android.view.MotionEvent up = android.view.MotionEvent.obtain(
-                          downTime,
-                          upTime,
-                          android.view.MotionEvent.ACTION_UP,
-                          x,
-                          y,
-                          0
-                  );
-                  try {
-                      webView.dispatchTouchEvent(up);
-                  } finally {
-                      up.recycle();
-                  }
-              }, 72L);
-          }
-
-          private static XMegaDriveAgePrompt agePrompt'''
-          updated, count = pattern.subn(replacement, text, count=1)
-          if count != 1:
-              raise SystemExit(f'Expected one native age bridge block, replaced {count}')
-          path.write_text(updated)
-
-          test_path = Path('app/src/test/java/com/webapp/crazyshit/XMegaDriveAgeGateSafetyTest.java')
-          test = test_path.read_text()
-          old = '''    @Test public void nativePromptFocusesAcceptControlWithoutSyntheticClick() {
-              String script = XMegaDriveBrowserFetch.ageGateNativeFocusScript();
-              assertTrue(script.contains("style.display='none'"));
-              assertTrue(script.contains("aria-hidden"));
-              assertTrue(script.contains("disabled"));
-              assertTrue(script.contains("scrollIntoView"));
-              assertTrue(script.contains("focus"));
-              assertTrue(script.contains("document.activeElement===el"));
-              assertTrue(script.contains("\\\\b(exit|leave|decline)\\\\b"));
-              assertTrue(script.contains("i(?:'m| am|m) 18"));
-              assertFalse(script.contains("el.click()"));
-          }
-'''
-          new = '''    @Test public void nativePromptLocatesAcceptControlForAndroidTouchWithoutSyntheticClick() {
-              String script = XMegaDriveBrowserFetch.ageGateNativeTapTargetScript();
-              assertTrue(script.contains("style.display='none'"));
-              assertTrue(script.contains("aria-hidden"));
-              assertTrue(script.contains("disabled"));
-              assertTrue(script.contains("scrollIntoView"));
-              assertTrue(script.contains("getBoundingClientRect"));
-              assertTrue(script.contains("window.innerWidth"));
-              assertTrue(script.contains("window.innerHeight"));
-              assertTrue(script.contains("JSON.stringify"));
-              assertTrue(script.contains("\\\\b(exit|leave|decline)\\\\b"));
-              assertTrue(script.contains("i(?:'m| am|m) 18"));
-              assertFalse(script.contains("el.click()"));
-              assertFalse(script.contains("document.activeElement"));
-          }
-'''
-          if old not in test:
-              raise SystemExit('Expected native prompt test block not found')
-          test_path.write_text(test.replace(old, new, 1))
-          PY
+          printf '%s' "$PATCH_B64" | base64 --decode > /tmp/patch.py
+          python3 /tmp/patch.py
 
       - name: Run focused XMegaDrive tests
-        run: |
-          gradle --no-daemon :app:testDebugUnitTest \
-            --tests com.webapp.crazyshit.XMegaDriveAgeGateSafetyTest \
-            --tests com.webapp.crazyshit.XMegaDriveAgePromptTest
+        run: gradle --no-daemon :app:testDebugUnitTest --tests com.webapp.crazyshit.XMegaDriveAgeGateSafetyTest --tests com.webapp.crazyshit.XMegaDriveAgePromptTest
 
       - name: Commit native touch bridge
-        shell: bash
         run: |
           if git diff --quiet -- app/src/main/java/com/webapp/crazyshit/XMegaDriveBrowserFetch.java app/src/test/java/com/webapp/crazyshit/XMegaDriveAgeGateSafetyTest.java; then
-            echo "No source changes to commit"
             exit 0
           fi
           git config user.name "github-actions[bot]"
