@@ -27,6 +27,7 @@ final class XMegaDriveAgePrompt {
     private final FrameLayout root;
     private final TextView continueButton;
     private final AtomicBoolean continuePressed = new AtomicBoolean();
+    private final AtomicBoolean rawFallbackShown = new AtomicBoolean();
     private volatile long continuePressedAtMs;
 
     XMegaDriveAgePrompt(Activity activity, Runnable onContinue, Runnable onCancel) {
@@ -154,6 +155,15 @@ final class XMegaDriveAgePrompt {
             if (parent instanceof ViewGroup) ((ViewGroup) parent).removeView(root);
         } catch (Exception ignored) {
         }
+    }
+
+    void showRawFallback() {
+        rawFallbackShown.set(true);
+        dismiss();
+    }
+
+    boolean isRawFallbackShown() {
+        return rawFallbackShown.get();
     }
 
     boolean hasContinueBeenPressed() {
