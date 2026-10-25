@@ -54,10 +54,9 @@ jobs:
 
       - name: Run focused XMegaDrive tests
         run: |
-          ./gradlew --no-daemon :app:testDebugUnitTest --tests com.webapp.crazyshit.XMegaDriveAgeGateSafetyTest --tests com.webapp.crazyshit.XMegaDriveAgePromptTest
-
-      - name: Remove one-time patch workflow
-        run: git rm .github/workflows/xmegadrive-native-age-prompt-patch.yml
+          gradle --no-daemon :app:testDebugUnitTest \
+            --tests com.webapp.crazyshit.XMegaDriveAgeGateSafetyTest \
+            --tests com.webapp.crazyshit.XMegaDriveAgePromptTest
 
       - name: Commit native XMegaDrive age prompt integration
         run: |
