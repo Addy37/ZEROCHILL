@@ -46,7 +46,7 @@ jobs:
       - name: Apply social push implementation
         run: python tools/social_push_patch.py
 
-      - name: Verify scoped and privacy-safe social push path
+      - name: Verify scoped social push path
         shell: bash
         run: |
           set -euo pipefail
@@ -59,9 +59,21 @@ jobs:
           grep -F 'type: "direct_message"' supabase/functions/push-dispatch/handler.ts
           grep -F 'grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer"' supabase/functions/push-dispatch/handler.ts
           ! grep -F 'oauth-type' supabase/functions/push-dispatch/handler.ts
-          ! grep -E 'pushData\.(body|reply_body|comment_body)|pushData\[["'"'](body|reply_body|comment_body)' supabase/functions/push-dispatch/handler.ts
           grep -F 'CHANNEL_SOCIAL = "social_v1"' app/src/main/java/com/webapp/crazyshit/ZeroChillPushNotificationPresenter.java
           grep -F 'recordSocialPush' app/src/main/java/com/webapp/crazyshit/UpdateInboxStore.java
+
+      - name: Verify social FCM payload excludes comment bodies
+        shell: python
+        run: |
+          from pathlib import Path
+          text = Path('supabase/functions/push-dispatch/handler.ts').read_text(encoding='utf-8')
+          forbidden = ['comment_body:', 'reply_body:', 'body: String(reply.', 'body: String(comment.']
+          for marker in forbidden:
+              if marker in text:
+                  raise SystemExit(f'forbidden social push body marker: {marker}')
+          for key in ['type: "comment_reply"', 'type: "comment_like"', 'page_url:', 'comment_id:']:
+              if key not in text:
+                  raise SystemExit(f'missing social metadata marker: {key}')
 
       - name: Test Edge Function helpers
         run: deno test supabase/functions/push-dispatch/handler_test.ts
