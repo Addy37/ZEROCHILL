@@ -609,8 +609,19 @@ final class XMegaDriveBrowserFetch {
                         CookieManager.getInstance().flush();
                     } catch (Exception ignored) {
                     }
-                    result.set(document);
-                    complete(completed, error, finished, null);
+                    Runnable finishReady = () -> {
+                        result.set(document);
+                        complete(completed, error, finished, null);
+                    };
+                    if (BuildConfig.DEBUG && XMegaDriveAgeDiagnostics.hasBefore(webView)) {
+                        XMegaDriveAgeDiagnostics.captureAfterAndShow(
+                                webView,
+                                webView.getUrl(),
+                                finishReady
+                        );
+                    } else {
+                        finishReady.run();
+                    }
                     return;
                 }
                 if (permanentlyBlocked(title, body)) {
@@ -1164,11 +1175,22 @@ static String ageGateSafetyScript() {
     }
 
     private static void revealRawAgeFallback(FrameLayout overlay, WebView webView) {
+        if (BuildConfig.DEBUG && webView != null) {
+            XMegaDriveAgeDiagnostics.captureBefore(
+                    webView,
+                    () -> revealRawAgeFallbackNow(overlay, webView)
+            );
+            return;
+        }
+        revealRawAgeFallbackNow(overlay, webView);
+    }
+
+    private static void revealRawAgeFallbackNow(FrameLayout overlay, WebView webView) {
         reveal(overlay, webView);
         if (overlay != null && overlay.getChildCount() > 0
                 && overlay.getChildAt(0) instanceof TextView) {
             ((TextView) overlay.getChildAt(0)).setText(
-                    "XMegaDrive needs a quick check. Tap Continue if it stays open.");
+                    "XMegaDrive diagnostic: tap the site's real Continue button once.");
         }
     }
 
