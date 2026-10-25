@@ -1,0 +1,205 @@
+name: Apply XMegaDrive Native Age Prompt
+
+on:
+  push:
+    branches: [ feature/zerochill-notifications-5.3.0 ]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out feature branch
+        uses: actions/checkout@v6
+        with:
+          ref: feature/zerochill-notifications-5.3.0
+          fetch-depth: 0
+
+      - name: Wire native age prompt into XMegaDrive browser flow
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('app/src/main/java/com/webapp/crazyshit/XMegaDriveBrowserFetch.java')
+          text = path.read_text()
+
+          def replace_once(old, new, label):
+              global text
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{label}: expected one match, found {count}')
+              text = text.replace(old, new, 1)
+
+          replace_once(
+              '    private static final long EXTRACTION_RETRY_MS = 800L;\n    private static volatile String sessionUserAgent = "";\n',
+              '    private static final long EXTRACTION_RETRY_MS = 800L;\n    private static final long NATIVE_AGE_FALLBACK_GRACE_MS = 4500L;\n    private static volatile String sessionUserAgent = "";\n',
+              'fallback grace constant'
+          )
+
+          replace_once(
+              '            // Read ownership on main: cancellation can race with start() creating the views.\n            main.post(() -> destroy(activeOverlay.getAndSet(null), activeWebView.getAndSet(null)));\n',
+              '            // Read ownership on main: cancellation can race with start() creating the views.\n            main.post(() -> {\n                WebView webView = activeWebView.getAndSet(null);\n                dismissAgePrompt(webView);\n                destroy(activeOverlay.getAndSet(null), webView);\n            });\n',
+              'final cleanup'
+          )
+
+          replace_once(
+              '                    // Remove this renderer\'s WebView even if completion already raced with cancel.\n                    destroy(activeOverlay.getAndSet(null), activeWebView.getAndSet(null));\n                    return true;\n',
+              '                    // Remove this renderer\'s WebView even if completion already raced with cancel.\n                    dismissAgePrompt(view);\n                    destroy(activeOverlay.getAndSet(null), activeWebView.getAndSet(null));\n                    return true;\n',
+              'renderer cleanup'
+          )
+
+          replace_once(
+              '        if (waiting) {\n            if (needsPerson(titleNow, "")) reveal(overlay, webView);\n',
+              '        if (waiting) {\n            if (needsPerson(titleNow, "")) {\n                XMegaDriveAgePrompt prompt = agePrompt(webView);\n                if (prompt != null) prompt.showRawFallback();\n                reveal(overlay, webView);\n            }\n',
+              'early human challenge reveal'
+          )
+
+          replace_once(
+              '                if (needsPerson(title, text)) reveal(overlay, webView);\n',
+              '                if (needsPerson(title, text)) {\n                    XMegaDriveAgePrompt prompt = agePrompt(webView);\n                    if (prompt != null) prompt.showRawFallback();\n                    reveal(overlay, webView);\n                }\n',
+              'late human challenge reveal'
+          )
+
+          old_age = '''                if (age && attempt >= 4) {
+                    reveal(overlay, webView);
+                    if (overlay != null && overlay.getChildCount() > 0
+                            && overlay.getChildAt(0) instanceof TextView) {
+                        ((TextView) overlay.getChildAt(0)).setText(
+                                "XMegaDrive needs a quick check. Tap Continue if it stays open.");
+                    }
+                }
+'''
+          new_age = '''                if (age && attempt >= 4) {
+                    XMegaDriveAgePrompt prompt = agePrompt(webView);
+                    if (prompt == null) {
+                        prompt = showNativeAgePrompt(webView, completed, error, finished);
+                    }
+                    if (prompt == null) {
+                        revealRawAgeFallback(overlay, webView);
+                    } else if (!prompt.isRawFallbackShown()
+                            && prompt.hasContinueBeenPressed()
+                            && prompt.millisSinceContinue() >= NATIVE_AGE_FALLBACK_GRACE_MS) {
+                        prompt.showRawFallback();
+                        revealRawAgeFallback(overlay, webView);
+                    }
+                }
+'''
+          replace_once(old_age, new_age, 'age fallback block')
+
+          marker = '    private static boolean needsPerson(String title, String text) {\n'
+          if text.count(marker) != 1:
+              raise SystemExit(f'helper insertion point: expected one match, found {text.count(marker)}')
+
+          helpers = r'''    static String ageGateNativeFocusScript() {
+        return "(() => {"
+                + "const norm=s=>String(s||'').replace(String.fromCharCode(8217),\"'\").replace(/\\s+/g,' ').trim().toLowerCase();"
+                + "const decline=s=>/\\b(exit|leave|decline)\\b/.test(s)||/under\\s*18/.test(s)"
+                + "||/\\bi(?:'m| am|m) not\\b/.test(s)||s==='no'||s==='no thanks'||s==='not 18';"
+                + "const accept=s=>!!s&&!decline(s)&&(/\\bcontinue\\b/.test(s)||/\\benter\\b/.test(s)"
+                + "||s==='yes'||/\\bi(?:'m| am|m) 18\\b/.test(s));"
+                + "const body=(document.body&&document.body.innerText)||'';if(!/age confirmation/i.test(body))return false;"
+                + "const controls=document.querySelectorAll('button,input[type=\\\"button\\\"],input[type=\\\"submit\\\"],a,[role=\\\"button\\\"]');"
+                + "const label=el=>norm(el.innerText||el.textContent||el.value||el.getAttribute('value')||el.getAttribute('aria-label')||'');"
+                + "for(let i=0;i<controls.length;i++){const el=controls[i];if(!decline(label(el)))continue;"
+                + "el.style.display='none';el.setAttribute('aria-hidden','true');el.setAttribute('tabindex','-1');"
+                + "try{if('disabled' in el)el.disabled=true;}catch(e){}}"
+                + "for(let i=0;i<controls.length;i++){const el=controls[i];if(!accept(label(el)))continue;"
+                + "try{el.scrollIntoView({block:'center',inline:'center'});}catch(e){}"
+                + "try{el.focus({preventScroll:false});}catch(e){try{el.focus();}catch(ignore){}}"
+                + "return document.activeElement===el;}return false;})()";
+    }
+
+    private static void triggerNativeAgeContinue(WebView webView) {
+        if (webView == null) return;
+        try {
+            webView.requestFocus();
+            webView.evaluateJavascript(ageGateNativeFocusScript(), encoded -> {
+                String value = encoded == null ? "" : encoded.replace("\"", "").trim();
+                if (!"true".equalsIgnoreCase(value)) return;
+                webView.post(() -> {
+                    try {
+                        webView.dispatchKeyEvent(new android.view.KeyEvent(
+                                android.view.KeyEvent.ACTION_DOWN,
+                                android.view.KeyEvent.KEYCODE_ENTER));
+                        webView.dispatchKeyEvent(new android.view.KeyEvent(
+                                android.view.KeyEvent.ACTION_UP,
+                                android.view.KeyEvent.KEYCODE_ENTER));
+                    } catch (Exception ignored) {
+                    }
+                });
+            });
+        } catch (Exception ignored) {
+        }
+    }
+
+    private static XMegaDriveAgePrompt agePrompt(WebView webView) {
+        if (webView == null) return null;
+        Object tag = webView.getTag();
+        return tag instanceof XMegaDriveAgePrompt ? (XMegaDriveAgePrompt) tag : null;
+    }
+
+    private static XMegaDriveAgePrompt showNativeAgePrompt(
+            WebView webView,
+            AtomicBoolean completed,
+            AtomicReference<IOException> error,
+            CountDownLatch finished
+    ) {
+        if (webView == null || completed.get()) return null;
+        XMegaDriveAgePrompt existing = agePrompt(webView);
+        if (existing != null) return existing;
+        Activity host = activity(webView.getContext());
+        if (host == null || host.isFinishing() || host.isDestroyed()) return null;
+        XMegaDriveAgePrompt created = new XMegaDriveAgePrompt(
+                host,
+                () -> triggerNativeAgeContinue(webView),
+                () -> complete(completed, error, finished,
+                        new IOException("XMegaDrive check was dismissed"))
+        );
+        webView.setTag(created);
+        created.show();
+        return created;
+    }
+
+    private static void dismissAgePrompt(WebView webView) {
+        XMegaDriveAgePrompt prompt = agePrompt(webView);
+        if (prompt == null) return;
+        prompt.dismiss();
+        try {
+            webView.setTag(null);
+        } catch (Exception ignored) {
+        }
+    }
+
+    private static void revealRawAgeFallback(FrameLayout overlay, WebView webView) {
+        reveal(overlay, webView);
+        if (overlay != null && overlay.getChildCount() > 0
+                && overlay.getChildAt(0) instanceof TextView) {
+            ((TextView) overlay.getChildAt(0)).setText(
+                    "XMegaDrive needs a quick check. Tap Continue if it stays open.");
+        }
+    }
+
+'''
+          text = text.replace(marker, helpers + marker, 1)
+          path.write_text(text)
+          PY
+
+      - name: Run focused XMegaDrive tests
+        run: |
+          ./gradlew --no-daemon :app:testDebugUnitTest \
+            --tests com.webapp.crazyshit.XMegaDriveAgeGateSafetyTest \
+            --tests com.webapp.crazyshit.XMegaDriveAgePromptTest
+
+      - name: Remove one-time patch workflow
+        run: git rm .github/workflows/xmegadrive-native-age-prompt-patch.yml
+
+      - name: Commit native XMegaDrive age prompt integration
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app/src/main/java/com/webapp/crazyshit/XMegaDriveBrowserFetch.java
+          git commit -m "Use native XMegaDrive age confirmation prompt"
+          git push origin HEAD:feature/zerochill-notifications-5.3.0
