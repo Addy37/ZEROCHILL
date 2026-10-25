@@ -7,12 +7,18 @@ import com.google.firebase.messaging.RemoteMessage;
 
 import java.util.Map;
 
-/** Receives Firebase token lifecycle callbacks and privacy-safe server push data. */
+/** Receives Firebase installation lifecycle callbacks and privacy-safe server push data. */
 public final class ZeroChillFirebaseMessagingService extends FirebaseMessagingService {
     @Override
-    public void onNewToken(@NonNull String token) {
-        super.onNewToken(token);
-        ZeroChillPushRegistration.onTokenRefreshed(this, token);
+    public void onRegistered(@NonNull String installationId) {
+        super.onRegistered(installationId);
+        ZeroChillPushRegistration.onRegistered(this, installationId);
+    }
+
+    @Override
+    public void onUnregistered(@NonNull String installationId) {
+        super.onUnregistered(installationId);
+        ZeroChillPushRegistration.onUnregistered(this, installationId);
     }
 
     @Override
