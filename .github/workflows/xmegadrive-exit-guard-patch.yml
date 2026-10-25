@@ -22,6 +22,7 @@ jobs:
         run: |
           python3 - <<'PY'
           from pathlib import Path
+          import textwrap
 
           source = Path('app/src/main/java/com/webapp/crazyshit/XMegaDriveBrowserFetch.java')
           text = source.read_text()
@@ -38,56 +39,58 @@ jobs:
           if text.count(marker) != 1:
               raise SystemExit(f'expected one helper insertion point, found {text.count(marker)}')
 
-          helper = r'''    /**
-     * Keep the reliable 5.2.1 visible fallback, but make every known age-decline
-     * control inert before that WebView is revealed. Continue remains available.
-     */
-    static String ageGateSafetyScript() {
-        return "const ageNorm=s=>String(s||'').replace(String.fromCharCode(8217),\"'\").replace(/\\s+/g,' ').trim().toLowerCase();"
-                + "const ageDecline=s=>/\\b(exit|leave|decline)\\b/.test(s)||/under\\s*18/.test(s)"
-                + "||/\\bi(?:'m| am|m) not\\b/.test(s)||s==='no'||s==='no thanks'||s==='not 18';"
-                + "const ageAccept=s=>!!s&&!ageDecline(s)&&(/\\bcontinue\\b/.test(s)||/\\benter\\b/.test(s)"
-                + "||s==='yes'||/\\bi(?:'m| am|m) 18\\b/.test(s));"
-                + "const age=/age confirmation/i.test(bodyText);"
-                + "if(age){const controls=document.querySelectorAll('button,input[type=\"button\"],input[type=\"submit\"],a,[role=\"button\"]');"
-                + "const ageLabel=el=>ageNorm(el.innerText||el.textContent||el.value||el.getAttribute('value')||el.getAttribute('aria-label')||'');"
-                + "const hideDecline=el=>{const label=ageLabel(el);if(!ageDecline(label))return false;"
-                + "el.style.display='none';el.setAttribute('aria-hidden','true');el.setAttribute('tabindex','-1');"
-                + "try{if('disabled' in el)el.disabled=true;}catch(e){}return true;};"
-                + "for(let i=0;i<controls.length;i++)hideDecline(controls[i]);"
-                + "if(!window.__zeroChillAgeExitGuard){window.__zeroChillAgeExitGuard=true;"
-                + "document.addEventListener('click',ev=>{const el=ev.target&&ev.target.closest?ev.target.closest('button,input,a,[role=\"button\"]'):null;"
-                + "if(!el)return;const text=(document.body&&document.body.innerText)||'';if(!/age confirmation/i.test(text))return;"
-                + "if(ageDecline(ageLabel(el))){ev.preventDefault();ev.stopImmediatePropagation();}},true);}"
-                + "for(let i=0;i<controls.length;i++){const el=controls[i];if(!ageAccept(ageLabel(el)))continue;el.click();break;}}";
-    }
+          helper = textwrap.dedent(r'''
+              /**
+               * Keep the reliable 5.2.1 visible fallback, but make every known age-decline
+               * control inert before that WebView is revealed. Continue remains available.
+               */
+              static String ageGateSafetyScript() {
+                  return "const ageNorm=s=>String(s||'').replace(String.fromCharCode(8217),\"'\").replace(/\\s+/g,' ').trim().toLowerCase();"
+                          + "const ageDecline=s=>/\\b(exit|leave|decline)\\b/.test(s)||/under\\s*18/.test(s)"
+                          + "||/\\bi(?:'m| am|m) not\\b/.test(s)||s==='no'||s==='no thanks'||s==='not 18';"
+                          + "const ageAccept=s=>!!s&&!ageDecline(s)&&(/\\bcontinue\\b/.test(s)||/\\benter\\b/.test(s)"
+                          + "||s==='yes'||/\\bi(?:'m| am|m) 18\\b/.test(s));"
+                          + "const age=/age confirmation/i.test(bodyText);"
+                          + "if(age){const controls=document.querySelectorAll('button,input[type=\"button\"],input[type=\"submit\"],a,[role=\"button\"]');"
+                          + "const ageLabel=el=>ageNorm(el.innerText||el.textContent||el.value||el.getAttribute('value')||el.getAttribute('aria-label')||'');"
+                          + "const hideDecline=el=>{const label=ageLabel(el);if(!ageDecline(label))return false;"
+                          + "el.style.display='none';el.setAttribute('aria-hidden','true');el.setAttribute('tabindex','-1');"
+                          + "try{if('disabled' in el)el.disabled=true;}catch(e){}return true;};"
+                          + "for(let i=0;i<controls.length;i++)hideDecline(controls[i]);"
+                          + "if(!window.__zeroChillAgeExitGuard){window.__zeroChillAgeExitGuard=true;"
+                          + "document.addEventListener('click',ev=>{const el=ev.target&&ev.target.closest?ev.target.closest('button,input,a,[role=\"button\"]'):null;"
+                          + "if(!el)return;const text=(document.body&&document.body.innerText)||'';if(!/age confirmation/i.test(text))return;"
+                          + "if(ageDecline(ageLabel(el))){ev.preventDefault();ev.stopImmediatePropagation();}},true);}"
+                          + "for(let i=0;i<controls.length;i++){const el=controls[i];if(!ageAccept(ageLabel(el)))continue;el.click();break;}}";
+              }
 
-'''
+          ''').lstrip()
           text = text.replace(marker, helper + marker, 1)
           source.write_text(text)
 
           test = Path('app/src/test/java/com/webapp/crazyshit/XMegaDriveAgeGateSafetyTest.java')
-          test.write_text(r'''package com.webapp.crazyshit;
+          test.write_text(textwrap.dedent(r'''
+              package com.webapp.crazyshit;
 
-import org.junit.Test;
+              import org.junit.Test;
 
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
+              import static org.junit.Assert.assertFalse;
+              import static org.junit.Assert.assertTrue;
 
-public class XMegaDriveAgeGateSafetyTest {
-    @Test public void visibleFallbackHidesAndBlocksDeclineControls() {
-        String script = XMegaDriveBrowserFetch.ageGateSafetyScript();
-        assertTrue(script.contains("ageDecline"));
-        assertTrue(script.contains("style.display='none'"));
-        assertTrue(script.contains("aria-hidden"));
-        assertTrue(script.contains("stopImmediatePropagation"));
-        assertTrue(script.contains("ageAccept"));
-        assertTrue(script.contains("el.click()"));
-        assertTrue(script.contains("\\b(exit|leave|decline)\\b"));
-        assertFalse(script.contains("ageDecline(ageLabel(el)))continue;el.click()"));
-    }
-}
-''')
+              public class XMegaDriveAgeGateSafetyTest {
+                  @Test public void visibleFallbackHidesAndBlocksDeclineControls() {
+                      String script = XMegaDriveBrowserFetch.ageGateSafetyScript();
+                      assertTrue(script.contains("ageDecline"));
+                      assertTrue(script.contains("style.display='none'"));
+                      assertTrue(script.contains("aria-hidden"));
+                      assertTrue(script.contains("stopImmediatePropagation"));
+                      assertTrue(script.contains("ageAccept"));
+                      assertTrue(script.contains("el.click()"));
+                      assertTrue(script.contains("\\b(exit|leave|decline)\\b"));
+                      assertFalse(script.contains("ageDecline(ageLabel(el)))continue;el.click()"));
+                  }
+              }
+          ''').lstrip())
           PY
 
       - name: Remove one-time patch workflow
