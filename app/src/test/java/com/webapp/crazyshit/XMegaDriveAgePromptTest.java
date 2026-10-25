@@ -1,6 +1,8 @@
 package com.webapp.crazyshit;
 
 import android.app.Activity;
+import android.os.SystemClock;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.TextView;
@@ -21,7 +23,7 @@ import static org.junit.Assert.assertTrue;
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = 35)
 public class XMegaDriveAgePromptTest {
-    @Test public void continueUsesNativePromptWithoutExposingExit() {
+    @Test public void continueUsesPhysicalTouchThroughWithoutExposingExit() {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
         AtomicInteger continued = new AtomicInteger();
         AtomicInteger cancelled = new AtomicInteger();
@@ -41,12 +43,37 @@ public class XMegaDriveAgePromptTest {
         assertNotNull(button);
         assertNotNull(cancel);
         assertEquals("One quick check", title.getText().toString());
-        assertEquals("CONTINUE", button.getText().toString());
+        assertEquals("PREPARING…", button.getText().toString());
+        assertFalse(button.isEnabled());
+        assertFalse(button.isClickable());
         assertFalse(containsText(root, "EXIT"));
         assertFalse(prompt.hasContinueBeenPressed());
 
-        button.performClick();
+        prompt.armPhysicalContinue();
+        assertEquals("CONTINUE", button.getText().toString());
+        assertTrue(button.isEnabled());
+        assertFalse(button.isClickable());
 
+        int widthSpec = View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY);
+        int heightSpec = View.MeasureSpec.makeMeasureSpec(1920, View.MeasureSpec.EXACTLY);
+        root.measure(widthSpec, heightSpec);
+        root.layout(0, 0, 1080, 1920);
+        int[] rootLocation = new int[2];
+        int[] buttonLocation = new int[2];
+        root.getLocationOnScreen(rootLocation);
+        button.getLocationOnScreen(buttonLocation);
+        float x = buttonLocation[0] - rootLocation[0] + button.getWidth() / 2f;
+        float y = buttonLocation[1] - rootLocation[1] + button.getHeight() / 2f;
+        long now = SystemClock.uptimeMillis();
+        MotionEvent down = MotionEvent.obtain(now, now, MotionEvent.ACTION_DOWN, x, y, 0);
+        boolean handled;
+        try {
+            handled = root.dispatchTouchEvent(down);
+        } finally {
+            down.recycle();
+        }
+
+        assertFalse(handled);
         assertEquals(1, continued.get());
         assertEquals(0, cancelled.get());
         assertTrue(prompt.hasContinueBeenPressed());
