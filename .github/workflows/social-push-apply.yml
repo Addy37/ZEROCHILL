@@ -38,6 +38,12 @@ jobs:
           path = Path('tools/social_push_patch.py')
           text = path.read_text(encoding='utf-8')
 
+          old_uuid = 'const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;'
+          new_uuid = '''function isUuid(value: string): boolean {\n  const parts = String(value ?? "").trim().toLowerCase().split("-");\n  const lengths = [8, 4, 4, 4, 12];\n  return parts.length === lengths.length && parts.every((part, index) =>\n    part.length === lengths[index] && /^[0-9a-f]+$/.test(part)\n  );\n}'''
+          if old_uuid not in text:
+              raise SystemExit('staged UUID validator anchor missing')
+          text = text.replace(old_uuid, new_uuid, 1).replace('UUID.test(', 'isUuid(')
+
           old_grant = 'grant_type: "urn:ietf:params:oauth-type:jwt-bearer".replace("oauth-type", "oauth"),'
           new_grant = 'grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",'
           if old_grant not in text:
@@ -50,19 +56,19 @@ jobs:
               raise SystemExit('staged PEM helper anchor missing')
           text = text.replace(old_bytes, new_bytes, 1)
 
-          old_fields = '''  const fields = Object.keys(record).sort();\n  const messageId = String(record.message_id ?? "").trim();\n  if (fields.length === 1 && fields[0] === "message_id" && UUID.test(messageId)) {'''
-          new_fields = '''  const fields = Object.keys(record);\n  const hasOnly = (...wanted: string[]) =>\n    fields.length === wanted.length && wanted.every((field) => fields.includes(field));\n  const messageId = String(record.message_id ?? "").trim();\n  if (hasOnly("message_id") && UUID.test(messageId)) {'''
+          old_fields = '''  const fields = Object.keys(record).sort();\n  const messageId = String(record.message_id ?? "").trim();\n  if (fields.length === 1 && fields[0] === "message_id" && isUuid(messageId)) {'''
+          new_fields = '''  const fields = Object.keys(record);\n  const hasOnly = (...wanted: string[]) =>\n    fields.length === wanted.length && wanted.every((field) => fields.includes(field));\n  const messageId = String(record.message_id ?? "").trim();\n  if (hasOnly("message_id") && isUuid(messageId)) {'''
           if old_fields not in text:
               raise SystemExit('staged request-field parser anchor missing')
           text = text.replace(old_fields, new_fields, 1)
           text = text.replace(
-              'if (fields.length === 2 && fields[0] === "event_type" && fields[1] === "reply_id" && UUID.test(replyId)) {',
-              'if (hasOnly("event_type", "reply_id") && UUID.test(replyId)) {',
+              'if (fields.length === 2 && fields[0] === "event_type" && fields[1] === "reply_id" && isUuid(replyId)) {',
+              'if (hasOnly("event_type", "reply_id") && isUuid(replyId)) {',
               1,
           )
           text = text.replace(
-              'if (fields.length === 3 && fields[0] === "comment_id" && fields[1] === "event_type"\n      && fields[2] === "user_id" && UUID.test(commentId) && UUID.test(userId)) {',
-              'if (hasOnly("event_type", "comment_id", "user_id")\n      && UUID.test(commentId) && UUID.test(userId)) {',
+              'if (fields.length === 3 && fields[0] === "comment_id" && fields[1] === "event_type"\n      && fields[2] === "user_id" && isUuid(commentId) && isUuid(userId)) {',
+              'if (hasOnly("event_type", "comment_id", "user_id")\n      && isUuid(commentId) && isUuid(userId)) {',
               1,
           )
 
@@ -91,6 +97,7 @@ jobs:
           grep -F 'type: "comment_reply"' supabase/functions/push-dispatch/handler.ts
           grep -F 'type: "comment_like"' supabase/functions/push-dispatch/handler.ts
           grep -F 'type: "direct_message"' supabase/functions/push-dispatch/handler.ts
+          grep -F 'function isUuid(value: string): boolean' supabase/functions/push-dispatch/handler.ts
           grep -F 'hasOnly("message_id")' supabase/functions/push-dispatch/handler.ts
           grep -F 'hasOnly("event_type", "reply_id")' supabase/functions/push-dispatch/handler.ts
           grep -F 'grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer"' supabase/functions/push-dispatch/handler.ts
