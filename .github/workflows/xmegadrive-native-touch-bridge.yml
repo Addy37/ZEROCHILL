@@ -1,0 +1,195 @@
+name: Apply XMegaDrive Native Touch Bridge
+
+on:
+  push:
+    branches: [ feature/zerochill-notifications-5.3.0 ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out feature branch
+        uses: actions/checkout@v6
+        with:
+          ref: feature/zerochill-notifications-5.3.0
+          fetch-depth: 0
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android APIs 35 and 36
+        run: sdkmanager "platforms;android-35" "platforms;android-36" "build-tools;35.0.0"
+
+      - name: Set up Gradle 8.11.1
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+
+      - name: Replace Enter bridge with native WebView touch
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          path = Path('app/src/main/java/com/webapp/crazyshit/XMegaDriveBrowserFetch.java')
+          text = path.read_text()
+          pattern = re.compile(
+              r"    static String ageGateNativeFocusScript\(\) \{.*?\n    \}\n\n"
+              r"    private static void triggerNativeAgeContinue\(WebView webView\) \{.*?\n    \}\n\n"
+              r"    private static XMegaDriveAgePrompt agePrompt",
+              re.S,
+          )
+          replacement = r'''    static String ageGateNativeTapTargetScript() {
+              return "(() => {"
+                      + "const norm=s=>String(s||'').replace(String.fromCharCode(8217),\"'\").replace(/\\s+/g,' ').trim().toLowerCase();"
+                      + "const decline=s=>/\\b(exit|leave|decline)\\b/.test(s)||/under\\s*18/.test(s)"
+                      + "||/\\bi(?:'m| am|m) not\\b/.test(s)||s==='no'||s==='no thanks'||s==='not 18';"
+                      + "const accept=s=>!!s&&!decline(s)&&(/\\bcontinue\\b/.test(s)||/\\benter\\b/.test(s)"
+                      + "||s==='yes'||/\\bi(?:'m| am|m) 18\\b/.test(s));"
+                      + "const body=(document.body&&document.body.innerText)||'';if(!/age confirmation/i.test(body))return '';"
+                      + "const controls=document.querySelectorAll('button,input[type=\\\"button\\\"],input[type=\\\"submit\\\"],a,[role=\\\"button\\\"]');"
+                      + "const label=el=>norm(el.innerText||el.textContent||el.value||el.getAttribute('value')||el.getAttribute('aria-label')||'');"
+                      + "for(let i=0;i<controls.length;i++){const el=controls[i];if(!decline(label(el)))continue;"
+                      + "el.style.display='none';el.setAttribute('aria-hidden','true');el.setAttribute('tabindex','-1');"
+                      + "try{if('disabled' in el)el.disabled=true;}catch(e){}}"
+                      + "for(let i=0;i<controls.length;i++){const el=controls[i];if(!accept(label(el)))continue;"
+                      + "try{el.scrollIntoView({block:'center',inline:'center'});}catch(e){}"
+                      + "const r=el.getBoundingClientRect();if(!r||r.width<=0||r.height<=0)return '';"
+                      + "return JSON.stringify({x:r.left+r.width/2,y:r.top+r.height/2,vw:window.innerWidth||0,vh:window.innerHeight||0});}"
+                      + "return '';})()";
+          }
+
+          private static void triggerNativeAgeContinue(WebView webView) {
+              if (webView == null) return;
+              try {
+                  webView.requestFocus();
+                  webView.evaluateJavascript(ageGateNativeTapTargetScript(), encoded -> {
+                      try {
+                          Object decoded = new JSONTokener(encoded == null ? "null" : encoded).nextValue();
+                          if (!(decoded instanceof String) || ((String) decoded).trim().isEmpty()) return;
+                          JSONObject target = new JSONObject((String) decoded);
+                          double cssX = target.optDouble("x", -1d);
+                          double cssY = target.optDouble("y", -1d);
+                          double viewportWidth = target.optDouble("vw", 0d);
+                          double viewportHeight = target.optDouble("vh", 0d);
+                          int viewWidth = webView.getWidth();
+                          int viewHeight = webView.getHeight();
+                          if (cssX < 0d || cssY < 0d || viewportWidth <= 0d || viewportHeight <= 0d
+                                  || viewWidth <= 1 || viewHeight <= 1) return;
+                          final float tapX = Math.max(1f, Math.min(viewWidth - 1f,
+                                  (float) (cssX * viewWidth / viewportWidth)));
+                          final float tapY = Math.max(1f, Math.min(viewHeight - 1f,
+                                  (float) (cssY * viewHeight / viewportHeight)));
+                          webView.post(() -> dispatchNativeTap(webView, tapX, tapY));
+                      } catch (Exception ignored) {
+                      }
+                  });
+              } catch (Exception ignored) {
+              }
+          }
+
+          private static void dispatchNativeTap(WebView webView, float x, float y) {
+              if (webView == null) return;
+              long downTime = android.os.SystemClock.uptimeMillis();
+              android.view.MotionEvent down = android.view.MotionEvent.obtain(
+                      downTime,
+                      downTime,
+                      android.view.MotionEvent.ACTION_DOWN,
+                      x,
+                      y,
+                      0
+              );
+              try {
+                  webView.dispatchTouchEvent(down);
+              } finally {
+                  down.recycle();
+              }
+              webView.postDelayed(() -> {
+                  long upTime = android.os.SystemClock.uptimeMillis();
+                  android.view.MotionEvent up = android.view.MotionEvent.obtain(
+                          downTime,
+                          upTime,
+                          android.view.MotionEvent.ACTION_UP,
+                          x,
+                          y,
+                          0
+                  );
+                  try {
+                      webView.dispatchTouchEvent(up);
+                  } finally {
+                      up.recycle();
+                  }
+              }, 72L);
+          }
+
+          private static XMegaDriveAgePrompt agePrompt'''
+          updated, count = pattern.subn(replacement, text, count=1)
+          if count != 1:
+              raise SystemExit(f'Expected one native age bridge block, replaced {count}')
+          path.write_text(updated)
+
+          test_path = Path('app/src/test/java/com/webapp/crazyshit/XMegaDriveAgeGateSafetyTest.java')
+          test = test_path.read_text()
+          old = '''    @Test public void nativePromptFocusesAcceptControlWithoutSyntheticClick() {
+              String script = XMegaDriveBrowserFetch.ageGateNativeFocusScript();
+              assertTrue(script.contains("style.display='none'"));
+              assertTrue(script.contains("aria-hidden"));
+              assertTrue(script.contains("disabled"));
+              assertTrue(script.contains("scrollIntoView"));
+              assertTrue(script.contains("focus"));
+              assertTrue(script.contains("document.activeElement===el"));
+              assertTrue(script.contains("\\\\b(exit|leave|decline)\\\\b"));
+              assertTrue(script.contains("i(?:'m| am|m) 18"));
+              assertFalse(script.contains("el.click()"));
+          }
+'''
+          new = '''    @Test public void nativePromptLocatesAcceptControlForAndroidTouchWithoutSyntheticClick() {
+              String script = XMegaDriveBrowserFetch.ageGateNativeTapTargetScript();
+              assertTrue(script.contains("style.display='none'"));
+              assertTrue(script.contains("aria-hidden"));
+              assertTrue(script.contains("disabled"));
+              assertTrue(script.contains("scrollIntoView"));
+              assertTrue(script.contains("getBoundingClientRect"));
+              assertTrue(script.contains("window.innerWidth"));
+              assertTrue(script.contains("window.innerHeight"));
+              assertTrue(script.contains("JSON.stringify"));
+              assertTrue(script.contains("\\\\b(exit|leave|decline)\\\\b"));
+              assertTrue(script.contains("i(?:'m| am|m) 18"));
+              assertFalse(script.contains("el.click()"));
+              assertFalse(script.contains("document.activeElement"));
+          }
+'''
+          if old not in test:
+              raise SystemExit('Expected native prompt test block not found')
+          test_path.write_text(test.replace(old, new, 1))
+          PY
+
+      - name: Run focused XMegaDrive tests
+        run: |
+          gradle --no-daemon :app:testDebugUnitTest \
+            --tests com.webapp.crazyshit.XMegaDriveAgeGateSafetyTest \
+            --tests com.webapp.crazyshit.XMegaDriveAgePromptTest
+
+      - name: Commit native touch bridge
+        shell: bash
+        run: |
+          if git diff --quiet -- app/src/main/java/com/webapp/crazyshit/XMegaDriveBrowserFetch.java app/src/test/java/com/webapp/crazyshit/XMegaDriveAgeGateSafetyTest.java; then
+            echo "No source changes to commit"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app/src/main/java/com/webapp/crazyshit/XMegaDriveBrowserFetch.java app/src/test/java/com/webapp/crazyshit/XMegaDriveAgeGateSafetyTest.java
+          git commit -m "Use native touch for XMegaDrive age confirmation"
+          git push origin HEAD:feature/zerochill-notifications-5.3.0
