@@ -227,12 +227,17 @@ internal fun MacrobenchmarkScope.search() {
         val density = bounds.height().coerceAtLeast(1) / 56f
         val searchX = (bounds.right - (80f * density)).toInt()
             .coerceIn(bounds.left + 1, bounds.right - 1)
+        Log.i("ZeroChillBenchmark", "SEARCH_HEADER_CLICK bounds=$bounds x=$searchX y=${bounds.centerY()}")
         device.click(searchX, bounds.centerY())
     }
     val field = checkNotNull(
         device.wait(Until.findObject(By.desc("Search Shows")), 5_000)
     ) {
-        "Search field did not open"
+        val hierarchy = ByteArrayOutputStream().also { device.dumpWindowHierarchy(it) }
+            .toString("UTF-8")
+        Log.e("ZeroChillBenchmark", "SEARCH_OPEN_FAILURE foreground=${device.currentPackageName}\n$hierarchy")
+        "Search field did not open. Foreground: ${device.currentPackageName}. " +
+            "Hierarchy: ${hierarchy.take(16_000)}"
     }
     field.click()
     field.text = "mia"
