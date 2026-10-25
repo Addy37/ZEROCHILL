@@ -13,7 +13,7 @@ on:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}${{ github.head_ref == 'fix/xmegadrive-shows-lifecycle' && '-creator-lifecycle' || '' }}
-  cancel-in-progress: ${{ github.head_ref == 'fix/xmegadrive-shows-lifecycle' || (github.head_ref == 'feature/search-recent-glass' || github.head_ref == 'feature/search-liquid-material') || github.head_ref == 'feature/shows-episode-list' || github.head_ref == 'fix/library-startup-navigation' || github.head_ref == 'feature/onlyfap-liquid-rift' || github.head_ref == 'feature/zerochill-5.1.0' }}
+  cancel-in-progress: ${{ github.head_ref == 'feature/zerochill-notifications-5.3.0' || github.head_ref == 'fix/xmegadrive-shows-lifecycle' || (github.head_ref == 'feature/search-recent-glass' || github.head_ref == 'feature/search-liquid-material') || github.head_ref == 'feature/shows-episode-list' || github.head_ref == 'fix/library-startup-navigation' || github.head_ref == 'feature/onlyfap-liquid-rift' || github.head_ref == 'feature/zerochill-5.1.0' }}
 
 permissions:
   contents: read
@@ -112,6 +112,12 @@ jobs:
           api-level: 35
           arch: x86_64
           profile: pixel_6
+          # Chromium/SwiftShader Vulkan can terminate the host emulator. Keep
+          # real Shows work and motion enabled while using Android's GLES workaround.
+          # https://developer.android.com/studio/run/emulator-troubleshooting#cannot_open_webpage_correctly
+          emulator-options: >-
+            -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+            ${{ startsWith(matrix.flow, 'shows-scroll') && '-feature -Vulkan' || '' }}
           disable-animations: ${{ matrix.flow != 'shows-scroll-motion' }}
           disk-size: 4096M
           # The ten-minute trace processor exhausted the default emulator RAM.
