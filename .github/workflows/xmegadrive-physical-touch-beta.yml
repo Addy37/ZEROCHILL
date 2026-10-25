@@ -1,0 +1,49 @@
+name: Build XMegaDrive Physical Touch Beta
+
+on:
+  push:
+    branches:
+      - feature/zerochill-notifications-5.3.0
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: e9b71d641e2543f6c66df7ce275a17edda733ff5
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+          cache-read-only: true
+
+      - name: Verify physical gesture bridge
+        run: |
+          ! grep -q 'dispatchNativeTap' app/src/main/java/com/webapp/crazyshit/XMegaDriveBrowserFetch.java
+          ! grep -q 'MotionEvent.obtain' app/src/main/java/com/webapp/crazyshit/XMegaDriveBrowserFetch.java
+          ! grep -q 'triggerNativeAgeContinue' app/src/main/java/com/webapp/crazyshit/XMegaDriveBrowserFetch.java
+          ! grep -q 'el.click()' app/src/main/java/com/webapp/crazyshit/XMegaDriveBrowserFetch.java
+
+      - name: Run focused XMegaDrive tests
+        run: gradle --no-daemon :app:testDebugUnitTest --tests com.webapp.crazyshit.XMegaDriveAgeGateSafetyTest --tests com.webapp.crazyshit.XMegaDriveAgePromptTest
+
+      - name: Build debug beta
+        run: gradle --no-daemon :app:assembleDebug
+
+      - name: Rename beta
+        run: cp app/build/outputs/apk/debug/app-debug.apk ZeroChill-e9b71d6-XMegaDrive-Physical-Touch-Beta.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ZeroChill-XMegaDrive-Physical-Touch-Beta
+          path: ZeroChill-e9b71d6-XMegaDrive-Physical-Touch-Beta.apk
+          retention-days: 7
