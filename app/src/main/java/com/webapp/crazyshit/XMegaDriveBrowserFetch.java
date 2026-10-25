@@ -555,11 +555,7 @@ final class XMegaDriveBrowserFetch {
                 + "if(e.tagName==='H1')o.text=e.textContent||'';"
                 + "return o;};"
                 + "const bodyText=(document.body&&document.body.innerText)||'';"
-                + "const age=/age confirmation/i.test(bodyText);"
-                + "if(age){const controls=document.querySelectorAll('button,input,a');"
-                + "for(let i=0;i<controls.length;i++){const el=controls[i];"
-                + "const label=(el.innerText||el.value||el.getAttribute('value')||'');"
-                + "if(/continue/i.test(label)){el.click(); break;}}}"
+                + ageGateSafetyScript()
                 + "const scripts=[]; const list=document.scripts||[];"
                 + "for(let i=0;i<list.length&&scripts.length<3;i++){"
                 + "const t=list[i].textContent||'';"
@@ -893,6 +889,30 @@ final class XMegaDriveBrowserFetch {
                 || body.contains("error 1020")
                 || body.contains("error 1015");
     }
+
+/**
+ * Keep the reliable 5.2.1 visible fallback, but make every known age-decline
+ * control inert before that WebView is revealed. Continue remains available.
+ */
+static String ageGateSafetyScript() {
+    return "const ageNorm=s=>String(s||'').replace(String.fromCharCode(8217),\"'\").replace(/\\s+/g,' ').trim().toLowerCase();"
+            + "const ageDecline=s=>/\\b(exit|leave|decline)\\b/.test(s)||/under\\s*18/.test(s)"
+            + "||/\\bi(?:'m| am|m) not\\b/.test(s)||s==='no'||s==='no thanks'||s==='not 18';"
+            + "const ageAccept=s=>!!s&&!ageDecline(s)&&(/\\bcontinue\\b/.test(s)||/\\benter\\b/.test(s)"
+            + "||s==='yes'||/\\bi(?:'m| am|m) 18\\b/.test(s));"
+            + "const age=/age confirmation/i.test(bodyText);"
+            + "if(age){const controls=document.querySelectorAll('button,input[type=\"button\"],input[type=\"submit\"],a,[role=\"button\"]');"
+            + "const ageLabel=el=>ageNorm(el.innerText||el.textContent||el.value||el.getAttribute('value')||el.getAttribute('aria-label')||'');"
+            + "const hideDecline=el=>{const label=ageLabel(el);if(!ageDecline(label))return false;"
+            + "el.style.display='none';el.setAttribute('aria-hidden','true');el.setAttribute('tabindex','-1');"
+            + "try{if('disabled' in el)el.disabled=true;}catch(e){}return true;};"
+            + "for(let i=0;i<controls.length;i++)hideDecline(controls[i]);"
+            + "if(!window.__zeroChillAgeExitGuard){window.__zeroChillAgeExitGuard=true;"
+            + "document.addEventListener('click',ev=>{const el=ev.target&&ev.target.closest?ev.target.closest('button,input,a,[role=\"button\"]'):null;"
+            + "if(!el)return;const text=(document.body&&document.body.innerText)||'';if(!/age confirmation/i.test(text))return;"
+            + "if(ageDecline(ageLabel(el))){ev.preventDefault();ev.stopImmediatePropagation();}},true);}"
+            + "for(let i=0;i<controls.length;i++){const el=controls[i];if(!ageAccept(ageLabel(el)))continue;el.click();break;}}";
+}
 
     private static boolean needsPerson(String title, String text) {
         String blob = ((title == null ? "" : title) + "\n" + (text == null ? "" : text))
