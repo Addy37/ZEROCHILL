@@ -11,10 +11,14 @@ public class XMegaDriveAgeGateSafetyTest {
         assertTrue(script.contains("ageDecline"));
         assertTrue(script.contains("style.display='none'"));
         assertTrue(script.contains("aria-hidden"));
+        assertTrue(script.contains("tabindex"));
+        assertTrue(script.contains("disabled"));
+        assertTrue(script.contains("document.addEventListener('click'"));
         assertTrue(script.contains("stopImmediatePropagation"));
         assertTrue(script.contains("ageAccept"));
         assertTrue(script.contains("el.click()"));
         assertTrue(script.contains("\\b(exit|leave|decline)\\b"));
+        assertTrue(script.indexOf("hideDecline") < script.lastIndexOf("el.click()"));
         assertFalse(script.contains("ageDecline(ageLabel(el)))continue;el.click()"));
     }
 }
