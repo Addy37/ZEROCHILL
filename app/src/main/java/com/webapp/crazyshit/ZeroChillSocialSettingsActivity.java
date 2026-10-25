@@ -214,7 +214,7 @@ public final class ZeroChillSocialSettingsActivity extends Activity {
         toggle("Likes on my comments", values.likes, enabled -> save(new ZeroChillNotificationPreferences.Values(
                 preferenceValues.replies, enabled, preferenceValues.directMessages,
                 preferenceValues.creatorUpdates, preferenceValues.appUpdates)));
-        TextView dmNote = label("Messages remain in your inbox. Social push alerts are not available.", 12,
+        TextView dmNote = label("Message alerts use Android notification settings. Your messages stay in your inbox.", 12,
                 Color.rgb(130, 145, 155), false);
         LinearLayout.LayoutParams dmParams = new LinearLayout.LayoutParams(-1, -2);
         dmParams.topMargin = dp(9);

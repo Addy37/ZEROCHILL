@@ -46,7 +46,7 @@ public class ZeroChillSocialSettingsUiTest {
         setControlsEnabled.invoke(activity, true);
         for (Switch control : switches) assertTrue(control.isEnabled());
         assertNull(find(root, "Direct messages"));
-        assertNotNull(find(root, "Messages remain in your inbox. Social push alerts are not available."));
+        assertNotNull(find(root, "Message alerts use Android notification settings. Your messages stay in your inbox."));
         ZeroChillPublicProfileUiTest.capture(root, "profile-account-2-notifications.png", 320, 800);
     }
 
