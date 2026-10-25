@@ -153,11 +153,16 @@ final class UpdateInboxStore {
                     for (Entry current : existing) {
                         if (!entry.accountId.equals(current.accountId)
                                 || !entry.fingerprint.equals(current.fingerprint)) continue;
-                        if (!entry.avatarUrl.equals(current.avatarUrl) || !entry.actorId.equals(current.actorId)) {
-                            current.avatarUrl = entry.avatarUrl;
-                            current.actorId = entry.actorId;
-                            refreshed = true;
-                        }
+                        boolean changed = false;
+                        if (!entry.avatarUrl.equals(current.avatarUrl)) { current.avatarUrl = entry.avatarUrl; changed = true; }
+                        if (!entry.actorId.equals(current.actorId)) { current.actorId = entry.actorId; changed = true; }
+                        if (!entry.actorName.equals(current.actorName)) { current.actorName = entry.actorName; changed = true; }
+                        if (!entry.title.equals(current.title)) { current.title = entry.title; changed = true; }
+                        if (!entry.subtitle.equals(current.subtitle)) { current.subtitle = entry.subtitle; changed = true; }
+                        if (!entry.pageUrl.equals(current.pageUrl)) { current.pageUrl = entry.pageUrl; changed = true; }
+                        if (!entry.videoTitle.equals(current.videoTitle)) { current.videoTitle = entry.videoTitle; changed = true; }
+                        if (!entry.commentId.equals(current.commentId)) { current.commentId = entry.commentId; changed = true; }
+                        if (changed) refreshed = true;
                         break;
                     }
                 }
@@ -173,6 +178,78 @@ final class UpdateInboxStore {
             writeLocked(context, incoming);
             return inserted;
         }
+    }
+
+    static Entry recordSocialPush(
+            Context context,
+            String accountId,
+            String eventId,
+            String socialType,
+            String actorId,
+            String actorName,
+            String pageUrl,
+            String commentId
+    ) {
+        if (context == null) return null;
+        String account = clean(accountId);
+        String event = clean(eventId);
+        String type = clean(socialType);
+        String actor = clean(actorId);
+        String page = clean(pageUrl);
+        String comment = clean(commentId);
+        if (account.isEmpty() || event.isEmpty() || actor.isEmpty() || page.isEmpty() || comment.isEmpty()) return null;
+        if (!account.equals(ZeroChillSessionStore.currentUserId(context))) return null;
+        if (!ZeroChillSocialRepository.SocialActivity.TYPE_REPLY.equals(type)
+                && !ZeroChillSocialRepository.SocialActivity.TYPE_LIKE.equals(type)) return null;
+
+        Entry entry = new Entry();
+        entry.timestamp = System.currentTimeMillis();
+        entry.category = CATEGORY_SOCIAL;
+        entry.sourceKey = "social";
+        entry.sourceLabel = "Social";
+        entry.accountId = account;
+        entry.socialType = type;
+        entry.pageUrl = page;
+        entry.commentId = comment;
+        entry.actorId = actor;
+        entry.actorName = clean(actorName).isEmpty() ? "Someone on ZEROCHILL" : clean(actorName);
+        entry.title = entry.actorName + (ZeroChillSocialRepository.SocialActivity.TYPE_REPLY.equals(type)
+                ? " replied to your comment" : " liked your comment");
+        entry.subtitle = ZeroChillSocialRepository.SocialActivity.TYPE_REPLY.equals(type)
+                ? "Open to view the reply." : "Open to view your comment.";
+        entry.count = 1;
+        entry.fingerprint = fingerprint(CATEGORY_SOCIAL, account + "|" + event, Collections.emptyList());
+        entry.id = entry.fingerprint + ":" + entry.timestamp;
+
+        synchronized (LOCK) {
+            ArrayList<Entry> existing = readLocked(context);
+            pruneNonFavoriteContent(context, existing);
+            CleanupState cleanup = new CleanupState(context);
+            if (cleanup.contains(entry)) return null;
+            for (Entry current : existing) {
+                if (!account.equals(current.accountId) || !entry.fingerprint.equals(current.fingerprint)) continue;
+                boolean changed = false;
+                if (current.pageUrl.isEmpty()) { current.pageUrl = entry.pageUrl; changed = true; }
+                if (current.commentId.isEmpty()) { current.commentId = entry.commentId; changed = true; }
+                if (current.actorId.isEmpty()) { current.actorId = entry.actorId; changed = true; }
+                if (current.actorName.isEmpty()) { current.actorName = entry.actorName; changed = true; }
+                if (changed) writeLocked(context, existing);
+                return current;
+            }
+            existing.add(0, entry);
+            dedupeAndTrim(existing);
+            writeLocked(context, existing);
+            return entry;
+        }
+    }
+
+    static Entry findVisibleById(Context context, String id, String accountId) {
+        String wanted = clean(id);
+        if (context == null || wanted.isEmpty()) return null;
+        for (Entry entry : allForAccount(context, accountId)) {
+            if (wanted.equals(entry.id)) return entry;
+        }
+        return null;
     }
 
     static void removeAccount(Context context, String accountId) {

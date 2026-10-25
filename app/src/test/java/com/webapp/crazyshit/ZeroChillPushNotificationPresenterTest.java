@@ -31,6 +31,26 @@ public class ZeroChillPushNotificationPresenterTest {
     }
 
     @Test
+    public void socialIntentOpensNotificationCenterWithExactEntry() {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        String entryId = "social-entry-123";
+
+        Intent intent = ZeroChillPushNotificationPresenter.socialIntent(activity, entryId);
+
+        assertEquals(UpdateInboxActivity.class.getName(), intent.getComponent().getClassName());
+        assertEquals(entryId, intent.getStringExtra(UpdateInboxActivity.EXTRA_SOCIAL_PUSH_ENTRY_ID));
+    }
+
+    @Test
+    public void socialEventProducesStableSeparateNotificationId() {
+        String eventId = "reply:550e8400-e29b-41d4-a716-446655440000";
+        assertEquals(
+                ZeroChillPushNotificationPresenter.socialNotificationId(eventId),
+                ZeroChillPushNotificationPresenter.socialNotificationId(eventId)
+        );
+    }
+
+    @Test
     public void messageIdProducesStableNotificationId() {
         String id = "12345678-1234-4234-8234-123456789012";
         assertEquals(

@@ -25,17 +25,44 @@ public final class ZeroChillFirebaseMessagingService extends FirebaseMessagingSe
     public void onMessageReceived(@NonNull RemoteMessage remoteMessage) {
         super.onMessageReceived(remoteMessage);
         Map<String, String> data = remoteMessage.getData();
-        if (!"direct_message".equals(clean(data.get("type")))) return;
-
+        String type = clean(data.get("type"));
         String recipientId = clean(data.get("recipient_id"));
         String currentUserId = ZeroChillSessionStore.currentUserId(this);
         if (currentUserId.isEmpty() || !currentUserId.equalsIgnoreCase(recipientId)) return;
 
-        ZeroChillPushNotificationPresenter.showDirectMessage(
+        if ("direct_message".equals(type)) {
+            ZeroChillPushNotificationPresenter.showDirectMessage(
+                    this,
+                    clean(data.get("message_id")),
+                    clean(data.get("sender_id")),
+                    clean(data.get("sender_name"))
+            );
+            return;
+        }
+
+        String socialType;
+        if ("comment_reply".equals(type)) socialType = ZeroChillSocialRepository.SocialActivity.TYPE_REPLY;
+        else if ("comment_like".equals(type)) socialType = ZeroChillSocialRepository.SocialActivity.TYPE_LIKE;
+        else return;
+
+        String eventId = clean(data.get("event_id"));
+        UpdateInboxStore.Entry entry = UpdateInboxStore.recordSocialPush(
                 this,
-                clean(data.get("message_id")),
-                clean(data.get("sender_id")),
-                clean(data.get("sender_name"))
+                recipientId,
+                eventId,
+                socialType,
+                clean(data.get("actor_id")),
+                clean(data.get("actor_name")),
+                clean(data.get("page_url")),
+                clean(data.get("comment_id"))
+        );
+        if (entry == null) return;
+        ZeroChillPushNotificationPresenter.showSocialActivity(
+                this,
+                eventId,
+                entry.id,
+                socialType,
+                clean(data.get("actor_name"))
         );
     }
 

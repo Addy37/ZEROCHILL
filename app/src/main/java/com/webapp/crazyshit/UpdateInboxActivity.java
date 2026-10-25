@@ -48,6 +48,7 @@ import java.util.concurrent.Executors;
 
 /** Notification history backed by the existing local update inbox. */
 public final class UpdateInboxActivity extends Activity {
+    static final String EXTRA_SOCIAL_PUSH_ENTRY_ID = "zerochill_social_push_entry_id";
     private static final String FILTER_ALL = "";
     private static final String FILTER_SOCIAL = UpdateInboxStore.CATEGORY_SOCIAL;
     private static final String FILTER_CREATORS = UpdateInboxStore.CATEGORY_ONLYFAP;
@@ -76,6 +77,7 @@ public final class UpdateInboxActivity extends Activity {
     private boolean historyLoading;
     private boolean historyPending;
     private boolean refreshAvatarsPending;
+    private String pendingSocialPushEntryId = "";
     private final Runnable loadHistory = this::loadHistory;
     private final Runnable refreshHistory = () -> {
         if (observing && !isFinishing() && !isDestroyed()) render();
@@ -90,6 +92,7 @@ public final class UpdateInboxActivity extends Activity {
     protected void onCreate(Bundle state) {
         super.onCreate(state);
         historyAccount = ZeroChillSessionStore.currentUserId(this);
+        pendingSocialPushEntryId = socialPushEntryId(getIntent());
         if (state != null) creatorRows.restore(state.getStringArrayList("expanded_creator_notifications"));
         if (state != null) activeFilter = state.getString("filter", FILTER_ALL);
         buildUi();
@@ -112,6 +115,31 @@ public final class UpdateInboxActivity extends Activity {
         }
         refreshAvatarsPending = true;
         render();
+        if (recycler != null) recycler.post(this::openPendingSocialPush);
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        pendingSocialPushEntryId = socialPushEntryId(intent);
+        if (observing && recycler != null) recycler.post(this::openPendingSocialPush);
+    }
+
+    private void openPendingSocialPush() {
+        String id = pendingSocialPushEntryId == null ? "" : pendingSocialPushEntryId.trim();
+        if (id.isEmpty() || isFinishing() || isDestroyed()) return;
+        pendingSocialPushEntryId = "";
+        UpdateInboxStore.Entry entry = UpdateInboxStore.findVisibleById(
+                this, id, ZeroChillSessionStore.currentUserId(this));
+        if (entry != null && UpdateInboxStore.CATEGORY_SOCIAL.equals(entry.category)) {
+            openSocial(entry, false);
+        }
+    }
+
+    private static String socialPushEntryId(Intent intent) {
+        return intent == null ? "" : String.valueOf(intent.getStringExtra(EXTRA_SOCIAL_PUSH_ENTRY_ID) == null
+                ? "" : intent.getStringExtra(EXTRA_SOCIAL_PUSH_ENTRY_ID)).trim();
     }
 
     private void refreshStoredAvatars(String owner, List<UpdateInboxStore.Entry> entries) {

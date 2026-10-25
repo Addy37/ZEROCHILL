@@ -24,6 +24,44 @@ type DeviceRegistration = {
   firebase_installation_id: string;
 };
 
+type DispatchRequest =
+  | { kind: "direct_message"; messageId: string }
+  | { kind: "comment_reply"; replyId: string }
+  | { kind: "comment_like"; commentId: string; userId: string };
+
+type PreferenceField = "direct_messages" | "replies" | "likes";
+
+export function parseDispatchRequest(payload: unknown): DispatchRequest {
+  if (typeof payload !== "object" || payload === null || Array.isArray(payload)) {
+    throw new Error("Invalid request");
+  }
+  const record = payload as Record<string, unknown>;
+  const fields = Object.keys(record);
+  const hasOnly = (...wanted: string[]) =>
+    fields.length === wanted.length && wanted.every((field) => fields.includes(field));
+  const messageId = String(record.message_id ?? "").trim();
+  if (hasOnly("message_id") && UUID.test(messageId)) {
+    return { kind: "direct_message", messageId };
+  }
+
+  const eventType = String(record.event_type ?? "").trim();
+  if (eventType === "comment_reply") {
+    const replyId = String(record.reply_id ?? "").trim();
+    if (hasOnly("event_type", "reply_id") && UUID.test(replyId)) {
+      return { kind: "comment_reply", replyId };
+    }
+  }
+  if (eventType === "comment_like") {
+    const commentId = String(record.comment_id ?? "").trim();
+    const userId = String(record.user_id ?? "").trim();
+    if (hasOnly("event_type", "comment_id", "user_id")
+      && UUID.test(commentId) && UUID.test(userId)) {
+      return { kind: "comment_like", commentId, userId };
+    }
+  }
+  throw new Error("Invalid request");
+}
+
 export async function handlePushDispatch(request: Request): Promise<Response> {
   if (request.method !== "POST") return json(405, { error: "Use POST." });
 
@@ -49,61 +87,153 @@ export async function handlePushDispatch(request: Request): Promise<Response> {
   }
   if (verified !== true) return json(401, { error: "Unauthorized." });
 
-  let payload: unknown;
+  let rawPayload: unknown;
   try {
-    payload = await request.json();
+    rawPayload = await request.json();
   } catch {
     return json(400, { error: "Invalid request." });
   }
-  if (typeof payload !== "object" || payload === null || Array.isArray(payload)) {
+
+  let dispatch: DispatchRequest;
+  try {
+    dispatch = parseDispatchRequest(rawPayload);
+  } catch {
     return json(400, { error: "Invalid request." });
   }
-  const fields = Object.keys(payload as Record<string, unknown>);
-  const messageId = String((payload as Record<string, unknown>).message_id ?? "").trim();
-  if (fields.length !== 1 || !UUID.test(messageId)) {
-    return json(400, { error: "Invalid message." });
+
+  let recipientId = "";
+  let actorId = "";
+  let preferenceField: PreferenceField = "direct_messages";
+  let pushData: Record<string, string> = {};
+
+  if (dispatch.kind === "direct_message") {
+    const { data: message, error: messageError } = await admin
+      .from("direct_messages")
+      .select("id,sender_id,recipient_id")
+      .eq("id", dispatch.messageId)
+      .maybeSingle();
+    if (messageError) {
+      console.error("Push message lookup failed", messageError.message);
+      return json(500, { error: "Unable to prepare notification." });
+    }
+    if (!message) return json(404, { error: "Message not found." });
+    recipientId = String(message.recipient_id ?? "");
+    actorId = String(message.sender_id ?? "");
+    preferenceField = "direct_messages";
+    pushData = {
+      type: "direct_message",
+      message_id: String(message.id ?? ""),
+      sender_id: actorId,
+      recipient_id: recipientId,
+    };
+  } else if (dispatch.kind === "comment_reply") {
+    const { data: reply, error: replyError } = await admin
+      .from("comments")
+      .select("id,parent_id,user_id,canonical_url,deleted_at")
+      .eq("id", dispatch.replyId)
+      .maybeSingle();
+    if (replyError) {
+      console.error("Reply push lookup failed", replyError.message);
+      return json(500, { error: "Unable to prepare notification." });
+    }
+    if (!reply || !reply.parent_id || reply.deleted_at) {
+      return json(200, { sent: 0, skipped: "reply_unavailable" });
+    }
+    const { data: parent, error: parentError } = await admin
+      .from("comments")
+      .select("id,user_id,canonical_url,deleted_at")
+      .eq("id", reply.parent_id)
+      .maybeSingle();
+    if (parentError) {
+      console.error("Reply parent lookup failed", parentError.message);
+      return json(500, { error: "Unable to prepare notification." });
+    }
+    if (!parent || parent.deleted_at) return json(200, { sent: 0, skipped: "parent_unavailable" });
+    recipientId = String(parent.user_id ?? "");
+    actorId = String(reply.user_id ?? "");
+    const pageUrl = cleanPageUrl(String(reply.canonical_url || parent.canonical_url || ""));
+    if (!pageUrl) return json(200, { sent: 0, skipped: "content_unavailable" });
+    preferenceField = "replies";
+    pushData = {
+      type: "comment_reply",
+      event_id: `reply:${String(reply.id ?? "")}`,
+      actor_id: actorId,
+      recipient_id: recipientId,
+      comment_id: String(reply.id ?? ""),
+      page_url: pageUrl,
+    };
+  } else {
+    const { data: like, error: likeError } = await admin
+      .from("comment_likes")
+      .select("comment_id,user_id")
+      .eq("comment_id", dispatch.commentId)
+      .eq("user_id", dispatch.userId)
+      .maybeSingle();
+    if (likeError) {
+      console.error("Comment-like push lookup failed", likeError.message);
+      return json(500, { error: "Unable to prepare notification." });
+    }
+    if (!like) return json(200, { sent: 0, skipped: "like_unavailable" });
+    const { data: comment, error: commentError } = await admin
+      .from("comments")
+      .select("id,user_id,canonical_url,deleted_at")
+      .eq("id", dispatch.commentId)
+      .maybeSingle();
+    if (commentError) {
+      console.error("Liked comment lookup failed", commentError.message);
+      return json(500, { error: "Unable to prepare notification." });
+    }
+    if (!comment || comment.deleted_at) return json(200, { sent: 0, skipped: "comment_unavailable" });
+    recipientId = String(comment.user_id ?? "");
+    actorId = String(like.user_id ?? "");
+    const pageUrl = cleanPageUrl(String(comment.canonical_url ?? ""));
+    if (!pageUrl) return json(200, { sent: 0, skipped: "content_unavailable" });
+    preferenceField = "likes";
+    pushData = {
+      type: "comment_like",
+      event_id: `like:${String(comment.id ?? "")}:${actorId}`,
+      actor_id: actorId,
+      recipient_id: recipientId,
+      comment_id: String(comment.id ?? ""),
+      page_url: pageUrl,
+    };
   }
 
-  const { data: message, error: messageError } = await admin
-    .from("direct_messages")
-    .select("id,sender_id,recipient_id")
-    .eq("id", messageId)
-    .maybeSingle();
-  if (messageError) {
-    console.error("Push message lookup failed", messageError.message);
-    return json(500, { error: "Unable to prepare notification." });
+  if (!UUID.test(recipientId) || !UUID.test(actorId)) {
+    return json(200, { sent: 0, skipped: "invalid_participant" });
   }
-  if (!message) return json(404, { error: "Message not found." });
-  if (message.recipient_id === message.sender_id) return json(200, { sent: 0, skipped: "self" });
+  if (recipientId === actorId) return json(200, { sent: 0, skipped: "self" });
 
   const { data: preference, error: preferenceError } = await admin
     .from("notification_preferences")
-    .select("direct_messages")
-    .eq("user_id", message.recipient_id)
+    .select("direct_messages,replies,likes")
+    .eq("user_id", recipientId)
     .maybeSingle();
   if (preferenceError) {
     console.error("Push preference lookup failed", preferenceError.message);
     return json(500, { error: "Unable to prepare notification." });
   }
-  if (preference?.direct_messages === false) {
+  if (preference && (preference as Record<string, unknown>)[preferenceField] === false) {
     return json(200, { sent: 0, skipped: "disabled" });
   }
 
-  const { data: senderProfile, error: profileError } = await admin
+  const { data: actorProfile, error: profileError } = await admin
     .from("profiles")
     .select("username,display_name")
-    .eq("user_id", message.sender_id)
+    .eq("user_id", actorId)
     .maybeSingle();
   if (profileError) {
-    console.error("Push sender profile lookup failed", profileError.message);
+    console.error("Push actor profile lookup failed", profileError.message);
     return json(500, { error: "Unable to prepare notification." });
   }
-  const senderName = cleanSenderName(senderProfile?.display_name || senderProfile?.username || "");
+  const actorName = cleanSenderName(actorProfile?.display_name || actorProfile?.username || "");
+  if (dispatch.kind === "direct_message") pushData.sender_name = actorName;
+  else pushData.actor_name = actorName;
 
   const { data: devices, error: deviceError } = await admin
     .from("push_device_tokens")
     .select("user_id,installation_id,application_id,firebase_installation_id")
-    .eq("user_id", message.recipient_id)
+    .eq("user_id", recipientId)
     .order("updated_at", { ascending: false })
     .limit(MAX_DEVICES);
   if (deviceError) {
@@ -142,26 +272,18 @@ export async function handlePushDispatch(request: Request): Promise<Response> {
   let sent = 0;
   let failed = 0;
   for (const registration of registrations) {
-    const result = await sendDirectMessagePush(
+    const result = await sendPush(
       accessToken,
       serviceAccount.project_id,
       registration.firebase_installation_id,
-      {
-        type: "direct_message",
-        message_id: message.id,
-        sender_id: message.sender_id,
-        sender_name: senderName,
-        recipient_id: message.recipient_id,
-      },
+      pushData,
     );
     if (result.ok) {
       sent++;
       continue;
     }
     failed++;
-    if (result.unregistered) {
-      await removeInvalidRegistration(admin, registration);
-    }
+    if (result.unregistered) await removeInvalidRegistration(admin, registration);
   }
 
   return json(200, { sent, failed });
@@ -175,6 +297,17 @@ export function cleanSenderName(value: string): string {
     .slice(0, 64)
     .trim();
   return clean || "Someone on ZEROCHILL";
+}
+
+export function cleanPageUrl(value: string): string {
+  try {
+    const url = new URL(String(value ?? "").trim());
+    if (url.protocol !== "https:" && url.protocol !== "http:") return "";
+    url.hash = "";
+    return url.toString().slice(0, 2048);
+  } catch {
+    return "";
+  }
 }
 
 export function parseServiceAccount(raw: string): FirebaseServiceAccount {
@@ -233,7 +366,7 @@ async function mintAccessToken(account: FirebaseServiceAccount): Promise<string>
   return token;
 }
 
-async function sendDirectMessagePush(
+async function sendPush(
   accessToken: string,
   projectId: string,
   firebaseInstallationId: string,
@@ -293,16 +426,17 @@ async function removeInvalidRegistration(admin: SupabaseClient, registration: De
   if (error) console.error("Unable to remove invalid Firebase installation", error.message);
 }
 
-function pemToBytes(pem: string): Uint8Array {
+function pemToBytes(pem: string): ArrayBuffer {
   const base64 = pem
     .replace(/-----BEGIN PRIVATE KEY-----/g, "")
     .replace(/-----END PRIVATE KEY-----/g, "")
     .replace(/\s+/g, "");
   if (!base64) throw new Error("Missing Firebase private key");
   const decoded = atob(base64);
-  const result = new Uint8Array(decoded.length);
+  const buffer = new ArrayBuffer(decoded.length);
+  const result = new Uint8Array(buffer);
   for (let i = 0; i < decoded.length; i++) result[i] = decoded.charCodeAt(i);
-  return result;
+  return buffer;
 }
 
 function base64UrlText(value: string): string {
