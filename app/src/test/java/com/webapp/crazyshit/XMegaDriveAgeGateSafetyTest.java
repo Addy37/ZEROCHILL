@@ -22,16 +22,19 @@ public class XMegaDriveAgeGateSafetyTest {
         assertFalse(script.contains("ageDecline(ageLabel(el)))continue;el.click()"));
     }
 
-    @Test public void nativePromptFocusesAcceptControlWithoutSyntheticClick() {
-        String script = XMegaDriveBrowserFetch.ageGateNativeFocusScript();
+    @Test public void nativePromptLocatesAcceptControlForAndroidTouchWithoutSyntheticClick() {
+        String script = XMegaDriveBrowserFetch.ageGateNativeTapTargetScript();
         assertTrue(script.contains("style.display='none'"));
         assertTrue(script.contains("aria-hidden"));
         assertTrue(script.contains("disabled"));
         assertTrue(script.contains("scrollIntoView"));
-        assertTrue(script.contains("focus"));
-        assertTrue(script.contains("document.activeElement===el"));
-        assertTrue(script.contains("\\b(exit|leave|decline)\\b"));
+        assertTrue(script.contains("getBoundingClientRect"));
+        assertTrue(script.contains("window.innerWidth"));
+        assertTrue(script.contains("window.innerHeight"));
+        assertTrue(script.contains("JSON.stringify"));
+        assertTrue(script.contains("\b(exit|leave|decline)\b"));
         assertTrue(script.contains("i(?:'m| am|m) 18"));
         assertFalse(script.contains("el.click()"));
+        assertFalse(script.contains("document.activeElement"));
     }
 }

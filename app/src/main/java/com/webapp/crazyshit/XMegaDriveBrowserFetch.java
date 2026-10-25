@@ -934,46 +934,87 @@ static String ageGateSafetyScript() {
             + "for(let i=0;i<controls.length;i++){const el=controls[i];if(!ageAccept(ageLabel(el)))continue;el.click();break;}}";
 }
 
-    static String ageGateNativeFocusScript() {
+    static String ageGateNativeTapTargetScript() {
         return "(() => {"
-                + "const norm=s=>String(s||'').replace(String.fromCharCode(8217),\"'\").replace(/\\s+/g,' ').trim().toLowerCase();"
-                + "const decline=s=>/\\b(exit|leave|decline)\\b/.test(s)||/under\\s*18/.test(s)"
-                + "||/\\bi(?:'m| am|m) not\\b/.test(s)||s==='no'||s==='no thanks'||s==='not 18';"
-                + "const accept=s=>!!s&&!decline(s)&&(/\\bcontinue\\b/.test(s)||/\\benter\\b/.test(s)"
-                + "||s==='yes'||/\\bi(?:'m| am|m) 18\\b/.test(s));"
-                + "const body=(document.body&&document.body.innerText)||'';if(!/age confirmation/i.test(body))return false;"
-                + "const controls=document.querySelectorAll('button,input[type=\\\"button\\\"],input[type=\\\"submit\\\"],a,[role=\\\"button\\\"]');"
+                + "const norm=s=>String(s||'').replace(String.fromCharCode(8217),\"'\").replace(/\s+/g,' ').trim().toLowerCase();"
+                + "const decline=s=>/\b(exit|leave|decline)\b/.test(s)||/under\s*18/.test(s)"
+                + "||/\bi(?:'m| am|m) not\b/.test(s)||s==='no'||s==='no thanks'||s==='not 18';"
+                + "const accept=s=>!!s&&!decline(s)&&(/\bcontinue\b/.test(s)||/\benter\b/.test(s)"
+                + "||s==='yes'||/\bi(?:'m| am|m) 18\b/.test(s));"
+                + "const body=(document.body&&document.body.innerText)||'';if(!/age confirmation/i.test(body))return '';"
+                + "const controls=document.querySelectorAll('button,input[type=button],input[type=submit],a,[role=button]');"
                 + "const label=el=>norm(el.innerText||el.textContent||el.value||el.getAttribute('value')||el.getAttribute('aria-label')||'');"
                 + "for(let i=0;i<controls.length;i++){const el=controls[i];if(!decline(label(el)))continue;"
                 + "el.style.display='none';el.setAttribute('aria-hidden','true');el.setAttribute('tabindex','-1');"
                 + "try{if('disabled' in el)el.disabled=true;}catch(e){}}"
                 + "for(let i=0;i<controls.length;i++){const el=controls[i];if(!accept(label(el)))continue;"
                 + "try{el.scrollIntoView({block:'center',inline:'center'});}catch(e){}"
-                + "try{el.focus({preventScroll:false});}catch(e){try{el.focus();}catch(ignore){}}"
-                + "return document.activeElement===el;}return false;})()";
+                + "const r=el.getBoundingClientRect();if(!r||r.width<=0||r.height<=0)return '';"
+                + "return JSON.stringify({x:r.left+r.width/2,y:r.top+r.height/2,vw:window.innerWidth||0,vh:window.innerHeight||0});}"
+                + "return '';})()";
     }
 
     private static void triggerNativeAgeContinue(WebView webView) {
         if (webView == null) return;
         try {
             webView.requestFocus();
-            webView.evaluateJavascript(ageGateNativeFocusScript(), encoded -> {
-                String value = encoded == null ? "" : encoded.replace("\"", "").trim();
-                if (!"true".equalsIgnoreCase(value)) return;
-                webView.post(() -> {
-                    try {
-                        webView.dispatchKeyEvent(new android.view.KeyEvent(
-                                android.view.KeyEvent.ACTION_DOWN,
-                                android.view.KeyEvent.KEYCODE_ENTER));
-                        webView.dispatchKeyEvent(new android.view.KeyEvent(
-                                android.view.KeyEvent.ACTION_UP,
-                                android.view.KeyEvent.KEYCODE_ENTER));
-                    } catch (Exception ignored) {
-                    }
-                });
+            webView.evaluateJavascript(ageGateNativeTapTargetScript(), encoded -> {
+                try {
+                    Object decoded = new JSONTokener(encoded == null ? "null" : encoded).nextValue();
+                    if (!(decoded instanceof String) || ((String) decoded).trim().isEmpty()) return;
+                    JSONObject target = new JSONObject((String) decoded);
+                    double cssX = target.optDouble("x", -1d);
+                    double cssY = target.optDouble("y", -1d);
+                    double viewportWidth = target.optDouble("vw", 0d);
+                    double viewportHeight = target.optDouble("vh", 0d);
+                    int viewWidth = webView.getWidth();
+                    int viewHeight = webView.getHeight();
+                    if (cssX < 0d || cssY < 0d || viewportWidth <= 0d || viewportHeight <= 0d
+                            || viewWidth <= 1 || viewHeight <= 1) return;
+                    final float tapX = Math.max(1f, Math.min(viewWidth - 1f,
+                            (float) (cssX * viewWidth / viewportWidth)));
+                    final float tapY = Math.max(1f, Math.min(viewHeight - 1f,
+                            (float) (cssY * viewHeight / viewportHeight)));
+                    webView.post(() -> dispatchNativeTap(webView, tapX, tapY));
+                } catch (Exception ignored) {
+                }
             });
         } catch (Exception ignored) {
         }
+    }
+
+    private static void dispatchNativeTap(WebView webView, float x, float y) {
+        if (webView == null) return;
+        long downTime = android.os.SystemClock.uptimeMillis();
+        android.view.MotionEvent down = android.view.MotionEvent.obtain(
+                downTime,
+                downTime,
+                android.view.MotionEvent.ACTION_DOWN,
+                x,
+                y,
+                0
+        );
+        try {
+            webView.dispatchTouchEvent(down);
+        } finally {
+            down.recycle();
+        }
+        webView.postDelayed(() -> {
+            long upTime = android.os.SystemClock.uptimeMillis();
+            android.view.MotionEvent up = android.view.MotionEvent.obtain(
+                    downTime,
+                    upTime,
+                    android.view.MotionEvent.ACTION_UP,
+                    x,
+                    y,
+                    0
+            );
+            try {
+                webView.dispatchTouchEvent(up);
+            } finally {
+                up.recycle();
+            }
+        }, 72L);
     }
 
     private static XMegaDriveAgePrompt agePrompt(WebView webView) {
