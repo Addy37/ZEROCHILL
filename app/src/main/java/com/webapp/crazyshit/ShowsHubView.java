@@ -1266,8 +1266,11 @@ final class ShowsHubView extends FrameLayout {
 
             ImageView image = new ImageView(getContext());
             image.setScaleType(ImageView.ScaleType.CENTER_CROP);
-            frame.addView(image, new FrameLayout.LayoutParams(
-                    -1, portrait ? -1 : Math.round(width * 9f / 16f)));
+            int artworkHeight = portrait ? -1 : Math.round(width * 9f / 16f);
+            frame.addView(image, new FrameLayout.LayoutParams(-1, artworkHeight));
+
+            ShowsCategoryMosaicView mosaic = new ShowsCategoryMosaicView(getContext());
+            frame.addView(mosaic, new FrameLayout.LayoutParams(-1, artworkHeight));
 
             View shade = new View(getContext());
             shade.setBackground(new GradientDrawable(
@@ -1300,7 +1303,7 @@ final class ShowsHubView extends FrameLayout {
             frame.addView(title, new FrameLayout.LayoutParams(
                     -1, portrait ? -2 : shelfTitleHeight, Gravity.BOTTOM));
 
-            return new RailHolder(card, image, source, title);
+            return new RailHolder(card, image, mosaic, source, title);
         }
 
         @Override
@@ -1311,8 +1314,13 @@ final class ShowsHubView extends FrameLayout {
             holder.source.setText(showSource ? WeeklyShowsFeed.sourceLabel(item) : "");
             holder.source.setVisibility(showSource ? View.VISIBLE : View.GONE);
             holder.card.setContentDescription("Open " + item.title);
+            if (item.isCategory()) holder.mosaic.bind(item);
+            else holder.mosaic.clear();
             holder.card.setOnClickListener(v -> {
-                if (clickListener != null) clickListener.onOpen(item, holder.image);
+                if (clickListener != null) {
+                    View sourceView = holder.mosaic.isShowing() ? holder.mosaic : holder.image;
+                    clickListener.onOpen(item, sourceView);
+                }
             });
             loadArtwork(holder.image, item, false);
         }
@@ -1320,6 +1328,7 @@ final class ShowsHubView extends FrameLayout {
         @Override
         public void onViewRecycled(@NonNull RailHolder holder) {
             Glide.with(holder.image).clear(holder.image);
+            holder.mosaic.clear();
             holder.card.setOnClickListener(null);
             super.onViewRecycled(holder);
         }
@@ -1383,13 +1392,21 @@ final class ShowsHubView extends FrameLayout {
     private static final class RailHolder extends RecyclerView.ViewHolder {
         final MaterialCardView card;
         final ImageView image;
+        final ShowsCategoryMosaicView mosaic;
         final TextView source;
         final TextView title;
 
-        RailHolder(MaterialCardView card, ImageView image, TextView source, TextView title) {
+        RailHolder(
+                MaterialCardView card,
+                ImageView image,
+                ShowsCategoryMosaicView mosaic,
+                TextView source,
+                TextView title
+        ) {
             super(card);
             this.card = card;
             this.image = image;
+            this.mosaic = mosaic;
             this.source = source;
             this.title = title;
         }

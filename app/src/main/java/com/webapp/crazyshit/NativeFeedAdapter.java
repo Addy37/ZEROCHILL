@@ -91,10 +91,18 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
     private int viewMode = VIEW_LIST;
     private boolean closed;
     private boolean episodePresentation;
+    private int episodeNumberOffset;
 
     void setEpisodePresentation(boolean episode) {
         episodePresentation = episode;
         if (episode) setViewMode(VIEW_LIST);
+    }
+
+    void setEpisodeNumberOffset(int offset) {
+        int next = Math.max(0, offset);
+        if (episodeNumberOffset == next) return;
+        episodeNumberOffset = next;
+        if (episodePresentation) notifyDataSetChanged();
     }
 
     public NativeFeedAdapter(Context context, Listener listener) {
@@ -647,7 +655,10 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
 
         boolean meme = item.isMeme();
         holder.image.setTag(R.id.shows_watch_source_page, item.url);
-        holder.title.setText(displayTitle(item));
+        String visibleTitle = displayTitle(item);
+        holder.title.setText(episodePresentation
+                ? "#" + (episodeNumberOffset + position + 1) + "  " + visibleTitle
+                : visibleTitle);
         holder.info.setText(buildInfo(item));
         boolean showDescription = !episodePresentation && viewMode != VIEW_CARDS && viewMode != VIEW_POSTERS && item.description != null &&
                 !item.description.trim().isEmpty();
