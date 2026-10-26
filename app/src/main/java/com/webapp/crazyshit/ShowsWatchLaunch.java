@@ -225,9 +225,9 @@ final class ShowsWatchLaunch {
 
     private static Bitmap snapshot(View view) {
         try {
-            int width = Math.min(512, view.getWidth());
-            int height = Math.min(512, Math.max(1,
-                    Math.round(width * view.getHeight() / (float) view.getWidth())));
+            float size = Math.min(1f, Math.min(512f / view.getWidth(), 512f / view.getHeight()));
+            int width = Math.max(1, Math.round(view.getWidth() * size));
+            int height = Math.max(1, Math.round(view.getHeight() * size));
             Bitmap bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
             Canvas canvas = new Canvas(bitmap);
             canvas.scale(width / (float) view.getWidth(), height / (float) view.getHeight());
