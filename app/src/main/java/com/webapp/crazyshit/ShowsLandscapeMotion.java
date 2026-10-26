@@ -39,6 +39,7 @@ final class ShowsLandscapeMotion {
         this.railHeight = railHeight;
         surfaceParams = (FrameLayout.LayoutParams) surface.getLayoutParams();
         railParams = (LinearLayout.LayoutParams) rail.getLayoutParams();
+        trimSecondaryActions(actions);
         shell.addOnLayoutChangeListener((v, left, top, right, bottom,
                 oldLeft, oldTop, oldRight, oldBottom) -> {
             if (active && (right - left != lastWidth || bottom - top != lastHeight)) apply();
@@ -61,6 +62,16 @@ final class ShowsLandscapeMotion {
                     controls.holdInteraction(false);
                 return false;
             });
+        }
+    }
+
+    static void trimSecondaryActions(LinearLayout actions) {
+        if (actions == null) return;
+        for (int i = actions.getChildCount() - 1; i >= 0; i--) {
+            CharSequence description = actions.getChildAt(i).getContentDescription();
+            if ("Open comments".contentEquals(description) || "Share video".contentEquals(description)) {
+                actions.removeViewAt(i);
+            }
         }
     }
 
