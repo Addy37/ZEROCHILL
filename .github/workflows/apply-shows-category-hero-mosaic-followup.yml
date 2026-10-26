@@ -1,0 +1,40 @@
+name: Apply category hero mosaic follow-up
+
+on:
+  push:
+    branches:
+      - feature/shows-episode-ranges-mosaic
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out feature branch
+        uses: actions/checkout@v6
+        with:
+          ref: feature/shows-episode-ranges-mosaic
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.x'
+
+      - name: Apply follow-up patch
+        run: python tools/apply_shows_category_hero_mosaic_followup.py
+
+      - name: Remove patch scaffolding
+        run: |
+          rm -f tools/apply_shows_category_hero_mosaic_followup.py
+          rm -f .github/workflows/apply-shows-category-hero-mosaic-followup.yml
+
+      - name: Commit follow-up
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "feat: add mosaics to Shows category heroes"
+          git push origin HEAD:feature/shows-episode-ranges-mosaic
