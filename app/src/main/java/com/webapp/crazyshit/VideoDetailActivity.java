@@ -1235,6 +1235,7 @@ public class VideoDetailActivity extends Activity {
         player.addListener(new Player.Listener() {
             @Override
             public void onPlaybackStateChanged(int playbackState) {
+                if (showsOrigin && showsSavedOnExit) return;
                 if (playbackState == Player.STATE_READY) {
                     RatingFeedbackPrompt.recordSuccessfulPlayback(VideoDetailActivity.this, mediaUrl);
                 } else if (playbackState == Player.STATE_ENDED) {
@@ -1254,6 +1255,7 @@ public class VideoDetailActivity extends Activity {
             @Override
             public void onPositionDiscontinuity(Player.PositionInfo oldPosition,
                                                  Player.PositionInfo newPosition, int reason) {
+                if (showsOrigin && showsSavedOnExit) return;
                 if (!showsOrigin || !showsCompleted || player == null) return;
                 long duration = player.getDuration();
                 if (duration > 0L && newPosition.positionMs < duration - 5_000L) {
@@ -1264,6 +1266,7 @@ public class VideoDetailActivity extends Activity {
 
             @Override
             public void onRenderedFirstFrame() {
+                if (showsOrigin && showsSavedOnExit) return;
                 if (playbackIdent) {
                     showsFirstFrameRendered = true;
                     hideStartupPosterNow();
@@ -1275,12 +1278,14 @@ public class VideoDetailActivity extends Activity {
 
             @Override
             public void onPlayerError(PlaybackException error) {
+                if (showsOrigin && showsSavedOnExit) return;
                 dismissStartupPoster();
                 if (!recoverPlayback(error)) showPlaybackFailure();
             }
 
             @Override
             public void onVideoSizeChanged(VideoSize videoSize) {
+                if (showsOrigin && showsSavedOnExit) return;
                 if (videoSize == null || videoSize.width <= 0 || videoSize.height <= 0) return;
                 boolean firstVideoSize = !videoSizeKnown;
                 videoSizeKnown = true;
@@ -2905,10 +2910,20 @@ public class VideoDetailActivity extends Activity {
         boolean showsRail = showsOrigin && landscape;
         boolean fullscreen = !showsRail && ((landscape && !showsOrigin) ||
                 portraitFullscreen || rotatableFullscreen);
+        boolean preserveShowsMotion = showsOrigin && ShowsWatchLaunch.isRunning(root);
+        if (preserveShowsMotion && (showsRail || fullscreen)) {
+            ShowsWatchLaunch.cancel(root);
+            root.setBackgroundColor(Color.BLACK);
+            shell.setBackgroundColor(oledEnabled() ? Color.BLACK : Color.rgb(13, 13, 15));
+            root.setAlpha(1f);
+            preserveShowsMotion = false;
+        }
         if (detailsScroll != null) {
             detailsScroll.setVisibility(fullscreen || showsRail ? View.GONE : View.VISIBLE);
-            detailsScroll.setAlpha(1f);
-            detailsScroll.setTranslationY(0f);
+            if (!preserveShowsMotion) {
+                detailsScroll.setAlpha(1f);
+                detailsScroll.setTranslationY(0f);
+            }
         }
         if (showsLandscapeMotion != null) {
             if (showsRail) showsLandscapeMotion.enter();
@@ -2924,11 +2939,14 @@ public class VideoDetailActivity extends Activity {
             params.weight = 0f;
             setFullscreenUi(false);
         }
-        playerContainer.setLayoutParams(params);
-        playerContainer.setScaleX(1f);
-        playerContainer.setScaleY(1f);
-        playerContainer.setTranslationY(0f);
-        playerContainer.setAlpha(1f);
+        if (!preserveShowsMotion) {
+            playerContainer.setLayoutParams(params);
+            playerContainer.setScaleX(1f);
+            playerContainer.setScaleY(1f);
+            playerContainer.setTranslationX(0f);
+            playerContainer.setTranslationY(0f);
+            playerContainer.setAlpha(1f);
+        }
         updatePortraitFullscreenButton();
         applyPlayerChrome(orientation);
         if (showsOrigin && fullscreenControls != null)

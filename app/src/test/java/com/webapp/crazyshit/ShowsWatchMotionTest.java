@@ -20,6 +20,7 @@ import org.junit.runner.RunWith;
 import org.robolectric.Robolectric;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.annotation.Config;
+import org.robolectric.annotation.LooperMode;
 import org.robolectric.util.ReflectionHelpers;
 import java.util.Map;
 
@@ -212,6 +213,51 @@ public class ShowsWatchMotionTest {
                 f.player, f.details, f.poster, () -> {}));
         assertEquals(0.4f, f.poster.getAlpha(), 0.01f);
         ShowsWatchLaunch.cancel(f.root);
+        ShowsWatchLaunch.release(f.launch);
+    }
+
+    @Test
+    @LooperMode(LooperMode.Mode.PAUSED)
+    public void videoSizePortraitRelayoutKeepsRunningPlayerAndDetailsAtMidpoint() {
+        Fixture f = fixture();
+        ShowsWatchActivity watch = Robolectric.buildActivity(ShowsWatchActivity.class, f.launch).get();
+        watch.setTheme(R.style.Theme_ZeroChill_ShowsWatch);
+        ReflectionHelpers.setField(watch, "showsOrigin", true);
+        ReflectionHelpers.setField(watch, "pageUrl", PAGE);
+        ReflectionHelpers.setField(watch, "title", "Episode");
+        for (String field : new String[] {"views", "uploader", "comments", "userAgent",
+                "cookies", "relatedFeedUrl", "source", "mediaReferer", "posterUrl"})
+            ReflectionHelpers.setField(watch, field, "");
+        ReflectionHelpers.callInstanceMethod(watch, "buildUi");
+        FrameLayout root = ReflectionHelpers.getField(watch, "root");
+        View player = ReflectionHelpers.getField(watch, "playerContainer");
+        View details = ReflectionHelpers.getField(watch, "detailsScroll");
+        ImageView poster = ReflectionHelpers.getField(watch, "startupPoster");
+        root.measure(View.MeasureSpec.makeMeasureSpec(360, View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(800, View.MeasureSpec.EXACTLY));
+        root.layout(0, 0, 360, 800);
+        assertTrue(ShowsWatchLaunch.animateEntrance(watch, f.launch, root, player, details,
+                poster, ReflectionHelpers.getField(watch, "startupPosterLoading")));
+        Object motion = root.getTag(R.id.shows_watch_motion);
+        ReflectionHelpers.setField(motion, "progress", 0.45f);
+        ReflectionHelpers.callInstanceMethod(motion, "apply");
+        float scale = player.getScaleX();
+        float translation = player.getTranslationY();
+        float detailsAlpha = details.getAlpha();
+        float detailsY = details.getTranslationY();
+        assertTrue(ShowsWatchLaunch.isRunning(root));
+        ReflectionHelpers.callInstanceMethod(watch, "applyOrientation",
+                ReflectionHelpers.ClassParameter.from(int.class, Configuration.ORIENTATION_PORTRAIT));
+        assertEquals(scale, player.getScaleX(), 0.001f);
+        assertEquals(translation, player.getTranslationY(), 0.001f);
+        assertEquals(detailsAlpha, details.getAlpha(), 0.001f);
+        assertEquals(detailsY, details.getTranslationY(), 0.001f);
+        ReflectionHelpers.setField(watch, "portraitFullscreen", true);
+        ReflectionHelpers.callInstanceMethod(watch, "applyOrientation",
+                ReflectionHelpers.ClassParameter.from(int.class, Configuration.ORIENTATION_PORTRAIT));
+        assertFalse(ShowsWatchLaunch.isRunning(root));
+        assertEquals(1f, player.getScaleX(), 0.001f);
+        assertEquals(1f, details.getAlpha(), 0.001f);
         ShowsWatchLaunch.release(f.launch);
     }
 

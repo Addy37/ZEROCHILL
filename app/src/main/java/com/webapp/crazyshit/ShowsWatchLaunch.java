@@ -62,6 +62,14 @@ final class ShowsWatchLaunch {
         return activity instanceof ShowsWatchActivity;
     }
 
+    static boolean isRunning(View root) {
+        if (root == null) return false;
+        Object tag = root.getTag(R.id.shows_watch_motion);
+        if (!(tag instanceof Motion)) return false;
+        ValueAnimator animator = ((Motion) tag).animator;
+        return animator != null && animator.isStarted();
+    }
+
     static Bitmap artwork(Intent intent) {
         Handoff handoff = handoff(intent);
         return handoff == null ? null : handoff.artwork;
