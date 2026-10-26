@@ -62,6 +62,30 @@ public class XMegaDriveBrowserLifecycleTest {
         assertTrue(shadowOf(web).wasDestroyCalled());
     }
 
+    @Test public void parkedBrowserDefersImagesAndRevealRestoresThem() throws Exception {
+        Browser b = new Browser();
+        b.start();
+        WebView web = b.web.get();
+        FrameLayout overlay = b.overlay.get();
+        assertNotNull(web);
+        assertNotNull(overlay);
+        assertFalse(web.getSettings().getLoadsImagesAutomatically());
+        assertTrue(web.getSettings().getBlockNetworkImage());
+
+        Method reveal = XMegaDriveBrowserFetch.class.getDeclaredMethod(
+                "reveal", FrameLayout.class, WebView.class);
+        reveal.setAccessible(true);
+        reveal.invoke(null, overlay, web);
+
+        assertTrue(web.getSettings().getLoadsImagesAutomatically());
+        assertFalse(web.getSettings().getBlockNetworkImage());
+
+        Method destroy = XMegaDriveBrowserFetch.class.getDeclaredMethod(
+                "destroy", FrameLayout.class, WebView.class);
+        destroy.setAccessible(true);
+        destroy.invoke(null, overlay, web);
+    }
+
     @Test public void interruptedFetchCannotCreateBrowserAfterItWaitedForOwnership() throws Exception {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
         AtomicReference<Throwable> failure = new AtomicReference<>();
