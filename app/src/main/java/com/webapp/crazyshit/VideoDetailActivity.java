@@ -1110,15 +1110,21 @@ public class VideoDetailActivity extends Activity {
                         .putExtra(PlayerActivity.EXTRA_START_POSITION, requestedStartPosition)
                         .putExtra(EXTRA_DEFERRED_SHOWS_RESOLVE, false);
 
-                buildPlayer(requestedStartPosition);
-                if (showsSession != null && showsSession.related(pageUrl).isEmpty()) {
-                    String scheme = Uri.parse(mediaUrl).getScheme();
-                    if (!"content".equalsIgnoreCase(scheme) && !"file".equalsIgnoreCase(scheme)) {
-                        loadRelated();
-                    }
-                }
+                startResolvedDeferredShowsPlaybackIfResumed();
             });
         });
+    }
+
+    private void startResolvedDeferredShowsPlaybackIfResumed() {
+        if (!showsOrigin || deferredShowsResolve || !recoveryResumed || player != null ||
+                mediaUrl == null || mediaUrl.trim().isEmpty()) return;
+        buildPlayer(requestedStartPosition);
+        if (showsSession != null && showsSession.related(pageUrl).isEmpty()) {
+            String scheme = Uri.parse(mediaUrl).getScheme();
+            if (!"content".equalsIgnoreCase(scheme) && !"file".equalsIgnoreCase(scheme)) {
+                loadRelated();
+            }
+        }
     }
 
     private void buildPlayer(long startPosition) {
@@ -3434,6 +3440,7 @@ public class VideoDetailActivity extends Activity {
     protected void onResume() {
         super.onResume();
         recoveryResumed = true;
+        startResolvedDeferredShowsPlaybackIfResumed();
         if (showsOrigin && fullscreenChromeActive && fullscreenControls != null)
             fullscreenControls.show();
         if (showsOrigin && showsResumeAfterStop && player != null && !showsCompleted) {
