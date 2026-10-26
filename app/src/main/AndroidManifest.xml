@@ -196,6 +196,14 @@
             android:screenOrientation="portrait" />
 
         <activity
+            android:name=".ShowsWatchActivity"
+            android:theme="@style/Theme.ZeroChill.ShowsWatch"
+            android:configChanges="keyboard|keyboardHidden|orientation|screenSize|smallestScreenSize|screenLayout|uiMode"
+            android:enableOnBackInvokedCallback="true"
+            android:exported="false"
+            android:screenOrientation="portrait" />
+
+        <activity
             android:name=".PlayerActivity"
             android:configChanges="keyboard|keyboardHidden|orientation|screenSize|smallestScreenSize|screenLayout|uiMode"
             android:enableOnBackInvokedCallback="true"

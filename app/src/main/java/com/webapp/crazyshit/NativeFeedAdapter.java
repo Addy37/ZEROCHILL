@@ -62,6 +62,11 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
 
     public interface Listener {
         void onOpen(NativeContentItem item);
+
+        default void onOpen(NativeContentItem item, View sourceView) {
+            onOpen(item);
+        }
+
         void onLongPress(NativeContentItem item, View anchor);
         void onComments(NativeContentItem item);
     }
@@ -641,6 +646,7 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
         }
 
         boolean meme = item.isMeme();
+        holder.image.setTag(R.id.shows_watch_source_page, item.url);
         holder.title.setText(displayTitle(item));
         holder.info.setText(buildInfo(item));
         boolean showDescription = !episodePresentation && viewMode != VIEW_CARDS && viewMode != VIEW_POSTERS && item.description != null &&
@@ -673,7 +679,7 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
 
         View options = holder.card.findViewWithTag("video_options");
         if (options != null) options.setOnClickListener(v -> listener.onLongPress(item, v));
-        holder.card.setOnClickListener(v -> listener.onOpen(item));
+        holder.card.setOnClickListener(v -> listener.onOpen(item, holder.image));
         holder.card.setOnLongClickListener(v -> {
             listener.onLongPress(item, v);
             return true;
@@ -797,6 +803,8 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
                         holder.image.getContext(), R.color.zc_surface_glass_strong)))
                 .error(new ColorDrawable(ZeroChillUi.color(
                         holder.image.getContext(), R.color.zc_surface_glass_strong)));
+        // Shows episode artwork must be readable by the launch snapshot canvas.
+        if (episodePresentation) request.disallowHardwareConfig();
         if (item.isMeme()) request.fitCenter(); else request.centerCrop();
         final String attemptedUrl = imageUrl;
         request.listener(new RequestListener<Drawable>() {

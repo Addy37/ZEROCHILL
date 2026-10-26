@@ -17,6 +17,13 @@ final class VideoDetailTransitionPolish {
         if (activity == null || activity.isFinishing() || Build.VERSION.SDK_INT < 21) return;
         Window window = activity.getWindow();
         if (window == null) return;
+        if (activity instanceof ShowsWatchActivity) {
+            window.setEnterTransition(null);
+            window.setReturnTransition(null);
+            window.setExitTransition(null);
+            window.setReenterTransition(null);
+            return;
+        }
 
         window.setAllowEnterTransitionOverlap(true);
         window.setAllowReturnTransitionOverlap(true);

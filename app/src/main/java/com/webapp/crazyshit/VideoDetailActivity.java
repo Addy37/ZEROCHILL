@@ -85,6 +85,7 @@ public class VideoDetailActivity extends Activity {
     public static final String EXTRA_SHOWS_ORIGIN = "shows_origin";
     public static final String EXTRA_PLAYBACK_IDENT = "playback_ident";
     public static final String EXTRA_SHOWS_CONTINUE_RESUME = "shows_continue_resume";
+    public static final String EXTRA_DEFERRED_SHOWS_RESOLVE = "deferred_shows_resolve";
     public static final String EXTRA_MANUAL_LANDSCAPE_FULLSCREEN =
             ShowsPlaybackOrientationPolicy.EXTRA_MANUAL_LANDSCAPE_FULLSCREEN;
     public static final String EXTRA_SOCIAL_ENTRY = "social_entry";
@@ -165,6 +166,8 @@ public class VideoDetailActivity extends Activity {
     private String mediaReferer;
     private String posterUrl;
     private boolean showsOrigin;
+    private boolean deferredShowsResolve;
+    private int deferredShowsResolveGeneration;
     private boolean manualLandscapeFullscreen;
     private boolean playbackIdent;
     private boolean socialEntry;
@@ -338,6 +341,8 @@ public class VideoDetailActivity extends Activity {
         mediaReferer = clean(getIntent().getStringExtra(EXTRA_MEDIA_REFERER));
         posterUrl = clean(getIntent().getStringExtra(EXTRA_POSTER_URL));
         showsOrigin = getIntent().getBooleanExtra(EXTRA_SHOWS_ORIGIN, false);
+        deferredShowsResolve = showsOrigin &&
+                getIntent().getBooleanExtra(EXTRA_DEFERRED_SHOWS_RESOLVE, false);
         showsSession = showsOrigin ? ShowsWatchSession.from(getIntent()) : null;
         onlyFapContent = OnlyFapVideoMetadata.fromIntent(getIntent(), pageUrl);
         manualLandscapeFullscreen = getIntent().getBooleanExtra(
@@ -354,8 +359,11 @@ public class VideoDetailActivity extends Activity {
         if (showsOrigin && state != null) {
             restoreShowsState(state);
         }
+        if (mediaUrl != null && !mediaUrl.trim().isEmpty()) {
+            deferredShowsResolve = false;
+        }
 
-        if (mediaUrl == null || mediaUrl.trim().isEmpty()) {
+        if ((mediaUrl == null || mediaUrl.trim().isEmpty()) && !deferredShowsResolve) {
             finish();
             return;
         }
@@ -372,7 +380,8 @@ public class VideoDetailActivity extends Activity {
         orientationListener = new SensorMediaOrientationListener(this, this::onPhysicalOrientation);
 
         buildUi();
-        buildPlayer(requestedStartPosition);
+        if (deferredShowsResolve) showStartupPoster();
+        else buildPlayer(requestedStartPosition);
         if (!showsOrigin) {
             thumbnailResolvers = new RenderedThumbnailResolver[RELATED_THUMBNAIL_WORKERS];
             for (int i = 0; i < thumbnailResolvers.length; i++) {
@@ -388,10 +397,19 @@ public class VideoDetailActivity extends Activity {
                 if (showsRailScroll != null) showsRailScroll.scrollTo(showsRestoreRailX, 0);
             });
         } else loadRelated();
-        if (showsOrigin && showsSession.related(pageUrl).isEmpty() &&
+        if (!deferredShowsResolve && showsOrigin && showsSession.related(pageUrl).isEmpty() &&
                 !"content".equalsIgnoreCase(Uri.parse(mediaUrl).getScheme()) &&
                 !"file".equalsIgnoreCase(Uri.parse(mediaUrl).getScheme())) loadRelated();
-        root.post(this::playEntranceOnce);
+        if (ShowsWatchLaunch.isScoped(this)) {
+            root.getViewTreeObserver().addOnPreDrawListener(new android.view.ViewTreeObserver.OnPreDrawListener() {
+                @Override public boolean onPreDraw() {
+                    root.getViewTreeObserver().removeOnPreDrawListener(this);
+                    playEntranceOnce();
+                    return true;
+                }
+            });
+        } else root.post(this::playEntranceOnce);
+        if (deferredShowsResolve) resolveDeferredShowsPlayback();
         if (socialEntry && !socialCommentsOpened) {
             socialCommentsOpened = true;
             root.post(() -> {
@@ -402,11 +420,21 @@ public class VideoDetailActivity extends Activity {
 
     private void buildUi() {
         root = new FrameLayout(this);
-        root.setBackgroundColor(Color.BLACK);
+        boolean motionHost = ShowsWatchLaunch.isScoped(this);
+        root.setBackgroundColor(motionHost ? Color.TRANSPARENT : Color.BLACK);
+        if (motionHost) {
+            root.setClipChildren(false);
+            root.setClipToPadding(false);
+        }
 
         shell = new LinearLayout(this);
         shell.setOrientation(LinearLayout.VERTICAL);
-        shell.setBackgroundColor(oledEnabled() ? Color.BLACK : Color.rgb(13, 13, 15));
+        shell.setBackgroundColor(motionHost ? Color.TRANSPARENT :
+                (oledEnabled() ? Color.BLACK : Color.rgb(13, 13, 15)));
+        if (motionHost) {
+            shell.setClipChildren(false);
+            shell.setClipToPadding(false);
+        }
         shell.setOnApplyWindowInsetsListener((view, insets) -> {
             if (portraitFullscreen ||
                     getResources().getConfiguration().orientation == Configuration.ORIENTATION_LANDSCAPE) {
@@ -486,6 +514,8 @@ public class VideoDetailActivity extends Activity {
         startupPoster = new ImageView(this);
         startupPoster.setBackgroundColor(Color.BLACK);
         startupPoster.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        if (motionHost && ShowsWatchLaunch.artwork(getIntent()) != null)
+            startupPoster.setImageBitmap(ShowsWatchLaunch.artwork(getIntent()));
         startupPoster.setClickable(false);
         playerContainer.addView(startupPoster, new FrameLayout.LayoutParams(-1, -1));
 
@@ -813,11 +843,18 @@ public class VideoDetailActivity extends Activity {
         startupPoster.animate().cancel();
         startupPoster.setAlpha(1f);
         startupPoster.setVisibility(View.VISIBLE);
-        try {
-            Glide.with(startupPoster).clear(startupPoster);
-        } catch (Exception ignored) {
+        boolean keepLaunchArt = ShowsWatchLaunch.isScoped(this) &&
+                pageUrl.equals(getIntent().getStringExtra(PlayerActivity.EXTRA_PAGE_URL)) &&
+                ShowsWatchLaunch.artwork(getIntent()) != null &&
+                startupPoster.getDrawable() != null;
+        if (!keepLaunchArt) {
+            startupPoster.setScaleType(ImageView.ScaleType.CENTER_CROP);
+            try {
+                Glide.with(startupPoster).clear(startupPoster);
+            } catch (Exception ignored) {
+            }
+            startupPoster.setImageDrawable(null);
         }
-        startupPoster.setImageDrawable(null);
 
         if (startupPosterLoading != null) {
             startupPosterLoading.animate().cancel();
@@ -825,13 +862,13 @@ public class VideoDetailActivity extends Activity {
             startupPosterLoading.setVisibility(View.VISIBLE);
         }
 
-        if (posterUrl != null && !posterUrl.isEmpty()) {
+        if (!keepLaunchArt && posterUrl != null && !posterUrl.isEmpty()) {
             loadImage(startupPoster, posterUrl, pageUrl);
         }
     }
 
     private void dismissStartupPoster() {
-        if (startupPosterDismissed || startupPoster == null) return;
+        if (showsSavedOnExit || startupPosterDismissed || startupPoster == null) return;
         startupPosterDismissed = true;
 
         if (!ZeroChillMotion.animationsEnabled(this)) {
@@ -923,8 +960,23 @@ public class VideoDetailActivity extends Activity {
     }
 
     private void playEntranceOnce() {
-        if (entrancePlayed || isFinishing()) return;
+        if (entrancePlayed || showsSavedOnExit || isFinishing()) return;
         entrancePlayed = true;
+        if (showsOrigin && ShowsWatchLaunch.animateEntrance(
+                this, getIntent(), root, playerContainer, detailsScroll,
+                startupPoster, startupPosterLoading)) {
+            return;
+        }
+        if (ShowsWatchLaunch.isScoped(this)) {
+            root.setBackgroundColor(Color.BLACK);
+            shell.setBackgroundColor(oledEnabled() ? Color.BLACK : Color.rgb(13, 13, 15));
+            detailsScroll.setAlpha(1f);
+            if (ZeroChillMotion.animationsEnabled(this)) {
+                root.setAlpha(0f);
+                root.animate().alpha(1f).setDuration(140L).start();
+            }
+            return;
+        }
         if (playerContainer != null) {
             playerContainer.animate().cancel();
             playerContainer.setPivotX(playerContainer.getWidth() * 0.5f);
@@ -1037,6 +1089,82 @@ public class VideoDetailActivity extends Activity {
         return bg;
     }
 
+    private void resolveDeferredShowsPlayback() {
+        if (showsSavedOnExit || !deferredShowsResolve || pageUrl == null || pageUrl.trim().isEmpty()) return;
+        final int requestGeneration = ++deferredShowsResolveGeneration;
+        final NativeContentItem requested = currentContent();
+        if (startupPosterLoading != null) startupPosterLoading.setVisibility(View.VISIBLE);
+        if (startupPoster != null) {
+            startupPoster.setClickable(false);
+            startupPoster.setOnClickListener(null);
+        }
+        io.execute(() -> {
+            CrazyShitRepository.StreamInfo stream = null;
+            try {
+                stream = PlayableSourceRouter.resolve(this, requested);
+            } catch (Exception ignored) {
+            }
+            CrazyShitRepository.StreamInfo resolved = stream;
+            runOnUiThread(() -> {
+                if (requestGeneration != deferredShowsResolveGeneration || showsSavedOnExit ||
+                        isFinishing() || isDestroyed()) return;
+                if (resolved == null || resolved.mediaUrl == null || resolved.mediaUrl.isEmpty()) {
+                    if (startupPosterLoading != null) startupPosterLoading.setVisibility(View.GONE);
+                    if (startupPoster != null) {
+                        startupPoster.setClickable(true);
+                        startupPoster.setOnClickListener(v -> resolveDeferredShowsPlayback());
+                    }
+                    ZeroChillToast.makeText(
+                            this,
+                            "Couldn't resolve this video natively right now. Tap the player to retry.",
+                            ZeroChillToast.LENGTH_SHORT
+                    ).show();
+                    return;
+                }
+
+                mediaUrl = resolved.mediaUrl;
+                mediaReferer = clean(resolved.requestReferer);
+                if (mediaReferer.isEmpty()) mediaReferer = pageUrl;
+                String resolvedPage = resolved.pageUrl == null || resolved.pageUrl.isEmpty()
+                        ? pageUrl
+                        : resolved.pageUrl;
+                source = ShowsWatchLaunch.sourceForPage(resolvedPage);
+                if (XMegaDriveRepository.isXMegaDriveUrl(resolvedPage)) {
+                    userAgent = clean(XMegaDriveBrowserFetch.sessionUserAgent());
+                }
+                if (userAgent.isEmpty()) userAgent = defaultUserAgent();
+                cookies = cookiesFor(mediaUrl, resolvedPage);
+                deferredShowsResolve = false;
+                if (startupPoster != null) {
+                    startupPoster.setClickable(false);
+                    startupPoster.setOnClickListener(null);
+                }
+
+                getIntent().putExtra(PlayerActivity.EXTRA_MEDIA_URL, mediaUrl)
+                        .putExtra(EXTRA_MEDIA_REFERER, mediaReferer)
+                        .putExtra(EXTRA_SOURCE, source)
+                        .putExtra(PlayerActivity.EXTRA_USER_AGENT, userAgent)
+                        .putExtra(PlayerActivity.EXTRA_COOKIES, cookies)
+                        .putExtra(PlayerActivity.EXTRA_START_POSITION, requestedStartPosition)
+                        .putExtra(EXTRA_DEFERRED_SHOWS_RESOLVE, false);
+
+                startResolvedDeferredShowsPlaybackIfResumed();
+            });
+        });
+    }
+
+    private void startResolvedDeferredShowsPlaybackIfResumed() {
+        if (!showsOrigin || showsSavedOnExit || deferredShowsResolve || !recoveryResumed || player != null ||
+                mediaUrl == null || mediaUrl.trim().isEmpty()) return;
+        buildPlayer(requestedStartPosition);
+        if (showsSession != null && showsSession.related(pageUrl).isEmpty()) {
+            String scheme = Uri.parse(mediaUrl).getScheme();
+            if (!"content".equalsIgnoreCase(scheme) && !"file".equalsIgnoreCase(scheme)) {
+                loadRelated();
+            }
+        }
+    }
+
     private void buildPlayer(long startPosition) {
         long position = startPosition;
         if (position < 0L && rememberPositionEnabled()) {
@@ -1107,6 +1235,7 @@ public class VideoDetailActivity extends Activity {
         player.addListener(new Player.Listener() {
             @Override
             public void onPlaybackStateChanged(int playbackState) {
+                if (showsOrigin && showsSavedOnExit) return;
                 if (playbackState == Player.STATE_READY) {
                     RatingFeedbackPrompt.recordSuccessfulPlayback(VideoDetailActivity.this, mediaUrl);
                 } else if (playbackState == Player.STATE_ENDED) {
@@ -1126,6 +1255,7 @@ public class VideoDetailActivity extends Activity {
             @Override
             public void onPositionDiscontinuity(Player.PositionInfo oldPosition,
                                                  Player.PositionInfo newPosition, int reason) {
+                if (showsOrigin && showsSavedOnExit) return;
                 if (!showsOrigin || !showsCompleted || player == null) return;
                 long duration = player.getDuration();
                 if (duration > 0L && newPosition.positionMs < duration - 5_000L) {
@@ -1136,6 +1266,7 @@ public class VideoDetailActivity extends Activity {
 
             @Override
             public void onRenderedFirstFrame() {
+                if (showsOrigin && showsSavedOnExit) return;
                 if (playbackIdent) {
                     showsFirstFrameRendered = true;
                     hideStartupPosterNow();
@@ -1147,12 +1278,14 @@ public class VideoDetailActivity extends Activity {
 
             @Override
             public void onPlayerError(PlaybackException error) {
+                if (showsOrigin && showsSavedOnExit) return;
                 dismissStartupPoster();
                 if (!recoverPlayback(error)) showPlaybackFailure();
             }
 
             @Override
             public void onVideoSizeChanged(VideoSize videoSize) {
+                if (showsOrigin && showsSavedOnExit) return;
                 if (videoSize == null || videoSize.width <= 0 || videoSize.height <= 0) return;
                 boolean firstVideoSize = !videoSizeKnown;
                 videoSizeKnown = true;
@@ -1958,7 +2091,8 @@ public class VideoDetailActivity extends Activity {
             CrazyShitRepository.StreamInfo resolved = stream;
             runOnUiThread(() -> {
                 if (queued != null) showsNextResolving = false;
-                if (isFinishing() || isDestroyed() || requestGeneration != relatedPlayGeneration) return;
+                if (showsSavedOnExit || isFinishing() || isDestroyed() ||
+                        requestGeneration != relatedPlayGeneration) return;
                 if (queued != null && !queued.toString().equals(getSharedPreferences("player_positions", MODE_PRIVATE)
                         .getString(SHOWS_NEXT, ""))) {
                     loading.setVisibility(View.GONE);
@@ -2711,7 +2845,7 @@ public class VideoDetailActivity extends Activity {
     }
 
     private void showPlaybackFailure() {
-        if (failureShown || isFinishing()) return;
+        if (failureShown || showsSavedOnExit || isFinishing()) return;
         failureShown = true;
         dismissShowsLaunchCurtain(true);
         RatingFeedbackPrompt.recordPlaybackError(this);
@@ -2739,6 +2873,26 @@ public class VideoDetailActivity extends Activity {
     @Override
     public void onConfigurationChanged(Configuration newConfig) {
         super.onConfigurationChanged(newConfig);
+        ShowsWatchLaunch.cancel(root);
+        if (showsOrigin && showsSavedOnExit) {
+            finish();
+            overridePendingTransition(0, 0);
+            return;
+        }
+        if (ShowsWatchLaunch.isScoped(this) && root != null) {
+            root.setBackgroundColor(Color.BLACK);
+            root.animate().cancel();
+            root.setAlpha(1f);
+            shell.setBackgroundColor(oledEnabled() ? Color.BLACK : Color.rgb(13, 13, 15));
+            playerContainer.setScaleX(1f);
+            playerContainer.setScaleY(1f);
+            playerContainer.setTranslationX(0f);
+            playerContainer.setTranslationY(0f);
+            if (detailsScroll != null) {
+                detailsScroll.setAlpha(1f);
+                detailsScroll.setTranslationY(0f);
+            }
+        }
         abortRelatedBackPreview();
         if (showsOrigin && showsTargetOrientation != Configuration.ORIENTATION_UNDEFINED) {
             showsOrientationSettled = orientationMatches(
@@ -2756,10 +2910,20 @@ public class VideoDetailActivity extends Activity {
         boolean showsRail = showsOrigin && landscape;
         boolean fullscreen = !showsRail && ((landscape && !showsOrigin) ||
                 portraitFullscreen || rotatableFullscreen);
+        boolean preserveShowsMotion = showsOrigin && ShowsWatchLaunch.isRunning(root);
+        if (preserveShowsMotion && (showsRail || fullscreen)) {
+            ShowsWatchLaunch.cancel(root);
+            root.setBackgroundColor(Color.BLACK);
+            shell.setBackgroundColor(oledEnabled() ? Color.BLACK : Color.rgb(13, 13, 15));
+            root.setAlpha(1f);
+            preserveShowsMotion = false;
+        }
         if (detailsScroll != null) {
             detailsScroll.setVisibility(fullscreen || showsRail ? View.GONE : View.VISIBLE);
-            detailsScroll.setAlpha(1f);
-            detailsScroll.setTranslationY(0f);
+            if (!preserveShowsMotion) {
+                detailsScroll.setAlpha(1f);
+                detailsScroll.setTranslationY(0f);
+            }
         }
         if (showsLandscapeMotion != null) {
             if (showsRail) showsLandscapeMotion.enter();
@@ -2775,11 +2939,14 @@ public class VideoDetailActivity extends Activity {
             params.weight = 0f;
             setFullscreenUi(false);
         }
-        playerContainer.setLayoutParams(params);
-        playerContainer.setScaleX(1f);
-        playerContainer.setScaleY(1f);
-        playerContainer.setTranslationY(0f);
-        playerContainer.setAlpha(1f);
+        if (!preserveShowsMotion) {
+            playerContainer.setLayoutParams(params);
+            playerContainer.setScaleX(1f);
+            playerContainer.setScaleY(1f);
+            playerContainer.setTranslationX(0f);
+            playerContainer.setTranslationY(0f);
+            playerContainer.setAlpha(1f);
+        }
         updatePortraitFullscreenButton();
         applyPlayerChrome(orientation);
         if (showsOrigin && fullscreenControls != null)
@@ -3053,13 +3220,33 @@ public class VideoDetailActivity extends Activity {
 
     private void handleBack() {
         if (showsOrigin) {
+            if (showsSavedOnExit) return;
             if (!showsSavedOnExit) {
                 showsSkipExitFrame = true;
                 savePlaybackState(showsCompleted);
                 showsSavedOnExit = true;
             }
+            deferredShowsResolveGeneration++;
+            relatedPlayGeneration++;
+            playbackRecovery.cancel();
+            if (player != null) player.pause();
+            if (startupPosterLoading != null) {
+                startupPosterLoading.animate().cancel();
+                startupPosterLoading.setVisibility(View.GONE);
+            }
             cancelShowsCountdown();
-            finish();
+            Runnable finishShows = () -> {
+                finish();
+                overridePendingTransition(0, 0);
+            };
+            if (!ShowsWatchLaunch.animateExit(
+                    this, getIntent(), root, playerContainer, detailsScroll, startupPoster,
+                    finishShows)) {
+                ShowsWatchLaunch.cancel(root);
+                if (ShowsWatchLaunch.isScoped(this) && ZeroChillMotion.animationsEnabled(this)) {
+                    root.animate().alpha(0f).setDuration(140L).withEndAction(finishShows).start();
+                } else finishShows.run();
+            }
             return;
         }
         if (portraitFullscreen) {
@@ -3256,8 +3443,10 @@ public class VideoDetailActivity extends Activity {
     }
 
     private boolean recoverPlayback(PlaybackException error) {
+        if (showsSavedOnExit) return false;
         if (error == null) failureShown = false;
         return playbackRecovery.recover(this, error, recovered -> {
+            if (showsSavedOnExit) return;
             mediaUrl = recovered.stream.mediaUrl;
             mediaReferer = recovered.stream.requestReferer;
             try { cookies = clean(CookieManager.getInstance().getCookie(mediaUrl)); } catch (Exception ignored) { }
@@ -3343,6 +3532,7 @@ public class VideoDetailActivity extends Activity {
     protected void onResume() {
         super.onResume();
         recoveryResumed = true;
+        startResolvedDeferredShowsPlaybackIfResumed();
         if (showsOrigin && fullscreenChromeActive && fullscreenControls != null)
             fullscreenControls.show();
         if (showsOrigin && showsResumeAfterStop && player != null && !showsCompleted) {
@@ -3407,6 +3597,8 @@ public class VideoDetailActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        ShowsWatchLaunch.cancel(root);
+        ShowsWatchLaunch.release(getIntent());
         if (showsLandscapeMotion != null) showsLandscapeMotion.leave();
         cancelShowsCountdown();
         if (activeComments != null) activeComments.dismiss();

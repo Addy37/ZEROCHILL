@@ -39,10 +39,18 @@ import java.util.List;
 final class ShowsHubView extends FrameLayout {
     interface Listener {
         void onOpen(NativeContentItem item);
+
+        default void onOpen(NativeContentItem item, View sourceView) {
+            onOpen(item);
+        }
     }
 
     interface ContinueListener {
         void onResume(PlaybackHistoryStore.Item item);
+
+        default void onResume(PlaybackHistoryStore.Item item, View sourceView) {
+            onResume(item);
+        }
     }
 
     interface PrewarmListener {
@@ -336,6 +344,7 @@ final class ShowsHubView extends FrameLayout {
                 false,
                 false
         );
+        thisWeekShelf.rail.setId(R.id.shows_weekly_rail);
         crazyShelf = addShelf("CrazyShit Shows", "Series and recurring collections", false);
         efuktShelf = addShelf("EFukt Series", "Browse EFukt by series", false);
         categoryShelf = addShelf("CrazyShit Categories", "Jump into a type of content", false);
@@ -504,10 +513,36 @@ final class ShowsHubView extends FrameLayout {
     }
 
     void refreshContinueWatching() {
+        // A newly visible Continue shelf pushes every lower card down. Hold the
+        // existing visible shelf at the same screen position on the first draw.
+        final boolean preserveAnchor = scroll.isLaidOut() && thisWeekShelf.container.isLaidOut() &&
+                thisWeekShelf.container.getVisibility() == View.VISIBLE;
+        int[] before = new int[2];
+        int[] viewport = new int[2];
+        if (preserveAnchor) {
+            thisWeekShelf.container.getLocationOnScreen(before);
+            scroll.getLocationOnScreen(viewport);
+        }
+        final boolean anchorVisible = preserveAnchor && before[1] < viewport[1] + scroll.getHeight();
         List<PlaybackHistoryStore.Item> items =
                 PlaybackHistoryStore.continueWatchingShows(getContext());
         continueShelf.adapter.replace(items);
         continueShelf.container.setVisibility(items.isEmpty() ? View.GONE : View.VISIBLE);
+        if (anchorVisible) {
+            final int top = before[1];
+            scroll.getViewTreeObserver().addOnPreDrawListener(new android.view.ViewTreeObserver.OnPreDrawListener() {
+                @Override public boolean onPreDraw() {
+                    scroll.getViewTreeObserver().removeOnPreDrawListener(this);
+                    if (!scroll.isAttachedToWindow()) return true;
+                    int[] after = new int[2];
+                    thisWeekShelf.container.getLocationOnScreen(after);
+                    int delta = after[1] - top;
+                    if (delta == 0) return true;
+                    scroll.scrollBy(0, delta);
+                    return false;
+                }
+            });
+        }
     }
 
     void setCategoryLoader(ShowsCategoryLoader loader) {
@@ -859,6 +894,7 @@ final class ShowsHubView extends FrameLayout {
             com.bumptech.glide.RequestBuilder<android.graphics.drawable.Drawable> request =
                     Glide.with(view)
                             .load(embedded)
+                            .disallowHardwareConfig()
                             .diskCacheStrategy(DiskCacheStrategy.NONE)
                             .skipMemoryCache(false)
                             .dontAnimate()
@@ -899,6 +935,7 @@ final class ShowsHubView extends FrameLayout {
         com.bumptech.glide.RequestBuilder<android.graphics.drawable.Drawable> request =
                 Glide.with(view)
                         .load(new GlideUrl(imageUrl, headers.build()))
+                        .disallowHardwareConfig()
                         .diskCacheStrategy(
                                 hero ? DiskCacheStrategy.ALL : DiskCacheStrategy.AUTOMATIC
                         )
@@ -961,6 +998,7 @@ final class ShowsHubView extends FrameLayout {
         }
         Glide.with(view)
                 .load(savedFrame)
+                .disallowHardwareConfig()
                 .signature(new ObjectKey(
                         savedFrame.lastModified() + ":" + savedFrame.length()
                 ))
@@ -1113,6 +1151,7 @@ final class ShowsHubView extends FrameLayout {
         @Override
         public void onBindViewHolder(@NonNull ContinueHolder holder, int position) {
             PlaybackHistoryStore.Item history = items.get(position);
+            holder.image.setTag(R.id.shows_watch_source_page, history.pageUrl);
             NativeContentItem item = new NativeContentItem(
                     NativeContentItem.KIND_MEDIA,
                     history.title,
@@ -1134,7 +1173,7 @@ final class ShowsHubView extends FrameLayout {
             holder.progressFill.setScaleX(progress);
             holder.progressTrack.setVisibility(history.durationMs > 0L ? View.VISIBLE : View.GONE);
             holder.card.setOnClickListener(v -> {
-                if (continueListener != null) continueListener.onResume(history);
+                if (continueListener != null) continueListener.onResume(history, holder.image);
             });
             loadContinueArtwork(holder.image, item, history.pageUrl);
         }
@@ -1267,12 +1306,13 @@ final class ShowsHubView extends FrameLayout {
         @Override
         public void onBindViewHolder(@NonNull RailHolder holder, int position) {
             NativeContentItem item = items.get(position);
+            holder.image.setTag(R.id.shows_watch_source_page, item.url);
             holder.title.setText(item.title);
             holder.source.setText(showSource ? WeeklyShowsFeed.sourceLabel(item) : "");
             holder.source.setVisibility(showSource ? View.VISIBLE : View.GONE);
             holder.card.setContentDescription("Open " + item.title);
             holder.card.setOnClickListener(v -> {
-                if (clickListener != null) clickListener.onOpen(item);
+                if (clickListener != null) clickListener.onOpen(item, holder.image);
             });
             loadArtwork(holder.image, item, false);
         }

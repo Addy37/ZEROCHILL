@@ -32,9 +32,10 @@ final class OledThemeController {
 
     private static void apply(Activity activity) {
         if (activity == null || activity.isFinishing()) return;
-        // This viewer owns a separate black backdrop that leaves with the return
-        // transition. Painting its content container black defeats that handoff.
-        if (activity instanceof BunkrGalleryActivity) return;
+        // These viewers own their transition backdrops; painting the content
+        // container black would cover the browsing page beneath them.
+        if (activity instanceof BunkrGalleryActivity ||
+                activity instanceof ShowsWatchActivity) return;
         boolean enabled = activity.getSharedPreferences("app_prefs", Activity.MODE_PRIVATE)
                 .getBoolean("oled_black_enabled", true);
         if (!enabled) return;
