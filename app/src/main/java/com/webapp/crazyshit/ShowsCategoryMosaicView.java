@@ -67,18 +67,26 @@ final class ShowsCategoryMosaicView extends FrameLayout {
 
         ShowsCollectionWarmCache.request(getContext(), category, (url, items) -> {
             if (request != generation || !categoryUrl.equals(url)) return;
-            List<NativeContentItem> selected = ShowsCategoryMosaicSelector.select(
-                    items,
-                    categoryUrl,
-                    ShowsCategoryMosaicSelector.SESSION_SEED,
-                    tiles.length
-            );
-            if (selected.size() < 2) return;
-            for (int index = 0; index < tiles.length; index++) {
-                load(tiles[index], selected.get(index % selected.size()));
-            }
-            setVisibility(View.VISIBLE);
+            bindItems(url, items);
         });
+    }
+
+    void bindItems(String url, List<NativeContentItem> items) {
+        String cleanUrl = url == null ? "" : url.trim();
+        if (cleanUrl.isEmpty()) return;
+        if (isShowing() && cleanUrl.equals(categoryUrl)) return;
+        categoryUrl = cleanUrl;
+        List<NativeContentItem> selected = ShowsCategoryMosaicSelector.select(
+                items,
+                categoryUrl,
+                ShowsCategoryMosaicSelector.SESSION_SEED,
+                tiles.length
+        );
+        if (selected.size() < 2) return;
+        for (int index = 0; index < tiles.length; index++) {
+            load(tiles[index], selected.get(index % selected.size()));
+        }
+        setVisibility(View.VISIBLE);
     }
 
     boolean isShowing() {
@@ -132,9 +140,4 @@ final class ShowsCategoryMosaicView extends FrameLayout {
                 .into(view);
     }
 
-    @Override
-    protected void onDetachedFromWindow() {
-        clear();
-        super.onDetachedFromWindow();
-    }
 }

@@ -27,6 +27,7 @@ final class ShowDetailsHeader extends FrameLayout {
                     "(KHTML, like Gecko) Chrome/139.0 Mobile Safari/537.36";
 
     private final ImageView artwork;
+    private final ShowsCategoryMosaicView categoryMosaic;
     private final TextView count;
     private final TextView action;
     private final String collectionUrl;
@@ -48,6 +49,14 @@ final class ShowDetailsHeader extends FrameLayout {
         artwork.setScaleType(ImageView.ScaleType.CENTER_CROP);
         artwork.setBackground(new ColorDrawable(Color.rgb(14, 16, 19)));
         addView(artwork, new FrameLayout.LayoutParams(-1, -1));
+
+        boolean category = clean(sourceLabel, "SHOW")
+                .toUpperCase(java.util.Locale.US)
+                .contains("CATEGORY");
+        categoryMosaic = category ? new ShowsCategoryMosaicView(context) : null;
+        if (categoryMosaic != null) {
+            addView(categoryMosaic, new FrameLayout.LayoutParams(-1, -1));
+        }
 
         View shade = new View(context);
         shade.setBackground(new GradientDrawable(
@@ -128,6 +137,10 @@ final class ShowDetailsHeader extends FrameLayout {
         metaRow.addView(action, new LinearLayout.LayoutParams(dp(132), dp(38)));
 
         loadArtwork(imageUrl);
+    }
+
+    void setCategoryItems(java.util.List<NativeContentItem> items) {
+        if (categoryMosaic != null) categoryMosaic.bindItems(collectionUrl, items);
     }
 
     void setPlaybackAction(boolean resumable, boolean available) {

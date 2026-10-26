@@ -2631,6 +2631,7 @@ public final class NativeFeedBrowserActivity extends Activity {
         if (showDetailsHeader == null || adapter == null) return;
         List<NativeContentItem> items = showEpisodeSnapshot();
         showDetailsHeader.setItemCount((int) items.stream().filter(ShowsEpisodePlayback::playable).count());
+        showDetailsHeader.setCategoryItems(items);
         ShowsEpisodePlayback.Selection selection = ShowsEpisodePlayback.select(
                 items,
                 PlaybackHistoryStore.load(this)
