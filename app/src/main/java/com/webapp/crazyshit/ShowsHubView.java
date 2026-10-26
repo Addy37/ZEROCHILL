@@ -400,6 +400,11 @@ final class ShowsHubView extends FrameLayout {
         if (categoryLoader != null) categoryLoader.invalidate();
     }
 
+    /** Reuse loaded shelf metadata when opening the watch page. */
+    List<NativeContentItem> watchItems() {
+        return new ArrayList<>(thisWeekItems);
+    }
+
     void setThisWeek(List<NativeContentItem> items) {
         thisWeekItems = safe(items);
         thisWeekShelf.adapter.replace(thisWeekItems);

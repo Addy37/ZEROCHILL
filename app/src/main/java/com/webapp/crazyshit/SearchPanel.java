@@ -1052,14 +1052,25 @@ final class SearchPanel {
             return;
         }
         if (item.isSeries() || item.isCategory()) {
-            activity.startActivity(NativeFeedBrowserActivity.create(
-                    activity, item.title, item.url, false, feedSource(item)));
+            activity.startActivity(scope == Scope.SHOWS
+                    ? NativeFeedBrowserActivity.createShowDetails(activity, item, feedSource(item))
+                    : NativeFeedBrowserActivity.create(activity, item.title, item.url, false, feedSource(item)));
             return;
         }
 
         progress.setVisibility(View.VISIBLE);
         final int requestGeneration = generation;
         final Scope requestedScope = scope;
+        final List<NativeContentItem> watchItems = new ArrayList<>();
+        if (requestedScope == Scope.SHOWS) {
+            watchItems.addAll(crazyVideos);
+            watchItems.addAll(efuktVideos);
+            watchItems.addAll(kaoticVideos);
+        } else if (requestedScope == Scope.LIBRARY) {
+            for (NativeContentItem candidate : library) {
+                if (!OnlyFapVideoMetadata.applies(candidate)) watchItems.add(candidate);
+            }
+        }
         io.execute(() -> {
             CrazyShitRepository.StreamInfo stream = null;
             try { stream = PlayableSourceRouter.resolve(activity, item.url); }
@@ -1076,7 +1087,9 @@ final class SearchPanel {
                 }
                 Intent playback = new Intent(activity, VideoDetailActivity.class);
                 playback.putExtra(PlayerActivity.EXTRA_MEDIA_URL, resolved.mediaUrl);
-                playback.putExtra(PlayerActivity.EXTRA_PAGE_URL, resolved.pageUrl);
+                playback.putExtra(PlayerActivity.EXTRA_PAGE_URL,
+                        requestedScope == Scope.SHOWS || requestedScope == Scope.LIBRARY
+                                ? item.url : resolved.pageUrl);
                 playback.putExtra(PlayerActivity.EXTRA_TITLE,
                         item.title == null || item.title.trim().isEmpty() ? resolved.title : item.title);
                 playback.putExtra(VideoDetailActivity.EXTRA_VIEWS, item.views);
@@ -1084,6 +1097,10 @@ final class SearchPanel {
                 playback.putExtra(VideoDetailActivity.EXTRA_COMMENTS, item.comments);
                 playback.putExtra(VideoDetailActivity.EXTRA_MEDIA_REFERER, resolved.requestReferer);
                 putPlaybackSource(playback, item);
+                if (requestedScope == Scope.SHOWS || (requestedScope == Scope.LIBRARY
+                        && !OnlyFapVideoMetadata.applies(item))) {
+                    ShowsWatchSession.attach(playback, watchItems, false, "Shows");
+                }
                 try {
                     String agent = WebSettings.getDefaultUserAgent(activity);
                     if (XMegaDriveRepository.isXMegaDriveUrl(item.url)

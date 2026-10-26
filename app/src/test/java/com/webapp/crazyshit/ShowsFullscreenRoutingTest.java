@@ -66,14 +66,15 @@ public class ShowsFullscreenRoutingTest {
         ((ShowsFullscreenControls) ReflectionHelpers.getField(activity, "fullscreenControls")).release();
     }
 
-    @Test public void downloadedShowsAndPortraitFullscreenUseSharedChrome() {
+    @Test public void downloadedShowsUseWatchPageAndOtherPortraitFullscreenKeepsSharedChrome() {
         VideoDetailActivity activity = activity();
         PlayerView player = ReflectionHelpers.getField(activity, "playerView");
         PlayerControlView overlay = ReflectionHelpers.getField(activity, "fullscreenOverlay");
         ReflectionHelpers.setField(activity, "showsOrigin", true);
         orient(activity, Configuration.ORIENTATION_PORTRAIT);
-        assertFalse(player.getUseController());
-        assertTrue(overlay.isFullyVisible());
+        assertTrue(player.getUseController());
+        assertEquals(View.GONE, overlay.getVisibility());
+        assertEquals(View.VISIBLE, ((View) ReflectionHelpers.getField(activity, "detailsScroll")).getVisibility());
         ReflectionHelpers.setField(activity, "showsOrigin", false);
         ReflectionHelpers.setField(activity, "portraitVideo", true);
         ReflectionHelpers.setField(activity, "portraitFullscreen", true);
