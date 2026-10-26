@@ -162,10 +162,14 @@ public class ShowsWatchPageTest {
         VideoDetailActivity activity = watch(item("1"), item("2"), item("3"));
         AtomicInteger mediaSwaps = new AtomicInteger();
         AtomicInteger releases = new AtomicInteger();
+        java.util.List<Long> soughtPositions = new java.util.ArrayList<>();
+        activity.getSharedPreferences("player_positions", 0).edit()
+                .putLong("position_" + Integer.toHexString(item("2").url.hashCode()), 45_000L).commit();
         ExoPlayer engine = (ExoPlayer) Proxy.newProxyInstance(ExoPlayer.class.getClassLoader(),
                 new Class<?>[]{ExoPlayer.class}, (proxy, method, args) -> {
                     if (method.getName().equals("setMediaSource")) mediaSwaps.incrementAndGet();
                     if (method.getName().equals("release")) releases.incrementAndGet();
+                    if (method.getName().equals("seekTo")) soughtPositions.add((Long) args[0]);
                     if (method.getName().equals("getPlaybackState")) return Player.STATE_READY;
                     if (method.getName().equals("getCurrentPosition")) return 12_000L;
                     if (method.getName().equals("getDuration")) return 100_000L;
@@ -185,6 +189,7 @@ public class ShowsWatchPageTest {
                 "content://example.test/media/3", item("3").url, "Episode 3"));
         assertEquals(2, mediaSwaps.get());
         assertEquals(0, releases.get());
+        assertTrue("Related selection must retain existing resume behavior", soughtPositions.contains(45_000L));
         assertSame(engine, ReflectionHelpers.getField(activity, "player"));
         assertSame(surface, ((PlayerView) ReflectionHelpers.getField(activity, "playerView")).getVideoSurfaceView());
         assertNull(shadowOf(activity).getNextStartedActivity());
@@ -233,6 +238,9 @@ public class ShowsWatchPageTest {
         ReflectionHelpers.setField(activity, "showsCompleted", true);
         ReflectionHelpers.setField(activity, "showsRestoreVolume", 0f);
         ReflectionHelpers.setField(activity, "showsRestoreSpeed", 1.5f);
+        ReflectionHelpers.setField(activity, "relatedFeedUrl", "https://example.test/series");
+        ReflectionHelpers.callInstanceMethod(activity, "applyOrientation",
+                ReflectionHelpers.ClassParameter.from(int.class, Configuration.ORIENTATION_PORTRAIT));
         Bundle saved = new Bundle();
         activity.onSaveInstanceState(saved);
         VideoDetailActivity restored = watch(item("1"), item("2"));
@@ -243,5 +251,9 @@ public class ShowsWatchPageTest {
         assertTrue(ReflectionHelpers.getField(restored, "showsCompleted"));
         assertEquals(0f, (float) ReflectionHelpers.getField(restored, "showsRestoreVolume"), 0f);
         assertEquals(1.5f, (float) ReflectionHelpers.getField(restored, "showsRestoreSpeed"), 0f);
+        assertEquals("https://example.test/series", ReflectionHelpers.getField(restored, "relatedFeedUrl"));
+        ShowsWatchSession restoredContext = ReflectionHelpers.getField(restored, "showsSession");
+        assertEquals("Season 1", restoredContext.label);
+        assertEquals(2, restoredContext.items.size());
     }
 }

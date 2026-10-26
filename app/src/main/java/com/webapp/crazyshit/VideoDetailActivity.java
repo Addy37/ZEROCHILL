@@ -231,6 +231,8 @@ public class VideoDetailActivity extends Activity {
     private boolean showsRestorePaused;
     private float showsRestoreVolume = 1f;
     private float showsRestoreSpeed = 1f;
+    private int showsRestoreScrollY;
+    private int showsRestoreRailX;
     private final Runnable showsCountdownTick = new Runnable() {
         @Override public void run() {
             if (showsNextOverlay == null || showsCountdownItem == null || !recoveryResumed) return;
@@ -377,8 +379,13 @@ public class VideoDetailActivity extends Activity {
         }
         configureBackHandling();
         applyOrientation(getResources().getConfiguration().orientation);
-        if (showsOrigin) renderShowsRelated();
-        else loadRelated();
+        if (showsOrigin) {
+            renderShowsRelated();
+            root.post(() -> {
+                if (detailsScroll != null) detailsScroll.scrollTo(0, showsRestoreScrollY);
+                if (showsRailScroll != null) showsRailScroll.scrollTo(showsRestoreRailX, 0);
+            });
+        } else loadRelated();
         if (showsOrigin && showsSession.related(pageUrl).isEmpty() &&
                 !"content".equalsIgnoreCase(Uri.parse(mediaUrl).getScheme()) &&
                 !"file".equalsIgnoreCase(Uri.parse(mediaUrl).getScheme())) loadRelated();
@@ -1023,6 +1030,11 @@ public class VideoDetailActivity extends Activity {
     }
 
     private void buildPlayer(long startPosition) {
+        long position = startPosition;
+        if (position < 0L && rememberPositionEnabled()) {
+            position = getSharedPreferences("player_positions", MODE_PRIVATE)
+                    .getLong(positionKey(), 0L);
+        }
         videoSizeKnown = false;
         portraitVideo = false;
         if (portraitFullscreen) setPortraitFullscreen(false);
@@ -1032,7 +1044,7 @@ public class VideoDetailActivity extends Activity {
             showStartupPoster();
             player.setMediaSource(showsMediaSource());
             playbackRecovery.bind(player, pageUrl);
-            if (startPosition > 0L) player.seekTo(startPosition);
+            if (position > 0L) player.seekTo(position);
             player.setPlayWhenReady(recoveryResumed);
             player.prepare();
             return;
@@ -1078,11 +1090,6 @@ public class VideoDetailActivity extends Activity {
         else player.setMediaItem(mediaItem());
         playbackRecovery.bind(player, pageUrl);
 
-        long position = startPosition;
-        if (position < 0L && rememberPositionEnabled()) {
-            position = getSharedPreferences("player_positions", MODE_PRIVATE)
-                    .getLong(positionKey(), 0L);
-        }
         if (position > 0L) player.seekTo(position);
         if (showsOrigin) {
             player.setVolume(showsRestoreVolume);
@@ -1096,10 +1103,11 @@ public class VideoDetailActivity extends Activity {
                     RatingFeedbackPrompt.recordSuccessfulPlayback(VideoDetailActivity.this, mediaUrl);
                 } else if (playbackState == Player.STATE_ENDED) {
                     if (showsOrigin) {
+                        boolean previouslyCompleted = showsCompleted;
                         showsCompleted = true;
-                        showsCountdownCancelled = false;
+                        if (!previouslyCompleted) showsCountdownCancelled = false;
                         savePlaybackState(true);
-                        startShowsCountdown();
+                        if (!showsCountdownCancelled) startShowsCountdown();
                         return;
                     }
                     savePlaybackState(true);
@@ -3114,6 +3122,15 @@ public class VideoDetailActivity extends Activity {
             outState.putString("shows_referer", mediaReferer);
             outState.putString("shows_poster", posterUrl);
             outState.putString("shows_source", source);
+            outState.putString("shows_feed", relatedFeedUrl);
+            if (showsSession != null) {
+                Intent context = ShowsWatchSession.attach(new Intent()
+                        .putExtra(PlayerActivity.EXTRA_PAGE_URL, pageUrl), showsSession.items,
+                        showsSession.episodic, showsSession.label);
+                outState.putBundle("shows_context", context.getExtras());
+            }
+            outState.putInt("shows_scroll_y", detailsScroll == null ? 0 : detailsScroll.getScrollY());
+            outState.putInt("shows_rail_x", showsRailScroll == null ? 0 : showsRailScroll.getScrollX());
             outState.putLong("shows_position", player == null ? requestedStartPosition : player.getCurrentPosition());
             outState.putBoolean("shows_paused", player == null ? showsRestorePaused
                     : !player.getPlayWhenReady() && !showsResumeAfterStop);
@@ -3140,6 +3157,11 @@ public class VideoDetailActivity extends Activity {
         mediaReferer = state.getString("shows_referer", mediaReferer);
         posterUrl = state.getString("shows_poster", posterUrl);
         source = state.getString("shows_source", source);
+        relatedFeedUrl = state.getString("shows_feed", relatedFeedUrl);
+        Bundle context = state.getBundle("shows_context");
+        if (context != null) showsSession = ShowsWatchSession.from(new Intent().putExtras(context));
+        showsRestoreScrollY = state.getInt("shows_scroll_y", 0);
+        showsRestoreRailX = state.getInt("shows_rail_x", 0);
         onlyFapContent = null;
         requestedStartPosition = state.getLong("shows_position", requestedStartPosition);
         showsRestorePaused = state.getBoolean("shows_paused", false);
