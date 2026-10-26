@@ -3224,6 +3224,7 @@ public class VideoDetailActivity extends Activity {
             if (!ShowsWatchLaunch.animateExit(
                     this, getIntent(), root, playerContainer, detailsScroll, startupPoster,
                     finishShows)) {
+                ShowsWatchLaunch.cancel(root);
                 if (ShowsWatchLaunch.isScoped(this) && ZeroChillMotion.animationsEnabled(this)) {
                     root.animate().alpha(0f).setDuration(140L).withEndAction(finishShows).start();
                 } else finishShows.run();

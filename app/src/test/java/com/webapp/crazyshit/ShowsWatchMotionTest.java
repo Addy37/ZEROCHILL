@@ -8,6 +8,7 @@ import android.content.Intent;
 import android.content.res.Configuration;
 import android.graphics.Color;
 import android.graphics.Matrix;
+import android.graphics.Rect;
 import android.graphics.drawable.ColorDrawable;
 import android.transition.Fade;
 import android.view.View;
@@ -110,6 +111,52 @@ public class ShowsWatchMotionTest {
         assertEquals(ImageView.ScaleType.MATRIX, f.poster.getScaleType());
         ShowsWatchLaunch.cancel(f.root);
         ShowsWatchLaunch.release(portrait);
+    }
+
+    @Test
+    public void partiallyVisibleArtworkClipsFullBitmapWithoutSquashingIt() {
+        Fixture f = fixture();
+        f.artwork.layout(-40, -40, 140, 62);
+        Intent partial = new Intent(f.source, VideoDetailActivity.class)
+                .putExtra(PlayerActivity.EXTRA_PAGE_URL, PAGE);
+        ShowsWatchLaunch.markDeferred(partial, f.artwork);
+        f.poster.setImageBitmap(ShowsWatchLaunch.artwork(partial));
+        assertTrue(ShowsWatchLaunch.animateEntrance(f.watch, partial, f.root,
+                f.player, f.details, f.poster, null));
+        Rect start = f.player.getClipBounds();
+        assertNotNull(start);
+        assertEquals(80, start.left, 1);
+        assertEquals(80, start.top, 1);
+        assertEquals(360, start.right);
+        assertEquals(203, start.bottom);
+        assertEquals(0f, f.player.getTranslationX() +
+                start.left * f.player.getScaleX(), 1f);
+        assertEquals(0f, 80 + f.player.getTranslationY() +
+                start.top * f.player.getScaleY(), 1f);
+        float[] image = new float[9];
+        f.poster.getImageMatrix().getValues(image);
+        assertEquals(180f, ShowsWatchLaunch.artwork(partial).getWidth() *
+                image[Matrix.MSCALE_X] * f.player.getScaleX(), 1f);
+        assertEquals(102f, ShowsWatchLaunch.artwork(partial).getHeight() *
+                image[Matrix.MSCALE_Y] * f.player.getScaleY(), 1f);
+        Object motion = f.root.getTag(R.id.shows_watch_motion);
+        ReflectionHelpers.setField(motion, "progress", 0.5f);
+        ReflectionHelpers.callInstanceMethod(motion, "apply");
+        assertTrue(f.player.getClipBounds().left > 0);
+        assertTrue(f.player.getClipBounds().left < start.left);
+        // Source can move while the watch host is translucent; reverse starts at
+        // precisely the current clip and targets the current card position.
+        Rect midpoint = new Rect(f.player.getClipBounds());
+        f.artwork.layout(-25, -30, 155, 72);
+        assertTrue(ShowsWatchLaunch.animateExit(f.watch, partial, f.root,
+                f.player, f.details, f.poster, () -> {}));
+        assertEquals(midpoint, f.player.getClipBounds());
+        ReflectionHelpers.setField(motion, "progress", 0f);
+        ReflectionHelpers.callInstanceMethod(motion, "apply");
+        assertEquals(50, f.player.getClipBounds().left, 1);
+        assertEquals(60, f.player.getClipBounds().top, 1);
+        ShowsWatchLaunch.cancel(f.root);
+        ShowsWatchLaunch.release(partial);
     }
 
     @Test

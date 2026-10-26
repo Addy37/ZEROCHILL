@@ -92,9 +92,17 @@ public class ShowsWatchLaunchTest {
                 .putExtra(PlayerActivity.EXTRA_PAGE_URL, "https://example.test/clipped");
         ShowsWatchLaunch.markDeferred(partial, artwork);
         assertEquals(ShowsWatchActivity.class.getName(), partial.getComponent().getClassName());
-        assertNull(ShowsWatchLaunch.artwork(partial));
+        assertNotNull(ShowsWatchLaunch.artwork(partial));
         artwork.setTranslationX(600f);
         assertNull(ShowsWatchLaunch.visibleBounds(artwork));
+        ShowsWatchLaunch.release(partial);
+        artwork.setTranslationX(0f);
+        artwork.setRotation(15f);
+        Intent rotated = new Intent(activity, VideoDetailActivity.class)
+                .putExtra(PlayerActivity.EXTRA_PAGE_URL, "https://example.test/clipped");
+        ShowsWatchLaunch.markDeferred(rotated, artwork);
+        assertEquals(ShowsWatchActivity.class.getName(), rotated.getComponent().getClassName());
+        assertNull(ShowsWatchLaunch.artwork(rotated));
     }
 
     @Test

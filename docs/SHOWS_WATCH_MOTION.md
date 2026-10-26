@@ -51,7 +51,7 @@ The supplied first return around 9.5–9.9 s was also inspected for page reveal.
 No bounce, spring, overshoot, separate geometry waypoint, entrance delay, or
 player-opacity animation is added. Page details follow the moving player's lower
 edge on the same progress clock. Their opacity and the page backdrop use that
-progress instead of an independent delayed page pop-in. Source card rounding
+progress (the entrance backdrop uses its square to keep the browsing page visible longer) instead of an independent delayed page pop-in. Source card rounding
 tapers toward the square player slot. ZEROCHILL's smaller rail cards require
 actual size interpolation, unlike the full-width YouTube thumbnail in the clip.
 
@@ -61,7 +61,10 @@ The Shows-only host inherits the existing watch Activity and keeps its existing
 PlayerView/TextureView attached. A transparent native window allows the retained
 browsing Activity to remain visible through the handoff. Source artwork, live
 identity, geometry, and orientation are held only in an ephemeral in-process
-handoff. No image or Activity is serialized into navigation extras.
+handoff. Full source bounds and the visible crop are transformed separately,
+including partially clipped rail cards. Poster image matrices counter the player
+scale so the image keeps its proportions while its crop changes. No image or
+Activity is serialized into navigation extras.
 
 Focused host tests cover geometry and motion state. The existing Shows scroll
 and animation-enabled scroll benchmark remain intact. The added
