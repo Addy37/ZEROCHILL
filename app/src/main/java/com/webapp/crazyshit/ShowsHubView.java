@@ -344,6 +344,7 @@ final class ShowsHubView extends FrameLayout {
                 false,
                 false
         );
+        thisWeekShelf.rail.setId(R.id.shows_weekly_rail);
         crazyShelf = addShelf("CrazyShit Shows", "Series and recurring collections", false);
         efuktShelf = addShelf("EFukt Series", "Browse EFukt by series", false);
         categoryShelf = addShelf("CrazyShit Categories", "Jump into a type of content", false);
@@ -512,10 +513,36 @@ final class ShowsHubView extends FrameLayout {
     }
 
     void refreshContinueWatching() {
+        // A newly visible Continue shelf pushes every lower card down. Hold the
+        // existing visible shelf at the same screen position on the first draw.
+        final boolean preserveAnchor = scroll.isLaidOut() && thisWeekShelf.container.isLaidOut() &&
+                thisWeekShelf.container.getVisibility() == View.VISIBLE;
+        int[] before = new int[2];
+        int[] viewport = new int[2];
+        if (preserveAnchor) {
+            thisWeekShelf.container.getLocationOnScreen(before);
+            scroll.getLocationOnScreen(viewport);
+        }
+        final boolean anchorVisible = preserveAnchor && before[1] < viewport[1] + scroll.getHeight();
         List<PlaybackHistoryStore.Item> items =
                 PlaybackHistoryStore.continueWatchingShows(getContext());
         continueShelf.adapter.replace(items);
         continueShelf.container.setVisibility(items.isEmpty() ? View.GONE : View.VISIBLE);
+        if (anchorVisible) {
+            final int top = before[1];
+            scroll.getViewTreeObserver().addOnPreDrawListener(new android.view.ViewTreeObserver.OnPreDrawListener() {
+                @Override public boolean onPreDraw() {
+                    scroll.getViewTreeObserver().removeOnPreDrawListener(this);
+                    if (!scroll.isAttachedToWindow()) return true;
+                    int[] after = new int[2];
+                    thisWeekShelf.container.getLocationOnScreen(after);
+                    int delta = after[1] - top;
+                    if (delta == 0) return true;
+                    scroll.scrollBy(0, delta);
+                    return false;
+                }
+            });
+        }
     }
 
     void setCategoryLoader(ShowsCategoryLoader loader) {
@@ -1121,6 +1148,7 @@ final class ShowsHubView extends FrameLayout {
         @Override
         public void onBindViewHolder(@NonNull ContinueHolder holder, int position) {
             PlaybackHistoryStore.Item history = items.get(position);
+            holder.image.setTag(R.id.shows_watch_source_page, history.pageUrl);
             NativeContentItem item = new NativeContentItem(
                     NativeContentItem.KIND_MEDIA,
                     history.title,
@@ -1275,6 +1303,7 @@ final class ShowsHubView extends FrameLayout {
         @Override
         public void onBindViewHolder(@NonNull RailHolder holder, int position) {
             NativeContentItem item = items.get(position);
+            holder.image.setTag(R.id.shows_watch_source_page, item.url);
             holder.title.setText(item.title);
             holder.source.setText(showSource ? WeeklyShowsFeed.sourceLabel(item) : "");
             holder.source.setVisibility(showSource ? View.VISIBLE : View.GONE);

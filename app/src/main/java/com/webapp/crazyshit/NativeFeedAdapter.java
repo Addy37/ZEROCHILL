@@ -646,6 +646,7 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
         }
 
         boolean meme = item.isMeme();
+        holder.image.setTag(R.id.shows_watch_source_page, item.url);
         holder.title.setText(displayTitle(item));
         holder.info.setText(buildInfo(item));
         boolean showDescription = !episodePresentation && viewMode != VIEW_CARDS && viewMode != VIEW_POSTERS && item.description != null &&

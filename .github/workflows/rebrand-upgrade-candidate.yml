@@ -436,6 +436,16 @@ jobs:
           --tests 'com.webapp.crazyshit.PrimaryTabNavigationTest'
           --tests 'com.webapp.crazyshit.NavigationMotionControllerTest'
 
+      - name: Run focused Shows motion and watch regressions
+        if: github.head_ref == 'feature/shows-youtube-motion'
+        run: >-
+          gradle --no-daemon :app:testDebugUnitTest
+          --tests 'com.webapp.crazyshit.ShowsWatch*'
+          --tests 'com.webapp.crazyshit.ShowsFullscreen*'
+          --tests 'com.webapp.crazyshit.ShowsLandscape*'
+          --tests 'com.webapp.crazyshit.PlaybackRecoveryListenerTest'
+          --tests 'com.webapp.crazyshit.XMegaDriveBrowserLifecycleTest'
+
       - name: Build signed upgrade candidate
         # These focused candidates run complete suites once instead of repeatedly
         # starting Gradle for overlapping filters. Signing/upgrade gates remain.
