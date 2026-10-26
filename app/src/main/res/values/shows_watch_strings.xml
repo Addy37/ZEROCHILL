@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="shows_watch_up_next">Up next</string>
+    <string name="shows_watch_countdown">Starting in %1$ds</string>
+</resources>

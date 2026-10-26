@@ -237,7 +237,8 @@ public class VideoDetailActivity extends Activity {
         @Override public void run() {
             if (showsNextOverlay == null || showsCountdownItem == null || !recoveryResumed) return;
             long remaining = Math.max(0L, showsCountdownDeadline - SystemClock.uptimeMillis());
-            showsNextText.setText("Starting in " + Math.max(1L, (remaining + 999L) / 1000L) + "s");
+            showsNextText.setText(getString(R.string.shows_watch_countdown,
+                    Math.max(1L, (remaining + 999L) / 1000L)));
             if (remaining == 0L) {
                 NativeContentItem next = showsCountdownItem;
                 org.json.JSONObject queued = showsCountdownQueued;
@@ -515,7 +516,7 @@ public class VideoDetailActivity extends Activity {
             copy.setPadding(dp(12), 0, 0, 0);
             preview.addView(copy, new LinearLayout.LayoutParams(0, -2, 1f));
             TextView nextLabel = new TextView(this);
-            nextLabel.setText("Up next");
+            nextLabel.setText(R.string.shows_watch_up_next);
             nextLabel.setTextColor(UiPalette.PRIMARY);
             nextLabel.setTextSize(12);
             copy.addView(nextLabel);
@@ -533,7 +534,7 @@ public class VideoDetailActivity extends Activity {
             showsNextText.setTextSize(14);
             countdownActions.addView(showsNextText, new LinearLayout.LayoutParams(0, -2, 1f));
             TextView cancelNext = new TextView(this);
-            cancelNext.setText("Cancel");
+            cancelNext.setText(android.R.string.cancel);
             cancelNext.setTextColor(UiPalette.PRIMARY);
             cancelNext.setTextSize(14);
             cancelNext.setGravity(Gravity.CENTER);
@@ -2394,8 +2395,8 @@ public class VideoDetailActivity extends Activity {
         if (showsLandscapeLike != null) {
             showsLandscapeLike.setCompoundDrawablesWithIntrinsicBounds(0,
                     videoLiked ? R.drawable.ic_action_heart_filled : R.drawable.ic_action_heart_outline, 0, 0);
-            showsLandscapeLike.setCompoundDrawableTintList(ColorStateList.valueOf(
-                    videoLiked ? UiPalette.PRIMARY : Color.WHITE));
+            androidx.core.widget.TextViewCompat.setCompoundDrawableTintList(showsLandscapeLike,
+                    ColorStateList.valueOf(videoLiked ? UiPalette.PRIMARY : Color.WHITE));
             showsLandscapeLike.setContentDescription(videoLiked ? "Unlike this video" : "Like this video");
             showsLandscapeLike.setEnabled(true);
         }
@@ -2472,8 +2473,8 @@ public class VideoDetailActivity extends Activity {
         if (showsLandscapeSave != null) {
             showsLandscapeSave.setCompoundDrawablesWithIntrinsicBounds(0,
                     saved ? R.drawable.ic_nav_saved : R.drawable.ic_action_save_outline, 0, 0);
-            showsLandscapeSave.setCompoundDrawableTintList(ColorStateList.valueOf(
-                    saved ? UiPalette.PRIMARY : Color.WHITE));
+            androidx.core.widget.TextViewCompat.setCompoundDrawableTintList(showsLandscapeSave,
+                    ColorStateList.valueOf(saved ? UiPalette.PRIMARY : Color.WHITE));
             showsLandscapeSave.setContentDescription(watchLaterButton.getContentDescription());
         }
     }

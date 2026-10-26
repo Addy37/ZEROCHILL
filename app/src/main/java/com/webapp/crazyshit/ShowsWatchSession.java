@@ -13,6 +13,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /** Small, ephemeral launch context for a Shows watch page. */
+@androidx.annotation.OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)
 final class ShowsWatchSession {
     static final String EXTRA_ITEMS = "shows_watch_items";
     static final String EXTRA_EPISODIC = "shows_watch_episodic";
