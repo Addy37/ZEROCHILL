@@ -58,6 +58,7 @@ final class XMegaDriveBrowserFetch {
     private static final String POPUP_GUARD =
             "(function(){window.open=function(){return null;};})();";
     private static final long TIMEOUT_SECONDS = 45L;
+    private static final long INITIAL_EXTRACTION_DELAY_MS = 200L;
     private static final long EXTRACTION_RETRY_MS = 800L;
     private static volatile String sessionUserAgent = "";
 
@@ -209,8 +210,10 @@ final class XMegaDriveBrowserFetch {
             settings.setDomStorageEnabled(true);
             settings.setUseWideViewPort(true);
             settings.setLoadWithOverviewMode(true);
-            settings.setLoadsImagesAutomatically(true);
-            settings.setBlockNetworkImage(false);
+            // This browser only needs DOM/image URLs while parked off-screen. Avoid spending the
+            // page-load critical path downloading thumbnails that the native UI will load later.
+            settings.setBlockNetworkImage(true);
+            settings.setLoadsImagesAutomatically(false);
             settings.setAllowFileAccess(false);
             settings.setAllowContentAccess(false);
             settings.setCacheMode(WebSettings.LOAD_DEFAULT);
@@ -292,7 +295,7 @@ final class XMegaDriveBrowserFetch {
                                     error,
                                     finished
                             ),
-                            EXTRACTION_RETRY_MS
+                            INITIAL_EXTRACTION_DELAY_MS
                     );
                 }
 
@@ -1020,11 +1023,22 @@ private static final class AgeGateState {
             overlay.setClickable(true);
         }
         if (webView != null) {
+            allowNetworkImages(webView);
             webView.setTranslationX(0f);
             webView.setTranslationY(0f);
             webView.setScaleX(1f);
             webView.setScaleY(1f);
             webView.requestFocus();
+        }
+    }
+
+    private static void allowNetworkImages(WebView webView) {
+        if (webView == null) return;
+        try {
+            WebSettings settings = webView.getSettings();
+            settings.setLoadsImagesAutomatically(true);
+            settings.setBlockNetworkImage(false);
+        } catch (Exception ignored) {
         }
     }
 
