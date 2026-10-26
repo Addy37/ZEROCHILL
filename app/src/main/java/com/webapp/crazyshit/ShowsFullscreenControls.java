@@ -21,9 +21,12 @@ import androidx.media3.ui.TimeBar;
 /** Shows chrome uses ShitTok's timing and layout without owning playback or orientation. */
 @UnstableApi
 final class ShowsFullscreenControls {
+    private static final int LANDSCAPE_END_GUTTER_DP = 20;
+
     private final PlayerControlView view;
     private final View chrome;
     private final PlayerControlView controller;
+    private final int progressBaseEndPadding;
     private Player player;
     private boolean scrubbing;
     private boolean touchingControl;
@@ -60,6 +63,8 @@ final class ShowsFullscreenControls {
         this.view = view;
         chrome = view.findViewById(R.id.shows_fullscreen_chrome);
         controller = view;
+        LinearLayout progress = view.findViewById(R.id.shows_progress_row);
+        progressBaseEndPadding = progress.getPaddingEnd();
         controller.setAnimationEnabled(false);
         controller.setShowTimeoutMs(0);
         observeControlTouches(chrome);
@@ -68,8 +73,8 @@ final class ShowsFullscreenControls {
         controller.setProgressUpdateListener((position, buffered) -> {
             if (!scrubbing) updateTimes(position);
         });
-        TimeBar progress = view.findViewById(androidx.media3.ui.R.id.exo_progress);
-        progress.addListener(new TimeBar.OnScrubListener() {
+        TimeBar progressBar = view.findViewById(androidx.media3.ui.R.id.exo_progress);
+        progressBar.addListener(new TimeBar.OnScrubListener() {
             @Override public void onScrubStart(TimeBar timeBar, long position) {
                 scrubbing = true;
                 show();
@@ -124,6 +129,12 @@ final class ShowsFullscreenControls {
         ((ViewGroup) toggle.getParent()).removeView(toggle);
         if (enabled) progress.addView(toggle);
         else actions.addView(toggle);
+        progress.setPaddingRelative(
+                progress.getPaddingStart(),
+                progress.getPaddingTop(),
+                progressBaseEndPadding + (enabled ? dp(LANDSCAPE_END_GUTTER_DP) : 0),
+                progress.getPaddingBottom()
+        );
         actions.setVisibility(enabled ? View.GONE : View.VISIBLE);
         applyInsets(ViewCompat.getRootWindowInsets(view));
         if (player != null) updateTimes(player.getCurrentPosition());
