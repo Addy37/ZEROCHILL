@@ -39,10 +39,18 @@ import java.util.List;
 final class ShowsHubView extends FrameLayout {
     interface Listener {
         void onOpen(NativeContentItem item);
+
+        default void onOpen(NativeContentItem item, View sourceView) {
+            onOpen(item);
+        }
     }
 
     interface ContinueListener {
         void onResume(PlaybackHistoryStore.Item item);
+
+        default void onResume(PlaybackHistoryStore.Item item, View sourceView) {
+            onResume(item);
+        }
     }
 
     interface PrewarmListener {
@@ -1134,7 +1142,7 @@ final class ShowsHubView extends FrameLayout {
             holder.progressFill.setScaleX(progress);
             holder.progressTrack.setVisibility(history.durationMs > 0L ? View.VISIBLE : View.GONE);
             holder.card.setOnClickListener(v -> {
-                if (continueListener != null) continueListener.onResume(history);
+                if (continueListener != null) continueListener.onResume(history, holder.image);
             });
             loadContinueArtwork(holder.image, item, history.pageUrl);
         }
@@ -1272,7 +1280,7 @@ final class ShowsHubView extends FrameLayout {
             holder.source.setVisibility(showSource ? View.VISIBLE : View.GONE);
             holder.card.setContentDescription("Open " + item.title);
             holder.card.setOnClickListener(v -> {
-                if (clickListener != null) clickListener.onOpen(item);
+                if (clickListener != null) clickListener.onOpen(item, holder.image);
             });
             loadArtwork(holder.image, item, false);
         }

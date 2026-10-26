@@ -705,18 +705,30 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
     }
 
     private void openShowsVideo(NativeContentItem item) {
-        openShowsVideo(item, true);
+        openShowsVideo(item, true, null);
     }
 
     private void openShowsVideo(
             NativeContentItem item,
             boolean manualLandscapeFullscreen
     ) {
+        openShowsVideo(item, manualLandscapeFullscreen, null);
+    }
+
+    private void openShowsVideo(
+            NativeContentItem item,
+            boolean manualLandscapeFullscreen,
+            android.view.View sourceView
+    ) {
         if (item == null || !item.isVideo() || item.url == null || item.url.trim().isEmpty()) {
             return;
         }
 
         final List<NativeContentItem> watchItems = showsWatchItems(item);
+        if (manualLandscapeFullscreen) {
+            launchDeferredShowsVideo(item, watchItems, -1L, sourceView, false);
+            return;
+        }
         io.execute(() -> {
             NativeContentItem libraryContent = OnlyFapVideoMetadata.restore(activity, item);
             CrazyShitRepository.StreamInfo stream = null;
@@ -798,18 +810,67 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         });
     }
 
+    private void launchDeferredShowsVideo(
+            NativeContentItem item,
+            List<NativeContentItem> watchItems,
+            long startPosition,
+            android.view.View sourceView,
+            boolean continueResume
+    ) {
+        android.content.Intent intent =
+                new android.content.Intent(activity, VideoDetailActivity.class);
+        intent.putExtra(PlayerActivity.EXTRA_PAGE_URL, item.url);
+        intent.putExtra(PlayerActivity.EXTRA_TITLE, item.title);
+        intent.putExtra(VideoDetailActivity.EXTRA_VIEWS, item.views);
+        intent.putExtra(VideoDetailActivity.EXTRA_UPLOADER, item.uploader);
+        intent.putExtra(VideoDetailActivity.EXTRA_COMMENTS, item.comments);
+        intent.putExtra(VideoDetailActivity.EXTRA_SOURCE, ShowsWatchLaunch.sourceForPage(item.url));
+        if (startPosition >= 0L) {
+            intent.putExtra(PlayerActivity.EXTRA_START_POSITION, startPosition);
+        }
+        if (continueResume) {
+            intent.putExtra(VideoDetailActivity.EXTRA_SHOWS_CONTINUE_RESUME, true);
+        }
+        if (item.imageUrl != null && !item.imageUrl.trim().isEmpty()) {
+            intent.putExtra(VideoDetailActivity.EXTRA_POSTER_URL, item.imageUrl);
+        }
+        ShowsWatchSession.attach(intent, watchItems, false, "Shows");
+        ShowsPlaybackOrientationPolicy.requireManualLandscapeFullscreen(intent);
+        ShowsWatchLaunch.markDeferred(intent, sourceView);
+        activity.startActivity(intent);
+        activity.overridePendingTransition(0, 0);
+    }
+
     private void openShowsResume(PlaybackHistoryStore.Item history) {
-        openShowsResume(history, true);
+        openShowsResume(history, true, null);
     }
 
     private void openShowsResume(
             PlaybackHistoryStore.Item history,
             boolean manualLandscapeFullscreen
     ) {
+        openShowsResume(history, manualLandscapeFullscreen, null);
+    }
+
+    private void openShowsResume(
+            PlaybackHistoryStore.Item history,
+            boolean manualLandscapeFullscreen,
+            android.view.View sourceView
+    ) {
         if (history == null || history.pageUrl == null || history.pageUrl.trim().isEmpty()) return;
         NativeContentItem item = OnlyFapVideoMetadata.merge(history.content,
                 OnlyFapVideoMetadata.basic(history.title, history.pageUrl, history.posterUrl));
         final List<NativeContentItem> watchItems = showsWatchItems(item);
+        if (manualLandscapeFullscreen) {
+            launchDeferredShowsVideo(
+                    item,
+                    watchItems,
+                    history.complete ? 0L : history.positionMs,
+                    sourceView,
+                    true
+            );
+            return;
+        }
         io.execute(() -> {
             NativeContentItem libraryContent = OnlyFapVideoMetadata.restore(activity, item);
             CrazyShitRepository.StreamInfo stream = null;
@@ -901,9 +962,31 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
             page.showsHub = new ShowsHubView(
                     activity,
                     this::openShowDetails,
-                    this::openShowsResume,
+                    new ShowsHubView.ContinueListener() {
+                        @Override public void onResume(PlaybackHistoryStore.Item item) {
+                            openShowsResume(item);
+                        }
+
+                        @Override public void onResume(
+                                PlaybackHistoryStore.Item item,
+                                android.view.View sourceView
+                        ) {
+                            openShowsResume(item, true, sourceView);
+                        }
+                    },
                     item -> ShowsCollectionWarmCache.request(activity, item),
-                    this::openShowsVideo
+                    new ShowsHubView.Listener() {
+                        @Override public void onOpen(NativeContentItem item) {
+                            openShowsVideo(item);
+                        }
+
+                        @Override public void onOpen(
+                                NativeContentItem item,
+                                android.view.View sourceView
+                        ) {
+                            openShowsVideo(item, true, sourceView);
+                        }
+                    }
             );
             android.os.Handler categoryMain = new android.os.Handler(android.os.Looper.getMainLooper());
             page.showsHub.setCategoryLoader(new ShowsCategoryLoader(

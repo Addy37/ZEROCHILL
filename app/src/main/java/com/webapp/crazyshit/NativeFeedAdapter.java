@@ -62,6 +62,11 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
 
     public interface Listener {
         void onOpen(NativeContentItem item);
+
+        default void onOpen(NativeContentItem item, View sourceView) {
+            onOpen(item);
+        }
+
         void onLongPress(NativeContentItem item, View anchor);
         void onComments(NativeContentItem item);
     }
@@ -673,7 +678,7 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
 
         View options = holder.card.findViewWithTag("video_options");
         if (options != null) options.setOnClickListener(v -> listener.onLongPress(item, v));
-        holder.card.setOnClickListener(v -> listener.onOpen(item));
+        holder.card.setOnClickListener(v -> listener.onOpen(item, holder.image));
         holder.card.setOnLongClickListener(v -> {
             listener.onLongPress(item, v);
             return true;

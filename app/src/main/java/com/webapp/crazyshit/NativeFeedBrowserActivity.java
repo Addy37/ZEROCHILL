@@ -675,6 +675,13 @@ public final class NativeFeedBrowserActivity extends Activity {
                 }
 
                 @Override
+                public void onOpen(NativeContentItem item, View sourceView) {
+                    if (item == null || item.isSection()) return;
+                    if (memeMode || item.isMeme()) openMeme(item);
+                    else openVideo(item, -1L, sourceView);
+                }
+
+                @Override
                 public void onLongPress(NativeContentItem item, View anchor) {
                     if (item == null || item.isSection()) return;
                     showItemMenu(item, anchor);
@@ -1585,12 +1592,44 @@ public final class NativeFeedBrowserActivity extends Activity {
     }
 
     private void openVideo(NativeContentItem item) {
-        openVideo(item, -1L);
+        openVideo(item, -1L, null);
     }
 
     private void openVideo(NativeContentItem item, long startPosition) {
+        openVideo(item, startPosition, null);
+    }
+
+    private void openVideo(
+            NativeContentItem item,
+            long startPosition,
+            View sourceView
+    ) {
         final List<NativeContentItem> watchItems = showDetailsMode && adapter != null
                 ? adapter.snapshot() : java.util.Collections.emptyList();
+        if (showDetailsMode) {
+            Intent intent = new Intent(this, VideoDetailActivity.class);
+            intent.putExtra(PlayerActivity.EXTRA_PAGE_URL, item.url);
+            intent.putExtra(PlayerActivity.EXTRA_TITLE, item.title);
+            intent.putExtra(VideoDetailActivity.EXTRA_VIEWS, item.views);
+            intent.putExtra(VideoDetailActivity.EXTRA_UPLOADER, item.uploader);
+            intent.putExtra(VideoDetailActivity.EXTRA_COMMENTS, item.comments);
+            intent.putExtra(VideoDetailActivity.EXTRA_RELATED_FEED_URL, baseUrl);
+            intent.putExtra(VideoDetailActivity.EXTRA_SOURCE, source);
+            if (startPosition >= 0L) {
+                intent.putExtra(PlayerActivity.EXTRA_START_POSITION, startPosition);
+            }
+            ShowsWatchSession.attach(intent, watchItems,
+                    NativeContentItem.KIND_SERIES.equals(showKind), title);
+            ShowsPlaybackOrientationPolicy.requireManualLandscapeFullscreen(intent);
+            if (item.imageUrl != null && !item.imageUrl.trim().isEmpty()) {
+                intent.putExtra(VideoDetailActivity.EXTRA_POSTER_URL, item.imageUrl);
+            }
+            ShowsWatchLaunch.markDeferred(intent, sourceView);
+            progress.setVisibility(View.GONE);
+            startActivity(intent);
+            overridePendingTransition(0, 0);
+            return;
+        }
         progress.setVisibility(View.VISIBLE);
         final int requestGeneration = generation;
         io.execute(() -> {
