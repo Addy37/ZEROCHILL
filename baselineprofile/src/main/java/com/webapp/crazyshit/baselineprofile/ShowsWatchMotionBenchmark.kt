@@ -2,6 +2,7 @@ package com.webapp.crazyshit.baselineprofile
 
 import android.graphics.Rect
 import androidx.benchmark.macro.CompilationMode
+import androidx.benchmark.macro.ExperimentalMetricApi
 import androidx.benchmark.macro.FrameTimingMetric
 import androidx.benchmark.macro.MemoryUsageMetric
 import androidx.benchmark.macro.StartupMode
@@ -17,6 +18,7 @@ import org.junit.runner.RunWith
 
 /** Real Shows artwork and retained watch Activity, with system animations enabled in CI. */
 @RunWith(AndroidJUnit4::class)
+@OptIn(ExperimentalMetricApi::class)
 class ShowsWatchMotionBenchmark {
     @get:Rule val benchmark = MacrobenchmarkRule()
 
