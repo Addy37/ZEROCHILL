@@ -82,19 +82,32 @@ final class ShowsWatchLaunch {
 
     static boolean animateEntrance(Activity activity, Intent intent, View root, View player,
                                    View details, ImageView poster, View loading) {
-        if (!canAnimate(activity, player)) return false;
+        if (!canAnimate(activity, player)) {
+            setMotionOverflow(root, false);
+            return false;
+        }
         Handoff handoff = handoff(intent);
-        if (handoff == null || handoff.artwork == null) return false;
+        if (handoff == null || handoff.artwork == null) {
+            setMotionOverflow(root, false);
+            return false;
+        }
         SourceGeometry source = currentBounds(activity, intent);
-        if (source == null) return false;
+        if (source == null) {
+            setMotionOverflow(root, false);
+            return false;
+        }
         Transform transform = transform(source.full, player);
-        if (transform == null) return false;
+        if (transform == null) {
+            setMotionOverflow(root, false);
+            return false;
+        }
+        setMotionOverflow(root, true);
         Motion motion = new Motion(root, player, details, poster, loading, transform,
                 clipInPlayer(source, player), handoff.cornerRadius, handoff.artwork);
         root.setTag(R.id.shows_watch_motion, motion);
         motion.progress = 0f;
         motion.apply();
-        motion.animateTo(1f, ENTER_MS, false, null);
+        motion.animateTo(1f, ENTER_MS, false, () -> setMotionOverflow(root, false));
         return true;
     }
 
@@ -106,6 +119,7 @@ final class ShowsWatchLaunch {
         if (source == null || motion == null) return false;
         Transform transform = transform(source.full, player);
         if (transform == null) return false;
+        setMotionOverflow(root, true);
         Handoff handoff = handoff(intent);
         if (poster != null && handoff != null && handoff.artwork != null) {
             motion.posterStartAlpha = poster.getVisibility() == View.VISIBLE &&
@@ -134,6 +148,20 @@ final class ShowsWatchLaunch {
             if (motion.poster != null) motion.poster.setScaleType(ImageView.ScaleType.CENTER_CROP);
             root.setTag(R.id.shows_watch_motion, null);
         }
+        setMotionOverflow(root, false);
+    }
+
+    static void setMotionOverflow(View root, boolean allowOverflow) {
+        if (!(root instanceof ViewGroup)) return;
+        ViewGroup rootGroup = (ViewGroup) root;
+        rootGroup.setClipChildren(!allowOverflow);
+        rootGroup.setClipToPadding(!allowOverflow);
+        if (rootGroup.getChildCount() == 0) return;
+        View firstChild = rootGroup.getChildAt(0);
+        if (!(firstChild instanceof ViewGroup)) return;
+        ViewGroup shell = (ViewGroup) firstChild;
+        shell.setClipChildren(!allowOverflow);
+        shell.setClipToPadding(!allowOverflow);
     }
 
     static RectF visibleBounds(View view) {
