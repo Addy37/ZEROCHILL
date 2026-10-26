@@ -894,6 +894,7 @@ final class ShowsHubView extends FrameLayout {
             com.bumptech.glide.RequestBuilder<android.graphics.drawable.Drawable> request =
                     Glide.with(view)
                             .load(embedded)
+                            .disallowHardwareConfig()
                             .diskCacheStrategy(DiskCacheStrategy.NONE)
                             .skipMemoryCache(false)
                             .dontAnimate()
@@ -934,6 +935,7 @@ final class ShowsHubView extends FrameLayout {
         com.bumptech.glide.RequestBuilder<android.graphics.drawable.Drawable> request =
                 Glide.with(view)
                         .load(new GlideUrl(imageUrl, headers.build()))
+                        .disallowHardwareConfig()
                         .diskCacheStrategy(
                                 hero ? DiskCacheStrategy.ALL : DiskCacheStrategy.AUTOMATIC
                         )
@@ -996,6 +998,7 @@ final class ShowsHubView extends FrameLayout {
         }
         Glide.with(view)
                 .load(savedFrame)
+                .disallowHardwareConfig()
                 .signature(new ObjectKey(
                         savedFrame.lastModified() + ":" + savedFrame.length()
                 ))

@@ -803,6 +803,8 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
                         holder.image.getContext(), R.color.zc_surface_glass_strong)))
                 .error(new ColorDrawable(ZeroChillUi.color(
                         holder.image.getContext(), R.color.zc_surface_glass_strong)));
+        // Shows episode artwork must be readable by the launch snapshot canvas.
+        if (episodePresentation) request.disallowHardwareConfig();
         if (item.isMeme()) request.fitCenter(); else request.centerCrop();
         final String attemptedUrl = imageUrl;
         request.listener(new RequestListener<Drawable>() {
