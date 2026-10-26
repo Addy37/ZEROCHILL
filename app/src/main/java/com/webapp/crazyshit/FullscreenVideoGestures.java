@@ -13,6 +13,7 @@ import java.util.function.BooleanSupplier;
 import java.util.function.Supplier;
 
 /** Surface taps only. Parents keep drag interception; transport controls keep their own touches. */
+@androidx.annotation.OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)
 final class FullscreenVideoGestures implements View.OnTouchListener {
     private final PlayerView surface;
     private final Supplier<Player> player;
