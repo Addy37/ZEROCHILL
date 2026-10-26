@@ -18,6 +18,7 @@ final class PlaybackRecovery {
     private String page = "";
     private int generation, attempts;
     private boolean pending;
+    private Player.Listener metricsListener;
 
     static final class Recovered {
         final CrazyShitRepository.StreamInfo stream;
@@ -29,13 +30,14 @@ final class PlaybackRecovery {
     }
 
     void bind(ExoPlayer next, String pageUrl) {
+        detachMetrics();
         generation++;
         pending = false;
         if (!page.equals(pageUrl)) attempts = 0;
         page = pageUrl == null ? "" : pageUrl;
         player = next;
         final long started = android.os.SystemClock.elapsedRealtime();
-        next.addListener(new Player.Listener() {
+        metricsListener = new Player.Listener() {
             boolean firstFrame;
             long buffering;
             public void onRenderedFirstFrame() {
@@ -47,7 +49,13 @@ final class PlaybackRecovery {
                     AppPerformance.record("Video rebuffer", android.os.SystemClock.elapsedRealtime() - buffering); buffering = 0;
                 }
             }
-        });
+        };
+        next.addListener(metricsListener);
+    }
+
+    private void detachMetrics() {
+        if (player != null && metricsListener != null) player.removeListener(metricsListener);
+        metricsListener = null;
     }
 
     boolean recover(Activity activity, PlaybackException error, Consumer<Recovered> ready, Runnable failure) {
@@ -77,5 +85,5 @@ final class PlaybackRecovery {
     }
 
     void reset() { attempts = 0; cancel(); }
-    void cancel() { generation++; pending = false; player = null; main.removeCallbacksAndMessages(null); }
+    void cancel() { generation++; pending = false; detachMetrics(); player = null; main.removeCallbacksAndMessages(null); }
 }

@@ -13,6 +13,7 @@ import java.util.function.BooleanSupplier;
 import java.util.function.Supplier;
 
 /** Surface taps only. Parents keep drag interception; transport controls keep their own touches. */
+@androidx.annotation.OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)
 final class FullscreenVideoGestures implements View.OnTouchListener {
     private final PlayerView surface;
     private final Supplier<Player> player;
@@ -20,15 +21,22 @@ final class FullscreenVideoGestures implements View.OnTouchListener {
     private final BooleanSupplier enabled;
     private final GestureDetector detector;
     private final TextView feedback;
+    private final boolean immediateSingleTap;
     private boolean dragged;
     private final Runnable clearFeedback = () -> feedbackGone();
 
     FullscreenVideoGestures(PlayerView surface, Supplier<Player> player,
             ShowsFullscreenControls controls, BooleanSupplier enabled) {
+        this(surface, player, controls, enabled, false);
+    }
+
+    FullscreenVideoGestures(PlayerView surface, Supplier<Player> player,
+            ShowsFullscreenControls controls, BooleanSupplier enabled, boolean immediateSingleTap) {
         this.surface = surface;
         this.player = player;
         this.controls = controls;
         this.enabled = enabled;
+        this.immediateSingleTap = immediateSingleTap;
         feedback = BrowseUi.text(surface.getContext(), "", 14, android.graphics.Color.WHITE);
         feedback.setGravity(Gravity.CENTER);
         feedback.setPadding(dp(14), dp(10), dp(14), dp(10));
@@ -38,8 +46,14 @@ final class FullscreenVideoGestures implements View.OnTouchListener {
         surface.addView(feedback, new FrameLayout.LayoutParams(-2, -2));
         detector = new GestureDetector(surface.getContext(), new GestureDetector.SimpleOnGestureListener() {
             @Override public boolean onDown(MotionEvent e) { dragged = false; return true; }
+            @Override public boolean onSingleTapUp(MotionEvent e) {
+                if (FullscreenVideoGestures.this.immediateSingleTap && enabled.getAsBoolean())
+                    controls.onVideoTap();
+                return true;
+            }
             @Override public boolean onSingleTapConfirmed(MotionEvent e) {
-                if (enabled.getAsBoolean()) controls.onVideoTap();
+                if (!FullscreenVideoGestures.this.immediateSingleTap && enabled.getAsBoolean())
+                    controls.onVideoTap();
                 return true;
             }
             @Override public boolean onDoubleTap(MotionEvent e) { return true; }

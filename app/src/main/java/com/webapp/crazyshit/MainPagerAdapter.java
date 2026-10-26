@@ -694,6 +694,16 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         });
     }
 
+    private List<NativeContentItem> showsWatchItems(NativeContentItem selected) {
+        java.util.ArrayList<NativeContentItem> items = new java.util.ArrayList<>();
+        // Keep selected metadata even when this launch came from Library/history.
+        if (selected != null) items.add(selected);
+        for (Page page : pages) {
+            if (page != null && page.showsHub != null) items.addAll(page.showsHub.watchItems());
+        }
+        return items;
+    }
+
     private void openShowsVideo(NativeContentItem item) {
         openShowsVideo(item, true);
     }
@@ -706,6 +716,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
             return;
         }
 
+        final List<NativeContentItem> watchItems = showsWatchItems(item);
         io.execute(() -> {
             NativeContentItem libraryContent = OnlyFapVideoMetadata.restore(activity, item);
             CrazyShitRepository.StreamInfo stream = null;
@@ -741,14 +752,17 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                 android.content.Intent intent =
                         new android.content.Intent(activity, VideoDetailActivity.class);
                 intent.putExtra(PlayerActivity.EXTRA_MEDIA_URL, resolved.mediaUrl);
-                intent.putExtra(PlayerActivity.EXTRA_PAGE_URL, OnlyFapVideoMetadata.applies(libraryContent)
-                        ? item.url : resolvedPage);
+                // Keep the selected item's identity stable across resolver redirects.
+                intent.putExtra(PlayerActivity.EXTRA_PAGE_URL, item.url);
                 intent.putExtra(PlayerActivity.EXTRA_TITLE, item.title);
                 intent.putExtra(VideoDetailActivity.EXTRA_VIEWS, item.views);
                 intent.putExtra(VideoDetailActivity.EXTRA_UPLOADER, item.uploader);
                 intent.putExtra(VideoDetailActivity.EXTRA_COMMENTS, item.comments);
                 intent.putExtra(VideoDetailActivity.EXTRA_SOURCE, source);
                 OnlyFapVideoMetadata.put(intent, libraryContent);
+                if (!OnlyFapVideoMetadata.applies(libraryContent)) {
+                    ShowsWatchSession.attach(intent, watchItems, false, "Shows");
+                }
                 if (manualLandscapeFullscreen) {
                     ShowsPlaybackOrientationPolicy.requireManualLandscapeFullscreen(intent);
                 }
@@ -795,6 +809,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         if (history == null || history.pageUrl == null || history.pageUrl.trim().isEmpty()) return;
         NativeContentItem item = OnlyFapVideoMetadata.merge(history.content,
                 OnlyFapVideoMetadata.basic(history.title, history.pageUrl, history.posterUrl));
+        final List<NativeContentItem> watchItems = showsWatchItems(item);
         io.execute(() -> {
             NativeContentItem libraryContent = OnlyFapVideoMetadata.restore(activity, item);
             CrazyShitRepository.StreamInfo stream = null;
@@ -836,6 +851,9 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                         history.complete ? 0L : history.positionMs);
                 intent.putExtra(VideoDetailActivity.EXTRA_SOURCE, source);
                 OnlyFapVideoMetadata.put(intent, libraryContent);
+                if (!OnlyFapVideoMetadata.applies(libraryContent)) {
+                    ShowsWatchSession.attach(intent, watchItems, false, "Shows");
+                }
                 if (manualLandscapeFullscreen) {
                     ShowsPlaybackOrientationPolicy.requireManualLandscapeFullscreen(intent);
                 }

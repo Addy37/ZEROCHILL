@@ -1589,6 +1589,8 @@ public final class NativeFeedBrowserActivity extends Activity {
     }
 
     private void openVideo(NativeContentItem item, long startPosition) {
+        final List<NativeContentItem> watchItems = showDetailsMode && adapter != null
+                ? adapter.snapshot() : java.util.Collections.emptyList();
         progress.setVisibility(View.VISIBLE);
         final int requestGeneration = generation;
         io.execute(() -> {
@@ -1611,7 +1613,7 @@ public final class NativeFeedBrowserActivity extends Activity {
                 }
                 Intent intent = new Intent(this, VideoDetailActivity.class);
                 intent.putExtra(PlayerActivity.EXTRA_MEDIA_URL, resolved.mediaUrl);
-                intent.putExtra(PlayerActivity.EXTRA_PAGE_URL, resolved.pageUrl);
+                intent.putExtra(PlayerActivity.EXTRA_PAGE_URL, showDetailsMode ? item.url : resolved.pageUrl);
                 intent.putExtra(PlayerActivity.EXTRA_TITLE, item.title);
                 intent.putExtra(VideoDetailActivity.EXTRA_VIEWS, item.views);
                 intent.putExtra(VideoDetailActivity.EXTRA_UPLOADER, item.uploader);
@@ -1620,6 +1622,8 @@ public final class NativeFeedBrowserActivity extends Activity {
                 intent.putExtra(VideoDetailActivity.EXTRA_SOURCE, source);
                 if (startPosition >= 0L) intent.putExtra(PlayerActivity.EXTRA_START_POSITION, startPosition);
                 if (showDetailsMode) {
+                    ShowsWatchSession.attach(intent, watchItems,
+                            NativeContentItem.KIND_SERIES.equals(showKind), title);
                     ShowsPlaybackOrientationPolicy.requireManualLandscapeFullscreen(intent);
                 }
                 if (item.imageUrl != null && !item.imageUrl.trim().isEmpty()) {

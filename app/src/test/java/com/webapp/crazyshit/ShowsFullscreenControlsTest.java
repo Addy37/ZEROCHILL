@@ -24,6 +24,7 @@ import java.lang.reflect.Proxy;
 import java.time.Duration;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.ArrayList;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.Robolectric;
@@ -105,6 +106,73 @@ public class ShowsFullscreenControlsTest {
         assertTrue(ShowsFullscreenControls.shouldAutoHide(true, Player.STATE_READY));
         assertFalse(ShowsFullscreenControls.shouldAutoHide(false, Player.STATE_READY));
         assertFalse(ShowsFullscreenControls.shouldAutoHide(true, Player.STATE_ENDED));
+    }
+
+    @Test public void landscapeTimerDefersForInteractionAndPausedTapKeepsControlsUsable() {
+        Activity host = host();
+        PlayerView view = view(host);
+        ShowsFullscreenControls controls = new ShowsFullscreenControls(view);
+        ArrayList<Boolean> visibility = new ArrayList<>();
+        controls.setShowsLandscapeMode(true);
+        controls.setLandscapeVisibilityListener(visibility::add);
+        AtomicBoolean playing = new AtomicBoolean(true);
+        controls.bind(player(playing));
+        controls.holdInteraction(true);
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(3000));
+        assertTrue(controls.isVisible());
+        controls.holdInteraction(false);
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(2400));
+        assertTrue(controls.isVisible());
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(150));
+        assertFalse(controls.isVisible());
+        controls.onVideoTap();
+        assertTrue(controls.isVisible());
+        assertTrue(visibility.contains(false));
+        playing.set(false);
+        controls.onVideoTap();
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(3000));
+        assertTrue(controls.isVisible());
+        controls.release();
+        host.finish();
+    }
+
+    @Test public void legacyPausedPlayerStillTogglesControlsOnTap() {
+        Activity host = host();
+        PlayerView view = view(host);
+        ShowsFullscreenControls controls = new ShowsFullscreenControls(view);
+        controls.bind(player(new AtomicBoolean(false)));
+        controls.onVideoTap();
+        assertFalse(controls.isVisible());
+        controls.onVideoTap();
+        assertTrue(controls.isVisible());
+        controls.release();
+        host.finish();
+    }
+
+    @Test public void showsSurfaceTapTogglesImmediatelyWhileLegacyGestureWaitsForConfirmation() {
+        Activity host = host();
+        PlayerView view = view(host);
+        ShowsFullscreenControls controls = new ShowsFullscreenControls(view);
+        Player player = player(new AtomicBoolean(true));
+        controls.bind(player);
+        FullscreenVideoGestures shows = new FullscreenVideoGestures(view,
+                () -> player, controls, () -> true, true);
+        long time = android.os.SystemClock.uptimeMillis();
+        MotionEvent down = MotionEvent.obtain(time, time, MotionEvent.ACTION_DOWN, 30, 30, 0);
+        MotionEvent up = MotionEvent.obtain(time, time + 40, MotionEvent.ACTION_UP, 30, 30, 0);
+        shows.onTouch(view, down);
+        shows.onTouch(view, up);
+        assertFalse("Shows tap should not wait for double-tap timeout", controls.isVisible());
+        controls.show();
+        FullscreenVideoGestures legacy = new FullscreenVideoGestures(view,
+                () -> player, controls, () -> true);
+        legacy.onTouch(view, down);
+        legacy.onTouch(view, up);
+        assertTrue("Legacy tap waits for confirmation", controls.isVisible());
+        down.recycle();
+        up.recycle();
+        controls.release();
+        host.finish();
     }
 
     @Test public void idleHidesTapRestoresAndUnrelatedPlayerEventsDoNotExtendTimeout() {
@@ -219,6 +287,24 @@ public class ShowsFullscreenControlsTest {
         controls.syncLiked(true, false);
         assertFalse(like.isEnabled());
         assertEquals("Unlike this video", like.getContentDescription().toString());
+        controls.release();
+        host.finish();
+    }
+
+    @Test public void showsLandscapeUsesOneActionStripAndTotalDuration() {
+        Activity host = host();
+        PlayerView view = view(host);
+        ShowsFullscreenControls controls = new ShowsFullscreenControls(view);
+        controls.bind(player(new AtomicBoolean(true)));
+        controls.setShowsLandscapeMode(true);
+        assertEquals(View.GONE, view.findViewById(R.id.shows_action_row).getVisibility());
+        assertSame(view.findViewById(R.id.shows_progress_row),
+                view.findViewById(R.id.shows_fullscreen_toggle).getParent());
+        assertEquals("0:28", ((TextView) view.findViewById(R.id.shows_remaining)).getText().toString());
+        controls.setShowsLandscapeMode(false);
+        assertSame(view.findViewById(R.id.shows_action_row),
+                view.findViewById(R.id.shows_fullscreen_toggle).getParent());
+        assertEquals("-0:25", ((TextView) view.findViewById(R.id.shows_remaining)).getText().toString());
         controls.release();
         host.finish();
     }
