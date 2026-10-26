@@ -24,7 +24,7 @@ public class ShowsLandscapeControlsPolishTest {
         return activity;
     }
 
-    @Test public void landscapeActionRailKeepsOnlyLikeAndSave() {
+    @Test public void landscapeActionRailHidesCommentsAndShare() {
         Activity host = host();
         LinearLayout actions = new LinearLayout(host);
         actions.addView(action(host, "Like this video"));
@@ -32,11 +32,13 @@ public class ShowsLandscapeControlsPolishTest {
         actions.addView(action(host, "Save to Watch Later"));
         actions.addView(action(host, "Share video"));
 
-        ShowsLandscapeMotion.trimSecondaryActions(actions);
+        ShowsLandscapeMotion.hideSecondaryActions(actions);
 
-        assertEquals(2, actions.getChildCount());
-        assertEquals("Like this video", actions.getChildAt(0).getContentDescription().toString());
-        assertEquals("Save to Watch Later", actions.getChildAt(1).getContentDescription().toString());
+        assertEquals(4, actions.getChildCount());
+        assertEquals(View.VISIBLE, actions.getChildAt(0).getVisibility());
+        assertEquals(View.GONE, actions.getChildAt(1).getVisibility());
+        assertEquals(View.VISIBLE, actions.getChildAt(2).getVisibility());
+        assertEquals(View.GONE, actions.getChildAt(3).getVisibility());
         host.finish();
     }
 
