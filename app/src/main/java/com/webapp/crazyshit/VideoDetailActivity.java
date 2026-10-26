@@ -211,6 +211,7 @@ public class VideoDetailActivity extends Activity {
     private LinearLayout showsLandscapeRail;
     private HorizontalScrollView showsRailScroll;
     private LinearLayout showsLandscapeActions;
+    private ShowsLandscapeMotion showsLandscapeMotion;
     private FrameLayout showsNextOverlay;
     private TextView showsNextText;
     private TextView showsNextTitle;
@@ -607,7 +608,7 @@ public class VideoDetailActivity extends Activity {
             haptic(v); setRotatableFullscreen(!rotatableFullscreen);
         });
         fullscreenGestures = new FullscreenVideoGestures(
-                playerView, () -> player, fullscreenControls, () -> fullscreenChromeActive);
+                playerView, () -> player, fullscreenControls, () -> fullscreenChromeActive, showsOrigin);
         playerView.setOnTouchListener(fullscreenGestures);
 
         View playerBack = playerView.findViewById(R.id.player_back);
@@ -724,6 +725,12 @@ public class VideoDetailActivity extends Activity {
             showsLandscapeRail.setPadding(dp(12), 0, dp(12), 0);
             showsRailScroll.addView(showsLandscapeRail);
             shell.addView(showsRailScroll, new LinearLayout.LayoutParams(-1, dp(136)));
+            showsLandscapeMotion = new ShowsLandscapeMotion(shell, playerView,
+                    showsRailScroll, showsLandscapeActions, fullscreenControls,
+                    Math.round(199f * showsLandscapeScale()));
+            fullscreenControls.setLandscapeVisibilityListener(showsLandscapeMotion::visible);
+            fullscreenOverlay.findViewById(R.id.shows_fullscreen_chrome)
+                    .setOnClickListener(v -> fullscreenControls.onVideoTap());
         }
 
         loading = new ZeroChillProgressBar(this);
@@ -1597,6 +1604,14 @@ public class VideoDetailActivity extends Activity {
         card.setClickable(true);
         card.setFocusable(true);
         card.setContentDescription("Play " + item.title);
+        card.setOnTouchListener((v, event) -> {
+            if (fullscreenControls == null) return false;
+            int action = event.getActionMasked();
+            if (action == MotionEvent.ACTION_DOWN) fullscreenControls.holdInteraction(true);
+            else if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL)
+                fullscreenControls.holdInteraction(false);
+            return false;
+        });
         card.setOnClickListener(v -> { haptic(v); dispatchShowsSelection(item); });
         ImageView image = new ImageView(this);
         image.setScaleType(ImageView.ScaleType.CENTER_CROP);
@@ -2746,13 +2761,9 @@ public class VideoDetailActivity extends Activity {
             detailsScroll.setAlpha(1f);
             detailsScroll.setTranslationY(0f);
         }
-        if (showsRailScroll != null) showsRailScroll.setVisibility(showsRail ? View.VISIBLE : View.GONE);
-        if (showsLandscapeActions != null)
-            showsLandscapeActions.setVisibility(showsRail ? View.VISIBLE : View.GONE);
-        if (showsRailScroll != null && showsRail) {
-            LinearLayout.LayoutParams railParams = (LinearLayout.LayoutParams) showsRailScroll.getLayoutParams();
-            railParams.height = Math.round(199f * showsLandscapeScale());
-            showsRailScroll.setLayoutParams(railParams);
+        if (showsLandscapeMotion != null) {
+            if (showsRail) showsLandscapeMotion.enter();
+            else showsLandscapeMotion.leave();
         }
         LinearLayout.LayoutParams params = (LinearLayout.LayoutParams) playerContainer.getLayoutParams();
         if (fullscreen || showsRail) {
@@ -2771,7 +2782,9 @@ public class VideoDetailActivity extends Activity {
         playerContainer.setAlpha(1f);
         updatePortraitFullscreenButton();
         applyPlayerChrome(orientation);
-        syncFullscreenChrome(fullscreen, landscape);
+        if (showsOrigin && fullscreenControls != null)
+            fullscreenControls.setShowsLandscapeMode(showsRail);
+        syncFullscreenChrome(fullscreen || showsRail, landscape);
         updateSwipeEnabled();
         updatePortraitProgress();
         if (canShowPortraitSeekBar()) showPortraitSeekBar();
@@ -2783,6 +2796,7 @@ public class VideoDetailActivity extends Activity {
         boolean changed = fullscreenChromeActive != fullscreen;
         fullscreenChromeActive = fullscreen;
         playerView.setUseController(!fullscreen);
+        if (fullscreen && changed) fullscreenOverlay.setVisibility(View.VISIBLE);
         if (changed) fullscreenControls.suspend(!fullscreen);
         if (!fullscreen) {
             fullscreenOverlay.setVisibility(View.GONE);
@@ -3329,6 +3343,8 @@ public class VideoDetailActivity extends Activity {
     protected void onResume() {
         super.onResume();
         recoveryResumed = true;
+        if (showsOrigin && fullscreenChromeActive && fullscreenControls != null)
+            fullscreenControls.show();
         if (showsOrigin && showsResumeAfterStop && player != null && !showsCompleted) {
             player.setPlayWhenReady(true);
             showsResumeAfterStop = false;
@@ -3351,6 +3367,7 @@ public class VideoDetailActivity extends Activity {
 
     @Override
     protected void onPause() {
+        if (showsLandscapeMotion != null) showsLandscapeMotion.cancel();
         if (showsOrigin) {
             recoveryResumed = false;
             relatedPlayGeneration++; // Reject a resolver result after the watch page loses focus.
@@ -3390,6 +3407,7 @@ public class VideoDetailActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        if (showsLandscapeMotion != null) showsLandscapeMotion.leave();
         cancelShowsCountdown();
         if (activeComments != null) activeComments.dismiss();
         if (orientationListener != null) orientationListener.disable();

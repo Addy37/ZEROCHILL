@@ -5,6 +5,7 @@ import android.content.Intent;
 import android.content.res.Configuration;
 import android.os.Bundle;
 import android.os.Looper;
+import android.animation.ValueAnimator;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.view.View;
@@ -98,6 +99,11 @@ public class ShowsWatchPageTest {
         root.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
                 View.MeasureSpec.makeMeasureSpec(height, View.MeasureSpec.EXACTLY));
         root.layout(0, 0, width, height);
+        // The first landscape measure reveals the new viewport to the retained surface.
+        forceLayoutTree(root);
+        root.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(height, View.MeasureSpec.EXACTLY));
+        root.layout(0, 0, width, height);
         Bitmap bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
         root.draw(new Canvas(bitmap));
         File file = new File("build/reports/visual-tests/" + name);
@@ -106,6 +112,14 @@ public class ShowsWatchPageTest {
             assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG, 100, out));
         }
         bitmap.recycle();
+    }
+
+    private void forceLayoutTree(View view) {
+        view.forceLayout();
+        if (view instanceof ViewGroup) {
+            ViewGroup group = (ViewGroup) view;
+            for (int i = 0; i < group.getChildCount(); i++) forceLayoutTree(group.getChildAt(i));
+        }
     }
 
     @Test public void portraitRelatedCardsHaveFullWidthArtworkAndSocialActions() throws Exception {
@@ -138,6 +152,21 @@ public class ShowsWatchPageTest {
         assertEquals(4, actions.getChildCount());
         render(activity, 800, 360, "shows-watch-landscape.png");
         assertEquals(360 - scroll.getHeight(), video.getHeight());
+        PlayerView player = ReflectionHelpers.getField(activity, "playerView");
+        assertFalse(player.getUseController());
+        assertTrue("compact surface " + player.getWidth() + " container " + video.getWidth()
+                + " params " + player.getLayoutParams().width,
+                player.getWidth() < video.getWidth());
+        View overlay = ReflectionHelpers.getField(activity, "fullscreenOverlay");
+        assertEquals(View.GONE, overlay.findViewById(R.id.shows_action_row).getVisibility());
+        assertSame(overlay.findViewById(R.id.shows_progress_row),
+                overlay.findViewById(R.id.shows_fullscreen_toggle).getParent());
+        assertEquals(((android.widget.FrameLayout.LayoutParams) overlay.findViewById(
+                R.id.shows_action_row).getLayoutParams()).bottomMargin,
+                ((android.widget.FrameLayout.LayoutParams) overlay.findViewById(
+                        R.id.shows_progress_row).getLayoutParams()).bottomMargin);
+        assertTrue(((ShowsFullscreenControls) ReflectionHelpers.getField(activity,
+                "fullscreenControls")).isVisible());
     }
 
     @Test public void rotationKeepsSurfaceAndPresentsRelatedInBothOrientations() {
@@ -152,10 +181,85 @@ public class ShowsWatchPageTest {
         orient(activity, Configuration.ORIENTATION_LANDSCAPE);
         assertEquals(View.GONE, details.getVisibility());
         assertEquals(View.VISIBLE, rail.getVisibility());
-        assertTrue(player.getUseController());
+        assertFalse(player.getUseController());
         assertSame(surface, player.getVideoSurfaceView());
         orient(activity, Configuration.ORIENTATION_PORTRAIT);
+        assertTrue(player.getUseController());
+        View overlay = ReflectionHelpers.getField(activity, "fullscreenOverlay");
+        assertSame(overlay.findViewById(R.id.shows_action_row),
+                overlay.findViewById(R.id.shows_fullscreen_toggle).getParent());
         assertSame(surface, player.getVideoSurfaceView());
+    }
+
+    @Test @Config(qualifiers = "w800dp-h360dp-land-mdpi")
+    public void videoFillsFittedViewportAsRailHidesAndReversesFromCurrentBounds() throws Exception {
+        VideoDetailActivity activity = watch(item("1"), item("2"));
+        orient(activity, Configuration.ORIENTATION_LANDSCAPE);
+        render(activity, 800, 360, "shows-watch-motion-start.png");
+        ShowsLandscapeMotion motion = ReflectionHelpers.getField(activity, "showsLandscapeMotion");
+        PlayerView player = ReflectionHelpers.getField(activity, "playerView");
+        View surface = player.getVideoSurfaceView();
+        HorizontalScrollView rail = ReflectionHelpers.getField(activity, "showsRailScroll");
+        int compactWidth = player.getWidth();
+        int compactRail = rail.getHeight();
+        motion.visible(false);
+        ValueAnimator animator = ReflectionHelpers.getField(motion, "resize");
+        assertEquals(ShowsLandscapeMotion.RESIZE_MS, animator.getDuration());
+        animator.setCurrentPlayTime(125);
+        render(activity, 800, 360, "shows-watch-motion-mid.png");
+        assertTrue("animated surface " + player.getWidth() + " compact " + compactWidth
+                + " params " + player.getLayoutParams().width + " fraction " + motion.fraction(),
+                player.getWidth() > compactWidth);
+        assertTrue(player.getWidth() < 640);
+        assertTrue(rail.getHeight() > 0 && rail.getHeight() < compactRail);
+        float middle = motion.fraction();
+        motion.visible(true);
+        ValueAnimator reverse = ReflectionHelpers.getField(motion, "resize");
+        assertEquals(middle, (Float) reverse.getAnimatedValue(), .01f);
+        reverse.setCurrentPlayTime(90);
+        float interrupted = motion.fraction();
+        motion.cancel(); // Activity loses focus during the show animation.
+        motion.visible(true); // onResume requests the same visible target.
+        ValueAnimator resumed = ReflectionHelpers.getField(motion, "resize");
+        assertEquals(interrupted, (Float) resumed.getAnimatedValue(), .01f);
+        assertEquals(1f, rail.getAlpha(), .01f);
+        reverse = resumed;
+        reverse.setCurrentPlayTime(250);
+        render(activity, 800, 360, "shows-watch-motion-restored.png");
+        assertEquals(compactWidth, player.getWidth());
+        motion.visible(false);
+        ((ValueAnimator) ReflectionHelpers.getField(motion, "resize")).setCurrentPlayTime(250);
+        render(activity, 800, 360, "shows-watch-motion-expanded.png");
+        assertEquals(640, player.getWidth());
+        assertEquals(360, player.getHeight());
+        assertEquals(0, rail.getHeight());
+        assertFalse(rail.isEnabled());
+        assertSame(surface, player.getVideoSurfaceView());
+        orient(activity, Configuration.ORIENTATION_PORTRAIT);
+        assertEquals(-1, player.getLayoutParams().width);
+        assertEquals(-1, player.getLayoutParams().height);
+        assertSame(surface, player.getVideoSurfaceView());
+        orient(activity, Configuration.ORIENTATION_LANDSCAPE);
+        LinearLayout actions = ReflectionHelpers.getField(activity, "showsLandscapeActions");
+        assertTrue(rail.isEnabled());
+        assertTrue(actions.isEnabled());
+    }
+
+    @Test public void referenceBoundsFitWithoutCropAtEveryFraction() {
+        for (int[] size : new int[][] {{800,360}, {800,500}, {1536,698}}) {
+            float rail = 199f * Math.min(size[0] / 1536f, size[1] / 698f);
+            ShowsLandscapeMotion.Bounds compact = ShowsLandscapeMotion.bounds(
+                    size[0], size[1], rail, 1f);
+            ShowsLandscapeMotion.Bounds full = ShowsLandscapeMotion.bounds(
+                    size[0], size[1], rail, 0f);
+            ShowsLandscapeMotion.Bounds middle = ShowsLandscapeMotion.bounds(
+                    size[0], size[1], rail, .5f);
+            assertEquals((compact.width + full.width) / 2f, middle.width, .01f);
+            assertEquals(16f / 9f, middle.width / middle.height, .001f);
+            assertTrue(full.left >= 0f && full.top >= 0f);
+            assertTrue(full.left + full.width <= size[0] + .01f);
+            assertTrue(full.top + full.height <= size[1] + .01f);
+        }
     }
 
     @Test public void backExitsDirectlyAfterSelectionsWithoutRelatedHistory() {

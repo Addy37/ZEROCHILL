@@ -7,6 +7,7 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
 import android.widget.ImageButton;
+import android.widget.LinearLayout;
 import android.widget.TextView;
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
@@ -28,6 +29,9 @@ final class ShowsFullscreenControls {
     private boolean touchingControl;
     private boolean visible;
     private boolean suspended;
+    private boolean showsLandscapeMode;
+    private long hideDelayMs = FullscreenPlayerStyle.HIDE_DELAY_MS;
+    private java.util.function.Consumer<Boolean> visibilityListener;
     private boolean standaloneLiked;
     private String standaloneLikeTarget = "";
     private int standaloneLikeGeneration;
@@ -106,9 +110,34 @@ final class ShowsFullscreenControls {
 
     boolean isVisible() { return visible; }
 
+    void setLandscapeVisibilityListener(java.util.function.Consumer<Boolean> listener) {
+        visibilityListener = listener;
+        hideDelayMs = listener == null ? FullscreenPlayerStyle.HIDE_DELAY_MS : 2500L;
+    }
+
+    void setShowsLandscapeMode(boolean enabled) {
+        if (showsLandscapeMode == enabled) return;
+        showsLandscapeMode = enabled;
+        LinearLayout actions = view.findViewById(R.id.shows_action_row);
+        LinearLayout progress = view.findViewById(R.id.shows_progress_row);
+        View toggle = view.findViewById(R.id.shows_fullscreen_toggle);
+        ((ViewGroup) toggle.getParent()).removeView(toggle);
+        if (enabled) progress.addView(toggle);
+        else actions.addView(toggle);
+        actions.setVisibility(enabled ? View.GONE : View.VISIBLE);
+        applyInsets(ViewCompat.getRootWindowInsets(view));
+        if (player != null) updateTimes(player.getCurrentPosition());
+    }
+
+    void holdInteraction(boolean holding) {
+        touchingControl = holding;
+        if (!suspended) show();
+    }
+
     void show() {
         if (suspended) return;
         visible = true;
+        if (visibilityListener != null) visibilityListener.accept(true);
         chrome.animate().cancel();
         chrome.setAlpha(1f);
         view.show();
@@ -118,7 +147,9 @@ final class ShowsFullscreenControls {
 
     void hide() {
         view.removeCallbacks(autoHide);
+        if (!visible) return;
         visible = false;
+        if (visibilityListener != null) visibilityListener.accept(false);
         chrome.animate().cancel();
         chrome.animate().alpha(0f).setDuration(FullscreenPlayerStyle.FADE_MS)
                 .withEndAction(() -> { if (!visible) view.hide(); }).start();
@@ -150,8 +181,9 @@ final class ShowsFullscreenControls {
     }
 
     void onVideoTap() {
-        if (!visible) { show(); return; }
-        hide();
+        if (!visible || (showsLandscapeMode && (player == null ||
+                !shouldAutoHide(player.getPlayWhenReady(), player.getPlaybackState())))) show();
+        else hide();
     }
 
     static boolean shouldAutoHide(boolean playWhenReady, int playbackState) {
@@ -162,7 +194,7 @@ final class ShowsFullscreenControls {
         view.removeCallbacks(autoHide);
         if (visible && !suspended && !scrubbing && !touchingControl && player != null &&
                 shouldAutoHide(player.getPlayWhenReady(), player.getPlaybackState())) {
-            view.postDelayed(autoHide, FullscreenPlayerStyle.HIDE_DELAY_MS);
+            view.postDelayed(autoHide, hideDelayMs);
         }
     }
 
@@ -197,7 +229,8 @@ final class ShowsFullscreenControls {
         TextView elapsed = view.findViewById(androidx.media3.ui.R.id.exo_position);
         elapsed.setText(FullscreenPlayerStyle.time(position));
         TextView remaining = view.findViewById(R.id.shows_remaining);
-        remaining.setText(FullscreenPlayerStyle.remaining(position, duration));
+        remaining.setText(showsLandscapeMode ? FullscreenPlayerStyle.time(duration)
+                : FullscreenPlayerStyle.remaining(position, duration));
     }
 
     void syncSaved(boolean saved) {
@@ -274,7 +307,8 @@ final class ShowsFullscreenControls {
         headerParams.topMargin = edges.top;
         header.setLayoutParams(headerParams);
         setBottomMargin(R.id.shows_action_row, bottom);
-        setBottomMargin(R.id.shows_progress_row, bottom + dp(FullscreenPlayerStyle.ACTION_ROW_DP));
+        setBottomMargin(R.id.shows_progress_row, bottom +
+                (showsLandscapeMode ? 0 : dp(FullscreenPlayerStyle.ACTION_ROW_DP)));
         view.findViewById(R.id.shows_top_scrim).getLayoutParams().height =
                 dp(FullscreenPlayerStyle.TOP_SCRIM_DP) + edges.top;
         view.findViewById(R.id.shows_bottom_scrim).getLayoutParams().height =

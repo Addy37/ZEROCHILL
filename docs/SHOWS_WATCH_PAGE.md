@@ -58,6 +58,31 @@ identifiable following episode, with source display order as the fallback where
 episode numbering is unavailable. Missing next content produces a normal ended
 state. Backgrounding, Back, and manual selection stop pending automatic selection.
 
+## Landscape motion follow-up
+
+Device recordings `13837.mp4` and `13838.mp4` showed that the first candidate
+kept the landscape rail and social strip visible permanently. It also bypassed
+the fullscreen playback controller. The follow-up starts from PR #345 head
+`8bbfc35b98498f2ad821c9208dc0016a2e1741f7` and connects those pieces to the same
+visibility state.
+
+KidTok's current 250 ms resize and 150 ms chrome fade are the timing reference.
+Controls, related thumbnails, and social actions appear together. While playing,
+2.5 seconds of inactivity hides the chrome and expands the retained video
+surface to the fitted viewport. A tap restores the compact video and rail.
+Touches on controls and related cards, scrubbing, and rail scrolling defer idle
+hiding. Paused and ended playback keep controls available.
+
+Interrupted transitions resume from their current dimensions, including rapid
+tap reversals. Orientation changes cancel the old animation and restore the
+appropriate page layout. The player, media item, and attached surface are not
+recreated by this presentation change. The landscape seek row shows elapsed and
+total duration with the fullscreen button beside it. Existing social actions
+remain in one strip; Download remains available from the video action menu.
+
+Host-side motion, gesture, and controller tests cover these state changes.
+Actual Android 16/120 Hz smoothness still needs physical-device review.
+
 ## Compatibility
 
 No application ID, signing setup, release version, provider scraping, remote
