@@ -116,7 +116,7 @@ internal class ConsoleState @JvmOverloads constructor(application: Application, 
     fun searchCommunity(value: String) {
         communityQuery = value.trim(); saved["communityQuery"] = communityQuery; loadCommunityList()
     }
-    fun setCommunityFilter(value: String) {
+    fun applyCommunityFilter(value: String) {
         communityFilter = value; saved["communityFilter"] = value; loadCommunityList()
     }
     fun loadCommunityList() {
