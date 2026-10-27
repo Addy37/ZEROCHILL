@@ -11,19 +11,19 @@ final class SearchResultCache {
     private static final long TTL_MS = 60_000L;
     private static final int CAPACITY = 64;
 
-    private static final class Entry {
+    private static final class CacheEntry {
         final long storedAtMs;
         final List<NativeContentItem> items;
 
-        Entry(List<NativeContentItem> items) {
+        CacheEntry(List<NativeContentItem> items) {
             storedAtMs = android.os.SystemClock.elapsedRealtime();
             this.items = new ArrayList<>(items);
         }
     }
 
-    private final Map<String, Entry> cache =
-            new LinkedHashMap<String, Entry>(CAPACITY, .75f, true) {
-                @Override protected boolean removeEldestEntry(Map.Entry<String, Entry> eldest) {
+    private final Map<String, CacheEntry> cache =
+            new LinkedHashMap<String, CacheEntry>(CAPACITY, .75f, true) {
+                @Override protected boolean removeEldestEntry(Map.Entry<String, CacheEntry> eldest) {
                     return size() > CAPACITY;
                 }
             };
@@ -31,7 +31,7 @@ final class SearchResultCache {
     synchronized List<NativeContentItem> get(String source, String query) {
         String key = key(source, query);
         if (key.isEmpty()) return null;
-        Entry entry = cache.get(key);
+        CacheEntry entry = cache.get(key);
         if (entry == null) return null;
         if (android.os.SystemClock.elapsedRealtime() - entry.storedAtMs >= TTL_MS) {
             cache.remove(key);
@@ -44,7 +44,7 @@ final class SearchResultCache {
         if (items == null || items.isEmpty()) return;
         String key = key(source, query);
         if (key.isEmpty()) return;
-        cache.put(key, new Entry(items));
+        cache.put(key, new CacheEntry(items));
     }
 
     private static String key(String source, String query) {
