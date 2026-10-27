@@ -121,11 +121,15 @@ internal val ConsoleShape = RoundedCornerShape(22.dp)
     }
 }
 internal data class Destination(val id: String, val label: String, val icon: ImageVector)
-internal val destinations = listOf(Destination("home", "Home", Icons.Outlined.SpaceDashboard),
-    Destination("feedback", "Feedback", Icons.Outlined.Forum), Destination("sources", "Sources", Icons.Outlined.Hub),
-    Destination("analytics", "Analytics", Icons.Outlined.BarChart))
+internal val destinations = listOf(
+    Destination("home", "Home", Icons.Outlined.SpaceDashboard),
+    Destination("feedback", "Feedback", Icons.Outlined.Forum),
+    Destination("community", "Community", Icons.Outlined.Groups),
+    Destination("sources", "Sources", Icons.Outlined.Hub),
+    Destination("analytics", "Analytics", Icons.Outlined.BarChart)
+)
 @Composable internal fun ConsoleNav(selected: String, unread: Int, navigate: (String) -> Unit) {
-    Row(Modifier.fillMaxWidth().background(Ink).navigationBarsPadding().padding(horizontal=12.dp, vertical=8.dp),
+    Row(Modifier.fillMaxWidth().background(Ink).navigationBarsPadding().padding(horizontal=8.dp, vertical=8.dp),
         horizontalArrangement = Arrangement.SpaceEvenly) {
         destinations.forEach { item ->
             val active = item.id == selected
@@ -133,9 +137,9 @@ internal val destinations = listOf(Destination("home", "Home", Icons.Outlined.Sp
             Column(Modifier.weight(1f).clip(RoundedCornerShape(16.dp)).clickable { navigate(item.id) }
                 .padding(vertical=9.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement=Arrangement.spacedBy(5.dp)) {
                 BadgedBox(badge={ if(item.id == "feedback" && unread > 0) Badge(containerColor=ElectricBlue, contentColor=Ink) { Text(unread.toString()) } }) {
-                    Icon(item.icon, null, tint = color, modifier=Modifier.size(23.dp))
+                    Icon(item.icon, null, tint = color, modifier=Modifier.size(22.dp))
                 }
-                Text(item.label, color=color, fontSize=12.sp, fontWeight=if(active) FontWeight.Bold else FontWeight.Normal)
+                Text(item.label, color=color, fontSize=10.sp, maxLines=1, fontWeight=if(active) FontWeight.Bold else FontWeight.Normal)
                 Box(Modifier.width(if(active) 18.dp else 0.dp).height(2.dp).background(ElectricBlue))
             }
         }

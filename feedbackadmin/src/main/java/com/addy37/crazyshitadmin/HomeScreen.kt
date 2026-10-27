@@ -19,9 +19,11 @@ import androidx.compose.ui.unit.dp
 @Composable internal fun HomeScreen(state: ConsoleState) {
     val a = state.analytics
     val counts = state.activeCounts
+    val community = state.communityOverview
     val draft = state.config
     val sources = remember(draft?.text) { draft?.let { org.json.JSONObject(it.text).optJSONObject("sources") } }
     val enabled = sources?.keysList()?.count { sources.optJSONObject(it)?.optBoolean("enabled", true) == true }
+    LaunchedEffect(Unit) { if(state.communityOverview == null) state.loadCommunityOverview() }
     LazyColumn(Modifier.fillMaxSize(), contentPadding=PaddingValues(22.dp), verticalArrangement=Arrangement.spacedBy(22.dp)) {
         item { Column(verticalArrangement=Arrangement.spacedBy(7.dp)) {
             Eyebrow("01 / OVERVIEW", color=Cyan)
@@ -48,13 +50,22 @@ import androidx.compose.ui.unit.dp
         }
         item {
             BoxWithConstraints {
-                val wide = maxWidth > 580.dp
-                val panels: @Composable (Modifier) -> Unit = { mod ->
+                val veryWide = maxWidth > 760.dp
+                val medium = maxWidth > 580.dp
+                val feedback: @Composable (Modifier) -> Unit = { mod ->
                     ConsolePanel(mod) {
                         Eyebrow("FEEDBACK")
                         Text(state.items.count { it.unreadCount > 0 }.toString(), style=MaterialTheme.typography.headlineLarge)
                         Text("Unread threads · ${state.items.count { it.status == "submitted" }} new", color=Muted)
                         TextButton(onClick={state.navigate("feedback")}) { Text("Open inbox"); Spacer(Modifier.width(8.dp)); Icon(Icons.AutoMirrored.Outlined.ArrowForward, null, Modifier.size(18.dp)) }
+                    }
+                }
+                val communityPanel: @Composable (Modifier) -> Unit = { mod ->
+                    ConsolePanel(mod) {
+                        Eyebrow("COMMUNITY")
+                        Text(community?.accounts?.let(::number) ?: "···", style=MaterialTheme.typography.headlineLarge)
+                        Text("Accounts · ${community?.reports?.let(::number) ?: "···"} reports", color=Muted)
+                        TextButton(onClick={state.navigate("community")}) { Text("Open community"); Spacer(Modifier.width(8.dp)); Icon(Icons.AutoMirrored.Outlined.ArrowForward, null, Modifier.size(18.dp)) }
                     }
                 }
                 val service: @Composable (Modifier) -> Unit = { mod ->
@@ -65,15 +76,27 @@ import androidx.compose.ui.unit.dp
                         TextButton(onClick={state.navigate("sources")}) { Text("Manage sources"); Spacer(Modifier.width(8.dp)); Icon(Icons.AutoMirrored.Outlined.ArrowForward, null, Modifier.size(18.dp)) }
                     }
                 }
-                if(wide) Row(horizontalArrangement=Arrangement.spacedBy(16.dp)) { panels(Modifier.weight(1f)); service(Modifier.weight(1f)) }
-                else Column(verticalArrangement=Arrangement.spacedBy(14.dp)) { panels(Modifier.fillMaxWidth()); service(Modifier.fillMaxWidth()) }
+                when {
+                    veryWide -> Row(horizontalArrangement=Arrangement.spacedBy(14.dp)) {
+                        feedback(Modifier.weight(1f)); communityPanel(Modifier.weight(1f)); service(Modifier.weight(1f))
+                    }
+                    medium -> Column(verticalArrangement=Arrangement.spacedBy(14.dp)) {
+                        Row(horizontalArrangement=Arrangement.spacedBy(14.dp)) { feedback(Modifier.weight(1f)); communityPanel(Modifier.weight(1f)) }
+                        service(Modifier.fillMaxWidth())
+                    }
+                    else -> Column(verticalArrangement=Arrangement.spacedBy(14.dp)) {
+                        feedback(Modifier.fillMaxWidth()); communityPanel(Modifier.fillMaxWidth()); service(Modifier.fillMaxWidth())
+                    }
+                }
             }
             Spacer(Modifier.height(12.dp))
             ErrorPanel(state.errors["feedback"], state::loadFeedback)
+            ErrorPanel(state.errors["communityOverview"], state::loadCommunityOverview)
             ErrorPanel(state.errors["sources"], {state.loadConfig()})
         }
         item { Column(verticalArrangement=Arrangement.spacedBy(16.dp)) {
             Eyebrow("OPERATIONS")
+            SnapshotRow("Community accounts", community?.accounts?.let { "${number(it)} accounts · ${number(community.newAccounts7d)} new this week" } ?: "Not loaded", Icons.Outlined.Groups) {state.navigate("community")}
             SnapshotRow("Remote configuration", draft?.let { if(it.published > 0) "Published v${it.published}" else "Bundled defaults" } ?: "Not loaded", Icons.Outlined.Tune) {state.navigate("sources")}
             if(draft?.dirty == true) StatusTag("Candidate has unpublished changes")
             SnapshotRow("Top creator", a?.creators?.firstOrNull()?.value ?: "No activity yet", Icons.Outlined.LocalFireDepartment) {state.navigate("analytics")}
