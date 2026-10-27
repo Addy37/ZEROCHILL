@@ -815,8 +815,11 @@ public final class NativeFeedBrowserActivity extends Activity {
         View content = shell.getChildAt(1);
         shell.removeView(top);
         shell.removeView(content);
-        content.setClipChildren(false);
-        content.setClipToPadding(false);
+        if (content instanceof ViewGroup) {
+            ViewGroup group = (ViewGroup) content;
+            group.setClipChildren(false);
+            group.setClipToPadding(false);
+        }
         if (showDetailsAppBar != null) {
             showDetailsAppBar.setClipChildren(false);
             showDetailsAppBar.setClipToPadding(false);

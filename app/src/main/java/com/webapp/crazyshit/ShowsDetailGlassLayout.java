@@ -58,9 +58,10 @@ final class ShowsDetailGlassLayout extends FrameLayout {
         header.setPageBackdrop(pageBackdrop);
         episodes.setPageBackdrop(pageBackdrop);
         pager.setPageBackdrop(pageBackdrop);
-        if (content != null) {
-            content.setClipChildren(false);
-            content.setClipToPadding(false);
+        if (content instanceof ViewGroup) {
+            ViewGroup group = (ViewGroup) content;
+            group.setClipChildren(false);
+            group.setClipToPadding(false);
         }
         addView(content, new LayoutParams(-1, -1));
         addView(header, new LayoutParams(-1, -2));

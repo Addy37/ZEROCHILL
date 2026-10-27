@@ -51,7 +51,7 @@ public class ShowsDetailGlassTest {
         assertEquals(content.getBottom(), pager.getBottom());
         assertEquals(header.getTop(), glass.underlayClipTop());
         assertTrue(glass.underlayClipTop() < content.getTop());
-        assertFalse(content.getClipChildren());
+        assertFalse(((ViewGroup) content).getClipChildren());
 
         ShowDetailsHeader hero = ReflectionHelpers.getField(browser, "showDetailsHeader");
         assertEquals(0, hero.getTop());
