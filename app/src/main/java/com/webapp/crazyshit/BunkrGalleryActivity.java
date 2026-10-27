@@ -991,9 +991,14 @@ public final class BunkrGalleryActivity extends Activity {
 
         DefaultHttpDataSource.Factory httpFactory = videoHttpFactory(mediaUrl,
                 requestReferer.isEmpty() ? item.url : requestReferer);
+        androidx.media3.datasource.DataSource.Factory data = isCreatorGallery()
+                ? GalleryVideoCache.factory(this, httpFactory) : httpFactory;
+        if (BunkrRepository.isBunkrUrl(item.url)
+                && value(Uri.parse(mediaUrl).getPath()).toLowerCase(java.util.Locale.US).endsWith(".mp4")) {
+            data = BunkrMp4DataSource.wrap(data);
+        }
         DefaultMediaSourceFactory mediaSourceFactory = new DefaultMediaSourceFactory(this)
-                .setDataSourceFactory(isCreatorGallery()
-                        ? GalleryVideoCache.factory(this, httpFactory) : httpFactory);
+                .setDataSourceFactory(data);
         player = new ExoPlayer.Builder(this).setMediaSourceFactory(mediaSourceFactory).build();
         activeVideoPosition = position;
         videoSizeKnown = false;
