@@ -404,8 +404,16 @@ final class XMegaDriveRepository {
         LinkedHashMap<String, NativeContentItem> categories = new LinkedHashMap<>();
         parseCategories(document, categories);
         if (!categories.isEmpty()) return true;
-        if (!parseVideos(document, 1).isEmpty()) return true;
+        if (hasVideoCards(document)) return true;
         return !extractMedia(document).isEmpty();
+    }
+
+    private static boolean hasVideoCards(Document document) {
+        if (document == null) return false;
+        for (Element anchor : document.select("a[href*=/videos/]")) {
+            if (!normalizeVideoUrl(anchor.absUrl("href")).isEmpty()) return true;
+        }
+        return false;
     }
 
     private static boolean ageGate(Document document) {
@@ -460,7 +468,7 @@ final class XMegaDriveRepository {
         if (document == null || max <= 0) return new ArrayList<>();
         for (Element anchor : document.select("a[href*=/videos/]")) {
             String canonical = normalizeVideoUrl(anchor.absUrl("href"));
-            if (canonical.isEmpty() || found.containsKey(canonical)) continue;
+            if (canonical.isEmpty() || found.containsKey(canonical) || isPremiumVideoCard(anchor)) continue;
             String title = cardTitle(anchor);
             if (title.isEmpty()) title = slugTitle(canonical);
             found.put(canonical, new NativeContentItem(
@@ -477,6 +485,102 @@ final class XMegaDriveRepository {
             if (found.size() >= max) break;
         }
         return new ArrayList<>(found.values());
+    }
+
+    private static boolean isPremiumVideoCard(Element anchor) {
+        if (anchor == null) return false;
+        Element scope = videoCardScope(anchor);
+        if (hasPremiumMarker(anchor) || (scope != anchor && hasPremiumMarker(scope))) return true;
+        if (scope == null) return false;
+        for (Element marker : scope.select(
+                "[class*=badge], [class*=label], [class*=flag], [class*=tag], "
+                        + "[class*=status], [class*=access], [class*=icon], [class*=ico], "
+                        + "span, small, em, i"
+        )) {
+            if (isPremiumLabel(marker.ownText())
+                    || isPremiumLabel(marker.attr("title"))
+                    || isPremiumLabel(marker.attr("aria-label"))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static Element videoCardScope(Element anchor) {
+        String target = normalizeVideoUrl(anchor == null ? "" : anchor.absUrl("href"));
+        if (anchor == null || target.isEmpty()) return anchor;
+        Element scope = anchor;
+        Element parent = anchor.parent();
+        for (int depth = 0; depth < 4 && parent != null; depth++) {
+            String tag = parent.tagName();
+            if ("body".equalsIgnoreCase(tag) || "html".equalsIgnoreCase(tag)) break;
+            String firstTarget = "";
+            boolean multipleTargets = false;
+            for (Element link : parent.select("a[href*=/videos/]")) {
+                String candidate = normalizeVideoUrl(link.absUrl("href"));
+                if (candidate.isEmpty()) continue;
+                if (firstTarget.isEmpty()) {
+                    firstTarget = candidate;
+                } else if (!firstTarget.equals(candidate)) {
+                    multipleTargets = true;
+                    break;
+                }
+            }
+            if (multipleTargets || (!firstTarget.isEmpty() && !target.equals(firstTarget))) break;
+            scope = parent;
+            parent = parent.parent();
+        }
+        return scope;
+    }
+
+    private static boolean hasPremiumMarker(Element element) {
+        if (element == null) return false;
+        if (hasPremiumMarkerSelf(element)) return true;
+        for (Element child : element.select(
+                "[class], [id], [data-is-private], [data-is_private], [data-private], "
+                        + "[data-video-type], [data-type], [data-access], "
+                        + "[data-access-level], [data-premium]"
+        )) {
+            if (hasPremiumMarkerSelf(child)) return true;
+        }
+        return false;
+    }
+
+    private static boolean hasPremiumMarkerSelf(Element element) {
+        if (element == null) return false;
+        if (containsPremiumWord(element.className()) || containsPremiumWord(element.id())) return true;
+        if ("2".equals(clean(element.attr("data-is-private")))
+                || "2".equals(clean(element.attr("data-is_private")))
+                || "2".equals(clean(element.attr("data-private")))) {
+            return true;
+        }
+        String[] accessAttributes = {
+                "data-video-type", "data-type", "data-access", "data-access-level"
+        };
+        for (String attribute : accessAttributes) {
+            if (containsPremiumWord(element.attr(attribute))) return true;
+        }
+        String premium = clean(element.attr("data-premium")).toLowerCase(Locale.US);
+        return "1".equals(premium) || "true".equals(premium) || containsPremiumWord(premium);
+    }
+
+    private static boolean containsPremiumWord(String value) {
+        String normalized = clean(value).toLowerCase(Locale.US);
+        if (normalized.isEmpty()) return false;
+        for (String part : normalized.split("[^a-z0-9]+")) {
+            if ("premium".equals(part)) return true;
+        }
+        return false;
+    }
+
+    private static boolean isPremiumLabel(String value) {
+        String normalized = clean(value).toLowerCase(Locale.US).replace('-', ' ');
+        return "premium".equals(normalized)
+                || "premium only".equals(normalized)
+                || "premium video".equals(normalized)
+                || "premium content".equals(normalized)
+                || "premium member".equals(normalized)
+                || "premium members only".equals(normalized);
     }
 
     private static String normalizeVideoUrl(String value) {
@@ -756,7 +860,7 @@ final class XMegaDriveRepository {
 
     static String decodePlayerUrl(String videoUrl, String licenseCode, String pageUrl) {
         if (videoUrl == null) return "";
-        String value = videoUrl.trim().replace("\\/", "/").replace("&", "&");
+        String value = videoUrl.trim().replace("\\/", "/").replace("&amp;", "&");
         if (value.startsWith("function/0/")) value = value.substring("function/0/".length());
         if (value.startsWith("//")) value = "https:" + value;
         if (value.startsWith("/")) {
