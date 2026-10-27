@@ -155,6 +155,7 @@ final class AppUpdater {
         ReleaseInfo preview = new ReleaseInfo(
                 "4.3.1 preview",
                 "ShitTok social polish and a smoother in-app updater.",
+                "ShitTok social polish and a smoother in-app updater.",
                 "",
                 "",
                 "",
@@ -164,7 +165,7 @@ final class AppUpdater {
         activeRelease = preview;
         card.showAvailable(
                 preview.version,
-                preview.title,
+                preview.summary,
                 () -> simulatePreviewDownload(preview),
                 card::dismiss
         );
@@ -251,8 +252,13 @@ final class AppUpdater {
         if (apkUrl.isEmpty()) return null;
 
         String title = release.optString("name", tag);
+        String summary = ReleaseNotesSummary.fromMarkdown(
+                release.optString("body", ""),
+                title,
+                tag
+        );
         String page = release.optString("html_url", "");
-        return new ReleaseInfo(tag, title, apkName, apkUrl, page, beta, false);
+        return new ReleaseInfo(tag, title, summary, apkName, apkUrl, page, beta, false);
     }
 
     private String httpGetFirst(List<String> addresses) throws Exception {
@@ -300,9 +306,9 @@ final class AppUpdater {
 
     private void showUpdateCard(ReleaseInfo release, String current) {
         activeRelease = release;
-        String channel = release.beta ? "beta" : "stable";
-        String summary = release.title == null ? "" : release.title.trim();
-        if (summary.isEmpty() || summary.equalsIgnoreCase(release.version)) {
+        String summary = release.summary == null ? "" : release.summary.trim();
+        if (summary.isEmpty()) {
+            String channel = release.beta ? "beta" : "stable";
             summary = "Installed " + current + " · " + channel + " update";
         }
         String finalSummary = summary;
@@ -515,6 +521,7 @@ final class AppUpdater {
     private static final class ReleaseInfo {
         final String version;
         final String title;
+        final String summary;
         final String apkName;
         final String apkUrl;
         final String pageUrl;
@@ -524,6 +531,7 @@ final class AppUpdater {
         ReleaseInfo(
                 String version,
                 String title,
+                String summary,
                 String apkName,
                 String apkUrl,
                 String pageUrl,
@@ -532,6 +540,7 @@ final class AppUpdater {
         ) {
             this.version = version;
             this.title = title;
+            this.summary = summary;
             this.apkName = apkName;
             this.apkUrl = apkUrl;
             this.pageUrl = pageUrl;
