@@ -439,12 +439,12 @@ public class SearchScopeTest {
                     playback.getStringExtra(VideoDetailActivity.EXTRA_SOURCE));
             Intent baddiePlayback = new Intent();
             ReflectionHelpers.callInstanceMethod(panel, "putPlaybackSource",
-                    ReflectionHelpers.ClassParameter.from(Intent.class, playback),
+                    ReflectionHelpers.ClassParameter.from(Intent.class, baddiePlayback),
                     ReflectionHelpers.ClassParameter.from(NativeContentItem.class, new NativeContentItem(
                             NativeContentItem.KIND_MEDIA, "Clip",
                             "https://baddiehub.com/lala-koi-54/", "", "", "BaddieHub", "")));
             assertEquals(NativeFeedBrowserActivity.SOURCE_BADDIEHUB,
-                    playback.getStringExtra(VideoDetailActivity.EXTRA_SOURCE));
+                    baddiePlayback.getStringExtra(VideoDetailActivity.EXTRA_SOURCE));
         } finally { close(panel); owner.close(); host.pause().stop().destroy(); }
     }
 
