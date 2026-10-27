@@ -2,7 +2,7 @@ package com.addy37.crazyshitadmin
 
 import org.json.JSONObject
 
-/** Small test seam around the unchanged synchronous repository. All calls run on Dispatchers.IO. */
+/** Small test seam around the synchronous repositories. All calls run on Dispatchers.IO. */
 internal interface AdminGateway {
     fun list(token: String): List<AdminRepository.Item>
     fun analytics(token: String): AdminRepository.AnalyticsDashboard
@@ -16,6 +16,11 @@ internal interface AdminGateway {
     fun reply(token: String, id: String, status: String, message: String)
     fun updateStatus(token: String, id: String, status: String)
     fun deleteFeedback(token: String, id: String)
+    fun communityOverview(token: String): CommunityRepository.Overview
+    fun accounts(token: String, query: String, filter: String): List<CommunityRepository.Account>
+    fun accountDetail(token: String, userId: String): CommunityRepository.AccountDetail
+    fun socialActivity(token: String, query: String, filter: String): List<CommunityRepository.SocialActivity>
+    fun reports(token: String, query: String, filter: String): List<CommunityRepository.Report>
 }
 internal object RepositoryGateway : AdminGateway {
     override fun list(token: String) = AdminRepository.list(token)
@@ -30,4 +35,9 @@ internal object RepositoryGateway : AdminGateway {
     override fun reply(token: String, id: String, status: String, message: String) = AdminRepository.reply(token, id, status, message)
     override fun updateStatus(token: String, id: String, status: String) = AdminRepository.updateStatus(token, id, status)
     override fun deleteFeedback(token: String, id: String) = AdminRepository.deleteFeedback(token, id)
+    override fun communityOverview(token: String) = CommunityRepository.overview(token)
+    override fun accounts(token: String, query: String, filter: String) = CommunityRepository.accounts(token, query, filter)
+    override fun accountDetail(token: String, userId: String) = CommunityRepository.accountDetail(token, userId)
+    override fun socialActivity(token: String, query: String, filter: String) = CommunityRepository.activity(token, query, filter)
+    override fun reports(token: String, query: String, filter: String) = CommunityRepository.reports(token, query, filter)
 }
