@@ -860,7 +860,7 @@ final class XMegaDriveRepository {
 
     static String decodePlayerUrl(String videoUrl, String licenseCode, String pageUrl) {
         if (videoUrl == null) return "";
-        String value = videoUrl.trim().replace("\\/", "/").replace("&amp;", "&");
+        String value = videoUrl.trim().replace("\\/", "/").replace("&", "&");
         if (value.startsWith("function/0/")) value = value.substring("function/0/".length());
         if (value.startsWith("//")) value = "https:" + value;
         if (value.startsWith("/")) {
