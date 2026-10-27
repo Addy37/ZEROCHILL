@@ -468,7 +468,12 @@ final class XMegaDriveRepository {
         if (document == null || max <= 0) return new ArrayList<>();
         for (Element anchor : document.select("a[href*=/videos/]")) {
             String canonical = normalizeVideoUrl(anchor.absUrl("href"));
-            if (canonical.isEmpty() || found.containsKey(canonical) || isPremiumVideoCard(anchor)) continue;
+            if (canonical.isEmpty()
+                    || found.containsKey(canonical)
+                    || isPremiumVideoUrl(canonical)
+                    || isPremiumVideoCard(anchor)) {
+                continue;
+            }
             String title = cardTitle(anchor);
             if (title.isEmpty()) title = slugTitle(canonical);
             found.put(canonical, new NativeContentItem(
@@ -485,6 +490,20 @@ final class XMegaDriveRepository {
             if (found.size() >= max) break;
         }
         return new ArrayList<>(found.values());
+    }
+
+    /** XMegaDrive encodes paid user-request videos in the canonical slug itself. */
+    private static boolean isPremiumVideoUrl(String canonical) {
+        if (canonical == null || canonical.isEmpty()) return false;
+        try {
+            URI uri = URI.create(canonical);
+            String[] parts = pathParts(uri.getPath());
+            if (parts.length != 2 || !"videos".equalsIgnoreCase(parts[0])) return false;
+            String slug = parts[1].toLowerCase(Locale.US);
+            return slug.contains("premium-user-request");
+        } catch (Exception ignored) {
+            return false;
+        }
     }
 
     private static boolean isPremiumVideoCard(Element anchor) {
