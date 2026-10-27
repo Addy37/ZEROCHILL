@@ -38,7 +38,7 @@ final class ShowsDetailGlassLayout extends FrameLayout {
                     | WindowInsetsCompat.Type.displayCutout());
             Insets gestures = insets.getInsetsIgnoringVisibility(
                     WindowInsetsCompat.Type.mandatorySystemGestures());
-            int bottom = Math.max(bars.bottom, Math.max(gestures.bottom, 0));
+            int bottom = safeBottomInset(bars, gestures);
             if (getPaddingLeft() != bars.left || getPaddingTop() != bars.top
                     || getPaddingRight() != bars.right || getPaddingBottom() != bottom) {
                 setPadding(bars.left, bars.top, bars.right, bottom);
@@ -46,6 +46,10 @@ final class ShowsDetailGlassLayout extends FrameLayout {
             }
             return insets;
         });
+    }
+
+    static int safeBottomInset(Insets bars, Insets gestures) {
+        return Math.max(bars == null ? 0 : bars.bottom, gestures == null ? 0 : gestures.bottom);
     }
 
     void install(GlassHeaderView header, View content, GlassHeaderView episodes,
