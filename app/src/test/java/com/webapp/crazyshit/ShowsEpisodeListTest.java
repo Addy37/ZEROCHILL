@@ -197,7 +197,9 @@ public class ShowsEpisodeListTest {
         adapter.close(); activity.finish();
     }
 
-    @Test public void longSourceTitleHasThreeLinesAndCardCanGrowBelowArtwork() {
+    @Test
+    @org.robolectric.annotation.GraphicsMode(org.robolectric.annotation.GraphicsMode.Mode.NATIVE)
+    public void longSourceTitleHasThreeLinesAndCardCanGrowBelowArtwork() {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
         activity.setTheme(R.style.Theme_CrazyShit);
         NativeContentItem longEpisode = new NativeContentItem(NativeContentItem.KIND_MEDIA,
