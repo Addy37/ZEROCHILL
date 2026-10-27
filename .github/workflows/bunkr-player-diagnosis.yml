@@ -84,6 +84,14 @@ jobs:
           s=s.replace('public void onRenderedFirstFrame() {','public void onRenderedFirstFrame() { android.util.Log.i("BunkrProbe", "FIRST_FRAME"); new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> { if(player!=null) { androidx.media3.exoplayer.DecoderCounters c=player.getAudioDecoderCounters(); android.util.Log.i("BunkrProbe", "AUDIO_BUFFERS="+(c==null?-1:c.renderedOutputBufferCount)+" POSITION="+player.getCurrentPosition()); } },4000L);')
           s=s.replace('player.setPlayWhenReady(true);\n        player.prepare();','android.util.Log.i("BunkrProbe", "PREPARE"); player.setPlayWhenReady(true);\n        player.prepare();')
           s=s.replace('} catch (Exception error) {','} catch (Exception error) { android.util.Log.e("BunkrProbe", "GALLERY_EXCEPTION", error);')
+          s=s.replace('public void onPlaybackStateChanged(int playbackState) {','public void onPlaybackStateChanged(int playbackState) { android.util.Log.i("BunkrProbe", "STATE="+playbackState+" play="+startedPlayer.getPlayWhenReady()+" position="+startedPlayer.getCurrentPosition());')
+          s=s.replace('protected void onPause() {','protected void onPause() { android.util.Log.i("BunkrProbe", "PAUSE");')
+          s=s.replace('protected void onResume() {','protected void onResume() { android.util.Log.i("BunkrProbe", "RESUME");')
+          p.write_text(s)
+          p=root/'BunkrMp4DataSource.java';s=p.read_text()
+          s=s.replace('return length;','android.util.Log.i("BunkrProbe", "OPEN="+position+" length="+length+" scan="+scanning);return length;',1)
+          s=s.replace('payloadRemaining = size - headerSize;','android.util.Log.i("BunkrProbe", "BOX="+new String(header,4,4)+" size="+size+" position="+position);payloadRemaining = size - headerSize;')
+          s=s.replace('if (bytes + headerSize == size) BunkrMp4MetadataRepair.repair(moov);','if (bytes + headerSize == size) { android.util.Log.i("BunkrProbe", "REPAIRED="+BunkrMp4MetadataRepair.repair(moov)); }')
           p.write_text(s)
           (root/'BunkrProbeActivity.java').write_text('''package com.webapp.crazyshit;
           public class BunkrProbeActivity extends android.app.Activity {
@@ -121,8 +129,12 @@ jobs:
             adb shell am start -n com.addy37.crazyshitunofficial.dev/com.webapp.crazyshit.BunkrProbeActivity
             for i in $(seq 1 12); do sleep 5; adb logcat -d -s BunkrProbe:I ExoPlayerImplInternal:E AndroidRuntime:E > bunkr-player-log.txt; if grep -q -E 'PLAYER_ERROR|AUDIO_BUFFERS=|FATAL EXCEPTION|GALLERY_EXCEPTION' bunkr-player-log.txt; then break; fi; done
             cat bunkr-player-log.txt
+            adb logcat -d --pid=$(adb shell pidof com.addy37.crazyshitunofficial.dev) > bunkr-full-log.txt
+            tail -200 bunkr-full-log.txt
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: Bunkr-Android-playback-diagnosis
-          path: bunkr-player-log.txt
+          path: |
+            bunkr-player-log.txt
+            bunkr-full-log.txt
