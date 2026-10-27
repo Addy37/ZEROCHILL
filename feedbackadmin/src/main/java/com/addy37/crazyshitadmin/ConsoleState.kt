@@ -29,7 +29,8 @@ internal class ConsoleState @JvmOverloads constructor(application: Application, 
     var accountDetail by mutableStateOf<CommunityRepository.AccountDetail?>(null); private set
     var communitySection by mutableStateOf(saved.get<String>("communitySection") ?: "accounts"); private set
     var communityQuery by mutableStateOf(saved.get<String>("communityQuery") ?: ""); private set
-    var communityFilter by mutableStateOf(saved.get<String>("communityFilter") ?: "all"); private set
+    private var communityFilterValue by mutableStateOf(saved.get<String>("communityFilter") ?: "all")
+    val communityFilter: String get() = communityFilterValue
 
     var busy by mutableStateOf(setOf<String>()); private set
     var errors by mutableStateOf(mapOf<String, String>()); private set
@@ -85,8 +86,8 @@ internal class ConsoleState @JvmOverloads constructor(application: Application, 
         SecureTokenStore.clear(getApplication()); paired = false
         items = emptyList(); analytics = null; activeCounts = null; config = null; history = emptyList(); thread = null
         communityOverview = null; communityAccounts = emptyList(); communityActivity = emptyList(); communityReports = emptyList(); accountDetail = null
-        communitySection = "accounts"; communityQuery = ""; communityFilter = "all"
-        saved["communitySection"] = communitySection; saved["communityQuery"] = communityQuery; saved["communityFilter"] = communityFilter
+        communitySection = "accounts"; communityQuery = ""; communityFilterValue = "all"
+        saved["communitySection"] = communitySection; saved["communityQuery"] = communityQuery; saved["communityFilter"] = communityFilterValue
         threadId = ""; saved["threadId"] = ""; busy = emptySet(); errors = emptyMap(); notice = ""
         saved.keys().filter { it.startsWith("reply:") }.forEach { saved.remove<String>(it) }
         persistConfig(); navigate("home")
@@ -109,33 +110,33 @@ internal class ConsoleState @JvmOverloads constructor(application: Application, 
     }
     fun refreshCommunity() { loadCommunityOverview(); loadCommunityList() }
     fun navigateCommunitySection(value: String) {
-        communitySection = value; communityQuery = ""; communityFilter = "all"; accountDetail = null
+        communitySection = value; communityQuery = ""; communityFilterValue = "all"; accountDetail = null
         saved["communitySection"] = value; saved["communityQuery"] = ""; saved["communityFilter"] = "all"
         loadCommunityList()
     }
     fun searchCommunity(value: String) {
         communityQuery = value.trim(); saved["communityQuery"] = communityQuery; loadCommunityList()
     }
-    fun applyCommunityFilter(value: String) {
-        communityFilter = value; saved["communityFilter"] = value; loadCommunityList()
+    fun setCommunityFilter(value: String) {
+        communityFilterValue = value; saved["communityFilter"] = value; loadCommunityList()
     }
     fun loadCommunityList() {
         val section = communitySection
         val query = communityQuery
-        val filter = communityFilter
+        val filter = communityFilterValue
         request("communityList") { token ->
             when(section) {
                 "social" -> {
                     val loaded = withContext(Dispatchers.IO) { gateway.socialActivity(token, query, filter) }
-                    if(communitySection == section && communityQuery == query && communityFilter == filter) communityActivity = loaded
+                    if(communitySection == section && communityQuery == query && communityFilterValue == filter) communityActivity = loaded
                 }
                 "reports" -> {
                     val loaded = withContext(Dispatchers.IO) { gateway.reports(token, query, filter) }
-                    if(communitySection == section && communityQuery == query && communityFilter == filter) communityReports = loaded
+                    if(communitySection == section && communityQuery == query && communityFilterValue == filter) communityReports = loaded
                 }
                 else -> {
                     val loaded = withContext(Dispatchers.IO) { gateway.accounts(token, query, filter) }
-                    if(communitySection == section && communityQuery == query && communityFilter == filter) communityAccounts = loaded
+                    if(communitySection == section && communityQuery == query && communityFilterValue == filter) communityAccounts = loaded
                 }
             }
         }
