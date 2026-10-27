@@ -66,7 +66,7 @@ public class ShowsDetailOledTest {
             assertEquals(0f, hero.getAlpha(), 0f);
             assertEquals(64, toolbar.getHeight());
             assertEquals(0, topIn(f.root, toolbar));
-            assertTrue(topIn(f.root, f.list) >= toolbar.getBottom());
+            assertEquals(toolbar.getBottom(), topIn(f.root, f.list));
         }
     }
 
@@ -199,6 +199,7 @@ public class ShowsDetailOledTest {
             ReflectionHelpers.callInstanceMethod(f.browser, "restoreScrollPositions");
             f.layout();
             assertEquals(expected, f.behavior().getTopAndBottomOffset());
+            assertEquals(286 + expected, topIn(f.root, f.list));
             LinearLayoutManager lm = (LinearLayoutManager) f.list.getLayoutManager();
             assertEquals(4, lm.findFirstVisibleItemPosition());
             assertEquals(-22, decoratedTop(lm, 4));
@@ -289,6 +290,7 @@ public class ShowsDetailOledTest {
                     "Original source title for episode " + (i + 1), "https://example.test/" + i,
                     "", "", "", ""));
             apply(false, -1);
+            ReflectionHelpers.callInstanceMethod(browser, "updateShowDetailsHeader");
             ((View) field(browser, "progress")).setVisibility(View.GONE);
             idleAndLayout();
         }
@@ -312,6 +314,9 @@ public class ShowsDetailOledTest {
                 root.measure(View.MeasureSpec.makeMeasureSpec(360, View.MeasureSpec.EXACTLY),
                         View.MeasureSpec.makeMeasureSpec(800, View.MeasureSpec.EXACTLY));
                 root.layout(0, 0, 360, 800);
+                // A real frame dispatches CoordinatorLayout dependencies before drawing.
+                // Direct Behavior calls in this fixture bypass its nested-scroll dispatch.
+                root.getViewTreeObserver().dispatchOnPreDraw();
             }
         }
         void assertSelectedAtTop(int position, int offset) {
