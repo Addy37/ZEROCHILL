@@ -33,6 +33,25 @@ public final class XMegaDrivePremiumFilterTest {
         );
     }
 
+    @Test public void exactPremiumUserRequestSlugIsOmitted() {
+        String html = ""
+                + "<div class='item'><a href='https://www.xmegadrive.com/videos/"
+                + "umiliazioniitaliane-fucked-by-feet-full-version-fottuti-dai-piedi-"
+                + "versione-integrale-30-99-premium-user-request/'>"
+                + "<strong class='title'>Umiliazioniitaliane - Fucked By Feet Full Version</strong>"
+                + "</a></div>"
+                + "<div class='item'><a href='/videos/premium-quality-free/'>"
+                + "<strong class='title'>Premium Quality Free Clip</strong></a></div>";
+
+        List<NativeContentItem> items = XMegaDriveRepository.parseListingHtml(html);
+
+        assertEquals(1, items.size());
+        assertEquals(
+                "https://www.xmegadrive.com/videos/premium-quality-free/",
+                items.get(0).url
+        );
+    }
+
     @Test public void premiumMarkerDoesNotBleedIntoSiblingFreeCard() {
         String html = ""
                 + "<section>"
