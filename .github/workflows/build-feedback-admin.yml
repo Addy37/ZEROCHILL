@@ -74,7 +74,7 @@ jobs:
           PY
 
       - name: Build private admin APK
-        run: gradle --no-daemon :feedbackadmin:testDebugUnitTest :feedbackadmin:assembleRelease
+        run: gradle --no-daemon :feedbackadmin:testDebugUnitTest :feedbackadmin:testReleaseUnitTest :feedbackadmin:assembleDebug :feedbackadmin:assembleRelease :feedbackadmin:assembleDebugAndroidTest
 
       - name: Prepare APK
         run: |
@@ -94,4 +94,43 @@ jobs:
             ZeroChill-Admin-*-signed.apk
             ZeroChill-Admin-SHA256.txt
           if-no-files-found: error
+          retention-days: 14
+
+      - name: Build previous admin for upgrade verification
+        if: github.event_name == 'pull_request'
+        env:
+          BASELINE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          git fetch --depth=1 origin "$BASELINE_SHA"
+          git worktree add --detach "$RUNNER_TEMP/admin-baseline" "$BASELINE_SHA"
+          gradle --no-daemon -p "$RUNNER_TEMP/admin-baseline" :feedbackadmin:assembleRelease
+          cp "$RUNNER_TEMP/admin-baseline/feedbackadmin/build/outputs/apk/release/feedbackadmin-release.apk" baseline-admin.apk
+          git worktree remove --force "$RUNNER_TEMP/admin-baseline"
+
+      - name: Enable emulator acceleration
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Compose flow checks and visual capture
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          script: bash feedbackadmin/ci/emulator-check.sh
+
+      - name: Admin test and visual reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ZeroChill-Admin-review
+          path: |
+            feedbackadmin/build/reports/tests/
+            feedbackadmin/build/reports/androidTests/
+            feedbackadmin/build/outputs/androidTest-results/
+            console-review/
+            upgrade-*.txt
           retention-days: 14
