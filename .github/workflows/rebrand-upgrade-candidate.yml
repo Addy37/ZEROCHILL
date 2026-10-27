@@ -12,7 +12,7 @@ on:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
-  cancel-in-progress: ${{ github.head_ref == 'feature/shows-youtube-motion' || github.head_ref == 'feature/shows-watch-page' || github.head_ref == 'fix/search-results-visual-polish' || (github.head_ref == 'feature/search-recent-glass' || github.head_ref == 'feature/search-liquid-material') || github.head_ref == 'feature/shows-episode-list' || (github.head_ref == 'feature/onlyfap-gender-shelves' || github.head_ref == 'fix/library-startup-navigation' || github.head_ref == 'feature/onlyfap-liquid-rift' || github.head_ref == 'feature/zerochill-5.1.0' || github.head_ref == 'feature/source-contracts-preference-search') }}
+  cancel-in-progress: ${{ github.head_ref == 'feature/shows-detail-cinematic-pagination' || github.head_ref == 'feature/shows-youtube-motion' || github.head_ref == 'feature/shows-watch-page' || github.head_ref == 'fix/search-results-visual-polish' || (github.head_ref == 'feature/search-recent-glass' || github.head_ref == 'feature/search-liquid-material') || github.head_ref == 'feature/shows-episode-list' || (github.head_ref == 'feature/onlyfap-gender-shelves' || github.head_ref == 'fix/library-startup-navigation' || github.head_ref == 'feature/onlyfap-liquid-rift' || github.head_ref == 'feature/zerochill-5.1.0' || github.head_ref == 'feature/source-contracts-preference-search') }}
 
 permissions:
   contents: read
@@ -70,6 +70,15 @@ jobs:
           --tests 'com.webapp.crazyshit.ShowsLandscape*'
           --tests 'com.webapp.crazyshit.PlaybackHistoryStoreTest'
           --tests 'com.webapp.crazyshit.VideoDetailProgressTest'
+
+      - name: Upload focused Shows failure details
+        if: failure() && github.head_ref == 'feature/shows-detail-cinematic-pagination'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ZeroChill-Shows-focused-failure
+          path: app/build/test-results/testDebugUnitTest/
+          if-no-files-found: warn
+          retention-days: 7
 
       - name: Run focused Shows motion and watch regressions
         if: github.head_ref == 'feature/shows-youtube-motion'

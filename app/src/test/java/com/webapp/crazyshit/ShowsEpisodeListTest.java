@@ -202,7 +202,8 @@ public class ShowsEpisodeListTest {
         activity.setTheme(R.style.Theme_CrazyShit);
         NativeContentItem longEpisode = new NativeContentItem(NativeContentItem.KIND_MEDIA,
                 "A long original source title with enough words to wrap over three lines " +
-                        "on a portrait phone while preserving the exact title from the source",
+                        "on a portrait phone while preserving the exact title from the source. " +
+                        "More original source text fills all three lines and should ellipsize only after the third line.",
                 "https://example.test/long", "", "123", "", "");
         NativeFeedAdapter adapter = new NativeFeedAdapter(activity, new NativeFeedAdapter.Listener() {
             public void onOpen(NativeContentItem item) { }
@@ -219,8 +220,14 @@ public class ShowsEpisodeListTest {
         assertEquals(ViewGroup.LayoutParams.WRAP_CONTENT, holder.itemView.getLayoutParams().height);
         holder.itemView.measure(View.MeasureSpec.makeMeasureSpec(336, View.MeasureSpec.EXACTLY),
                 View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
+        holder.itemView.layout(0, 0, 336, holder.itemView.getMeasuredHeight());
+        assertNotNull(holder.title.getLayout());
         assertEquals(3, holder.title.getLineCount());
-        assertTrue(holder.itemView.getMeasuredHeight() > 189);
+        assertTrue(holder.title.getHeight() - holder.title.getCompoundPaddingTop()
+                - holder.title.getCompoundPaddingBottom() >= holder.title.getLayout().getLineBottom(2));
+        View media = (View) holder.image.getParent();
+        View copy = (View) holder.title.getParent().getParent();
+        assertTrue(holder.itemView.getMeasuredHeight() >= media.getMeasuredHeight() + copy.getMeasuredHeight());
         adapter.close(); activity.finish();
     }
 

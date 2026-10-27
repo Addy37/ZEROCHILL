@@ -2598,8 +2598,8 @@ public final class NativeFeedBrowserActivity extends Activity {
         TextView button = text(label, 13, Color.WHITE);
         button.setTypeface(null, android.graphics.Typeface.BOLD);
         button.setGravity(Gravity.CENTER);
-        button.setMinHeight(dp(48));
         styleEpisodeControl(button, direction > 0);
+        button.setMinHeight(dp(48));
         button.setOnClickListener(v -> {
             int next = episodeRangeStart + direction * ShowsEpisodeRanges.RANGE_SIZE;
             if (next < 0 || next >= showEpisodes.size()) return;
