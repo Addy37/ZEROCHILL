@@ -103,7 +103,7 @@ jobs:
               String page="https://bunkr.cr/f/Fuyd9dOX3ZbhP";
               String album="https://bunkr.cr/a/WlA5Bbyp";
               String session=BunkrGallerySessionStore.createCreator("Reproduction",album,"reproduction");
-              NativeContentItem item=new NativeContentItem(NativeContentItem.KIND_MEDIA,"Reproduction.mp4",page,"","","Bunkr","");
+              NativeContentItem item=new NativeContentItem(NativeContentItem.KIND_MEDIA,"Reproduction.mp4",page,"https://static.scdn.st/c7a9b5d3-1e4f-4c82-a6d8-3b7e9f0c2a1d/thumbs/nina-crowne-pov-cuckolding-amp-foot-worship-p744ZWo1.png","","Bunkr","");
               BunkrGallerySessionStore.replace(session,java.util.Collections.singletonList(item),1,true);
               android.content.Intent i=new android.content.Intent(this,BunkrGalleryActivity.class);
               i.putExtra(BunkrGalleryActivity.EXTRA_SESSION_ID,session);
@@ -128,12 +128,17 @@ jobs:
           disable-animations: true
           script: |
             adb install app/build/outputs/apk/debug/app-debug.apk
+            adb shell input keyevent KEYCODE_WAKEUP
+            adb shell wm dismiss-keyguard
             adb logcat -c
             adb shell am start -n com.addy37.crazyshitunofficial.dev/com.webapp.crazyshit.BunkrProbeActivity
             for i in $(seq 1 12); do sleep 5; adb logcat -d -s BunkrProbe:I ExoPlayerImplInternal:E AndroidRuntime:E > bunkr-player-log.txt; if grep -q -E 'PLAYER_ERROR|AUDIO_BUFFERS=|FATAL EXCEPTION|GALLERY_EXCEPTION' bunkr-player-log.txt; then break; fi; done
             cat bunkr-player-log.txt
             adb logcat -d --pid=$(adb shell pidof com.addy37.crazyshitunofficial.dev) > bunkr-full-log.txt
             tail -200 bunkr-full-log.txt
+            adb exec-out screencap -p > bunkr-player-screen.png
+            grep -q FIRST_FRAME bunkr-player-log.txt
+            grep -q -E "AUDIO_BUFFERS=[1-9][0-9]* POSITION=[1-9][0-9]*" bunkr-player-log.txt
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -141,3 +146,4 @@ jobs:
           path: |
             bunkr-player-log.txt
             bunkr-full-log.txt
+            bunkr-player-screen.png
