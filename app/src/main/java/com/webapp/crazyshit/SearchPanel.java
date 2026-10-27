@@ -40,14 +40,14 @@ import java.util.concurrent.Future;
 /** Native search scoped to one content area at a time. */
 final class SearchPanel {
     static final List<String> SCOPE_LABELS = Arrays.asList(
-            "Shows", "OnlyFap", "XMegaDrive", "BaddieHub", "Library");
+            "Shows", "OnlyFap", "Bunkr", "XMegaDrive", "BaddieHub", "Library");
     private static final long ONLYFAP_DEBOUNCE_MS = 280L;
     private static final long XMEGA_DEBOUNCE_MS = 900L;
     private static final long REMOTE_DEBOUNCE_MS = 420L;
     private static final long LIBRARY_DEBOUNCE_MS = 160L;
 
     enum Scope {
-        SHOWS, ONLYFAP, XMEGADRIVE, BADDIEHUB, LIBRARY
+        SHOWS, ONLYFAP, BUNKR_ALBUMS, XMEGADRIVE, BADDIEHUB, LIBRARY
     }
 
     /** Browser work is allowed only for a real XMegaDrive query. */
@@ -94,8 +94,10 @@ final class SearchPanel {
     private final EfuktRepository efuktRepository = new EfuktRepository();
     private final WebVideoSourceRepository webVideoRepository = new WebVideoSourceRepository();
     private final XMegaDriveRepository xMegaDriveRepository = new XMegaDriveRepository();
+    private final BunkrRepository bunkrRepository = new BunkrRepository();
     private final BaddieHubRepository baddieHubRepository = new BaddieHubRepository();
     private final ExecutorService io = Executors.newFixedThreadPool(4);
+    private final ExecutorService bunkrIo = Executors.newSingleThreadExecutor();
 
     private EditText input;
     private ZeroChillProgressBar progress;
@@ -110,6 +112,7 @@ final class SearchPanel {
     private List<NativeContentItem> efuktVideos = new ArrayList<>();
     private List<NativeContentItem> kaoticVideos = new ArrayList<>();
     private List<NativeContentItem> xmegaResults = new ArrayList<>();
+    private List<NativeContentItem> bunkrResults = new ArrayList<>();
     private List<NativeContentItem> baddieResults = new ArrayList<>();
     private List<NativeContentItem> library = new ArrayList<>();
     private Scope scope = Scope.SHOWS;
@@ -403,6 +406,7 @@ final class SearchPanel {
         efuktVideos = new ArrayList<>();
         kaoticVideos = new ArrayList<>();
         xmegaResults = new ArrayList<>();
+        bunkrResults = new ArrayList<>();
         baddieResults = new ArrayList<>();
         library = new ArrayList<>();
         creatorResults = new ArrayList<>();
@@ -524,6 +528,7 @@ final class SearchPanel {
         scopeScroll.addView(row, new HorizontalScrollView.LayoutParams(-2, -1));
         addScope(row, "Shows", Scope.SHOWS);
         addScope(row, "OnlyFap", Scope.ONLYFAP);
+        addScope(row, "Bunkr", Scope.BUNKR_ALBUMS);
         addScope(row, "XMegaDrive", Scope.XMEGADRIVE);
         addScope(row, "BaddieHub", Scope.BADDIEHUB);
         addScope(row, "Library", Scope.LIBRARY);
@@ -596,6 +601,10 @@ final class SearchPanel {
                 hint = "Search creators";
                 description = "Search OnlyFap creators";
                 break;
+            case BUNKR_ALBUMS:
+                hint = "Search Bunkr albums";
+                description = "Search Bunkr albums";
+                break;
             case XMEGADRIVE:
                 hint = "Search XMegaDrive";
                 description = "Search XMegaDrive";
@@ -647,6 +656,7 @@ final class SearchPanel {
         if (query == null || query.trim().length() < 2 || destroyed) return;
         switch (scope) {
             case ONLYFAP: startOnlyFapSearch(query); break;
+            case BUNKR_ALBUMS: startBunkrSearch(query); break;
             case XMEGADRIVE: startXMegaDriveSearch(query); break;
             case BADDIEHUB: startBaddieHubSearch(query); break;
             case LIBRARY: startLibrarySearch(query); break;
@@ -781,6 +791,22 @@ final class SearchPanel {
                 xMegaDriveRepository.search(activity, requested));
     }
 
+    private void startBunkrSearch(String query) {
+        cancelSearchWork();
+        applyScopeAdapter();
+        clearResults();
+        activeQuery = query.trim();
+        final String requested = activeQuery;
+        final int token = generation;
+        errors.clear();
+        pendingSources = 1;
+        searchStarted = android.os.SystemClock.elapsedRealtime();
+        firstResultsRecorded = false;
+        renderResults();
+        source(bunkrIo, token, Scope.BUNKR_ALBUMS, requested, 0, "Bunkr", () ->
+                bunkrRepository.searchAlbums(activity, requested, 1));
+    }
+
     private void startBaddieHubSearch(String query) {
         cancelSearchWork();
         applyScopeAdapter();
@@ -816,7 +842,12 @@ final class SearchPanel {
 
     private void source(int token, Scope requested, String query, int id, String title,
                         Callable<List<NativeContentItem>> fetch) {
-        requests.add(io.submit(() -> {
+        source(io, token, requested, query, id, title, fetch);
+    }
+
+    private void source(ExecutorService executor, int token, Scope requested, String query, int id,
+                        String title, Callable<List<NativeContentItem>> fetch) {
+        requests.add(executor.submit(() -> {
             List<NativeContentItem> items = null;
             try {
                 if (Thread.currentThread().isInterrupted()) return;
@@ -840,6 +871,7 @@ final class SearchPanel {
             else if (id == 1) efuktVideos = result;
             else if (id == 2) kaoticVideos = result;
         } else if (requested == Scope.XMEGADRIVE) xmegaResults = result;
+        else if (requested == Scope.BUNKR_ALBUMS) bunkrResults = result;
         else if (requested == Scope.BADDIEHUB) baddieResults = result;
         else if (requested == Scope.LIBRARY) library = result;
     }
@@ -868,6 +900,7 @@ final class SearchPanel {
             data.put("efuktVideos", ContentItemCodec.encodeList(efuktVideos, 80));
             data.put("kaoticVideos", ContentItemCodec.encodeList(kaoticVideos, 80));
             data.put("xmega", ContentItemCodec.encodeList(xmegaResults, 40));
+            data.put("bunkrAlbums", ContentItemCodec.encodeList(bunkrResults, 48));
             data.put("baddie", ContentItemCodec.encodeList(baddieResults, 48));
             data.put("library", ContentItemCodec.encodeList(library, 80));
             ScreenSnapshotStore.save(activity, snapshotId, data);
@@ -884,6 +917,7 @@ final class SearchPanel {
         efuktVideos = ContentItemCodec.decodeList(data.optJSONArray("efuktVideos"), 80);
         kaoticVideos = ContentItemCodec.decodeList(data.optJSONArray("kaoticVideos"), 80);
         xmegaResults = ContentItemCodec.decodeList(data.optJSONArray("xmega"), 40);
+        bunkrResults = ContentItemCodec.decodeList(data.optJSONArray("bunkrAlbums"), 48);
         baddieResults = ContentItemCodec.decodeList(data.optJSONArray("baddie"), 48);
         library = ContentItemCodec.decodeList(data.optJSONArray("library"), 80);
         pendingSources = data.optBoolean("complete", false) ? 0 : pendingSources;
@@ -970,6 +1004,8 @@ final class SearchPanel {
         } else if (scope == Scope.XMEGADRIVE) {
             appendKind(output, "Videos", xmegaResults, false);
             appendKind(output, "Categories", xmegaResults, true);
+        } else if (scope == Scope.BUNKR_ALBUMS) {
+            appendSection(output, "Albums", bunkrResults, GlobalSearchAdapter.SOURCE_REMOTE, 48);
         } else if (scope == Scope.BADDIEHUB) {
             appendKind(output, "Videos", baddieResults, false);
             appendKind(output, "Categories", baddieResults, true);
@@ -1020,6 +1056,7 @@ final class SearchPanel {
     private static String scopeLabel(Scope value) {
         switch (value) {
             case ONLYFAP: return "OnlyFap";
+            case BUNKR_ALBUMS: return "Bunkr";
             case XMEGADRIVE: return "XMegaDrive";
             case BADDIEHUB: return "BaddieHub";
             case LIBRARY: return "Library";
@@ -1288,5 +1325,6 @@ final class SearchPanel {
         requests.clear();
         if (adapter != null) adapter.close();
         io.shutdownNow();
+        bunkrIo.shutdownNow();
     }
 }

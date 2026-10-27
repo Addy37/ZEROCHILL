@@ -53,7 +53,7 @@ public final class BunkrRepository {
             "(?i)data-file-id\\s*=\\s*[\\\"']([0-9]+)"
     );
     private static final Pattern MEDIA_URL = Pattern.compile(
-            "(?i)https?://[^\\s\\\"'<>]+?\\.(?:m3u8|mpd|mp4|webm|m4v|mov)(?:\\?[^\\s\\\"'<>]*)?"
+            "(?i)https?://[^\\s\\\"'<>]+"
     );
     private static final Pattern IMAGE_URL = Pattern.compile(
             "(?i)https?://[^\\s\\\"'<>]+?\\.(?:jpe?g|png|webp|avif|gif|bmp|heic|heif)(?:\\?[^\\s\\\"'<>]*)?"
@@ -299,7 +299,8 @@ public final class BunkrRepository {
             Matcher direct = MEDIA_URL.matcher(body.replace("\\/", "/"));
             while (direct.find()) {
                 String candidate = direct.group();
-                if (!isMaintenanceVideo(candidate)) {
+                if (isDirectMedia(candidate) && !isMaintenanceVideo(candidate)
+                        && !candidate.equals(cdnUrl)) {
                     return new CrazyShitRepository.StreamInfo(candidate, resolvedPageUrl, title);
                 }
             }
@@ -610,7 +611,7 @@ public final class BunkrRepository {
                     .ignoreContentType(true)
                     .ignoreHttpErrors(false)
                     .followRedirects(true);
-            addCookies(context, connection, requestUrl);
+            // The current site signs with credentials: omit. Do not send WebView cookies.
 
             try {
                 JSONObject payload = new JSONObject(connection.execute().body());
@@ -619,8 +620,7 @@ public final class BunkrRepository {
                 if (token.isEmpty() || expiry.isEmpty()) {
                     throw new IOException("Bunkr's signing response was incomplete");
                 }
-                String base = cdnUrl.split("#", 2)[0].split("\\?", 2)[0];
-                return base + "?token=" + queryValue(token) + "&ex=" + queryValue(expiry);
+                return signedMediaUrl(cdnUrl, token, expiry);
             } catch (IOException error) {
                 last = error;
             } catch (Exception error) {
@@ -722,17 +722,73 @@ public final class BunkrRepository {
 
     private String imageFrom(Element root) {
         if (root == null) return "";
-        Element image = root.is("img") ? root : root.selectFirst("img,video[poster],[data-src],[data-thumbnail]");
-        if (image == null) return "";
-        String[] attrs = {"data-src", "data-original", "data-thumbnail", "poster", "src"};
-        for (String attr : attrs) {
-            String value = normalizeThumbnailUrl(image.absUrl(attr), root.baseUri(), "");
-            if (value.isEmpty()) {
-                value = normalizeThumbnailUrl(image.attr(attr), root.baseUri(), "");
+        // Current album cards put /images/video.svg before the actual raster thumbnail.
+        for (Element image : root.is("img") ? java.util.Collections.singletonList(root)
+                : root.select("img,video[poster],[data-src],[data-thumbnail]")) {
+            for (String attr : new String[]{"data-src", "data-original", "data-thumbnail", "poster", "src"}) {
+                String value = normalizeThumbnailUrl(image.absUrl(attr), root.baseUri(), "");
+                if (isUsableArtwork(value)) return value;
             }
-            if (value.startsWith("http")) return value;
         }
         return "";
+    }
+
+    static boolean isUsableArtwork(String value) {
+        if (value == null) return false;
+        try {
+            URI uri = new URI(value);
+            String path = uri.getPath();
+            return ("https".equalsIgnoreCase(uri.getScheme()) || "http".equalsIgnoreCase(uri.getScheme()))
+                    && uri.getHost() != null && path != null
+                    && !path.toLowerCase(Locale.US).endsWith(".svg");
+        } catch (Exception ignored) { return false; }
+    }
+
+    /** Metadata-only repair for a visible tile whose album artwork is missing or failed. */
+    String fetchFileArtwork(Context context, String pageUrl, String rejectedUrl) throws IOException {
+        requireEnabled();
+        Document doc = fetchBunkrDocument(context, pageUrl, pathAndQuery(pageUrl));
+        return fileArtwork(doc, rejectedUrl);
+    }
+
+    String fileArtwork(Document doc, String rejectedUrl) {
+        for (Element meta : doc.select("meta[property=og:image][content],meta[name=twitter:image][content]")) {
+            String image = normalizeThumbnailUrl(meta.attr("content"), doc.location(), "");
+            if (isUsableArtwork(image) && !image.equals(rejectedUrl)) return image;
+        }
+        Element video = doc.selectFirst("video[poster]");
+        if (video != null) {
+            String image = normalizeThumbnailUrl(video.attr("poster"), doc.location(), "");
+            if (isUsableArtwork(image) && !image.equals(rejectedUrl)) return image;
+        }
+        String cover = scriptValue(doc, Pattern.compile("(?is)\\bvideoCoverUrl\\s*=\\s*([\"'])(.*?)\\1"));
+        return isUsableArtwork(cover) && !cover.equals(rejectedUrl) ? cover : "";
+    }
+
+    static boolean usableCachedPlayable(String pageUrl, String mediaUrl, long nowSeconds) {
+        if (mediaUrl == null || mediaUrl.isEmpty()) return false;
+        if (!isBunkrUrl(pageUrl)) return true;
+        android.net.Uri uri = android.net.Uri.parse(mediaUrl);
+        if (uri.getQueryParameter("token") == null) return true; // Legacy direct URLs.
+        try {
+            return Long.parseLong(uri.getQueryParameter("ex")) > nowSeconds + 30L;
+        } catch (Exception ignored) { return false; }
+    }
+
+    private String signedMediaUrl(String cdnUrl, String token, String expiry) throws IOException {
+        // URLSearchParams.set on the site retains unrelated CDN query fields.
+        String base = cdnUrl.split("#", 2)[0];
+        int query = base.indexOf('?');
+        StringBuilder params = new StringBuilder();
+        if (query >= 0) {
+            for (String part : base.substring(query + 1).split("&")) {
+                String key = part.split("=", 2)[0];
+                if ("token".equals(key) || "ex".equals(key) || part.isEmpty()) continue;
+                params.append(part).append('&');
+            }
+            base = base.substring(0, query);
+        }
+        return base + "?" + params + "token=" + queryValue(token) + "&ex=" + queryValue(expiry);
     }
 
     private String albumDescription(String text) {
@@ -863,7 +919,9 @@ public final class BunkrRepository {
     private String normalizeThumbnailUrl(String value, String base, String cdnEndpoint) {
         String raw = unescapeScriptUrl(value);
         if (raw.isEmpty()) return "";
-        String normalized = normalizeUrl(raw, base);
+        String endpointBase = unescapeScriptUrl(cdnEndpoint);
+        String normalized = normalizeUrl(raw, endpointBase.startsWith("https://")
+                ? endpointBase : base);
         if (!normalized.startsWith("http")) {
             String endpoint = unescapeScriptUrl(cdnEndpoint);
             if (endpoint.startsWith("http://") || endpoint.startsWith("https://")) {
