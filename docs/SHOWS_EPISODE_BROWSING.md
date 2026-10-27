@@ -6,7 +6,7 @@ Shows collections keep the order and titles returned by their source. ZEROCHILL 
 
 When a loaded collection contains more than 10 playable items, the detail page displays a range selector beside the EPISODES heading. Ranges use the loaded source order in groups of 10, such as `1–10`, `11–20`, and `21–30`. The footer shows the visible range and total, with Previous 10 and Next 10 controls where a loaded neighboring range exists. At the loaded tail, Load more videos continues the source's existing pagination when available.
 
-Phone portrait episodes use full-width 16:9 artwork with their local number and source title underneath. Titles allow three lines and cards grow to fit the copy. Landscape and wider layouts use large horizontal artwork with flexible copy height. Paging controls reuse the native smoked-glass capsule and press ripple.
+Phone portrait episodes use full-width 16:9 artwork with their local number and source title underneath. Titles allow three lines and cards grow to fit the copy. Landscape and wider layouts use large horizontal artwork with flexible copy height. The Back/Shows header, the pinned EPISODES bar, and the bottom paging surface share one liquid-glass recording and the same header material as the navbar. Episode artwork scrolls underneath those panes. Paging and range controls keep white, cool gray, and cyan text on that surface; they do not use a separate smoked-glass capsule or their own backdrop recording. The pager stays above the system gesture inset.
 
 The range sheet also searches the titles that are already loaded for that collection. Local `#N` labels are navigation aids only and do not replace or persist over source titles.
 

@@ -1,7 +1,8 @@
 package com.webapp.crazyshit;
 
 import android.app.Application;
-import android.graphics.drawable.LayerDrawable;
+import android.graphics.Color;
+import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.RippleDrawable;
 import android.view.View;
 import android.widget.TextView;
@@ -107,14 +108,18 @@ public class ShowsDetailPagingTest {
                 ReflectionHelpers.ClassParameter.from(int.class, -1));
     }
 
-    @Test public void pagingControlsReuseGlassCapsuleAndHaveFingerSizedTargets() {
+    @Test public void pagingControlsStayReadableOnTheSharedGlassSurface() {
         NativeFeedBrowserActivity browser = browser();
         TextView next = ReflectionHelpers.callInstanceMethod(browser, "episodePageButton",
                 ReflectionHelpers.ClassParameter.from(String.class, "Next 10 →"),
                 ReflectionHelpers.ClassParameter.from(int.class, 1));
         assertTrue(next.getBackground() instanceof RippleDrawable);
-        assertTrue(((RippleDrawable) next.getBackground()).getDrawable(0) instanceof LayerDrawable);
+        android.graphics.drawable.Drawable content =
+                ((RippleDrawable) next.getBackground()).getDrawable(0);
+        assertTrue(content instanceof ColorDrawable);
+        assertEquals(Color.TRANSPARENT, ((ColorDrawable) content).getColor());
         assertEquals(UiPalette.PRIMARY, next.getCurrentTextColor());
+        assertEquals(0f, next.getElevation(), 0f);
         assertTrue(next.getMinHeight() >= 48);
     }
 
