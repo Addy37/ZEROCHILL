@@ -2,6 +2,7 @@ package com.webapp.crazyshit;
 
 import android.content.Intent;
 import android.graphics.Color;
+import android.graphics.drawable.ColorDrawable;
 import android.os.Looper;
 import android.view.View;
 import android.view.ViewGroup;
@@ -25,7 +26,7 @@ import static org.robolectric.Shadows.shadowOf;
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = 35, qualifiers = "w360dp-h800dp-port-mdpi")
 public class ShowsDetailGlassTest {
-    @Test public void panesShareOneBackdropAndLetEpisodesScrollUnderneath() {
+    @Test public void topAndBottomGlassShareBackdropWhileEpisodeBarStaysOpaque() {
         ActivityController<NativeFeedBrowserActivity> controller = details();
         NativeFeedBrowserActivity browser = controller.get();
         shadowOf(Looper.getMainLooper()).idle();
@@ -39,18 +40,17 @@ public class ShowsDetailGlassTest {
         assertNotNull(header);
         assertNotNull(episodes);
         assertNotNull(pager);
-        assertTrue(header.sharesBackdropWith(episodes));
-        assertTrue(episodes.sharesBackdropWith(pager));
+        assertTrue(header.sharesBackdropWith(pager));
+        assertFalse(header.sharesBackdropWith(episodes));
         assertTrue(header.usesHeaderGlass());
-        assertTrue(episodes.usesHeaderGlass());
         assertTrue(pager.usesHeaderGlass());
         assertTrue(glass.excludesGlassFromRecording());
         assertEquals(BrowseUi.dp(browser, ShowsDetailGlassLayout.HEADER_HEIGHT_DP), header.getHeight());
         assertEquals(BrowseUi.dp(browser, ShowsDetailGlassLayout.EPISODE_BAR_HEIGHT_DP), episodes.getHeight());
-        assertEquals(header.getBottom(), content.getTop());
-        assertEquals(content.getBottom(), pager.getBottom());
-        assertEquals(header.getTop(), glass.underlayClipTop());
-        assertTrue(glass.underlayClipTop() < content.getTop());
+
+        // The hero now genuinely paints behind the top pane instead of starting below it.
+        assertEquals(header.getTop(), content.getTop());
+        assertEquals(content.getTop(), glass.underlayClipTop());
         assertFalse(((ViewGroup) content).getClipChildren());
 
         ShowDetailsHeader hero = ReflectionHelpers.getField(browser, "showDetailsHeader");
@@ -58,10 +58,22 @@ public class ShowsDetailGlassTest {
         assertEquals(BrowseUi.dp(browser, 286), hero.getHeight());
         assertEquals(content.getTop() + hero.getBottom(), episodes.getTop());
 
+        // The episode label is a normal OLED section bar, not a third frosted layer.
+        assertTrue(episodes.getBackground() instanceof ColorDrawable);
+        assertEquals(ZeroChillUi.background(browser),
+                ((ColorDrawable) episodes.getBackground()).getColor());
+
+        int sideMargin = BrowseUi.dp(browser, ShowsDetailGlassLayout.PAGER_SIDE_MARGIN_DP);
+        int bottomMargin = BrowseUi.dp(browser, ShowsDetailGlassLayout.PAGER_BOTTOM_MARGIN_DP);
+        assertEquals(glass.getPaddingLeft() + sideMargin, pager.getLeft());
+        assertEquals(glass.getWidth() - glass.getPaddingRight() - sideMargin, pager.getRight());
+        assertEquals(content.getBottom() - bottomMargin, pager.getBottom());
+        assertTrue(pager.getClipToOutline());
+
         RecyclerView list = ReflectionHelpers.getField(browser, "recycler");
         assertFalse(list.getClipToPadding());
         assertEquals(episodes.getHeight(), list.getPaddingTop());
-        assertEquals(pager.getHeight(), list.getPaddingBottom());
+        assertEquals(pager.getHeight() + bottomMargin * 2, list.getPaddingBottom());
         assertTrue(pager.getHeight() > episodes.getHeight());
 
         assertEquals(Color.WHITE, text(header, "Shows").getCurrentTextColor());
@@ -96,11 +108,14 @@ public class ShowsDetailGlassTest {
         // The production selection policy is asserted directly above with both inset types.
         assertEquals(16, glass.getPaddingBottom());
         assertEquals(glass.getPaddingTop(), glass.headerForTest().getTop());
-        assertEquals(glass.getHeight() - glass.getPaddingBottom(), glass.pagerForTest().getBottom());
+        assertEquals(glass.getPaddingTop(), glass.contentForTest().getTop());
+        assertEquals(glass.getHeight() - glass.getPaddingBottom() - bottomMargin,
+                glass.pagerForTest().getBottom());
         assertTrue(bottomIn(glass, text(glass.pagerForTest(), "Next 10"))
-                <= glass.getHeight() - glass.getPaddingBottom() - BrowseUi.dp(browser, 8));
+                <= glass.pagerForTest().getBottom());
         assertEquals(glass.episodePaneForTest().getHeight(), list.getPaddingTop());
-        assertEquals(glass.pagerForTest().getHeight(), list.getPaddingBottom());
+        assertEquals(glass.pagerForTest().getHeight() + bottomMargin * 2,
+                list.getPaddingBottom());
 
         ViewPageBackdrop backdrop = glass.backdropForTest();
         ReflectionHelpers.setField(backdrop, "recorded", true);
