@@ -103,7 +103,7 @@ class AnalyticsActivity : ComponentActivity() {
                 }
                 ActionIcon(Icons.Outlined.Refresh, "Refresh", !blockingBusy) {
                     when(state.destination) { "feedback" -> state.loadFeedback(); "analytics" -> state.loadAnalytics();
-                        "sources" -> state.loadConfig(force=true); else -> state.refresh() }
+                        "community" -> state.refreshCommunity(); "sources" -> state.loadConfig(force=true); else -> state.refresh() }
                 }
                 ActionIcon(Icons.Outlined.AdminPanelSettings, "Admin settings") { settings=true }
             }
@@ -114,6 +114,7 @@ class AnalyticsActivity : ComponentActivity() {
             AnimatedContent(state.destination, transitionSpec={ (fadeIn() + slideInHorizontally { it/16 }) togetherWith fadeOut() }, label="destination") { destination ->
                 screenState.SaveableStateProvider(destination) { when(destination) {
                     "feedback" -> InboxScreen(state)
+                    "community" -> CommunityScreen(state)
                     "sources" -> SourcesScreen(state)
                     "analytics" -> AnalyticsScreen(state)
                     else -> HomeScreen(state)
@@ -125,6 +126,7 @@ class AnalyticsActivity : ComponentActivity() {
         title={ Text("Admin session") }, text={ Column(verticalArrangement=Arrangement.spacedBy(16.dp)) {
             Text("ZeroChill Admin ${BuildConfig.VERSION_NAME}")
             Text("Notifications: " + if(NotificationManagerCompat.from(context).areNotificationsEnabled()) "Allowed" else "Off in Android settings", color=Muted)
+            Text("Community visibility is read-only in this build. Direct-message bodies are not exposed.", color=Muted)
             Text("Lock removes the admin token from this device. You will need it to connect again.", color=Muted)
         } }, confirmButton={ TextButton(onClick={settings=false;lock=true}) { Text("Lock session", color=Danger) } },
         dismissButton={ TextButton(onClick={settings=false}) { Text("Close") } })
@@ -147,7 +149,7 @@ class AnalyticsActivity : ComponentActivity() {
             Column(verticalArrangement=Arrangement.spacedBy(10.dp)) {
                 Eyebrow("PRIVATE CONTROL CENTER", color=Cyan)
                 Text("Your console.\nFull control.", style=MaterialTheme.typography.headlineLarge)
-                Text("Connect to manage feedback, source configuration, and aggregate app activity.", color=Muted)
+                Text("Connect to manage accounts, social activity, feedback, source configuration, and aggregate app activity.", color=Muted)
             }
             OutlinedTextField(value=token, onValueChange={token=it}, label={Text("Admin token")}, singleLine=true,
                 enabled=!connecting, modifier=Modifier.fillMaxWidth(), shape=ConsoleShape,
