@@ -27,6 +27,29 @@ jobs:
           result=subprocess.run(['ffprobe','-v','error','-user_agent',config['userAgent'],'-headers','Referer: '+page+'\r\n','-show_entries','format=format_name,duration:stream=codec_name,codec_tag_string,profile,pix_fmt,width,height,sample_rate,channels','-of','json',signed],capture_output=True,text=True,timeout=50)
           print('PROBE_STATUS',result.returncode);print(result.stdout);print(result.stderr[:4000])
           print('SIGN_TTL_SECONDS',int(sign['ex'])-__import__('time').time())
+          import struct
+          def grab(at,n):
+              req=urllib.request.Request(signed,headers={'User-Agent':config['userAgent'],'Referer':page,'Range':f'bytes={at}-{at+n-1}'})
+              with urllib.request.urlopen(req,timeout=15) as r:
+                  assert r.status==206
+                  data=r.read(n+1);assert len(data)==n;return data
+          at=0
+          for i in range(12):
+              header=grab(at,16);size,kind=struct.unpack('>I4s',header[:8])
+              if size==1:size=struct.unpack('>Q',header[8:16])[0]
+              print('BOX',at,size,kind)
+              if kind==b'moov':
+                  assert size<4000000
+                  data=grab(at,size)
+                  for match in re.finditer(b'esds',data):
+                      start=match.start()-4;length=struct.unpack_from('>I',data,start)[0]
+                      print('ESDS',data[start:start+length].hex())
+                      entry=data.rfind(b'mp4a',0,start)-4
+                      print('MP4A_HEAD',data[entry:entry+36].hex())
+                  break
+              assert size>0
+              at+=size
+
           PY
   android:
     if: github.event.head_commit.message != 'Inspect Bunkr codec metadata'
