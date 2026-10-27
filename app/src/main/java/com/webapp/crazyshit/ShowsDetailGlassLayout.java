@@ -36,7 +36,8 @@ final class ShowsDetailGlassLayout extends FrameLayout {
         ViewCompat.setOnApplyWindowInsetsListener(this, (view, insets) -> {
             Insets bars = insets.getInsets(WindowInsetsCompat.Type.systemBars()
                     | WindowInsetsCompat.Type.displayCutout());
-            Insets gestures = insets.getInsets(WindowInsetsCompat.Type.mandatorySystemGestures());
+            Insets gestures = insets.getInsetsIgnoringVisibility(
+                    WindowInsetsCompat.Type.mandatorySystemGestures());
             int bottom = Math.max(bars.bottom, Math.max(gestures.bottom, 0));
             if (getPaddingLeft() != bars.left || getPaddingTop() != bars.top
                     || getPaddingRight() != bars.right || getPaddingBottom() != bottom) {
