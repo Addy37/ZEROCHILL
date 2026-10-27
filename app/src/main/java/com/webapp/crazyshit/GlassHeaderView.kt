@@ -21,7 +21,7 @@ import com.webapp.crazyshit.glass.*
 
 /** Native controls stay above a single pane sampling the navbar's live page recording. */
 internal class GlassHeaderView @JvmOverloads constructor(
-    private val activity: Activity, private val controls: View, initialCornerRadius: Float = 0f,
+    private val activity: Activity, private val controls: View, private val cornerRadius: Float = 0f,
     private val resultsSurface: Boolean = false,
     private val searchControlSurface: Boolean = false
 ) : FrameLayout(activity) {
@@ -31,10 +31,17 @@ internal class GlassHeaderView @JvmOverloads constructor(
     }
     private var backdrop by mutableStateOf<ViewPageBackdrop?>(null)
     private var recentMaterial by mutableStateOf(false)
-    private var cornerRadius by mutableStateOf(initialCornerRadius)
 
     init {
-        updateCornerOutline()
+        if (cornerRadius > 0f) {
+            outlineProvider = object : android.view.ViewOutlineProvider() {
+                override fun getOutline(view: View, outline: android.graphics.Outline) {
+                    outline.setRoundRect(0, 0, view.width, view.height,
+                        cornerRadius * resources.displayMetrics.density)
+                }
+            }
+            clipToOutline = true
+        }
         setBackgroundColor(android.graphics.Color.TRANSPARENT)
         contentDescription = controls.contentDescription
         controls.contentDescription = null
@@ -59,29 +66,6 @@ internal class GlassHeaderView @JvmOverloads constructor(
         setBackgroundColor(if (enabled) android.graphics.Color.TRANSPARENT else ZeroChillUi.background(activity))
     }
 
-    /** Allows a page-specific pane to reuse the navbar's floating lens without a new material. */
-    fun setGlassCornerRadius(radiusDp: Float) {
-        val next = radiusDp.coerceAtLeast(0f)
-        if (cornerRadius == next) return
-        cornerRadius = next
-        updateCornerOutline()
-        invalidateOutline()
-    }
-
-    private fun updateCornerOutline() {
-        if (cornerRadius <= 0f) {
-            clipToOutline = false
-            return
-        }
-        outlineProvider = object : android.view.ViewOutlineProvider() {
-            override fun getOutline(view: View, outline: android.graphics.Outline) {
-                outline.setRoundRect(0, 0, view.width, view.height,
-                    cornerRadius * resources.displayMetrics.density)
-            }
-        }
-        clipToOutline = true
-    }
-
     fun setPageBackdrop(page: ViewPageBackdrop) { backdrop = page }
     fun setRecentSurface(recent: Boolean) { recentMaterial = recent }
     fun sharesBackdropWith(other: GlassHeaderView): Boolean = backdrop === other.backdrop
@@ -93,13 +77,13 @@ internal class GlassHeaderView @JvmOverloads constructor(
         post {
             if (!isAttachedToWindow) return@post
             glass.setContent {
-                val config = remember(recentMaterial, cornerRadius) { (if (resultsSurface && recentMaterial) recentSearchGlassConfig(activity)
+                val config = remember(recentMaterial) { (if (resultsSurface && recentMaterial) recentSearchGlassConfig(activity)
                     else if (resultsSurface) searchResultsGlassConfig(activity)
                     else if (searchControlSurface) searchControlsGlassConfig(activity)
                     else headerGlassConfig(activity)).let {
                     if (cornerRadius > 0f) it.copy(lensSideEdges = true) else it
                 } }
-                val shape = remember(cornerRadius) { RoundedCornerShape(cornerRadius.dp) }
+                val shape = remember { RoundedCornerShape(cornerRadius.dp) }
                 backdrop?.let { page ->
                     CompositionLocalProvider(LocalAppBackdrop provides page,
                         LocalGlassEffectConfig provides config) {

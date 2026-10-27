@@ -126,6 +126,7 @@ final class OledImmersiveUiController {
     }
 
     private static void applyBrowser(NativeFeedBrowserActivity activity) {
+        if (activity != null && activity.ownsShowsDetailChrome()) return;
         if (activity == null || activity.isFinishing()) return;
         State state = stateFor(activity);
         state.baseBg = baseBackground(activity);

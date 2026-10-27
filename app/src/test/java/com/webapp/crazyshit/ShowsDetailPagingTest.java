@@ -108,7 +108,7 @@ public class ShowsDetailPagingTest {
                 ReflectionHelpers.ClassParameter.from(int.class, -1));
     }
 
-    @Test public void pagingControlsStayReadableOnTheSharedGlassSurface() {
+    @Test public void pagingControlsStayFlatAndReadable() {
         NativeFeedBrowserActivity browser = browser();
         TextView next = ReflectionHelpers.callInstanceMethod(browser, "episodePageButton",
                 ReflectionHelpers.ClassParameter.from(String.class, "Next 10 →"),

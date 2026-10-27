@@ -25,13 +25,15 @@ import android.widget.TextView;
 
 import androidx.annotation.NonNull;
 import androidx.coordinatorlayout.widget.CoordinatorLayout;
-import androidx.lifecycle.ViewTreeLifecycleOwner;
+import androidx.recyclerview.widget.ConcatAdapter;
 import androidx.recyclerview.widget.GridLayoutManager;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowInsetsCompat;
+import androidx.core.graphics.Insets;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.LinearSmoothScroller;
 import androidx.recyclerview.widget.RecyclerView;
 import androidx.recyclerview.widget.StaggeredGridLayoutManager;
-import androidx.savedstate.ViewTreeSavedStateRegistryOwner;
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
 import androidx.viewpager2.widget.ViewPager2;
 
@@ -143,9 +145,9 @@ public final class NativeFeedBrowserActivity extends Activity {
     private TextView episodeLoadMore;
     private LinearLayout showsEpisodeBar;
     private LinearLayout showsEpisodePager;
-    private FrameLayout showsDetailBody;
-    private ShowsDetailGlassLayout showsDetailGlass;
-    private NavOwner showsGlassOwner;
+    private TextView episodeEnd;
+    private View showsToolbar;
+    private final ColorDrawable showsToolbarBlack = new ColorDrawable(Color.BLACK);
     private int episodeRangeStart;
     private boolean showsBrowserResumed;
     private int episodePrefetchFailedPage = -1;
@@ -501,7 +503,7 @@ public final class NativeFeedBrowserActivity extends Activity {
         options.setContentDescription("Feed options");
         options.setOnClickListener(this::showOptions);
         if (!showDetailsMode) top.addView(options, new LinearLayout.LayoutParams(dp(48), actionHeight));
-        shell.addView(top, new LinearLayout.LayoutParams(-1, dp(isCreatorGallery() ? 56 : 64)));
+        if (!showDetailsMode) shell.addView(top, new LinearLayout.LayoutParams(-1, dp(isCreatorGallery() ? 56 : 64)));
 
         FrameLayout body = new FrameLayout(this);
         if (isCreatorGallery()) {
@@ -591,16 +593,12 @@ public final class NativeFeedBrowserActivity extends Activity {
         } else if (showDetailsMode) {
             CoordinatorLayout coordinator = new CoordinatorLayout(this);
             coordinator.setBackgroundColor(Color.BLACK);
-            coordinator.setClipChildren(false);
-            coordinator.setClipToPadding(false);
             shell.addView(coordinator, new LinearLayout.LayoutParams(-1, 0, 1f));
 
             showDetailsAppBar = new AppBarLayout(this);
             showDetailsAppBar.setBackgroundColor(Color.BLACK);
             showDetailsAppBar.setElevation(0f);
             showDetailsAppBar.setLiftOnScroll(false);
-            showDetailsAppBar.setClipChildren(false);
-            showDetailsAppBar.setClipToPadding(false);
             CoordinatorLayout.LayoutParams appBarParams =
                     new CoordinatorLayout.LayoutParams(-1, -2);
             appBarParams.gravity = Gravity.TOP;
@@ -615,6 +613,8 @@ public final class NativeFeedBrowserActivity extends Activity {
                     showImageUrl,
                     this::playSeries
             );
+            // Retain a toolbar-height collapsed strip, with artwork beginning at y=0.
+            showDetailsHeader.setMinimumHeight(dp(64));
             AppBarLayout.LayoutParams headerParams =
                     new AppBarLayout.LayoutParams(-1, dp(286));
             headerParams.setScrollFlags(
@@ -623,13 +623,13 @@ public final class NativeFeedBrowserActivity extends Activity {
             );
             showDetailsAppBar.addView(showDetailsHeader, headerParams);
             showDetailsAppBar.addOnOffsetChangedListener((appBar, verticalOffset) -> {
-                if (showsDetailGlass != null) showsDetailGlass.followEpisodeAnchor();
                 if (showDetailsHeader == null) return;
                 float progress = Math.min(
                         1f,
-                        Math.abs(verticalOffset) / (float) Math.max(1, dp(286))
+                        Math.abs(verticalOffset) / (float) Math.max(1, appBar.getTotalScrollRange())
                 );
-                showDetailsHeader.setAlpha(1f - (progress * 0.78f));
+                showDetailsHeader.setAlpha(1f - progress);
+                showsToolbarBlack.setAlpha(Math.round(255f * progress * progress));
             });
 
             CoordinatorLayout.LayoutParams bodyParams =
@@ -644,13 +644,12 @@ public final class NativeFeedBrowserActivity extends Activity {
         refresh.setColorSchemeColors(UiPalette.PRIMARY);
         refresh.setOnRefreshListener(this::reload);
         if (showDetailsMode) {
-            showsDetailBody = body;
             LinearLayout episodeBar = new LinearLayout(this);
             episodeBar.setOrientation(LinearLayout.HORIZONTAL);
             episodeBar.setGravity(Gravity.CENTER_VERTICAL);
-            episodeBar.setMinimumHeight(dp(ShowsDetailGlassLayout.EPISODE_BAR_HEIGHT_DP));
+            episodeBar.setMinimumHeight(dp(58));
             episodeBar.setPadding(dp(16), dp(5), dp(12), dp(5));
-            episodeBar.setBackgroundColor(Color.TRANSPARENT);
+            episodeBar.setBackgroundColor(Color.BLACK);
 
             TextView section = text("EPISODES", 12, UiPalette.PRIMARY);
             section.setTypeface(null, android.graphics.Typeface.BOLD);
@@ -667,20 +666,26 @@ public final class NativeFeedBrowserActivity extends Activity {
             episodeRangeAction.setVisibility(View.GONE);
             episodeRangeAction.setOnClickListener(v -> showEpisodeRangePicker());
             ZeroChillMotion.installPressFeedback(episodeRangeAction);
-            episodeBar.addView(episodeRangeAction, new LinearLayout.LayoutParams(-2, dp(34)));
+            episodeBar.addView(episodeRangeAction, new LinearLayout.LayoutParams(-2, dp(48)));
             showsEpisodeBar = episodeBar;
 
             body.addView(refresh, new FrameLayout.LayoutParams(-1, -1));
             LinearLayout episodePager = new LinearLayout(this);
             episodePager.setOrientation(LinearLayout.VERTICAL);
             episodePager.setGravity(Gravity.CENTER);
-            episodePager.setBackgroundColor(Color.TRANSPARENT);
-            episodePager.setPadding(dp(12), dp(2), dp(12), dp(12));
-            episodePrevious = episodePageButton("← Previous 10", -1);
+            episodePager.setBackgroundColor(Color.BLACK);
+            episodePager.setPadding(dp(16), dp(16), dp(16), dp(24));
+            View divider = new View(this);
+            divider.setBackgroundColor(Color.argb(110, Color.red(UiPalette.PRIMARY),
+                    Color.green(UiPalette.PRIMARY), Color.blue(UiPalette.PRIMARY)));
+            LinearLayout.LayoutParams dividerParams = new LinearLayout.LayoutParams(-1, dp(1));
+            dividerParams.bottomMargin = dp(16);
+            episodePager.addView(divider, dividerParams);
+            episodePrevious = episodePageButton("‹ Previous 10", -1);
             episodePageSummary = text("", 12,
                     ZeroChillUi.color(this, R.color.zc_text_secondary));
             episodePageSummary.setGravity(Gravity.CENTER);
-            episodeNext = episodePageButton("Next 10 →", 1);
+            episodeNext = episodePageButton("Next 10 ›", 1);
             episodePager.addView(episodePageSummary, new LinearLayout.LayoutParams(-1, dp(22)));
             LinearLayout controls = new LinearLayout(this);
             controls.setGravity(Gravity.CENTER_VERTICAL);
@@ -699,6 +704,11 @@ public final class NativeFeedBrowserActivity extends Activity {
             });
             episodeLoadMore.setVisibility(View.GONE);
             episodePager.addView(episodeLoadMore, new LinearLayout.LayoutParams(-1, dp(48)));
+            episodeEnd = text("End of episodes", 12,
+                    ZeroChillUi.color(this, R.color.zc_text_secondary));
+            episodeEnd.setGravity(Gravity.CENTER);
+            episodeEnd.setVisibility(View.GONE);
+            episodePager.addView(episodeEnd, new LinearLayout.LayoutParams(-1, dp(32)));
             showsEpisodePager = episodePager;
         } else {
             body.addView(refresh, new FrameLayout.LayoutParams(-1, -1));
@@ -769,7 +779,13 @@ public final class NativeFeedBrowserActivity extends Activity {
                 }
             });
             adapter.setEpisodePresentation(showDetailsMode);
-            recycler.setAdapter(adapter);
+            if (showDetailsMode) {
+                recycler.setPadding(0, 0, 0, dp(18));
+                recycler.setAdapter(new ConcatAdapter(new ConcatAdapter.Config.Builder()
+                        .setStableIdMode(ConcatAdapter.Config.StableIdMode.ISOLATED_STABLE_IDS).build(),
+                        new SingleViewAdapter(showsEpisodeBar), adapter,
+                        new SingleViewAdapter(showsEpisodePager)));
+            } else recycler.setAdapter(adapter);
             refresh.addView(recycler, new SwipeRefreshLayout.LayoutParams(-1, -1));
             attachFeedScrollListener(recycler);
         }
@@ -802,7 +818,7 @@ public final class NativeFeedBrowserActivity extends Activity {
         });
         body.addView(empty, new FrameLayout.LayoutParams(-1, -1));
 
-        View root = showDetailsMode ? wrapShowDetailsGlass(shell) : shell;
+        View root = showDetailsMode ? wrapShowDetailsOled(shell, top) : shell;
         if (isCreatorGallery() && !shitTokReturnTransition.isEmpty()) {
             installShitTokReturnSurface(root);
         } else {
@@ -810,35 +826,68 @@ public final class NativeFeedBrowserActivity extends Activity {
         }
     }
 
-    private View wrapShowDetailsGlass(LinearLayout shell) {
-        View top = shell.getChildAt(0);
-        View content = shell.getChildAt(1);
-        shell.removeView(top);
+    boolean ownsShowsDetailChrome() { return showDetailsMode; }
+
+    private View wrapShowDetailsOled(LinearLayout shell, View toolbar) {
+        View content = shell.getChildAt(0);
         shell.removeView(content);
-        if (content instanceof ViewGroup) {
-            ViewGroup group = (ViewGroup) content;
-            group.setClipChildren(false);
-            group.setClipToPadding(false);
+        FrameLayout root = new FrameLayout(this);
+        root.setBackgroundColor(Color.BLACK);
+        root.addView(content, new FrameLayout.LayoutParams(-1, -1));
+        showsToolbar = toolbar;
+        showsToolbarBlack.setAlpha(0);
+        toolbar.setBackground(new android.graphics.drawable.LayerDrawable(
+                new android.graphics.drawable.Drawable[] {
+                        new android.graphics.drawable.GradientDrawable(
+                                android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM,
+                                new int[] {Color.argb(170, 0, 0, 0), Color.TRANSPARENT}),
+                        showsToolbarBlack
+                }));
+        root.addView(toolbar, new FrameLayout.LayoutParams(-1, dp(64), Gravity.TOP));
+        ViewCompat.setOnApplyWindowInsetsListener(root, (view, insets) -> {
+            Insets bars = insets.getInsets(WindowInsetsCompat.Type.systemBars()
+                    | WindowInsetsCompat.Type.displayCutout());
+            Insets gestures = insets.getInsetsIgnoringVisibility(
+                    WindowInsetsCompat.Type.mandatorySystemGestures());
+            view.setPadding(bars.left, bars.top, bars.right, Math.max(bars.bottom, gestures.bottom));
+            return insets;
+        });
+        root.addOnAttachStateChangeListener(new View.OnAttachStateChangeListener() {
+            @Override public void onViewAttachedToWindow(View view) { ViewCompat.requestApplyInsets(view); }
+            @Override public void onViewDetachedFromWindow(View view) { }
+        });
+        if (restoredBrowserState != null && restoredBrowserState.containsKey("show_app_bar_offset")) {
+            int offset = restoredBrowserState.getInt("show_app_bar_offset");
+            content.addOnLayoutChangeListener(new View.OnLayoutChangeListener() {
+                @Override public void onLayoutChange(View view, int l, int t, int r, int b,
+                        int oldL, int oldT, int oldR, int oldB) {
+                    if (showDetailsAppBar.getTotalScrollRange() == 0) return;
+                    view.removeOnLayoutChangeListener(this);
+                    CoordinatorLayout.LayoutParams params =
+                            (CoordinatorLayout.LayoutParams) showDetailsAppBar.getLayoutParams();
+                    AppBarLayout.Behavior behavior = (AppBarLayout.Behavior) params.getBehavior();
+                    if (behavior != null) behavior.onNestedPreScroll(
+                            (CoordinatorLayout) content, showDetailsAppBar, recycler, 0,
+                            -offset - Math.abs(behavior.getTopAndBottomOffset()), new int[2],
+                            ViewCompat.TYPE_NON_TOUCH);
+                }
+            });
         }
-        if (showDetailsAppBar != null) {
-            showDetailsAppBar.setClipChildren(false);
-            showDetailsAppBar.setClipToPadding(false);
+        return root;
+    }
+
+    /** Flat section and paging rows belong to the RecyclerView, never an overlay. */
+    private static final class SingleViewAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
+        private final View view;
+        SingleViewAdapter(View view) { this.view = view; setHasStableIds(true); }
+        @Override public long getItemId(int position) { return 0L; }
+        @NonNull @Override public RecyclerView.ViewHolder onCreateViewHolder(
+                @NonNull ViewGroup parent, int type) {
+            view.setLayoutParams(new RecyclerView.LayoutParams(-1, -2));
+            return new RecyclerView.ViewHolder(view) { };
         }
-        showsGlassOwner = new NavOwner(this);
-        ViewTreeLifecycleOwner.set(getWindow().getDecorView(), showsGlassOwner);
-        ViewTreeSavedStateRegistryOwner.set(getWindow().getDecorView(), showsGlassOwner);
-        GlassHeaderView header = new GlassHeaderView(this, top);
-        GlassHeaderView episodes = new GlassHeaderView(this, showsEpisodeBar);
-        GlassHeaderView pager = new GlassHeaderView(this, showsEpisodePager);
-        header.setClickable(true);
-        episodes.setClickable(true);
-        pager.setClickable(true);
-        ShowsDetailGlassLayout glass = new ShowsDetailGlassLayout(this);
-        ViewTreeLifecycleOwner.set(glass, showsGlassOwner);
-        ViewTreeSavedStateRegistryOwner.set(glass, showsGlassOwner);
-        glass.install(header, content, episodes, pager, showsDetailBody, recycler);
-        showsDetailGlass = glass;
-        return glass;
+        @Override public void onBindViewHolder(@NonNull RecyclerView.ViewHolder holder, int position) { }
+        @Override public int getItemCount() { return 1; }
     }
 
     private void installShitTokReturnSurface(View content) {
@@ -1232,7 +1281,9 @@ public final class NativeFeedBrowserActivity extends Activity {
             @Override
             public void onScrolled(@NonNull RecyclerView view, int dx, int dy) {
                 int[] range = visibleRange(view.getLayoutManager());
-                adapter.preloadVisible(range[0], range[1]);
+                int headerRows = showDetailsMode ? 1 : 0;
+                adapter.preloadVisible(Math.max(0, range[0] - headerRows),
+                        Math.max(0, range[1] - headerRows));
                 if (showDetailsMode) {
                     if (dy > 0) maybePrefetchShowEpisodes();
                     return;
@@ -2143,6 +2194,10 @@ public final class NativeFeedBrowserActivity extends Activity {
             return;
         }
         if (recycler == null || (adapter == null && bunkrGalleryAdapter == null)) return;
+        if (showDetailsMode) {
+            if (recycler.getLayoutManager() == null) recycler.setLayoutManager(new LinearLayoutManager(this));
+            return;
+        }
         RecyclerView.LayoutManager old = recycler.getLayoutManager();
         int position = 0;
         int offset = 0;
@@ -2654,8 +2709,7 @@ public final class NativeFeedBrowserActivity extends Activity {
     }
 
     private void styleEpisodeControl(TextView button, boolean forward) {
-        // These controls sit on the shared liquid-glass panes. A smoked-glass
-        // drawable would stack a second, non-reactive material on that surface.
+        // Flat text actions with a bounded ripple and a 48dp touch target.
         button.setBackground(new android.graphics.drawable.RippleDrawable(
                 android.content.res.ColorStateList.valueOf(
                         ZeroChillUi.color(this, R.color.zc_ripple)),
@@ -2716,11 +2770,14 @@ public final class NativeFeedBrowserActivity extends Activity {
         updateEpisodeRangeUi();
         if (scrollToSelection && recycler != null && adapter.getItemCount() > 0) {
             int local = selectedIndex >= 0 ? selectedIndex - episodeRangeStart : 0;
-            int target = Math.max(0, Math.min(local, adapter.getItemCount() - 1));
+            int target = 1 + Math.max(0, Math.min(local, adapter.getItemCount() - 1));
             recycler.post(() -> {
-                if (recycler == null || recycler.getLayoutManager() == null) return;
+                if (isFinishing() || isDestroyed() || recycler == null
+                        || recycler.getLayoutManager() == null) return;
+                recycler.stopScroll();
                 if (!ZeroChillMotion.animationsEnabled(this)) {
-                    recycler.scrollToPosition(target);
+                    ((LinearLayoutManager) recycler.getLayoutManager())
+                            .scrollToPositionWithOffset(target, 0);
                     return;
                 }
                 // Keep nested app-bar offset fixed while returning to the chosen row.
@@ -2755,8 +2812,9 @@ public final class NativeFeedBrowserActivity extends Activity {
         if (episodePageSummary != null) {
             episodePageSummary.setText(total == 0 ? "" :
                     ShowsEpisodeRanges.label(episodeRangeStart, total) + " of " + total);
-            episodePrevious.setVisibility(ShowsEpisodeRanges.hasPrevious(episodeRangeStart, total)
-                    ? View.VISIBLE : View.INVISIBLE);
+            boolean previous = ShowsEpisodeRanges.hasPrevious(episodeRangeStart, total);
+            episodePrevious.setEnabled(previous);
+            episodePrevious.setVisibility(previous ? View.VISIBLE : View.INVISIBLE);
             episodeNext.setVisibility(ShowsEpisodeRanges.hasNext(episodeRangeStart, total)
                     ? View.VISIBLE : View.INVISIBLE);
             episodeLoadMore.setVisibility(total > 0 && !endReached &&
@@ -2766,8 +2824,11 @@ public final class NativeFeedBrowserActivity extends Activity {
                     : episodePrefetchFailedPage >= 0 ? "Retry loading more" : "Load more videos");
             episodeLoadMore.setEnabled(!loading);
             episodeLoadMore.setAlpha(loading ? 0.55f : 1f);
+            if (episodeEnd != null) episodeEnd.setVisibility(total > 0 && endReached
+                    && !ShowsEpisodeRanges.hasNext(episodeRangeStart, total) ? View.VISIBLE : View.GONE);
+            if (showsEpisodePager != null) showsEpisodePager.setVisibility(total > 0 ? View.VISIBLE : View.GONE);
         }
-        if (showsDetailGlass != null) showsDetailGlass.requestLayout();
+
     }
 
     private void showEpisodeRangePicker() {
@@ -2914,6 +2975,11 @@ public final class NativeFeedBrowserActivity extends Activity {
         state.putString("browser_snapshot", browserSnapshot);
         state.putString("gallery_session", bunkrGallerySessionId);
         state.putInt("episode_range_start", episodeRangeStart);
+        if (showDetailsAppBar != null) {
+            AppBarLayout.Behavior behavior = (AppBarLayout.Behavior)
+                    ((CoordinatorLayout.LayoutParams) showDetailsAppBar.getLayoutParams()).getBehavior();
+            if (behavior != null) state.putInt("show_app_bar_offset", behavior.getTopAndBottomOffset());
+        }
         state.putBoolean("notification_fresh_pending_focus", notificationFreshPendingFocus);
         state.putInt("tab", activeCreatorTab());
         if (isCreatorGallery()) {
