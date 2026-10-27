@@ -67,21 +67,21 @@ class ConsoleFlowTest {
 
         ui.onNodeWithText("Community",useUnmergedTree=true).performClick()
         ui.waitUntil(10_000) {state.communityAccounts.isNotEmpty()}
-        ui.onAllNodes(hasScrollAction()).onFirst().performScrollToNode(hasText("Fixture User"))
+        ui.onNode(hasScrollToIndexAction()).performScrollToNode(hasText("Fixture User"))
         screenshot("03-community-accounts")
         ui.onNodeWithText("Fixture User").performClick()
         ui.waitUntil(10_000) {state.accountDetail != null};idle()
         ui.onNodeWithText("SOCIAL TOTALS").assertExists();screenshot("03b-community-account")
         ui.onNodeWithText("Close").performClick()
-        ui.onAllNodes(hasScrollAction()).onFirst().performScrollToNode(hasText("Social"))
+        ui.onNode(hasScrollToIndexAction()).performScrollToNode(hasText("Social"))
         ui.onNodeWithText("Social").performClick()
         ui.waitUntil(10_000) {state.communityActivity.isNotEmpty()}
-        ui.onAllNodes(hasScrollAction()).onFirst().performScrollToNode(hasText("Fixture User commented"))
+        ui.onNode(hasScrollToIndexAction()).performScrollToNode(hasText("Fixture User commented"))
         ui.onNodeWithText("Fixture User commented").assertExists();screenshot("03c-community-social")
-        ui.onAllNodes(hasScrollAction()).onFirst().performScrollToNode(hasText("Reports"))
+        ui.onNode(hasScrollToIndexAction()).performScrollToNode(hasText("Reports"))
         ui.onNodeWithText("Reports").performClick()
         ui.waitUntil(10_000) {state.communityReports.isNotEmpty()}
-        ui.onAllNodes(hasScrollAction()).onFirst().performScrollToNode(hasText("reported",substring=true))
+        ui.onNode(hasScrollToIndexAction()).performScrollToNode(hasText("reported",substring=true))
         ui.onNodeWithText("reported",substring=true).assertExists();screenshot("03d-community-reports")
 
         ui.onNodeWithText("Feedback",useUnmergedTree=true).performClick();idle();screenshot("04-inbox")
