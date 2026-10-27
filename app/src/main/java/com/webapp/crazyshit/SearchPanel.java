@@ -1202,7 +1202,7 @@ final class SearchPanel {
                 playback.putExtra(VideoDetailActivity.EXTRA_VIEWS, item.views);
                 playback.putExtra(VideoDetailActivity.EXTRA_UPLOADER, item.uploader);
                 playback.putExtra(VideoDetailActivity.EXTRA_COMMENTS, item.comments);
-                playback.putExtra(PlayerActivity.EXTRA_MEDIA_REFERER, resolved.requestReferer);
+                playback.putExtra(VideoDetailActivity.EXTRA_MEDIA_REFERER, resolved.requestReferer);
                 putPlaybackSource(playback, item);
                 if (requestedScope == Scope.SHOWS || (requestedScope == Scope.LIBRARY
                         && !OnlyFapVideoMetadata.applies(item))) {
