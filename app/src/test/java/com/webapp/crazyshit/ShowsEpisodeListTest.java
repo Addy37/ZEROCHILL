@@ -6,6 +6,7 @@ import android.content.Context;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
+import android.widget.LinearLayout;
 import android.widget.TextView;
 import androidx.recyclerview.widget.RecyclerView;
 import org.junit.Test;
@@ -181,13 +182,86 @@ public class ShowsEpisodeListTest {
         View description = ReflectionHelpers.getField(holder, "description");
         assertEquals(View.GONE, description.getVisibility());
         assertNotNull(holder.itemView.findViewWithTag("video_options"));
-        assertTrue(holder.itemView.getLayoutParams().height <= 110);
+        assertEquals(ViewGroup.LayoutParams.WRAP_CONTENT, holder.itemView.getLayoutParams().height);
         assertEquals("#1", holder.episodeNumber.getText().toString());
         assertEquals("Episode one", holder.title.getText().toString());
         assertTrue(holder.episodeNumber.getTextSize() < holder.title.getTextSize());
         View media = (View) holder.image.getParent();
-        assertEquals(148, media.getLayoutParams().width);
-        assertEquals(83, media.getLayoutParams().height);
+        assertEquals(ViewGroup.LayoutParams.MATCH_PARENT, media.getLayoutParams().width);
+        assertEquals(189, media.getLayoutParams().height);
+        LinearLayout column = (LinearLayout) media.getParent();
+        assertEquals(LinearLayout.VERTICAL, column.getOrientation());
+        assertTrue(column.indexOfChild((View) holder.title.getParent().getParent()) >
+                column.indexOfChild(media));
+        assertEquals(3, holder.title.getMaxLines());
+        adapter.close(); activity.finish();
+    }
+
+    @Test public void longSourceTitleHasThreeLinesAndCardCanGrowBelowArtwork() {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        activity.setTheme(R.style.Theme_CrazyShit);
+        NativeContentItem longEpisode = new NativeContentItem(NativeContentItem.KIND_MEDIA,
+                "A long original source title with enough words to wrap over three lines " +
+                        "on a portrait phone while preserving the exact title from the source",
+                "https://example.test/long", "", "123", "", "");
+        NativeFeedAdapter adapter = new NativeFeedAdapter(activity, new NativeFeedAdapter.Listener() {
+            public void onOpen(NativeContentItem item) { }
+            public void onLongPress(NativeContentItem item, View anchor) { }
+            public void onComments(NativeContentItem item) { }
+        });
+        adapter.setEpisodePresentation(true);
+        adapter.replace(Collections.singletonList(longEpisode));
+        NativeFeedAdapter.Holder holder = adapter.onCreateViewHolder(new FrameLayout(activity),
+                NativeFeedAdapter.VIEW_LIST);
+        adapter.onBindViewHolder(holder, 0);
+        assertEquals(longEpisode.title, holder.title.getText().toString());
+        assertEquals(3, holder.title.getMaxLines());
+        assertEquals(ViewGroup.LayoutParams.WRAP_CONTENT, holder.itemView.getLayoutParams().height);
+        holder.itemView.measure(View.MeasureSpec.makeMeasureSpec(336, View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
+        assertEquals(3, holder.title.getLineCount());
+        assertTrue(holder.itemView.getMeasuredHeight() > 189);
+        adapter.close(); activity.finish();
+    }
+
+    @Test @Config(qualifiers = "w800dp-h400dp-land-mdpi")
+    public void landscapeEpisodeUsesLargeHorizontalArtworkWithFlexibleHeight() {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        activity.setTheme(R.style.Theme_CrazyShit);
+        NativeFeedAdapter adapter = new NativeFeedAdapter(activity, new NativeFeedAdapter.Listener() {
+            public void onOpen(NativeContentItem item) { }
+            public void onLongPress(NativeContentItem item, View anchor) { }
+            public void onComments(NativeContentItem item) { }
+        });
+        adapter.setEpisodePresentation(true);
+        adapter.replace(Collections.singletonList(episode("landscape")));
+        FrameLayout parent = new FrameLayout(activity);
+        parent.layout(0, 0, 720, 400);
+        NativeFeedAdapter.Holder holder = adapter.onCreateViewHolder(parent, NativeFeedAdapter.VIEW_LIST);
+        View media = (View) holder.image.getParent();
+        // The measured RecyclerView width, rather than display width, determines the card.
+        assertEquals(348, media.getLayoutParams().width);
+        assertEquals(196, media.getLayoutParams().height);
+        assertEquals(LinearLayout.HORIZONTAL, ((LinearLayout) media.getParent()).getOrientation());
+        assertEquals(ViewGroup.LayoutParams.WRAP_CONTENT, holder.itemView.getLayoutParams().height);
+        adapter.close(); activity.finish();
+    }
+
+    @Test public void ordinaryFeedKeepsItsOriginalHorizontalRowGeometry() {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        activity.setTheme(R.style.Theme_CrazyShit);
+        NativeFeedAdapter adapter = new NativeFeedAdapter(activity, new NativeFeedAdapter.Listener() {
+            public void onOpen(NativeContentItem item) { }
+            public void onLongPress(NativeContentItem item, View anchor) { }
+            public void onComments(NativeContentItem item) { }
+        });
+        NativeFeedAdapter.Holder holder = adapter.onCreateViewHolder(new FrameLayout(activity),
+                NativeFeedAdapter.VIEW_LIST);
+        View media = (View) holder.image.getParent();
+        assertEquals(166, media.getLayoutParams().width);
+        assertEquals(118, media.getLayoutParams().height);
+        assertEquals(118, holder.itemView.getLayoutParams().height);
+        assertEquals(LinearLayout.HORIZONTAL, ((LinearLayout) media.getParent()).getOrientation());
         assertEquals(2, holder.title.getMaxLines());
         adapter.close(); activity.finish();
     }

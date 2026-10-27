@@ -6,7 +6,11 @@ Shows collections keep the order and titles returned by their source. ZEROCHILL 
 
 When a loaded collection contains more than 10 playable items, the detail page displays a range selector beside the EPISODES heading. Ranges use the loaded source order in groups of 10, such as `1–10`, `11–20`, and `21–30`. The footer shows the visible range and total, with Previous 10 and Next 10 controls where a loaded neighboring range exists. At the loaded tail, Load more videos continues the source's existing pagination when available.
 
+Phone portrait episodes use full-width 16:9 artwork with their local number and source title underneath. Titles allow three lines and cards grow to fit the copy. Landscape and wider layouts use large horizontal artwork with flexible copy height. Paging controls reuse the native smoked-glass capsule and press ripple.
+
 The range sheet also searches the titles that are already loaded for that collection. Local `#N` labels are navigation aids only and do not replace or persist over source titles.
+
+While the detail activity is resumed, browsing within two ten-item ranges of the loaded tail requests the next source page through the existing repository. Requests remain sequential and stop once that look-ahead buffer is available, the source is exhausted, the activity pauses, or a request fails. Failed pages require a manual retry; there is no repeated background retry loop. Appending unseen items does not rebind the current ten rows. Slow source responses can still produce a brief wait if browsing overtakes the buffer.
 
 The browser keeps the full loaded collection for episode counts, Resume or Play First selection, watch-session launch context, pagination, and snapshot restore. Only the visible RecyclerView is reduced to the selected range. Range and scroll position survive activity recreation; switching ranges scrolls the RecyclerView to its new start without changing the collapsing header position.
 

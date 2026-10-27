@@ -45,4 +45,14 @@ public class ShowsEpisodeRangesTest {
         assertEquals(false, ShowsEpisodeRanges.hasNext(120, 124));
         assertEquals(false, ShowsEpisodeRanges.hasNext(0, 10));
     }
+
+    @Test public void loadingStartsBeforeLastRangeAndStopsWhenBufferIsReady() {
+        assertEquals(false, ShowsEpisodeRanges.nearLoadedEnd(0, 40));
+        assertEquals(true, ShowsEpisodeRanges.nearLoadedEnd(10, 40));
+        assertEquals(true, ShowsEpisodeRanges.nearLoadedEnd(20, 40));
+        assertEquals(false, ShowsEpisodeRanges.nearLoadedEnd(10, 60));
+        assertEquals(true, ShowsEpisodeRanges.nearLoadedEnd(100, 124));
+        assertEquals(false, ShowsEpisodeRanges.nearLoadedEnd(90, 124));
+        assertEquals(false, ShowsEpisodeRanges.nearLoadedEnd(0, 0));
+    }
 }

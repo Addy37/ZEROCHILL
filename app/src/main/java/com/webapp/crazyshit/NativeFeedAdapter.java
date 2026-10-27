@@ -341,21 +341,29 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
 
     private Holder createListHolder(ViewGroup parent) {
         boolean landscape = isLandscape(parent);
-        int episodeWidth = Math.round((parent.getResources().getConfiguration().screenWidthDp - 24) * 0.44f);
-        int height = episodePresentation ? Math.max(Math.round(episodeWidth * 9f / 16f) + 8,
-                Math.round(100 * parent.getResources().getConfiguration().fontScale)) : landscape ? 106 : 118;
+        int availableDp = parent.getWidth() > 0
+                ? Math.round((parent.getWidth() - parent.getPaddingLeft() - parent.getPaddingRight()) /
+                        parent.getResources().getDisplayMetrics().density)
+                : parent.getResources().getConfiguration().screenWidthDp;
+        boolean episodeColumn = episodePresentation && !landscape && availableDp < 600;
+        int episodeContentWidth = Math.max(1, availableDp - 24);
+        int episodeWidth = episodeColumn ? episodeContentWidth
+                : Math.min(420, Math.round(episodeContentWidth * 0.50f));
+        int height = episodePresentation ? -1 : landscape ? 106 : 118;
         int width = homePresentation
                 ? responsiveHomeListMediaWidthDp(parent, height)
                 : landscape ? 150 : 166;
         if (episodePresentation) width = episodeWidth;
         MaterialCardView card = baseCard(parent, 12,
-                episodePresentation ? 3 : 4, 15, height);
+                episodePresentation ? 5 : 4, 15, height);
         LinearLayout row = new LinearLayout(parent.getContext());
-        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setOrientation(episodeColumn ? LinearLayout.VERTICAL : LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
-        card.addView(row, new MaterialCardView.LayoutParams(-1, -1));
+        card.addView(row, new MaterialCardView.LayoutParams(-1, episodePresentation ? -2 : -1));
 
-        MediaViews media = addMedia(parent, row, episodePresentation ? Math.round(width * 9f / 16f) : height, width);
+        MediaViews media = addMedia(parent, row,
+                episodePresentation ? Math.round(width * 9f / 16f) : height,
+                episodeColumn ? -1 : width);
         CopyViews copy = addCopy(
                 parent,
                 row,
@@ -561,6 +569,10 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
         LinearLayout.LayoutParams copyParams;
         if (fillRemaining) {
             copyParams = new LinearLayout.LayoutParams(-1, 0, 1f);
+        } else if (episodePresentation && host.getOrientation() == LinearLayout.VERTICAL) {
+            copyParams = new LinearLayout.LayoutParams(-1, -2);
+        } else if (episodePresentation) {
+            copyParams = new LinearLayout.LayoutParams(0, -2, 1f);
         } else {
             copyParams = new LinearLayout.LayoutParams(
                     viewMode == VIEW_LIST ? 0 : -1,
@@ -583,7 +595,7 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
         title.setTextColor(ZeroChillUi.color(parent.getContext(), R.color.zc_text_primary));
         title.setTextSize(titleSize);
         title.setTypeface(null, android.graphics.Typeface.BOLD);
-        title.setMaxLines(homePresentation && viewMode == VIEW_LIST ? 4 : 2);
+        title.setMaxLines(episodePresentation ? 3 : homePresentation && viewMode == VIEW_LIST ? 4 : 2);
         title.setEllipsize(TextUtils.TruncateAt.END);
         LinearLayout titleRow = new LinearLayout(parent.getContext());
         titleRow.setGravity(Gravity.CENTER_VERTICAL);
@@ -593,8 +605,7 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
         menu.setTextSize(24);
         menu.setTextColor(ZeroChillUi.color(parent.getContext(), R.color.zc_text_secondary));
         menu.setBackgroundColor(Color.TRANSPARENT);
-        titleRow.addView(menu, new LinearLayout.LayoutParams(dp(parent,
-                episodePresentation ? 36 : 48), dp(parent, episodePresentation ? 36 : 48)));
+        titleRow.addView(menu, new LinearLayout.LayoutParams(dp(parent, 48), dp(parent, 48)));
         copy.addView(titleRow, new LinearLayout.LayoutParams(-1, -2));
 
         if (fillRemaining) {

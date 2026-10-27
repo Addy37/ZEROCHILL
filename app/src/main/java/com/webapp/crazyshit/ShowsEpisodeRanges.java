@@ -45,4 +45,10 @@ final class ShowsEpisodeRanges {
     static boolean hasNext(int start, int total) {
         return total > 0 && startForIndex(start, total) + RANGE_SIZE < total;
     }
+
+    /** Keep two visible ranges ahead without crawling an entire collection. */
+    static boolean nearLoadedEnd(int start, int total) {
+        return total > 0 && total - (startForIndex(start, total) + RANGE_SIZE)
+                <= RANGE_SIZE * 2;
+    }
 }
