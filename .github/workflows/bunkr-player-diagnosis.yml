@@ -28,6 +28,9 @@ jobs:
           result=subprocess.run(['ffprobe','-v','error','-user_agent',config['userAgent'],'-headers','Referer: '+page+'\r\n','-show_entries','format=format_name,duration:stream=codec_name,codec_tag_string,profile,pix_fmt,width,height,sample_rate,channels','-of','json',signed],capture_output=True,text=True,timeout=50)
           print('PROBE_STATUS',result.returncode);print(result.stdout);print(result.stderr[:4000])
           print('SIGN_TTL_SECONDS',int(sign['ex'])-__import__('time').time())
+          result=subprocess.run(['ffmpeg','-hide_banner','-user_agent',config['userAgent'],'-headers','Referer: '+page+'\r\n','-i',signed,'-t','1','-f','null','-'],capture_output=True,text=True,timeout=40)
+          print('DECODE_STATUS',result.returncode);print(result.stderr[-6000:])
+
           import struct
           def grab(at,n):
               req=urllib.request.Request(signed,headers={'User-Agent':config['userAgent'],'Referer':page,'Range':f'bytes={at}-{at+n-1}'})
