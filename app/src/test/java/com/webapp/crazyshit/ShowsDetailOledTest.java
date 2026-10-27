@@ -5,6 +5,7 @@ import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.Rect;
 import android.graphics.drawable.ColorDrawable;
 import android.os.Bundle;
 import android.os.Looper;
@@ -139,6 +140,9 @@ public class ShowsDetailOledTest {
     @Test public void rangeChangesKeepPartialHeroCollapseAndAlignFirstEpisodeWithMotionOff() {
         try (Fixture f = new Fixture(null)) {
             Settings.Global.putFloat(f.browser.getContentResolver(), Settings.Global.ANIMATOR_DURATION_SCALE, 0f);
+            ReflectionHelpers.callStaticMethod(android.animation.ValueAnimator.class, "setDurationScale",
+                    ReflectionHelpers.ClassParameter.from(float.class, 0f));
+            assertFalse(ZeroChillMotion.animationsEnabled(f.browser));
             f.collapse(111);
             int offset = f.behavior().getTopAndBottomOffset();
             ((LinearLayoutManager) f.list.getLayoutManager()).scrollToPositionWithOffset(9, -30);
@@ -163,6 +167,9 @@ public class ShowsDetailOledTest {
     @Test public void animatedPagingKeepsCollapsedAppBarAndRestoresNestedScrolling() {
         try (Fixture f = new Fixture(null)) {
             Settings.Global.putFloat(f.browser.getContentResolver(), Settings.Global.ANIMATOR_DURATION_SCALE, 1f);
+            ReflectionHelpers.callStaticMethod(android.animation.ValueAnimator.class, "setDurationScale",
+                    ReflectionHelpers.ClassParameter.from(float.class, 1f));
+            assertTrue(ZeroChillMotion.animationsEnabled(f.browser));
             f.collapse(f.appBar.getTotalScrollRange());
             int offset = f.behavior().getTopAndBottomOffset();
             ((LinearLayoutManager) f.list.getLayoutManager()).scrollToPositionWithOffset(9, 0);
@@ -194,7 +201,7 @@ public class ShowsDetailOledTest {
             assertEquals(expected, f.behavior().getTopAndBottomOffset());
             LinearLayoutManager lm = (LinearLayoutManager) f.list.getLayoutManager();
             assertEquals(4, lm.findFirstVisibleItemPosition());
-            assertEquals(-22, lm.findViewByPosition(4).getTop());
+            assertEquals(-22, decoratedTop(lm, 4));
         }
     }
 
@@ -311,7 +318,7 @@ public class ShowsDetailOledTest {
             assertEquals(offset, behavior().getTopAndBottomOffset());
             LinearLayoutManager lm = (LinearLayoutManager) list.getLayoutManager();
             assertEquals(position, lm.findFirstVisibleItemPosition());
-            assertEquals(0, lm.findViewByPosition(position).getTop());
+            assertEquals(0, decoratedTop(lm, position));
         }
         void render(String state) throws Exception {
             layout();
@@ -325,6 +332,12 @@ public class ShowsDetailOledTest {
             bitmap.recycle();
         }
         @Override public void close() { controller.pause().stop().destroy(); }
+    }
+    // LayoutManager offsets include the unchanged 5dp card margin, not only the card background.
+    private static int decoratedTop(LinearLayoutManager manager, int position) {
+        Rect bounds = new Rect();
+        manager.getDecoratedBoundsWithMargins(manager.findViewByPosition(position), bounds);
+        return bounds.top;
     }
     @SuppressWarnings("unchecked") private static <T> T field(Object target, String name) {
         return ReflectionHelpers.getField(target, name);
