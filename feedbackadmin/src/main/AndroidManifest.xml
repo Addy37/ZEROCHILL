@@ -12,6 +12,9 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.CrazyShitAdmin">
         <activity
+            android:name=".CommunityActivity"
+            android:exported="false" />
+        <activity
             android:name=".AnalyticsActivity"
             android:exported="false" />
         <activity
