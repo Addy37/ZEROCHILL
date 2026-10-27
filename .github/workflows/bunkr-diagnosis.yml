@@ -1,0 +1,35 @@
+name: Bunkr metadata diagnosis
+on:
+  push:
+    branches: [fix/bunkr-resolution-artwork-search]
+    paths: ['.github/workflows/bunkr-diagnosis.yml']
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v6
+      - name: Inspect reproduction metadata without downloading media
+        run: |
+          python3 - <<'PY'
+          import urllib.request, urllib.parse, re, json
+          config=json.load(open('app/src/main/assets/source_config_defaults.json'))['sources']['bunkr']
+          address='https://bunkr.cr/f/Fuyd9dOX3ZbhP'
+          def fetch(u):
+              req=urllib.request.Request(u, headers={'User-Agent':config['userAgent'],'Referer':address})
+              with urllib.request.urlopen(req,timeout=15) as r:
+                  body=r.read(1024*1024).decode('utf-8',errors='replace')
+                  print('URL',r.url,'STATUS',r.status)
+                  return body
+          body=fetch(address)
+          print('METADATA', '\n'.join(x for x in body.splitlines() if any(k in x for k in ['jsCDN','signUrl','og:image','poster=','script src','data-file-id','/a/','<video','<source'])))
+          for script in re.findall(r'<script[^>]*>(.*?)</script>',body,re.S):
+              if any(k in script for k in ['jsCDN','signUrl','fetch(','player']):
+                  print('SCRIPT',script[:18000])
+          for album in list(dict.fromkeys(re.findall(r'href=["\']([^"\']*/a/[^"\']+)',body)))[:1]:
+              album=urllib.parse.urljoin(address,album)
+              data=fetch(album)
+              print('ALBUM',data[:100000])
+          PY
