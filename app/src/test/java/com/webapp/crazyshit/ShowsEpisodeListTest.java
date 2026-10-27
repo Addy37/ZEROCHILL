@@ -6,6 +6,7 @@ import android.content.Context;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
+import android.widget.LinearLayout;
 import android.widget.TextView;
 import androidx.recyclerview.widget.RecyclerView;
 import org.junit.Test;
@@ -19,6 +20,7 @@ import org.robolectric.util.ReflectionHelpers;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.ArrayList;
+import java.util.List;
 import static org.junit.Assert.*;
 
 @RunWith(RobolectricTestRunner.class)
@@ -180,7 +182,96 @@ public class ShowsEpisodeListTest {
         View description = ReflectionHelpers.getField(holder, "description");
         assertEquals(View.GONE, description.getVisibility());
         assertNotNull(holder.itemView.findViewWithTag("video_options"));
-        assertTrue(holder.itemView.getLayoutParams().height <= 110);
+        assertEquals(ViewGroup.LayoutParams.WRAP_CONTENT, holder.itemView.getLayoutParams().height);
+        assertEquals("#1", holder.episodeNumber.getText().toString());
+        assertEquals("Episode one", holder.title.getText().toString());
+        assertTrue(holder.episodeNumber.getTextSize() < holder.title.getTextSize());
+        View media = (View) holder.image.getParent();
+        assertEquals(ViewGroup.LayoutParams.MATCH_PARENT, media.getLayoutParams().width);
+        assertEquals(189, media.getLayoutParams().height);
+        LinearLayout column = (LinearLayout) media.getParent();
+        assertEquals(LinearLayout.VERTICAL, column.getOrientation());
+        assertTrue(column.indexOfChild((View) holder.title.getParent().getParent()) >
+                column.indexOfChild(media));
+        assertEquals(3, holder.title.getMaxLines());
+        adapter.close(); activity.finish();
+    }
+
+    @Test
+    @org.robolectric.annotation.GraphicsMode(org.robolectric.annotation.GraphicsMode.Mode.NATIVE)
+    public void longSourceTitleHasThreeLinesAndCardCanGrowBelowArtwork() {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        activity.setTheme(R.style.Theme_CrazyShit);
+        NativeContentItem longEpisode = new NativeContentItem(NativeContentItem.KIND_MEDIA,
+                "A long original source title with enough words to wrap over three lines " +
+                        "on a portrait phone while preserving the exact title from the source. " +
+                        "More original source text fills all three lines and should ellipsize only after the third line.",
+                "https://example.test/long", "", "123", "", "");
+        NativeFeedAdapter adapter = new NativeFeedAdapter(activity, new NativeFeedAdapter.Listener() {
+            public void onOpen(NativeContentItem item) { }
+            public void onLongPress(NativeContentItem item, View anchor) { }
+            public void onComments(NativeContentItem item) { }
+        });
+        adapter.setEpisodePresentation(true);
+        adapter.replace(Collections.singletonList(longEpisode));
+        NativeFeedAdapter.Holder holder = adapter.onCreateViewHolder(new FrameLayout(activity),
+                NativeFeedAdapter.VIEW_LIST);
+        adapter.onBindViewHolder(holder, 0);
+        assertEquals(longEpisode.title, holder.title.getText().toString());
+        assertEquals(3, holder.title.getMaxLines());
+        assertEquals(ViewGroup.LayoutParams.WRAP_CONTENT, holder.itemView.getLayoutParams().height);
+        holder.itemView.measure(View.MeasureSpec.makeMeasureSpec(336, View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
+        holder.itemView.layout(0, 0, 336, holder.itemView.getMeasuredHeight());
+        assertNotNull(holder.title.getLayout());
+        assertEquals(3, holder.title.getLineCount());
+        assertTrue(holder.title.getHeight() - holder.title.getCompoundPaddingTop()
+                - holder.title.getCompoundPaddingBottom() >= holder.title.getLayout().getLineBottom(2));
+        View media = (View) holder.image.getParent();
+        View copy = (View) holder.title.getParent().getParent();
+        assertTrue(holder.itemView.getMeasuredHeight() >= media.getMeasuredHeight() + copy.getMeasuredHeight());
+        adapter.close(); activity.finish();
+    }
+
+    @Test @Config(qualifiers = "w800dp-h400dp-land-mdpi")
+    public void landscapeEpisodeUsesLargeHorizontalArtworkWithFlexibleHeight() {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        activity.setTheme(R.style.Theme_CrazyShit);
+        NativeFeedAdapter adapter = new NativeFeedAdapter(activity, new NativeFeedAdapter.Listener() {
+            public void onOpen(NativeContentItem item) { }
+            public void onLongPress(NativeContentItem item, View anchor) { }
+            public void onComments(NativeContentItem item) { }
+        });
+        adapter.setEpisodePresentation(true);
+        adapter.replace(Collections.singletonList(episode("landscape")));
+        FrameLayout parent = new FrameLayout(activity);
+        parent.layout(0, 0, 720, 400);
+        NativeFeedAdapter.Holder holder = adapter.onCreateViewHolder(parent, NativeFeedAdapter.VIEW_LIST);
+        View media = (View) holder.image.getParent();
+        // The measured RecyclerView width, rather than display width, determines the card.
+        assertEquals(348, media.getLayoutParams().width);
+        assertEquals(196, media.getLayoutParams().height);
+        assertEquals(LinearLayout.HORIZONTAL, ((LinearLayout) media.getParent()).getOrientation());
+        assertEquals(ViewGroup.LayoutParams.WRAP_CONTENT, holder.itemView.getLayoutParams().height);
+        adapter.close(); activity.finish();
+    }
+
+    @Test public void ordinaryFeedKeepsItsOriginalHorizontalRowGeometry() {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        activity.setTheme(R.style.Theme_CrazyShit);
+        NativeFeedAdapter adapter = new NativeFeedAdapter(activity, new NativeFeedAdapter.Listener() {
+            public void onOpen(NativeContentItem item) { }
+            public void onLongPress(NativeContentItem item, View anchor) { }
+            public void onComments(NativeContentItem item) { }
+        });
+        NativeFeedAdapter.Holder holder = adapter.onCreateViewHolder(new FrameLayout(activity),
+                NativeFeedAdapter.VIEW_LIST);
+        View media = (View) holder.image.getParent();
+        assertEquals(166, media.getLayoutParams().width);
+        assertEquals(118, media.getLayoutParams().height);
+        assertEquals(118, holder.itemView.getLayoutParams().height);
+        assertEquals(LinearLayout.HORIZONTAL, ((LinearLayout) media.getParent()).getOrientation());
+        assertEquals(2, holder.title.getMaxLines());
         adapter.close(); activity.finish();
     }
     @Test public void progressUsesExistingHistoryAndRecyclingClearsIt() {
@@ -291,5 +382,58 @@ public class ShowsEpisodeListTest {
         assertEquals("RESUME", action.getText().toString());
         assertTrue(action.isEnabled());
         activity.finish();
+    }
+
+    @Test public void categoryHeaderKeepsArtworkFallbackAndStopsRotationWhenInactive() {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        activity.setTheme(R.style.Theme_CrazyShit);
+        ShowDetailsHeader header = new ShowDetailsHeader(activity, "Category", "XMEGADRIVE CATEGORY",
+                "Category", "", "", () -> {});
+        activity.setContentView(header);
+        header.setCategoryItems(Collections.singletonList(episode("one")));
+        android.widget.ImageView[] layers = ReflectionHelpers.getField(header, "episodeArtwork");
+        assertEquals(0f, layers[0].getAlpha(), 0f);
+        assertEquals(0f, layers[1].getAlpha(), 0f);
+        header.setItemCount(12);
+        TextView count = ReflectionHelpers.getField(header, "count");
+        assertEquals("12 videos", count.getText().toString());
+        header.setActive(false);
+        assertFalse((boolean) ReflectionHelpers.getField(header, "active"));
+        activity.finish();
+    }
+
+    @Test public void selectedRangeAndFullWatchSnapshotSurviveSavedState() {
+        NativeFeedBrowserActivity browser = Robolectric.buildActivity(NativeFeedBrowserActivity.class).get();
+        browser.setTheme(R.style.Theme_CrazyShit);
+        ReflectionHelpers.setField(browser, "showDetailsMode", true);
+        NativeFeedAdapter adapter = new NativeFeedAdapter(browser, new NativeFeedAdapter.Listener() {
+            @Override public void onOpen(NativeContentItem item) { }
+            @Override public void onLongPress(NativeContentItem item, View anchor) { }
+            @Override public void onComments(NativeContentItem item) { }
+        });
+        adapter.setEpisodePresentation(true);
+        ReflectionHelpers.setField(browser, "adapter", adapter);
+        ArrayList<NativeContentItem> all = ReflectionHelpers.getField(browser, "showEpisodes");
+        for (int i = 0; i < 124; i++) all.add(episode(Integer.toString(i)));
+        ReflectionHelpers.setField(browser, "episodeRangeStart", 120);
+        ReflectionHelpers.callInstanceMethod(browser, "applyEpisodeRange",
+                ReflectionHelpers.ClassParameter.from(boolean.class, false),
+                ReflectionHelpers.ClassParameter.from(int.class, -1));
+        assertEquals(4, adapter.getItemCount());
+        List<NativeContentItem> watch = ReflectionHelpers.callInstanceMethod(browser, "showEpisodeSnapshot");
+        assertEquals(124, watch.size());
+        assertSame(all.get(123), watch.get(123));
+        android.os.Bundle saved = new android.os.Bundle();
+        browser.onSaveInstanceState(saved);
+        assertEquals(120, saved.getInt("episode_range_start"));
+        // Search returns an absolute source index, including videos outside the visible page.
+        ReflectionHelpers.callInstanceMethod(browser, "applyEpisodeRange",
+                ReflectionHelpers.ClassParameter.from(boolean.class, true),
+                ReflectionHelpers.ClassParameter.from(int.class, 76));
+        assertEquals(70, (int) ReflectionHelpers.getField(browser, "episodeRangeStart"));
+        assertEquals(10, adapter.getItemCount());
+        assertSame(all.get(70), adapter.snapshot().get(0));
+        assertEquals(124, all.size());
+        adapter.close();
     }
 }

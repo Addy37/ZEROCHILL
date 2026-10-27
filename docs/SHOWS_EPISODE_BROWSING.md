@@ -4,19 +4,23 @@
 
 Shows collections keep the order and titles returned by their source. ZEROCHILL does not infer seasons when the source does not expose season metadata.
 
-When a loaded collection contains more than 25 playable items, the detail page displays a range selector beside the EPISODES heading. Ranges use the loaded source order in groups of 25, such as `1–25`, `26–50`, and `51–75`.
+When a loaded collection contains more than 10 playable items, the detail page displays a range selector beside the EPISODES heading. Ranges use the loaded source order in groups of 10, such as `1–10`, `11–20`, and `21–30`. The footer shows the visible range and total, with Previous 10 and Next 10 controls where a loaded neighboring range exists. At the loaded tail, Load more videos continues the source's existing pagination when available.
+
+Phone portrait episodes use full-width 16:9 artwork with their local number and source title underneath. Titles allow three lines and cards grow to fit the copy. Landscape and wider layouts use large horizontal artwork with flexible copy height. The hero starts at the top of the safe content area. The white Back/Shows toolbar overlays its artwork with a dark vertical scrim, gradually becoming OLED black as the hero collapses. The flat OLED EPISODES/range row scrolls with the list. A thin cyan divider and inline pager follow the visible episodes, with no floating footer or content overlay. Range and paging actions retain 48dp targets. Previous is hidden and disabled on the first range; the exhausted final range shows End of episodes. Loading and manual retry use a compact inline action. No Shows-specific glass, backdrop recording or lifecycle owner remains; shared navbar/Search/OnlyFap glass is unchanged.
 
 The range sheet also searches the titles that are already loaded for that collection. Local `#N` labels are navigation aids only and do not replace or persist over source titles.
 
-The browser keeps the full loaded collection for episode counts, Resume or Play First selection, watch-session launch context, pagination, and snapshot restore. Only the visible RecyclerView is reduced to the selected range.
+While the detail activity is resumed, browsing within two ten-item ranges of the loaded tail requests the next source page through the existing repository. Requests remain sequential and stop once that look-ahead buffer is available, the source is exhausted, the activity pauses, or a request fails. Failed pages require a manual retry; there is no repeated background retry loop. Appending unseen items does not rebind the current ten rows. Slow source responses can still produce a brief wait if browsing overtakes the buffer.
+
+The browser keeps the full loaded collection for episode counts, Resume or Play First selection, watch-session launch context, pagination, and snapshot restore. Only the visible RecyclerView is reduced to the selected range. Range and scroll position survive activity recreation; switching ranges moves the RecyclerView to the first episode (or the title-search selection) without changing the collapsing header position. Motion-disabled devices move immediately; other devices use a smooth list-only move. Recreation also restores the app-bar offset. The inline section and footer are separate RecyclerView adapters so the source episode adapter, numbering and playback membership remain unchanged. Shows detail owns its geometry and opts out of legacy delayed browser restyling passes; ordinary feeds retain them.
 
 ## Category artwork
 
 Category surfaces can use a 2 by 2 thumbnail mosaic built from playable items inside the category. The existing category artwork remains the fallback when fewer than two usable thumbnails are available.
 
-Mosaic selection is randomized once per app process and remains stable for that process so visible cards and detail heroes do not continuously reshuffle.
+Mosaic selection is randomized once per app process and remains stable for that process so visible category cards do not continuously reshuffle. Once a category detail opens, its compact hero uses a single thumbnail from the loaded playable items. It rotates among distinct thumbnail URLs about every 13 seconds, preloads the next image, and never repeats the immediately previous image. The original category artwork remains underneath and is shown when fewer than two usable thumbnails are loaded. Detail text and playback actions stay fixed as images change.
 
-Category cards reuse the bounded Shows collection warm cache. The large category detail hero uses the collection already loaded by the browser. The artwork feature does not crawl every page of a category solely to build a collage.
+Category cards reuse the bounded Shows collection warm cache. The category detail hero uses the collection already loaded by the browser. The artwork feature does not crawl every page of a category solely to build artwork.
 
 Supported category warm-cache paths include CrazyShit, EFukt, Kaotic, BaddieHub, and XMegaDrive using their existing repository routes and request handling.
 

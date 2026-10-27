@@ -69,6 +69,7 @@ final class ResponsiveFitmentController {
             installSafeInsets(activity);
             fitSecondaryShell(activity, landscape, widthDp, 1100, 56);
         } else if (activity instanceof NativeFeedBrowserActivity) {
+            if (((NativeFeedBrowserActivity) activity).ownsShowsDetailChrome()) return;
             installSafeInsets(activity);
             fitSecondaryShell(activity, landscape, widthDp, 1100, 54);
         }

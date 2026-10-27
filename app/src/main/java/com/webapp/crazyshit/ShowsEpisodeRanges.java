@@ -5,7 +5,7 @@ import java.util.List;
 
 /** Ordered, source-agnostic grouping for large Shows collections. */
 final class ShowsEpisodeRanges {
-    static final int RANGE_SIZE = 25;
+    static final int RANGE_SIZE = 10;
 
     private ShowsEpisodeRanges() {
     }
@@ -36,5 +36,19 @@ final class ShowsEpisodeRanges {
         ArrayList<Integer> starts = new ArrayList<>();
         for (int start = 0; start < total; start += RANGE_SIZE) starts.add(start);
         return starts;
+    }
+
+    static boolean hasPrevious(int start, int total) {
+        return total > 0 && startForIndex(start, total) > 0;
+    }
+
+    static boolean hasNext(int start, int total) {
+        return total > 0 && startForIndex(start, total) + RANGE_SIZE < total;
+    }
+
+    /** Keep two visible ranges ahead without crawling an entire collection. */
+    static boolean nearLoadedEnd(int start, int total) {
+        return total > 0 && total - (startForIndex(start, total) + RANGE_SIZE)
+                <= RANGE_SIZE * 2;
     }
 }
