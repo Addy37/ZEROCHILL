@@ -837,7 +837,8 @@ final class SearchPanel {
         pendingSources = 1;
         renderResults();
         source(token, requestedScope, requested, 0, "XMegaDrive", () ->
-                xMegaDriveRepository.search(activity, requested));
+                xMegaDriveRepository.search(activity, requested,
+                        partial -> publishPartial(token, requestedScope, requested, 0, partial)));
     }
 
     private void startBunkrSearch(String query) {
@@ -868,7 +869,8 @@ final class SearchPanel {
         pendingSources = 1;
         renderResults();
         source(token, requestedScope, requested, 0, "BaddieHub", () ->
-                baddieHubRepository.search(activity, requested));
+                baddieHubRepository.search(activity, requested,
+                        partial -> publishPartial(token, requestedScope, requested, 0, partial)));
     }
 
     private void startLibrarySearch(String query) {
@@ -884,6 +886,17 @@ final class SearchPanel {
         pendingSources = 1;
         renderResults();
         source(token, requestedScope, requested, 0, "Library", () -> searchLibrary(requested));
+    }
+
+    private void publishPartial(int token, Scope requested, String query, int id,
+                                List<NativeContentItem> items) {
+        if (items == null || items.isEmpty()) return;
+        List<NativeContentItem> copy = new ArrayList<>(items);
+        activity.runOnUiThread(() -> {
+            if (!delivers(token, requested, query)) return;
+            accept(requested, id, copy);
+            renderResults();
+        });
     }
 
     private void source(int token, Scope requested, String query, int id, String title,
