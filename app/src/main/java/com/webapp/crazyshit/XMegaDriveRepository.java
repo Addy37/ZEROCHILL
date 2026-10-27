@@ -173,9 +173,9 @@ final class XMegaDriveRepository {
     }
 
     /**
-     * One search page, plus the existing bounded category directory when the search page has no
-     * category matches. A failed search page falls back to one listing page. Nothing here runs
-     * unless Search has selected XMegaDrive and the query is non-empty.
+     * One search page. A failed search page falls back to one listing page. Category-directory
+     * discovery runs only when those video paths return no usable result, so a normal video search
+     * is not held behind a second browser-session round trip.
      */
     List<NativeContentItem> search(Context context, String query) throws IOException {
         String url = searchUrl(query);
@@ -209,7 +209,7 @@ final class XMegaDriveRepository {
                 if (found.isEmpty()) throw failure == null ? error : failure;
             }
         }
-        if (!hasCategory(found) && !Thread.currentThread().isInterrupted()) {
+        if (found.isEmpty() && !Thread.currentThread().isInterrupted()) {
             try {
                 addMatchingCategories(fetchCategories(context), query, found);
             } catch (IOException error) {

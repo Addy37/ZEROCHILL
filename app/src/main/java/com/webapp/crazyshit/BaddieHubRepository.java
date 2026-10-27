@@ -172,7 +172,8 @@ final class BaddieHubRepository {
     /**
      * WordPress search on the configured origin. There is no search route in schema 1, so the
      * query string stays compiled and every other value comes from the current BaddieHub config.
-     * One search response, or one latest page if that response fails, plus one category page.
+     * Category-directory discovery is a no-video fallback instead of blocking every successful
+     * video search behind a second network request.
      */
     static String searchUrl(String baseUrl, String query) {
         String value = query == null ? "" : query.trim();
@@ -219,7 +220,7 @@ final class BaddieHubRepository {
                 }
             }
         }
-        if (!Thread.currentThread().isInterrupted()) {
+        if (found.isEmpty() && !Thread.currentThread().isInterrupted()) {
             try {
                 String categoriesUrl = routeUrl(config, config.categoriesFirstRoute, "", 1);
                 Document categories = fetch(context, categoriesUrl, config.baseUrl, config);

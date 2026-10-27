@@ -29,9 +29,11 @@ import org.json.JSONObject;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -41,10 +43,10 @@ import java.util.concurrent.Future;
 final class SearchPanel {
     static final List<String> SCOPE_LABELS = Arrays.asList(
             "Shows", "OnlyFap", "Bunkr", "XMegaDrive", "BaddieHub", "Library");
-    private static final long ONLYFAP_DEBOUNCE_MS = 280L;
-    private static final long XMEGA_DEBOUNCE_MS = 900L;
-    private static final long REMOTE_DEBOUNCE_MS = 420L;
-    private static final long LIBRARY_DEBOUNCE_MS = 160L;
+    private static final long ONLYFAP_DEBOUNCE_MS = 240L;
+    private static final long XMEGA_DEBOUNCE_MS = 420L;
+    private static final long REMOTE_DEBOUNCE_MS = 350L;
+    private static final long LIBRARY_DEBOUNCE_MS = 100L;
 
     enum Scope {
         SHOWS, ONLYFAP, BUNKR_ALBUMS, XMEGADRIVE, BADDIEHUB, LIBRARY
@@ -96,8 +98,9 @@ final class SearchPanel {
     private final XMegaDriveRepository xMegaDriveRepository = new XMegaDriveRepository();
     private final BunkrRepository bunkrRepository = new BunkrRepository();
     private final BaddieHubRepository baddieHubRepository = new BaddieHubRepository();
+    private final SearchResultCache resultCache = new SearchResultCache();
     private final ExecutorService io = Executors.newFixedThreadPool(4);
-    private final ExecutorService bunkrIo = Executors.newSingleThreadExecutor();
+    private final ExecutorService bunkrIo = Executors.newFixedThreadPool(2);
 
     private EditText input;
     private ZeroChillProgressBar progress;
@@ -130,12 +133,16 @@ final class SearchPanel {
     private TextView searchState;
     private final List<Future<?>> requests = new ArrayList<>();
     private final Map<Integer, String> errors = new LinkedHashMap<>();
+    private final Map<String, Long> searchSourceTimings = new LinkedHashMap<>();
+    private final Set<String> searchCacheHits = new LinkedHashSet<>();
     private int pendingSources;
     private boolean destroyed;
     private String snapshotId = ScreenSnapshotStore.newId();
     private Parcelable restoredScroll;
     private long searchStarted;
     private boolean firstResultsRecorded;
+    private long searchFirstResultMs = -1L;
+    private long searchCompletedMs = -1L;
 
     void create(Bundle state) {
         scope = initialScope(state);
@@ -283,6 +290,11 @@ final class SearchPanel {
             if (activeQuery.isEmpty()) return;
             startScopedSearch(activeQuery);
         });
+        searchState.setOnLongClickListener(v -> {
+            if (!SearchPerformanceDiagnostics.enabled() || activeQuery.isEmpty()) return false;
+            SearchPerformanceDiagnostics.show(activity, searchDiagnosticsReport());
+            return true;
+        });
         LinearLayout footer = new LinearLayout(activity);
         footer.setGravity(Gravity.CENTER_VERTICAL);
         progress = new ZeroChillProgressBar(activity);
@@ -390,6 +402,31 @@ final class SearchPanel {
         return REMOTE_DEBOUNCE_MS;
     }
 
+    private void beginSearchTrace() {
+        searchSourceTimings.clear();
+        searchCacheHits.clear();
+        searchStarted = android.os.SystemClock.elapsedRealtime();
+        firstResultsRecorded = false;
+        searchFirstResultMs = -1L;
+        searchCompletedMs = -1L;
+    }
+
+    private String searchDiagnosticsReport() {
+        int count = scope == Scope.ONLYFAP
+                ? creatorResults.size()
+                : adapter == null ? 0 : adapter.getItemCount();
+        return SearchPerformanceDiagnostics.report(
+                scopeLabel(scope),
+                activeQuery == null ? 0 : activeQuery.length(),
+                debounceFor(scope),
+                searchFirstResultMs,
+                searchCompletedMs,
+                count,
+                searchSourceTimings,
+                searchCacheHits
+        );
+    }
+
     private void cancelSearchWork() {
         if (liveSearch != null) searchHandler.removeCallbacks(liveSearch);
         generation++;
@@ -397,6 +434,8 @@ final class SearchPanel {
         requests.clear();
         if (io instanceof java.util.concurrent.ThreadPoolExecutor)
             ((java.util.concurrent.ThreadPoolExecutor) io).purge();
+        if (bunkrIo instanceof java.util.concurrent.ThreadPoolExecutor)
+            ((java.util.concurrent.ThreadPoolExecutor) bunkrIo).purge();
     }
 
     private void clearResults() {
@@ -676,6 +715,11 @@ final class SearchPanel {
 
     private void publishCreators(List<NativeContentItem> next) {
         creatorResults = OnlyFapCreatorResults.merge(creatorResults, next, 80);
+        if (!creatorResults.isEmpty() && !firstResultsRecorded && searchStarted > 0L) {
+            firstResultsRecorded = true;
+            searchFirstResultMs = android.os.SystemClock.elapsedRealtime() - searchStarted;
+            AppPerformance.record("Search first results", searchFirstResultMs);
+        }
         if (scope == Scope.ONLYFAP && onlyFapAdapter != null) onlyFapAdapter.replace(creatorResults);
         updateResultSize();
     }
@@ -687,6 +731,7 @@ final class SearchPanel {
         creatorResults = new ArrayList<>();
         if (onlyFapAdapter != null) onlyFapAdapter.replace(creatorResults);
         activeQuery = query.trim();
+        beginSearchTrace();
         final String requestedQuery = activeQuery;
         final int token = generation;
         final Scope requestedScope = Scope.ONLYFAP;
@@ -704,8 +749,10 @@ final class SearchPanel {
                             CreatorCatalog.matching(activity.getApplicationContext(), requestedQuery, false, 60)), 60);
             local.sort(java.util.Comparator.comparingInt((NativeContentItem item) -> index.rank(item, requestedQuery))
                     .thenComparing(item -> CreatorNameMatcher.normalized(item.title)));
+            long localElapsed = android.os.SystemClock.elapsedRealtime() - searchStarted;
             activity.runOnUiThread(() -> {
                 if (!delivers(token, requestedScope, requestedQuery)) return;
+                searchSourceTimings.put("Local creator index", localElapsed);
                 publishCreators(local);
                 status.setVisibility(View.GONE);
                 searchState.setText(creatorResults.size() + " creators · Checking sources…");
@@ -723,11 +770,15 @@ final class SearchPanel {
                 });
             } catch (Exception ignored) { }
             List<NativeContentItem> creators = result;
+            long sourceElapsed = android.os.SystemClock.elapsedRealtime() - searchStarted;
             activity.runOnUiThread(() -> {
                 if (!delivers(token, requestedScope, requestedQuery)) return;
+                searchSourceTimings.put("Creator sources", sourceElapsed);
                 if (creators != null) CreatorCatalog.remember(activity.getApplicationContext(), creators);
                 pendingSources = 0;
                 publishCreators(creators);
+                searchCompletedMs = android.os.SystemClock.elapsedRealtime() - searchStarted;
+                AppPerformance.record("Search complete", searchCompletedMs);
                 progress.setVisibility(View.GONE);
                 searchState.setText(creators == null ? "Creator search incomplete · Tap to retry"
                         : creatorResults.size() + (creatorResults.size() == 1 ? " creator" : " creators"));
@@ -756,13 +807,12 @@ final class SearchPanel {
         searchPreference = ContentPreference.get(activity);
         clearResults();
         activeQuery = query.trim();
+        beginSearchTrace();
         final String requested = activeQuery;
         final int token = generation;
         final Scope requestedScope = Scope.SHOWS;
         errors.clear();
         pendingSources = 3;
-        searchStarted = android.os.SystemClock.elapsedRealtime();
-        firstResultsRecorded = false;
         renderResults();
         source(token, requestedScope, requested, 0, "CrazyShit", () ->
                 label(repository.fetchFeed(activity, repository.searchUrl(requested), 1), "CrazyShit"));
@@ -778,14 +828,13 @@ final class SearchPanel {
         applyScopeAdapter();
         clearResults();
         activeQuery = query.trim();
+        beginSearchTrace();
         final String requested = activeQuery;
         final int token = generation;
         final Scope requestedScope = Scope.XMEGADRIVE;
         if (!runsXMegaDrive(requestedScope, requested)) return;
         errors.clear();
         pendingSources = 1;
-        searchStarted = android.os.SystemClock.elapsedRealtime();
-        firstResultsRecorded = false;
         renderResults();
         source(token, requestedScope, requested, 0, "XMegaDrive", () ->
                 xMegaDriveRepository.search(activity, requested));
@@ -796,12 +845,11 @@ final class SearchPanel {
         applyScopeAdapter();
         clearResults();
         activeQuery = query.trim();
+        beginSearchTrace();
         final String requested = activeQuery;
         final int token = generation;
         errors.clear();
         pendingSources = 1;
-        searchStarted = android.os.SystemClock.elapsedRealtime();
-        firstResultsRecorded = false;
         renderResults();
         source(bunkrIo, token, Scope.BUNKR_ALBUMS, requested, 0, "Bunkr", () ->
                 bunkrRepository.searchAlbums(activity, requested, 1));
@@ -812,13 +860,12 @@ final class SearchPanel {
         applyScopeAdapter();
         clearResults();
         activeQuery = query.trim();
+        beginSearchTrace();
         final String requested = activeQuery;
         final int token = generation;
         final Scope requestedScope = Scope.BADDIEHUB;
         errors.clear();
         pendingSources = 1;
-        searchStarted = android.os.SystemClock.elapsedRealtime();
-        firstResultsRecorded = false;
         renderResults();
         source(token, requestedScope, requested, 0, "BaddieHub", () ->
                 baddieHubRepository.search(activity, requested));
@@ -829,13 +876,12 @@ final class SearchPanel {
         applyScopeAdapter();
         clearResults();
         activeQuery = query.trim();
+        beginSearchTrace();
         final String requested = activeQuery;
         final int token = generation;
         final Scope requestedScope = Scope.LIBRARY;
         errors.clear();
         pendingSources = 1;
-        searchStarted = android.os.SystemClock.elapsedRealtime();
-        firstResultsRecorded = false;
         renderResults();
         source(token, requestedScope, requested, 0, "Library", () -> searchLibrary(requested));
     }
@@ -847,6 +893,20 @@ final class SearchPanel {
 
     private void source(ExecutorService executor, int token, Scope requested, String query, int id,
                         String title, Callable<List<NativeContentItem>> fetch) {
+        String cacheKey = requested.name() + ":" + id + ":" + title;
+        if (requested != Scope.LIBRARY) {
+            List<NativeContentItem> cached = resultCache.get(cacheKey, query);
+            if (cached != null) {
+                pendingSources = Math.max(0, pendingSources - 1);
+                searchSourceTimings.put(title, 0L);
+                searchCacheHits.add(title);
+                accept(requested, id, cached);
+                renderResults();
+                if (pendingSources == 0) saveSnapshot();
+                return;
+            }
+        }
+        long started = android.os.SystemClock.elapsedRealtime();
         requests.add(executor.submit(() -> {
             List<NativeContentItem> items = null;
             try {
@@ -854,11 +914,16 @@ final class SearchPanel {
                 items = fetch.call();
             } catch (Exception ignored) { }
             List<NativeContentItem> result = items;
+            long elapsed = android.os.SystemClock.elapsedRealtime() - started;
             activity.runOnUiThread(() -> {
                 if (!delivers(token, requested, query)) return;
+                searchSourceTimings.put(title, elapsed);
                 pendingSources = Math.max(0, pendingSources - 1);
                 if (result == null) errors.put(id, title);
-                else accept(requested, id, result);
+                else {
+                    accept(requested, id, result);
+                    if (requested != Scope.LIBRARY) resultCache.put(cacheKey, query, result);
+                }
                 renderResults();
                 if (pendingSources == 0 && requested != Scope.LIBRARY) saveSnapshot();
             });
@@ -1014,7 +1079,12 @@ final class SearchPanel {
         }
         if (!output.isEmpty() && !firstResultsRecorded && searchStarted > 0) {
             firstResultsRecorded = true;
-            AppPerformance.record("Search first results", android.os.SystemClock.elapsedRealtime() - searchStarted);
+            searchFirstResultMs = android.os.SystemClock.elapsedRealtime() - searchStarted;
+            AppPerformance.record("Search first results", searchFirstResultMs);
+        }
+        if (pendingSources == 0 && searchStarted > 0L && searchCompletedMs < 0L) {
+            searchCompletedMs = android.os.SystemClock.elapsedRealtime() - searchStarted;
+            AppPerformance.record("Search complete", searchCompletedMs);
         }
         adapter.replace(output);
         progress.setVisibility(pendingSources > 0 ? View.VISIBLE : View.GONE);
@@ -1132,7 +1202,7 @@ final class SearchPanel {
                 playback.putExtra(VideoDetailActivity.EXTRA_VIEWS, item.views);
                 playback.putExtra(VideoDetailActivity.EXTRA_UPLOADER, item.uploader);
                 playback.putExtra(VideoDetailActivity.EXTRA_COMMENTS, item.comments);
-                playback.putExtra(VideoDetailActivity.EXTRA_MEDIA_REFERER, resolved.requestReferer);
+                playback.putExtra(PlayerActivity.EXTRA_MEDIA_REFERER, resolved.requestReferer);
                 putPlaybackSource(playback, item);
                 if (requestedScope == Scope.SHOWS || (requestedScope == Scope.LIBRARY
                         && !OnlyFapVideoMetadata.applies(item))) {
