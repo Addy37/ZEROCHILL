@@ -341,12 +341,15 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
 
     private Holder createListHolder(ViewGroup parent) {
         boolean landscape = isLandscape(parent);
-        int height = episodePresentation ? Math.max(96, Math.round(88 * parent.getResources().getConfiguration().fontScale)) : landscape ? 106 : 118;
+        int episodeWidth = Math.round((parent.getResources().getConfiguration().screenWidthDp - 24) * 0.44f);
+        int height = episodePresentation ? Math.max(Math.round(episodeWidth * 9f / 16f) + 8,
+                Math.round(100 * parent.getResources().getConfiguration().fontScale)) : landscape ? 106 : 118;
         int width = homePresentation
                 ? responsiveHomeListMediaWidthDp(parent, height)
                 : landscape ? 150 : 166;
-        if (episodePresentation) width = Math.min(144, Math.round(parent.getResources().getConfiguration().screenWidthDp * 0.38f));
-        MaterialCardView card = baseCard(parent, 12, 4, 15, height);
+        if (episodePresentation) width = episodeWidth;
+        MaterialCardView card = baseCard(parent, 12,
+                episodePresentation ? 3 : 4, 15, height);
         LinearLayout row = new LinearLayout(parent.getContext());
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
@@ -356,10 +359,10 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
         CopyViews copy = addCopy(
                 parent,
                 row,
-                homePresentation ? 14 : landscape ? 14 : 15,
+                episodePresentation ? 14 : homePresentation ? 14 : landscape ? 14 : 15,
                 11,
-                homePresentation ? 9 : 12,
-                homePresentation ? 7 : landscape ? 7 : 9,
+                episodePresentation ? 7 : homePresentation ? 9 : 12,
+                episodePresentation ? 4 : homePresentation ? 7 : landscape ? 7 : 9,
                 false
         );
         return new Holder(card, media, copy);
@@ -418,7 +421,7 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
         TextView unusedComments = new TextView(parent.getContext());
         TextView unusedDescription = new TextView(parent.getContext());
         unusedDescription.setVisibility(View.GONE);
-        CopyViews copy = new CopyViews(title, info, unusedComments, unusedDescription);
+        CopyViews copy = new CopyViews(title, info, unusedComments, unusedDescription, null);
         return new Holder(card, media, copy);
     }
 
@@ -567,6 +570,15 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
         }
         host.addView(copy, copyParams);
 
+        TextView episodeNumber = null;
+        if (episodePresentation) {
+            episodeNumber = new TextView(parent.getContext());
+            episodeNumber.setTextColor(UiPalette.PRIMARY);
+            episodeNumber.setTextSize(11f);
+            episodeNumber.setTypeface(null, android.graphics.Typeface.BOLD);
+            copy.addView(episodeNumber, new LinearLayout.LayoutParams(-1, -2));
+        }
+
         TextView title = new TextView(parent.getContext());
         title.setTextColor(ZeroChillUi.color(parent.getContext(), R.color.zc_text_primary));
         title.setTextSize(titleSize);
@@ -581,7 +593,8 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
         menu.setTextSize(24);
         menu.setTextColor(ZeroChillUi.color(parent.getContext(), R.color.zc_text_secondary));
         menu.setBackgroundColor(Color.TRANSPARENT);
-        titleRow.addView(menu, new LinearLayout.LayoutParams(dp(parent, 48), dp(parent, 48)));
+        titleRow.addView(menu, new LinearLayout.LayoutParams(dp(parent,
+                episodePresentation ? 36 : 48), dp(parent, episodePresentation ? 36 : 48)));
         copy.addView(titleRow, new LinearLayout.LayoutParams(-1, -2));
 
         if (fillRemaining) {
@@ -620,7 +633,7 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
         descriptionParams.topMargin = dp(parent, 4);
         copy.addView(description, 1, descriptionParams);
 
-        return new CopyViews(title, info, comments, description);
+        return new CopyViews(title, info, comments, description, episodeNumber);
     }
 
     @Override
@@ -656,9 +669,9 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
         boolean meme = item.isMeme();
         holder.image.setTag(R.id.shows_watch_source_page, item.url);
         String visibleTitle = displayTitle(item);
-        holder.title.setText(episodePresentation
-                ? "#" + (episodeNumberOffset + position + 1) + "  " + visibleTitle
-                : visibleTitle);
+        holder.title.setText(visibleTitle);
+        if (holder.episodeNumber != null)
+            holder.episodeNumber.setText("#" + (episodeNumberOffset + position + 1));
         holder.info.setText(buildInfo(item));
         boolean showDescription = !episodePresentation && viewMode != VIEW_CARDS && viewMode != VIEW_POSTERS && item.description != null &&
                 !item.description.trim().isEmpty();
@@ -1105,12 +1118,15 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
         final TextView info;
         final TextView comments;
         final TextView description;
+        final TextView episodeNumber;
 
-        CopyViews(TextView title, TextView info, TextView comments, TextView description) {
+        CopyViews(TextView title, TextView info, TextView comments, TextView description,
+                  TextView episodeNumber) {
             this.title = title;
             this.info = info;
             this.comments = comments;
             this.description = description;
+            this.episodeNumber = episodeNumber;
         }
     }
 
@@ -1126,6 +1142,7 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
         final TextView info;
         final TextView comments;
         final TextView description;
+        final TextView episodeNumber;
         final TextView sectionTitle;
 
         Holder(MaterialCardView card, MediaViews media, CopyViews copy) {
@@ -1141,6 +1158,7 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
             this.info = copy.info;
             this.comments = copy.comments;
             this.description = copy.description;
+            this.episodeNumber = copy.episodeNumber;
             this.sectionTitle = null;
         }
 
@@ -1157,6 +1175,7 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
             this.info = null;
             this.comments = null;
             this.description = null;
+            this.episodeNumber = null;
             this.sectionTitle = sectionTitle;
         }
     }

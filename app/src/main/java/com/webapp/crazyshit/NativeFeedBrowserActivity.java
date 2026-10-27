@@ -27,6 +27,7 @@ import androidx.annotation.NonNull;
 import androidx.coordinatorlayout.widget.CoordinatorLayout;
 import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.LinearLayoutManager;
+import androidx.recyclerview.widget.LinearSmoothScroller;
 import androidx.recyclerview.widget.RecyclerView;
 import androidx.recyclerview.widget.StaggeredGridLayoutManager;
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
@@ -134,6 +135,10 @@ public final class NativeFeedBrowserActivity extends Activity {
     private String showKind;
     private final ArrayList<NativeContentItem> showEpisodes = new ArrayList<>();
     private TextView episodeRangeAction;
+    private TextView episodePageSummary;
+    private TextView episodePrevious;
+    private TextView episodeNext;
+    private TextView episodeLoadMore;
     private int episodeRangeStart;
     private boolean showDetailsMode;
     private boolean memeMode;
@@ -640,7 +645,7 @@ public final class NativeFeedBrowserActivity extends Activity {
             section.setGravity(Gravity.CENTER_VERTICAL);
             episodeBar.addView(section, new LinearLayout.LayoutParams(0, -1, 1f));
 
-            episodeRangeAction = text("1–25 ▾", 12, Color.WHITE);
+            episodeRangeAction = text("1–10 ▾", 12, Color.WHITE);
             episodeRangeAction.setTypeface(null, android.graphics.Typeface.BOLD);
             episodeRangeAction.setGravity(Gravity.CENTER);
             episodeRangeAction.setPadding(dp(13), 0, dp(13), 0);
@@ -658,6 +663,29 @@ public final class NativeFeedBrowserActivity extends Activity {
 
             detailsFeed.addView(episodeBar, new LinearLayout.LayoutParams(-1, dp(48)));
             detailsFeed.addView(refresh, new LinearLayout.LayoutParams(-1, 0, 1f));
+            LinearLayout episodePager = new LinearLayout(this);
+            episodePager.setOrientation(LinearLayout.VERTICAL);
+            episodePager.setGravity(Gravity.CENTER);
+            episodePager.setPadding(dp(12), dp(2), dp(12), dp(5));
+            episodePrevious = episodePageButton("Previous 10", -1);
+            episodePageSummary = text("", 12,
+                    ZeroChillUi.color(this, R.color.zc_text_secondary));
+            episodePageSummary.setGravity(Gravity.CENTER);
+            episodeNext = episodePageButton("Next 10", 1);
+            episodePager.addView(episodePageSummary, new LinearLayout.LayoutParams(-1, dp(22)));
+            LinearLayout controls = new LinearLayout(this);
+            controls.setGravity(Gravity.CENTER_VERTICAL);
+            controls.addView(episodePrevious, new LinearLayout.LayoutParams(0, dp(48), 1f));
+            View gap = new View(this);
+            controls.addView(gap, new LinearLayout.LayoutParams(dp(8), 1));
+            controls.addView(episodeNext, new LinearLayout.LayoutParams(0, dp(48), 1f));
+            episodePager.addView(controls, new LinearLayout.LayoutParams(-1, dp(48)));
+            episodeLoadMore = text("Load more videos", 12, UiPalette.PRIMARY);
+            episodeLoadMore.setGravity(Gravity.CENTER);
+            episodeLoadMore.setOnClickListener(v -> load(true));
+            episodeLoadMore.setVisibility(View.GONE);
+            episodePager.addView(episodeLoadMore, new LinearLayout.LayoutParams(-1, dp(48)));
+            detailsFeed.addView(episodePager, new LinearLayout.LayoutParams(-1, -2));
             body.addView(detailsFeed, new FrameLayout.LayoutParams(-1, -1));
         } else {
             body.addView(refresh, new FrameLayout.LayoutParams(-1, -1));
@@ -1161,6 +1189,7 @@ public final class NativeFeedBrowserActivity extends Activity {
                 int[] range = visibleRange(view.getLayoutManager());
                 adapter.preloadVisible(range[0], range[1]);
                 if (dy > 0 && !loading && !endReached &&
+                        (!showDetailsMode || episodeRangeStart + ShowsEpisodeRanges.RANGE_SIZE >= showEpisodes.size()) &&
                         range[1] >= Math.max(0, adapter.getItemCount() - 5)) {
                     load(true);
                 }
@@ -1361,6 +1390,7 @@ public final class NativeFeedBrowserActivity extends Activity {
                     } else if (result.isEmpty() || (append && added == 0) || isEfukt()) {
                         endReached = true;
                     }
+                    updateEpisodeRangeUi();
                     updateShowDetailsHeader();
                     if (isBunkr() && !isCreatorGallery()) {
                         if (append) {
@@ -2554,6 +2584,23 @@ public final class NativeFeedBrowserActivity extends Activity {
         return "CRAZYSHIT SHOW";
     }
 
+    private TextView episodePageButton(String label, int direction) {
+        TextView button = text(label, 12, Color.WHITE);
+        button.setTypeface(null, android.graphics.Typeface.BOLD);
+        button.setGravity(Gravity.CENTER);
+        button.setBackground(ZeroChillUi.rounded(this,
+                ZeroChillUi.color(this, R.color.zc_surface_glass_strong),
+                ZeroChillUi.color(this, R.color.zc_edge), R.dimen.zc_radius_pill));
+        button.setOnClickListener(v -> {
+            int next = episodeRangeStart + direction * ShowsEpisodeRanges.RANGE_SIZE;
+            if (next < 0 || next >= showEpisodes.size()) return;
+            episodeRangeStart = next;
+            applyEpisodeRange(true, -1);
+        });
+        ZeroChillMotion.installPressFeedback(button);
+        return button;
+    }
+
     private void replaceShowEpisodes(List<NativeContentItem> items) {
         showEpisodes.clear();
         appendShowEpisodes(items);
@@ -2589,7 +2636,26 @@ public final class NativeFeedBrowserActivity extends Activity {
         updateEpisodeRangeUi();
         if (scrollToSelection && recycler != null && adapter.getItemCount() > 0) {
             int local = selectedIndex >= 0 ? selectedIndex - episodeRangeStart : 0;
-            recycler.scrollToPosition(Math.max(0, Math.min(local, adapter.getItemCount() - 1)));
+            int target = Math.max(0, Math.min(local, adapter.getItemCount() - 1));
+            recycler.post(() -> {
+                if (recycler == null || recycler.getLayoutManager() == null) return;
+                if (!ZeroChillMotion.animationsEnabled(this)) {
+                    recycler.scrollToPosition(target);
+                    return;
+                }
+                // Keep nested app-bar offset fixed while returning to the chosen row.
+                boolean nested = recycler.isNestedScrollingEnabled();
+                recycler.setNestedScrollingEnabled(false);
+                LinearSmoothScroller scroller = new LinearSmoothScroller(this) {
+                    @Override protected int getVerticalSnapPreference() { return SNAP_TO_START; }
+                    @Override protected void onStop() {
+                        super.onStop();
+                        recycler.setNestedScrollingEnabled(nested);
+                    }
+                };
+                scroller.setTargetPosition(target);
+                recycler.getLayoutManager().startSmoothScroll(scroller);
+            });
         }
     }
 
@@ -2604,6 +2670,17 @@ public final class NativeFeedBrowserActivity extends Activity {
             episodeRangeAction.setContentDescription(
                     "Choose episode range, current " + ShowsEpisodeRanges.label(episodeRangeStart, total)
             );
+        }
+        if (episodePageSummary != null) {
+            episodePageSummary.setText(total == 0 ? "" :
+                    ShowsEpisodeRanges.label(episodeRangeStart, total) + " of " + total);
+            episodePrevious.setVisibility(ShowsEpisodeRanges.hasPrevious(episodeRangeStart, total)
+                    ? View.VISIBLE : View.INVISIBLE);
+            episodeNext.setVisibility(ShowsEpisodeRanges.hasNext(episodeRangeStart, total)
+                    ? View.VISIBLE : View.INVISIBLE);
+            episodeLoadMore.setVisibility(total > 0 && !endReached &&
+                    !ShowsEpisodeRanges.hasNext(episodeRangeStart, total)
+                    ? View.VISIBLE : View.GONE);
         }
     }
 
@@ -2692,6 +2769,7 @@ public final class NativeFeedBrowserActivity extends Activity {
                         adapter.replace(restoredItems);
                     }
                     currentPage = feed.optInt("page"); endReached = feed.optBoolean("end");
+                    updateEpisodeRangeUi();
                     updateShowDetailsHeader();
                 } else {
                     if (isBunkr()) {
@@ -2764,6 +2842,7 @@ public final class NativeFeedBrowserActivity extends Activity {
     }
 
     @Override protected void onPause() {
+        if (showDetailsHeader != null) showDetailsHeader.setActive(false);
         persistBrowser();
         super.onPause();
     }
@@ -2771,6 +2850,7 @@ public final class NativeFeedBrowserActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
+        if (showDetailsHeader != null) showDetailsHeader.setActive(true);
         updateShowDetailsHeader();
         if (creatorProfile != null) creatorProfile.refresh();
         if (isBunkr() && bunkrGalleryAdapter != null) {

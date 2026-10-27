@@ -57,6 +57,20 @@ jobs:
           gradle-version: '8.11.1'
           cache-provider: basic
 
+      - name: Run focused Shows detail and playback regressions
+        if: github.head_ref == 'feature/shows-detail-cinematic-pagination'
+        run: >-
+          gradle --no-daemon :app:testDebugUnitTest
+          --tests 'com.webapp.crazyshit.ShowsDetail*'
+          --tests 'com.webapp.crazyshit.ShowsEpisode*'
+          --tests 'com.webapp.crazyshit.ShowsCategory*'
+          --tests 'com.webapp.crazyshit.ShowsHeroDesignTest'
+          --tests 'com.webapp.crazyshit.ShowsWatch*'
+          --tests 'com.webapp.crazyshit.ShowsFullscreen*'
+          --tests 'com.webapp.crazyshit.ShowsLandscape*'
+          --tests 'com.webapp.crazyshit.PlaybackHistoryStoreTest'
+          --tests 'com.webapp.crazyshit.VideoDetailProgressTest'
+
       - name: Run focused Shows motion and watch regressions
         if: github.head_ref == 'feature/shows-youtube-motion'
         run: >-
