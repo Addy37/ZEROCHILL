@@ -1,0 +1,102 @@
+name: Diagnose Bunkr Android playback
+on:
+  push:
+    branches: [diagnostic/bunkr-player-15329122]
+permissions:
+  contents: read
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v6
+      - name: Inspect stream metadata
+        run: |
+          python3 - <<'PY'
+          import urllib.request,urllib.parse,re,json,subprocess
+          page='https://bunkr.cr/f/Fuyd9dOX3ZbhP'
+          config=json.load(open('app/src/main/assets/source_config_defaults.json'))['sources']['bunkr']
+          def read(u):
+              with urllib.request.urlopen(urllib.request.Request(u,headers={'User-Agent':config['userAgent'],'Referer':page}),timeout=15) as r:return r.read(1000000).decode()
+          body=read(page)
+          cdn=re.search(r'jsCDN\s*=\s*["\']([^"\']+)',body).group(1).replace('\\/','/')
+          signer=re.search(r'signUrl\s*=\s*["\']([^"\']+)',body).group(1)
+          sign=json.loads(read(signer+'?path='+urllib.parse.quote(urllib.parse.unquote(urllib.parse.urlsplit(cdn).path),safe='')))
+          signed=cdn+'?'+urllib.parse.urlencode({'token':sign['token'],'ex':sign['ex']})
+          result=subprocess.run(['ffprobe','-v','error','-user_agent',config['userAgent'],'-headers','Referer: '+page+'\r\n','-show_entries','format=format_name,duration:stream=codec_name,codec_tag_string,profile,pix_fmt,width,height,sample_rate,channels','-of','json',signed],capture_output=True,text=True,timeout=50)
+          print('PROBE_STATUS',result.returncode);print(result.stdout);print(result.stderr[:4000])
+          print('SIGN_TTL_SECONDS',int(sign['ex'])-__import__('time').time())
+          PY
+  android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    env:
+      ANALYTICS_ENDPOINT: ''
+      FEEDBACK_ENDPOINT: ''
+      SHITTOK_POOL_DIAGNOSTICS: 'true'
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v4
+        with:
+          packages: platform-tools
+      - run: sdkmanager 'platforms;android-35' 'platforms;android-36' 'build-tools;35.0.0'
+      - uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: '8.11.1'
+          cache-provider: basic
+      - name: Add temporary CI-only launcher and error logging
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          root=Path('app/src/main/java/com/webapp/crazyshit')
+          p=root/'BunkrGalleryActivity.java';s=p.read_text()
+          s=s.replace('public void onPlayerError(PlaybackException error) {','public void onPlayerError(PlaybackException error) { android.util.Log.e("BunkrProbe", "PLAYER_ERROR code="+error.errorCode+" name="+error.getErrorCodeName(), error);')
+          s=s.replace('public void onRenderedFirstFrame() {','public void onRenderedFirstFrame() { android.util.Log.i("BunkrProbe", "FIRST_FRAME");')
+          s=s.replace('player.setPlayWhenReady(true);\n        player.prepare();','android.util.Log.i("BunkrProbe", "PREPARE"); player.setPlayWhenReady(true);\n        player.prepare();')
+          s=s.replace('} catch (Exception error) {','} catch (Exception error) { android.util.Log.e("BunkrProbe", "GALLERY_EXCEPTION", error);')
+          p.write_text(s)
+          (root/'BunkrProbeActivity.java').write_text('''package com.webapp.crazyshit;
+          public class BunkrProbeActivity extends android.app.Activity {
+            public void onCreate(android.os.Bundle state) {
+              super.onCreate(state);
+              String page="https://bunkr.cr/f/Fuyd9dOX3ZbhP";
+              String album="https://bunkr.cr/a/WlA5Bbyp";
+              String session=BunkrGallerySessionStore.createCreator("Reproduction",album,"reproduction");
+              NativeContentItem item=new NativeContentItem(NativeContentItem.KIND_MEDIA,"Reproduction.mp4",page,"","","Bunkr","");
+              BunkrGallerySessionStore.replace(session,java.util.Collections.singletonList(item),1,true);
+              android.content.Intent i=new android.content.Intent(this,BunkrGalleryActivity.class);
+              i.putExtra(BunkrGalleryActivity.EXTRA_SESSION_ID,session);
+              i.putExtra(BunkrGalleryActivity.EXTRA_CREATOR_QUERY,"reproduction");
+              i.putExtra(BunkrGalleryActivity.EXTRA_INITIAL_URL,page);
+              startActivity(i);finish();
+            }
+          }''')
+          p=Path('app/src/main/AndroidManifest.xml');s=p.read_text().replace('</application>','<activity android:name=".BunkrProbeActivity" android:exported="true" /></application>');p.write_text(s)
+          PY
+      - run: gradle --no-daemon :app:assembleDebug
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - uses: ReactiveCircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          script: |
+            adb install app/build/outputs/apk/debug/app-debug.apk
+            adb logcat -c
+            adb shell am start -n com.addy37.crazyshitunofficial.dev/com.webapp.crazyshit.BunkrProbeActivity
+            for i in $(seq 1 12); do sleep 5; adb logcat -d -s BunkrProbe:I ExoPlayerImplInternal:E AndroidRuntime:E > bunkr-player-log.txt; if grep -q -E 'PLAYER_ERROR|FIRST_FRAME|FATAL EXCEPTION|GALLERY_EXCEPTION' bunkr-player-log.txt; then break; fi; done
+            cat bunkr-player-log.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Bunkr-Android-playback-diagnosis
+          path: bunkr-player-log.txt
