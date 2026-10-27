@@ -46,6 +46,7 @@ import java.util.concurrent.Executors;
 public final class MainActivity extends AppCompatActivity {
     static final String EXTRA_DESTINATION = "destination";
     private static final String DASHBOARD = "dashboard";
+    private static final String COMMUNITY = "community";
     private static final String FEEDBACK = "feedback";
     private static final String SOURCES = "sources";
 
@@ -96,6 +97,7 @@ public final class MainActivity extends AppCompatActivity {
     private void route(String destination) {
         if (FEEDBACK.equals(destination)) showInbox();
         else if (SOURCES.equals(destination)) showSourceControl();
+        else if (COMMUNITY.equals(destination)) openCommunity();
         else showDashboard();
     }
 
@@ -112,7 +114,7 @@ public final class MainActivity extends AppCompatActivity {
         TextView eyebrow = label("PRIVATE CONTROL CENTER");
         TextView title = text("ZeroChill Admin", 32, Color.WHITE);
         title.setTypeface(null, Typeface.BOLD);
-        TextView detail = text("Connect once to manage analytics, sources, and feedback.",
+        TextView detail = text("Connect once to manage accounts, social activity, analytics, sources, and feedback.",
                 15, color(R.color.app_on_surface_variant));
         detail.setPadding(0, dp(8), 0, dp(26));
 
@@ -212,8 +214,10 @@ public final class MainActivity extends AppCompatActivity {
         LinearLayout quickBody = new LinearLayout(this);
         quickBody.setOrientation(LinearLayout.HORIZONTAL);
         MaterialButton analytics = compactButton("Analytics");
+        MaterialButton community = compactButton("Community");
         MaterialButton manageSources = compactButton("Sources");
         quickBody.addView(analytics, weighted());
+        quickBody.addView(community, weighted());
         quickBody.addView(manageSources, weighted());
         content.addView(panel("QUICK ACTIONS", null, quickBody));
 
@@ -226,6 +230,7 @@ public final class MainActivity extends AppCompatActivity {
 
         lock.setOnClickListener(v -> confirmLock());
         analytics.setOnClickListener(v -> openAnalytics());
+        community.setOnClickListener(v -> openCommunity());
         manageSources.setOnClickListener(v -> showSourceControl());
 
         String token = SecureTokenStore.read(this);
@@ -471,6 +476,7 @@ public final class MainActivity extends AppCompatActivity {
 
         nav.addView(navButton("Dashboard", DASHBOARD, selected, v -> showDashboard()), weighted());
         nav.addView(navButton("Analytics", "analytics", selected, v -> openAnalytics()), weighted());
+        nav.addView(navButton("Community", COMMUNITY, selected, v -> openCommunity()), weighted());
         nav.addView(navButton("Sources", SOURCES, selected, v -> showSourceControl()), weighted());
         nav.addView(navButton("Feedback", FEEDBACK, selected, v -> showInbox()), weighted());
         return nav;
@@ -480,12 +486,12 @@ public final class MainActivity extends AppCompatActivity {
         boolean active = destination.equals(selected);
         MaterialButton button = new MaterialButton(this);
         button.setText(title);
-        button.setTextSize(10);
+        button.setTextSize(9);
         button.setAllCaps(false);
         button.setSingleLine(true);
         button.setMaxLines(1);
         button.setMinWidth(0);
-        button.setPadding(dp(2), 0, dp(2), 0);
+        button.setPadding(dp(1), 0, dp(1), 0);
         button.setMinHeight(dp(38));
         button.setInsetTop(0);
         button.setInsetBottom(0);
@@ -502,6 +508,10 @@ public final class MainActivity extends AppCompatActivity {
 
     private void openAnalytics() {
         startActivity(new Intent(this, AnalyticsActivity.class));
+    }
+
+    private void openCommunity() {
+        startActivity(new Intent(this, CommunityActivity.class));
     }
 
     private void confirmLock() {
