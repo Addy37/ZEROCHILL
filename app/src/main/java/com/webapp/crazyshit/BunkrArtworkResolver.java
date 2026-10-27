@@ -25,21 +25,21 @@ final class BunkrArtworkResolver {
 
     private BunkrArtworkResolver() { }
 
-    static void request(Context context, String pageUrl, String rejected, Consumer<String> callback) {
-        if (!BunkrRepository.isBunkrUrl(pageUrl)) return;
+    static boolean request(Context context, String pageUrl, String rejected, Consumer<String> callback) {
+        if (!BunkrRepository.isBunkrUrl(pageUrl)) return true;
         final String key = pageUrl + "\n" + rejected;
         synchronized (PENDING) {
             Cached cached = CACHE.get(key);
             if (cached != null && cached.until > SystemClock.elapsedRealtime()) {
                 MAIN.post(() -> callback.accept(cached.url));
-                return;
+                return true;
             }
             List<Consumer<String>> waiting = PENDING.get(key);
             if (waiting != null) {
                 waiting.add(callback);
-                return;
+                return true;
             }
-            if (PENDING.size() >= MAX_PENDING) return;
+            if (PENDING.size() >= MAX_PENDING) return false;
             waiting = new ArrayList<>();
             waiting.add(callback);
             PENDING.put(key, waiting);
@@ -60,6 +60,7 @@ final class BunkrArtworkResolver {
                 if (callbacks != null) for (Consumer<String> ready : callbacks) ready.accept(result);
             });
         });
+        return true;
     }
 
     private static final class Cached {

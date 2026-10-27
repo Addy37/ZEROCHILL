@@ -392,9 +392,12 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
     private void repairArtwork(Holder holder, NativeContentItem item, String rejected) {
         if (!BunkrRepository.isBunkrUrl(item.url)) return;
         int binding = holder.bindGeneration;
-        BunkrArtworkResolver.request(context, item.url, rejected == null ? "" : rejected, image -> {
+        boolean accepted = BunkrArtworkResolver.request(context, item.url, rejected == null ? "" : rejected, image -> {
             if (binding == holder.bindGeneration && !image.isEmpty()) loadArtwork(holder, item, image, false);
         });
+        if (!accepted) holder.image.postDelayed(() -> {
+            if (binding == holder.bindGeneration) repairArtwork(holder, item, rejected);
+        }, 250L);
     }
 
     private void applyOverlayDensity(Holder holder) {
@@ -443,6 +446,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         for (int i = start; i < end; i++) {
             NativeContentItem item = items.get(i);
             if (item.imageUrl == null || item.imageUrl.isEmpty()) continue;
+            if (BunkrRepository.isBunkrUrl(item.url) && !BunkrRepository.isUsableArtwork(item.imageUrl)) continue;
             String imageUrl = item.imageUrl.trim();
             if (imageUrl.isEmpty()) continue;
             String referer = imageReferer(item);
