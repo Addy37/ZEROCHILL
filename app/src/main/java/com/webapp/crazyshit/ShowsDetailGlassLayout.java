@@ -12,12 +12,15 @@ import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 import androidx.recyclerview.widget.RecyclerView;
 
-/** One page recording for the Shows detail header, episode bar, and pager.
- *  Glass panes and their controls are drawn after the recording so they cannot
- *  sample themselves. Episode content may paint underneath each pane. */
+/** One page recording for the Shows detail header and pager.
+ *  The episode section stays a clean opaque bar; only the chrome the user asked
+ *  to frost samples the live page. */
 final class ShowsDetailGlassLayout extends FrameLayout {
     static final int HEADER_HEIGHT_DP = 64;
     static final int EPISODE_BAR_HEIGHT_DP = 48;
+    static final int PAGER_SIDE_MARGIN_DP = 12;
+    static final int PAGER_BOTTOM_MARGIN_DP = 8;
+    static final int PAGER_RADIUS_DP = 28;
 
     private final ViewPageBackdrop pageBackdrop = new ViewPageBackdrop(this);
     private GlassHeaderView headerView;
@@ -60,9 +63,14 @@ final class ShowsDetailGlassLayout extends FrameLayout {
         pagerView = pager;
         this.episodeAnchor = episodeAnchor;
         this.list = list;
+
         header.setPageBackdrop(pageBackdrop);
-        episodes.setPageBackdrop(pageBackdrop);
+        // The product request was top + bottom glass. Keeping this section opaque
+        // prevents a third material layer from washing over episode artwork.
+        episodes.setGlassEnabled(false);
+        pager.setGlassCornerRadius(PAGER_RADIUS_DP);
         pager.setPageBackdrop(pageBackdrop);
+
         if (content instanceof ViewGroup) {
             ViewGroup group = (ViewGroup) content;
             group.setClipChildren(false);
@@ -89,11 +97,10 @@ final class ShowsDetailGlassLayout extends FrameLayout {
     }
 
     int underlayClipTop() {
-        if (headerView != null && headerView.getVisibility() == VISIBLE) return headerView.getTop();
         return contentView == null ? getPaddingTop() : contentView.getTop();
     }
 
-    /** The collapsing hero moves the episode anchor; keep that pane on the list. */
+    /** The collapsing hero moves the episode anchor; keep the opaque section bar with it. */
     void followEpisodeAnchor() {
         if (episodeView == null || !isLaidOut()) return;
         int target = clampedEpisodeTop(episodeView.getHeight());
@@ -117,10 +124,13 @@ final class ShowsDetailGlassLayout extends FrameLayout {
         int headerH = Math.min(innerH, BrowseUi.dp(getContext(), HEADER_HEIGHT_DP));
         int episodeH = Math.min(Math.max(0, innerH - headerH),
                 BrowseUi.dp(getContext(), EPISODE_BAR_HEIGHT_DP));
-        int contentH = Math.max(0, innerH - headerH);
+        int pagerSideMargin = BrowseUi.dp(getContext(), PAGER_SIDE_MARGIN_DP);
+        int pagerW = Math.max(0, innerW - (pagerSideMargin * 2));
+
+        // Content now genuinely runs behind the top glass instead of starting below it.
         if (contentView != null) contentView.measure(
                 View.MeasureSpec.makeMeasureSpec(innerW, View.MeasureSpec.EXACTLY),
-                View.MeasureSpec.makeMeasureSpec(contentH, View.MeasureSpec.EXACTLY));
+                View.MeasureSpec.makeMeasureSpec(innerH, View.MeasureSpec.EXACTLY));
         if (headerView != null) headerView.measure(
                 View.MeasureSpec.makeMeasureSpec(innerW, View.MeasureSpec.EXACTLY),
                 View.MeasureSpec.makeMeasureSpec(headerH, View.MeasureSpec.EXACTLY));
@@ -128,8 +138,8 @@ final class ShowsDetailGlassLayout extends FrameLayout {
                 View.MeasureSpec.makeMeasureSpec(innerW, View.MeasureSpec.EXACTLY),
                 View.MeasureSpec.makeMeasureSpec(episodeH, View.MeasureSpec.EXACTLY));
         if (pagerView != null) pagerView.measure(
-                View.MeasureSpec.makeMeasureSpec(innerW, View.MeasureSpec.EXACTLY),
-                View.MeasureSpec.makeMeasureSpec(contentH, View.MeasureSpec.AT_MOST));
+                View.MeasureSpec.makeMeasureSpec(pagerW, View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(Math.max(0, innerH - headerH), View.MeasureSpec.AT_MOST));
         setMeasuredDimension(width, height);
     }
 
@@ -139,11 +149,23 @@ final class ShowsDetailGlassLayout extends FrameLayout {
         int safeRight = right - left - getPaddingRight();
         int safeBottom = bottom - top - getPaddingBottom();
         int headerH = headerView == null ? 0 : headerView.getMeasuredHeight();
-        if (contentView != null) contentView.layout(safeLeft, safeTop + headerH, safeRight, safeBottom);
+
+        if (contentView != null) contentView.layout(safeLeft, safeTop, safeRight, safeBottom);
         if (headerView != null) headerView.layout(safeLeft, safeTop, safeRight, safeTop + headerH);
+
+        int pagerMargin = BrowseUi.dp(getContext(), PAGER_SIDE_MARGIN_DP);
+        int pagerBottomMargin = BrowseUi.dp(getContext(), PAGER_BOTTOM_MARGIN_DP);
         int pagerH = pagerView == null ? 0 : pagerView.getMeasuredHeight();
-        if (pagerH > safeBottom - (safeTop + headerH)) pagerH = Math.max(0, safeBottom - safeTop - headerH);
-        if (pagerView != null) pagerView.layout(safeLeft, safeBottom - pagerH, safeRight, safeBottom);
+        int pagerBottom = Math.max(safeTop + headerH, safeBottom - pagerBottomMargin);
+        if (pagerH > pagerBottom - (safeTop + headerH)) {
+            pagerH = Math.max(0, pagerBottom - safeTop - headerH);
+        }
+        if (pagerView != null) {
+            int pagerLeft = Math.min(safeRight, safeLeft + pagerMargin);
+            int pagerRight = Math.max(pagerLeft, safeRight - pagerMargin);
+            pagerView.layout(pagerLeft, pagerBottom - pagerH, pagerRight, pagerBottom);
+        }
+
         if (episodeView != null) {
             int episodeH = episodeView.getMeasuredHeight();
             int episodeTop = clampedEpisodeTop(episodeH);
@@ -178,7 +200,8 @@ final class ShowsDetailGlassLayout extends FrameLayout {
     private void syncListPadding() {
         if (list == null || episodeView == null || pagerView == null) return;
         int top = episodeView.getHeight();
-        int bottom = pagerView.getHeight();
+        int bottom = pagerView.getHeight()
+                + BrowseUi.dp(getContext(), PAGER_BOTTOM_MARGIN_DP * 2);
         if (list.getPaddingTop() == top && list.getPaddingBottom() == bottom
                 && list.getPaddingLeft() == 0 && list.getPaddingRight() == 0) {
             if (list.getClipToPadding()) list.setClipToPadding(false);
@@ -189,8 +212,8 @@ final class ShowsDetailGlassLayout extends FrameLayout {
     }
 
     @Override protected void dispatchDraw(Canvas canvas) {
-        boolean glassVisible = visible(headerView) || visible(episodeView) || visible(pagerView);
-        if (Build.VERSION.SDK_INT >= 29 && canvas.isHardwareAccelerated() && glassVisible
+        boolean chromeVisible = visible(headerView) || visible(episodeView) || visible(pagerView);
+        if (Build.VERSION.SDK_INT >= 29 && canvas.isHardwareAccelerated() && chromeVisible
                 && getWindowVisibility() == VISIBLE && getWidth() > 0 && getHeight() > 0) {
             if (pageDirty) {
                 pageDirty = false;
@@ -200,12 +223,12 @@ final class ShowsDetailGlassLayout extends FrameLayout {
                 });
             }
             if (pageBackdrop.drawPage(canvas)) {
-                drawGlass(canvas);
+                drawChrome(canvas);
                 return;
             }
         }
         drawUnderlay(canvas);
-        drawGlass(canvas);
+        drawChrome(canvas);
     }
 
     private void drawUnderlay(Canvas canvas) {
@@ -217,7 +240,7 @@ final class ShowsDetailGlassLayout extends FrameLayout {
         canvas.restoreToCount(checkpoint);
     }
 
-    private void drawGlass(Canvas canvas) {
+    private void drawChrome(Canvas canvas) {
         if (visible(episodeView)) drawChild(canvas, episodeView, getDrawingTime());
         if (visible(pagerView)) drawChild(canvas, pagerView, getDrawingTime());
         if (visible(headerView)) drawChild(canvas, headerView, getDrawingTime());
