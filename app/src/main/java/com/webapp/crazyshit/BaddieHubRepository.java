@@ -53,6 +53,10 @@ final class BaddieHubRepository {
     private static final long FAILURE_RETRY_MS = 60_000L;
     private static final int MAX_CATEGORY_DIRECTORY_PAGES = 4;
 
+    interface SearchListener {
+        void onResults(List<NativeContentItem> items);
+    }
+
     private static final SourceConfig.BaddieHub COMPILED_CONFIG =
             SourceConfig.defaultBaddieHub();
 
@@ -172,8 +176,7 @@ final class BaddieHubRepository {
     /**
      * WordPress search on the configured origin. There is no search route in schema 1, so the
      * query string stays compiled and every other value comes from the current BaddieHub config.
-     * Category-directory discovery is a no-video fallback instead of blocking every successful
-     * video search behind a second network request.
+     * Search can publish video results before the existing category page enrichment completes.
      */
     static String searchUrl(String baseUrl, String query) {
         String value = query == null ? "" : query.trim();
@@ -186,6 +189,11 @@ final class BaddieHubRepository {
     }
 
     List<NativeContentItem> search(Context context, String query) throws IOException {
+        return search(context, query, null);
+    }
+
+    List<NativeContentItem> search(Context context, String query, SearchListener listener)
+            throws IOException {
         SourceConfig.BaddieHub config = config(context);
         if (!enabled(config)) return new ArrayList<>();
         String value = query == null ? "" : query.trim();
@@ -203,6 +211,7 @@ final class BaddieHubRepository {
                 siteSearch = true;
                 addSearchItems(found, toShowsItems(parseListing(
                         document, config.cardLinksSelector, 40)));
+                publishSearch(listener, found);
             } catch (IOException error) {
                 failure = error;
             }
@@ -219,8 +228,9 @@ final class BaddieHubRepository {
                     addSearchItem(found, item);
                 }
             }
+            publishSearch(listener, found);
         }
-        if (found.isEmpty() && !Thread.currentThread().isInterrupted()) {
+        if (!Thread.currentThread().isInterrupted()) {
             try {
                 String categoriesUrl = routeUrl(config, config.categoriesFirstRoute, "", 1);
                 Document categories = fetch(context, categoriesUrl, config.baseUrl, config);
@@ -237,6 +247,14 @@ final class BaddieHubRepository {
         }
         if (found.isEmpty() && failure != null && !siteSearch) throw failure;
         return found;
+    }
+
+    private static void publishSearch(SearchListener listener, List<NativeContentItem> items) {
+        if (listener == null || items == null || items.isEmpty()) return;
+        try {
+            listener.onResults(new ArrayList<>(items));
+        } catch (RuntimeException ignored) {
+        }
     }
 
     private static void addSearchItems(List<NativeContentItem> found, List<NativeContentItem> items) {
