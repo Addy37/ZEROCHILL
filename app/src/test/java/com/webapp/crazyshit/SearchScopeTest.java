@@ -43,7 +43,8 @@ import static org.robolectric.Shadows.shadowOf;
         SearchScopeTest.QuietEfukt.class,
         SearchScopeTest.QuietKaotic.class,
         SearchScopeTest.QuietXMega.class,
-        SearchScopeTest.QuietBaddie.class
+        SearchScopeTest.QuietBaddie.class,
+        SearchScopeTest.QuietBunkr.class
 })
 public class SearchScopeTest {
     @Implements(value = CrazyShitRepository.class, isInAndroidSdk = false)
@@ -107,7 +108,31 @@ public class SearchScopeTest {
         }
     }
 
+    @Implements(value = BunkrRepository.class, isInAndroidSdk = false)
+    public static class QuietBunkr {
+        static final AtomicInteger calls = new AtomicInteger();
+        static volatile boolean fail;
+        static volatile CountDownLatch started = new CountDownLatch(1);
+        static volatile CountDownLatch release = new CountDownLatch(0);
+        @Implementation protected List<NativeContentItem> searchAlbums(Context context, String query, int page)
+                throws java.io.IOException {
+            calls.incrementAndGet(); started.countDown();
+            // Simulate an upstream socket that does not stop immediately on cancellation.
+            while (release.getCount() > 0) {
+                try { release.await(50, TimeUnit.MILLISECONDS); }
+                catch (InterruptedException ignored) { }
+            }
+            if (fail) throw new java.io.IOException("unavailable");
+            return Collections.singletonList(new NativeContentItem(NativeContentItem.KIND_SERIES,
+                    "Matching collection", "https://bunkr.cr/a/sample", "", "", "Bunkr", ""));
+        }
+    }
+
     @Before public void reset() {
+        QuietBunkr.calls.set(0);
+        QuietBunkr.fail = false;
+        QuietBunkr.started = new CountDownLatch(1);
+        QuietBunkr.release = new CountDownLatch(0);
         QuietCrazy.calls.set(0);
         QuietEfukt.calls.set(0);
         QuietKaotic.calls.set(0);
@@ -119,10 +144,11 @@ public class SearchScopeTest {
         QuietBaddie.lastQuery = "";
     }
 
-    @Test public void tabsAreExactlyTheFiveContentAreas() {
+    @Test public void tabsAreExactlyTheSixContentAreas() {
         SearchPanel panel = open();
         try {
             List<String> labels = labels(panel);
+            assertEquals(Arrays.asList("Shows", "OnlyFap", "Bunkr", "XMegaDrive", "BaddieHub", "Library"), labels);
             assertEquals(SearchPanel.SCOPE_LABELS, labels);
             assertFalse(labels.contains("All"));
             assertFalse(labels.contains("ShitTok"));
@@ -189,6 +215,50 @@ public class SearchScopeTest {
             assertTrue(recycler.getAdapter() instanceof OnlyFapCreatorSearchAdapter);
             assertEquals(SearchPanel.Scope.ONLYFAP, ReflectionHelpers.getField(panel, "scope"));
         } finally { close(panel); }
+    }
+
+    @Test public void bunkrAlbumSearchUsesNativeGalleryAndRetainsRecentQuery() throws Exception {
+        SearchPanel panel = open();
+        try {
+            chip(panel, "Bunkr").performClick();
+            panel.field().setText("sample");
+            ReflectionHelpers.callInstanceMethod(panel, "runSearch");
+            await(() -> QuietBunkr.calls.get() > 0);
+            await(() -> ((int) ReflectionHelpers.getField(panel, "pendingSources")) == 0);
+            assertEquals(SearchPanel.Scope.BUNKR_ALBUMS, ReflectionHelpers.getField(panel, "scope"));
+            assertEquals("sample", panel.field().getText().toString());
+            GlobalSearchAdapter adapter = ReflectionHelpers.getField(panel, "adapter");
+            assertTrue(boundText(panel, adapter).contains("Matching collection"));
+            List<NativeContentItem> results = ReflectionHelpers.getField(panel, "bunkrResults");
+            ReflectionHelpers.callInstanceMethod(panel, "openResult",
+                    ReflectionHelpers.ClassParameter.from(NativeContentItem.class, results.get(0)));
+            Activity host = ((Session) panel.view.getTag()).host.get();
+            Intent opened = shadowOf(host).getNextStartedActivity();
+            assertEquals(NativeFeedBrowserActivity.class.getName(), opened.getComponent().getClassName());
+            assertEquals("https://bunkr.cr/a/sample", opened.getStringExtra(NativeFeedBrowserActivity.EXTRA_BASE_URL));
+            assertEquals(0, QuietXMega.calls.get());
+            assertEquals(0, QuietCrazy.calls.get());
+        } finally { close(panel); }
+    }
+
+    @Test public void slowOrFailedBunkrCannotBlockOrOverwriteShows() throws Exception {
+        SearchPanel panel = open();
+        try {
+            QuietBunkr.release = new CountDownLatch(1);
+            QuietBunkr.fail = true;
+            chip(panel, "Bunkr").performClick();
+            panel.field().setText("sample");
+            ReflectionHelpers.callInstanceMethod(panel, "runSearch");
+            assertTrue(QuietBunkr.started.await(3, TimeUnit.SECONDS));
+            chip(panel, "Shows").performClick();
+            await(() -> QuietCrazy.calls.get() > 0 && QuietEfukt.calls.get() > 0 && QuietKaotic.calls.get() > 0);
+            await(() -> ((int) ReflectionHelpers.getField(panel, "pendingSources")) == 0);
+            QuietBunkr.release.countDown();
+            shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(100));
+            TextView state = ReflectionHelpers.getField(panel, "searchState");
+            assertEquals("Shows search complete", state.getText().toString());
+            assertEquals(SearchPanel.Scope.SHOWS, ReflectionHelpers.getField(panel, "scope"));
+        } finally { QuietBunkr.release.countDown(); close(panel); }
     }
 
     @Test public void librarySearchStaysLocalAndRecentQueriesUseTheSelectedScope() throws Exception {

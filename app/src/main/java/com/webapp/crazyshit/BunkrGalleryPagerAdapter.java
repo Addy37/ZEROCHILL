@@ -190,7 +190,13 @@ final class BunkrGalleryPagerAdapter
 
     String resolvedUrl(int position) {
         NativeContentItem item = itemAt(position);
-        return item == null ? "" : value(resolvedUrls.get(item.url));
+        if (item == null) return "";
+        String cached = value(resolvedUrls.get(item.url));
+        if (!BunkrRepository.usableCachedPlayable(item.url, cached, System.currentTimeMillis() / 1000L)) {
+            resolvedUrls.remove(item.url);
+            return "";
+        }
+        return cached;
     }
 
     /** Warm one full-screen image with the same Glide model and size used by the pager. */

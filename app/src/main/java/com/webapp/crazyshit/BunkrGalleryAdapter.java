@@ -328,58 +328,14 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
                         (fresh ? ", new from Updates" : "")
         );
 
-        if (item.imageUrl == null || item.imageUrl.isEmpty()) {
+        holder.bindGeneration++;
+        if (item.imageUrl == null || item.imageUrl.isEmpty()
+                || (BunkrRepository.isBunkrUrl(item.url) && !BunkrRepository.isUsableArtwork(item.imageUrl))) {
             Glide.with(holder.image).clear(holder.image);
             holder.image.setImageDrawable(new ColorDrawable(Color.rgb(20, 20, 23)));
+            repairArtwork(holder, item, item.imageUrl);
         } else {
-            RequestBuilder<Drawable> request = Glide.with(holder.image)
-                    .load(withHeaders(item.imageUrl, imageReferer(item)))
-                    .diskCacheStrategy(DiskCacheStrategy.ALL)
-                    .transition(ThumbnailFades.thumbnail())
-                    .placeholder(new ColorDrawable(Color.rgb(20, 20, 23)))
-                    .error(new ColorDrawable(Color.rgb(20, 20, 23)));
-            if (adaptiveAspectRatios) {
-                request = request
-                        .dontTransform()
-                        .override(384, 384)
-                        .listener(new RequestListener<Drawable>() {
-                            @Override
-                            public boolean onLoadFailed(
-                                    GlideException error,
-                                    Object model,
-                                    Target<Drawable> target,
-                                    boolean firstResource
-                            ) {
-                                return false;
-                            }
-
-                            @Override
-                            public boolean onResourceReady(
-                                    Drawable resource,
-                                    Object model,
-                                    Target<Drawable> target,
-                                    DataSource dataSource,
-                                    boolean firstResource
-                            ) {
-                                applyAspectRatio(holder, item, resource);
-                                return false;
-                            }
-                        });
-            } else {
-                request = request.centerCrop().override(360, 360);
-            }
-            if (isOnlyHavenImagePreview(item)) {
-                RequestBuilder<Drawable> fallback = Glide.with(holder.image)
-                        .load(withHeaders(item.url, imageReferer(item)))
-                        .diskCacheStrategy(DiskCacheStrategy.ALL)
-                        .dontAnimate()
-                        .transition(ThumbnailFades.thumbnail());
-                fallback = adaptiveAspectRatios
-                        ? fallback.dontTransform().override(384, 384)
-                        : fallback.centerCrop().override(360, 360);
-                request = request.error(fallback);
-            }
-            request.into(holder.image);
+            loadArtwork(holder, item, item.imageUrl, true);
         }
 
         holder.itemView.setOnClickListener(v -> {
@@ -393,6 +349,55 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
             listener.onLongPress(items.get(current), v);
             return true;
         });
+    }
+
+    private void loadArtwork(Holder holder, NativeContentItem item, String url, boolean repair) {
+        int binding = holder.bindGeneration;
+        RequestBuilder<Drawable> request = Glide.with(holder.image)
+                .load(withHeaders(url, imageReferer(item)))
+                .diskCacheStrategy(DiskCacheStrategy.ALL)
+                .transition(ThumbnailFades.thumbnail())
+                .placeholder(new ColorDrawable(Color.rgb(20, 20, 23)))
+                .error(new ColorDrawable(Color.rgb(20, 20, 23)))
+                .listener(new RequestListener<Drawable>() {
+                    @Override public boolean onLoadFailed(GlideException error, Object model,
+                            Target<Drawable> target, boolean firstResource) {
+                        // Glide forbids starting another request synchronously inside its listener.
+                        if (repair) holder.image.post(() -> {
+                            if (binding == holder.bindGeneration) repairArtwork(holder, item, url);
+                        });
+                        return false;
+                    }
+                    @Override public boolean onResourceReady(Drawable resource, Object model,
+                            Target<Drawable> target, DataSource dataSource, boolean firstResource) {
+                        if (adaptiveAspectRatios && binding == holder.bindGeneration)
+                            applyAspectRatio(holder, item, resource);
+                        return false;
+                    }
+                });
+        request = adaptiveAspectRatios ? request.dontTransform().override(384, 384)
+                : request.centerCrop().override(360, 360);
+        if (isOnlyHavenImagePreview(item)) {
+            RequestBuilder<Drawable> fallback = Glide.with(holder.image)
+                    .load(withHeaders(item.url, imageReferer(item)))
+                    .diskCacheStrategy(DiskCacheStrategy.ALL).dontAnimate()
+                    .transition(ThumbnailFades.thumbnail());
+            fallback = adaptiveAspectRatios ? fallback.dontTransform().override(384, 384)
+                    : fallback.centerCrop().override(360, 360);
+            request = request.error(fallback);
+        }
+        request.into(holder.image);
+    }
+
+    private void repairArtwork(Holder holder, NativeContentItem item, String rejected) {
+        if (!BunkrRepository.isBunkrUrl(item.url)) return;
+        int binding = holder.bindGeneration;
+        boolean accepted = BunkrArtworkResolver.request(context, item.url, rejected == null ? "" : rejected, image -> {
+            if (binding == holder.bindGeneration && !image.isEmpty()) loadArtwork(holder, item, image, false);
+        });
+        if (!accepted) holder.image.postDelayed(() -> {
+            if (binding == holder.bindGeneration) repairArtwork(holder, item, rejected);
+        }, 250L);
     }
 
     private void applyOverlayDensity(Holder holder) {
@@ -416,6 +421,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
 
     @Override
     public void onViewRecycled(@NonNull Holder holder) {
+        holder.bindGeneration++;
         GalleryMediaTransition.clearName(holder.image);
         Glide.with(holder.image).clear(holder.image);
         holder.morphPulse.animate().cancel();
@@ -440,6 +446,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         for (int i = start; i < end; i++) {
             NativeContentItem item = items.get(i);
             if (item.imageUrl == null || item.imageUrl.isEmpty()) continue;
+            if (BunkrRepository.isBunkrUrl(item.url) && !BunkrRepository.isUsableArtwork(item.imageUrl)) continue;
             String imageUrl = item.imageUrl.trim();
             if (imageUrl.isEmpty()) continue;
             String referer = imageReferer(item);
@@ -565,6 +572,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
     }
 
     static final class Holder extends RecyclerView.ViewHolder {
+        int bindGeneration;
         final AspectRatioFrameLayout tile;
         final ImageView image;
         final FrameLayout source;
