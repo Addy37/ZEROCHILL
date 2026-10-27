@@ -23,13 +23,20 @@ jobs:
                   body=r.read(1024*1024).decode('utf-8',errors='replace')
                   print('URL',r.url,'STATUS',r.status)
                   return body
-          body=fetch(address)
-          print('METADATA', '\n'.join(x for x in body.splitlines() if any(k in x for k in ['jsCDN','signUrl','og:image','poster=','script src','data-file-id','/a/','<video','<source'])))
-          for script in re.findall(r'<script[^>]*>(.*?)</script>',body,re.S):
-              if any(k in script for k in ['jsCDN','signUrl','fetch(','player']):
-                  print('SCRIPT',script[:18000])
-          for album in list(dict.fromkeys(re.findall(r'href=["\']([^"\']*/a/[^"\']+)',body)))[:1]:
-              album=urllib.parse.urljoin(address,album)
-              data=fetch(album)
-              print('ALBUM',data[:100000])
+          for page in [address, address.replace('bunkr.cr','bunkr.fi')]:
+              try:
+                  body=fetch(page)
+                  cdn=re.search(r'jsCDN\s*=\s*["\']([^"\']+)',body).group(1).replace('\\/','/')
+                  sign=re.search(r'signUrl\s*=\s*["\']([^"\']+)',body).group(1)
+                  path=urllib.parse.unquote(urllib.parse.urlsplit(cdn).path)
+                  data=json.loads(fetch(sign+'?path='+urllib.parse.quote(path,safe='')))
+                  print('SIGN_FIELDS',sorted(data.keys()))
+                  signed=cdn+'?'+urllib.parse.urlencode({'token':data['token'],'ex':data['ex']})
+                  for label,headers in [('native',{'Origin':urllib.parse.urlsplit(page).scheme+'://'+urllib.parse.urlsplit(page).netloc,'Referer':page}),('browser',{'Referer':page})]:
+                      req=urllib.request.Request(signed,headers={'User-Agent':config['userAgent'],'Range':'bytes=0-31',**headers})
+                      try:
+                          with urllib.request.urlopen(req,timeout=15) as r:
+                              print('STREAM',page,label,r.status,r.headers.get('Content-Type'),r.headers.get('Content-Range'),r.read(32).hex())
+                      except Exception as e: print('STREAM_ERROR',page,label,str(e))
+              except Exception as e: print('PAGE_ERROR',page,str(e))
           PY
