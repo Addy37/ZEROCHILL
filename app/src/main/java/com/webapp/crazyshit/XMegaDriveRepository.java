@@ -32,6 +32,10 @@ final class XMegaDriveRepository {
     private static final String LISTING = BASE + "videos/";
     private static final String CATEGORIES = BASE + "categories/";
 
+    interface SearchListener {
+        void onResults(List<NativeContentItem> items);
+    }
+
     /** Device Chrome UA with the embedded-WebView marker removed. Client hints are left alone. */
     static String browserIdentity(String webViewUserAgent) {
         if (webViewUserAgent == null) return "";
@@ -172,12 +176,16 @@ final class XMegaDriveRepository {
         return BASE + "search/" + slug + "/";
     }
 
-    /**
-     * One search page, plus the existing bounded category directory when the search page has no
-     * category matches. A failed search page falls back to one listing page. Nothing here runs
-     * unless Search has selected XMegaDrive and the query is non-empty.
-     */
     List<NativeContentItem> search(Context context, String query) throws IOException {
+        return search(context, query, null);
+    }
+
+    /**
+     * Search publishes the first usable video/category batch before optional category-directory
+     * enrichment, then returns the same complete result shape used before the performance pass.
+     */
+    List<NativeContentItem> search(Context context, String query, SearchListener listener)
+            throws IOException {
         String url = searchUrl(query);
         if (url.isEmpty()) return new ArrayList<>();
         if (Thread.currentThread().isInterrupted()) {
@@ -193,6 +201,7 @@ final class XMegaDriveRepository {
                 addSearchItem(found, video);
             }
             addMatchingCategories(categoriesOn(document), query, found);
+            publishSearch(listener, found);
         } catch (IOException error) {
             failure = error;
             if (Thread.currentThread().isInterrupted()) throw error;
@@ -205,6 +214,7 @@ final class XMegaDriveRepository {
                 for (NativeContentItem video : parseVideos(fetch(context, LISTING), MAX_CANDIDATES)) {
                     if (matchesQuery(video, query)) addSearchItem(found, video);
                 }
+                publishSearch(listener, found);
             } catch (IOException error) {
                 if (found.isEmpty()) throw failure == null ? error : failure;
             }
@@ -218,6 +228,14 @@ final class XMegaDriveRepository {
         }
         if (found.isEmpty() && failure != null && !siteSearch) throw failure;
         return found;
+    }
+
+    private static void publishSearch(SearchListener listener, List<NativeContentItem> items) {
+        if (listener == null || items == null || items.isEmpty()) return;
+        try {
+            listener.onResults(new ArrayList<>(items));
+        } catch (RuntimeException ignored) {
+        }
     }
 
     private static List<NativeContentItem> categoriesOn(Document document) {

@@ -83,8 +83,8 @@ public class SearchScopeTest {
         static volatile CountDownLatch started = new CountDownLatch(1);
         static volatile CountDownLatch release = new CountDownLatch(0);
         static volatile List<NativeContentItem> results = Collections.emptyList();
-        @Implementation
-        protected List<NativeContentItem> search(Context context, String query) {
+
+        private static List<NativeContentItem> run(XMegaDriveRepository.SearchListener listener) {
             calls.incrementAndGet();
             started.countDown();
             try { if (!release.await(3, TimeUnit.SECONDS)) return Collections.emptyList(); }
@@ -92,7 +92,23 @@ public class SearchScopeTest {
                 Thread.currentThread().interrupt();
                 return Collections.emptyList();
             }
-            return results;
+            List<NativeContentItem> next = results;
+            if (listener != null && next != null && !next.isEmpty()) listener.onResults(next);
+            return next;
+        }
+
+        @Implementation
+        protected List<NativeContentItem> search(Context context, String query) {
+            return run(null);
+        }
+
+        @Implementation
+        protected List<NativeContentItem> search(
+                Context context,
+                String query,
+                XMegaDriveRepository.SearchListener listener
+        ) {
+            return run(listener);
         }
     }
 
@@ -100,11 +116,30 @@ public class SearchScopeTest {
     public static class QuietBaddie {
         static final AtomicInteger calls = new AtomicInteger();
         static volatile String lastQuery = "";
-        @Implementation
-        protected List<NativeContentItem> search(Context context, String query) {
+
+        private static List<NativeContentItem> run(
+                String query,
+                BaddieHubRepository.SearchListener listener
+        ) {
             calls.incrementAndGet();
             lastQuery = query;
-            return Collections.emptyList();
+            List<NativeContentItem> next = Collections.emptyList();
+            if (listener != null && !next.isEmpty()) listener.onResults(next);
+            return next;
+        }
+
+        @Implementation
+        protected List<NativeContentItem> search(Context context, String query) {
+            return run(query, null);
+        }
+
+        @Implementation
+        protected List<NativeContentItem> search(
+                Context context,
+                String query,
+                BaddieHubRepository.SearchListener listener
+        ) {
+            return run(query, listener);
         }
     }
 
