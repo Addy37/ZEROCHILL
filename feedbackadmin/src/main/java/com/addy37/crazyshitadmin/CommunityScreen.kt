@@ -19,8 +19,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -100,8 +98,9 @@ import androidx.compose.ui.unit.sp
         item {
             Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement=Arrangement.spacedBy(8.dp)) {
                 filters.forEach { (value,label) ->
-                    FilterChip(selected=state.communityFilter==value, onClick={state.setCommunityFilter(value)},
-                        label={Text(label)}, leadingIcon={if(state.communityFilter==value) {{Icon(Icons.Outlined.Check,null,Modifier.size(16.dp))}} else null})
+                    val selected = state.communityFilter == value
+                    FilterChip(selected=selected, onClick={state.setCommunityFilter(value)}, label={Text(label)},
+                        leadingIcon=if(selected) {{Icon(Icons.Outlined.Check,null,Modifier.size(16.dp))}} else null)
                 }
             }
         }
@@ -141,8 +140,9 @@ import androidx.compose.ui.unit.sp
 }
 
 @Composable private fun SectionChip(label: String, value: String, state: ConsoleState, after: () -> Unit) {
-    FilterChip(selected=state.communitySection==value, onClick={state.navigateCommunitySection(value);after()},
-        label={Text(label)}, leadingIcon={if(state.communitySection==value) {{Icon(Icons.Outlined.Check,null,Modifier.size(16.dp))}} else null})
+    val selected = state.communitySection == value
+    FilterChip(selected=selected, onClick={state.navigateCommunitySection(value);after()}, label={Text(label)},
+        leadingIcon=if(selected) {{Icon(Icons.Outlined.Check,null,Modifier.size(16.dp))}} else null)
 }
 
 private fun searchLabel(section: String) = when(section) {
