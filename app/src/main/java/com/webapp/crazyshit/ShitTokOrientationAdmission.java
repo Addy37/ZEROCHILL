@@ -92,7 +92,6 @@ final class ShitTokOrientationAdmission {
             Entry known;
             synchronized (cache) { known = cache.get(item.url); }
             if (trustedHint(item)) {
-                // A current trusted landscape hint must override an earlier portrait cache entry.
                 CrazyShitRepository.StreamInfo reusable = known != null
                         && Float.compare(known.aspect, item.aspectRatioHint) == 0 ? known.stream : null;
                 Entry hint = new Entry(item.aspectRatioHint, reusable, 0L, "metadata");
@@ -102,7 +101,6 @@ final class ShitTokOrientationAdmission {
                     accept(item, hint, admitted, streams, onVerified);
                     continue;
                 }
-                // Trusted dimensions avoid the probe, but continuity still needs a playable URL.
                 known = hint;
             }
             if (known != null && (known.aspect > 0f || known.retryAt > clock.getAsLong())
@@ -154,7 +152,6 @@ final class ShitTokOrientationAdmission {
                     remaining.add(item);
                     continue;
                 }
-                // A failed item cannot prevent other sources from filling the feed.
                 aspect = 0f;
             }
             if (!(aspect > 0f) || !Float.isFinite(aspect)) aspect = 0f;
@@ -174,7 +171,6 @@ final class ShitTokOrientationAdmission {
         return new Result(admitted, streams, remaining, deferred);
     }
 
-    // Three metadata/URL lanes only. These workers never allocate an ExoPlayer or media buffer.
     private final java.util.concurrent.ThreadPoolExecutor inventoryIo =
             new java.util.concurrent.ThreadPoolExecutor(3, 3, 0L, java.util.concurrent.TimeUnit.MILLISECONDS,
                     new java.util.concurrent.ArrayBlockingQueue<>(3));
@@ -214,7 +210,7 @@ final class ShitTokOrientationAdmission {
                                 allowedWork, new Random(0), 1, true, null)), item);
                     } catch (java.util.concurrent.RejectedExecutionException busy) {
                         remaining.add(item);
-                        attempts = 24; // Old interrupted IO still owns the three slots. Retry in a later batch.
+                        attempts = 24;
                         break;
                     }
                 }
@@ -249,8 +245,6 @@ final class ShitTokOrientationAdmission {
     private static NativeContentItem nextCandidate(java.util.concurrent.BlockingQueue<NativeContentItem> candidates,
             java.util.Collection<NativeContentItem> active, boolean productionDone,
             List<NativeContentItem> remaining, int attempt) {
-        // Keep one of the three lanes available to a later, faster provider. Once production
-        // finishes there is nothing left to race, so a single provider may use all three.
         Map<String, Integer> counts = new java.util.HashMap<>();
         for (NativeContentItem item : active) counts.merge(ShitTokAspectPriority.sourceKey(item), 1, Integer::sum);
         synchronized (candidates) {
@@ -260,6 +254,7 @@ final class ShitTokOrientationAdmission {
             for (int i = 0; i < available; i++) {
                 NativeContentItem item = candidates.poll();
                 if (item == null) break;
+                ShitTokSmartRanker.register(item);
                 if (productionDone || counts.getOrDefault(ShitTokAspectPriority.sourceKey(item), 0) < 2) {
                     eligible.add(item);
                 } else {
@@ -269,9 +264,6 @@ final class ShitTokOrientationAdmission {
 
             NativeContentItem selected = null;
             if (!eligible.isEmpty()) {
-                // Every fourth admission deliberately follows the already-randomized queue rather
-                // than the score. Normal admissions prefer trusted no-probe dimensions, then the
-                // strongest popularity/local-skip score among candidates that are ready now.
                 if (attempt % 4 == 3) {
                     selected = eligible.remove(0);
                 } else {
@@ -320,7 +312,6 @@ final class ShitTokOrientationAdmission {
     private static boolean trustedHint(NativeContentItem item) {
         if (!(item.aspectRatioHint > 0f) || !Float.isFinite(item.aspectRatioHint)) return false;
         String source = ShitTokAspectPriority.sourceKey(item);
-        // Shit Show uses HTMLVideoElement.videoWidth/videoHeight, BaddieHub uses video metadata.
         return source.equals("shit-show") || source.equals("baddiehub");
     }
 
@@ -342,13 +333,11 @@ final class ShitTokOrientationAdmission {
         ArrayList<ArrayDeque<NativeContentItem>> queues = new ArrayList<>();
         for (ArrayList<NativeContentItem> group : groups.values()) {
             Collections.shuffle(group, rng);
-            // Stable sort keeps every trustworthy dimension hint ahead of network work.
             group.sort((a, b) -> Boolean.compare(trustedHint(b), trustedHint(a)));
             queues.add(new ArrayDeque<>(group));
         }
         Collections.shuffle(queues, rng);
         ArrayList<NativeContentItem> result = new ArrayList<>();
-        // Publish all trusted hints first, without making them wait on another source's resolver.
         boolean haveHints;
         do {
             haveHints = false;
