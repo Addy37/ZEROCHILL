@@ -79,6 +79,17 @@ public class BunkrMediaPreviewLifecycleTest {
         assertEquals(View.VISIBLE, holder.unavailable.getVisibility());
         adapter.onViewRecycled(holder);
     }
+    @Test public void retainedHiddenRecyclerDoesNotResolveOriginalMedia() {
+        BunkrGalleryAdapter adapter = adapter("https://bunkr.cr/f/offscreen");
+        androidx.recyclerview.widget.RecyclerView hidden = new androidx.recyclerview.widget.RecyclerView(
+                RuntimeEnvironment.getApplication());
+        hidden.setVisibility(View.GONE);
+        adapter.onAttachedToRecyclerView(hidden);
+        BunkrGalleryAdapter.Holder holder = holder(adapter);
+        adapter.onBindViewHolder(holder, 0); adapter.onViewAttachedToWindow(holder);
+        assertEquals(0, Metadata.calls); assertEquals(0, Preview.calls);
+        adapter.onDetachedFromRecyclerView(hidden);
+    }
     @Test public void otherSourcesDoNotStartBunkrFallback() {
         BunkrGalleryAdapter adapter = adapter("https://fapello.com/creator/123/");
         BunkrGalleryAdapter.Holder holder = holder(adapter);

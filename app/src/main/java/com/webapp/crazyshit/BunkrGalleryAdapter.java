@@ -3,6 +3,7 @@ package com.webapp.crazyshit;
 import android.content.Context;
 import android.graphics.Color;
 import android.graphics.Typeface;
+import android.graphics.Rect;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
@@ -57,6 +58,25 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
     private final Listener listener;
     private final boolean adaptiveAspectRatios;
     private int gridColumns = 2;
+    private RecyclerView previewViewport;
+    private final Rect previewBounds = new Rect();
+    private final android.view.ViewTreeObserver.OnPreDrawListener previewVisibility = () -> {
+        RecyclerView viewport = previewViewport;
+        if (viewport == null) return true;
+        for (int i = 0; i < viewport.getChildCount(); i++) {
+            RecyclerView.ViewHolder raw = viewport.getChildViewHolder(viewport.getChildAt(i));
+            if (!(raw instanceof Holder)) continue;
+            Holder holder = (Holder) raw;
+            if (!previewVisible(holder)) {
+                cancelPreview(holder);
+                holder.previewAttempted = false;
+            } else if (holder.boundItem != null) {
+                if (holder.wantsMediaPreview) requestMediaPreview(holder, holder.boundItem);
+                else if (holder.needsRepair) repairArtwork(holder, holder.boundItem, holder.boundItem.imageUrl);
+            }
+        }
+        return true;
+    };
     private final PreloadRequestTracker imagePreloads =
             new PreloadRequestTracker(320);
 
@@ -342,6 +362,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         cancelPreview(holder);
         holder.boundItem = item;
         holder.needsRepair = false;
+        holder.repairPending = false;
         holder.wantsMediaPreview = false;
         holder.previewAttempted = false;
         if (item.imageUrl == null || item.imageUrl.isEmpty()
@@ -409,27 +430,33 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
     private void repairArtwork(Holder holder, NativeContentItem item, String rejected) {
         if (!BunkrRepository.isBunkrUrl(item.url)) return;
         holder.needsRepair = true;
-        if (!holder.attached) return;
+        if (!previewVisible(holder) || holder.repairPending) return;
+        holder.repairPending = true;
         int binding = holder.bindGeneration;
         boolean accepted = BunkrArtworkResolver.request(context, item.url, rejected == null ? "" : rejected, image -> {
-            if (binding != holder.bindGeneration || !holder.attached) return;
+            if (binding != holder.bindGeneration) return;
+            holder.repairPending = false;
+            if (!previewVisible(holder)) return;
             holder.needsRepair = false;
             if (!image.isEmpty()) loadArtwork(holder, item, image, false);
             else requestMediaPreview(holder, item);
         });
-        if (!accepted) holder.image.postDelayed(() -> {
-            if (binding == holder.bindGeneration && holder.attached) repairArtwork(holder, item, rejected);
-        }, 250L);
+        if (!accepted) {
+            holder.repairPending = false;
+            holder.image.postDelayed(() -> {
+                if (binding == holder.bindGeneration && previewVisible(holder)) repairArtwork(holder, item, rejected);
+            }, 250L);
+        }
     }
 
     private void requestMediaPreview(Holder holder, NativeContentItem item) {
         if (!BunkrRepository.isBunkrUrl(item.url) || (!item.isImage() && !item.isVideo())) return;
         holder.wantsMediaPreview = true;
-        if (!holder.attached || holder.previewAttempted) return;
+        if (!previewVisible(holder) || holder.previewAttempted) return;
         holder.previewAttempted = true;
         int binding = holder.bindGeneration;
         holder.preview = BunkrMediaPreview.request(context, item, file -> {
-            if (binding != holder.bindGeneration || !holder.attached) return;
+            if (binding != holder.bindGeneration || !previewVisible(holder)) return;
             holder.preview = null;
             if (file == null) {
                 holder.unavailable.setVisibility(View.VISIBLE);
@@ -461,6 +488,29 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
     private void cancelPreview(Holder holder) {
         if (holder.preview != null) holder.preview.cancel();
         holder.preview = null;
+    }
+
+    private boolean previewVisible(Holder holder) {
+        if (!holder.attached) return false;
+        // Retained All/Pictures/Videos pages may be attached beyond the pager's clipped viewport.
+        return previewViewport == null || (holder.itemView.isShown()
+                && holder.itemView.getGlobalVisibleRect(previewBounds));
+    }
+
+    @Override public void onAttachedToRecyclerView(@NonNull RecyclerView recycler) {
+        super.onAttachedToRecyclerView(recycler);
+        previewViewport = recycler;
+        recycler.getViewTreeObserver().addOnPreDrawListener(previewVisibility);
+    }
+
+    @Override public void onDetachedFromRecyclerView(@NonNull RecyclerView recycler) {
+        recycler.getViewTreeObserver().removeOnPreDrawListener(previewVisibility);
+        for (int i = 0; i < recycler.getChildCount(); i++) {
+            RecyclerView.ViewHolder raw = recycler.getChildViewHolder(recycler.getChildAt(i));
+            if (raw instanceof Holder) cancelPreview((Holder) raw);
+        }
+        previewViewport = null;
+        super.onDetachedFromRecyclerView(recycler);
     }
 
     @Override public void onViewAttachedToWindow(@NonNull Holder holder) {
@@ -664,7 +714,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
 
     static final class Holder extends RecyclerView.ViewHolder {
         int bindGeneration;
-        boolean attached, needsRepair, wantsMediaPreview, previewAttempted;
+        boolean attached, needsRepair, repairPending, wantsMediaPreview, previewAttempted;
         NativeContentItem boundItem;
         BunkrMediaPreview.Task preview;
         final AspectRatioFrameLayout tile;

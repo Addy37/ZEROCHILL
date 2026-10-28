@@ -11,7 +11,8 @@ behavior. Playback models and resolved playback caches remain unchanged.
   second, then try zero only if extraction returns no frame. This creates no player.
 - Android 8.0 uses frame extraction followed by scaling; Android 8.1+ uses scaled
   extraction directly. Minimum SDK stays 26.
-- One global worker and at most 24 queued jobs. Detached/recycled tiles cancel
+- One global worker and at most 24 queued jobs. Retained filter pages outside
+  the clipped viewport do not start preview work. Detached/recycled or offscreen tiles cancel
   queued and running preview tasks, and stale results cannot replace new bindings.
 - Video reads use 256 KiB HTTP ranges, a four-block memory cache, an 8 MiB transfer
   budget and at most 48 range requests. Large responses that ignore ranges fail
