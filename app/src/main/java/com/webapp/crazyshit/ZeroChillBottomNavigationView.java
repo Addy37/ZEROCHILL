@@ -3,6 +3,7 @@ package com.webapp.crazyshit;
 import android.animation.ValueAnimator;
 import android.content.Context;
 import android.graphics.RectF;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowInsets;
@@ -52,6 +53,17 @@ final class ZeroChillBottomNavigationView extends BottomNavigationView {
         setElevation(0f);
         setPadding(0, 0, 0, 0);
         super.onMeasure(width, height);
+    }
+
+    @Override public boolean dispatchTouchEvent(MotionEvent event) {
+        // Focus Mode hides the navigation shell with alpha so its layout footprint stays
+        // stable. A fully transparent bar must also be touch-dead or its Compose buttons
+        // can still navigate underneath the fullscreen feed.
+        if (getAlpha() <= 0.01f) {
+            if (dragging) endSquareDrag(true);
+            return true;
+        }
+        return super.dispatchTouchEvent(event);
     }
 
     @Override public WindowInsets dispatchApplyWindowInsets(WindowInsets insets) {
