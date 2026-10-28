@@ -78,8 +78,9 @@ class ConsoleFlowTest {
         ui.waitUntil(10_000) {state.communityActivity.isNotEmpty()}
         ui.onNode(hasScrollToIndexAction()).performScrollToNode(hasText("Fixture User commented"))
         ui.onNodeWithText("Fixture User commented").assertExists();screenshot("03c-community-social")
-        ui.onNode(hasScrollToIndexAction()).performScrollToNode(hasText("Reports"))
-        ui.onNodeWithText("Reports").performClick()
+        val reportsSection = hasText("Reports") and hasClickAction()
+        ui.onNode(hasScrollToIndexAction()).performScrollToNode(reportsSection)
+        ui.onNode(reportsSection).performClick()
         ui.waitUntil(10_000) {state.communityReports.isNotEmpty()}
         ui.onNode(hasScrollToIndexAction()).performScrollToNode(hasText("reported",substring=true))
         ui.onNodeWithText("reported",substring=true).assertExists();screenshot("03d-community-reports")
