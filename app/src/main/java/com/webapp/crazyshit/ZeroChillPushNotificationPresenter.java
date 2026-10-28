@@ -7,21 +7,35 @@ import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.os.Build;
 
 import androidx.core.app.NotificationCompat;
 import androidx.core.app.NotificationManagerCompat;
+import androidx.core.app.Person;
 import androidx.core.content.ContextCompat;
 
+import org.json.JSONArray;
+import org.json.JSONObject;
+
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import java.util.UUID;
 
 /** Builds privacy-preserving Android notifications for server-delivered ZEROCHILL events. */
 final class ZeroChillPushNotificationPresenter {
     static final String CHANNEL_MESSAGES = "messages_v1";
     static final String CHANNEL_SOCIAL = "social_v1";
+    static final String PREF_MESSAGE_PREVIEWS = "message_notification_previews_enabled";
+    static final String PREF_GROUP_MESSAGES = "message_notification_grouping_enabled";
+
+    private static final String APP_PREFS = "app_prefs";
     private static final String GROUP_MESSAGES = "zerochill_direct_messages";
     private static final String GROUP_SOCIAL = "zerochill_social";
+    private static final int MAX_PREVIEW_MESSAGES = 6;
 
     private ZeroChillPushNotificationPresenter() { }
 
@@ -43,7 +57,28 @@ final class ZeroChillPushNotificationPresenter {
 
         createMessagesChannel(app);
         String name = cleanSenderName(senderName);
-        PendingIntent open = messagePendingIntent(app, senderId, messageId);
+        SharedPreferences prefs = app.getSharedPreferences(APP_PREFS, Context.MODE_PRIVATE);
+        boolean showPreviews = prefs.getBoolean(PREF_MESSAGE_PREVIEWS, false);
+        boolean groupMessages = prefs.getBoolean(PREF_GROUP_MESSAGES, true);
+
+        List<PreviewMessage> previews = Collections.emptyList();
+        if (showPreviews) {
+            previews = unreadPreviews(app, senderId, messageId, groupMessages);
+        }
+        postDirectMessage(app, messageId, senderId, name, previews, showPreviews, groupMessages);
+    }
+
+    private static void postDirectMessage(
+            Context app,
+            String messageId,
+            String senderId,
+            String senderName,
+            List<PreviewMessage> previews,
+            boolean showPreviews,
+            boolean groupMessages
+    ) {
+        int id = groupMessages ? conversationNotificationId(senderId) : notificationId(messageId);
+        PendingIntent open = messagePendingIntent(app, senderId, id);
 
         Notification publicVersion = new NotificationCompat.Builder(app, CHANNEL_MESSAGES)
                 .setSmallIcon(R.drawable.ic_notification_crazyshit)
@@ -53,12 +88,10 @@ final class ZeroChillPushNotificationPresenter {
                 .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
                 .build();
 
-        Notification notification = new NotificationCompat.Builder(app, CHANNEL_MESSAGES)
+        NotificationCompat.Builder builder = new NotificationCompat.Builder(app, CHANNEL_MESSAGES)
                 .setSmallIcon(R.drawable.ic_notification_crazyshit)
                 .setColor(UiPalette.PRIMARY)
-                .setContentTitle(name)
-                .setContentText("Sent you a message")
-                .setStyle(new NotificationCompat.BigTextStyle().bigText(name + " sent you a message."))
+                .setContentTitle(senderName)
                 .setContentIntent(open)
                 .setAutoCancel(true)
                 .setCategory(NotificationCompat.CATEGORY_MESSAGE)
@@ -66,12 +99,29 @@ final class ZeroChillPushNotificationPresenter {
                 .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
                 .setPublicVersion(publicVersion)
                 .setGroup(GROUP_MESSAGES)
-                .setOnlyAlertOnce(true)
                 .setShowWhen(true)
-                .setWhen(System.currentTimeMillis())
-                .build();
+                .setWhen(System.currentTimeMillis());
 
-        NotificationManagerCompat.from(app).notify(notificationId(messageId), notification);
+        if (showPreviews && previews != null && !previews.isEmpty()) {
+            Person you = new Person.Builder().setName("You").build();
+            Person sender = new Person.Builder().setName(senderName).build();
+            NotificationCompat.MessagingStyle style = new NotificationCompat.MessagingStyle(you)
+                    .setGroupConversation(false);
+            for (PreviewMessage preview : previews) {
+                style.addMessage(preview.body, preview.timestamp, sender);
+            }
+            PreviewMessage latest = previews.get(previews.size() - 1);
+            builder.setContentText(latest.body)
+                    .setStyle(style)
+                    .setNumber(previews.size());
+        } else {
+            builder.setContentText("Sent you a message")
+                    .setStyle(new NotificationCompat.BigTextStyle().bigText(
+                            senderName + " sent you a message."
+                    ));
+        }
+
+        NotificationManagerCompat.from(app).notify(id, builder.build());
     }
 
     static void showSocialActivity(
@@ -138,6 +188,10 @@ final class ZeroChillPushNotificationPresenter {
         return 12_000 + Math.abs((messageId == null ? "" : messageId).hashCode() % 20_000);
     }
 
+    static int conversationNotificationId(String senderId) {
+        return 52_000 + Math.abs((senderId == null ? "" : senderId).hashCode() % 20_000);
+    }
+
     static int socialNotificationId(String eventId) {
         return 32_000 + Math.abs((eventId == null ? "" : eventId).hashCode() % 20_000);
     }
@@ -149,10 +203,66 @@ final class ZeroChillPushNotificationPresenter {
         return clean.isEmpty() ? "Someone on ZEROCHILL" : clean;
     }
 
-    private static PendingIntent messagePendingIntent(Context context, String senderId, String messageId) {
+    static String cleanMessagePreview(String value) {
+        String clean = value == null ? "" : value.replaceAll("[\\p{Cntrl}&&[^\\n\\t]]", "")
+                .replaceAll("[\\n\\r\\t]+", " ")
+                .replaceAll("\\s+", " ").trim();
+        if (clean.length() > 500) clean = clean.substring(0, 500).trim() + "…";
+        return clean;
+    }
+
+    private static List<PreviewMessage> unreadPreviews(
+            Context context,
+            String senderId,
+            String messageId,
+            boolean grouped
+    ) {
+        String account = ZeroChillSessionStore.currentUserId(context);
+        if (!isUuid(account)) return Collections.emptyList();
+        try {
+            String raw = ZeroChillAccountRepository.restBlocking(
+                    context,
+                    account,
+                    "GET",
+                    "/rest/v1/rpc/visible_zerochill_direct_messages"
+                            + "?select=id,body,created_at"
+                            + "&sender_id=eq." + senderId
+                            + "&recipient_id=eq." + account
+                            + "&read_at=is.null"
+                            + "&order=created_at.desc"
+                            + "&limit=" + MAX_PREVIEW_MESSAGES,
+                    null
+            );
+            JSONArray rows = new JSONArray(raw);
+            ArrayList<PreviewMessage> result = new ArrayList<>();
+            for (int i = 0; i < rows.length(); i++) {
+                JSONObject row = rows.optJSONObject(i);
+                if (row == null) continue;
+                String id = clean(row.optString("id"));
+                String body = cleanMessagePreview(row.optString("body"));
+                if (body.isEmpty()) continue;
+                if (!grouped && !messageId.equalsIgnoreCase(id)) continue;
+                result.add(new PreviewMessage(id, body, timestamp(row.optString("created_at"))));
+            }
+            Collections.reverse(result);
+            return result;
+        } catch (Exception ignored) {
+            return Collections.emptyList();
+        }
+    }
+
+    private static long timestamp(String value) {
+        try {
+            return Instant.parse(clean(value)).toEpochMilli();
+        } catch (Exception ignored) {
+            return System.currentTimeMillis();
+        }
+    }
+
+    private static PendingIntent messagePendingIntent(Context context, String senderId, int requestCode) {
         return PendingIntent.getActivity(
                 context,
-                notificationId(messageId),
+                requestCode,
                 messageIntent(context, senderId),
                 PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
         );
@@ -223,5 +333,17 @@ final class ZeroChillPushNotificationPresenter {
 
     private static String clean(String value) {
         return value == null ? "" : value.trim();
+    }
+
+    private static final class PreviewMessage {
+        final String id;
+        final String body;
+        final long timestamp;
+
+        PreviewMessage(String id, String body, long timestamp) {
+            this.id = id;
+            this.body = body;
+            this.timestamp = timestamp;
+        }
     }
 }
