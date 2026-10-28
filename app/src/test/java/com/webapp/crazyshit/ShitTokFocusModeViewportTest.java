@@ -135,10 +135,11 @@ public class ShitTokFocusModeViewportTest {
             int minTouch = Math.round(48f * root.getResources().getDisplayMetrics().density);
             assertTrue(pillParams.height >= minTouch);
             assertTrue(pillParams.width >= minTouch * 2);
-            assertTrue(focusPlay.getMinimumWidth() >= minTouch);
-            assertTrue(focusPlay.getMinimumHeight() >= minTouch);
-            assertTrue(focusSpeed.getMinimumWidth() >= minTouch);
-            assertTrue(focusSpeed.getMinimumHeight() >= minTouch);
+            // TextView setMinWidth/setMinHeight use different properties from View minimums.
+            assertTrue(focusPlay.getMinWidth() >= minTouch);
+            assertTrue(focusPlay.getMinHeight() >= minTouch);
+            assertTrue(focusSpeed.getMinWidth() >= minTouch);
+            assertTrue(focusSpeed.getMinHeight() >= minTouch);
         }
     }
 }

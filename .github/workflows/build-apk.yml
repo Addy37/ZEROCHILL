@@ -217,6 +217,16 @@ jobs:
           gradle-version: '8.11.1'
           cache-provider: basic
 
+      - name: Run Smart ShitTok ranking and Focus Mode regressions first
+        if: github.head_ref == 'feature/shittok-smart-ranking-v1' || github.ref_name == 'feature/shittok-smart-ranking-v1'
+        run: >-
+          gradle --no-daemon :app:testDebugUnitTest
+          --tests 'com.webapp.crazyshit.ShitTokAspectPriorityTest'
+          --tests 'com.webapp.crazyshit.ShitTokInventoryAdmissionTest'
+          --tests 'com.webapp.crazyshit.ShitTokSeenStoreTest'
+          --tests 'com.webapp.crazyshit.ShitTokFocusModeViewportTest'
+          --tests 'com.webapp.crazyshit.ShitTokDynamicPinchTest'
+
       - name: Run missing-artwork preview regressions first
         if: github.head_ref == 'feature/bunkr-generated-previews' || github.ref_name == 'integration/bunkr-previews-focus-approved'
         run: >-
