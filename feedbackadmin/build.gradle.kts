@@ -15,12 +15,17 @@ android {
         minSdk = 26
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         targetSdk = 34
-        versionCode = 12
-        versionName = "2.1.0"
+        versionCode = 13
+        versionName = "2.2.0"
         buildConfigField(
             "String",
             "ADMIN_FEEDBACK_ENDPOINT",
             "\"${System.getenv("ADMIN_FEEDBACK_ENDPOINT") ?: "https://fketutffusxgjxjlckci.supabase.co/functions/v1/feedback-admin"}\""
+        )
+        buildConfigField(
+            "String",
+            "ADMIN_DM_ENDPOINT",
+            "\"${System.getenv("ADMIN_DM_ENDPOINT") ?: "https://fketutffusxgjxjlckci.supabase.co/functions/v1/dm-moderation"}\""
         )
         buildConfigField(
             "String",
