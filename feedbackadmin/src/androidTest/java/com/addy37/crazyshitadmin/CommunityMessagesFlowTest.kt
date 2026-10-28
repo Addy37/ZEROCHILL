@@ -1,10 +1,8 @@
 package com.addy37.crazyshitadmin
 
 import android.app.Application
-import androidx.compose.ui.test.assertExists
+import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
-import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.performClick
 import androidx.lifecycle.SavedStateHandle
 import androidx.test.core.app.ApplicationProvider
 import org.json.JSONObject
@@ -70,7 +68,7 @@ private class MessageFixtureGateway : AdminGateway {
             "read_at":null,
             "report_count":1,
             "report_reasons":["spam"]
-        }"""))
+        }""")))
     }
 
     override fun list(token: String): List<AdminRepository.Item> = error("unused")
