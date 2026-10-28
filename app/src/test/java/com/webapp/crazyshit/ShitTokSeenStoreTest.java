@@ -75,7 +75,7 @@ public class ShitTokSeenStoreTest {
         assertFalse(store.liked("https://kaotic.com/video/other", null));
     }
 
-    @Test public void fastSkipDemotesMatchingCreatorWithoutRemovingDiversity() {
+    @Test public void fastSkipDemotesMatchingCreatorMoreThanItsSourcePeer() {
         Application app = RuntimeEnvironment.getApplication();
         ShitTokSmartRanker.resetForTest(app);
         ShitTokCommunityPopularity.setScoresForTest(Collections.emptyMap());
@@ -87,8 +87,11 @@ public class ShitTokSeenStoreTest {
         ShitTokSmartRanker.onViewedAt(skipped.url, 1_000L, 100_000L);
         ShitTokSmartRanker.onViewedAt(neutral.url, 2_100L, 101_100L);
 
-        assertTrue(ShitTokSmartRanker.penalty(skipped) > 0.5f);
-        assertEquals(0f, ShitTokSmartRanker.penalty(neutral), 0.001f);
+        float skippedPenalty = ShitTokSmartRanker.penalty(skipped);
+        float sourceOnlyPenalty = ShitTokSmartRanker.penalty(neutral);
+        assertTrue(skippedPenalty > 0.5f);
+        assertTrue(sourceOnlyPenalty > 0f);
+        assertTrue(skippedPenalty > sourceOnlyPenalty);
         List<NativeContentItem> ordered = new ShitTokAspectPriority().order(
                 Arrays.asList(skipped, neutral), new Random(7L));
         assertEquals(neutral.url, ordered.get(0).url);
