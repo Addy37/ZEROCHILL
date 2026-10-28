@@ -16,6 +16,12 @@ import androidx.core.app.NotificationCompat;
 import androidx.core.app.NotificationManagerCompat;
 import androidx.core.app.Person;
 import androidx.core.content.ContextCompat;
+import androidx.work.Constraints;
+import androidx.work.Data;
+import androidx.work.ExistingWorkPolicy;
+import androidx.work.NetworkType;
+import androidx.work.OneTimeWorkRequest;
+import androidx.work.WorkManager;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -75,11 +81,47 @@ final class ZeroChillPushNotificationPresenter {
         boolean showPreviews = prefs.getBoolean(PREF_MESSAGE_PREVIEWS, false);
         boolean groupMessages = prefs.getBoolean(PREF_GROUP_MESSAGES, true);
 
-        List<PreviewMessage> previews = Collections.emptyList();
-        if (showPreviews) {
-            previews = unreadPreviews(app, senderId, messageId, groupMessages);
-        }
-        postDirectMessage(app, messageId, senderId, name, previews, showPreviews, groupMessages);
+        // Alert immediately with the existing private notification. Preview text is fetched
+        // off the FCM callback so a slow network cannot hold the push service open.
+        postDirectMessage(
+                app,
+                messageId,
+                senderId,
+                name,
+                Collections.emptyList(),
+                false,
+                groupMessages,
+                false
+        );
+        if (showPreviews) enqueuePreviewUpgrade(app, messageId, senderId, name, groupMessages);
+    }
+
+    static void upgradeDirectMessagePreview(
+            Context context,
+            String messageId,
+            String senderId,
+            String senderName
+    ) {
+        Context app = context.getApplicationContext();
+        if (!isUuid(messageId) || !isUuid(senderId) || !canPost(app)) return;
+        if (!ZeroChillAccountRepository.hasStoredSession(app)) return;
+
+        SharedPreferences prefs = app.getSharedPreferences(APP_PREFS, Context.MODE_PRIVATE);
+        if (!prefs.getBoolean(PREF_MESSAGE_PREVIEWS, false)) return;
+        boolean groupMessages = prefs.getBoolean(PREF_GROUP_MESSAGES, true);
+        List<PreviewMessage> previews = unreadPreviews(app, senderId, messageId, groupMessages);
+        if (previews.isEmpty()) return;
+
+        postDirectMessage(
+                app,
+                messageId,
+                senderId,
+                cleanSenderName(senderName),
+                previews,
+                true,
+                groupMessages,
+                true
+        );
     }
 
     static void clearMessageNotifications(Context context) {
@@ -94,6 +136,33 @@ final class ZeroChillPushNotificationPresenter {
         }
     }
 
+    private static void enqueuePreviewUpgrade(
+            Context context,
+            String messageId,
+            String senderId,
+            String senderName,
+            boolean grouped
+    ) {
+        Data input = new Data.Builder()
+                .putString(DirectMessagePreviewWorker.INPUT_MESSAGE_ID, messageId)
+                .putString(DirectMessagePreviewWorker.INPUT_SENDER_ID, senderId)
+                .putString(DirectMessagePreviewWorker.INPUT_SENDER_NAME, senderName)
+                .build();
+        Constraints constraints = new Constraints.Builder()
+                .setRequiredNetworkType(NetworkType.CONNECTED)
+                .build();
+        OneTimeWorkRequest request = new OneTimeWorkRequest.Builder(DirectMessagePreviewWorker.class)
+                .setInputData(input)
+                .setConstraints(constraints)
+                .build();
+        String key = grouped ? senderId : messageId;
+        WorkManager.getInstance(context).enqueueUniqueWork(
+                "zerochill-dm-preview-" + key,
+                ExistingWorkPolicy.REPLACE,
+                request
+        );
+    }
+
     private static void postDirectMessage(
             Context app,
             String messageId,
@@ -101,7 +170,8 @@ final class ZeroChillPushNotificationPresenter {
             String senderName,
             List<PreviewMessage> previews,
             boolean showPreviews,
-            boolean groupMessages
+            boolean groupMessages,
+            boolean silentUpdate
     ) {
         int id = groupMessages ? conversationNotificationId(senderId) : notificationId(messageId);
         PendingIntent open = messagePendingIntent(app, senderId, id);
@@ -125,7 +195,8 @@ final class ZeroChillPushNotificationPresenter {
                 .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
                 .setPublicVersion(publicVersion)
                 .setShowWhen(true)
-                .setWhen(System.currentTimeMillis());
+                .setWhen(System.currentTimeMillis())
+                .setOnlyAlertOnce(silentUpdate);
         if (groupMessages) builder.setGroup(GROUP_MESSAGES);
 
         if (showPreviews && previews != null && !previews.isEmpty()) {
