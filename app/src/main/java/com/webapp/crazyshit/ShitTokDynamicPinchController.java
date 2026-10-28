@@ -44,9 +44,9 @@ final class ShitTokDynamicPinchController {
     // TikTok reference: full-width media above a compact black control zone.
     private static final int FOCUS_CHROME_HEIGHT_DP = 82;
     private static final int FOCUS_EDGE_DP = 8;
-    private static final int FOCUS_BUTTON_DP = 34;
-    private static final int FOCUS_PILL_WIDTH_DP = 84;
-    private static final int FOCUS_PILL_HEIGHT_DP = 34;
+    private static final int FOCUS_BUTTON_DP = 38;
+    private static final int FOCUS_PILL_WIDTH_DP = 94;
+    private static final int FOCUS_PILL_HEIGHT_DP = 38;
 
     interface Listener { void onPinchChanged(boolean active); }
 
@@ -166,10 +166,10 @@ final class ShitTokDynamicPinchController {
 
             if (focusMode) {
                 if (touchesFocusChrome(event)) return false;
-                // One finger belongs to ViewPager2 in Focus Mode. If a second finger
-                // arrives, the controller takes ownership and converts it into pinch.
+                // Focus Mode owns media taps so the normal hold-for-2x detector never
+                // starts. ViewPager2 can still intercept a vertical move for paging.
                 focusMediaDown = true;
-                return false;
+                return true;
             }
             return false;
         }
@@ -185,10 +185,8 @@ final class ShitTokDynamicPinchController {
             }
             if (focusMode && focusMediaDown) {
                 focusMediaDown = false;
-                // Consume an un-intercepted tap so normal feed click chrome does not
-                // flash underneath Focus Mode. Vertical paging has already intercepted
-                // its own move/up sequence before this point.
-                return action != MotionEvent.ACTION_CANCEL;
+                if (action == MotionEvent.ACTION_UP) toggleFocusPlayback();
+                return true;
             }
             return swallowRemainder;
         }
@@ -230,6 +228,7 @@ final class ShitTokDynamicPinchController {
             media.setScaleX(displayedScale);
             media.setScaleY(displayedScale);
         }
+        if (focusMode && focusMediaDown && !active) return true;
         return ownsTouchSequence();
     }
 
@@ -746,7 +745,7 @@ final class ShitTokDynamicPinchController {
         );
         focusChrome.addView(focusSeek, seekParams);
 
-        TextView close = focusButton("×", "Exit focus mode", 20f);
+        TextView close = focusButton("×", "Exit focus mode", 22f);
         close.setBackground(roundRect(Color.rgb(35, 35, 38), FOCUS_BUTTON_DP / 2f));
         FrameLayout.LayoutParams closeParams = new FrameLayout.LayoutParams(
                 dp(FOCUS_BUTTON_DP),
@@ -781,24 +780,20 @@ final class ShitTokDynamicPinchController {
         );
         focusChrome.addView(pill, pillParams);
 
-        focusPlay = focusButton("❚❚", "Pause video", 15f);
-        focusSpeed = focusButton("1×", "Playback speed 1x", 14f);
+        focusPlay = focusButton("❚❚", "Pause video", 16f);
+        focusSpeed = focusButton("1×", "Playback speed 1x", 15f);
         View divider = new View(context);
         divider.setBackgroundColor(Color.argb(70, 255, 255, 255));
 
         pill.addView(focusPlay, new LinearLayout.LayoutParams(0, -1, 1f));
         LinearLayout.LayoutParams dividerParams =
-                new LinearLayout.LayoutParams(dp(1), dp(16));
+                new LinearLayout.LayoutParams(dp(1), dp(18));
         pill.addView(divider, dividerParams);
         pill.addView(focusSpeed, new LinearLayout.LayoutParams(0, -1, 1f));
 
         close.setOnClickListener(v -> exitFocusModeAnimated());
         focusPlay.setOnClickListener(v -> {
-            Player player = player();
-            if (player == null) return;
-            if (player.isPlaying()) player.pause();
-            else player.play();
-            updateFocusControls();
+            toggleFocusPlayback();
         });
         focusSpeed.setOnClickListener(v -> {
             Player player = player();
@@ -885,6 +880,14 @@ final class ShitTokDynamicPinchController {
         focusChrome.setVisibility(View.GONE);
         root.removeCallbacks(focusProgressTick);
         focusProgressDragging = false;
+    }
+
+    private void toggleFocusPlayback() {
+        Player player = player();
+        if (player == null) return;
+        if (player.isPlaying()) player.pause();
+        else player.play();
+        updateFocusControls();
     }
 
     private void updateFocusControls() {
