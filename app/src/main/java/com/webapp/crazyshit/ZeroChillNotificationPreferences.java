@@ -84,6 +84,8 @@ final class ZeroChillNotificationPreferences {
         if (!account.equals(ZeroChillSessionStore.currentUserId(context)))
             throw new IllegalStateException("Account changed. Reopen this screen.");
         context.getSharedPreferences(PREFS, 0).edit().putString(account, value.json().toString()).apply();
+        if (!value.directMessages) ZeroChillPushNotificationPresenter.clearMessageNotifications(context);
+        if (!value.creatorUpdates) CreatorSystemNotificationPresenter.clear(context);
     }
     static void clearAccount(Context context, String account) {
         context.getApplicationContext().getSharedPreferences(PREFS, 0).edit().remove(account).apply();
