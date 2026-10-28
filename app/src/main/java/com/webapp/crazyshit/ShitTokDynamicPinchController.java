@@ -4,6 +4,8 @@ import android.content.Context;
 import android.content.res.ColorStateList;
 import android.graphics.Color;
 import android.graphics.Rect;
+import android.graphics.drawable.ColorDrawable;
+import android.graphics.drawable.GradientDrawable;
 import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
@@ -23,17 +25,25 @@ import java.util.function.BooleanSupplier;
 
 /**
  * Touch-sequence-local ShitTok transform with an optional persistent focus mode.
- * Never recreates the player, changes its surface, or changes layout size.
+ * Never recreates the player or changes its playback surface.
  */
 final class ShitTokDynamicPinchController {
     static final float MIN_SCALE = 0.45f;
     static final float MAX_SCALE = 3.5f;
     static final float FOCUS_ENTER_SCALE = 1.18f;
+
     private static final float SCALE_RESPONSE = 0.58f;
     private static final float PIVOT_RESPONSE = 0.54f;
     private static final long RETURN_DURATION_MS = 165L;
     private static final long FOCUS_RETURN_DURATION_MS = 180L;
     private static final long FOCUS_CHROME_DURATION_MS = 140L;
+
+    // TikTok reference: full-width media above a compact black control zone.
+    private static final int FOCUS_CHROME_HEIGHT_DP = 82;
+    private static final int FOCUS_EDGE_DP = 8;
+    private static final int FOCUS_BUTTON_DP = 34;
+    private static final int FOCUS_PILL_WIDTH_DP = 84;
+    private static final int FOCUS_PILL_HEIGHT_DP = 34;
 
     interface Listener { void onPinchChanged(boolean active); }
 
@@ -69,10 +79,26 @@ final class ShitTokDynamicPinchController {
     private boolean listenerEngaged;
     private boolean settling;
     private boolean gestureStartedInFocus;
+    private boolean focusViewportApplied;
+    private boolean focusViewportChanging;
+
     private int firstId, secondId;
     private float initialSpan, originX, originY, pivotX, pivotY;
     private float displayedScale = 1f;
     private float targetScale = 1f;
+
+    private int originalPaddingLeft;
+    private int originalPaddingTop;
+    private int originalPaddingRight;
+    private int originalPaddingBottom;
+    private int originalPlayerWidth;
+    private int originalPlayerHeight;
+    private int originalPlayerGravity;
+    private int originalPlayerLeftMargin;
+    private int originalPlayerTopMargin;
+    private int originalPlayerRightMargin;
+    private int originalPlayerBottomMargin;
+    private boolean originalPlayerLayoutCaptured;
 
     ShitTokDynamicPinchController(TouchFrame root, View media, BooleanSupplier eligible,
             Listener listener, View... overlays) {
@@ -85,8 +111,10 @@ final class ShitTokDynamicPinchController {
         root.pinch = this;
         buildFocusChrome();
         media.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> {
-            if ((active || focusMode || settling)
-                    && (l != ol || t != ot || r != or || b != ob)) reset();
+            if (!focusViewportChanging && (active || focusMode || settling)
+                    && (l != ol || t != ot || r != or || b != ob)) {
+                reset();
+            }
         });
     }
 
@@ -248,7 +276,10 @@ final class ShitTokDynamicPinchController {
         focusMode = true;
         Player player = player();
         focusOriginalSpeed = player == null ? 1f : player.getPlaybackParameters().speed;
-        animateMediaToRest(FOCUS_RETURN_DURATION_MS, this::showFocusChrome);
+        animateMediaToRest(FOCUS_RETURN_DURATION_MS, () -> {
+            applyFocusViewport();
+            root.post(this::showFocusChrome);
+        });
     }
 
     private void exitFocusModeAnimated() {
@@ -258,6 +289,7 @@ final class ShitTokDynamicPinchController {
         root.removeCallbacks(focusProgressTick);
         hideFocusChromeImmediate();
         restoreOriginalPlaybackSpeed();
+        restoreFocusViewport();
         animateMediaToRest(RETURN_DURATION_MS, this::finishInteraction);
     }
 
@@ -297,6 +329,7 @@ final class ShitTokDynamicPinchController {
     private void finishInteraction() {
         hideFocusChromeImmediate();
         restoreOriginalPlaybackSpeed();
+        restoreFocusViewport();
         for (int i = 0; i < overlays.length; i++) {
             View overlay = overlays[i];
             if (overlay == null) continue;
@@ -315,7 +348,7 @@ final class ShitTokDynamicPinchController {
         videoTouchStarted = false;
         focusMediaDown = false;
         swallowRemainder = false;
-        if (!active && !focusMode && !listenerEngaged && !settling) return;
+        if (!active && !focusMode && !listenerEngaged && !settling && !focusViewportApplied) return;
 
         active = false;
         focusMode = false;
@@ -331,7 +364,78 @@ final class ShitTokDynamicPinchController {
         }
         hideFocusChromeImmediate();
         restoreOriginalPlaybackSpeed();
+        restoreFocusViewport();
         finishInteraction();
+    }
+
+    private void applyFocusViewport() {
+        if (focusViewportApplied) return;
+        PlayerView playerView = playerView();
+        if (playerView == null || root.getWidth() <= 0 || root.getHeight() <= 0) return;
+
+        originalPaddingLeft = root.getPaddingLeft();
+        originalPaddingTop = root.getPaddingTop();
+        originalPaddingRight = root.getPaddingRight();
+        originalPaddingBottom = root.getPaddingBottom();
+
+        if (playerView.getLayoutParams() instanceof FrameLayout.LayoutParams) {
+            FrameLayout.LayoutParams current =
+                    (FrameLayout.LayoutParams) playerView.getLayoutParams();
+            originalPlayerWidth = current.width;
+            originalPlayerHeight = current.height;
+            originalPlayerGravity = current.gravity;
+            originalPlayerLeftMargin = current.leftMargin;
+            originalPlayerTopMargin = current.topMargin;
+            originalPlayerRightMargin = current.rightMargin;
+            originalPlayerBottomMargin = current.bottomMargin;
+            originalPlayerLayoutCaptured = true;
+        } else {
+            originalPlayerLayoutCaptured = false;
+        }
+
+        focusViewportApplied = true;
+        focusViewportChanging = true;
+        root.setPadding(0, 0, 0, 0);
+
+        int height = Math.max(dp(120), root.getHeight() - dp(FOCUS_CHROME_HEIGHT_DP));
+        FrameLayout.LayoutParams focused =
+                new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, height);
+        focused.gravity = Gravity.TOP;
+        playerView.setLayoutParams(focused);
+        playerView.requestLayout();
+        root.requestLayout();
+        root.post(() -> focusViewportChanging = false);
+    }
+
+    private void restoreFocusViewport() {
+        if (!focusViewportApplied) return;
+        focusViewportChanging = true;
+        PlayerView playerView = playerView();
+
+        root.setPadding(
+                originalPaddingLeft,
+                originalPaddingTop,
+                originalPaddingRight,
+                originalPaddingBottom
+        );
+
+        if (playerView != null && originalPlayerLayoutCaptured) {
+            FrameLayout.LayoutParams restored =
+                    new FrameLayout.LayoutParams(originalPlayerWidth, originalPlayerHeight);
+            restored.gravity = originalPlayerGravity;
+            restored.setMargins(
+                    originalPlayerLeftMargin,
+                    originalPlayerTopMargin,
+                    originalPlayerRightMargin,
+                    originalPlayerBottomMargin
+            );
+            playerView.setLayoutParams(restored);
+            playerView.requestLayout();
+        }
+
+        focusViewportApplied = false;
+        root.requestLayout();
+        root.post(() -> focusViewportChanging = false);
     }
 
     private void buildFocusChrome() {
@@ -339,12 +443,12 @@ final class ShitTokDynamicPinchController {
         focusChrome = new FrameLayout(context);
         focusChrome.setVisibility(View.GONE);
         focusChrome.setAlpha(0f);
-        focusChrome.setBackgroundColor(Color.argb(178, 0, 0, 0));
+        focusChrome.setBackgroundColor(Color.TRANSPARENT);
         focusChrome.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_YES);
 
         FrameLayout.LayoutParams chromeParams = new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
-                dp(92),
+                dp(FOCUS_CHROME_HEIGHT_DP),
                 Gravity.BOTTOM
         );
         root.addView(focusChrome, chromeParams);
@@ -353,36 +457,73 @@ final class ShitTokDynamicPinchController {
         focusSeek.setMax(1000);
         focusSeek.setPadding(0, 0, 0, 0);
         focusSeek.setContentDescription("Video progress");
-        focusSeek.setProgressTintList(ColorStateList.valueOf(UiPalette.PRIMARY));
-        focusSeek.setProgressBackgroundTintList(
-                ColorStateList.valueOf(Color.argb(150, 215, 220, 226))
+        focusSeek.setSplitTrack(false);
+        focusSeek.setThumb(new ColorDrawable(Color.TRANSPARENT));
+        focusSeek.setProgressTintList(
+                ColorStateList.valueOf(Color.argb(185, 235, 235, 238))
         );
-        focusSeek.setThumbTintList(ColorStateList.valueOf(UiPalette.PRIMARY));
+        focusSeek.setProgressBackgroundTintList(
+                ColorStateList.valueOf(Color.argb(70, 205, 205, 210))
+        );
+
         FrameLayout.LayoutParams seekParams = new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
-                dp(34),
+                dp(24),
                 Gravity.TOP
         );
-        seekParams.setMargins(dp(14), 0, dp(14), 0);
+        seekParams.setMargins(
+                dp(FOCUS_EDGE_DP),
+                dp(26),
+                dp(FOCUS_EDGE_DP),
+                0
+        );
         focusChrome.addView(focusSeek, seekParams);
 
-        LinearLayout row = new LinearLayout(context);
-        row.setOrientation(LinearLayout.HORIZONTAL);
-        row.setGravity(Gravity.CENTER_VERTICAL);
-        FrameLayout.LayoutParams rowParams = new FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT,
-                dp(58),
-                Gravity.BOTTOM
+        TextView close = focusButton("×", "Exit focus mode", 20f);
+        close.setBackground(roundRect(Color.rgb(35, 35, 38), FOCUS_BUTTON_DP / 2f));
+        FrameLayout.LayoutParams closeParams = new FrameLayout.LayoutParams(
+                dp(FOCUS_BUTTON_DP),
+                dp(FOCUS_BUTTON_DP),
+                Gravity.BOTTOM | Gravity.START
         );
-        rowParams.setMargins(dp(8), 0, dp(8), dp(2));
-        focusChrome.addView(row, rowParams);
+        closeParams.setMargins(
+                dp(FOCUS_EDGE_DP),
+                0,
+                0,
+                dp(5)
+        );
+        focusChrome.addView(close, closeParams);
 
-        TextView close = focusButton("✕", "Exit focus mode", Gravity.START | Gravity.CENTER_VERTICAL);
-        focusPlay = focusButton("❚❚", "Pause video", Gravity.CENTER);
-        focusSpeed = focusButton("1×", "Playback speed 1x", Gravity.END | Gravity.CENTER_VERTICAL);
-        row.addView(close, new LinearLayout.LayoutParams(0, -1, 1f));
-        row.addView(focusPlay, new LinearLayout.LayoutParams(0, -1, 1f));
-        row.addView(focusSpeed, new LinearLayout.LayoutParams(0, -1, 1f));
+        LinearLayout pill = new LinearLayout(context);
+        pill.setOrientation(LinearLayout.HORIZONTAL);
+        pill.setGravity(Gravity.CENTER);
+        pill.setBackground(roundRect(
+                Color.rgb(35, 35, 38),
+                FOCUS_PILL_HEIGHT_DP / 2f
+        ));
+        FrameLayout.LayoutParams pillParams = new FrameLayout.LayoutParams(
+                dp(FOCUS_PILL_WIDTH_DP),
+                dp(FOCUS_PILL_HEIGHT_DP),
+                Gravity.BOTTOM | Gravity.END
+        );
+        pillParams.setMargins(
+                0,
+                0,
+                dp(FOCUS_EDGE_DP),
+                dp(5)
+        );
+        focusChrome.addView(pill, pillParams);
+
+        focusPlay = focusButton("❚❚", "Pause video", 15f);
+        focusSpeed = focusButton("1×", "Playback speed 1x", 14f);
+        View divider = new View(context);
+        divider.setBackgroundColor(Color.argb(70, 255, 255, 255));
+
+        pill.addView(focusPlay, new LinearLayout.LayoutParams(0, -1, 1f));
+        LinearLayout.LayoutParams dividerParams =
+                new LinearLayout.LayoutParams(dp(1), dp(16));
+        pill.addView(divider, dividerParams);
+        pill.addView(focusSpeed, new LinearLayout.LayoutParams(0, -1, 1f));
 
         close.setOnClickListener(v -> exitFocusModeAnimated());
         focusPlay.setOnClickListener(v -> {
@@ -425,17 +566,24 @@ final class ShitTokDynamicPinchController {
         });
     }
 
-    private TextView focusButton(String text, String description, int gravity) {
+    private TextView focusButton(String text, String description, float sizeSp) {
         TextView button = new TextView(root.getContext());
         button.setText(text);
-        button.setTextColor(Color.WHITE);
-        button.setTextSize(20f);
-        button.setGravity(gravity);
-        button.setPadding(dp(14), 0, dp(14), 0);
+        button.setTextColor(Color.rgb(235, 235, 238));
+        button.setTextSize(sizeSp);
+        button.setGravity(Gravity.CENTER);
+        button.setPadding(0, 0, 0, 0);
         button.setContentDescription(description);
         button.setClickable(true);
         button.setFocusable(true);
         return button;
+    }
+
+    private GradientDrawable roundRect(int color, float radiusDp) {
+        GradientDrawable drawable = new GradientDrawable();
+        drawable.setColor(color);
+        drawable.setCornerRadius(dpFloat(radiusDp));
+        return drawable;
     }
 
     private void showFocusChrome() {
@@ -446,7 +594,7 @@ final class ShitTokDynamicPinchController {
         focusChrome.setAlpha(0f);
         focusChrome.animate()
                 .alpha(1f)
-                .setStartDelay(45L)
+                .setStartDelay(35L)
                 .setDuration(FOCUS_CHROME_DURATION_MS)
                 .setInterpolator(settleInterpolator)
                 .start();
@@ -508,9 +656,14 @@ final class ShitTokDynamicPinchController {
     }
 
     private Player player() {
+        PlayerView playerView = playerView();
+        return playerView == null ? null : playerView.getPlayer();
+    }
+
+    private PlayerView playerView() {
         View current = media;
         while (current != null) {
-            if (current instanceof PlayerView) return ((PlayerView) current).getPlayer();
+            if (current instanceof PlayerView) return (PlayerView) current;
             ViewParent parent = current.getParent();
             current = parent instanceof View ? (View) parent : null;
         }
@@ -531,6 +684,10 @@ final class ShitTokDynamicPinchController {
         ));
     }
 
+    private float dpFloat(float value) {
+        return value * root.getResources().getDisplayMetrics().density;
+    }
+
     private static String speedLabel(float speed) {
         if (Math.abs(speed - Math.round(speed)) < 0.01f) {
             return String.format(Locale.US, "%d×", Math.round(speed));
@@ -539,12 +696,14 @@ final class ShitTokDynamicPinchController {
     }
 
     private static float span(MotionEvent event, int a, int b) {
-        return (float) Math.hypot(event.getX(a) - event.getX(b), event.getY(a) - event.getY(b));
+        return (float) Math.hypot(event.getX(a) - event.getX(b),
+                event.getY(a) - event.getY(b));
     }
 
     /** Observe before child dispatch so scaled media never changes gesture coordinates. */
     static final class TouchFrame extends FrameLayout {
         private ShitTokDynamicPinchController pinch;
+
         TouchFrame(Context context) { super(context); }
 
         @Override public boolean dispatchTouchEvent(MotionEvent event) {
