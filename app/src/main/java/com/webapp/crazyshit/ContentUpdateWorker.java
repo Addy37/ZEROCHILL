@@ -70,6 +70,7 @@ public final class ContentUpdateWorker extends Worker {
 
         if (!alerts.isEmpty()) {
             UpdateInboxStore.record(context, alerts);
+            CreatorSystemNotificationPresenter.show(context, alerts);
         }
         NotificationCoordinator.clearContentNotifications(context);
 

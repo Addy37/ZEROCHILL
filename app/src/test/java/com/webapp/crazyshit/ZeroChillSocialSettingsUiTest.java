@@ -24,7 +24,7 @@ import static org.junit.Assert.*;
 @Config(application = Application.class, sdk = 35, qualifiers = "w320dp-h800dp-xhdpi")
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 public class ZeroChillSocialSettingsUiTest {
-    @Test public void notificationControlsShowSupportedInAppCategoriesAtLargeFont() throws Exception {
+    @Test public void notificationControlsShowSupportedCategoriesAtLargeFont() throws Exception {
         ZeroChillSocialSettingsActivity activity = create(ZeroChillSocialSettingsActivity.MODE_NOTIFICATIONS);
         Configuration config = new Configuration(activity.getResources().getConfiguration());
         config.fontScale = 1.5f;
@@ -36,8 +36,16 @@ public class ZeroChillSocialSettingsUiTest {
         View root = activity.getWindow().getDecorView();
         ArrayList<Switch> switches = new ArrayList<>();
         collectSwitches(root, switches);
-        assertEquals(4, switches.size());
-        for (Switch control : switches) assertTrue(control.isChecked());
+        assertEquals(7, switches.size());
+        Switch previews = findSwitch(root, "Show message previews");
+        Switch grouping = findSwitch(root, "Group message notifications");
+        assertNotNull(previews);
+        assertNotNull(grouping);
+        assertFalse(previews.isChecked());
+        assertTrue(grouping.isChecked());
+        assertNotNull(find(root, "Direct messages"));
+        assertNotNull(find(root,
+                "Previews show message text in Android notifications. Grouping keeps new messages from the same person in one notification."));
         Method setControlsEnabled = ZeroChillSocialSettingsActivity.class
                 .getDeclaredMethod("setControlsEnabled", boolean.class);
         setControlsEnabled.setAccessible(true);
@@ -45,8 +53,6 @@ public class ZeroChillSocialSettingsUiTest {
         for (Switch control : switches) assertFalse(control.isEnabled());
         setControlsEnabled.invoke(activity, true);
         for (Switch control : switches) assertTrue(control.isEnabled());
-        assertNull(find(root, "Direct messages"));
-        assertNotNull(find(root, "Message alerts use Android notification settings. Your messages stay in your inbox."));
         ZeroChillPublicProfileUiTest.capture(root, "profile-account-2-notifications.png", 320, 800);
     }
 
@@ -70,6 +76,20 @@ public class ZeroChillSocialSettingsUiTest {
             ViewGroup group = (ViewGroup) root;
             for (int i = 0; i < group.getChildCount(); i++) collectSwitches(group.getChildAt(i), result);
         }
+    }
+
+    private static Switch findSwitch(View root, String description) {
+        if (root instanceof Switch && description.contentEquals(root.getContentDescription())) {
+            return (Switch) root;
+        }
+        if (root instanceof ViewGroup) {
+            ViewGroup group = (ViewGroup) root;
+            for (int i = 0; i < group.getChildCount(); i++) {
+                Switch found = findSwitch(group.getChildAt(i), description);
+                if (found != null) return found;
+            }
+        }
+        return null;
     }
 
     private static View find(View root, String text) {

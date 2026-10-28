@@ -34,6 +34,7 @@ public final class ZeroChillSocialSettingsActivity extends Activity {
     private boolean updatingControls;
     private ZeroChillNotificationPreferences.Values preferenceValues;
     private final ArrayList<Switch> controls = new ArrayList<>();
+    private final ArrayList<Switch> localControls = new ArrayList<>();
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
@@ -203,10 +204,16 @@ public final class ZeroChillSocialSettingsActivity extends Activity {
         if (values == null) return;
         preferenceValues = values;
         controls.clear();
-        TextView note = label("These settings control new in-app activity and alerts. Existing notification history stays in place.",
-                12, Color.rgb(155, 171, 182), false);
+        localControls.clear();
+        TextView note = label(
+                "Account alert choices sync with your ZEROCHILL ID. Message preview and grouping choices stay on this device.",
+                12,
+                Color.rgb(155, 171, 182),
+                false
+        );
         note.setLineSpacing(dp(3), 1f);
         content.addView(note);
+
         section("SOCIAL");
         toggle("Replies to my comments", values.replies, enabled -> save(new ZeroChillNotificationPreferences.Values(
                 enabled, preferenceValues.likes, preferenceValues.directMessages,
@@ -214,15 +221,46 @@ public final class ZeroChillSocialSettingsActivity extends Activity {
         toggle("Likes on my comments", values.likes, enabled -> save(new ZeroChillNotificationPreferences.Values(
                 preferenceValues.replies, enabled, preferenceValues.directMessages,
                 preferenceValues.creatorUpdates, preferenceValues.appUpdates)));
-        TextView dmNote = label("Message alerts use Android notification settings. Your messages stay in your inbox.", 12,
-                Color.rgb(130, 145, 155), false);
+
+        section("MESSAGES");
+        toggle("Direct messages", values.directMessages, enabled -> {
+            if (enabled) NotificationCoordinator.requestPermissionFromSettings(this);
+            save(new ZeroChillNotificationPreferences.Values(
+                    preferenceValues.replies,
+                    preferenceValues.likes,
+                    enabled,
+                    preferenceValues.creatorUpdates,
+                    preferenceValues.appUpdates
+            ));
+        });
+        android.content.SharedPreferences appPrefs = getSharedPreferences("app_prefs", MODE_PRIVATE);
+        localToggle(
+                "Show message previews",
+                ZeroChillPushNotificationPresenter.PREF_MESSAGE_PREVIEWS,
+                appPrefs.getBoolean(ZeroChillPushNotificationPresenter.PREF_MESSAGE_PREVIEWS, false),
+                true
+        );
+        localToggle(
+                "Group message notifications",
+                ZeroChillPushNotificationPresenter.PREF_GROUP_MESSAGES,
+                appPrefs.getBoolean(ZeroChillPushNotificationPresenter.PREF_GROUP_MESSAGES, true),
+                false
+        );
+        TextView dmNote = label(
+                "Previews show message text in Android notifications. Grouping keeps new messages from the same person in one notification.",
+                12,
+                Color.rgb(130, 145, 155),
+                false
+        );
         LinearLayout.LayoutParams dmParams = new LinearLayout.LayoutParams(-1, -2);
         dmParams.topMargin = dp(9);
         content.addView(dmNote, dmParams);
+
         section("CREATORS");
         toggle("Favorite creator updates", values.creatorUpdates, enabled -> save(new ZeroChillNotificationPreferences.Values(
                 preferenceValues.replies, preferenceValues.likes, preferenceValues.directMessages,
                 enabled, preferenceValues.appUpdates)));
+
         section("APP");
         toggle("ZEROCHILL app updates", values.appUpdates, enabled -> save(new ZeroChillNotificationPreferences.Values(
                 preferenceValues.replies, preferenceValues.likes, preferenceValues.directMessages,
@@ -253,15 +291,20 @@ public final class ZeroChillSocialSettingsActivity extends Activity {
             control.setEnabled(enabled);
             if (control.getParent() instanceof View) ((View) control.getParent()).setEnabled(enabled);
         }
+        for (Switch control : localControls) {
+            control.setEnabled(enabled);
+            if (control.getParent() instanceof View) ((View) control.getParent()).setEnabled(enabled);
+        }
     }
 
     private void applyChecks(ZeroChillNotificationPreferences.Values values) {
-        if (values == null || controls.size() != 4) return;
+        if (values == null || controls.size() != 5) return;
         updatingControls = true;
         controls.get(0).setChecked(values.replies);
         controls.get(1).setChecked(values.likes);
-        controls.get(2).setChecked(values.creatorUpdates);
-        controls.get(3).setChecked(values.appUpdates);
+        controls.get(2).setChecked(values.directMessages);
+        controls.get(3).setChecked(values.creatorUpdates);
+        controls.get(4).setChecked(values.appUpdates);
         updatingControls = false;
     }
 
@@ -287,6 +330,30 @@ public final class ZeroChillSocialSettingsActivity extends Activity {
         ZeroChillMotion.installPressFeedback(row);
         toggle.setOnCheckedChangeListener((button, enabled) -> {
             if (!updatingControls && !saving) action.changed(enabled);
+        });
+    }
+
+    private void localToggle(String title, String key, boolean checked, boolean requestPermission) {
+        LinearLayout row = new LinearLayout(this);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(dp(15), dp(8), dp(9), dp(8));
+        row.setBackground(panel());
+        row.setMinimumHeight(dp(60));
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, -2);
+        params.bottomMargin = dp(8);
+        content.addView(row, params);
+        TextView name = label(title, 14, Color.WHITE, false);
+        row.addView(name, new LinearLayout.LayoutParams(0, -2, 1f));
+        Switch toggle = new ZeroChillSwitch(this);
+        toggle.setChecked(checked);
+        toggle.setContentDescription(title);
+        row.addView(toggle);
+        localControls.add(toggle);
+        row.setOnClickListener(v -> toggle.setChecked(!toggle.isChecked()));
+        ZeroChillMotion.installPressFeedback(row);
+        toggle.setOnCheckedChangeListener((button, enabled) -> {
+            getSharedPreferences("app_prefs", MODE_PRIVATE).edit().putBoolean(key, enabled).apply();
+            if (requestPermission && enabled) NotificationCoordinator.requestPermissionFromSettings(this);
         });
     }
 
