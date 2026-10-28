@@ -404,7 +404,7 @@ final class ShitTokDynamicPinchController {
         playerView.setLayoutParams(focused);
         playerView.requestLayout();
         root.requestLayout();
-        root.post(() -> focusViewportChanging = false);
+        root.postDelayed(() -> focusViewportChanging = false, 80L);
     }
 
     private void restoreFocusViewport() {
@@ -435,7 +435,7 @@ final class ShitTokDynamicPinchController {
 
         focusViewportApplied = false;
         root.requestLayout();
-        root.post(() -> focusViewportChanging = false);
+        root.postDelayed(() -> focusViewportChanging = false, 80L);
     }
 
     private void buildFocusChrome() {
