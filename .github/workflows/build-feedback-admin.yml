@@ -2,11 +2,12 @@ name: Build Private Feedback Admin APK
 
 on:
   push:
-    branches: [ main, rebrand/zerochill ]
+    branches: [ main, rebrand/zerochill, feature/admin-dm-moderation ]
     paths:
       - '.github/workflows/build-feedback-admin.yml'
       - 'feedbackadmin/**'
       - 'supabase/functions/feedback-admin/**'
+      - 'supabase/functions/dm-moderation/**'
       - 'supabase/functions/dynamic-api/**'
       - 'supabase/functions/app-config-admin/**'
       - 'supabase/functions/_shared/**'
@@ -18,6 +19,7 @@ on:
     paths:
       - 'feedbackadmin/**'
       - 'supabase/functions/feedback-admin/**'
+      - 'supabase/functions/dm-moderation/**'
       - 'supabase/functions/app-config-admin/**'
       - 'supabase/functions/_shared/**'
       - 'supabase/migrations/*source_config.sql'
