@@ -364,6 +364,63 @@ public class ShitTokDynamicPinchTest {
         }
     }
 
+    @Test public void focusModeSurvivesPagerDragStartAndCanceledSwipe() {
+        try (ShitTokAudioOwnershipTest.Fixture f = new ShitTokAudioOwnershipTest.Fixture()) {
+            ReflectionHelpers.callInstanceMethod(f.feed, "playSelected");
+            View root = ((RecyclerView.ViewHolder) f.selected).itemView;
+            ViewPager2 pager = ReflectionHelpers.getField(f.feed, "pager");
+            ShitTokDynamicPinchController pinch = ReflectionHelpers.getField(f.selected, "pinch");
+            begin(root);
+            grow(root);
+            release(root, 200, 600);
+            idleAnimations();
+            assertTrue(pinch.isFocusMode());
+
+            // FakeDrag dispatches through ViewPager2's actual callback composite.
+            // setCurrentItem(..., false) bypasses DRAGGING and missed the device crash.
+            assertTrue(pager.beginFakeDrag());
+            assertTrue(pinch.isFocusMode());
+            assertEquals(0f, ((View) ReflectionHelpers.getField(f.selected, "lower")).getAlpha(), 0f);
+            assertTrue(pager.endFakeDrag());
+            idleAnimations();
+            assertEquals(0, pager.getCurrentItem());
+            assertTrue(pinch.isFocusMode());
+            assertTrue(pager.isUserInputEnabled());
+        }
+    }
+
+    @Test public void focusModeSurvivesForwardAndReversePagerDrags() {
+        try (ShitTokAudioOwnershipTest.Fixture f = new ShitTokAudioOwnershipTest.Fixture()) {
+            ReflectionHelpers.callInstanceMethod(f.feed, "playSelected");
+            View root = ((RecyclerView.ViewHolder) f.selected).itemView;
+            ViewPager2 pager = ReflectionHelpers.getField(f.feed, "pager");
+            RecyclerView recycler = (RecyclerView) pager.getChildAt(0);
+            begin(root);
+            grow(root);
+            release(root, 200, 600);
+            idleAnimations();
+
+            for (int position : new int[] {1, 0, 1}) {
+                float delta = position > pager.getCurrentItem() ? -pager.getHeight() : pager.getHeight();
+                assertTrue(pager.beginFakeDrag());
+                assertTrue(pager.fakeDragBy(delta));
+                assertTrue(pager.endFakeDrag());
+                idleAnimations();
+                assertEquals(position, pager.getCurrentItem());
+                RecyclerView.ViewHolder actual = recycler.findViewHolderForAdapterPosition(position);
+                assertNotNull(actual);
+                ShitTokDynamicPinchController pinch = ReflectionHelpers.getField(actual, "pinch");
+                assertTrue(pinch.isFocusMode());
+                assertTrue(pager.isUserInputEnabled());
+                assertEquals(0f, ((View) ReflectionHelpers.getField(actual, "lower")).getAlpha(), 0f);
+            }
+            assertTrue(f.feed.exitSensorFullscreenForBack());
+            RecyclerView.ViewHolder selected = recycler.findViewHolderForAdapterPosition(pager.getCurrentItem());
+            assertFalse(((ShitTokDynamicPinchController) ReflectionHelpers.getField(selected, "pinch")).isFocusMode());
+            assertEquals(1f, ((View) ReflectionHelpers.getField(selected, "lower")).getAlpha(), 0f);
+        }
+    }
+
     @Test public void preparedAndAdoptedHolderRejectsNormalChromeSyncAndRestoresSavedAlpha() {
         try (ShitTokAudioOwnershipTest.Fixture f = new ShitTokAudioOwnershipTest.Fixture()) {
             ReflectionHelpers.callInstanceMethod(f.feed, "playSelected");
