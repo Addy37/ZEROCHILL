@@ -4,14 +4,22 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertTrue;
 
+import org.junit.After;
 import org.junit.Test;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Random;
 
 public class ShitTokAspectPriorityTest {
+    @After
+    public void resetPopularity() {
+        ShitTokCommunityPopularity.resetForTest();
+    }
+
     @Test
     public void bucketDistinguishesPortraitSquareLandscapeAndUnknown() {
         assertEquals(
@@ -94,6 +102,48 @@ public class ShitTokAspectPriorityTest {
         assertEquals(2, countSource(ordered.subList(0, 6), "kaotic"));
         assertEquals(2, countSource(ordered.subList(0, 6), "shit-show"));
         assertEquals(2, countSource(ordered.subList(0, 6), "baddiehub"));
+    }
+
+    @Test
+    public void communityPopularityMovesHotCandidateAheadWithinItsSource() {
+        ShitTokAspectPriority priority = new ShitTokAspectPriority();
+        NativeContentItem cold = item(
+                "cold", 9f / 16f, "https://kaotic.com/video/cold", "Kaotic", ""
+        );
+        NativeContentItem hot = item(
+                "hot", 9f / 16f, "https://kaotic.com/video/hot", "Kaotic", ""
+        );
+        Map<String, Float> scores = new HashMap<>();
+        scores.put(ZeroChillSocialRepository.contentKey(hot.url), 4.5f);
+        ShitTokCommunityPopularity.setScoresForTest(scores);
+
+        List<NativeContentItem> ordered = priority.order(Arrays.asList(cold, hot), new Random(9L));
+
+        assertEquals(hot.url, ordered.get(0).url);
+        assertEquals(cold.url, ordered.get(1).url);
+    }
+
+    @Test
+    public void hotSourceStillCannotCrowdOutOtherAvailableSources() {
+        ShitTokAspectPriority priority = new ShitTokAspectPriority();
+        ArrayList<NativeContentItem> candidates = new ArrayList<>();
+        Map<String, Float> scores = new HashMap<>();
+        for (int i = 0; i < 5; i++) {
+            NativeContentItem hot = item(
+                    "hot-" + i, 9f / 16f, "https://kaotic.com/video/hot-" + i, "Kaotic", ""
+            );
+            candidates.add(hot);
+            scores.put(ZeroChillSocialRepository.contentKey(hot.url), 5f);
+        }
+        candidates.add(item(
+                "other", 9f / 16f, "https://baddiehub.com/post/other", "BaddieHub", ""
+        ));
+        ShitTokCommunityPopularity.setScoresForTest(scores);
+
+        List<NativeContentItem> ordered = priority.order(candidates, new Random(2L));
+
+        assertEquals(2, ordered.subList(0, 2).stream()
+                .map(ShitTokAspectPriority::sourceKey).distinct().count());
     }
 
     @Test
