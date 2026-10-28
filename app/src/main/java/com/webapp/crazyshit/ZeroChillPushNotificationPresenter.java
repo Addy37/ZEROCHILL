@@ -9,6 +9,9 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
+import android.graphics.Bitmap;
+import android.graphics.Canvas;
+import android.graphics.drawable.Drawable;
 import android.os.Build;
 import android.service.notification.StatusBarNotification;
 
@@ -16,12 +19,15 @@ import androidx.core.app.NotificationCompat;
 import androidx.core.app.NotificationManagerCompat;
 import androidx.core.app.Person;
 import androidx.core.content.ContextCompat;
+import androidx.core.graphics.drawable.IconCompat;
 import androidx.work.Constraints;
 import androidx.work.Data;
 import androidx.work.ExistingWorkPolicy;
 import androidx.work.NetworkType;
 import androidx.work.OneTimeWorkRequest;
 import androidx.work.WorkManager;
+
+import com.bumptech.glide.Glide;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -79,11 +85,11 @@ final class ZeroChillPushNotificationPresenter {
         createMessagesChannel(app);
         String name = cleanSenderName(senderName);
         SharedPreferences prefs = app.getSharedPreferences(APP_PREFS, Context.MODE_PRIVATE);
-        boolean showPreviews = prefs.getBoolean(PREF_MESSAGE_PREVIEWS, false);
         boolean groupMessages = prefs.getBoolean(PREF_GROUP_MESSAGES, true);
 
-        // Alert immediately with the existing private notification. Preview text is fetched
-        // off the FCM callback so a slow network cannot hold the push service open.
+        // Alert immediately with a local mascot fallback. The background worker upgrades the
+        // notification with the sender's profile avatar and optional preview text without
+        // holding the FCM callback open on network access.
         postDirectMessage(
                 app,
                 messageId,
@@ -92,9 +98,10 @@ final class ZeroChillPushNotificationPresenter {
                 Collections.emptyList(),
                 false,
                 groupMessages,
-                false
+                false,
+                fallbackSenderAvatar(app)
         );
-        if (showPreviews) enqueuePreviewUpgrade(app, messageId, senderId, name, groupMessages);
+        enqueuePreviewUpgrade(app, messageId, senderId, name, groupMessages);
     }
 
     static void upgradeDirectMessagePreview(
@@ -109,15 +116,18 @@ final class ZeroChillPushNotificationPresenter {
         if (!ZeroChillNotificationPreferences.cached(app).directMessages) return;
 
         SharedPreferences prefs = app.getSharedPreferences(APP_PREFS, Context.MODE_PRIVATE);
-        if (!prefs.getBoolean(PREF_MESSAGE_PREVIEWS, false)) return;
+        boolean showPreviews = prefs.getBoolean(PREF_MESSAGE_PREVIEWS, false);
         boolean groupMessages = prefs.getBoolean(PREF_GROUP_MESSAGES, true);
         int notificationId = groupMessages
                 ? conversationNotificationId(senderId)
                 : notificationId(messageId);
         if (!isMessageNotificationActive(app, notificationId)) return;
 
-        List<PreviewMessage> previews = unreadPreviews(app, senderId, messageId, groupMessages);
-        if (previews.isEmpty() || !isMessageNotificationActive(app, notificationId)) return;
+        Bitmap avatar = senderAvatar(app, senderId);
+        List<PreviewMessage> previews = showPreviews
+                ? unreadPreviews(app, senderId, messageId, groupMessages)
+                : Collections.emptyList();
+        if (!isMessageNotificationActive(app, notificationId)) return;
 
         postDirectMessage(
                 app,
@@ -125,9 +135,10 @@ final class ZeroChillPushNotificationPresenter {
                 senderId,
                 cleanSenderName(senderName),
                 previews,
-                true,
+                showPreviews && !previews.isEmpty(),
                 groupMessages,
-                true
+                true,
+                avatar
         );
     }
 
@@ -190,7 +201,8 @@ final class ZeroChillPushNotificationPresenter {
             List<PreviewMessage> previews,
             boolean showPreviews,
             boolean groupMessages,
-            boolean silentUpdate
+            boolean silentUpdate,
+            Bitmap senderAvatar
     ) {
         int id = groupMessages ? conversationNotificationId(senderId) : notificationId(messageId);
         PendingIntent open = messagePendingIntent(app, senderId, id);
@@ -216,11 +228,18 @@ final class ZeroChillPushNotificationPresenter {
                 .setShowWhen(true)
                 .setWhen(System.currentTimeMillis())
                 .setOnlyAlertOnce(silentUpdate);
+        if (senderAvatar != null) builder.setLargeIcon(senderAvatar);
         if (groupMessages) builder.setGroup(GROUP_MESSAGES);
 
         if (showPreviews && previews != null && !previews.isEmpty()) {
             Person you = new Person.Builder().setName("You").build();
-            Person sender = new Person.Builder().setName(senderName).build();
+            Person.Builder senderBuilder = new Person.Builder()
+                    .setName(senderName)
+                    .setKey(senderId);
+            if (senderAvatar != null) {
+                senderBuilder.setIcon(IconCompat.createWithBitmap(senderAvatar));
+            }
+            Person sender = senderBuilder.build();
             NotificationCompat.MessagingStyle style = new NotificationCompat.MessagingStyle(you)
                     .setGroupConversation(false);
             for (PreviewMessage preview : previews) {
@@ -366,6 +385,53 @@ final class ZeroChillPushNotificationPresenter {
         } catch (Exception ignored) {
             return Collections.emptyList();
         }
+    }
+
+    private static Bitmap senderAvatar(Context context, String senderId) {
+        Bitmap fallback = fallbackSenderAvatar(context);
+        String account = ZeroChillSessionStore.currentUserId(context);
+        if (!isUuid(account) || !isUuid(senderId)) return fallback;
+        try {
+            String raw = ZeroChillAccountRepository.restBlocking(
+                    context,
+                    account,
+                    "GET",
+                    "/rest/v1/profiles?select=avatar_path&user_id=eq." + senderId + "&limit=1",
+                    null
+            );
+            JSONArray rows = new JSONArray(raw);
+            if (rows.length() == 0) return fallback;
+            JSONObject row = rows.optJSONObject(0);
+            String avatarPath = row == null ? "" : clean(row.optString("avatar_path"));
+            String avatarUrl = ZeroChillAccountRepository.avatarUrl(avatarPath);
+            if (avatarUrl.isEmpty()) return fallback;
+            int size = senderAvatarSize(context);
+            return Glide.with(context.getApplicationContext())
+                    .asBitmap()
+                    .load(avatarUrl)
+                    .circleCrop()
+                    .submit(size, size)
+                    .get();
+        } catch (Exception ignored) {
+            return fallback;
+        }
+    }
+
+    private static Bitmap fallbackSenderAvatar(Context context) {
+        Drawable drawable = ContextCompat.getDrawable(context, R.drawable.ic_zerochill_loader_devil);
+        if (drawable == null) return null;
+        int size = senderAvatarSize(context);
+        Bitmap bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
+        Canvas canvas = new Canvas(bitmap);
+        drawable.setBounds(0, 0, size, size);
+        drawable.draw(canvas);
+        return bitmap;
+    }
+
+    private static int senderAvatarSize(Context context) {
+        return Math.max(128, Math.round(
+                72f * context.getResources().getDisplayMetrics().density
+        ));
     }
 
     private static long timestamp(String value) {
