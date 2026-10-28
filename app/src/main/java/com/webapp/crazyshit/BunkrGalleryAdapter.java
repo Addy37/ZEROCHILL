@@ -435,10 +435,26 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
                 holder.unavailable.setVisibility(View.VISIBLE);
                 return;
             }
-            Glide.with(holder.image).load(file).override(384, 384).centerCrop()
+            RequestBuilder<Drawable> preview = Glide.with(holder.image).load(file).override(384, 384)
                     .diskCacheStrategy(DiskCacheStrategy.NONE)
                     .transition(ThumbnailFades.thumbnail())
-                    .into(holder.image);
+                    .listener(new RequestListener<Drawable>() {
+                        @Override public boolean onLoadFailed(GlideException error, Object model,
+                                Target<Drawable> target, boolean firstResource) {
+                            if (binding == holder.bindGeneration) {
+                                file.delete(); // Regenerate an evicted/corrupt entry on the next attachment.
+                                holder.unavailable.setVisibility(View.VISIBLE);
+                            }
+                            return false;
+                        }
+                        @Override public boolean onResourceReady(Drawable resource, Object model,
+                                Target<Drawable> target, DataSource source, boolean firstResource) {
+                            if (adaptiveAspectRatios && binding == holder.bindGeneration)
+                                applyAspectRatio(holder, item, resource);
+                            return false;
+                        }
+                    });
+            (adaptiveAspectRatios ? preview.dontTransform() : preview.centerCrop()).into(holder.image);
         });
     }
 

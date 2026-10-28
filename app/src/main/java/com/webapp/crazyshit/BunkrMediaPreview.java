@@ -85,6 +85,8 @@ final class BunkrMediaPreview {
         } else if (item.isVideo()) {
             try (BunkrPreviewDataSource source = new BunkrPreviewDataSource(
                     (position, size) -> task.range(stream.mediaUrl, headers, position, size))) {
+                // Give the native extractor a known length so it can seek to end-of-file metadata.
+                if (source.readAt(0, new byte[1], 0, 1) < 0) return null;
                 MediaMetadataRetriever retriever = new MediaMetadataRetriever();
                 try {
                     retriever.setDataSource(source);
@@ -224,7 +226,9 @@ final class BunkrMediaPreview {
         byte[] image(String url, Map<String, String> headers) throws IOException {
             HttpURLConnection conn = open(url, headers);
             try {
-                if (conn.getResponseCode() != 200 || !contentType(conn).startsWith("image/"))
+                String type = contentType(conn);
+                if (conn.getResponseCode() != 200 || (!type.startsWith("image/")
+                        && !type.startsWith("application/octet-stream")))
                     throw new IOException("No source image");
                 if (conn.getContentLengthLong() > MAX_IMAGE_BYTES) throw new IOException("Image too large");
                 try (InputStream in = conn.getInputStream()) { return read(in, MAX_IMAGE_BYTES, false); }
@@ -246,7 +250,8 @@ final class BunkrMediaPreview {
                         long from = Long.parseLong(range.group(1));
                         long to = Long.parseLong(range.group(2));
                         total = Long.parseLong(range.group(3));
-                        if (from != start || to < from || to >= total || to - from >= size)
+                        if (from != start || to < from || to >= total || to - from >= size
+                                || to != Math.min(total - 1, start + size - 1))
                             throw new IOException("Incorrect preview range");
                         expected = (int) (to - from + 1);
                     } catch (NumberFormatException error) { throw new IOException("Invalid preview range", error); }

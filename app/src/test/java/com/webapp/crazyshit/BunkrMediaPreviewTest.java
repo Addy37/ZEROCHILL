@@ -27,7 +27,7 @@ import org.robolectric.annotation.GraphicsMode;
 @RunWith(RobolectricTestRunner.class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(application = Application.class, sdk = 35,
-        shadows = { BunkrMediaPreviewTest.Repository.class, BunkrMediaPreviewTest.Retriever.class })
+        shadows = { BunkrMediaPreviewTest.Repository.class, BunkrMediaPreviewTest.Retriever.class, BunkrMediaPreviewTest.Network.class })
 public class BunkrMediaPreviewTest {
     @Implements(value = BunkrRepository.class, isInAndroidSdk = false)
     public static class Repository {
@@ -37,11 +37,21 @@ public class BunkrMediaPreviewTest {
             return new CrazyShitRepository.StreamInfo("https://cdn.example/video.mp4?expires=123", page, "video");
         }
     }
+    @Implements(value = BunkrMediaPreview.Task.class, isInAndroidSdk = false)
+    public static class Network {
+        @Implementation protected BunkrPreviewDataSource.Block range(String url,
+                java.util.Map<String, String> headers, long start, int size) {
+            return new BunkrPreviewDataSource.Block(new byte[size], 512_000);
+        }
+    }
     @Implements(MediaMetadataRetriever.class)
     public static class Retriever {
         static AtomicInteger calls = new AtomicInteger();
         static AtomicInteger releases = new AtomicInteger();
-        @Implementation protected void setDataSource(MediaDataSource source) { assertNotNull(source); }
+        @Implementation protected void __constructor__() { }
+        @Implementation protected void setDataSource(MediaDataSource source) { assertNotNull(source);
+            try { assertEquals(512_000, source.getSize()); } catch (Exception error) { throw new AssertionError(error); }
+        }
         @Implementation protected Bitmap getScaledFrameAtTime(long time, int option, int width, int height) {
             calls.incrementAndGet();
             assertEquals(1_000_000L, time);
