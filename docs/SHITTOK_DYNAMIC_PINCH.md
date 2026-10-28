@@ -29,6 +29,8 @@ Bind, detach, recycle, ownership changes, host pause, deactivation, refresh, clo
 
 Completion-driven auto-scroll stays blocked until Focus Mode ends, while manual vertical paging remains available.
 
+Drag-start and settling callbacks preserve Focus Mode before page selection changes. A canceled swipe keeps the current holder focused. Focus callback subscriptions become inactive immediately on cleanup, and removal is posted after ViewPager2 finishes callback dispatch. This avoids the callback-list mutation crash exposed by physical-device swiping with the completed-video replay observer installed.
+
 ## Validation
 
 Focused Robolectric coverage checks:

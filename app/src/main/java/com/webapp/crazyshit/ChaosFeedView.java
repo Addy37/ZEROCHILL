@@ -550,7 +550,7 @@ public final class ChaosFeedView extends FrameLayout {
         if (state == ViewPager2.SCROLL_STATE_DRAGGING) userDragInProgress = true;
         else if (state == ViewPager2.SCROLL_STATE_IDLE) userDragInProgress = false;
         userPaging = state != ViewPager2.SCROLL_STATE_IDLE;
-        if (userPaging) resetTemporaryPinch();
+        if (userPaging) resetTemporaryPinch(true);
         ShitTokPoolDiagnostics.record("pager", "state=" + state + " selected=" + selectedPosition);
         playbackOwner.permission(false, chaosMuted);
         if (userPaging) {
@@ -2247,7 +2247,16 @@ public final class ChaosFeedView extends FrameLayout {
     }
 
     private void resetTemporaryPinch() {
-        if (pinchingHolder != null) pinchingHolder.pinch.reset();
+        resetTemporaryPinch(false);
+    }
+
+    private void resetTemporaryPinch(boolean preserveFocusForPaging) {
+        // DRAGGING arrives before currentItem changes. Focus belongs to the feed
+        // across that drag, including a canceled swipe; selection migrates it later.
+        if (pinchingHolder != null
+                && (!preserveFocusForPaging || !pinchingHolder.pinch.isFocusMode())) {
+            pinchingHolder.pinch.reset();
+        }
         // These existing UI transition boundaries also invalidate optional interaction work.
         for (ChaosHolder holder : playerHolders) holder.cancelInteractionUi();
     }

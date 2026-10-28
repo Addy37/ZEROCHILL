@@ -508,6 +508,7 @@ final class ShitTokDynamicPinchController {
         if (focusPageCallback == null) {
             focusPageCallback = new ViewPager2.OnPageChangeCallback() {
                 @Override public void onPageSelected(int position) {
+                    if (focusPageCallback != this) return;
                     ViewPager2 observedPager = focusPager;
                     if (observedPager == null) return;
                     observedPager.post(() -> migrateFocusTo(position));
@@ -593,7 +594,12 @@ final class ShitTokDynamicPinchController {
 
     private void stopFocusObserversOnly() {
         if (focusPager != null && focusPageCallback != null) {
-            focusPager.unregisterOnPageChangeCallback(focusPageCallback);
+            ViewPager2 observedPager = focusPager;
+            ViewPager2.OnPageChangeCallback callback = focusPageCallback;
+            // Reset can run inside a feed page/scroll callback. ViewPager2 forbids
+            // mutating its callback list during dispatch. Invalidate synchronously
+            // below, then remove only this captured subscription after dispatch.
+            observedPager.post(() -> observedPager.unregisterOnPageChangeCallback(callback));
         }
         if (focusRecycler != null && focusAttachListener != null) {
             focusRecycler.removeOnChildAttachStateChangeListener(focusAttachListener);
