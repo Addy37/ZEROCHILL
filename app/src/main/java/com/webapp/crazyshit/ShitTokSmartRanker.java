@@ -44,6 +44,7 @@ final class ShitTokSmartRanker {
     private static final LinkedHashMap<String, Signal> CREATOR_SIGNALS = new LinkedHashMap<>();
     private static String activeUrl = "";
     private static long activeSinceElapsed;
+    private static boolean dirty;
 
     private ShitTokSmartRanker() {}
 
@@ -58,6 +59,7 @@ final class ShitTokSmartRanker {
         CREATOR_SIGNALS.clear();
         activeUrl = "";
         activeSinceElapsed = 0L;
+        dirty = false;
         readSignals(KEY_SOURCES, SOURCE_SIGNALS, MAX_SOURCE_SIGNALS);
         readSignals(KEY_CREATORS, CREATOR_SIGNALS, MAX_CREATOR_SIGNALS);
     }
@@ -117,7 +119,7 @@ final class ShitTokSmartRanker {
             putSignal(CREATOR_SIGNALS, feature.creator, CREATOR_SKIP_WEIGHT, MAX_CREATOR_SIGNAL,
                     MAX_CREATOR_SIGNALS, nowWall);
         }
-        persistLocked();
+        dirty = true;
     }
 
     private static void putSignal(
@@ -160,8 +162,9 @@ final class ShitTokSmartRanker {
         }
     }
 
-    private static void persistLocked() {
-        if (prefs == null) return;
+    static synchronized void flush() {
+        if (!dirty || prefs == null) return;
+        dirty = false;
         ArrayList<Map.Entry<String, Signal>> sourceSnapshot = new ArrayList<>(SOURCE_SIGNALS.entrySet());
         ArrayList<Map.Entry<String, Signal>> creatorSnapshot = new ArrayList<>(CREATOR_SIGNALS.entrySet());
         SharedPreferences target = prefs;
@@ -193,6 +196,7 @@ final class ShitTokSmartRanker {
         CREATOR_SIGNALS.clear();
         activeUrl = "";
         activeSinceElapsed = 0L;
+        dirty = false;
     }
 
     private static String clean(String value) {
