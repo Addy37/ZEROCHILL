@@ -65,6 +65,7 @@ final class ShitTokSeenStore {
     synchronized int seenSize() { return seen.size(); }
     synchronized int likedSize() { return liked.size(); }
     synchronized void flush() {
+        ShitTokSmartRanker.flush();
         if (!dirty) return;
         dirty = false;
         ArrayList<String> seenCopy = new ArrayList<>(seen), likedCopy = new ArrayList<>(liked);
