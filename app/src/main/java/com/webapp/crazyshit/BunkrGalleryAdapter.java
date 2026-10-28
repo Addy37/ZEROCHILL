@@ -59,6 +59,8 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
     private final boolean adaptiveAspectRatios;
     private int gridColumns = 2;
     private RecyclerView previewViewport;
+    private boolean previewsActive = true;
+    private final LinkedHashSet<Holder> previewHolders = new LinkedHashSet<>();
     private final Rect previewBounds = new Rect();
     private final android.view.ViewTreeObserver.OnPreDrawListener previewVisibility = () -> {
         RecyclerView viewport = previewViewport;
@@ -491,10 +493,24 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
     }
 
     private boolean previewVisible(Holder holder) {
-        if (!holder.attached) return false;
+        if (!holder.attached || !previewsActive) return false;
         // Retained All/Pictures/Videos pages may be attached beyond the pager's clipped viewport.
         return previewViewport == null || (holder.itemView.isShown()
                 && holder.itemView.getGlobalVisibleRect(previewBounds));
+    }
+
+    void setPreviewsActive(boolean active) {
+        if (previewsActive == active) return;
+        previewsActive = active;
+        for (Holder holder : previewHolders) {
+            if (!active) {
+                cancelPreview(holder);
+                holder.previewAttempted = false;
+            } else if (holder.boundItem != null) {
+                if (holder.wantsMediaPreview) requestMediaPreview(holder, holder.boundItem);
+                else if (holder.needsRepair) repairArtwork(holder, holder.boundItem, holder.boundItem.imageUrl);
+            }
+        }
     }
 
     @Override public void onAttachedToRecyclerView(@NonNull RecyclerView recycler) {
@@ -515,6 +531,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
 
     @Override public void onViewAttachedToWindow(@NonNull Holder holder) {
         super.onViewAttachedToWindow(holder);
+        previewHolders.add(holder);
         holder.attached = true;
         NativeContentItem item = holder.boundItem;
         if (item == null) return;
@@ -523,6 +540,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
     }
 
     @Override public void onViewDetachedFromWindow(@NonNull Holder holder) {
+        previewHolders.remove(holder);
         holder.attached = false;
         cancelPreview(holder);
         holder.previewAttempted = false;
@@ -550,6 +568,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
 
     @Override
     public void onViewRecycled(@NonNull Holder holder) {
+        previewHolders.remove(holder);
         holder.bindGeneration++;
         cancelPreview(holder);
         holder.boundItem = null;

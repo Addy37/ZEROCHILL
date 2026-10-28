@@ -79,6 +79,18 @@ public class BunkrMediaPreviewLifecycleTest {
         assertEquals(View.VISIBLE, holder.unavailable.getVisibility());
         adapter.onViewRecycled(holder);
     }
+    @Test public void galleryPauseCancelsWorkBeforeViewerPlaybackAndResumeRestartsVisibleTile() {
+        BunkrGalleryAdapter adapter = adapter("https://bunkr.cr/f/pause");
+        BunkrGalleryAdapter.Holder holder = holder(adapter);
+        adapter.onBindViewHolder(holder, 0); adapter.onViewAttachedToWindow(holder);
+        BunkrMediaPreview.Task first = Preview.task;
+        adapter.setPreviewsActive(false);
+        assertTrue(first.canceled);
+        assertEquals(1, Preview.calls);
+        adapter.setPreviewsActive(true);
+        assertEquals(2, Preview.calls);
+        adapter.onViewRecycled(holder);
+    }
     @Test public void retainedHiddenRecyclerDoesNotResolveOriginalMedia() {
         BunkrGalleryAdapter adapter = adapter("https://bunkr.cr/f/offscreen");
         androidx.recyclerview.widget.RecyclerView hidden = new androidx.recyclerview.widget.RecyclerView(

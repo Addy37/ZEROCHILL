@@ -2995,6 +2995,7 @@ public final class NativeFeedBrowserActivity extends Activity {
     }
 
     @Override protected void onPause() {
+        setGalleryPreviewsActive(false);
         showsBrowserResumed = false;
         if (showDetailsHeader != null) showDetailsHeader.setActive(false);
         persistBrowser();
@@ -3004,6 +3005,7 @@ public final class NativeFeedBrowserActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
+        setGalleryPreviewsActive(true);
         showsBrowserResumed = true;
         if (showDetailsHeader != null) showDetailsHeader.setActive(true);
         updateShowDetailsHeader();
@@ -3038,6 +3040,7 @@ public final class NativeFeedBrowserActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        setGalleryPreviewsActive(false);
         generation++;
         if (isFinishing() && !shitTokReturnTransition.isEmpty()) {
             ShitTokTransitionSnapshotStore.remove(shitTokReturnTransition);
@@ -3046,6 +3049,13 @@ public final class NativeFeedBrowserActivity extends Activity {
         if (creatorTabsMediator != null) creatorTabsMediator.detach();
         io.shutdownNow();
         super.onDestroy();
+    }
+
+    private void setGalleryPreviewsActive(boolean active) {
+        if (bunkrGalleryAdapter != null) bunkrGalleryAdapter.setPreviewsActive(active);
+        for (BunkrGalleryAdapter gallery : creatorTabAdapters) {
+            if (gallery != null && gallery != bunkrGalleryAdapter) gallery.setPreviewsActive(active);
+        }
     }
 
     private final class CreatorTabsPagerAdapter
