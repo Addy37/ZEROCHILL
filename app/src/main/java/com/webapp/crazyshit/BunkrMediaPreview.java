@@ -47,6 +47,17 @@ final class BunkrMediaPreview {
 
     private BunkrMediaPreview() { }
 
+    static File cached(Context context, NativeContentItem item) {
+        try {
+            File file = cacheFile(context.getApplicationContext(), item);
+            if (!file.isFile() || file.length() <= 0) return null;
+            file.setLastModified(System.currentTimeMillis());
+            return file;
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
     static Task request(Context context, NativeContentItem item, Consumer<File> callback) {
         Task task = new Task();
         Context app = context.getApplicationContext();
@@ -56,9 +67,8 @@ final class BunkrMediaPreview {
                 File result = null;
                 try {
                     task.check();
-                    File cached = cacheFile(app, item);
-                    if (cached.isFile() && cached.length() > 0) {
-                        cached.setLastModified(System.currentTimeMillis());
+                    File cached = cached(app, item);
+                    if (cached != null) {
                         result = cached;
                     } else if (!recentFailure(item.url)) {
                         result = generate(app, item, task);
