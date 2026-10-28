@@ -111,6 +111,21 @@ public class BunkrMediaPreviewTest {
         preview.recycle();
         assertNull(BunkrMediaPreview.decodeImage("<html>unavailable</html>".getBytes()));
     }
+    @Test public void originalPhotoOrientationSurvivesGeneratedPreview() throws Exception {
+        File original = File.createTempFile("preview-orientation", ".jpg", RuntimeEnvironment.getApplication().getCacheDir());
+        Bitmap source = Bitmap.createBitmap(200, 100, Bitmap.Config.ARGB_8888);
+        try (java.io.FileOutputStream out = new java.io.FileOutputStream(original)) {
+            source.compress(Bitmap.CompressFormat.JPEG, 90, out);
+        }
+        source.recycle();
+        androidx.exifinterface.media.ExifInterface exif = new androidx.exifinterface.media.ExifInterface(original.toString());
+        exif.setAttribute(androidx.exifinterface.media.ExifInterface.TAG_ORIENTATION,
+                String.valueOf(androidx.exifinterface.media.ExifInterface.ORIENTATION_ROTATE_90));
+        exif.saveAttributes();
+        Bitmap preview = BunkrMediaPreview.decodeImage(java.nio.file.Files.readAllBytes(original.toPath()));
+        assertEquals(100, preview.getWidth()); assertEquals(200, preview.getHeight());
+        preview.recycle(); original.delete();
+    }
     @Test public void cacheIdentityUsesMediaKindAndStablePageNotTitleOrThumbnail() throws Exception {
         Context context = RuntimeEnvironment.getApplication();
         NativeContentItem first = video("identity");

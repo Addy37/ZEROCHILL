@@ -3,6 +3,8 @@ package com.webapp.crazyshit;
 import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.graphics.Matrix;
+import androidx.exifinterface.media.ExifInterface;
 import android.media.MediaMetadataRetriever;
 import android.os.Handler;
 import android.os.Looper;
@@ -10,6 +12,7 @@ import android.os.SystemClock;
 import android.webkit.CookieManager;
 
 import java.io.ByteArrayOutputStream;
+import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -127,7 +130,26 @@ final class BunkrMediaPreview {
         options.inJustDecodeBounds = false;
         Bitmap decoded = BitmapFactory.decodeByteArray(bytes, 0, bytes.length, options);
         if (decoded == null) return null;
-        return scale(decoded);
+        decoded = scale(decoded);
+        // BitmapFactory does not apply camera orientation when producing the cached JPEG.
+        try {
+            ExifInterface exif = new ExifInterface(new ByteArrayInputStream(bytes));
+            int orientation = exif.getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL);
+            Matrix matrix = new Matrix();
+            switch (orientation) {
+                case ExifInterface.ORIENTATION_FLIP_HORIZONTAL: matrix.setScale(-1, 1); break;
+                case ExifInterface.ORIENTATION_ROTATE_180: matrix.setRotate(180); break;
+                case ExifInterface.ORIENTATION_FLIP_VERTICAL: matrix.setScale(1, -1); break;
+                case ExifInterface.ORIENTATION_TRANSPOSE: matrix.setRotate(90); matrix.postScale(-1, 1); break;
+                case ExifInterface.ORIENTATION_ROTATE_90: matrix.setRotate(90); break;
+                case ExifInterface.ORIENTATION_TRANSVERSE: matrix.setRotate(-90); matrix.postScale(-1, 1); break;
+                case ExifInterface.ORIENTATION_ROTATE_270: matrix.setRotate(-90); break;
+                default: return decoded;
+            }
+            Bitmap oriented = Bitmap.createBitmap(decoded, 0, 0, decoded.getWidth(), decoded.getHeight(), matrix, true);
+            if (oriented != decoded) decoded.recycle();
+            return oriented;
+        } catch (IOException ignored) { return decoded; }
     }
 
     private static Bitmap frame(MediaMetadataRetriever retriever, long time) {
