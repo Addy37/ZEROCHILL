@@ -885,7 +885,7 @@ public final class BunkrRepository {
         String title = doc.title().toLowerCase(Locale.US);
         if (title.contains("just a moment") || title.contains("attention required") ||
                 title.contains("ddos-guard") || title.contains("404") ||
-                title.contains("not found")) return true;
+                title.contains("not found") || title.contains("site unavailable")) return true;
         String text = doc.text().toLowerCase(Locale.US);
         return text.contains("checking your browser before accessing") ||
                 text.contains("server under maintenance") ||
