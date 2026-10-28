@@ -217,6 +217,19 @@ jobs:
           gradle-version: '8.11.1'
           cache-provider: basic
 
+      - name: Run focused ShitTok Focus Mode and lifecycle regressions first
+        if: github.head_ref == 'feature/shittok-smooth-pinch-focus-mode'
+        run: >-
+          gradle --no-daemon :app:testDebugUnitTest
+          --tests 'com.webapp.crazyshit.ShitTokDynamicPinchTest'
+          --tests 'com.webapp.crazyshit.ShitTokFocusModeViewportTest'
+          --tests 'com.webapp.crazyshit.ShitTokInteraction*'
+          --tests 'com.webapp.crazyshit.ShitTokAudioOwnershipTest'
+          --tests 'com.webapp.crazyshit.ShitTokSettledSwipeTest'
+          --tests 'com.webapp.crazyshit.ShitTokSwipeStartTest'
+          --tests 'com.webapp.crazyshit.ShitTokSessionResumeTest'
+          --tests 'com.webapp.crazyshit.ShitTokAutoScrollIntegrationTest'
+
       - name: Run focused XMegaDrive Shows lifecycle regressions
         if: github.head_ref == 'fix/xmegadrive-shows-lifecycle'
         run: >-
