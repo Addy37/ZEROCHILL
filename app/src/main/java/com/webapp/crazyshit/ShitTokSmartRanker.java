@@ -75,6 +75,7 @@ final class ShitTokSmartRanker {
 
     static synchronized float score(NativeContentItem item) {
         if (item == null) return 0f;
+        ShitTokCommunityPopularity.refreshAsync();
         register(item);
         String key = ZeroChillSocialRepository.contentKey(item.url);
         return ShitTokCommunityPopularity.score(key) - penaltyLocked(Feature.from(item), System.currentTimeMillis());
