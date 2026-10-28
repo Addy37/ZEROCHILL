@@ -74,6 +74,7 @@ final class ZeroChillPushNotificationPresenter {
         Context app = context.getApplicationContext();
         if (!isUuid(messageId) || !isUuid(senderId) || !canPost(app)) return;
         if (!ZeroChillAccountRepository.hasStoredSession(app)) return;
+        if (!ZeroChillNotificationPreferences.cached(app).directMessages) return;
 
         createMessagesChannel(app);
         String name = cleanSenderName(senderName);
@@ -105,6 +106,7 @@ final class ZeroChillPushNotificationPresenter {
         Context app = context.getApplicationContext();
         if (!isUuid(messageId) || !isUuid(senderId) || !canPost(app)) return;
         if (!ZeroChillAccountRepository.hasStoredSession(app)) return;
+        if (!ZeroChillNotificationPreferences.cached(app).directMessages) return;
 
         SharedPreferences prefs = app.getSharedPreferences(APP_PREFS, Context.MODE_PRIVATE);
         if (!prefs.getBoolean(PREF_MESSAGE_PREVIEWS, false)) return;
@@ -248,6 +250,7 @@ final class ZeroChillPushNotificationPresenter {
         Context app = context.getApplicationContext();
         if (clean(eventId).isEmpty() || clean(entryId).isEmpty() || !isSocialType(socialType) || !canPost(app)) return;
         if (!ZeroChillAccountRepository.hasStoredSession(app)) return;
+        if (!ZeroChillNotificationPreferences.cached(app).allowsSocial(socialType)) return;
 
         createSocialChannel(app);
         String name = cleanSenderName(actorName);
