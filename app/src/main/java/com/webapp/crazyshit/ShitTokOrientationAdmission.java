@@ -205,7 +205,8 @@ final class ShitTokOrientationAdmission {
             while (allowedWork.getAsBoolean() && !Thread.currentThread().isInterrupted()
                     && admitted.size() < maxItems.getAsInt() && clock.getAsLong() - started < BATCH_MILLIS) {
                 while (active.size() < 3 && attempts < 24) {
-                    NativeContentItem item = nextCandidate(candidates, active.values(), productionDone.getAsBoolean(), remaining);
+                    NativeContentItem item = nextCandidate(candidates, active.values(),
+                            productionDone.getAsBoolean(), remaining, attempts);
                     if (item == null) break;
                     attempts++;
                     try {
@@ -246,23 +247,50 @@ final class ShitTokOrientationAdmission {
     }
 
     private static NativeContentItem nextCandidate(java.util.concurrent.BlockingQueue<NativeContentItem> candidates,
-            java.util.Collection<NativeContentItem> active, boolean productionDone, List<NativeContentItem> remaining) {
+            java.util.Collection<NativeContentItem> active, boolean productionDone,
+            List<NativeContentItem> remaining, int attempt) {
         // Keep one of the three lanes available to a later, faster provider. Once production
         // finishes there is nothing left to race, so a single provider may use all three.
         Map<String, Integer> counts = new java.util.HashMap<>();
         for (NativeContentItem item : active) counts.merge(ShitTokAspectPriority.sourceKey(item), 1, Integer::sum);
         synchronized (candidates) {
             ArrayList<NativeContentItem> deferred = new ArrayList<>();
-            NativeContentItem selected = null;
+            ArrayList<NativeContentItem> eligible = new ArrayList<>();
             int available = candidates.size();
             for (int i = 0; i < available; i++) {
                 NativeContentItem item = candidates.poll();
                 if (item == null) break;
                 if (productionDone || counts.getOrDefault(ShitTokAspectPriority.sourceKey(item), 0) < 2) {
-                    selected = item; break;
+                    eligible.add(item);
+                } else {
+                    deferred.add(item);
                 }
-                deferred.add(item);
             }
+
+            NativeContentItem selected = null;
+            if (!eligible.isEmpty()) {
+                // Every fourth admission deliberately follows the already-randomized queue rather
+                // than the score. Normal admissions prefer trusted no-probe dimensions, then the
+                // strongest popularity/local-skip score among candidates that are ready now.
+                if (attempt % 4 == 3) {
+                    selected = eligible.remove(0);
+                } else {
+                    int bestIndex = 0;
+                    for (int i = 1; i < eligible.size(); i++) {
+                        NativeContentItem current = eligible.get(i);
+                        NativeContentItem best = eligible.get(bestIndex);
+                        boolean currentTrusted = trustedHint(current);
+                        boolean bestTrusted = trustedHint(best);
+                        if (currentTrusted != bestTrusted) {
+                            if (currentTrusted) bestIndex = i;
+                        } else if (ShitTokSmartRanker.score(current) > ShitTokSmartRanker.score(best)) {
+                            bestIndex = i;
+                        }
+                    }
+                    selected = eligible.remove(bestIndex);
+                }
+            }
+            for (NativeContentItem item : eligible) if (!candidates.offer(item)) remaining.add(item);
             for (NativeContentItem item : deferred) if (!candidates.offer(item)) remaining.add(item);
             return selected;
         }
