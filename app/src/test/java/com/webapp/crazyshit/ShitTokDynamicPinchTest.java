@@ -221,7 +221,6 @@ public class ShitTokDynamicPinchTest {
         Harness h = new Harness();
         touch(h.root, MotionEvent.ACTION_DOWN, 300, 500);
         touch(h.root, MotionEvent.ACTION_UP, 300, 500);
-        // The unattached harness queues performClick until attachment. Check dispatch.
         assertEquals(1, h.ups);
         assertEquals(0, h.cancels);
         assertTrue(h.transitions.isEmpty());
@@ -312,11 +311,32 @@ public class ShitTokDynamicPinchTest {
         }
     }
 
-    @Test public void focusModeMigratesToNextPageAndKeepsFeedChromeHidden() {
+    @Test public void focusPeerPreparationHidesIncomingChrome() {
+        try (ShitTokAudioOwnershipTest.Fixture f = new ShitTokAudioOwnershipTest.Fixture()) {
+            ReflectionHelpers.callInstanceMethod(f.feed, "playSelected");
+            View root = ((RecyclerView.ViewHolder) f.selected).itemView;
+            begin(root);
+            grow(root);
+            release(root, 200, 600);
+            idleAnimations();
+
+            ShitTokDynamicPinchController first = ReflectionHelpers.getField(f.selected, "pinch");
+            assertTrue(first.isFocusMode());
+
+            RecyclerView.ViewHolder incoming = (RecyclerView.ViewHolder) f.offscreen;
+            ReflectionHelpers.callInstanceMethod(first, "preparePeerView",
+                    from(View.class, incoming.itemView));
+            assertEquals(0f, ((View) ReflectionHelpers.getField(incoming, "lower")).getAlpha(), 0f);
+        }
+    }
+
+    @Test public void focusModeMigratesToActualSelectedPageAndKeepsChromeHidden() {
         try (ShitTokAudioOwnershipTest.Fixture f = new ShitTokAudioOwnershipTest.Fixture()) {
             ReflectionHelpers.callInstanceMethod(f.feed, "playSelected");
             View root = ((RecyclerView.ViewHolder) f.selected).itemView;
             ViewPager2 pager = ReflectionHelpers.getField(f.feed, "pager");
+            RecyclerView recycler = (RecyclerView) pager.getChildAt(0);
+
             begin(root);
             grow(root);
             release(root, 200, 600);
@@ -325,21 +345,22 @@ public class ShitTokDynamicPinchTest {
             ShitTokDynamicPinchController first = ReflectionHelpers.getField(f.selected, "pinch");
             assertTrue(first.isFocusMode());
             assertTrue(pager.isUserInputEnabled());
-            assertEquals(0f, ((View) ReflectionHelpers.getField(f.duplicate, "lower")).getAlpha(), 0f);
 
             pager.setCurrentItem(1, false);
             idleAnimations();
 
-            ShitTokDynamicPinchController next = ReflectionHelpers.getField(f.duplicate, "pinch");
+            RecyclerView.ViewHolder actual = recycler.findViewHolderForAdapterPosition(1);
+            assertNotNull(actual);
+            ShitTokDynamicPinchController next = ReflectionHelpers.getField(actual, "pinch");
             assertTrue(next.isFocusMode());
             assertTrue(pager.isUserInputEnabled());
-            assertEquals(0f, ((View) ReflectionHelpers.getField(f.duplicate, "lower")).getAlpha(), 0f);
+            assertEquals(0f, ((View) ReflectionHelpers.getField(actual, "lower")).getAlpha(), 0f);
 
             next.reset();
             idleAnimations();
             assertFalse(next.isFocusMode());
             assertTrue(pager.isUserInputEnabled());
-            assertEquals(1f, ((View) ReflectionHelpers.getField(f.duplicate, "lower")).getAlpha(), 0f);
+            assertEquals(1f, ((View) ReflectionHelpers.getField(actual, "lower")).getAlpha(), 0f);
         }
     }
 
