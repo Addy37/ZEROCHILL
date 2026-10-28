@@ -1,87 +1,113 @@
-# ShitTok temporary dynamic pinch candidate
+# ShitTok pinch and Focus Mode
 
-Base: `rebrand/zerochill` at `d46516d8b9319d32a926bff9e13332841e0d094f`.
-Candidate branch: `feature/shittok-dynamic-pinch`. Keep unmerged pending phone testing.
+Current candidate branch: `feature/shittok-smooth-pinch-focus-mode`.
+Base: current approved `main` after PR #359.
+Keep unmerged pending CI and physical-device approval.
 
 ## Interaction and architecture
 
-Only an active, playing, canonical holder with the owner's attached surface can
-start a pinch. The first touch must belong to the video, rather than a button or
-scrubber. A second finger enters immediately. Root-space pointer IDs and their
-distance drive a 0.45–3.5 scale, relative to the initial distance. The current
-midpoint becomes the focal point. There is no persistent zoom, pan or double-tap mode.
+Only the active, playing canonical holder with the playback owner's attached surface
+can start a feed pinch. The first touch must belong to the video rather than a button
+or scrubber. A second finger enters immediately. Root-space pointer IDs and their
+distance drive a bounded 0.45–3.5 transform on the existing Media3 content frame.
 
-`ShitTokDynamicPinchController.TouchFrame` observes before child dispatch. It
-cancels the original click/creator-swipe target once, blocks parent interception
-and disables vertical pager input. It consumes the remainder of that touch
-sequence, including finger release, so it cannot toggle pause or open a creator.
-Pointer up, final up, cancel and a third finger immediately restore scale 1,
-original pivot, chrome and pager input. A fresh one-finger gesture works normally.
+Live pinch motion is deliberately softened around 1x and the focal point is damped,
+so small finger changes do not create the previous harsh 1:1 jump. The fitted
+PlayerView, TextureView, player owner, layout size, and playback surface remain
+unchanged.
 
-ShitTok already inflated `view_video_player_texture.xml` before this change.
-The candidate preserves that TextureView, Media3 1.11.1, the fitted PlayerView
-layout and the three-player owner. Only `exo_content_frame` receives transform
-properties. App chrome, subtitles, artwork/loading overlays, header and bottom
-navigation hide using alpha without changing viewport dimensions or insets.
-There are no per-move allocations, layout parameters, player calls or surface
-handoffs. One copied cancel event is allocated at gesture entry.
+An ordinary pinch release animates back to the resting transform instead of snapping.
+A deliberate outward pinch that crosses the Focus Mode threshold promotes the current
+video into a persistent portrait Focus Mode after the fingers leave the screen.
+Focus Mode keeps the normal ShitTok feed chrome and vertical pager disabled while
+reusing the same player and surface.
 
-Bind, detach, recycle, outgoing ownership, page/scroll changes, host pause,
-deactivation, refresh, close, configuration and fullscreen/gallery/comments
-transitions reset the controller. Touch-origin state also clears before reuse.
-Async chrome callbacks cannot reveal controls during pinch. Completion-driven
-auto-scroll waits until pinch ends. Automatic creator-gallery warming remains off.
+Focus Mode exposes a minimal player surface at the bottom:
+
+- Exit
+- Play / pause
+- Progress scrubber
+- Playback speed
+
+The user can pinch again while Focus Mode is active. Back exits Focus Mode through the
+same existing temporary-pinch reset path. The playback speed that existed before Focus
+Mode is restored on exit.
+
+`ShitTokDynamicPinchController.TouchFrame` still observes before child dispatch. It
+cancels the original click/creator-swipe target once when the two-finger gesture takes
+over, blocks parent interception, and consumes the remainder of the owned gesture.
+Controls in the Focus Mode chrome remain normal child views and receive their own
+touches.
+
+Cancel, third-finger interruption, holder bind/detach/recycle, outgoing ownership,
+page changes, host pause/deactivation, refresh, close, configuration changes, and Back
+reset the transform and Focus Mode safely before reuse.
+
+## Compatibility boundaries
+
+This feature must not:
+
+- recreate ExoPlayer
+- move or replace the TextureView surface
+- change the ShitTok player pool or ownership model
+- alter feed admission, preload, source selection, creator handoff, comments, likes,
+  favorites, history, downloads, persisted settings, or account data
+- change application ID, signing identity, backend, Supabase, or remote config
+
+The existing player/surface continuity is more important than reproducing every TikTok
+visual detail.
 
 ## Validation scope
 
-The focused Robolectric test exercises actual multi-pointer dispatch, scale
-limits, midpoint, immediate reset, child cancellation, parent interception,
-normal/overlay touches, rapid repetition, no layout request during scaling,
-real-holder player/surface continuity, pending auto-scroll and lifecycle/reuse.
-It uses the existing offline, decoder-free playback fixture. It cannot validate
-actual video pixels, hardware decoding or physical swipe frame timing.
+Focused Robolectric coverage exercises:
 
-The branch-specific CI comparison runs only the existing short `chaosScroll`
-Macrobenchmark: approved source then candidate, three warm iterations each on
-one API 35 Pixel 6 emulator, with app data cleared between sources. It preserves
-both source SHAs, frame timings, page/holder/pool/surface trace totals, memory and
-device diagnostics. The ten-flow performance workflow skips this branch.
-Live-source ordering/network variance and fixed run order limit causal claims;
-these emulator numbers are regression signals, not proof of phone smoothness.
-Actual results and failures belong in the PR delivery report.
+- scale bounds and softened response
+- focal-point damping without layout resize
+- animated ordinary release
+- outward-pinch Focus Mode promotion
+- Focus Mode persistence after finger release
+- Back/reset behavior
+- parent interception and child cancellation
+- auto-advance staying blocked until Focus Mode exits
+- real-holder player and surface continuity
+- holder, page, lifecycle, ownership, refresh, close, and configuration resets
+
+CI remains a regression signal. It cannot prove physical video pixels, hardware decoder
+behavior, 120 Hz motion feel, or the final placement of Focus Mode controls on the
+OnePlus device.
 
 ## Phone checklist
 
-Use the signed upgrade candidate. Do not uninstall the existing app or clear data.
+Use the signed Beta/upgrade candidate without uninstalling or clearing app data.
 
-1. One-finger vertical swipe still selects videos normally.
-2. Pinch inward during playback; it shrinks below normal and chrome hides.
-3. Pinch outward; video enlarges around the midpoint, with unscaled controls.
-4. Repeat rapid pinches, alternating shrink and enlarge.
-5. Playback and its audio continue during each pinch.
-6. Lift the first finger before the second; scale/UI/paging reset immediately.
-7. Lift the second finger first, then both fingers together in another gesture.
-8. Cancel a pinch by backgrounding or rotating; return at normal scale/chrome.
-9. Move vertically with two fingers during pinch; the page must stay selected.
-10. Release and immediately start a fresh one-finger swipe.
-11. Pinch then rapidly move forward and backward through other videos.
-12. Every incoming video starts at exactly 1.0x.
-13. Every incoming video's normal UI remains visible.
-14. Listen for audio from a previous or queued video.
-15. Check for overlapping audio or duplicate playback starts.
-16. Open/close comments after pinch.
-17. Like, save/favorite and share after pinch.
-18. Test auto-scroll, including holding a pinch when the video finishes.
-19. Rotate and enter/exit horizontal fullscreen after pinch.
-20. Open/return from a creator gallery, including its horizontal swipe.
-21. Background/foreground after using pinch; resume normal playback.
-22. Scroll rapidly after many pinches, including immediate reverse swipes.
-23. Compare hitching and stray audio with approved 4.3.7 on the same phone.
+1. Compare a normal small pinch against TikTok. ZEROCHILL should feel resistant rather
+   than twitchy and should animate back instead of snapping.
+2. Pinch outward enough to enter Focus Mode. Release both fingers. Focus Mode should
+   remain active.
+3. Confirm normal ShitTok header, action rail, captions, and bottom navigation remain
+   hidden while Focus Mode is active.
+4. Confirm the Focus Mode controls show Exit, play/pause, scrubber, and playback speed.
+5. Confirm playback and audio continue without restarting when Focus Mode begins.
+6. Scrub and resume playback from the Focus Mode controls.
+7. Change playback speed, exit Focus Mode, and verify the previous baseline speed is
+   restored.
+8. Pinch again while already in Focus Mode and confirm the transform remains smooth.
+9. Press Back while in Focus Mode. It should return to the same ShitTok item with normal
+   chrome and vertical paging restored.
+10. Use X to exit Focus Mode and compare the return animation with TikTok.
+11. Pinch inward and release without crossing the Focus threshold. It should return to
+    normal feed mode.
+12. Add a third finger or cancel a pinch. It must not leave a transformed frame or stuck
+    pager.
+13. Verify one-finger vertical swipe still selects clips normally after exiting.
+14. Verify creator swipe, comments, like, favorite/save, share, double tap, hold-for-2x,
+    mute, and scrubber still work after repeated Focus Mode entries.
+15. Let a clip finish while pinching or in Focus Mode. Auto-advance must not move until
+    Focus Mode exits.
+16. Background/foreground, rotate, switch tabs, refresh, and return from creator gallery.
+    Every incoming clip must start at the normal transform and UI state.
+17. Listen for overlapping audio or a previous clip continuing after page changes.
+18. Compare motion on the 120 Hz physical device directly against the supplied TikTok
+    reference recording.
 
-Also start on a button/scrubber with one finger and add another. That control
-must keep its existing behavior rather than activating video pinch. Adding a
-third finger should end the pinch without leaving the video transformed.
-
-No application ID, stable signing, persisted settings/data, playback/preload,
-content-source, backend or remote-config change is intended. The feature remains
-an unapproved candidate until the physical checklist passes.
+Do not merge until the physical-device behavior is approved.
