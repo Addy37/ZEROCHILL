@@ -1,6 +1,7 @@
 package com.webapp.crazyshit;
 
 import android.app.Application;
+import android.view.MotionEvent;
 import android.view.View;
 
 import androidx.media3.ui.PlayerView;
@@ -58,6 +59,42 @@ public class ShitTokFocusModeViewportTest {
             assertEquals(originalPlayerHeight, playerView.getLayoutParams().height);
             assertSame(f.selectedPlayer.player, playerView.getPlayer());
             assertEquals(ownerBefore, owner.summary());
+        }
+    }
+
+    @Test public void focusModeMediaTapTogglesPlaybackAndNeverStartsHoldSpeedBoost() {
+        try (ShitTokAudioOwnershipTest.Fixture f = new ShitTokAudioOwnershipTest.Fixture()) {
+            ReflectionHelpers.callInstanceMethod(f.feed, "playSelected");
+            View root = ((RecyclerView.ViewHolder) f.selected).itemView;
+            ShitTokDynamicPinchController pinch = ReflectionHelpers.getField(f.selected, "pinch");
+
+            ShitTokDynamicPinchTest.begin(root);
+            ShitTokDynamicPinchTest.grow(root);
+            ShitTokDynamicPinchTest.release(root, 200, 600);
+            ShitTokDynamicPinchTest.idleAnimations();
+            org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper())
+                    .idleFor(Duration.ofMillis(120));
+            assertTrue(pinch.isFocusMode());
+
+            f.selectedPlayer.readyToPlay = true;
+            f.selectedPlayer.plays = 0;
+            f.selectedPlayer.pauses = 0;
+            f.selectedPlayer.speed = new androidx.media3.common.PlaybackParameters(1f);
+
+            ShitTokDynamicPinchTest.touch(root, MotionEvent.ACTION_DOWN, 400, 600);
+            org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper())
+                    .idleFor(Duration.ofMillis(650));
+            assertEquals(1f, f.selectedPlayer.speed.speed, 0f);
+            ShitTokDynamicPinchTest.touch(root, MotionEvent.ACTION_UP, 400, 600);
+            assertEquals(1, f.selectedPlayer.pauses);
+            assertFalse(f.selectedPlayer.readyToPlay);
+            assertEquals(1f, f.selectedPlayer.speed.speed, 0f);
+
+            ShitTokDynamicPinchTest.touch(root, MotionEvent.ACTION_DOWN, 400, 600);
+            ShitTokDynamicPinchTest.touch(root, MotionEvent.ACTION_UP, 400, 600);
+            assertEquals(1, f.selectedPlayer.plays);
+            assertTrue(f.selectedPlayer.readyToPlay);
+            assertEquals(1f, f.selectedPlayer.speed.speed, 0f);
         }
     }
 }
