@@ -40,7 +40,7 @@ final class BunkrMediaPreview {
     private static final int MAX_IMAGE_BYTES = 12 * 1024 * 1024;
     private static final long MAX_CACHE_BYTES = 32L * 1024 * 1024;
     private static final Handler MAIN = new Handler(Looper.getMainLooper());
-    private static final ThreadPoolExecutor IO = new ThreadPoolExecutor(1, 1, 0L,
+    private static final ThreadPoolExecutor IO = new ThreadPoolExecutor(2, 2, 0L,
             TimeUnit.MILLISECONDS, new ArrayBlockingQueue<>(24));
     private static final LinkedHashMap<String, Long> FAILURES = new LinkedHashMap<>();
     private static final Pattern RANGE = Pattern.compile("bytes (\\d+)-(\\d+)/(\\d+)");
