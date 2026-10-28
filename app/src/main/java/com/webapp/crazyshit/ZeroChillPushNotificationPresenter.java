@@ -98,9 +98,9 @@ final class ZeroChillPushNotificationPresenter {
                 .setPriority(NotificationCompat.PRIORITY_DEFAULT)
                 .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
                 .setPublicVersion(publicVersion)
-                .setGroup(GROUP_MESSAGES)
                 .setShowWhen(true)
                 .setWhen(System.currentTimeMillis());
+        if (groupMessages) builder.setGroup(GROUP_MESSAGES);
 
         if (showPreviews && previews != null && !previews.isEmpty()) {
             Person you = new Person.Builder().setName("You").build();
