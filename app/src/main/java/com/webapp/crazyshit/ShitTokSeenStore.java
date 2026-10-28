@@ -24,6 +24,7 @@ final class ShitTokSeenStore {
     private boolean dirty;
     ShitTokSeenStore(Context app) {
         this.app = app;
+        ShitTokSmartRanker.initialize(app);
         read("seen_v1", seen, SEEN_LIMIT);
         read("liked_v1", liked, LIKED_LIMIT);
         // Migrate the old 500 URLs without deleting or rewriting the old key.
@@ -43,6 +44,7 @@ final class ShitTokSeenStore {
                 || (media != null && liked.contains(ShitTokContentIdentity.media(media)));
     }
     synchronized void watch(String page, String media) {
+        ShitTokSmartRanker.onViewed(page);
         add(seen, ShitTokContentIdentity.page(page), SEEN_LIMIT);
         if (media != null) add(seen, ShitTokContentIdentity.media(media), SEEN_LIMIT);
         dirty = true;
