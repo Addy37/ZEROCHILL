@@ -94,6 +94,11 @@ final class CreatorSystemNotificationPresenter {
         NotificationManagerCompat.from(app).notify(NOTIFICATION_ID, notification);
     }
 
+    static void clear(Context context) {
+        if (context == null) return;
+        NotificationManagerCompat.from(context.getApplicationContext()).cancel(NOTIFICATION_ID);
+    }
+
     static List<String> notificationLines(List<NotificationCoordinator.SourceAlert> alerts) {
         ArrayList<String> lines = new ArrayList<>();
         for (CreatorUpdate update : creatorUpdates(alerts)) lines.add(line(update));
