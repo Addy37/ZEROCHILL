@@ -37,6 +37,7 @@ final class ZeroChillPushNotificationPresenter {
     private static final String GROUP_MESSAGES = "zerochill_direct_messages";
     private static final String GROUP_SOCIAL = "zerochill_social";
     private static final int MAX_PREVIEW_MESSAGES = 6;
+    private static SharedPreferences.OnSharedPreferenceChangeListener appPrefsListener;
 
     private ZeroChillPushNotificationPresenter() { }
 
@@ -44,6 +45,18 @@ final class ZeroChillPushNotificationPresenter {
         Context app = context.getApplicationContext();
         createMessagesChannel(app);
         createSocialChannel(app);
+        SharedPreferences prefs = app.getSharedPreferences(APP_PREFS, Context.MODE_PRIVATE);
+        if (appPrefsListener == null) {
+            appPrefsListener = (shared, key) -> {
+                if (PREF_MESSAGE_PREVIEWS.equals(key) || PREF_GROUP_MESSAGES.equals(key)) {
+                    clearMessageNotifications(app);
+                } else if (NotificationCoordinator.PREF_NEW_VIDEO_ALERTS.equals(key)
+                        && !shared.getBoolean(NotificationCoordinator.PREF_NEW_VIDEO_ALERTS, true)) {
+                    CreatorSystemNotificationPresenter.clear(app);
+                }
+            };
+            prefs.registerOnSharedPreferenceChangeListener(appPrefsListener);
+        }
     }
 
     static void showDirectMessage(
