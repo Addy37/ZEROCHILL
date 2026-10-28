@@ -1117,18 +1117,18 @@ public final class BunkrRepository {
                 ? "https://get.bunkrr.su" : configured;
     }
 
-    private static String userAgent() {
+    static String userAgent() {
         SourceConfig.Bunkr config = config();
         return config == null ? USER_AGENT : config.userAgent;
     }
 
-    private static String referer(String fallback) {
+    static String referer(String fallback) {
         SourceConfig.Bunkr config = config();
         return config != null && !config.refererOverride.isEmpty()
                 ? config.refererOverride : fallback;
     }
 
-    private static int requestTimeoutMs() {
+    static int requestTimeoutMs() {
         SourceConfig.Bunkr config = config();
         return config == null ? 12_000 : config.requestTimeoutMs;
     }

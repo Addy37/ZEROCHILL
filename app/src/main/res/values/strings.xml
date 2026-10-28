@@ -2,4 +2,5 @@
 <resources>
     <string name="app_name">ZeroChill</string>
     <string name="edition_name">ZeroChill</string>
+    <string name="media_preview_unavailable">Preview unavailable</string>
 </resources>
