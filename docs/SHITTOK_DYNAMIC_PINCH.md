@@ -14,8 +14,9 @@ Focus Mode follows the supplied TikTok reference layout:
 - media reclaims the old feed viewport and is top-anchored above the compact control zone
 - normal ShitTok title, metadata, action rail, and feed chrome disappear instead of shifting with the viewport
 - neutral gray hairline scrubber with no visible thumb at rest
-- small circular exit control at bottom-left
-- compact rounded play/pause and speed pill at bottom-right
+- scrubber and button row occupy separate vertical zones so their touch areas never overlap
+- small circular exit control at bottom-left with a minimum 48dp touch target
+- compact rounded play/pause and speed pill at bottom-right with minimum 48dp-tall touch targets
 - no ZEROCHILL cyan treatment in the fullscreen chrome
 - controls hide during another pinch and return after release
 
@@ -47,5 +48,6 @@ Focused Robolectric coverage checks:
 - auto-advance blocking
 - holder lifecycle resets
 - fullscreen viewport reclaim and restoration
+- non-overlapping progress/control geometry and minimum button touch targets
 
 Physical-device validation remains required for final motion and visual matching, especially on high-refresh-rate displays.
