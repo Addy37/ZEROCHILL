@@ -109,10 +109,12 @@ android {
     }
 }
 
-// Native Robolectric surface fixtures share a JVM with the complete regression suite.
-// Budget test memory explicitly; this does not change the application's heap or APK.
+// Native Robolectric fixtures retain resources across classes. Bound each test worker
+// lifetime as well as its heap; every test still runs. This does not change the APK.
 tasks.withType<org.gradle.api.tasks.testing.Test>().configureEach {
     maxHeapSize = "1g"
+    maxParallelForks = 1
+    forkEvery = 50
 }
 
 kotlin { jvmToolchain(17) }
