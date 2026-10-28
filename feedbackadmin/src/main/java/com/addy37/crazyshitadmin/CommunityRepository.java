@@ -85,6 +85,32 @@ final class CommunityRepository {
         }
     }
 
+    static final class Conversation {
+        final String participantAId, participantAName, participantBId, participantBName;
+        final String lastMessageId, lastMessageBody, lastSenderId, lastSenderName, lastCreatedAt;
+        final long messageCount, unreadCount, reportCount;
+        final List<String> reportReasons;
+
+        Conversation(JSONObject value) {
+            participantAId = value.optString("participant_a_id");
+            participantAName = value.optString("participant_a_name");
+            participantBId = value.optString("participant_b_id");
+            participantBName = value.optString("participant_b_name");
+            lastMessageId = value.optString("last_message_id");
+            lastMessageBody = value.optString("last_message_body");
+            lastSenderId = value.optString("last_sender_id");
+            lastSenderName = value.optString("last_sender_name");
+            lastCreatedAt = value.optString("last_created_at");
+            messageCount = value.optLong("message_count");
+            unreadCount = value.optLong("unread_count");
+            reportCount = value.optLong("report_count");
+            reportReasons = strings(value.optJSONArray("report_reasons"));
+        }
+
+        String key() { return participantAId + ":" + participantBId; }
+        boolean isReported() { return reportCount > 0; }
+    }
+
     static final class DirectMessage {
         final String id, senderId, senderName, recipientId, recipientName, body, createdAt, readAt;
         final long reportCount;
@@ -195,21 +221,40 @@ final class CommunityRepository {
         return activities(result.optJSONArray("items"));
     }
 
+    static List<Conversation> conversations(String token, String query, String filter) throws Exception {
+        JSONObject result = dmRequest(token, new JSONObject()
+                .put("action", "conversations")
+                .put("query", query == null ? "" : query.trim())
+                .put("filter", filter == null ? "all" : filter)
+                .put("limit", 100));
+        JSONArray rows = result.optJSONArray("items");
+        List<Conversation> items = new ArrayList<>();
+        if (rows != null) {
+            for (int i = 0; i < rows.length(); i++) {
+                JSONObject row = rows.optJSONObject(i);
+                if (row != null) items.add(new Conversation(row));
+            }
+        }
+        return items;
+    }
+
+    static List<DirectMessage> conversationMessages(String token, String participantAId, String participantBId) throws Exception {
+        JSONObject result = dmRequest(token, new JSONObject()
+                .put("action", "conversation")
+                .put("participant_a_id", participantAId)
+                .put("participant_b_id", participantBId)
+                .put("limit", 1000));
+        return directMessageRows(result.optJSONArray("items"));
+    }
+
+    /** Legacy per-message moderation call kept for older private admin builds. */
     static List<DirectMessage> directMessages(String token, String query, String filter) throws Exception {
         JSONObject result = dmRequest(token, new JSONObject()
                 .put("action", "list")
                 .put("query", query == null ? "" : query.trim())
                 .put("filter", filter == null ? "all" : filter)
                 .put("limit", 100));
-        JSONArray rows = result.optJSONArray("items");
-        List<DirectMessage> items = new ArrayList<>();
-        if (rows != null) {
-            for (int i = 0; i < rows.length(); i++) {
-                JSONObject row = rows.optJSONObject(i);
-                if (row != null) items.add(new DirectMessage(row));
-            }
-        }
-        return items;
+        return directMessageRows(result.optJSONArray("items"));
     }
 
     static List<Report> reports(String token, String query, String filter) throws Exception {
@@ -227,6 +272,16 @@ final class CommunityRepository {
         for (int i = 0; i < rows.length(); i++) {
             JSONObject row = rows.optJSONObject(i);
             if (row != null) items.add(new SocialActivity(row));
+        }
+        return items;
+    }
+
+    private static List<DirectMessage> directMessageRows(JSONArray rows) {
+        List<DirectMessage> items = new ArrayList<>();
+        if (rows == null) return items;
+        for (int i = 0; i < rows.length(); i++) {
+            JSONObject row = rows.optJSONObject(i);
+            if (row != null) items.add(new DirectMessage(row));
         }
         return items;
     }

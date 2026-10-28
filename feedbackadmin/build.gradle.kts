@@ -15,8 +15,8 @@ android {
         minSdk = 26
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         targetSdk = 34
-        versionCode = 13
-        versionName = "2.2.0"
+        versionCode = 14
+        versionName = "2.2.1"
         buildConfigField(
             "String",
             "ADMIN_FEEDBACK_ENDPOINT",

@@ -20,6 +20,8 @@ internal interface AdminGateway {
     fun accounts(token: String, query: String, filter: String): List<CommunityRepository.Account>
     fun accountDetail(token: String, userId: String): CommunityRepository.AccountDetail
     fun socialActivity(token: String, query: String, filter: String): List<CommunityRepository.SocialActivity>
+    fun conversations(token: String, query: String, filter: String): List<CommunityRepository.Conversation> = emptyList()
+    fun conversationMessages(token: String, participantAId: String, participantBId: String): List<CommunityRepository.DirectMessage> = emptyList()
     fun directMessages(token: String, query: String, filter: String): List<CommunityRepository.DirectMessage> = emptyList()
     fun reports(token: String, query: String, filter: String): List<CommunityRepository.Report>
 }
@@ -40,6 +42,8 @@ internal object RepositoryGateway : AdminGateway {
     override fun accounts(token: String, query: String, filter: String) = CommunityRepository.accounts(token, query, filter)
     override fun accountDetail(token: String, userId: String) = CommunityRepository.accountDetail(token, userId)
     override fun socialActivity(token: String, query: String, filter: String) = CommunityRepository.activity(token, query, filter)
+    override fun conversations(token: String, query: String, filter: String) = CommunityRepository.conversations(token, query, filter)
+    override fun conversationMessages(token: String, participantAId: String, participantBId: String) = CommunityRepository.conversationMessages(token, participantAId, participantBId)
     override fun directMessages(token: String, query: String, filter: String) = CommunityRepository.directMessages(token, query, filter)
     override fun reports(token: String, query: String, filter: String) = CommunityRepository.reports(token, query, filter)
 }

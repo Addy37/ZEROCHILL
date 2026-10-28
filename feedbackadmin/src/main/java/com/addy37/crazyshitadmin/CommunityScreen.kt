@@ -118,9 +118,9 @@ import androidx.compose.ui.unit.sp
                 else items(state.communityActivity, key={it.type+":"+it.id}) { ActivityRow(it) }
             }
             "messages" -> {
-                if("communityList" in state.busy && state.communityMessages.isEmpty()) item { InitialLoad("Loading direct messages") }
-                else if(state.communityMessages.isEmpty()) item { EmptyPanel("No messages found", "Nothing matches this search or moderation filter.", Icons.Outlined.MailOutline) }
-                else items(state.communityMessages, key={it.id}) { MessageRow(it) }
+                if("communityList" in state.busy && state.communityConversations.isEmpty()) item { InitialLoad("Loading conversations") }
+                else if(state.communityConversations.isEmpty()) item { EmptyPanel("No conversations found", "Nothing matches this search or moderation filter.", Icons.Outlined.MailOutline) }
+                else items(state.communityConversations, key={it.key()}) { conversation -> ConversationRow(conversation) { state.openConversation(conversation) } }
             }
             "reports" -> {
                 if("communityList" in state.busy && state.communityReports.isEmpty()) item { InitialLoad("Loading reports") }
@@ -136,15 +136,17 @@ import androidx.compose.ui.unit.sp
         item {
             val count = when(state.communitySection) {
                 "social" -> state.communityActivity.size
-                "messages" -> state.communityMessages.size
+                "messages" -> state.communityConversations.size
                 "reports" -> state.communityReports.size
                 else -> state.communityAccounts.size
             }
-            Text("Showing ${number(count.toLong())} recent result${if(count==1) "" else "s"}. Lists are capped at 100 items per request.", color=Muted, fontSize=12.sp)
+            val noun = if(state.communitySection == "messages") "conversation" else "result"
+            Text("Showing ${number(count.toLong())} recent $noun${if(count==1) "" else "s"}.", color=Muted, fontSize=12.sp)
         }
     }
 
     state.accountDetail?.let { detail -> AccountDetailDialog(detail, state::closeAccountDetail) }
+    state.selectedConversation?.let { conversation -> ConversationDialog(conversation, state) }
 }
 
 @Composable private fun SectionChip(label: String, value: String, state: ConsoleState, after: () -> Unit) {
@@ -198,6 +200,57 @@ private fun searchLabel(section: String) = when(section) {
         if(item.text.isNotBlank()) Text(item.text, maxLines=4, overflow=TextOverflow.Ellipsis)
         if(item.secondary.isNotBlank()) Text(item.secondary, color=Muted, fontSize=12.sp, maxLines=2, overflow=TextOverflow.Ellipsis)
     }
+}
+
+@Composable private fun ConversationRow(item: CommunityRepository.Conversation, open: () -> Unit) {
+    ConsolePanel(Modifier.fillMaxWidth().clickable(onClick=open)) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment=Alignment.Top, horizontalArrangement=Arrangement.spacedBy(12.dp)) {
+            Icon(Icons.Outlined.Forum, null, tint=if(item.isReported()) Danger else Cyan)
+            Column(Modifier.weight(1f), verticalArrangement=Arrangement.spacedBy(3.dp)) {
+                Text("${nameOrId(item.participantAName,item.participantAId)} ↔ ${nameOrId(item.participantBName,item.participantBId)}", fontWeight=FontWeight.SemiBold)
+                Text(dateLabel(item.lastCreatedAt), color=Muted, fontSize=12.sp)
+            }
+            when {
+                item.isReported() -> StatusTag("${item.reportCount} REPORT${if(item.reportCount==1L) "" else "S"}", Danger)
+                item.unreadCount > 0 -> StatusTag("${item.unreadCount} UNREAD")
+                else -> StatusTag("READ")
+            }
+        }
+        if(item.lastMessageBody.isNotBlank()) {
+            Text("${nameOrId(item.lastSenderName,item.lastSenderId)}: ${item.lastMessageBody}", fontSize=14.sp, maxLines=3, overflow=TextOverflow.Ellipsis)
+        }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement=Arrangement.SpaceBetween, verticalAlignment=Alignment.CenterVertically) {
+            Text("${number(item.messageCount)} message${if(item.messageCount==1L) "" else "s"}${if(item.unreadCount>0) " · ${number(item.unreadCount)} unread" else ""}", color=Muted, fontSize=11.sp)
+            if(item.reportReasons.isNotEmpty()) Text(item.reportReasons.joinToString(" · ") { friendly(it) }, color=Danger, fontSize=11.sp, maxLines=1, overflow=TextOverflow.Ellipsis)
+        }
+    }
+}
+
+@Composable private fun ConversationDialog(conversation: CommunityRepository.Conversation, state: ConsoleState) {
+    AlertDialog(
+        onDismissRequest=state::closeConversation,
+        icon={Icon(Icons.Outlined.Forum,null,tint=if(conversation.isReported()) Danger else Cyan)},
+        title={
+            Column(verticalArrangement=Arrangement.spacedBy(4.dp)) {
+                Text("${nameOrId(conversation.participantAName,conversation.participantAId)} ↔ ${nameOrId(conversation.participantBName,conversation.participantBId)}")
+                Text("${number(conversation.messageCount)} messages · ${number(conversation.unreadCount)} unread", color=Muted, fontSize=12.sp)
+            }
+        },
+        text={
+            Column(Modifier.heightIn(max=600.dp), verticalArrangement=Arrangement.spacedBy(10.dp)) {
+                ReadOnlyBanner("Read-only conversation")
+                ErrorPanel(state.errors["conversationThread"], state::loadConversation)
+                when {
+                    "conversationThread" in state.busy && state.communityMessages.isEmpty() -> InitialLoad("Loading conversation")
+                    state.communityMessages.isEmpty() -> EmptyPanel("No messages", "This conversation has no messages to display.", Icons.Outlined.MailOutline)
+                    else -> LazyColumn(Modifier.fillMaxWidth().weight(1f), verticalArrangement=Arrangement.spacedBy(10.dp)) {
+                        items(state.communityMessages, key={it.id}) { MessageRow(it) }
+                    }
+                }
+            }
+        },
+        confirmButton={TextButton(onClick=state::closeConversation){Text("Close")}}
+    )
 }
 
 @Composable private fun MessageRow(item: CommunityRepository.DirectMessage) {
@@ -271,11 +324,11 @@ private fun searchLabel(section: String) = when(section) {
     )
 }
 
-@Composable private fun ReadOnlyBanner() {
+@Composable private fun ReadOnlyBanner(label: String = "Read-only account view") {
     Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Good.copy(alpha=.08f)).padding(12.dp),
         verticalAlignment=Alignment.CenterVertically, horizontalArrangement=Arrangement.spacedBy(10.dp)) {
         Icon(Icons.Outlined.Visibility, null, tint=Good)
-        Text("Read-only account view", color=Good, fontWeight=FontWeight.Medium)
+        Text(label, color=Good, fontWeight=FontWeight.Medium)
     }
 }
 

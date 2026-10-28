@@ -25,8 +25,10 @@ internal class ConsoleState @JvmOverloads constructor(application: Application, 
     var communityOverview by mutableStateOf<CommunityRepository.Overview?>(null); private set
     var communityAccounts by mutableStateOf<List<CommunityRepository.Account>>(emptyList()); private set
     var communityActivity by mutableStateOf<List<CommunityRepository.SocialActivity>>(emptyList()); private set
+    var communityConversations by mutableStateOf<List<CommunityRepository.Conversation>>(emptyList()); private set
     var communityMessages by mutableStateOf<List<CommunityRepository.DirectMessage>>(emptyList()); private set
     var communityReports by mutableStateOf<List<CommunityRepository.Report>>(emptyList()); private set
+    var selectedConversation by mutableStateOf<CommunityRepository.Conversation?>(null); private set
     var accountDetail by mutableStateOf<CommunityRepository.AccountDetail?>(null); private set
     var communitySection by mutableStateOf(saved.get<String>("communitySection") ?: "accounts"); private set
     var communityQuery by mutableStateOf(saved.get<String>("communityQuery") ?: ""); private set
@@ -56,7 +58,7 @@ internal class ConsoleState @JvmOverloads constructor(application: Application, 
         saved["configPublished"] = config?.published
     }
     private fun request(key: String, block: suspend (String) -> Unit) {
-        val replaceable = key == "thread" || key == "communityList" || key == "accountDetail"
+        val replaceable = key == "thread" || key == "communityList" || key == "accountDetail" || key == "conversationThread"
         if (key in busy && !replaceable) return
         if (replaceable) tasks.remove(key)?.cancel()
         val requestId = (requestIds[key] ?: 0) + 1
@@ -86,7 +88,7 @@ internal class ConsoleState @JvmOverloads constructor(application: Application, 
         generation++; tasks.values.toList().forEach { it.cancel() }; tasks.clear()
         SecureTokenStore.clear(getApplication()); paired = false
         items = emptyList(); analytics = null; activeCounts = null; config = null; history = emptyList(); thread = null
-        communityOverview = null; communityAccounts = emptyList(); communityActivity = emptyList(); communityMessages = emptyList(); communityReports = emptyList(); accountDetail = null
+        communityOverview = null; communityAccounts = emptyList(); communityActivity = emptyList(); communityConversations = emptyList(); communityMessages = emptyList(); communityReports = emptyList(); selectedConversation = null; accountDetail = null
         communitySection = "accounts"; communityQuery = ""; communityFilterValue = "all"
         saved["communitySection"] = communitySection; saved["communityQuery"] = communityQuery; saved["communityFilter"] = communityFilterValue
         threadId = ""; saved["threadId"] = ""; busy = emptySet(); errors = emptyMap(); notice = ""
@@ -111,14 +113,17 @@ internal class ConsoleState @JvmOverloads constructor(application: Application, 
     }
     fun refreshCommunity() { loadCommunityOverview(); loadCommunityList() }
     fun navigateCommunitySection(value: String) {
+        closeConversation()
         communitySection = value; communityQuery = ""; communityFilterValue = "all"; accountDetail = null
         saved["communitySection"] = value; saved["communityQuery"] = ""; saved["communityFilter"] = "all"
         loadCommunityList()
     }
     fun searchCommunity(value: String) {
+        closeConversation()
         communityQuery = value.trim(); saved["communityQuery"] = communityQuery; loadCommunityList()
     }
     fun setCommunityFilter(value: String) {
+        closeConversation()
         communityFilterValue = value; saved["communityFilter"] = value; loadCommunityList()
     }
     fun loadCommunityList() {
@@ -132,8 +137,8 @@ internal class ConsoleState @JvmOverloads constructor(application: Application, 
                     if(communitySection == section && communityQuery == query && communityFilterValue == filter) communityActivity = loaded
                 }
                 "messages" -> {
-                    val loaded = withContext(Dispatchers.IO) { gateway.directMessages(token, query, filter) }
-                    if(communitySection == section && communityQuery == query && communityFilterValue == filter) communityMessages = loaded
+                    val loaded = withContext(Dispatchers.IO) { gateway.conversations(token, query, filter) }
+                    if(communitySection == section && communityQuery == query && communityFilterValue == filter) communityConversations = loaded
                 }
                 "reports" -> {
                     val loaded = withContext(Dispatchers.IO) { gateway.reports(token, query, filter) }
@@ -145,6 +150,24 @@ internal class ConsoleState @JvmOverloads constructor(application: Application, 
                 }
             }
         }
+    }
+    fun openConversation(conversation: CommunityRepository.Conversation) {
+        selectedConversation = conversation
+        communityMessages = emptyList()
+        loadConversation()
+    }
+    fun loadConversation() {
+        val conversation = selectedConversation ?: return
+        request("conversationThread") { token ->
+            val loaded = withContext(Dispatchers.IO) { gateway.conversationMessages(token, conversation.participantAId, conversation.participantBId) }
+            if(selectedConversation?.key() == conversation.key()) communityMessages = loaded
+        }
+    }
+    fun closeConversation() {
+        tasks.remove("conversationThread")?.cancel()
+        selectedConversation = null
+        communityMessages = emptyList()
+        errors = errors - "conversationThread"
     }
     fun loadAccountDetail(userId: String) = request("accountDetail") { token ->
         accountDetail = withContext(Dispatchers.IO) { gateway.accountDetail(token, userId) }
