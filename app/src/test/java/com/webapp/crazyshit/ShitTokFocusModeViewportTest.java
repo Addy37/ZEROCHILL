@@ -3,6 +3,9 @@ package com.webapp.crazyshit;
 import android.app.Application;
 import android.view.MotionEvent;
 import android.view.View;
+import android.widget.FrameLayout;
+import android.widget.SeekBar;
+import android.widget.TextView;
 
 import androidx.media3.ui.PlayerView;
 import androidx.recyclerview.widget.RecyclerView;
@@ -95,6 +98,47 @@ public class ShitTokFocusModeViewportTest {
             assertEquals(1, f.selectedPlayer.plays);
             assertTrue(f.selectedPlayer.readyToPlay);
             assertEquals(1f, f.selectedPlayer.speed.speed, 0f);
+        }
+    }
+
+    @Test public void focusModeControlRowClearsProgressAndUsesLargeTapTargets() {
+        try (ShitTokAudioOwnershipTest.Fixture f = new ShitTokAudioOwnershipTest.Fixture()) {
+            ReflectionHelpers.callInstanceMethod(f.feed, "playSelected");
+            View root = ((RecyclerView.ViewHolder) f.selected).itemView;
+            ShitTokDynamicPinchController pinch = ReflectionHelpers.getField(f.selected, "pinch");
+
+            ShitTokDynamicPinchTest.begin(root);
+            ShitTokDynamicPinchTest.grow(root);
+            ShitTokDynamicPinchTest.release(root, 200, 600);
+            ShitTokDynamicPinchTest.idleAnimations();
+            org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper())
+                    .idleFor(Duration.ofMillis(120));
+            assertTrue(pinch.isFocusMode());
+
+            FrameLayout focusChrome = ReflectionHelpers.getField(pinch, "focusChrome");
+            SeekBar focusSeek = ReflectionHelpers.getField(pinch, "focusSeek");
+            TextView focusPlay = ReflectionHelpers.getField(pinch, "focusPlay");
+            TextView focusSpeed = ReflectionHelpers.getField(pinch, "focusSpeed");
+            View pill = (View) focusPlay.getParent();
+
+            FrameLayout.LayoutParams chromeParams =
+                    (FrameLayout.LayoutParams) focusChrome.getLayoutParams();
+            FrameLayout.LayoutParams seekParams =
+                    (FrameLayout.LayoutParams) focusSeek.getLayoutParams();
+            FrameLayout.LayoutParams pillParams =
+                    (FrameLayout.LayoutParams) pill.getLayoutParams();
+
+            int seekBottom = seekParams.topMargin + seekParams.height;
+            int pillTop = chromeParams.height - pillParams.bottomMargin - pillParams.height;
+            assertTrue("progress and control row must not overlap", pillTop > seekBottom);
+
+            int minTouch = Math.round(48f * root.getResources().getDisplayMetrics().density);
+            assertTrue(pillParams.height >= minTouch);
+            assertTrue(pillParams.width >= minTouch * 2);
+            assertTrue(focusPlay.getMinimumWidth() >= minTouch);
+            assertTrue(focusPlay.getMinimumHeight() >= minTouch);
+            assertTrue(focusSpeed.getMinimumWidth() >= minTouch);
+            assertTrue(focusSpeed.getMinimumHeight() >= minTouch);
         }
     }
 }
