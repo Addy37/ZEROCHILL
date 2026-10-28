@@ -55,6 +55,10 @@ public class ShitTokDynamicPinchTest {
         touch(root, MotionEvent.ACTION_MOVE, 200, 500, 600, 500);
     }
 
+    static void shrink(View root) {
+        touch(root, MotionEvent.ACTION_MOVE, 350, 500, 450, 500);
+    }
+
     static void nudge(View root) {
         touch(root, MotionEvent.ACTION_MOVE, 280, 500, 520, 500);
     }
@@ -65,7 +69,7 @@ public class ShitTokDynamicPinchTest {
 
     static void idleAnimations() {
         org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper())
-                .idleFor(Duration.ofMillis(260));
+                .idleFor(Duration.ofMillis(300));
     }
 
     static final class Harness {
@@ -108,6 +112,8 @@ public class ShitTokDynamicPinchTest {
         assertTrue(inward > 0.5f && inward < 1f);
         assertFalse(ShitTokDynamicPinchController.shouldEnterFocusMode(1.17f));
         assertTrue(ShitTokDynamicPinchController.shouldEnterFocusMode(1.18f));
+        assertFalse(ShitTokDynamicPinchController.shouldExitFocusMode(0.83f));
+        assertTrue(ShitTokDynamicPinchController.shouldExitFocusMode(0.82f));
     }
 
     @Test public void softenedScaleTracksMidpointWithoutResizingOrScalingChrome() {
@@ -169,20 +175,38 @@ public class ShitTokDynamicPinchTest {
         assertEquals(Arrays.asList(true, false), h.transitions);
     }
 
-    @Test public void cancelAndThirdFingerNeverEnterFocusMode() {
-        for (int end : new int[] {MotionEvent.ACTION_CANCEL}) {
-            Harness h = new Harness();
-            begin(h.root);
-            grow(h.root);
-            touch(h.root, end, 200, 500, 600, 500);
-            idleAnimations();
-            assertFalse(h.pinch.isActive());
-            assertFalse(h.pinch.isFocusMode());
-            assertEquals(1f, h.media.getScaleX(), 0.001f);
-            assertEquals(0.7f, h.overlay.getAlpha(), 0f);
-        }
-
+    @Test public void inwardPinchExitsFocusModeWithoutUsingCloseButton() {
         Harness h = new Harness();
+        begin(h.root);
+        grow(h.root);
+        release(h.root, 200, 600);
+        idleAnimations();
+        assertTrue(h.pinch.isFocusMode());
+
+        begin(h.root);
+        shrink(h.root);
+        assertTrue(h.media.getScaleX() < 1f);
+        release(h.root, 350, 450);
+        idleAnimations();
+
+        assertFalse(h.pinch.isFocusMode());
+        assertEquals(1f, h.media.getScaleX(), 0.001f);
+        assertEquals(0.7f, h.overlay.getAlpha(), 0f);
+        assertEquals(Arrays.asList(true, false), h.transitions);
+    }
+
+    @Test public void cancelAndThirdFingerNeverEnterFocusMode() {
+        Harness h = new Harness();
+        begin(h.root);
+        grow(h.root);
+        touch(h.root, MotionEvent.ACTION_CANCEL, 200, 500, 600, 500);
+        idleAnimations();
+        assertFalse(h.pinch.isActive());
+        assertFalse(h.pinch.isFocusMode());
+        assertEquals(1f, h.media.getScaleX(), 0.001f);
+        assertEquals(0.7f, h.overlay.getAlpha(), 0f);
+
+        h = new Harness();
         begin(h.root);
         grow(h.root);
         touch(h.root, MotionEvent.ACTION_POINTER_DOWN | (2 << 8),
@@ -259,7 +283,7 @@ public class ShitTokDynamicPinchTest {
         assertFalse(disallowed[0]);
     }
 
-    @Test public void autoScrollWaitsUntilFocusModeExits() {
+    @Test public void autoScrollWaitsUntilFocusModeExitsButManualPagingStaysEnabled() {
         try (ShitTokAudioOwnershipTest.Fixture f = new ShitTokAudioOwnershipTest.Fixture()) {
             ReflectionHelpers.callInstanceMethod(f.feed, "playSelected");
             View root = ((RecyclerView.ViewHolder) f.selected).itemView;
@@ -276,7 +300,7 @@ public class ShitTokDynamicPinchTest {
             ShitTokDynamicPinchController pinch = ReflectionHelpers.getField(f.selected, "pinch");
             assertTrue(pinch.isFocusMode());
             assertEquals(0, pager.getCurrentItem());
-            assertFalse(pager.isUserInputEnabled());
+            assertTrue(pager.isUserInputEnabled());
 
             pinch.reset();
             org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
@@ -285,6 +309,37 @@ public class ShitTokDynamicPinchTest {
             begin(((RecyclerView.ViewHolder) f.duplicate).itemView);
             ShitTokDynamicPinchController stale = ReflectionHelpers.getField(f.duplicate, "pinch");
             assertFalse(stale.isActive());
+        }
+    }
+
+    @Test public void focusModeMigratesToNextPageAndKeepsFeedChromeHidden() {
+        try (ShitTokAudioOwnershipTest.Fixture f = new ShitTokAudioOwnershipTest.Fixture()) {
+            ReflectionHelpers.callInstanceMethod(f.feed, "playSelected");
+            View root = ((RecyclerView.ViewHolder) f.selected).itemView;
+            ViewPager2 pager = ReflectionHelpers.getField(f.feed, "pager");
+            begin(root);
+            grow(root);
+            release(root, 200, 600);
+            idleAnimations();
+
+            ShitTokDynamicPinchController first = ReflectionHelpers.getField(f.selected, "pinch");
+            assertTrue(first.isFocusMode());
+            assertTrue(pager.isUserInputEnabled());
+            assertEquals(0f, ((View) ReflectionHelpers.getField(f.duplicate, "lower")).getAlpha(), 0f);
+
+            pager.setCurrentItem(1, false);
+            idleAnimations();
+
+            ShitTokDynamicPinchController next = ReflectionHelpers.getField(f.duplicate, "pinch");
+            assertTrue(next.isFocusMode());
+            assertTrue(pager.isUserInputEnabled());
+            assertEquals(0f, ((View) ReflectionHelpers.getField(f.duplicate, "lower")).getAlpha(), 0f);
+
+            next.reset();
+            idleAnimations();
+            assertFalse(next.isFocusMode());
+            assertTrue(pager.isUserInputEnabled());
+            assertEquals(1f, ((View) ReflectionHelpers.getField(f.duplicate, "lower")).getAlpha(), 0f);
         }
     }
 
@@ -315,7 +370,7 @@ public class ShitTokDynamicPinchTest {
             release(root, 200, 600);
             idleAnimations();
             assertTrue(pinch.isFocusMode());
-            assertFalse(pager.isUserInputEnabled());
+            assertTrue(pager.isUserInputEnabled());
             assertEquals(1f, media.getScaleX(), 0.001f);
             assertSame(f.selectedPlayer.player, playerView.getPlayer());
             assertEquals(before, owner.summary());
