@@ -1,7 +1,5 @@
 package com.webapp.crazyshit;
 
-import android.os.SystemClock;
-
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -34,7 +32,7 @@ final class ShitTokCommunityPopularity {
 
     static void refreshAsync() {
         if (testScores != null || !configured()) return;
-        long now = SystemClock.elapsedRealtime();
+        long now = monotonicMillis();
         if (loadedAt > 0L && now - loadedAt < REFRESH_MS) return;
         if (attemptedAt > 0L && now - attemptedAt < RETRY_MS) return;
         if (!REFRESHING.compareAndSet(false, true)) return;
@@ -44,7 +42,7 @@ final class ShitTokCommunityPopularity {
                 Map<String, Float> fresh = fetch();
                 if (!fresh.isEmpty()) {
                     scores = Collections.unmodifiableMap(fresh);
-                    loadedAt = SystemClock.elapsedRealtime();
+                    loadedAt = monotonicMillis();
                 }
             } catch (Exception ignored) {
                 // Ranking remains functional with local skip/diversity signals when community data is unavailable.
@@ -104,6 +102,10 @@ final class ShitTokCommunityPopularity {
         } finally {
             connection.disconnect();
         }
+    }
+
+    private static long monotonicMillis() {
+        return System.nanoTime() / 1_000_000L;
     }
 
     private static boolean configured() {
