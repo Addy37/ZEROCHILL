@@ -109,8 +109,13 @@ final class ZeroChillPushNotificationPresenter {
         SharedPreferences prefs = app.getSharedPreferences(APP_PREFS, Context.MODE_PRIVATE);
         if (!prefs.getBoolean(PREF_MESSAGE_PREVIEWS, false)) return;
         boolean groupMessages = prefs.getBoolean(PREF_GROUP_MESSAGES, true);
+        int notificationId = groupMessages
+                ? conversationNotificationId(senderId)
+                : notificationId(messageId);
+        if (!isMessageNotificationActive(app, notificationId)) return;
+
         List<PreviewMessage> previews = unreadPreviews(app, senderId, messageId, groupMessages);
-        if (previews.isEmpty()) return;
+        if (previews.isEmpty() || !isMessageNotificationActive(app, notificationId)) return;
 
         postDirectMessage(
                 app,
@@ -134,6 +139,18 @@ final class ZeroChillPushNotificationPresenter {
                 manager.cancel(active.getId());
             }
         }
+    }
+
+    private static boolean isMessageNotificationActive(Context context, int id) {
+        if (Build.VERSION.SDK_INT < 23) return true;
+        NotificationManager manager = context.getSystemService(NotificationManager.class);
+        if (manager == null) return false;
+        for (StatusBarNotification active : manager.getActiveNotifications()) {
+            if (active.getId() != id) continue;
+            Notification notification = active.getNotification();
+            return notification != null && CHANNEL_MESSAGES.equals(notification.getChannelId());
+        }
+        return false;
     }
 
     private static void enqueuePreviewUpgrade(
