@@ -85,6 +85,28 @@ final class CommunityRepository {
         }
     }
 
+    static final class DirectMessage {
+        final String id, senderId, senderName, recipientId, recipientName, body, createdAt, readAt;
+        final long reportCount;
+        final List<String> reportReasons;
+
+        DirectMessage(JSONObject value) {
+            id = value.optString("id");
+            senderId = value.optString("sender_id");
+            senderName = value.optString("sender_name");
+            recipientId = value.optString("recipient_id");
+            recipientName = value.optString("recipient_name");
+            body = value.optString("body");
+            createdAt = value.optString("created_at");
+            readAt = nullable(value, "read_at");
+            reportCount = value.optLong("report_count");
+            reportReasons = strings(value.optJSONArray("report_reasons"));
+        }
+
+        boolean isReported() { return reportCount > 0; }
+        boolean isRead() { return !readAt.trim().isEmpty(); }
+    }
+
     static final class Report {
         final String id, reporterId, reporterName, reportedUserId, reportedName;
         final String reason, details, directMessageId, createdAt;
@@ -173,6 +195,23 @@ final class CommunityRepository {
         return activities(result.optJSONArray("items"));
     }
 
+    static List<DirectMessage> directMessages(String token, String query, String filter) throws Exception {
+        JSONObject result = dmRequest(token, new JSONObject()
+                .put("action", "list")
+                .put("query", query == null ? "" : query.trim())
+                .put("filter", filter == null ? "all" : filter)
+                .put("limit", 100));
+        JSONArray rows = result.optJSONArray("items");
+        List<DirectMessage> items = new ArrayList<>();
+        if (rows != null) {
+            for (int i = 0; i < rows.length(); i++) {
+                JSONObject row = rows.optJSONObject(i);
+                if (row != null) items.add(new DirectMessage(row));
+            }
+        }
+        return items;
+    }
+
     static List<Report> reports(String token, String query, String filter) throws Exception {
         JSONObject result = request(token, new JSONObject()
                 .put("action", "reports")
@@ -202,9 +241,26 @@ final class CommunityRepository {
         return items;
     }
 
+    private static List<String> strings(JSONArray rows) {
+        List<String> items = new ArrayList<>();
+        if (rows == null) return items;
+        for (int i = 0; i < rows.length(); i++) {
+            String value = rows.optString(i).trim();
+            if (!value.isEmpty()) items.add(value);
+        }
+        return items;
+    }
+
     private static JSONObject request(String token, JSONObject body) throws Exception {
+        return request(BuildConfig.ADMIN_FEEDBACK_ENDPOINT, token, body);
+    }
+
+    private static JSONObject dmRequest(String token, JSONObject body) throws Exception {
+        return request(BuildConfig.ADMIN_DM_ENDPOINT, token, body);
+    }
+
+    private static JSONObject request(String endpoint, String token, JSONObject body) throws Exception {
         if (token == null || token.trim().isEmpty()) throw new SecurityException("Admin token required.");
-        String endpoint = BuildConfig.ADMIN_FEEDBACK_ENDPOINT;
         if (endpoint == null || endpoint.trim().isEmpty()) {
             throw new IllegalStateException("The admin endpoint is not configured.");
         }
