@@ -41,4 +41,26 @@ class CommunityRepositoryTest {
         assertEquals("To Other User", detail.recentMessages[0].secondary)
         assertEquals("spam", detail.recentReports[0].reason)
     }
+
+    @Test fun directMessageModerationPayloadParsesBodyAndReports() {
+        val message = CommunityRepository.DirectMessage(JSONObject("""{
+            "id":"b83fa3c0-ad0e-4acc-8973-4b6799ae9d96",
+            "sender_id":"0d3f54f1-9453-4b55-9444-10fdca175a79",
+            "sender_name":"ZEROCHILL",
+            "recipient_id":"707ec1ff-d140-4081-a254-b2bf5d9342b2",
+            "recipient_name":"@vjplus",
+            "body":"Push notifications should be working.",
+            "created_at":"2026-10-27T21:33:22Z",
+            "read_at":null,
+            "report_count":2,
+            "report_reasons":["spam","harassment"]
+        }"""))
+        assertEquals("ZEROCHILL", message.senderName)
+        assertEquals("@vjplus", message.recipientName)
+        assertEquals("Push notifications should be working.", message.body)
+        assertFalse(message.isRead())
+        assertTrue(message.isReported())
+        assertEquals(2, message.reportCount)
+        assertEquals(listOf("spam", "harassment"), message.reportReasons)
+    }
 }
