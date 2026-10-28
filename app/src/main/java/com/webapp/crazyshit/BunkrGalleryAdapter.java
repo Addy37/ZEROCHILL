@@ -30,6 +30,7 @@ import com.bumptech.glide.request.RequestListener;
 import com.bumptech.glide.load.resource.drawable.DrawableTransitionOptions;
 import com.bumptech.glide.request.target.Target;
 
+import java.io.File;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
@@ -367,7 +368,13 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         holder.repairPending = false;
         holder.wantsMediaPreview = false;
         holder.previewAttempted = false;
-        if (item.imageUrl == null || item.imageUrl.isEmpty()
+        File cachedPreview = BunkrRepository.isBunkrUrl(item.url)
+                ? BunkrMediaPreview.cached(context, item) : null;
+        if (cachedPreview != null) {
+            holder.wantsMediaPreview = true;
+            holder.previewAttempted = true;
+            loadMediaPreview(holder, item, cachedPreview);
+        } else if (item.imageUrl == null || item.imageUrl.isEmpty()
                 || (BunkrRepository.isBunkrUrl(item.url) && !BunkrRepository.isUsableArtwork(item.imageUrl))) {
             Glide.with(holder.image).clear(holder.image);
             holder.image.setImageDrawable(new ColorDrawable(Color.rgb(20, 20, 23)));
@@ -464,27 +471,32 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
                 holder.unavailable.setVisibility(View.VISIBLE);
                 return;
             }
-            RequestBuilder<Drawable> preview = Glide.with(holder.image).load(file).override(384, 384)
-                    .diskCacheStrategy(DiskCacheStrategy.NONE)
-                    .transition(ThumbnailFades.thumbnail())
-                    .listener(new RequestListener<Drawable>() {
-                        @Override public boolean onLoadFailed(GlideException error, Object model,
-                                Target<Drawable> target, boolean firstResource) {
-                            if (binding == holder.bindGeneration) {
-                                file.delete(); // Regenerate an evicted/corrupt entry on the next attachment.
-                                holder.unavailable.setVisibility(View.VISIBLE);
-                            }
-                            return false;
-                        }
-                        @Override public boolean onResourceReady(Drawable resource, Object model,
-                                Target<Drawable> target, DataSource source, boolean firstResource) {
-                            if (adaptiveAspectRatios && binding == holder.bindGeneration)
-                                applyAspectRatio(holder, item, resource);
-                            return false;
-                        }
-                    });
-            (adaptiveAspectRatios ? preview.dontTransform() : preview.centerCrop()).into(holder.image);
+            loadMediaPreview(holder, item, file);
         });
+    }
+
+    private void loadMediaPreview(Holder holder, NativeContentItem item, File file) {
+        int binding = holder.bindGeneration;
+        RequestBuilder<Drawable> preview = Glide.with(holder.image).load(file).override(384, 384)
+                .diskCacheStrategy(DiskCacheStrategy.NONE)
+                .transition(ThumbnailFades.thumbnail())
+                .listener(new RequestListener<Drawable>() {
+                    @Override public boolean onLoadFailed(GlideException error, Object model,
+                            Target<Drawable> target, boolean firstResource) {
+                        if (binding == holder.bindGeneration) {
+                            file.delete(); // Regenerate an evicted/corrupt entry on the next attachment.
+                            holder.unavailable.setVisibility(View.VISIBLE);
+                        }
+                        return false;
+                    }
+                    @Override public boolean onResourceReady(Drawable resource, Object model,
+                            Target<Drawable> target, DataSource source, boolean firstResource) {
+                        if (adaptiveAspectRatios && binding == holder.bindGeneration)
+                            applyAspectRatio(holder, item, resource);
+                        return false;
+                    }
+                });
+        (adaptiveAspectRatios ? preview.dontTransform() : preview.centerCrop()).into(holder.image);
     }
 
     private void cancelPreview(Holder holder) {
