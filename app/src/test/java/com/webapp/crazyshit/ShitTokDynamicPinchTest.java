@@ -369,6 +369,9 @@ public class ShitTokDynamicPinchTest {
             ReflectionHelpers.callInstanceMethod(f.feed, "playSelected");
             View root = ((RecyclerView.ViewHolder) f.selected).itemView;
             ViewPager2 pager = ReflectionHelpers.getField(f.feed, "pager");
+            // NativeMainActivity also installs a completed-replay page observer.
+            // Mirror that extra subscriber, absent from this plain Activity fixture.
+            pager.registerOnPageChangeCallback(new ViewPager2.OnPageChangeCallback() {});
             ShitTokDynamicPinchController pinch = ReflectionHelpers.getField(f.selected, "pinch");
             begin(root);
             grow(root);
@@ -394,6 +397,9 @@ public class ShitTokDynamicPinchTest {
             ReflectionHelpers.callInstanceMethod(f.feed, "playSelected");
             View root = ((RecyclerView.ViewHolder) f.selected).itemView;
             ViewPager2 pager = ReflectionHelpers.getField(f.feed, "pager");
+            // NativeMainActivity also installs a completed-replay page observer.
+            // Mirror that extra subscriber, absent from this plain Activity fixture.
+            pager.registerOnPageChangeCallback(new ViewPager2.OnPageChangeCallback() {});
             RecyclerView recycler = (RecyclerView) pager.getChildAt(0);
             begin(root);
             grow(root);
