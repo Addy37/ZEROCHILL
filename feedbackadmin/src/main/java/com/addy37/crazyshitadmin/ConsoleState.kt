@@ -25,6 +25,7 @@ internal class ConsoleState @JvmOverloads constructor(application: Application, 
     var communityOverview by mutableStateOf<CommunityRepository.Overview?>(null); private set
     var communityAccounts by mutableStateOf<List<CommunityRepository.Account>>(emptyList()); private set
     var communityActivity by mutableStateOf<List<CommunityRepository.SocialActivity>>(emptyList()); private set
+    var communityMessages by mutableStateOf<List<CommunityRepository.DirectMessage>>(emptyList()); private set
     var communityReports by mutableStateOf<List<CommunityRepository.Report>>(emptyList()); private set
     var accountDetail by mutableStateOf<CommunityRepository.AccountDetail?>(null); private set
     var communitySection by mutableStateOf(saved.get<String>("communitySection") ?: "accounts"); private set
@@ -85,7 +86,7 @@ internal class ConsoleState @JvmOverloads constructor(application: Application, 
         generation++; tasks.values.toList().forEach { it.cancel() }; tasks.clear()
         SecureTokenStore.clear(getApplication()); paired = false
         items = emptyList(); analytics = null; activeCounts = null; config = null; history = emptyList(); thread = null
-        communityOverview = null; communityAccounts = emptyList(); communityActivity = emptyList(); communityReports = emptyList(); accountDetail = null
+        communityOverview = null; communityAccounts = emptyList(); communityActivity = emptyList(); communityMessages = emptyList(); communityReports = emptyList(); accountDetail = null
         communitySection = "accounts"; communityQuery = ""; communityFilterValue = "all"
         saved["communitySection"] = communitySection; saved["communityQuery"] = communityQuery; saved["communityFilter"] = communityFilterValue
         threadId = ""; saved["threadId"] = ""; busy = emptySet(); errors = emptyMap(); notice = ""
@@ -129,6 +130,10 @@ internal class ConsoleState @JvmOverloads constructor(application: Application, 
                 "social" -> {
                     val loaded = withContext(Dispatchers.IO) { gateway.socialActivity(token, query, filter) }
                     if(communitySection == section && communityQuery == query && communityFilterValue == filter) communityActivity = loaded
+                }
+                "messages" -> {
+                    val loaded = withContext(Dispatchers.IO) { gateway.directMessages(token, query, filter) }
+                    if(communitySection == section && communityQuery == query && communityFilterValue == filter) communityMessages = loaded
                 }
                 "reports" -> {
                     val loaded = withContext(Dispatchers.IO) { gateway.reports(token, query, filter) }
