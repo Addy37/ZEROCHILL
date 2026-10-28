@@ -9,6 +9,7 @@ import org.robolectric.Robolectric;
 import org.robolectric.RobolectricTestRunner;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotEquals;
 
 @RunWith(RobolectricTestRunner.class)
 public class ZeroChillPushNotificationPresenterTest {
@@ -24,10 +25,12 @@ public class ZeroChillPushNotificationPresenterTest {
     }
 
     @Test
-    public void senderNameIsSanitizedAndMessageBodyIsNeverNeeded() {
+    public void senderAndPreviewTextAreSanitized() {
         assertEquals("Someone on ZEROCHILL", ZeroChillPushNotificationPresenter.cleanSenderName(" \n\t "));
         assertEquals("vjplus", ZeroChillPushNotificationPresenter.cleanSenderName("  vjplus  "));
         assertEquals(64, ZeroChillPushNotificationPresenter.cleanSenderName("x".repeat(100)).length());
+        assertEquals("hello there", ZeroChillPushNotificationPresenter.cleanMessagePreview("hello\nthere"));
+        assertEquals(501, ZeroChillPushNotificationPresenter.cleanMessagePreview("x".repeat(700)).length());
     }
 
     @Test
@@ -51,11 +54,20 @@ public class ZeroChillPushNotificationPresenterTest {
     }
 
     @Test
-    public void messageIdProducesStableNotificationId() {
-        String id = "12345678-1234-4234-8234-123456789012";
+    public void messageAndConversationIdsAreStableButDifferent() {
+        String message = "12345678-1234-4234-8234-123456789012";
+        String sender = "707ec1ff-d140-4081-a254-b2bf5d9342b2";
         assertEquals(
-                ZeroChillPushNotificationPresenter.notificationId(id),
-                ZeroChillPushNotificationPresenter.notificationId(id)
+                ZeroChillPushNotificationPresenter.notificationId(message),
+                ZeroChillPushNotificationPresenter.notificationId(message)
+        );
+        assertEquals(
+                ZeroChillPushNotificationPresenter.conversationNotificationId(sender),
+                ZeroChillPushNotificationPresenter.conversationNotificationId(sender)
+        );
+        assertNotEquals(
+                ZeroChillPushNotificationPresenter.notificationId(message),
+                ZeroChillPushNotificationPresenter.conversationNotificationId(sender)
         );
     }
 }
