@@ -42,11 +42,13 @@ final class ShitTokDynamicPinchController {
     private static final long FOCUS_CHROME_DURATION_MS = 140L;
 
     // TikTok reference: full-width media above a compact black control zone.
-    private static final int FOCUS_CHROME_HEIGHT_DP = 82;
-    private static final int FOCUS_EDGE_DP = 8;
-    private static final int FOCUS_BUTTON_DP = 38;
-    private static final int FOCUS_PILL_WIDTH_DP = 94;
-    private static final int FOCUS_PILL_HEIGHT_DP = 38;
+    private static final int FOCUS_CHROME_HEIGHT_DP = 112;
+    private static final int FOCUS_EDGE_DP = 12;
+    private static final int FOCUS_BUTTON_DP = 48;
+    private static final int FOCUS_PILL_WIDTH_DP = 112;
+    private static final int FOCUS_PILL_HEIGHT_DP = 48;
+    private static final int FOCUS_SEEK_TOP_DP = 8;
+    private static final int FOCUS_CONTROL_BOTTOM_DP = 10;
 
     interface Listener { void onPinchChanged(boolean active); }
 
@@ -739,7 +741,7 @@ final class ShitTokDynamicPinchController {
         );
         seekParams.setMargins(
                 dp(FOCUS_EDGE_DP),
-                dp(26),
+                dp(FOCUS_SEEK_TOP_DP),
                 dp(FOCUS_EDGE_DP),
                 0
         );
@@ -756,7 +758,7 @@ final class ShitTokDynamicPinchController {
                 dp(FOCUS_EDGE_DP),
                 0,
                 0,
-                dp(5)
+                dp(FOCUS_CONTROL_BOTTOM_DP)
         );
         focusChrome.addView(close, closeParams);
 
@@ -776,7 +778,7 @@ final class ShitTokDynamicPinchController {
                 0,
                 0,
                 dp(FOCUS_EDGE_DP),
-                dp(5)
+                dp(FOCUS_CONTROL_BOTTOM_DP)
         );
         focusChrome.addView(pill, pillParams);
 
@@ -787,7 +789,7 @@ final class ShitTokDynamicPinchController {
 
         pill.addView(focusPlay, new LinearLayout.LayoutParams(0, -1, 1f));
         LinearLayout.LayoutParams dividerParams =
-                new LinearLayout.LayoutParams(dp(1), dp(18));
+                new LinearLayout.LayoutParams(dp(1), dp(20));
         pill.addView(divider, dividerParams);
         pill.addView(focusSpeed, new LinearLayout.LayoutParams(0, -1, 1f));
 
@@ -837,6 +839,8 @@ final class ShitTokDynamicPinchController {
         button.setGravity(Gravity.CENTER);
         button.setPadding(0, 0, 0, 0);
         button.setContentDescription(description);
+        button.setMinWidth(dp(48));
+        button.setMinHeight(dp(48));
         button.setClickable(true);
         button.setFocusable(true);
         return button;
