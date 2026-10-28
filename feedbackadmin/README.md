@@ -25,12 +25,12 @@ Compose BOM 2026.06.01 matches the existing consumer app's compatible stable sta
 
 ```sh
 gradle --no-daemon :feedbackadmin:testDebugUnitTest :feedbackadmin:testReleaseUnitTest :feedbackadmin:assembleDebug :feedbackadmin:assembleRelease :feedbackadmin:assembleDebugAndroidTest
-gradle --no-daemon :feedbackadmin:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.addy37.crazyshitadmin.ConsoleFlowTest
+gradle --no-daemon :feedbackadmin:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.addy37.crazyshitadmin.ConsoleFlowTest,com.addy37.crazyshitadmin.CommunityMessagesFlowTest
 ```
 
 `ConsoleLogicTest` covers candidate identity/invalidation, version assignment, preserving unknown config fields, semantic diffs, combined inbox filters/sorting, status labels and device filtering. `CommunityRepositoryTest` covers Community payload parsing, account-detail message-metadata behavior, and the dedicated DM moderation body/report payload.
 
-`ConsoleFlowTest` uses test-only fixtures through the gateway, never real hosted feedback, moderation data, or a real remote publish. It captures the pairing, Home, Community accounts/account detail/social/reports, inbox, conversation, details, Sources, validated candidate, history and Analytics screens. It checks failed status saves, expired authentication, saved candidate/draft restoration and lock. Screenshots contain synthetic data.
+`ConsoleFlowTest` uses test-only fixtures through the gateway, never real hosted feedback, moderation data, or a real remote publish. It captures the pairing, Home, Community accounts/account detail/social/reports, inbox, conversation, details, Sources, validated candidate, history and Analytics screens. It checks failed status saves, expired authentication, saved candidate/draft restoration and lock. `CommunityMessagesFlowTest` separately opens the Messages moderation section with synthetic data and verifies participant labels, message body, report badge, message ID, and the Reported filter. Screenshots and fixtures contain synthetic data only.
 
 CI also builds the PR base's release APK with the same signing bundle, seeds a synthetic token using `TokenUpgradeTest#seed`, installs the new release with `adb install -r`, and checks decryption using `TokenUpgradeTest#verify`. These methods run explicitly, separately from the fixture suite. Debug/test APKs use the persistent signing configuration when supplied by CI; local builds keep the normal local debug key.
 
