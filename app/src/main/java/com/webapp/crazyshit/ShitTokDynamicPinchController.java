@@ -19,6 +19,8 @@ import android.widget.TextView;
 import androidx.media3.common.PlaybackParameters;
 import androidx.media3.common.Player;
 import androidx.media3.ui.PlayerView;
+import androidx.recyclerview.widget.RecyclerView;
+import androidx.viewpager2.widget.ViewPager2;
 
 import java.util.Locale;
 import java.util.function.BooleanSupplier;
@@ -31,6 +33,7 @@ final class ShitTokDynamicPinchController {
     static final float MIN_SCALE = 0.45f;
     static final float MAX_SCALE = 3.5f;
     static final float FOCUS_ENTER_SCALE = 1.18f;
+    static final float FOCUS_EXIT_SCALE = 0.82f;
 
     private static final float SCALE_RESPONSE = 0.58f;
     private static final float PIVOT_RESPONSE = 0.54f;
@@ -81,6 +84,8 @@ final class ShitTokDynamicPinchController {
     private boolean gestureStartedInFocus;
     private boolean focusViewportApplied;
     private boolean focusViewportChanging;
+    private boolean focusPeerPrepared;
+    private boolean focusMigrationPending;
 
     private int firstId, secondId;
     private float initialSpan, originX, originY, pivotX, pivotY;
@@ -99,6 +104,12 @@ final class ShitTokDynamicPinchController {
     private int originalPlayerRightMargin;
     private int originalPlayerBottomMargin;
     private boolean originalPlayerLayoutCaptured;
+
+    private ViewPager2 focusPager;
+    private RecyclerView focusRecycler;
+    private ViewPager2.OnPageChangeCallback focusPageCallback;
+    private RecyclerView.OnChildAttachStateChangeListener focusAttachListener;
+    private float migrationSpeed = 1f;
 
     ShitTokDynamicPinchController(TouchFrame root, View media, BooleanSupplier eligible,
             Listener listener, View... overlays) {
@@ -139,6 +150,10 @@ final class ShitTokDynamicPinchController {
         return Float.isFinite(scale) && scale >= FOCUS_ENTER_SCALE;
     }
 
+    static boolean shouldExitFocusMode(float scale) {
+        return Float.isFinite(scale) && scale <= FOCUS_EXIT_SCALE;
+    }
+
     private boolean handle(MotionEvent event) {
         int action = event.getActionMasked();
 
@@ -150,8 +165,10 @@ final class ShitTokDynamicPinchController {
 
             if (focusMode) {
                 if (touchesFocusChrome(event)) return false;
+                // One finger belongs to ViewPager2 in Focus Mode. If a second finger
+                // arrives, the controller takes ownership and converts it into pinch.
                 focusMediaDown = true;
-                return true;
+                return false;
             }
             return false;
         }
@@ -167,7 +184,10 @@ final class ShitTokDynamicPinchController {
             }
             if (focusMode && focusMediaDown) {
                 focusMediaDown = false;
-                return true;
+                // Consume an un-intercepted tap so normal feed click chrome does not
+                // flash underneath Focus Mode. Vertical paging has already intercepted
+                // its own move/up sequence before this point.
+                return action != MotionEvent.ACTION_CANCEL;
             }
             return swallowRemainder;
         }
@@ -209,7 +229,7 @@ final class ShitTokDynamicPinchController {
             media.setScaleX(displayedScale);
             media.setScaleY(displayedScale);
         }
-        return ownsTouchSequence() || (focusMode && focusMediaDown);
+        return ownsTouchSequence();
     }
 
     private void beginPinch(MotionEvent event) {
@@ -230,17 +250,7 @@ final class ShitTokDynamicPinchController {
         originY = bounds.top;
 
         if (!listenerEngaged) {
-            pivotX = media.getPivotX();
-            pivotY = media.getPivotY();
-            listenerEngaged = true;
-            listener.onPinchChanged(true);
-            for (int i = 0; i < overlays.length; i++) {
-                View overlay = overlays[i];
-                if (overlay == null) continue;
-                overlay.animate().withEndAction(null).cancel();
-                overlayAlphas[i] = overlay.getAlpha();
-                overlay.setAlpha(0f);
-            }
+            engageListenerAndHideOverlays();
         }
 
         gestureStartedInFocus = focusMode;
@@ -248,7 +258,35 @@ final class ShitTokDynamicPinchController {
         swallowRemainder = true;
         focusMediaDown = true;
         hideFocusChromeForPinch();
+        setPagerInputEnabled(false);
         root.requestDisallowInterceptTouchEvent(true);
+    }
+
+    private void engageListenerAndHideOverlays() {
+        pivotX = media.getPivotX();
+        pivotY = media.getPivotY();
+        listenerEngaged = true;
+        listener.onPinchChanged(true);
+        captureAndHideOverlays();
+    }
+
+    private void captureAndHideOverlays() {
+        for (int i = 0; i < overlays.length; i++) {
+            View overlay = overlays[i];
+            if (overlay == null) continue;
+            overlay.animate().withEndAction(null).cancel();
+            overlayAlphas[i] = overlay.getAlpha();
+            overlay.setAlpha(0f);
+        }
+    }
+
+    private void restoreOverlays() {
+        for (int i = 0; i < overlays.length; i++) {
+            View overlay = overlays[i];
+            if (overlay == null) continue;
+            overlay.animate().withEndAction(null).cancel();
+            overlay.setAlpha(overlayAlphas[i]);
+        }
     }
 
     private void finishPinch(boolean cancelled) {
@@ -264,8 +302,16 @@ final class ShitTokDynamicPinchController {
         }
 
         if (wasFocus) {
+            if (!cancelled && shouldExitFocusMode(Math.min(displayedScale, targetScale))) {
+                exitFocusModeAnimated();
+                return;
+            }
             focusMode = true;
-            animateMediaToRest(FOCUS_RETURN_DURATION_MS, this::showFocusChrome);
+            animateMediaToRest(FOCUS_RETURN_DURATION_MS, () -> {
+                showFocusChrome();
+                setPagerInputEnabled(true);
+                prepareVisibleFocusPeers();
+            });
             return;
         }
 
@@ -278,16 +324,44 @@ final class ShitTokDynamicPinchController {
         focusOriginalSpeed = player == null ? 1f : player.getPlaybackParameters().speed;
         animateMediaToRest(FOCUS_RETURN_DURATION_MS, () -> {
             applyFocusViewport();
+            startFocusPaging();
+            prepareVisibleFocusPeers();
+            setPagerInputEnabled(true);
             root.post(this::showFocusChrome);
         });
+    }
+
+    private void adoptFocusFromPaging(float speed) {
+        if (focusMode) return;
+        focusMigrationPending = false;
+        focusMode = true;
+        focusOriginalSpeed = speed;
+
+        if (focusPeerPrepared) {
+            focusPeerPrepared = false;
+            pivotX = media.getPivotX();
+            pivotY = media.getPivotY();
+            listenerEngaged = true;
+            listener.onPinchChanged(true);
+        } else if (!listenerEngaged) {
+            engageListenerAndHideOverlays();
+            applyFocusViewport();
+        }
+
+        startFocusPaging();
+        prepareVisibleFocusPeers();
+        setPagerInputEnabled(true);
+        root.post(this::showFocusChrome);
     }
 
     private void exitFocusModeAnimated() {
         if (!focusMode) return;
         focusMode = false;
         focusMediaDown = false;
+        focusMigrationPending = false;
         root.removeCallbacks(focusProgressTick);
         hideFocusChromeImmediate();
+        stopFocusPaging(true);
         restoreOriginalPlaybackSpeed();
         restoreFocusViewport();
         animateMediaToRest(RETURN_DURATION_MS, this::finishInteraction);
@@ -328,15 +402,12 @@ final class ShitTokDynamicPinchController {
 
     private void finishInteraction() {
         hideFocusChromeImmediate();
+        stopFocusPaging(true);
         restoreOriginalPlaybackSpeed();
         restoreFocusViewport();
-        for (int i = 0; i < overlays.length; i++) {
-            View overlay = overlays[i];
-            if (overlay == null) continue;
-            overlay.animate().withEndAction(null).cancel();
-            overlay.setAlpha(overlayAlphas[i]);
-        }
+        restoreOverlays();
         root.requestDisallowInterceptTouchEvent(false);
+        setPagerInputEnabled(true);
         if (listenerEngaged) {
             listenerEngaged = false;
             listener.onPinchChanged(false);
@@ -348,12 +419,20 @@ final class ShitTokDynamicPinchController {
         videoTouchStarted = false;
         focusMediaDown = false;
         swallowRemainder = false;
-        if (!active && !focusMode && !listenerEngaged && !settling && !focusViewportApplied) return;
+
+        if (shouldPreserveFocusForPageChange()) {
+            detachForFocusPaging();
+            return;
+        }
+
+        if (!active && !focusMode && !listenerEngaged && !settling
+                && !focusViewportApplied && !focusPeerPrepared) return;
 
         active = false;
         focusMode = false;
         gestureStartedInFocus = false;
         settling = false;
+        focusMigrationPending = false;
         media.animate().withEndAction(null).cancel();
         media.setScaleX(1f);
         media.setScaleY(1f);
@@ -363,9 +442,178 @@ final class ShitTokDynamicPinchController {
             media.setPivotY(pivotY);
         }
         hideFocusChromeImmediate();
+        stopFocusPaging(true);
         restoreOriginalPlaybackSpeed();
         restoreFocusViewport();
+        if (focusPeerPrepared) restorePeerPreparation();
         finishInteraction();
+    }
+
+    private boolean shouldPreserveFocusForPageChange() {
+        if (!focusMode || active) return false;
+        RecyclerView recycler = recyclerView();
+        ViewPager2 pager = pagerView();
+        if (recycler == null || pager == null) return false;
+        int ownPosition = recycler.getChildAdapterPosition(root);
+        return ownPosition != RecyclerView.NO_POSITION && pager.getCurrentItem() != ownPosition;
+    }
+
+    private void detachForFocusPaging() {
+        Player player = player();
+        migrationSpeed = player == null ? focusOriginalSpeed : player.getPlaybackParameters().speed;
+        focusMigrationPending = true;
+        focusMode = false;
+        active = false;
+        gestureStartedInFocus = false;
+        settling = false;
+        media.animate().withEndAction(null).cancel();
+        media.setScaleX(1f);
+        media.setScaleY(1f);
+        displayedScale = targetScale = 1f;
+        hideFocusChromeImmediate();
+        restoreOriginalPlaybackSpeed();
+        restoreFocusViewport();
+        restoreOverlays();
+        listenerEngaged = false;
+        root.requestDisallowInterceptTouchEvent(false);
+        setPagerInputEnabled(true);
+        // Do not notify false here. The feed-level chrome stays hidden while the
+        // newly selected holder adopts Focus Mode in the same page transition.
+    }
+
+    private void startFocusPaging() {
+        ViewPager2 pager = pagerView();
+        RecyclerView recycler = recyclerView();
+        if (pager == null || recycler == null) return;
+
+        if (focusPager != pager) {
+            stopFocusObserversOnly();
+            focusPager = pager;
+            focusRecycler = recycler;
+        }
+
+        if (focusPageCallback == null) {
+            focusPageCallback = new ViewPager2.OnPageChangeCallback() {
+                @Override public void onPageSelected(int position) {
+                    ViewPager2 observedPager = focusPager;
+                    if (observedPager == null) return;
+                    observedPager.post(() -> migrateFocusTo(position));
+                }
+            };
+            focusPager.registerOnPageChangeCallback(focusPageCallback);
+        }
+
+        if (focusAttachListener == null) {
+            focusAttachListener = new RecyclerView.OnChildAttachStateChangeListener() {
+                @Override public void onChildViewAttachedToWindow(View view) {
+                    if (!focusMode && !focusMigrationPending) return;
+                    preparePeerView(view);
+                }
+
+                @Override public void onChildViewDetachedFromWindow(View view) {
+                }
+            };
+            focusRecycler.addOnChildAttachStateChangeListener(focusAttachListener);
+        }
+    }
+
+    private void migrateFocusTo(int position) {
+        if (!focusMigrationPending || focusRecycler == null) return;
+        RecyclerView.ViewHolder holder = focusRecycler.findViewHolderForAdapterPosition(position);
+        if (holder == null || !(holder.itemView instanceof TouchFrame)) {
+            ViewPager2 pager = focusPager;
+            if (pager != null) pager.postDelayed(() -> migrateFocusTo(position), 32L);
+            return;
+        }
+
+        ShitTokDynamicPinchController next = ((TouchFrame) holder.itemView).pinch;
+        if (next == null || next == this) return;
+
+        float speed = migrationSpeed;
+        focusMigrationPending = false;
+        stopFocusObserversOnly();
+        next.adoptFocusFromPaging(speed);
+    }
+
+    private void prepareVisibleFocusPeers() {
+        RecyclerView recycler = focusRecycler != null ? focusRecycler : recyclerView();
+        if (recycler == null) return;
+        for (int i = 0; i < recycler.getChildCount(); i++) {
+            preparePeerView(recycler.getChildAt(i));
+        }
+    }
+
+    private void preparePeerView(View view) {
+        if (!(view instanceof TouchFrame)) return;
+        ShitTokDynamicPinchController peer = ((TouchFrame) view).pinch;
+        if (peer == null || peer == this || peer.focusMode) return;
+        peer.preparePeerForFocus();
+    }
+
+    private void preparePeerForFocus() {
+        if (focusPeerPrepared || focusMode || listenerEngaged) return;
+        focusPeerPrepared = true;
+        captureAndHideOverlays();
+        applyFocusViewport();
+        hideFocusChromeImmediate();
+    }
+
+    private void restorePeerPreparation() {
+        if (!focusPeerPrepared) return;
+        focusPeerPrepared = false;
+        hideFocusChromeImmediate();
+        restoreFocusViewport();
+        restoreOverlays();
+    }
+
+    private void stopFocusPaging(boolean restorePeers) {
+        if (restorePeers && focusRecycler != null) {
+            for (int i = 0; i < focusRecycler.getChildCount(); i++) {
+                View child = focusRecycler.getChildAt(i);
+                if (!(child instanceof TouchFrame)) continue;
+                ShitTokDynamicPinchController peer = ((TouchFrame) child).pinch;
+                if (peer != null && peer != this) peer.restorePeerPreparation();
+            }
+        }
+        stopFocusObserversOnly();
+    }
+
+    private void stopFocusObserversOnly() {
+        if (focusPager != null && focusPageCallback != null) {
+            focusPager.unregisterOnPageChangeCallback(focusPageCallback);
+        }
+        if (focusRecycler != null && focusAttachListener != null) {
+            focusRecycler.removeOnChildAttachStateChangeListener(focusAttachListener);
+        }
+        focusPageCallback = null;
+        focusAttachListener = null;
+        focusPager = null;
+        focusRecycler = null;
+    }
+
+    private void setPagerInputEnabled(boolean enabled) {
+        ViewPager2 pager = focusPager != null ? focusPager : pagerView();
+        if (pager != null) pager.setUserInputEnabled(enabled);
+    }
+
+    private ViewPager2 pagerView() {
+        View current = root;
+        while (current != null) {
+            if (current instanceof ViewPager2) return (ViewPager2) current;
+            ViewParent parent = current.getParent();
+            current = parent instanceof View ? (View) parent : null;
+        }
+        return null;
+    }
+
+    private RecyclerView recyclerView() {
+        View current = root;
+        while (current != null) {
+            if (current instanceof RecyclerView) return (RecyclerView) current;
+            ViewParent parent = current.getParent();
+            current = parent instanceof View ? (View) parent : null;
+        }
+        return null;
     }
 
     private void applyFocusViewport() {
@@ -560,7 +808,8 @@ final class ShitTokDynamicPinchController {
 
             @Override public void onStopTrackingTouch(SeekBar bar) {
                 focusProgressDragging = false;
-                root.requestDisallowInterceptTouchEvent(true);
+                root.requestDisallowInterceptTouchEvent(false);
+                setPagerInputEnabled(true);
                 updateFocusControls();
             }
         });
