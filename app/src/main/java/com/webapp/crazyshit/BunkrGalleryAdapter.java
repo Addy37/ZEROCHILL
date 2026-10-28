@@ -3,6 +3,7 @@ package com.webapp.crazyshit;
 import android.content.Context;
 import android.graphics.Color;
 import android.graphics.Typeface;
+import android.graphics.Rect;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
@@ -29,6 +30,7 @@ import com.bumptech.glide.request.RequestListener;
 import com.bumptech.glide.load.resource.drawable.DrawableTransitionOptions;
 import com.bumptech.glide.request.target.Target;
 
+import java.io.File;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
@@ -57,6 +59,27 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
     private final Listener listener;
     private final boolean adaptiveAspectRatios;
     private int gridColumns = 2;
+    private RecyclerView previewViewport;
+    private boolean previewsActive = true;
+    private final LinkedHashSet<Holder> previewHolders = new LinkedHashSet<>();
+    private final Rect previewBounds = new Rect();
+    private final android.view.ViewTreeObserver.OnPreDrawListener previewVisibility = () -> {
+        RecyclerView viewport = previewViewport;
+        if (viewport == null) return true;
+        for (int i = 0; i < viewport.getChildCount(); i++) {
+            RecyclerView.ViewHolder raw = viewport.getChildViewHolder(viewport.getChildAt(i));
+            if (!(raw instanceof Holder)) continue;
+            Holder holder = (Holder) raw;
+            if (!previewVisible(holder)) {
+                cancelPreview(holder);
+                holder.previewAttempted = false;
+            } else if (holder.boundItem != null) {
+                if (holder.wantsMediaPreview) requestMediaPreview(holder, holder.boundItem);
+                else if (holder.needsRepair) repairArtwork(holder, holder.boundItem, holder.boundItem.imageUrl);
+            }
+        }
+        return true;
+    };
     private final PreloadRequestTracker imagePreloads =
             new PreloadRequestTracker(320);
 
@@ -191,6 +214,14 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         image.setBackgroundColor(Color.rgb(20, 20, 23));
         tile.addView(image, new FrameLayout.LayoutParams(-1, -1));
 
+        TextView unavailable = new TextView(parent.getContext());
+        unavailable.setText(R.string.media_preview_unavailable);
+        unavailable.setTextColor(Color.LTGRAY);
+        unavailable.setTextSize(12);
+        unavailable.setGravity(Gravity.CENTER);
+        unavailable.setVisibility(View.GONE);
+        tile.addView(unavailable, new FrameLayout.LayoutParams(-1, -1));
+
         FrameLayout source = new FrameLayout(parent.getContext());
         source.setBackground(BrowseUi.rounded(
                 parent.getContext(),
@@ -283,7 +314,8 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
                 sourceVariant,
                 fresh,
                 play,
-                morphPulse
+                morphPulse,
+                unavailable
         );
     }
 
@@ -329,7 +361,20 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         );
 
         holder.bindGeneration++;
-        if (item.imageUrl == null || item.imageUrl.isEmpty()
+        holder.unavailable.setVisibility(View.GONE);
+        cancelPreview(holder);
+        holder.boundItem = item;
+        holder.needsRepair = false;
+        holder.repairPending = false;
+        holder.wantsMediaPreview = false;
+        holder.previewAttempted = false;
+        File cachedPreview = BunkrRepository.isBunkrUrl(item.url)
+                ? BunkrMediaPreview.cached(context, item) : null;
+        if (cachedPreview != null) {
+            holder.wantsMediaPreview = true;
+            holder.previewAttempted = true;
+            loadMediaPreview(holder, item, cachedPreview);
+        } else if (item.imageUrl == null || item.imageUrl.isEmpty()
                 || (BunkrRepository.isBunkrUrl(item.url) && !BunkrRepository.isUsableArtwork(item.imageUrl))) {
             Glide.with(holder.image).clear(holder.image);
             holder.image.setImageDrawable(new ColorDrawable(Color.rgb(20, 20, 23)));
@@ -363,8 +408,10 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
                     @Override public boolean onLoadFailed(GlideException error, Object model,
                             Target<Drawable> target, boolean firstResource) {
                         // Glide forbids starting another request synchronously inside its listener.
-                        if (repair) holder.image.post(() -> {
-                            if (binding == holder.bindGeneration) repairArtwork(holder, item, url);
+                        holder.image.post(() -> {
+                            if (binding != holder.bindGeneration) return;
+                            if (repair) repairArtwork(holder, item, url);
+                            else requestMediaPreview(holder, item);
                         });
                         return false;
                     }
@@ -391,13 +438,125 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
 
     private void repairArtwork(Holder holder, NativeContentItem item, String rejected) {
         if (!BunkrRepository.isBunkrUrl(item.url)) return;
+        holder.needsRepair = true;
+        if (!previewVisible(holder) || holder.repairPending) return;
+        holder.repairPending = true;
         int binding = holder.bindGeneration;
         boolean accepted = BunkrArtworkResolver.request(context, item.url, rejected == null ? "" : rejected, image -> {
-            if (binding == holder.bindGeneration && !image.isEmpty()) loadArtwork(holder, item, image, false);
+            if (binding != holder.bindGeneration) return;
+            holder.repairPending = false;
+            if (!previewVisible(holder)) return;
+            holder.needsRepair = false;
+            if (!image.isEmpty()) loadArtwork(holder, item, image, false);
+            else requestMediaPreview(holder, item);
         });
-        if (!accepted) holder.image.postDelayed(() -> {
-            if (binding == holder.bindGeneration) repairArtwork(holder, item, rejected);
-        }, 250L);
+        if (!accepted) {
+            holder.repairPending = false;
+            holder.image.postDelayed(() -> {
+                if (binding == holder.bindGeneration && previewVisible(holder)) repairArtwork(holder, item, rejected);
+            }, 250L);
+        }
+    }
+
+    private void requestMediaPreview(Holder holder, NativeContentItem item) {
+        if (!BunkrRepository.isBunkrUrl(item.url) || (!item.isImage() && !item.isVideo())) return;
+        holder.wantsMediaPreview = true;
+        if (!previewVisible(holder) || holder.previewAttempted) return;
+        holder.previewAttempted = true;
+        int binding = holder.bindGeneration;
+        holder.preview = BunkrMediaPreview.request(context, item, file -> {
+            if (binding != holder.bindGeneration || !previewVisible(holder)) return;
+            holder.preview = null;
+            if (file == null) {
+                holder.unavailable.setVisibility(View.VISIBLE);
+                return;
+            }
+            loadMediaPreview(holder, item, file);
+        });
+    }
+
+    private void loadMediaPreview(Holder holder, NativeContentItem item, File file) {
+        int binding = holder.bindGeneration;
+        RequestBuilder<Drawable> preview = Glide.with(holder.image).load(file).override(384, 384)
+                .diskCacheStrategy(DiskCacheStrategy.NONE)
+                .transition(ThumbnailFades.thumbnail())
+                .listener(new RequestListener<Drawable>() {
+                    @Override public boolean onLoadFailed(GlideException error, Object model,
+                            Target<Drawable> target, boolean firstResource) {
+                        if (binding == holder.bindGeneration) {
+                            file.delete(); // Regenerate an evicted/corrupt entry on the next attachment.
+                            holder.unavailable.setVisibility(View.VISIBLE);
+                        }
+                        return false;
+                    }
+                    @Override public boolean onResourceReady(Drawable resource, Object model,
+                            Target<Drawable> target, DataSource source, boolean firstResource) {
+                        if (adaptiveAspectRatios && binding == holder.bindGeneration)
+                            applyAspectRatio(holder, item, resource);
+                        return false;
+                    }
+                });
+        (adaptiveAspectRatios ? preview.dontTransform() : preview.centerCrop()).into(holder.image);
+    }
+
+    private void cancelPreview(Holder holder) {
+        if (holder.preview != null) holder.preview.cancel();
+        holder.preview = null;
+    }
+
+    private boolean previewVisible(Holder holder) {
+        if (!holder.attached || !previewsActive) return false;
+        // Retained All/Pictures/Videos pages may be attached beyond the pager's clipped viewport.
+        return previewViewport == null || (holder.itemView.isShown()
+                && holder.itemView.getGlobalVisibleRect(previewBounds));
+    }
+
+    void setPreviewsActive(boolean active) {
+        if (previewsActive == active) return;
+        previewsActive = active;
+        for (Holder holder : previewHolders) {
+            if (!active) {
+                cancelPreview(holder);
+                holder.previewAttempted = false;
+            } else if (holder.boundItem != null) {
+                if (holder.wantsMediaPreview) requestMediaPreview(holder, holder.boundItem);
+                else if (holder.needsRepair) repairArtwork(holder, holder.boundItem, holder.boundItem.imageUrl);
+            }
+        }
+    }
+
+    @Override public void onAttachedToRecyclerView(@NonNull RecyclerView recycler) {
+        super.onAttachedToRecyclerView(recycler);
+        previewViewport = recycler;
+        recycler.getViewTreeObserver().addOnPreDrawListener(previewVisibility);
+    }
+
+    @Override public void onDetachedFromRecyclerView(@NonNull RecyclerView recycler) {
+        recycler.getViewTreeObserver().removeOnPreDrawListener(previewVisibility);
+        for (int i = 0; i < recycler.getChildCount(); i++) {
+            RecyclerView.ViewHolder raw = recycler.getChildViewHolder(recycler.getChildAt(i));
+            if (raw instanceof Holder) cancelPreview((Holder) raw);
+        }
+        previewViewport = null;
+        super.onDetachedFromRecyclerView(recycler);
+    }
+
+    @Override public void onViewAttachedToWindow(@NonNull Holder holder) {
+        super.onViewAttachedToWindow(holder);
+        previewHolders.add(holder);
+        holder.attached = true;
+        NativeContentItem item = holder.boundItem;
+        if (item == null) return;
+        if (holder.wantsMediaPreview) requestMediaPreview(holder, item);
+        else if (holder.needsRepair) repairArtwork(holder, item, item.imageUrl);
+    }
+
+    @Override public void onViewDetachedFromWindow(@NonNull Holder holder) {
+        previewHolders.remove(holder);
+        holder.attached = false;
+        cancelPreview(holder);
+        holder.previewAttempted = false;
+        super.onViewDetachedFromWindow(holder);
     }
 
     private void applyOverlayDensity(Holder holder) {
@@ -421,7 +580,12 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
 
     @Override
     public void onViewRecycled(@NonNull Holder holder) {
+        previewHolders.remove(holder);
         holder.bindGeneration++;
+        cancelPreview(holder);
+        holder.boundItem = null;
+        holder.needsRepair = false;
+        holder.wantsMediaPreview = false;
         GalleryMediaTransition.clearName(holder.image);
         Glide.with(holder.image).clear(holder.image);
         holder.morphPulse.animate().cancel();
@@ -483,6 +647,14 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
                 .addHeader("Referer", pageUrl == null
                         ? BunkrRepository.DEFAULT_PAGE_ORIGIN + "/" : pageUrl)
                 .addHeader("Accept", "image/avif,image/webp,image/apng,image/*,*/*;q=0.8");
+        SourceConfig current = RemoteSourceConfigManager.snapshotOrNull();
+        if (current != null && BunkrRepository.isBunkrUrl(pageUrl)) {
+            SourceConfig.Bunkr config = current.bunkr;
+            headers.setHeader("User-Agent", config.userAgent);
+            if (!config.refererOverride.isEmpty()) headers.setHeader("Referer", config.refererOverride);
+            for (Map.Entry<String, String> header : config.requestHeaders.entrySet())
+                headers.setHeader(header.getKey(), header.getValue());
+        }
         try {
             String cookies = CookieManager.getInstance().getCookie(imageUrl);
             if ((cookies == null || cookies.isEmpty()) && pageUrl != null) {
@@ -573,6 +745,9 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
 
     static final class Holder extends RecyclerView.ViewHolder {
         int bindGeneration;
+        boolean attached, needsRepair, repairPending, wantsMediaPreview, previewAttempted;
+        NativeContentItem boundItem;
+        BunkrMediaPreview.Task preview;
         final AspectRatioFrameLayout tile;
         final ImageView image;
         final FrameLayout source;
@@ -581,6 +756,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         final ImageView fresh;
         final View play;
         final View morphPulse;
+        final TextView unavailable;
 
         Holder(
                 AspectRatioFrameLayout itemView,
@@ -590,7 +766,8 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
                 TextView sourceVariant,
                 ImageView fresh,
                 View play,
-                View morphPulse
+                View morphPulse,
+                TextView unavailable
         ) {
             super(itemView);
             this.tile = itemView;
@@ -601,6 +778,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
             this.fresh = fresh;
             this.play = play;
             this.morphPulse = morphPulse;
+            this.unavailable = unavailable;
         }
     }
 

@@ -2,7 +2,7 @@ name: ZeroChill Signed Upgrade Candidate
 
 on:
   pull_request:
-    branches: [ main, rebrand/zerochill ]
+    branches: [ main, rebrand/zerochill, feature/shittok-smooth-pinch-focus-mode ]
     paths:
       - 'app/**'
       - 'RELEASE_VERSION'
@@ -12,7 +12,7 @@ on:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
-  cancel-in-progress: ${{ github.head_ref == 'fix/bunkr-resolution-artwork-search' || github.head_ref == 'feature/shows-detail-cinematic-pagination' || github.head_ref == 'feature/shows-youtube-motion' || github.head_ref == 'feature/shows-watch-page' || github.head_ref == 'fix/search-results-visual-polish' || (github.head_ref == 'feature/search-recent-glass' || github.head_ref == 'feature/search-liquid-material') || github.head_ref == 'feature/shows-episode-list' || (github.head_ref == 'feature/onlyfap-gender-shelves' || github.head_ref == 'fix/library-startup-navigation' || github.head_ref == 'feature/onlyfap-liquid-rift' || github.head_ref == 'feature/zerochill-5.1.0' || github.head_ref == 'feature/source-contracts-preference-search') }}
+  cancel-in-progress: ${{ github.head_ref == 'feature/bunkr-generated-previews' || github.head_ref == 'fix/bunkr-resolution-artwork-search' || github.head_ref == 'feature/shows-detail-cinematic-pagination' || github.head_ref == 'feature/shows-youtube-motion' || github.head_ref == 'feature/shows-watch-page' || github.head_ref == 'fix/search-results-visual-polish' || (github.head_ref == 'feature/search-recent-glass' || github.head_ref == 'feature/search-liquid-material') || github.head_ref == 'feature/shows-episode-list' || (github.head_ref == 'feature/onlyfap-gender-shelves' || github.head_ref == 'fix/library-startup-navigation' || github.head_ref == 'feature/onlyfap-liquid-rift' || github.head_ref == 'feature/zerochill-5.1.0' || github.head_ref == 'feature/source-contracts-preference-search') }}
 
 permissions:
   contents: read
@@ -57,8 +57,17 @@ jobs:
           gradle-version: '8.11.1'
           cache-provider: basic
 
+      - name: Run missing-artwork preview regressions first
+        if: github.head_ref == 'feature/bunkr-generated-previews' || github.ref_name == 'integration/bunkr-previews-focus-approved'
+        run: >-
+          gradle --no-daemon :app:testDebugUnitTest
+          --tests 'com.webapp.crazyshit.Bunkr*Test'
+          --tests 'com.webapp.crazyshit.ThumbnailLoadTransitionTest'
+          --tests 'com.webapp.crazyshit.CreatorMergedGallery*Test'
+          --tests 'com.webapp.crazyshit.OnlyFapLibrary*Test'
+
       - name: Run focused ShitTok Focus Mode and lifecycle regressions first
-        if: github.head_ref == 'feature/shittok-smooth-pinch-focus-mode'
+        if: github.head_ref == 'feature/shittok-smooth-pinch-focus-mode' || github.head_ref == 'feature/bunkr-generated-previews'
         run: >-
           gradle --no-daemon :app:testDebugUnitTest
           --tests 'com.webapp.crazyshit.ShitTokDynamicPinchTest'

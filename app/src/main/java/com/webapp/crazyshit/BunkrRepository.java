@@ -885,7 +885,7 @@ public final class BunkrRepository {
         String title = doc.title().toLowerCase(Locale.US);
         if (title.contains("just a moment") || title.contains("attention required") ||
                 title.contains("ddos-guard") || title.contains("404") ||
-                title.contains("not found")) return true;
+                title.contains("not found") || title.contains("site unavailable")) return true;
         String text = doc.text().toLowerCase(Locale.US);
         return text.contains("checking your browser before accessing") ||
                 text.contains("server under maintenance") ||
@@ -1117,18 +1117,18 @@ public final class BunkrRepository {
                 ? "https://get.bunkrr.su" : configured;
     }
 
-    private static String userAgent() {
+    static String userAgent() {
         SourceConfig.Bunkr config = config();
         return config == null ? USER_AGENT : config.userAgent;
     }
 
-    private static String referer(String fallback) {
+    static String referer(String fallback) {
         SourceConfig.Bunkr config = config();
         return config != null && !config.refererOverride.isEmpty()
                 ? config.refererOverride : fallback;
     }
 
-    private static int requestTimeoutMs() {
+    static int requestTimeoutMs() {
         SourceConfig.Bunkr config = config();
         return config == null ? 12_000 : config.requestTimeoutMs;
     }
