@@ -84,8 +84,9 @@ public class ShitTokSeenStoreTest {
         ShitTokSmartRanker.register(skipped);
         ShitTokSmartRanker.register(neutral);
 
-        ShitTokSmartRanker.onViewedAt(skipped.url, 1_000L, 100_000L);
-        ShitTokSmartRanker.onViewedAt(neutral.url, 2_100L, 101_100L);
+        long wallNow = System.currentTimeMillis();
+        ShitTokSmartRanker.onViewedAt(skipped.url, 1_000L, wallNow);
+        ShitTokSmartRanker.onViewedAt(neutral.url, 2_100L, wallNow + 1_100L);
 
         float skippedPenalty = ShitTokSmartRanker.penalty(skipped);
         float sourceOnlyPenalty = ShitTokSmartRanker.penalty(neutral);
