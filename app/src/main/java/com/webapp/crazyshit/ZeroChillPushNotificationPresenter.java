@@ -10,6 +10,7 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.os.Build;
+import android.service.notification.StatusBarNotification;
 
 import androidx.core.app.NotificationCompat;
 import androidx.core.app.NotificationManagerCompat;
@@ -66,6 +67,18 @@ final class ZeroChillPushNotificationPresenter {
             previews = unreadPreviews(app, senderId, messageId, groupMessages);
         }
         postDirectMessage(app, messageId, senderId, name, previews, showPreviews, groupMessages);
+    }
+
+    static void clearMessageNotifications(Context context) {
+        if (context == null || Build.VERSION.SDK_INT < 23) return;
+        NotificationManager manager = context.getSystemService(NotificationManager.class);
+        if (manager == null) return;
+        for (StatusBarNotification active : manager.getActiveNotifications()) {
+            Notification notification = active.getNotification();
+            if (notification != null && CHANNEL_MESSAGES.equals(notification.getChannelId())) {
+                manager.cancel(active.getId());
+            }
+        }
     }
 
     private static void postDirectMessage(
