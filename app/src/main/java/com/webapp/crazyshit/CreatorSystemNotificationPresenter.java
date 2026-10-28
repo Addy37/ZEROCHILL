@@ -51,7 +51,7 @@ final class CreatorSystemNotificationPresenter {
             style.addLine("+" + (updates.size() - MAX_LINES) + " more creators");
         }
 
-        String title = notificationTitle(updates);
+        String title = titleForUpdates(updates);
         String text = updates.size() == 1
                 ? line(updates.get(0))
                 : totalItems + (totalItems == 1 ? " new item" : " new items") + " from your favorites";
@@ -101,10 +101,10 @@ final class CreatorSystemNotificationPresenter {
     }
 
     static String notificationTitle(List<NotificationCoordinator.SourceAlert> alerts) {
-        return notificationTitle(creatorUpdates(alerts));
+        return titleForUpdates(creatorUpdates(alerts));
     }
 
-    private static String notificationTitle(List<CreatorUpdate> updates) {
+    private static String titleForUpdates(List<CreatorUpdate> updates) {
         if (updates == null || updates.isEmpty()) return "New creator activity";
         if (updates.size() == 1) return updates.get(0).name + " posted new content";
         return updates.size() + " creators posted new content";
