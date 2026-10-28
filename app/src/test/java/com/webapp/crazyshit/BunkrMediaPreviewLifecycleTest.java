@@ -3,9 +3,11 @@ package com.webapp.crazyshit;
 import static org.junit.Assert.*;
 import android.app.Application;
 import android.content.Context;
+import android.graphics.Bitmap;
 import android.view.View;
 import android.widget.FrameLayout;
 import java.io.File;
+import java.io.FileOutputStream;
 import java.util.Collections;
 import java.util.function.Consumer;
 import org.junit.Before;
@@ -32,14 +34,26 @@ public class BunkrMediaPreviewLifecycleTest {
     @Implements(value = BunkrMediaPreview.class, isInAndroidSdk = false)
     public static class Preview {
         static int calls;
+        static int cacheChecks;
+        static File cached;
         static Consumer<File> callback;
         static BunkrMediaPreview.Task task;
+        @Implementation protected static File cached(Context context, NativeContentItem item) {
+            cacheChecks++;
+            return cached;
+        }
         @Implementation protected static BunkrMediaPreview.Task request(Context context,
                 NativeContentItem item, Consumer<File> ready) {
             calls++; callback = ready; task = new BunkrMediaPreview.Task(); return task;
         }
     }
-    @Before public void reset() { Metadata.calls = 0; Preview.calls = 0; Preview.callback = null; }
+    @Before public void reset() {
+        Metadata.calls = 0;
+        Preview.calls = 0;
+        Preview.cacheChecks = 0;
+        Preview.cached = null;
+        Preview.callback = null;
+    }
     private BunkrGalleryAdapter adapter(String url) {
         Context context = RuntimeEnvironment.getApplication();
         BunkrGalleryAdapter adapter = new BunkrGalleryAdapter(context, new BunkrGalleryAdapter.Listener() {
@@ -65,6 +79,26 @@ public class BunkrMediaPreviewLifecycleTest {
         assertTrue(old.canceled);
         adapter.onViewAttachedToWindow(holder);
         assertEquals(2, Preview.calls);
+    }
+    @Test public void cachedPreviewRebindSkipsRepairAndGeneration() throws Exception {
+        Context context = RuntimeEnvironment.getApplication();
+        File file = File.createTempFile("bunkr-preview-", ".jpg", context.getCacheDir());
+        Bitmap bitmap = Bitmap.createBitmap(2, 2, Bitmap.Config.ARGB_8888);
+        try (FileOutputStream output = new FileOutputStream(file)) {
+            assertTrue(bitmap.compress(Bitmap.CompressFormat.JPEG, 80, output));
+        } finally {
+            bitmap.recycle();
+        }
+        Preview.cached = file;
+        BunkrGalleryAdapter adapter = adapter("https://bunkr.cr/f/cached");
+        BunkrGalleryAdapter.Holder holder = holder(adapter);
+        adapter.onBindViewHolder(holder, 0);
+        adapter.onViewAttachedToWindow(holder);
+        assertEquals(1, Preview.cacheChecks);
+        assertEquals(0, Metadata.calls);
+        assertEquals(0, Preview.calls);
+        adapter.onViewRecycled(holder);
+        file.delete();
     }
     @Test public void failedPreviewShowsLabelAndRebindRejectsStaleCallback() {
         BunkrGalleryAdapter adapter = adapter("https://bunkr.cr/f/rebind");
