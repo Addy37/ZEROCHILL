@@ -364,6 +364,46 @@ public class ShitTokDynamicPinchTest {
         }
     }
 
+    @Test public void preparedAndAdoptedHolderRejectsNormalChromeSyncAndRestoresSavedAlpha() {
+        try (ShitTokAudioOwnershipTest.Fixture f = new ShitTokAudioOwnershipTest.Fixture()) {
+            ReflectionHelpers.callInstanceMethod(f.feed, "playSelected");
+            Object incoming = f.selected;
+            View lower = ReflectionHelpers.getField(incoming, "lower");
+            lower.setAlpha(0.65f);
+            PlayerView playerView = ReflectionHelpers.getField(incoming, "playerView");
+            View surface = playerView.getVideoSurfaceView();
+            ShitTokDynamicPinchController peer = ReflectionHelpers.getField(incoming, "pinch");
+            ReflectionHelpers.callInstanceMethod(peer, "preparePeerForFocus");
+            assertNormalSyncKeepsChromeHidden(incoming);
+            ReflectionHelpers.callInstanceMethod(peer, "adoptFocusFromPaging", from(float.class, 1f));
+            assertTrue(peer.isFocusMode());
+            assertNormalSyncKeepsChromeHidden(incoming);
+            begin(((RecyclerView.ViewHolder) incoming).itemView);
+            shrink(((RecyclerView.ViewHolder) incoming).itemView);
+            release(((RecyclerView.ViewHolder) incoming).itemView, 350, 450);
+            idleAnimations();
+            assertFalse(peer.isFocusMode());
+            // The feed's exit callback normally shows controls. Inspect the saved
+            // snapshot too, so adoption cannot silently recapture the hidden alpha.
+            float[] saved = ReflectionHelpers.getField(peer, "overlayAlphas");
+            assertEquals(0.65f, saved[0], 0f);
+            assertEquals(1f, lower.getAlpha(), 0f);
+            assertSame(surface, playerView.getVideoSurfaceView());
+        }
+    }
+
+    private static void assertNormalSyncKeepsChromeHidden(Object holder) {
+        View lower = ReflectionHelpers.getField(holder, "lower");
+        for (String method : new String[] {"syncOrientationChrome", "showControlsTemporarily",
+                "hideControlsNow", "syncPausedChrome", "hidePausedChrome"}) {
+            ReflectionHelpers.callInstanceMethod(holder, method);
+            idleAnimations();
+            assertEquals(method, 0f, lower.getAlpha(), 0f);
+        }
+        ReflectionHelpers.callInstanceMethod(holder, "syncProgressChrome", from(long.class, 60_000L));
+        assertEquals(0f, ((View) ReflectionHelpers.getField(holder, "progressRow")).getAlpha(), 0f);
+    }
+
     @Test public void realHolderFocusKeepsAudioAndSurfaceUntilBackExit() {
         try (ShitTokAudioOwnershipTest.Fixture f = new ShitTokAudioOwnershipTest.Fixture()) {
             ReflectionHelpers.callInstanceMethod(f.feed, "playSelected");

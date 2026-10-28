@@ -131,6 +131,7 @@ final class ShitTokDynamicPinchController {
 
     boolean isActive() { return active; }
     boolean isFocusMode() { return focusMode; }
+    boolean suppressesFeedChrome() { return listenerEngaged || focusMode || focusPeerPrepared; }
     boolean ownsTouchSequence() { return active || swallowRemainder; }
     void videoTouchStarted() { videoTouchStarted = true; }
 
@@ -276,6 +277,15 @@ final class ShitTokDynamicPinchController {
             if (overlay == null) continue;
             overlay.animate().withEndAction(null).cancel();
             overlayAlphas[i] = overlay.getAlpha();
+        }
+        hideOverlays();
+    }
+
+    /** Reassert suppression without replacing the pre-Focus alpha snapshot. */
+    private void hideOverlays() {
+        for (View overlay : overlays) {
+            if (overlay == null) continue;
+            overlay.animate().withEndAction(null).cancel();
             overlay.setAlpha(0f);
         }
     }
@@ -348,6 +358,9 @@ final class ShitTokDynamicPinchController {
             applyFocusViewport();
         }
 
+        // Holder/listener synchronization may have touched chrome since pre-hide.
+        // Keep the original snapshot so pinch-in/Back restores the pre-Focus UI.
+        hideOverlays();
         startFocusPaging();
         prepareVisibleFocusPeers();
         setPagerInputEnabled(true);

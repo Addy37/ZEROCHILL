@@ -41,7 +41,7 @@ public class ShitTokFocusModeViewportTest {
                     .idleFor(Duration.ofMillis(120));
 
             assertTrue(pinch.isFocusMode());
-            assertFalse(pager.isUserInputEnabled());
+            assertTrue(pager.isUserInputEnabled());
             assertEquals(0, root.getPaddingBottom());
             assertTrue(playerView.getLayoutParams().height > 0);
             assertTrue(playerView.getLayoutParams().height <= root.getHeight());
