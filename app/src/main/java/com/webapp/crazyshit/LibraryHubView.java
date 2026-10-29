@@ -555,6 +555,7 @@ final class LibraryHubView extends ScrollView {
         return wrapper;
     }
 
+    @androidx.annotation.OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)
     private void addMediaFavoritesSection(List<FavoriteStore.Item> items) {
         LibraryMediaRows rail = addMediaSectionShell("Favorites", "View all", () -> {
             Intent intent = new Intent(activity, FavoritesActivity.class)

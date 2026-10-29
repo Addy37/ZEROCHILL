@@ -14,6 +14,8 @@ import android.widget.ScrollView;
 import android.widget.TextView;
 
 /** Same-window glass menu. A second finger dismisses it and hands the gesture to the gallery. */
+// This action surface is created with per-item callbacks and is never inflated from XML.
+@android.annotation.SuppressLint("ViewConstructor")
 final class GalleryContextMenu extends FrameLayout {
     private final ViewGroup host;
     private final View anchor;
@@ -49,7 +51,7 @@ final class GalleryContextMenu extends FrameLayout {
             row.setGravity(Gravity.CENTER_VERTICAL);
             row.setPadding(dp(16), dp(4), dp(16), dp(4));
             row.setCompoundDrawablePadding(dp(16));
-            android.graphics.drawable.Drawable icon = activity.getDrawable(icons[i]).mutate();
+            android.graphics.drawable.Drawable icon = androidx.appcompat.content.res.AppCompatResources.getDrawable(activity, icons[i]).mutate();
             icon.setTint(i == 1 && favorite ? UiPalette.PRIMARY : Color.WHITE);
             icon.setBounds(0, 0, dp(22), dp(22));
             row.setCompoundDrawables(icon, null, null, null);
