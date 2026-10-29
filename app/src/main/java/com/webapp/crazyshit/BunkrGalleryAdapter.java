@@ -531,6 +531,16 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
                     .transition(ThumbnailFades.thumbnail());
             fallback = adaptiveAspectRatios ? fallback.dontTransform().override(384, 384)
                     : fallback.centerCrop().override(360, 360);
+            fallback = fallback.listener(new RequestListener<Drawable>() {
+                @Override public boolean onLoadFailed(GlideException error, Object model,
+                        Target<Drawable> target, boolean firstResource) { return false; }
+                @Override public boolean onResourceReady(Drawable resource, Object model,
+                        Target<Drawable> target, DataSource source, boolean firstResource) {
+                    if (adaptiveAspectRatios && binding == holder.bindGeneration)
+                        applyAspectRatio(holder, item, resource);
+                    return false;
+                }
+            });
             request = request.error(fallback);
         }
         request.into(holder.image);
