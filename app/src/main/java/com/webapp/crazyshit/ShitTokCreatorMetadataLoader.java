@@ -6,9 +6,11 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
@@ -16,22 +18,45 @@ import java.util.function.Function;
 
 /** UI-owned cache. Catalog decoding/matching never runs in identity() or its result callback. */
 final class ShitTokCreatorMetadataLoader {
+    private static final long LIVE_INITIAL_DELAY_MS = 350L;
+    private static final long LIVE_RECHECK_MS = 450L;
+
     private final Executor worker, ui;
-    private final Function<NativeContentItem, NativeContentItem> resolve;
+    private final ScheduledThreadPoolExecutor liveWorker;
+    private final Function<NativeContentItem, NativeContentItem> resolve, liveResolve;
     private final Consumer<String> ready;
     private final Map<String, NativeContentItem> identities = new HashMap<>();
+    private final Map<String, Integer> observations = new HashMap<>();
     private final Set<String> requested = new HashSet<>();
+    private final Set<String> liveWatching = ConcurrentHashMap.newKeySet();
+    private final Set<String> liveAttempted = ConcurrentHashMap.newKeySet();
     private volatile int generation;
     private volatile boolean closed;
 
     ShitTokCreatorMetadataLoader(Context context, Executor ui, Consumer<String> ready) {
-        this(new ThreadPoolExecutor(1, 1, 0L, TimeUnit.MILLISECONDS,
+        this(newMetadataWorker(), newLiveWorker(), ui, resolver(context), liveResolver(context), ready);
+    }
+
+    private static ThreadPoolExecutor newMetadataWorker() {
+        return new ThreadPoolExecutor(1, 1, 0L, TimeUnit.MILLISECONDS,
                 new ArrayBlockingQueue<>(48), task -> {
                     Thread thread = new Thread(task, "ShitTokCreatorMetadata");
                     thread.setPriority(Thread.MIN_PRIORITY);
                     thread.setDaemon(true);
                     return thread;
-                }), ui, resolver(context), ready);
+                });
+    }
+
+    private static ScheduledThreadPoolExecutor newLiveWorker() {
+        ScheduledThreadPoolExecutor executor = new ScheduledThreadPoolExecutor(1, task -> {
+            Thread thread = new Thread(task, "ShitTokCreatorLive");
+            thread.setPriority(Thread.MIN_PRIORITY);
+            thread.setDaemon(true);
+            return thread;
+        });
+        executor.setRemoveOnCancelPolicy(true);
+        executor.setExecuteExistingDelayedTasksAfterShutdownPolicy(false);
+        return executor;
     }
 
     static Function<NativeContentItem, NativeContentItem> resolver(Context context) {
@@ -72,20 +97,38 @@ final class ShitTokCreatorMetadataLoader {
         };
     }
 
+    static Function<NativeContentItem, NativeContentItem> liveResolver(Context context) {
+        Context app = context.getApplicationContext();
+        return media -> BaddieHubCreatorMatcher.matchLive(app, media);
+    }
+
     ShitTokCreatorMetadataLoader(Executor worker, Executor ui,
             Function<NativeContentItem, NativeContentItem> resolve, Consumer<String> ready) {
+        this(worker, null, ui, resolve, null, ready);
+    }
+
+    ShitTokCreatorMetadataLoader(Executor worker, ScheduledThreadPoolExecutor liveWorker, Executor ui,
+            Function<NativeContentItem, NativeContentItem> resolve,
+            Function<NativeContentItem, NativeContentItem> liveResolve, Consumer<String> ready) {
         this.worker = worker;
+        this.liveWorker = liveWorker;
         this.ui = ui;
         this.resolve = resolve;
+        this.liveResolve = liveResolve;
         this.ready = ready;
     }
 
     NativeContentItem identity(NativeContentItem media) {
         if (media == null) return null;
+        int seen = observations.getOrDefault(media.url, 0) + 1;
+        observations.put(media.url, seen);
         if (!identities.containsKey(media.url))
             identities.put(media.url, ShitTokCreatorMetadata.creatorIdentity(null, media));
         NativeContentItem fallback = identities.get(media.url);
         boolean deferredBaddieHub = fallback == null && BaddieHubCreatorMatcher.isCandidate(media);
+        // The first observation is feed admission. A later observation means the card has been
+        // bound or refreshed near the viewport. Only then keep a lightweight live-match watch.
+        if (deferredBaddieHub && seen > 1) watchLiveBaddieHub(media);
         if (closed || (!deferredBaddieHub && fallback == null) || !requested.add(media.url)) {
             return fallback;
         }
@@ -116,22 +159,80 @@ final class ShitTokCreatorMetadataLoader {
         return fallback;
     }
 
+    private void watchLiveBaddieHub(NativeContentItem media) {
+        if (closed || liveWorker == null || liveResolve == null
+                || liveAttempted.contains(media.url) || !liveWatching.add(media.url)) return;
+        scheduleLiveCheck(media, generation, LIVE_INITIAL_DELAY_MS);
+    }
+
+    private void scheduleLiveCheck(NativeContentItem media, int expected, long delayMs) {
+        try {
+            liveWorker.schedule(() -> runLiveCheck(media, expected), delayMs, TimeUnit.MILLISECONDS);
+        } catch (RejectedExecutionException closedWorker) {
+            liveWatching.remove(media.url);
+        }
+    }
+
+    private void runLiveCheck(NativeContentItem media, int expected) {
+        if (closed || expected != generation) {
+            liveWatching.remove(media.url);
+            return;
+        }
+        if (!ShitTokPlaybackOwner.isForegroundWindow(media.url)) {
+            liveWatching.remove(media.url);
+            return;
+        }
+        if (!ShitTokPlaybackOwner.allowsCreatorLookup(media.url)) {
+            scheduleLiveCheck(media, expected, LIVE_RECHECK_MS);
+            return;
+        }
+
+        liveWatching.remove(media.url);
+        if (!liveAttempted.add(media.url)) return;
+        long started = android.os.SystemClock.elapsedRealtime();
+        NativeContentItem matched = null;
+        try { matched = liveResolve.apply(media); }
+        catch (RuntimeException unavailable) {
+            ShitTokPoolDiagnostics.record("creatorMetadataLive", "status=fallback");
+        }
+        NativeContentItem result = matched;
+        ShitTokPoolDiagnostics.record("creatorMetadataLive", "ms="
+                + (android.os.SystemClock.elapsedRealtime() - started)
+                + " matched=" + (result != null));
+        if (result == null) return;
+        ui.execute(() -> {
+            if (closed || expected != generation) return;
+            identities.put(media.url, result);
+            ready.accept(media.url);
+        });
+    }
+
     void clear() {
         generation++;
         identities.clear();
+        observations.clear();
         requested.clear();
+        liveWatching.clear();
+        liveAttempted.clear();
         if (worker instanceof ThreadPoolExecutor) ((ThreadPoolExecutor) worker).getQueue().clear();
+        if (liveWorker != null) liveWorker.getQueue().clear();
     }
 
     int backlog() {
-        if (!(worker instanceof ThreadPoolExecutor)) return -1;
-        ThreadPoolExecutor pool = (ThreadPoolExecutor) worker;
-        return pool.getActiveCount() + pool.getQueue().size();
+        int local = -1;
+        if (worker instanceof ThreadPoolExecutor) {
+            ThreadPoolExecutor pool = (ThreadPoolExecutor) worker;
+            local = pool.getActiveCount() + pool.getQueue().size();
+        }
+        if (liveWorker == null) return local;
+        int live = liveWorker.getActiveCount() + liveWorker.getQueue().size();
+        return local < 0 ? live : local + live;
     }
 
     void close() {
         closed = true;
         clear();
         if (worker instanceof ExecutorService) ((ExecutorService) worker).shutdownNow();
+        if (liveWorker != null) liveWorker.shutdownNow();
     }
 }
