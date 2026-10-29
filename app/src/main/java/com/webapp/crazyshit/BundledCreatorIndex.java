@@ -15,10 +15,14 @@ final class BundledCreatorIndex {
     private static volatile BundledCreatorIndex cached;
     private final List<Entry> entries;
     private final Map<String, Entry> byName = new HashMap<>();
+    private final Map<String, Entry> bySearchable = new HashMap<>();
 
     private BundledCreatorIndex(List<Entry> entries) {
         this.entries = entries;
-        for (Entry entry : entries) byName.put(entry.searchable.get(0), entry);
+        for (Entry entry : entries) {
+            byName.put(entry.searchable.get(0), entry);
+            for (String key : entry.searchable) bySearchable.putIfAbsent(key, entry);
+        }
     }
 
     static BundledCreatorIndex get(Context context) {
@@ -63,6 +67,11 @@ final class BundledCreatorIndex {
 
     int size() { return entries.size(); }
 
+    NativeContentItem exact(String query) {
+        Entry entry = bySearchable.get(CreatorNameMatcher.normalized(query));
+        return entry == null ? null : item(entry);
+    }
+
     int rank(NativeContentItem item, String query) {
         Entry entry = byName.get(CreatorNameMatcher.normalized(item.title));
         int score = Math.min(CreatorNameMatcher.rank(item.title, query),
@@ -86,11 +95,14 @@ final class BundledCreatorIndex {
                 .thenComparing(match -> match.entry.searchable.get(0)));
         ArrayList<NativeContentItem> out = new ArrayList<>();
         for (int i = 0; i < Math.min(limit, matches.size()); i++) {
-            String name = matches.get(i).entry.name;
-            out.add(new NativeContentItem(NativeContentItem.KIND_CREATOR, name,
-                    "", "", "", "", "", "", name));
+            out.add(item(matches.get(i).entry));
         }
         return out;
+    }
+
+    private static NativeContentItem item(Entry entry) {
+        return new NativeContentItem(NativeContentItem.KIND_CREATOR, entry.name,
+                "", "", "", "", "", "", entry.name);
     }
 
     private static final class Entry {
