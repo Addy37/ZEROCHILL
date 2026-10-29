@@ -27,7 +27,7 @@ final class GalleryContextMenu extends FrameLayout {
         this.dismissed = dismissed;
         host = activity.findViewById(android.R.id.content);
         setBackgroundColor(0x22000000);
-        setAccessibilityPaneTitle("Media actions");
+        androidx.core.view.ViewCompat.setAccessibilityPaneTitle(this, "Media actions");
         setClickable(true); setFocusableInTouchMode(true);
         setOnClickListener(v -> dismiss());
         setOnKeyListener((v, key, event) -> {
