@@ -85,7 +85,10 @@ final class ShitTokCreatorMetadataLoader {
         if (!identities.containsKey(media.url))
             identities.put(media.url, ShitTokCreatorMetadata.creatorIdentity(null, media));
         NativeContentItem fallback = identities.get(media.url);
-        if (closed || fallback == null || !requested.add(media.url)) return fallback;
+        boolean deferredBaddieHub = fallback == null && BaddieHubCreatorMatcher.isCandidate(media);
+        if (closed || (!deferredBaddieHub && fallback == null) || !requested.add(media.url)) {
+            return fallback;
+        }
         final int expected = generation;
         try {
             worker.execute(() -> {
