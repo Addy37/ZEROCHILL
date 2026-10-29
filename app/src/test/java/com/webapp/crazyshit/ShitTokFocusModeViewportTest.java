@@ -24,7 +24,7 @@ import static org.junit.Assert.*;
 @RunWith(RobolectricTestRunner.class)
 @Config(application = Application.class, sdk = 35, qualifiers = "w400dp-h800dp-xhdpi")
 public class ShitTokFocusModeViewportTest {
-    @Test public void focusModeReclaimsViewportAndRestoresItOnBack() {
+    @Test public void focusModePreservesViewportAndRestoresChromeOnBack() {
         try (ShitTokAudioOwnershipTest.Fixture f = new ShitTokAudioOwnershipTest.Fixture()) {
             ReflectionHelpers.callInstanceMethod(f.feed, "playSelected");
             View root = ((RecyclerView.ViewHolder) f.selected).itemView;
@@ -46,10 +46,9 @@ public class ShitTokFocusModeViewportTest {
 
             assertTrue(pinch.isFocusMode());
             assertTrue(pager.isUserInputEnabled());
-            assertEquals(0, root.getPaddingBottom());
-            assertTrue(playerView.getLayoutParams().height > 0);
-            assertEquals("floating controls must not reduce the fitted media height",
-                    root.getHeight(), playerView.getLayoutParams().height);
+            assertEquals(originalBottomPadding, root.getPaddingBottom());
+            assertEquals("floating controls must not refit the picture",
+                    originalPlayerHeight, playerView.getLayoutParams().height);
             assertSame(f.selectedPlayer.player, playerView.getPlayer());
             assertEquals(ownerBefore, owner.summary());
 
@@ -147,6 +146,13 @@ public class ShitTokFocusModeViewportTest {
     }
     @Test public void focusButtonTapUpdatesOwnerAndPauseSurvivesPlaybackReconciliation() {
         try (ShitTokAudioOwnershipTest.Fixture f = new ShitTokAudioOwnershipTest.Fixture()) {
+            // The real shell places an alpha-hidden navbar above the feed. Without
+            // this overlapping sibling, taps can pass in JVM tests and fail on-device.
+            FrameLayout shell = (FrameLayout) f.feed.getParent();
+            ZeroChillBottomNavigationView nav = new ZeroChillBottomNavigationView(f.host.get());
+            nav.setAlpha(0f);
+            shell.addView(nav, new FrameLayout.LayoutParams(-1, 112, android.view.Gravity.BOTTOM));
+            layout(shell);
             ReflectionHelpers.callInstanceMethod(f.feed, "playSelected");
             View root = ((RecyclerView.ViewHolder) f.selected).itemView;
             ShitTokDynamicPinchController pinch = ReflectionHelpers.getField(f.selected, "pinch");
@@ -154,18 +160,18 @@ public class ShitTokFocusModeViewportTest {
             ShitTokDynamicPinchTest.grow(root);
             ShitTokDynamicPinchTest.release(root, 200, 600);
             ShitTokDynamicPinchTest.idleAnimations();
-            layout(f.feed);
+            layout(shell);
             ShitTokFocusControls controls = ReflectionHelpers.getField(pinch, "focusChrome");
             ShitTokPlaybackOwner owner = ReflectionHelpers.getField(f.feed, "playbackOwner");
             NativeContentItem item = ReflectionHelpers.getField(f.selected, "item");
             f.selectedPlayer.readyToPlay = true;
-            tap(f.feed, controls.play);
+            tap(shell, controls.play);
             assertTrue(owner.isUserPaused(item.url));
             assertTrue((boolean) ReflectionHelpers.getField(f.selected, "userPaused"));
             assertFalse(f.selectedPlayer.readyToPlay);
             ReflectionHelpers.callInstanceMethod(f.feed, "playSelected");
             assertFalse("feed reconciliation must respect Focus Mode pause", f.selectedPlayer.readyToPlay);
-            tap(f.feed, controls.play);
+            tap(shell, controls.play);
             assertFalse(owner.isUserPaused(item.url));
             assertTrue(f.selectedPlayer.readyToPlay);
             assertTrue(pinch.isFocusMode());
@@ -205,6 +211,36 @@ public class ShitTokFocusModeViewportTest {
             assertEquals(View.GONE, controls.getVisibility());
             assertNull(controls.owner);
         }
+    }
+
+    @Test public void focusEntryKeepsMeasuredPortraitAndSquarePictureBounds() {
+        for (float aspect : new float[] {0.6f, 1f}) {
+            try (ShitTokAudioOwnershipTest.Fixture f = new ShitTokAudioOwnershipTest.Fixture()) {
+                ReflectionHelpers.callInstanceMethod(f.feed, "playSelected");
+                View root = ((RecyclerView.ViewHolder) f.selected).itemView;
+                PlayerView playerView = ReflectionHelpers.getField(f.selected, "playerView");
+                androidx.media3.ui.AspectRatioFrameLayout picture = playerView.findViewById(
+                        androidx.media3.ui.R.id.exo_content_frame);
+                picture.setAspectRatio(aspect);
+                layout(f.feed);
+                android.graphics.Rect before = pictureBounds(f.feed, picture);
+                assertTrue(before.width() > 0);
+                assertTrue(before.height() > 0);
+                ShitTokDynamicPinchTest.begin(root);
+                ShitTokDynamicPinchTest.grow(root);
+                ShitTokDynamicPinchTest.release(root, 200, 600);
+                ShitTokDynamicPinchTest.idleAnimations();
+                layout(f.feed);
+                assertEquals("Focus entry must preserve visible size and vertical placement for " + aspect,
+                        before, pictureBounds(f.feed, picture));
+            }
+        }
+    }
+
+    private static android.graphics.Rect pictureBounds(FrameLayout host, View picture) {
+        android.graphics.Rect bounds = new android.graphics.Rect(0, 0, picture.getWidth(), picture.getHeight());
+        host.offsetDescendantRectToMyCoords(picture, bounds);
+        return bounds;
     }
 
     private static void layout(View view) {

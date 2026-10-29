@@ -73,7 +73,6 @@ final class ShitTokDynamicPinchController {
     private boolean settling;
     private boolean gestureStartedInFocus;
     private boolean focusViewportApplied;
-    private boolean focusViewportChanging;
     private boolean focusPeerPrepared;
     private boolean focusMigrationPending;
 
@@ -81,19 +80,6 @@ final class ShitTokDynamicPinchController {
     private float initialSpan, originX, originY, pivotX, pivotY;
     private float displayedScale = 1f;
     private float targetScale = 1f;
-
-    private int originalPaddingLeft;
-    private int originalPaddingTop;
-    private int originalPaddingRight;
-    private int originalPaddingBottom;
-    private int originalPlayerWidth;
-    private int originalPlayerHeight;
-    private int originalPlayerGravity;
-    private int originalPlayerLeftMargin;
-    private int originalPlayerTopMargin;
-    private int originalPlayerRightMargin;
-    private int originalPlayerBottomMargin;
-    private boolean originalPlayerLayoutCaptured;
 
     private ViewPager2 focusPager;
     private RecyclerView focusRecycler;
@@ -111,10 +97,10 @@ final class ShitTokDynamicPinchController {
         overlayAlphas = new float[overlays.length];
         root.pinch = this;
         media.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> {
-            if (!focusViewportChanging && (active || focusMode || settling)
+            if ((active || focusMode || settling)
                     && (l != ol || t != ot || r != or || b != ob)) {
-                // Media3 may deliver the fitted frame's layout after the viewport post.
-                // A settled fullscreen relayout is expected, not an ownership transition.
+                // A source aspect update may relayout the fitted frame while focused.
+                // Keep that settled layout; host/holder transitions reset separately.
                 if (focusViewportApplied && !active) return;
                 reset();
             }
@@ -630,74 +616,16 @@ final class ShitTokDynamicPinchController {
     }
 
     private void applyFocusViewport() {
-        if (focusViewportApplied) return;
-        PlayerView playerView = playerView();
-        if (playerView == null || root.getWidth() <= 0 || root.getHeight() <= 0) return;
-
-        originalPaddingLeft = root.getPaddingLeft();
-        originalPaddingTop = root.getPaddingTop();
-        originalPaddingRight = root.getPaddingRight();
-        originalPaddingBottom = root.getPaddingBottom();
-
-        if (playerView.getLayoutParams() instanceof FrameLayout.LayoutParams) {
-            FrameLayout.LayoutParams current =
-                    (FrameLayout.LayoutParams) playerView.getLayoutParams();
-            originalPlayerWidth = current.width;
-            originalPlayerHeight = current.height;
-            originalPlayerGravity = current.gravity;
-            originalPlayerLeftMargin = current.leftMargin;
-            originalPlayerTopMargin = current.topMargin;
-            originalPlayerRightMargin = current.rightMargin;
-            originalPlayerBottomMargin = current.bottomMargin;
-            originalPlayerLayoutCaptured = true;
-        } else {
-            originalPlayerLayoutCaptured = false;
-        }
-
+        // Focus hides chrome; it must not refit or recenter the playing picture.
+        // The controls are already a sibling overlay above the full-height pager.
+        // Keep holder padding, media-layer margins and PlayerView layout exactly as
+        // they were before the pinch, including portrait/square letterboxing.
         focusViewportApplied = true;
-        focusViewportChanging = true;
-        root.setPadding(0, 0, 0, 0);
-
-        // Controls float above the pager, so the fitted media keeps the entire viewport.
-        int height = root.getHeight();
-        FrameLayout.LayoutParams focused =
-                new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, height);
-        focused.gravity = Gravity.TOP;
-        playerView.setLayoutParams(focused);
-        playerView.requestLayout();
-        root.requestLayout();
-        root.postDelayed(() -> focusViewportChanging = false, 80L);
     }
 
     private void restoreFocusViewport() {
-        if (!focusViewportApplied) return;
-        focusViewportChanging = true;
-        PlayerView playerView = playerView();
-
-        root.setPadding(
-                originalPaddingLeft,
-                originalPaddingTop,
-                originalPaddingRight,
-                originalPaddingBottom
-        );
-
-        if (playerView != null && originalPlayerLayoutCaptured) {
-            FrameLayout.LayoutParams restored =
-                    new FrameLayout.LayoutParams(originalPlayerWidth, originalPlayerHeight);
-            restored.gravity = originalPlayerGravity;
-            restored.setMargins(
-                    originalPlayerLeftMargin,
-                    originalPlayerTopMargin,
-                    originalPlayerRightMargin,
-                    originalPlayerBottomMargin
-            );
-            playerView.setLayoutParams(restored);
-            playerView.requestLayout();
-        }
-
+        // Entry no longer changes geometry, so there is no viewport to restore.
         focusViewportApplied = false;
-        root.requestLayout();
-        root.postDelayed(() -> focusViewportChanging = false, 80L);
     }
 
     private void buildFocusChrome() {

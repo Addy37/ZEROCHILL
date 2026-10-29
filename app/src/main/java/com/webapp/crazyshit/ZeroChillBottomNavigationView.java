@@ -57,11 +57,11 @@ final class ZeroChillBottomNavigationView extends BottomNavigationView {
 
     @Override public boolean dispatchTouchEvent(MotionEvent event) {
         // Focus Mode hides the navigation shell with alpha so its layout footprint stays
-        // stable. A fully transparent bar must also be touch-dead or its Compose buttons
-        // can still navigate underneath the fullscreen feed.
+        // stable. Reject the hidden sibling before child dispatch so the parent can
+        // deliver the same touch to Focus Mode controls underneath it.
         if (getAlpha() <= 0.01f) {
             if (dragging) endSquareDrag(true);
-            return true;
+            return false;
         }
         return super.dispatchTouchEvent(event);
     }

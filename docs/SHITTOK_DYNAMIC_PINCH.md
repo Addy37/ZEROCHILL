@@ -11,7 +11,7 @@ A normal pinch release animates back to the resting frame. A deliberate outward 
 Focus Mode uses a stationary control overlay above the existing pager:
 
 - black fullscreen canvas
-- media reclaims the entire feed viewport; floating controls reserve no height and do not shrink fitted video
+- media retains its measured resting size and position; Focus entry never clears holder insets or refits/recenters the picture
 - normal ShitTok title, metadata, action rail, and feed chrome disappear instead of shifting with the viewport
 - neutral gray hairline scrubber with no visible thumb at rest
 - scrubber and button row occupy separate vertical zones so their touch areas never overlap
@@ -28,7 +28,7 @@ A deliberate inward pinch exits Focus Mode and smoothly returns to normal ShitTo
 
 ## Lifecycle
 
-Bind, detach, recycle, ownership changes, host pause, deactivation, refresh, close, configuration changes, and Back reset the pinch/focus controller. User page changes migrate Focus Mode to the newly selected holder instead of ending it. Focus Mode restores the original player layout and holder padding before returning control to the normal feed.
+Bind, detach, recycle, ownership changes, host pause, deactivation, refresh, close, configuration changes, and Back reset the pinch/focus controller. User page changes migrate Focus Mode to the newly selected holder instead of ending it. Focus Mode leaves player layout and holder padding intact throughout entry and exit.
 
 Completion-driven auto-scroll stays blocked until Focus Mode ends, while manual vertical paging remains available.
 
@@ -49,7 +49,8 @@ Focused Robolectric coverage checks:
 - player/surface continuity
 - auto-advance blocking
 - holder lifecycle resets
-- fullscreen viewport reclaim and restoration
+- measured portrait/square picture size and position preserved across entry
+- real touch dispatch through the alpha-hidden overlapping navbar
 - non-overlapping progress/control geometry and minimum button touch targets
 
 Physical-device validation remains required for final motion and visual matching, especially on high-refresh-rate displays.
