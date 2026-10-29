@@ -12,8 +12,7 @@ create table if not exists private.social_bans (
 
 revoke all on table private.social_bans from public, anon, authenticated;
 
-drop function if exists private.is_socially_banned(uuid);
-create function private.is_socially_banned(p_user_id uuid)
+create or replace function private.is_socially_banned(p_user_id uuid)
 returns boolean
 language sql
 stable
