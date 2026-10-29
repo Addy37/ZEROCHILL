@@ -55,6 +55,15 @@ jobs:
         uses: gradle/actions/setup-gradle@v6
         with:
           gradle-version: '8.11.1'
+
+      - name: Run OnlyFap gallery sizing, actions, and favorites regressions
+        if: ${{ github.head_ref == 'feature/onlyfap-gallery-favorites' || github.ref_name == 'feature/onlyfap-gallery-favorites' }}
+        run: >-
+          gradle --no-daemon :app:testDebugUnitTest
+          --tests 'com.webapp.crazyshit.OnlyFapGalleryFavoritesTest'
+          --tests 'com.webapp.crazyshit.CreatorGalleryMotionTest'
+          --tests 'com.webapp.crazyshit.GalleryViewerLifecycleTest'
+          --tests 'com.webapp.crazyshit.OnlyFapLibraryMetadataTest'
           cache-provider: basic
 
       - name: Run Smart ShitTok ranking and Focus Mode regressions first

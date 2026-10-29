@@ -123,6 +123,57 @@ public class OnlyFapGalleryFavoritesTest {
         assertEquals(1, actions[4]); assertNull(menu.getParent());
         for (int i = 0; i < 4; i++) assertEquals(0, actions[i]);
     }
+    @Test public void everyMenuActionRequiresSelectionAndOutsideTapDismisses() {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        FrameLayout source = new FrameLayout(activity);
+        View anchor = new View(activity); source.addView(anchor); activity.setContentView(source);
+        String[] labels = {"Open", "Unfavorite", "Share", "Copy Link", "Download"};
+        for (int selected = 0; selected < 5; selected++) {
+            int[] calls = new int[5]; Runnable[] callbacks = new Runnable[5];
+            for (int i = 0; i < 5; i++) { final int index = i; callbacks[i] = () -> calls[index]++; }
+            GalleryContextMenu menu = new GalleryContextMenu(activity, anchor, source, true, callbacks, () -> { });
+            find(menu, labels[selected]).performClick();
+            for (int i = 0; i < 5; i++) assertEquals(i == selected ? 1 : 0, calls[i]);
+        }
+        boolean[] dismissed = {false};
+        Runnable[] callbacks = {() -> fail(), () -> fail(), () -> fail(), () -> fail(), () -> fail()};
+        GalleryContextMenu menu = new GalleryContextMenu(activity, anchor, source, false, callbacks, () -> dismissed[0] = true);
+        menu.performClick(); assertTrue(dismissed[0]); assertNull(menu.getParent());
+    }
+
+    @Test public void secondFingerDismissesMenuAndForwardsPinchBeginningToPage() {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        java.util.ArrayList<Integer> received = new java.util.ArrayList<>();
+        View source = new View(activity) {
+            @Override public boolean onTouchEvent(android.view.MotionEvent event) {
+                received.add(event.getActionMasked()); return true;
+            }
+        };
+        activity.setContentView(source);
+        FrameLayout host = activity.findViewById(android.R.id.content);
+        host.measure(View.MeasureSpec.makeMeasureSpec(600, View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(900, View.MeasureSpec.EXACTLY));
+        host.layout(0, 0, 600, 900);
+        Runnable[] callbacks = {() -> {}, () -> {}, () -> {}, () -> {}, () -> {}};
+        GalleryContextMenu menu = new GalleryContextMenu(activity, source, source, false, callbacks, () -> {});
+        host.measure(View.MeasureSpec.makeMeasureSpec(600, View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(900, View.MeasureSpec.EXACTLY));
+        host.layout(0, 0, 600, 900);
+        android.view.MotionEvent.PointerProperties[] properties = new android.view.MotionEvent.PointerProperties[2];
+        android.view.MotionEvent.PointerCoords[] coords = new android.view.MotionEvent.PointerCoords[2];
+        for (int i = 0; i < 2; i++) {
+            properties[i] = new android.view.MotionEvent.PointerProperties(); properties[i].id = i;
+            coords[i] = new android.view.MotionEvent.PointerCoords(); coords[i].x = 100 + i * 100;
+            coords[i].y = 300; coords[i].pressure = 1; coords[i].size = 1;
+        }
+        android.view.MotionEvent event = android.view.MotionEvent.obtain(1, 2,
+                android.view.MotionEvent.ACTION_POINTER_DOWN | (1 << android.view.MotionEvent.ACTION_POINTER_INDEX_SHIFT),
+                2, properties, coords, 0, 0, 1, 1, 0, 0, android.view.InputDevice.SOURCE_TOUCHSCREEN, 0);
+        menu.dispatchTouchEvent(event); event.recycle();
+        assertNull(menu.getParent());
+        assertEquals(Arrays.asList(android.view.MotionEvent.ACTION_DOWN, android.view.MotionEvent.ACTION_POINTER_DOWN), received);
+    }
+
     private TextView find(View view, String text) {
         if (view instanceof TextView && text.contentEquals(((TextView) view).getText())) return (TextView) view;
         if (view instanceof android.view.ViewGroup) {

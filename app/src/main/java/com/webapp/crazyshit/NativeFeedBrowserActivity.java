@@ -1999,7 +1999,11 @@ public final class NativeFeedBrowserActivity extends Activity {
                     () -> {
                         BunkrGalleryAdapter active = activeCreatorAdapter();
                         int position = active == null ? -1 : active.indexOfUrl(item.url);
-                        if (position >= 0) openBunkrGallery(position, item, anchor);
+                        if (position >= 0) {
+                            RecyclerView.ViewHolder holder = activeCreatorRecycler().findViewHolderForAdapterPosition(position);
+                            View media = holder instanceof BunkrGalleryAdapter.Holder ? ((BunkrGalleryAdapter.Holder) holder).image : anchor;
+                            openBunkrGallery(position, item, media);
+                        }
                     },
                     () -> io.execute(() -> {
                         FavoriteStore.setMediaFavorite(this, item, !favorite, creatorGalleryCacheKey);

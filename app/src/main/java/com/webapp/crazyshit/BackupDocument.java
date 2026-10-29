@@ -58,6 +58,10 @@ final class BackupDocument {
         }
         for (int i = 0; i < later.length(); i++) {
             JSONObject item = later.getJSONObject(i);
+            for (String flag : new String[]{"mediaFavorite", "watchLater"})
+                if (item.has(flag) && !(item.get(flag) instanceof Boolean))
+                    throw new IOException("A saved media flag is invalid.");
+            if (item.has("galleryKey")) requireText(item, "galleryKey", 4096, true);
             requireText(item, "title", 1000, false);
             requireUrl(item.getString("url"), false);
             if (item.has("content")) {

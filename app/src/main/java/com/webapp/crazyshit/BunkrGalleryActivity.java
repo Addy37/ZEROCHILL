@@ -226,6 +226,11 @@ public final class BunkrGalleryActivity extends Activity {
                     }
 
                     @Override
+                    public void onDownloadTap(int position, NativeContentItem item) {
+                        downloadGalleryItem(position, item);
+                    }
+
+                    @Override
                     public void onResolvedImageFailed(int position, NativeContentItem item) {
                         BunkrGallerySessionStore.clearResolvedUrl(sessionId, item.url);
                     }
@@ -696,6 +701,7 @@ public final class BunkrGalleryActivity extends Activity {
 
     @Override
     public void onBackPressed() {
+        if (mediaContextMenu != null) { mediaContextMenu.dismiss(); return; }
         finishViewer();
     }
 
@@ -1280,8 +1286,11 @@ public final class BunkrGalleryActivity extends Activity {
                     pager.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
                 mediaContextMenu = new GalleryContextMenu(this, pager, pager, selected, new Runnable[] {
                     () -> onMediaTap(position, item),
-                    () -> mediaIo.execute(() -> FavoriteStore.setMediaFavorite(this, item, !selected,
-                            value(creatorQuery))),
+                    () -> mediaIo.execute(() -> {
+                        BunkrGallerySessionStore.Snapshot snapshot = BunkrGallerySessionStore.snapshot(sessionId);
+                        FavoriteStore.setMediaFavorite(this, item, !selected,
+                                snapshot == null ? value(creatorQuery) : snapshot.creatorQuery);
+                    }),
                     () -> startActivity(Intent.createChooser(new Intent(Intent.ACTION_SEND)
                             .setType("text/plain").putExtra(Intent.EXTRA_TEXT, item.url), "Share")),
                     () -> {

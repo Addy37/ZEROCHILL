@@ -379,7 +379,7 @@ public class FavoritesActivity extends Activity {
         wrapper.setOrientation(LinearLayout.VERTICAL);
         wrapper.setClickable(true);
         wrapper.setFocusable(true);
-        wrapper.setContentDescription("Watch Later " + item.title);
+        wrapper.setContentDescription((mediaFavorites ? "Favorite " : "Watch Later ") + item.title);
         wrapper.setOnClickListener(v -> {
             if (mediaFavorites && item.content != null) SavedGalleryMedia.open(this, item.content);
             else select(item.url, item.title);
@@ -394,11 +394,9 @@ public class FavoritesActivity extends Activity {
 
         FrameLayout media = new FrameLayout(this);
         card.addView(media, new MaterialCardView.LayoutParams(-1, -1));
-        FrameLayout thumbnail = makeThumbnail(item.url);
-        if (item.content != null && !item.content.imageUrl.isEmpty()) {
+        if (item.content != null && !item.content.imageUrl.isEmpty())
             resolvedThumbnails.put(item.url, item.content.imageUrl);
-            onThumbnailResolved(item.url, item.content.imageUrl);
-        }
+        FrameLayout thumbnail = makeThumbnail(item.url);
         if (item.content != null && item.content.isImage() && thumbnail.getChildCount() > 1)
             thumbnail.getChildAt(1).setVisibility(View.GONE);
         media.addView(thumbnail, new FrameLayout.LayoutParams(-1, -1));

@@ -1178,6 +1178,7 @@ final class SearchPanel {
             return;
         }
 
+        if (item.isImage()) { SavedGalleryMedia.open(activity, item); return; }
         progress.setVisibility(View.VISIBLE);
         final int requestGeneration = generation;
         final Scope requestedScope = scope;

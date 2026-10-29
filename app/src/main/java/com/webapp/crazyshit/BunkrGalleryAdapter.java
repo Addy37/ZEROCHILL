@@ -143,15 +143,19 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
     void setFavoriteUrls(java.util.Set<String> urls) {
         if (favoriteUrls.equals(urls)) return;
         java.util.Set<String> changed = new java.util.HashSet<>(favoriteUrls);
-        changed.addAll(urls);
+        for (String url : urls) if (!changed.add(url)) changed.remove(url);
         favoriteUrls.clear(); favoriteUrls.addAll(urls);
-        reorderFavorites();
+        reorderFavorites(changed);
         for (int i = 0; i < items.size(); i++) if (changed.contains(items.get(i).url))
             notifyItemChanged(i, PAYLOAD_FAVORITE);
     }
 
-    private void reorderFavorites() {
+    private void reorderFavorites() { reorderFavorites(java.util.Collections.emptySet()); }
+
+    private void reorderFavorites(java.util.Set<String> changed) {
         ArrayList<NativeContentItem> before = snapshot();
+        rememberAndSort();
+        if (before.equals(items)) return;
         RecyclerView list = previewViewport;
         java.util.Map<String, android.graphics.PointF> locations = new HashMap<>();
         String anchorUrl = ""; int anchorOffset = 0;
@@ -161,13 +165,11 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
             if (position < 0 || position >= before.size()) continue;
             String url = before.get(position).url;
             locations.put(url, new android.graphics.PointF(child.getX(), child.getY()));
-            if (anchorUrl.isEmpty() && child.getBottom() > list.getPaddingTop()) {
+            if (anchorUrl.isEmpty() && !changed.contains(url) && child.getBottom() > list.getPaddingTop()) {
                 anchorUrl = url; anchorOffset = child.getTop() - list.getPaddingTop();
             }
             child.animate().cancel(); child.setTranslationX(0f); child.setTranslationY(0f);
         }
-        rememberAndSort();
-        if (before.equals(items)) return;
         androidx.recyclerview.widget.DiffUtil.calculateDiff(new androidx.recyclerview.widget.DiffUtil.Callback() {
             public int getOldListSize() { return before.size(); }
             public int getNewListSize() { return items.size(); }
@@ -419,6 +421,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
     ) {
         if (payloads.contains(PAYLOAD_FAVORITE)) {
             holder.favorite.setVisibility(favoriteUrls.contains(items.get(position).url) ? View.VISIBLE : View.GONE);
+            if (payloads.contains(PAYLOAD_OVERLAY_DENSITY)) applyOverlayDensity(holder);
             return;
         }
         if (!payloads.isEmpty() && payloads.contains(PAYLOAD_OVERLAY_DENSITY)) {
@@ -669,6 +672,9 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         holder.fresh.setScaleX(scale);
         holder.fresh.setScaleY(scale);
 
+        holder.favorite.setPivotX(0f); holder.favorite.setPivotY(0f);
+        holder.favorite.setScaleX(scale); holder.favorite.setScaleY(scale);
+
         holder.play.setPivotX(dp(holder.play, 42));
         holder.play.setPivotY(dp(holder.play, 42));
         holder.play.setScaleX(scale);
@@ -697,9 +703,11 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
 
     private void addUnique(List<NativeContentItem> incoming) {
         if (incoming == null) return;
+        java.util.Set<String> existing = new java.util.HashSet<>();
+        for (NativeContentItem item : items) existing.add(item.url);
         for (NativeContentItem candidate : incoming) {
             if (candidate == null || candidate.url == null || candidate.url.isEmpty()) continue;
-            if (indexOfUrl(candidate.url) < 0) items.add(candidate);
+            if (existing.add(candidate.url)) items.add(candidate);
         }
     }
 
