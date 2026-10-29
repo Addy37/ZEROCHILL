@@ -50,13 +50,9 @@ final class BaddieHubCreatorMatcher {
         }
         if (best != null) return best;
 
-        // The bundled index covers creators the user has not browsed yet. A rank of zero means the
-        // BaddieHub title exactly matches the canonical name or a reviewed alias after normalization.
-        BundledCreatorIndex bundled = BundledCreatorIndex.get(app);
-        for (NativeContentItem candidate : bundled.matching(media.title, CANDIDATE_LIMIT)) {
-            if (bundled.rank(candidate, media.title) == 0) return candidate;
-        }
-        return null;
+        // The immutable bundled index covers creators the user has not browsed yet. Its exact map
+        // accepts only canonical names or reviewed aliases after the same normalization rules.
+        return BundledCreatorIndex.get(app).exact(media.title);
     }
 
     static boolean exact(String baddieTitle, NativeContentItem creator) {
