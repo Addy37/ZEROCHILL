@@ -21,7 +21,7 @@ import java.util.function.Function;
 /** UI-owned cache. Catalog decoding/matching never runs in identity() or its result callback. */
 final class ShitTokCreatorMetadataLoader {
     private static final long LIVE_SELECTED_DELAY_MS = 2_000L;
-    private static final long LIVE_READY_DELAY_MS = 150L;
+    private static final long LIVE_READY_DELAY_MS = 750L;
     private static volatile WeakReference<ShitTokCreatorMetadataLoader> activeLiveLoader =
             new WeakReference<>(null);
 
