@@ -219,6 +219,8 @@ public class ShitTokFocusModeViewportTest {
         host.offsetDescendantRectToMyCoords(target, bounds);
         ShitTokDynamicPinchTest.touch(host, MotionEvent.ACTION_DOWN, bounds.centerX(), bounds.centerY());
         ShitTokDynamicPinchTest.touch(host, MotionEvent.ACTION_UP, bounds.centerX(), bounds.centerY());
+        // View posts performClick after the touch sequence, as it does on a device.
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
     }
 
 }
