@@ -1,5 +1,8 @@
+[functions.dynamic-api]
+verify_jwt = true
+
 [functions.feedback]
-verify_jwt = false
+verify_jwt = true
 
 [functions.feedback-admin]
 verify_jwt = false
