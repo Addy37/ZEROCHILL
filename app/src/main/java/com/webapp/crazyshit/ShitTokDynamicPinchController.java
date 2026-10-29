@@ -1,18 +1,14 @@
 package com.webapp.crazyshit;
 
 import android.content.Context;
-import android.content.res.ColorStateList;
-import android.graphics.Color;
+
 import android.graphics.Rect;
-import android.graphics.drawable.ColorDrawable;
-import android.graphics.drawable.GradientDrawable;
 import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewParent;
 import android.view.animation.DecelerateInterpolator;
 import android.widget.FrameLayout;
-import android.widget.LinearLayout;
 import android.widget.SeekBar;
 import android.widget.TextView;
 
@@ -41,15 +37,6 @@ final class ShitTokDynamicPinchController {
     private static final long FOCUS_RETURN_DURATION_MS = 180L;
     private static final long FOCUS_CHROME_DURATION_MS = 140L;
 
-    // TikTok reference: full-width media above a compact black control zone.
-    private static final int FOCUS_CHROME_HEIGHT_DP = 112;
-    private static final int FOCUS_EDGE_DP = 12;
-    private static final int FOCUS_BUTTON_DP = 48;
-    private static final int FOCUS_PILL_WIDTH_DP = 112;
-    private static final int FOCUS_PILL_HEIGHT_DP = 48;
-    private static final int FOCUS_SEEK_TOP_DP = 8;
-    private static final int FOCUS_CONTROL_BOTTOM_DP = 10;
-
     interface Listener { void onPinchChanged(boolean active); }
 
     private final TouchFrame root;
@@ -62,7 +49,8 @@ final class ShitTokDynamicPinchController {
     private final Rect focusBounds = new Rect();
     private final DecelerateInterpolator settleInterpolator = new DecelerateInterpolator(1.65f);
 
-    private FrameLayout focusChrome;
+    private ShitTokFocusControls focusChrome;
+    private Runnable playbackToggle;
     private SeekBar focusSeek;
     private TextView focusPlay;
     private TextView focusSpeed;
@@ -122,14 +110,18 @@ final class ShitTokDynamicPinchController {
         this.overlays = overlays;
         overlayAlphas = new float[overlays.length];
         root.pinch = this;
-        buildFocusChrome();
         media.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> {
             if (!focusViewportChanging && (active || focusMode || settling)
                     && (l != ol || t != ot || r != or || b != ob)) {
+                // Media3 may deliver the fitted frame's layout after the viewport post.
+                // A settled fullscreen relayout is expected, not an ownership transition.
+                if (focusViewportApplied && !active) return;
                 reset();
             }
         });
     }
+
+    void setPlaybackToggle(Runnable toggle) { playbackToggle = toggle; }
 
     boolean isActive() { return active; }
     boolean isFocusMode() { return focusMode; }
@@ -368,7 +360,7 @@ final class ShitTokDynamicPinchController {
         root.post(this::showFocusChrome);
     }
 
-    private void exitFocusModeAnimated() {
+    void exitFocusModeAnimated() {
         if (!focusMode) return;
         focusMode = false;
         focusMediaDown = false;
@@ -484,7 +476,8 @@ final class ShitTokDynamicPinchController {
         media.setScaleX(1f);
         media.setScaleY(1f);
         displayedScale = targetScale = 1f;
-        hideFocusChromeImmediate();
+        root.removeCallbacks(focusProgressTick);
+        if (focusChrome != null && focusChrome.owner == this) focusChrome.bind(null);
         restoreOriginalPlaybackSpeed();
         restoreFocusViewport();
         restoreOverlays();
@@ -665,7 +658,8 @@ final class ShitTokDynamicPinchController {
         focusViewportChanging = true;
         root.setPadding(0, 0, 0, 0);
 
-        int height = Math.max(dp(120), root.getHeight() - dp(FOCUS_CHROME_HEIGHT_DP));
+        // Controls float above the pager, so the fitted media keeps the entire viewport.
+        int height = root.getHeight();
         FrameLayout.LayoutParams focused =
                 new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, height);
         focused.gravity = Gravity.TOP;
@@ -707,170 +701,76 @@ final class ShitTokDynamicPinchController {
     }
 
     private void buildFocusChrome() {
-        Context context = root.getContext();
-        focusChrome = new FrameLayout(context);
-        focusChrome.setVisibility(View.GONE);
-        focusChrome.setAlpha(0f);
-        focusChrome.setBackgroundColor(Color.TRANSPARENT);
-        focusChrome.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_YES);
+        ViewPager2 pager = pagerView();
+        FrameLayout host = pager != null && pager.getParent() instanceof FrameLayout
+                ? (FrameLayout) pager.getParent() : root;
+        ShitTokFocusControls shared = null;
+        for (int i = 0; i < host.getChildCount(); i++) {
+            if (host.getChildAt(i) instanceof ShitTokFocusControls) {
+                shared = (ShitTokFocusControls) host.getChildAt(i);
+                break;
+            }
+        }
+        if (shared == null) {
+            shared = new ShitTokFocusControls(root.getContext(), pager == null ? root : pager);
+            host.addView(shared, new FrameLayout.LayoutParams(-1,
+                    dp(ShitTokFocusControls.HEIGHT_DP), Gravity.BOTTOM));
+        }
+        focusChrome = shared;
+        focusChrome.bind(this);
+        focusSeek = shared.seek;
+        focusPlay = shared.play;
+        focusSpeed = shared.speed;
+        focusChrome.bringToFront();
+    }
 
-        FrameLayout.LayoutParams chromeParams = new FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT,
-                dp(FOCUS_CHROME_HEIGHT_DP),
-                Gravity.BOTTOM
-        );
-        root.addView(focusChrome, chromeParams);
+    void cycleFocusSpeed() {
+        Player player = player();
+        if (player == null) return;
+        float speed = player.getPlaybackParameters().speed;
+        float next = speed < 1.25f ? 1.5f : speed < 1.75f ? 2f : 1f;
+        player.setPlaybackParameters(new PlaybackParameters(next));
+        updateFocusControls();
+    }
 
-        focusSeek = new SeekBar(context);
-        focusSeek.setMax(1000);
-        focusSeek.setPadding(0, 0, 0, 0);
-        focusSeek.setContentDescription("Video progress");
-        focusSeek.setSplitTrack(false);
-        focusSeek.setThumb(new ColorDrawable(Color.TRANSPARENT));
-        focusSeek.setProgressTintList(
-                ColorStateList.valueOf(Color.argb(185, 235, 235, 238))
-        );
-        focusSeek.setProgressBackgroundTintList(
-                ColorStateList.valueOf(Color.argb(70, 205, 205, 210))
-        );
+    void seekFocusTo(int progress) {
+        Player player = player();
+        if (player == null) return;
+        long duration = player.getDuration();
+        if (duration <= 0L) return;
+        player.seekTo(Math.max(0L, Math.min(duration,
+                Math.round(duration * (progress / (float) focusSeek.getMax())))));
+    }
 
-        FrameLayout.LayoutParams seekParams = new FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT,
-                dp(24),
-                Gravity.TOP
-        );
-        seekParams.setMargins(
-                dp(FOCUS_EDGE_DP),
-                dp(FOCUS_SEEK_TOP_DP),
-                dp(FOCUS_EDGE_DP),
-                0
-        );
-        focusChrome.addView(focusSeek, seekParams);
-
-        TextView close = focusButton("×", "Exit focus mode", 22f);
-        close.setBackground(roundRect(Color.rgb(35, 35, 38), FOCUS_BUTTON_DP / 2f));
-        FrameLayout.LayoutParams closeParams = new FrameLayout.LayoutParams(
-                dp(FOCUS_BUTTON_DP),
-                dp(FOCUS_BUTTON_DP),
-                Gravity.BOTTOM | Gravity.START
-        );
-        closeParams.setMargins(
-                dp(FOCUS_EDGE_DP),
-                0,
-                0,
-                dp(FOCUS_CONTROL_BOTTOM_DP)
-        );
-        focusChrome.addView(close, closeParams);
-
-        LinearLayout pill = new LinearLayout(context);
-        pill.setOrientation(LinearLayout.HORIZONTAL);
-        pill.setGravity(Gravity.CENTER);
-        pill.setBackground(roundRect(
-                Color.rgb(35, 35, 38),
-                FOCUS_PILL_HEIGHT_DP / 2f
-        ));
-        FrameLayout.LayoutParams pillParams = new FrameLayout.LayoutParams(
-                dp(FOCUS_PILL_WIDTH_DP),
-                dp(FOCUS_PILL_HEIGHT_DP),
-                Gravity.BOTTOM | Gravity.END
-        );
-        pillParams.setMargins(
-                0,
-                0,
-                dp(FOCUS_EDGE_DP),
-                dp(FOCUS_CONTROL_BOTTOM_DP)
-        );
-        focusChrome.addView(pill, pillParams);
-
-        focusPlay = focusButton("❚❚", "Pause video", 16f);
-        focusSpeed = focusButton("1×", "Playback speed 1x", 15f);
-        View divider = new View(context);
-        divider.setBackgroundColor(Color.argb(70, 255, 255, 255));
-
-        pill.addView(focusPlay, new LinearLayout.LayoutParams(0, -1, 1f));
-        LinearLayout.LayoutParams dividerParams =
-                new LinearLayout.LayoutParams(dp(1), dp(20));
-        pill.addView(divider, dividerParams);
-        pill.addView(focusSpeed, new LinearLayout.LayoutParams(0, -1, 1f));
-
-        close.setOnClickListener(v -> exitFocusModeAnimated());
-        focusPlay.setOnClickListener(v -> {
-            toggleFocusPlayback();
-        });
-        focusSpeed.setOnClickListener(v -> {
-            Player player = player();
-            if (player == null) return;
-            float speed = player.getPlaybackParameters().speed;
-            float next = speed < 1.25f ? 1.5f : speed < 1.75f ? 2f : 1f;
-            player.setPlaybackParameters(new PlaybackParameters(next));
+    void setFocusSeeking(boolean seeking) {
+        focusProgressDragging = seeking;
+        if (focusChrome != null) focusChrome.requestDisallowInterceptTouchEvent(seeking);
+        if (!seeking) {
+            setPagerInputEnabled(true);
             updateFocusControls();
-        });
-
-        focusSeek.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
-            @Override public void onProgressChanged(SeekBar bar, int progress, boolean fromUser) {
-                if (!fromUser) return;
-                Player player = player();
-                if (player == null) return;
-                long duration = player.getDuration();
-                if (duration <= 0L) return;
-                player.seekTo(Math.max(0L, Math.min(duration,
-                        Math.round(duration * (progress / (float) bar.getMax())))));
-            }
-
-            @Override public void onStartTrackingTouch(SeekBar bar) {
-                focusProgressDragging = true;
-                root.requestDisallowInterceptTouchEvent(true);
-            }
-
-            @Override public void onStopTrackingTouch(SeekBar bar) {
-                focusProgressDragging = false;
-                root.requestDisallowInterceptTouchEvent(false);
-                setPagerInputEnabled(true);
-                updateFocusControls();
-            }
-        });
-    }
-
-    private TextView focusButton(String text, String description, float sizeSp) {
-        TextView button = new TextView(root.getContext());
-        button.setText(text);
-        button.setTextColor(Color.rgb(235, 235, 238));
-        button.setTextSize(sizeSp);
-        button.setGravity(Gravity.CENTER);
-        button.setPadding(0, 0, 0, 0);
-        button.setContentDescription(description);
-        button.setMinWidth(dp(48));
-        button.setMinHeight(dp(48));
-        button.setClickable(true);
-        button.setFocusable(true);
-        return button;
-    }
-
-    private GradientDrawable roundRect(int color, float radiusDp) {
-        GradientDrawable drawable = new GradientDrawable();
-        drawable.setColor(color);
-        drawable.setCornerRadius(dpFloat(radiusDp));
-        return drawable;
+        }
     }
 
     private void showFocusChrome() {
         if (!focusMode) return;
+        buildFocusChrome();
         updateFocusControls();
+        boolean alreadyVisible = focusChrome.getVisibility() == View.VISIBLE;
         focusChrome.animate().withEndAction(null).cancel();
         focusChrome.setVisibility(View.VISIBLE);
-        focusChrome.setAlpha(0f);
-        focusChrome.animate()
-                .alpha(1f)
-                .setStartDelay(35L)
-                .setDuration(FOCUS_CHROME_DURATION_MS)
-                .setInterpolator(settleInterpolator)
-                .start();
+        if (alreadyVisible) focusChrome.setAlpha(1f);
+        else {
+            focusChrome.setAlpha(0f);
+            focusChrome.animate().alpha(1f).setStartDelay(35L)
+                    .setDuration(FOCUS_CHROME_DURATION_MS).setInterpolator(settleInterpolator).start();
+        }
         root.removeCallbacks(focusProgressTick);
         root.post(focusProgressTick);
     }
 
     private void hideFocusChromeForPinch() {
-        if (focusChrome == null || focusChrome.getVisibility() != View.VISIBLE) return;
+        if (focusChrome == null || focusChrome.owner != this
+                || focusChrome.getVisibility() != View.VISIBLE) return;
         focusChrome.animate().withEndAction(null).cancel();
         focusChrome.setAlpha(0f);
         focusChrome.setVisibility(View.GONE);
@@ -878,7 +778,9 @@ final class ShitTokDynamicPinchController {
     }
 
     private void hideFocusChromeImmediate() {
-        if (focusChrome == null) return;
+        root.removeCallbacks(focusProgressTick);
+        if (focusChrome == null || focusChrome.owner != this) return;
+        focusChrome.bind(null);
         focusChrome.animate().withEndAction(null).cancel();
         focusChrome.setAlpha(0f);
         focusChrome.setVisibility(View.GONE);
@@ -886,15 +788,21 @@ final class ShitTokDynamicPinchController {
         focusProgressDragging = false;
     }
 
-    private void toggleFocusPlayback() {
+    void toggleFocusPlayback() {
+        if (playbackToggle != null) {
+            playbackToggle.run();
+            updateFocusControls();
+            return;
+        }
         Player player = player();
         if (player == null) return;
-        if (player.isPlaying()) player.pause();
+        if (player.getPlayWhenReady()) player.pause();
         else player.play();
         updateFocusControls();
     }
 
     private void updateFocusControls() {
+        if (focusChrome == null || focusChrome.owner != this) return;
         Player player = player();
         if (player == null) {
             focusPlay.setText("▶");
@@ -903,7 +811,7 @@ final class ShitTokDynamicPinchController {
             return;
         }
 
-        boolean playing = player.isPlaying();
+        boolean playing = player.getPlayWhenReady();
         focusPlay.setText(playing ? "❚❚" : "▶");
         focusPlay.setContentDescription(playing ? "Pause video" : "Play video");
         float speed = player.getPlaybackParameters().speed;
@@ -949,7 +857,13 @@ final class ShitTokDynamicPinchController {
         if (!focusMode || focusChrome == null || focusChrome.getVisibility() != View.VISIBLE) {
             return false;
         }
-        focusChrome.getHitRect(focusBounds);
+        int[] chromeLocation = new int[2];
+        int[] rootLocation = new int[2];
+        focusChrome.getLocationInWindow(chromeLocation);
+        root.getLocationInWindow(rootLocation);
+        int left = chromeLocation[0] - rootLocation[0];
+        int top = chromeLocation[1] - rootLocation[1];
+        focusBounds.set(left, top, left + focusChrome.getWidth(), top + focusChrome.getHeight());
         return focusBounds.contains(Math.round(event.getX()), Math.round(event.getY()));
     }
 

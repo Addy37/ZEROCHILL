@@ -73,6 +73,17 @@ import java.util.concurrent.Executors;
  */
 @UnstableApi
 public final class ChaosFeedView extends FrameLayout {
+    @Override public void onDescendantInvalidated(View child, View target) {
+        super.onDescendantInvalidated(child, target);
+        if (child == pager) {
+            for (int i = 0; i < getChildCount(); i++) {
+                if (getChildAt(i) instanceof ShitTokFocusControls) {
+                    ((ShitTokFocusControls) getChildAt(i)).invalidateBackdrop();
+                }
+            }
+        }
+    }
+
     public interface Host {
         void openDetails(NativeContentItem item);
 
@@ -635,7 +646,10 @@ public final class ChaosFeedView extends FrameLayout {
     public void setActive(boolean value) {
         if (value) applyContentPreference();
         if (!value && active) { recordRunway("leavingFeed"); pauseRunwayClock(); }
-        if (!value) resetTemporaryPinch();
+        if (!value) {
+            resetTemporaryPinch();
+            dismissFocusControls();
+        }
         if (value && !active) consecutiveDryLoads = 0;
         active = value;
         syncLoadingIndicators();
@@ -697,10 +711,22 @@ public final class ChaosFeedView extends FrameLayout {
         }
     }
 
+    private void dismissFocusControls() {
+        for (int i = 0; i < getChildCount(); i++) {
+            if (getChildAt(i) instanceof ShitTokFocusControls) {
+                ShitTokFocusControls controls = (ShitTokFocusControls) getChildAt(i);
+                controls.bind(null);
+                controls.animate().cancel();
+                controls.setVisibility(GONE);
+            }
+        }
+    }
+
     public void onHostPause() {
         ChaosStartupPreloader.stopPreparation();
         if (active) { recordRunway("hostPause"); pauseRunwayClock(); }
         resetTemporaryPinch();
+        dismissFocusControls();
         hostResumed = false;
         sourceMixer.stopPreference();
         cancelInventoryBatch();
@@ -727,6 +753,7 @@ public final class ChaosFeedView extends FrameLayout {
         ChaosHolder selected = holderAt(selectedPosition);
         if (selected != null) selected.cancelInteractionUi();
         resetTemporaryPinch();
+        dismissFocusControls();
         resetCreatorSwipePreview();
         searchCoverActive = true;
         pager.setUserInputEnabled(false);
@@ -809,6 +836,7 @@ public final class ChaosFeedView extends FrameLayout {
         searchCoverActive = false;
         playbackOwner.setSearchCovered(false);
         resetTemporaryPinch();
+        dismissFocusControls();
         cancelPendingAutoAdvance();
         resetCreatorSwipePreview();
         closed = true;
@@ -3013,6 +3041,8 @@ public final class ChaosFeedView extends FrameLayout {
                     playerView.findViewById(androidx.media3.ui.R.id.exo_buffering),
                     playerView.findViewById(androidx.media3.ui.R.id.exo_error_message));
 
+            pinch.setPlaybackToggle(this::toggleFocusPlayback);
+
             playerView.setOnClickListener(v -> {
                 haptic(v);
                 if (clearDisplay) {
@@ -4199,6 +4229,20 @@ public final class ChaosFeedView extends FrameLayout {
                     && boundPosition < items.size()
                     && item.url.equals(items.get(boundPosition).url)
                     && holderAt(boundPosition) == this;
+        }
+
+        private void toggleFocusPlayback() {
+            if (player == null || item == null || !ownsPlayback()) return;
+            boolean pause = !userPaused && player.getPlayWhenReady();
+            userPaused = pause;
+            playbackOwner.setUserPaused(item.url, pause);
+            if (pause) {
+                cancelPendingAutoAdvance();
+            } else {
+                everStarted = true;
+                if (player.getPlaybackState() == Player.STATE_ENDED) player.seekTo(0L);
+                playOwnedPlayer();
+            }
         }
 
         private void playOwnedPlayer() {

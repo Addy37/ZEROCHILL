@@ -5,6 +5,7 @@ import android.widget.FrameLayout
 import android.view.View
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
@@ -23,7 +24,9 @@ import com.webapp.crazyshit.glass.*
 internal class GlassHeaderView @JvmOverloads constructor(
     private val activity: Activity, private val controls: View, private val cornerRadius: Float = 0f,
     private val resultsSurface: Boolean = false,
-    private val searchControlSurface: Boolean = false
+    private val searchControlSurface: Boolean = false,
+    private val navigationSurface: Boolean = false,
+    private val surfaceInset: Float = 0f
 ) : FrameLayout(activity) {
     private val glass = ComposeView(activity).apply {
         importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO
@@ -80,6 +83,7 @@ internal class GlassHeaderView @JvmOverloads constructor(
                 val config = remember(recentMaterial) { (if (resultsSurface && recentMaterial) recentSearchGlassConfig(activity)
                     else if (resultsSurface) searchResultsGlassConfig(activity)
                     else if (searchControlSurface) searchControlsGlassConfig(activity)
+                    else if (navigationSurface) navigationGlassConfig(activity)
                     else headerGlassConfig(activity)).let {
                     if (cornerRadius > 0f) it.copy(lensSideEdges = true) else it
                 } }
@@ -87,7 +91,7 @@ internal class GlassHeaderView @JvmOverloads constructor(
                 backdrop?.let { page ->
                     CompositionLocalProvider(LocalAppBackdrop provides page,
                         LocalGlassEffectConfig provides config) {
-                        Box(Modifier.fillMaxSize().clipToBounds()
+                        Box(Modifier.fillMaxSize().padding(surfaceInset.dp).clipToBounds()
                             // Floating capsules share the navbar rim; full-width headers keep none.
                             .liquidGlass(config, shape, highlightAlpha = if (cornerRadius > 0f) .3f else 0f))
                     }

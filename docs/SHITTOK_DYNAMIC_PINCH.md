@@ -8,16 +8,18 @@ Only the active, playing canonical holder can begin a pinch from the video surfa
 
 A normal pinch release animates back to the resting frame. A deliberate outward pinch can promote into persistent Focus Mode. Focus Mode keeps the current video playing in the same holder, hides the normal ShitTok feed chrome, and allows additional two-finger pinches without recreating or handing off the player surface.
 
-Focus Mode follows the supplied TikTok reference layout:
+Focus Mode uses a stationary control overlay above the existing pager:
 
 - black fullscreen canvas
-- media reclaims the old feed viewport and is top-anchored above the compact control zone
+- media reclaims the entire feed viewport; floating controls reserve no height and do not shrink fitted video
 - normal ShitTok title, metadata, action rail, and feed chrome disappear instead of shifting with the viewport
 - neutral gray hairline scrubber with no visible thumb at rest
 - scrubber and button row occupy separate vertical zones so their touch areas never overlap
-- small circular exit control at bottom-left with a minimum 48dp touch target
-- compact rounded play/pause and speed pill at bottom-right with minimum 48dp-tall touch targets
-- no ZEROCHILL cyan treatment in the fullscreen chrome
+- 40dp circular exit surface at bottom-left inside a 48dp touch target
+- compact rounded play/pause and speed pill at bottom-right with 40dp visual height inside 48dp touch targets
+- the same live liquid-glass material as navigation, sampling the pager without capturing the controls themselves
+- one shared control instance stays pinned while holders swipe behind it; owner and progress follow the selected holder
+- play/pause updates the existing holder and playback-owner pause state, including while buffering
 - controls hide during another pinch and return after release
 
 One-finger vertical swipes remain owned by the existing ViewPager2 while Focus Mode is active. Adjacent attached holders are prepped with their normal feed chrome hidden and their fullscreen viewport applied before selection, so swiping to the next or previous video stays in Focus Mode without a title jump or flash back to the normal feed layout.
