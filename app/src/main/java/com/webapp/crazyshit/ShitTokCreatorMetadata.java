@@ -13,10 +13,6 @@ final class ShitTokCreatorMetadata {
     static String creatorName(NativeContentItem item) {
         if (item == null) return "";
 
-        if (BaddieHubCreatorMatcher.isCandidate(item)) {
-            return clean(item.title);
-        }
-
         if (FapelloRepository.isFapelloUrl(item.url)) {
             String creator = clean(item.uploader);
             return isGenericCreatorLabel(creator) ? "" : creator;
