@@ -16,9 +16,9 @@ import com.webapp.crazyshit.glass.backdrop.internal.RoundedRectRefractionShaderS
 /** Native controls over the same recorded page and lens shader used by navigation/search. */
 // Programmatic controls are required; this pane is never inflated from XML.
 @android.annotation.SuppressLint("ViewConstructor")
-internal class PreferenceGlassPanel(context: Context, private val controls: View) : FrameLayout(context) {
+internal class PreferenceGlassPanel @JvmOverloads constructor(context: Context, private val controls: View, backdropSource: View? = null) : FrameLayout(context) {
     private val activity = context as? Activity
-    private val source = activity?.window?.decorView?.findViewById<View>(android.R.id.content)
+    private val source = backdropSource ?: activity?.window?.decorView?.findViewById<View>(android.R.id.content)
     private val sharedPage = findShell(source)?.pageBackdropForOverlay()
     private val fallbackPage = source?.let { ViewPageBackdrop(it) }
     private var fallbackDirty = true

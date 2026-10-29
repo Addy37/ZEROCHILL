@@ -225,13 +225,16 @@ final class LibraryHubView extends ScrollView {
         retainSection("downloads", java.util.Arrays.asList(snapshot.inputs.get(6), snapshot.downloadState, snapshot.metadataKey), () -> {
             if (!snapshot.downloads.isEmpty()) addDownloadsSection(snapshot.downloads);
         });
+        retainSection("media-favorites", java.util.Arrays.asList(snapshot.inputs.get(1), snapshot.metadataKey), () -> {
+            if (!snapshot.mediaFavorites.isEmpty()) addMediaFavoritesSection(snapshot.mediaFavorites);
+        });
         retainSection("watch-later", java.util.Arrays.asList(snapshot.inputs.get(0), snapshot.inputs.get(1), snapshot.metadataKey), () -> {
             if (!snapshot.watchLater.isEmpty()) addWatchLaterSection(snapshot.watchLater, historyByUrl);
         });
         retainSection("history", java.util.Arrays.asList(snapshot.inputs.get(0), snapshot.metadataKey), () -> {
             if (!history.isEmpty()) addHistorySection(history);
         });
-        if (snapshot.likedVideos.isEmpty() && snapshot.creators.isEmpty() && snapshot.watchLater.isEmpty()
+        if (snapshot.likedVideos.isEmpty() && snapshot.creators.isEmpty() && snapshot.watchLater.isEmpty() && snapshot.mediaFavorites.isEmpty()
                 && snapshot.downloads.isEmpty() && history.isEmpty()) retainSection("empty", true, this::addGlobalEmptyState);
         else sectionStates.remove("empty");
         content.removeView(previous);
@@ -307,6 +310,7 @@ final class LibraryHubView extends ScrollView {
         final List<CreatorCatalog.FavoriteGroup> creators;
         final List<CreatorAvatarOverrideStore.Override> avatars;
         final List<FavoriteStore.Item> watchLater;
+        final List<FavoriteStore.Item> mediaFavorites;
         final List<VideoDownloadStore.Entry> downloads;
         final String downloadState;
 
@@ -328,6 +332,7 @@ final class LibraryHubView extends ScrollView {
                 creators = previous.creators;
                 avatars = previous.avatars;
                 watchLater = previous.watchLater;
+                mediaFavorites = previous.mediaFavorites;
             } else {
                 videoMetadata = OnlyFapVideoMetadata.snapshot(activity);
                 history = PlaybackHistoryStore.load(activity);
@@ -340,7 +345,8 @@ final class LibraryHubView extends ScrollView {
                             CreatorAvatarOverrideStore.find(allAvatars, creator.relationshipKeys);
                     if (avatar != null) avatars.add(avatar);
                 }
-                watchLater = first(FavoriteStore.load(activity), 10);
+                watchLater = first(FavoriteStore.watchLater(activity), 10);
+                mediaFavorites = first(FavoriteStore.mediaFavorites(activity), 10);
             }
             String encoded = "";
             try { encoded = ContentItemCodec.encodeList(new ArrayList<>(videoMetadata.values()),
@@ -547,6 +553,22 @@ final class LibraryHubView extends ScrollView {
         avatar.setOnClickListener(openCreator);
         avatar.setContentDescription("Open " + creator.title);
         return wrapper;
+    }
+
+    private void addMediaFavoritesSection(List<FavoriteStore.Item> items) {
+        LibraryMediaRows rail = addMediaSectionShell("Favorites", "View all", () -> {
+            Intent intent = new Intent(activity, FavoritesActivity.class)
+                    .putExtra(FavoritesActivity.EXTRA_START_TAB, FavoritesActivity.START_WATCH_LATER)
+                    .putExtra(FavoritesActivity.EXTRA_MEDIA_FAVORITES, true);
+            activity.startActivityForResult(intent, NativeMainActivity.FAVORITES_REQUEST);
+        });
+        for (FavoriteStore.Item item : items) {
+            NativeContentItem content = item.content;
+            if (content == null) continue;
+            View card = compactMediaCard(item.title, item.url, content.imageUrl, "♥", false);
+            card.setOnClickListener(v -> SavedGalleryMedia.open(activity, content));
+            rail.addCard(card, item.url, portraitThumbnails.getOrDefault(item.url, false));
+        }
     }
 
     private void addWatchLaterSection(

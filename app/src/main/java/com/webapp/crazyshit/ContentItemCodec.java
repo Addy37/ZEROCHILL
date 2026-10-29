@@ -14,7 +14,8 @@ final class ContentItemCodec {
         return new JSONObject().put("kind", item.kind).put("name", item.title)
                 .put("url", item.url).put("image", item.imageUrl).put("views", item.views)
                 .put("referer", item.uploader).put("comments", item.comments)
-                .put("description", item.description).put("query", item.searchQuery);
+                .put("description", item.description).put("query", item.searchQuery)
+                .put("aspectRatio", item.aspectRatioHint);
     }
 
     static NativeContentItem decode(JSONObject item) {
@@ -22,7 +23,7 @@ final class ContentItemCodec {
                 item.optString("name"), item.optString("url"), item.optString("image"),
                 item.optString("views", item.optString("rank")), item.optString("referer"),
                 item.optString("comments"), item.optString("description"),
-                item.optString("query", item.optString("name")));
+                item.optString("query", item.optString("name")), 0L, (float) item.optDouble("aspectRatio", 0));
     }
 
     static JSONArray encodeList(List<NativeContentItem> items, int limit) throws JSONException {

@@ -62,7 +62,8 @@ final class BackupDocument {
             requireUrl(item.getString("url"), false);
             if (item.has("content")) {
                 JSONObject content = item.getJSONObject("content");
-                if (!NativeContentItem.KIND_MEDIA.equals(content.optString("kind"))
+                if (!(NativeContentItem.KIND_MEDIA.equals(content.optString("kind"))
+                        || NativeContentItem.KIND_IMAGE.equals(content.optString("kind")))
                         || !item.getString("url").equals(content.optString("url")))
                     throw new IOException("A saved video's metadata does not match its link.");
                 requireText(content, "name", 1000, true);

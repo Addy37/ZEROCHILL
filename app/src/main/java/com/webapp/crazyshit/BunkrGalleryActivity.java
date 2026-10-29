@@ -76,6 +76,7 @@ public final class BunkrGalleryActivity extends Activity {
             new BunkrCreatorGalleryRepository();
 
     private String sessionId;
+    private GalleryContextMenu mediaContextMenu;
     private String albumTitle;
     private String albumUrl;
     private String creatorQuery;
@@ -221,10 +222,7 @@ public final class BunkrGalleryActivity extends Activity {
 
                     @Override
                     public void onMediaLongPress(int position, NativeContentItem item) {
-                        if (pager != null) {
-                            pager.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
-                        }
-                        downloadGalleryItem(position, item);
+                        showMediaContextMenu(position, item);
                     }
 
                     @Override
@@ -1269,6 +1267,34 @@ public final class BunkrGalleryActivity extends Activity {
         menu.show();
     }
 
+    private void showMediaContextMenu(int position, NativeContentItem item) {
+        mediaIo.execute(() -> {
+            boolean favorite = false;
+            for (FavoriteStore.Item saved : FavoriteStore.mediaFavorites(this))
+                if (saved.url.equals(item.url)) favorite = true;
+            final boolean selected = favorite;
+            runOnUiThread(() -> {
+                if (isFinishing() || isDestroyed() || pager.getCurrentItem() != position) return;
+                if (mediaContextMenu != null) mediaContextMenu.dismiss();
+                if (getSharedPreferences("app_prefs", MODE_PRIVATE).getBoolean("haptics_enabled", true))
+                    pager.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
+                mediaContextMenu = new GalleryContextMenu(this, pager, pager, selected, new Runnable[] {
+                    () -> onMediaTap(position, item),
+                    () -> mediaIo.execute(() -> FavoriteStore.setMediaFavorite(this, item, !selected,
+                            value(creatorQuery))),
+                    () -> startActivity(Intent.createChooser(new Intent(Intent.ACTION_SEND)
+                            .setType("text/plain").putExtra(Intent.EXTRA_TEXT, item.url), "Share")),
+                    () -> {
+                        android.content.ClipboardManager clipboard = (android.content.ClipboardManager)
+                                getSystemService(CLIPBOARD_SERVICE);
+                        clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Media link", item.url));
+                    },
+                    () -> downloadGalleryItem(position, item)
+                }, () -> mediaContextMenu = null);
+            });
+        });
+    }
+
     private void downloadGalleryItem(int position, NativeContentItem item) {
         if (item == null) return;
         String resolvedUrl = adapter.resolvedUrl(position);
@@ -1361,6 +1387,7 @@ public final class BunkrGalleryActivity extends Activity {
 
     @Override
     protected void onPause() {
+        if (mediaContextMenu != null) mediaContextMenu.dismiss();
         if (videoOrientationListener != null) videoOrientationListener.disable();
         recoveryResumed = false;
         BunkrGallerySessionStore.persist(this, sessionId);

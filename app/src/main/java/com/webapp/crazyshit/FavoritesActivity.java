@@ -53,6 +53,8 @@ public class FavoritesActivity extends Activity {
     public static final String EXTRA_SELECTED_URL = "selected_url";
     public static final String EXTRA_SELECTED_TITLE = "selected_title";
     public static final String EXTRA_SELECTED_TAB = "selected_tab";
+    public static final String EXTRA_MEDIA_FAVORITES = "media_favorites";
+    private boolean mediaFavorites;
     public static final String EXTRA_START_TAB = "start_tab";
     public static final int START_CONTINUE = 0;
     public static final int START_HISTORY = 1;
@@ -87,6 +89,7 @@ public class FavoritesActivity extends Activity {
         tab = getIntent() == null
                 ? TAB_CONTINUE
                 : getIntent().getIntExtra(EXTRA_START_TAB, TAB_CONTINUE);
+        mediaFavorites = getIntent() != null && getIntent().getBooleanExtra(EXTRA_MEDIA_FAVORITES, false);
         if (tab < TAB_CONTINUE || tab > TAB_WATCH_LATER) tab = TAB_CONTINUE;
         getWindow().setStatusBarColor(Color.rgb(13, 13, 15));
         getWindow().setNavigationBarColor(Color.BLACK);
@@ -185,7 +188,7 @@ public class FavoritesActivity extends Activity {
 
     private String sectionTitle() {
         if (tab == TAB_HISTORY) return "History";
-        if (tab == TAB_WATCH_LATER) return "Watch Later";
+        if (tab == TAB_WATCH_LATER) return mediaFavorites ? "Favorites" : "Watch Later";
         return "Continue Watching";
     }
 
@@ -344,7 +347,7 @@ public class FavoritesActivity extends Activity {
 
     private void renderWatchLater(LinearLayout target) {
         if (target == null) return;
-        List<FavoriteStore.Item> allItems = FavoriteStore.load(this);
+        List<FavoriteStore.Item> allItems = mediaFavorites ? FavoriteStore.mediaFavorites(this) : FavoriteStore.watchLater(this);
         String query = searchQuery();
         List<FavoriteStore.Item> items = new ArrayList<>();
         for (FavoriteStore.Item item : allItems) {
@@ -356,7 +359,7 @@ public class FavoritesActivity extends Activity {
         updateCount(items.size(), allItems.size(), "Saved");
 
         if (allItems.isEmpty()) {
-            showEmpty(target, "Nothing saved yet", "Long-press a video card and choose Save to Watch Later.");
+            showEmpty(target, "Nothing saved yet", mediaFavorites ? "Long-press a gallery item and choose Favorite." : "Long-press a video card and choose Save to Watch Later.");
             return;
         }
         if (items.isEmpty()) {
@@ -377,7 +380,10 @@ public class FavoritesActivity extends Activity {
         wrapper.setClickable(true);
         wrapper.setFocusable(true);
         wrapper.setContentDescription("Watch Later " + item.title);
-        wrapper.setOnClickListener(v -> select(item.url, item.title));
+        wrapper.setOnClickListener(v -> {
+            if (mediaFavorites && item.content != null) SavedGalleryMedia.open(this, item.content);
+            else select(item.url, item.title);
+        });
         ZeroChillMotion.installPressFeedback(wrapper);
 
         MaterialCardView card = new MaterialCardView(this);
@@ -388,7 +394,14 @@ public class FavoritesActivity extends Activity {
 
         FrameLayout media = new FrameLayout(this);
         card.addView(media, new MaterialCardView.LayoutParams(-1, -1));
-        media.addView(makeThumbnail(item.url), new FrameLayout.LayoutParams(-1, -1));
+        FrameLayout thumbnail = makeThumbnail(item.url);
+        if (item.content != null && !item.content.imageUrl.isEmpty()) {
+            resolvedThumbnails.put(item.url, item.content.imageUrl);
+            onThumbnailResolved(item.url, item.content.imageUrl);
+        }
+        if (item.content != null && item.content.isImage() && thumbnail.getChildCount() > 1)
+            thumbnail.getChildAt(1).setVisibility(View.GONE);
+        media.addView(thumbnail, new FrameLayout.LayoutParams(-1, -1));
 
         View shade = new View(this);
         shade.setBackground(bottomShade());
@@ -428,11 +441,12 @@ public class FavoritesActivity extends Activity {
 
     private void showWatchLaterMenu(View anchor, FavoriteStore.Item item) {
         ZeroChillMenu menu = new ZeroChillMenu(this, anchor);
-        menu.getMenu().add("Remove from Watch Later");
+        menu.getMenu().add(mediaFavorites ? "Unfavorite" : "Remove from Watch Later");
         menu.setOnMenuItemClickListener(clicked -> {
             haptic(anchor);
-            FavoriteStore.remove(this, item.url);
-            ZeroChillToast.makeText(this, "Removed from Watch Later.", ZeroChillToast.LENGTH_SHORT).show();
+            if (mediaFavorites && item.content != null) FavoriteStore.setMediaFavorite(this, item.content, false);
+            else FavoriteStore.remove(this, item.url);
+            ZeroChillToast.makeText(this, mediaFavorites ? "Removed from Favorites." : "Removed from Watch Later.", ZeroChillToast.LENGTH_SHORT).show();
             renderAllPages();
             return true;
         });
@@ -644,7 +658,7 @@ public class FavoritesActivity extends Activity {
     private void showSectionMenu(View anchor) {
         ZeroChillMenu menu = new ZeroChillMenu(this, anchor);
         String label = tab == TAB_WATCH_LATER
-                ? "Clear Watch Later"
+                ? (mediaFavorites ? "Clear Favorites" : "Clear Watch Later")
                 : "Clear watch history";
         menu.getMenu().add(label);
         menu.setOnMenuItemClickListener(item -> {
@@ -658,13 +672,16 @@ public class FavoritesActivity extends Activity {
     private void confirmClear() {
         boolean watchLater = tab == TAB_WATCH_LATER;
         new ZeroChillDialog.Builder(this).destructive()
-                .setTitle(watchLater ? "Clear Watch Later?" : "Clear watch history?")
+                .setTitle(watchLater ? (mediaFavorites ? "Clear Favorites?" : "Clear Watch Later?") : "Clear watch history?")
                 .setMessage(watchLater
-                        ? "This removes every saved Watch Later item from this device."
+                        ? (mediaFavorites ? "This removes every media favorite from this device." : "This removes every saved Watch Later item from this device.")
                         : "This clears History and Continue Watching from this device.")
                 .setNegativeButton("Cancel", null)
                 .setPositiveButton("Clear", (dialog, which) -> {
-                    if (watchLater) FavoriteStore.clear(this);
+                    if (watchLater && mediaFavorites) {
+                        for (FavoriteStore.Item item : FavoriteStore.mediaFavorites(this))
+                            if (item.content != null) FavoriteStore.setMediaFavorite(this, item.content, false);
+                    } else if (watchLater) FavoriteStore.clear(this);
                     else PlaybackHistoryStore.clear(this);
                     renderAllPages();
                 })

@@ -103,6 +103,10 @@ public final class NativeFeedBrowserActivity extends Activity {
 
     private NativeFeedAdapter adapter;
     private BunkrGalleryAdapter bunkrGalleryAdapter;
+    private GalleryContextMenu galleryContextMenu;
+    private final java.util.Set<String> mediaFavoriteUrls = new java.util.HashSet<>();
+    private int favoriteReadGeneration;
+    private final java.util.List<NativeContentItem> pinnedCreatorMedia = new java.util.ArrayList<>();
     private final BunkrGalleryAdapter[] creatorTabAdapters =
             new BunkrGalleryAdapter[CREATOR_TAB_COUNT];
     private final RecyclerView[] creatorTabRecyclers =
@@ -1166,6 +1170,7 @@ public final class NativeFeedBrowserActivity extends Activity {
 
     @Override
     public void onBackPressed() {
+        if (galleryContextMenu != null) { galleryContextMenu.dismiss(); return; }
         finishToShitTok();
     }
 
@@ -1199,17 +1204,7 @@ public final class NativeFeedBrowserActivity extends Activity {
                     public void onLongPress(NativeContentItem item, View anchor) {
                         if (creatorAvatarPickerMode) return;
                         if (isCreatorGallery()) {
-                            anchor.performHapticFeedback(
-                                    android.view.HapticFeedbackConstants.LONG_PRESS
-                            );
-                            GalleryMediaDownloader.download(
-                                    NativeFeedBrowserActivity.this,
-                                    io,
-                                    item,
-                                    "",
-                                    "",
-                                    null
-                            );
+                            showGalleryContextMenu(item, anchor);
                         } else {
                             showItemMenu(item, anchor);
                         }
@@ -1217,6 +1212,7 @@ public final class NativeFeedBrowserActivity extends Activity {
                 },
                 adaptiveAspectRatios
         );
+        if (isCreatorGallery()) galleryAdapter.setFavoriteUrls(mediaFavoriteUrls);
         if (isCreatorGallery() && !notificationFreshUrls.isEmpty()) {
             galleryAdapter.setHighlightedUrls(notificationFreshUrls);
         }
@@ -1605,6 +1601,7 @@ public final class NativeFeedBrowserActivity extends Activity {
                         filterCreatorItems(prioritized, tab),
                         tab == activeTab
                 );
+                creatorTabAdapters[tab].appendPinned(filterCreatorItems(pinnedCreatorMedia, tab));
             }
         }
         updateCreatorTabLabels();
@@ -1617,7 +1614,7 @@ public final class NativeFeedBrowserActivity extends Activity {
             return;
         }
         if (!notificationFreshUrls.isEmpty() && bunkrGalleryAdapter != null) {
-            ArrayList<NativeContentItem> combined = bunkrGalleryAdapter.snapshot();
+            ArrayList<NativeContentItem> combined = bunkrGalleryAdapter.normalSnapshot();
             if (items != null) combined.addAll(items);
             replaceBunkrItems(combined);
             return;
@@ -1970,6 +1967,8 @@ public final class NativeFeedBrowserActivity extends Activity {
                 currentPage,
                 endReached
         );
+        if (isCreatorGallery()) BunkrGallerySessionStore.append(
+                bunkrGallerySessionId, activeCreatorAdapter().snapshot(), currentPage, endReached);
         Intent intent = new Intent(this, BunkrGalleryActivity.class);
         intent.putExtra(BunkrGalleryActivity.EXTRA_SESSION_ID, bunkrGallerySessionId);
         intent.putExtra(BunkrGalleryActivity.EXTRA_TITLE, title);
@@ -1987,6 +1986,60 @@ public final class NativeFeedBrowserActivity extends Activity {
         intent.putExtra(BunkrGalleryActivity.EXTRA_INITIAL_URL, item.url);
         intent.putExtra(BunkrGalleryActivity.EXTRA_INITIAL_POSITION, position);
         GalleryMediaTransition.start(this, intent, transitionAnchor, item);
+    }
+
+    private void showGalleryContextMenu(NativeContentItem item, View anchor) {
+        if (galleryContextMenu != null) galleryContextMenu.dismiss();
+        boolean favorite = mediaFavoriteUrls.contains(item.url);
+        if (getSharedPreferences("app_prefs", MODE_PRIVATE).getBoolean("haptics_enabled", true))
+            anchor.performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP,
+                    android.view.HapticFeedbackConstants.FLAG_IGNORE_VIEW_SETTING);
+        galleryContextMenu = new GalleryContextMenu(this, anchor, activeCreatorRecycler(), favorite,
+                new Runnable[] {
+                    () -> {
+                        BunkrGalleryAdapter active = activeCreatorAdapter();
+                        int position = active == null ? -1 : active.indexOfUrl(item.url);
+                        if (position >= 0) openBunkrGallery(position, item, anchor);
+                    },
+                    () -> io.execute(() -> {
+                        FavoriteStore.setMediaFavorite(this, item, !favorite, creatorGalleryCacheKey);
+                        runOnUiThread(this::refreshMediaFavorites);
+                    }),
+                    () -> shareItem(item),
+                    () -> {
+                        android.content.ClipboardManager clipboard = (android.content.ClipboardManager)
+                                getSystemService(CLIPBOARD_SERVICE);
+                        clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Media link", item.url));
+                        if (android.os.Build.VERSION.SDK_INT < 33)
+                            ZeroChillToast.makeText(this, "Link copied", ZeroChillToast.LENGTH_SHORT).show();
+                    },
+                    () -> GalleryMediaDownloader.download(this, io, item, "", "", null)
+                }, () -> galleryContextMenu = null);
+    }
+
+    private void refreshMediaFavorites() {
+        if (!isCreatorGallery()) return;
+        final int request = ++favoriteReadGeneration;
+        io.execute(() -> {
+            java.util.Set<String> urls = new java.util.HashSet<>();
+            java.util.List<NativeContentItem> pinned = new java.util.ArrayList<>();
+            for (FavoriteStore.Item saved : FavoriteStore.mediaFavorites(this)) {
+                urls.add(saved.url);
+                if (saved.content != null && creatorGalleryCacheKey.equals(saved.galleryKey)) pinned.add(saved.content);
+            }
+            runOnUiThread(() -> {
+                if (isFinishing() || isDestroyed() || request != favoriteReadGeneration) return;
+                mediaFavoriteUrls.clear(); mediaFavoriteUrls.addAll(urls);
+                pinnedCreatorMedia.clear(); pinnedCreatorMedia.addAll(pinned);
+                for (int tab = 0; tab < CREATOR_TAB_COUNT; tab++) {
+                    BunkrGalleryAdapter gallery = creatorTabAdapters[tab];
+                    if (gallery == null) continue;
+                    gallery.setFavoriteUrls(urls);
+                    gallery.appendPinned(filterCreatorItems(pinned, tab));
+                }
+                updateCreatorTabLabels();
+            });
+        });
     }
 
     private void showItemMenu(NativeContentItem item, View anchor) {
@@ -2995,6 +3048,7 @@ public final class NativeFeedBrowserActivity extends Activity {
     }
 
     @Override protected void onPause() {
+        if (galleryContextMenu != null) galleryContextMenu.dismiss();
         setGalleryPreviewsActive(false);
         showsBrowserResumed = false;
         if (showDetailsHeader != null) showDetailsHeader.setActive(false);
@@ -3006,6 +3060,7 @@ public final class NativeFeedBrowserActivity extends Activity {
     protected void onResume() {
         super.onResume();
         setGalleryPreviewsActive(true);
+        refreshMediaFavorites();
         showsBrowserResumed = true;
         if (showDetailsHeader != null) showDetailsHeader.setActive(true);
         updateShowDetailsHeader();
