@@ -33,11 +33,14 @@ final class BaddieHubCreatorMatcher {
 
     static NativeContentItem match(Context context, NativeContentItem media) {
         if (context == null || !isCandidate(media)) return null;
-        List<NativeContentItem> candidates = CreatorCatalog.matching(
-                context.getApplicationContext(), media.title, false, CANDIDATE_LIMIT);
+        Context app = context.getApplicationContext();
+
+        // Prefer learned catalog metadata so a verified creator can open with known artwork/profile.
+        List<NativeContentItem> learned = CreatorCatalog.matching(
+                app, media.title, false, CANDIDATE_LIMIT);
         NativeContentItem best = null;
         int bestRichness = -1;
-        for (NativeContentItem candidate : candidates) {
+        for (NativeContentItem candidate : learned) {
             if (!exact(media.title, candidate)) continue;
             int richness = richness(candidate);
             if (best == null || richness > bestRichness) {
@@ -45,7 +48,15 @@ final class BaddieHubCreatorMatcher {
                 bestRichness = richness;
             }
         }
-        return best;
+        if (best != null) return best;
+
+        // The bundled index covers creators the user has not browsed yet. A rank of zero means the
+        // BaddieHub title exactly matches the canonical name or a reviewed alias after normalization.
+        BundledCreatorIndex bundled = BundledCreatorIndex.get(app);
+        for (NativeContentItem candidate : bundled.matching(media.title, CANDIDATE_LIMIT)) {
+            if (bundled.rank(candidate, media.title) == 0) return candidate;
+        }
+        return null;
     }
 
     static boolean exact(String baddieTitle, NativeContentItem creator) {
