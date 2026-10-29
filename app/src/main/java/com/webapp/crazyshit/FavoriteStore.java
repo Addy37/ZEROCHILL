@@ -97,8 +97,17 @@ public final class FavoriteStore {
     }
 
     public static synchronized void clear(Context context) {
-        List<Item> items = load(context);
-        for (Item item : new ArrayList<>(items)) if (item.watchLater) remove(context, item.url);
+        List<Item> remaining = new ArrayList<>();
+        for (Item item : load(context)) if (item.mediaFavorite)
+            remaining.add(new Item(item.title, item.url, item.savedAt, item.content, true, false, item.galleryKey));
+        save(context, remaining);
+    }
+
+    static synchronized void clearMediaFavorites(Context context) {
+        List<Item> remaining = new ArrayList<>();
+        for (Item item : load(context)) if (item.watchLater)
+            remaining.add(new Item(item.title, item.url, item.savedAt, item.content, false, true, item.galleryKey));
+        save(context, remaining);
     }
 
     public static List<Item> watchLater(Context context) {

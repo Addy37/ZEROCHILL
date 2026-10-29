@@ -676,10 +676,8 @@ public class FavoritesActivity extends Activity {
                         : "This clears History and Continue Watching from this device.")
                 .setNegativeButton("Cancel", null)
                 .setPositiveButton("Clear", (dialog, which) -> {
-                    if (watchLater && mediaFavorites) {
-                        for (FavoriteStore.Item item : FavoriteStore.mediaFavorites(this))
-                            if (item.content != null) FavoriteStore.setMediaFavorite(this, item.content, false);
-                    } else if (watchLater) FavoriteStore.clear(this);
+                    if (watchLater && mediaFavorites) FavoriteStore.clearMediaFavorites(this);
+                    else if (watchLater) FavoriteStore.clear(this);
                     else PlaybackHistoryStore.clear(this);
                     renderAllPages();
                 })

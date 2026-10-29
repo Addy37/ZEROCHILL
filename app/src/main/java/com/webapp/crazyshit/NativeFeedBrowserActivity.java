@@ -3052,6 +3052,7 @@ public final class NativeFeedBrowserActivity extends Activity {
     }
 
     @Override protected void onPause() {
+        favoriteReadGeneration++;
         if (galleryContextMenu != null) galleryContextMenu.dismiss();
         setGalleryPreviewsActive(false);
         showsBrowserResumed = false;

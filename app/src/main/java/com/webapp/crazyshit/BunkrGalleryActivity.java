@@ -1280,7 +1280,7 @@ public final class BunkrGalleryActivity extends Activity {
                 if (saved.url.equals(item.url)) favorite = true;
             final boolean selected = favorite;
             runOnUiThread(() -> {
-                if (isFinishing() || isDestroyed() || pager.getCurrentItem() != position) return;
+                if (isFinishing() || isDestroyed() || !recoveryResumed || pager.getCurrentItem() != position) return;
                 if (mediaContextMenu != null) mediaContextMenu.dismiss();
                 if (getSharedPreferences("app_prefs", MODE_PRIVATE).getBoolean("haptics_enabled", true))
                     pager.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
