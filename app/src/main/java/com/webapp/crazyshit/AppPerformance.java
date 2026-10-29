@@ -19,6 +19,8 @@ final class AppPerformance {
     private static Handler frameHandler;
     private static long frames, slowFrames;
     private static boolean firstDraw;
+    private static volatile String shitTokSelectedUrl = "";
+    private static volatile boolean shitTokSelectedReady;
     private AppPerformance() { }
     static void begin() {
         record("Application entry from process start", SystemClock.elapsedRealtime() - android.os.Process.getStartElapsedRealtime());
@@ -41,6 +43,7 @@ final class AppPerformance {
 
     /** Bounded, correlated cold-start phases. URLs remain on-device and never enter the report. */
     static synchronized void startupItem(String event, String url, String detail) {
+        trackShitTokSelection(event, url);
         if (STARTUP_EVENTS.contains("frame") || CLIP_EVENTS.size() >= 200 || url == null) return;
         int clip = STARTUP_CLIPS.computeIfAbsent(url, ignored -> STARTUP_CLIPS.size() + 1);
         if (!CLIP_EVENTS.add(event + ":" + clip)) return;
@@ -48,6 +51,30 @@ final class AppPerformance {
         record("Startup clip " + clip + " " + event + " " + detail, elapsed);
         if (ShitTokPoolDiagnostics.isEnabled())
             android.util.Log.i("ZeroChillStartup", event + " clip=" + clip + " processMs=" + elapsed + " " + detail);
+    }
+
+    private static void trackShitTokSelection(String event, String url) {
+        if (event == null || url == null || url.isEmpty()) return;
+        if ("owner_select".equals(event)) {
+            boolean changed = !url.equals(shitTokSelectedUrl);
+            shitTokSelectedUrl = url;
+            if (changed) shitTokSelectedReady = false;
+            if (changed) ShitTokCreatorMetadataLoader.onShitTokSelected(url);
+            return;
+        }
+        if (!event.startsWith("player_state_") || !url.equals(shitTokSelectedUrl)) return;
+        boolean ready = "player_state_3".equals(event);
+        boolean becameReady = ready && !shitTokSelectedReady;
+        shitTokSelectedReady = ready;
+        if (becameReady) ShitTokCreatorMetadataLoader.onShitTokPlaybackReady(url);
+    }
+
+    static boolean isShitTokSelected(String url) {
+        return url != null && !url.isEmpty() && url.equals(shitTokSelectedUrl);
+    }
+
+    static boolean isShitTokSelectedReady(String url) {
+        return isShitTokSelected(url) && shitTokSelectedReady;
     }
 
     static void startupCost(String phase, long startedAt) {
