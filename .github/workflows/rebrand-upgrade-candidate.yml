@@ -12,7 +12,7 @@ on:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
-  cancel-in-progress: ${{ github.head_ref == 'feature/bunkr-generated-previews' || github.head_ref == 'fix/bunkr-resolution-artwork-search' || github.head_ref == 'feature/shows-detail-cinematic-pagination' || github.head_ref == 'feature/shows-youtube-motion' || github.head_ref == 'feature/shows-watch-page' || github.head_ref == 'fix/search-results-visual-polish' || (github.head_ref == 'feature/search-recent-glass' || github.head_ref == 'feature/search-liquid-material') || github.head_ref == 'feature/shows-episode-list' || (github.head_ref == 'feature/onlyfap-gender-shelves' || github.head_ref == 'fix/library-startup-navigation' || github.head_ref == 'feature/onlyfap-liquid-rift' || github.head_ref == 'feature/zerochill-5.1.0' || github.head_ref == 'feature/source-contracts-preference-search') }}
+  cancel-in-progress: ${{ github.head_ref == 'feature/baddiehub-onlyfap-creator-links' || github.head_ref == 'feature/bunkr-generated-previews' || github.head_ref == 'fix/bunkr-resolution-artwork-search' || github.head_ref == 'feature/shows-detail-cinematic-pagination' || github.head_ref == 'feature/shows-youtube-motion' || github.head_ref == 'feature/shows-watch-page' || github.head_ref == 'fix/search-results-visual-polish' || (github.head_ref == 'feature/search-recent-glass' || github.head_ref == 'feature/search-liquid-material') || github.head_ref == 'feature/shows-episode-list' || (github.head_ref == 'feature/onlyfap-gender-shelves' || github.head_ref == 'fix/library-startup-navigation' || github.head_ref == 'feature/onlyfap-liquid-rift' || github.head_ref == 'feature/zerochill-5.1.0' || github.head_ref == 'feature/source-contracts-preference-search') }}
 
 permissions:
   contents: read
@@ -56,6 +56,19 @@ jobs:
         with:
           gradle-version: '8.11.1'
           cache-provider: basic
+
+      - name: Run verified BaddieHub creator regressions first
+        if: github.head_ref == 'feature/baddiehub-onlyfap-creator-links'
+        run: >-
+          gradle --no-daemon :app:testDebugUnitTest
+          --tests 'com.webapp.crazyshit.BaddieHubCreatorLinkTest'
+          --tests 'com.webapp.crazyshit.ShitTokSwipeStartTest'
+          --tests 'com.webapp.crazyshit.BundledCreatorIndexTest'
+          --tests 'com.webapp.crazyshit.ShitTokCreatorMetadataTest'
+          --tests 'com.webapp.crazyshit.ShitTokCreatorMetadataLoaderTest'
+          --tests 'com.webapp.crazyshit.ShitTokCreatorGalleryHandoffTest'
+          --tests 'com.webapp.crazyshit.CreatorNameMatcherTest'
+          --tests 'com.webapp.crazyshit.BaddieHubRepositoryTest'
 
       - name: Run Smart ShitTok ranking and Focus Mode regressions first
         if: github.head_ref == 'feature/shittok-smart-ranking-v1' || github.ref_name == 'feature/shittok-smart-ranking-v1'

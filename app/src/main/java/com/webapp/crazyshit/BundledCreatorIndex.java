@@ -21,7 +21,11 @@ final class BundledCreatorIndex {
         this.entries = entries;
         for (Entry entry : entries) {
             byName.put(entry.searchable.get(0), entry);
-            for (String key : entry.searchable) bySearchable.putIfAbsent(key, entry);
+            for (String key : entry.searchable) {
+                // A normalized alias shared by different entries cannot verify an identity.
+                if (!bySearchable.containsKey(key)) bySearchable.put(key, entry);
+                else if (bySearchable.get(key) != entry) bySearchable.put(key, null);
+            }
         }
     }
 

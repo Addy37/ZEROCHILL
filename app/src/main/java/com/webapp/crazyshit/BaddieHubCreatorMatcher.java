@@ -36,23 +36,30 @@ final class BaddieHubCreatorMatcher {
         Context app = context.getApplicationContext();
 
         // Prefer learned catalog metadata so a verified creator can open with known artwork/profile.
+        NativeContentItem learned = learned(app, media.title);
+        if (learned != null) return learned;
+
+        // Resolve reviewed aliases to their canonical name before enriching profile/artwork.
+        NativeContentItem bundled = BundledCreatorIndex.get(app).exact(media.title);
+        if (bundled == null) return null;
+        NativeContentItem enriched = learned(app, bundled.title);
+        return enriched == null ? bundled : enriched;
+    }
+
+    private static NativeContentItem learned(Context app, String title) {
         List<NativeContentItem> learned = CreatorCatalog.matching(
-                app, media.title, false, CANDIDATE_LIMIT);
+                app, title, false, CANDIDATE_LIMIT);
         NativeContentItem best = null;
         int bestRichness = -1;
         for (NativeContentItem candidate : learned) {
-            if (!exact(media.title, candidate)) continue;
+            if (!exact(title, candidate)) continue;
             int richness = richness(candidate);
             if (best == null || richness > bestRichness) {
                 best = candidate;
                 bestRichness = richness;
             }
         }
-        if (best != null) return best;
-
-        // The immutable bundled index covers creators the user has not browsed yet. Its exact map
-        // accepts only canonical names or reviewed aliases after the same normalization rules.
-        return BundledCreatorIndex.get(app).exact(media.title);
+        return best;
     }
 
     static boolean exact(String baddieTitle, NativeContentItem creator) {

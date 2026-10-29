@@ -34,6 +34,18 @@ public class BundledCreatorIndexTest {
         assertNull(index.exact("Nina Crowne Extra"));
     }
 
+    @Test public void exactLookupRejectsAliasAndCanonicalCollisionsInEitherOrder() throws Exception {
+        for (String rows : new String[]{
+                "Alice\tshared|Bob\nBob\tshared\n",
+                "Bob\tshared\nAlice\tshared|Bob\n"}) {
+            BundledCreatorIndex index = index(rows);
+            assertNull(index.exact("shared"));
+            assertNull(index.exact("Bob"));
+            assertEquals("Alice", index.exact("Alice").title);
+        }
+        assertNull(index("Mía Rose\nMia-Rose\n").exact("mia rose"));
+    }
+
     @Test public void largeIndexLimitsResultsAndRepeatedQueries() throws Exception {
         StringBuilder rows = new StringBuilder();
         for (int i = 0; i < 5000; i++) rows.append("Creator ").append(i).append('\n');
