@@ -2,12 +2,14 @@ package com.webapp.crazyshit;
 
 import android.content.Context;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 
-/** Strictly links BaddieHub title candidates to creators already known by OnlyFap. */
+/** Strictly links BaddieHub title candidates to verified OnlyFap creators. */
 final class BaddieHubCreatorMatcher {
     private static final int CANDIDATE_LIMIT = 24;
+    private static final int LIVE_LIMIT = 6;
 
     private BaddieHubCreatorMatcher() { }
 
@@ -44,6 +46,58 @@ final class BaddieHubCreatorMatcher {
         if (bundled == null) return null;
         NativeContentItem enriched = learned(app, bundled.title);
         return enriched == null ? bundled : enriched;
+    }
+
+    /**
+     * Background-only fallback. Local catalog and reviewed aliases always win. The source calls
+     * accept only an exact normalized creator name and save a successful identity for later clips.
+     */
+    static NativeContentItem matchLive(Context context, NativeContentItem media) {
+        if (context == null || !isCandidate(media)) return null;
+        Context app = context.getApplicationContext();
+        NativeContentItem local = match(app, media);
+        if (local != null) return local;
+
+        NativeContentItem fapello = exactFapello(app, media.title);
+        if (fapello != null) return remember(app, fapello);
+
+        NativeContentItem onlyHaven = exactOnlyHaven(app, media.title);
+        return onlyHaven == null ? null : remember(app, onlyHaven);
+    }
+
+    private static NativeContentItem exactFapello(Context app, String title) {
+        String wanted = CreatorNameMatcher.normalized(title);
+        if (wanted.isEmpty()) return null;
+        try {
+            for (FapelloRepository.Model model :
+                    new FapelloRepository().searchConfirmedModels(app, title, LIVE_LIMIT)) {
+                if (model == null || !wanted.equals(CreatorNameMatcher.normalized(model.name))) continue;
+                return CreatorCatalog.fromModel(model);
+            }
+        } catch (Exception unavailable) {
+            ShitTokPoolDiagnostics.record("creatorLiveFapello", "status=unavailable");
+        }
+        return null;
+    }
+
+    private static NativeContentItem exactOnlyHaven(Context app, String title) {
+        String wanted = CreatorNameMatcher.normalized(title);
+        if (wanted.isEmpty()) return null;
+        try {
+            for (OnlyHavenRepository.Creator creator : new OnlyHavenRepository()
+                    .searchCategoryCreators(app, title, LIVE_LIMIT, ContentPreference.ALL)) {
+                if (creator == null || !wanted.equals(CreatorNameMatcher.normalized(creator.name))) continue;
+                return FapzoneCreatorSearchRepository.onlyHavenItem(creator, creator.name);
+            }
+        } catch (Exception unavailable) {
+            ShitTokPoolDiagnostics.record("creatorLiveOnlyHaven", "status=unavailable");
+        }
+        return null;
+    }
+
+    private static NativeContentItem remember(Context app, NativeContentItem creator) {
+        CreatorCatalog.remember(app, Collections.singletonList(creator));
+        return creator;
     }
 
     private static NativeContentItem learned(Context app, String title) {
