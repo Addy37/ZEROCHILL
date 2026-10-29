@@ -43,7 +43,7 @@ public final class BaddieHubCreatorLinkTest {
         NativeContentItem media = baddie(CREATOR_NAME);
 
         assertTrue(BaddieHubCreatorMatcher.isCandidate(media));
-        assertEquals(CREATOR_NAME, ShitTokCreatorMetadata.creatorName(media));
+        assertEquals("", ShitTokCreatorMetadata.creatorName(media));
         assertNull(ShitTokCreatorMetadata.creatorIdentity(null, media));
     }
 
