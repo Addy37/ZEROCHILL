@@ -1,8 +1,9 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.118.0";
 
 const allowedTypes = new Set(["feature_request", "bug_report", "general_feedback"]);
 const encoder = new TextEncoder();
 const feedbackIdPattern = /^[0-9a-f-]{36}$/i;
+const sourceAddressPattern = /^[0-9a-f:.]{3,64}$/i;
 
 function response(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -14,13 +15,22 @@ function response(body: unknown, status = 200) {
   });
 }
 
-async function installationHash(value: string) {
+async function saltedHash(value: string) {
   const salt = Deno.env.get("FEEDBACK_ID_SALT") ?? "";
   const bytes = encoder.encode(`${salt}:${value}`);
   const digest = await crypto.subtle.digest("SHA-256", bytes);
   return Array.from(new Uint8Array(digest))
     .map((part) => part.toString(16).padStart(2, "0"))
     .join("");
+}
+
+function requestSource(request: Request) {
+  const candidate =
+    request.headers.get("cf-connecting-ip")?.trim() ||
+    request.headers.get("x-real-ip")?.trim() ||
+    "";
+  if (!sourceAddressPattern.test(candidate)) return "";
+  return candidate.toLowerCase();
 }
 
 function validMessage(value: string, min = 1) {
@@ -70,7 +80,9 @@ Deno.serve(async (request) => {
     if (!url || !serviceKey) return response({ error: "Service unavailable." }, 503);
 
     const db = createClient(url, serviceKey, { auth: { persistSession: false } });
-    const hash = await installationHash(installationId);
+    const hash = await saltedHash(installationId);
+    const source = requestSource(request);
+    const sourceHash = source ? await saltedHash(`source:${source}`) : null;
     const action = String(body.action ?? "");
 
     if (action === "list") {
@@ -136,6 +148,7 @@ Deno.serve(async (request) => {
         return response({ error: "Message must contain 1 to 2000 characters." }, 400);
       }
 
+      const oneMinuteAgo = new Date(Date.now() - 60 * 1000).toISOString();
       const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
       const { count, error: countError } = await db
         .from("feedback_messages")
@@ -148,12 +161,37 @@ Deno.serve(async (request) => {
         return response({ error: "Please wait before sending more replies." }, 429);
       }
 
+      if (sourceHash) {
+        const { count: sourceMinuteCount, error: sourceMinuteError } = await db
+          .from("feedback_messages")
+          .select("id", { count: "exact", head: true })
+          .eq("source_hash", sourceHash)
+          .eq("sender", "user")
+          .gte("created_at", oneMinuteAgo);
+        if (sourceMinuteError) throw sourceMinuteError;
+        if ((sourceMinuteCount ?? 0) >= 10) {
+          return response({ error: "Please wait before sending more replies." }, 429);
+        }
+
+        const { count: sourceHourCount, error: sourceHourError } = await db
+          .from("feedback_messages")
+          .select("id", { count: "exact", head: true })
+          .eq("source_hash", sourceHash)
+          .eq("sender", "user")
+          .gte("created_at", oneHourAgo);
+        if (sourceHourError) throw sourceHourError;
+        if ((sourceHourCount ?? 0) >= 60) {
+          return response({ error: "Please wait before sending more replies." }, 429);
+        }
+      }
+
       const { data, error } = await db
         .from("feedback_messages")
         .insert({
           feedback_id: feedbackId,
           sender: "user",
           message,
+          source_hash: sourceHash,
         })
         .select("id,feedback_id,sender,message,created_at,read_at")
         .single();
@@ -174,6 +212,7 @@ Deno.serve(async (request) => {
       return response({ error: "Rating must be from 1 to 5." }, 400);
     }
 
+    const oneMinuteAgo = new Date(Date.now() - 60 * 1000).toISOString();
     const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
     const { count, error: countError } = await db
       .from("app_feedback")
@@ -185,10 +224,33 @@ Deno.serve(async (request) => {
       return response({ error: "Please wait before sending more feedback." }, 429);
     }
 
+    if (sourceHash) {
+      const { count: sourceMinuteCount, error: sourceMinuteError } = await db
+        .from("app_feedback")
+        .select("id", { count: "exact", head: true })
+        .eq("source_hash", sourceHash)
+        .gte("created_at", oneMinuteAgo);
+      if (sourceMinuteError) throw sourceMinuteError;
+      if ((sourceMinuteCount ?? 0) >= 5) {
+        return response({ error: "Please wait before sending more feedback." }, 429);
+      }
+
+      const { count: sourceHourCount, error: sourceHourError } = await db
+        .from("app_feedback")
+        .select("id", { count: "exact", head: true })
+        .eq("source_hash", sourceHash)
+        .gte("created_at", oneHourAgo);
+      if (sourceHourError) throw sourceHourError;
+      if ((sourceHourCount ?? 0) >= 20) {
+        return response({ error: "Please wait before sending more feedback." }, 429);
+      }
+    }
+
     const { data, error } = await db
       .from("app_feedback")
       .insert({
         installation_hash: hash,
+        source_hash: sourceHash,
         type,
         message,
         rating,
@@ -207,6 +269,7 @@ Deno.serve(async (request) => {
         feedback_id: data.id,
         sender: "user",
         message,
+        source_hash: sourceHash,
       });
     if (messageError) throw messageError;
 
