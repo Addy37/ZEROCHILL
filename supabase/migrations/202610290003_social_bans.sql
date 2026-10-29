@@ -1,5 +1,6 @@
 -- Reusable moderation ban layer for ZEROCHILL social writes.
 -- Operational ban records are inserted separately and are not hard-coded in migrations.
+-- Banned accounts are rejected by social write RLS even while an already-issued JWT is still valid.
 
 create table if not exists private.social_bans (
     user_id uuid primary key references auth.users(id) on delete cascade,
