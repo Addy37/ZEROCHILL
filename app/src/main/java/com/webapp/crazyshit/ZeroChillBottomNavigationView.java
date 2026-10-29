@@ -3,6 +3,7 @@ package com.webapp.crazyshit;
 import android.animation.ValueAnimator;
 import android.content.Context;
 import android.graphics.RectF;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowInsets;
@@ -52,6 +53,17 @@ final class ZeroChillBottomNavigationView extends BottomNavigationView {
         setElevation(0f);
         setPadding(0, 0, 0, 0);
         super.onMeasure(width, height);
+    }
+
+    @Override public boolean dispatchTouchEvent(MotionEvent event) {
+        // Focus Mode hides the navigation shell with alpha so its layout footprint stays
+        // stable. Reject the hidden sibling before child dispatch so the parent can
+        // deliver the same touch to Focus Mode controls underneath it.
+        if (getAlpha() <= 0.01f) {
+            if (dragging) endSquareDrag(true);
+            return false;
+        }
+        return super.dispatchTouchEvent(event);
     }
 
     @Override public WindowInsets dispatchApplyWindowInsets(WindowInsets insets) {

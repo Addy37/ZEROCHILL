@@ -6,6 +6,10 @@ import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.RuntimeEnvironment;
 import org.robolectric.annotation.Config;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
+import java.util.Random;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
 import org.robolectric.util.ReflectionHelpers;
@@ -62,6 +66,7 @@ public class ShitTokSeenStoreTest {
         assertTrue(restored.liked("https://kaotic.com/video/liked", null));
         assertEquals(ShitTokSeenStore.SEEN_LIMIT, restored.seenSize());
     }
+
     @Test public void existingServerLikeKeyIsHardExcludedLocally() {
         ShitTokSeenStore store = new ShitTokSeenStore(RuntimeEnvironment.getApplication());
         String page = "https://kaotic.com/video/already-hearted";
@@ -69,6 +74,65 @@ public class ShitTokSeenStoreTest {
         assertTrue(store.liked(page, null));
         assertFalse(store.liked("https://kaotic.com/video/other", null));
     }
+
+    @Test public void fastSkipDemotesMatchingCreatorMoreThanItsSourcePeer() {
+        Application app = RuntimeEnvironment.getApplication();
+        ShitTokSmartRanker.resetForTest(app);
+        ShitTokCommunityPopularity.setScoresForTest(Collections.emptyMap());
+        NativeContentItem skipped = fapello("Alice", "https://fapello.com/alice/101/");
+        NativeContentItem neutral = fapello("Bob", "https://fapello.com/bob/202/");
+        ShitTokSmartRanker.register(skipped);
+        ShitTokSmartRanker.register(neutral);
+
+        long wallNow = System.currentTimeMillis();
+        ShitTokSmartRanker.onViewedAt(skipped.url, 1_000L, wallNow);
+        ShitTokSmartRanker.onViewedAt(neutral.url, 2_100L, wallNow + 1_100L);
+
+        float skippedPenalty = ShitTokSmartRanker.penalty(skipped);
+        float sourceOnlyPenalty = ShitTokSmartRanker.penalty(neutral);
+        assertTrue(skippedPenalty > 0.5f);
+        assertTrue(sourceOnlyPenalty > 0f);
+        assertTrue(skippedPenalty > sourceOnlyPenalty);
+        List<NativeContentItem> ordered = new ShitTokAspectPriority().order(
+                Arrays.asList(skipped, neutral), new Random(7L));
+        assertEquals(neutral.url, ordered.get(0).url);
+        ShitTokCommunityPopularity.resetForTest();
+        ShitTokSmartRanker.resetForTest(app);
+    }
+
+    @Test public void slowTransitionDoesNotCreateFastSkipPenalty() {
+        Application app = RuntimeEnvironment.getApplication();
+        ShitTokSmartRanker.resetForTest(app);
+        NativeContentItem watched = fapello("Alice", "https://fapello.com/alice/303/");
+        NativeContentItem next = fapello("Bob", "https://fapello.com/bob/404/");
+        ShitTokSmartRanker.register(watched);
+        ShitTokSmartRanker.register(next);
+
+        ShitTokSmartRanker.onViewedAt(watched.url, 1_000L, 100_000L);
+        ShitTokSmartRanker.onViewedAt(next.url,
+                1_000L + ShitTokSmartRanker.FAST_SKIP_MS + 1L,
+                100_000L + ShitTokSmartRanker.FAST_SKIP_MS + 1L);
+
+        assertEquals(0f, ShitTokSmartRanker.penalty(watched), 0.001f);
+        ShitTokSmartRanker.resetForTest(app);
+    }
+
+    private static NativeContentItem fapello(String creator, String url) {
+        return new NativeContentItem(
+                NativeContentItem.KIND_MEDIA,
+                creator + " clip",
+                url,
+                "",
+                "",
+                creator,
+                "",
+                "Fapello",
+                "",
+                0L,
+                9f / 16f
+        );
+    }
+
     private static void drainDisk() throws Exception {
         ExecutorService disk = ReflectionHelpers.getStaticField(ShitTokSeenStore.class, "DISK");
         disk.submit(() -> {}).get(5, TimeUnit.SECONDS);

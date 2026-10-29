@@ -27,6 +27,32 @@ public class ShitTokInventoryAdmissionTest {
             assertEquals("fast", result.items.get(0).title);
         } finally { release.countDown(); gate.close(); }
     }
+
+    @Test public void communityHotCandidateLeadsProgressiveAdmissionWithinSource() {
+        ShitTokOrientationAdmission gate = new ShitTokOrientationAdmission((s, allowed) -> .5f, () -> 0L);
+        BlockingQueue<NativeContentItem> queue = new ArrayBlockingQueue<>(48);
+        NativeContentItem cold0 = item("cold0"), cold1 = item("cold1"), cold2 = item("cold2"), hot = item("hot");
+        queue.add(cold0); queue.add(cold1); queue.add(cold2); queue.add(hot);
+        Map<String, Float> scores = new HashMap<>();
+        scores.put(ZeroChillSocialRepository.contentKey(hot.url), 5f);
+        ShitTokCommunityPopularity.setScoresForTest(scores);
+        CountDownLatch release = new CountDownLatch(1);
+        try {
+            ShitTokOrientationAdmission.Result result = gate.admitConcurrent(queue, () -> true, candidate -> {
+                if (!candidate.title.equals("hot")) release.await(2, TimeUnit.SECONDS);
+                return new CrazyShitRepository.StreamInfo(candidate.url + ".mp4", candidate.url, candidate.title);
+            }, () -> true, 1, partial -> {
+                assertEquals("hot", partial.items.get(0).title);
+                release.countDown();
+            }, count -> assertTrue(count <= 3));
+            assertEquals("hot", result.items.get(0).title);
+        } finally {
+            release.countDown();
+            ShitTokCommunityPopularity.resetForTest();
+            gate.close();
+        }
+    }
+
     @Test public void cancelledResolutionSlotWaitDefersWithoutUnplayableCooldown() {
         ShitTokOrientationAdmission gate = new ShitTokOrientationAdmission((s, allowed) -> .5f, () -> 0L);
         BlockingQueue<NativeContentItem> queue = new ArrayBlockingQueue<>(48);

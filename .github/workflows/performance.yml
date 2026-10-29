@@ -67,7 +67,9 @@ jobs:
       matrix:
         # This lifecycle fix validates the affected creator flow without the unrelated ten-minute soak.
         include: >-
-          ${{ fromJSON(github.head_ref == 'fix/xmegadrive-shows-lifecycle'
+          ${{ fromJSON(github.head_ref == 'feature/shittok-smart-ranking-v1'
+          && '[{"flow":"chaos-scroll","test":"com.webapp.crazyshit.baselineprofile.MainFlowsBenchmark#chaosScroll","rules":"Macrobenchmark","task":":baselineprofile:connectedBenchmarkReleaseAndroidTest"}]'
+          || github.head_ref == 'fix/xmegadrive-shows-lifecycle'
           && '[{"flow":"creator-gallery-playback","test":"com.webapp.crazyshit.baselineprofile.MainFlowsBenchmark#creatorGalleryAndPlayback","rules":"Macrobenchmark","task":":baselineprofile:connectedBenchmarkReleaseAndroidTest"}]'
           || '[
           {"flow":"startup","test":"com.webapp.crazyshit.baselineprofile.MainFlowsBenchmark#coldStartupUncompiled","rules":"Macrobenchmark","task":":baselineprofile:connectedBenchmarkReleaseAndroidTest"},
