@@ -223,6 +223,7 @@ jobs:
           gradle --no-daemon :app:testDebugUnitTest
           --tests 'com.webapp.crazyshit.BaddieHubCreatorLinkTest'
           --tests 'com.webapp.crazyshit.ShitTokSwipeStartTest'
+          --tests 'com.webapp.crazyshit.ShitTokSpeedMuteTest'
           --tests 'com.webapp.crazyshit.BundledCreatorIndexTest'
           --tests 'com.webapp.crazyshit.ShitTokCreatorMetadataTest'
           --tests 'com.webapp.crazyshit.ShitTokCreatorMetadataLoaderTest'
