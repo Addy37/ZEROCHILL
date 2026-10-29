@@ -9,7 +9,7 @@ import java.util.Locale;
 /** Strictly links BaddieHub title candidates to verified OnlyFap creators. */
 final class BaddieHubCreatorMatcher {
     private static final int CANDIDATE_LIMIT = 24;
-    private static final int LIVE_LIMIT = 6;
+    private static final int LIVE_LIMIT = 4;
 
     private BaddieHubCreatorMatcher() { }
 
@@ -49,8 +49,8 @@ final class BaddieHubCreatorMatcher {
     }
 
     /**
-     * Background-only fallback. Local catalog and reviewed aliases always win. The source calls
-     * accept only an exact normalized creator name and save a successful identity for later clips.
+     * Background-only ShitTok fallback. Local catalog and reviewed aliases always win. Source
+     * calls accept only an exact normalized creator name and save a successful identity for later.
      */
     static NativeContentItem matchLive(Context context, NativeContentItem media) {
         if (context == null || !isCandidate(media)) return null;
@@ -61,6 +61,9 @@ final class BaddieHubCreatorMatcher {
         NativeContentItem fapello = exactFapello(app, media.title);
         if (fapello != null) return remember(app, fapello);
 
+        // A user may have already swiped away while the first source was resolving. Do not spend
+        // another request on an old card.
+        if (!AppPerformance.isShitTokSelected(media.url)) return null;
         NativeContentItem onlyHaven = exactOnlyHaven(app, media.title);
         return onlyHaven == null ? null : remember(app, onlyHaven);
     }
