@@ -26,6 +26,14 @@ public class BundledCreatorIndexTest {
         assertEquals("Mía Rose", index.matching("mia rose", 4).get(0).title);
     }
 
+    @Test public void exactLookupUsesCanonicalNamesAndReviewedAliasesOnly() throws Exception {
+        BundledCreatorIndex index = index("Nina Crowne\tnina_crowne|nina-crowne-official\nNina Crowne Jr\n");
+        assertEquals("Nina Crowne", index.exact("Nina-Crowne").title);
+        assertEquals("Nina Crowne", index.exact("nina crowne official").title);
+        assertNull(index.exact("Nina"));
+        assertNull(index.exact("Nina Crowne Extra"));
+    }
+
     @Test public void largeIndexLimitsResultsAndRepeatedQueries() throws Exception {
         StringBuilder rows = new StringBuilder();
         for (int i = 0; i < 5000; i++) rows.append("Creator ").append(i).append('\n');
