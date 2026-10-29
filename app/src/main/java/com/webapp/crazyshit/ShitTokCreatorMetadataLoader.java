@@ -1,6 +1,7 @@
 package com.webapp.crazyshit;
 
 import android.content.Context;
+import java.lang.ref.WeakReference;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -10,6 +11,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
@@ -18,23 +20,26 @@ import java.util.function.Function;
 
 /** UI-owned cache. Catalog decoding/matching never runs in identity() or its result callback. */
 final class ShitTokCreatorMetadataLoader {
-    private static final long LIVE_INITIAL_DELAY_MS = 350L;
-    private static final long LIVE_RECHECK_MS = 450L;
+    private static final long LIVE_SELECTED_DELAY_MS = 2_000L;
+    private static final long LIVE_READY_DELAY_MS = 150L;
+    private static volatile WeakReference<ShitTokCreatorMetadataLoader> activeLiveLoader =
+            new WeakReference<>(null);
 
     private final Executor worker, ui;
     private final ScheduledThreadPoolExecutor liveWorker;
     private final Function<NativeContentItem, NativeContentItem> resolve, liveResolve;
     private final Consumer<String> ready;
     private final Map<String, NativeContentItem> identities = new HashMap<>();
-    private final Map<String, Integer> observations = new HashMap<>();
+    private final Map<String, NativeContentItem> mediaByUrl = new HashMap<>();
     private final Set<String> requested = new HashSet<>();
-    private final Set<String> liveWatching = ConcurrentHashMap.newKeySet();
+    private final Map<String, ScheduledFuture<?>> liveScheduled = new ConcurrentHashMap<>();
     private final Set<String> liveAttempted = ConcurrentHashMap.newKeySet();
     private volatile int generation;
     private volatile boolean closed;
 
     ShitTokCreatorMetadataLoader(Context context, Executor ui, Consumer<String> ready) {
         this(newMetadataWorker(), newLiveWorker(), ui, resolver(context), liveResolver(context), ready);
+        activeLiveLoader = new WeakReference<>(this);
     }
 
     private static ThreadPoolExecutor newMetadataWorker() {
@@ -118,17 +123,31 @@ final class ShitTokCreatorMetadataLoader {
         this.ready = ready;
     }
 
+    static void onShitTokSelected(String url) {
+        ShitTokCreatorMetadataLoader loader = activeLiveLoader.get();
+        if (loader != null) loader.scheduleSelected(url, LIVE_SELECTED_DELAY_MS, false);
+    }
+
+    static void onShitTokPlaybackReady(String url) {
+        ShitTokCreatorMetadataLoader loader = activeLiveLoader.get();
+        if (loader != null) loader.scheduleSelected(url, LIVE_READY_DELAY_MS, true);
+    }
+
     NativeContentItem identity(NativeContentItem media) {
         if (media == null) return null;
-        int seen = observations.getOrDefault(media.url, 0) + 1;
-        observations.put(media.url, seen);
+        mediaByUrl.put(media.url, media);
         if (!identities.containsKey(media.url))
             identities.put(media.url, ShitTokCreatorMetadata.creatorIdentity(null, media));
         NativeContentItem fallback = identities.get(media.url);
         boolean deferredBaddieHub = fallback == null && BaddieHubCreatorMatcher.isCandidate(media);
-        // The first observation is feed admission. A later observation means the card has been
-        // bound or refreshed near the viewport. Only then keep a lightweight live-match watch.
-        if (deferredBaddieHub && seen > 1) watchLiveBaddieHub(media);
+        if (deferredBaddieHub && AppPerformance.isShitTokSelected(media.url)) {
+            scheduleSelected(
+                    media.url,
+                    AppPerformance.isShitTokSelectedReady(media.url)
+                            ? LIVE_READY_DELAY_MS : LIVE_SELECTED_DELAY_MS,
+                    AppPerformance.isShitTokSelectedReady(media.url)
+            );
+        }
         if (closed || (!deferredBaddieHub && fallback == null) || !requested.add(media.url)) {
             return fallback;
         }
@@ -159,36 +178,28 @@ final class ShitTokCreatorMetadataLoader {
         return fallback;
     }
 
-    private void watchLiveBaddieHub(NativeContentItem media) {
-        if (closed || liveWorker == null || liveResolve == null
-                || liveAttempted.contains(media.url) || !liveWatching.add(media.url)) return;
-        scheduleLiveCheck(media, generation, LIVE_INITIAL_DELAY_MS);
-    }
-
-    private void scheduleLiveCheck(NativeContentItem media, int expected, long delayMs) {
+    private void scheduleSelected(String url, long delayMs, boolean replaceExisting) {
+        if (closed || liveWorker == null || liveResolve == null || url == null || url.isEmpty()
+                || liveAttempted.contains(url)) return;
+        NativeContentItem media = mediaByUrl.get(url);
+        if (media == null || !BaddieHubCreatorMatcher.isCandidate(media)
+                || identities.get(url) != null) return;
+        ScheduledFuture<?> existing = liveScheduled.get(url);
+        if (existing != null && !replaceExisting) return;
+        if (existing != null) existing.cancel(false);
+        final int expected = generation;
         try {
-            liveWorker.schedule(() -> runLiveCheck(media, expected), delayMs, TimeUnit.MILLISECONDS);
-        } catch (RejectedExecutionException closedWorker) {
-            liveWatching.remove(media.url);
+            ScheduledFuture<?> scheduled = liveWorker.schedule(
+                    () -> runLiveSelected(media, expected), delayMs, TimeUnit.MILLISECONDS);
+            liveScheduled.put(url, scheduled);
+        } catch (RejectedExecutionException ignored) {
         }
     }
 
-    private void runLiveCheck(NativeContentItem media, int expected) {
-        if (closed || expected != generation) {
-            liveWatching.remove(media.url);
-            return;
-        }
-        if (!ShitTokPlaybackOwner.isForegroundWindow(media.url)) {
-            liveWatching.remove(media.url);
-            return;
-        }
-        if (!ShitTokPlaybackOwner.allowsCreatorLookup(media.url)) {
-            scheduleLiveCheck(media, expected, LIVE_RECHECK_MS);
-            return;
-        }
-
-        liveWatching.remove(media.url);
-        if (!liveAttempted.add(media.url)) return;
+    private void runLiveSelected(NativeContentItem media, int expected) {
+        liveScheduled.remove(media.url);
+        if (closed || expected != generation || !AppPerformance.isShitTokSelected(media.url)
+                || !liveAttempted.add(media.url)) return;
         long started = android.os.SystemClock.elapsedRealtime();
         NativeContentItem matched = null;
         try { matched = liveResolve.apply(media); }
@@ -210,10 +221,11 @@ final class ShitTokCreatorMetadataLoader {
     void clear() {
         generation++;
         identities.clear();
-        observations.clear();
+        mediaByUrl.clear();
         requested.clear();
-        liveWatching.clear();
         liveAttempted.clear();
+        for (ScheduledFuture<?> future : liveScheduled.values()) future.cancel(false);
+        liveScheduled.clear();
         if (worker instanceof ThreadPoolExecutor) ((ThreadPoolExecutor) worker).getQueue().clear();
         if (liveWorker != null) liveWorker.getQueue().clear();
     }
@@ -232,6 +244,8 @@ final class ShitTokCreatorMetadataLoader {
     void close() {
         closed = true;
         clear();
+        ShitTokCreatorMetadataLoader active = activeLiveLoader.get();
+        if (active == this) activeLiveLoader = new WeakReference<>(null);
         if (worker instanceof ExecutorService) ((ExecutorService) worker).shutdownNow();
         if (liveWorker != null) liveWorker.shutdownNow();
     }
