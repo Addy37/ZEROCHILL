@@ -13,6 +13,10 @@ final class ShitTokCreatorMetadata {
     static String creatorName(NativeContentItem item) {
         if (item == null) return "";
 
+        if (BaddieHubCreatorMatcher.isCandidate(item)) {
+            return clean(item.title);
+        }
+
         if (FapelloRepository.isFapelloUrl(item.url)) {
             String creator = clean(item.uploader);
             return isGenericCreatorLabel(creator) ? "" : creator;
@@ -35,6 +39,12 @@ final class ShitTokCreatorMetadata {
     }
 
     static NativeContentItem creatorIdentity(Context context, NativeContentItem media) {
+        if (BaddieHubCreatorMatcher.isCandidate(media)) {
+            // A BaddieHub title is only a candidate. Do not expose a creator identity until the
+            // background catalog lookup confirms an exact normalized OnlyFap creator match.
+            return context == null ? null : BaddieHubCreatorMatcher.match(context, media);
+        }
+
         String creator = creatorName(media);
         if (creator.isEmpty()) return null;
 
