@@ -17,6 +17,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
@@ -68,6 +69,19 @@ public final class BaddieHubCreatorLinkTest {
         assertEquals(CREATOR_NAME, matched.title);
         assertEquals(CREATOR_URL, matched.url);
         assertEquals(expected.imageUrl, matched.imageUrl);
+    }
+
+    @Test public void bundledIndexCanVerifyAnUnseenCreatorAlias() {
+        Context context = RuntimeEnvironment.getApplication();
+
+        NativeContentItem matched = BaddieHubCreatorMatcher.match(
+                context,
+                baddie("48-pxnmoxk-79")
+        );
+
+        assertNotNull(matched);
+        assertEquals("48_pxnmoxk", matched.title);
+        assertTrue(matched.url.isEmpty());
     }
 
     @Test public void genericAndNonBaddieHubTitlesNeverBecomeCandidates() {
