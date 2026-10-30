@@ -25,6 +25,25 @@ public final class ShitTokCreatorMetadataTest {
     }
 
     @Test
+    public void fapelloCreatorPageClip_usesModelNameInsteadOfProfileUrl() {
+        String profile = "https://fapello.com/lilijunex-1/";
+        NativeContentItem item = new NativeContentItem(
+                NativeContentItem.KIND_MEDIA,
+                "lilijunex #493857",
+                "https://fapello.com/video/lilijunex/493857/",
+                "",
+                "Fapello",
+                profile,
+                "",
+                "Fapello"
+        );
+
+        assertEquals("lilijunex", ShitTokCreatorMetadata.creatorName(item));
+        assertEquals(profile, ShitTokCreatorMetadata.knownProfileUrl(item));
+        assertTrue(ShitTokCreatorMetadata.hasCreator(item));
+    }
+
+    @Test
     public void onlyHavenClip_usesTitleAsCreatorName() {
         NativeContentItem item = new NativeContentItem(
                 NativeContentItem.KIND_MEDIA,
