@@ -47,7 +47,8 @@ final class ShitTokFilteredInventory {
         final LinkedHashMap<String, Integer> evidence = new LinkedHashMap<>();
         int offset;
         boolean hasMore = true, seeded;
-        long accepted;
+        long accepted, categoryRetryAt;
+        int categoryFailures;
         Session(ContentPreference mode) {
             this.mode = mode;
             for (int source : new int[]{HAVEN, FAPELLO, BUNKR}) lanes.put(source, new Lane());
@@ -126,19 +127,33 @@ final class ShitTokFilteredInventory {
         boolean expand;
         int offset;
         synchronized (session) {
-            expand = source == HAVEN && lane.fresh.isEmpty() && session.hasMore;
+            expand = source == HAVEN && lane.fresh.isEmpty() && session.hasMore
+                    && clock.getAsLong() >= session.categoryRetryAt;
             offset = session.offset;
         }
         if (expand) {
-            OnlyHavenRepository.CategoryPage page = backend.creators(session.mode, offset);
-            if (Thread.currentThread().isInterrupted()) throw new InterruptedException();
-            synchronized (session) {
-                session.offset += PAGE_SIZE;
-                session.hasMore = page.hasMore;
-                addCreators(session, page.creators);
+            try {
+                OnlyHavenRepository.CategoryPage page = backend.creators(session.mode, offset);
+                if (Thread.currentThread().isInterrupted()) throw new InterruptedException();
+                synchronized (session) {
+                    session.offset += PAGE_SIZE;
+                    session.hasMore = page.hasMore;
+                    session.categoryFailures = 0; session.categoryRetryAt = 0;
+                    addCreators(session, page.creators);
+                }
+                // Wake cross-source discovery without waiting for Haven media.
+                available.run();
+            } catch (Exception failure) {
+                if (failure instanceof InterruptedException || Thread.currentThread().isInterrupted()) throw failure;
+                synchronized (session) {
+                    session.categoryFailures = Math.min(5, session.categoryFailures + 1);
+                    session.categoryRetryAt = clock.getAsLong() + Math.min(120_000L,
+                            5_000L * (1L << (session.categoryFailures - 1)));
+                    // Category discovery failing does not invalidate previously verified
+                    // creators or their remaining media pages.
+                    if (lane.count() == 0) throw failure;
+                }
             }
-            // Wake the coordinator so Fapello/Bunkr start without waiting for Haven media.
-            available.run();
         }
         List<List<NativeContentItem>> pages = new ArrayList<>();
         Exception lastFailure = null;
@@ -272,6 +287,8 @@ final class ShitTokFilteredInventory {
         synchronized (session) {
             return " filtered=" + active.value + " creators=" + session.creators.size()
                     + " offset=" + session.offset + " more=" + session.hasMore
+                    + " categoryFailures=" + session.categoryFailures
+                    + " categoryBackoff=" + (clock.getAsLong() < session.categoryRetryAt)
                     + " evidence=" + session.evidence.size() + " accepted=" + session.accepted
                     + " pools=" + session.pool.summary();
         }

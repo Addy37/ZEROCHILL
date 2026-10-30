@@ -138,6 +138,24 @@ public class ShitTokFilteredInventoryTest {
         inv.request(ContentPreference.MEN, true, () -> {});
         assertEquals(3, inv.take(ContentPreference.MEN).size());
     }
+    @Test public void failedLaterCategoryPageBacksOffWithoutBlockingVerifiedCreatorMedia() {
+        AtomicInteger laterPages = new AtomicInteger();
+        Fake backend = new Fake() {
+            @Override public OnlyHavenRepository.CategoryPage creators(ContentPreference mode, int offset) throws Exception {
+                if (offset > 0) { laterPages.incrementAndGet(); throw new java.io.IOException("offline page"); }
+                return super.creators(mode, offset);
+            }
+            @Override public boolean available(int source) { return source == 6; }
+        };
+        ShitTokFilteredInventory inv = new ShitTokFilteredInventory(new Direct(), () -> 0L, backend);
+        for (int i = 0; i < 8; i++) {
+            inv.request(ContentPreference.MEN, true, () -> {});
+            assertFalse("Verified continuation must survive pagination failure", inv.take(ContentPreference.MEN).isEmpty());
+        }
+        assertEquals(1, laterPages.get());
+        assertTrue(inv.summary().contains("offset=12"));
+    }
+
     @Test public void uninterruptibleOldCategoryCannotPublishIntoNewCategory() throws Exception {
         ExecutorService io = Executors.newFixedThreadPool(3);
         CountDownLatch started = new CountDownLatch(1), release = new CountDownLatch(1), finished = new CountDownLatch(1);

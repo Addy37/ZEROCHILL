@@ -64,7 +64,8 @@ open; pagination stops at the provider's `hasMore=false`. No entire catalog fetc
 Offsets, profile matches, media page cursors, overflow and source buffers survive
 switches. Repeated identical media pages terminate their cursor. A successful empty
 page with more cursor work resumes on the normal recovery tick; real request
-failures retain source backoff and bounded cursor retries.
+failures retain source backoff and bounded cursor retries. Category-page failures
+back off independently while previously verified creator media cursors remain usable.
 
 Switches pause/invalidate source and admission generations without sharing pools
 between categories. Old socket completions cannot publish into the new source
