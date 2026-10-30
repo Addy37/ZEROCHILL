@@ -1,12 +1,13 @@
-# ZEROCHILL 5.5.0
+# ZEROCHILL 5.6.0
 
-Smarter ShitTok, Focus Mode, better notifications, and faster Bunkr artwork recovery.
+Smart ShitTok gets more personal and reliable, OnlyFap galleries get better favorites and controls, and social/feedback protections are stronger.
 
-- Added Smart ShitTok ranking that boosts already-discovered videos using ZEROCHILL community likes while learning from fast skips locally on your device, with source diversity and exploration retained.
-- Added and polished ShitTok Focus Mode with pinch entry, full-height video behavior, stationary liquid-glass controls, stable vertical paging, and working play/pause, mute, seek, and Back controls.
-- Added optional direct-message previews, grouped message notifications, favorite creator update alerts, and expanded notification settings.
-- Direct-message notifications now show the sender's ZEROCHILL profile avatar when available, with the ZEROCHILL mascot as the fallback.
-- Improved Bunkr artwork recovery when a source page is unavailable and added cached OnlyFap previews generated from original images or video frames when Bunkr provides no thumbnail.
-- Existing accounts, favorites, history, downloads, messages, settings, and other saved data are preserved when updating.
+- Upgraded Smart ShitTok with local personalization based on real viewing behavior, stronger source recovery, immediate category refocusing, and bounded background admission work for smoother long sessions.
+- ShitTok now keeps CrazyShit, Kaotic, ShitShow, Fapello, OnlyHaven, and BaddieHub in the active mix while removing eFukt and XMegaDrive from ShitTok only. ShitShow and BaddieHub feed contribution were repaired.
+- Added hard ShitTok category modes for Women, Men, Trans Women, Trans Men, and Groups using verified OnlyHaven category membership.
+- Improved OnlyFap creator galleries with natural-aspect masonry thumbnails, liquid-glass long-press actions, individual media favorites, favorite-first creator ordering, and saved media in Library.
+- BaddieHub ShitTok cards can now link to verified matching OnlyFap creators for title, avatar, swipe, and creator-gallery navigation while keeping BaddieHub as the media source.
+- Added stronger server-side protections against DM, feedback, comment, report, and comment-like spam, including atomic feedback and reply rate limiting.
+- Existing accounts, favorites, history, downloads, messages, settings, backups, and other saved data are preserved when updating.
 
 Install over your existing ZeroChill app without uninstalling.
