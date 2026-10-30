@@ -12,7 +12,7 @@ public class ShitTokPreferenceBufferTest {
                 "https://example.com/" + id + ".mp4", "", "", "", "");
     }
 
-    @Test public void slowPreferenceSurvivesOrdinaryHarvestAndRetainsOtherProviders() throws Exception {
+    @Test public void slowPreferenceSurvivesOrdinaryHarvestWithoutLeakingOtherProviders() throws Exception {
         ExecutorService io = Executors.newSingleThreadExecutor();
         ShitTokPreferenceBuffer buffer = new ShitTokPreferenceBuffer(io, () -> 0L);
         CountDownLatch started = new CountDownLatch(1), release = new CountDownLatch(1), ready = new CountDownLatch(1);
@@ -35,8 +35,8 @@ public class ShitTokPreferenceBufferTest {
             assertEquals(1, calls.get()); assertEquals(2, matching.size());
             ArrayList<NativeContentItem> queue = new ArrayList<>(normal); queue.addAll(matching);
             List<NativeContentItem> ordered = ShitTokPreferenceMix.order(queue, matching::contains);
-            assertEquals(8, ordered.size()); assertTrue(ordered.containsAll(normal));
-            assertSame(matching.get(0), ordered.get(0)); assertSame(matching.get(1), ordered.get(3));
+            assertEquals(2, ordered.size()); assertFalse(ordered.contains(normal.get(0)));
+            assertSame(matching.get(0), ordered.get(0)); assertSame(matching.get(1), ordered.get(1));
             assertFalse(buffer.hasReady(ContentPreference.MEN));
         } finally { release.countDown(); buffer.stop(); io.shutdownNow(); }
     }

@@ -66,6 +66,32 @@ public class ShitTokContinuityTest {
             assertEquals(0, (int) ReflectionHelpers.getField(f.feed, "selectedPosition"));
         }
     }
+    @Test public void fullRunwayRecoveryTickKeepsCandidatesAndCurrentLeaseWithoutNewFetches() {
+        try (Fixture f = new Fixture()) {
+            for (int i = 0; i < 6; i++) {
+                NativeContentItem next = item("full" + i);
+                f.items.add(next); f.cache.put(next.url, stream(next));
+            }
+            f.candidates("retained1", "retained2");
+            ChaosSourceMixer mixer = new ChaosSourceMixer(new CrazyShitRepository(), new Random(0),
+                    source -> { throw new AssertionError("full runway must not fetch"); });
+            ReflectionHelpers.setField(f.feed, "sourceMixer", mixer);
+            ReflectionHelpers.setField(f.owner, "speculativeAllowed", true);
+            int token = f.owner.token(item("current").url);
+            int prepares = f.engines.get(0).prepares;
+            ((Runnable) ReflectionHelpers.getField(f.feed, "sourceRecoveryTick")).run();
+            assertEquals("{}", mixer.providerSummary());
+            assertTrue(f.io.tasks.isEmpty());
+            assertEquals(2, ((Deque<?>) ReflectionHelpers.getField(f.feed, "orientationPending")).size());
+            assertEquals(token, f.owner.token(item("current").url));
+            assertEquals(prepares, f.engines.get(0).prepares);
+            // Existing normal hysteresis resumes at four; cached candidates are still usable.
+            ReflectionHelpers.setField(f.feed, "selectedPosition", 2);
+            call(f.feed, "requestContinuity");
+            assertTrue((boolean) ReflectionHelpers.getField(f.feed, "continuityWorkNeeded"));
+        }
+    }
+
     static NativeContentItem item(String id) {
         return new NativeContentItem(NativeContentItem.KIND_MEDIA, id,
                 "https://fixture.invalid/" + id, "", "", "Kaotic", "", "", "", 0L, .5f);

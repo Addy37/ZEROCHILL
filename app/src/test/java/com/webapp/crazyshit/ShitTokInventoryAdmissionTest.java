@@ -160,4 +160,109 @@ public class ShitTokInventoryAdmissionTest {
             assertEquals(0, callbacks.get()); assertTrue(result.items.isEmpty());
         } finally { gate.close(); }
     }
+    @Test public void slowVerificationSurvivesRefillAndReentersWithoutAnotherResolution() throws Exception {
+        AtomicLong clock = new AtomicLong();
+        ShitTokOrientationAdmission gate = new ShitTokOrientationAdmission((stream, allowed) -> .5f, clock::get);
+        BlockingQueue<NativeContentItem> queue = new ArrayBlockingQueue<>(48);
+        NativeContentItem slow = new NativeContentItem("media", "slow-browser", "https://slow.invalid/1", "", "", "", "");
+        queue.add(slow); queue.add(item("fast"));
+        CountDownLatch entered = new CountDownLatch(1), release = new CountDownLatch(1), resolved = new CountDownLatch(1);
+        AtomicInteger slowCalls = new AtomicInteger();
+        try {
+            ShitTokOrientationAdmission.Resolver resolver = candidate -> {
+                if (candidate == slow) {
+                    slowCalls.incrementAndGet(); entered.countDown(); release.await(); resolved.countDown();
+                }
+                return new CrazyShitRepository.StreamInfo(candidate.url + ".mp4", candidate.url, candidate.title);
+            };
+            ShitTokOrientationAdmission.Result first = gate.admitConcurrent(queue, () -> true, resolver,
+                    () -> true, 1, partial -> clock.set(ShitTokOrientationAdmission.BATCH_MILLIS), count -> {});
+            assertEquals("fast", first.items.get(0).title);
+            assertTrue(entered.await(2, TimeUnit.SECONDS)); assertTrue(gate.hasPending());
+            release.countDown(); assertTrue(resolved.await(2, TimeUnit.SECONDS));
+            ShitTokOrientationAdmission.Result next = gate.admitConcurrent(queue, () -> true, resolver,
+                    () -> true, 1, null, count -> {});
+            assertEquals("slow-browser", next.items.get(0).title); assertEquals(1, slowCalls.get());
+        } finally { release.countDown(); gate.close(); }
+    }
+    @Test public void lifecycleCancellationRejectsVerificationThatIgnoresInterrupts() throws Exception {
+        ShitTokOrientationAdmission gate = new ShitTokOrientationAdmission((stream, allowed) -> .5f, () -> 0);
+        BlockingQueue<NativeContentItem> queue = new ArrayBlockingQueue<>(48);
+        queue.add(item("old"));
+        CountDownLatch entered = new CountDownLatch(1), release = new CountDownLatch(1);
+        ExecutorService coordinator = Executors.newSingleThreadExecutor();
+        AtomicBoolean allowed = new AtomicBoolean(true);
+        AtomicInteger callbacks = new AtomicInteger();
+        try {
+            Future<?> batch = coordinator.submit(() -> gate.admitConcurrent(queue, () -> true, candidate -> {
+                entered.countDown();
+                while (release.getCount() > 0) try { release.await(); } catch (InterruptedException ignored) {}
+                return new CrazyShitRepository.StreamInfo(candidate.url + ".mp4", candidate.url, candidate.title);
+            }, allowed::get, 1, partial -> callbacks.incrementAndGet(), count -> {}));
+            assertTrue(entered.await(2, TimeUnit.SECONDS)); allowed.set(false); gate.cancelPending();
+            release.countDown(); batch.get(2, TimeUnit.SECONDS);
+            assertEquals(0, callbacks.get()); assertFalse(gate.hasPending());
+            queue.add(item("new"));
+            ShitTokOrientationAdmission.Result next = gate.admitConcurrent(queue, () -> true,
+                    candidate -> new CrazyShitRepository.StreamInfo(candidate.url + ".mp4", candidate.url, candidate.title),
+                    () -> true, 1, null, count -> {});
+            assertEquals("new", next.items.get(0).title);
+        } finally { release.countDown(); coordinator.shutdownNow(); gate.close(); }
+    }
+
+    @Test public void fullRunwayLeavesCandidatesUntouchedAndStartsNoResolutionOrProbe() {
+        AtomicInteger resolves = new AtomicInteger(), probes = new AtomicInteger();
+        ShitTokOrientationAdmission gate = new ShitTokOrientationAdmission((stream, allowed) -> {
+            probes.incrementAndGet(); return .5f;
+        }, () -> 0);
+        BlockingQueue<NativeContentItem> queue = new ArrayBlockingQueue<>(48);
+        for (int i = 0; i < 28; i++) queue.add(item("full" + i));
+        try {
+            ShitTokOrientationAdmission.Result result = gate.admitConcurrent(queue, () -> true, candidate -> {
+                resolves.incrementAndGet(); return stream(candidate);
+            }, () -> true, () -> false, () -> 10, null, count -> {});
+            assertTrue(result.items.isEmpty());
+            assertEquals(28, queue.size());
+            assertEquals(0, resolves.get()); assertEquals(0, probes.get());
+            assertTrue(gate.schedulingSummary().contains("runwayPauses=1"));
+        } finally { gate.close(); }
+    }
+
+    @Test public void liveRunwayDemandStopsLegacyBatchDrainAndResumesRetainedInventory() {
+        // Same queue and publication event; the old batch-only budget keeps resolving ten.
+        assertTrue(resolutionsAfterRunwayFills(false) >= 10);
+        assertTrue(resolutionsAfterRunwayFills(true) <= 3);
+    }
+
+    private int resolutionsAfterRunwayFills(boolean useDemand) {
+        AtomicInteger resolves = new AtomicInteger();
+        AtomicBoolean demand = new AtomicBoolean(true);
+        ShitTokOrientationAdmission gate = new ShitTokOrientationAdmission((stream, allowed) -> .5f, () -> 0);
+        BlockingQueue<NativeContentItem> queue = new ArrayBlockingQueue<>(48);
+        for (int i = 0; i < 28; i++) queue.add(item("demand" + i));
+        try {
+            ShitTokOrientationAdmission.Resolver resolver = candidate -> { resolves.incrementAndGet(); return stream(candidate); };
+            ShitTokOrientationAdmission.Result first = gate.admitConcurrent(queue, () -> true, resolver,
+                    () -> true, () -> !useDemand || demand.get(), () -> 10,
+                    partial -> demand.set(false), count -> assertTrue(count <= 3));
+            if (!useDemand) { assertEquals(10, first.items.size()); return resolves.get(); }
+            assertEquals(1, first.items.size());
+            assertTrue(queue.size() >= 25);
+            int atPause = resolves.get();
+            // Existing verification may finish, but its result remains owned by pending.
+            demand.set(true);
+            ShitTokOrientationAdmission.Result next = gate.admitConcurrent(queue, () -> true, resolver,
+                    () -> true, demand::get, () -> 10, null, count -> assertTrue(count <= 3));
+            assertEquals(10, next.items.size());
+            java.util.Set<String> unique = new java.util.HashSet<>();
+            first.items.forEach(i -> assertTrue(unique.add(i.url)));
+            next.items.forEach(i -> assertTrue(unique.add(i.url)));
+            return atPause;
+        } finally { gate.close(); }
+    }
+
+    private static CrazyShitRepository.StreamInfo stream(NativeContentItem item) {
+        return new CrazyShitRepository.StreamInfo(item.url + ".mp4", item.url, item.title);
+    }
+
 }

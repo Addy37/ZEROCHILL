@@ -43,9 +43,11 @@ final class ShitShowTapSource {
     private final Set<String> seenStoryUrls = new HashSet<>();
 
     private boolean warming;
+    private long generation;
     private volatile boolean playbackProtected;
-    private WebView webView;
+    private volatile WebView webView;
     private long harvestStartedAt;
+    private volatile boolean harvestFailed;
 
     void prewarm(Context context) {
         if (!playbackProtected && cachedCount() < 8) warm(context);
@@ -87,8 +89,17 @@ final class ShitShowTapSource {
                 while (requested-- > 0 && !ready.isEmpty()) result.add(ready.removeFirst());
             }
         }
+        if (result.isEmpty() && harvestFailed) throw new IllegalStateException("ShitShow page failed");
         return result;
     }
+
+    void stop() {
+        final WebView outgoing;
+        synchronized (lock) { generation++; warming = false; outgoing = webView; lock.notifyAll(); }
+        main.post(() -> { if (webView == outgoing) destroyWebView(); });
+    }
+
+    void releaseUnplayed(String url) { synchronized (lock) { seenStoryUrls.remove(url); } }
 
     void resetDeck() {
         // Keep process-level Shit Show history. Chaos has its own repeat protection too.
@@ -116,7 +127,9 @@ final class ShitShowTapSource {
             if (warming) return;
             warming = true;
         }
-        main.post(() -> startHarvest(activity));
+        long token;
+        synchronized (lock) { token = generation; }
+        main.post(() -> { synchronized (lock) { if (token != generation) return; } startHarvest(activity); });
     }
 
     private void startHarvest(Activity activity) {
@@ -127,6 +140,7 @@ final class ShitShowTapSource {
 
         destroyWebView();
         harvestStartedAt = System.currentTimeMillis();
+        harvestFailed = false;
 
         WebView view = new WebView(activity);
         webView = view;
@@ -163,8 +177,20 @@ final class ShitShowTapSource {
         } catch (Exception ignored) {
         }
 
-        view.addJavascriptInterface(new Bridge(), "CSShitBridge");
+        view.addJavascriptInterface(new Bridge(generation), "CSShitBridge");
         view.setWebViewClient(new WebViewClient() {
+            @Override public void onReceivedError(WebView web, WebResourceRequest request,
+                    android.webkit.WebResourceError error) {
+                if (web == webView && request != null && request.isForMainFrame()) {
+                    harvestFailed = true; finishHarvest(web);
+                }
+            }
+            @Override public void onReceivedHttpError(WebView web, WebResourceRequest request,
+                    android.webkit.WebResourceResponse response) {
+                if (web == webView && request != null && request.isForMainFrame()) {
+                    harvestFailed = true; finishHarvest(web);
+                }
+            }
             @Override
             public boolean shouldOverrideUrlLoading(WebView web, WebResourceRequest request) {
                 if (request == null || request.getUrl() == null || !request.isForMainFrame()) return false;
@@ -178,6 +204,7 @@ final class ShitShowTapSource {
 
             @Override
             public void onPageFinished(WebView web, String url) {
+                if (webView != web || !isWarming()) return;
                 harvestStories(web);
                 schedulePump(web);
             }
@@ -219,7 +246,9 @@ final class ShitShowTapSource {
         if (view != null) view.evaluateJavascript(HARVEST_STORIES_JS, null);
     }
 
-    private void acceptStory(String raw) {
+    private void acceptStory(String raw) { acceptStory(raw, generation); }
+
+    private void acceptStory(String raw, long token) {
         try {
             JSONObject json = new JSONObject(raw == null ? "{}" : raw);
             String pageUrl = cleanUrl(json.optString("page", ""));
@@ -240,7 +269,8 @@ final class ShitShowTapSource {
             if (itemUrl.isEmpty()) return;
 
             synchronized (lock) {
-                if (!seenStoryUrls.add(itemUrl)) return;
+                if (token != generation || !seenStoryUrls.add(itemUrl)) return;
+                if (seenStoryUrls.size() > 8192) seenStoryUrls.clear();
                 while (ready.size() >= MAX_CACHE) ready.removeLast();
                 ready.addLast(new NativeContentItem(
                         NativeContentItem.KIND_MEDIA,
@@ -362,9 +392,11 @@ final class ShitShowTapSource {
     }
 
     private final class Bridge {
+        private final long token;
+        Bridge(long token) { this.token = token; }
         @JavascriptInterface
         public void onStory(String raw) {
-            acceptStory(raw);
+            acceptStory(raw, token);
         }
 
         @JavascriptInterface

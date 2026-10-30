@@ -11,10 +11,8 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Random;
 import java.util.Set;
-import java.util.concurrent.ExecutorCompletionService;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -28,9 +26,10 @@ final class ChaosSourceMixer {
     private static final int BADDIEHUB_MAX_PAGE = 3;
     private static final int XMEGADRIVE_MAX_PAGE = 4;
     private static final ExecutorService CRAZY_IO = Executors.newFixedThreadPool(2);
-    private static final ExecutorService SOURCE_IO = Executors.newFixedThreadPool(6);
-    private static final ExecutorService CONTINUITY_SOURCE_IO = Executors.newFixedThreadPool(3);
+    private static final ExecutorService SOURCE_IO = new java.util.concurrent.ThreadPoolExecutor(
+            6, 6, 0L, TimeUnit.MILLISECONDS, new java.util.concurrent.ArrayBlockingQueue<>(16));
     private static final long MIX_BATCH_BUDGET_MS = 5_500L;
+    private static final int BATCH_SHIT_SHOW = 4;
     private static final int BATCH_REGULAR = 1;
     private static final int BATCH_EFUKT = 2;
     private static final int BATCH_KAOTIC = 3;
@@ -40,7 +39,7 @@ final class ChaosSourceMixer {
     private static final int BATCH_XMEGADRIVE = 8;
     private static final int SOURCES_PER_BATCH = 3;
     private static final int REGULAR_ITEMS_PER_SOURCE = 4;
-    private static final int SHIT_SHOW_PER_BATCH = 24;
+    private static final int SHIT_SHOW_PER_BATCH = ShitTokSourcePool.MAX_READY_PER_SOURCE;
     private static final int EFUKT_ITEMS_PER_BATCH = 12;
     private static final int EFUKT_SERIES_PER_BATCH = 2;
     private static final int FAPELLO_ITEMS_PER_BATCH = 16;
@@ -53,6 +52,7 @@ final class ChaosSourceMixer {
     private static final String VIDEOS = CrazyShitRepository.BASE + "videos/";
     private static final String USER_UPLOADS = CrazyShitRepository.BASE + "submissions/";
 
+    private final ShitTokSourcePool sourcePool = new ShitTokSourcePool(SOURCE_IO, android.os.SystemClock::elapsedRealtime);
     private final CrazyShitRepository repository;
     private final Random random;
     interface SourceLoader { List<NativeContentItem> load(int source) throws Exception; }
@@ -82,22 +82,54 @@ final class ChaosSourceMixer {
     private long categoryRetryAfter;
     private final Set<String> preferenceMatches = java.util.concurrent.ConcurrentHashMap.newKeySet();
 
+    private final java.util.concurrent.ConcurrentLinkedDeque<String> preferenceMatchOrder = new java.util.concurrent.ConcurrentLinkedDeque<>();
+
+    ShitTokSourcePool.Health preferenceHealth() { return sourcePool.health(BATCH_ONLY_HAVEN); }
+
     boolean matchesPreference(NativeContentItem item, ContentPreference mode) {
-        return mode != ContentPreference.ALL && preferenceMatches.contains(mode.value + "|" + item.url);
+        return mode != ContentPreference.ALL && ShitTokPreferenceMix.eligible(item, mode, preferenceMatches);
     }
-    private final ShitTokPreferenceBuffer preferenceBuffer = new ShitTokPreferenceBuffer();
+    private volatile ContentPreference poolMode = ContentPreference.ALL;
 
-    void requestPreference(Context context, Runnable available) {
+    synchronized void requestPreference(Context context, Runnable available) {
         ContentPreference mode = ContentPreference.get(context);
-        if (!explorationAllowed && mode != ContentPreference.ALL) return;
+        if (poolMode != mode) {
+            sourcePool.pause(); sourcePool.clearSource(BATCH_ONLY_HAVEN); shitShow.stop(); poolMode = mode;
+        }
+        SourceConfig config = RemoteSourceConfigManager.snapshotOrNull();
+        if (mode == ContentPreference.ALL) {
+            for (int source = 1; source <= 8; source++) {
+                boolean shittokEligible = source != BATCH_EFUKT && source != BATCH_XMEGADRIVE;
+                sourcePool.setEligibility(source, shittokEligible,
+                        shittokEligible && sourceAvailable(source, config));
+            }
+            return;
+        }
+        sourcePool.filterExcept(BATCH_ONLY_HAVEN);
+        boolean enabled = sourceAvailable(BATCH_ONLY_HAVEN, config);
         Context app = context.getApplicationContext();
-        preferenceBuffer.request(mode, () -> provider(BATCH_ONLY_HAVEN,
-                () -> loadOnlyHavenBatch(app, mode)).call().items, available);
+        sourcePool.request(BATCH_ONLY_HAVEN, true, enabled,
+                () -> source(BATCH_ONLY_HAVEN, () -> loadOnlyHavenBatch(app, mode)), available);
     }
 
-    boolean hasPreference(ContentPreference mode) { return preferenceBuffer.hasReady(mode); }
-    List<NativeContentItem> takePreference(ContentPreference mode) { return preferenceBuffer.take(mode); }
-    void stopPreference() { preferenceBuffer.stop(); }
+    boolean hasPreference(ContentPreference mode) {
+        return mode != ContentPreference.ALL && poolMode == mode && sourcePool.hasReady(BATCH_ONLY_HAVEN);
+    }
+    List<NativeContentItem> takePreference(ContentPreference mode) {
+        return poolMode == mode ? sourcePool.take(2) : Collections.emptyList();
+    }
+    void stopPreference() { sourcePool.pause(); shitShow.stop(); }
+
+    private static boolean sourceAvailable(int source, SourceConfig config) {
+        if (config == null) return true;
+        switch (source) {
+            case BATCH_KAOTIC: return config.kaotic.enabled;
+            case BATCH_ONLY_HAVEN: return config.onlyHaven.enabled;
+            case BATCH_FAPELLO: return !config.sourceKillSwitchesEnabled || config.fapello.enabled;
+            case BATCH_BADDIEHUB: return !config.sourceKillSwitchesEnabled || config.baddieHub.enabled;
+            default: return true;
+        }
+    }
 
     private boolean starterPending = true;
     private volatile boolean explorationAllowed;
@@ -106,7 +138,14 @@ final class ChaosSourceMixer {
     private final Set<Integer> fetching = java.util.concurrent.ConcurrentHashMap.newKeySet();
     private final java.util.Map<String, ArrayDeque<Integer>> pageDecks = new java.util.HashMap<>();
     int activeFetches() { return activeFetches.get(); }
-    String providerSummary() { return providerTimings.toString(); }
+    String providerSummary() { return sourcePool.summary(); }
+    void verifiedCandidates(List<NativeContentItem> items) {
+        for (NativeContentItem item : items) sourcePool.verified(item.url);
+    }
+    void contributed(NativeContentItem item) { sourcePool.contributed(item.url); }
+    void abandon(NativeContentItem item) {
+        if (item != null && "shit-show".equals(ShitTokAspectPriority.sourceKey(item))) shitShow.releaseUnplayed(item.url);
+    }
 
     // Page traversal is cheap post-starter work, independent of rendering/expensive catalog warmup.
     synchronized int nextPage(String source, int maximum) {
@@ -167,153 +206,56 @@ final class ChaosSourceMixer {
 
     List<NativeContentItem> loadRandomBatch(Context context, boolean continuityOnly,
             java.util.function.Consumer<List<NativeContentItem>> onCandidates) {
+        ContentPreference mode = ContentPreference.get(context);
+        if (mode != ContentPreference.ALL) {
+            // Only the authoritative category loader can produce a filtered candidate.
+            return takePreference(mode);
+        }
         if (starterPending) {
             starterPending = false;
             List<NativeContentItem> starter = loadStarterBatch(context, onCandidates);
             if (!starter.isEmpty()) return starter;
         }
-        // Hidden WebView/catalog exploration begins only with normal post-starter refills.
-        if (explorationAllowed) shitShow.prewarm(context);
-
-        // Full refills race independent sources together. A slow or dead provider gets the same
-        // bounded batch window as every other provider instead of serially delaying ShitTok.
-        ExecutorCompletionService<SourceBatch> completions =
-                new ExecutorCompletionService<>(continuityOnly ? CONTINUITY_SOURCE_IO : SOURCE_IO);
-        ArrayList<Future<SourceBatch>> work = new ArrayList<>();
-        ArrayList<java.util.concurrent.Callable<SourceBatch>> requests = new ArrayList<>();
-        final ContentPreference preference = ContentPreference.get(context);
-        // Fast independent listings enter the bounded three-worker pool before multi-page catalogs.
-        requests.add(provider(BATCH_KAOTIC, () -> loadKaoticBatch(context)));
-        requests.add(provider(BATCH_FAPELLO, () -> loadFapelloBatch(context)));
-        requests.add(provider(BATCH_REGULAR, () -> loadRegularBatch(context, onCandidates)));
-        requests.add(provider(BATCH_BADDIEHUB, () -> loadBaddieHubBatch(context)));
-        requests.add(provider(BATCH_XMEGADRIVE, () -> loadXMegaDriveBatch(context)));
-        // eFukt remains bounded before the first frame. No new sources are introduced.
-        requests.add(provider(BATCH_EFUKT,
-                () -> explorationAllowed ? loadEfuktBatch(context) : efukt.fetchLatest(context)));
-        if (explorationAllowed && preference == ContentPreference.ALL)
-            requests.add(provider(BATCH_ONLY_HAVEN, () -> loadOnlyHavenBatch(context)));
-        for (java.util.concurrent.Callable<SourceBatch> request : requests) work.add(completions.submit(request));
-
-        ArrayList<NativeContentItem> regularItems = new ArrayList<>();
-        ArrayList<NativeContentItem> efuktItems = new ArrayList<>();
-        ArrayList<NativeContentItem> kaoticItems = new ArrayList<>();
-        ArrayList<NativeContentItem> fapelloItems = new ArrayList<>();
-        ArrayList<NativeContentItem> onlyHavenItems = new ArrayList<>();
-        ArrayList<NativeContentItem> baddieHubItems = new ArrayList<>();
-        ArrayList<NativeContentItem> xMegaDriveItems = new ArrayList<>();
-
+        recoverSources(context);
+        ArrayList<NativeContentItem> result = new ArrayList<>();
         long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(MIX_BATCH_BUDGET_MS);
-        int remainingWork = work.size();
-        try {
-            while (remainingWork-- > 0) {
-                long remaining = deadline - System.nanoTime();
-                if (remaining <= 0L) break;
-                Future<SourceBatch> completed = completions.poll(
-                        remaining, TimeUnit.NANOSECONDS);
-                if (completed == null) break;
-                try {
-                    SourceBatch batch = completed.get();
-                    if (batch == null || batch.items == null) continue;
-                    // Start admission as each provider completes. Slow catalogs cannot hold
-                    // already available candidates behind the mixed-batch deadline.
-                    if (onCandidates != null) {
-                        int cap = batch.source == BATCH_EFUKT ? 1
-                                : batch.source == BATCH_REGULAR ? 6 : batch.items.size();
-                        onCandidates.accept(batch.items.subList(0, Math.min(cap, batch.items.size())));
-                    }
-                    switch (batch.source) {
-                        case BATCH_REGULAR:
-                            regularItems.addAll(batch.items);
-                            break;
-                        case BATCH_EFUKT:
-                            efuktItems.addAll(batch.items);
-                            break;
-                        case BATCH_KAOTIC:
-                            kaoticItems.addAll(batch.items);
-                            break;
-                        case BATCH_FAPELLO:
-                            fapelloItems.addAll(batch.items);
-                            break;
-                        case BATCH_ONLY_HAVEN:
-                            onlyHavenItems.addAll(batch.items);
-                            break;
-                        case BATCH_BADDIEHUB:
-                            baddieHubItems.addAll(batch.items);
-                            break;
-                        case BATCH_XMEGADRIVE:
-                            xMegaDriveItems.addAll(batch.items);
-                            break;
-                        default:
-                            break;
-                    }
-                } catch (Exception ignored) {
-                    // Other source tasks continue contributing to this batch.
-                }
+        // The consumer can stop admission at any time. Provider work retains its own bounded
+        // session buffers and survives that decision, until explicit lifecycle/mode cancellation.
+        while (!Thread.currentThread().isInterrupted() && System.nanoTime() < deadline) {
+            List<NativeContentItem> ready = sourcePool.take(8);
+            if (!ready.isEmpty()) {
+                result.addAll(ready);
+                if (onCandidates != null) onCandidates.accept(ready);
+                if (result.size() >= 24) break;
             }
-        } catch (InterruptedException interrupted) {
-            Thread.currentThread().interrupt();
-        } finally {
-            for (Future<SourceBatch> request : work) {
-                if (!request.isDone()) request.cancel(true);
-            }
+            try { Thread.sleep(40L); }
+            catch (InterruptedException cancelled) { Thread.currentThread().interrupt(); break; }
         }
-
-        Collections.shuffle(regularItems, random);
-        Collections.shuffle(efuktItems, random);
-        Collections.shuffle(kaoticItems, random);
-        Collections.shuffle(fapelloItems, random);
-        Collections.shuffle(onlyHavenItems, random);
-        Collections.shuffle(baddieHubItems, random);
-        Collections.shuffle(xMegaDriveItems, random);
-
-        ArrayList<NativeContentItem> shitShowItems = new ArrayList<>();
-        HashSet<String> regularUrls = new HashSet<>();
-        for (NativeContentItem item : regularItems) {
-            if (item != null && item.url != null) regularUrls.add(item.url);
-        }
-        for (NativeContentItem item : shitShow.takeReadyBatch(
-                kaoticItems.size() < 6 ? SHIT_SHOW_PER_BATCH : 7)) {
-            if (item == null || item.url == null || item.url.isEmpty()) continue;
-            if (regularUrls.contains(item.url)) continue;
-            shitShowItems.add(item);
-        }
-        Collections.shuffle(shitShowItems, random);
-        if (onCandidates != null) onCandidates.accept(shitShowItems);
-
-        ArrayList<NativeContentItem> result = new ArrayList<>(mixAvailable(
-                kaoticItems, shitShowItems, fapelloItems, onlyHavenItems, regularItems, efuktItems));
-        addUpTo(result, baddieHubItems, BADDIEHUB_ITEMS_PER_BATCH);
-        addUpTo(result, xMegaDriveItems, XMEGADRIVE_ITEMS_PER_BATCH);
         return result;
     }
 
-    static List<NativeContentItem> mixAvailable(
-            List<NativeContentItem> kaotic, List<NativeContentItem> shitShow,
-            List<NativeContentItem> fapello, List<NativeContentItem> onlyHaven,
-            List<NativeContentItem> crazyShit, List<NativeContentItem> efukt
-    ) {
-        ArrayList<NativeContentItem> preferred = new ArrayList<>();
-        boolean kaoticReady = kaotic != null && kaotic.size() >= 6;
-        addUpTo(preferred, kaotic, Integer.MAX_VALUE);
-        // Kaotic leads a healthy batch. If it is short, keep the other feeds uncapped.
-        addUpTo(preferred, shitShow, kaoticReady ? 7 : Integer.MAX_VALUE);
-        addUpTo(preferred, fapello, Integer.MAX_VALUE);
-        addUpTo(preferred, onlyHaven, Integer.MAX_VALUE);
-        addUpTo(preferred, crazyShit, kaoticReady ? 6 : Integer.MAX_VALUE);
+    List<NativeContentItem> takeReadyCandidates() { return sourcePool.take(16); }
 
-        int efuktLimit = preferred.size() < 10 ? Integer.MAX_VALUE
-                : Math.max(1, (preferred.size() + 12) / 13);
-        ArrayList<NativeContentItem> result = new ArrayList<>(preferred);
-        addUpTo(result, efukt, efuktLimit);
-        // FeedView applies its portrait and source-weighted shuffle to this complete pool.
-        return result;
+    void recoverSources(Context context) {
+        if (ContentPreference.get(context) != ContentPreference.ALL) return;
+        if (context instanceof android.app.Activity) {
+            ShitShowPlayableResolver.rememberHost((android.app.Activity) context);
+        }
+        requestPreference(context, () -> {});
+        SourceConfig config = RemoteSourceConfigManager.snapshotOrNull();
+        sourcePool.request(BATCH_KAOTIC, true, sourceAvailable(BATCH_KAOTIC, config), () -> source(BATCH_KAOTIC, () -> loadKaoticBatch(context)));
+        sourcePool.request(BATCH_FAPELLO, true, sourceAvailable(BATCH_FAPELLO, config), () -> source(BATCH_FAPELLO, () -> loadFapelloBatch(context)));
+        sourcePool.request(BATCH_REGULAR, true, true, () -> source(BATCH_REGULAR, () -> loadRegularBatch(context, null)));
+        sourcePool.request(BATCH_BADDIEHUB, true, sourceAvailable(BATCH_BADDIEHUB, config), () -> source(BATCH_BADDIEHUB, () -> loadBaddieHubBatch(context)));
+        if (explorationAllowed) {
+            sourcePool.request(BATCH_ONLY_HAVEN, true, sourceAvailable(BATCH_ONLY_HAVEN, config), () -> source(BATCH_ONLY_HAVEN, () -> loadOnlyHavenBatch(context)));
+            sourcePool.request(BATCH_SHIT_SHOW, true, true, () -> source(BATCH_SHIT_SHOW,
+                    () -> shitShow.takeBatchOrWarm(context, SHIT_SHOW_PER_BATCH)));
+        }
     }
 
-    private static void addUpTo(List<NativeContentItem> result,
-                                List<NativeContentItem> source, int limit) {
-        if (source == null) return;
-        for (int i = 0; i < source.size() && i < limit; i++) result.add(source.get(i));
+    private List<NativeContentItem> source(int id, java.util.concurrent.Callable<List<NativeContentItem>> loader) throws Exception {
+        return provider(id, loader).call().items;
     }
 
     private List<NativeContentItem> loadRegularBatch(Context context, java.util.function.Consumer<List<NativeContentItem>> onCandidates) {
@@ -323,15 +265,18 @@ final class ChaosSourceMixer {
         synchronized (catalogLock) {
             sourceCount = Math.min(SOURCES_PER_BATCH, Math.max(2, catalog.size()));
         }
+        boolean anyResponse = false;
         for (int i = 0; i < sourceCount; i++) {
             if (Thread.currentThread().isInterrupted()) break;
             int before = regular.size();
-            addRequest(context, regular, nextRequest());
+            anyResponse |= addRequest(context, regular, nextRequest());
             if (onCandidates != null && regular.size() > before) {
                 List<NativeContentItem> arrived = new ArrayList<>(regular.values());
                 onCandidates.accept(arrived.subList(before, arrived.size()));
             }
         }
+        if (!anyResponse && !Thread.currentThread().isInterrupted())
+            throw new IllegalStateException("Regular source requests failed");
         return new ArrayList<>(regular.values());
     }
 
@@ -377,14 +322,14 @@ final class ChaosSourceMixer {
             int take = Math.min(XMEGADRIVE_ITEMS_PER_BATCH, candidates.size());
             return new ArrayList<>(candidates.subList(0, take));
         } catch (Exception ignored) {
-            return new ArrayList<>();
+            throw new IllegalStateException("Source acquisition failed", ignored);
         }
     }
 
     private List<NativeContentItem> loadBaddieHubBatch(Context context) {
         try {
             ArrayList<NativeContentItem> candidates = new ArrayList<>(
-                    ShitTokPoolDiagnostics.fetched(BATCH_BADDIEHUB, baddieHub.fetchShitTokCandidates(
+                    ShitTokPoolDiagnostics.fetched(BATCH_BADDIEHUB, baddieHub.fetchPortraitFeed(
                             context,
                             nextPage("baddiehub", BADDIEHUB_MAX_PAGE)
                     ))
@@ -394,7 +339,7 @@ final class ChaosSourceMixer {
             int take = Math.min(BADDIEHUB_ITEMS_PER_BATCH, candidates.size());
             return new ArrayList<>(candidates.subList(0, take));
         } catch (Exception ignored) {
-            return new ArrayList<>();
+            throw new IllegalStateException("Source acquisition failed", ignored);
         }
     }
 
@@ -405,6 +350,7 @@ final class ChaosSourceMixer {
         LinkedHashMap<String, NativeContentItem> combined = new LinkedHashMap<>();
         HashSet<String> usedSeries = new HashSet<>();
         int seriesTarget = Math.min(EFUKT_SERIES_PER_BATCH, efuktSeries.size());
+        boolean anyResponse = false;
         int attempts = Math.max(4, efuktSeries.size() * 2);
 
         while (usedSeries.size() < seriesTarget && attempts-- > 0) {
@@ -420,10 +366,13 @@ final class ChaosSourceMixer {
                     if (!NativeContentItem.KIND_MEDIA.equals(item.kind)) continue;
                     combined.putIfAbsent(item.url, item);
                 }
+                anyResponse = true;
             } catch (Exception ignored) {
             }
         }
 
+        if (!anyResponse && !usedSeries.isEmpty() && !Thread.currentThread().isInterrupted())
+            throw new IllegalStateException("EFukt media requests failed");
         ArrayList<NativeContentItem> candidates = new ArrayList<>(combined.values());
         Collections.shuffle(candidates, random);
         int take = Math.min(EFUKT_ITEMS_PER_BATCH, candidates.size());
@@ -442,9 +391,11 @@ final class ChaosSourceMixer {
                 efuktSeries.add(series);
             }
             loaded = !Thread.currentThread().isInterrupted();
-        } catch (Exception ignored) {
+        } catch (Exception failed) {
+            efuktCatalogAttempted = false;
+            throw new IllegalStateException("EFukt catalog failed", failed);
         }
-        if (!loaded && efuktSeries.isEmpty()) efuktCatalogAttempted = false;
+        if (efuktSeries.isEmpty()) efuktCatalogAttempted = false;
         refillEfuktDeck();
     }
 
@@ -465,7 +416,7 @@ final class ChaosSourceMixer {
             int take = Math.min(FAPELLO_ITEMS_PER_BATCH, candidates.size());
             return new ArrayList<>(candidates.subList(0, take));
         } catch (Exception ignored) {
-            return new ArrayList<>();
+            throw new IllegalStateException("Source acquisition failed", ignored);
         }
     }
 
@@ -483,7 +434,7 @@ final class ChaosSourceMixer {
             int take = Math.min(KAOTIC_ITEMS_PER_BATCH, candidates.size());
             return new ArrayList<>(candidates.subList(0, take));
         } catch (Exception ignored) {
-            return new ArrayList<>();
+            throw new IllegalStateException("Source acquisition failed", ignored);
         }
     }
 
@@ -506,9 +457,9 @@ final class ChaosSourceMixer {
 
         LinkedHashMap<String, NativeContentItem> combined = new LinkedHashMap<>();
         HashSet<String> usedCreators = new HashSet<>();
+        boolean anyResponse = false;
         int attempts = Math.min(4, onlyHavenCreators.size());
-        // The independent preference buffer holds at most two raw matching clips.
-        // Ordinary providers keep their normal fetch/admission path.
+        // Category acquisitions are small; the shared source buffer can fill the normal runway.
         int batchLimit = mode == ContentPreference.ALL ? ONLY_HAVEN_ITEMS_PER_BATCH : 2;
         while (combined.size() < batchLimit && attempts-- > 0) {
             if (Thread.currentThread().isInterrupted()) break;
@@ -524,6 +475,7 @@ final class ChaosSourceMixer {
                     if (item == null || !item.isVideo()) continue;
                     candidates.add(onlyHavenClip(item, creator));
                 }
+                anyResponse = true;
             } catch (Exception ignored) {
             }
 
@@ -534,13 +486,20 @@ final class ChaosSourceMixer {
                 if (item.url == null || item.url.isEmpty()) continue;
                 combined.putIfAbsent(item.url, item);
                 if (mode != ContentPreference.ALL) {
-                    if (preferenceMatches.size() > 4096) preferenceMatches.clear();
-                    preferenceMatches.add(mode.value + "|" + item.url);
+                    String key = mode.value + "|" + item.url;
+                    if (preferenceMatches.add(key)) preferenceMatchOrder.addLast(key);
+                    while (preferenceMatches.size() > 4096) {
+                        String oldest = preferenceMatchOrder.pollFirst();
+                        if (oldest == null) break;
+                        preferenceMatches.remove(oldest);
+                    }
                 }
                 if (combined.size() >= batchLimit) break;
             }
         }
 
+        if (!anyResponse && !usedCreators.isEmpty() && !Thread.currentThread().isInterrupted())
+            throw new IllegalStateException("OnlyHaven media requests failed");
         return new ArrayList<>(combined.values());
     }
 
@@ -575,14 +534,16 @@ final class ChaosSourceMixer {
                 onlyHavenCreators.add(creator);
             }
             loaded = !Thread.currentThread().isInterrupted();
-        } catch (Exception ignored) {
+        } catch (Exception failed) {
+            onlyHavenCatalogAttempted = false;
+            throw new IllegalStateException("OnlyHaven catalog failed", failed);
         }
         if (onlyHavenCreators.isEmpty() && mode != ContentPreference.ALL) {
             onlyHavenCatalogAttempted = false;
             // Cancellation is navigation, not evidence of a failing provider.
             categoryRetryAfter = Thread.currentThread().isInterrupted() ? 0L
                     : android.os.SystemClock.elapsedRealtime() + 60_000L;
-        } else if (!loaded && onlyHavenCreators.isEmpty()) onlyHavenCatalogAttempted = false;
+        } else if (onlyHavenCreators.isEmpty()) onlyHavenCatalogAttempted = false;
         refillOnlyHavenDeck();
     }
 
@@ -635,10 +596,10 @@ final class ChaosSourceMixer {
         });
     }
 
-    private void addRequest(Context context,
+    private boolean addRequest(Context context,
                             LinkedHashMap<String, NativeContentItem> combined,
                             SourceRequest request) {
-        if (request == null) return;
+        if (request == null) return false;
         try {
             ArrayList<NativeContentItem> candidates = new ArrayList<>();
             for (NativeContentItem item : ShitTokPoolDiagnostics.fetched(BATCH_REGULAR, repository.fetchFeed(context, request.url, request.page))) {
@@ -652,7 +613,9 @@ final class ChaosSourceMixer {
                 NativeContentItem item = candidates.get(i);
                 combined.putIfAbsent(item.url, item);
             }
+            return true;
         } catch (Exception ignored) {
+            return false;
         }
     }
 

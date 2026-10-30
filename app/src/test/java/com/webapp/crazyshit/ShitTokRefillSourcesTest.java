@@ -1,8 +1,10 @@
 package com.webapp.crazyshit;
 
+import android.app.Activity;
 import android.app.Application;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.robolectric.Robolectric;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.RuntimeEnvironment;
 import org.robolectric.annotation.Config;
@@ -35,6 +37,36 @@ public class ShitTokRefillSourcesTest {
             assertEquals(0, mixer.activeFetches());
         } finally { release.countDown(); }
     }
+
+    @Test public void shittokRecoveryDoesNotStartEfuktOrXMegaDrive() throws Exception {
+        Set<Integer> requested = ConcurrentHashMap.newKeySet();
+        CountDownLatch expected = new CountDownLatch(4);
+        ChaosSourceMixer mixer = new ChaosSourceMixer(new CrazyShitRepository(), new Random(9), source -> {
+            requested.add(source);
+            expected.countDown();
+            return Collections.emptyList();
+        });
+
+        mixer.recoverSources(RuntimeEnvironment.getApplication());
+
+        assertTrue(expected.await(2, TimeUnit.SECONDS));
+        assertFalse(requested.contains(2));
+        assertFalse(requested.contains(8));
+        ShitTokSourcePool pool = ReflectionHelpers.getField(mixer, "sourcePool");
+        assertEquals(ShitTokSourcePool.Health.FILTERED, pool.health(2));
+        assertEquals(ShitTokSourcePool.Health.FILTERED, pool.health(8));
+    }
+
+    @Test public void shitShowResolverCanReuseLiveHostFromApplicationContext() {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        ShitShowPlayableResolver.rememberHost(activity);
+
+        assertSame(activity, ShitShowPlayableResolver.hostActivity(RuntimeEnvironment.getApplication()));
+
+        activity.finish();
+        assertNull(ShitShowPlayableResolver.hostActivity(RuntimeEnvironment.getApplication()));
+    }
+
     @Test public void postStarterPageDeckWorksWithoutFirstFrameAndDoesNotResetOnRefresh() {
         ChaosSourceMixer mixer = new ChaosSourceMixer(new CrazyShitRepository(), new Random(7));
         Set<Integer> firstCycle = new HashSet<>();

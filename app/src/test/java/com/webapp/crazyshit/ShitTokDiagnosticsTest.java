@@ -34,6 +34,21 @@ public class ShitTokDiagnosticsTest {
             assertFalse(copied.contains("secret"));
         }
     }
+    @Test public void admissionSummaryGroupsTerminalOutcomesBySourceWithoutUrls() {
+        ShitTokPoolDiagnostics.resetAdmissionOutcomes();
+        NativeContentItem efukt = new NativeContentItem(NativeContentItem.KIND_MEDIA, "clip",
+                "https://private.test/efukt/1", "", "", "eFukt", "");
+        NativeContentItem baddie = new NativeContentItem(NativeContentItem.KIND_MEDIA, "clip",
+                "https://private.test/baddie/1", "", "", "BaddieHub", "");
+        ShitTokPoolDiagnostics.admissionOutcome(efukt, "unplayable");
+        ShitTokPoolDiagnostics.admissionOutcome(efukt, "accepted");
+        ShitTokPoolDiagnostics.admissionOutcome(baddie, "orientation");
+        String report = ShitTokPoolDiagnostics.userReport();
+        assertTrue(report.contains("Admission outcomes by source:"));
+        assertTrue(report.contains("efukt{unplayable=1}"));
+        assertTrue(report.contains("baddiehub{orientation=1}"));
+        assertFalse(report.contains("private.test"));
+    }
     @Test public void openingSettingsRetainsLastActiveFeedSnapshot() {
         try (ShitTokContinuityTest.Fixture f = new ShitTokContinuityTest.Fixture()) {
             f.feed.onHostPause();

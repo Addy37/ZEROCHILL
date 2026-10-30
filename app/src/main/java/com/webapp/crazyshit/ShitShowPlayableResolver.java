@@ -2,6 +2,7 @@ package com.webapp.crazyshit;
 
 import android.app.Activity;
 import android.content.Context;
+import android.content.ContextWrapper;
 import android.net.Uri;
 import android.os.Handler;
 import android.os.Looper;
@@ -17,6 +18,7 @@ import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.FrameLayout;
 
+import java.lang.ref.WeakReference;
 import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Map;
@@ -38,8 +40,29 @@ final class ShitShowPlayableResolver {
     private static final int MAX_HEADER_CACHE = 96;
     private static final Object HEADER_LOCK = new Object();
     private static final LinkedHashMap<String, Map<String, String>> HEADER_CACHE = new LinkedHashMap<>();
+    private static volatile WeakReference<Activity> hostActivityRef = new WeakReference<>(null);
 
     private ShitShowPlayableResolver() {
+    }
+
+    static void rememberHost(Activity activity) {
+        if (valid(activity) != null) hostActivityRef = new WeakReference<>(activity);
+    }
+
+    static Activity hostActivity(Context context) {
+        Context current = context;
+        while (current instanceof ContextWrapper) {
+            if (current instanceof Activity) return valid((Activity) current);
+            Context next = ((ContextWrapper) current).getBaseContext();
+            if (next == current) break;
+            current = next;
+        }
+        if (current instanceof Activity) return valid((Activity) current);
+        return valid(hostActivityRef.get());
+    }
+
+    private static Activity valid(Activity activity) {
+        return activity == null || activity.isFinishing() || activity.isDestroyed() ? null : activity;
     }
 
     static Map<String, String> playbackHeaders(String mediaUrl) {
@@ -51,11 +74,11 @@ final class ShitShowPlayableResolver {
     }
 
     static CrazyShitRepository.StreamInfo resolve(Context context, String pageUrl) {
-        if (!(context instanceof Activity) || !isStoryUrl(pageUrl)) return null;
+        if (!isStoryUrl(pageUrl)) return null;
         if (Looper.myLooper() == Looper.getMainLooper()) return null;
 
-        Activity activity = (Activity) context;
-        if (activity.isFinishing() || activity.isDestroyed()) return null;
+        Activity activity = hostActivity(context);
+        if (activity == null) return null;
 
         CountDownLatch done = new CountDownLatch(1);
         AtomicReference<String> domMedia = new AtomicReference<>("");

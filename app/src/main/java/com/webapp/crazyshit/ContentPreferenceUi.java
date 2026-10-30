@@ -209,7 +209,7 @@ final class ContentPreferenceUi {
             icon.setShadowLayer(dp(context, 6), 0, 0, 0x600892D0);
             notice.addView(icon);
         }
-        TextView title = label(context, mode.label + (shittok && mode != ContentPreference.ALL ? " · prioritized" : ""), 14, Color.WHITE);
+        TextView title = label(context, mode.label + (shittok && mode != ContentPreference.ALL ? " only" : ""), 14, Color.WHITE);
         title.setTypeface(null, android.graphics.Typeface.BOLD);
         title.setMaxLines(2);
         if (shittok) title.setMaxWidth(Math.max(dp(context, 100),
@@ -224,7 +224,7 @@ final class ContentPreferenceUi {
         surface.addView(notice, placement);
         notice.start(glass, sheen);
         notice.announceForAccessibility(mode.label + (shittok && mode != ContentPreference.ALL
-                ? ". Matching OnlyFap content will be prioritized" : ""));
+                ? ". Only verified matching content is eligible" : ""));
     }
 
     /** One finite glass bloom, with no full-screen scrim or touch interception. */
