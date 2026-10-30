@@ -233,7 +233,7 @@ public class ContentPreferenceTest {
         assertFalse(notice.isClickable());
         assertEquals(android.view.ViewGroup.LayoutParams.WRAP_CONTENT, notice.getLayoutParams().width);
         assertEquals(android.view.ViewGroup.LayoutParams.WRAP_CONTENT, notice.getLayoutParams().height);
-        assertNotNull(findText(notice, "Groups · prioritized"));
+        assertNotNull(findText(notice, "Groups only"));
         org.robolectric.shadows.ShadowLooper.idleMainLooper(650, java.util.concurrent.TimeUnit.MILLISECONDS);
         assertNull(surface.findViewWithTag("content_preference_presentation"));
         ContentPreferenceUi.present(surface, true);

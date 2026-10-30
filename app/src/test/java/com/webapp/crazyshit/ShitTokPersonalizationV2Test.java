@@ -43,7 +43,7 @@ public class ShitTokPersonalizationV2Test {
     @Test public void pausedTimeDoesNotEarnWatchReward() {
         selectAndPlay(); ShitTokSmartRanker.playbackAt(alice.url, false, 2_000);
         ShitTokSmartRanker.leaveAt(900_000, WALL);
-        assertTrue(ShitTokSmartRanker.localScoreAt(alice, WALL) <= 0f);
+        assertEquals(0f, ShitTokSmartRanker.localScoreAt(alice, WALL), .001f);
     }
     @Test public void favoriteStrongPositiveIsBoundedAndRecentSignalOutweighsStale() {
         ShitTokSmartRanker.actionAt(alice, ShitTokSmartRanker.Action.FAVORITE, WALL);

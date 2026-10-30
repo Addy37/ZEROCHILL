@@ -87,7 +87,8 @@ final class ShitTokSmartRanker {
         accountPlayback(elapsed);
         Feature feature = FEATURES.get(activeUrl);
         // Buffering, failed streams and paused/background time are never disinterest.
-        if (hasPlayed && !failed && !completed && watchedMs > 0 && watchedMs <= FAST_SKIP_MS)
+        if (hasPlayed && !failed && !completed && watchedMs > 0 && watchedMs <= FAST_SKIP_MS
+                && elapsed - activeSinceElapsed <= FAST_SKIP_MS + 500L)
             recordSkipLocked(feature, wall);
         else if (!completed && watchedMs >= 8_000L) reward(feature, WATCH_REWARD, wall);
         playedSince = watchedMs = 0;
@@ -114,7 +115,7 @@ final class ShitTokSmartRanker {
         actionAt(item, action, System.currentTimeMillis());
     }
     static synchronized void actionAt(NativeContentItem item, Action action, long wall) {
-        if (item == null) return;
+        if (item == null || clean(item.url).isEmpty()) return;
         register(item);
         String key = item.url + "|" + action;
         if (!actions.add(key)) return;
@@ -133,6 +134,7 @@ final class ShitTokSmartRanker {
         return feature.rewardKey;
     }
     static synchronized float localScoreAt(NativeContentItem item, long wall) {
+        if (item == null || clean(item.url).isEmpty()) return 0f;
         register(item);
         Feature feature = FEATURES.get(item.url);
         return Math.min(4f, decayed(SOURCE_REWARDS.get(feature.source), wall) * .55f
@@ -179,7 +181,7 @@ final class ShitTokSmartRanker {
     }
 
     static synchronized float score(NativeContentItem item) {
-        if (item == null) return 0f;
+        if (item == null || clean(item.url).isEmpty()) return 0f;
         ShitTokCommunityPopularity.refreshAsync();
         register(item);
         String key = FEATURES.get(item.url).contentKey;
@@ -187,7 +189,7 @@ final class ShitTokSmartRanker {
     }
 
     static synchronized float penalty(NativeContentItem item) {
-        if (item == null) return 0f;
+        if (item == null || clean(item.url).isEmpty()) return 0f;
         register(item);
         return penaltyLocked(FEATURES.get(item.url), System.currentTimeMillis());
     }

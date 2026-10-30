@@ -32,16 +32,20 @@ verification -> local score + source opportunity + exploration -> ready runway.
 `ShitTokSourcePool` owns at most one acquisition per source and 12 raw candidates
 per source (eight providers, at most 96 raw entries). A refill ending never cancels
 these requests. Completed slow sources remain available for a later refill. Existing
-provider request timeouts remain unchanged. Session health distinguishes idle,
+provider request timeouts remain unchanged. Multi-request source loaders preserve
+partial success and distinguish total failure from a legitimate empty response;
+empty catalogs can retry rather than becoming permanent session exclusions. Session health distinguishes idle,
 fetching, slow (>5.5 seconds), ready, empty, failed, config-unavailable, user-filtered,
-and ready-but-starved sources. Diagnostics expose health and buffered counts.
+and ready-but-starved sources. Diagnostics expose health, buffered counts, successful playable verification and
+actual queue contributions separately; raw arrival is not treated as playback success.
 
 Failure backoff starts at five seconds; legitimate empty backoff starts at 15 seconds.
 Both double to a two-minute ceiling. Cancellation is not failure. No source is declared
 dead. While the feed is active, a two-second main-loop tick only schedules bounded
 work: recovery acquisition requires existing playback permission; filtered acquisition
 can start without a first frame. Buffered sources do not refetch until consumed.
-Paused/hidden/closed/search-covered sessions do not start recovery. Lifecycle/mode
+Paused/hidden/closed/search-covered sessions do not start recovery. Existing
+reservoirs reuse their candidates without launching another provider race. Lifecycle/mode
 cancellation invalidates source generations and stops the ShitShow WebView. A socket
 that ignores interruption remains single-flight until it really exits.
 
@@ -70,6 +74,8 @@ accounts on that device, matching the existing local skip-profile behavior.
 
 Only selected-player `isPlaying` intervals count toward watch time. Buffering,
 paused/background time, stream failure and no-playback selections do not teach skips.
+A fast skip must also leave promptly in elapsed time, so a buffering wait is not
+misclassified as disinterest.
 On leaving a successfully played clip, <=2.5 seconds produces the existing negative
 source/creator signal; >=8 seconds produces a 1.2 reward. A completion with actual
 watching >=min(8 seconds, 80% of duration), at least one second, earns 1.8. A measured
@@ -80,7 +86,8 @@ All signals have a seven-day half-life and fixed caps. The positive score caps a
 negative score caps at six. Constants are centralized in the ranker for tuning.
 
 Reads/scoring use memory. Existing lifecycle/seen-store flushes serialize snapshots
-on the existing single disk executor. Corrupt/non-finite rows are ignored. Existing
+on one disk worker with at most one pending snapshot (newer snapshots supersede
+older queued writes). Corrupt/non-finite rows are ignored. Existing
 favorites, history, downloads, settings, backup formats, application IDs and signing
 are unchanged. There is no cloud recommendation requirement or new dependency.
 Existing optional anonymous community popularity remains a cached background input;

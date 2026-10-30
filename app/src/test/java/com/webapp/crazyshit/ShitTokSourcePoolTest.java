@@ -38,7 +38,10 @@ public class ShitTokSourcePoolTest {
         assertEquals("fast1", pool.take(1).get(0).title);
         clock.set(5_000); pool.request(8, true, true, loader);
         awaitHealth(8, ShitTokSourcePool.Health.READY);
-        assertEquals("recovered1", pool.take(1).get(0).title);
+        NativeContentItem recovered = pool.take(1).get(0);
+        assertEquals("recovered1", recovered.title);
+        pool.verified(recovered.url); pool.contributed(recovered.url);
+        assertTrue(pool.summary().contains("verified=1,queued=1"));
     }
     @Test public void emptyHasBoundedBackoffAndUnavailableAndFilteredDoNotFetch() throws Exception {
         AtomicInteger calls = new AtomicInteger();
@@ -81,6 +84,14 @@ public class ShitTokSourcePoolTest {
         io.submit(() -> {}).get(2, TimeUnit.SECONDS);
         List<NativeContentItem> result = pool.take(24);
         assertEquals(1, result.size()); assertEquals("new1", result.get(0).title);
+    }
+    @Test public void malformedAndDuplicateCandidatesDoNotPoisonHealthyPool() throws Exception {
+        NativeContentItem valid = clip("valid", 1);
+        pool.request(1, true, true, () -> Arrays.asList(null,
+                new NativeContentItem("media", "missing url", "", "", "", "", ""), valid, valid));
+        awaitHealth(1, ShitTokSourcePool.Health.READY);
+        assertEquals(Collections.singletonList(valid), pool.take(12));
+        assertEquals(0f, ShitTokSmartRanker.score(new NativeContentItem("media", "missing", "", "", "", "", "")), 0f);
     }
     @Test public void repeatedFastRefillCannotStarveReadyPeersAndStorageIsBounded() throws Exception {
         for (int source = 1; source <= 8; source++) {

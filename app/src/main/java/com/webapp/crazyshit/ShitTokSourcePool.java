@@ -12,6 +12,9 @@ final class ShitTokSourcePool {
     private final ExecutorService executor;
     private final LongSupplier clock;
     private long generation, turn;
+    private final java.util.concurrent.ConcurrentHashMap<String, Slot> provenance = new java.util.concurrent.ConcurrentHashMap<>();
+    private final ArrayDeque<String> provenanceOrder = new ArrayDeque<>();
+    private final java.util.concurrent.atomic.AtomicLong feedTurn = new java.util.concurrent.atomic.AtomicLong();
     private static final class Slot {
         final ArrayList<NativeContentItem> ready = new ArrayList<>();
         Future<?> work;
@@ -19,6 +22,9 @@ final class ShitTokSourcePool {
         long retryAt, started, delivered;
         int failures;
         boolean running, entered, eligible = true;
+        final java.util.concurrent.atomic.AtomicLong verified = new java.util.concurrent.atomic.AtomicLong();
+        final java.util.concurrent.atomic.AtomicLong contributed = new java.util.concurrent.atomic.AtomicLong();
+        volatile long lastContribution;
     }
     ShitTokSourcePool(ExecutorService executor, LongSupplier clock) {
         this.executor = executor; this.clock = clock;
@@ -54,8 +60,11 @@ final class ShitTokSourcePool {
                 if (token != generation || !slot.eligible || Thread.currentThread().isInterrupted()) return null;
                 Set<String> urls = new HashSet<>();
                 if (loaded != null) for (NativeContentItem item : loaded) {
-                    if (item != null && item.isVideo() && urls.add(item.url) && slot.ready.size() < PER_SOURCE)
+                    if (item != null && item.isVideo() && !item.url.trim().isEmpty() && urls.add(item.url) && slot.ready.size() < PER_SOURCE) {
                         slot.ready.add(item);
+                        if (provenance.put(item.url, slot) == null) provenanceOrder.addLast(item.url);
+                        while (provenanceOrder.size() > 4096) provenance.remove(provenanceOrder.removeFirst());
+                    }
                 }
                 if (!slot.ready.isEmpty()) {
                     slot.health = Health.READY; slot.failures = 0; slot.retryAt = 0;
@@ -104,6 +113,15 @@ final class ShitTokSourcePool {
         }
         return result;
     }
+    void verified(String url) {
+        Slot slot = provenance.get(url);
+        if (slot != null) slot.verified.incrementAndGet();
+    }
+    void contributed(String url) {
+        Slot slot = provenance.get(url);
+        long position = feedTurn.incrementAndGet();
+        if (slot != null) { slot.contributed.incrementAndGet(); slot.lastContribution = position; }
+    }
     synchronized boolean hasReady(int source) {
         Slot slot = slots.get(source);
         return slot != null && !slot.ready.isEmpty();
@@ -117,17 +135,24 @@ final class ShitTokSourcePool {
     synchronized Health health(int source) {
         Slot slot = slots.get(source);
         if (slot == null) return Health.IDLE;
+        if (!slot.eligible) return slot.health;
         if (slot.running && clock.getAsLong() - slot.started > 5_500L) return Health.SLOW;
-        if (!slot.ready.isEmpty() && turn - slot.delivered >= 8) return Health.STARVED;
+        if (!slot.ready.isEmpty() && (turn - slot.delivered >= 8
+                || (slot.verified.get() > 0 && feedTurn.get() - slot.lastContribution >= 8))) return Health.STARVED;
         return slot.health;
     }
     synchronized String summary() {
         Map<Integer, String> result = new LinkedHashMap<>();
-        for (Integer source : slots.keySet()) result.put(source, health(source) + ":" + slots.get(source).ready.size());
+        for (Integer source : slots.keySet()) {
+            Slot slot = slots.get(source);
+            result.put(source, health(source) + ":" + slot.ready.size()
+                    + ",verified=" + slot.verified.get() + ",queued=" + slot.contributed.get());
+        }
         return result.toString();
     }
     synchronized void stop() {
         generation++;
+        provenance.clear(); provenanceOrder.clear();
         for (Slot slot : slots.values()) {
             if (slot.work != null) slot.work.cancel(true);
             slot.ready.clear();

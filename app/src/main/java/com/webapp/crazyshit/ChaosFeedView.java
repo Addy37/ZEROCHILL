@@ -990,7 +990,16 @@ public final class ChaosFeedView extends FrameLayout {
     final boolean preferenceBatch = queuePreference != ContentPreference.ALL
             && (sourceMixer.hasPreference(queuePreference) || !orientationPending.isEmpty() || orientationAdmission.hasPending())
             && upcomingPreferenceCount() < desiredRunway();
-    if (queuePreference != ContentPreference.ALL && !preferenceBatch) return;
+    if (queuePreference != ContentPreference.ALL && !preferenceBatch) {
+        ShitTokSourcePool.Health health = sourceMixer.preferenceHealth();
+        if (items.isEmpty() && (health == ShitTokSourcePool.Health.EMPTY
+                || health == ShitTokSourcePool.Health.FAILED || health == ShitTokSourcePool.Health.UNAVAILABLE)) {
+            initialProgress.setVisibility(View.GONE);
+            empty.setText("No verified " + queuePreference.label + " clips ready yet. Retrying…");
+            empty.setVisibility(View.VISIBLE);
+        }
+        return;
+    }
     // Source production, resolution and portrait inspection are background work. Do not hold
     // the startup handoff behind the first draw/post queue; UI application still waits for idle.
     if (closed || !active || !hostResumed || poolLoading || !sourceRequestsEnabled || !hasReservoirRoom(items.size(), selectedPosition)) return;
@@ -1088,10 +1097,13 @@ public final class ChaosFeedView extends FrameLayout {
             Trace.beginSection("zc.shittok.batch_fetch");
             try {
                 if (batchPreference == ContentPreference.ALL) {
-                    offer.accept(sourceMixer.takeReadyCandidates());
+                    List<NativeContentItem> recovered = sourceMixer.takeReadyCandidates();
+                    offer.accept(recovered);
                     offer.accept(pendingCandidates);
-                    List<NativeContentItem> mixed = sourceMixer.loadRandomBatch(activity, protectedRefill, offer);
-                    offer.accept(mixed); // Include the final source mix; URL dedup keeps partial results singular.
+                    if (recovered.isEmpty() && pendingCandidates.isEmpty()) {
+                        List<NativeContentItem> mixed = sourceMixer.loadRandomBatch(activity, protectedRefill, offer);
+                        offer.accept(mixed); // URL dedup keeps partial results singular.
+                    }
                 } else offer.accept(pendingCandidates);
             } finally {
                 productionDone.set(true);
@@ -1132,7 +1144,8 @@ public final class ChaosFeedView extends FrameLayout {
                     }
                 }, () -> !work.cancelled && batchGeneration == feedGeneration && mayVerifyOrientation(),
                 () -> Math.min(MAX_QUEUED_AHEAD, admissionLimit + Math.max(0, selectedPosition - batchPosition)
-                        + Math.max(0, desiredRunway() - batchTarget)), partial ->
+                        + Math.max(0, desiredRunway() - batchTarget)), partial -> {
+                    if (!work.cancelled && batchGeneration == feedGeneration) sourceMixer.verifiedCandidates(partial.items);
                     activity.runOnUiThread(() -> deferUiApply(() -> timedAdmissionApply("partial", () -> {
                         if (closed || work.cancelled || inventoryBatch != work || batchGeneration != feedGeneration) return;
                         if (!preferenceBatch && !items.isEmpty()
@@ -1159,7 +1172,8 @@ public final class ChaosFeedView extends FrameLayout {
                         if (active && hostResumed) playSelected();
                         tryPendingAutoAdvance();
                         requestContinuity();
-                    }))), count -> {
+                    })));
+                }, count -> {
                     if (inventoryBatch == work) { activeAdmissions = count; inventoryCandidateCount = candidates.size(); }
                 });
         ArrayList<NativeContentItem> leftovers = new ArrayList<>(verified.remaining);
@@ -1518,6 +1532,7 @@ public final class ChaosFeedView extends FrameLayout {
             if (sessionIdentities.contains(identity) || (!mediaIdentity.isEmpty() && sessionIdentities.contains(mediaIdentity))) continue;
             if (!acceptUnique(item, hiddenUrls, sessionUrls)) continue;
             items.add(item);
+            sourceMixer.contributed(item);
             sessionIdentities.add(identity);
             if (!mediaIdentity.isEmpty()) sessionIdentities.add(mediaIdentity);
             while (sessionIdentities.size() > 32768) sessionIdentities.remove(sessionIdentities.iterator().next());

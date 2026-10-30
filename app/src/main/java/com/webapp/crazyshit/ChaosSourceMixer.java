@@ -82,6 +82,10 @@ final class ChaosSourceMixer {
     private long categoryRetryAfter;
     private final Set<String> preferenceMatches = java.util.concurrent.ConcurrentHashMap.newKeySet();
 
+    private final java.util.concurrent.ConcurrentLinkedDeque<String> preferenceMatchOrder = new java.util.concurrent.ConcurrentLinkedDeque<>();
+
+    ShitTokSourcePool.Health preferenceHealth() { return sourcePool.health(BATCH_ONLY_HAVEN); }
+
     boolean matchesPreference(NativeContentItem item, ContentPreference mode) {
         return mode != ContentPreference.ALL && ShitTokPreferenceMix.eligible(item, mode, preferenceMatches);
     }
@@ -117,6 +121,10 @@ final class ChaosSourceMixer {
     private final java.util.Map<String, ArrayDeque<Integer>> pageDecks = new java.util.HashMap<>();
     int activeFetches() { return activeFetches.get(); }
     String providerSummary() { return sourcePool.summary(); }
+    void verifiedCandidates(List<NativeContentItem> items) {
+        for (NativeContentItem item : items) sourcePool.verified(item.url);
+    }
+    void contributed(NativeContentItem item) { sourcePool.contributed(item.url); }
 
     // Page traversal is cheap post-starter work, independent of rendering/expensive catalog warmup.
     synchronized int nextPage(String source, int maximum) {
@@ -458,8 +466,13 @@ final class ChaosSourceMixer {
                 if (item.url == null || item.url.isEmpty()) continue;
                 combined.putIfAbsent(item.url, item);
                 if (mode != ContentPreference.ALL) {
-                    if (preferenceMatches.size() > 4096) preferenceMatches.clear();
-                    preferenceMatches.add(mode.value + "|" + item.url);
+                    String key = mode.value + "|" + item.url;
+                    if (preferenceMatches.add(key)) preferenceMatchOrder.addLast(key);
+                    while (preferenceMatches.size() > 4096) {
+                        String oldest = preferenceMatchOrder.pollFirst();
+                        if (oldest == null) break;
+                        preferenceMatches.remove(oldest);
+                    }
                 }
                 if (combined.size() >= batchLimit) break;
             }
