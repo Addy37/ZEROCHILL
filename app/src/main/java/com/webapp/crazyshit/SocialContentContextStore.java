@@ -143,6 +143,7 @@ final class SocialContentContextStore {
                     NativeContentItem.KIND_MEDIA, "Liked video", url, "", "", "", ""));
         }
         for (FavoriteStore.Item item : FavoriteStore.load(context)) {
+            if (item.content != null && item.content.isImage()) continue;
             String key = ZeroChillSocialRepository.contentKey(item.url);
             NativeContentItem base = item.content == null
                     ? OnlyFapVideoMetadata.basic(item.title, item.url, "") : item.content;

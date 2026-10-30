@@ -674,6 +674,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
     }
 
     void openLibraryVideo(NativeContentItem item) {
+        if (item != null && item.isImage()) { SavedGalleryMedia.open(activity, item); return; }
         if (OnlyFapVideoMetadata.applies(item)) openLibraryHistory(item);
         else openShowsVideo(item, false);
     }

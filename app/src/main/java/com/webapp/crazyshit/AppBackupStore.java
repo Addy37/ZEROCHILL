@@ -37,6 +37,7 @@ final class AppBackupStore {
 
     private static JSONObject watchLaterItem(FavoriteStore.Item item, NativeContentItem content) throws Exception {
         JSONObject json = new JSONObject().put("title", item.title).put("url", item.url).put("savedAt", item.savedAt);
+        json.put("mediaFavorite", item.mediaFavorite).put("watchLater", item.watchLater).put("galleryKey", item.galleryKey);
         if (content != null) json.put("content", ContentItemCodec.encode(content));
         return json;
     }
@@ -62,7 +63,13 @@ final class AppBackupStore {
             JSONObject incomingItem = watchLater.get(item.url);
             NativeContentItem imported = incomingItem == null ? null
                     : OnlyFapVideoMetadata.decode(incomingItem.optJSONObject("content"), item.url);
-            watchLater.put(item.url, watchLaterItem(item, OnlyFapVideoMetadata.merge(item.content, imported)));
+            JSONObject merged = watchLaterItem(item, OnlyFapVideoMetadata.merge(item.content, imported));
+            if (incomingItem != null) {
+                if (item.galleryKey.isEmpty()) merged.put("galleryKey", incomingItem.optString("galleryKey", ""));
+                merged.put("mediaFavorite", item.mediaFavorite || incomingItem.optBoolean("mediaFavorite", false));
+                merged.put("watchLater", item.watchLater || incomingItem.optBoolean("watchLater", !incomingItem.optBoolean("mediaFavorite", false)));
+            }
+            watchLater.put(item.url, merged);
         }
         if (favorites.size() > BackupDocument.MAX_ITEMS || watchLater.size() > BackupDocument.MAX_ITEMS)
             throw new IOException("The combined saved lists exceed the backup limit.");

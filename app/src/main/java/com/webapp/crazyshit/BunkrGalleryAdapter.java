@@ -41,6 +41,9 @@ import java.util.Map;
 
 /** Dense mixed-media grid used for Bunkr albums. */
 final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter.Holder> {
+    private static final Object PAYLOAD_FAVORITE = new Object();
+    private final java.util.Set<String> favoriteUrls = new java.util.HashSet<>();
+    private final java.util.LinkedHashMap<String, Integer> normalOrder = new java.util.LinkedHashMap<>();
     private static final Object PAYLOAD_OVERLAY_DENSITY = new Object();
     private static final String USER_AGENT =
             "Mozilla/5.0 (Linux; Android 16) AppleWebKit/537.36 " +
@@ -100,7 +103,10 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
 
     void replace(List<NativeContentItem> incoming, boolean preloadAhead) {
         items.clear();
+        normalOrder.clear();
         addUnique(incoming);
+        for (NativeContentItem item : items) normalOrder.put(item.url, normalOrder.size());
+        rememberAndSort();
         notifyDataSetChanged();
         if (preloadAhead) preloadRange(0, Math.min(items.size(), adaptiveAspectRatios ? 6 : 12));
     }
@@ -112,11 +118,81 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
     void append(List<NativeContentItem> incoming, boolean preloadAhead) {
         int start = items.size();
         addUnique(incoming);
+        if (incoming != null) for (NativeContentItem item : incoming)
+            if (item != null) normalOrder.putIfAbsent(item.url, normalOrder.size());
         int added = items.size() - start;
         if (added > 0) {
             notifyItemRangeInserted(start, added);
             if (preloadAhead) preloadRange(start, Math.min(items.size(), start + (adaptiveAspectRatios ? 6 : 12)));
         }
+        reorderFavorites();
+    }
+
+    void appendPinned(List<NativeContentItem> incoming) {
+        int start = items.size();
+        addUnique(incoming);
+        if (items.size() > start) notifyItemRangeInserted(start, items.size() - start);
+        reorderFavorites();
+    }
+
+    private void rememberAndSort() {
+        items.sort(java.util.Comparator.comparingInt((NativeContentItem item) -> favoriteUrls.contains(item.url) ? 0 : 1)
+                .thenComparingInt(item -> normalOrder.getOrDefault(item.url, Integer.MAX_VALUE)));
+    }
+
+    void setFavoriteUrls(java.util.Set<String> urls) {
+        if (favoriteUrls.equals(urls)) return;
+        java.util.Set<String> changed = new java.util.HashSet<>(favoriteUrls);
+        for (String url : urls) if (!changed.add(url)) changed.remove(url);
+        favoriteUrls.clear(); favoriteUrls.addAll(urls);
+        reorderFavorites(changed);
+        for (int i = 0; i < items.size(); i++) if (changed.contains(items.get(i).url))
+            notifyItemChanged(i, PAYLOAD_FAVORITE);
+    }
+
+    private void reorderFavorites() { reorderFavorites(java.util.Collections.emptySet()); }
+
+    private void reorderFavorites(java.util.Set<String> changed) {
+        ArrayList<NativeContentItem> before = snapshot();
+        rememberAndSort();
+        if (before.equals(items)) return;
+        RecyclerView list = previewViewport;
+        java.util.Map<String, android.graphics.PointF> locations = new HashMap<>();
+        String anchorUrl = ""; int anchorOffset = 0;
+        if (list != null) for (int i = 0; i < list.getChildCount(); i++) {
+            View child = list.getChildAt(i);
+            int position = list.getChildAdapterPosition(child);
+            if (position < 0 || position >= before.size()) continue;
+            String url = before.get(position).url;
+            locations.put(url, new android.graphics.PointF(child.getX(), child.getY()));
+            if (anchorUrl.isEmpty() && !changed.contains(url) && child.getBottom() > list.getPaddingTop()) {
+                anchorUrl = url; anchorOffset = child.getTop() - list.getPaddingTop();
+            }
+            child.animate().cancel(); child.setTranslationX(0f); child.setTranslationY(0f);
+        }
+        androidx.recyclerview.widget.DiffUtil.calculateDiff(new androidx.recyclerview.widget.DiffUtil.Callback() {
+            public int getOldListSize() { return before.size(); }
+            public int getNewListSize() { return items.size(); }
+            public boolean areItemsTheSame(int oldIndex, int newIndex) { return before.get(oldIndex).url.equals(items.get(newIndex).url); }
+            public boolean areContentsTheSame(int oldIndex, int newIndex) { return true; }
+        }).dispatchUpdatesTo(this);
+        if (list == null) return;
+        if (!anchorUrl.isEmpty() && list.getLayoutManager() instanceof androidx.recyclerview.widget.StaggeredGridLayoutManager)
+            ((androidx.recyclerview.widget.StaggeredGridLayoutManager) list.getLayoutManager())
+                    .scrollToPositionWithOffset(indexOfUrl(anchorUrl), anchorOffset);
+        androidx.core.view.OneShotPreDrawListener.add(list, () -> {
+            if (!android.animation.ValueAnimator.areAnimatorsEnabled()) return;
+            for (int i = 0; i < list.getChildCount(); i++) {
+                View child = list.getChildAt(i);
+                int position = list.getChildAdapterPosition(child);
+                if (position < 0 || position >= items.size()) continue;
+                android.graphics.PointF old = locations.get(items.get(position).url);
+                if (old == null) continue;
+                child.setTranslationX(old.x - child.getLeft()); child.setTranslationY(old.y - child.getTop());
+                child.animate().translationX(0).translationY(0).setDuration(240)
+                        .setInterpolator(new android.view.animation.PathInterpolator(.20f, 0f, .05f, 1f)).start();
+            }
+        });
     }
 
     void setHighlightedUrls(Collection<String> urls) {
@@ -139,6 +215,13 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
 
     ArrayList<NativeContentItem> snapshot() {
         return new ArrayList<>(items);
+    }
+
+    ArrayList<NativeContentItem> normalSnapshot() {
+        ArrayList<NativeContentItem> result = snapshot();
+        result.removeIf(item -> !normalOrder.containsKey(item.url));
+        result.sort(java.util.Comparator.comparingInt(item -> normalOrder.get(item.url)));
+        return result;
     }
 
     int indexOfUrl(String url) {
@@ -206,11 +289,12 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         int gap = dp(parent, 3);
         tile.setBackground(BrowseUi.rounded(parent.getContext(), BrowseUi.SURFACE, 10));
         tile.setClipToOutline(true);
+        tile.setHapticFeedbackEnabled(false);
         tileParams.setMargins(gap, gap, gap, gap);
         tile.setLayoutParams(tileParams);
 
         ImageView image = new ImageView(parent.getContext());
-        image.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        image.setScaleType(adaptiveAspectRatios ? ImageView.ScaleType.FIT_CENTER : ImageView.ScaleType.CENTER_CROP);
         image.setBackgroundColor(Color.rgb(20, 20, 23));
         tile.addView(image, new FrameLayout.LayoutParams(-1, -1));
 
@@ -275,6 +359,16 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         freshParams.setMargins(0, dp(parent, 6), dp(parent, 6), 0);
         tile.addView(fresh, freshParams);
 
+        ImageView favorite = new ImageView(parent.getContext());
+        favorite.setImageResource(R.drawable.ic_action_heart_filled);
+        favorite.setColorFilter(UiPalette.PRIMARY);
+        favorite.setBackground(BrowseUi.rounded(parent.getContext(), Color.argb(160, 0, 0, 0), 16));
+        favorite.setPadding(dp(parent, 5), dp(parent, 5), dp(parent, 5), dp(parent, 5));
+        favorite.setContentDescription("Favorited media");
+        FrameLayout.LayoutParams favoriteParams = new FrameLayout.LayoutParams(dp(parent, 28), dp(parent, 28), Gravity.TOP | Gravity.START);
+        favoriteParams.setMargins(dp(parent, 6), dp(parent, 6), 0, 0);
+        tile.addView(favorite, favoriteParams);
+
         FrameLayout play = new FrameLayout(parent.getContext());
         GradientDrawable playBackground = new GradientDrawable();
         playBackground.setCornerRadius(dp(parent, 8));
@@ -315,7 +409,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
                 fresh,
                 play,
                 morphPulse,
-                unavailable
+                unavailable, favorite
         );
     }
 
@@ -325,6 +419,11 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
             int position,
             @NonNull List<Object> payloads
     ) {
+        if (payloads.contains(PAYLOAD_FAVORITE)) {
+            holder.favorite.setVisibility(favoriteUrls.contains(items.get(position).url) ? View.VISIBLE : View.GONE);
+            if (payloads.contains(PAYLOAD_OVERLAY_DENSITY)) applyOverlayDensity(holder);
+            return;
+        }
         if (!payloads.isEmpty() && payloads.contains(PAYLOAD_OVERLAY_DENSITY)) {
             applyOverlayDensity(holder);
             return;
@@ -337,9 +436,10 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         holder.morphPulse.animate().cancel();
         holder.morphPulse.setAlpha(0f);
         NativeContentItem item = items.get(position);
+        holder.favorite.setVisibility(favoriteUrls.contains(item.url) ? View.VISIBLE : View.GONE);
         ViewCompat.setTransitionName(holder.image, GalleryMediaTransition.transitionName(item));
         holder.tile.setAspectRatio(adaptiveAspectRatios
-                ? aspectRatios.getOrDefault(item.url, 1f)
+                ? aspectRatios.getOrDefault(item.url, item.aspectRatioHint > 0f ? item.aspectRatioHint : 1f)
                 : 1f);
         holder.play.setVisibility(item.isVideo() ? View.VISIBLE : View.GONE);
         applyOverlayDensity(holder);
@@ -431,6 +531,16 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
                     .transition(ThumbnailFades.thumbnail());
             fallback = adaptiveAspectRatios ? fallback.dontTransform().override(384, 384)
                     : fallback.centerCrop().override(360, 360);
+            fallback = fallback.listener(new RequestListener<Drawable>() {
+                @Override public boolean onLoadFailed(GlideException error, Object model,
+                        Target<Drawable> target, boolean firstResource) { return false; }
+                @Override public boolean onResourceReady(Drawable resource, Object model,
+                        Target<Drawable> target, DataSource source, boolean firstResource) {
+                    if (adaptiveAspectRatios && binding == holder.bindGeneration)
+                        applyAspectRatio(holder, item, resource);
+                    return false;
+                }
+            });
             request = request.error(fallback);
         }
         request.into(holder.image);
@@ -572,6 +682,9 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         holder.fresh.setScaleX(scale);
         holder.fresh.setScaleY(scale);
 
+        holder.favorite.setPivotX(0f); holder.favorite.setPivotY(0f);
+        holder.favorite.setScaleX(scale); holder.favorite.setScaleY(scale);
+
         holder.play.setPivotX(dp(holder.play, 42));
         holder.play.setPivotY(dp(holder.play, 42));
         holder.play.setScaleX(scale);
@@ -600,9 +713,11 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
 
     private void addUnique(List<NativeContentItem> incoming) {
         if (incoming == null) return;
+        java.util.Set<String> existing = new java.util.HashSet<>();
+        for (NativeContentItem item : items) existing.add(item.url);
         for (NativeContentItem candidate : incoming) {
             if (candidate == null || candidate.url == null || candidate.url.isEmpty()) continue;
-            if (indexOfUrl(candidate.url) < 0) items.add(candidate);
+            if (existing.add(candidate.url)) items.add(candidate);
         }
     }
 
@@ -632,8 +747,9 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
     ) {
         if (resource == null || resource.getIntrinsicWidth() <= 0 ||
                 resource.getIntrinsicHeight() <= 0) return;
-        float ratio = (float) resource.getIntrinsicWidth() / resource.getIntrinsicHeight();
-        ratio = Math.max(0.56f, Math.min(1.78f, ratio));
+        float ratio = item.aspectRatioHint > 0f ? item.aspectRatioHint
+                : (float) resource.getIntrinsicWidth() / resource.getIntrinsicHeight();
+        if (!Float.isFinite(ratio) || ratio <= 0f) return;
         aspectRatios.put(item.url, ratio);
         int current = holder.getBindingAdapterPosition();
         if (current == RecyclerView.NO_POSITION || current >= items.size() ||
@@ -757,6 +873,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         final View play;
         final View morphPulse;
         final TextView unavailable;
+        final ImageView favorite;
 
         Holder(
                 AspectRatioFrameLayout itemView,
@@ -767,7 +884,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
                 ImageView fresh,
                 View play,
                 View morphPulse,
-                TextView unavailable
+                TextView unavailable, ImageView favorite
         ) {
             super(itemView);
             this.tile = itemView;
@@ -779,6 +896,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
             this.play = play;
             this.morphPulse = morphPulse;
             this.unavailable = unavailable;
+            this.favorite = favorite;
         }
     }
 
@@ -790,7 +908,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         }
 
         void setAspectRatio(float next) {
-            float safe = Math.max(0.56f, Math.min(1.78f, next));
+            float safe = Float.isFinite(next) && next > 0f ? next : 1f;
             if (Math.abs(aspectRatio - safe) < 0.01f) return;
             aspectRatio = safe;
             requestLayout();

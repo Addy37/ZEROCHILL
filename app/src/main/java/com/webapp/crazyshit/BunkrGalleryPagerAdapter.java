@@ -51,6 +51,8 @@ final class BunkrGalleryPagerAdapter
 
         void onMediaLongPress(int position, NativeContentItem item);
 
+        default void onDownloadTap(int position, NativeContentItem item) { onMediaLongPress(position, item); }
+
         void onResolvedImageFailed(int position, NativeContentItem item);
 
         default void onVideoBack() { }
@@ -510,26 +512,32 @@ final class BunkrGalleryPagerAdapter
 
         holder.itemView.setContentDescription(
                 (item.isVideo() ? "Video, " : "Photo, ") + item.title +
-                        ". Long press to download."
+                        ". Long press for media actions."
         );
         View.OnClickListener openItem = v -> {
             int current = holder.getBindingAdapterPosition();
             if (current == RecyclerView.NO_POSITION || current >= items.size()) return;
             listener.onMediaTap(current, items.get(current));
         };
-        View.OnLongClickListener downloadItem = v -> {
+        View.OnLongClickListener contextItem = v -> {
             int current = holder.getBindingAdapterPosition();
             if (current == RecyclerView.NO_POSITION || current >= items.size()) return false;
             listener.onMediaLongPress(current, items.get(current));
             return true;
         };
+        holder.itemView.setHapticFeedbackEnabled(false);
+        holder.image.setHapticFeedbackEnabled(false);
+        holder.playerView.setHapticFeedbackEnabled(false);
         holder.itemView.setOnClickListener(openItem);
-        holder.itemView.setOnLongClickListener(downloadItem);
+        holder.itemView.setOnLongClickListener(contextItem);
         // The preview sits above the page root, so give it the same actions for videos too.
         holder.image.setOnClickListener(openItem);
-        holder.image.setOnLongClickListener(downloadItem);
-        holder.playerView.setOnLongClickListener(downloadItem);
-        holder.playerView.findViewById(R.id.shows_download).setOnClickListener(v -> downloadItem.onLongClick(v));
+        holder.image.setOnLongClickListener(contextItem);
+        holder.playerView.setOnLongClickListener(contextItem);
+        holder.playerView.findViewById(R.id.shows_download).setOnClickListener(v -> {
+            int current = holder.getBindingAdapterPosition();
+            if (current != RecyclerView.NO_POSITION && current < items.size()) listener.onDownloadTap(current, items.get(current));
+        });
         ((TextView) holder.playerView.findViewById(R.id.player_title)).setText(
                 item.title + " · " + (position + 1) + " of " + items.size());
         holder.play.setOnClickListener(openItem);

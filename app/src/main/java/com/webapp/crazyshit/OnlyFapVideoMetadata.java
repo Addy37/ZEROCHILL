@@ -12,7 +12,8 @@ final class OnlyFapVideoMetadata {
     private OnlyFapVideoMetadata() { }
 
     static boolean applies(NativeContentItem item) {
-        return item != null && (FapelloRepository.isFapelloUrl(item.url)
+        return item != null && (WikiFeetRepository.isWikiFeetUrl(item.uploader)
+                || WikiFeetRepository.isWikiFeetUrl(item.url) || FapelloRepository.isFapelloUrl(item.url)
                 || OnlyHavenRepository.isOnlyHavenUrl(item.url)
                 || BunkrRepository.isBunkrUrl(item.url)
                 || item.description.toLowerCase(java.util.Locale.ROOT).contains("onlyfap")
@@ -23,7 +24,7 @@ final class OnlyFapVideoMetadata {
     static NativeContentItem decode(JSONObject object, String url) {
         if (object == null) return null;
         NativeContentItem item = ContentItemCodec.decode(object);
-        return url.equals(item.url) && NativeContentItem.KIND_MEDIA.equals(item.kind)
+        return url.equals(item.url) && (item.isVideo() || item.isImage())
                 && applies(item) ? item : null;
     }
 
@@ -87,11 +88,12 @@ final class OnlyFapVideoMetadata {
         for (NativeContentItem item : SocialContentContextStore.knownVideos(context,
                 ZeroChillSessionStore.currentUserId(context)).values()) add(items, item);
         for (NativeContentItem item : VideoDownloadStore.savedContent(context)) add(items, item);
+        for (FavoriteStore.Item item : FavoriteStore.load(context)) add(items, item.content);
         return items;
     }
 
     private static void add(Map<String, NativeContentItem> items, NativeContentItem item) {
-        if (applies(item) && NativeContentItem.KIND_MEDIA.equals(item.kind))
+        if (applies(item) && (item.isVideo() || item.isImage()))
             items.put(item.url, merge(item, items.get(item.url)));
     }
 
