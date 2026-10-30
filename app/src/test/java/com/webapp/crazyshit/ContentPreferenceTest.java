@@ -296,6 +296,38 @@ public class ContentPreferenceTest {
         feed.close();
     }
 
+    @Test public void preferenceSwitchRetainsCurrentPlayerObjectAndFocusState() {
+        try (ShitTokAudioOwnershipTest.Fixture fixture = new ShitTokAudioOwnershipTest.Fixture()) {
+            org.robolectric.util.ReflectionHelpers.setField(fixture.feed, "queuePreference", ContentPreference.ALL);
+            fixture.install(fixture.selected, fixture.selectedPlayer);
+            org.robolectric.util.ReflectionHelpers.setField(fixture.feed, "clearDisplay", true);
+            Object player = org.robolectric.util.ReflectionHelpers.getField(fixture.selected, "player");
+            ContentPreference.set(fixture.host.get(), ContentPreference.MEN);
+            org.robolectric.util.ReflectionHelpers.callInstanceMethod(fixture.feed, "applyContentPreference");
+            assertSame(player, org.robolectric.util.ReflectionHelpers.getField(fixture.selected, "player"));
+            assertTrue((boolean) org.robolectric.util.ReflectionHelpers.getField(fixture.feed, "clearDisplay"));
+            ArrayList<NativeContentItem> queue = org.robolectric.util.ReflectionHelpers.getField(fixture.feed, "items");
+            assertEquals(1, queue.size());
+        }
+    }
+
+    @Test public void switchingFromLaterPageRemovesIncompatibleHistoryWithoutChangingPlaybackGeneration() {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        ChaosFeedView feed = new ChaosFeedView(activity, item -> {}, false);
+        org.robolectric.util.ReflectionHelpers.setField(feed, "queuePreference", ContentPreference.ALL);
+        org.robolectric.util.ReflectionHelpers.setField(feed, "feedGeneration", 9);
+        ArrayList<NativeContentItem> items = org.robolectric.util.ReflectionHelpers.getField(feed, "items");
+        NativeContentItem current = clip("playing");
+        items.addAll(Arrays.asList(clip("past0"), clip("past1"), current, clip("prepared")));
+        org.robolectric.util.ReflectionHelpers.setField(feed, "selectedPosition", 2);
+        ContentPreference.set(activity, ContentPreference.WOMEN);
+        org.robolectric.util.ReflectionHelpers.callInstanceMethod(feed, "applyContentPreference");
+        assertEquals(Arrays.asList(current), items);
+        assertEquals(0, (int) org.robolectric.util.ReflectionHelpers.getField(feed, "selectedPosition"));
+        assertEquals(9, (int) org.robolectric.util.ReflectionHelpers.getField(feed, "feedGeneration"));
+        feed.close();
+    }
+
     @Test public void latePreferenceAdmissionFiltersStaleTailAndPreservesExclusions() {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
         ContentPreference.set(activity, ContentPreference.MEN);

@@ -30,7 +30,10 @@ final class ShitTokSmartRanker {
     private static final String PREFS = "shittok_smart_ranker_v1";
     private static final String KEY_SOURCES = "fast_skip_sources";
     private static final String KEY_CREATORS = "fast_skip_creators";
-    private static final ExecutorService DISK = Executors.newSingleThreadExecutor();
+    private static final ExecutorService DISK = new java.util.concurrent.ThreadPoolExecutor(
+            1, 1, 0L, java.util.concurrent.TimeUnit.MILLISECONDS,
+            new java.util.concurrent.ArrayBlockingQueue<>(1),
+            new java.util.concurrent.ThreadPoolExecutor.DiscardOldestPolicy());
 
     private static Context app;
     private static SharedPreferences prefs;

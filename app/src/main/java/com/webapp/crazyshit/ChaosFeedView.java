@@ -641,6 +641,7 @@ public final class ChaosFeedView extends FrameLayout {
 
     private void settleSelectedPage() {
         if (closed || !active || !hostResumed || isPaging()) return;
+        pruneIncompatibleHistory();
         reconcilePlaybackWindow();
         pauseNonSelected(selectedPosition);
         syncLoadingIndicators();
@@ -902,6 +903,7 @@ public final class ChaosFeedView extends FrameLayout {
     };
 
     private void applyContentPreference() {
+        if (closed) return;
         ContentPreference current = ContentPreference.get(activity);
         if (queuePreference == null) { queuePreference = current; return; }
         if (queuePreference == current) return;
@@ -928,9 +930,31 @@ public final class ChaosFeedView extends FrameLayout {
         }
         items.subList(first, items.size()).clear();
         if (removed > 0) adapter.notifyItemRangeRemoved(first, removed);
+        pruneIncompatibleHistory();
         refillDeferred = true;
         continuityWorkNeeded = true;
         post(this::loadMorePool);
+    }
+
+    private void pruneIncompatibleHistory() {
+        ContentPreference mode = ContentPreference.get(activity);
+        if (mode == ContentPreference.ALL || isPaging()) return;
+        ArrayList<Integer> removed = new ArrayList<>();
+        for (int i = selectedPosition - 1; i >= 0; i--) {
+            NativeContentItem item = items.get(i);
+            if (eligiblePreference(item, mode)) continue;
+            releaseFutureHolder(item.url);
+            streamCache.remove(item.url);
+            items.remove(i);
+            selectedPosition--;
+            removed.add(i);
+        }
+        if (removed.isEmpty()) return;
+        // Targeted removals retain the current holder/URL lease while shifting its position.
+        syncHolderPositionsAfterQueuePrune();
+        for (int index : removed) adapter.notifyItemRemoved(index);
+        pager.setCurrentItem(selectedPosition, false);
+        plannedPosition = -1;
     }
 
     private void releaseFutureHolder(String url) {

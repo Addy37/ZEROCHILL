@@ -47,6 +47,7 @@ final class ShitShowTapSource {
     private volatile boolean playbackProtected;
     private volatile WebView webView;
     private long harvestStartedAt;
+    private volatile boolean harvestFailed;
 
     void prewarm(Context context) {
         if (!playbackProtected && cachedCount() < 8) warm(context);
@@ -88,6 +89,7 @@ final class ShitShowTapSource {
                 while (requested-- > 0 && !ready.isEmpty()) result.add(ready.removeFirst());
             }
         }
+        if (result.isEmpty() && harvestFailed) throw new IllegalStateException("ShitShow page failed");
         return result;
     }
 
@@ -136,6 +138,7 @@ final class ShitShowTapSource {
 
         destroyWebView();
         harvestStartedAt = System.currentTimeMillis();
+        harvestFailed = false;
 
         WebView view = new WebView(activity);
         webView = view;
@@ -174,6 +177,18 @@ final class ShitShowTapSource {
 
         view.addJavascriptInterface(new Bridge(generation), "CSShitBridge");
         view.setWebViewClient(new WebViewClient() {
+            @Override public void onReceivedError(WebView web, WebResourceRequest request,
+                    android.webkit.WebResourceError error) {
+                if (web == webView && request != null && request.isForMainFrame()) {
+                    harvestFailed = true; finishHarvest(web);
+                }
+            }
+            @Override public void onReceivedHttpError(WebView web, WebResourceRequest request,
+                    android.webkit.WebResourceResponse response) {
+                if (web == webView && request != null && request.isForMainFrame()) {
+                    harvestFailed = true; finishHarvest(web);
+                }
+            }
             @Override
             public boolean shouldOverrideUrlLoading(WebView web, WebResourceRequest request) {
                 if (request == null || request.getUrl() == null || !request.isForMainFrame()) return false;

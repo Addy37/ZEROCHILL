@@ -95,7 +95,7 @@ final class ChaosSourceMixer {
         if (mode == ContentPreference.ALL) return;
         sourcePool.filterExcept(BATCH_ONLY_HAVEN);
         SourceConfig config = RemoteSourceConfigManager.snapshotOrNull();
-        boolean enabled = config == null || !config.sourceKillSwitchesEnabled || config.onlyHaven.enabled;
+        boolean enabled = config == null || config.onlyHaven.enabled;
         Context app = context.getApplicationContext();
         sourcePool.request(BATCH_ONLY_HAVEN, true, enabled,
                 () -> source(BATCH_ONLY_HAVEN, () -> loadOnlyHavenBatch(app, mode)), available);
@@ -209,6 +209,7 @@ final class ChaosSourceMixer {
 
     void recoverSources(Context context) {
         if (ContentPreference.get(context) != ContentPreference.ALL) return;
+        requestPreference(context, () -> {});
         SourceConfig config = RemoteSourceConfigManager.snapshotOrNull();
         boolean switches = config != null && config.sourceKillSwitchesEnabled;
         sourcePool.request(BATCH_KAOTIC, true, config == null || config.kaotic.enabled, () -> source(BATCH_KAOTIC, () -> loadKaoticBatch(context)));
@@ -219,7 +220,7 @@ final class ChaosSourceMixer {
         sourcePool.request(BATCH_EFUKT, true, true, () -> source(BATCH_EFUKT,
                 () -> explorationAllowed ? loadEfuktBatch(context) : efukt.fetchLatest(context)));
         if (explorationAllowed) {
-            sourcePool.request(BATCH_ONLY_HAVEN, true, !switches || config.onlyHaven.enabled, () -> source(BATCH_ONLY_HAVEN, () -> loadOnlyHavenBatch(context)));
+            sourcePool.request(BATCH_ONLY_HAVEN, true, config == null || config.onlyHaven.enabled, () -> source(BATCH_ONLY_HAVEN, () -> loadOnlyHavenBatch(context)));
             sourcePool.request(BATCH_SHIT_SHOW, true, true, () -> source(BATCH_SHIT_SHOW,
                     () -> shitShow.takeBatchOrWarm(context, SHIT_SHOW_PER_BATCH)));
         }
@@ -236,15 +237,18 @@ final class ChaosSourceMixer {
         synchronized (catalogLock) {
             sourceCount = Math.min(SOURCES_PER_BATCH, Math.max(2, catalog.size()));
         }
+        boolean anyResponse = false;
         for (int i = 0; i < sourceCount; i++) {
             if (Thread.currentThread().isInterrupted()) break;
             int before = regular.size();
-            addRequest(context, regular, nextRequest());
+            anyResponse |= addRequest(context, regular, nextRequest());
             if (onCandidates != null && regular.size() > before) {
                 List<NativeContentItem> arrived = new ArrayList<>(regular.values());
                 onCandidates.accept(arrived.subList(before, arrived.size()));
             }
         }
+        if (!anyResponse && !Thread.currentThread().isInterrupted())
+            throw new IllegalStateException("Regular source requests failed");
         return new ArrayList<>(regular.values());
     }
 
@@ -318,6 +322,7 @@ final class ChaosSourceMixer {
         LinkedHashMap<String, NativeContentItem> combined = new LinkedHashMap<>();
         HashSet<String> usedSeries = new HashSet<>();
         int seriesTarget = Math.min(EFUKT_SERIES_PER_BATCH, efuktSeries.size());
+        boolean anyResponse = false;
         int attempts = Math.max(4, efuktSeries.size() * 2);
 
         while (usedSeries.size() < seriesTarget && attempts-- > 0) {
@@ -333,10 +338,13 @@ final class ChaosSourceMixer {
                     if (!NativeContentItem.KIND_MEDIA.equals(item.kind)) continue;
                     combined.putIfAbsent(item.url, item);
                 }
+                anyResponse = true;
             } catch (Exception ignored) {
             }
         }
 
+        if (!anyResponse && !usedSeries.isEmpty() && !Thread.currentThread().isInterrupted())
+            throw new IllegalStateException("EFukt media requests failed");
         ArrayList<NativeContentItem> candidates = new ArrayList<>(combined.values());
         Collections.shuffle(candidates, random);
         int take = Math.min(EFUKT_ITEMS_PER_BATCH, candidates.size());
@@ -355,9 +363,11 @@ final class ChaosSourceMixer {
                 efuktSeries.add(series);
             }
             loaded = !Thread.currentThread().isInterrupted();
-        } catch (Exception ignored) {
+        } catch (Exception failed) {
+            efuktCatalogAttempted = false;
+            throw new IllegalStateException("EFukt catalog failed", failed);
         }
-        if (!loaded && efuktSeries.isEmpty()) efuktCatalogAttempted = false;
+        if (efuktSeries.isEmpty()) efuktCatalogAttempted = false;
         refillEfuktDeck();
     }
 
@@ -419,9 +429,9 @@ final class ChaosSourceMixer {
 
         LinkedHashMap<String, NativeContentItem> combined = new LinkedHashMap<>();
         HashSet<String> usedCreators = new HashSet<>();
+        boolean anyResponse = false;
         int attempts = Math.min(4, onlyHavenCreators.size());
-        // The independent preference buffer holds at most two raw matching clips.
-        // Ordinary providers keep their normal fetch/admission path.
+        // Category acquisitions are small; the shared source buffer can fill the normal runway.
         int batchLimit = mode == ContentPreference.ALL ? ONLY_HAVEN_ITEMS_PER_BATCH : 2;
         while (combined.size() < batchLimit && attempts-- > 0) {
             if (Thread.currentThread().isInterrupted()) break;
@@ -437,6 +447,7 @@ final class ChaosSourceMixer {
                     if (item == null || !item.isVideo()) continue;
                     candidates.add(onlyHavenClip(item, creator));
                 }
+                anyResponse = true;
             } catch (Exception ignored) {
             }
 
@@ -454,6 +465,8 @@ final class ChaosSourceMixer {
             }
         }
 
+        if (!anyResponse && !usedCreators.isEmpty() && !Thread.currentThread().isInterrupted())
+            throw new IllegalStateException("OnlyHaven media requests failed");
         return new ArrayList<>(combined.values());
     }
 
@@ -488,14 +501,16 @@ final class ChaosSourceMixer {
                 onlyHavenCreators.add(creator);
             }
             loaded = !Thread.currentThread().isInterrupted();
-        } catch (Exception ignored) {
+        } catch (Exception failed) {
+            onlyHavenCatalogAttempted = false;
+            throw new IllegalStateException("OnlyHaven catalog failed", failed);
         }
         if (onlyHavenCreators.isEmpty() && mode != ContentPreference.ALL) {
             onlyHavenCatalogAttempted = false;
             // Cancellation is navigation, not evidence of a failing provider.
             categoryRetryAfter = Thread.currentThread().isInterrupted() ? 0L
                     : android.os.SystemClock.elapsedRealtime() + 60_000L;
-        } else if (!loaded && onlyHavenCreators.isEmpty()) onlyHavenCatalogAttempted = false;
+        } else if (onlyHavenCreators.isEmpty()) onlyHavenCatalogAttempted = false;
         refillOnlyHavenDeck();
     }
 
@@ -548,10 +563,10 @@ final class ChaosSourceMixer {
         });
     }
 
-    private void addRequest(Context context,
+    private boolean addRequest(Context context,
                             LinkedHashMap<String, NativeContentItem> combined,
                             SourceRequest request) {
-        if (request == null) return;
+        if (request == null) return false;
         try {
             ArrayList<NativeContentItem> candidates = new ArrayList<>();
             for (NativeContentItem item : ShitTokPoolDiagnostics.fetched(BATCH_REGULAR, repository.fetchFeed(context, request.url, request.page))) {
@@ -565,7 +580,9 @@ final class ChaosSourceMixer {
                 NativeContentItem item = candidates.get(i);
                 combined.putIfAbsent(item.url, item);
             }
+            return true;
         } catch (Exception ignored) {
+            return false;
         }
     }
 

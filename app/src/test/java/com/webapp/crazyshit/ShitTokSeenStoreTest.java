@@ -117,6 +117,25 @@ public class ShitTokSeenStoreTest {
         ShitTokSmartRanker.resetForTest(app);
     }
 
+    @Test public void additiveRewardProfileSurvivesReloadWithoutTouchingHistoryOrLegacySkips() throws Exception {
+        android.content.Context app = org.robolectric.RuntimeEnvironment.getApplication();
+        ShitTokSmartRanker.resetForTest(app);
+        app.getSharedPreferences("playback_history", 0).edit().putString("upgrade_sentinel", "keep").commit();
+        NativeContentItem favorite = fapello("Alice", "https://fapello.com/alice/1/");
+        ShitTokSmartRanker.action(favorite, ShitTokSmartRanker.Action.FAVORITE);
+        float before = ShitTokSmartRanker.score(favorite);
+        ShitTokSmartRanker.flush();
+        long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(3);
+        while (!app.getSharedPreferences("shittok_smart_ranker_v1", 0).contains("creator_rewards_v2")
+                && System.nanoTime() < deadline) Thread.sleep(1);
+        assertTrue(app.getSharedPreferences("shittok_smart_ranker_v1", 0).contains("creator_rewards_v2"));
+        org.robolectric.util.ReflectionHelpers.setStaticField(ShitTokSmartRanker.class, "app", null);
+        ShitTokSmartRanker.initialize(app);
+        assertEquals(before, ShitTokSmartRanker.score(favorite), .01f);
+        assertEquals("keep", app.getSharedPreferences("playback_history", 0).getString("upgrade_sentinel", ""));
+        ShitTokSmartRanker.resetForTest(app);
+    }
+
     private static NativeContentItem fapello(String creator, String url) {
         return new NativeContentItem(
                 NativeContentItem.KIND_MEDIA,

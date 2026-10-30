@@ -98,8 +98,9 @@ Scarcity/failed category loading yields a wait/empty state, never an unfiltered 
 The preference listener immediately cancels old acquisition, inventory and verification
 work. Queue pruning waits only for an already-running pager transition to settle,
 then drops every future clip, including the prefetched successor. The current player,
-playback generation and lease survive. A page-selection guard rejects incompatible
-old pages during a racing gesture and on backward navigation. Worker admission and
+playback generation and lease survive. Targeted removals retire incompatible past pages, including the outgoing current
+exception after its first swipe, while retaining the current holder/URL lease.
+A page-selection guard rejects incompatible old pages during a racing gesture. Worker admission and
 final publication independently re-check the current category. Old callbacks cannot
 restore incompatible content. Returning to All reuses the broader local profile.
 
