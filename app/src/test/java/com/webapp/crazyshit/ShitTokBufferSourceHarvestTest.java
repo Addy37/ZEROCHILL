@@ -21,7 +21,6 @@ public class ShitTokBufferSourceHarvestTest {
             source.prewarm(host.get());
             assertFalse(ReflectionHelpers.getField(source, "warming"));
             source.setPlaybackProtected(false);
-            source.prewarm(host.get());
             assertTrue(ReflectionHelpers.getField(source, "warming"));
             // Suppress queued startHarvest before fixture disposal; no page requests needed.
             source.setPlaybackProtected(true);
