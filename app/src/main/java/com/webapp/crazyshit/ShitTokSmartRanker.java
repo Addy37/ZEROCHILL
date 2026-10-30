@@ -238,7 +238,7 @@ final class ShitTokSmartRanker {
             int limit,
             long nowWall
     ) {
-        if (key.isEmpty()) return;
+        if (key.isEmpty() || key.length() > 256) return;
         float next = Math.min(cap, decayed(target.get(key), nowWall) + increment);
         target.remove(key);
         target.put(key, new Signal(next, nowWall));
