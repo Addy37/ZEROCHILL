@@ -69,6 +69,8 @@ jobs:
         include: >-
           ${{ fromJSON(github.head_ref == 'fix/baddiehub-canonical-creator'
           && '[{"flow":"chaos-scroll","test":"com.webapp.crazyshit.baselineprofile.MainFlowsBenchmark#chaosScroll","rules":"Macrobenchmark","task":":baselineprofile:connectedBenchmarkReleaseAndroidTest"},{"flow":"creator-gallery-playback","test":"com.webapp.crazyshit.baselineprofile.MainFlowsBenchmark#creatorGalleryAndPlayback","rules":"Macrobenchmark","task":":baselineprofile:connectedBenchmarkReleaseAndroidTest"}]'
+          || github.head_ref == 'feature/smart-shittok-v2'
+          && '[{"flow":"chaos-scroll","test":"com.webapp.crazyshit.baselineprofile.MainFlowsBenchmark#chaosScroll","rules":"Macrobenchmark","task":":baselineprofile:connectedBenchmarkReleaseAndroidTest"},{"flow":"chaos-long-session","test":"com.webapp.crazyshit.baselineprofile.MainFlowsBenchmark#chaosLongSession","rules":"Macrobenchmark","task":":baselineprofile:connectedBenchmarkReleaseAndroidTest"}]'
           || github.head_ref == 'feature/shittok-smart-ranking-v1'
           && '[{"flow":"chaos-scroll","test":"com.webapp.crazyshit.baselineprofile.MainFlowsBenchmark#chaosScroll","rules":"Macrobenchmark","task":":baselineprofile:connectedBenchmarkReleaseAndroidTest"}]'
           || (github.head_ref == 'fix/xmegadrive-shows-lifecycle' || github.head_ref == 'feature/onlyfap-gallery-favorites')

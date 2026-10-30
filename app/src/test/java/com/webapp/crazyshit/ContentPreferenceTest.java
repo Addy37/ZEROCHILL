@@ -269,17 +269,17 @@ public class ContentPreferenceTest {
         assertTrue(OnlyHavenRepository.categoryRoute(SourceConfig.parseAndValidate(document.toString()).onlyHaven,
                 ContentPreference.MEN, 10, 0).startsWith("api/custom?g=man"));
     }
-    @Test public void preferenceMixPrioritizesOnlyEligibleMatchesWithoutDroppingNormalProviders() {
+    @Test public void preferenceMixExcludesUnverifiedProviders() {
         NativeContentItem a = clip("kaotic"), b = clip("shit-show"), c = clip("fapello"),
                 d = clip("onlyhaven-1"), e = clip("onlyhaven-2"), f = clip("efukt");
         List<NativeContentItem> original = Arrays.asList(a, b, c, d, e, f);
         List<NativeContentItem> ordered = ShitTokPreferenceMix.order(original,
                 item -> item == d || item == e);
-        assertEquals(Arrays.asList(d, a, b, e, c, f), ordered);
-        assertEquals(new HashSet<>(original), new HashSet<>(ordered));
-        assertEquals(original, ShitTokPreferenceMix.order(original, item -> false));
+        assertEquals(Arrays.asList(d, e), ordered);
+
+        assertTrue(ShitTokPreferenceMix.order(original, item -> false).isEmpty());
     }
-    @Test public void preferenceChangePreservesPlayingGenerationAndNextQueueItem() {
+    @Test public void preferenceChangePreservesPlayingGenerationAndDropsEvenPreparedNext() {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
         ChaosFeedView feed = new ChaosFeedView(activity, item -> {}, false);
         org.robolectric.util.ReflectionHelpers.setField(feed, "queuePreference", ContentPreference.ALL);
@@ -290,20 +290,20 @@ public class ContentPreferenceTest {
         ContentPreference.set(activity, ContentPreference.MEN);
         org.robolectric.util.ReflectionHelpers.callInstanceMethod(feed, "applyContentPreference");
         assertEquals(7, (int) org.robolectric.util.ReflectionHelpers.getField(feed, "feedGeneration"));
-        assertEquals(Arrays.asList(current, next), items);
+        assertEquals(Arrays.asList(current), items);
         assertEquals(0, (int) org.robolectric.util.ReflectionHelpers.getField(feed, "selectedPosition"));
         assertEquals(ContentPreference.MEN, org.robolectric.util.ReflectionHelpers.getField(feed, "queuePreference"));
         feed.close();
     }
 
-    @Test public void latePreferenceAdmissionPreservesNormalTailCurrentNextAndExclusions() {
+    @Test public void latePreferenceAdmissionFiltersStaleTailAndPreservesExclusions() {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
         ContentPreference.set(activity, ContentPreference.MEN);
         ChaosFeedView feed = new ChaosFeedView(activity, item -> {}, false);
         ArrayList<NativeContentItem> items = org.robolectric.util.ReflectionHelpers.getField(feed, "items");
         NativeContentItem current = clip("current"), next = clip("next"),
                 kaotic = clip("kaotic"), fapello = clip("fapello"), efukt = clip("efukt");
-        items.addAll(Arrays.asList(current, next, kaotic, fapello, efukt));
+        items.add(current);
         NativeContentItem match = havenClip("match"), blocked = havenClip("blocked"),
                 watched = havenClip("watched"), liked = havenClip("liked");
         Set<String> blockedKeys = org.robolectric.util.ReflectionHelpers.getField(feed, "blockedCreatorKeys");
@@ -317,8 +317,10 @@ public class ContentPreferenceTest {
         org.robolectric.util.ReflectionHelpers.callInstanceMethod(feed, "appendUnique",
                 org.robolectric.util.ReflectionHelpers.ClassParameter.from(List.class,
                         Arrays.asList(blocked, watched, liked, match, match)));
-        org.robolectric.util.ReflectionHelpers.callInstanceMethod(feed, "prioritizePreferenceQueue");
-        assertEquals(Arrays.asList(current, next, match, kaotic, fapello, efukt), items);
+        // A stale publication remains ineligible even if it was fetched before the mode changed.
+        org.robolectric.util.ReflectionHelpers.callInstanceMethod(feed, "appendUnique",
+                org.robolectric.util.ReflectionHelpers.ClassParameter.from(List.class, Arrays.asList(clip("stale"))));
+        assertEquals(Arrays.asList(current, match), items);
         assertEquals(1, (int) Collections.frequency(items, match));
         assertTrue(seen.seen(watched.url, null)); assertTrue(seen.liked(liked.url, null));
         feed.close();

@@ -57,6 +57,16 @@ jobs:
           gradle-version: '8.11.1'
           cache-provider: basic
 
+      - name: Verify Smart ShitTok v2 recovery, personalization, eligibility and playback
+        if: github.head_ref == 'feature/smart-shittok-v2'
+        run: >-
+          gradle --no-daemon :app:testDebugUnitTest
+          --tests 'com.webapp.crazyshit.ShitTok*'
+          --tests 'com.webapp.crazyshit.ContentPreferenceTest'
+          --tests 'com.webapp.crazyshit.ChaosSourceMixerPriorityTest'
+          --tests 'com.webapp.crazyshit.XMegaDrive*'
+          --tests 'com.webapp.crazyshit.OnlyHaven*'
+
       - name: Verify BaddieHub creator matching and existing navigation
         if: github.head_ref == 'fix/baddiehub-canonical-creator'
         run: >-
@@ -547,7 +557,7 @@ jobs:
         # These focused candidates run complete suites once instead of repeatedly
         # starting Gradle for overlapping filters. Signing/upgrade gates remain.
         run: |
-          if [ "${{ github.head_ref }}" = "fix/baddiehub-canonical-creator" ] || [ "${{ github.head_ref }}" = "feature/onlyfap-gallery-favorites" ] || [ "${{ github.head_ref }}" = "feature/shows-youtube-motion" ] || [ "${{ github.head_ref }}" = "fix/search-results-visual-polish" ] || [ "${{ github.head_ref }}" = "feature/search-recent-glass" ] || [ "${{ github.head_ref }}" = "feature/shows-episode-list" ] || [ "${{ github.head_ref }}" = "feature/onlyfap-gender-shelves" ] || [ "${{ github.head_ref }}" = "feature/source-contracts-preference-search" ] || [ "${{ github.head_ref }}" = "feature/zerochill-5.1.0" ] || [ "${{ github.head_ref }}" = "release/zerochill-5.0.0" ] || [ "${{ github.event.pull_request.number }}" = "295" ] || [ "${{ github.event.pull_request.number }}" = "304" ] || [ "${{ github.head_ref }}" = "fix/shittok-async-creator-metadata" ] || [ "${{ github.head_ref }}" = "fix/shittok-startup-handoff" ] || [ "${{ github.head_ref }}" = "fix/onlyfap-first-open" ] || [ "${{ github.head_ref }}" = "feature/library-profile-redesign" ]; then
+          if [ "${{ github.head_ref }}" = "feature/smart-shittok-v2" ] || [ "${{ github.head_ref }}" = "fix/baddiehub-canonical-creator" ] || [ "${{ github.head_ref }}" = "feature/onlyfap-gallery-favorites" ] || [ "${{ github.head_ref }}" = "feature/shows-youtube-motion" ] || [ "${{ github.head_ref }}" = "fix/search-results-visual-polish" ] || [ "${{ github.head_ref }}" = "feature/search-recent-glass" ] || [ "${{ github.head_ref }}" = "feature/shows-episode-list" ] || [ "${{ github.head_ref }}" = "feature/onlyfap-gender-shelves" ] || [ "${{ github.head_ref }}" = "feature/source-contracts-preference-search" ] || [ "${{ github.head_ref }}" = "feature/zerochill-5.1.0" ] || [ "${{ github.head_ref }}" = "release/zerochill-5.0.0" ] || [ "${{ github.event.pull_request.number }}" = "295" ] || [ "${{ github.event.pull_request.number }}" = "304" ] || [ "${{ github.head_ref }}" = "fix/shittok-async-creator-metadata" ] || [ "${{ github.head_ref }}" = "fix/shittok-startup-handoff" ] || [ "${{ github.head_ref }}" = "fix/onlyfap-first-open" ] || [ "${{ github.head_ref }}" = "feature/library-profile-redesign" ]; then
             gradle --no-daemon :app:testDebugUnitTest :app:testReleaseUnitTest :app:assembleDebug :app:assembleRelease
           else
             gradle --no-daemon :app:testReleaseUnitTest :app:assembleRelease :app:assembleDebug

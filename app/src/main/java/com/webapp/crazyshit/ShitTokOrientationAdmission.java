@@ -190,9 +190,6 @@ final class ShitTokOrientationAdmission {
     Result admitConcurrent(java.util.concurrent.BlockingQueue<NativeContentItem> candidates,
             BooleanSupplier productionDone, Resolver resolver, BooleanSupplier allowedWork,
             java.util.function.IntSupplier maxItems, Consumer<Result> onVerified, java.util.function.IntConsumer activeCount) {
-        java.util.concurrent.CompletionService<Result> completed =
-                new java.util.concurrent.ExecutorCompletionService<>(inventoryIo);
-        Map<java.util.concurrent.Future<Result>, NativeContentItem> active = new LinkedHashMap<>();
         ArrayList<NativeContentItem> admitted = new ArrayList<>(), remaining = new ArrayList<>();
         Map<String, CrazyShitRepository.StreamInfo> streams = new LinkedHashMap<>();
         long started = clock.getAsLong();
@@ -200,54 +197,74 @@ final class ShitTokOrientationAdmission {
         try {
             while (allowedWork.getAsBoolean() && !Thread.currentThread().isInterrupted()
                     && admitted.size() < maxItems.getAsInt() && clock.getAsLong() - started < BATCH_MILLIS) {
-                while (active.size() < 3 && attempts < 24) {
-                    NativeContentItem item = nextCandidate(candidates, active.values(),
-                            productionDone.getAsBoolean(), remaining, attempts);
-                    if (item == null) break;
-                    attempts++;
-                    try {
-                        active.put(completed.submit(() -> admit(Collections.singletonList(item), resolver,
-                                allowedWork, new Random(0), 1, true, null)), item);
-                    } catch (java.util.concurrent.RejectedExecutionException busy) {
-                        remaining.add(item);
-                        attempts = 24;
-                        break;
+                synchronized (pending) {
+                    if (!allowedWork.getAsBoolean()) break;
+                    java.util.Iterator<Pending> iterator = pending.values().iterator();
+                    while (iterator.hasNext() && admitted.size() < maxItems.getAsInt()) {
+                        Pending task = iterator.next();
+                        if (!task.future.isDone()) continue;
+                        iterator.remove();
+                        Result result;
+                        try { result = task.future.get(); }
+                        catch (java.util.concurrent.ExecutionException | java.util.concurrent.CancellationException failed) { continue; }
+                        if (!allowedWork.getAsBoolean()) { remaining.add(task.item); break; }
+                        if (result.items.isEmpty() && result.remaining.isEmpty()) rejectedCount.incrementAndGet();
+                        admitted.addAll(result.items); streams.putAll(result.streams); remaining.addAll(result.remaining);
+                        if (onVerified != null && !result.items.isEmpty()) onVerified.accept(result);
                     }
+                    while (pending.size() < 3 && attempts < 24 && admitted.size() < maxItems.getAsInt()) {
+                        ArrayList<NativeContentItem> busy = new ArrayList<>();
+                        for (Pending task : pending.values()) busy.add(task.item);
+                        NativeContentItem item = nextCandidate(candidates, busy, productionDone.getAsBoolean(), remaining, attempts);
+                        if (item == null) break;
+                        if (pending.containsKey(item.url)) continue;
+                        attempts++;
+                        final long token = admissionGeneration;
+                        try {
+                            java.util.concurrent.Future<Result> future = inventoryIo.submit(() ->
+                                    admit(Collections.singletonList(item), resolver,
+                                            () -> token == admissionGeneration && allowedWork.getAsBoolean(),
+                                            new Random(0), 1, true, null));
+                            pending.put(item.url, new Pending(item, future));
+                        } catch (java.util.concurrent.RejectedExecutionException full) { remaining.add(item); break; }
+                    }
+                    activeCount.accept(pending.size());
+                    if (pending.isEmpty() && ((productionDone.getAsBoolean() && candidates.isEmpty()) || attempts >= 24)) break;
                 }
-                activeCount.accept(active.size());
-                if (active.isEmpty() && (productionDone.getAsBoolean() && candidates.isEmpty() || attempts >= 24)) break;
-                java.util.concurrent.Future<Result> done = completed.poll(25, java.util.concurrent.TimeUnit.MILLISECONDS);
-                if (done == null) continue;
-                NativeContentItem item = active.remove(done);
-                Result result;
-                try { result = done.get(); }
-                catch (java.util.concurrent.ExecutionException failure) { continue; }
-                if (!allowedWork.getAsBoolean()) { remaining.add(item); break; }
-                if (result.items.isEmpty() && result.remaining.isEmpty()) rejectedCount.incrementAndGet();
-                admitted.addAll(result.items);
-                streams.putAll(result.streams);
-                remaining.addAll(result.remaining);
-                if (onVerified != null && !result.items.isEmpty()) onVerified.accept(result);
+                Thread.sleep(25L);
             }
-        } catch (InterruptedException interrupted) {
-            Thread.currentThread().interrupt();
-        } finally {
-            for (Map.Entry<java.util.concurrent.Future<Result>, NativeContentItem> task : active.entrySet()) {
-                task.getKey().cancel(true);
-                remaining.add(task.getValue());
-            }
-            inventoryIo.purge();
-            activeCount.accept(0);
-        }
+        } catch (InterruptedException interrupted) { Thread.currentThread().interrupt(); }
+        // Normal runway completion does not cancel slow verification. Its bounded result is
+        // collected by a later refill; only cancelPending() ends a lifecycle/category generation.
         return new Result(admitted, streams, remaining, !allowedWork.getAsBoolean());
     }
 
-    private static NativeContentItem nextCandidate(java.util.concurrent.BlockingQueue<NativeContentItem> candidates,
+    private static final class Pending {
+        final NativeContentItem item;
+        final java.util.concurrent.Future<Result> future;
+        Pending(NativeContentItem item, java.util.concurrent.Future<Result> future) { this.item = item; this.future = future; }
+    }
+    private final Map<String, Pending> pending = new LinkedHashMap<>();
+    private volatile long admissionGeneration;
+    boolean hasPending() { synchronized (pending) { return !pending.isEmpty(); } }
+
+    void cancelPending() {
+        synchronized (pending) {
+            admissionGeneration++;
+            for (Pending task : pending.values()) task.future.cancel(true);
+            pending.clear(); inventoryIo.purge();
+        }
+    }
+
+    private NativeContentItem nextCandidate(java.util.concurrent.BlockingQueue<NativeContentItem> candidates,
             java.util.Collection<NativeContentItem> active, boolean productionDone,
             List<NativeContentItem> remaining, int attempt) {
         Map<String, Integer> counts = new java.util.HashMap<>();
         for (NativeContentItem item : active) counts.merge(ShitTokAspectPriority.sourceKey(item), 1, Integer::sum);
         synchronized (candidates) {
+            Set<String> availableSources = new HashSet<>(counts.keySet());
+            for (NativeContentItem item : candidates) availableSources.add(ShitTokAspectPriority.sourceKey(item));
+            int perSource = productionDone && availableSources.size() == 1 ? 3 : 2;
             ArrayList<NativeContentItem> deferred = new ArrayList<>();
             ArrayList<NativeContentItem> eligible = new ArrayList<>();
             int available = candidates.size();
@@ -255,7 +272,7 @@ final class ShitTokOrientationAdmission {
                 NativeContentItem item = candidates.poll();
                 if (item == null) break;
                 ShitTokSmartRanker.register(item);
-                if (productionDone || counts.getOrDefault(ShitTokAspectPriority.sourceKey(item), 0) < 2) {
+                if (counts.getOrDefault(ShitTokAspectPriority.sourceKey(item), 0) < perSource) {
                     eligible.add(item);
                 } else {
                     deferred.add(item);
@@ -271,16 +288,14 @@ final class ShitTokOrientationAdmission {
                     for (int i = 1; i < eligible.size(); i++) {
                         NativeContentItem current = eligible.get(i);
                         NativeContentItem best = eligible.get(bestIndex);
-                        boolean currentTrusted = trustedHint(current);
-                        boolean bestTrusted = trustedHint(best);
-                        if (currentTrusted != bestTrusted) {
-                            if (currentTrusted) bestIndex = i;
-                        } else if (ShitTokSmartRanker.score(current) > ShitTokSmartRanker.score(best)) {
-                            bestIndex = i;
-                        }
+                        if (opportunity(current) > opportunity(best)) bestIndex = i;
                     }
                     selected = eligible.remove(bestIndex);
                 }
+            }
+            if (selected != null) {
+                admissionTurns.put(ShitTokAspectPriority.sourceKey(selected), ++admissionTurn);
+                while (admissionTurns.size() > 32) admissionTurns.remove(admissionTurns.keySet().iterator().next());
             }
             for (NativeContentItem item : eligible) if (!candidates.offer(item)) remaining.add(item);
             for (NativeContentItem item : deferred) if (!candidates.offer(item)) remaining.add(item);
@@ -288,7 +303,14 @@ final class ShitTokOrientationAdmission {
         }
     }
 
-    void close() { inventoryIo.shutdownNow(); }
+    private final Map<String, Long> admissionTurns = new LinkedHashMap<>();
+    private long admissionTurn;
+    private double opportunity(NativeContentItem item) {
+        long age = admissionTurn - admissionTurns.getOrDefault(ShitTokAspectPriority.sourceKey(item), 0L);
+        return Math.min(8, age) + Math.max(-2f, Math.min(2f, ShitTokSmartRanker.score(item)))
+                + (trustedHint(item) ? .5 : 0);
+    }
+    void close() { cancelPending(); inventoryIo.shutdownNow(); }
 
     String describe(String url) {
         synchronized (cache) {

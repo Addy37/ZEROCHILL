@@ -204,6 +204,7 @@ public final class ChaosFeedView extends FrameLayout {
         void cancel() { cancelled = true; if (harvest != null) harvest.cancel(true); }
     }
     private void cancelInventoryBatch() {
+        orientationAdmission.cancelPending();
         if (inventoryBatch != null) inventoryBatch.cancel();
         inventoryBatch = null;
         activeAdmissions = inventoryCandidateCount = 0;
@@ -248,6 +249,8 @@ public final class ChaosFeedView extends FrameLayout {
         loadRecent();
         loadHidden();
         reloadBlockedCreatorKeys();
+        ContentPreference.prefs(activity).registerOnSharedPreferenceChangeListener(preferenceListener);
+        postDelayed(sourceRecoveryTick, 2_000L);
         chaosMuted = activity.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
                 .getBoolean(KEY_MUTED, false);
         playbackOwner = new ShitTokPlaybackOwner(activity.getApplicationContext(), new ShitTokPlaybackOwner.Callbacks() {
@@ -354,10 +357,18 @@ public final class ChaosFeedView extends FrameLayout {
             }
 
             private void selectPage(int position) {
+                if (position != selectedPosition && position >= 0 && position < items.size()
+                        && !eligiblePreference(items.get(position), ContentPreference.get(activity))) {
+                    pager.setCurrentItem(selectedPosition, false);
+                    return;
+                }
                 cancelSwipePlayerMaintenance();
                 int previousPosition = selectedPosition;
                 boolean changed = position != previousPosition;
-                if (changed) resetTemporaryPinch();
+                if (changed) {
+                    ShitTokSmartRanker.leaveSelection();
+                    resetTemporaryPinch();
+                }
                 if (changed) {
                     maintenancePosition = position;
                     consecutiveDryLoads = 0;
@@ -869,25 +880,44 @@ public final class ChaosFeedView extends FrameLayout {
         }
         orientationAdmission.close();
         creatorMetadata.close();
+        removeCallbacks(sourceRecoveryTick);
+        ContentPreference.prefs(activity).unregisterOnSharedPreferenceChangeListener(preferenceListener);
         io.shutdownNow();
     }
 
-    private ContentPreference queuePreference;
+    private ContentPreference queuePreference, invalidatedPreference;
+    private final android.content.SharedPreferences.OnSharedPreferenceChangeListener preferenceListener =
+            (preferences, key) -> { if (ContentPreference.KEY.equals(key)) post(this::applyContentPreference); };
+    private final Runnable sourceRecoveryTick = new Runnable() {
+        @Override public void run() {
+            if (closed) return;
+            if (active && hostResumed && sourceRequestsEnabled && !searchCoverActive) {
+                applyContentPreference();
+                if (!items.isEmpty() && playbackOwner.allowsSpeculativeWork()) sourceMixer.recoverSources(activity);
+                requestPreferenceCandidates();
+                if (needsContinuity()) loadMorePool();
+            }
+            postDelayed(this, 2_000L);
+        }
+    };
 
     private void applyContentPreference() {
         ContentPreference current = ContentPreference.get(activity);
         if (queuePreference == null) { queuePreference = current; return; }
         if (queuePreference == current) return;
+        if (invalidatedPreference != current) {
+            invalidatedPreference = current;
+            sourceMixer.stopPreference();
+            cancelInventoryBatch();
+        }
         if (isPaging()) { deferUiApply(this::applyContentPreference); return; }
         queuePreference = current;
-        sourceMixer.stopPreference();
-        cancelInventoryBatch();
+        invalidatedPreference = null;
         cancelPendingAutoAdvance();
         orientationPending.clear();
         consecutiveDryLoads = 0;
-        // Keep current playback and its immediately prepared successor. Only future discovery
-        // changes. Removed, unplayed queue entries may be admitted again through normal checks.
-        int first = Math.min(items.size(), selectedPosition + 2);
+        // Keep only the active lease. The very next swipe must use the new category.
+        int first = Math.min(items.size(), selectedPosition + 1);
         int removed = items.size() - first;
         for (NativeContentItem item : new ArrayList<>(items.subList(first, items.size()))) {
             sessionUrls.remove(item.url);
@@ -900,24 +930,12 @@ public final class ChaosFeedView extends FrameLayout {
         if (removed > 0) adapter.notifyItemRangeRemoved(first, removed);
         refillDeferred = true;
         continuityWorkNeeded = true;
+        post(this::loadMorePool);
     }
 
     private void releaseFutureHolder(String url) {
         for (ChaosHolder holder : new ArrayList<>(playerHolders))
             if (holder.item != null && url.equals(holder.item.url)) holder.releasePlayer();
-    }
-
-    private void prioritizePreferenceQueue() {
-        ContentPreference mode = ContentPreference.get(activity);
-        if (mode == ContentPreference.ALL || isPaging()) return;
-        int first = Math.min(items.size(), selectedPosition + 2);
-        List<NativeContentItem> tail = new ArrayList<>(items.subList(first, items.size()));
-        List<NativeContentItem> ordered = ShitTokPreferenceMix.order(tail,
-                item -> sourceMixer.matchesPreference(item, mode));
-        if (tail.equals(ordered)) return;
-        for (NativeContentItem item : tail) releaseFutureHolder(item.url);
-        for (int i = 0; i < ordered.size(); i++) items.set(first + i, ordered.get(i));
-        adapter.notifyItemRangeChanged(first, ordered.size());
     }
 
     private int upcomingPreferenceCount() {
@@ -931,7 +949,7 @@ public final class ChaosFeedView extends FrameLayout {
     private void requestPreferenceCandidates() {
         if (searchCoverActive) return;
         if (closed || !active || !hostResumed || !sourceRequestsEnabled) return;
-        if (ContentPreference.get(activity) != ContentPreference.ALL && upcomingPreferenceCount() >= 2) return;
+        if (ContentPreference.get(activity) != ContentPreference.ALL && upcomingPreferenceCount() >= desiredRunway()) return;
         sourceMixer.requestPreference(activity, () -> post(() -> {
             if (!closed && active && hostResumed) loadMorePool();
         }));
@@ -939,12 +957,16 @@ public final class ChaosFeedView extends FrameLayout {
 
     private void loadMorePool() {
         if (searchCoverActive) return;
+    applyContentPreference();
     if (queuePreference == null) queuePreference = ContentPreference.get(activity);
+    if (queuePreference != ContentPreference.get(activity)) return;
     requestPreferenceCandidates();
     // A late matching result gets a bounded turn through the SAME admission gates even
     // when normal providers already filled the runway or left an orientation reservoir.
-    final boolean preferenceBatch = sourceMixer.hasPreference(queuePreference)
-            && upcomingPreferenceCount() < 2;
+    final boolean preferenceBatch = queuePreference != ContentPreference.ALL
+            && (sourceMixer.hasPreference(queuePreference) || !orientationPending.isEmpty() || orientationAdmission.hasPending())
+            && upcomingPreferenceCount() < desiredRunway();
+    if (queuePreference != ContentPreference.ALL && !preferenceBatch) return;
     // Source production, resolution and portrait inspection are background work. Do not hold
     // the startup handoff behind the first draw/post queue; UI application still waits for idle.
     if (closed || !active || !hostResumed || poolLoading || !sourceRequestsEnabled || !hasReservoirRoom(items.size(), selectedPosition)) return;
@@ -969,10 +991,11 @@ public final class ChaosFeedView extends FrameLayout {
             ? Math.max(1, desiredRunway() - usableUpcomingCount() + (items.isEmpty() ? 1 : 0))
             : Integer.MAX_VALUE;
     final int batchGeneration = feedGeneration;
+    final ContentPreference batchPreference = queuePreference;
     final int batchPosition = selectedPosition, batchTarget = desiredRunway();
-    final ArrayList<NativeContentItem> pendingCandidates = preferenceBatch
-            ? new ArrayList<>(sourceMixer.takePreference(queuePreference)) : new ArrayList<>(orientationPending);
-    if (!preferenceBatch) orientationPending.clear();
+    final ArrayList<NativeContentItem> pendingCandidates = new ArrayList<>(orientationPending);
+    orientationPending.clear();
+    if (preferenceBatch) pendingCandidates.addAll(sourceMixer.takePreference(queuePreference));
     final Set<String> hiddenSnapshot = new HashSet<>(hiddenUrls);
     final Set<String> recentSnapshot = new HashSet<>(recentSet);
     final Set<String> sessionSnapshot = new HashSet<>(sessionUrls);
@@ -996,7 +1019,8 @@ public final class ChaosFeedView extends FrameLayout {
             for (NativeContentItem item : batch) {
                 if (work.cancelled || !acceptingCandidates.get() || batchGeneration != feedGeneration || closed || Thread.currentThread().isInterrupted()) break;
                 rawCandidates.incrementAndGet();
-                if (!isMedia(item) || hiddenSnapshot.contains(item.url)
+                if (!isMedia(item) || ContentPreference.get(activity) != batchPreference
+                        || !eligiblePreference(item, batchPreference) || hiddenSnapshot.contains(item.url)
                         || ShitTokBlockedCreatorStore.isBlocked(blockedSnapshot, item)) continue;
                 String identity = ShitTokContentIdentity.page(item.url);
                 if (sessionSnapshot.contains(item.url) || identitySnapshot.contains(identity)) {
@@ -1039,7 +1063,9 @@ public final class ChaosFeedView extends FrameLayout {
         java.util.concurrent.Future<?> harvest = io.submit(() -> {
             Trace.beginSection("zc.shittok.batch_fetch");
             try {
-                if (pendingCandidates.isEmpty()) {
+                if (batchPreference == ContentPreference.ALL) {
+                    offer.accept(sourceMixer.takeReadyCandidates());
+                    offer.accept(pendingCandidates);
                     List<NativeContentItem> mixed = sourceMixer.loadRandomBatch(activity, protectedRefill, offer);
                     offer.accept(mixed); // Include the final source mix; URL dedup keeps partial results singular.
                 } else offer.accept(pendingCandidates);
@@ -1102,7 +1128,6 @@ public final class ChaosFeedView extends FrameLayout {
                         if (added == 0) return;
                         recordFirstAdmission();
                         adapter.notifyItemRangeInserted(before, added);
-                        prioritizePreferenceQueue();
                         initialProgress.setVisibility(View.GONE);
                         empty.setVisibility(View.GONE);
                         reconcilePlaybackWindow();
@@ -1149,7 +1174,6 @@ public final class ChaosFeedView extends FrameLayout {
                 recordFirstAdmission();
                 long mutationAt = android.os.SystemClock.elapsedRealtime();
                 adapter.notifyItemRangeInserted(before, added);
-                        prioritizePreferenceQueue();
                 ShitTokPoolDiagnostics.record("adapterInsert", "count=" + added + " ms=" + (android.os.SystemClock.elapsedRealtime()-mutationAt));
                 initialProgress.setVisibility(View.GONE);
                 empty.setVisibility(View.GONE);
@@ -1160,7 +1184,7 @@ public final class ChaosFeedView extends FrameLayout {
             }
 
             requestContinuity();
-            if (sourceMixer.hasPreference(queuePreference) && upcomingPreferenceCount() < 2)
+            if (sourceMixer.hasPreference(queuePreference) && upcomingPreferenceCount() < desiredRunway())
                 post(this::loadMorePool);
             boolean autoAdvanceNeedsNext = (autoAdvancePending && autoAdvanceFrom + 1 >= items.size())
                     || continuityWorkNeeded;
@@ -1460,6 +1484,7 @@ public final class ChaosFeedView extends FrameLayout {
         if (candidates == null) return;
         for (NativeContentItem item : candidates) {
             if (!hasReservoirRoom(items.size(), selectedPosition)) break;
+            if (!eligiblePreference(item, ContentPreference.get(activity))) continue;
             if (!ShitTokOrientation.eligible(item.aspectRatioHint)) continue;
             if (isBlockedCreator(item)) continue;
             if (discoveryExcluded(item, streamCache.get(item.url))) continue;
@@ -1481,7 +1506,12 @@ public final class ChaosFeedView extends FrameLayout {
         }
     }
 
+    private boolean eligiblePreference(NativeContentItem item, ContentPreference mode) {
+        return mode == ContentPreference.ALL || sourceMixer.matchesPreference(item, mode);
+    }
+
     private boolean discoveryExcluded(NativeContentItem item, CrazyShitRepository.StreamInfo stream) {
+        if (!eligiblePreference(item, ContentPreference.get(activity))) return true;
         String media = stream == null ? null : stream.mediaUrl;
         if (seenStore.liked(item.url, media)) { likedRejected.incrementAndGet(); return true; }
         if (recentSet.contains(item.url) || seenStore.seen(item.url, media)) { seenRejected.incrementAndGet(); return true; }
@@ -1906,6 +1936,7 @@ public final class ChaosFeedView extends FrameLayout {
     }
 
     private void pauseAll() {
+        ShitTokSmartRanker.endSession();
         for (ChaosHolder holder : new ArrayList<>(playerHolders)) {
             holder.pauseAndRecord();
         }
@@ -2416,6 +2447,7 @@ public final class ChaosFeedView extends FrameLayout {
             ZeroChillToast.makeText(activity, "Removed from Watch Later.", ZeroChillToast.LENGTH_SHORT).show();
         } else {
             FavoriteStore.add(activity, item);
+            ShitTokSmartRanker.action(item, ShitTokSmartRanker.Action.FAVORITE);
             ZeroChillToast.makeText(activity, "Saved to Watch Later.", ZeroChillToast.LENGTH_SHORT).show();
         }
         updateSaveButton(item, button);
@@ -3205,6 +3237,7 @@ public final class ChaosFeedView extends FrameLayout {
                         || CreatorFavoriteStore.contains(activity, creatorIdentity)) return;
                 haptic(v);
                 CreatorFavoriteStore.toggle(activity, creatorIdentity);
+                ShitTokSmartRanker.action(item, ShitTokSmartRanker.Action.CREATOR_FAVORITE);
                 refreshCreatorFavoriteBadge();
                 ZeroChillToast.makeText(
                         activity,
@@ -3664,6 +3697,7 @@ public final class ChaosFeedView extends FrameLayout {
                         if (state.liked && !videoLiked && boundPosition == selectedPosition) lateLikedSelections++;
                         videoLiked = state.liked;
                         if (state.liked) {
+                            ShitTokSmartRanker.action(item, ShitTokSmartRanker.Action.LIKE);
                             CrazyShitRepository.StreamInfo likedStream = streamCache.get(target);
                             seenStore.heart(target, likedStream == null ? null : likedStream.mediaUrl);
                         }
@@ -3932,6 +3966,10 @@ public final class ChaosFeedView extends FrameLayout {
 
                 @Override
                 public void onIsPlayingChanged(boolean isPlaying) {
+                    if (listenerGeneration == feedGeneration && validUiCallback(createdPlayer, listenerUrl, listenerToken)) {
+                        if (isPlaying && ownsPlayback()) ShitTokSmartRanker.onViewed(listenerUrl);
+                        ShitTokSmartRanker.playback(listenerUrl, isPlaying && ownsPlayback());
+                    }
                     if (listenerGeneration != feedGeneration || !validUiCallback(createdPlayer, listenerUrl, listenerToken) || isPaging()) return;
                     if (isPlaying && !ownsPlayback()) {
                         silencePlayer(createdPlayer);
@@ -4084,6 +4122,7 @@ public final class ChaosFeedView extends FrameLayout {
             if (item == null) return;
             NativeContentItem identity = creatorIdentity;
             if (identity == null) return;
+            ShitTokSmartRanker.action(item, ShitTokSmartRanker.Action.GALLERY);
             String query = identity.searchQuery.trim().isEmpty()
                     ? identity.title : identity.searchQuery;
             String returnToken = transitionToken == null ? "" : transitionToken.trim();
@@ -4284,6 +4323,7 @@ public final class ChaosFeedView extends FrameLayout {
                 silencePlayer(completedPlayer);
                 return;
             }
+            if (item != null) ShitTokSmartRanker.completion(item.url, completedPlayer.getDuration());
             ShitTokAutoScrollPolicy.Completion decision = ShitTokAutoScrollPolicy.onCompleted(
                     active, hostResumed, boundPosition == selectedPosition, userPaused,
                     autoScrollEnabled, userPaging);
@@ -4682,6 +4722,7 @@ public final class ChaosFeedView extends FrameLayout {
             RatingFeedbackPrompt.recordPlaybackError(activity);
             syncLoading();
             failurePending = true;
+            if (item != null) ShitTokSmartRanker.failed(item.url);
             syncLoading();
             if (item != null && boundPosition > selectedPosition) {
                 unplayable.add(item.url);
@@ -4704,6 +4745,7 @@ public final class ChaosFeedView extends FrameLayout {
             cancelInteractionUi();
             pinch.reset();
             ExoPlayer paused = player;
+            if (item != null) ShitTokSmartRanker.playback(item.url, false);
             if (paused == null) return;
             // History reads/recording must never prevent the outgoing player from stopping.
             silencePlayer(paused);

@@ -44,7 +44,7 @@ final class ShitTokSeenStore {
                 || (media != null && liked.contains(ShitTokContentIdentity.media(media)));
     }
     synchronized void watch(String page, String media) {
-        ShitTokSmartRanker.onViewed(page);
+
         add(seen, ShitTokContentIdentity.page(page), SEEN_LIMIT);
         if (media != null) add(seen, ShitTokContentIdentity.media(media), SEEN_LIMIT);
         dirty = true;

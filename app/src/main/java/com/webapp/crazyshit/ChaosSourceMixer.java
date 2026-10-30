@@ -11,10 +11,8 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Random;
 import java.util.Set;
-import java.util.concurrent.ExecutorCompletionService;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -28,9 +26,10 @@ final class ChaosSourceMixer {
     private static final int BADDIEHUB_MAX_PAGE = 3;
     private static final int XMEGADRIVE_MAX_PAGE = 4;
     private static final ExecutorService CRAZY_IO = Executors.newFixedThreadPool(2);
-    private static final ExecutorService SOURCE_IO = Executors.newFixedThreadPool(6);
-    private static final ExecutorService CONTINUITY_SOURCE_IO = Executors.newFixedThreadPool(3);
+    private static final ExecutorService SOURCE_IO = new java.util.concurrent.ThreadPoolExecutor(
+            6, 6, 0L, TimeUnit.MILLISECONDS, new java.util.concurrent.ArrayBlockingQueue<>(16));
     private static final long MIX_BATCH_BUDGET_MS = 5_500L;
+    private static final int BATCH_SHIT_SHOW = 4;
     private static final int BATCH_REGULAR = 1;
     private static final int BATCH_EFUKT = 2;
     private static final int BATCH_KAOTIC = 3;
@@ -53,6 +52,7 @@ final class ChaosSourceMixer {
     private static final String VIDEOS = CrazyShitRepository.BASE + "videos/";
     private static final String USER_UPLOADS = CrazyShitRepository.BASE + "submissions/";
 
+    private final ShitTokSourcePool sourcePool = new ShitTokSourcePool(SOURCE_IO, android.os.SystemClock::elapsedRealtime);
     private final CrazyShitRepository repository;
     private final Random random;
     interface SourceLoader { List<NativeContentItem> load(int source) throws Exception; }
@@ -83,21 +83,31 @@ final class ChaosSourceMixer {
     private final Set<String> preferenceMatches = java.util.concurrent.ConcurrentHashMap.newKeySet();
 
     boolean matchesPreference(NativeContentItem item, ContentPreference mode) {
-        return mode != ContentPreference.ALL && preferenceMatches.contains(mode.value + "|" + item.url);
+        return mode != ContentPreference.ALL && ShitTokPreferenceMix.eligible(item, mode, preferenceMatches);
     }
-    private final ShitTokPreferenceBuffer preferenceBuffer = new ShitTokPreferenceBuffer();
+    private volatile ContentPreference poolMode = ContentPreference.ALL;
 
-    void requestPreference(Context context, Runnable available) {
+    synchronized void requestPreference(Context context, Runnable available) {
         ContentPreference mode = ContentPreference.get(context);
-        if (!explorationAllowed && mode != ContentPreference.ALL) return;
+        if (poolMode != mode) {
+            sourcePool.stop(); shitShow.stop(); poolMode = mode;
+        }
+        if (mode == ContentPreference.ALL) return;
+        sourcePool.filterExcept(BATCH_ONLY_HAVEN);
+        SourceConfig config = RemoteSourceConfigManager.snapshotOrNull();
+        boolean enabled = config == null || !config.sourceKillSwitchesEnabled || config.onlyHaven.enabled;
         Context app = context.getApplicationContext();
-        preferenceBuffer.request(mode, () -> provider(BATCH_ONLY_HAVEN,
-                () -> loadOnlyHavenBatch(app, mode)).call().items, available);
+        sourcePool.request(BATCH_ONLY_HAVEN, true, enabled,
+                () -> source(BATCH_ONLY_HAVEN, () -> loadOnlyHavenBatch(app, mode)), available);
     }
 
-    boolean hasPreference(ContentPreference mode) { return preferenceBuffer.hasReady(mode); }
-    List<NativeContentItem> takePreference(ContentPreference mode) { return preferenceBuffer.take(mode); }
-    void stopPreference() { preferenceBuffer.stop(); }
+    boolean hasPreference(ContentPreference mode) {
+        return mode != ContentPreference.ALL && poolMode == mode && sourcePool.hasReady(BATCH_ONLY_HAVEN);
+    }
+    List<NativeContentItem> takePreference(ContentPreference mode) {
+        return poolMode == mode ? sourcePool.take(2) : Collections.emptyList();
+    }
+    void stopPreference() { sourcePool.stop(); shitShow.stop(); }
 
     private boolean starterPending = true;
     private volatile boolean explorationAllowed;
@@ -106,7 +116,7 @@ final class ChaosSourceMixer {
     private final Set<Integer> fetching = java.util.concurrent.ConcurrentHashMap.newKeySet();
     private final java.util.Map<String, ArrayDeque<Integer>> pageDecks = new java.util.HashMap<>();
     int activeFetches() { return activeFetches.get(); }
-    String providerSummary() { return providerTimings.toString(); }
+    String providerSummary() { return sourcePool.summary(); }
 
     // Page traversal is cheap post-starter work, independent of rendering/expensive catalog warmup.
     synchronized int nextPage(String source, int maximum) {
@@ -167,153 +177,56 @@ final class ChaosSourceMixer {
 
     List<NativeContentItem> loadRandomBatch(Context context, boolean continuityOnly,
             java.util.function.Consumer<List<NativeContentItem>> onCandidates) {
+        ContentPreference mode = ContentPreference.get(context);
+        if (mode != ContentPreference.ALL) {
+            // Only the authoritative category loader can produce a filtered candidate.
+            return takePreference(mode);
+        }
         if (starterPending) {
             starterPending = false;
             List<NativeContentItem> starter = loadStarterBatch(context, onCandidates);
             if (!starter.isEmpty()) return starter;
         }
-        // Hidden WebView/catalog exploration begins only with normal post-starter refills.
-        if (explorationAllowed) shitShow.prewarm(context);
-
-        // Full refills race independent sources together. A slow or dead provider gets the same
-        // bounded batch window as every other provider instead of serially delaying ShitTok.
-        ExecutorCompletionService<SourceBatch> completions =
-                new ExecutorCompletionService<>(continuityOnly ? CONTINUITY_SOURCE_IO : SOURCE_IO);
-        ArrayList<Future<SourceBatch>> work = new ArrayList<>();
-        ArrayList<java.util.concurrent.Callable<SourceBatch>> requests = new ArrayList<>();
-        final ContentPreference preference = ContentPreference.get(context);
-        // Fast independent listings enter the bounded three-worker pool before multi-page catalogs.
-        requests.add(provider(BATCH_KAOTIC, () -> loadKaoticBatch(context)));
-        requests.add(provider(BATCH_FAPELLO, () -> loadFapelloBatch(context)));
-        requests.add(provider(BATCH_REGULAR, () -> loadRegularBatch(context, onCandidates)));
-        requests.add(provider(BATCH_BADDIEHUB, () -> loadBaddieHubBatch(context)));
-        requests.add(provider(BATCH_XMEGADRIVE, () -> loadXMegaDriveBatch(context)));
-        // eFukt remains bounded before the first frame. No new sources are introduced.
-        requests.add(provider(BATCH_EFUKT,
-                () -> explorationAllowed ? loadEfuktBatch(context) : efukt.fetchLatest(context)));
-        if (explorationAllowed && preference == ContentPreference.ALL)
-            requests.add(provider(BATCH_ONLY_HAVEN, () -> loadOnlyHavenBatch(context)));
-        for (java.util.concurrent.Callable<SourceBatch> request : requests) work.add(completions.submit(request));
-
-        ArrayList<NativeContentItem> regularItems = new ArrayList<>();
-        ArrayList<NativeContentItem> efuktItems = new ArrayList<>();
-        ArrayList<NativeContentItem> kaoticItems = new ArrayList<>();
-        ArrayList<NativeContentItem> fapelloItems = new ArrayList<>();
-        ArrayList<NativeContentItem> onlyHavenItems = new ArrayList<>();
-        ArrayList<NativeContentItem> baddieHubItems = new ArrayList<>();
-        ArrayList<NativeContentItem> xMegaDriveItems = new ArrayList<>();
-
+        recoverSources(context);
+        ArrayList<NativeContentItem> result = new ArrayList<>();
         long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(MIX_BATCH_BUDGET_MS);
-        int remainingWork = work.size();
-        try {
-            while (remainingWork-- > 0) {
-                long remaining = deadline - System.nanoTime();
-                if (remaining <= 0L) break;
-                Future<SourceBatch> completed = completions.poll(
-                        remaining, TimeUnit.NANOSECONDS);
-                if (completed == null) break;
-                try {
-                    SourceBatch batch = completed.get();
-                    if (batch == null || batch.items == null) continue;
-                    // Start admission as each provider completes. Slow catalogs cannot hold
-                    // already available candidates behind the mixed-batch deadline.
-                    if (onCandidates != null) {
-                        int cap = batch.source == BATCH_EFUKT ? 1
-                                : batch.source == BATCH_REGULAR ? 6 : batch.items.size();
-                        onCandidates.accept(batch.items.subList(0, Math.min(cap, batch.items.size())));
-                    }
-                    switch (batch.source) {
-                        case BATCH_REGULAR:
-                            regularItems.addAll(batch.items);
-                            break;
-                        case BATCH_EFUKT:
-                            efuktItems.addAll(batch.items);
-                            break;
-                        case BATCH_KAOTIC:
-                            kaoticItems.addAll(batch.items);
-                            break;
-                        case BATCH_FAPELLO:
-                            fapelloItems.addAll(batch.items);
-                            break;
-                        case BATCH_ONLY_HAVEN:
-                            onlyHavenItems.addAll(batch.items);
-                            break;
-                        case BATCH_BADDIEHUB:
-                            baddieHubItems.addAll(batch.items);
-                            break;
-                        case BATCH_XMEGADRIVE:
-                            xMegaDriveItems.addAll(batch.items);
-                            break;
-                        default:
-                            break;
-                    }
-                } catch (Exception ignored) {
-                    // Other source tasks continue contributing to this batch.
-                }
+        // The consumer can stop admission at any time. Provider work retains its own bounded
+        // session buffers and survives that decision, until explicit lifecycle/mode cancellation.
+        while (!Thread.currentThread().isInterrupted() && System.nanoTime() < deadline) {
+            List<NativeContentItem> ready = sourcePool.take(8);
+            if (!ready.isEmpty()) {
+                result.addAll(ready);
+                if (onCandidates != null) onCandidates.accept(ready);
+                if (result.size() >= 24) break;
             }
-        } catch (InterruptedException interrupted) {
-            Thread.currentThread().interrupt();
-        } finally {
-            for (Future<SourceBatch> request : work) {
-                if (!request.isDone()) request.cancel(true);
-            }
+            try { Thread.sleep(40L); }
+            catch (InterruptedException cancelled) { Thread.currentThread().interrupt(); break; }
         }
-
-        Collections.shuffle(regularItems, random);
-        Collections.shuffle(efuktItems, random);
-        Collections.shuffle(kaoticItems, random);
-        Collections.shuffle(fapelloItems, random);
-        Collections.shuffle(onlyHavenItems, random);
-        Collections.shuffle(baddieHubItems, random);
-        Collections.shuffle(xMegaDriveItems, random);
-
-        ArrayList<NativeContentItem> shitShowItems = new ArrayList<>();
-        HashSet<String> regularUrls = new HashSet<>();
-        for (NativeContentItem item : regularItems) {
-            if (item != null && item.url != null) regularUrls.add(item.url);
-        }
-        for (NativeContentItem item : shitShow.takeReadyBatch(
-                kaoticItems.size() < 6 ? SHIT_SHOW_PER_BATCH : 7)) {
-            if (item == null || item.url == null || item.url.isEmpty()) continue;
-            if (regularUrls.contains(item.url)) continue;
-            shitShowItems.add(item);
-        }
-        Collections.shuffle(shitShowItems, random);
-        if (onCandidates != null) onCandidates.accept(shitShowItems);
-
-        ArrayList<NativeContentItem> result = new ArrayList<>(mixAvailable(
-                kaoticItems, shitShowItems, fapelloItems, onlyHavenItems, regularItems, efuktItems));
-        addUpTo(result, baddieHubItems, BADDIEHUB_ITEMS_PER_BATCH);
-        addUpTo(result, xMegaDriveItems, XMEGADRIVE_ITEMS_PER_BATCH);
         return result;
     }
 
-    static List<NativeContentItem> mixAvailable(
-            List<NativeContentItem> kaotic, List<NativeContentItem> shitShow,
-            List<NativeContentItem> fapello, List<NativeContentItem> onlyHaven,
-            List<NativeContentItem> crazyShit, List<NativeContentItem> efukt
-    ) {
-        ArrayList<NativeContentItem> preferred = new ArrayList<>();
-        boolean kaoticReady = kaotic != null && kaotic.size() >= 6;
-        addUpTo(preferred, kaotic, Integer.MAX_VALUE);
-        // Kaotic leads a healthy batch. If it is short, keep the other feeds uncapped.
-        addUpTo(preferred, shitShow, kaoticReady ? 7 : Integer.MAX_VALUE);
-        addUpTo(preferred, fapello, Integer.MAX_VALUE);
-        addUpTo(preferred, onlyHaven, Integer.MAX_VALUE);
-        addUpTo(preferred, crazyShit, kaoticReady ? 6 : Integer.MAX_VALUE);
+    List<NativeContentItem> takeReadyCandidates() { return sourcePool.take(16); }
 
-        int efuktLimit = preferred.size() < 10 ? Integer.MAX_VALUE
-                : Math.max(1, (preferred.size() + 12) / 13);
-        ArrayList<NativeContentItem> result = new ArrayList<>(preferred);
-        addUpTo(result, efukt, efuktLimit);
-        // FeedView applies its portrait and source-weighted shuffle to this complete pool.
-        return result;
+    void recoverSources(Context context) {
+        if (ContentPreference.get(context) != ContentPreference.ALL) return;
+        SourceConfig config = RemoteSourceConfigManager.snapshotOrNull();
+        boolean switches = config != null && config.sourceKillSwitchesEnabled;
+        sourcePool.request(BATCH_KAOTIC, true, config == null || config.kaotic.enabled, () -> source(BATCH_KAOTIC, () -> loadKaoticBatch(context)));
+        sourcePool.request(BATCH_FAPELLO, true, !switches || config.fapello.enabled, () -> source(BATCH_FAPELLO, () -> loadFapelloBatch(context)));
+        sourcePool.request(BATCH_REGULAR, true, true, () -> source(BATCH_REGULAR, () -> loadRegularBatch(context, null)));
+        sourcePool.request(BATCH_BADDIEHUB, true, !switches || config.baddieHub.enabled, () -> source(BATCH_BADDIEHUB, () -> loadBaddieHubBatch(context)));
+        sourcePool.request(BATCH_XMEGADRIVE, true, true, () -> source(BATCH_XMEGADRIVE, () -> loadXMegaDriveBatch(context)));
+        sourcePool.request(BATCH_EFUKT, true, true, () -> source(BATCH_EFUKT,
+                () -> explorationAllowed ? loadEfuktBatch(context) : efukt.fetchLatest(context)));
+        if (explorationAllowed) {
+            sourcePool.request(BATCH_ONLY_HAVEN, true, !switches || config.onlyHaven.enabled, () -> source(BATCH_ONLY_HAVEN, () -> loadOnlyHavenBatch(context)));
+            sourcePool.request(BATCH_SHIT_SHOW, true, true, () -> source(BATCH_SHIT_SHOW,
+                    () -> shitShow.takeBatchOrWarm(context, SHIT_SHOW_PER_BATCH)));
+        }
     }
 
-    private static void addUpTo(List<NativeContentItem> result,
-                                List<NativeContentItem> source, int limit) {
-        if (source == null) return;
-        for (int i = 0; i < source.size() && i < limit; i++) result.add(source.get(i));
+    private List<NativeContentItem> source(int id, java.util.concurrent.Callable<List<NativeContentItem>> loader) throws Exception {
+        return provider(id, loader).call().items;
     }
 
     private List<NativeContentItem> loadRegularBatch(Context context, java.util.function.Consumer<List<NativeContentItem>> onCandidates) {
@@ -377,7 +290,7 @@ final class ChaosSourceMixer {
             int take = Math.min(XMEGADRIVE_ITEMS_PER_BATCH, candidates.size());
             return new ArrayList<>(candidates.subList(0, take));
         } catch (Exception ignored) {
-            return new ArrayList<>();
+            throw new IllegalStateException("Source acquisition failed", ignored);
         }
     }
 
@@ -394,7 +307,7 @@ final class ChaosSourceMixer {
             int take = Math.min(BADDIEHUB_ITEMS_PER_BATCH, candidates.size());
             return new ArrayList<>(candidates.subList(0, take));
         } catch (Exception ignored) {
-            return new ArrayList<>();
+            throw new IllegalStateException("Source acquisition failed", ignored);
         }
     }
 
@@ -465,7 +378,7 @@ final class ChaosSourceMixer {
             int take = Math.min(FAPELLO_ITEMS_PER_BATCH, candidates.size());
             return new ArrayList<>(candidates.subList(0, take));
         } catch (Exception ignored) {
-            return new ArrayList<>();
+            throw new IllegalStateException("Source acquisition failed", ignored);
         }
     }
 
@@ -483,7 +396,7 @@ final class ChaosSourceMixer {
             int take = Math.min(KAOTIC_ITEMS_PER_BATCH, candidates.size());
             return new ArrayList<>(candidates.subList(0, take));
         } catch (Exception ignored) {
-            return new ArrayList<>();
+            throw new IllegalStateException("Source acquisition failed", ignored);
         }
     }
 

@@ -43,8 +43,9 @@ final class ShitShowTapSource {
     private final Set<String> seenStoryUrls = new HashSet<>();
 
     private boolean warming;
+    private long generation;
     private volatile boolean playbackProtected;
-    private WebView webView;
+    private volatile WebView webView;
     private long harvestStartedAt;
 
     void prewarm(Context context) {
@@ -90,6 +91,12 @@ final class ShitShowTapSource {
         return result;
     }
 
+    void stop() {
+        final WebView outgoing;
+        synchronized (lock) { generation++; ready.clear(); warming = false; outgoing = webView; lock.notifyAll(); }
+        main.post(() -> { if (webView == outgoing) destroyWebView(); });
+    }
+
     void resetDeck() {
         // Keep process-level Shit Show history. Chaos has its own repeat protection too.
     }
@@ -116,7 +123,9 @@ final class ShitShowTapSource {
             if (warming) return;
             warming = true;
         }
-        main.post(() -> startHarvest(activity));
+        long token;
+        synchronized (lock) { token = generation; }
+        main.post(() -> { synchronized (lock) { if (token != generation) return; } startHarvest(activity); });
     }
 
     private void startHarvest(Activity activity) {
@@ -163,7 +172,7 @@ final class ShitShowTapSource {
         } catch (Exception ignored) {
         }
 
-        view.addJavascriptInterface(new Bridge(), "CSShitBridge");
+        view.addJavascriptInterface(new Bridge(generation), "CSShitBridge");
         view.setWebViewClient(new WebViewClient() {
             @Override
             public boolean shouldOverrideUrlLoading(WebView web, WebResourceRequest request) {
@@ -178,6 +187,7 @@ final class ShitShowTapSource {
 
             @Override
             public void onPageFinished(WebView web, String url) {
+                if (webView != web || !isWarming()) return;
                 harvestStories(web);
                 schedulePump(web);
             }
@@ -219,7 +229,9 @@ final class ShitShowTapSource {
         if (view != null) view.evaluateJavascript(HARVEST_STORIES_JS, null);
     }
 
-    private void acceptStory(String raw) {
+    private void acceptStory(String raw) { acceptStory(raw, generation); }
+
+    private void acceptStory(String raw, long token) {
         try {
             JSONObject json = new JSONObject(raw == null ? "{}" : raw);
             String pageUrl = cleanUrl(json.optString("page", ""));
@@ -240,7 +252,8 @@ final class ShitShowTapSource {
             if (itemUrl.isEmpty()) return;
 
             synchronized (lock) {
-                if (!seenStoryUrls.add(itemUrl)) return;
+                if (token != generation || !seenStoryUrls.add(itemUrl)) return;
+                if (seenStoryUrls.size() > 8192) seenStoryUrls.clear();
                 while (ready.size() >= MAX_CACHE) ready.removeLast();
                 ready.addLast(new NativeContentItem(
                         NativeContentItem.KIND_MEDIA,
@@ -362,9 +375,11 @@ final class ShitShowTapSource {
     }
 
     private final class Bridge {
+        private final long token;
+        Bridge(long token) { this.token = token; }
         @JavascriptInterface
         public void onStory(String raw) {
-            acceptStory(raw);
+            acceptStory(raw, token);
         }
 
         @JavascriptInterface
