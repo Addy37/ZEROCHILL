@@ -44,6 +44,25 @@ public final class ShitTokCreatorMetadataTest {
     }
 
     @Test
+    public void fapelloProfileUrlWithOpaqueTitle_staysRejectedAsCreatorLabel() {
+        String profile = "https://fapello.com/test-creator/";
+        NativeContentItem item = new NativeContentItem(
+                NativeContentItem.KIND_MEDIA,
+                "Clip",
+                "https://fapello.com/video/999/",
+                "",
+                "",
+                profile,
+                "",
+                "Fapello"
+        );
+
+        assertEquals("", ShitTokCreatorMetadata.creatorName(item));
+        assertEquals(profile, ShitTokCreatorMetadata.knownProfileUrl(item));
+        assertFalse(ShitTokCreatorMetadata.hasCreator(item));
+    }
+
+    @Test
     public void onlyHavenClip_usesTitleAsCreatorName() {
         NativeContentItem item = new NativeContentItem(
                 NativeContentItem.KIND_MEDIA,
