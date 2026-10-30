@@ -40,13 +40,13 @@ final class ShitShowPlayableResolver {
     private static final int MAX_HEADER_CACHE = 96;
     private static final Object HEADER_LOCK = new Object();
     private static final LinkedHashMap<String, Map<String, String>> HEADER_CACHE = new LinkedHashMap<>();
-    private static volatile WeakReference<Activity> host = new WeakReference<>(null);
+    private static volatile WeakReference<Activity> hostActivityRef = new WeakReference<>(null);
 
     private ShitShowPlayableResolver() {
     }
 
     static void rememberHost(Activity activity) {
-        if (valid(activity) != null) host = new WeakReference<>(activity);
+        if (valid(activity) != null) hostActivityRef = new WeakReference<>(activity);
     }
 
     static Activity hostActivity(Context context) {
@@ -58,7 +58,7 @@ final class ShitShowPlayableResolver {
             current = next;
         }
         if (current instanceof Activity) return valid((Activity) current);
-        return valid(host.get());
+        return valid(hostActivityRef.get());
     }
 
     private static Activity valid(Activity activity) {
@@ -103,9 +103,9 @@ final class ShitShowPlayableResolver {
             view.setFocusable(false);
             view.setFocusableInTouchMode(false);
 
-            ViewGroup content = activity.findViewById(android.R.id.content);
-            if (content != null) {
-                content.addView(view, 0, new FrameLayout.LayoutParams(dp(activity, 360), dp(activity, 640)));
+            ViewGroup host = activity.findViewById(android.R.id.content);
+            if (host != null) {
+                host.addView(view, 0, new FrameLayout.LayoutParams(dp(activity, 360), dp(activity, 640)));
             } else {
                 view.layout(0, 0, dp(activity, 360), dp(activity, 640));
             }
@@ -183,6 +183,7 @@ final class ShitShowPlayableResolver {
             Thread.currentThread().interrupt();
         }
 
+        // Prefer the actual request the rendered player made. DOM currentSrc is only a fallback.
         String rawMedia = cleanUrl(requestMedia.get());
         if (!isHttp(rawMedia)) rawMedia = cleanUrl(domMedia.get());
         Map<String, String> headers = buildPlaybackHeaders(
@@ -379,9 +380,9 @@ final class ShitShowPlayableResolver {
     private static boolean isStoryUrl(String value) {
         try {
             Uri uri = Uri.parse(cleanUrl(value));
-            String storyHost = safe(uri.getHost()).toLowerCase(Locale.US);
+            String host = safe(uri.getHost()).toLowerCase(Locale.US);
             String path = safe(uri.getPath()).toLowerCase(Locale.US);
-            return ("crazyshit.com".equals(storyHost) || "www.crazyshit.com".equals(storyHost))
+            return ("crazyshit.com".equals(host) || "www.crazyshit.com".equals(host))
                     && path.startsWith("/shitshow/")
                     && path.length() > "/shitshow/".length();
         } catch (Exception ignored) {
@@ -392,8 +393,8 @@ final class ShitShowPlayableResolver {
     private static boolean isCrazyShitHost(String value) {
         try {
             Uri uri = Uri.parse(cleanUrl(value));
-            String valueHost = safe(uri.getHost()).toLowerCase(Locale.US);
-            return "crazyshit.com".equals(valueHost) || "www.crazyshit.com".equals(valueHost);
+            String host = safe(uri.getHost()).toLowerCase(Locale.US);
+            return "crazyshit.com".equals(host) || "www.crazyshit.com".equals(host);
         } catch (Exception ignored) {
             return false;
         }
