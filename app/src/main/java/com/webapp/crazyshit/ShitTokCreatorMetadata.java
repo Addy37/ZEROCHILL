@@ -17,10 +17,14 @@ final class ShitTokCreatorMetadata {
         if (FapelloRepository.isFapelloUrl(item.url) || FapelloRepository.isModelUrl(uploader)) {
             String creator = uploader;
             // Creator-page media keeps the canonical Fapello profile URL in uploader so
-            // navigation can preserve the exact profile. ShitTok must never render that URL
-            // as the creator label. Fapello creator-page titles are "<model name> #<post id>".
+            // navigation can preserve the exact profile. Only the repository's creator-page
+            // title shape, "<model name> #<post id>", may supply a display-name fallback.
+            // Arbitrary titles must stay rejected so opaque media cannot become creator identities.
             if (FapelloRepository.isModelUrl(creator) || looksLikeUrl(creator)) {
-                creator = clean(item.title).replaceFirst("\\s+#[0-9]+$", "").trim();
+                String title = clean(item.title);
+                String stripped = title.replaceFirst("\\s+#[0-9]+$", "").trim();
+                if (stripped.equals(title)) return "";
+                creator = stripped;
             }
             return isGenericCreatorLabel(creator) || looksLikeUrl(creator) ? "" : creator;
         }
