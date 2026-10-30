@@ -371,6 +371,7 @@ public final class ChaosFeedView extends FrameLayout {
                 }
                 if (manualFullscreen && position != selectedPosition) exitManualFullscreen();
                 selectedPosition = position;
+                if (changed) creatorMetadata.select(null);
                 if (changed) {
                     sessionResume.clear();
                     host.onVerticalPageChanged(
@@ -592,6 +593,7 @@ public final class ChaosFeedView extends FrameLayout {
         if (searchCoverActive) return;
         if (closed || !active || !hostResumed || isPaging() || selectedPosition >= items.size()) return;
         String url = items.get(selectedPosition).url;
+        creatorMetadata.select(items.get(selectedPosition));
         AppPerformance.startupItem("owner_select", url, "");
         playbackOwner.select(url,
                 selectedPosition + 1 < items.size() ? items.get(selectedPosition + 1).url : null,
@@ -647,6 +649,7 @@ public final class ChaosFeedView extends FrameLayout {
         if (value) applyContentPreference();
         if (!value && active) { recordRunway("leavingFeed"); pauseRunwayClock(); }
         if (!value) {
+            creatorMetadata.select(null);
             resetTemporaryPinch();
             dismissFocusControls();
         }
@@ -728,6 +731,7 @@ public final class ChaosFeedView extends FrameLayout {
         resetTemporaryPinch();
         dismissFocusControls();
         hostResumed = false;
+        creatorMetadata.select(null);
         sourceMixer.stopPreference();
         cancelInventoryBatch();
         syncLoadingIndicators();
@@ -756,6 +760,7 @@ public final class ChaosFeedView extends FrameLayout {
         dismissFocusControls();
         resetCreatorSwipePreview();
         searchCoverActive = true;
+        creatorMetadata.select(null);
         pager.setUserInputEnabled(false);
         cancelPendingAutoAdvance();
         cancelSwipePlayerMaintenance();
@@ -1495,7 +1500,7 @@ public final class ChaosFeedView extends FrameLayout {
             // Refresh only creator chrome. Never bind a card, detach a lease or prepare a player.
             for (ChaosHolder holder : playerHolders) {
                 if (holder.item != null && url.equals(holder.item.url))
-                    holder.bindCreatorAvatar(holder.item, true);
+                    holder.bindCreatorChrome(holder.item);
             }
         });
     }
@@ -3114,7 +3119,7 @@ public final class ChaosFeedView extends FrameLayout {
                 }
 
                 if (action == MotionEvent.ACTION_MOVE && !manualFullscreen) {
-                    String creator = ShitTokCreatorMetadata.creatorName(item);
+                    String creator = creatorIdentity == null ? "" : creatorIdentity.title;
                     float dx = event.getX() - creatorSwipeDownX;
                     float dy = event.getY() - creatorSwipeDownY;
                     if (!creator.isEmpty() && dx < -dp(14)
@@ -3151,7 +3156,7 @@ public final class ChaosFeedView extends FrameLayout {
                         pager.setUserInputEnabled(true);
                         ViewParentCompat.disallow(v, false);
                         if (openCreator) {
-                            String creator = ShitTokCreatorMetadata.creatorName(item);
+                            String creator = creatorIdentity == null ? "" : creatorIdentity.title;
                             haptic(v);
                             pauseAndRecord();
                             String transitionToken = creatorSwipeTransitionToken;
@@ -3186,7 +3191,7 @@ public final class ChaosFeedView extends FrameLayout {
             title.setOnLongClickListener(menuLongPress);
             meta.setOnLongClickListener(menuLongPress);
             title.setOnClickListener(v -> {
-                if (ShitTokCreatorMetadata.creatorName(item).isEmpty()) return;
+                if (creatorIdentity == null) return;
                 haptic(v);
                 openCreatorGallery(false, "");
             });
@@ -3481,6 +3486,36 @@ public final class ChaosFeedView extends FrameLayout {
             return drawable;
         }
 
+        private void bindCreatorChrome(NativeContentItem next) {
+            bindCreatorAvatar(next, true);
+            boolean creatorClip = creatorIdentity != null;
+            String creator = creatorClip ? creatorIdentity.title : "";
+            String displayTitle = creatorClip
+                    ? creator
+                    : (next.title == null || next.title.isEmpty() ? "Random video" : next.title);
+            title.setText(displayTitle);
+            landscapeTitle.setText(next.title == null || next.title.isEmpty()
+                    ? displayTitle : next.title);
+            title.setClickable(creatorClip);
+            title.setContentDescription(
+                    creatorClip ? "Open " + creator + " gallery" : displayTitle
+            );
+            StringBuilder info = new StringBuilder();
+            if (!creatorClip) {
+                if (next.uploader != null && !next.uploader.isEmpty()) info.append(next.uploader);
+                if (next.views != null && !next.views.isEmpty()) {
+                    if (info.length() > 0) info.append("  •  ");
+                    info.append(next.views).append(" views");
+                }
+            }
+            meta.setText(info);
+            if (creatorClip && BaddieHubRepository.isBaddieHubUrl(next.url)) {
+                // Creator identity never changes this clip's source, resolver, or saved media.
+                meta.setText(BaddieHubRepository.LABEL);
+                meta.setVisibility(View.VISIBLE);
+            } else meta.setVisibility(creatorClip ? View.GONE : View.VISIBLE);
+        }
+
         private void bindCreatorAvatar(NativeContentItem media, boolean creatorClip) {
             Glide.with(creatorAvatar).clear(creatorAvatar);
             creatorAvatar.setImageResource(R.drawable.ic_more_account);
@@ -3494,7 +3529,8 @@ public final class ChaosFeedView extends FrameLayout {
                 return;
             }
 
-            creatorAvatarControl.setVisibility(View.VISIBLE);
+            creatorAvatarControl.setVisibility(!landscapeFullscreen() && !clearDisplay
+                    && !pinch.suppressesFeedChrome() ? View.VISIBLE : View.GONE);
             creatorAvatarControl.setContentDescription(
                     "Open " + creatorIdentity.title + " creator gallery"
             );
@@ -3584,29 +3620,7 @@ public final class ChaosFeedView extends FrameLayout {
             landscapeHeader.setVisibility(View.GONE);
             landscapeActions.setVisibility(View.GONE);
             applyMuteState();
-            String creator = ShitTokCreatorMetadata.creatorName(next);
-            boolean creatorClip = !creator.isEmpty();
-            bindCreatorAvatar(next, creatorClip);
-            String displayTitle = creatorClip
-                    ? creator
-                    : (next.title == null || next.title.isEmpty() ? "Random video" : next.title);
-            title.setText(displayTitle);
-            landscapeTitle.setText(next.title == null || next.title.isEmpty()
-                    ? displayTitle : next.title);
-            title.setClickable(creatorClip);
-            title.setContentDescription(
-                    creatorClip ? "Open " + creator + " gallery" : displayTitle
-            );
-            StringBuilder info = new StringBuilder();
-            if (!creatorClip) {
-                if (next.uploader != null && !next.uploader.isEmpty()) info.append(next.uploader);
-                if (next.views != null && !next.views.isEmpty()) {
-                    if (info.length() > 0) info.append("  •  ");
-                    info.append(next.views).append(" views");
-                }
-            }
-            meta.setText(info);
-            meta.setVisibility(creatorClip ? View.GONE : View.VISIBLE);
+            bindCreatorChrome(next);
             comments.setVisibility(supportsComments(next) ? View.VISIBLE : View.GONE);
             landscapeComments.setVisibility(supportsComments(next) ? View.VISIBLE : View.GONE);
             updateSaveButton(next, save);
@@ -4068,7 +4082,7 @@ public final class ChaosFeedView extends FrameLayout {
         private void openCreatorGallery(boolean seamless, String transitionToken) {
             pinch.reset();
             if (item == null) return;
-            NativeContentItem identity = creatorMetadata.identity(item);
+            NativeContentItem identity = creatorIdentity;
             if (identity == null) return;
             String query = identity.searchQuery.trim().isEmpty()
                     ? identity.title : identity.searchQuery;

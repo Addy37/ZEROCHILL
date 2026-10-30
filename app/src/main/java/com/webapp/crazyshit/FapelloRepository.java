@@ -193,6 +193,10 @@ final class FapelloRepository {
         return searchModels(context, query, limit);
     }
 
+    boolean confirmsCreatorAlias(Context context, Model model, String query) throws IOException {
+        return profileConfirmsAlias(fetchDocument(context, model.url, baseUrl()), model, query);
+    }
+
     static String searchUrl(String query, int limit) throws IOException {
         return searchUrl(query, limit, 0);
     }

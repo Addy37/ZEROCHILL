@@ -86,6 +86,9 @@ public class ShitTokSwipeStartTest {
         ReflectionHelpers.setField(h.holder, "item", new NativeContentItem(
                 NativeContentItem.KIND_MEDIA, "Fixture creator", "https://example.invalid/creator",
                 "", "", "", "", "OnlyHaven", "OnlyHaven"));
+        ReflectionHelpers.callInstanceMethod(h.holder, "bindCreatorChrome",
+                org.robolectric.util.ReflectionHelpers.ClassParameter.from(NativeContentItem.class,
+                        ReflectionHelpers.<NativeContentItem>getField(h.holder, "item")));
         h.directPlayer = true;
         h.event(0, 0, MotionEvent.ACTION_DOWN, 400, 700);
         h.event(0, 16, MotionEvent.ACTION_MOVE, 300, 699);
@@ -102,6 +105,9 @@ public class ShitTokSwipeStartTest {
         ReflectionHelpers.setField(h.holder, "item", new NativeContentItem(
                 NativeContentItem.KIND_MEDIA, "Fixture creator", "https://example.invalid/creator",
                 "", "", "", "", "OnlyHaven", "OnlyHaven"));
+        ReflectionHelpers.callInstanceMethod(h.holder, "bindCreatorChrome",
+                org.robolectric.util.ReflectionHelpers.ClassParameter.from(NativeContentItem.class,
+                        ReflectionHelpers.<NativeContentItem>getField(h.holder, "item")));
         h.event(0, 0, MotionEvent.ACTION_DOWN, 400, 700);
         h.event(0, 16, MotionEvent.ACTION_MOVE, 300, 699);
         assertTrue(ReflectionHelpers.<Boolean>getField(h.holder, "creatorSwipeTracking"));
