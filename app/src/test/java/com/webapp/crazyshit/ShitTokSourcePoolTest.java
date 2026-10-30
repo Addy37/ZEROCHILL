@@ -100,6 +100,21 @@ public class ShitTokSourcePoolTest {
         assertTrue(pool.take(12).isEmpty());
         pool.setEligibility(4, true, true); assertFalse(pool.hasReady(4));
     }
+    @Test public void womenShowHandoffConsumesOnlyItsBoundedCacheWithoutOpeningBroadSources() throws Exception {
+        NativeContentItem show = clip("cached-show", 1), broad = clip("broad", 1);
+        pool.request(4, true, true, () -> Arrays.asList(show));
+        pool.request(3, true, true, () -> Arrays.asList(broad));
+        awaitHealth(4, ShitTokSourcePool.Health.READY); awaitHealth(3, ShitTokSourcePool.Health.READY);
+        pool.pause(); pool.filterExcept(-1);
+        assertTrue(pool.take(12).isEmpty());
+        assertTrue(pool.takeCached(4, 0).isEmpty());
+        assertEquals(Arrays.asList(show), pool.takeCached(4, 12));
+        assertTrue(pool.takeCached(4, 12).isEmpty());
+        assertTrue(pool.take(12).isEmpty());
+        pool.setEligibility(3, true, true);
+        assertEquals(Arrays.asList(broad), pool.take(12));
+    }
+
     @Test public void changingCategoryDiscardsOnlyCategoryBufferAndKeepsBroadSourceCache() throws Exception {
         pool.request(4, true, true, () -> Arrays.asList(clip("shitshow", 1)));
         pool.request(6, true, true, () -> Arrays.asList(clip("old-category", 1)));

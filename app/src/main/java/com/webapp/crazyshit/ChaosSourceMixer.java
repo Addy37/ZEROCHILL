@@ -106,6 +106,8 @@ final class ChaosSourceMixer {
                 sourcePool.setEligibility(source, shittokEligible,
                         shittokEligible && sourceAvailable(source, config));
             }
+            if (filtered != null) sourcePool.putCached(BATCH_SHIT_SHOW,
+                    filtered.returnShowToAll(sourcePool.cacheRoom(BATCH_SHIT_SHOW)));
             return;
         }
         // Broad buffers survive filtering, but only the selected category inventory can drain.
@@ -113,7 +115,8 @@ final class ChaosSourceMixer {
         if (context instanceof android.app.Activity)
             ShitShowPlayableResolver.rememberHost((android.app.Activity) context);
         if (filtered == null) filtered = new ShitTokFilteredInventory(SOURCE_IO,
-                android.os.SystemClock::elapsedRealtime, ShitTokFilteredInventory.backend(context, shitShow));
+                android.os.SystemClock::elapsedRealtime, ShitTokFilteredInventory.backend(context, shitShow,
+                        () -> sourcePool.takeCached(BATCH_SHIT_SHOW, SHIT_SHOW_PER_BATCH)));
         filtered.request(mode, demand, available);
     }
 

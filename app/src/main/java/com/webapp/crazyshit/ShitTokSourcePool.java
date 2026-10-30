@@ -109,6 +109,34 @@ final class ShitTokSourcePool {
         }
         return result;
     }
+    /** Transfer raw metadata only after the caller establishes a separate eligibility path.
+     * The Women-only ShitShow loader uses this; ordinary take() still honors every source gate. */
+    synchronized List<NativeContentItem> takeCached(int source, int maximum) {
+        Slot slot = slots.get(source);
+        ArrayList<NativeContentItem> result = new ArrayList<>();
+        if (slot == null) return result;
+        while (!slot.ready.isEmpty() && result.size() < Math.max(0, maximum))
+            result.add(slot.ready.remove(0));
+        if (slot.eligible) slot.health = slot.ready.isEmpty() ? Health.IDLE : Health.READY;
+        return result;
+    }
+    synchronized int cacheRoom(int source) {
+        Slot slot = slots.get(source);
+        return MAX_READY_PER_SOURCE - (slot == null ? 0 : slot.ready.size());
+    }
+    synchronized void putCached(int source, List<NativeContentItem> items) {
+        Slot slot = slots.computeIfAbsent(source, ignored -> new Slot());
+        Set<String> urls = new HashSet<>();
+        for (NativeContentItem item : slot.ready) urls.add(item.url);
+        for (NativeContentItem item : items) {
+            if (item == null || !item.isVideo() || item.url.isEmpty() || !urls.add(item.url)
+                    || slot.ready.size() >= MAX_READY_PER_SOURCE) continue;
+            slot.ready.add(item);
+            if (provenance.put(item.url, slot) == null) provenanceOrder.addLast(item.url);
+            while (provenanceOrder.size() > 4096) provenance.remove(provenanceOrder.removeFirst());
+        }
+        if (slot.eligible && !slot.ready.isEmpty()) slot.health = Health.READY;
+    }
     void verified(String url) {
         Slot slot = provenance.get(url);
         if (slot != null) slot.verified.incrementAndGet();

@@ -268,6 +268,11 @@ final class ShitTokFilteredInventory {
         return mode == active && session != null ? session.pool.take(12) : Collections.emptyList();
     }
 
+    synchronized List<NativeContentItem> returnShowToAll(int maximum) {
+        Session women = sessions.get(ContentPreference.WOMEN);
+        return women == null ? Collections.emptyList() : women.pool.takeCached(SHOW, maximum);
+    }
+
     synchronized ShitTokSourcePool.Health health() {
         Session session = sessions.get(active);
         return session == null ? ShitTokSourcePool.Health.IDLE : session.pool.health(HAVEN);
@@ -295,6 +300,10 @@ final class ShitTokFilteredInventory {
     }
 
     static Backend backend(Context context, ShitShowTapSource show) {
+        return backend(context, show, Collections::emptyList);
+    }
+    static Backend backend(Context context, ShitShowTapSource show,
+                           java.util.function.Supplier<List<NativeContentItem>> cachedShow) {
         Context app = context.getApplicationContext();
         OnlyHavenRepository haven = new OnlyHavenRepository();
         FapelloRepository fapello = new FapelloRepository();
@@ -337,7 +346,10 @@ final class ShitTokFilteredInventory {
                 }
                 return result;
             }
-            public List<NativeContentItem> show() throws Exception { return show.takeBatchOrWarm(context, 12); }
+            public List<NativeContentItem> show() throws Exception {
+                List<NativeContentItem> cached = cachedShow.get();
+                return cached.isEmpty() ? show.takeBatchOrWarm(context, 12) : cached;
+            }
             public List<OnlyHavenRepository.Creator> known(ContentPreference mode) {
                 ArrayList<OnlyHavenRepository.Creator> result = new ArrayList<>();
                 for (NativeContentItem item : CreatorCatalog.all(app)) {

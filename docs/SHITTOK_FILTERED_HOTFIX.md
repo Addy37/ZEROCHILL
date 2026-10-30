@@ -40,7 +40,11 @@ Bunkr clips retain the original media URL and carry the OnlyHaven profile/name f
 existing blocking and creator navigation. No Bunkr network configuration changes.
 
 ShitShow's existing Activity-backed harvester and playable resolver contribute
-directly only in Women. The other four filtered inventories never request ShitShow.
+directly only in Women. Women first drains up to 12 already-buffered ShitShow
+metadata entries from the broad source cache, avoiding stranding valid unplayed
+clips when the active mode changes; no other broad source buffer is opened.
+Returning to All hands unused raw Women ShitShow metadata back within the same
+12-entry source cap, retaining its original All Content acquisition behavior. The other four filtered inventories never request ShitShow.
 Only URLs actually harvested into that category session receive evidence. Labels,
 media titles, descriptions and thumbnails cannot grant eligibility.
 
