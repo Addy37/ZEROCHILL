@@ -13,12 +13,18 @@ final class ShitTokCreatorMetadata {
     static String creatorName(NativeContentItem item) {
         if (item == null) return "";
 
-        if (FapelloRepository.isFapelloUrl(item.url)) {
-            String creator = clean(item.uploader);
-            return isGenericCreatorLabel(creator) ? "" : creator;
+        String uploader = clean(item.uploader);
+        if (FapelloRepository.isFapelloUrl(item.url) || FapelloRepository.isModelUrl(uploader)) {
+            String creator = uploader;
+            // Creator-page media keeps the canonical Fapello profile URL in uploader so
+            // navigation can preserve the exact profile. ShitTok must never render that URL
+            // as the creator label. Fapello creator-page titles are "<model name> #<post id>".
+            if (FapelloRepository.isModelUrl(creator) || looksLikeUrl(creator)) {
+                creator = clean(item.title).replaceFirst("\\s+#[0-9]+$", "").trim();
+            }
+            return isGenericCreatorLabel(creator) || looksLikeUrl(creator) ? "" : creator;
         }
 
-        String uploader = clean(item.uploader);
         String description = clean(item.description).toLowerCase(Locale.US);
         boolean onlyHaven = OnlyHavenRepository.isOnlyHavenUrl(uploader)
                 || "onlyhaven".equalsIgnoreCase(uploader)
@@ -110,6 +116,11 @@ final class ShitTokCreatorMetadata {
                 || "onlyhaven".equals(lower)
                 || "onlyhaven media".equals(lower)
                 || "random video".equals(lower);
+    }
+
+    private static boolean looksLikeUrl(String value) {
+        String lower = clean(value).toLowerCase(Locale.US);
+        return lower.startsWith("http://") || lower.startsWith("https://");
     }
 
     private static String clean(String value) {
