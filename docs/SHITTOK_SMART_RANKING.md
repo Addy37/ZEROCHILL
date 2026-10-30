@@ -46,7 +46,13 @@ work: recovery acquisition requires existing playback permission; filtered acqui
 can start without a first frame. Buffered sources do not refetch until consumed.
 Paused/hidden/closed/search-covered sessions do not start recovery. Existing
 reservoirs reuse their candidates without launching another provider race. Lifecycle/mode
-cancellation invalidates source generations and stops the ShitShow WebView. A socket
+cancellation invalidates source generations and stops the ShitShow WebView.
+Healthy raw metadata caches survive pauses and filtered modes without becoming
+eligible there. Mode changes clear the OnlyHaven category buffer; returning to
+All re-enables broad caches after rechecking remote availability. This avoids
+losing ShitShow metadata already consumed by its internal harvest deduplication.
+Abandoned unplayed ShitShow recommendations release that metadata dedup key; normal
+seen/history exclusions still prevent replaying actually watched clips. A socket
 that ignores interruption remains single-flight until it really exits.
 
 Raw selection combines source opportunity age (capped at eight turns) with a bounded

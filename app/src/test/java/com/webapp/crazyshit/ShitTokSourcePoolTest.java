@@ -78,12 +78,44 @@ public class ShitTokSourcePoolTest {
             while (release.getCount() > 0) try { release.await(); } catch (InterruptedException ignored) {}
             exited.countDown(); return Arrays.asList(clip("stale", 1));
         });
-        assertTrue(entered.await(2, TimeUnit.SECONDS)); pool.stop();
+        assertTrue(entered.await(2, TimeUnit.SECONDS)); pool.pause();
         pool.request(3, true, true, () -> Arrays.asList(clip("new", 1)));
         awaitHealth(3, ShitTokSourcePool.Health.READY); release.countDown(); assertTrue(exited.await(2, TimeUnit.SECONDS));
         io.submit(() -> {}).get(2, TimeUnit.SECONDS);
         List<NativeContentItem> result = pool.take(24);
         assertEquals(1, result.size()); assertEquals("new1", result.get(0).title);
+    }
+    @Test public void lifecyclePauseAndFilteredModesRetainHealthyRawCacheWithoutLeakingIt() throws Exception {
+        NativeContentItem healthy = clip("cached-shitshow", 1);
+        pool.request(4, true, true, () -> Arrays.asList(healthy));
+        awaitHealth(4, ShitTokSourcePool.Health.READY);
+        pool.pause(); pool.filterExcept(6);
+        assertEquals(ShitTokSourcePool.Health.FILTERED, pool.health(4));
+        assertTrue(pool.take(12).isEmpty());
+        pool.setEligibility(4, true, true);
+        assertEquals(Collections.singletonList(healthy), pool.take(12));
+        pool.request(4, true, true, () -> Arrays.asList(healthy));
+        awaitHealth(4, ShitTokSourcePool.Health.READY);
+        pool.setEligibility(4, true, false);
+        assertTrue(pool.take(12).isEmpty());
+        pool.setEligibility(4, true, true); assertFalse(pool.hasReady(4));
+    }
+    @Test public void changingCategoryDiscardsOnlyCategoryBufferAndKeepsBroadSourceCache() throws Exception {
+        pool.request(4, true, true, () -> Arrays.asList(clip("shitshow", 1)));
+        pool.request(6, true, true, () -> Arrays.asList(clip("old-category", 1)));
+        awaitHealth(4, ShitTokSourcePool.Health.READY); awaitHealth(6, ShitTokSourcePool.Health.READY);
+        pool.pause(); pool.clearSource(6); pool.filterExcept(6);
+        assertFalse(pool.hasReady(6)); assertTrue(pool.take(12).isEmpty());
+        pool.setEligibility(4, true, true);
+        assertEquals("shitshow1", pool.take(1).get(0).title);
+    }
+    @Test public void oldCategoryBackoffDoesNotDelayNewCategory() throws Exception {
+        pool.request(6, true, true, Collections::emptyList);
+        awaitHealth(6, ShitTokSourcePool.Health.EMPTY);
+        pool.clearSource(6);
+        pool.request(6, true, true, () -> Arrays.asList(clip("new-category", 1)));
+        awaitHealth(6, ShitTokSourcePool.Health.READY);
+        assertEquals("new-category1", pool.take(1).get(0).title);
     }
     @Test public void malformedAndDuplicateCandidatesDoNotPoisonHealthyPool() throws Exception {
         NativeContentItem valid = clip("valid", 1);

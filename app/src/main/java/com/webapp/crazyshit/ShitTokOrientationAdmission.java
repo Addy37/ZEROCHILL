@@ -248,11 +248,14 @@ final class ShitTokOrientationAdmission {
     private volatile long admissionGeneration;
     boolean hasPending() { synchronized (pending) { return !pending.isEmpty(); } }
 
-    void cancelPending() {
+    List<NativeContentItem> cancelPending() {
         synchronized (pending) {
+            ArrayList<NativeContentItem> abandoned = new ArrayList<>();
+            for (Pending task : pending.values()) abandoned.add(task.item);
             admissionGeneration++;
             for (Pending task : pending.values()) task.future.cancel(true);
             pending.clear(); inventoryIo.purge();
+            return abandoned;
         }
     }
 

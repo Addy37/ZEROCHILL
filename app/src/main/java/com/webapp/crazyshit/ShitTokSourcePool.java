@@ -7,7 +7,7 @@ import java.util.function.LongSupplier;
 /** Session-only acquisition. Admission owns no provider futures; lifecycle owns cancellation. */
 final class ShitTokSourcePool {
     enum Health { IDLE, FETCHING, SLOW, READY, EMPTY, FAILED, UNAVAILABLE, FILTERED, STARVED }
-    private static final int PER_SOURCE = 12;
+    static final int MAX_READY_PER_SOURCE = 12;
     private final Map<Integer, Slot> slots = new LinkedHashMap<>();
     private final ExecutorService executor;
     private final LongSupplier clock;
@@ -36,12 +36,8 @@ final class ShitTokSourcePool {
     synchronized void request(int source, boolean eligible, boolean available,
             Callable<List<NativeContentItem>> loader, Runnable availableCallback) {
         Slot slot = slots.computeIfAbsent(source, ignored -> new Slot());
-        slot.eligible = eligible && available;
-        if (!slot.eligible) {
-            slot.health = eligible ? Health.UNAVAILABLE : Health.FILTERED;
-            slot.ready.clear();
-            return;
-        }
+        setEligibility(source, eligible, available);
+        if (!slot.eligible) return;
         if (slot.running || !slot.ready.isEmpty() || clock.getAsLong() < slot.retryAt) return;
         slot.running = true; slot.entered = false; slot.started = clock.getAsLong(); slot.health = Health.FETCHING;
         long token = generation;
@@ -60,7 +56,7 @@ final class ShitTokSourcePool {
                 if (token != generation || !slot.eligible || Thread.currentThread().isInterrupted()) return null;
                 Set<String> urls = new HashSet<>();
                 if (loaded != null) for (NativeContentItem item : loaded) {
-                    if (item != null && item.isVideo() && !item.url.trim().isEmpty() && urls.add(item.url) && slot.ready.size() < PER_SOURCE) {
+                    if (item != null && item.isVideo() && !item.url.trim().isEmpty() && urls.add(item.url) && slot.ready.size() < MAX_READY_PER_SOURCE) {
                         slot.ready.add(item);
                         if (provenance.put(item.url, slot) == null) provenanceOrder.addLast(item.url);
                         while (provenanceOrder.size() > 4096) provenance.remove(provenanceOrder.removeFirst());
@@ -98,7 +94,7 @@ final class ShitTokSourcePool {
         while (result.size() < maximum) {
             Slot best = null; double score = -Double.MAX_VALUE;
             for (Slot slot : slots.values()) {
-                if (slot.ready.isEmpty()) continue;
+                if (!slot.eligible || slot.ready.isEmpty()) continue;
                 double value = Math.min(8, turn - slot.delivered)
                         + Math.max(-2, Math.min(2, ShitTokSmartRanker.score(slot.ready.get(0))));
                 if (best == null || value > score) { best = slot; score = value; }
@@ -124,12 +120,25 @@ final class ShitTokSourcePool {
     }
     synchronized boolean hasReady(int source) {
         Slot slot = slots.get(source);
-        return slot != null && !slot.ready.isEmpty();
+        return slot != null && slot.eligible && !slot.ready.isEmpty();
+    }
+    synchronized void setEligibility(int source, boolean eligible, boolean available) {
+        Slot slot = slots.computeIfAbsent(source, ignored -> new Slot());
+        slot.eligible = eligible && available;
+        if (!slot.eligible) {
+            slot.health = eligible ? Health.UNAVAILABLE : Health.FILTERED;
+            if (!available) slot.ready.clear(); // Remote availability remains authoritative.
+        } else if (!slot.ready.isEmpty()) slot.health = Health.READY;
+        else if (slot.health == Health.FILTERED || slot.health == Health.UNAVAILABLE) slot.health = Health.IDLE;
     }
     synchronized void filterExcept(int allowed) {
-        for (int source = 1; source <= 8; source++) if (source != allowed) {
-            Slot slot = slots.computeIfAbsent(source, ignored -> new Slot());
-            slot.eligible = false; slot.ready.clear(); slot.health = Health.FILTERED;
+        for (int source = 1; source <= 8; source++) if (source != allowed) setEligibility(source, false, true);
+    }
+    synchronized void clearSource(int source) {
+        Slot slot = slots.get(source);
+        if (slot != null) {
+            slot.ready.clear(); slot.retryAt = 0; slot.failures = 0;
+            if (!slot.running) slot.health = Health.IDLE;
         }
     }
     synchronized Health health(int source) {
@@ -150,14 +159,16 @@ final class ShitTokSourcePool {
         }
         return result.toString();
     }
-    synchronized void stop() {
+    synchronized void stop() { cancel(true); }
+    synchronized void pause() { cancel(false); }
+    private void cancel(boolean discardReady) {
         generation++;
-        provenance.clear(); provenanceOrder.clear();
+        if (discardReady) { provenance.clear(); provenanceOrder.clear(); }
         for (Slot slot : slots.values()) {
             if (slot.work != null) slot.work.cancel(true);
-            slot.ready.clear();
+            if (discardReady) slot.ready.clear();
             // Keep running=true until the socket really exits; no duplicate fetch storm on resume.
-            if (!slot.running) slot.health = Health.IDLE;
+            if (!slot.running && slot.eligible) slot.health = slot.ready.isEmpty() ? Health.IDLE : Health.READY;
         }
         if (executor instanceof ThreadPoolExecutor) ((ThreadPoolExecutor) executor).purge();
     }

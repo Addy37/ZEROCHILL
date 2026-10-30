@@ -39,7 +39,7 @@ final class ChaosSourceMixer {
     private static final int BATCH_XMEGADRIVE = 8;
     private static final int SOURCES_PER_BATCH = 3;
     private static final int REGULAR_ITEMS_PER_SOURCE = 4;
-    private static final int SHIT_SHOW_PER_BATCH = 24;
+    private static final int SHIT_SHOW_PER_BATCH = ShitTokSourcePool.MAX_READY_PER_SOURCE;
     private static final int EFUKT_ITEMS_PER_BATCH = 12;
     private static final int EFUKT_SERIES_PER_BATCH = 2;
     private static final int FAPELLO_ITEMS_PER_BATCH = 16;
@@ -94,12 +94,16 @@ final class ChaosSourceMixer {
     synchronized void requestPreference(Context context, Runnable available) {
         ContentPreference mode = ContentPreference.get(context);
         if (poolMode != mode) {
-            sourcePool.stop(); shitShow.stop(); poolMode = mode;
+            sourcePool.pause(); sourcePool.clearSource(BATCH_ONLY_HAVEN); shitShow.stop(); poolMode = mode;
         }
-        if (mode == ContentPreference.ALL) return;
-        sourcePool.filterExcept(BATCH_ONLY_HAVEN);
         SourceConfig config = RemoteSourceConfigManager.snapshotOrNull();
-        boolean enabled = config == null || config.onlyHaven.enabled;
+        if (mode == ContentPreference.ALL) {
+            for (int source = 1; source <= 8; source++)
+                sourcePool.setEligibility(source, true, sourceAvailable(source, config));
+            return;
+        }
+        sourcePool.filterExcept(BATCH_ONLY_HAVEN);
+        boolean enabled = sourceAvailable(BATCH_ONLY_HAVEN, config);
         Context app = context.getApplicationContext();
         sourcePool.request(BATCH_ONLY_HAVEN, true, enabled,
                 () -> source(BATCH_ONLY_HAVEN, () -> loadOnlyHavenBatch(app, mode)), available);
@@ -111,7 +115,18 @@ final class ChaosSourceMixer {
     List<NativeContentItem> takePreference(ContentPreference mode) {
         return poolMode == mode ? sourcePool.take(2) : Collections.emptyList();
     }
-    void stopPreference() { sourcePool.stop(); shitShow.stop(); }
+    void stopPreference() { sourcePool.pause(); shitShow.stop(); }
+
+    private static boolean sourceAvailable(int source, SourceConfig config) {
+        if (config == null) return true;
+        switch (source) {
+            case BATCH_KAOTIC: return config.kaotic.enabled;
+            case BATCH_ONLY_HAVEN: return config.onlyHaven.enabled;
+            case BATCH_FAPELLO: return !config.sourceKillSwitchesEnabled || config.fapello.enabled;
+            case BATCH_BADDIEHUB: return !config.sourceKillSwitchesEnabled || config.baddieHub.enabled;
+            default: return true;
+        }
+    }
 
     private boolean starterPending = true;
     private volatile boolean explorationAllowed;
@@ -125,6 +140,9 @@ final class ChaosSourceMixer {
         for (NativeContentItem item : items) sourcePool.verified(item.url);
     }
     void contributed(NativeContentItem item) { sourcePool.contributed(item.url); }
+    void abandon(NativeContentItem item) {
+        if (item != null && "shit-show".equals(ShitTokAspectPriority.sourceKey(item))) shitShow.releaseUnplayed(item.url);
+    }
 
     // Page traversal is cheap post-starter work, independent of rendering/expensive catalog warmup.
     synchronized int nextPage(String source, int maximum) {
@@ -219,16 +237,15 @@ final class ChaosSourceMixer {
         if (ContentPreference.get(context) != ContentPreference.ALL) return;
         requestPreference(context, () -> {});
         SourceConfig config = RemoteSourceConfigManager.snapshotOrNull();
-        boolean switches = config != null && config.sourceKillSwitchesEnabled;
-        sourcePool.request(BATCH_KAOTIC, true, config == null || config.kaotic.enabled, () -> source(BATCH_KAOTIC, () -> loadKaoticBatch(context)));
-        sourcePool.request(BATCH_FAPELLO, true, !switches || config.fapello.enabled, () -> source(BATCH_FAPELLO, () -> loadFapelloBatch(context)));
+        sourcePool.request(BATCH_KAOTIC, true, sourceAvailable(BATCH_KAOTIC, config), () -> source(BATCH_KAOTIC, () -> loadKaoticBatch(context)));
+        sourcePool.request(BATCH_FAPELLO, true, sourceAvailable(BATCH_FAPELLO, config), () -> source(BATCH_FAPELLO, () -> loadFapelloBatch(context)));
         sourcePool.request(BATCH_REGULAR, true, true, () -> source(BATCH_REGULAR, () -> loadRegularBatch(context, null)));
-        sourcePool.request(BATCH_BADDIEHUB, true, !switches || config.baddieHub.enabled, () -> source(BATCH_BADDIEHUB, () -> loadBaddieHubBatch(context)));
+        sourcePool.request(BATCH_BADDIEHUB, true, sourceAvailable(BATCH_BADDIEHUB, config), () -> source(BATCH_BADDIEHUB, () -> loadBaddieHubBatch(context)));
         sourcePool.request(BATCH_XMEGADRIVE, true, true, () -> source(BATCH_XMEGADRIVE, () -> loadXMegaDriveBatch(context)));
         sourcePool.request(BATCH_EFUKT, true, true, () -> source(BATCH_EFUKT,
                 () -> explorationAllowed ? loadEfuktBatch(context) : efukt.fetchLatest(context)));
         if (explorationAllowed) {
-            sourcePool.request(BATCH_ONLY_HAVEN, true, config == null || config.onlyHaven.enabled, () -> source(BATCH_ONLY_HAVEN, () -> loadOnlyHavenBatch(context)));
+            sourcePool.request(BATCH_ONLY_HAVEN, true, sourceAvailable(BATCH_ONLY_HAVEN, config), () -> source(BATCH_ONLY_HAVEN, () -> loadOnlyHavenBatch(context)));
             sourcePool.request(BATCH_SHIT_SHOW, true, true, () -> source(BATCH_SHIT_SHOW,
                     () -> shitShow.takeBatchOrWarm(context, SHIT_SHOW_PER_BATCH)));
         }

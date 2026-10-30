@@ -95,9 +95,11 @@ final class ShitShowTapSource {
 
     void stop() {
         final WebView outgoing;
-        synchronized (lock) { generation++; ready.clear(); warming = false; outgoing = webView; lock.notifyAll(); }
+        synchronized (lock) { generation++; warming = false; outgoing = webView; lock.notifyAll(); }
         main.post(() -> { if (webView == outgoing) destroyWebView(); });
     }
+
+    void releaseUnplayed(String url) { synchronized (lock) { seenStoryUrls.remove(url); } }
 
     void resetDeck() {
         // Keep process-level Shit Show history. Chaos has its own repeat protection too.

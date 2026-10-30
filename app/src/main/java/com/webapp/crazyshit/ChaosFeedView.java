@@ -204,8 +204,8 @@ public final class ChaosFeedView extends FrameLayout {
         void cancel() { cancelled = true; if (harvest != null) harvest.cancel(true); }
     }
     private void cancelInventoryBatch() {
-        orientationAdmission.cancelPending();
         if (inventoryBatch != null) inventoryBatch.cancel();
+        for (NativeContentItem item : orientationAdmission.cancelPending()) sourceMixer.abandon(item);
         inventoryBatch = null;
         activeAdmissions = inventoryCandidateCount = 0;
         poolLoading = false;
@@ -916,12 +916,14 @@ public final class ChaosFeedView extends FrameLayout {
         queuePreference = current;
         invalidatedPreference = null;
         cancelPendingAutoAdvance();
+        for (NativeContentItem item : orientationPending) sourceMixer.abandon(item);
         orientationPending.clear();
         consecutiveDryLoads = 0;
         // Keep only the active lease. The very next swipe must use the new category.
         int first = Math.min(items.size(), selectedPosition + 1);
         int removed = items.size() - first;
         for (NativeContentItem item : new ArrayList<>(items.subList(first, items.size()))) {
+            sourceMixer.abandon(item);
             sessionUrls.remove(item.url);
             sessionIdentities.remove(ShitTokContentIdentity.page(item.url));
             CrazyShitRepository.StreamInfo stream = streamCache.remove(item.url);
@@ -931,6 +933,7 @@ public final class ChaosFeedView extends FrameLayout {
         items.subList(first, items.size()).clear();
         if (removed > 0) adapter.notifyItemRangeRemoved(first, removed);
         pruneIncompatibleHistory();
+        reconcilePlaybackWindow(); // Retire old neighbors while retaining the current URL lease.
         refillDeferred = true;
         continuityWorkNeeded = true;
         post(this::loadMorePool);
@@ -1050,10 +1053,12 @@ public final class ChaosFeedView extends FrameLayout {
         java.util.function.Consumer<List<NativeContentItem>> offer = batch -> {
             ArrayList<NativeContentItem> fresh = new ArrayList<>();
             for (NativeContentItem item : batch) {
-                if (work.cancelled || !acceptingCandidates.get() || batchGeneration != feedGeneration || closed || Thread.currentThread().isInterrupted()) break;
+                if (work.cancelled || !acceptingCandidates.get() || batchGeneration != feedGeneration || closed || Thread.currentThread().isInterrupted()) {
+                    sourceMixer.abandon(item); continue;
+                }
                 rawCandidates.incrementAndGet();
-                if (!isMedia(item) || ContentPreference.get(activity) != batchPreference
-                        || !eligiblePreference(item, batchPreference) || hiddenSnapshot.contains(item.url)
+                if (ContentPreference.get(activity) != batchPreference) { sourceMixer.abandon(item); continue; }
+                if (!isMedia(item) || !eligiblePreference(item, batchPreference) || hiddenSnapshot.contains(item.url)
                         || ShitTokBlockedCreatorStore.isBlocked(blockedSnapshot, item)) continue;
                 String identity = ShitTokContentIdentity.page(item.url);
                 if (sessionSnapshot.contains(item.url) || identitySnapshot.contains(identity)) {
@@ -1082,7 +1087,9 @@ public final class ChaosFeedView extends FrameLayout {
                 ShitTokPoolDiagnostics.record("likedLookup", "status=unavailable localExclusion=true");
             }
             synchronized (candidates) { for (NativeContentItem item : fresh) {
-                if (work.cancelled || !acceptingCandidates.get() || batchGeneration != feedGeneration || closed) break;
+                if (work.cancelled || !acceptingCandidates.get() || batchGeneration != feedGeneration || closed) {
+                    sourceMixer.abandon(item); continue;
+                }
                 if (seenStore.liked(item.url, null)) { likedRejected.incrementAndGet(); continue; }
                 AppPerformance.startupItem("candidate_offered", item.url, "fresh=true");
                 if (candidates.offer(item)) activity.runOnUiThread(() -> {
@@ -1090,7 +1097,7 @@ public final class ChaosFeedView extends FrameLayout {
                     firstCandidate = true;
                     AppPerformance.startup("candidate");
                     AppPerformance.record("ShitTok first candidate", android.os.SystemClock.elapsedRealtime() - initializedAt);
-                });
+                }); else sourceMixer.abandon(item);
             } }
         };
         java.util.concurrent.Future<?> harvest = io.submit(() -> {
@@ -1192,7 +1199,7 @@ public final class ChaosFeedView extends FrameLayout {
             refillCount++; refillTotalMs += duration; refillMaxMs = Math.max(refillMaxMs, duration);
             ShitTokPoolDiagnostics.record("refillComplete", "admitted=" + verified.items.size() + " ms=" + duration);
             for (NativeContentItem candidate : leftovers) {
-                if (orientationPending.size() >= 48) break;
+                if (orientationPending.size() >= 48) { sourceMixer.abandon(candidate); continue; }
                 orientationPending.addLast(candidate);
             }
             refillDeferred = verified.deferred;
@@ -3791,6 +3798,7 @@ public final class ChaosFeedView extends FrameLayout {
                         }
                         videoLiked = state.liked;
                         if (state.liked) {
+                            ShitTokSmartRanker.action(item, ShitTokSmartRanker.Action.LIKE);
                             CrazyShitRepository.StreamInfo likedStream = streamCache.get(target);
                             seenStore.heart(target, likedStream == null ? null : likedStream.mediaUrl);
                         }
