@@ -211,6 +211,16 @@ final class ShitTokOrientationAdmission {
     Result admitConcurrent(java.util.concurrent.BlockingQueue<NativeContentItem> candidates,
             BooleanSupplier productionDone, Resolver resolver, BooleanSupplier allowedWork,
             java.util.function.IntSupplier maxItems, Consumer<Result> onVerified, java.util.function.IntConsumer activeCount) {
+        return admitConcurrent(candidates, productionDone, resolver, allowedWork, () -> true,
+                maxItems, onVerified, activeCount);
+    }
+
+    // Demand governs NEW work only. Playback/lifecycle permission still governs in-flight work;
+    // a full runway must not discard a useful slow result or restart its resolver later.
+    Result admitConcurrent(java.util.concurrent.BlockingQueue<NativeContentItem> candidates,
+            BooleanSupplier productionDone, Resolver resolver, BooleanSupplier allowedWork,
+            BooleanSupplier demand, java.util.function.IntSupplier maxItems,
+            Consumer<Result> onVerified, java.util.function.IntConsumer activeCount) {
         ArrayList<NativeContentItem> admitted = new ArrayList<>(), remaining = new ArrayList<>();
         Map<String, CrazyShitRepository.StreamInfo> streams = new LinkedHashMap<>();
         long started = clock.getAsLong();
@@ -220,8 +230,9 @@ final class ShitTokOrientationAdmission {
                     && admitted.size() < maxItems.getAsInt() && clock.getAsLong() - started < BATCH_MILLIS) {
                 synchronized (pending) {
                     if (!allowedWork.getAsBoolean()) break;
+                    if (!demand.getAsBoolean()) { demandPauses.incrementAndGet(); break; }
                     java.util.Iterator<Pending> iterator = pending.values().iterator();
-                    while (iterator.hasNext() && admitted.size() < maxItems.getAsInt()) {
+                    while (iterator.hasNext() && admitted.size() < maxItems.getAsInt() && demand.getAsBoolean()) {
                         Pending task = iterator.next();
                         if (!task.future.isDone()) continue;
                         iterator.remove();
@@ -233,7 +244,8 @@ final class ShitTokOrientationAdmission {
                         admitted.addAll(result.items); streams.putAll(result.streams); remaining.addAll(result.remaining);
                         if (onVerified != null && !result.items.isEmpty()) onVerified.accept(result);
                     }
-                    while (pending.size() < 3 && attempts < 24 && admitted.size() < maxItems.getAsInt()) {
+                    while (pending.size() < 3 && attempts < 24 && admitted.size() < maxItems.getAsInt()
+                            && demand.getAsBoolean()) {
                         ArrayList<NativeContentItem> busy = new ArrayList<>();
                         for (Pending task : pending.values()) busy.add(task.item);
                         NativeContentItem item = nextCandidate(candidates, busy, productionDone.getAsBoolean(), remaining, attempts);
@@ -242,10 +254,21 @@ final class ShitTokOrientationAdmission {
                         attempts++;
                         final long token = admissionGeneration;
                         try {
-                            java.util.concurrent.Future<Result> future = inventoryIo.submit(() ->
-                                    admit(Collections.singletonList(item), resolver,
+                            java.util.concurrent.Future<Result> future = inventoryIo.submit(() -> {
+                                // A queued lane may run after the UI publishes the last needed clip.
+                                if (!demand.getAsBoolean()) {
+                                    startDeferrals.incrementAndGet();
+                                    return new Result(Collections.emptyList(), Collections.emptyMap(),
+                                            Collections.singletonList(item), true);
+                                }
+                                admissionStarts.incrementAndGet();
+                                verificationActive.incrementAndGet();
+                                try {
+                                    return admit(Collections.singletonList(item), resolver,
                                             () -> token == admissionGeneration && allowedWork.getAsBoolean(),
-                                            new Random(0), 1, true, null));
+                                            new Random(0), 1, true, null);
+                                } finally { verificationActive.decrementAndGet(); }
+                            });
                             pending.put(item.url, new Pending(item, future));
                         } catch (java.util.concurrent.RejectedExecutionException full) { remaining.add(item); break; }
                     }
@@ -257,7 +280,17 @@ final class ShitTokOrientationAdmission {
         } catch (InterruptedException interrupted) { Thread.currentThread().interrupt(); }
         // Normal runway completion does not cancel slow verification. Its bounded result is
         // collected by a later refill; only cancelPending() ends a lifecycle/category generation.
-        return new Result(admitted, streams, remaining, !allowedWork.getAsBoolean());
+        return new Result(admitted, streams, remaining,
+                !allowedWork.getAsBoolean() || !demand.getAsBoolean());
+    }
+
+    private final java.util.concurrent.atomic.AtomicInteger verificationActive = new java.util.concurrent.atomic.AtomicInteger();
+    private final java.util.concurrent.atomic.AtomicLong admissionStarts = new java.util.concurrent.atomic.AtomicLong();
+    private final java.util.concurrent.atomic.AtomicLong demandPauses = new java.util.concurrent.atomic.AtomicLong();
+    private final java.util.concurrent.atomic.AtomicLong startDeferrals = new java.util.concurrent.atomic.AtomicLong();
+    String schedulingSummary() {
+        return "admissionStarts=" + admissionStarts.get() + " runwayPauses=" + demandPauses.get()
+                + " startDeferrals=" + startDeferrals.get() + " verificationActive=" + verificationActive.get();
     }
 
     private static final class Pending {

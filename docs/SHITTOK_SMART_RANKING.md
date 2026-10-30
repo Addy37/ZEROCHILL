@@ -124,6 +124,28 @@ preparation/cleanup staggering, Focus Mode, thumbnails, mute/speed, creator navi
 history, favorites and downloads. There is no scoring/network wait in swipe dispatch.
 The recovery tick never ranks or resolves media on main. Work and queues remain bounded.
 
+New source recovery/category requests and admission starts follow the existing runway
+hysteresis: fill to six normally or ten during rapid scrolling, then resume at four
+or six respectively. A full runway closes the start gate even when playback permits
+speculation and raw candidate queues remain populated. The gate is checked by the
+coordinator, again when a queued verification lane starts, and after waiting for a
+shared resolution slot. No provider validation is weakened to save work.
+
+Demand is separate from lifecycle/playback permission. Up to three existing verification
+tasks may finish; their results stay in the bounded pending map for the next refill.
+Raw leftovers and source caches remain available. Full-runway pauses do not cancel a
+category generation, reset the selected player, or count as a dry refill. Existing
+host/category cancellation still invalidates pending work. An already running bounded
+source acquisition/hidden harvest can finish; the recovery tick starts no replacement
+acquisition while demand is closed.
+
+Session diagnostics add aggregate `admissionStarts`, `runwayPauses` (coordinator exits
+because demand closed), `startDeferrals` (queued lanes deferred before admission), and `verificationActive`
+(running verification lanes). The existing `activeAdmissions` counts pending entries,
+including completed results awaiting publication, rather than just running tasks.
+These counters contain no URLs and use the existing bounded report. They measure
+scheduling, not frame improvement; in-flight tasks can still appear at a full runway.
+
 Focused tests cover source recovery/backoff/single-flight/generation safety, diversity,
 actual-viewing learning/decay/action caps/exploration, exact category evidence and
 queue invalidation, and retained slow verification. Relevant existing regressions

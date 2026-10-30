@@ -495,7 +495,8 @@ public final class ChaosFeedView extends FrameLayout {
                 + " dryRefills=" + dryRefillCount + " refills=" + refillCount
                 + " refillAvgMs=" + (refillCount == 0 ? 0 : refillTotalMs / refillCount) + " refillMaxMs=" + refillMaxMs
                 + " applyAvgMs=" + (admissionApplyCount == 0 ? 0 : admissionApplyTotalMs / admissionApplyCount)
-                + " applyMaxMs=" + admissionApplyMaxMs + " creatorMetadataBacklog=" + creatorMetadata.backlog();
+                + " applyMaxMs=" + admissionApplyMaxMs + " creatorMetadataBacklog=" + creatorMetadata.backlog()
+                + " " + orientationAdmission.schedulingSummary();
         ShitTokPoolDiagnostics.record("runway", detail);
         ShitTokPoolDiagnostics.snapshot("Uptime ms: " + now + "\n" + detail + "\n" + frameDiagnostics.summary()
                 + "\nSeen identities: " + seenStore.seenSize() + " / " + ShitTokSeenStore.SEEN_LIMIT
@@ -894,7 +895,9 @@ public final class ChaosFeedView extends FrameLayout {
             if (closed) return;
             if (active && hostResumed && sourceRequestsEnabled && !searchCoverActive) {
                 applyContentPreference();
-                if (!items.isEmpty() && playbackOwner.allowsSpeculativeWork()) sourceMixer.recoverSources(activity);
+                continuityWorkNeeded = needsContinuity();
+                if (continuityWorkNeeded && !items.isEmpty() && playbackOwner.allowsSpeculativeWork())
+                    sourceMixer.recoverSources(activity);
                 requestPreferenceCandidates();
                 if (needsContinuity()) loadMorePool();
             }
@@ -976,7 +979,7 @@ public final class ChaosFeedView extends FrameLayout {
     private void requestPreferenceCandidates() {
         if (searchCoverActive) return;
         if (closed || !active || !hostResumed || !sourceRequestsEnabled) return;
-        if (ContentPreference.get(activity) != ContentPreference.ALL && upcomingPreferenceCount() >= desiredRunway()) return;
+        if (!needsContinuity()) return;
         sourceMixer.requestPreference(activity, () -> post(() -> {
             if (!closed && active && hostResumed) loadMorePool();
         }));
@@ -1123,12 +1126,15 @@ public final class ChaosFeedView extends FrameLayout {
         final int[] publishedFresh = {0};
         ShitTokOrientationAdmission.Result verified = orientationAdmission.admitConcurrent(candidates, productionDone::get,
                 item -> {
-                    CrazyShitRepository.StreamInfo startup = ChaosStartupPreloader.takeResolved(item.url);
                     long at = android.os.SystemClock.elapsedRealtime();
                     inventoryResolutionSlots.acquire();
                     inventoryResolutions.incrementAndGet();
                     try {
+                        // Recheck after waiting for the shared URL-resolution lane, before any
+                        // provider-specific resolver (including WebView validation) is started.
+                        if (!continuityWorkNeeded) throw new ShitTokOrientationAdmission.Deferred();
                         AppPerformance.startup("resolve_begin");
+                        CrazyShitRepository.StreamInfo startup = ChaosStartupPreloader.takeResolved(item.url);
                         CrazyShitRepository.StreamInfo resolved = startup != null ? startup : resolvePlayable(item);
                         if (resolved != null) {
                             AppPerformance.startup("resolved");
@@ -1150,6 +1156,7 @@ public final class ChaosFeedView extends FrameLayout {
                         ShitTokPoolDiagnostics.record("inventoryResolve", "ms=" + (android.os.SystemClock.elapsedRealtime() - at));
                     }
                 }, () -> !work.cancelled && batchGeneration == feedGeneration && mayVerifyOrientation(),
+                () -> continuityWorkNeeded,
                 () -> Math.min(MAX_QUEUED_AHEAD, admissionLimit + Math.max(0, selectedPosition - batchPosition)
                         + Math.max(0, desiredRunway() - batchTarget)), partial -> {
                     if (!work.cancelled && batchGeneration == feedGeneration) sourceMixer.verifiedCandidates(partial.items);
