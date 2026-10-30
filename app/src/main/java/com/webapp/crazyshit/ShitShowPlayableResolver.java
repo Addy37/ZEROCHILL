@@ -2,6 +2,7 @@ package com.webapp.crazyshit;
 
 import android.app.Activity;
 import android.content.Context;
+import android.content.ContextWrapper;
 import android.net.Uri;
 import android.os.Handler;
 import android.os.Looper;
@@ -17,6 +18,7 @@ import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.FrameLayout;
 
+import java.lang.ref.WeakReference;
 import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Map;
@@ -38,8 +40,29 @@ final class ShitShowPlayableResolver {
     private static final int MAX_HEADER_CACHE = 96;
     private static final Object HEADER_LOCK = new Object();
     private static final LinkedHashMap<String, Map<String, String>> HEADER_CACHE = new LinkedHashMap<>();
+    private static volatile WeakReference<Activity> host = new WeakReference<>(null);
 
     private ShitShowPlayableResolver() {
+    }
+
+    static void rememberHost(Activity activity) {
+        if (valid(activity) != null) host = new WeakReference<>(activity);
+    }
+
+    static Activity hostActivity(Context context) {
+        Context current = context;
+        while (current instanceof ContextWrapper) {
+            if (current instanceof Activity) return valid((Activity) current);
+            Context next = ((ContextWrapper) current).getBaseContext();
+            if (next == current) break;
+            current = next;
+        }
+        if (current instanceof Activity) return valid((Activity) current);
+        return valid(host.get());
+    }
+
+    private static Activity valid(Activity activity) {
+        return activity == null || activity.isFinishing() || activity.isDestroyed() ? null : activity;
     }
 
     static Map<String, String> playbackHeaders(String mediaUrl) {
@@ -51,11 +74,11 @@ final class ShitShowPlayableResolver {
     }
 
     static CrazyShitRepository.StreamInfo resolve(Context context, String pageUrl) {
-        if (!(context instanceof Activity) || !isStoryUrl(pageUrl)) return null;
+        if (!isStoryUrl(pageUrl)) return null;
         if (Looper.myLooper() == Looper.getMainLooper()) return null;
 
-        Activity activity = (Activity) context;
-        if (activity.isFinishing() || activity.isDestroyed()) return null;
+        Activity activity = hostActivity(context);
+        if (activity == null) return null;
 
         CountDownLatch done = new CountDownLatch(1);
         AtomicReference<String> domMedia = new AtomicReference<>("");
@@ -80,9 +103,9 @@ final class ShitShowPlayableResolver {
             view.setFocusable(false);
             view.setFocusableInTouchMode(false);
 
-            ViewGroup host = activity.findViewById(android.R.id.content);
-            if (host != null) {
-                host.addView(view, 0, new FrameLayout.LayoutParams(dp(activity, 360), dp(activity, 640)));
+            ViewGroup content = activity.findViewById(android.R.id.content);
+            if (content != null) {
+                content.addView(view, 0, new FrameLayout.LayoutParams(dp(activity, 360), dp(activity, 640)));
             } else {
                 view.layout(0, 0, dp(activity, 360), dp(activity, 640));
             }
@@ -160,7 +183,6 @@ final class ShitShowPlayableResolver {
             Thread.currentThread().interrupt();
         }
 
-        // Prefer the actual request the rendered player made. DOM currentSrc is only a fallback.
         String rawMedia = cleanUrl(requestMedia.get());
         if (!isHttp(rawMedia)) rawMedia = cleanUrl(domMedia.get());
         Map<String, String> headers = buildPlaybackHeaders(
@@ -357,9 +379,9 @@ final class ShitShowPlayableResolver {
     private static boolean isStoryUrl(String value) {
         try {
             Uri uri = Uri.parse(cleanUrl(value));
-            String host = safe(uri.getHost()).toLowerCase(Locale.US);
+            String storyHost = safe(uri.getHost()).toLowerCase(Locale.US);
             String path = safe(uri.getPath()).toLowerCase(Locale.US);
-            return ("crazyshit.com".equals(host) || "www.crazyshit.com".equals(host))
+            return ("crazyshit.com".equals(storyHost) || "www.crazyshit.com".equals(storyHost))
                     && path.startsWith("/shitshow/")
                     && path.length() > "/shitshow/".length();
         } catch (Exception ignored) {
@@ -370,8 +392,8 @@ final class ShitShowPlayableResolver {
     private static boolean isCrazyShitHost(String value) {
         try {
             Uri uri = Uri.parse(cleanUrl(value));
-            String host = safe(uri.getHost()).toLowerCase(Locale.US);
-            return "crazyshit.com".equals(host) || "www.crazyshit.com".equals(host);
+            String valueHost = safe(uri.getHost()).toLowerCase(Locale.US);
+            return "crazyshit.com".equals(valueHost) || "www.crazyshit.com".equals(valueHost);
         } catch (Exception ignored) {
             return false;
         }
