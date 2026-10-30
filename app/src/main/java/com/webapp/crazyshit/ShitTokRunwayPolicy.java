@@ -16,10 +16,14 @@ final class ShitTokRunwayPolicy {
     }
     int target(long now) { return rapid(now) ? RAPID : NORMAL; }
     boolean rapid(long now) { return rapidUntil > now; }
-    int threshold(long now) { return rapid(now) ? 6 : 4; }
+    int threshold(long now) { return threshold(now, false); }
+    int threshold(long now, boolean filtered) { return rapid(now) ? (filtered ? 8 : 6) : (filtered ? 5 : 4); }
     boolean needsWork(int usable, long now) {
+        return needsWork(usable, now, false);
+    }
+    boolean needsWork(int usable, long now, boolean filtered) {
         if (usable >= target(now)) refilling = false;
-        else if (usable <= threshold(now)) refilling = true;
+        else if (usable <= threshold(now, filtered)) refilling = true;
         return refilling;
     }
     void reset() { streak = 0; rapidUntil = 0; lastForward = Long.MIN_VALUE / 2; refilling = true; }

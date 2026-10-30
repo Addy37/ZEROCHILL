@@ -141,6 +141,13 @@ final class ShitTokSourcePool {
             if (!slot.running) slot.health = Health.IDLE;
         }
     }
+    /** A filtered lane with more cursor work need not apply catalog-exhaustion backoff. */
+    synchronized void continueInventory(int source) {
+        Slot slot = slots.get(source);
+        if (slot != null && !slot.running && slot.health == Health.EMPTY) {
+            slot.retryAt = 0; slot.failures = 0; slot.health = Health.IDLE;
+        }
+    }
     synchronized Health health(int source) {
         Slot slot = slots.get(source);
         if (slot == null) return Health.IDLE;

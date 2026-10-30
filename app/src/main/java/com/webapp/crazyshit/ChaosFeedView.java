@@ -170,6 +170,7 @@ public final class ChaosFeedView extends FrameLayout {
     private String plannedUrl = "";
     private final Deque<Integer> pendingWarmPreparePositions = new ArrayDeque<>();
     private final Random random = new Random();
+    private final ShitTokWarmCategoryCache warmCategories = new ShitTokWarmCategoryCache();
     private final ChaosSourceMixer sourceMixer = new ChaosSourceMixer(repository, random);
     private final Deque<NativeContentItem> orientationPending = new ArrayDeque<>();
     private ShitTokOrientationAdmission orientationAdmission;
@@ -462,7 +463,8 @@ public final class ChaosFeedView extends FrameLayout {
     private int desiredRunway() { return runway.target(android.os.SystemClock.elapsedRealtime()); }
 
     private boolean needsContinuity() {
-        return runway.needsWork(usableUpcomingCount(), android.os.SystemClock.elapsedRealtime());
+        return runway.needsWork(usableUpcomingCount(), android.os.SystemClock.elapsedRealtime(),
+                ContentPreference.get(activity) != ContentPreference.ALL);
     }
 
     private void recordRunway(String reason) {
@@ -916,6 +918,10 @@ public final class ChaosFeedView extends FrameLayout {
             cancelInventoryBatch();
         }
         if (isPaging()) { deferUiApply(this::applyContentPreference); return; }
+        ContentPreference previous = queuePreference;
+        warmCategories.save(previous, new ArrayList<>(items.subList(
+                Math.min(items.size(), selectedPosition + 1), items.size())), streamCache,
+                android.os.SystemClock.elapsedRealtime());
         queuePreference = current;
         invalidatedPreference = null;
         cancelPendingAutoAdvance();
@@ -937,6 +943,20 @@ public final class ChaosFeedView extends FrameLayout {
         if (removed > 0) adapter.notifyItemRangeRemoved(first, removed);
         pruneIncompatibleHistory();
         reconcilePlaybackWindow(); // Retire old neighbors while retaining the current URL lease.
+        // Establish the category session before rechecking cached clip evidence.
+        sourceMixer.requestPreference(activity, () -> post(this::loadMorePool), false);
+        ArrayList<NativeContentItem> warm = new ArrayList<>();
+        for (ShitTokWarmCategoryCache.Entry entry : warmCategories.take(current, android.os.SystemClock.elapsedRealtime())) {
+            streamCache.put(entry.item.url, entry.stream);
+            warm.add(entry.item);
+        }
+        int warmStart = items.size();
+        appendUnique(warm);
+        if (items.size() > warmStart) {
+            adapter.notifyItemRangeInserted(warmStart, items.size() - warmStart);
+            sequenceFilteredFuture();
+            reconcilePlaybackWindow();
+        }
         refillDeferred = true;
         continuityWorkNeeded = true;
         post(this::loadMorePool);
@@ -995,7 +1015,7 @@ public final class ChaosFeedView extends FrameLayout {
     // when normal providers already filled the runway or left an orientation reservoir.
     final boolean preferenceBatch = queuePreference != ContentPreference.ALL
             && (sourceMixer.hasPreference(queuePreference) || !orientationPending.isEmpty() || orientationAdmission.hasPending())
-            && upcomingPreferenceCount() < desiredRunway();
+            && needsContinuity();
     if (queuePreference != ContentPreference.ALL && !preferenceBatch) {
         ShitTokSourcePool.Health health = sourceMixer.preferenceHealth();
         if (items.isEmpty() && (health == ShitTokSourcePool.Health.EMPTY
@@ -1012,7 +1032,7 @@ public final class ChaosFeedView extends FrameLayout {
     continuityWorkNeeded = needsContinuity();
     boolean continuity = active && hostResumed && continuityWorkNeeded;
     if (!items.isEmpty() && !continuityWorkNeeded && !preferenceBatch) return;
-    if (continuity && consecutiveDryLoads >= 4) { requestContinuity(); return; }
+    if (queuePreference == ContentPreference.ALL && continuity && consecutiveDryLoads >= 4) { requestContinuity(); return; }
     if (!items.isEmpty() && active && !playbackOwner.allowsSpeculativeWork() && !continuity) {
         refillDeferred = true;
         return;
@@ -1026,7 +1046,8 @@ public final class ChaosFeedView extends FrameLayout {
     final boolean continuityBatch = continuity || items.isEmpty();
     final boolean protectedRefill = continuityBatch;
     recordRunway("refillStart");
-    final int admissionLimit = preferenceBatch ? 2 : continuityBatch
+    final int admissionLimit = preferenceBatch ? Math.max(1, desiredRunway() - usableUpcomingCount()
+            + (items.isEmpty() ? 1 : 0)) : continuityBatch
             ? Math.max(1, desiredRunway() - usableUpcomingCount() + (items.isEmpty() ? 1 : 0))
             : Integer.MAX_VALUE;
     final int batchGeneration = feedGeneration;
@@ -1179,6 +1200,7 @@ public final class ChaosFeedView extends FrameLayout {
                         if (added == 0) return;
                         recordFirstAdmission();
                         adapter.notifyItemRangeInserted(before, added);
+                        sequenceFilteredFuture();
                         initialProgress.setVisibility(View.GONE);
                         empty.setVisibility(View.GONE);
                         reconcilePlaybackWindow();
@@ -1226,6 +1248,7 @@ public final class ChaosFeedView extends FrameLayout {
                 recordFirstAdmission();
                 long mutationAt = android.os.SystemClock.elapsedRealtime();
                 adapter.notifyItemRangeInserted(before, added);
+                sequenceFilteredFuture();
                 ShitTokPoolDiagnostics.record("adapterInsert", "count=" + added + " ms=" + (android.os.SystemClock.elapsedRealtime()-mutationAt));
                 initialProgress.setVisibility(View.GONE);
                 empty.setVisibility(View.GONE);
@@ -1556,6 +1579,28 @@ public final class ChaosFeedView extends FrameLayout {
             AppPerformance.startupItem("metadata_end", item.url, "");
             CrazyShitRepository.StreamInfo preloaded = ChaosStartupPreloader.takeResolved(item.url);
             if (preloaded != null) streamCache.put(item.url, preloaded);
+        }
+    }
+
+    private void sequenceFilteredFuture() {
+        if (ContentPreference.get(activity) == ContentPreference.ALL || isPaging()) return;
+        int first = Math.min(items.size(), selectedPosition + 1);
+        if (items.size() - first < 2) return;
+        ShitTokCreatorDiversity diversity = new ShitTokCreatorDiversity();
+        for (int i = Math.max(0, first - ShitTokCreatorDiversity.WINDOW); i < first; i++)
+            diversity.remember(items.get(i));
+        List<NativeContentItem> ordered = diversity.order(new ArrayList<>(items.subList(first, items.size())));
+        boolean moved = false;
+        for (int i = 0; i < ordered.size(); i++) {
+            int target = first + i, from = items.indexOf(ordered.get(i));
+            if (from == target) continue;
+            items.add(target, items.remove(from));
+            adapter.notifyItemMoved(from, target);
+            moved = true;
+        }
+        if (moved) {
+            syncHolderPositionsAfterQueuePrune();
+            plannedPosition = -1; plannedUrl = "";
         }
     }
 
