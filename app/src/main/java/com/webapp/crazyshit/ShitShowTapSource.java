@@ -44,21 +44,31 @@ final class ShitShowTapSource {
 
     private boolean warming;
     private volatile boolean playbackProtected;
+    private Activity lastActivity;
     private WebView webView;
     private long harvestStartedAt;
 
     void prewarm(Context context) {
+        if (context instanceof Activity) lastActivity = (Activity) context;
         if (!playbackProtected && cachedCount() < 8) warm(context);
     }
 
     void setPlaybackProtected(boolean value) {
         if (playbackProtected == value) return;
         playbackProtected = value;
-        if (value) main.post(() -> {
-            if (!playbackProtected) return;
-            // Keep harvested metadata, but release the hidden page's competing media requests.
-            finishHarvest(webView);
-        });
+        if (value) {
+            main.post(() -> {
+                if (!playbackProtected) return;
+                // Keep harvested metadata, but release the hidden page's competing media requests.
+                finishHarvest(webView);
+            });
+            return;
+        }
+
+        // A protected refill may have been cancelled while the selected clip recovered. Retry the
+        // same low-priority harvest once playback is healthy instead of waiting for another feed batch.
+        Activity activity = lastActivity;
+        if (activity != null && !activity.isFinishing() && !activity.isDestroyed()) prewarm(activity);
     }
 
     List<NativeContentItem> takeReadyBatch(int maxItems) {
