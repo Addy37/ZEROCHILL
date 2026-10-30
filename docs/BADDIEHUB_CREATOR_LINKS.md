@@ -52,6 +52,8 @@ Production changes: BaddieHubCreatorMatcher, BundledCreatorIndex,
 ShitTokCreatorMetadataLoader, ChaosFeedView and one FapelloRepository alias-verification
 entry point. Tests add deterministic matching/scheduler/real-holder coverage and
 update three existing gesture/handoff fixtures to bind identity as production does.
+CI scopes this branch to the focused creator gate, one complete debug/release suite
+per workflow, and the ShitTok scroll plus creator-gallery performance flows.
 No gallery implementation, data format, application ID, signing, backend, Supabase
 or remote source configuration changes are made.
 
