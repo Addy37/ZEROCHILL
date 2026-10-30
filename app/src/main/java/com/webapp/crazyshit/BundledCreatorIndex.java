@@ -63,6 +63,26 @@ final class BundledCreatorIndex {
 
     int size() { return entries.size(); }
 
+    /** Reviewed aliases only; a collision must never pick whichever row was loaded first. */
+    NativeContentItem exact(String query) {
+        String wanted = CreatorNameMatcher.normalized(query);
+        Entry found = null;
+        for (Entry entry : entries) {
+            if (!entry.searchable.contains(wanted)) continue;
+            if (found != null && found != entry) return null;
+            found = entry;
+        }
+        return found == null ? null : new NativeContentItem(NativeContentItem.KIND_CREATOR,
+                found.name, "", "", "", "", "", "", found.name);
+    }
+
+    boolean ambiguous(String query) {
+        String wanted = CreatorNameMatcher.normalized(query);
+        int count = 0;
+        for (Entry entry : entries) if (entry.searchable.contains(wanted) && ++count > 1) return true;
+        return false;
+    }
+
     int rank(NativeContentItem item, String query) {
         Entry entry = byName.get(CreatorNameMatcher.normalized(item.title));
         int score = Math.min(CreatorNameMatcher.rank(item.title, query),

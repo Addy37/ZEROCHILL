@@ -66,6 +66,8 @@ public class ShitTokSpeedMuteTest {
                         NativeContentItem creator = new NativeContentItem(NativeContentItem.KIND_MEDIA,
                                 "Fixture creator", original.url, "", "", "", "", "OnlyHaven", "OnlyHaven");
                         ReflectionHelpers.setField(f.selected, "item", creator);
+                        ReflectionHelpers.setField(f.selected, "creatorIdentity",
+                                ShitTokCreatorMetadata.creatorIdentity(null, creator));
                     }
                     long down = down(f);
                     if (active) { waitForHold(); boosted(f); }

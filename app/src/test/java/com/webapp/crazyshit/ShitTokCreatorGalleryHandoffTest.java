@@ -135,6 +135,8 @@ public class ShitTokCreatorGalleryHandoffTest {
                 Object holder = ReflectionHelpers.callInstanceMethod(adapter, "onCreateViewHolder",
                         from(android.view.ViewGroup.class, new FrameLayout(host.get())), from(int.class, 0));
                 ReflectionHelpers.setField(holder, "item", media);
+                ReflectionHelpers.callInstanceMethod(holder, "bindCreatorChrome",
+                        from(NativeContentItem.class, media));
                 ReflectionHelpers.callInstanceMethod(holder, "openCreatorGallery",
                         from(boolean.class, false), from(String.class, "test-return-token"));
                 Intent intent = shadowOf(host.get()).getNextStartedActivity();
