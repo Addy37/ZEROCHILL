@@ -147,6 +147,7 @@ final class ChaosSourceMixer {
         if (item != null && "shit-show".equals(ShitTokAspectPriority.sourceKey(item))) shitShow.releaseUnplayed(item.url);
     }
 
+    // Page traversal is cheap post-starter work, independent of rendering/expensive catalog warmup.
     synchronized int nextPage(String source, int maximum) {
         ArrayDeque<Integer> pages = pageDecks.computeIfAbsent(source, ignored -> new ArrayDeque<>());
         if (pages.isEmpty()) {
@@ -161,6 +162,7 @@ final class ChaosSourceMixer {
     private java.util.concurrent.Callable<SourceBatch> provider(int source,
             java.util.concurrent.Callable<List<NativeContentItem>> loader) {
         return () -> {
+            // Interrupted socket IO may outlive a batch. Never queue another copy behind it.
             if (!fetching.add(source)) return new SourceBatch(source, Collections.emptyList());
             activeFetches.incrementAndGet();
             long at = android.os.SystemClock.elapsedRealtime();
@@ -206,6 +208,7 @@ final class ChaosSourceMixer {
             java.util.function.Consumer<List<NativeContentItem>> onCandidates) {
         ContentPreference mode = ContentPreference.get(context);
         if (mode != ContentPreference.ALL) {
+            // Only the authoritative category loader can produce a filtered candidate.
             return takePreference(mode);
         }
         if (starterPending) {
@@ -216,6 +219,8 @@ final class ChaosSourceMixer {
         recoverSources(context);
         ArrayList<NativeContentItem> result = new ArrayList<>();
         long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(MIX_BATCH_BUDGET_MS);
+        // The consumer can stop admission at any time. Provider work retains its own bounded
+        // session buffers and survives that decision, until explicit lifecycle/mode cancellation.
         while (!Thread.currentThread().isInterrupted() && System.nanoTime() < deadline) {
             List<NativeContentItem> ready = sourcePool.take(8);
             if (!ready.isEmpty()) {
@@ -288,6 +293,7 @@ final class ChaosSourceMixer {
     }
 
     private List<NativeContentItem> withKnownStarter(List<NativeContentItem> starter) {
+        // Reuse video dimensions already harvested during the starter race. No new wait or probe.
         ArrayList<NativeContentItem> combined = new ArrayList<>(shitShow.takeReadyBatch(6));
         combined.addAll(starter);
         return combined;
@@ -437,6 +443,7 @@ final class ChaosSourceMixer {
     }
 
     private List<NativeContentItem> loadOnlyHavenBatch(Context context, ContentPreference mode) {
+        // Catalog serialization must not hold this mixer's nextPage() monitor across IO.
         synchronized (onlyHavenLock) { return harvestOnlyHavenBatch(context, mode); }
     }
 
@@ -452,6 +459,7 @@ final class ChaosSourceMixer {
         HashSet<String> usedCreators = new HashSet<>();
         boolean anyResponse = false;
         int attempts = Math.min(4, onlyHavenCreators.size());
+        // Category acquisitions are small; the shared source buffer can fill the normal runway.
         int batchLimit = mode == ContentPreference.ALL ? ONLY_HAVEN_ITEMS_PER_BATCH : 2;
         while (combined.size() < batchLimit && attempts-- > 0) {
             if (Thread.currentThread().isInterrupted()) break;
@@ -495,6 +503,7 @@ final class ChaosSourceMixer {
         return new ArrayList<>(combined.values());
     }
 
+    // Preserve the source relationship at harvest time; playback still uses item.url.
     static NativeContentItem onlyHavenClip(NativeContentItem item, OnlyHavenRepository.Creator creator) {
         return new NativeContentItem(
                 item.kind, item.title, item.url, item.imageUrl, item.views,
@@ -531,6 +540,7 @@ final class ChaosSourceMixer {
         }
         if (onlyHavenCreators.isEmpty() && mode != ContentPreference.ALL) {
             onlyHavenCatalogAttempted = false;
+            // Cancellation is navigation, not evidence of a failing provider.
             categoryRetryAfter = Thread.currentThread().isInterrupted() ? 0L
                     : android.os.SystemClock.elapsedRealtime() + 60_000L;
         } else if (onlyHavenCreators.isEmpty()) onlyHavenCatalogAttempted = false;
@@ -558,6 +568,8 @@ final class ChaosSourceMixer {
             catalogLoading = true;
         }
 
+        // Category expansion is useful for variety, but it must never delay the base CrazyShit
+        // feeds. Populate it independently and fold it into a later batch when it is ready.
         CRAZY_IO.execute(() -> {
             LinkedHashSet<String> discovered = new LinkedHashSet<>();
             try {
