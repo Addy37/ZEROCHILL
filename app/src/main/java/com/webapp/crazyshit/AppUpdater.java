@@ -138,17 +138,17 @@ final class AppUpdater {
     private void previewUpdateExperience() {
         if (!betaChannel) return;
         ReleaseInfo preview = new ReleaseInfo(
-                "4.3.1 preview",
-                "ShitTok social polish and a smoother in-app updater.",
-                "ShitTok social polish and a smoother in-app updater.",
-                "",
+                "5.6.2 preview",
+                "Play Protect-safe updater preview.",
+                "Test the ZEROCHILL update card and browser-owned download handoff.",
+                "https://github.com/Addy37/ZEROCHILL/releases/latest",
                 true,
-                true
+                false
         );
         card.showAvailable(
                 preview.version,
                 preview.summary,
-                () -> simulatePreviewDownload(preview),
+                () -> openReleasePage(preview),
                 card::dismiss
         );
     }
