@@ -35,6 +35,7 @@ public class ShitTokAdmissionHealthTest {
             for (int source : new int[]{6, 5}) assertTrue(gate.canOffer(ShitTokFilteredInventoryTest.clip("Jane", source, 1), Collections.emptyList()));
             assertTrue(gate.canOffer(ShitTokInventoryAdmissionTest.item("show"), Collections.emptyList()));
             clock.set(5000); assertTrue(gate.canOffer(bunkr("recovered"), Collections.emptyList()));
+            assertFalse(gate.canOffer(bunkr("third"), Arrays.asList(bunkr("first"), bunkr("second"))));
             assertEquals(1, gate.admit(Arrays.asList(bunkr("recovered")), item -> stream(item), () -> true, new Random(0)).items.size());
         } finally { gate.close(); }
     }
@@ -61,6 +62,40 @@ public class ShitTokAdmissionHealthTest {
             assertTrue(maximum.get() <= 1);
         } finally { release.countDown(); gate.close(); }
     }
+    @Test public void completedProbeSurvivesClosedPermissionButSelectionCancellationInvalidatesIt() {
+        for (boolean cancel : new boolean[]{false, true}) {
+            AtomicBoolean allowed = new AtomicBoolean(true);
+            ShitTokOrientationAdmission[] holder = new ShitTokOrientationAdmission[1];
+            holder[0] = new ShitTokOrientationAdmission((stream, permission) -> {
+                allowed.set(false);
+                if (cancel) holder[0].cancelPending();
+                return .5f;
+            }, () -> 0L);
+            try {
+                ShitTokOrientationAdmission.Result result = holder[0].admit(Arrays.asList(bunkr("completed")),
+                        item -> stream(item), allowed::get, new Random(0));
+                assertEquals(cancel ? 0 : 1, result.items.size());
+                assertEquals(cancel ? 1 : 0, result.remaining.size());
+            } finally { holder[0].close(); }
+        }
+    }
+    @Test public void portraitSchedulingStillRanksHotCandidatesWithinThePortraitSet() {
+        ShitTokOrientationAdmission gate = new ShitTokOrientationAdmission((s, allowed) -> .5f, () -> 0L);
+        gate.setCreatorFocused(true);
+        BlockingQueue<NativeContentItem> queue = new ArrayBlockingQueue<>(48);
+        NativeContentItem cold = ShitTokInventoryAdmissionTest.item("cold"), hot = ShitTokInventoryAdmissionTest.item("hot");
+        queue.add(cold); queue.add(hot);
+        ShitTokCommunityPopularity.setScoresForTest(Collections.singletonMap(ZeroChillSocialRepository.contentKey(hot.url), 5f));
+        CountDownLatch release = new CountDownLatch(1);
+        try {
+            ShitTokOrientationAdmission.Result result = gate.admitConcurrent(queue, () -> true, candidate -> {
+                if (candidate != hot) release.await(2, TimeUnit.SECONDS);
+                return stream(candidate);
+            }, () -> true, 1, partial -> { assertEquals(hot.url, partial.items.get(0).url); release.countDown(); }, count -> {});
+            assertEquals(hot.url, result.items.get(0).url);
+        } finally { release.countDown(); gate.close(); ShitTokCommunityPopularity.resetForTest(); }
+    }
+
     static NativeContentItem bunkr(String title) { return new NativeContentItem("media", title, "https://bunkr.cr/f/" + title, "", "", "Bunkr", ""); }
     static CrazyShitRepository.StreamInfo stream(NativeContentItem item) { return new CrazyShitRepository.StreamInfo(item.url + ".mp4", item.url, item.title); }
 }

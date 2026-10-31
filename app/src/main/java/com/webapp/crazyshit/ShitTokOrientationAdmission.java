@@ -90,6 +90,7 @@ final class ShitTokOrientationAdmission {
     }
     private Result admit(List<NativeContentItem> candidates, Resolver resolver, BooleanSupplier allowedWork,
                  Random random, int maxItems, boolean requireStreams, Consumer<Result> onVerified, long diagnosticToken) {
+        final long workGeneration = admissionGeneration;
         List<NativeContentItem> ordered = candidateOrder(candidates, random);
         ArrayList<NativeContentItem> admitted = new ArrayList<>();
         ArrayList<NativeContentItem> remaining = new ArrayList<>();
@@ -179,7 +180,9 @@ final class ShitTokOrientationAdmission {
                 terminalError = true;
                 aspect = 0f;
             }
-            if (!allowedWork.getAsBoolean() || Thread.currentThread().isInterrupted()) {
+            // Keep an already completed probe when demand/permission closes. Only an actual
+            // lifecycle/selection cancellation invalidates its result and source health.
+            if (workGeneration != admissionGeneration || Thread.currentThread().isInterrupted()) {
                 deferred = true; remaining.add(item); continue;
             }
             if (!(aspect > 0f) || !Float.isFinite(aspect)) aspect = 0f;

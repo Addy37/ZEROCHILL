@@ -210,6 +210,8 @@ public class ShitTokFilteredInventoryTest {
             inv.request(ShitTokSourceMode.ALL, ContentPreference.WOMEN, true, freshReady::countDown);
             assertTrue(freshReady.await(2, TimeUnit.SECONDS));
             release.countDown(); io.submit(() -> {}).get(2, TimeUnit.SECONDS);
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(2);
+            while (!inv.hasReady(ContentPreference.WOMEN) && System.nanoTime() < deadline) Thread.yield();
             List<NativeContentItem> fresh = inv.take(ContentPreference.WOMEN);
             assertFalse(fresh.isEmpty());
             for (NativeContentItem item : fresh) assertEquals("new", item.searchQuery);
