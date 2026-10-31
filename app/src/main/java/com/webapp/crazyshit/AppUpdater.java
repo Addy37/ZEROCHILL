@@ -1,23 +1,27 @@
 package com.webapp.crazyshit;
 
 import android.app.Activity;
+import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageInfo;
+import android.content.pm.PackageInstaller;
+import android.content.pm.PackageManager;
+import android.content.pm.Signature;
 import android.net.Uri;
 import android.os.Build;
 import android.provider.Settings;
-
-import androidx.core.content.FileProvider;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.io.BufferedInputStream;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.ArrayList;
@@ -419,11 +423,61 @@ final class AppUpdater {
     }
 
     private void verifyPackage(File apk) throws Exception {
-        PackageInfo archive = activity.getPackageManager().getPackageArchiveInfo(apk.getAbsolutePath(), 0);
+        PackageManager packageManager = activity.getPackageManager();
+        int flags = Build.VERSION.SDK_INT >= Build.VERSION_CODES.P
+                ? PackageManager.GET_SIGNING_CERTIFICATES
+                : PackageManager.GET_SIGNATURES;
+        PackageInfo archive = packageManager.getPackageArchiveInfo(apk.getAbsolutePath(), flags);
+        PackageInfo installed = packageManager.getPackageInfo(activity.getPackageName(), flags);
+
         if (archive == null || archive.packageName == null) throw new Exception("Invalid APK");
         if (!activity.getPackageName().equals(archive.packageName)) {
             throw new Exception("Update package doesn't match installed app");
         }
+        if (!sameSigningIdentity(installed, archive)) {
+            throw new Exception("Update signing certificate doesn't match installed app");
+        }
+
+        long installedCode = Build.VERSION.SDK_INT >= Build.VERSION_CODES.P
+                ? installed.getLongVersionCode()
+                : installed.versionCode;
+        long archiveCode = Build.VERSION.SDK_INT >= Build.VERSION_CODES.P
+                ? archive.getLongVersionCode()
+                : archive.versionCode;
+        if (archiveCode <= installedCode) {
+            throw new Exception("Update version must be newer than installed app");
+        }
+    }
+
+    private boolean sameSigningIdentity(PackageInfo installed, PackageInfo archive) {
+        Signature[] installedSigners = currentSigners(installed);
+        Signature[] archiveSigners = currentSigners(archive);
+        if (installedSigners.length == 0 || installedSigners.length != archiveSigners.length) return false;
+
+        boolean[] matched = new boolean[archiveSigners.length];
+        for (Signature installedSigner : installedSigners) {
+            boolean found = false;
+            for (int i = 0; i < archiveSigners.length; i++) {
+                if (!matched[i] && installedSigner.equals(archiveSigners[i])) {
+                    matched[i] = true;
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) return false;
+        }
+        return true;
+    }
+
+    @SuppressWarnings("deprecation")
+    private Signature[] currentSigners(PackageInfo info) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            if (info.signingInfo == null || info.signingInfo.getApkContentsSigners() == null) {
+                return new Signature[0];
+            }
+            return info.signingInfo.getApkContentsSigners();
+        }
+        return info.signatures == null ? new Signature[0] : info.signatures;
     }
 
     private void requestInstall(File apk) {
@@ -446,19 +500,61 @@ final class AppUpdater {
     }
 
     private void launchInstaller(File apk) {
+        PackageInstaller installer = activity.getPackageManager().getPackageInstaller();
+        int sessionId = -1;
         try {
-            pendingInstall = apk;
-            Uri uri = FileProvider.getUriForFile(
-                    activity,
-                    activity.getPackageName() + ".files",
-                    apk
+            verifyPackage(apk);
+
+            PackageInstaller.SessionParams params = new PackageInstaller.SessionParams(
+                    PackageInstaller.SessionParams.MODE_FULL_INSTALL
             );
-            Intent intent = new Intent(Intent.ACTION_VIEW);
-            intent.setDataAndType(uri, "application/vnd.android.package-archive");
-            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-            intent.putExtra(Intent.EXTRA_NOT_UNKNOWN_SOURCE, true);
-            activity.startActivity(intent);
+            params.setAppPackageName(activity.getPackageName());
+            params.setSize(apk.length());
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                params.setRequireUserAction(PackageInstaller.SessionParams.USER_ACTION_REQUIRED);
+            }
+
+            sessionId = installer.createSession(params);
+            try (PackageInstaller.Session session = installer.openSession(sessionId);
+                 InputStream input = new BufferedInputStream(new FileInputStream(apk));
+                 OutputStream output = session.openWrite("ZeroChill.apk", 0L, apk.length())) {
+                byte[] buffer = new byte[64 * 1024];
+                int read;
+                while ((read = input.read(buffer)) >= 0) {
+                    output.write(buffer, 0, read);
+                }
+                session.fsync(output);
+
+                Intent callback = new Intent(activity, UpdateInstallReceiver.class)
+                        .setAction(UpdateInstallReceiver.ACTION_INSTALL_STATUS)
+                        .setPackage(activity.getPackageName())
+                        .putExtra(
+                                UpdateInstallReceiver.EXTRA_VERSION,
+                                activeRelease == null ? "" : activeRelease.version
+                        );
+                int pendingFlags = PendingIntent.FLAG_UPDATE_CURRENT;
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    pendingFlags |= PendingIntent.FLAG_MUTABLE;
+                }
+                PendingIntent pendingIntent = PendingIntent.getBroadcast(
+                        activity,
+                        sessionId,
+                        callback,
+                        pendingFlags
+                );
+                session.commit(pendingIntent.getIntentSender());
+            }
+
+            pendingInstall = null;
+            card.dismiss();
+            if (apk.exists()) apk.delete();
         } catch (Exception e) {
+            if (sessionId >= 0) {
+                try {
+                    installer.abandonSession(sessionId);
+                } catch (Exception ignored) {
+                }
+            }
             ZeroChillToast.makeText(activity, "Couldn't open Android's installer.", ZeroChillToast.LENGTH_LONG).show();
             if (activeRelease != null) {
                 card.showReady(
