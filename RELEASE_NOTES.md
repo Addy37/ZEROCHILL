@@ -1,13 +1,13 @@
-# ZEROCHILL 5.6.0
+# ZEROCHILL 5.6.1
 
-Smart ShitTok gets more personal and reliable, OnlyFap galleries get better favorites and controls, and social/feedback protections are stronger.
+This hotfix focuses on ShitTok reliability, source balance, and personalization behavior after the 5.6.0 release.
 
-- Upgraded Smart ShitTok with local personalization based on real viewing behavior, stronger source recovery, immediate category refocusing, and bounded background admission work for smoother long sessions.
-- ShitTok now keeps CrazyShit, Kaotic, ShitShow, Fapello, OnlyHaven, and BaddieHub in the active mix while removing eFukt and XMegaDrive from ShitTok only. ShitShow and BaddieHub feed contribution were repaired.
-- Added hard ShitTok category modes for Women, Men, Trans Women, Trans Men, and Groups using verified OnlyHaven category membership.
-- Improved OnlyFap creator galleries with natural-aspect masonry thumbnails, liquid-glass long-press actions, individual media favorites, favorite-first creator ordering, and saved media in Library.
-- BaddieHub ShitTok cards can now link to verified matching OnlyFap creators for title, avatar, swipe, and creator-gallery navigation while keeping BaddieHub as the media source.
-- Added stronger server-side protections against DM, feedback, comment, report, and comment-like spam, including atomic feedback and reply rate limiting.
-- Existing accounts, favorites, history, downloads, messages, settings, backups, and other saved data are preserved when updating.
+- Fixed filtered ShitTok starvation so the feed keeps refilling during longer sessions and after source or gender changes.
+- Added the compact All / OnlyFap ShitTok source selector with the existing ZEROCHILL liquid-glass selected lens.
+- Improved source scheduling so productive providers can keep the runway filled without letting one slow or failing source stall the feed.
+- Restored ShitShow embedded-story extraction and improved handling of repeated, rejected, or unavailable candidates.
+- Changed Smart ShitTok history handling so past seen or liked content no longer blocks otherwise-valid recommendations. Ranking and creator diversity still influence ordering.
+- Added a one-time recommendation-history reset for existing installs so stale ShitTok learning does not carry forward into the corrected ranking behavior.
+- Preserved explicit hides and blocks, category rules, session duplicate protection, favorites, creator favorites, downloads, progress, Library data, accounts, messages, settings, backups, and other saved user data.
 
 Install over your existing ZeroChill app without uninstalling.
