@@ -24,7 +24,7 @@ import static org.robolectric.util.ReflectionHelpers.ClassParameter.from;
 @RunWith(RobolectricTestRunner.class)
 @Config(application = Application.class, sdk = 35)
 public class ShitTokContinuityTest {
-    @Test public void seenAndHeartedCandidatesNeverConsumeRunwayEvenAfterDryBatches() {
+    @Test public void seenAndHeartedCandidatesRemainAvailableToFillRunwayAfterDryBatches() {
         try (Fixture f = new Fixture()) {
             ShitTokSeenStore store = ReflectionHelpers.getField(f.feed, "seenStore");
             store.watch(item("seen").url, null);
@@ -33,10 +33,12 @@ public class ShitTokContinuityTest {
             f.candidates("seen", "liked", "fresh");
             call(f.feed, "loadMorePool"); f.io.tasks.removeFirst().run();
             org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
-            assertEquals(2, f.items.size());
-            assertEquals("fresh", f.items.get(1).title);
-            assertTrue(((java.util.concurrent.atomic.AtomicInteger) ReflectionHelpers.getField(f.feed, "seenRejected")).get() > 0);
-            assertTrue(((java.util.concurrent.atomic.AtomicInteger) ReflectionHelpers.getField(f.feed, "likedRejected")).get() > 0);
+            assertEquals(4, f.items.size());
+            Set<String> titles = new HashSet<>();
+            for (NativeContentItem candidate : f.items) titles.add(candidate.title);
+            assertTrue(titles.containsAll(Arrays.asList("seen", "liked", "fresh")));
+            assertEquals(0, ((java.util.concurrent.atomic.AtomicInteger) ReflectionHelpers.getField(f.feed, "seenRejected")).get());
+            assertEquals(0, ((java.util.concurrent.atomic.AtomicInteger) ReflectionHelpers.getField(f.feed, "likedRejected")).get());
         }
     }
     @Test public void fiveReadyClipsAndIncrementalAdmissionFillNormalTarget() {
@@ -171,10 +173,10 @@ public class ShitTokContinuityTest {
             host.close();
         }
     }
-    @Test public void discardedRecentCandidateDoesNotClaimFirstFeedAdmission() {
+    @Test public void discardedSessionDuplicateDoesNotClaimFirstFeedAdmission() {
         try (Fixture f = new Fixture()) {
-            Set<String> recent = ReflectionHelpers.getField(f.feed, "recentSet");
-            recent.add(item("watched").url);
+            Set<String> duplicates = ReflectionHelpers.getField(f.feed, "sessionUrls");
+            duplicates.add(item("watched").url);
             f.candidates("watched");
             call(f.feed, "loadMorePool");
             f.io.tasks.removeFirst().run();

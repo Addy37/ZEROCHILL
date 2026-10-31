@@ -58,7 +58,7 @@ final class ShitTokSourceControl extends FrameLayout {
         displayed = mode;
         if (selectedGlass != null) selectedGlass.select(mode.ordinal());
         for (int i = 0; i < labels.length; i++) {
-            labels[i].setTextColor(i == mode.ordinal() ? Color.rgb(0, 229, 255) : 0xFFE0E7ED);
+            labels[i].setTextColor(i == mode.ordinal() ? SquareNavigationBridge.SELECTED_ARGB : 0xFFE0E7ED);
             labels[i].setSelected(i == mode.ordinal());
         }
         selection.animate().cancel();

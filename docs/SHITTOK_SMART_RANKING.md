@@ -54,7 +54,7 @@ responses or the physical device's complete failure history.
 ## Pipeline and health
 
 Existing starter race -> session source acquisition -> category eligibility ->
-blocks/seen/liked/identity checks -> bounded asynchronous playable/orientation
+explicit blocks/session identity checks -> bounded asynchronous playable/orientation
 verification -> local score + source opportunity + exploration -> ready runway.
 
 `ShitTokSourcePool` owns at most one acquisition per source and 12 raw candidates
@@ -80,7 +80,7 @@ eligible there. Mode changes clear the OnlyHaven category buffer; returning to
 All re-enables broad caches after rechecking remote availability. This avoids
 losing ShitShow metadata already consumed by its internal harvest deduplication.
 Abandoned unplayed ShitShow recommendations release that metadata dedup key; normal
-seen/history exclusions still prevent replaying actually watched clips. A socket
+session identity checks still prevent in-session duplicates. Historical viewing does not exclude clips. A socket
 that ignores interruption remains single-flight until it really exits.
 
 Raw selection combines source opportunity age (capped at eight turns) with a bounded
