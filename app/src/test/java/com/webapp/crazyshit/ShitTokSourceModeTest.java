@@ -115,8 +115,11 @@ public class ShitTokSourceModeTest {
             ArrayList<NativeContentItem> queue = ReflectionHelpers.getField(feed, "items");
             NativeContentItem current = ShitTokInventoryAdmissionTest.item("current"), broad = new NativeContentItem("media", "broad", "https://kaotic.com/video/fixture", "", "", "Kaotic", "", "", "", 0, .5f);
             queue.addAll(Arrays.asList(current, broad));
-            ShitTokSmartRanker.action(broad, ShitTokSmartRanker.Action.FAVORITE);
-            float learned = ShitTokSmartRanker.score(broad);
+            // Compare the same instant: normal wall-clock decay is independent
+            // of whether a source switch preserved the learned signal.
+            long rankingInstant = 1_700_000_000_000L;
+            ShitTokSmartRanker.actionAt(broad, ShitTokSmartRanker.Action.FAVORITE, rankingInstant);
+            float learned = ShitTokSmartRanker.localScoreAt(broad, rankingInstant);
             int generation = ReflectionHelpers.getField(feed, "feedGeneration");
             long before = ShitTokPoolDiagnostics.modeToken();
             ShitTokSourceMode.set(activity.get(), ShitTokSourceMode.ONLY_FAP);
@@ -126,7 +129,7 @@ public class ShitTokSourceModeTest {
             assertTrue(ShitTokPoolDiagnostics.modeToken() > before);
             ReflectionHelpers.callInstanceMethod(feed, "appendUnique", from(List.class, Arrays.asList(broad)));
             assertEquals(Arrays.asList(current), queue);
-            assertEquals(learned, ShitTokSmartRanker.score(broad), 0f);
+            assertEquals(learned, ShitTokSmartRanker.localScoreAt(broad, rankingInstant), 0f);
             assertTrue(feed.findViewWithTag("shittok_source_onlyfap").isSelected());
             feed.close();
         }
