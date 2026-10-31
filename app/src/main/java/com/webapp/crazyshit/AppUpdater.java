@@ -141,7 +141,7 @@ final class AppUpdater {
                 "5.6.2 preview",
                 "Play Protect-safe updater preview.",
                 "Test the ZEROCHILL update card and browser-owned download handoff.",
-                "https://github.com/Addy37/ZEROCHILL/releases/latest",
+                "https://cdn.jsdelivr.net/gh/Addy37/ZEROCHILL@6a72fa192847f66960365d6a0cdc387ccae17439/docs/update/index.html?version=5.6.2%20preview&title=ZEROCHILL%20update%20preview&summary=Browser-owned%20download%20handoff&release=https%3A%2F%2Fgithub.com%2FAddy37%2FZEROCHILL%2Freleases%2Flatest&preview=1",
                 true,
                 false
         );
