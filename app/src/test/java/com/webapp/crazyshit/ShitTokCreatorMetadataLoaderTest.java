@@ -82,6 +82,22 @@ public class ShitTokCreatorMetadataLoaderTest {
         } finally { loader.close(); }
     }
 
+    @Test public void unresolvedBaddieTitleDoesNotSuppressNewClipAfterCreatorDiscovery() {
+        Queue worker = new Queue(), ui = new Queue();
+        java.util.concurrent.atomic.AtomicBoolean discovered = new java.util.concurrent.atomic.AtomicBoolean();
+        ShitTokCreatorMetadataLoader loader = new ShitTokCreatorMetadataLoader(worker, ui,
+                media -> discovered.get() ? creator() : null, url -> {});
+        try {
+            NativeContentItem first = new NativeContentItem("media", "Jane", "https://baddiehub.com/first/", "", "", "BaddieHub", "");
+            NativeContentItem second = new NativeContentItem("media", "Jane", "https://baddiehub.com/second/", "", "", "BaddieHub", "");
+            assertNull(loader.identity(first)); worker.next(); ui.next();
+            discovered.set(true);
+            assertNull(loader.identity(second));
+            assertEquals(1, worker.tasks.size()); worker.next(); ui.next();
+            assertEquals(creator().url, loader.identity(second).url);
+        } finally { loader.close(); }
+    }
+
     @Test public void creatorCacheIsBoundedWithoutQueuingOrdinaryClipWork() {
         ShitTokCreatorMetadataLoader loader = new ShitTokCreatorMetadataLoader(Runnable::run, Runnable::run,
                 media -> null, url -> {});

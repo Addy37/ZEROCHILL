@@ -363,10 +363,7 @@ final class ShitTokFilteredInventory {
         BaddieHubRepository baddie = new BaddieHubRepository();
         BaddieHubCreatorMatcher matcher = new BaddieHubCreatorMatcher(app);
         java.util.concurrent.atomic.AtomicInteger baddiePage = new java.util.concurrent.atomic.AtomicInteger();
-        Map<String, NativeContentItem> baddieIdentities = Collections.synchronizedMap(
-                new LinkedHashMap<String, NativeContentItem>(32, .75f, true) {
-                    @Override protected boolean removeEldestEntry(Map.Entry<String, NativeContentItem> entry) { return size() > 128; }
-                });
+        ShitTokCreatorIdentityCache baddieIdentities = new ShitTokCreatorIdentityCache();
         return new Backend() {
             public OnlyHavenRepository.CategoryPage creators(ContentPreference mode, int offset) throws Exception {
                 if (mode == ContentPreference.ALL)
@@ -417,11 +414,7 @@ final class ShitTokFilteredInventory {
                 ArrayList<NativeContentItem> result = new ArrayList<>();
                 for (NativeContentItem item : baddie.fetchPortraitFeed(app, 1 + baddiePage.getAndIncrement() % 3)) {
                     String key = CreatorNameMatcher.normalized(item.title);
-                    NativeContentItem identity;
-                    synchronized (baddieIdentities) {
-                        if (!baddieIdentities.containsKey(key)) baddieIdentities.put(key, matcher.local(item));
-                        identity = baddieIdentities.get(key);
-                    }
+                    NativeContentItem identity = baddieIdentities.resolve(key, () -> matcher.local(item));
                     if (mode == ContentPreference.ALL) {
                         if (identity == null || (!OnlyHavenRepository.isOnlyHavenUrl(identity.url)
                                 && !FapelloRepository.isModelUrl(identity.url))) result.add(item);

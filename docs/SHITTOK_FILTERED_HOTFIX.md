@@ -32,6 +32,9 @@ Code-traced bottlenecks after the first device tests:
   creator (or the existing exact identity), with 256 identities and 512 learned-profile
   keys. Fallback labels/navigation are immediate; enrichment never gates admission.
   The exact Fapello profile URL remains internal and its clean label stays visible.
+  BaddieHub worker linking/enrichment reuses at most 128 successful identities per
+  cache. Misses are not memoized across clips: later verified catalog discovery
+  must still get a chance to resolve a previously unknown title.
 
 ShitShow's protected or still-running harvest could return an empty list, which the
 source pool interpreted as an exhausted catalog, escalating its retry delay. Those

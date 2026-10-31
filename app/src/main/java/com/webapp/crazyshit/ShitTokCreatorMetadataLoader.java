@@ -54,8 +54,11 @@ final class ShitTokCreatorMetadataLoader {
     private static Function<NativeContentItem, NativeContentItem> combinedResolver(
             Context context, BaddieHubCreatorMatcher matcher) {
         Function<NativeContentItem, NativeContentItem> ordinary = resolver(context);
+        ShitTokCreatorIdentityCache baddie = new ShitTokCreatorIdentityCache();
         return media -> BaddieHubCreatorMatcher.isCandidate(media)
-                && ShitTokCreatorMetadata.knownProfileUrl(media).isEmpty() ? matcher.local(media) : ordinary.apply(media);
+                && ShitTokCreatorMetadata.knownProfileUrl(media).isEmpty()
+                ? baddie.resolve(CreatorNameMatcher.normalized(media.title), () -> matcher.local(media))
+                : ordinary.apply(media);
     }
 
     private static ScheduledThreadPoolExecutor newLiveWorker() {
@@ -176,8 +179,8 @@ final class ShitTokCreatorMetadataLoader {
         if (!profile.isEmpty() && !name.isEmpty())
             return ShitTokAspectPriority.sourceKey(media) + "\n" + profile + "\n" + CreatorIdentity.key(name);
         if (!name.isEmpty()) return ShitTokAspectPriority.sourceKey(media) + "\n" + CreatorIdentity.key(name);
-        // BaddieHub linkage remains exact and ambiguous titles never become creator identities.
-        if (BaddieHubCreatorMatcher.isCandidate(media)) return "baddiehub\n" + CreatorNameMatcher.normalized(media.title);
+        // An unresolved BaddieHub title is not yet a creator key. Successful worker matches
+        // are memoized separately; a miss must not suppress lookup for later clips.
         return media.url + "\n" + media.title;
     }
     private void trim() {
