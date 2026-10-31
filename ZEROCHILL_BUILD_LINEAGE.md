@@ -2,6 +2,15 @@
 
 This file identifies the current approved ZEROCHILL product baseline for test APKs and future feature work.
 
+## ShitTok ranking/reset feature candidate
+
+The user selected current main, verified at merged PR #376 commit
+`c1bbb7e1561703955e319eb9b2cd2cf5424603ea`, as the approved source of truth.
+`feature/shittok-ranking-reset` continues it with selector presentation, ranking-only
+history handling and a scoped one-time recommendation reset. PR #376 is historical
+and is not modified. No release metadata, signing, provider configuration or backend
+change is part of this work. A new PR must remain unmerged for physical testing.
+
 ## Unreleased filtered ShitTok hotfix candidate
 
 GitHub `main` was verified at `1fa925f4806d21a1cfefc6d98158ca2cb7f14a51`

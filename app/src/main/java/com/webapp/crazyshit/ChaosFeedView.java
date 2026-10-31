@@ -137,7 +137,6 @@ public final class ChaosFeedView extends FrameLayout {
     private final Set<String> sessionUrls = new HashSet<>();
     private final LinkedHashSet<String> sessionIdentities = new LinkedHashSet<>();
     private final ShitTokSeenStore seenStore;
-    private final Set<String> checkedLikeKeys = Collections.synchronizedSet(new HashSet<>()); // bounded per retained feed
     private final java.util.concurrent.atomic.AtomicInteger rawCandidates = new java.util.concurrent.atomic.AtomicInteger();
     private final java.util.concurrent.atomic.AtomicInteger duplicateRejected = new java.util.concurrent.atomic.AtomicInteger();
     private final java.util.concurrent.atomic.AtomicInteger seenRejected = new java.util.concurrent.atomic.AtomicInteger();
@@ -351,6 +350,7 @@ public final class ChaosFeedView extends FrameLayout {
         FrameLayout.LayoutParams sourceParams = new FrameLayout.LayoutParams(dp(172), dp(44), Gravity.TOP | Gravity.CENTER_HORIZONTAL);
         sourceParams.topMargin = dp(8);
         addView(sourceControl, sourceParams);
+        updateSourceControlVisibility();
         ViewCompat.setOnApplyWindowInsetsListener(sourceControl, (view, insets) -> {
             int status = insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.statusBars()).top;
             int[] location = new int[2]; getLocationInWindow(location);
@@ -555,10 +555,7 @@ public final class ChaosFeedView extends FrameLayout {
         boolean removed = false;
         for (int i = items.size() - 1; i > selectedPosition; i--) {
             NativeContentItem item = items.get(i);
-            CrazyShitRepository.StreamInfo future = streamCache.get(item.url);
-            boolean liked = seenStore.liked(item.url, future == null ? null : future.mediaUrl);
-            if (!unplayable.contains(item.url) && !hiddenUrls.contains(item.url) && !isBlockedCreator(item) && !liked) continue;
-            if (liked) likedRejected.incrementAndGet();
+            if (!unplayable.contains(item.url) && !hiddenUrls.contains(item.url) && !isBlockedCreator(item)) continue;
             for (ChaosHolder holder : new ArrayList<>(playerHolders)) {
                 if (holder.item != null && item.url.equals(holder.item.url)) holder.releasePlayer();
             }
@@ -942,6 +939,7 @@ public final class ChaosFeedView extends FrameLayout {
         ContentPreference current = ContentPreference.get(activity);
         ShitTokSourceMode currentSources = ShitTokSourceMode.get(activity);
         if (sourceControl != null) sourceControl.refresh(false);
+        updateSourceControlVisibility();
         if (queuePreference == null) { queuePreference = current; queueSources = currentSources; return; }
         if (queuePreference == current && queueSources == currentSources) return;
         String selection = currentSources.key(current);
@@ -1135,30 +1133,12 @@ public final class ChaosFeedView extends FrameLayout {
                 // Partial provider results appear again in the final mix. Do not count this
                 // internal replay as a new fetched duplicate or spend another lookup.
                 if (!offered.add(identity)) continue;
-                if (seenStore.liked(item.url, null)) { likedRejected.incrementAndGet(); continue; }
-                if (recentSnapshot.contains(item.url) || seenStore.seen(item.url, null)) { seenRejected.incrementAndGet(); continue; }
                 fresh.add(item);
-            }
-            // One small account-scoped lookup per provider result, on the harvest worker. Cached
-            // exclusions work offline. A lookup failure is visible and never enables known likes.
-            Set<String> unchecked = new HashSet<>();
-            for (NativeContentItem item : fresh) {
-                String key = ZeroChillSocialRepository.contentKey(item.url);
-                if (!checkedLikeKeys.contains(key)) unchecked.add(key);
-            }
-            try {
-                seenStore.importLikes(ZeroChillSocialRepository.shittokLikedKeysBlocking(activity.getApplicationContext(), unchecked));
-                if (checkedLikeKeys.size() + unchecked.size() > 4096) checkedLikeKeys.clear();
-                checkedLikeKeys.addAll(unchecked);
-            } catch (Exception unavailable) {
-                likedLookupFailures.incrementAndGet();
-                ShitTokPoolDiagnostics.record("likedLookup", "status=unavailable localExclusion=true");
             }
             synchronized (candidates) { for (NativeContentItem item : fresh) {
                 if (work.cancelled || !acceptingCandidates.get() || batchGeneration != feedGeneration || closed) {
                     sourceMixer.abandon(item); continue;
                 }
-                if (seenStore.liked(item.url, null)) { likedRejected.incrementAndGet(); continue; }
                 if (preferenceBatch && !orientationAdmission.canOffer(item, candidates)) {
                     offered.remove(ShitTokContentIdentity.page(item.url));
                     sourceMixer.returnPreference(batchPreference, item);
@@ -1225,12 +1205,6 @@ public final class ChaosFeedView extends FrameLayout {
                         CrazyShitRepository.StreamInfo resolved = startup != null ? startup : resolvePlayable(item);
                         if (resolved != null) {
                             AppPerformance.startup("resolved");
-                            if (seenStore.liked(item.url, resolved.mediaUrl)) {
-                                likedRejected.incrementAndGet(); throw new ShitTokOrientationAdmission.Filtered();
-                            }
-                            if (seenStore.seen(item.url, resolved.mediaUrl)) {
-                                seenRejected.incrementAndGet(); throw new ShitTokOrientationAdmission.Filtered();
-                            }
                             if (!resolvedIdentities.add(ShitTokContentIdentity.media(resolved.mediaUrl))) {
                                 duplicateRejected.incrementAndGet(); throw new ShitTokOrientationAdmission.Filtered();
                             }
@@ -1262,7 +1236,7 @@ public final class ChaosFeedView extends FrameLayout {
                         appendUnique(newItems);
                         int added = items.size() - before;
                         for (int i = before; i < items.size(); i++)
-                            if (!recentSnapshot.contains(items.get(i).url)) publishedFresh[0]++;
+                            publishedFresh[0]++;
                         if (added == 0) return;
                         recordFirstAdmission();
                         adapter.notifyItemRangeInserted(before, added);
@@ -1684,9 +1658,7 @@ public final class ChaosFeedView extends FrameLayout {
 
     private boolean discoveryExcluded(NativeContentItem item, CrazyShitRepository.StreamInfo stream) {
         if (!eligiblePreference(item, ContentPreference.get(activity))) return true;
-        String media = stream == null ? null : stream.mediaUrl;
-        if (seenStore.liked(item.url, media)) { likedRejected.incrementAndGet(); return true; }
-        if (recentSet.contains(item.url) || seenStore.seen(item.url, media)) { seenRejected.incrementAndGet(); return true; }
+        // Historical viewing and saved content inform ranking, not eligibility.
         return false;
     }
 
@@ -2490,7 +2462,7 @@ public final class ChaosFeedView extends FrameLayout {
     }
 
     private void updateSourceControlVisibility() {
-        if (sourceControl != null) sourceControl.setVisibility(clearDisplay || manualFullscreen
+        if (sourceControl != null) sourceControl.setVisibility(ContentPreference.get(activity) != ContentPreference.ALL || clearDisplay || manualFullscreen
                 || pinchingHolder != null && pinchingHolder.pinch.suppressesFeedChrome() ? View.GONE : View.VISIBLE);
     }
 

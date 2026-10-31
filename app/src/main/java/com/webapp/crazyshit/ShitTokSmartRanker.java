@@ -147,6 +147,7 @@ final class ShitTokSmartRanker {
         if (context == null) return;
         Context next = context.getApplicationContext();
         if (app == next && prefs != null) return;
+        ShitTokRecommendationReset.run(next);
         app = next;
         prefs = app.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
         FEATURES.clear();

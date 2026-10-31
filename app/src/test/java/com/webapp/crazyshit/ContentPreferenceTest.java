@@ -328,7 +328,7 @@ public class ContentPreferenceTest {
         feed.close();
     }
 
-    @Test public void latePreferenceAdmissionFiltersStaleTailAndPreservesExclusions() {
+    @Test public void latePreferenceAdmissionKeepsHistoricalContentButRejectsStaleBlockedAndDuplicateItems() {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
         ContentPreference.set(activity, ContentPreference.MEN);
         ChaosFeedView feed = new ChaosFeedView(activity, item -> {}, false);
@@ -352,7 +352,9 @@ public class ContentPreferenceTest {
         // A stale publication remains ineligible even if it was fetched before the mode changed.
         org.robolectric.util.ReflectionHelpers.callInstanceMethod(feed, "appendUnique",
                 org.robolectric.util.ReflectionHelpers.ClassParameter.from(List.class, Arrays.asList(clip("stale"))));
-        assertEquals(Arrays.asList(current, match), items);
+        assertEquals(4, items.size());
+        assertTrue(items.containsAll(Arrays.asList(current, watched, liked, match)));
+        assertFalse(items.contains(blocked));
         assertEquals(1, (int) Collections.frequency(items, match));
         assertTrue(seen.seen(watched.url, null)); assertTrue(seen.liked(liked.url, null));
         feed.close();

@@ -17,6 +17,7 @@ final class ShitTokSourceControl extends FrameLayout {
     private final ViewPageBackdrop page;
     private final FrameLayout controls;
     private final View selection;
+    private ShitTokSelectedGlass selectedGlass;
     private final TextView[] labels = new TextView[2];
     private boolean dirty = true, installed;
     private ShitTokSourceMode displayed;
@@ -55,8 +56,9 @@ final class ShitTokSourceControl extends FrameLayout {
         ShitTokSourceMode mode = ShitTokSourceMode.get(activity);
         if (displayed == mode) return;
         displayed = mode;
+        if (selectedGlass != null) selectedGlass.select(mode.ordinal());
         for (int i = 0; i < labels.length; i++) {
-            labels[i].setTextColor(i == mode.ordinal() ? Color.rgb(0, 229, 255) : 0xFFE0E7ED);
+            labels[i].setTextColor(i == mode.ordinal() ? SquareNavigationBridge.SELECTED_ARGB : 0xFFE0E7ED);
             labels[i].setSelected(i == mode.ordinal());
         }
         selection.animate().cancel();
@@ -72,7 +74,12 @@ final class ShitTokSourceControl extends FrameLayout {
         while (ancestor != null && !(ancestor instanceof FrostedNavigationLayout))
             ancestor = ancestor.getParent() instanceof View ? (View) ancestor.getParent() : null;
         if (!installed && ancestor != null) {
-            installed = true; removeView(controls); setBackgroundColor(Color.TRANSPARENT);
+            installed = true;
+            controls.removeView(selection);
+            selectedGlass = new ShitTokSelectedGlass(activity, page);
+            selectedGlass.select(displayed.ordinal());
+            controls.addView(selectedGlass, 0, new LayoutParams(-1, -1));
+            removeView(controls); setBackgroundColor(Color.TRANSPARENT);
             GlassHeaderView glass = new GlassHeaderView(activity, controls, 24f, false, false, true, 0f);
             glass.setPageBackdrop(page); addView(glass, new LayoutParams(-1, -1));
         }

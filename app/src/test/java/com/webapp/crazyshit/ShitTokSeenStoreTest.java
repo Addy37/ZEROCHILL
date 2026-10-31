@@ -37,18 +37,18 @@ public class ShitTokSeenStoreTest {
                 ShitTokContentIdentity.page("https://other.test/watch?id=2"));
     }
 
-    @Test public void legacyUrlsMigrateAndStreamAliasesSurviveProcessReload() throws Exception {
+    @Test public void legacyUrlsResetAndNewStreamAliasesSurviveProcessReload() throws Exception {
         Application app = RuntimeEnvironment.getApplication();
         app.getSharedPreferences("chaos_feed", 0).edit().putString("recent_urls",
                 "[\"https://crazyshit.com/cnt/medias/5/old\"]").commit();
         ShitTokSeenStore store = new ShitTokSeenStore(app);
-        assertTrue(store.seen("https://crazyshit.com/cnt/medias/5/new", null));
+        assertFalse(store.seen("https://crazyshit.com/cnt/medias/5/new", null));
         store.watch("https://kaotic.com/video/post", "https://cdn.test/a.mp4?token=old&expires=1");
         store.flush(); drainDisk();
         ShitTokSeenStore restored = new ShitTokSeenStore(app);
         assertTrue(restored.seen("https://different.test/page", "https://cdn.test/a.mp4?token=new&expires=9"));
         assertTrue(restored.seen("https://cdn.test/a.mp4?token=new&expires=9", null));
-        assertTrue(app.getSharedPreferences("chaos_feed", 0).getString("recent_urls", "").contains("/5/old"));
+        assertFalse(app.getSharedPreferences("chaos_feed", 0).contains("recent_urls"));
     }
 
     @Test public void heartedContentOutlivesOrdinaryHistoryAndMatchesMediaVariants() throws Exception {
