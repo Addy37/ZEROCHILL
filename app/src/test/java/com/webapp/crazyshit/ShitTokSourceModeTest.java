@@ -14,6 +14,35 @@ import static org.robolectric.util.ReflectionHelpers.ClassParameter.from;
 @RunWith(RobolectricTestRunner.class)
 @Config(application = Application.class, sdk = 35)
 public class ShitTokSourceModeTest {
+    @Test public void selectorOnlyAppearsForAllAndRestoresWithoutChangingCategory() {
+        try (org.robolectric.android.controller.ActivityController<Activity> activity = Robolectric.buildActivity(Activity.class).setup()) {
+            ChaosFeedView feed = new ChaosFeedView(activity.get(), item -> {}, false);
+            try {
+                for (ContentPreference mode : ContentPreference.values()) {
+                    ContentPreference.set(activity.get(), mode);
+                    ReflectionHelpers.callInstanceMethod(feed, "applyContentPreference");
+                    assertEquals(mode == ContentPreference.ALL ? android.view.View.VISIBLE : android.view.View.GONE,
+                            feed.findViewWithTag("shittok_source_control").getVisibility());
+                    assertEquals(mode, ContentPreference.get(activity.get()));
+                }
+                ContentPreference.set(activity.get(), ContentPreference.ALL);
+                ReflectionHelpers.callInstanceMethod(feed, "applyContentPreference");
+                assertEquals(android.view.View.VISIBLE, feed.findViewWithTag("shittok_source_control").getVisibility());
+            } finally { feed.close(); }
+        }
+    }
+    @Test public void historicalViewingAndLikesDoNotExcludeValidCandidates() {
+        try (org.robolectric.android.controller.ActivityController<Activity> activity = Robolectric.buildActivity(Activity.class).setup()) {
+            ChaosFeedView feed = new ChaosFeedView(activity.get(), item -> {}, false);
+            try {
+                NativeContentItem item = new NativeContentItem("media", "fixture", "https://kaotic.com/video/fixture", "", "", "Kaotic", "");
+                ShitTokSeenStore store = ShitTokSeenStore.get(activity.get());
+                store.watch(item.url, null); store.heart(item.url, null);
+                assertFalse(ReflectionHelpers.callInstanceMethod(feed, "discoveryExcluded",
+                        from(NativeContentItem.class, item), from(CrazyShitRepository.StreamInfo.class, null)));
+            } finally { feed.close(); }
+        }
+    }
     @Before public void setup() {
         ContentPreference.prefs(RuntimeEnvironment.getApplication()).edit().clear().commit();
         ShitTokSmartRanker.resetForTest(null);

@@ -1,5 +1,29 @@
 # Smart ShitTok v2 candidate
 
+## Ranking and reset follow-up
+
+The All/OnlyFap source control is visible only for All Content, with the navbar's
+LiquidBottomTabs selected lens. Specific categories retain their existing source
+mode and verified eligibility; hiding the control never changes the preference.
+
+Historical seen/liked membership no longer excludes otherwise valid candidates at
+offer, resolution, publication or future-queue maintenance. SmartRanker and creator
+diversity order candidates; session URL/media identity deduplication, explicit hidden
+and blocked choices, provider/category verification and orientation stay hard gates.
+The exclusion-only account like lookup is removed; ranking adds no network wait.
+All runway targets, thresholds, workers, source scheduling and verification caps stay.
+
+Before first recommendation initialization, `ShitTokRecommendationReset` removes
+only `fast_skip_sources`, `fast_skip_creators`, `source_rewards_v2`,
+`creator_rewards_v2` from `shittok_smart_ranker_v1`, `seen_v1` from
+`shittok_discovery`, and legacy `chaos_feed.recent_urls`. The dedicated persisted
+`shittok_personalization_reset_v2_complete` flag prevents subsequent resets and
+legacy reimport. Preference edits use existing asynchronous apply writes. Fresh
+installs mark completion once. Saved liked identities, explicit blocks/hides,
+favorites, downloads, general playback/Shows history, account/social data, backups,
+content/source preferences and other settings remain intact. Later recommendation
+learning is retained normally; the seven-day decay algorithm is unchanged.
+
 The filtered-mode follow-up is documented in [SHITTOK_FILTERED_HOTFIX.md](SHITTOK_FILTERED_HOTFIX.md).
 Its combined source-mode/category inventory, cross-source evidence, warm caches and earlier refill thresholds
 supersede the original filtered-only behavior below; All Content retains this v2 design.

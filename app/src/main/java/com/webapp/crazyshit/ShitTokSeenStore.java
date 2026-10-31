@@ -27,11 +27,7 @@ final class ShitTokSeenStore {
         ShitTokSmartRanker.initialize(app);
         read("seen_v1", seen, SEEN_LIMIT);
         read("liked_v1", liked, LIKED_LIMIT);
-        // Migrate the old 500 URLs without deleting or rewriting the old key.
-        try {
-            JSONArray old = new JSONArray(app.getSharedPreferences("chaos_feed", 0).getString("recent_urls", "[]"));
-            for (int i = old.length() - 1; i >= 0; i--) add(seen, ShitTokContentIdentity.page(old.optString(i)), SEEN_LIMIT);
-        } catch (Exception ignored) {}
+        // Legacy recent URLs are reset once and are no longer imported as exclusions.
     }
     synchronized boolean seen(String page, String media) {
         return seen.contains(ShitTokContentIdentity.page(page)) || seen.contains(ShitTokContentIdentity.media(page))
