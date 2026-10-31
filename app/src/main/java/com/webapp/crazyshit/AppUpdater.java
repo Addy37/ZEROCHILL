@@ -6,17 +6,10 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageInfo;
 import android.net.Uri;
-import android.os.Build;
-import android.provider.Settings;
-
-import androidx.core.content.FileProvider;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
 
-import java.io.BufferedInputStream;
-import java.io.File;
-import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
@@ -43,9 +36,6 @@ final class AppUpdater {
 
     private volatile boolean checking;
     private volatile boolean cancelDownload;
-    private File pendingInstall;
-    private boolean waitingForInstallPermission;
-    private ReleaseInfo activeRelease;
 
     AppUpdater(Activity activity) {
         this.activity = activity;
@@ -122,11 +112,6 @@ final class AppUpdater {
         if (betaChannel && consumePreviewRequest()) {
             previewUpdateExperience();
         }
-        if (!waitingForInstallPermission || pendingInstall == null) return;
-        if (Build.VERSION.SDK_INT < 26 || activity.getPackageManager().canRequestPackageInstalls()) {
-            waitingForInstallPermission = false;
-            launchInstaller(pendingInstall);
-        }
     }
 
     void close() {
@@ -157,12 +142,9 @@ final class AppUpdater {
                 "ShitTok social polish and a smoother in-app updater.",
                 "ShitTok social polish and a smoother in-app updater.",
                 "",
-                "",
-                "",
                 true,
                 true
         );
-        activeRelease = preview;
         card.showAvailable(
                 preview.version,
                 preview.summary,
@@ -233,8 +215,7 @@ final class AppUpdater {
         if (tag.isEmpty()) return null;
 
         JSONArray assets = release.optJSONArray("assets");
-        String apkName = "";
-        String apkUrl = "";
+        boolean hasApk = false;
         if (assets != null) {
             for (int i = 0; i < assets.length(); i++) {
                 JSONObject asset = assets.optJSONObject(i);
@@ -244,12 +225,11 @@ final class AppUpdater {
                 String lower = name.toLowerCase(Locale.US);
                 if (beta && !(lower.contains("test") || lower.contains("beta"))) continue;
                 if (!beta && lower.contains("test")) continue;
-                apkName = name;
-                apkUrl = asset.optString("browser_download_url", "");
-                if (!apkUrl.isEmpty()) break;
+                hasApk = true;
+                break;
             }
         }
-        if (apkUrl.isEmpty()) return null;
+        if (!hasApk) return null;
 
         String title = release.optString("name", tag);
         String summary = ReleaseNotesSummary.fromMarkdown(
@@ -257,8 +237,9 @@ final class AppUpdater {
                 title,
                 tag
         );
-        String page = release.optString("html_url", "");
-        return new ReleaseInfo(tag, title, summary, apkName, apkUrl, page, beta, false);
+        String page = release.optString("html_url", "").trim();
+        if (page.isEmpty()) return null;
+        return new ReleaseInfo(tag, title, summary, page, beta, false);
     }
 
     private String httpGetFirst(List<String> addresses) throws Exception {
@@ -305,7 +286,6 @@ final class AppUpdater {
     }
 
     private void showUpdateCard(ReleaseInfo release, String current) {
-        activeRelease = release;
         String summary = release.summary == null ? "" : release.summary.trim();
         if (summary.isEmpty()) {
             String channel = release.beta ? "beta" : "stable";
@@ -315,7 +295,7 @@ final class AppUpdater {
         card.showAvailable(
                 release.version,
                 finalSummary,
-                () -> downloadAndStage(release),
+                () -> openReleasePage(release),
                 () -> {
                     snoozeCard(release.version);
                     card.dismiss();
@@ -323,150 +303,58 @@ final class AppUpdater {
         );
     }
 
-    private void downloadAndStage(ReleaseInfo release) {
+    private void openReleasePage(ReleaseInfo release) {
         if (release == null) return;
         if (release.preview) {
             simulatePreviewDownload(release);
             return;
         }
-        cancelDownload = false;
-        activeRelease = release;
-        card.showDownloading(release.version, 0, 0L, -1L, () -> cancelDownload = true);
 
-        io.execute(() -> {
-            HttpURLConnection connection = null;
-            try {
-                File dir = new File(activity.getCacheDir(), "updates");
-                if (!dir.exists() && !dir.mkdirs()) {
-                    throw new Exception("Couldn't create update folder");
-                }
-                File target = new File(dir, "ZeroChill-update.apk");
-                if (target.exists()) target.delete();
+        Uri uri = Uri.parse(release.pageUrl);
+        int screenHeight = activity.getResources().getDisplayMetrics().heightPixels;
+        int sheetHeight = Math.round(screenHeight * 0.78f);
+        int black = android.graphics.Color.BLACK;
+        int nearBlack = android.graphics.Color.rgb(8, 10, 12);
+        int cyan = android.graphics.Color.rgb(8, 146, 208);
 
-                connection = (HttpURLConnection) new URL(release.apkUrl).openConnection();
-                connection.setInstanceFollowRedirects(true);
-                connection.setConnectTimeout(15000);
-                connection.setReadTimeout(30000);
-                connection.setRequestProperty("User-Agent", "ZeroChill-Android");
-                int code = connection.getResponseCode();
-                if (code < 200 || code >= 300) throw new Exception("HTTP " + code);
+        try {
+            androidx.browser.customtabs.CustomTabColorSchemeParams colors =
+                    new androidx.browser.customtabs.CustomTabColorSchemeParams.Builder()
+                            .setToolbarColor(nearBlack)
+                            .setSecondaryToolbarColor(nearBlack)
+                            .setNavigationBarColor(black)
+                            .setNavigationBarDividerColor(cyan)
+                            .build();
 
-                long total = connection.getContentLengthLong();
-                long downloaded = 0L;
-                int lastPercent = -1;
-                long lastUnknownUpdate = 0L;
-                try (InputStream input = new BufferedInputStream(connection.getInputStream());
-                     FileOutputStream output = new FileOutputStream(target)) {
-                    byte[] buffer = new byte[32 * 1024];
-                    int read;
-                    while ((read = input.read(buffer)) >= 0) {
-                        if (cancelDownload) throw new InterruptedException("Cancelled");
-                        output.write(buffer, 0, read);
-                        downloaded += read;
-
-                        int percent = total > 0
-                                ? (int) Math.min(100L, downloaded * 100L / total)
-                                : 0;
-                        boolean shouldUpdate = total > 0
-                                ? percent != lastPercent
-                                : downloaded - lastUnknownUpdate >= 256L * 1024L;
-                        if (shouldUpdate) {
-                            lastPercent = percent;
-                            lastUnknownUpdate = downloaded;
-                            final int p = percent;
-                            final long bytes = downloaded;
-                            final long all = total;
-                            activity.runOnUiThread(() ->
-                                    card.showDownloading(
-                                            release.version,
-                                            p,
-                                            bytes,
-                                            all,
-                                            () -> cancelDownload = true
-                                    )
-                            );
-                        }
-                    }
-                }
-
-                activity.runOnUiThread(() ->
-                        card.showPreparing(release.version, () -> cancelDownload = true)
-                );
-                if (cancelDownload) throw new InterruptedException("Cancelled");
-                verifyPackage(target);
-                pendingInstall = target;
-                activity.runOnUiThread(() ->
-                        card.showReady(
-                                release.version,
-                                () -> requestInstall(target),
-                                card::dismiss
-                        )
-                );
-            } catch (InterruptedException cancelled) {
-                activity.runOnUiThread(() -> showUpdateCard(release, currentVersion()));
-            } catch (Exception error) {
-                activity.runOnUiThread(() ->
-                        card.showError(
-                                release.version,
-                                () -> downloadAndStage(release),
-                                card::dismiss
-                        )
-                );
-            } finally {
-                if (connection != null) connection.disconnect();
-            }
-        });
-    }
-
-    private void verifyPackage(File apk) throws Exception {
-        PackageInfo archive = activity.getPackageManager().getPackageArchiveInfo(apk.getAbsolutePath(), 0);
-        if (archive == null || archive.packageName == null) throw new Exception("Invalid APK");
-        if (!activity.getPackageName().equals(archive.packageName)) {
-            throw new Exception("Update package doesn't match installed app");
+            androidx.browser.customtabs.CustomTabsIntent tab =
+                    new androidx.browser.customtabs.CustomTabsIntent.Builder()
+                            .setColorScheme(androidx.browser.customtabs.CustomTabsIntent.COLOR_SCHEME_DARK)
+                            .setDefaultColorSchemeParams(colors)
+                            .setShowTitle(true)
+                            .setUrlBarHidingEnabled(true)
+                            .setShareState(androidx.browser.customtabs.CustomTabsIntent.SHARE_STATE_OFF)
+                            .setInitialActivityHeightPx(
+                                    sheetHeight,
+                                    androidx.browser.customtabs.CustomTabsIntent.ACTIVITY_HEIGHT_ADJUSTABLE
+                            )
+                            .build();
+            tab.launchUrl(activity, uri);
+            card.dismiss();
+            return;
+        } catch (Exception ignored) {
         }
-    }
 
-    private void requestInstall(File apk) {
-        if (Build.VERSION.SDK_INT >= 26 && !activity.getPackageManager().canRequestPackageInstalls()) {
-            pendingInstall = apk;
-            waitingForInstallPermission = true;
+        try {
+            Intent browser = new Intent(Intent.ACTION_VIEW, uri);
+            browser.addCategory(Intent.CATEGORY_BROWSABLE);
+            activity.startActivity(browser);
+            card.dismiss();
+        } catch (Exception error) {
             ZeroChillToast.makeText(
                     activity,
-                    "Allow updates from this app, then you'll return automatically.",
+                    "Couldn't open the ZEROCHILL release page.",
                     ZeroChillToast.LENGTH_LONG
             ).show();
-            Intent settings = new Intent(
-                    Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
-                    Uri.parse("package:" + activity.getPackageName())
-            );
-            activity.startActivity(settings);
-            return;
-        }
-        launchInstaller(apk);
-    }
-
-    private void launchInstaller(File apk) {
-        try {
-            pendingInstall = apk;
-            Uri uri = FileProvider.getUriForFile(
-                    activity,
-                    activity.getPackageName() + ".files",
-                    apk
-            );
-            Intent intent = new Intent(Intent.ACTION_VIEW);
-            intent.setDataAndType(uri, "application/vnd.android.package-archive");
-            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-            intent.putExtra(Intent.EXTRA_NOT_UNKNOWN_SOURCE, true);
-            activity.startActivity(intent);
-        } catch (Exception e) {
-            ZeroChillToast.makeText(activity, "Couldn't open Android's installer.", ZeroChillToast.LENGTH_LONG).show();
-            if (activeRelease != null) {
-                card.showReady(
-                        activeRelease.version,
-                        () -> requestInstall(apk),
-                        card::dismiss
-                );
-            }
         }
     }
 
@@ -522,8 +410,6 @@ final class AppUpdater {
         final String version;
         final String title;
         final String summary;
-        final String apkName;
-        final String apkUrl;
         final String pageUrl;
         final boolean beta;
         final boolean preview;
@@ -532,8 +418,6 @@ final class AppUpdater {
                 String version,
                 String title,
                 String summary,
-                String apkName,
-                String apkUrl,
                 String pageUrl,
                 boolean beta,
                 boolean preview
@@ -541,8 +425,6 @@ final class AppUpdater {
             this.version = version;
             this.title = title;
             this.summary = summary;
-            this.apkName = apkName;
-            this.apkUrl = apkUrl;
             this.pageUrl = pageUrl;
             this.beta = beta;
             this.preview = preview;
