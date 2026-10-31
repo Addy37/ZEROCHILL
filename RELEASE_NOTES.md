@@ -10,3 +10,5 @@ Smarter ShitTok, Focus Mode, better notifications, and faster Bunkr artwork reco
 - Existing accounts, favorites, history, downloads, messages, settings, and other saved data are preserved when updating.
 
 Install over your existing ZeroChill app without uninstalling.
+
+<!-- Play Protect production-package diagnostic checkpoint. Do not merge or release. -->
