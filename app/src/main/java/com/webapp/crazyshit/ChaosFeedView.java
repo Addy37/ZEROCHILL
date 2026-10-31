@@ -1090,6 +1090,7 @@ public final class ChaosFeedView extends FrameLayout {
     final int batchGeneration = feedGeneration;
     final ContentPreference batchPreference = queuePreference;
     final ShitTokSourceMode batchSources = queueSources;
+    final long batchDiagnosticToken = ShitTokPoolDiagnostics.modeToken();
     final int batchPosition = selectedPosition, batchTarget = desiredRunway();
     final ArrayList<NativeContentItem> pendingCandidates = new ArrayList<>(orientationPending);
     orientationPending.clear();
@@ -1121,6 +1122,12 @@ public final class ChaosFeedView extends FrameLayout {
                 if (ContentPreference.get(activity) != batchPreference || ShitTokSourceMode.get(activity) != batchSources) { sourceMixer.abandon(item); continue; }
                 if (!isMedia(item) || !eligiblePreference(item, batchPreference) || hiddenSnapshot.contains(item.url)
                         || ShitTokBlockedCreatorStore.isBlocked(blockedSnapshot, item)) continue;
+                // Drain cached negative results rather than returning them to a full
+                // raw pool and repeatedly offering them ahead of new creator pages.
+                if (preferenceBatch && orientationAdmission.rejectsKnown(item)) {
+                    ShitTokPoolDiagnostics.modeEvent(batchDiagnosticToken, "knownRejectedDrained", 1);
+                    continue;
+                }
                 String identity = ShitTokContentIdentity.page(item.url);
                 if (sessionSnapshot.contains(item.url) || identitySnapshot.contains(identity)) {
                     duplicateRejected.incrementAndGet(); continue;

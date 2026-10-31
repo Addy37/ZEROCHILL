@@ -17,6 +17,9 @@ The physical-test rescue continues PR #376 from verified head
 candidate restriction and targeted refill/harvest/metadata scheduling fixes. Build
 and artifact records on the draft PR identify the final source SHA. Do not merge
 or publish 5.6.1 before the new physical Beta is approved.
+The user physically rejected `33f2a3eec385516946fbf08d422a5e1ab932ac5c`
+on October 31. Its targeted follow-up continues that exact PR head; passing unit or
+emulator checks do not supersede the failed device acceptance. See the hotfix document.
 
 ## Current release preparation: 5.2.1
 

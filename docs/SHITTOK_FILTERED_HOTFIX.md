@@ -4,6 +4,47 @@ Baseline: GitHub `main` verified at `1fa925f4806d21a1cfefc6d98158ca2cb7f14a51`.
 Branch: `hotfix/5.6.1-filtered-shittok`. No stable version bump, publication or merge.
 Physical approval on the OnePlus CPH2655 / Android 16 / 120 Hz is still required.
 
+## Physical rejection of 33f2a3e and follow-up
+
+The October 31 physical report rejects the first rescue Beta: the final OnlyFap /
+All Content generation spent 34,238 of 34,246 ms below target, reached zero, and
+recorded 12 tail hits. Those are current-selection values; session totals span
+fourteen generations. Metadata backlog was zero with 797 hits / 53 misses.
+
+The follow-up removes an admission mistake from the rescue: individual primary-source
+probe errors had inherited the exponential cooldown intended for supplemental Bunkr.
+Only Bunkr now receives that cooldown. Other providers retain measured scheduling
+costs, and a lone productive provider may fill all three existing lanes while the
+producer remains open. No worker or probe budget increase occurs. Known negative
+orientation results are drained from raw inventory rather than repeatedly returned
+to a full pool; unknown cached results no longer count as fresh orientation rejects.
+Acquisition also continues after an individual OnlyHaven/Fapello creator-page failure
+when other verified cursors remain. Per-creator retry bounds stay unchanged; failures
+have current-mode counters rather than silently disappearing. Bunkr retains its
+provider acquisition backoff as well as its supplemental admission restrictions.
+
+The metadata byte budget charged upstream network delivery again as extractor reads.
+Network transfers (including ignored-Range skips) plus cache-only delivery now share
+one 768 KiB ceiling without double charging. The 1.8-second total deadline and HTTP
+timeouts are unchanged. Current diagnostics distinguish byte/deadline exhaustion,
+HTTP error classes, timeouts and other failures without printing URLs or error text.
+
+ShitShow reached its host/harvester but emitted no raw clips. Repository history
+records that embedded story arrays were used by the original integration; its inline
+fallback was later removed, leaving only window-property scans. The follow-up reads
+global lexical story arrays and restores bounded JSON-only embedded-array parsing.
+It never evaluates downloaded script text. The exact production WebView JavaScript
+is executed by five Node regressions, including lexical/closure arrays, existing
+window data, malformed data and scan bounds; existing Java tests cover the real
+Activity-safe request/bridge/inventory path. Script passes, arrays/emissions, parse
+errors and accepted/duplicate/invalid bridge entries have bounded per-mode counters.
+
+The workspace proxy blocks live CrazyShit HTML access. Historical evidence and these
+regressions prove the missing extraction path, not the current provider payload or
+live-device yield. The next signed Beta still requires physical approval. No category
+or portrait restriction, source route/header/selector, user state or ranking rule is
+relaxed. All/OnlyFap UI, combined generation and warm inventory remain intact.
+
 ## Physical-test rescue pass and OnlyFap source mode
 
 The rescue pass starts from verified PR #376 head

@@ -63,6 +63,9 @@ jobs:
             exit 1
           }
 
+      - name: Verify production ShitShow script extraction
+        run: node --test --test-reporter=tap tools/test_shitshow_harvest.mjs
+
       - name: Verify 2.8 compatibility cleanup
         run: |
           set -euo pipefail

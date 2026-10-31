@@ -138,6 +138,28 @@ public class ShitTokFilteredInventoryTest {
         inv.request(ContentPreference.MEN, true, () -> {});
         assertEquals(3, inv.take(ContentPreference.MEN).size());
     }
+    @Test public void failedFapelloCreatorDoesNotParkOtherVerifiedCreatorsButBunkrStaysSupplemental() {
+        AtomicLong clock = new AtomicLong();
+        Map<Integer, Integer> calls = new HashMap<>();
+        Fake backend = new Fake() {
+            @Override public List<NativeContentItem> media(int source, ShitTokFilteredInventory.Cursor cursor) throws Exception {
+                calls.merge(source, 1, Integer::sum);
+                if ((source == 5 || source == 9) && cursor.creator.name.equals("men0"))
+                    throw new java.io.IOException("one creator unavailable");
+                return super.media(source, cursor);
+            }
+        };
+        ShitTokFilteredInventory inv = new ShitTokFilteredInventory(new Direct(), clock::get, backend);
+        inv.request(ContentPreference.MEN, true, () -> {});
+        inv.take(ContentPreference.MEN);
+        assertEquals(Integer.valueOf(1), calls.get(5));
+        assertEquals(Integer.valueOf(1), calls.get(9));
+        clock.set(1000);
+        inv.request(ContentPreference.MEN, true, () -> {});
+        List<NativeContentItem> ready = inv.take(ContentPreference.MEN);
+        assertTrue(ready.stream().anyMatch(item -> item.url.contains("fapello.com/men1/")));
+        assertEquals("Supplemental source retains failure backoff", Integer.valueOf(1), calls.get(9));
+    }
     @Test public void failedLaterCategoryPageBacksOffWithoutBlockingVerifiedCreatorMedia() {
         AtomicInteger laterPages = new AtomicInteger();
         Fake backend = new Fake() {

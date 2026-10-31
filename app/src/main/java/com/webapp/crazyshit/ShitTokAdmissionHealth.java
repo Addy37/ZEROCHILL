@@ -16,7 +16,10 @@ final class ShitTokAdmissionHealth {
         double cost = Math.min(3, Math.max(0, elapsed) / 1000.0) + (accepted ? -1 : 1);
         state.cost = state.cost * .7 + cost * .3;
         if (accepted) { state.failures = state.windows = 0; state.retryAt = 0; }
-        else if (error && ++state.failures >= 3) {
+        // A per-clip metadata failure is not evidence that every creator at the
+        // provider is unavailable. Keep productive lanes work-conserving; only
+        // supplemental Bunkr uses the exponential admission cooldown.
+        else if (source.equals("bunkr") && error && ++state.failures >= 3) {
             state.failures = 0;
             state.windows = Math.min(5, state.windows + 1);
             state.retryAt = clock.getAsLong() + Math.min(60_000L, 5_000L << (state.windows - 1));

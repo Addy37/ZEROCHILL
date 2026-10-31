@@ -218,7 +218,13 @@ final class ShitTokFilteredInventory {
                 if (lane.overflow.size() < MEDIA_PAGE) lane.overflow.addLast(item);
             }
             session.accepted += lane.overflow.size();
-            if (pages.isEmpty() && lastFailure != null) throw lastFailure;
+            if (pages.isEmpty() && lastFailure != null) {
+                // One creator's failed page must not park every other verified
+                // creator behind provider-wide exponential acquisition backoff.
+                if ((source == HAVEN || source == FAPELLO) && lane.count() > 0)
+                    throw new ShitTokSourcePool.Deferred();
+                throw lastFailure;
+            }
             return drain(lane.overflow);
         }
     }
@@ -240,6 +246,7 @@ final class ShitTokFilteredInventory {
     }
 
     private List<NativeContentItem> fetchCursor(Session session, Lane lane, int source, Cursor cursor) throws Exception {
+        long diagnosticToken = ShitTokPoolDiagnostics.modeToken();
         List<NativeContentItem> loaded;
         try { loaded = backend.media(source, cursor); }
         catch (Exception failure) {
@@ -247,6 +254,8 @@ final class ShitTokFilteredInventory {
                 if (Thread.currentThread().isInterrupted() || failure instanceof InterruptedException
                         || ++cursor.failures <= 2) lane.fresh.addLast(cursor);
             }
+            if (!(failure instanceof InterruptedException) && !Thread.currentThread().isInterrupted())
+                ShitTokPoolDiagnostics.modeEvent(diagnosticToken, "creatorPageFailure." + source, 1);
             throw failure;
         }
         if (Thread.currentThread().isInterrupted()) {

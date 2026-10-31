@@ -7,6 +7,57 @@ import org.junit.Test;
 import static org.junit.Assert.*;
 
 public class ShitTokAdmissionHealthTest {
+    @Test public void individualPrimaryProbeErrorsNeverParkTheWholeCreatorProvider() {
+        AtomicLong clock = new AtomicLong();
+        ShitTokAdmissionHealth health = new ShitTokAdmissionHealth(clock::get);
+        for (String provider : Arrays.asList("onlyhaven", "fapello", "shit-show", "baddiehub")) {
+            for (int i = 0; i < 30; i++) health.result(provider, false, true, 1800);
+            assertTrue(provider, health.allowed(provider));
+            assertTrue(health.cost(provider) > 0);
+        }
+    }
+
+    @Test public void productiveSourceUsesAllFreeLanesWhileProducerAndBunkrBackoffRemainOpen() throws Exception {
+        AtomicLong clock = new AtomicLong(System.nanoTime() / 1_000_000);
+        ShitTokOrientationAdmission gate = new ShitTokOrientationAdmission((s, allowed) -> .5f, clock::get);
+        gate.setCreatorFocused(true);
+        for (int i = 0; i < 3; i++) gate.admit(Arrays.asList(bunkr("bad" + i)), candidate -> {
+            throw new java.io.IOException();
+        }, () -> true, new Random(0));
+        BlockingQueue<NativeContentItem> queue = new ArrayBlockingQueue<>(48);
+        queue.add(bunkr("waiting"));
+        for (int i = 0; i < 3; i++) queue.add(ShitTokFilteredInventoryTest.clip("Jane", 6, i));
+        CountDownLatch allStarted = new CountDownLatch(3), release = new CountDownLatch(1);
+        ExecutorService io = Executors.newSingleThreadExecutor();
+        try {
+            Future<ShitTokOrientationAdmission.Result> result = io.submit(() -> gate.admitConcurrent(queue, () -> false,
+                    candidate -> {
+                        assertEquals("onlyhaven", ShitTokAspectPriority.sourceKey(candidate));
+                        allStarted.countDown();
+                        assertTrue(release.await(3, TimeUnit.SECONDS));
+                        return stream(candidate);
+                    }, () -> true, 3, partial -> {}, count -> assertTrue(count <= 3)));
+            assertTrue("No idle third lane behind a running producer or Bunkr cooldown", allStarted.await(3, TimeUnit.SECONDS));
+            release.countDown();
+            assertEquals(3, result.get(3, TimeUnit.SECONDS).items.size());
+        } finally { release.countDown(); gate.close(); io.shutdownNow(); }
+    }
+
+    @Test public void rawPoolCanDrainKnownNegativeItemsWithoutRepeatingTheirProbe() {
+        AtomicLong clock = new AtomicLong();
+        AtomicInteger probes = new AtomicInteger();
+        ShitTokOrientationAdmission gate = new ShitTokOrientationAdmission((s, allowed) -> {
+            probes.incrementAndGet(); return 1.777f;
+        }, clock::get);
+        NativeContentItem wide = ShitTokFilteredInventoryTest.clip("Jane", 6, 1);
+        try {
+            assertFalse(gate.rejectsKnown(wide));
+            assertTrue(gate.admit(Arrays.asList(wide), ShitTokAdmissionHealthTest::stream,
+                    () -> true, new Random(0)).items.isEmpty());
+            assertTrue(gate.rejectsKnown(wide));
+            assertEquals(1, probes.get());
+        } finally { gate.close(); }
+    }
     @Test public void repeatedBunkrErrorsBackOffTemporarilyAndSuccessfulRecoveryRestoresIt() {
         AtomicLong clock = new AtomicLong();
         ShitTokAdmissionHealth health = new ShitTokAdmissionHealth(clock::get);

@@ -48,6 +48,7 @@ final class ShitShowTapSource {
     private volatile WebView webView;
     private long harvestStartedAt;
     private volatile boolean harvestFailed;
+    private volatile long harvestDiagnosticToken;
 
     void prewarm(Context context) {
         if (!playbackProtected && cachedCount() < 8) warm(context);
@@ -162,6 +163,7 @@ final class ShitShowTapSource {
         destroyWebView();
         harvestStartedAt = System.currentTimeMillis();
         harvestFailed = false;
+        harvestDiagnosticToken = ShitTokPoolDiagnostics.modeToken();
 
         WebView view = new WebView(activity);
         webView = view;
@@ -287,10 +289,17 @@ final class ShitShowTapSource {
             String itemUrl = "";
             if (isDirectMedia(direct)) itemUrl = direct;
             else if (isUsableStoryPage(pageUrl)) itemUrl = pageUrl;
-            if (itemUrl.isEmpty()) return;
+            if (itemUrl.isEmpty()) {
+                if (token == generation) ShitTokPoolDiagnostics.modeEvent(harvestDiagnosticToken, "showStoryInvalid", 1);
+                return;
+            }
 
             synchronized (lock) {
-                if (token != generation || !seenStoryUrls.add(itemUrl)) return;
+                if (token != generation) return;
+                if (!seenStoryUrls.add(itemUrl)) {
+                    ShitTokPoolDiagnostics.modeEvent(harvestDiagnosticToken, "showStoryDuplicate", 1);
+                    return;
+                }
                 if (seenStoryUrls.size() > 8192) seenStoryUrls.clear();
                 while (ready.size() >= MAX_CACHE) ready.removeLast();
                 ready.addLast(new NativeContentItem(
@@ -306,9 +315,11 @@ final class ShitShowTapSource {
                         0L,
                         aspectRatioHint
                 ));
+                ShitTokPoolDiagnostics.modeEvent(harvestDiagnosticToken, "showStoryAccepted", 1);
                 lock.notifyAll();
             }
         } catch (Exception ignored) {
+            if (token == generation) ShitTokPoolDiagnostics.modeEvent(harvestDiagnosticToken, "showStoryParseError", 1);
         }
     }
 
@@ -422,7 +433,20 @@ final class ShitShowTapSource {
 
         @JavascriptInterface
         public void onProbeError(String error) {
-            // Production source deliberately keeps diagnostics off-screen.
+            if (token == generation) ShitTokPoolDiagnostics.modeEvent(harvestDiagnosticToken, "showScriptError", 1);
+        }
+
+        @JavascriptInterface
+        public void onProbeState(String raw) {
+            if (token != generation) return;
+            try {
+                JSONObject state = new JSONObject(raw);
+                for (String field : new String[]{"arrays", "emitted", "inline", "parseErrors"}) {
+                    int count = Math.max(0, Math.min(8192, state.optInt(field)));
+                    if (count > 0) ShitTokPoolDiagnostics.modeEvent(harvestDiagnosticToken, "showScript_" + field, count);
+                }
+                ShitTokPoolDiagnostics.modeEvent(harvestDiagnosticToken, "showScriptPasses", 1);
+            } catch (Exception ignored) {}
         }
     }
 
@@ -436,9 +460,23 @@ final class ShitShowTapSource {
             "function poster(o){var v=first(o,['poster','thumbnail','thumb','image','image_url','thumbnail_url','preview','cover']);if(typeof v==='object'&&v)v=first(v,['url','src','large','medium','small']);return abs(v);}" +
             "function dim(o,ks){var pools=[o&&o.video,o&&o.media,o&&o.source,o];for(var p=0;p<pools.length;p++){var v=first(pools[p],ks);var n=parseFloat(v);if(isFinite(n)&&n>0)return n;}return 0;}" +
             "function good(a){if(!Array.isArray(a)||!a.length)return false;var hits=0;for(var i=0;i<a.length&&i<10;i++){var o=a[i];if(o&&typeof o==='object'&&(o.permalink||o.id)&&(o.title||o.name||o.permalink))hits++;}return hits>0;}" +
-            "function emit(a){if(!good(a))return 0;var n=0;for(var i=0;i<a.length&&i<80;i++){var o=a[i];if(!o||typeof o!=='object')continue;var p=page(o),m=media(o);if(!p&&!m)continue;CSShitBridge.onStory(JSON.stringify({page:p,media:m,title:str(first(o,['title','name','headline','caption'])||'Shit Show'),poster:poster(o),views:str(first(o,['views','view_count','viewCount','views_count'])),comments:str(first(o,['comments','comment_count','commentCount','comments_count'])),width:dim(o,['width','video_width','videoWidth','media_width','mediaWidth']),height:dim(o,['height','video_height','videoHeight','media_height','mediaHeight']),id:str(o.id||'')}));n++;}return n;}" +
-            "var sent=0,names=['_stories','stories','shitshowStories','shitShowStories','storyList','story_list'];" +
-            "for(var i=0;i<names.length;i++){try{sent+=emit(window[names[i]]);}catch(e){}}" +
+            "var arrays=0,inline=0,parseErrors=0;" +
+            "function emit(a){if(!good(a))return 0;arrays++;var n=0;for(var i=0;i<a.length&&i<80;i++){var o=a[i];if(!o||typeof o!=='object')continue;var p=page(o),m=media(o);if(!p&&!m)continue;CSShitBridge.onStory(JSON.stringify({page:p,media:m,title:str(first(o,['title','name','headline','caption'])||'Shit Show'),poster:poster(o),views:str(first(o,['views','view_count','viewCount','views_count'])),comments:str(first(o,['comments','comment_count','commentCount','comments_count'])),width:dim(o,['width','video_width','videoWidth','media_width','mediaWidth']),height:dim(o,['height','video_height','videoHeight','media_height','mediaHeight']),id:str(o.id||'')}));n++;}return n;}" +
+            // Global let/const declarations are not window properties.
+            "var sent=0;try{if(typeof _stories!=='undefined')sent+=emit(_stories);}catch(e){}" +
+            "try{if(typeof stories!=='undefined')sent+=emit(stories);}catch(e){}" +
+            "var names=['_stories','stories','shitshowStories','shitShowStories','storyList','story_list'];" +
+            "for(var i=0;i<names.length&&!sent;i++){try{sent+=emit(window[names[i]]);}catch(e){}}" +
             "if(!sent){try{var ks=Object.keys(window);for(var j=0;j<ks.length&&j<2500;j++){var v;try{v=window[ks[j]];}catch(e){continue;}if(good(v)){sent+=emit(v);if(sent)break;}}}catch(e){}}" +
+            // Restore the embedded story-array path from the original integration.
+            // Parse data only; never evaluate a downloaded script body as code.
+            "if(!sent){var ss=document.scripts||[],budget=1048576;for(var q=0;q<ss.length&&q<64&&!sent&&budget>0;q++){" +
+            "if(ss[q].src)continue;var t=(ss[q].textContent||'').slice(0,Math.min(524288,budget));budget-=t.length;" +
+            "var re=/\\b(?:_stories|stories|shitshowStories|shitShowStories|storyList|story_list)\\s*=\\s*\\[/g,mx;" +
+            "while((mx=re.exec(t))&&!sent){var st=t.indexOf('[',mx.index),dep=0,quote='',esc=false,end=-1;" +
+            "for(var z=st;z<t.length;z++){var c=t.charAt(z);if(quote){if(esc){esc=false;continue;}if(c==='\\\\'){esc=true;continue;}if(c===quote)quote='';continue;}" +
+            "if(c==='\"'||c===\"'\"||c==='`'){quote=c;continue;}if(c==='[')dep++;else if(c===']'&&--dep===0){end=z;break;}}" +
+            "if(end>st){try{var a=JSON.parse(t.slice(st,end+1));var n=emit(a);sent+=n;if(n)inline++;}catch(e){parseErrors++;}}}}}" +
+            "CSShitBridge.onProbeState(JSON.stringify({arrays:arrays,emitted:sent,inline:inline,parseErrors:parseErrors}));" +
             "}catch(e){try{CSShitBridge.onProbeError(String(e&&e.stack||e));}catch(x){}}})();";
 }

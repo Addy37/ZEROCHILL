@@ -124,9 +124,11 @@ final class ShitTokOrientationAdmission {
                 else if (known.stream == null || known.stream.mediaUrl == null || known.stream.mediaUrl.isEmpty()) {
                     unplayableRejected.incrementAndGet();
                     ShitTokPoolDiagnostics.admissionOutcome(item, "unplayable", diagnosticToken);
-                } else {
+                } else if (known.aspect > 0f) {
                     orientationRejected.incrementAndGet();
                     ShitTokPoolDiagnostics.admissionOutcome(item, "orientation", diagnosticToken);
+                } else {
+                    ShitTokPoolDiagnostics.modeEvent(diagnosticToken, "cachedUnknown", 1);
                 }
                 continue;
             }
@@ -178,6 +180,8 @@ final class ShitTokOrientationAdmission {
                     continue;
                 }
                 terminalError = true;
+                ShitTokPoolDiagnostics.modeEvent(diagnosticToken,
+                        "error." + ShitTokAspectPriority.sourceKey(item) + "." + failureKind(failure), 1);
                 aspect = 0f;
             }
             // Keep an already completed probe when demand/permission closes. Only an actual
@@ -331,6 +335,15 @@ final class ShitTokOrientationAdmission {
         return true;
     }
 
+    boolean rejectsKnown(NativeContentItem item) {
+        if (trustedHint(item) && ShitTokOrientation.eligible(item.aspectRatioHint)) return false;
+        synchronized (cache) {
+            Entry known = cache.get(item.url);
+            return known != null && !ShitTokOrientation.eligible(known.aspect)
+                    && (known.aspect > 0f || known.retryAt > clock.getAsLong());
+        }
+    }
+
     List<NativeContentItem> cancelPending() {
         synchronized (pending) {
             ArrayList<NativeContentItem> abandoned = new ArrayList<>();
@@ -352,6 +365,16 @@ final class ShitTokOrientationAdmission {
             Set<String> availableSources = new HashSet<>(counts.keySet());
             for (NativeContentItem item : candidates) availableSources.add(ShitTokAspectPriority.sourceKey(item));
             int perSource = productionDone && availableSources.size() == 1 ? 3 : 2;
+            if (creatorScheduling) {
+                Set<String> productive = new HashSet<>();
+                for (NativeContentItem candidate : candidates) {
+                    String source = ShitTokAspectPriority.sourceKey(candidate);
+                    if (!source.equals("bunkr") && health.allowed(source)) productive.add(source);
+                }
+                // Do not hold a third lane idle merely because a producer is still
+                // running or supplemental candidates are waiting behind backoff.
+                if (productive.size() == 1) perSource = 3;
+            }
             ArrayList<NativeContentItem> deferred = new ArrayList<>();
             ArrayList<NativeContentItem> eligible = new ArrayList<>();
             int available = candidates.size();
@@ -442,6 +465,19 @@ final class ShitTokOrientationAdmission {
             if (cause instanceof Deferred || cause instanceof ShitTokOrientationProbe.DeferredIOException) return true;
         }
         return false;
+    }
+
+    private static String failureKind(Throwable failure) {
+        for (Throwable cause = failure; cause != null; cause = cause.getCause()) {
+            if (cause instanceof ShitTokOrientationProbe.MetadataBudgetIOException)
+                return "budget_" + ((ShitTokOrientationProbe.MetadataBudgetIOException) cause).limit;
+            if (cause instanceof androidx.media3.datasource.HttpDataSource.InvalidResponseCodeException) {
+                int code = ((androidx.media3.datasource.HttpDataSource.InvalidResponseCodeException) cause).responseCode;
+                return code >= 500 ? "http5xx" : "http4xx";
+            }
+            if (cause instanceof java.net.SocketTimeoutException) return "timeout";
+        }
+        return "other";
     }
 
     private static List<NativeContentItem> candidateOrder(List<NativeContentItem> candidates, Random random) {
