@@ -29,7 +29,9 @@ final class ShitTokCreatorMetadataLoader {
     private final Map<String, Long> retryAt = new HashMap<>();
     private final Function<NativeContentItem, NativeContentItem> resolve;
     private final Consumer<String> ready;
-    private final Map<String, NativeContentItem> identities = new HashMap<>();
+    static final int MAX_IDENTITIES = 256;
+    private final Map<String, NativeContentItem> identities = new java.util.LinkedHashMap<>(64, .75f, true);
+    private long cacheHits, cacheMisses;
     private final Set<String> requested = new HashSet<>();
     private volatile int generation;
     private volatile boolean closed;
@@ -52,8 +54,11 @@ final class ShitTokCreatorMetadataLoader {
     private static Function<NativeContentItem, NativeContentItem> combinedResolver(
             Context context, BaddieHubCreatorMatcher matcher) {
         Function<NativeContentItem, NativeContentItem> ordinary = resolver(context);
+        ShitTokCreatorIdentityCache baddie = new ShitTokCreatorIdentityCache();
         return media -> BaddieHubCreatorMatcher.isCandidate(media)
-                ? matcher.local(media) : ordinary.apply(media);
+                && ShitTokCreatorMetadata.knownProfileUrl(media).isEmpty()
+                ? baddie.resolve(CreatorNameMatcher.normalized(media.title), () -> matcher.local(media))
+                : ordinary.apply(media);
     }
 
     private static ScheduledThreadPoolExecutor newLiveWorker() {
@@ -70,7 +75,7 @@ final class ShitTokCreatorMetadataLoader {
 
     static Function<NativeContentItem, NativeContentItem> resolver(Context context) {
         Context app = context.getApplicationContext();
-        Set<String> learned = new HashSet<>();
+        java.util.LinkedHashSet<String> learned = new java.util.LinkedHashSet<>();
         return media -> {
             NativeContentItem identity = ShitTokCreatorMetadata.creatorIdentity(app, media);
             String profile = ShitTokCreatorMetadata.knownProfileUrl(media);
@@ -83,6 +88,7 @@ final class ShitTokCreatorMetadataLoader {
                     && name.codePoints().anyMatch(Character::isLetter);
             if (named && !profile.isEmpty()
                     && learned.add(CreatorFavoriteStore.key(identity) + "\n" + profile)) {
+                while (learned.size() > 512) learned.remove(learned.iterator().next());
                 boolean saved = false;
                 for (NativeContentItem candidate : CreatorCatalog.matching(
                         app, identity.title, false, 12)) {
@@ -125,8 +131,16 @@ final class ShitTokCreatorMetadataLoader {
     NativeContentItem identity(NativeContentItem media) {
         if (media == null) return null;
         String key = key(media);
-        if (!identities.containsKey(key))
+        long diagnosticToken = ShitTokPoolDiagnostics.modeToken();
+        if (!identities.containsKey(key)) {
+            cacheMisses++;
+            ShitTokPoolDiagnostics.modeEvent(diagnosticToken, "metadataMisses", 1);
             identities.put(key, ShitTokCreatorMetadata.creatorIdentity(null, media));
+            trim();
+        } else {
+            cacheHits++;
+            ShitTokPoolDiagnostics.modeEvent(diagnosticToken, "metadataHits", 1);
+        }
         NativeContentItem fallback = identities.get(key);
         if (closed || fallback == null && !BaddieHubCreatorMatcher.isCandidate(media)
                 || !requested.add(key)) return fallback;
@@ -144,7 +158,7 @@ final class ShitTokCreatorMetadataLoader {
                 ShitTokPoolDiagnostics.record("creatorMetadata", "ms="
                         + (android.os.SystemClock.elapsedRealtime() - started));
                 ui.execute(() -> {
-                    if (closed || expected != generation) return;
+                    if (closed || expected != generation || !identities.containsKey(key)) return;
                     identities.put(key, result);
                     localFinished.add(key);
                     // Retain the key until clear(): rebinding must not repeat the catalog lookup.
@@ -159,7 +173,24 @@ final class ShitTokCreatorMetadataLoader {
         return fallback;
     }
 
-    private static String key(NativeContentItem media) { return media.url + "\n" + media.title; }
+    private static String key(NativeContentItem media) {
+        String profile = ShitTokCreatorMetadata.knownProfileUrl(media);
+        String name = ShitTokCreatorMetadata.creatorName(media);
+        if (!profile.isEmpty() && !name.isEmpty())
+            return ShitTokAspectPriority.sourceKey(media) + "\n" + profile + "\n" + CreatorIdentity.key(name);
+        if (!name.isEmpty()) return ShitTokAspectPriority.sourceKey(media) + "\n" + CreatorIdentity.key(name);
+        // An unresolved BaddieHub title is not yet a creator key. Successful worker matches
+        // are memoized separately; a miss must not suppress lookup for later clips.
+        return media.url + "\n" + media.title;
+    }
+    private void trim() {
+        while (identities.size() > MAX_IDENTITIES) {
+            String key = identities.keySet().iterator().next();
+            identities.remove(key); requested.remove(key); localFinished.remove(key);
+            liveFinished.remove(key); retryAt.remove(key);
+        }
+    }
+    String cacheSummary() { return "metadataEntries=" + identities.size() + " metadataHits=" + cacheHits + " metadataMisses=" + cacheMisses; }
 
     /** Called directly by the feed owner, never through diagnostic logging or a static loader. */
     void select(NativeContentItem media) {

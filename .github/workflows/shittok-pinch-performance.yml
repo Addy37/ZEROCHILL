@@ -14,12 +14,12 @@ permissions:
 
 jobs:
   short-scroll:
-    if: ${{ github.head_ref == 'feature/shittok-dynamic-pinch' || github.head_ref == 'feature/smart-shittok-v2' }}
+    if: ${{ github.head_ref == 'feature/shittok-dynamic-pinch' || github.head_ref == 'feature/smart-shittok-v2' || github.head_ref == 'hotfix/5.6.1-filtered-shittok' }}
     runs-on: ubuntu-latest
     timeout-minutes: 35
     env:
       ANALYTICS_ENDPOINT: ""
-      BASE_SHA: ${{ github.head_ref == 'feature/smart-shittok-v2' && 'dd0fc91fdb7be88587685fd4ea3a618998b8bdea' || 'd46516d8b9319d32a926bff9e13332841e0d094f' }}
+      BASE_SHA: ${{ github.head_ref == 'hotfix/5.6.1-filtered-shittok' && '1fa925f4806d21a1cfefc6d98158ca2cb7f14a51' || github.head_ref == 'feature/smart-shittok-v2' && 'dd0fc91fdb7be88587685fd4ea3a618998b8bdea' || 'd46516d8b9319d32a926bff9e13332841e0d094f' }}
       CANDIDATE_SHA: ${{ github.event.pull_request.head.sha }}
     steps:
       - uses: actions/checkout@v6

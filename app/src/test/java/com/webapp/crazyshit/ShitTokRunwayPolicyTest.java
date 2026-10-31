@@ -35,4 +35,15 @@ public class ShitTokRunwayPolicyTest {
             assertFalse(p.needsWork(10, now));
         }
     }
+    @Test public void filteredTargetsStaySixAndTenAndResumeAtFiveAndEight() {
+        ShitTokRunwayPolicy p = new ShitTokRunwayPolicy();
+        assertEquals(6, p.target(0)); assertEquals(5, p.threshold(0, true));
+        assertFalse(p.needsWork(6, 0, true)); assertTrue(p.needsWork(5, 0, true));
+        p.forward(0); p.forward(100);
+        assertEquals(10, p.target(100)); assertEquals(8, p.threshold(100, true));
+        assertFalse(p.needsWork(10, 100, true)); assertFalse(p.needsWork(9, 100, true));
+        assertTrue(p.needsWork(8, 100, true)); assertTrue(p.needsWork(9, 100, true));
+        assertFalse(p.needsWork(10, 100, true));
+        assertEquals(6, p.threshold(100)); assertEquals(4, p.threshold(5000));
+    }
 }

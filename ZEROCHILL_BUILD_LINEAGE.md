@@ -2,6 +2,25 @@
 
 This file identifies the current approved ZEROCHILL product baseline for test APKs and future feature work.
 
+## Unreleased filtered ShitTok hotfix candidate
+
+GitHub `main` was verified at `1fa925f4806d21a1cfefc6d98158ca2cb7f14a51`
+before starting `hotfix/5.6.1-filtered-shittok`. This is a descendant of the user's
+approved 5.6.0 baseline, not the older release preparations below. Stable release
+metadata stays unchanged. The existing signed-candidate workflow produces a
+branch/SHA-named Beta and a release-package upgrade candidate for testing only.
+See `docs/SHITTOK_FILTERED_HOTFIX.md` for architecture and compatibility.
+No merge, 5.6.1 publication, backend deployment or source-config change is authorized.
+Physical approval on the user's OnePlus CPH2655 is pending.
+The physical-test rescue continues PR #376 from verified head
+`89f2563c1457f462858bdcdd4448cd457c053a5b`; it adds the requested All/OnlyFap
+candidate restriction and targeted refill/harvest/metadata scheduling fixes. Build
+and artifact records on the draft PR identify the final source SHA. Do not merge
+or publish 5.6.1 before the new physical Beta is approved.
+The user physically rejected `33f2a3eec385516946fbf08d422a5e1ab932ac5c`
+on October 31. Its targeted follow-up continues that exact PR head; passing unit or
+emulator checks do not supersede the failed device acceptance. See the hotfix document.
+
 ## Current release preparation: 5.2.1
 
 - Source-of-truth branch: `main`

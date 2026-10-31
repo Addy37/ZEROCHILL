@@ -3,6 +3,7 @@ package com.webapp.crazyshit;
 import android.app.Application;
 import android.content.Context;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Collections;
 import org.junit.Before;
 import org.junit.Test;
@@ -49,5 +50,16 @@ public final class CreatorCategoryIndexTest {
         CreatorCategoryIndex.remember(context, ContentPreference.GROUPS, Collections.singletonList(creator));
         assertTrue(CreatorCategoryIndex.includes(context, ContentPreference.MEN, known));
         assertTrue(CreatorCategoryIndex.includes(context, ContentPreference.GROUPS, known));
+    }
+    @Test public void filteredColdSeedRequiresPersistedMembershipForExactOnlyHavenProfile() {
+        OnlyHavenRepository.Creator creator = new OnlyHavenRepository.Creator("onlyfans", "confirmed-1",
+                "Verified Creator", profile, "");
+        CreatorCatalog.remember(context, Collections.singletonList(OnlyHavenRepository.creatorItem(creator)));
+        CreatorCategoryIndex.remember(context, ContentPreference.WOMEN, Collections.singletonList(creator));
+        ShitTokFilteredInventory.Backend backend = ShitTokFilteredInventory.backend(context, new ShitShowTapSource());
+        assertTrue(backend.known(ContentPreference.MEN).isEmpty());
+        List<OnlyHavenRepository.Creator> warm = backend.known(ContentPreference.WOMEN);
+        assertEquals(1, warm.size()); assertEquals(profile, warm.get(0).url);
+        assertEquals("Verified Creator", warm.get(0).name);
     }
 }

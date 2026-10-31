@@ -193,6 +193,7 @@ final class ShitTokOrientationProbe implements ShitTokOrientationAdmission.Probe
         final long deadline;
         long readBytes;
         long networkBytes;
+        long chargedBytes;
         Budget(BooleanSupplier allowed) { this(allowed, System::nanoTime); }
         Budget(BooleanSupplier allowed, LongSupplier nanoClock) {
             this.allowed = allowed;
@@ -202,13 +203,23 @@ final class ShitTokOrientationProbe implements ShitTokOrientationAdmission.Probe
         void check() throws IOException {
             if (Thread.currentThread().isInterrupted() || !allowed.getAsBoolean())
                 throw new DeferredIOException();
-            if (nanoClock.getAsLong() >= deadline || (readBytes + networkBytes) >= MAX_BYTES)
-                throw new IOException("Orientation metadata budget reached");
+            if (nanoClock.getAsLong() >= deadline) throw new MetadataBudgetIOException("deadline");
+            if (chargedBytes >= MAX_BYTES) throw new MetadataBudgetIOException("bytes");
+        }
+        void readCompleted(int count, long networkBeforeRead) throws IOException {
+            if (count > 0) {
+                readBytes += count;
+                // Upstream transfer callbacks already charged network bytes. Charge
+                // only cache-delivered bytes here, rather than halving the ceiling.
+                chargedBytes += Math.max(0L, count - (networkBytes - networkBeforeRead));
+            }
+            check();
         }
         @Override public void onTransferInitializing(DataSource source, DataSpec spec, boolean network) {}
         @Override public void onTransferStart(DataSource source, DataSpec spec, boolean network) {}
         @Override public void onBytesTransferred(DataSource source, DataSpec spec, boolean network, int bytes) {
             networkBytes += bytes;
+            chargedBytes += bytes;
             try { check(); } catch (IOException stopped) { throw new ProbeStopped(stopped); }
         }
         @Override public void onTransferEnd(DataSource source, DataSpec spec, boolean network) {}
@@ -222,10 +233,10 @@ final class ShitTokOrientationProbe implements ShitTokOrientationAdmission.Probe
         @Override public long open(DataSpec spec) throws IOException { budget.check(); return delegate.open(spec); }
         @Override public int read(byte[] target, int offset, int length) throws IOException {
             budget.check();
+            long networkBeforeRead = budget.networkBytes;
             int count = delegate.read(target, offset,
-                    (int) Math.min(length, MAX_BYTES - (budget.readBytes + budget.networkBytes)));
-            if (count > 0) budget.readBytes += count;
-            budget.check();
+                    (int) Math.min(length, MAX_BYTES - budget.chargedBytes));
+            budget.readCompleted(count, networkBeforeRead);
             return count;
         }
         @Override public Uri getUri() { return delegate.getUri(); }
@@ -234,6 +245,10 @@ final class ShitTokOrientationProbe implements ShitTokOrientationAdmission.Probe
     }
 
     static final class DeferredIOException extends IOException {}
+    static final class MetadataBudgetIOException extends IOException {
+        final String limit;
+        MetadataBudgetIOException(String limit) { super("Orientation metadata budget reached"); this.limit = limit; }
+    }
     private static final class ProbeStopped extends RuntimeException {
         ProbeStopped(IOException cause) { super(cause); }
     }

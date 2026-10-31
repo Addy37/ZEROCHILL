@@ -6,6 +6,8 @@ import java.util.function.LongSupplier;
 
 /** Session-only acquisition. Admission owns no provider futures; lifecycle owns cancellation. */
 final class ShitTokSourcePool {
+    /** Work is temporarily forbidden or a live harvester is still producing, not an empty catalog. */
+    static final class Deferred extends RuntimeException { }
     enum Health { IDLE, FETCHING, SLOW, READY, EMPTY, FAILED, UNAVAILABLE, FILTERED, STARVED }
     static final int MAX_READY_PER_SOURCE = 12;
     private final Map<Integer, Slot> slots = new LinkedHashMap<>();
@@ -47,8 +49,9 @@ final class ShitTokSourcePool {
                 slot.entered = true;
             }
             List<NativeContentItem> loaded = Collections.emptyList();
-            boolean failed = false;
+            boolean failed = false, deferred = false;
             try { loaded = loader.call(); }
+            catch (Deferred waiting) { deferred = true; }
             catch (Exception error) { failed = true; }
             synchronized (ShitTokSourcePool.this) {
                 slot.running = false;
@@ -64,6 +67,9 @@ final class ShitTokSourcePool {
                 }
                 if (!slot.ready.isEmpty()) {
                     slot.health = Health.READY; slot.failures = 0; slot.retryAt = 0;
+                } else if (deferred) {
+                    slot.health = Health.IDLE;
+                    slot.retryAt = clock.getAsLong() + 1_000L;
                 } else {
                     slot.health = failed ? Health.FAILED : Health.EMPTY;
                     slot.failures = Math.min(5, slot.failures + 1);
@@ -90,11 +96,14 @@ final class ShitTokSourcePool {
     }
     /** Bounded score plus age gives ready sources opportunity without permanent percentages. */
     synchronized List<NativeContentItem> take(int maximum) {
+        return take(maximum, item -> true);
+    }
+    synchronized List<NativeContentItem> take(int maximum, java.util.function.Predicate<NativeContentItem> room) {
         ArrayList<NativeContentItem> result = new ArrayList<>();
         while (result.size() < maximum) {
             Slot best = null; double score = -Double.MAX_VALUE;
             for (Slot slot : slots.values()) {
-                if (!slot.eligible || slot.ready.isEmpty()) continue;
+                if (!slot.eligible || slot.ready.isEmpty() || !room.test(slot.ready.get(0))) continue;
                 double value = Math.min(8, turn - slot.delivered)
                         + Math.max(-2, Math.min(2, ShitTokSmartRanker.score(slot.ready.get(0))));
                 if (best == null || value > score) { best = slot; score = value; }
@@ -108,6 +117,34 @@ final class ShitTokSourcePool {
             best.health = best.ready.isEmpty() ? Health.IDLE : Health.READY;
         }
         return result;
+    }
+    /** Transfer raw metadata only after the caller establishes a separate eligibility path.
+     * The Women-only ShitShow loader uses this; ordinary take() still honors every source gate. */
+    synchronized List<NativeContentItem> takeCached(int source, int maximum) {
+        Slot slot = slots.get(source);
+        ArrayList<NativeContentItem> result = new ArrayList<>();
+        if (slot == null) return result;
+        while (!slot.ready.isEmpty() && result.size() < Math.max(0, maximum))
+            result.add(slot.ready.remove(0));
+        if (slot.eligible) slot.health = slot.ready.isEmpty() ? Health.IDLE : Health.READY;
+        return result;
+    }
+    synchronized int cacheRoom(int source) {
+        Slot slot = slots.get(source);
+        return MAX_READY_PER_SOURCE - (slot == null ? 0 : slot.ready.size());
+    }
+    synchronized void putCached(int source, List<NativeContentItem> items) {
+        Slot slot = slots.computeIfAbsent(source, ignored -> new Slot());
+        Set<String> urls = new HashSet<>();
+        for (NativeContentItem item : slot.ready) urls.add(item.url);
+        for (NativeContentItem item : items) {
+            if (item == null || !item.isVideo() || item.url.isEmpty() || !urls.add(item.url)
+                    || slot.ready.size() >= MAX_READY_PER_SOURCE) continue;
+            slot.ready.add(item);
+            if (provenance.put(item.url, slot) == null) provenanceOrder.addLast(item.url);
+            while (provenanceOrder.size() > 4096) provenance.remove(provenanceOrder.removeFirst());
+        }
+        if (slot.eligible && !slot.ready.isEmpty()) slot.health = Health.READY;
     }
     void verified(String url) {
         Slot slot = provenance.get(url);
@@ -139,6 +176,13 @@ final class ShitTokSourcePool {
         if (slot != null) {
             slot.ready.clear(); slot.retryAt = 0; slot.failures = 0;
             if (!slot.running) slot.health = Health.IDLE;
+        }
+    }
+    /** A filtered lane with more cursor work need not apply catalog-exhaustion backoff. */
+    synchronized void continueInventory(int source) {
+        Slot slot = slots.get(source);
+        if (slot != null && !slot.running && slot.health == Health.EMPTY) {
+            slot.retryAt = 0; slot.failures = 0; slot.health = Health.IDLE;
         }
     }
     synchronized Health health(int source) {

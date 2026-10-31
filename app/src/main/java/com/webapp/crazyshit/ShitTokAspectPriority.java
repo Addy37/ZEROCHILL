@@ -106,7 +106,8 @@ final class ShitTokAspectPriority {
         String uploader = item.uploader == null ? "" : item.uploader.trim().toLowerCase(Locale.US);
         if (uploader.equals("kaotic")) return "kaotic";
         if (uploader.equals("shit show")) return "shit-show";
-        if (uploader.equals("baddiehub")) return "baddiehub";
+        if (uploader.equals("baddiehub") || BaddieHubRepository.isBaddieHubUrl(item.url)) return "baddiehub";
+        if (BunkrRepository.isBunkrUrl(item.url)) return "bunkr";
         if (uploader.equals("onlyhaven") ||
                 (uploader.contains("cum.st") && OnlyHavenRepository.isOnlyHavenUrl(item.uploader))) {
             return "onlyhaven";

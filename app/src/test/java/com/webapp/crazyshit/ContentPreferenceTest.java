@@ -343,9 +343,9 @@ public class ContentPreferenceTest {
         ShitTokSeenStore seen = org.robolectric.util.ReflectionHelpers.getField(feed, "seenStore");
         seen.watch(watched.url, null); seen.heart(liked.url, null);
         ChaosSourceMixer mixer = org.robolectric.util.ReflectionHelpers.getField(feed, "sourceMixer");
-        Set<String> matches = org.robolectric.util.ReflectionHelpers.getField(mixer, "preferenceMatches");
-        for (NativeContentItem item : Arrays.asList(match, blocked, watched, liked))
-            matches.add(ContentPreference.MEN.value + "|" + item.url);
+        org.robolectric.util.ReflectionHelpers.setField(mixer, "filtered",
+                ShitTokFilteredInventoryTest.seed(ContentPreference.MEN,
+                        Arrays.asList(match, blocked, watched, liked)));
         org.robolectric.util.ReflectionHelpers.callInstanceMethod(feed, "appendUnique",
                 org.robolectric.util.ReflectionHelpers.ClassParameter.from(List.class,
                         Arrays.asList(blocked, watched, liked, match, match)));
@@ -355,6 +355,49 @@ public class ContentPreferenceTest {
         assertEquals(Arrays.asList(current, match), items);
         assertEquals(1, (int) Collections.frequency(items, match));
         assertTrue(seen.seen(watched.url, null)); assertTrue(seen.liked(liked.url, null));
+        feed.close();
+    }
+
+    @Test public void womenMenWomenRestoresVerifiedFutureStreamsAndKeepsCurrentClip() {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        ContentPreference.set(activity, ContentPreference.WOMEN);
+        ChaosFeedView feed = new ChaosFeedView(activity, item -> {}, false);
+        NativeContentItem current = havenClip("current"), future = havenClip("warm-future");
+        ArrayList<NativeContentItem> items = org.robolectric.util.ReflectionHelpers.getField(feed, "items");
+        items.add(current); items.add(future);
+        Map<String, CrazyShitRepository.StreamInfo> streams = org.robolectric.util.ReflectionHelpers.getField(feed, "streamCache");
+        CrazyShitRepository.StreamInfo stream = new CrazyShitRepository.StreamInfo(future.url, future.url, "clip");
+        streams.put(future.url, stream);
+        ChaosSourceMixer mixer = org.robolectric.util.ReflectionHelpers.getField(feed, "sourceMixer");
+        org.robolectric.util.ReflectionHelpers.setField(mixer, "filtered",
+                ShitTokFilteredInventoryTest.seed(ContentPreference.WOMEN, Arrays.asList(future)));
+        org.robolectric.util.ReflectionHelpers.setField(feed, "queuePreference", ContentPreference.WOMEN);
+        ContentPreference.set(activity, ContentPreference.MEN);
+        org.robolectric.util.ReflectionHelpers.callInstanceMethod(feed, "applyContentPreference");
+        assertEquals(Arrays.asList(current), items);
+        ContentPreference.set(activity, ContentPreference.WOMEN);
+        org.robolectric.util.ReflectionHelpers.callInstanceMethod(feed, "applyContentPreference");
+        assertEquals(Arrays.asList(current, future), items);
+        assertSame(stream, streams.get(future.url));
+        feed.close();
+    }
+
+    @Test public void filteredFutureSequencingPreservesCurrentAndSeparatesCrossSourceCreator() {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        ContentPreference.set(activity, ContentPreference.WOMEN);
+        ChaosFeedView feed = new ChaosFeedView(activity, item -> {}, false);
+        ArrayList<NativeContentItem> items = org.robolectric.util.ReflectionHelpers.getField(feed, "items");
+        NativeContentItem current = ShitTokFilteredInventoryTest.clip("Alice", 6, 1);
+        NativeContentItem duplicate = ShitTokFilteredInventoryTest.clip("Alice", 5, 2);
+        NativeContentItem other = ShitTokFilteredInventoryTest.clip("Bob", 5, 1);
+        items.addAll(Arrays.asList(current, duplicate, other));
+        org.robolectric.util.ReflectionHelpers.callInstanceMethod(feed, "sequenceFilteredFuture");
+        assertEquals(Arrays.asList(current, other, duplicate), items);
+        assertEquals(0, (int) org.robolectric.util.ReflectionHelpers.getField(feed, "selectedPosition"));
+        ContentPreference.set(activity, ContentPreference.ALL);
+        items.clear(); items.addAll(Arrays.asList(current, duplicate, other));
+        org.robolectric.util.ReflectionHelpers.callInstanceMethod(feed, "sequenceFilteredFuture");
+        assertEquals(Arrays.asList(current, duplicate, other), items);
         feed.close();
     }
 

@@ -13,12 +13,27 @@ final class ShitTokCreatorMetadata {
     static String creatorName(NativeContentItem item) {
         if (item == null) return "";
 
-        if (FapelloRepository.isFapelloUrl(item.url)) {
-            String creator = clean(item.uploader);
-            return isGenericCreatorLabel(creator) ? "" : creator;
+        String uploader = clean(item.uploader);
+        if (BaddieHubRepository.isBaddieHubUrl(item.url)
+                && (isOnlyHavenProfile(uploader) || FapelloRepository.isModelUrl(uploader))) {
+            String creator = clean(item.searchQuery);
+            return isGenericCreatorLabel(creator) || looksLikeUrl(creator) ? "" : creator;
+        }
+        if (FapelloRepository.isFapelloUrl(item.url) || FapelloRepository.isModelUrl(uploader)) {
+            String creator = uploader;
+            // Creator-page media keeps the canonical Fapello profile URL in uploader so
+            // navigation can preserve the exact profile. Only the repository's creator-page
+            // title shape, "<model name> #<post id>", may supply a display-name fallback.
+            // Arbitrary titles must stay rejected so opaque media cannot become creator identities.
+            if (FapelloRepository.isModelUrl(creator) || looksLikeUrl(creator)) {
+                String title = clean(item.title);
+                String stripped = title.replaceFirst("\\s+#[0-9]+$", "").trim();
+                if (stripped.equals(title)) return "";
+                creator = stripped;
+            }
+            return isGenericCreatorLabel(creator) || looksLikeUrl(creator) ? "" : creator;
         }
 
-        String uploader = clean(item.uploader);
         String description = clean(item.description).toLowerCase(Locale.US);
         boolean onlyHaven = OnlyHavenRepository.isOnlyHavenUrl(uploader)
                 || "onlyhaven".equalsIgnoreCase(uploader)
@@ -110,6 +125,11 @@ final class ShitTokCreatorMetadata {
                 || "onlyhaven".equals(lower)
                 || "onlyhaven media".equals(lower)
                 || "random video".equals(lower);
+    }
+
+    private static boolean looksLikeUrl(String value) {
+        String lower = clean(value).toLowerCase(Locale.US);
+        return lower.startsWith("http://") || lower.startsWith("https://");
     }
 
     private static String clean(String value) {
