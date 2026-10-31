@@ -586,7 +586,7 @@ jobs:
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$BETA_APK"
           "$ANDROID_HOME/build-tools/35.0.0/aapt2" dump badging "$BETA_APK" | grep "package: name='com.addy37.crazyshitunofficial.dev'"
           "$ANDROID_HOME/build-tools/35.0.0/aapt2" dump badging "$BETA_APK" | grep "application-label:'ZeroChill Beta'"
-          sha256sum "$BETA_APK" > SHA256SUMS-beta.txt
+          sha256sum "$BETA_APK" | tee SHA256SUMS-beta.txt
 
       - name: Upload signed beta
         uses: actions/upload-artifact@v4
