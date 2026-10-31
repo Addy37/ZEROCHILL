@@ -309,8 +309,43 @@ final class AppUpdater {
             simulatePreviewDownload(release);
             return;
         }
+
+        Uri uri = Uri.parse(release.pageUrl);
+        int screenHeight = activity.getResources().getDisplayMetrics().heightPixels;
+        int sheetHeight = Math.round(screenHeight * 0.78f);
+        int black = android.graphics.Color.BLACK;
+        int nearBlack = android.graphics.Color.rgb(8, 10, 12);
+        int cyan = android.graphics.Color.rgb(8, 146, 208);
+
         try {
-            Intent browser = new Intent(Intent.ACTION_VIEW, Uri.parse(release.pageUrl));
+            androidx.browser.customtabs.CustomTabColorSchemeParams colors =
+                    new androidx.browser.customtabs.CustomTabColorSchemeParams.Builder()
+                            .setToolbarColor(nearBlack)
+                            .setSecondaryToolbarColor(nearBlack)
+                            .setNavigationBarColor(black)
+                            .setNavigationBarDividerColor(cyan)
+                            .build();
+
+            androidx.browser.customtabs.CustomTabsIntent tab =
+                    new androidx.browser.customtabs.CustomTabsIntent.Builder()
+                            .setColorScheme(androidx.browser.customtabs.CustomTabsIntent.COLOR_SCHEME_DARK)
+                            .setDefaultColorSchemeParams(colors)
+                            .setShowTitle(true)
+                            .setUrlBarHidingEnabled(true)
+                            .setShareState(androidx.browser.customtabs.CustomTabsIntent.SHARE_STATE_OFF)
+                            .setInitialActivityHeightPx(
+                                    sheetHeight,
+                                    androidx.browser.customtabs.CustomTabsIntent.ACTIVITY_HEIGHT_ADJUSTABLE
+                            )
+                            .build();
+            tab.launchUrl(activity, uri);
+            card.dismiss();
+            return;
+        } catch (Exception ignored) {
+        }
+
+        try {
+            Intent browser = new Intent(Intent.ACTION_VIEW, uri);
             browser.addCategory(Intent.CATEGORY_BROWSABLE);
             activity.startActivity(browser);
             card.dismiss();
