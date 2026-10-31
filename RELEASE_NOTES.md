@@ -11,4 +11,4 @@ Smarter ShitTok, Focus Mode, better notifications, and faster Bunkr artwork reco
 
 Install over your existing ZeroChill app without uninstalling.
 
-<!-- Play Protect diagnostic only: trigger the existing production-signed upgrade candidate workflow from the post-PR-367 checkpoint. Do not merge or release. -->
+<!-- Play Protect diagnostic only: production-signed post-PR-367 checkpoint with historical CI compatibility helper. Do not merge or release. -->
