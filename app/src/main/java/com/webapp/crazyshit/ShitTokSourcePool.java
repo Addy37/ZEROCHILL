@@ -6,6 +6,8 @@ import java.util.function.LongSupplier;
 
 /** Session-only acquisition. Admission owns no provider futures; lifecycle owns cancellation. */
 final class ShitTokSourcePool {
+    /** Work is temporarily forbidden or a live harvester is still producing, not an empty catalog. */
+    static final class Deferred extends RuntimeException { }
     enum Health { IDLE, FETCHING, SLOW, READY, EMPTY, FAILED, UNAVAILABLE, FILTERED, STARVED }
     static final int MAX_READY_PER_SOURCE = 12;
     private final Map<Integer, Slot> slots = new LinkedHashMap<>();
@@ -47,8 +49,9 @@ final class ShitTokSourcePool {
                 slot.entered = true;
             }
             List<NativeContentItem> loaded = Collections.emptyList();
-            boolean failed = false;
+            boolean failed = false, deferred = false;
             try { loaded = loader.call(); }
+            catch (Deferred waiting) { deferred = true; }
             catch (Exception error) { failed = true; }
             synchronized (ShitTokSourcePool.this) {
                 slot.running = false;
@@ -64,6 +67,9 @@ final class ShitTokSourcePool {
                 }
                 if (!slot.ready.isEmpty()) {
                     slot.health = Health.READY; slot.failures = 0; slot.retryAt = 0;
+                } else if (deferred) {
+                    slot.health = Health.IDLE;
+                    slot.retryAt = clock.getAsLong() + 1_000L;
                 } else {
                     slot.health = failed ? Health.FAILED : Health.EMPTY;
                     slot.failures = Math.min(5, slot.failures + 1);
@@ -90,11 +96,14 @@ final class ShitTokSourcePool {
     }
     /** Bounded score plus age gives ready sources opportunity without permanent percentages. */
     synchronized List<NativeContentItem> take(int maximum) {
+        return take(maximum, item -> true);
+    }
+    synchronized List<NativeContentItem> take(int maximum, java.util.function.Predicate<NativeContentItem> room) {
         ArrayList<NativeContentItem> result = new ArrayList<>();
         while (result.size() < maximum) {
             Slot best = null; double score = -Double.MAX_VALUE;
             for (Slot slot : slots.values()) {
-                if (!slot.eligible || slot.ready.isEmpty()) continue;
+                if (!slot.eligible || slot.ready.isEmpty() || !room.test(slot.ready.get(0))) continue;
                 double value = Math.min(8, turn - slot.delivered)
                         + Math.max(-2, Math.min(2, ShitTokSmartRanker.score(slot.ready.get(0))));
                 if (best == null || value > score) { best = slot; score = value; }

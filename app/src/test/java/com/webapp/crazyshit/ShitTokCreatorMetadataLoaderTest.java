@@ -62,6 +62,36 @@ public class ShitTokCreatorMetadataLoaderTest {
         loader.close();
     }
 
+    @Test public void repeatedCreatorClipsShareOneEnrichmentAndRetainExactProfileNavigation() {
+        Queue worker = new Queue(), ui = new Queue();
+        AtomicInteger lookups = new AtomicInteger();
+        ShitTokCreatorMetadataLoader loader = new ShitTokCreatorMetadataLoader(worker, ui,
+                media -> { lookups.incrementAndGet(); return ShitTokCreatorMetadata.creatorIdentity(null, media); }, url -> {});
+        try {
+            for (int i = 0; i < 30; i++) loader.identity(new NativeContentItem("media", "lilijunex #" + i,
+                    "https://fapello.com/lilijunex-1/" + i + "/", "", "", "https://fapello.com/lilijunex-1/", "", "Fapello"));
+            assertEquals(1, worker.tasks.size());
+            worker.next(); ui.next();
+            NativeContentItem identity = loader.identity(new NativeContentItem("media", "lilijunex #100",
+                    "https://fapello.com/lilijunex-1/100/", "", "", "https://fapello.com/lilijunex-1/", "", "Fapello"));
+            assertEquals(1, lookups.get()); assertTrue(worker.tasks.isEmpty());
+            assertEquals("lilijunex", identity.title);
+            assertEquals("https://fapello.com/lilijunex-1/", identity.url);
+            assertTrue(loader.cacheSummary().contains("metadataEntries=1"));
+            assertTrue(loader.cacheSummary().contains("metadataMisses=1"));
+        } finally { loader.close(); }
+    }
+
+    @Test public void creatorCacheIsBoundedWithoutQueuingOrdinaryClipWork() {
+        ShitTokCreatorMetadataLoader loader = new ShitTokCreatorMetadataLoader(Runnable::run, Runnable::run,
+                media -> null, url -> {});
+        try {
+            for (int i = 0; i < 700; i++) loader.identity(new NativeContentItem("media", "clip" + i,
+                    "https://fixture.invalid/" + i, "", "", "Uploader", ""));
+            assertTrue(loader.cacheSummary().contains("metadataEntries=" + ShitTokCreatorMetadataLoader.MAX_IDENTITIES));
+        } finally { loader.close(); }
+    }
+
     @Test public void refreshDiscardsOldPublicationEvenWhenSameClipIsRequestedAgain() {
         Queue worker = new Queue(), ui = new Queue();
         List<String> ready = new ArrayList<>();

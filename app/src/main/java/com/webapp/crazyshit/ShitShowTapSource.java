@@ -67,11 +67,21 @@ final class ShitShowTapSource {
         return drainReady(Math.max(0, maxItems));
     }
 
-    List<NativeContentItem> takeBatchOrWarm(Context context, int maxItems) {
+    List<NativeContentItem> takeBatchOrWarm(Context context, int maxItems) throws ShitTokSourcePool.Deferred {
+        long diagnosticToken = ShitTokPoolDiagnostics.modeToken();
+        ShitTokPoolDiagnostics.modeEvent(diagnosticToken, "showAttempts", 1);
         int requested = Math.max(0, maxItems);
         prewarm(context);
         ArrayList<NativeContentItem> result = drainReady(requested);
-        if (!result.isEmpty() || requested == 0) return result;
+        if (!result.isEmpty() || requested == 0) {
+            ShitTokPoolDiagnostics.modeEvent(diagnosticToken, "showRaw", result.size());
+            return result;
+        }
+        if (playbackProtected || ShitShowPlayableResolver.hostActivity(context) == null) {
+            ShitTokPoolDiagnostics.modeEvent(diagnosticToken,
+                    playbackProtected ? "showProtected" : "showNoHost", 1);
+            throw new ShitTokSourcePool.Deferred();
+        }
 
         if (Looper.myLooper() != Looper.getMainLooper()) {
             long deadline = SystemClock.uptimeMillis() + FIRST_BATCH_WAIT_MS;
@@ -89,7 +99,13 @@ final class ShitShowTapSource {
                 while (requested-- > 0 && !ready.isEmpty()) result.add(ready.removeFirst());
             }
         }
-        if (result.isEmpty() && harvestFailed) throw new IllegalStateException("ShitShow page failed");
+        ShitTokPoolDiagnostics.modeEvent(diagnosticToken, "showRaw", result.size());
+        if (result.isEmpty()) {
+            ShitTokPoolDiagnostics.modeEvent(diagnosticToken,
+                    isWarming() ? "showHarvesting" : harvestFailed ? "showFailed" : "showEmpty", 1);
+            if (isWarming() || playbackProtected) throw new ShitTokSourcePool.Deferred();
+            if (harvestFailed) throw new IllegalStateException("ShitShow page failed");
+        }
         return result;
     }
 
@@ -121,15 +137,20 @@ final class ShitShowTapSource {
     }
 
     private void warm(Context context) {
-        if (!(context instanceof Activity)) return;
-        Activity activity = (Activity) context;
+        Activity activity = ShitShowPlayableResolver.hostActivity(context);
+        if (activity == null) return;
         synchronized (lock) {
             if (warming) return;
             warming = true;
         }
         long token;
         synchronized (lock) { token = generation; }
-        main.post(() -> { synchronized (lock) { if (token != generation) return; } startHarvest(activity); });
+        java.lang.ref.WeakReference<Activity> host = new java.lang.ref.WeakReference<>(activity);
+        main.post(() -> {
+            synchronized (lock) { if (token != generation) return; }
+            Activity current = host.get();
+            if (current == null) setWarming(false); else startHarvest(current);
+        });
     }
 
     private void startHarvest(Activity activity) {

@@ -188,4 +188,33 @@ public class ShitTokFilteredInventoryTest {
             assertTrue(inv.take(ContentPreference.WOMEN).isEmpty());
         } finally { release.countDown(); inv.pause(); io.shutdownNow(); }
     }
+    @Test public void uninterruptiblePriorSourceModeCannotPublishIntoSameGenderNewSourceMode() throws Exception {
+        ExecutorService io = Executors.newFixedThreadPool(2);
+        CountDownLatch oldStarted = new CountDownLatch(1), release = new CountDownLatch(1), freshReady = new CountDownLatch(1);
+        AtomicInteger calls = new AtomicInteger();
+        Fake backend = new Fake() {
+            @Override public OnlyHavenRepository.CategoryPage creators(ContentPreference mode, int offset) {
+                int call = calls.incrementAndGet();
+                if (call == 1) {
+                    oldStarted.countDown();
+                    while (release.getCount() > 0) try { release.await(); } catch (InterruptedException ignored) { }
+                }
+                return new OnlyHavenRepository.CategoryPage(Arrays.asList(creator(call == 1 ? "old" : "new")), false);
+            }
+            @Override public boolean available(int source) { return source == 6; }
+        };
+        ShitTokFilteredInventory inv = new ShitTokFilteredInventory(io, () -> 0L, backend);
+        try {
+            inv.request(ShitTokSourceMode.ONLY_FAP, ContentPreference.WOMEN, true, () -> {});
+            assertTrue(oldStarted.await(2, TimeUnit.SECONDS));
+            inv.request(ShitTokSourceMode.ALL, ContentPreference.WOMEN, true, freshReady::countDown);
+            assertTrue(freshReady.await(2, TimeUnit.SECONDS));
+            release.countDown(); io.submit(() -> {}).get(2, TimeUnit.SECONDS);
+            List<NativeContentItem> fresh = inv.take(ContentPreference.WOMEN);
+            assertFalse(fresh.isEmpty());
+            for (NativeContentItem item : fresh) assertEquals("new", item.searchQuery);
+            assertFalse(inv.matches(clip("old", 6, 1), ContentPreference.WOMEN));
+        } finally { release.countDown(); inv.pause(); io.shutdownNow(); }
+    }
+
 }

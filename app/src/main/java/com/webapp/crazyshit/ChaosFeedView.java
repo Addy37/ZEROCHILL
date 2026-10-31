@@ -76,6 +76,7 @@ public final class ChaosFeedView extends FrameLayout {
     @Override public void onDescendantInvalidated(View child, View target) {
         super.onDescendantInvalidated(child, target);
         if (child == pager) {
+            if (sourceControl != null) sourceControl.invalidateBackdrop();
             for (int i = 0; i < getChildCount(); i++) {
                 if (getChildAt(i) instanceof ShitTokFocusControls) {
                     ((ShitTokFocusControls) getChildAt(i)).invalidateBackdrop();
@@ -107,6 +108,8 @@ public final class ChaosFeedView extends FrameLayout {
     private final ShitTokRunwayPolicy runway = new ShitTokRunwayPolicy();
     private long belowRunwayAt, belowRunwayMs;
     private int physicalTailHits;
+    private int modeTailHits, modeMinRunway = Integer.MAX_VALUE, modeRefills, modeDryRefills;
+    private long modeBelowAt, modeBelowMs;
     private long admissionApplyCount, admissionApplyTotalMs, admissionApplyMaxMs;
     private final long initializedAt = android.os.SystemClock.elapsedRealtime();
     private boolean firstCandidate, firstAdmitted;
@@ -187,6 +190,7 @@ public final class ChaosFeedView extends FrameLayout {
     private final ShitTokSessionResume sessionResume = new ShitTokSessionResume();
 
     private ViewPager2 pager;
+    private ShitTokSourceControl sourceControl;
     private ChaosAdapter adapter;
     private TextView empty;
     private ProgressBar initialProgress;
@@ -290,7 +294,9 @@ public final class ChaosFeedView extends FrameLayout {
             sourceMixer.onFirstFrame();
             post(this::requestPreferenceCandidates);
         });
+        ShitTokPoolDiagnostics.beginMode(ShitTokSourceMode.get(activity), ContentPreference.get(activity));
         orientationAdmission = new ShitTokOrientationAdmission(activity.getApplicationContext());
+        orientationAdmission.setCreatorFocused(creatorInventory());
         buildUi();
         ShitTokPoolDiagnostics.record("feedInit", "at=" + initializedAt);
         initialUiDrawn = !sourceRequestsEnabled;
@@ -340,6 +346,20 @@ public final class ChaosFeedView extends FrameLayout {
         empty.setText("Loading ShitTok…");
         empty.setVisibility(View.GONE);
         addView(empty, new FrameLayout.LayoutParams(-1, -1));
+
+        sourceControl = new ShitTokSourceControl(activity, pager);
+        FrameLayout.LayoutParams sourceParams = new FrameLayout.LayoutParams(dp(172), dp(44), Gravity.TOP | Gravity.CENTER_HORIZONTAL);
+        sourceParams.topMargin = dp(8);
+        addView(sourceControl, sourceParams);
+        ViewCompat.setOnApplyWindowInsetsListener(sourceControl, (view, insets) -> {
+            int status = insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.statusBars()).top;
+            int[] location = new int[2]; getLocationInWindow(location);
+            FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) view.getLayoutParams();
+            int top = Math.max(dp(8), status - location[1] + dp(8));
+            if (params.topMargin != top) { params.topMargin = top; view.setLayoutParams(params); }
+            return insets;
+        });
+        sourceControl.post(() -> ViewCompat.requestApplyInsets(sourceControl));
 
         pager.registerOnPageChangeCallback(new ViewPager2.OnPageChangeCallback() {
             @Override
@@ -441,7 +461,7 @@ public final class ChaosFeedView extends FrameLayout {
         if (closed || !active || !hostResumed || usableUpcomingCount() >= desiredRunway()) return;
         if (!forwardSwipeIntent) consecutiveDryLoads = 0;
         forwardSwipeIntent = true;
-        if (selectedPosition >= items.size() - 1) physicalTailHits++;
+        if (selectedPosition >= items.size() - 1) { physicalTailHits++; modeTailHits++; }
         requestContinuity();
         // Fetch/probe may start during the drag. Adapter changes and prepares still wait for IDLE.
         if (continuityWorkNeeded && usableUpcomingCount() == items.size() - selectedPosition - 1) loadMorePool();
@@ -464,7 +484,7 @@ public final class ChaosFeedView extends FrameLayout {
 
     private boolean needsContinuity() {
         return runway.needsWork(usableUpcomingCount(), android.os.SystemClock.elapsedRealtime(),
-                ContentPreference.get(activity) != ContentPreference.ALL);
+                creatorInventory());
     }
 
     private void recordRunway(String reason) {
@@ -475,6 +495,9 @@ public final class ChaosFeedView extends FrameLayout {
         if (firstAdmitted) minimumRunway = Math.min(minimumRunway, usable);
         if (usable < desiredRunway()) { if (belowRunwayAt == 0) belowRunwayAt = now; }
         else if (belowRunwayAt != 0) { belowRunwayMs += now - belowRunwayAt; belowRunwayAt = 0; }
+        if (firstAdmitted) modeMinRunway = Math.min(modeMinRunway, usable);
+        if (usable < desiredRunway()) { if (modeBelowAt == 0) modeBelowAt = now; }
+        else if (modeBelowAt != 0) { modeBelowMs += now - modeBelowAt; modeBelowAt = 0; }
         String detail = "reason=" + reason + " selected=" + selectedPosition
                 + " queued=" + items.size() + " usable=" + usable + " desired=" + desiredRunway()
                 + " rapid=" + runway.rapid(now) + " unresolved=" + resolving.size()
@@ -498,12 +521,17 @@ public final class ChaosFeedView extends FrameLayout {
                 + " refillAvgMs=" + (refillCount == 0 ? 0 : refillTotalMs / refillCount) + " refillMaxMs=" + refillMaxMs
                 + " applyAvgMs=" + (admissionApplyCount == 0 ? 0 : admissionApplyTotalMs / admissionApplyCount)
                 + " applyMaxMs=" + admissionApplyMaxMs + " creatorMetadataBacklog=" + creatorMetadata.backlog()
-                + " " + orientationAdmission.schedulingSummary();
+                + " " + orientationAdmission.schedulingSummary() + " " + creatorMetadata.cacheSummary()
+                + " " + ShitTokPoolDiagnostics.modeSummary()
+                + " currentTailHits=" + modeTailHits + " currentBelowMs="
+                + (modeBelowMs + (modeBelowAt == 0 ? 0 : now - modeBelowAt))
+                + " currentMinUsable=" + (modeMinRunway == Integer.MAX_VALUE ? -1 : modeMinRunway)
+                + " currentRefills=" + modeRefills + " currentDryRefills=" + modeDryRefills;
         ShitTokPoolDiagnostics.record("runway", detail);
         ShitTokPoolDiagnostics.snapshot("Uptime ms: " + now + "\n" + detail + "\n" + frameDiagnostics.summary()
                 + "\nSeen identities: " + seenStore.seenSize() + " / " + ShitTokSeenStore.SEEN_LIMIT
                 + "; liked exclusions: " + seenStore.likedSize() + " / " + ShitTokSeenStore.LIKED_LIMIT
-                + "\nProvider IDs: 1=CrazyShit, 2=eFukt, 3=Kaotic, 5=Fapello, 6=OnlyHaven, 7=BaddieHub"
+                + "\nProvider IDs: 1=CrazyShit, 2=eFukt, 3=Kaotic, 4=ShitShow, 5=Fapello, 6=OnlyHaven, 7=BaddieHub, 9=Bunkr"
                 + "\nselectedState: 1=idle, 2=buffering, 3=ready, 4=ended. Counts describe inventory, not device smoothness.");
     }
 
@@ -552,7 +580,7 @@ public final class ChaosFeedView extends FrameLayout {
         if (searchCoverActive) return;
         continuityWorkNeeded = needsContinuity();
         if (!continuityWorkNeeded || poolLoading) return;
-        if (consecutiveDryLoads >= 4) {
+        if (!creatorInventory() && consecutiveDryLoads >= 4) {
             removeCallbacks(recoveryRunnable);
             postDelayed(recoveryRunnable, 1_000L);
             return;
@@ -889,9 +917,11 @@ public final class ChaosFeedView extends FrameLayout {
         io.shutdownNow();
     }
 
-    private ContentPreference queuePreference, invalidatedPreference;
+    private ContentPreference queuePreference;
+    private ShitTokSourceMode queueSources = ShitTokSourceMode.ALL;
+    private String invalidatedSelection;
     private final android.content.SharedPreferences.OnSharedPreferenceChangeListener preferenceListener =
-            (preferences, key) -> { if (ContentPreference.KEY.equals(key)) post(this::applyContentPreference); };
+            (preferences, key) -> { if (ContentPreference.KEY.equals(key) || ShitTokSourceMode.KEY.equals(key)) post(this::applyContentPreference); };
     private final Runnable sourceRecoveryTick = new Runnable() {
         @Override public void run() {
             if (closed) return;
@@ -910,20 +940,27 @@ public final class ChaosFeedView extends FrameLayout {
     private void applyContentPreference() {
         if (closed) return;
         ContentPreference current = ContentPreference.get(activity);
-        if (queuePreference == null) { queuePreference = current; return; }
-        if (queuePreference == current) return;
-        if (invalidatedPreference != current) {
-            invalidatedPreference = current;
+        ShitTokSourceMode currentSources = ShitTokSourceMode.get(activity);
+        if (sourceControl != null) sourceControl.refresh(false);
+        if (queuePreference == null) { queuePreference = current; queueSources = currentSources; return; }
+        if (queuePreference == current && queueSources == currentSources) return;
+        String selection = currentSources.key(current);
+        if (!selection.equals(invalidatedSelection)) {
+            invalidatedSelection = selection;
             sourceMixer.stopPreference();
             cancelInventoryBatch();
         }
         if (isPaging()) { deferUiApply(this::applyContentPreference); return; }
         ContentPreference previous = queuePreference;
-        warmCategories.save(previous, new ArrayList<>(items.subList(
+        warmCategories.save(queueSources, previous, new ArrayList<>(items.subList(
                 Math.min(items.size(), selectedPosition + 1), items.size())), streamCache,
                 android.os.SystemClock.elapsedRealtime());
-        queuePreference = current;
-        invalidatedPreference = null;
+        queuePreference = current; queueSources = currentSources;
+        orientationAdmission.setCreatorFocused(currentSources.creatorInventory(current));
+        invalidatedSelection = null;
+        ShitTokPoolDiagnostics.beginMode(currentSources, current);
+        modeTailHits = modeRefills = modeDryRefills = 0;
+        modeMinRunway = Integer.MAX_VALUE; modeBelowAt = modeBelowMs = 0;
         cancelPendingAutoAdvance();
         for (NativeContentItem item : orientationPending) sourceMixer.abandon(item);
         orientationPending.clear();
@@ -946,7 +983,7 @@ public final class ChaosFeedView extends FrameLayout {
         // Establish the category session before rechecking cached clip evidence.
         sourceMixer.requestPreference(activity, () -> post(this::loadMorePool), false);
         ArrayList<NativeContentItem> warm = new ArrayList<>();
-        for (ShitTokWarmCategoryCache.Entry entry : warmCategories.take(current, android.os.SystemClock.elapsedRealtime())) {
+        for (ShitTokWarmCategoryCache.Entry entry : warmCategories.take(currentSources, current, android.os.SystemClock.elapsedRealtime())) {
             streamCache.put(entry.item.url, entry.stream);
             warm.add(entry.item);
         }
@@ -964,7 +1001,7 @@ public final class ChaosFeedView extends FrameLayout {
 
     private void pruneIncompatibleHistory() {
         ContentPreference mode = ContentPreference.get(activity);
-        if (mode == ContentPreference.ALL || isPaging()) return;
+        if (!creatorInventory() || isPaging()) return;
         ArrayList<Integer> removed = new ArrayList<>();
         for (int i = selectedPosition - 1; i >= 0; i--) {
             NativeContentItem item = items.get(i);
@@ -1009,14 +1046,14 @@ public final class ChaosFeedView extends FrameLayout {
         if (searchCoverActive) return;
     applyContentPreference();
     if (queuePreference == null) queuePreference = ContentPreference.get(activity);
-    if (queuePreference != ContentPreference.get(activity)) return;
+    if (queuePreference != ContentPreference.get(activity) || queueSources != ShitTokSourceMode.get(activity)) return;
     requestPreferenceCandidates();
     // A late matching result gets a bounded turn through the SAME admission gates even
     // when normal providers already filled the runway or left an orientation reservoir.
-    final boolean preferenceBatch = queuePreference != ContentPreference.ALL
+    final boolean preferenceBatch = creatorInventory()
             && (sourceMixer.hasPreference(queuePreference) || !orientationPending.isEmpty() || orientationAdmission.hasPending())
             && needsContinuity();
-    if (queuePreference != ContentPreference.ALL && !preferenceBatch) {
+    if (creatorInventory() && !preferenceBatch) {
         ShitTokSourcePool.Health health = sourceMixer.preferenceHealth();
         if (items.isEmpty() && (health == ShitTokSourcePool.Health.EMPTY
                 || health == ShitTokSourcePool.Health.FAILED || health == ShitTokSourcePool.Health.UNAVAILABLE)) {
@@ -1032,7 +1069,7 @@ public final class ChaosFeedView extends FrameLayout {
     continuityWorkNeeded = needsContinuity();
     boolean continuity = active && hostResumed && continuityWorkNeeded;
     if (!items.isEmpty() && !continuityWorkNeeded && !preferenceBatch) return;
-    if (queuePreference == ContentPreference.ALL && continuity && consecutiveDryLoads >= 4) { requestContinuity(); return; }
+    if (!creatorInventory() && continuity && consecutiveDryLoads >= 4) { requestContinuity(); return; }
     if (!items.isEmpty() && active && !playbackOwner.allowsSpeculativeWork() && !continuity) {
         refillDeferred = true;
         return;
@@ -1052,10 +1089,10 @@ public final class ChaosFeedView extends FrameLayout {
             : Integer.MAX_VALUE;
     final int batchGeneration = feedGeneration;
     final ContentPreference batchPreference = queuePreference;
+    final ShitTokSourceMode batchSources = queueSources;
     final int batchPosition = selectedPosition, batchTarget = desiredRunway();
     final ArrayList<NativeContentItem> pendingCandidates = new ArrayList<>(orientationPending);
     orientationPending.clear();
-    if (preferenceBatch) pendingCandidates.addAll(sourceMixer.takePreference(queuePreference));
     final Set<String> hiddenSnapshot = new HashSet<>(hiddenUrls);
     final Set<String> recentSnapshot = new HashSet<>(recentSet);
     final Set<String> sessionSnapshot = new HashSet<>(sessionUrls);
@@ -1081,7 +1118,7 @@ public final class ChaosFeedView extends FrameLayout {
                     sourceMixer.abandon(item); continue;
                 }
                 rawCandidates.incrementAndGet();
-                if (ContentPreference.get(activity) != batchPreference) { sourceMixer.abandon(item); continue; }
+                if (ContentPreference.get(activity) != batchPreference || ShitTokSourceMode.get(activity) != batchSources) { sourceMixer.abandon(item); continue; }
                 if (!isMedia(item) || !eligiblePreference(item, batchPreference) || hiddenSnapshot.contains(item.url)
                         || ShitTokBlockedCreatorStore.isBlocked(blockedSnapshot, item)) continue;
                 String identity = ShitTokContentIdentity.page(item.url);
@@ -1115,6 +1152,11 @@ public final class ChaosFeedView extends FrameLayout {
                     sourceMixer.abandon(item); continue;
                 }
                 if (seenStore.liked(item.url, null)) { likedRejected.incrementAndGet(); continue; }
+                if (preferenceBatch && !orientationAdmission.canOffer(item, candidates)) {
+                    offered.remove(ShitTokContentIdentity.page(item.url));
+                    sourceMixer.returnPreference(batchPreference, item);
+                    continue;
+                }
                 AppPerformance.startupItem("candidate_offered", item.url, "fresh=true");
                 if (candidates.offer(item)) activity.runOnUiThread(() -> {
                     if (closed || work.cancelled || inventoryBatch != work || batchGeneration != feedGeneration || firstCandidate) return;
@@ -1127,7 +1169,7 @@ public final class ChaosFeedView extends FrameLayout {
         java.util.concurrent.Future<?> harvest = io.submit(() -> {
             Trace.beginSection("zc.shittok.batch_fetch");
             try {
-                if (batchPreference == ContentPreference.ALL) {
+                if (!batchSources.creatorInventory(batchPreference)) {
                     List<NativeContentItem> recovered = sourceMixer.takeReadyCandidates();
                     offer.accept(recovered);
                     offer.accept(pendingCandidates);
@@ -1135,7 +1177,24 @@ public final class ChaosFeedView extends FrameLayout {
                         List<NativeContentItem> mixed = sourceMixer.loadRandomBatch(activity, protectedRefill, offer);
                         offer.accept(mixed); // URL dedup keeps partial results singular.
                     }
-                } else offer.accept(pendingCandidates);
+                } else {
+                    offer.accept(pendingCandidates);
+                    // Keep this bounded producer open while admission is running. Previously
+                    // a new healthy source result waited behind the entire six-second snapshot.
+                    long until = android.os.SystemClock.elapsedRealtime() + ShitTokOrientationAdmission.BATCH_MILLIS;
+                    while (!work.cancelled && acceptingCandidates.get() && continuityWorkNeeded
+                            && batchGeneration == feedGeneration && !closed
+                            && batchPreference == ContentPreference.get(activity)
+                            && batchSources == ShitTokSourceMode.get(activity)
+                            && android.os.SystemClock.elapsedRealtime() < until
+                            && !Thread.currentThread().isInterrupted()) {
+                        if (candidates.remainingCapacity() >= ShitTokSourcePool.MAX_READY_PER_SOURCE)
+                            offer.accept(sourceMixer.takePreference(batchPreference, item -> orientationAdmission.canOffer(item, candidates)));
+                        sourceMixer.requestPreference(activity, () -> {}, continuityWorkNeeded);
+                        try { Thread.sleep(50L); }
+                        catch (InterruptedException cancelled) { Thread.currentThread().interrupt(); break; }
+                    }
+                }
             } finally {
                 productionDone.set(true);
                 ShitTokPoolDiagnostics.record("harvest", "ms=" + (android.os.SystemClock.elapsedRealtime() - batchStartedAt));
@@ -1225,7 +1284,7 @@ public final class ChaosFeedView extends FrameLayout {
             if (closed || work.cancelled || inventoryBatch != work || batchGeneration != feedGeneration) return;
             poolLoading = false;
             long duration = android.os.SystemClock.elapsedRealtime() - batchStartedAt;
-            refillCount++; refillTotalMs += duration; refillMaxMs = Math.max(refillMaxMs, duration);
+            refillCount++; modeRefills++; refillTotalMs += duration; refillMaxMs = Math.max(refillMaxMs, duration);
             ShitTokPoolDiagnostics.record("refillComplete", "admitted=" + verified.items.size() + " ms=" + duration);
             for (NativeContentItem candidate : leftovers) {
                 if (orientationPending.size() >= 48) { sourceMixer.abandon(candidate); continue; }
@@ -1237,7 +1296,7 @@ public final class ChaosFeedView extends FrameLayout {
             appendUnique(prioritizedFresh);
 
             int freshAdded = publishedFresh[0] + items.size() - before;
-            if (freshAdded == 0 && !verified.deferred) { consecutiveDryLoads++; dryRefillCount++; }
+            if (freshAdded == 0 && !verified.deferred) { consecutiveDryLoads++; dryRefillCount++; modeDryRefills++; }
             else if (freshAdded > 0) consecutiveDryLoads = 0;
 
             // Freshness never relaxes after dry batches. Recovery keeps exploring existing sources.
@@ -1264,7 +1323,7 @@ public final class ChaosFeedView extends FrameLayout {
             boolean autoAdvanceNeedsNext = (autoAdvancePending && autoAdvanceFrom + 1 >= items.size())
                     || continuityWorkNeeded;
             boolean canResumeVerification = !isPaging() && mayVerifyOrientation();
-            if (shouldRefillVerifiedPool(items.size() - selectedPosition, consecutiveDryLoads,
+            if (shouldRefillVerifiedPool(items.size() - selectedPosition, creatorInventory() ? 0 : consecutiveDryLoads,
                     autoAdvanceNeedsNext, verified.deferred, canResumeVerification)) {
                 // Yield between bounded batches, including batches rejected by orientation.
                 postDelayed(this::loadMorePool, freshAdded == 0 ? 350L : 60L);
@@ -1290,6 +1349,8 @@ public final class ChaosFeedView extends FrameLayout {
     private void pauseRunwayClock() {
         if (belowRunwayAt != 0) belowRunwayMs += android.os.SystemClock.elapsedRealtime() - belowRunwayAt;
         belowRunwayAt = 0;
+        if (modeBelowAt != 0) modeBelowMs += android.os.SystemClock.elapsedRealtime() - modeBelowAt;
+        modeBelowAt = 0;
     }
 
     private boolean mayVerifyOrientation() {
@@ -1583,7 +1644,7 @@ public final class ChaosFeedView extends FrameLayout {
     }
 
     private void sequenceFilteredFuture() {
-        if (ContentPreference.get(activity) == ContentPreference.ALL || isPaging()) return;
+        if (!creatorInventory() || isPaging()) return;
         int first = Math.min(items.size(), selectedPosition + 1);
         if (items.size() - first < 2) return;
         ShitTokCreatorDiversity diversity = new ShitTokCreatorDiversity();
@@ -1604,8 +1665,14 @@ public final class ChaosFeedView extends FrameLayout {
         }
     }
 
+    private boolean creatorInventory() {
+        return ShitTokSourceMode.get(activity).creatorInventory(ContentPreference.get(activity));
+    }
+
     private boolean eligiblePreference(NativeContentItem item, ContentPreference mode) {
-        return mode == ContentPreference.ALL || sourceMixer.matchesPreference(item, mode);
+        ShitTokSourceMode sources = ShitTokSourceMode.get(activity);
+        return sources.allowsSource(ShitTokAspectPriority.sourceKey(item))
+                && (!sources.creatorInventory(mode) || sourceMixer.matchesPreference(item, mode));
     }
 
     private boolean discoveryExcluded(NativeContentItem item, CrazyShitRepository.StreamInfo stream) {
@@ -2355,6 +2422,7 @@ public final class ChaosFeedView extends FrameLayout {
         resetTemporaryPinch();
         if (manualFullscreen || holder == null || !holder.horizontalVideo) return;
         manualFullscreen = true;
+        updateSourceControlVisibility();
         PhoneOrientationPolicy.enterSensorFullscreen(activity);
         holder.syncOrientationChrome();
     }
@@ -2363,6 +2431,7 @@ public final class ChaosFeedView extends FrameLayout {
         resetTemporaryPinch();
         if (!manualFullscreen) return;
         manualFullscreen = false;
+        updateSourceControlVisibility();
         PhoneOrientationPolicy.exitFullscreenVideo(activity);
         syncVisibleChrome();
     }
@@ -2396,6 +2465,7 @@ public final class ChaosFeedView extends FrameLayout {
     private void setClearDisplay(boolean clear) {
         if (clearDisplay == clear) return;
         clearDisplay = clear;
+        updateSourceControlVisibility();
         host.onClearDisplayChanged(clear);
 
         RecyclerView rv = pagerRecycler();
@@ -2410,6 +2480,11 @@ public final class ChaosFeedView extends FrameLayout {
 
     private void resetTemporaryPinch() {
         resetTemporaryPinch(false);
+    }
+
+    private void updateSourceControlVisibility() {
+        if (sourceControl != null) sourceControl.setVisibility(clearDisplay || manualFullscreen
+                || pinchingHolder != null && pinchingHolder.pinch.suppressesFeedChrome() ? View.GONE : View.VISIBLE);
     }
 
     private void resetTemporaryPinch(boolean preserveFocusForPaging) {
@@ -3166,6 +3241,7 @@ public final class ChaosFeedView extends FrameLayout {
                             // Resume a completion-driven advance only after fingers let go.
                             pager.post(ChaosFeedView.this::tryPendingAutoAdvance);
                         }
+                        updateSourceControlVisibility();
                         host.onTemporaryPinchChanged(pinching);
                     },
                     lower, creatorAvatarControl, fullscreen, landscapeTopScrim,

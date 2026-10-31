@@ -12,6 +12,11 @@ branch/SHA-named Beta and a release-package upgrade candidate for testing only.
 See `docs/SHITTOK_FILTERED_HOTFIX.md` for architecture and compatibility.
 No merge, 5.6.1 publication, backend deployment or source-config change is authorized.
 Physical approval on the user's OnePlus CPH2655 is pending.
+The physical-test rescue continues PR #376 from verified head
+`89f2563c1457f462858bdcdd4448cd457c053a5b`; it adds the requested All/OnlyFap
+candidate restriction and targeted refill/harvest/metadata scheduling fixes. Build
+and artifact records on the draft PR identify the final source SHA. Do not merge
+or publish 5.6.1 before the new physical Beta is approved.
 
 ## Current release preparation: 5.2.1
 

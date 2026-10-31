@@ -19,6 +19,26 @@ final class ShitTokPoolDiagnostics {
         }
     };
     private static final java.util.concurrent.atomic.AtomicLong fetched = new java.util.concurrent.atomic.AtomicLong();
+    private static long modeGeneration, switchedAt;
+    private static String selection = "all:all";
+    private static final Map<String, Long> modeCounters = new LinkedHashMap<>();
+    private static final Map<String, Map<String, Integer>> modeOutcomes = new LinkedHashMap<>();
+    private static final java.util.Set<String> modeFinal = new java.util.HashSet<>();
+    static synchronized long beginMode(ShitTokSourceMode sources, ContentPreference gender) {
+        selection = sources.key(gender); modeGeneration++; switchedAt = SystemClock.elapsedRealtime();
+        modeCounters.clear(); modeOutcomes.clear(); modeFinal.clear();
+        return modeGeneration;
+    }
+    static synchronized long modeToken() { return modeGeneration; }
+    static synchronized void modeEvent(long token, String name, long count) {
+        if (!enabled || token != modeGeneration || modeCounters.size() >= 24 && !modeCounters.containsKey(name)) return;
+        modeCounters.put(name, modeCounters.getOrDefault(name, 0L) + count);
+    }
+    static synchronized String modeSummary() {
+        return "currentMode=" + selection + " preferenceGeneration=" + modeGeneration
+                + " switchAgeMs=" + Math.max(0, SystemClock.elapsedRealtime() - switchedAt)
+                + " currentOutcomes=" + modeOutcomes + " currentWork=" + modeCounters;
+    }
     static java.util.List<NativeContentItem> fetched(int provider, java.util.List<NativeContentItem> items) {
         fetched.addAndGet(items.size());
         record("listing", "source=" + provider + " raw=" + items.size());
@@ -30,9 +50,17 @@ final class ShitTokPoolDiagnostics {
         finalAdmissionOutcomes.clear();
     }
     static synchronized void admissionOutcome(NativeContentItem item, String outcome) {
+        admissionOutcome(item, outcome, modeGeneration);
+    }
+    static synchronized void admissionOutcome(NativeContentItem item, String outcome, long token) {
         if (!enabled || item == null || item.url == null || item.url.isEmpty() || outcome == null || outcome.isEmpty()) return;
-        if (finalAdmissionOutcomes.containsKey(item.url)) return;
         String source = ShitTokAspectPriority.sourceKey(item);
+        if (token == modeGeneration && modeFinal.add(item.url)) {
+            if (modeFinal.size() > 4096) modeFinal.clear();
+            Map<String, Integer> counts = modeOutcomes.computeIfAbsent(source, ignored -> new LinkedHashMap<>());
+            counts.put(outcome, counts.getOrDefault(outcome, 0) + 1);
+        }
+        if (finalAdmissionOutcomes.containsKey(item.url)) return;
         finalAdmissionOutcomes.put(item.url, source + "|" + outcome);
         LinkedHashMap<String, Integer> counts = admissionBySource.computeIfAbsent(source, ignored -> new LinkedHashMap<>());
         counts.put(outcome, counts.getOrDefault(outcome, 0) + 1);
@@ -61,7 +89,8 @@ final class ShitTokPoolDiagnostics {
                 + "\nSource: " + BuildConfig.SOURCE_REVISION
                 + "\nAndroid " + android.os.Build.VERSION.RELEASE + " / " + android.os.Build.MODEL
                 + "\nCaptured: " + java.time.Instant.now()
-                + "\n\nShitTok last session\n" + snapshot + "\n" + admissionSummary() + "\n\nRecent events\n" + redact(report())
+                + "\n\nShitTok last session\n" + snapshot + "\n" + modeSummary()
+                + "\n" + admissionSummary() + "\n\nRecent events\n" + redact(report())
                 + "\n\n" + AppPerformance.summary();
     }
     static String redact(String value) {

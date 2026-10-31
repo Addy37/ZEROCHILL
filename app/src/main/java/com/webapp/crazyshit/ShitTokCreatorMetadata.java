@@ -14,6 +14,11 @@ final class ShitTokCreatorMetadata {
         if (item == null) return "";
 
         String uploader = clean(item.uploader);
+        if (BaddieHubRepository.isBaddieHubUrl(item.url)
+                && (isOnlyHavenProfile(uploader) || FapelloRepository.isModelUrl(uploader))) {
+            String creator = clean(item.searchQuery);
+            return isGenericCreatorLabel(creator) || looksLikeUrl(creator) ? "" : creator;
+        }
         if (FapelloRepository.isFapelloUrl(item.url) || FapelloRepository.isModelUrl(uploader)) {
             String creator = uploader;
             // Creator-page media keeps the canonical Fapello profile URL in uploader so

@@ -1,7 +1,7 @@
 # Smart ShitTok v2 candidate
 
 The filtered-mode follow-up is documented in [SHITTOK_FILTERED_HOTFIX.md](SHITTOK_FILTERED_HOTFIX.md).
-Its category inventory, cross-source evidence, warm caches and earlier refill thresholds
+Its combined source-mode/category inventory, cross-source evidence, warm caches and earlier refill thresholds
 supersede the original filtered-only behavior below; All Content retains this v2 design.
 
 Starting point: approved `main` `dd0fc91fdb7be88587685fd4ea3a618998b8bdea` (PR #370).

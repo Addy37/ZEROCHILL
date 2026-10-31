@@ -14,10 +14,14 @@ final class ShitTokWarmCategoryCache {
             this.item = item; this.stream = stream; this.at = at;
         }
     }
-    private final EnumMap<ContentPreference, List<Entry>> categories = new EnumMap<>(ContentPreference.class);
+    private final Map<String, List<Entry>> categories = new LinkedHashMap<>();
     void save(ContentPreference mode, List<NativeContentItem> future,
               Map<String, CrazyShitRepository.StreamInfo> streams, long now) {
-        if (mode == null || mode == ContentPreference.ALL) return;
+        if (mode != ContentPreference.ALL) save(ShitTokSourceMode.ALL, mode, future, streams, now);
+    }
+    void save(ShitTokSourceMode sources, ContentPreference mode, List<NativeContentItem> future,
+              Map<String, CrazyShitRepository.StreamInfo> streams, long now) {
+        if (mode == null) return;
         ArrayList<Entry> entries = new ArrayList<>();
         for (NativeContentItem item : future) {
             CrazyShitRepository.StreamInfo stream = streams.get(item.url);
@@ -26,10 +30,13 @@ final class ShitTokWarmCategoryCache {
             if (entries.size() == MAX_PER_CATEGORY) break;
         }
         // An empty visit must not destroy an earlier still-warm category.
-        if (!entries.isEmpty()) categories.put(mode, entries);
+        if (!entries.isEmpty()) categories.put(sources.key(mode), entries);
     }
     List<Entry> take(ContentPreference mode, long now) {
-        List<Entry> saved = categories.remove(mode);
+        return take(ShitTokSourceMode.ALL, mode, now);
+    }
+    List<Entry> take(ShitTokSourceMode sources, ContentPreference mode, long now) {
+        List<Entry> saved = categories.remove(sources.key(mode));
         ArrayList<Entry> result = new ArrayList<>();
         if (saved != null) for (Entry entry : saved)
             if (now - entry.at <= MAX_AGE_MS) result.add(entry);

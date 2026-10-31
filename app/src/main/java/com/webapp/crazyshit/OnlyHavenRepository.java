@@ -217,6 +217,19 @@ final class OnlyHavenRepository {
         throw new IOException("OnlyHaven returned no trending creators");
     }
 
+    /** Reuses the configured creator search route with its existing offset token; no category inference. */
+    CategoryPage fetchTrendingPage(Context context, int limit, int offset) throws IOException {
+        if (offset == 0) return new CategoryPage(fetchTrendingCreators(context, limit), true);
+        SourceConfig.OnlyHaven config = config();
+        if (!config.enabled) throw new IOException("OnlyHaven is temporarily unavailable");
+        String route = config.creatorSearchApiRoute.replace("{query}", "")
+                .replace("{limit}", String.valueOf(limit)).replace("{offset}", String.valueOf(offset));
+        List<Creator> creators = parseCreatorSearchJson(
+                fetchConfiguredText(context, config, config.baseUrl + route), config, "", limit);
+        rememberConfirmedCreators(context, creators);
+        return new CategoryPage(creators, creators.size() >= limit);
+    }
+
     static String categoryRoute(SourceConfig.OnlyHaven config, ContentPreference preference, int limit, int offset) {
         String category = config.categoryValues.get(preference.value);
         if (category == null) throw new IllegalArgumentException("A category preference is required");
