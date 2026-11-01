@@ -189,11 +189,16 @@ final class SocialMedia {
         image.setContentDescription("Attachment. Tap to enlarge");
         image.setLayoutParams(new LinearLayout.LayoutParams(-1,Math.round(200*activity.getResources().getDisplayMetrics().density)));
         bind(image,bucket,path);
-        image.setOnClickListener(v -> {
-            ImageView large=new ImageView(activity); large.setAdjustViewBounds(true); large.setScaleType(ImageView.ScaleType.FIT_CENTER);
-            bind(large,bucket,path);
-            new ZeroChillDialog.Builder(activity).setView(large).setPositiveButton("Close",null).show();
-        });
+        image.setOnClickListener(v -> showViewer(activity,bucket,path));
         return image;
     }
+    static void showViewer(Activity activity,String bucket,String path) {
+        ImageView large=new ImageView(activity); large.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        large.setContentDescription("Attachment viewer");
+        large.setLayoutParams(new android.view.ViewGroup.LayoutParams(-1,
+                Math.round(activity.getResources().getDisplayMetrics().heightPixels*0.72f)));
+        bind(large,bucket,path);
+        new ZeroChillDialog.Builder(activity).setView(large).setPositiveButton("Close",null).show();
+    }
+
 }

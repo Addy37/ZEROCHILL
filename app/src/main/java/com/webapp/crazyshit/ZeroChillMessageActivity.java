@@ -758,10 +758,7 @@ public final class ZeroChillMessageActivity extends Activity {
             holder.body.setText(item.body);
             holder.body.setVisibility(!item.attachmentPath.isEmpty() && (item.body.equals("Photo") || item.body.equals("GIF")) ? View.GONE:View.VISIBLE);
             SocialMedia.bind(holder.media,item.attachmentBucket,item.attachmentPath);
-            holder.media.setOnClickListener(v -> {
-                ImageView large=SocialMedia.inline(ZeroChillMessageActivity.this,item.attachmentBucket,item.attachmentPath);
-                new ZeroChillDialog.Builder(ZeroChillMessageActivity.this).setView(large).setPositiveButton("Close",null).show();
-            });
+            holder.media.setOnClickListener(v -> SocialMedia.showViewer(ZeroChillMessageActivity.this,item.attachmentBucket,item.attachmentPath));
             holder.media.setOnLongClickListener(v -> {showReactions(holder.bubble,item); return true;});
             holder.reactions.setText(reactionLabels.getOrDefault(item.id,""));
             holder.reactions.setVisibility(holder.reactions.length()==0?View.GONE:View.VISIBLE);

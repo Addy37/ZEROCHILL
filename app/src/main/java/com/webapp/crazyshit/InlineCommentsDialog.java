@@ -61,6 +61,7 @@ final class InlineCommentsDialog extends BottomSheetDialog {
     private boolean posting;
     private String pendingCommentId=java.util.UUID.randomUUID().toString();
     private String pendingCommentBody="";
+    private String pendingCommentParent="";
     private SocialMedia.Prepared pendingMedia;
     private boolean focusConsumed;
     private int loadGeneration;
@@ -608,8 +609,9 @@ final class InlineCommentsDialog extends BottomSheetDialog {
         String message = clean(composerInput.getText().toString());
         if (message.isEmpty() && attachment.selected == null) return;
         final String submittedAccount = ZeroChillSessionStore.currentUserId(activity);
-        if(!message.equals(pendingCommentBody) || pendingMedia!=attachment.selected) pendingCommentId=java.util.UUID.randomUUID().toString();
-        pendingCommentBody=message; pendingMedia=attachment.selected;
+        String parent=replyTarget==null?"":replyTarget.id;
+        if(!message.equals(pendingCommentBody) || !parent.equals(pendingCommentParent) || pendingMedia!=attachment.selected) pendingCommentId=java.util.UUID.randomUUID().toString();
+        pendingCommentBody=message; pendingCommentParent=parent; pendingMedia=attachment.selected;
         posting = true;
         attachment.busy(true);
         composerInput.setEnabled(false);
