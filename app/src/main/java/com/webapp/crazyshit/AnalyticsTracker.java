@@ -117,7 +117,7 @@ final class AnalyticsTracker {
             count("app_version",BuildConfig.VERSION_NAME,1);
             count("device_model",deviceModel(Build.MANUFACTURER,Build.MODEL),1);
             count("android_version",androidVersion(Build.VERSION.RELEASE),1);
-            periodic=NETWORK.scheduleAtFixedRate(() -> summarize(false),15,15,TimeUnit.MINUTES);
+            periodic=NETWORK.scheduleWithFixedDelay(() -> summarize(false),15,15,TimeUnit.MINUTES);
         });
     }
     static void onStopped(Activity activity) {
