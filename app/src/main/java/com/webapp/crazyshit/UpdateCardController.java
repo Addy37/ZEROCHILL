@@ -176,17 +176,17 @@ final class UpdateCardController {
         showCard();
     }
 
-    void showReady(String version, Action install, Action later) {
+    void showReady(String version, Action openDownloads, Action later) {
         ensureAttached();
-        eyebrow.setText("UPDATE READY");
-        title.setText(cleanVersion(version) + " downloaded");
-        body.setText("Ready to install. Android will ask for confirmation.");
+        eyebrow.setText("UPDATE DOWNLOADED");
+        title.setText(cleanVersion(version) + " is ready");
+        body.setText("Open Downloads, then tap the ZEROCHILL APK to update.");
         percent.setText("✓");
         percent.setTextColor(UiPalette.PRIMARY);
         progress.setVisibility(View.VISIBLE);
         progress.setIndeterminate(false);
         progress.setProgress(1000);
-        configureButton(primary, "Install now", install, true);
+        configureButton(primary, "Open Downloads", openDownloads, true);
         configureButton(secondary, "Later", later, false);
         showCard();
     }
