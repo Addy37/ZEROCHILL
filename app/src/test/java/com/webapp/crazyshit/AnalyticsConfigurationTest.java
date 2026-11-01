@@ -16,10 +16,10 @@ import static org.junit.Assume.assumeTrue;
 @Config(application = Application.class, sdk = 35)
 public class AnalyticsConfigurationTest {
     @Test public void missingEndpointDoesNotInitializeOrQueueEvents() throws Exception {
-        assumeTrue(BuildConfig.ANALYTICS_ENDPOINT.trim().isEmpty());
+        assumeTrue(BuildConfig.ANALYTICS_V2_ENDPOINT.trim().isEmpty());
         Field initialized = AnalyticsTracker.class.getDeclaredField("INITIALIZED");
         initialized.setAccessible(true);
-        Field recent = AnalyticsTracker.class.getDeclaredField("RECENT");
+        Field recent = AnalyticsTracker.class.getDeclaredField("COUNTERS");
         recent.setAccessible(true);
         int before = ((Map<?, ?>) recent.get(null)).size();
         AnalyticsTracker.initialize(RuntimeEnvironment.getApplication());

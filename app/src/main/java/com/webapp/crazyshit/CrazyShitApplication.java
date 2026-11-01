@@ -64,6 +64,7 @@ public final class CrazyShitApplication extends Application {
             @Override
             public void onActivityStarted(Activity activity) {
                 RatingFeedbackPrompt.onActivityStarted(activity);
+                AnalyticsTracker.onStarted(activity);
                 AppPerformance.started(activity);
             }
 
@@ -88,6 +89,7 @@ public final class CrazyShitApplication extends Application {
             @Override
             public void onActivityStopped(Activity activity) {
                 RatingFeedbackPrompt.onActivityStopped(activity);
+                AnalyticsTracker.onStopped(activity);
                 AppPerformance.stopped(activity);
             }
 

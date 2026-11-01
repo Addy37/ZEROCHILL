@@ -692,6 +692,7 @@ final class SearchPanel {
     }
 
     private void startScopedSearch(String query) {
+        AnalyticsTracker.event(activity,"search");
         if (query == null || query.trim().length() < 2 || destroyed) return;
         switch (scope) {
             case ONLYFAP: startOnlyFapSearch(query); break;

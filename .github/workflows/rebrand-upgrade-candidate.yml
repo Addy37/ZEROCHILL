@@ -29,6 +29,7 @@ jobs:
       SUPABASE_PUBLISHABLE_KEY: ${{ secrets.FEEDBACK_ANON_KEY }}
       # Signed betas and emulator upgrade checks must not pollute production analytics.
       ANALYTICS_ENDPOINT: ${{ github.head_ref == 'release/zerochill-5.0.0' && 'https://fketutffusxgjxjlckci.supabase.co/functions/v1/analytics-ingest' || '' }}
+      ANALYTICS_V2_ENDPOINT: ""
       SHITTOK_POOL_DIAGNOSTICS: ${{ github.head_ref == 'release/zerochill-5.0.0' && 'false' || 'true' }}
 
     steps:
@@ -321,6 +322,8 @@ jobs:
               if beta_code <= release_code:
                   raise SystemExit("5.1 beta must upgrade the released application")
               code, name = beta_code, beta
+          if "${{ github.head_ref || github.ref_name }}" == "feature/social-media-reactions-analytics-v2":
+              code, name = 5_007_000, "5.7.0-beta.1"
           with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as output:
               output.write(f"APP_VERSION_CODE={code}\n")
               output.write(f"APP_VERSION_NAME={name}\n")
@@ -347,6 +350,8 @@ jobs:
           keystore = pathlib.Path(os.environ["RUNNER_TEMP"]) / "zerochill-upgrade-candidate.jks"
           keystore.write_bytes(base64.b64decode(data["keystore_base64"]))
           keystore.chmod(0o600)
+          if "${{ github.head_ref || github.ref_name }}" == "feature/social-media-reactions-analytics-v2":
+              code, name = 5_007_000, "5.7.0-beta.1"
           with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as output:
               output.write(f"ANDROID_KEYSTORE_PATH={keystore}\n")
               output.write(f"ANDROID_KEYSTORE_PASSWORD={data['store_password']}\n")

@@ -284,8 +284,10 @@ final class ZeroChillAccountRepository {
                 syncCreatorFavoritesBlocking(context, session);
                 ZeroChillNotificationPreferences.load(context, (preferences, failure) -> { });
                 AccountProfileCache.record(context, state);
+                AnalyticsTracker.event(context,"account_signin");
                 callback.complete(state, null);
             } catch (Exception error) {
+                AnalyticsTracker.failure(context,"account_error","auth");
                 callback.complete(null, error);
             }
         });

@@ -45,6 +45,7 @@ final class InlineCommentsDialog extends BottomSheetDialog {
 
     private LinearLayout commentsContainer;
     private EditText composerInput;
+    private SocialMedia.Composer attachment;
     private TextView replyContext;
     private TextView headerTitle;
     private ProgressBar loading;
@@ -58,6 +59,9 @@ final class InlineCommentsDialog extends BottomSheetDialog {
     private boolean closeDispatched;
     private boolean accountLaunched;
     private boolean posting;
+    private String pendingCommentId=java.util.UUID.randomUUID().toString();
+    private String pendingCommentBody="";
+    private SocialMedia.Prepared pendingMedia;
     private boolean focusConsumed;
     private int loadGeneration;
     private final Map<String, View> commentViews = new HashMap<>();
@@ -209,6 +213,8 @@ final class InlineCommentsDialog extends BottomSheetDialog {
         ZeroChillMotion.installPressFeedback(replyContext);
         composer.addView(replyContext, new LinearLayout.LayoutParams(-1, -2));
 
+        attachment = new SocialMedia.Composer(activity);
+        composer.addView(attachment);
         LinearLayout row = new LinearLayout(activity);
         row.setGravity(Gravity.CENTER_VERTICAL);
         composer.addView(row, new LinearLayout.LayoutParams(-1, -2));
@@ -473,6 +479,10 @@ final class InlineCommentsDialog extends BottomSheetDialog {
         }
         copy.setLineSpacing(0f, 1.08f);
         copy.setPadding(0, dp(4), 0, dp(7));
+        if (!comment.attachmentPath.isEmpty() && !comment.deleted()) {
+            body.addView(SocialMedia.inline(activity,comment.attachmentBucket,comment.attachmentPath));
+            if (comment.body.equals("Photo") || comment.body.equals("GIF")) copy.setVisibility(View.GONE);
+        }
         body.addView(copy);
 
         TextView metadata = text(SocialUi.relativeTime(comment.createdAt)
@@ -572,6 +582,7 @@ final class InlineCommentsDialog extends BottomSheetDialog {
         if (posting || comment == null || comment.deleted() || !isOwner(comment)) return;
         replyTarget = null;
         editTarget = comment;
+        attachment.clear(); attachment.setVisibility(View.GONE);
         showComposerMode("Editing your comment  ·  Cancel");
         composerInput.setText(comment.body);
         composerInput.setSelection(composerInput.length());
@@ -579,33 +590,40 @@ final class InlineCommentsDialog extends BottomSheetDialog {
     }
 
     private void cancelReply() {
+        pendingCommentId=java.util.UUID.randomUUID().toString();
         replyTarget = null;
         editTarget = null;
+        attachment.clear(); attachment.setVisibility(View.VISIBLE);
         showComposerMode("");
         composerInput.setText("");
         updateComposerHint();
     }
 
     private void submit() {
-        if (posting) return;
+        if (posting || attachment.preparing) return;
         if (!ZeroChillAccountRepository.hasStoredSession(activity)) {
             openAccount();
             return;
         }
         String message = clean(composerInput.getText().toString());
-        if (message.isEmpty()) return;
+        if (message.isEmpty() && attachment.selected == null) return;
         final String submittedAccount = ZeroChillSessionStore.currentUserId(activity);
+        if(!message.equals(pendingCommentBody) || pendingMedia!=attachment.selected) pendingCommentId=java.util.UUID.randomUUID().toString();
+        pendingCommentBody=message; pendingMedia=attachment.selected;
         posting = true;
+        attachment.busy(true);
         composerInput.setEnabled(false);
         ZeroChillSocialRepository.Callback<Boolean> completed = (ok, error) ->
                 activity.runOnUiThread(() -> {
                     posting = false;
+                    attachment.busy(false);
                     if (!isShowing() || activity.isDestroyed()) return;
                     composerInput.setEnabled(true);
                     if (!submittedAccount.equals(ZeroChillSessionStore.currentUserId(activity))) { loadComments(); return; }
                     if (error != null) {
                         ZeroChillToast.makeText(activity, error.getMessage(), ZeroChillToast.LENGTH_LONG).show();
                     } else {
+                        pendingCommentId=java.util.UUID.randomUUID().toString();
                         cancelReply();
                         loadComments();
                     }
@@ -624,6 +642,8 @@ final class InlineCommentsDialog extends BottomSheetDialog {
                     pageTitle,
                     replyTarget == null ? "" : replyTarget.id,
                     message,
+                    attachment.selected,
+                    pendingCommentId,
                     completed
             );
         }

@@ -17,6 +17,7 @@ jobs:
     timeout-minutes: 40
     env:
       ANALYTICS_ENDPOINT: ""
+      ANALYTICS_V2_ENDPOINT: ""
       BASE_SHA: 3f1b919e8c915c83b21017c456a5287274730bf1
       CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:

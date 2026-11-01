@@ -66,7 +66,7 @@ public class ZeroChillMessageThreadUiTest {
         ImageView avatar = (ImageView) row.getChildAt(0);
         LinearLayout bubble = (LinearLayout) ((LinearLayout) row.getChildAt(1)).getChildAt(0);
         TextView body = (TextView) bubble.getChildAt(0);
-        TextView time = (TextView) bubble.getChildAt(1);
+        TextView time = (TextView) field(holder,"time");
         adapter.bindViewHolder(holder, 0);
         assertEquals(Gravity.LEFT, row.getGravity() & Gravity.HORIZONTAL_GRAVITY_MASK);
         assertEquals(View.INVISIBLE, avatar.getVisibility());

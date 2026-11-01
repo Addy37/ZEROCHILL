@@ -289,6 +289,7 @@ final class AppUpdater {
     }
 
     private void showUpdateCard(ReleaseInfo release, String current) {
+        AnalyticsTracker.event(activity,"update_prompt");
         String summary = release.summary == null ? "" : release.summary.trim();
         if (summary.isEmpty()) {
             String channel = release.beta ? "beta" : "stable";

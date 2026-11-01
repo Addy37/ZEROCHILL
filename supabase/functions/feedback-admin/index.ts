@@ -466,6 +466,12 @@ Deno.serve(async (request) => {
       return response({ deleted: true, id });
     }
 
+    if (action === "analytics_v2" || action === "active_counts_v2") {
+      const {data,error}=await db.rpc("analytics_v2_dashboard");
+      if(error) throw error;
+      return response({analytics:data ?? {}});
+    }
+
     if (action === "active_counts") {
       const periods = utcPeriodStarts();
       const [daily, weekly, monthly] = await Promise.all([

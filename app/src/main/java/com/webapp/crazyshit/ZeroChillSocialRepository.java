@@ -39,6 +39,8 @@ final class ZeroChillSocialRepository {
         final String parentId;
         final String userId;
         final String body;
+        final String attachmentBucket;
+        final String attachmentPath;
         final String createdAt;
         final String editedAt;
         final String deletedAt;
@@ -53,6 +55,8 @@ final class ZeroChillSocialRepository {
             parentId = value.optString("parent_id");
             userId = value.optString("user_id");
             body = value.optString("body");
+            attachmentBucket = value.optString("attachment_bucket", "");
+            attachmentPath = value.optString("attachment_path", "");
             createdAt = value.optString("created_at");
             editedAt = value.isNull("edited_at") ? "" : value.optString("edited_at");
             deletedAt = value.isNull("deleted_at") ? "" : value.optString("deleted_at");
@@ -65,6 +69,7 @@ final class ZeroChillSocialRepository {
 
         private Comment(Comment source, boolean liked) {
             id = source.id; parentId = source.parentId; userId = source.userId;
+            attachmentBucket = source.attachmentBucket; attachmentPath = source.attachmentPath;
             body = source.body; createdAt = source.createdAt; editedAt = source.editedAt;
             deletedAt = source.deletedAt; username = source.username;
             displayName = source.displayName; avatarPath = source.avatarPath;
@@ -132,6 +137,8 @@ final class ZeroChillSocialRepository {
         final String senderId;
         final String recipientId;
         final String body;
+        final String attachmentBucket;
+        final String attachmentPath;
         final String createdAt;
         final String readAt;
         final boolean pending;
@@ -141,6 +148,8 @@ final class ZeroChillSocialRepository {
             senderId = value.optString("sender_id");
             recipientId = value.optString("recipient_id");
             body = value.optString("body");
+            attachmentBucket = value.optString("attachment_bucket", "");
+            attachmentPath = value.optString("attachment_path", "");
             createdAt = value.optString("created_at");
             readAt = value.isNull("read_at") ? "" : value.optString("read_at");
             pending = false;
@@ -151,6 +160,7 @@ final class ZeroChillSocialRepository {
             senderId = ""; // Local outgoing row; the server supplies auth.uid().
             recipientId = recipient;
             body = message;
+            attachmentBucket = ""; attachmentPath = "";
             createdAt = java.time.Instant.now().toString();
             readAt = "";
             pending = true;
@@ -259,7 +269,7 @@ final class ZeroChillSocialRepository {
                 if (key.isEmpty()) throw new IllegalArgumentException("This video does not have a stable page URL.");
                 Response response = request(
                         "GET",
-                        "/rest/v1/comment_feed?select=id,parent_id,user_id,body,created_at,edited_at,deleted_at,username,display_name,avatar_path,like_count"
+                        "/rest/v1/comment_feed?select=id,parent_id,user_id,body,created_at,edited_at,deleted_at,username,display_name,avatar_path,like_count,attachment_bucket,attachment_path"
                                 + "&content_key=eq." + encode(key) + "&order=created_at.asc",
                         "",
                         null,
@@ -318,21 +328,31 @@ final class ZeroChillSocialRepository {
             String body,
             Callback<Boolean> callback
     ) {
+        postComment(context,pageUrl,title,parentId,body,null,java.util.UUID.randomUUID().toString(),callback);
+    }
+
+    static void postComment(Context context, String pageUrl, String title, String parentId,
+            String body, SocialMedia.Prepared media, String clientId, Callback<Boolean> callback) {
+        final String owner = ZeroChillSessionStore.currentUserId(context);
         NETWORK.execute(() -> {
             try {
                 String message = clean(body);
+                if (message.isEmpty() && media != null) message = media.fallback();
                 if (message.isEmpty() || message.length() > 2000) {
                     throw new IllegalArgumentException("Comment must contain 1 to 2000 characters.");
                 }
                 String token = ZeroChillAccountRepository.accessTokenBlocking(context);
                 String key = contentKey(pageUrl);
                 JSONObject row = new JSONObject()
+                        .put("id", clientId)
                         .put("content_key", key)
                         .put("canonical_url", canonicalUrl(pageUrl))
                         .put("video_title", clean(title))
                         .put("body", message);
                 if (!clean(parentId).isEmpty()) row.put("parent_id", parentId);
 
+                requireSameAccount(context, owner);
+                attach(context, row, media, token, owner);
                 Response response = request(
                         "POST",
                         "/rest/v1/comments",
@@ -341,7 +361,12 @@ final class ZeroChillSocialRepository {
                         "application/json",
                         "return=minimal"
                 );
+                if(response.status==409) {
+                    Response existing=request("GET","/rest/v1/comments?select=id&id=eq."+encode(clientId)+"&user_id=eq."+encode(owner),token,null,null,null);
+                    if(existing.ok() && new JSONArray(existing.body).length()==1) {callback.complete(true,null);return;}
+                }
                 if (!response.ok()) throw error(response, "Unable to post the comment.");
+                AnalyticsTracker.event(context,"comments");
                 callback.complete(true, null);
             } catch (Exception error) {
                 callback.complete(false, error);
@@ -451,6 +476,7 @@ final class ZeroChillSocialRepository {
                     );
                 }
                 if (!response.ok()) throw error(response, "Unable to update the like.");
+                if(!currentlyLiked) AnalyticsTracker.event(context,"likes");
                 callback.complete(!currentlyLiked, null);
             } catch (Exception error) {
                 callback.complete(currentlyLiked, error);
@@ -716,7 +742,7 @@ final class ZeroChillSocialRepository {
                 String userId = expectedUser;
                 Response response = request(
                         "GET",
-                        "/rest/v1/rpc/visible_zerochill_direct_messages?select=id,sender_id,recipient_id,body,created_at,read_at"
+                        "/rest/v1/rpc/visible_zerochill_direct_messages?select=id,sender_id,recipient_id,body,created_at,read_at,attachment_bucket,attachment_path"
                                 + "&or=(sender_id.eq." + userId + ",recipient_id.eq." + userId + ")"
                                 + "&order=created_at.desc&limit=500",
                         token,
@@ -814,7 +840,7 @@ final class ZeroChillSocialRepository {
                 requireSameAccount(context, expectedUser);
                 Response response = request(
                         "GET",
-                        "/rest/v1/rpc/visible_zerochill_direct_messages?select=id,sender_id,recipient_id,body,created_at,read_at"
+                        "/rest/v1/rpc/visible_zerochill_direct_messages?select=id,sender_id,recipient_id,body,created_at,read_at,attachment_bucket,attachment_path"
                                 + "&or=(and(sender_id.eq." + userId + ",recipient_id.eq." + other + "),"
                                 + "and(sender_id.eq." + other + ",recipient_id.eq." + userId + "))"
                                 + "&order=created_at.asc&limit=500",
@@ -845,11 +871,17 @@ final class ZeroChillSocialRepository {
             String body,
             Callback<DirectMessage> callback
     ) {
+        sendDirectMessage(context,recipientId,clientId,body,null,callback);
+    }
+
+    static void sendDirectMessage(Context context, String recipientId, String clientId, String body,
+            SocialMedia.Prepared media, Callback<DirectMessage> callback) {
         final String expectedUser = ZeroChillSessionStore.currentUserId(context);
         NETWORK.execute(() -> {
             try {
                 String recipient = clean(recipientId);
                 String message = body == null ? "" : body;
+                if (message.trim().isEmpty() && media != null) message = media.fallback();
                 if (recipient.isEmpty()) throw new IllegalArgumentException("This user is unavailable.");
                 if (message.trim().isEmpty() || message.length() > 2000) {
                     throw new IllegalArgumentException("Message must contain 1 to 2000 characters.");
@@ -858,6 +890,7 @@ final class ZeroChillSocialRepository {
                 String token = ZeroChillAccountRepository.accessTokenBlocking(context);
                 requireSameAccount(context, expectedUser);
                 JSONObject row = directMessagePayload(clientId, recipient, message);
+                attach(context,row,media,token,expectedUser);
                 Response response = request(
                         "POST",
                         "/rest/v1/direct_messages",
@@ -866,12 +899,19 @@ final class ZeroChillSocialRepository {
                         "application/json",
                         "return=representation"
                 );
+                boolean reconciled=false;
+                if(response.status==409) {
+                    Response existing=request("GET","/rest/v1/direct_messages?select=*&id=eq."+encode(clientId)
+                            +"&sender_id=eq."+encode(expectedUser)+"&recipient_id=eq."+encode(recipient),token,null,null,null);
+                    if(existing.ok() && new JSONArray(existing.body).length()==1) {response=existing;reconciled=true;}
+                }
                 if (!response.ok()) {
                     if (response.status == 401 || response.status == 403) {
                         throw new IllegalStateException("You can't message this user.");
                     }
                     throw error(response, "Unable to send the message.");
                 }
+                if(!reconciled) AnalyticsTracker.event(context,"dms");
                 JSONArray rows = response.body.isEmpty() ? new JSONArray() : new JSONArray(response.body);
                 requireSameAccount(context, expectedUser);
                 callback.complete(
@@ -881,6 +921,69 @@ final class ZeroChillSocialRepository {
             } catch (Exception error) {
                 callback.complete(null, error);
             }
+        });
+    }
+
+    private static void attach(Context context, JSONObject row, SocialMedia.Prepared media,
+            String token, String owner) throws Exception {
+        if (media == null) return;
+        String id = row.optString("id");
+        if (id.isEmpty()) { id = java.util.UUID.randomUUID().toString(); row.put("id",id); }
+        String path = owner + "/" + id;
+        requireSameAccount(context, owner);
+        cleanupMediaDebt(context,token,owner);
+        android.content.SharedPreferences debt=context.getSharedPreferences("social_media_debt_"+owner,Context.MODE_PRIVATE);
+        debt.edit().putLong(media.bucket()+"/"+path,System.currentTimeMillis()).apply();
+        Response upload = request("POST", "/functions/v1/social-media-upload?id="+id,
+                token,media.bytes,media.mime,null);
+        if (!upload.ok() && upload.status != 409) throw error(upload,"Upload failed. Your draft is saved; try again.");
+        row.put("attachment_bucket",media.bucket()).put("attachment_path",path);
+        requireSameAccount(context, owner);
+    }
+
+    private static void cleanupMediaDebt(Context context,String token,String owner) {
+        android.content.SharedPreferences debt=context.getSharedPreferences("social_media_debt_"+owner,Context.MODE_PRIVATE);
+        int attempted=0;
+        for(Map.Entry<String,?> entry:debt.getAll().entrySet()) {
+            if(attempted>=10 || !(entry.getValue() instanceof Long)
+                    || System.currentTimeMillis()-(Long)entry.getValue()<24*60*60*1000L) continue;
+            attempted++;
+            try {
+                requireSameAccount(context,owner);
+                String[] parts=entry.getKey().split("/",2);
+                Response removed=request("DELETE","/storage/v1/object/"+parts[0],token,
+                        new JSONObject().put("prefixes",new JSONArray().put(parts[1])).toString().getBytes(StandardCharsets.UTF_8),"application/json",null);
+                if(removed.ok()) debt.edit().remove(entry.getKey()).apply();
+            } catch(Exception ignored) { }
+        }
+    }
+
+    static void loadReactions(Context context, String partner, Callback<JSONArray> callback) {
+        final String owner=ZeroChillSessionStore.currentUserId(context);
+        NETWORK.execute(() -> {
+            try {
+                String token=ZeroChillAccountRepository.accessTokenBlocking(context);
+                requireSameAccount(context,owner);
+                Response response=request("POST","/rest/v1/rpc/zerochill_dm_reactions",token,
+                        new JSONObject().put("partner",partner).toString().getBytes(StandardCharsets.UTF_8),"application/json",null);
+                if(!response.ok()) throw error(response,"Unable to load reactions.");
+                requireSameAccount(context,owner);
+                callback.complete(new JSONArray(response.body),null);
+            } catch(Exception e) { callback.complete(null,e); }
+        });
+    }
+
+    static void react(Context context, String messageId, String emoji, Callback<Boolean> callback) {
+        final String owner=ZeroChillSessionStore.currentUserId(context);
+        NETWORK.execute(() -> {
+            try {
+                String token=ZeroChillAccountRepository.accessTokenBlocking(context);
+                requireSameAccount(context,owner);
+                Response response=request("POST","/rest/v1/rpc/toggle_zerochill_dm_reaction",token,
+                        new JSONObject().put("message",messageId).put("reaction",emoji).toString().getBytes(StandardCharsets.UTF_8),"application/json",null);
+                if(!response.ok()) throw error(response,"Unable to update reaction.");
+                requireSameAccount(context,owner); callback.complete(true,null);
+            } catch(Exception e) { callback.complete(false,e); }
         });
     }
 
@@ -1224,6 +1327,7 @@ final class ZeroChillSocialRepository {
                     );
                 }
                 if (!response.ok()) throw error(response, "Unable to update the video like.");
+                if(!currentlyLiked) AnalyticsTracker.event(context,"likes");
                 if (!currentlyLiked) ShitTokSeenStore.get(context).heart(pageUrl, null);
                 if (metadata != null && userId.equals(ZeroChillSessionStore.currentUserId(context)))
                     SocialContentContextStore.remember(context, metadata);
@@ -1330,9 +1434,13 @@ final class ZeroChillSocialRepository {
                 }
             }
             int status = connection.getResponseCode();
+            if(status>=400 && status!=409 && !path.contains("reaction")) AnalyticsTracker.backendFailure(status);
             InputStream stream = status >= 200 && status < 300
                     ? connection.getInputStream() : connection.getErrorStream();
             return new Response(status, read(stream));
+        } catch(java.io.IOException error) {
+            if(!path.contains("reaction")) AnalyticsTracker.backendFailure(0);
+            throw error;
         } finally {
             if (connection != null) connection.disconnect();
         }

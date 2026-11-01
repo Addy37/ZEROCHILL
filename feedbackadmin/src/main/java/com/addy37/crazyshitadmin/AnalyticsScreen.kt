@@ -39,30 +39,37 @@ import androidx.compose.ui.unit.sp
                 Eyebrow("ACTIVE INSTALLS")
                 Metric(counts?.dailyUsers ?: a.dailyUsers,"Today",large=true)
                 Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(24.dp)) {
-                    Metric(counts?.weeklyUsers ?: a.weeklyUsers,"7 days",modifier=Modifier.weight(1f));Metric(counts?.monthlyUsers ?: a.monthlyUsers,"30 days",modifier=Modifier.weight(1f))
+                    Metric(counts?.weeklyUsers ?: a.weeklyUsers,"This week",modifier=Modifier.weight(1f));Metric(counts?.monthlyUsers ?: a.monthlyUsers,"This month",modifier=Modifier.weight(1f))
                 }
                 val generated = counts?.generatedAt?.takeIf { it.isNotEmpty() } ?: a.generatedAt
-                Text("Live counters · ${dateLabel(generated)}",color=Muted,fontSize=12.sp)
+                Text("Eastern Time · ${easternLabel(generated)}",color=Muted,fontSize=12.sp)
             } }
-            item {RankingSection("Creator rankings","Gallery interest · weekly users & opens",a.creators,expandedInitially=true,creator=true)}
-            item {BoxWithConstraints {
-                if(maxWidth>620.dp) Row(horizontalArrangement=Arrangement.spacedBy(18.dp)) {
-                    Column(Modifier.weight(1f)) {RankingSection("Section usage","Weekly users & opens",a.sections,true)}
-                    Column(Modifier.weight(1f)) {RankingSection("Source interest","Weekly users & opens",a.sources,true)}
-                } else Column(verticalArrangement=Arrangement.spacedBy(22.dp)) {
-                    RankingSection("Section usage","Weekly users & opens",a.sections,true)
-                    RankingSection("Source interest","Weekly users & opens",a.sources,true)
-                }
-            } }
-            item {RankingSection("App versions","Release adoption · weekly active installs",a.versions,false,adoption=true)}
-            item {RankingSection("Device models","Physical devices · weekly activity",a.deviceModels.filter {realDevice(it.value)},false,device=true)}
-            item {RankingSection("Manufacturers","Weekly active installs",a.deviceManufacturers,false,device=true)}
-            item {RankingSection("Android versions","Weekly active installs",a.androidVersions,false,device=true)}
+            item {RankingSection("Section usage","This Eastern calendar week · activity totals",a.sections,true)}
+            item {RankingSection("App versions","Foreground sessions by version",a.versions,true)}
+            item {RankingSection("Phone models","This Eastern calendar week · sessions",a.deviceModels,false,device=true)}
+            item {RankingSection("Android versions","This Eastern calendar week · sessions",a.androidVersions,false,device=true)}
+            listOf(
+                "provider_failure" to "Provider failures", "provider_missing" to "Unavailable providers",
+                "playback_failure" to "Playback failures", "buffering" to "Buffering problems",
+                "search" to "Search usage", "favorites" to "Favorites usage", "creator_gallery" to "Creator / gallery usage",
+                "update_prompt" to "Update prompts", "update_adoption" to "Update adoption",
+                "account_signin" to "Account sign-ins", "account_error" to "Account errors",
+                "comments" to "Comments", "likes" to "Likes", "dms" to "Direct messages",
+                "backend_error" to "Backend errors"
+            ).forEach { (metric,title) ->
+                item {RankingSection(title,"This Eastern calendar week · totals",
+                    a.metrics.filter {it.value.startsWith("$metric / ")},false)}
+            }
+            item {ConsolePanel(Modifier.fillMaxWidth()) {
+                Text("Session averages",style=MaterialTheme.typography.titleLarge)
+                Text("${String.format("%.1f",a.averageSessionSeconds)} seconds per session",color=Cyan)
+                Text("${String.format("%.1f",a.averageShittokVideos)} ShitTok videos per session",color=Cyan)
+            }}
             val daily = counts?.dailyUsers ?: a.dailyUsers
             val weekly = counts?.weeklyUsers ?: a.weeklyUsers
             val monthly = counts?.monthlyUsers ?: a.monthlyUsers
             if(monthly==0L && weekly==0L && daily==0L) item {EmptyPanel("Waiting for activity","Metrics fill in as analytics-enabled apps report activity.",Icons.Outlined.Insights)}
-            item {Text("Bars compare weekly users within each group. Counts can overlap across sections, sources, and creators.",color=Muted,fontSize=13.sp)}
+            item {Text("Analytics v2 · America/New_York. Counts are aggregates; no individual activity profiles.",color=Muted,fontSize=13.sp)}
         }
     }
 }
@@ -79,22 +86,22 @@ import androidx.compose.ui.unit.sp
             Column(verticalArrangement=Arrangement.spacedBy(19.dp)) {
                 if(rows.isEmpty()) Text("No activity reported yet.",color=Muted)
                 if(adoption && rows.isNotEmpty()) AdoptionRing(rows)
-                val max = rows.maxOfOrNull {it.uniqueUsers}?.coerceAtLeast(1) ?: 1
+                val max = rows.maxOfOrNull {it.eventCount}?.coerceAtLeast(1) ?: 1
                 rows.take(if(all) rows.size else if(creator) 5 else 4).forEachIndexed {index,row ->
                     var entered by remember {mutableStateOf(false)}
                     LaunchedEffect(Unit) { entered=true }
-                    val progress by animateFloatAsState(if(entered) (row.uniqueUsers.toFloat()/max).coerceIn(0f,1f) else 0f,tween(300),label="ranking")
+                    val progress by animateFloatAsState(if(entered) (row.eventCount.toFloat()/max).coerceIn(0f,1f) else 0f,tween(300),label="ranking")
                     Column(verticalArrangement=Arrangement.spacedBy(7.dp)) {
                         Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(10.dp)) {
                             if(creator) Text(String.format("%02d",index+1),color=if(index==0) Cyan else Muted,fontSize=13.sp)
-                            Text(if(device) deviceName(row.value) else if(creator) row.value else friendly(row.value),Modifier.weight(1f),fontWeight=FontWeight.Medium)
-                            Text(number(row.uniqueUsers),color=Cyan,fontWeight=FontWeight.Bold)
+                            Text(if(device) deviceName(row.value) else if(creator) row.value else if(row.value.contains(" / ")) friendly(row.value.substringAfter(" / ").let {if(it=="all") "Total" else it}) else friendly(row.value),Modifier.weight(1f),fontWeight=FontWeight.Medium)
+                            Text(number(row.eventCount),color=Cyan,fontWeight=FontWeight.Bold)
                         }
-                        Canvas(Modifier.fillMaxWidth().height(5.dp).semantics {contentDescription="${row.value}: ${row.uniqueUsers} weekly users"}) {
+                        Canvas(Modifier.fillMaxWidth().height(5.dp).semantics {contentDescription="${row.value}: ${row.eventCount} events"}) {
                             drawLine(Panel,Offset(0f,size.height/2),Offset(size.width,size.height/2),size.height,StrokeCap.Round)
                             if(progress>0f) drawLine(if(index==0) Cyan else Cyan.copy(alpha=.55f),Offset(0f,size.height/2),Offset(size.width*progress,size.height/2),size.height,StrokeCap.Round)
                         }
-                        Text(if(device) "${number(row.usersToday)} today · ${number(row.eventCount)} events" else "${number(row.eventCount)} opens",color=Muted,fontSize=12.sp)
+                        Text(if(device) "${number(row.eventCount)} sessions" else "${number(row.eventCount)} total",color=Muted,fontSize=12.sp)
                     }
                 }
                 if(rows.size>(if(creator) 5 else 4)) TextButton(onClick={all=!all}) {Text(if(all) "Show less" else "Show all ${rows.size}")}
@@ -104,8 +111,8 @@ import androidx.compose.ui.unit.sp
     }
 }
 @Composable private fun AdoptionRing(rows: List<AdminRepository.AnalyticsRow>) {
-    val total = rows.sumOf {it.uniqueUsers}.coerceAtLeast(1)
-    val top = rows.maxByOrNull {it.uniqueUsers} ?: return
+    val total = rows.sumOf {it.eventCount}.coerceAtLeast(1)
+    val top = rows.maxByOrNull {it.eventCount} ?: return
     val fraction = top.uniqueUsers.toFloat()/total
     Row(Modifier.fillMaxWidth().clip(ConsoleShape).background(Panel).padding(18.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(22.dp)) {
         Canvas(Modifier.size(70.dp).semantics {contentDescription="${(fraction*100).toInt()} percent of reported version counts use ${top.value}"}) {
@@ -119,3 +126,8 @@ import androidx.compose.ui.unit.sp
         }
     }
 }
+
+internal fun easternLabel(raw:String):String = try {
+    java.time.format.DateTimeFormatter.ofPattern("MMM d, h:mm a z")
+        .withZone(java.time.ZoneId.of("America/New_York")).format(java.time.Instant.parse(raw))
+} catch(_:Exception) { "" }

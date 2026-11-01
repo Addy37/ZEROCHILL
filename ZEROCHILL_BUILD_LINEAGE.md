@@ -2,6 +2,16 @@
 
 This file identifies the current approved ZEROCHILL product baseline for test APKs and future feature work.
 
+## Social media, DM reactions and analytics v2 candidate
+
+`feature/social-media-reactions-analytics-v2` starts from GitHub main verified at
+`4454d965ea3285800b98592d2dcca15c071fa304`, released ZEROCHILL 5.6.2. This supersedes
+historical rebrand and unmerged-candidate baseline instructions below. The next
+physical candidate is 5.7.0-beta.1, using the existing branch/SHA-named signed Beta
+workflow. No merge, stable release or legacy analytics cutoff is authorized.
+See `docs/SOCIAL_MEDIA_ANALYTICS_V2.md` and `docs/ANALYTICS_V2_CUTOFF.md` for additive
+backend rollout, compatibility, privacy, validation and later cutoff procedures.
+
 ## Supabase invocation optimization candidate
 
 `feature/supabase-invocation-batching` starts from fetched main

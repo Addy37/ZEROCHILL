@@ -4074,6 +4074,8 @@ public final class ChaosFeedView extends FrameLayout {
                     });
                 }
 
+                private boolean analyticsViewed;
+                private long analyticsBufferStart;
                 @Override
                 public void onRenderedFirstFrame() {
                     if (listenerGeneration != feedGeneration || !validUiCallback(createdPlayer, listenerUrl, listenerToken)) return;
@@ -4092,7 +4094,10 @@ public final class ChaosFeedView extends FrameLayout {
                     postOwnerUi(createdPlayer, listenerUrl, listenerToken, () -> {
                         if (createdPlayer.getPlaybackState() != state) return;
                         syncLoading();
+                        if(boundPosition==selectedPosition && state==Player.STATE_BUFFERING && analyticsBufferStart==0) analyticsBufferStart=android.os.SystemClock.elapsedRealtime();
                         if (state == Player.STATE_READY) {
+                            if(analyticsBufferStart!=0 && android.os.SystemClock.elapsedRealtime()-analyticsBufferStart>=2000) AnalyticsTracker.event(activity,"buffering");
+                            analyticsBufferStart=0;
                             RatingFeedbackPrompt.recordSuccessfulPlayback(activity, nextStream.mediaUrl);
                             failurePending = false;
                             root.removeCallbacks(skipFailedClipRunnable);
@@ -4130,6 +4135,7 @@ public final class ChaosFeedView extends FrameLayout {
                         return;
                     }
                     if (isPlaying) {
+                        if(!analyticsViewed && boundPosition==selectedPosition) {analyticsViewed=true; AnalyticsTracker.event(activity,"shittok_videos");}
                         playbackSuspended = false;
                         userPaused = false;
                         everStarted = true;
@@ -4158,6 +4164,7 @@ public final class ChaosFeedView extends FrameLayout {
                         syncLoading();
                         userPaused = false;
                         hidePausedChrome();
+                        if(boundPosition==selectedPosition) AnalyticsTracker.failure(activity,"playback_failure",AnalyticsV2Policy.playbackCategory(error.errorCode));
                         lastPlaybackError = error;
                         lastFailureStage = "Player error";
                         if (!retryAttempted) {
