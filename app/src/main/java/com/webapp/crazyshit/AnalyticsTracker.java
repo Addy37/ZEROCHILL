@@ -196,11 +196,16 @@ final class AnalyticsTracker {
         return null;
     }
 
-    private static void trackPrimaryPage(Context context, int position) {
-        if (position == MainPagerAdapter.PAGE_SERIES) trackSection(context, "collections");
-        else if (position == MainPagerAdapter.PAGE_CHAOS) trackSection(context, "chaos");
-        else if (position == MainPagerAdapter.PAGE_LIBRARY) trackSection(context, "library");
-        else trackSection(context, "home");
+    private static void trackPrimaryPage(Context context, int pagerPosition) {
+        trackSection(context,primarySection(pagerPosition));
+    }
+
+    static String primarySection(int pagerPosition) {
+        int page=MainPagerAdapter.pageForPagerPosition(pagerPosition);
+        if(page==MainPagerAdapter.PAGE_SERIES) return "shows";
+        if(page==MainPagerAdapter.PAGE_CHAOS) return "shittok";
+        if(page==MainPagerAdapter.PAGE_ONLYFAP) return "onlyfap";
+        return "library";
     }
 
     private static void trackNativeBrowser(Activity activity) {
