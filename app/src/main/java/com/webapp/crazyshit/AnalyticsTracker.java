@@ -112,7 +112,12 @@ final class AnalyticsTracker {
             count("sessions","all",1);
             android.content.SharedPreferences adoption=application.getSharedPreferences("analytics_v2_adoption",Context.MODE_PRIVATE);
             String previous=adoption.getString("version","");
-            if(!previous.isEmpty() && !previous.equals(BuildConfig.VERSION_NAME)) count("update_adoption",BuildConfig.VERSION_NAME,1);
+            long firstInstall=0,lastUpdate=0;
+            try {
+                android.content.pm.PackageInfo info=application.getPackageManager().getPackageInfo(application.getPackageName(),0);
+                firstInstall=info.firstInstallTime; lastUpdate=info.lastUpdateTime;
+            } catch(Exception ignored) { }
+            if(AnalyticsV2Policy.adoptedUpdate(previous,BuildConfig.VERSION_NAME,firstInstall,lastUpdate)) count("update_adoption",BuildConfig.VERSION_NAME,1);
             adoption.edit().putString("version",BuildConfig.VERSION_NAME).apply();
             count("app_version",BuildConfig.VERSION_NAME,1);
             count("device_model",deviceModel(Build.MANUFACTURER,Build.MODEL),1);

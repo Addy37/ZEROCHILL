@@ -20,6 +20,9 @@ final class AnalyticsV2Policy {
             default: return false;
         }
     }
+    static boolean adoptedUpdate(String previous,String current,long firstInstall,long lastUpdate) {
+        return previous.isEmpty() ? firstInstall>0 && lastUpdate>firstInstall : !previous.equals(current);
+    }
     static String playbackCategory(int code) {
         if(code>=2000 && code<3000) return "network";
         if(code>=3000 && code<4000) return "source";

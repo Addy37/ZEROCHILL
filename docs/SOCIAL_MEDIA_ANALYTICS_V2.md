@@ -104,8 +104,8 @@ state transition. Provider missing/failure counters are emitted on stream resolu
 provider labels are finite and normal provider popularity is not collected. Search
 counts are submitted search actions, creator/gallery and favorites counts are entries,
 social counts are successful writes, and update adoption is a locally observed
-version transition after the first v2 version record. The first upgrade from a legacy
-client has no v2 predecessor record and is reflected by version adoption instead.
+version transition. On the first v2 report, package first-install/update times distinguish
+an existing upgraded installation from a fresh install; no installation identifier is sent.
 
 Only DAU/WAU/MAU store anonymous unique keys. Each day/week/month has an independent
 random local seed, replaced when that Eastern calendar period changes. SHA-256 keys
