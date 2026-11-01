@@ -18,12 +18,11 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 /** Owns one validated source-config snapshot and refreshes it away from the startup/UI thread. */
 final class RemoteSourceConfigManager {
-    static final long REFRESH_INTERVAL_MS = 45L * 60L * 1_000L;
+    static final long REFRESH_INTERVAL_MS = 2L * 60L * 60L * 1_000L;
     private static final long RETRY_DELAY_MS = 15_000L;
     private static final int MAX_IMMEDIATE_RETRIES = 3;
     private static final String TAG = "SourceConfig";
@@ -41,7 +40,8 @@ final class RemoteSourceConfigManager {
     });
     private static final AtomicBoolean PERIODIC_REFRESH_SCHEDULED = new AtomicBoolean();
     private static final AtomicBoolean REFRESH_IN_FLIGHT = new AtomicBoolean();
-    private static final AtomicInteger CONSECUTIVE_FAILURES = new AtomicInteger();
+    private static final String AUTO_FAILURES = "auto_refresh_failures";
+    private static final String NEXT_AUTO_ATTEMPT = "next_auto_refresh_attempt";
     private static volatile Context applicationContext;
     private static volatile String activeOrigin = "bundled";
     private static volatile String initializationError = "";
@@ -156,8 +156,7 @@ final class RemoteSourceConfigManager {
     private static void queueRefreshIfDue(Context app) {
         SharedPreferences prefs = prefs(app);
         long now = System.currentTimeMillis();
-        long lastSuccess = prefs.getLong(LAST_REFRESH_SUCCESS, 0L);
-        if (lastSuccess > 0L && now - lastSuccess < REFRESH_INTERVAL_MS) return;
+        if (BuildConfig.SOURCE_CONFIG_ENDPOINT.trim().isEmpty() || !automaticRefreshDue(prefs, now)) return;
         if (!REFRESH_IN_FLIGHT.compareAndSet(false, true)) return;
         REFRESHER.execute(() -> {
             try {
@@ -169,7 +168,19 @@ final class RemoteSourceConfigManager {
         });
     }
 
+    static boolean automaticRefreshDue(SharedPreferences prefs, long now) {
+        long success = prefs.getLong(LAST_REFRESH_SUCCESS, 0L);
+        long next = prefs.getLong(NEXT_AUTO_ATTEMPT, 0L);
+        return (success <= 0L || now < success || now - success >= REFRESH_INTERVAL_MS)
+                && (next <= 0L || now >= next || next - now > REFRESH_INTERVAL_MS);
+    }
+
     private static boolean runRefresh(Context app, boolean force) {
+        return runRefresh(app, force, new HttpFetcher(), BuildConfig.SOURCE_CONFIG_ENDPOINT.trim(),
+                BuildConfig.SOURCE_CONFIG_PUBLISHABLE_KEY.trim());
+    }
+
+    private static boolean runRefresh(Context app, boolean force, Fetcher fetcher, String endpoint, String key) {
         SharedPreferences prefs = prefs(app);
         long now = System.currentTimeMillis();
         if (!force) {
@@ -177,27 +188,29 @@ final class RemoteSourceConfigManager {
             if (lastAttempt > 0L && now - lastAttempt < RETRY_DELAY_MS) return false;
         }
         prefs.edit().putLong(LAST_REFRESH_ATTEMPT, now).apply();
-        boolean success = refresh(app, new HttpFetcher());
+        boolean success = refresh(app, fetcher, endpoint, key);
         if (success) {
-            CONSECUTIVE_FAILURES.set(0);
             prefs.edit()
                     .putLong(LAST_REFRESH_SUCCESS, System.currentTimeMillis())
                     .remove(LAST_REFRESH_ERROR)
+                    .remove(AUTO_FAILURES)
+                    .remove(NEXT_AUTO_ATTEMPT)
                     .apply();
         }
         return success;
     }
 
     private static void scheduleRetry(Context app) {
-        int failures = CONSECUTIVE_FAILURES.incrementAndGet();
-        if (failures > MAX_IMMEDIATE_RETRIES) return;
-        long delay = RETRY_DELAY_MS * failures;
+        long delay = recordAutomaticFailure(prefs(app), System.currentTimeMillis());
+        if (delay == REFRESH_INTERVAL_MS) return;
         REFRESHER.schedule(() -> queueRefreshIfDue(app), delay, TimeUnit.MILLISECONDS);
     }
 
-    private static boolean refresh(Context context, Fetcher fetcher) {
-        return refresh(context, fetcher, BuildConfig.SOURCE_CONFIG_ENDPOINT.trim(),
-                BuildConfig.SOURCE_CONFIG_PUBLISHABLE_KEY.trim());
+    static long recordAutomaticFailure(SharedPreferences prefs, long now) {
+        int failures = Math.min(MAX_IMMEDIATE_RETRIES + 1, prefs.getInt(AUTO_FAILURES, 0) + 1);
+        long delay = failures > MAX_IMMEDIATE_RETRIES ? REFRESH_INTERVAL_MS : RETRY_DELAY_MS * failures;
+        prefs.edit().putInt(AUTO_FAILURES, failures).putLong(NEXT_AUTO_ATTEMPT, now + delay).apply();
+        return delay;
     }
 
     private static boolean refresh(Context context, Fetcher fetcher, String endpoint, String key) {
@@ -324,7 +337,12 @@ final class RemoteSourceConfigManager {
         }
     }
 
-    private static final class HttpFetcher implements Fetcher {
+    interface ConnectionFactory { HttpURLConnection open(URL url) throws IOException; }
+
+    static final class HttpFetcher implements Fetcher {
+        private final ConnectionFactory connections;
+        HttpFetcher() { this(url -> (HttpURLConnection) url.openConnection()); }
+        HttpFetcher(ConnectionFactory connections) { this.connections = connections; }
         @Override public FetchResult fetch(String endpoint, String publishableKey, long currentVersion)
                 throws Exception {
             HttpURLConnection connection = null;
@@ -333,13 +351,17 @@ final class RemoteSourceConfigManager {
                 if (!"https".equalsIgnoreCase(url.getProtocol())) {
                     throw new IOException("Config endpoint must use HTTPS");
                 }
-                connection = (HttpURLConnection) url.openConnection();
+                connection = connections.open(url);
                 connection.setRequestMethod("GET");
                 connection.setConnectTimeout(8_000);
                 connection.setReadTimeout(12_000);
                 connection.setUseCaches(false);
                 connection.setDefaultUseCaches(false);
                 connection.setRequestProperty("Accept", "application/json");
+                if (currentVersion > 0L) {
+                    connection.setRequestProperty("If-None-Match", "\"" + currentVersion + "\"");
+                }
+                if (!publishableKey.isEmpty()) connection.setRequestProperty("apikey", publishableKey);
                 connection.setRequestProperty("Cache-Control", "no-cache, no-store");
                 connection.setRequestProperty("Pragma", "no-cache");
                 int status = connection.getResponseCode();
@@ -365,13 +387,17 @@ final class RemoteSourceConfigManager {
         activeOrigin = "bundled";
         initializationError = "";
         REFRESH_IN_FLIGHT.set(false);
-        CONSECUTIVE_FAILURES.set(0);
     }
 
     static void applyRemoteForTests(Context context, String json) throws Exception {
         initialize(context);
         SourceConfig candidate = SourceConfig.parseAndValidate(json);
         activateValidated(context, candidate);
+    }
+
+    static boolean manualRefreshForTests(Context context, Fetcher fetcher) {
+        initialize(context);
+        return runRefresh(context, true, fetcher, "https://config.example/app-config", "test-publishable-key");
     }
 
     static void refreshForTests(Context context, Fetcher fetcher) {

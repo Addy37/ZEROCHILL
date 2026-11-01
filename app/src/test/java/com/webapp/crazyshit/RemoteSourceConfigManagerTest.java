@@ -287,6 +287,69 @@ public final class RemoteSourceConfigManagerTest {
                 ));
     }
 
+    @Test public void httpFetcherSendsCurrentVersionAndAccepts304() throws Exception {
+        HttpURLConnection connection = new HttpURLConnection(new URL("https://test.invalid")) {
+            public void disconnect() {}
+            public boolean usingProxy() { return false; }
+            public void connect() {}
+            public int getResponseCode() { return 304; }
+            public InputStream getInputStream() { fail("304 must not read a body"); return null; }
+        };
+        RemoteSourceConfigManager.HttpFetcher fetcher = new RemoteSourceConfigManager.HttpFetcher(url -> connection);
+        assertTrue(fetcher.fetch("https://test.invalid/config", "public-key", 11).notModified);
+        assertEquals("\"11\"", connection.getRequestProperty("If-None-Match"));
+        assertEquals("public-key", connection.getRequestProperty("apikey"));
+    }
+
+    @Test public void unchangedAndInvalidResponsesPreserveValidatedSnapshot() throws Exception {
+        RemoteSourceConfigManager.initialize(context);
+        SourceConfig before = RemoteSourceConfigManager.snapshot();
+        RemoteSourceConfigManager.refreshForTests(context, (endpoint, key, version) -> {
+            assertEquals(before.configVersion, version);
+            return new RemoteSourceConfigManager.FetchResult(true, "");
+        });
+        assertTrue(before == RemoteSourceConfigManager.snapshot());
+        RemoteSourceConfigManager.refreshForTests(context, (endpoint, key, version) ->
+                new RemoteSourceConfigManager.FetchResult(false, before.serialized()));
+        assertTrue(before == RemoteSourceConfigManager.snapshot());
+        RemoteSourceConfigManager.refreshForTests(context, (endpoint, key, version) ->
+                new RemoteSourceConfigManager.FetchResult(false, "{}"));
+        assertTrue(before == RemoteSourceConfigManager.snapshot());
+    }
+
+    @Test public void automaticRefreshUsesTwoHoursAndPersistsFailureCooldownAcrossRestart() {
+        android.content.SharedPreferences prefs = context.getSharedPreferences("remote_source_config", Context.MODE_PRIVATE);
+        long now = 100_000_000L;
+        long interval = 2 * 60 * 60_000L;
+        assertEquals(interval, RemoteSourceConfigManager.REFRESH_INTERVAL_MS);
+        prefs.edit().putLong("last_refresh_success", now).commit();
+        assertFalse(RemoteSourceConfigManager.automaticRefreshDue(prefs, now + interval - 1));
+        assertTrue(RemoteSourceConfigManager.automaticRefreshDue(prefs, now + interval));
+        prefs.edit().remove("last_refresh_success").commit();
+        for (int i = 1; i <= 3; i++) {
+            assertEquals(15_000L * i, RemoteSourceConfigManager.recordAutomaticFailure(prefs, now));
+            assertFalse(RemoteSourceConfigManager.automaticRefreshDue(prefs, now + 1));
+            now += 15_000L * i;
+            assertTrue(RemoteSourceConfigManager.automaticRefreshDue(prefs, now));
+        }
+        assertEquals(interval, RemoteSourceConfigManager.recordAutomaticFailure(prefs, now));
+        RemoteSourceConfigManager.resetForTests();
+        assertFalse(RemoteSourceConfigManager.automaticRefreshDue(prefs, now + 60_000));
+        assertTrue(RemoteSourceConfigManager.automaticRefreshDue(prefs, now + interval));
+    }
+
+    @Test public void manualRefreshBypassesAutomaticIntervalAndClearsFailureState() {
+        android.content.SharedPreferences prefs = context.getSharedPreferences("remote_source_config", Context.MODE_PRIVATE);
+        long now = System.currentTimeMillis();
+        prefs.edit().putLong("last_refresh_success", now).commit();
+        RemoteSourceConfigManager.recordAutomaticFailure(prefs, now);
+        assertFalse(RemoteSourceConfigManager.automaticRefreshDue(prefs, now));
+        assertTrue(RemoteSourceConfigManager.manualRefreshForTests(context,
+                (endpoint, key, version) -> new RemoteSourceConfigManager.FetchResult(true, "")));
+        assertEquals(0, prefs.getInt("auto_refresh_failures", 0));
+        assertEquals(0L, prefs.getLong("next_auto_refresh_attempt", 0));
+    }
+
     private void assertRejected(JSONObject value) throws Exception {
         try {
             SourceConfig.parseAndValidate(value.toString());
