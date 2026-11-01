@@ -17,8 +17,9 @@ Android parser and private Admin editor use the same supported source set.
 1. Parse `app/src/main/assets/source_config_defaults.json`.
 2. Replace it with a newer validated local cache when one exists.
 3. Start the normal application flow.
-4. Check the `app-config` Edge Function on a background thread, at most once every 45 minutes while
+4. Check the `app-config` Edge Function on a background thread, at most once every 2 hours while
    the process is running.
+   Requests send the active version as `If-None-Match`; HTTP 304 keeps the validated snapshot.
 5. Activate and cache only a newer config that passes Android validation.
 
 The previous valid snapshot remains in local storage for rollback. A failed refresh never deletes
@@ -104,7 +105,7 @@ No database migration is needed: immutable documents remain JSONB.
 4. Tap **Publish** only after validation succeeds.
 5. Use **History** and **Roll back** to restore an older known-good document as a new version.
 
-The main app normally receives a publish within 45 minutes. Restarting does not force repeated
+The main app normally receives a publish within 2 hours. Restarting does not force repeated
 requests inside the refresh interval.
 
 ## Compatibility and rollback

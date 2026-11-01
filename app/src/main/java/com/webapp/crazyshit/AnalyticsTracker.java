@@ -11,8 +11,8 @@ import android.view.ViewGroup;
 import androidx.viewpager2.widget.ViewPager2;
 
 import org.json.JSONObject;
+import org.json.JSONArray;
 
-import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
@@ -26,7 +26,8 @@ import java.time.temporal.TemporalAdjusters;
 import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutorService;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -36,11 +37,18 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * cross-feature viewing profile for an installation.
  */
 final class AnalyticsTracker {
-    private static final ExecutorService NETWORK = Executors.newSingleThreadExecutor();
+    private static final ScheduledExecutorService NETWORK = Executors.newSingleThreadScheduledExecutor();
+    private static final AnalyticsBatchQueue QUEUE = new AnalyticsBatchQueue((task, delay) -> {
+        java.util.concurrent.ScheduledFuture<?> future = NETWORK.schedule(task, delay, TimeUnit.MILLISECONDS);
+        return () -> future.cancel(false);
+    }, events -> {
+        JSONArray batch = new JSONArray();
+        for (String event : events) batch.put(new JSONObject(event));
+        return post(new JSONObject().put("events", batch));
+    });
     private static final AtomicBoolean INITIALIZED = new AtomicBoolean(false);
     private static final Map<String, Long> RECENT = new ConcurrentHashMap<>();
     private static final long DUPLICATE_WINDOW_MS = 5_000L;
-    private static final int MAX_ATTEMPTS = 3;
 
     private AnalyticsTracker() {
     }
@@ -76,7 +84,12 @@ final class AnalyticsTracker {
     static void trackSource(Context context, String source) {
         if (source == null) return;
         String clean = source.trim().toLowerCase(Locale.US);
-        if (!clean.isEmpty()) track(context, "source", clean);
+        if (supportedSource(clean)) track(context, "source", clean);
+    }
+
+    static boolean supportedSource(String source) {
+        return java.util.Arrays.asList("crazyshit", "efukt", "fapzone", "fapello", "bunkr",
+                "wikifeet", "wikifeetx", "kaotic", "baddiehub", "xmegadrive", "onlyhaven").contains(source);
     }
 
     static void trackCreator(Context context, String creator) {
@@ -169,7 +182,7 @@ final class AnalyticsTracker {
                         .put("day_key", anonymousKey(installation, "day", today, metric, value))
                         .put("week_key", anonymousKey(installation, "week", week, metric, value))
                         .put("month_key", anonymousKey(installation, "month", month, metric, value));
-                postWithRetry(payload);
+                QUEUE.add(payload.toString());
             } catch (Exception ignored) {
                 // Analytics never blocks or changes app behavior.
             }
@@ -196,28 +209,7 @@ final class AnalyticsTracker {
         return result.toString();
     }
 
-    private static void postWithRetry(JSONObject payload) throws Exception {
-        Exception last = null;
-        for (int attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-            try {
-                post(payload);
-                return;
-            } catch (Exception error) {
-                last = error;
-                if (attempt < MAX_ATTEMPTS) {
-                    try {
-                        Thread.sleep(500L * attempt);
-                    } catch (InterruptedException interrupted) {
-                        Thread.currentThread().interrupt();
-                        throw interrupted;
-                    }
-                }
-            }
-        }
-        if (last != null) throw last;
-    }
-
-    private static void post(JSONObject payload) throws Exception {
+    private static int post(JSONObject payload) throws Exception {
         HttpURLConnection connection = null;
         try {
             connection = (HttpURLConnection) new URL(BuildConfig.ANALYTICS_ENDPOINT).openConnection();
@@ -238,10 +230,11 @@ final class AnalyticsTracker {
             if (status < 200 || status >= 300) {
                 InputStream error = connection.getErrorStream();
                 if (error != null) error.close();
-                throw new IOException("Analytics request failed with HTTP " + status);
+                return status;
             }
             InputStream input = connection.getInputStream();
             if (input != null) input.close();
+            return status;
         } finally {
             if (connection != null) connection.disconnect();
         }

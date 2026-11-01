@@ -5,6 +5,13 @@ import static org.junit.Assert.assertEquals;
 import org.junit.Test;
 
 public class AnalyticsDeviceTest {
+    @org.junit.Test public void currentBrowserSourcesAreAcceptedBeforeBatching() {
+        for (String source : java.util.Arrays.asList("crazyshit", "efukt", "kaotic", "baddiehub", "xmegadrive", "bunkr", "onlyhaven")) {
+            org.junit.Assert.assertTrue(source, AnalyticsTracker.supportedSource(source));
+        }
+        org.junit.Assert.assertFalse(AnalyticsTracker.supportedSource("unknown-source"));
+    }
+
     @Test public void combinesAndDeduplicatesManufacturer() {
         assertEquals("OnePlus CPH2655", AnalyticsTracker.deviceModel(" OnePlus ", " CPH2655 "));
         assertEquals("Samsung SM-S938U", AnalyticsTracker.deviceModel("Samsung", "Samsung SM-S938U"));
