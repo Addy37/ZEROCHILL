@@ -1,4 +1,4 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2.58.0";
 
 const encoder = new TextEncoder();
 const allowedStatuses = new Set([
@@ -143,7 +143,7 @@ function reportMatches(item: any, query: string) {
   return haystack.includes(query);
 }
 
-async function listAllUsers(db: ReturnType<typeof createClient>) {
+async function listAllUsers(db: SupabaseClient) {
   const users: any[] = [];
   const perPage = 1000;
   for (let page = 1; page <= 20; page++) {
@@ -156,7 +156,7 @@ async function listAllUsers(db: ReturnType<typeof createClient>) {
   return users;
 }
 
-async function loadProfiles(db: ReturnType<typeof createClient>) {
+async function loadProfiles(db: SupabaseClient) {
   const profiles: any[] = [];
   const pageSize = 1000;
   for (let offset = 0; offset < 20_000; offset += pageSize) {
@@ -180,7 +180,7 @@ function profileMap(profiles: any[]) {
 }
 
 async function activeCount(
-  db: ReturnType<typeof createClient>,
+  db: SupabaseClient,
   periodType: "day" | "week" | "month",
   periodStart: string,
 ) {
@@ -201,7 +201,7 @@ async function exactCount(query: any) {
   return count ?? 0;
 }
 
-async function feedbackById(db: ReturnType<typeof createClient>, id: string) {
+async function feedbackById(db: SupabaseClient, id: string) {
   if (!feedbackIdPattern.test(id)) return null;
   const { data, error } = await db
     .from("app_feedback")
@@ -213,7 +213,7 @@ async function feedbackById(db: ReturnType<typeof createClient>, id: string) {
 }
 
 async function messagesFor(
-  db: ReturnType<typeof createClient>,
+  db: SupabaseClient,
   feedbackIds: string[],
   ascending = true,
 ) {
