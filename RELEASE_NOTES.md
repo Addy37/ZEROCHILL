@@ -1,13 +1,13 @@
-# ZEROCHILL 5.6.1
+# ZEROCHILL 5.6.2
 
-This hotfix focuses on ShitTok reliability, source balance, and personalization behavior after the 5.6.0 release.
+This hotfix changes the updater after Google Play Protect blocked builds that could request APK installation.
 
-- Fixed filtered ShitTok starvation so the feed keeps refilling during longer sessions and after source or gender changes.
-- Added the compact All / OnlyFap ShitTok source selector with the existing ZEROCHILL liquid-glass selected lens.
-- Improved source scheduling so productive providers can keep the runway filled without letting one slow or failing source stall the feed.
-- Restored ShitShow embedded-story extraction and improved handling of repeated, rejected, or unavailable candidates.
-- Changed Smart ShitTok history handling so past seen or liked content no longer blocks otherwise-valid recommendations. Ranking and creator diversity still influence ordering.
-- Added a one-time recommendation-history reset for existing installs so stale ShitTok learning does not carry forward into the corrected ranking behavior.
-- Preserved explicit hides and blocks, category rules, session duplicate protection, favorites, creator favorites, downloads, progress, Library data, accounts, messages, settings, backups, and other saved user data.
+- Removed ZEROCHILL's APK installation permission and all in-app APK installer paths.
+- Kept automatic update checks, update notifications, release notes, snooze behavior, and the native ZEROCHILL update card.
+- Updates now download through Android DownloadManager after you tap Download update.
+- ZEROCHILL still shows native download progress while Android manages the file transfer.
+- When the download finishes, tap Open Downloads, then tap the downloaded ZEROCHILL APK and confirm Android's update prompt.
+- Preserved the existing application ID, signing identity, user data, settings, favorites, history, downloads, backups, accounts, and upgrade compatibility.
+- Includes all ShitTok reliability, source balance, and personalization fixes from 5.6.1.
 
 Install over your existing ZeroChill app without uninstalling.
