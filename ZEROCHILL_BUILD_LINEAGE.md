@@ -2,6 +2,18 @@
 
 This file identifies the current approved ZEROCHILL product baseline for test APKs and future feature work.
 
+## Supabase invocation optimization candidate
+
+`feature/supabase-invocation-batching` starts from fetched main
+`87e3378bd53913863a4282bd522c872d2f84ae60` (released 5.6.1, merged PR #378).
+PR #394 independently names that same released baseline and remains an isolated,
+unmerged Play Protect-safe updater candidate. Older rebrand/5.2.1 instructions
+below are historical. This optimization changes neither updater nor release metadata.
+See `docs/SUPABASE_INVOCATION_OPTIMIZATION.md` for backend deployment, compatibility
+and validation. After approval/merge, integrate the new main baseline into PR #394
+and rebuild/physically validate the combined final 5.6.2 candidate. Do not merge
+or publish either candidate automatically.
+
 ## ShitTok ranking/reset feature candidate
 
 The user selected current main, verified at merged PR #376 commit

@@ -4,7 +4,8 @@ on:
   pull_request:
     paths:
       - 'supabase/migrations/*analytics.sql'
-      - 'supabase/tests/device_analytics.sql'
+      - 'supabase/tests/*analytics*'
+      - 'supabase/functions/analytics-ingest/**'
       - '.github/workflows/device-analytics-sql.yml'
 
 permissions:
@@ -37,7 +38,9 @@ jobs:
         with:
           node-version: '24'
       - name: Validate edge ingestion values
-        run: node supabase/tests/device_validation.mjs
+        run: |
+          node supabase/tests/device_validation.mjs
+          node --test supabase/tests/analytics-handlers.test.mjs
       - name: Create Supabase roles and apply existing migration
         run: |
           psql -v ON_ERROR_STOP=1 -c 'create role anon; create role authenticated; create role service_role;'
@@ -48,3 +51,21 @@ jobs:
           psql -v ON_ERROR_STOP=1 -f supabase/migrations/202609230001_device_analytics.sql
           psql -v ON_ERROR_STOP=1 -f supabase/migrations/202609230002_preserve_version_analytics.sql
           psql -v ON_ERROR_STOP=1 -f supabase/tests/device_analytics.sql
+      - name: Apply batch migration and validate atomic aggregates
+        run: |
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261101021403_batch_analytics.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/tests/batch_analytics.sql
+
+  deployed-backend-smoke:
+    # Bounded validation for this optimization PR only; no credentials or user data.
+    if: github.head_ref == 'feature/supabase-invocation-batching' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Verify deployed old and batch requests plus conditional configuration
+        env:
+          RUN_PRODUCTION_ANALYTICS_SMOKE: '1'
+        run: node supabase/tests/analytics-production-smoke.mjs
