@@ -32,5 +32,6 @@ jobs:
           deno-version: v2.x
       - run: node --test supabase/tests/analytics-v2.test.mjs supabase/tests/analytics-handlers.test.mjs supabase/tests/social-media.test.mjs
       - run: bash supabase/tests/run-social-sql.sh
-      - run: deno check supabase/functions/analytics-ingest-v2/index.ts supabase/functions/account-delete/index.ts supabase/functions/social-media-upload/index.ts
+      - run: deno check supabase/functions/analytics-ingest-v2/index.ts supabase/functions/account-delete/index.ts supabase/functions/social-media-upload/index.ts supabase/functions/feedback-admin/index.ts
       - run: deno test --allow-env supabase/functions/account-delete/handler_test.ts
+      - run: deno test --allow-env --allow-read=app/src/test/resources/social-media supabase/functions/social-media-upload/handler_test.ts

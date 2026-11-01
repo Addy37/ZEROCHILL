@@ -67,6 +67,18 @@ insert into public.comments(id,content_key,canonical_url,body,attachment_bucket,
 ('c20aa450-3550-4a10-9a77-000000000002',repeat('a',64),'https://invalid.example','Photo','social-photos','b20aa450-3550-4a10-9a77-000000000001/c20aa450-3550-4a10-9a77-000000000002');
 insert into public.comments(content_key,canonical_url,body,parent_id) values(repeat('a',64),'https://invalid.example','legacy text','c20aa450-3550-4a10-9a77-000000000002');
 insert into public.direct_messages(recipient_id,body) values('b20aa450-3550-4a10-9a77-000000000003','legacy DM');
+-- Text + photo DM and attachment-only GIF reply exercise both bucket/row combinations.
+select public.reserve_zerochill_media_upload('c20aa450-3550-4a10-9a77-000000000003','social-photos');
+select public.reserve_zerochill_media_upload('c20aa450-3550-4a10-9a77-000000000004','social-gifs');
+reset role;
+insert into storage.objects(bucket_id,name) values
+('social-photos','b20aa450-3550-4a10-9a77-000000000001/c20aa450-3550-4a10-9a77-000000000003'),
+('social-gifs','b20aa450-3550-4a10-9a77-000000000001/c20aa450-3550-4a10-9a77-000000000004');
+set local role authenticated;
+insert into public.direct_messages(id,recipient_id,body,attachment_bucket,attachment_path) values
+('c20aa450-3550-4a10-9a77-000000000003','b20aa450-3550-4a10-9a77-000000000003','caption','social-photos','b20aa450-3550-4a10-9a77-000000000001/c20aa450-3550-4a10-9a77-000000000003');
+insert into public.comments(id,content_key,canonical_url,parent_id,body,attachment_bucket,attachment_path) values
+('c20aa450-3550-4a10-9a77-000000000004',repeat('a',64),'https://invalid.example','c20aa450-3550-4a10-9a77-000000000002','GIF','social-gifs','b20aa450-3550-4a10-9a77-000000000001/c20aa450-3550-4a10-9a77-000000000004');
 select set_config('request.jwt.claim.sub','',true);
 set local role anon;
 do $$ begin if (select count(*) from storage.objects where bucket_id='social-photos')<>1 then raise exception 'Public comment media denied'; end if; end $$;

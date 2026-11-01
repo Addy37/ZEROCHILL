@@ -75,6 +75,17 @@ public class AnalyticsBatchQueueTest {
         AnalyticsBatchQueue queue = new AnalyticsBatchQueue(clock, events -> {calls.add(events); return 400;});
         queue.add("bad"); clock.advance(600_000); assertEquals(1,calls.size());
     }
+    @Test public void lifecycleFlushDoesNotRushRetryAndBacklogKeepsSummaryBatching() {
+        Clock clock = new Clock(); List<List<String>> calls = new ArrayList<>();
+        AnalyticsBatchQueue queue = new AnalyticsBatchQueue(clock, summaries -> {
+            calls.add(summaries); return calls.size()==1 ? 503 : 204;
+        },5,60_000,30);
+        queue.add("session-one"); assertTrue(calls.isEmpty()); queue.flushNow();
+        for(int i=0;i<4;i++) {queue.add("later-session-"+i);queue.flushNow();}
+        assertEquals(1,calls.size()); clock.advance(60_000);
+        assertEquals(calls.get(0),calls.get(1)); clock.advance(60_000);
+        assertEquals(3,calls.size());assertEquals(4,calls.get(2).size());
+    }
     @Test public void emptyQueueNeverInvokesTransport() {
         Clock clock = new Clock();
         new AnalyticsBatchQueue(clock, events -> {fail("empty queue sent a request"); return 204;});

@@ -14,6 +14,8 @@ begin
  perform public.record_analytics_v2(jsonb_set(s,'{events}','[{"metric":"creator","value":"private name","count":1}]'));
  raise exception 'Unapproved metric accepted';
 exception when raise_exception then if sqlerrm='Unapproved metric accepted' then raise; end if; end;
+for i in 1..120 loop if not public.allow_analytics_v2_request(repeat('f',64)) then raise exception 'Rate limit rejected normal budget'; end if; end loop;
+if public.allow_analytics_v2_request(repeat('f',64)) then raise exception 'Rate limit not enforced'; end if;
 end $$;
 reset role;
 do $$ begin
