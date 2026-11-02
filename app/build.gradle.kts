@@ -20,8 +20,8 @@ android {
         applicationId = "com.addy37.crazyshitunofficial"
         minSdk = 26
         targetSdk = 35
-        versionCode = System.getenv("APP_VERSION_CODE")?.toIntOrNull() ?: 5_007_000
-        versionName = System.getenv("APP_VERSION_NAME") ?: "5.7.0-beta.1"
+        versionCode = System.getenv("APP_VERSION_CODE")?.toIntOrNull() ?: 6_000_000
+        versionName = System.getenv("APP_VERSION_NAME") ?: "6.0.0"
         buildConfigField("boolean", "SHITTOK_POOL_DIAGNOSTICS", System.getenv("SHITTOK_POOL_DIAGNOSTICS") ?: "false")
         buildConfigField("String", "SOURCE_REVISION", "\"${System.getenv("ZEROCHILL_SOURCE_SHA") ?: "local"}\"")
         buildConfigField(
