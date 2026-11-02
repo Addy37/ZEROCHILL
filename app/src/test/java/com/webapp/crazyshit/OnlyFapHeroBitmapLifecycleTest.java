@@ -38,13 +38,15 @@ import static org.junit.Assert.*;
 @org.robolectric.annotation.GraphicsMode(org.robolectric.annotation.GraphicsMode.Mode.NATIVE)
 public class OnlyFapHeroBitmapLifecycleTest {
     private Activity activity;
+    private org.robolectric.android.controller.ActivityController<Activity> controller;
     private OnlyFapHubView hub;
     private final java.util.Map<String, DataFetcher.DataCallback<? super InputStream>> pending =
             new java.util.concurrent.ConcurrentHashMap<>();
     private byte[] png;
 
     @Before public void setup() {
-        activity = Robolectric.buildActivity(Activity.class).setup().get();
+        controller = Robolectric.buildActivity(Activity.class).setup();
+        activity = controller.get();
         activity.setTheme(R.style.Theme_CrazyShit);
         Glide.init(activity, new com.bumptech.glide.GlideBuilder()
                 .setMemoryCache(new com.bumptech.glide.load.engine.cache.MemoryCacheAdapter())
@@ -93,6 +95,9 @@ public class OnlyFapHeroBitmapLifecycleTest {
 
     @After public void close() {
         if (hub != null && !(boolean) ReflectionHelpers.getField(hub, "closed")) hub.close();
+        // Expire bounded reveal slots before Robolectric resets the main looper.
+        ShadowLooper.idleMainLooper(400, TimeUnit.MILLISECONDS);
+        controller.pause().stop().destroy();
         Glide.tearDown(); // Do not leak the fake image loader into other tests.
     }
 

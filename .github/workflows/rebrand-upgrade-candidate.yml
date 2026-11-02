@@ -67,6 +67,15 @@ jobs:
           --tests 'com.webapp.crazyshit.OnlyFapDiscoverLifecycleTest'
           --tests 'com.webapp.crazyshit.ThumbnailLoadTransitionTest'
 
+      - name: Upload LiquidRift regression failure details
+        if: failure() && github.head_ref == 'hotfix/liquid-rift-bitmap-crash'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ZeroChill-liquid-rift-test-failure
+          path: app/build/test-results/testDebugUnitTest/
+          if-no-files-found: warn
+          retention-days: 14
+
       - name: Verify filtered hotfix eligibility, switching, runway and source regressions first
         if: github.head_ref == 'hotfix/5.6.1-filtered-shittok'
         run: >-
@@ -727,12 +736,20 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
+      - name: Name hotfix APK with source lineage
+        if: github.head_ref == 'hotfix/liquid-rift-bitmap-crash'
+        run: |
+          SOURCE_SHA="$(git rev-parse HEAD)"
+          CANDIDATE_APK="ZeroChill-upgrade-candidate-hotfix-liquid-rift-bitmap-crash-${SOURCE_SHA:0:7}.apk"
+          mv ZeroChill-upgrade-candidate.apk "$CANDIDATE_APK"
+          sha256sum "$CANDIDATE_APK" > SHA256SUMS-upgrade-candidate.txt
+
       - name: Upload signed upgrade candidate
         uses: actions/upload-artifact@v4
         with:
           name: ZeroChill-upgrade-candidate
           path: |
-            ZeroChill-upgrade-candidate.apk
+            ZeroChill-upgrade-candidate*.apk
             SHA256SUMS-upgrade-candidate.txt
           if-no-files-found: error
           retention-days: 14
