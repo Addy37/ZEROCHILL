@@ -127,37 +127,149 @@ final class SocialMedia {
         Prepared selected;
         final TextView control;
         final ImageView preview;
-        boolean busy;
-        boolean preparing;
+        boolean busy, preparing;
+        Runnable changed = () -> {};
+
         Composer(Activity activity) {
-            super(activity); setOrientation(VERTICAL);
-            control=new TextView(activity); control.setText("＋ Attach photo / GIF"); control.setTextColor(UiPalette.PRIMARY);
-            control.setPadding(12,12,12,12); control.setMinHeight(Math.round(48*getResources().getDisplayMetrics().density));
-            addView(control);
-            preview=new ImageView(activity); preview.setScaleType(ImageView.ScaleType.FIT_CENTER);
-            addView(preview,new LayoutParams(-1,Math.round(100*getResources().getDisplayMetrics().density)));
-            preview.setVisibility(GONE);
-            control.setOnClickListener(v -> {
-                if (busy) return;
-                if (selected!=null) { clear(); return; }
-                if (!ZeroChillAccountRepository.hasStoredSession(activity)) return;
-                String owner=ZeroChillSessionStore.currentUserId(activity);
-                preparing=true; control.setEnabled(false); control.setText("Preparing image…");
-                pick(activity,(media,error) -> {
-                    preparing=false; control.setEnabled(true); control.setText("＋ Attach photo / GIF");
-                    if (!owner.equals(ZeroChillSessionStore.currentUserId(activity))) return;
-                    if(error!=null) { ZeroChillToast.makeText(activity,error.getMessage(),ZeroChillToast.LENGTH_LONG).show(); return; }
-                    if(media==null) return;
-                    selected=media; preview.setVisibility(VISIBLE);
-                    Glide.with(preview).load(media.bytes).diskCacheStrategy(DiskCacheStrategy.NONE).into(preview);
-                    control.setText(media.fallback()+" selected · Remove");
-                });
-            });
+            super(activity);
+            setOrientation(HORIZONTAL);
+            setGravity(android.view.Gravity.CENTER_VERTICAL);
+            setVisibility(GONE);
+            control = new TextView(activity);
+            control.setText("＋");
+            control.setTextSize(24);
+            control.setTextColor(UiPalette.PRIMARY);
+            control.setGravity(android.view.Gravity.CENTER);
+            control.setContentDescription("Attach photo or GIF");
+            control.setLayoutParams(new LayoutParams(dp(48), dp(48)));
+            preview = new ImageView(activity);
+            preview.setScaleType(ImageView.ScaleType.FIT_CENTER);
+            addView(preview, new LayoutParams(dp(72), dp(64)));
+            TextView remove = new TextView(activity);
+            remove.setText("×");
+            remove.setTextSize(24);
+            remove.setTextColor(UiPalette.PRIMARY);
+            remove.setGravity(android.view.Gravity.CENTER);
+            remove.setContentDescription("Remove attachment");
+            addView(remove, new LayoutParams(dp(48), dp(48)));
+            remove.setOnClickListener(
+                    v -> {
+                        if (!busy && !preparing) clear();
+                    });
+            control.setOnClickListener(
+                    v -> {
+                        if (busy || preparing) return;
+                        if (!ZeroChillAccountRepository.hasStoredSession(activity)) {
+                            activity.startActivity(
+                                    new Intent(activity, ZeroChillAccountActivity.class));
+                            return;
+                        }
+                        String owner = ZeroChillSessionStore.currentUserId(activity);
+                        preparing = true;
+                        refresh();
+                        pick(
+                                activity,
+                                (media, error) -> {
+                                    preparing = false;
+                                    if (owner.equals(
+                                            ZeroChillSessionStore.currentUserId(activity))) {
+                                        if (error != null)
+                                            ZeroChillToast.makeText(
+                                                            activity,
+                                                            error.getMessage(),
+                                                            ZeroChillToast.LENGTH_LONG)
+                                                    .show();
+                                        else if (media != null) {
+                                            selected = media;
+                                            Glide.with(preview)
+                                                    .load(media.bytes)
+                                                    .diskCacheStrategy(DiskCacheStrategy.NONE)
+                                                    .into(preview);
+                                        }
+                                    }
+                                    refresh();
+                                });
+                    });
         }
-        void busy(boolean value) { busy=value; control.setEnabled(!value); if(value) control.setText("Uploading / sending…");
-            else control.setText(selected==null ? "＋ Attach photo / GIF" : selected.fallback()+" selected · Remove / retry send"); }
-        void clear() { selected=null; preview.setVisibility(GONE); Glide.with(preview).clear(preview); control.setText("＋ Attach photo / GIF"); }
+
+        private int dp(int value) {
+            return Math.round(value * getResources().getDisplayMetrics().density);
+        }
+
+        private void refresh() {
+            setVisibility(selected == null ? GONE : VISIBLE);
+            control.setEnabled(!busy && !preparing);
+            control.setText(busy || preparing ? "…" : "＋");
+            control.setContentDescription(
+                    busy
+                            ? "Uploading / sending attachment"
+                            : preparing ? "Preparing image" : "Attach photo or GIF");
+            changed.run();
+        }
+
+        void busy(boolean value) {
+            busy = value;
+            refresh();
+        }
+
+        void clear() {
+            selected = null;
+            Glide.with(preview).clear(preview);
+            refresh();
+        }
     }
+
+    /**
+     * Measure from the decoded drawable, including animated GIFs, without cropping or stretching.
+     */
+    static final class MediaView extends androidx.appcompat.widget.AppCompatImageView {
+        final int maximumWidth, maximumHeight;
+
+        MediaView(Activity activity, int width, int height) {
+            super(activity);
+            float density = getResources().getDisplayMetrics().density;
+            maximumWidth = Math.round(width * density);
+            maximumHeight = Math.round(height * density);
+            setScaleType(ScaleType.FIT_CENTER);
+            setAdjustViewBounds(true);
+            setLayoutParams(new LinearLayout.LayoutParams(-2, -2));
+            setOutlineProvider(
+                    new android.view.ViewOutlineProvider() {
+                        public void getOutline(View v, android.graphics.Outline o) {
+                            o.setRoundRect(0, 0, v.getWidth(), v.getHeight(), 12 * density);
+                        }
+                    });
+            setClipToOutline(true);
+        }
+
+        @Override
+        protected void onMeasure(int widthSpec, int heightSpec) {
+            int width =
+                    Math.min(
+                            maximumWidth,
+                            MeasureSpec.getMode(widthSpec) == MeasureSpec.UNSPECIFIED
+                                    ? maximumWidth
+                                    : MeasureSpec.getSize(widthSpec));
+            int height =
+                    Math.min(
+                            maximumHeight,
+                            MeasureSpec.getMode(heightSpec) == MeasureSpec.UNSPECIFIED
+                                    ? maximumHeight
+                                    : MeasureSpec.getSize(heightSpec));
+            android.graphics.drawable.Drawable drawable = getDrawable();
+            int naturalWidth = drawable == null ? width : Math.max(1, drawable.getIntrinsicWidth());
+            int naturalHeight =
+                    drawable == null ? height : Math.max(1, drawable.getIntrinsicHeight());
+            float scale =
+                    Math.min(
+                            1f,
+                            Math.min(width / (float) naturalWidth, height / (float) naturalHeight));
+            setMeasuredDimension(
+                    Math.max(1, Math.round(naturalWidth * scale)),
+                    Math.max(1, Math.round(naturalHeight * scale)));
+        }
+    }
+
     static void bind(ImageView image, String bucket, String path) {
         String binding=ZeroChillSessionStore.currentUserId(image.getContext())+":"+bucket+":"+path;
         if(!path.isEmpty() && binding.equals(image.getTag())) return;
@@ -184,13 +296,11 @@ final class SocialMedia {
             } catch(Exception ignored) { }
         });
     }
-    static ImageView inline(Activity activity,String bucket,String path) {
-        ImageView image=new ImageView(activity); image.setScaleType(ImageView.ScaleType.FIT_CENTER);
-        image.setContentDescription("Attachment. Tap to enlarge");
-        image.setLayoutParams(new LinearLayout.LayoutParams(-1,Math.round(200*activity.getResources().getDisplayMetrics().density)));
-        bind(image,bucket,path);
-        image.setOnClickListener(v -> showViewer(activity,bucket,path));
-        return image;
+    static ImageView inline(Activity activity,String bucket,String path) {return inline(activity,bucket,path,false);}
+    static ImageView inline(Activity activity,String bucket,String path,boolean message) {
+        ImageView image=new MediaView(activity,message?250:220,message?280:150);
+        image.setContentDescription("Attachment. Tap to enlarge");bind(image,bucket,path);
+        image.setOnClickListener(v->showViewer(activity,bucket,path));return image;
     }
     static void showViewer(Activity activity,String bucket,String path) {
         ImageView large=new ImageView(activity); large.setScaleType(ImageView.ScaleType.FIT_CENTER);

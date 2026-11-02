@@ -7,6 +7,14 @@ The candidate version is **5.7.0-beta.1**; a stable 5.7.0 release is not authori
 The signed-candidate workflow uses `.dev` for the side-by-side Beta and records the
 source branch and SHA in its filename. Its analytics endpoints are intentionally empty.
 
+## Current backend status
+
+The social production migration (attachment columns, DM reactions, private photo/GIF
+buckets and quota/reservations) has already been deployed manually. The
+`social-media-upload` v1 Edge Function is ACTIVE with JWT verification enabled.
+Social media physical testing is possible now. This follow-up does not redeploy or
+replace it. Analytics v2 remains **undeployed**; no cutoff is activated.
+
 ## Android social behavior
 
 `SocialMedia` shares a single-selection system Photo Picker, bounded preparation,
@@ -34,9 +42,9 @@ Tap opens a larger dialog. Selection drafts are process-local, like the existing
 programmatic social composers; process death discards unsent media. A recreated
 picker cancels its old callback rather than delivering to a destroyed composer.
 
-Long press a confirmed bubble or its media for ❤️ 😂 🔥 👍 😮 👎. The existing themed
-dialog presents the compact picker and light platform haptic feedback. Incoming
-messages retain Report in that dialog. Grouped counts show a dot beside the current
+Long press a confirmed bubble or its media for ❤️ 😂 🔥 👍 😮 👎. A floating strip
+anchors beside the highlighted bubble with light platform haptic feedback. The
+context header offers Copy for actual text and Report for incoming messages. Grouped counts show a dot beside the current
 user's reaction. The unique `(message_id,user_id)` key allows one reaction each;
 the RPC serializes toggles, replaces a different emoji and removes a repeated one.
 Reactions use the existing foreground thread refresh cadence. No reaction push or
@@ -145,16 +153,23 @@ sessions, retries and background transitions change the savings.
 
 ## Deployment and rollback
 
-Do not remove or disable the legacy function. Apply both additive migrations before
-installing a media-enabled candidate against the project. Deploy:
+Do not remove or disable the legacy analytics function. The social production
+migration and `social-media-upload` v1 are already live; do not reapply or replace
+them for this Android follow-up. Analytics v2 remains undeployed and is not authorized
+for deployment in this task. The following is reference for a separately approved
+backend rollout or a fresh isolated test project:
 
-1. `social-media-upload` with JWT verification enabled.
-2. Updated `account-delete` with its existing JWT verification and server-only keys.
-3. `analytics-ingest-v2` with JWT verification disabled, plus a server-only random
-   `ANALYTICS_V2_RATE_SALT`; never place this secret in Android or Git.
-4. Updated `feedback-admin` with its existing private admin-token verification.
+1. Apply the additive social/analytics migrations appropriate to that rollout;
+   check existing migration state first rather than rerunning the live social setup.
+2. Preserve `social-media-upload` JWT verification and server-only credentials.
+3. Verify the updated `account-delete` Storage cleanup bundle and its existing JWT
+   verification when that backend bundle is approved for rollout.
+4. Deploy `analytics-ingest-v2` only after approval, with JWT verification disabled
+   and a server-only random `ANALYTICS_V2_RATE_SALT`; never put this secret in Android.
+5. Deploy updated `feedback-admin` analytics support only as part of that approved
+   v2 rollout, preserving its existing private admin-token verification.
 
-Schedule `select public.cleanup_analytics_v2();` hourly through the project's trusted
+During that separately approved rollout, schedule `select public.cleanup_analytics_v2();` hourly through the project's trusted
 scheduler. It removes abuse rows older than two hours, anonymous keys older than
 65 days and aggregates older than 400 days. No client can invoke maintenance. Also
 schedule operational removal through the Storage API of old unreferenced objects
@@ -172,3 +187,41 @@ any media-enabled client is installed. Roll back function bundles to their recor
 prior versions only when those clients will no longer invoke the new contract. Do
 not drop populated tables/buckets or remove columns to roll back an APK. Restoring
 legacy analytics is independent of Auth, social data, keys and remote configuration.
+
+## Social experience and automatic crash follow-up
+
+Comments use AndroidX NestedScrollView inside Material's draggable bottom sheet,
+allowing the child to consume scrolls until the appropriate boundary. The pinned
+composer integrates media; comments use aspect-aware media capped at 220 × 150dp.
+DMs target WhatsApp-like compact grouping, dates/long-gap separators, integrated
+media composition and aspect-aware media capped at 250 × 280dp. A selected bubble
+is highlighted with a nearby six-reaction popup and supported contextual actions.
+No new reaction types, notifications, backend actions or social schema are added.
+
+CrashReporter installs once from Application and always delegates the previous
+uncaught handler, including when its own capture fails. That handler does no network
+I/O and does not acquire diagnostic locks: it uses a sanitized cached snapshot,
+refreshed on resume and every 30 seconds only while foregrounded. Local AtomicFile
+storage is private (backup disabled), capped at three reports / 128 KiB. Delivered
+payloads are removed, retaining small bounded deduplication receipts. Stable class
+and method frames fingerprint repeats for 24 hours; line numbers/messages do not.
+
+After a successful resume, a delayed background worker submits at most one pending
+report per launch through existing Feedback submit/thread/reply APIs. A new thread
+is `bug_report`, section `Crash`; creation is capped at one per 24 hours. Repeats
+reuse the thread with a one-hour update cooldown. At most three diagnostic replies
+fit under the API's 2,000-character message limit; server messages reconcile partial
+reply delivery and the summary marker reconciles uncertain thread POST responses.
+Failures retain local reports for a later launch without UI or startup blocking.
+No external SDK, email alerts, Brevo integration or new backend deployment.
+
+Crash-only sanitation runs before persistence and upload, redacting URLs, email,
+authorization/cookie headers, recognizable secrets and token-shaped strings.
+Free-form exception messages are withheld unless they match restricted platform
+forms; arbitrary thread names are withheld. Social bodies/drafts are never read.
+ShitTokPoolDiagnostics.userReport already includes AppPerformance; the cached
+snapshot reserves bounded space for its recent-event tail and performance section.
+Java/Kotlin uncaught exceptions are covered; native crashes, ANRs, forced process
+kills, low-memory kills and failures before Application installation are not.
+The debug/Beta-only CrashProbeActivity is absent from release manifests/source.
+Physical acceptance and real Feedback Admin arrival remain pending Addy's test.

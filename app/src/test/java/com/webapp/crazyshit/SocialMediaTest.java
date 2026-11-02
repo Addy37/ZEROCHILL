@@ -46,6 +46,16 @@ public class SocialMediaTest {
   reject("<svg/>".getBytes(),"image/png","JPEG");
   reject(new byte[]{(byte)255,(byte)216,(byte)255},"image/png","JPEG");
  }
+ @Test public void commentAndDmMediaPreserveAspectRatioWithinSharedLimits() {
+  android.app.Activity activity=org.robolectric.Robolectric.buildActivity(android.app.Activity.class).setup().get();
+  for(boolean message:new boolean[]{false,true})for(int[] size:new int[][]{{1200,600},{600,1800},{80,60}}){
+   SocialMedia.MediaView image=(SocialMedia.MediaView)SocialMedia.inline(activity,"","",message);
+   Bitmap bitmap=Bitmap.createBitmap(size[0],size[1],Bitmap.Config.ARGB_8888);image.setImageBitmap(bitmap);
+   image.measure(android.view.View.MeasureSpec.makeMeasureSpec(500,android.view.View.MeasureSpec.AT_MOST),android.view.View.MeasureSpec.makeMeasureSpec(0,android.view.View.MeasureSpec.UNSPECIFIED));
+   assertTrue(image.getMeasuredHeight()<=image.maximumHeight);assertTrue(image.getMeasuredWidth()<=image.maximumWidth);
+   assertEquals(size[0]/(float)size[1],image.getMeasuredWidth()/(float)image.getMeasuredHeight(),0.02f);assertTrue(image.getClipToOutline());bitmap.recycle();
+  }
+ }
  private void reject(byte[] bytes,String mime,String text) throws Exception {
   try {SocialMedia.prepareBytes(RuntimeEnvironment.getApplication(),bytes,mime);fail("Accepted unsupported image");}
   catch(IllegalArgumentException expected) {assertTrue(expected.getMessage(),expected.getMessage().contains(text));}

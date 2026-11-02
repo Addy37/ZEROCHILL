@@ -130,6 +130,18 @@ class ConsoleFlowTest {
         ui.onNodeWithText("Lock session").performClick();ui.onNodeWithText("Lock",useUnmergedTree=true).performClick()
         ui.onNodeWithText("Connect securely").assertExists();assertEquals("",SecureTokenStore.read(app))
     }
+    @Test fun crashInboxKeepsSummaryVisibleAboveDiagnosticReplies() {
+        val crash=AdminRepository.Item(JSONObject().put("id","crash-fixture").put("type","bug_report")
+            .put("section","Crash").put("message","ZEROCHILL crashed in ShitTok")
+            .put("last_message","Crash diagnostics 3/3: stack frames").put("app_version","5.7.0-beta.1")
+            .put("device","OnePlus CPH2655").put("created_at","2026-11-02T12:00:00Z"))
+        var opened=false
+        ui.setContent {ConsoleTheme {FeedbackRow(crash) {opened=true}}}
+        ui.onNodeWithText("Bug report · Crash").assertExists()
+        ui.onNodeWithText("ZEROCHILL crashed in ShitTok").assertExists().performClick()
+        ui.onNodeWithText("Crash diagnostics 3/3: stack frames").assertDoesNotExist()
+        assertTrue(opened);screenshot("12-crash-feedback")
+    }
     @Test fun rejectedPairingKeepsTokenStoreEmpty() {
         launch(false);fake.rejectPairing=true
         ui.onNodeWithText("Admin token").performTextInput("fixture-token-for-instrumented-test-only")

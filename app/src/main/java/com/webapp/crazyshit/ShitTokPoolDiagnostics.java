@@ -84,14 +84,19 @@ final class ShitTokPoolDiagnostics {
         return text.toString();
     }
     static synchronized void snapshot(String value) { snapshot = redact(value); }
-    static synchronized String userReport() {
-        return "ZEROCHILL " + BuildConfig.VERSION_NAME + " (" + BuildConfig.VERSION_CODE + ")"
+    static String userReport() {
+        String session;
+        synchronized (ShitTokPoolDiagnostics.class) {
+            session = "ZEROCHILL " + BuildConfig.VERSION_NAME + " (" + BuildConfig.VERSION_CODE + ")"
                 + "\nSource: " + BuildConfig.SOURCE_REVISION
                 + "\nAndroid " + android.os.Build.VERSION.RELEASE + " / " + android.os.Build.MODEL
                 + "\nCaptured: " + java.time.Instant.now()
                 + "\n\nShitTok last session\n" + snapshot + "\n" + modeSummary()
-                + "\n" + admissionSummary() + "\n\nRecent events\n" + redact(report())
-                + "\n\n" + AppPerformance.summary();
+                + "\n" + admissionSummary() + "\n\nRecent events\n" + redact(report());
+        }
+        // AppPerformance can record a diagnostic while holding its own monitor. Never
+        // acquire that monitor while holding the playback diagnostics monitor.
+        return session + "\n\n" + AppPerformance.summary();
     }
     static String redact(String value) {
         return value.replaceAll("https?://\\S+", "[content]");

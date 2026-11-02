@@ -105,6 +105,22 @@ public class InlineCommentsUiTest {
         try (FileOutputStream out = new FileOutputStream(new File(folder,"comments-social-polish.png"))) { assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG,100,out)); }
         bitmap.recycle();
     }
+    @Test public void listUsesNestedScrollingAndComposerStaysOutsideList() throws Exception {
+        InlineCommentsDialog dialog=shell();
+        androidx.core.widget.NestedScrollView list=(androidx.core.widget.NestedScrollView)field(dialog,"scrollView");
+        assertTrue(list.isNestedScrollingEnabled());
+        android.widget.EditText input=(android.widget.EditText)field(dialog,"composerInput");
+        View send=(View)field(dialog,"sendControl");SocialMedia.Composer media=(SocialMedia.Composer)field(dialog,"attachment");
+        assertFalse(send.isEnabled());assertEquals(View.GONE,media.getVisibility());
+        input.setText("reply draft");assertTrue(send.isEnabled());input.setText("");assertFalse(send.isEnabled());
+        media.selected=new SocialMedia.Prepared(new byte[]{1},"image/gif");media.busy(false);assertTrue(send.isEnabled());
+        assertNotSame(list,media.getParent());assertNotNull(media.control.getParent());
+        media.busy(true);assertFalse(media.control.isEnabled());media.busy(false);media.clear();assertFalse(send.isEnabled());
+        ArrayList<ZeroChillSocialRepository.Comment> rows=new ArrayList<>();for(int i=0;i<30;i++)rows.add(comment(""+i,"","Comment "+i,false,false,false));
+        Method render=InlineCommentsDialog.class.getDeclaredMethod("render",ArrayList.class);render.setAccessible(true);render.invoke(dialog,rows);
+        View content=((View)list.getParent().getParent());content.measure(View.MeasureSpec.makeMeasureSpec(640,View.MeasureSpec.EXACTLY),View.MeasureSpec.makeMeasureSpec(900,View.MeasureSpec.EXACTLY));content.layout(0,0,640,900);
+        for(int i=0;i<5;i++){list.scrollTo(0,800);assertTrue(list.canScrollVertically(-1));list.scrollTo(0,0);assertFalse(list.canScrollVertically(-1));assertTrue(list.canScrollVertically(1));}
+    }
     @Test public void namesAndRelativeTimesArePresentationOnly() {
         assertEquals("Addy", SocialUi.name("Addy", "addy37"));
         assertEquals("addy37", SocialUi.name("", "@addy37"));

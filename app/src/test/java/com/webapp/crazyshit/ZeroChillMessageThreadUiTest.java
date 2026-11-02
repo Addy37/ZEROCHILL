@@ -50,6 +50,40 @@ public class ZeroChillMessageThreadUiTest {
         } finally { java.util.TimeZone.setDefault(previous); }
     }
 
+    @Test public void dateSeparatorsOnlyAppearForDatesAndMeaningfulGaps() throws Exception {
+        ZeroChillSocialRepository.DirectMessage a=message("other","2026-09-30T12:00:00Z","one");
+        assertFalse(ZeroChillMessageActivity.separator(null,a).isEmpty());
+        assertEquals("",ZeroChillMessageActivity.separator(a,message("me","2026-09-30T12:02:00Z","two")));
+        assertFalse(ZeroChillMessageActivity.separator(a,message("me","2026-09-30T13:00:00Z","later")).isEmpty());
+        assertFalse(ZeroChillMessageActivity.separator(a,message("me","2026-10-01T12:00:00Z","next day")).isEmpty());
+    }
+    @Test public void selectionHighlightsMediaAndExposesOnlySupportedActions() throws Exception {
+        ZeroChillMessageActivity activity=shell();RecyclerView recycler=(RecyclerView)field(activity,"recycler");
+        RecyclerView.Adapter adapter=recycler.getAdapter();Method replace=adapter.getClass().getDeclaredMethod("replace",java.util.List.class);replace.setAccessible(true);
+        ZeroChillSocialRepository.DirectMessage media=new ZeroChillSocialRepository.DirectMessage(new JSONObject().put("id","media").put("sender_id","other").put("body","GIF").put("created_at","2026-09-30T12:00:00Z").put("attachment_path","other/test.gif").put("attachment_bucket","social-gifs"));
+        replace.invoke(adapter,Arrays.asList(media));RecyclerView.ViewHolder holder=adapter.createViewHolder(recycler,0);adapter.bindViewHolder(holder,0);
+        assertEquals(View.GONE,((View)field(holder,"body")).getVisibility());assertFalse(ZeroChillMessageActivity.canCopy(media));
+        Method select=activity.getClass().getDeclaredMethod("showReactions",View.class,ZeroChillSocialRepository.DirectMessage.class);select.setAccessible(true);
+        select.invoke(activity,field(holder,"bubble"),media);assertSame(media,field(activity,"selectedMessage"));
+        android.widget.PopupWindow popup=(android.widget.PopupWindow)field(activity,"reactionPopup");assertTrue(popup.isShowing());
+        assertEquals(6,((LinearLayout)popup.getContentView()).getChildCount());
+        LinearLayout actions=(LinearLayout)field(activity,"selectionActions");assertEquals(1,actions.getChildCount());assertEquals("Report",((TextView)actions.getChildAt(0)).getText().toString());
+        adapter.bindViewHolder(holder,0);assertEquals(Color.rgb(12,56,65),((GradientDrawable)((View)field(holder,"bubble")).getBackground()).getColor().getDefaultColor());
+        activity.onBackPressed();assertNull(field(activity,"selectedMessage"));assertFalse(popup.isShowing());
+        setField(activity,"blockedByMe",true);select.invoke(activity,field(holder,"bubble"),media);assertNull(field(activity,"selectedMessage"));
+    }
+    @Test public void textSelectionActionsRespectSenderAndCopyExactText() throws Exception {
+        ZeroChillMessageActivity activity=shell();RecyclerView recycler=(RecyclerView)field(activity,"recycler");
+        RecyclerView.Adapter adapter=recycler.getAdapter();RecyclerView.ViewHolder holder=adapter.createViewHolder(recycler,0);
+        Method select=activity.getClass().getDeclaredMethod("showReactions",View.class,ZeroChillSocialRepository.DirectMessage.class);select.setAccessible(true);
+        select.invoke(activity,field(holder,"bubble"),message("other","2026-09-30T12:00:00Z","Incoming text"));
+        LinearLayout actions=(LinearLayout)field(activity,"selectionActions");assertEquals(2,actions.getChildCount());
+        ((android.widget.PopupWindow)field(activity,"reactionPopup")).dismiss();assertNull(field(activity,"selectedMessage"));
+        select.invoke(activity,field(holder,"bubble"),message("me","2026-09-30T12:00:00Z","Own exact text"));
+        assertEquals(1,actions.getChildCount());assertEquals("Copy",((TextView)actions.getChildAt(0)).getText().toString());actions.getChildAt(0).performClick();
+        assertNull(field(activity,"selectedMessage"));android.content.ClipboardManager clipboard=(android.content.ClipboardManager)activity.getSystemService(android.content.Context.CLIPBOARD_SERVICE);
+        assertEquals("Own exact text",clipboard.getPrimaryClip().getItemAt(0).getText().toString());
+    }
     @Test public void rowsDistinguishSendersGroupAvatarsAndResetRecycledState() throws Exception {
         ZeroChillMessageActivity activity = shell();
         RecyclerView recycler = (RecyclerView) field(activity, "recycler");
@@ -62,7 +96,7 @@ public class ZeroChillMessageThreadUiTest {
                 message("me", "2026-09-30T12:02:00Z", "Hello"),
                 message("me", "2026-09-30T12:03:00Z", new String(new char[2000]).replace('\0', 'W'))));
         RecyclerView.ViewHolder holder = adapter.createViewHolder(recycler, 0);
-        LinearLayout row = (LinearLayout) holder.itemView;
+        LinearLayout row = (LinearLayout) field(holder,"row");
         ImageView avatar = (ImageView) row.getChildAt(0);
         LinearLayout bubble = (LinearLayout) ((LinearLayout) row.getChildAt(1)).getChildAt(0);
         TextView body = (TextView) bubble.getChildAt(0);
@@ -72,12 +106,12 @@ public class ZeroChillMessageThreadUiTest {
         assertEquals(View.INVISIBLE, avatar.getVisibility());
         assertEquals(View.GONE, time.getVisibility());
         assertEquals(UiPalette.SURFACE, ((GradientDrawable) bubble.getBackground()).getColor().getDefaultColor());
-        int firstGap = ((RecyclerView.LayoutParams) row.getLayoutParams()).topMargin;
+        int firstGap = ((LinearLayout.LayoutParams) row.getLayoutParams()).topMargin;
         adapter.bindViewHolder(holder, 1);
         assertEquals(View.VISIBLE, avatar.getVisibility());
         assertEquals(View.VISIBLE, time.getVisibility());
         assertNotNull(avatar.getDrawable());
-        assertTrue(((RecyclerView.LayoutParams) row.getLayoutParams()).topMargin < firstGap);
+        assertTrue(((LinearLayout.LayoutParams) row.getLayoutParams()).topMargin < firstGap);
         adapter.bindViewHolder(holder, 2);
         assertEquals(Gravity.RIGHT, row.getGravity() & Gravity.HORIZONTAL_GRAVITY_MASK);
         assertEquals(View.GONE, avatar.getVisibility());
@@ -118,7 +152,7 @@ public class ZeroChillMessageThreadUiTest {
 
         RecyclerView.ViewHolder holder = adapter.createViewHolder(recycler, 0);
         adapter.bindViewHolder(holder, 1);
-        LinearLayout row = (LinearLayout) holder.itemView;
+        LinearLayout row = (LinearLayout) field(holder,"row");
         LinearLayout bubble = (LinearLayout) ((LinearLayout) row.getChildAt(1)).getChildAt(0);
         TextView body = (TextView) bubble.getChildAt(0);
         assertEquals(Gravity.RIGHT, row.getGravity() & Gravity.HORIZONTAL_GRAVITY_MASK);
@@ -134,7 +168,7 @@ public class ZeroChillMessageThreadUiTest {
         String[] bodies = {"this looks the same chatgpt", "Hi", "first line\nsecond line\nthird line",
                 new String(new char[2000]).replace('\0', 'W')};
         RecyclerView.ViewHolder holder = adapter.createViewHolder(recycler, 0);
-        LinearLayout row = (LinearLayout) holder.itemView;
+        LinearLayout row = (LinearLayout) field(holder,"row");
         LinearLayout bubble = (LinearLayout) ((LinearLayout) row.getChildAt(1)).getChildAt(0);
         TextView body = (TextView) bubble.getChildAt(0);
         // Reproduce the prior default params: all text is in the layout, but lines
@@ -326,7 +360,7 @@ public class ZeroChillMessageThreadUiTest {
         upsert.invoke(adapter, new ZeroChillSocialRepository.DirectMessage(java.util.UUID.randomUUID().toString(), "other", "Hi"));
         RecyclerView.ViewHolder holder = adapter.createViewHolder(recycler, 0);
         adapter.bindViewHolder(holder, 0);
-        LinearLayout row = (LinearLayout) holder.itemView;
+        LinearLayout row = (LinearLayout) field(holder,"row");
         LinearLayout bubble = (LinearLayout) field(holder, "bubble");
         measureRow(row);
         assertEquals(((View) bubble.getParent()).getWidth(), bubble.getRight());
