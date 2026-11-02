@@ -21,6 +21,17 @@ final class PlayableSourceRouter {
     }
 
     static CrazyShitRepository.StreamInfo resolve(Context context, String pageUrl) throws IOException {
+        try {
+            CrazyShitRepository.StreamInfo result=resolveInternal(context,pageUrl);
+            if(result==null) AnalyticsTracker.provider(context,pageUrl,"provider_missing");
+            return result;
+        } catch(IOException error) {
+            AnalyticsTracker.provider(context,pageUrl,"provider_failure");
+            throw error;
+        }
+    }
+
+    private static CrazyShitRepository.StreamInfo resolveInternal(Context context,String pageUrl) throws IOException {
         if (BaddieHubRepository.isBaddieHubUrl(pageUrl)) {
             return new BaddieHubRepository().resolvePlayable(context, pageUrl);
         }

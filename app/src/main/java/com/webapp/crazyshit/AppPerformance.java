@@ -10,7 +10,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.WeakHashMap;
 
-/** In-memory timings for this app session. No URLs, saved history or network reporting. */
+/** In-memory timings for this app session. No URLs or saved history. CrashReporter may attach a sanitized summary. */
 @androidx.annotation.OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)
 final class AppPerformance {
     private static final long STARTED = SystemClock.elapsedRealtime();
@@ -108,7 +108,7 @@ final class AppPerformance {
                     .append(totals[1] / Math.max(1, totals[0])).append(" ms average\n");
         }
         text.append("\nFrames over the display's timing budget: ").append(slowFrames).append(" / ").append(frames);
-        text.append("\n\nTimings reset when the app process restarts. They stay on your device.");
+        text.append("\n\nTimings reset when the app process restarts. Automatic crash reports may include sanitized timings.");
         return text.toString();
     }
 }

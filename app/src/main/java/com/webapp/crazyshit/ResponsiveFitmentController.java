@@ -3,10 +3,13 @@ package com.webapp.crazyshit;
 import android.app.Activity;
 import android.content.res.Configuration;
 import android.os.Build;
+import android.text.Editable;
+import android.text.TextWatcher;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowInsets;
+import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 
@@ -29,6 +32,8 @@ import java.util.WeakHashMap;
  */
 final class ResponsiveFitmentController {
     private static final WeakHashMap<Activity, View> INSET_TARGETS = new WeakHashMap<>();
+    private static final Set<Activity> MESSAGE_COMPOSER_WATCHERS =
+            Collections.newSetFromMap(new WeakHashMap<>());
 
     private ResponsiveFitmentController() {
     }
@@ -58,6 +63,7 @@ final class ResponsiveFitmentController {
         } else if (activity instanceof ZeroChillMessageActivity) {
             installSafeInsets(activity, true);
             fitSecondaryShell(activity, landscape, widthDp, 980, 56);
+            fitMessageComposer(activity);
         } else if (activity instanceof ZeroChillAccountActivity
                 || activity instanceof ZeroChillPublicProfileActivity
                 || activity instanceof ZeroChillInboxActivity) {
@@ -83,6 +89,7 @@ final class ResponsiveFitmentController {
     static void release(Activity activity) {
         if (activity == null) return;
         INSET_TARGETS.remove(activity);
+        MESSAGE_COMPOSER_WATCHERS.remove(activity);
         Set<Object> visited = Collections.newSetFromMap(new IdentityHashMap<>());
 
         if (activity instanceof SearchActivity) {
@@ -185,6 +192,46 @@ final class ResponsiveFitmentController {
                 top.setLayoutParams(params);
             }
         }
+    }
+
+    private static void fitMessageComposer(Activity activity) {
+        EditText composer = findFirst(activity.findViewById(android.R.id.content), EditText.class);
+        if (composer == null) return;
+
+        composer.setGravity(Gravity.CENTER_VERTICAL);
+        if (MESSAGE_COMPOSER_WATCHERS.add(activity)) {
+            composer.addTextChangedListener(new TextWatcher() {
+                @Override
+                public void beforeTextChanged(CharSequence text, int start, int count, int after) {
+                }
+
+                @Override
+                public void onTextChanged(CharSequence text, int start, int before, int count) {
+                }
+
+                @Override
+                public void afterTextChanged(Editable text) {
+                    composer.post(() -> fitMessageComposerHeight(activity, composer));
+                    composer.postDelayed(() -> fitMessageComposerHeight(activity, composer), 32L);
+                }
+            });
+        }
+        composer.post(() -> fitMessageComposerHeight(activity, composer));
+    }
+
+    private static void fitMessageComposerHeight(Activity activity, EditText composer) {
+        if (activity == null || activity.isFinishing() || composer == null) return;
+        int lines = Math.max(1, composer.getLineCount());
+        int compactHeight = dp(activity, 44);
+        int maximumHeight = dp(activity, 104);
+        int textHeight = composer.getLineHeight() * lines
+                + composer.getPaddingTop()
+                + composer.getPaddingBottom();
+        int wanted = Math.min(maximumHeight, Math.max(compactHeight, textHeight));
+        ViewGroup.LayoutParams params = composer.getLayoutParams();
+        if (params == null || params.height == wanted) return;
+        params.height = wanted;
+        composer.setLayoutParams(params);
     }
 
     private static View findTopBar(View view, Activity activity) {
@@ -340,4 +387,3 @@ final class ResponsiveFitmentController {
         return Math.round(value * activity.getResources().getDisplayMetrics().density);
     }
 }
-

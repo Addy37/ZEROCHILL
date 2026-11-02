@@ -8,5 +8,7 @@
             android:exported="true" android:theme="@style/Theme.CrazyShit" />
         <activity android:name="com.webapp.crazyshit.GlassRenderProbeActivity"
             android:exported="true" android:theme="@style/Theme.CrazyShit" />
+        <activity android:name="com.webapp.crazyshit.CrashProbeActivity"
+            android:exported="true" android:theme="@style/Theme.CrazyShit" />
     </application>
 </manifest>

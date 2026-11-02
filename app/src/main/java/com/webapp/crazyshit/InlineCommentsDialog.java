@@ -19,7 +19,7 @@ import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
-import android.widget.ScrollView;
+import androidx.core.widget.NestedScrollView;
 import android.widget.TextView;
 
 import com.bumptech.glide.Glide;
@@ -45,10 +45,12 @@ final class InlineCommentsDialog extends BottomSheetDialog {
 
     private LinearLayout commentsContainer;
     private EditText composerInput;
+    private SocialMedia.Composer attachment;
     private TextView replyContext;
     private TextView headerTitle;
+    private TextView sendControl;
     private ProgressBar loading;
-    private ScrollView scrollView;
+    private NestedScrollView scrollView;
     private BottomSheetBehavior<FrameLayout> behavior;
     private FrameLayout bottomSheet;
     private ZeroChillSocialRepository.Comment replyTarget;
@@ -58,6 +60,10 @@ final class InlineCommentsDialog extends BottomSheetDialog {
     private boolean closeDispatched;
     private boolean accountLaunched;
     private boolean posting;
+    private String pendingCommentId=java.util.UUID.randomUUID().toString();
+    private String pendingCommentBody="";
+    private String pendingCommentParent="";
+    private SocialMedia.Prepared pendingMedia;
     private boolean focusConsumed;
     private int loadGeneration;
     private final Map<String, View> commentViews = new HashMap<>();
@@ -152,11 +158,12 @@ final class InlineCommentsDialog extends BottomSheetDialog {
 
         LinearLayout header = new LinearLayout(activity);
         header.setGravity(Gravity.CENTER_VERTICAL);
-        header.setPadding(dp(14), 0, dp(8), 0);
+        header.setPadding(0, 0, 0, 0);
+        header.addView(new View(activity),new LinearLayout.LayoutParams(dp(48),dp(48)));
         shell.addView(header, new LinearLayout.LayoutParams(-1, dp(48)));
 
-        headerTitle = text("Comments", 17, Color.WHITE, true);
-        headerTitle.setGravity(Gravity.CENTER_VERTICAL);
+        headerTitle = text("Comments", 14, Color.WHITE, true);
+        headerTitle.setGravity(Gravity.CENTER);
         header.addView(headerTitle, new LinearLayout.LayoutParams(0, -1, 1f));
 
         TextView close = text("×", 28, Color.WHITE, false);
@@ -173,15 +180,15 @@ final class InlineCommentsDialog extends BottomSheetDialog {
         FrameLayout body = new FrameLayout(activity);
         shell.addView(body, new LinearLayout.LayoutParams(-1, 0, 1f));
 
-        scrollView = new ScrollView(activity);
+        scrollView = new NestedScrollView(activity);
         scrollView.setFillViewport(true);
         scrollView.setVerticalScrollBarEnabled(false);
         body.addView(scrollView, new FrameLayout.LayoutParams(-1, -1));
 
         commentsContainer = new LinearLayout(activity);
         commentsContainer.setOrientation(LinearLayout.VERTICAL);
-        commentsContainer.setPadding(dp(14), dp(10), dp(14), dp(20));
-        scrollView.addView(commentsContainer, new ScrollView.LayoutParams(-1, -2));
+        commentsContainer.setPadding(dp(14), dp(4), dp(14), dp(10));
+        scrollView.addView(commentsContainer, new NestedScrollView.LayoutParams(-1, -2));
 
         loading = new ZeroChillProgressBar(activity);
         ZeroChillUi.styleProgress(loading);
@@ -196,23 +203,34 @@ final class InlineCommentsDialog extends BottomSheetDialog {
     private View buildComposer() {
         LinearLayout composer = new LinearLayout(activity);
         composer.setOrientation(LinearLayout.VERTICAL);
-        composer.setPadding(dp(12), dp(9), dp(12), dp(10));
+        composer.setPadding(dp(8), dp(5), dp(8), dp(6));
         composer.setBackgroundColor(UiPalette.SURFACE);
 
         replyContext = text("", 12, UiPalette.PRIMARY, false);
         replyContext.setPadding(dp(6), 0, dp(6), 0);
         replyContext.setVisibility(View.GONE);
         replyContext.setOnClickListener(v -> { if (!posting) cancelReply(); });
-        replyContext.setMinimumHeight(dp(48));
+        replyContext.setMinimumHeight(dp(32));
         replyContext.setGravity(Gravity.CENTER_VERTICAL);
         replyContext.setContentDescription("Comment mode. Tap to cancel");
         ZeroChillMotion.installPressFeedback(replyContext);
         composer.addView(replyContext, new LinearLayout.LayoutParams(-1, -2));
 
+        attachment = new SocialMedia.Composer(activity);
+        composer.addView(attachment);
         LinearLayout row = new LinearLayout(activity);
         row.setGravity(Gravity.CENTER_VERTICAL);
         composer.addView(row, new LinearLayout.LayoutParams(-1, -2));
 
+        ImageView ownAvatar=new ImageView(activity);ownAvatar.setImageResource(R.drawable.ic_more_account);
+        ownAvatar.setColorFilter(UiPalette.TEXT_SECONDARY);ownAvatar.setPadding(dp(7),dp(7),dp(7),dp(7));
+        ownAvatar.setContentDescription("Your profile");ownAvatar.setOnClickListener(v->openAccount());
+        String owner=ZeroChillSessionStore.currentUserId(activity);
+        android.content.SharedPreferences cached=AccountProfileCache.preferences(activity);
+        if(!owner.isEmpty()&&owner.equals(cached.getString("owner",""))&&!cached.getString("avatar","").isEmpty()) {
+            ownAvatar.setPadding(0,0,0,0);ownAvatar.clearColorFilter();AccountAvatarImages.bind(ownAvatar,owner,cached.getString("avatar",""));
+        }
+        row.addView(ownAvatar,new LinearLayout.LayoutParams(dp(36),dp(36)));
         composerInput = new ZeroChillEditText(activity);
         composerInput.setTextColor(Color.WHITE);
         composerInput.setHintTextColor(Color.rgb(150, 150, 160));
@@ -238,6 +256,7 @@ final class InlineCommentsDialog extends BottomSheetDialog {
         });
         row.addView(composerInput, new LinearLayout.LayoutParams(0, -2, 1f));
 
+        row.addView(attachment.control);
         TextView send = text("↑", 23, UiPalette.ON_PRIMARY, true);
         send.setGravity(Gravity.CENTER);
         send.setBackground(circle(UiPalette.PRIMARY));
@@ -248,8 +267,17 @@ final class InlineCommentsDialog extends BottomSheetDialog {
         sendParams.setMargins(dp(8), 0, 0, 0);
         row.addView(send, sendParams);
 
-        updateComposerHint();
+        sendControl=send;
+        attachment.changed=this::updateSendState;
+        composerInput.addTextChangedListener(new android.text.TextWatcher(){public void beforeTextChanged(CharSequence s,int a,int c,int f){} public void onTextChanged(CharSequence s,int a,int b,int c){updateSendState();}public void afterTextChanged(android.text.Editable e){}});
+        updateSendState();updateComposerHint();
         return composer;
+    }
+
+    private void updateSendState() {
+        if(sendControl==null)return;
+        boolean ready=!posting&&!attachment.preparing&&(!composerInput.getText().toString().trim().isEmpty()||attachment.selected!=null);
+        sendControl.setAlpha(ready?1f:0.35f);sendControl.setEnabled(ready);
     }
 
     private void updateComposerHint() {
@@ -407,7 +435,7 @@ final class InlineCommentsDialog extends BottomSheetDialog {
         LinearLayout row = new LinearLayout(activity);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.TOP);
-        row.setPadding(dp(2), dp(10), dp(2), dp(8));
+        row.setPadding(dp(2), dp(5), dp(2), dp(2));
 
         ImageView avatar = new ImageView(activity);
         avatar.setScaleType(ImageView.ScaleType.CENTER_CROP);
@@ -446,6 +474,7 @@ final class InlineCommentsDialog extends BottomSheetDialog {
 
         String identity = SocialUi.name(comment.displayName, comment.username);
         TextView name = text(identity, 13, comment.deleted() ? Color.rgb(135, 145, 155) : Color.WHITE, true);
+        name.setSingleLine(true);name.setEllipsize(android.text.TextUtils.TruncateAt.END);
         name.setClickable(!comment.deleted());
         name.setFocusable(!comment.deleted());
         name.setContentDescription("Open " + SocialUi.name(comment.displayName, comment.username) + " profile");
@@ -453,14 +482,6 @@ final class InlineCommentsDialog extends BottomSheetDialog {
         ZeroChillMotion.installPressFeedback(name);
         nameRow.addView(name, new LinearLayout.LayoutParams(0, -2, 1f));
 
-        if (!comment.deleted() && isOwner(comment)) {
-            TextView menu = text("⋮", 20, Color.rgb(170, 170, 180), true);
-            menu.setGravity(Gravity.CENTER);
-            menu.setContentDescription("Comment options");
-            ZeroChillMotion.installPressFeedback(menu);
-            menu.setOnClickListener(v -> showCommentMenu(v, commentStates.get(comment.id)));
-            nameRow.addView(menu, new LinearLayout.LayoutParams(dp(48), dp(48)));
-        }
 
         TextView copy = text(
                 comment.deleted() ? "Comment deleted" : comment.body,
@@ -472,18 +493,24 @@ final class InlineCommentsDialog extends BottomSheetDialog {
             copy.setTypeface(null, android.graphics.Typeface.ITALIC);
         }
         copy.setLineSpacing(0f, 1.08f);
-        copy.setPadding(0, dp(4), 0, dp(7));
+        copy.setPadding(0, dp(2), 0, dp(2));
+        if (!comment.attachmentPath.isEmpty() && !comment.deleted()) {
+            body.addView(SocialMedia.inline(activity,comment.attachmentBucket,comment.attachmentPath));
+            if (comment.body.equals("Photo") || comment.body.equals("GIF")) copy.setVisibility(View.GONE);
+        }
         body.addView(copy);
 
         TextView metadata = text(SocialUi.relativeTime(comment.createdAt)
                 + (comment.edited() ? "  ·  Edited" : ""), 12, UiPalette.TEXT_MUTED, false);
         metadata.setPadding(0, 0, 0, dp(2));
-        body.addView(metadata);
+        metadata.setSingleLine(true);metadata.setMaxWidth(dp(120));metadata.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        nameRow.addView(metadata,new LinearLayout.LayoutParams(-2,-2));
         if (comment.deleted()) return row;
 
         LinearLayout actions = new LinearLayout(activity);
         actions.setGravity(Gravity.CENTER_VERTICAL);
         body.addView(actions);
+
 
         TextView reply = text("Reply", 13, UiPalette.TEXT_SECONDARY, true);
         reply.setPadding(0, dp(7), dp(18), dp(7));
@@ -507,6 +534,15 @@ final class InlineCommentsDialog extends BottomSheetDialog {
         like.setOnClickListener(v -> toggleLike(commentStates.get(comment.id)));
         likeViews.put(comment.id, like);
         actions.addView(like);
+        if (!comment.deleted() && isOwner(comment)) {
+            TextView menu = text("⋮", 20, Color.rgb(170, 170, 180), true);
+            menu.setGravity(Gravity.CENTER);
+            menu.setContentDescription("Comment options");
+            ZeroChillMotion.installPressFeedback(menu);
+            menu.setOnClickListener(v -> showCommentMenu(v, commentStates.get(comment.id)));
+            actions.addView(menu, new LinearLayout.LayoutParams(dp(48), dp(48)));
+        }
+
 
         return row;
     }
@@ -572,6 +608,7 @@ final class InlineCommentsDialog extends BottomSheetDialog {
         if (posting || comment == null || comment.deleted() || !isOwner(comment)) return;
         replyTarget = null;
         editTarget = comment;
+        attachment.clear(); attachment.control.setVisibility(View.GONE);
         showComposerMode("Editing your comment  ·  Cancel");
         composerInput.setText(comment.body);
         composerInput.setSelection(composerInput.length());
@@ -579,33 +616,43 @@ final class InlineCommentsDialog extends BottomSheetDialog {
     }
 
     private void cancelReply() {
+        pendingCommentId=java.util.UUID.randomUUID().toString();
         replyTarget = null;
         editTarget = null;
+        attachment.clear(); attachment.control.setVisibility(View.VISIBLE);
         showComposerMode("");
         composerInput.setText("");
         updateComposerHint();
     }
 
     private void submit() {
-        if (posting) return;
+        if (posting || attachment.preparing) return;
         if (!ZeroChillAccountRepository.hasStoredSession(activity)) {
             openAccount();
             return;
         }
         String message = clean(composerInput.getText().toString());
-        if (message.isEmpty()) return;
+        if (message.isEmpty() && attachment.selected == null) return;
         final String submittedAccount = ZeroChillSessionStore.currentUserId(activity);
+        String parent=replyTarget==null?"":replyTarget.id;
+        if(!message.equals(pendingCommentBody) || !parent.equals(pendingCommentParent) || pendingMedia!=attachment.selected) pendingCommentId=java.util.UUID.randomUUID().toString();
+        pendingCommentBody=message; pendingCommentParent=parent; pendingMedia=attachment.selected;
         posting = true;
+        updateSendState();
+        attachment.busy(true);
         composerInput.setEnabled(false);
         ZeroChillSocialRepository.Callback<Boolean> completed = (ok, error) ->
                 activity.runOnUiThread(() -> {
                     posting = false;
+                    updateSendState();
+                    attachment.busy(false);
                     if (!isShowing() || activity.isDestroyed()) return;
                     composerInput.setEnabled(true);
                     if (!submittedAccount.equals(ZeroChillSessionStore.currentUserId(activity))) { loadComments(); return; }
                     if (error != null) {
                         ZeroChillToast.makeText(activity, error.getMessage(), ZeroChillToast.LENGTH_LONG).show();
                     } else {
+                        pendingCommentId=java.util.UUID.randomUUID().toString();
                         cancelReply();
                         loadComments();
                     }
@@ -624,6 +671,8 @@ final class InlineCommentsDialog extends BottomSheetDialog {
                     pageTitle,
                     replyTarget == null ? "" : replyTarget.id,
                     message,
+                    attachment.selected,
+                    pendingCommentId,
                     completed
             );
         }
@@ -764,6 +813,13 @@ final class InlineCommentsDialog extends BottomSheetDialog {
             }
         });
         behavior.setState(BottomSheetBehavior.STATE_EXPANDED);
+        View parent=(View)bottomSheet.getParent();
+        parent.addOnLayoutChangeListener((v,l,t,r,b,oldL,oldT,oldR,oldB)->{
+            int height=Math.min(desiredHeight(),b-t);
+            if(height>0&&bottomSheet.getLayoutParams().height!=height){
+                ViewGroup.LayoutParams resized=bottomSheet.getLayoutParams();resized.height=height;bottomSheet.setLayoutParams(resized);
+            }
+        });
         bottomSheet.post(this::notifySheetTop);
     }
 

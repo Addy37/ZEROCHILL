@@ -25,6 +25,9 @@ final class FeedbackRepository {
     private static final String INSTALLATION_ID = "installation_id";
     private static final ExecutorService NETWORK = Executors.newSingleThreadExecutor();
 
+    interface RequestExecutor { JSONObject execute(JSONObject payload) throws Exception; }
+    static volatile RequestExecutor requestOverride; // Test seam; production always uses the configured endpoint.
+
     interface Callback<T> {
         void complete(T value, Exception error);
     }
@@ -198,6 +201,57 @@ final class FeedbackRepository {
         });
     }
 
+    // Called only by CrashReporter's background worker. Normal user Feedback keeps its own queue.
+    static CrashDelivery.Transport crashTransport(Context context) {
+        return new CrashDelivery.Transport() {
+            public String find(String marker) throws Exception {
+                JSONArray rows = request(basePayload(context, "list")).optJSONArray("items");
+                if (rows != null)
+                    for (int i = 0; i < rows.length(); i++) {
+                        JSONObject row = rows.optJSONObject(i);
+                        if (row != null
+                                && "bug_report".equals(row.optString("type"))
+                                && row.optString("message").contains(marker))
+                            return row.optString("id");
+                    }
+                return "";
+            }
+
+            public String create(CrashReport report) throws Exception {
+                return request(
+                                basePayload(context, "submit")
+                                        .put("type", "bug_report")
+                                        .put("section", "Crash")
+                                        .put("rating", JSONObject.NULL)
+                                        .put("message", report.firstMessage())
+                                        .put("app_version", report.version)
+                                        .put("android_version", report.androidVersion)
+                                        .put("device", report.device))
+                        .optString("id");
+            }
+
+            public java.util.Set<String> messages(String id) throws Exception {
+                JSONArray rows =
+                        request(basePayload(context, "thread").put("feedback_id", id))
+                                .optJSONArray("messages");
+                java.util.Set<String> messages = new java.util.HashSet<>();
+                if (rows != null)
+                    for (int i = 0; i < rows.length(); i++) {
+                        JSONObject row = rows.optJSONObject(i);
+                        if (row != null) messages.add(row.optString("message"));
+                    }
+                return messages;
+            }
+
+            public void reply(String id, String text) throws Exception {
+                request(
+                        basePayload(context, "reply")
+                                .put("feedback_id", id)
+                                .put("message", CrashSanitizer.clean(text)));
+            }
+        };
+    }
+
     private static JSONObject basePayload(Context context, String action) throws Exception {
         return new JSONObject()
                 .put("action", action)
@@ -217,6 +271,8 @@ final class FeedbackRepository {
     }
 
     private static JSONObject request(JSONObject payload) throws Exception {
+        RequestExecutor override=requestOverride;
+        if(override!=null)return override.execute(payload);
         if (!isConfigured()) throw new IllegalStateException("Feedback service is not configured.");
         HttpURLConnection connection = null;
         try {
@@ -227,7 +283,8 @@ final class FeedbackRepository {
             connection.setDoOutput(true);
             connection.setRequestProperty("Content-Type", "application/json");
             connection.setRequestProperty("apikey", BuildConfig.FEEDBACK_ANON_KEY);
-            connection.setRequestProperty("Authorization", "Bearer " + BuildConfig.FEEDBACK_ANON_KEY);
+            connection.setRequestProperty(
+                    "Authorization", "Bearer " + BuildConfig.FEEDBACK_ANON_KEY);
             byte[] bytes = payload.toString().getBytes(StandardCharsets.UTF_8);
             try (OutputStream output = connection.getOutputStream()) {
                 output.write(bytes);

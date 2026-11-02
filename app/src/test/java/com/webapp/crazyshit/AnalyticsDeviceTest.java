@@ -5,6 +5,11 @@ import static org.junit.Assert.assertEquals;
 import org.junit.Test;
 
 public class AnalyticsDeviceTest {
+    @Test public void sectionMetricsUsePagerPositionsRatherThanCompatibilityPageIds() {
+        String[] expected={"shows","shittok","onlyfap","library"};
+        for(int position=0;position<expected.length;position++) assertEquals(expected[position],AnalyticsTracker.primarySection(position));
+    }
+
     @org.junit.Test public void currentBrowserSourcesAreAcceptedBeforeBatching() {
         for (String source : java.util.Arrays.asList("crazyshit", "efukt", "kaotic", "baddiehub", "xmegadrive", "bunkr", "onlyhaven")) {
             org.junit.Assert.assertTrue(source, AnalyticsTracker.supportedSource(source));

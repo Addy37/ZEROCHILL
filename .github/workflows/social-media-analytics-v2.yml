@@ -1,0 +1,37 @@
+name: Social media and analytics v2 backend
+on:
+  pull_request:
+    paths:
+      - 'supabase/**'
+      - '.github/workflows/social-media-analytics-v2.yml'
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ['5432:5432']
+        options: --health-cmd "pg_isready -U postgres" --health-interval 10s --health-timeout 5s --health-retries 5
+    env:
+      PGHOST: localhost
+      PGPORT: '5432'
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      PGDATABASE: postgres
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - run: node --test supabase/tests/analytics-v2.test.mjs supabase/tests/analytics-handlers.test.mjs supabase/tests/social-media.test.mjs
+      - run: bash supabase/tests/run-social-sql.sh
+      - run: deno check --frozen --lock=supabase/functions/deno.lock supabase/functions/analytics-ingest-v2/index.ts supabase/functions/account-delete/index.ts supabase/functions/social-media-upload/index.ts supabase/functions/feedback-admin/index.ts
+      - run: deno test --frozen --lock=supabase/functions/deno.lock --allow-env supabase/functions/account-delete/handler_test.ts
+      - run: deno test --frozen --lock=supabase/functions/deno.lock --allow-env --allow-read=app/src/test/resources/social-media supabase/functions/social-media-upload/handler_test.ts

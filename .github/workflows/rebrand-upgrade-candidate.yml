@@ -12,7 +12,7 @@ on:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
-  cancel-in-progress: ${{ github.head_ref == 'hotfix/5.6.1-filtered-shittok' || github.head_ref == 'feature/smart-shittok-v2' || github.head_ref == 'fix/baddiehub-canonical-creator' || github.head_ref == 'feature/onlyfap-gallery-favorites' || github.head_ref == 'feature/bunkr-generated-previews' || github.head_ref == 'fix/bunkr-resolution-artwork-search' || github.head_ref == 'feature/shows-detail-cinematic-pagination' || github.head_ref == 'feature/shows-youtube-motion' || github.head_ref == 'feature/shows-watch-page' || github.head_ref == 'fix/search-results-visual-polish' || (github.head_ref == 'feature/search-recent-glass' || github.head_ref == 'feature/search-liquid-material') || github.head_ref == 'feature/shows-episode-list' || (github.head_ref == 'feature/onlyfap-gender-shelves' || github.head_ref == 'fix/library-startup-navigation' || github.head_ref == 'feature/onlyfap-liquid-rift' || github.head_ref == 'feature/zerochill-5.1.0' || github.head_ref == 'feature/source-contracts-preference-search') }}
+  cancel-in-progress: ${{ github.head_ref == 'feature/social-media-reactions-analytics-v2' || github.head_ref == 'hotfix/5.6.1-filtered-shittok' || github.head_ref == 'feature/smart-shittok-v2' || github.head_ref == 'fix/baddiehub-canonical-creator' || github.head_ref == 'feature/onlyfap-gallery-favorites' || github.head_ref == 'feature/bunkr-generated-previews' || github.head_ref == 'fix/bunkr-resolution-artwork-search' || github.head_ref == 'feature/shows-detail-cinematic-pagination' || github.head_ref == 'feature/shows-youtube-motion' || github.head_ref == 'feature/shows-watch-page' || github.head_ref == 'fix/search-results-visual-polish' || (github.head_ref == 'feature/search-recent-glass' || github.head_ref == 'feature/search-liquid-material') || github.head_ref == 'feature/shows-episode-list' || (github.head_ref == 'feature/onlyfap-gender-shelves' || github.head_ref == 'fix/library-startup-navigation' || github.head_ref == 'feature/onlyfap-liquid-rift' || github.head_ref == 'feature/zerochill-5.1.0' || github.head_ref == 'feature/source-contracts-preference-search') }}
 
 permissions:
   contents: read
@@ -29,6 +29,7 @@ jobs:
       SUPABASE_PUBLISHABLE_KEY: ${{ secrets.FEEDBACK_ANON_KEY }}
       # Signed betas and emulator upgrade checks must not pollute production analytics.
       ANALYTICS_ENDPOINT: ${{ github.head_ref == 'release/zerochill-5.0.0' && 'https://fketutffusxgjxjlckci.supabase.co/functions/v1/analytics-ingest' || '' }}
+      ANALYTICS_V2_ENDPOINT: ""
       SHITTOK_POOL_DIAGNOSTICS: ${{ github.head_ref == 'release/zerochill-5.0.0' && 'false' || 'true' }}
 
     steps:
@@ -321,6 +322,8 @@ jobs:
               if beta_code <= release_code:
                   raise SystemExit("5.1 beta must upgrade the released application")
               code, name = beta_code, beta
+          if "${{ github.head_ref || github.ref_name }}" == "feature/social-media-reactions-analytics-v2":
+              code, name = 5_007_000, "5.7.0-beta.1"
           with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as output:
               output.write(f"APP_VERSION_CODE={code}\n")
               output.write(f"APP_VERSION_NAME={name}\n")
@@ -347,6 +350,8 @@ jobs:
           keystore = pathlib.Path(os.environ["RUNNER_TEMP"]) / "zerochill-upgrade-candidate.jks"
           keystore.write_bytes(base64.b64decode(data["keystore_base64"]))
           keystore.chmod(0o600)
+          if "${{ github.head_ref || github.ref_name }}" == "feature/social-media-reactions-analytics-v2":
+              code, name = 5_007_000, "5.7.0-beta.1"
           with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as output:
               output.write(f"ANDROID_KEYSTORE_PATH={keystore}\n")
               output.write(f"ANDROID_KEYSTORE_PASSWORD={data['store_password']}\n")

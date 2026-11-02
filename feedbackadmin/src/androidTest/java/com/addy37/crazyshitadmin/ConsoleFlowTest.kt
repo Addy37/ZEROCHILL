@@ -78,8 +78,8 @@ class ConsoleFlowTest {
         ui.waitUntil(10_000) {state.communityActivity.isNotEmpty()}
         ui.onNode(hasScrollToIndexAction()).performScrollToNode(hasText("Fixture User commented"))
         ui.onNodeWithText("Fixture User commented").assertExists();screenshot("03c-community-social")
-        ui.onNode(hasScrollToIndexAction()).performScrollToNode(hasText("Reports"))
-        ui.onNodeWithText("Reports").performClick()
+        ui.onNode(hasScrollToIndexAction()).performScrollToNode(hasText("Reports") and hasClickAction())
+        ui.onNode(hasText("Reports") and hasClickAction()).performClick()
         ui.waitUntil(10_000) {state.communityReports.isNotEmpty()}
         ui.onNode(hasScrollToIndexAction()).performScrollToNode(hasText("reported",substring=true))
         ui.onNodeWithText("reported",substring=true).assertExists();screenshot("03d-community-reports")
@@ -121,10 +121,26 @@ class ConsoleFlowTest {
         ui.onNodeWithTag("source-list").performScrollToIndex(0)
         ui.onNodeWithText("History").performClick();idle();screenshot("09-history")
         ui.onNodeWithContentDescription("Close history").performClick()
-        ui.onNodeWithText("Analytics",useUnmergedTree=true).performClick();idle();screenshot("10-analytics")
+        ui.onNodeWithText("Analytics",useUnmergedTree=true).performClick();idle()
+        ui.onNodeWithText("Creator rankings").assertDoesNotExist()
+        ui.onNodeWithText("Eastern Time",substring=true).assertExists();screenshot("10-analytics")
+        ui.onNode(hasScrollToIndexAction()).performScrollToNode(hasText("Session averages"))
+        ui.onNodeWithText("300.5 seconds per session").assertExists();screenshot("10b-analytics-averages")
         ui.onNodeWithContentDescription("Admin settings").performClick()
         ui.onNodeWithText("Lock session").performClick();ui.onNodeWithText("Lock",useUnmergedTree=true).performClick()
         ui.onNodeWithText("Connect securely").assertExists();assertEquals("",SecureTokenStore.read(app))
+    }
+    @Test fun crashInboxKeepsSummaryVisibleAboveDiagnosticReplies() {
+        val crash=AdminRepository.Item(JSONObject().put("id","crash-fixture").put("type","bug_report")
+            .put("section","Crash").put("message","ZEROCHILL crashed in ShitTok")
+            .put("last_message","Crash diagnostics 3/3: stack frames").put("app_version","5.7.0-beta.1")
+            .put("device","OnePlus CPH2655").put("created_at","2026-11-02T12:00:00Z"))
+        var opened=false
+        ui.setContent {ConsoleTheme {FeedbackRow(crash) {opened=true}}}
+        ui.onNodeWithText("Bug report · Crash").assertExists()
+        ui.onNodeWithText("ZEROCHILL crashed in ShitTok").assertExists().performClick()
+        ui.onNodeWithText("Crash diagnostics 3/3: stack frames").assertDoesNotExist()
+        assertTrue(opened);screenshot("12-crash-feedback")
     }
     @Test fun rejectedPairingKeepsTokenStoreEmpty() {
         launch(false);fake.rejectPairing=true
@@ -189,7 +205,7 @@ private class FixtureGateway : AdminGateway {
     override fun list(token:String):List<AdminRepository.Item> {if(rejectPairing) throw SecurityException("Rejected fixture");return if(deleted) emptyList() else listOf(item())}
     override fun analytics(token:String):AdminRepository.AnalyticsDashboard {
         if(expired) throw SecurityException("Expired")
-        return AdminRepository.AnalyticsDashboard(JSONObject("""{"active_users":{"daily":128,"weekly":426,"monthly":1248},"generated_at":"2026-10-20T04:25:00Z","creators":[{"value":"Creator A","unique_users":162,"event_count":713},{"value":"Creator B","unique_users":98,"event_count":341},{"value":"Creator C","unique_users":64,"event_count":190}],"sections":[{"value":"shittok","unique_users":318,"event_count":6200},{"value":"onlyfap","unique_users":267,"event_count":3100},{"value":"shows","unique_users":104,"event_count":580}],"sources":[{"value":"kaotic","unique_users":240,"event_count":2000},{"value":"fapello","unique_users":170,"event_count":1410}],"versions":[{"value":"5.0.1","unique_users":310,"event_count":2000},{"value":"5.0.0","unique_users":116,"event_count":560}],"device_models":[{"value":"CPH2655","unique_users":38,"users_today":12,"event_count":470}],"device_manufacturers":[{"value":"Samsung","unique_users":180,"users_today":44,"event_count":1600}],"android_versions":[{"value":"16","unique_users":245,"users_today":95,"event_count":2800}]}"""))
+        return AdminRepository.AnalyticsDashboard(JSONObject("""{"active_users":{"daily":128,"weekly":426,"monthly":1248},"generated_at":"2026-10-20T04:25:00Z","sections":[{"value":"shittok","event_count":6200},{"value":"onlyfap","event_count":3100},{"value":"shows","event_count":580},{"value":"library","event_count":250}],"versions":[{"value":"5.7.0-beta.1","event_count":2000}],"device_models":[{"value":"OnePlus CPH2655","event_count":470}],"android_versions":[{"value":"16","event_count":2800}],"metrics":[{"value":"provider_failure / kaotic","event_count":3},{"value":"provider_missing / fapello","event_count":2},{"value":"playback_failure / network","event_count":2},{"value":"buffering / all","event_count":5},{"value":"search / all","event_count":18},{"value":"favorites / all","event_count":6},{"value":"creator_gallery / all","event_count":4},{"value":"update_prompt / all","event_count":6},{"value":"update_adoption / 5.7.0-beta.1","event_count":5},{"value":"account_signin / all","event_count":5},{"value":"account_error / auth","event_count":1},{"value":"comments / all","event_count":12},{"value":"likes / all","event_count":20},{"value":"dms / all","event_count":7},{"value":"backend_error / network","event_count":2}],"average_session_seconds":300.5,"average_shittok_videos":15.2}"""))
     }
     override fun communityOverview(token:String)=CommunityRepository.Overview(JSONObject("""{"accounts":443,"new_accounts_7d":169,"comments":96,"video_likes":2416,"comment_likes":9,"messages":70,"reports":1,"blocks":2}"""))
     override fun accounts(token:String,query:String,filter:String)=listOf(communityAccount()).filter {query.isBlank() || it.name().contains(query,true)}

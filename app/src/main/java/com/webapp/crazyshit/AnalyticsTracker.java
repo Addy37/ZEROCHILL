@@ -21,34 +21,34 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
-import java.time.ZoneOffset;
 import java.time.temporal.TemporalAdjusters;
 import java.util.Locale;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
- * Sends aggregate-only usage signals. Stable installation IDs never leave the device for analytics.
- * Unique keys rotate by metric, value and UTC day/week/month so analytics cannot build a persistent
- * cross-feature viewing profile for an installation.
+ * Analytics v2: local counters and foreground-session summaries, with Eastern calendar periods.
+ * Independent random period seeds expire locally; no account or installation identity is used.
  */
 final class AnalyticsTracker {
     private static final ScheduledExecutorService NETWORK = Executors.newSingleThreadScheduledExecutor();
-    private static final AnalyticsBatchQueue QUEUE = new AnalyticsBatchQueue((task, delay) -> {
-        java.util.concurrent.ScheduledFuture<?> future = NETWORK.schedule(task, delay, TimeUnit.MILLISECONDS);
+    private static final java.util.Map<String,Long> COUNTERS = new java.util.LinkedHashMap<>();
+    private static final AnalyticsBatchQueue QUEUE=new AnalyticsBatchQueue((task,delay) -> {
+        java.util.concurrent.ScheduledFuture<?> future=NETWORK.schedule(task,delay,TimeUnit.MILLISECONDS);
         return () -> future.cancel(false);
-    }, events -> {
-        JSONArray batch = new JSONArray();
-        for (String event : events) batch.put(new JSONObject(event));
-        return post(new JSONObject().put("events", batch));
-    });
+    },summaries -> {
+        JSONArray batch=new JSONArray();
+        for(String summary:summaries) batch.put(new JSONObject(summary));
+        return post(new JSONObject().put("summaries",batch));
+    },5,60_000,30);
+    private static Context application;
+    private static int started;
+    private static long segmentStart;
+    private static java.util.concurrent.ScheduledFuture<?> periodic;
+    private static final java.time.ZoneId EASTERN=java.time.ZoneId.of("America/New_York");
     private static final AtomicBoolean INITIALIZED = new AtomicBoolean(false);
-    private static final Map<String, Long> RECENT = new ConcurrentHashMap<>();
-    private static final long DUPLICATE_WINDOW_MS = 5_000L;
 
     private AnalyticsTracker() {
     }
@@ -56,18 +56,14 @@ final class AnalyticsTracker {
     static void initialize(Context context) {
         if (!isConfigured() || !INITIALIZED.compareAndSet(false, true)) return;
         Context app = context.getApplicationContext();
-        track(app, "app_open", "all");
-        track(app, "app_version", BuildConfig.VERSION_NAME);
-        track(app, "device_model", deviceModel(Build.MANUFACTURER, Build.MODEL));
-        track(app, "device_manufacturer", deviceManufacturer(Build.MANUFACTURER));
-        track(app, "android_version", androidVersion(Build.VERSION.RELEASE));
+        application=app;
+
     }
 
     static void onActivityCreated(Activity activity, Bundle state) {
         if (activity == null || state != null) return;
         String name = activity.getClass().getSimpleName();
         if (activity instanceof NativeMainActivity) attachMainPager(activity);
-        else if ("SearchActivity".equals(name)) trackSection(activity, "search");
         else if ("FavoritesActivity".equals(name)) trackSection(activity, "favorites");
         else if ("DownloadedActivity".equals(name)) trackSection(activity, "downloads");
         else if ("SettingsActivity".equals(name)) trackSection(activity, "settings");
@@ -81,23 +77,95 @@ final class AnalyticsTracker {
         track(context, "section", section.trim().toLowerCase(Locale.US));
     }
 
-    static void trackSource(Context context, String source) {
-        if (source == null) return;
-        String clean = source.trim().toLowerCase(Locale.US);
-        if (supportedSource(clean)) track(context, "source", clean);
-    }
-
+    // Kept as compatibility entry points. Normal provider usage and creator names never leave device.
+    static void trackSource(Context context, String source) { }
     static boolean supportedSource(String source) {
-        return java.util.Arrays.asList("crazyshit", "efukt", "fapzone", "fapello", "bunkr",
-                "wikifeet", "wikifeetx", "kaotic", "baddiehub", "xmegadrive", "onlyhaven").contains(source);
+        return java.util.Arrays.asList("crazyshit","efukt","fapzone","fapello","bunkr","wikifeet",
+                "wikifeetx","kaotic","baddiehub","xmegadrive","onlyhaven").contains(source);
     }
+    static void trackCreator(Context context, String ignored) { track(context,"creator_gallery","all"); }
+    static void event(Context context,String metric) { track(context,metric,"all"); }
+    static void failure(Context context,String metric,String category) {
+        if(!AnalyticsV2Policy.allowed(metric,category)) category="unknown";
+        track(context,metric,category);
+    }
+    static void provider(Context context,String url,String metric) {
+        String source="unknown";
+        if(BaddieHubRepository.isBaddieHubUrl(url)) source="baddiehub";
+        else if(XMegaDriveRepository.isXMegaDriveUrl(url)) source="xmegadrive";
+        else if(FapelloRepository.isFapelloUrl(url)) source="fapello";
+        else if(BunkrRepository.isBunkrUrl(url)) source="bunkr";
+        else if(OnlyHavenRepository.isOnlyHavenUrl(url)) source="onlyhaven";
+        else if(EfuktRepository.isEfuktUrl(url)) source="efukt";
+        else if(WebVideoSourceRepository.isKaoticUrl(url)) source="kaotic";
+        else if(WikiFeetRepository.isWikiFeetUrl(url)) source="wikifeet";
+        else if(url!=null && url.contains("crazyshit.com/")) source="crazyshit";
+        failure(context,metric,source);
+    }
+    static void backendFailure(int status) { if(application!=null) track(application,"backend_error",AnalyticsV2Policy.backendCategory(status)); }
+    static void onStarted(Activity activity) {
+        if (!isConfigured()) return;
+        if (started++ != 0) return;
+        NETWORK.execute(() -> {
+            if(segmentStart!=0) return;
+            segmentStart=android.os.SystemClock.elapsedRealtime();
+            count("sessions","all",1);
+            android.content.SharedPreferences adoption=application.getSharedPreferences("analytics_v2_adoption",Context.MODE_PRIVATE);
+            String previous=adoption.getString("version","");
+            long firstInstall=0,lastUpdate=0;
+            try {
+                android.content.pm.PackageInfo info=application.getPackageManager().getPackageInfo(application.getPackageName(),0);
+                firstInstall=info.firstInstallTime; lastUpdate=info.lastUpdateTime;
+            } catch(Exception ignored) { }
+            if(AnalyticsV2Policy.adoptedUpdate(previous,BuildConfig.VERSION_NAME,firstInstall,lastUpdate)) count("update_adoption",BuildConfig.VERSION_NAME,1);
+            adoption.edit().putString("version",BuildConfig.VERSION_NAME).apply();
+            count("app_version",BuildConfig.VERSION_NAME,1);
+            count("device_model",deviceModel(Build.MANUFACTURER,Build.MODEL),1);
+            count("android_version",androidVersion(Build.VERSION.RELEASE),1);
+            periodic=NETWORK.scheduleWithFixedDelay(() -> summarize(false),15,15,TimeUnit.MINUTES);
+        });
+    }
+    static void onStopped(Activity activity) {
+        if (!isConfigured() || started==0 || --started!=0 || activity.isChangingConfigurations()) return;
+        NETWORK.execute(() -> { if(periodic!=null) periodic.cancel(false); summarize(true); });
+    }
+    private static void summarize(boolean ending) {
+        try {
+            long now=android.os.SystemClock.elapsedRealtime();
+            if(segmentStart!=0) count("session_ms","all",Math.min(900_000,Math.max(0,now-segmentStart)));
+            segmentStart=ending?0:now;
+            if(COUNTERS.isEmpty() || application==null) return;
+            JSONArray events=new JSONArray();
+            for(java.util.Map.Entry<String,Long> entry:COUNTERS.entrySet()) {
+                String[] key=entry.getKey().split("\n",2);
+                events.put(new JSONObject().put("metric",key[0]).put("value",key[1]).put("count",entry.getValue()));
+            }
+            COUNTERS.clear();
+            LocalDate day=LocalDate.now(EASTERN);
+            JSONObject active=new JSONObject();
+            String[] names={"day","week","month"};
+            LocalDate[] periods={day,day.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY)),day.withDayOfMonth(1)};
+            android.content.SharedPreferences prefs=application.getSharedPreferences("analytics_v2_periods",Context.MODE_PRIVATE);
+            for(int i=0;i<3;i++) {
+                String period=periods[i].toString();
+                String seed=prefs.getString(names[i]+"_seed","");
+                if(!period.equals(prefs.getString(names[i]+"_period","")) || seed.isEmpty()) {
+                    seed=java.util.UUID.randomUUID().toString();
+                    prefs.edit().putString(names[i]+"_period",period).putString(names[i]+"_seed",seed).apply();
+                }
+                active.put(names[i]+"_key",anonymousKey(seed,names[i],periods[i]));
+                active.put(names[i]+"_period",period);
+            }
+            JSONObject payload=new JSONObject().put("version",BuildConfig.VERSION_NAME).put("events",events).put("active",active);
+            QUEUE.add(payload.toString());
+            QUEUE.flushNow(); // Reuse the existing bounded retry/cooldown batching transport.
 
-    static void trackCreator(Context context, String creator) {
-        String clean = cleanCreator(creator);
-        if (clean.isEmpty()) return;
-        trackSection(context, "creator_gallery");
-        trackSource(context, "fapzone");
-        track(context, "creator", clean);
+        } catch(Exception ignored) { /* Best effort. Never affects app operation. */ }
+    }
+    private static void count(String metric,String value,long amount) {
+        if(!AnalyticsV2Policy.allowed(metric,value) || amount<=0 || COUNTERS.size()>=160 && !COUNTERS.containsKey(metric+"\n"+value)) return;
+        String key=metric+"\n"+value;
+        COUNTERS.put(key,Math.min(metric.equals("session_ms")?900_000:metric.equals("sessions")?1:10_000,COUNTERS.getOrDefault(key,0L)+amount));
     }
 
     private static void attachMainPager(Activity activity) {
@@ -133,11 +201,16 @@ final class AnalyticsTracker {
         return null;
     }
 
-    private static void trackPrimaryPage(Context context, int position) {
-        if (position == MainPagerAdapter.PAGE_SERIES) trackSection(context, "collections");
-        else if (position == MainPagerAdapter.PAGE_CHAOS) trackSection(context, "chaos");
-        else if (position == MainPagerAdapter.PAGE_LIBRARY) trackSection(context, "library");
-        else trackSection(context, "home");
+    private static void trackPrimaryPage(Context context, int pagerPosition) {
+        trackSection(context,primarySection(pagerPosition));
+    }
+
+    static String primarySection(int pagerPosition) {
+        int page=MainPagerAdapter.pageForPagerPosition(pagerPosition);
+        if(page==MainPagerAdapter.PAGE_SERIES) return "shows";
+        if(page==MainPagerAdapter.PAGE_CHAOS) return "shittok";
+        if(page==MainPagerAdapter.PAGE_ONLYFAP) return "onlyfap";
+        return "library";
     }
 
     private static void trackNativeBrowser(Activity activity) {
@@ -163,45 +236,24 @@ final class AnalyticsTracker {
     }
 
     private static void track(Context context, String metric, String value) {
-        if (!isConfigured() || context == null || metric == null || value == null || value.isEmpty()) return;
-        String recentKey = metric + '\n' + value;
-        long now = android.os.SystemClock.elapsedRealtime();
-        Long previous = RECENT.put(recentKey, now);
-        if (previous != null && now - previous < DUPLICATE_WINDOW_MS) return;
-
-        Context app = context.getApplicationContext();
-        NETWORK.execute(() -> {
-            try {
-                String installation = FeedbackRepository.installationId(app);
-                LocalDate today = LocalDate.now(ZoneOffset.UTC);
-                LocalDate week = today.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
-                LocalDate month = today.withDayOfMonth(1);
-                JSONObject payload = new JSONObject()
-                        .put("metric", metric)
-                        .put("value", value)
-                        .put("day_key", anonymousKey(installation, "day", today, metric, value))
-                        .put("week_key", anonymousKey(installation, "week", week, metric, value))
-                        .put("month_key", anonymousKey(installation, "month", month, metric, value));
-                QUEUE.add(payload.toString());
-            } catch (Exception ignored) {
-                // Analytics never blocks or changes app behavior.
-            }
-        });
+        if (!isConfigured() || context==null) return;
+        if(metric.equals("section")) {
+            if(value.equals("chaos")) value="shittok";
+            else if(value.equals("collections")) value="shows";
+            else if(value.equals("home")) value="onlyfap";
+            else if(value.equals("search") || value.equals("favorites") || value.equals("creator_gallery")) {metric=value;value="all";}
+        }
+        final String m=metric,v=value;
+        if(!AnalyticsV2Policy.allowed(m,v)) return;
+        NETWORK.execute(() -> count(m,v,1));
     }
 
     private static boolean isConfigured() {
-        return !BuildConfig.ANALYTICS_ENDPOINT.trim().isEmpty();
+        return !BuildConfig.ANALYTICS_V2_ENDPOINT.trim().isEmpty();
     }
 
-    private static String anonymousKey(
-            String installation,
-            String period,
-            LocalDate periodStart,
-            String metric,
-            String value
-    ) throws Exception {
-        String input = "analytics-v1\n" + installation + '\n' + period + '\n' + periodStart + '\n'
-                + metric + '\n' + value;
+    static String anonymousKey(String seed,String period,LocalDate periodStart) throws Exception {
+        String input = "analytics-v2\n" + seed + '\n' + period + '\n' + periodStart;
         byte[] digest = MessageDigest.getInstance("SHA-256")
                 .digest(input.getBytes(StandardCharsets.UTF_8));
         StringBuilder result = new StringBuilder(digest.length * 2);
@@ -212,7 +264,7 @@ final class AnalyticsTracker {
     private static int post(JSONObject payload) throws Exception {
         HttpURLConnection connection = null;
         try {
-            connection = (HttpURLConnection) new URL(BuildConfig.ANALYTICS_ENDPOINT).openConnection();
+            connection = (HttpURLConnection) new URL(BuildConfig.ANALYTICS_V2_ENDPOINT).openConnection();
             connection.setRequestMethod("POST");
             connection.setConnectTimeout(7_000);
             connection.setReadTimeout(10_000);
@@ -238,16 +290,6 @@ final class AnalyticsTracker {
         } finally {
             if (connection != null) connection.disconnect();
         }
-    }
-
-    private static String cleanCreator(String creator) {
-        String clean = value(creator).replaceAll("\\s+", " ");
-        if (clean.length() > 120) clean = clean.substring(0, 120).trim();
-        for (int i = 0; i < clean.length(); i++) {
-            char character = clean.charAt(i);
-            if (character < 32 || character == 127) return "";
-        }
-        return clean;
     }
 
     static String deviceModel(String manufacturer, String model) {

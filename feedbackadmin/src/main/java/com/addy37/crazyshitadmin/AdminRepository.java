@@ -110,6 +110,9 @@ final class AdminRepository {
         final long monthlyUsers;
         final String generatedAt;
         final List<AnalyticsRow> sections;
+        final List<AnalyticsRow> metrics;
+        final double averageSessionSeconds;
+        final double averageShittokVideos;
         final List<AnalyticsRow> sources;
         final List<AnalyticsRow> creators;
         final List<AnalyticsRow> versions;
@@ -123,6 +126,9 @@ final class AdminRepository {
             weeklyUsers = active == null ? 0L : active.optLong("weekly");
             monthlyUsers = active == null ? 0L : active.optLong("monthly");
             generatedAt = value.optString("generated_at");
+            metrics=analyticsRows(value.optJSONArray("metrics"));
+            averageSessionSeconds=value.optDouble("average_session_seconds",0);
+            averageShittokVideos=value.optDouble("average_shittok_videos",0);
             sections = analyticsRows(value.optJSONArray("sections"));
             sources = analyticsRows(value.optJSONArray("sources"));
             creators = analyticsRows(value.optJSONArray("creators"));
@@ -207,14 +213,14 @@ final class AdminRepository {
 
     static AnalyticsDashboard analytics(String token) throws Exception {
         JSONObject result = request(BuildConfig.ADMIN_FEEDBACK_ENDPOINT, token,
-                new JSONObject().put("action", "analytics"));
+                new JSONObject().put("action", "analytics_v2"));
         JSONObject analytics = result.optJSONObject("analytics");
         return new AnalyticsDashboard(analytics == null ? new JSONObject() : analytics);
     }
 
     static ActiveCounts activeCounts(String token) throws Exception {
         JSONObject result = request(BuildConfig.ADMIN_FEEDBACK_ENDPOINT, token,
-                new JSONObject().put("action", "active_counts"));
+                new JSONObject().put("action", "active_counts_v2"));
         JSONObject analytics = result.optJSONObject("analytics");
         return new ActiveCounts(analytics == null ? new JSONObject() : analytics);
     }

@@ -13,6 +13,9 @@ final class AnalyticsBatchQueue {
     interface Cancellation { void cancel(); }
     interface Scheduler { Cancellation schedule(Runnable task, long delayMs); }
     interface Transport { int send(List<String> events) throws Exception; }
+    private final int batchSize;
+    private final long flushDelay;
+    private final int maxPending;
     private final Scheduler scheduler;
     private final Transport transport;
     private final List<String> pending = new ArrayList<>();
@@ -21,6 +24,11 @@ final class AnalyticsBatchQueue {
     private boolean coolingDown;
 
     AnalyticsBatchQueue(Scheduler scheduler, Transport transport) {
+        this(scheduler,transport,BATCH_SIZE,FLUSH_DELAY_MS,MAX_PENDING);
+    }
+
+    AnalyticsBatchQueue(Scheduler scheduler,Transport transport,int batchSize,long flushDelay,int maxPending) {
+        this.batchSize=batchSize; this.flushDelay=flushDelay; this.maxPending=maxPending;
         this.scheduler = scheduler;
         this.transport = transport;
     }
@@ -28,11 +36,11 @@ final class AnalyticsBatchQueue {
     void add(String event) {
         // Best-effort analytics: bound memory during an extended outage. Normal batches never
         // hit this limit. Retain recent events rather than growing an unbounded offline backlog.
-        if (pending.size() == MAX_PENDING) pending.remove(0);
+        if (pending.size() == maxPending) pending.remove(0);
         pending.add(event);
         if (retry != null || coolingDown) return;
-        if (pending.size() >= BATCH_SIZE) flush();
-        else if (scheduled == null) schedule(FLUSH_DELAY_MS);
+        if (pending.size() >= batchSize) flush();
+        else if (scheduled == null) schedule(flushDelay);
     }
 
     private void schedule(long delay) {
@@ -44,6 +52,8 @@ final class AnalyticsBatchQueue {
         }, delay);
     }
 
+    void flushNow() { if(retry==null && !coolingDown) flush(); }
+
     private void flush() {
         if (scheduled != null) { scheduled.cancel(); scheduled = null; }
         boolean secondAttempt = retry != null;
@@ -51,7 +61,7 @@ final class AnalyticsBatchQueue {
         retry = null;
         if (batch == null) {
             if (pending.isEmpty()) return;
-            int size = Math.min(BATCH_SIZE, pending.size());
+            int size = Math.min(batchSize, pending.size());
             batch = new ArrayList<>(pending.subList(0, size));
             pending.subList(0, size).clear();
         }
@@ -70,7 +80,7 @@ final class AnalyticsBatchQueue {
             }
         } else if (!pending.isEmpty()) {
             // Drain an outage backlog gradually; never burst one invocation per queued event.
-            schedule(FLUSH_DELAY_MS);
+            schedule(flushDelay);
         }
     }
 }

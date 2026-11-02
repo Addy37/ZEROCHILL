@@ -28,7 +28,7 @@ async function withBackend(sessionActive: boolean, execute: (calls: string[]) =>
     calls.push(url);
     if (url.endsWith("/auth/v1/user")) return response({ id: "11111111-1111-4111-8111-111111111111", aud: "authenticated", email: "test@example.com" });
     if (url.endsWith("/rest/v1/rpc/current_zerochill_session")) return response(sessionActive);
-    if (url.includes("/storage/v1/object/list/avatars")) {
+    if (["avatars","social-photos","social-gifs"].some(bucket=>url.includes("/storage/v1/object/list/"+bucket))) {
       assert(String(init?.body).includes("11111111-1111-4111-8111-111111111111"), "Must list only the verified owner's avatar folder");
       return storageFailure ? response({ message: "Storage unavailable" }, 500) : response([]);
     }

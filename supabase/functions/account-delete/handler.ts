@@ -10,11 +10,12 @@ async function removeAvatarFolder(
   admin: SupabaseClient,
   path: string,
   depth = 0,
+  bucket = "avatars",
 ): Promise<void> {
   if (depth > 8) throw new Error("Avatar folder depth exceeded");
   // Always start at offset zero. Removing a page shifts the next page down.
   for (let batch = 0; batch < 1000; batch++) {
-    const { data, error } = await admin.storage.from("avatars").list(path, {
+    const { data, error } = await admin.storage.from(bucket).list(path, {
       limit: 100,
       offset: 0,
     });
@@ -24,11 +25,11 @@ async function removeAvatarFolder(
     const files: string[] = [];
     for (const object of data) {
       const child = `${path}/${object.name}`;
-      if (object.id === null) await removeAvatarFolder(admin, child, depth + 1);
+      if (object.id === null) await removeAvatarFolder(admin, child, depth + 1, bucket);
       else files.push(child);
     }
     if (files.length) {
-      const { error: removeError } = await admin.storage.from("avatars").remove(files);
+      const { error: removeError } = await admin.storage.from(bucket).remove(files);
       if (removeError) throw removeError;
     }
   }
@@ -87,6 +88,8 @@ export async function handleDeleteAccount(request: Request): Promise<Response> {
   });
   try {
     await removeAvatarFolder(admin, userId);
+    await removeAvatarFolder(admin, userId,0,"social-photos");
+    await removeAvatarFolder(admin, userId,0,"social-gifs");
     const { error } = await admin.auth.admin.deleteUser(userId, false);
     if (error) throw error;
     return json(200, { deleted: true });

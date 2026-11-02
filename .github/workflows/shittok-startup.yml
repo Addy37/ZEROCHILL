@@ -16,6 +16,7 @@ jobs:
     env:
       ZEROCHILL_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
       ANALYTICS_ENDPOINT: ''
+      ANALYTICS_V2_ENDPOINT: ""
       SHITTOK_POOL_DIAGNOSTICS: 'true'
     steps:
       - uses: actions/checkout@v6

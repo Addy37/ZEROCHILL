@@ -40,7 +40,7 @@ class MainActivity : ComponentActivity() {
             val liveScreen = state.destination == "home" || state.destination == "analytics"
             val failed = state.errors.containsKey("activeCounts")
             if(state.paired && state.threadId.isEmpty() && liveScreen) state.loadActiveCounts()
-            liveCounterHandler.postDelayed(this, if(failed) 30_000L else 5_000L)
+            liveCounterHandler.postDelayed(this, if(failed) 30_000L else 60_000L)
         }
     }
     override fun onCreate(savedInstanceState: Bundle?) {

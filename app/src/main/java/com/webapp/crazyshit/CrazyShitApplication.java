@@ -14,6 +14,7 @@ public final class CrazyShitApplication extends Application {
     @Override
     public void onCreate() {
         super.onCreate();
+        CrashReporter.install(this);
         AppPerformance.begin();
         long initializationAt = android.os.SystemClock.elapsedRealtime();
         android.os.Trace.beginSection("zc.startup.application");
@@ -64,6 +65,7 @@ public final class CrazyShitApplication extends Application {
             @Override
             public void onActivityStarted(Activity activity) {
                 RatingFeedbackPrompt.onActivityStarted(activity);
+                AnalyticsTracker.onStarted(activity);
                 AppPerformance.started(activity);
             }
 
@@ -71,6 +73,7 @@ public final class CrazyShitApplication extends Application {
             public void onActivityResumed(Activity activity) {
                 PhoneOrientationPolicy.applyBrowsingOrientation(activity);
                 ZeroChillToast.onResumed(activity);
+                CrashReporter.resumed(activity);
                 if (!StartupWizardPolicy.shouldShow(activity)) {
                     NotificationCoordinator.onAppForeground(activity);
                 }
@@ -80,6 +83,7 @@ public final class CrazyShitApplication extends Application {
 
             @Override
             public void onActivityPaused(Activity activity) {
+                CrashReporter.paused();
                 ZeroChillToast.onPaused(activity);
                 SocialActivityCoordinator.onPaused(activity);
                 UiFoundationCoordinator.onActivityPaused(activity);
@@ -88,6 +92,7 @@ public final class CrazyShitApplication extends Application {
             @Override
             public void onActivityStopped(Activity activity) {
                 RatingFeedbackPrompt.onActivityStopped(activity);
+                AnalyticsTracker.onStopped(activity);
                 AppPerformance.stopped(activity);
             }
 

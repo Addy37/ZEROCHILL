@@ -45,7 +45,7 @@ import androidx.compose.ui.unit.dp
             }
             Spacer(Modifier.height(8.dp))
             val generated = counts?.generatedAt?.takeIf { it.isNotEmpty() } ?: a?.generatedAt
-            Text(generated?.let { "Live counters · ${dateLabel(it)}" } ?: "Waiting for analytics", color=Muted, style=MaterialTheme.typography.bodySmall)
+            Text(generated?.let { "Eastern Time · ${easternLabel(it)}" } ?: "Waiting for analytics", color=Muted, style=MaterialTheme.typography.bodySmall)
             ErrorPanel(state.errors["analytics"], state::loadAnalytics)
         }
         item {

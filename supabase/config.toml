@@ -21,3 +21,9 @@ verify_jwt = false
 
 [functions.analytics-ingest]
 verify_jwt = false
+
+[functions.analytics-ingest-v2]
+verify_jwt = false
+
+[functions.social-media-upload]
+verify_jwt = true

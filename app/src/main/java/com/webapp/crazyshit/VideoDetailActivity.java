@@ -1233,10 +1233,14 @@ public class VideoDetailActivity extends Activity {
         }
         player.setPlayWhenReady(!showsOrigin || (!showsRestorePaused && !showsCompleted));
         player.addListener(new Player.Listener() {
+            private long analyticsBufferStart;
             @Override
             public void onPlaybackStateChanged(int playbackState) {
                 if (showsOrigin && showsSavedOnExit) return;
+                if(playbackState==Player.STATE_BUFFERING && analyticsBufferStart==0) analyticsBufferStart=android.os.SystemClock.elapsedRealtime();
                 if (playbackState == Player.STATE_READY) {
+                    if(analyticsBufferStart!=0 && android.os.SystemClock.elapsedRealtime()-analyticsBufferStart>=2000) AnalyticsTracker.event(VideoDetailActivity.this,"buffering");
+                    analyticsBufferStart=0;
                     RatingFeedbackPrompt.recordSuccessfulPlayback(VideoDetailActivity.this, mediaUrl);
                 } else if (playbackState == Player.STATE_ENDED) {
                     if (showsOrigin) {
@@ -1278,6 +1282,7 @@ public class VideoDetailActivity extends Activity {
 
             @Override
             public void onPlayerError(PlaybackException error) {
+                AnalyticsTracker.failure(VideoDetailActivity.this,"playback_failure",AnalyticsV2Policy.playbackCategory(error.errorCode));
                 if (showsOrigin && showsSavedOnExit) return;
                 dismissStartupPoster();
                 if (!recoverPlayback(error)) showPlaybackFailure();

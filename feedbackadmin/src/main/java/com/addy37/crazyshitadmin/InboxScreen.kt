@@ -61,10 +61,10 @@ import androidx.compose.ui.unit.sp
         verticalArrangement=Arrangement.spacedBy(10.dp)) {
         Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(9.dp)) {
             Icon(icon,null,tint=color,modifier=Modifier.size(19.dp))
-            Text(typeLabel(item.type),Modifier.weight(1f),fontWeight=FontWeight.SemiBold,fontSize=13.sp)
+            Text(typeLabel(item.type)+(if(item.section=="Crash") " · Crash" else ""),Modifier.weight(1f),fontWeight=FontWeight.SemiBold,fontSize=13.sp)
             if(item.unreadCount>0) StatusTag("${item.unreadCount} unread")
         }
-        Text((if(item.lastSender=="developer") "You: " else "")+item.lastMessage, maxLines=2,overflow=TextOverflow.Ellipsis,
+        Text(if(item.section=="Crash") item.message else (if(item.lastSender=="developer") "You: " else "")+item.lastMessage, maxLines=2,overflow=TextOverflow.Ellipsis,
             style=MaterialTheme.typography.bodyLarge,fontWeight=if(item.unreadCount>0) FontWeight.SemiBold else FontWeight.Normal)
         Row(horizontalArrangement=Arrangement.spacedBy(8.dp),verticalAlignment=Alignment.CenterVertically) {
             Text(statusLabel(item.status),color=if(item.status=="submitted") Cyan else Muted,fontSize=12.sp)
