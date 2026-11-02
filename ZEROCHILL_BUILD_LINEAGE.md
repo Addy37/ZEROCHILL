@@ -2,6 +2,18 @@
 
 This file identifies the current approved ZEROCHILL product baseline for test APKs and future feature work.
 
+## Unreleased 6.0.1 LiquidRift crash hotfix
+
+`hotfix/liquid-rift-bitmap-crash` starts from current `main`, verified locally and
+on GitHub at released 6.0.0 commit `4144b9e312b90822d121af0cd396127e39525a4c`.
+The historical rebrand branch is superseded by this approved release lineage.
+Candidate 6.0.1 (`6000001`) preserves the stable package and production signing
+identity through the existing Signed Upgrade Candidate workflow. The release
+version file prepares a candidate only: do not tag, publish, or merge before the
+user physically approves the signed APK. No migration, backend, Supabase, or
+remote-config change is required. See `docs/LIQUID_RIFT_BITMAP_HOTFIX.md` for the
+ownership trace and regression coverage.
+
 ## Social media, DM reactions and analytics v2 candidate
 
 `feature/social-media-reactions-analytics-v2` starts from GitHub main verified at

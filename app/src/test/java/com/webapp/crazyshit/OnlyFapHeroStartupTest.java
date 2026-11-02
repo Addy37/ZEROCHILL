@@ -122,6 +122,10 @@ public class OnlyFapHeroStartupTest {
                 && title().equals("Fresh") && OnlyFapHeroMemory.read(activity).imageUrl.equals(FRESH));
         assertTrue(((ImageView) ReflectionHelpers.getField(hub, "heroImage")).getDrawable()
                 instanceof android.graphics.drawable.TransitionDrawable);
+        assertNotNull(((ImageView) ReflectionHelpers.getField(hub, "preferenceImage")).getDrawable());
+        ShadowLooper.idleMainLooper(400, TimeUnit.MILLISECONDS);
+        assertNull(ReflectionHelpers.getField(hub, "heroCrossfade"));
+        assertNull(((ImageView) ReflectionHelpers.getField(hub, "preferenceImage")).getDrawable());
         ReflectionHelpers.callInstanceMethod(hub, "openHero");
         assertEquals(fresh.url, opened.url);
         assertEquals(1, ((List<?>) ReflectionHelpers.getField(hub, "heroItems")).size());

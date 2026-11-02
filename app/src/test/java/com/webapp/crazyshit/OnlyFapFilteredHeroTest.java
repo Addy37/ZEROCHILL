@@ -281,9 +281,11 @@ public class OnlyFapFilteredHeroTest {
     }
     private void ready(int token, Object candidate) throws Exception {
         java.lang.reflect.Method commit = OnlyFapHubView.class.getDeclaredMethod("commitPreferenceArtwork",
-                int.class, candidate.getClass(), android.graphics.drawable.Drawable.class);
+                int.class, candidate.getClass());
         commit.setAccessible(true);
-        commit.invoke(hub, token, candidate, new android.graphics.drawable.ColorDrawable(Color.RED));
+        android.graphics.drawable.Drawable resource = new android.graphics.drawable.ColorDrawable(Color.RED);
+        ((android.widget.ImageView) ReflectionHelpers.getField(hub, "preferenceImage")).setImageDrawable(resource);
+        commit.invoke(hub, token, candidate);
     }
     private String title() { return ((android.widget.TextView) ReflectionHelpers.getField(hub, "heroTitle")).getText().toString(); }
 

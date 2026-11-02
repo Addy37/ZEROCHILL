@@ -209,6 +209,9 @@ final class OnlyFapHubView extends FrameLayout {
     private boolean preferenceHeroPending;
     private boolean heroArtworkReady;
     private android.animation.ValueAnimator heroMorph;
+    private android.graphics.drawable.TransitionDrawable heroCrossfade;
+    private final Runnable crossfadeCleanup = this::finishHeroCrossfade;
+    private int artworkRequestId;
     private android.animation.ValueAnimator selectorPulse;
     private float riftProgress;
     private int deferredHeroIndex = -1;
@@ -670,6 +673,7 @@ final class OnlyFapHubView extends FrameLayout {
         finishHeroMorph();
         publishedPreference = null;
         heroGeneration++;
+        artworkRequestId++;
         for (java.util.concurrent.Future<?> task : new java.util.concurrent.Future<?>[]{
                 startupTask, selectionTask, resolutionTask, discoveryTask}) {
             if (task != null) task.cancel(true);
@@ -896,6 +900,7 @@ final class OnlyFapHubView extends FrameLayout {
         onOpenCancelled();
         if (profileAvatar != null) profileAvatar.close();
         closed = true;
+        artworkRequestId++;
         finishHeroMorph();
         ContentPreferenceUi.clearPresentation(this);
         Glide.with(preferenceImage).clear(preferenceImage);
@@ -1089,16 +1094,18 @@ final class OnlyFapHubView extends FrameLayout {
             loadPreferenceArtwork(candidate, true, cacheOnly, fallback);
             return;
         }
-        Drawable previous = heroImage.getDrawable();
-        Glide.with(heroImage).load(remoteImage(candidate.currentImageUrl(), candidate.currentReferer()))
+        finishHeroCrossfade();
+        final int requestId = ++artworkRequestId;
+        final ImageView targetView = preferenceImage;
+        Glide.with(targetView).clear(targetView);
+        Glide.with(targetView).load(remoteImage(candidate.currentImageUrl(), candidate.currentReferer()))
                 .centerCrop().diskCacheStrategy(DiskCacheStrategy.ALL)
-                .onlyRetrieveFromCache(cacheOnly).transition(ThumbnailFades.hero())
-                .placeholder(previous).error(previous)
+                .onlyRetrieveFromCache(cacheOnly).dontAnimate()
                 .listener(new RequestListener<Drawable>() {
                     @Override public boolean onLoadFailed(GlideException error, Object model,
                             Target<Drawable> target, boolean first) {
                         post(() -> {
-                            if (closed || startupHero != candidate || heroItem != null) return;
+                            if (closed || requestId != artworkRequestId || startupHero != candidate || heroItem != null) return;
                             startupHero = null;
                             if (cacheOnly) {
                                 metadataIo.execute(() -> OnlyFapHeroMemory.forget(
@@ -1111,16 +1118,20 @@ final class OnlyFapHubView extends FrameLayout {
                     }
                     @Override public boolean onResourceReady(Drawable resource, Object model,
                             Target<Drawable> target, DataSource source, boolean first) {
-                        if (heroItem != null || startupHero != candidate || !startupAllowed(candidate)) {
+                        if (closed || requestId != artworkRequestId || heroItem != null
+                                || startupHero != candidate || !startupAllowed(candidate)) {
                             if (startupHero == candidate) startupHero = null;
                             return true;
                         }
                         heroArtworkReady = true;
                         showStartupCopy(candidate);
-                        post(OnlyFapHubView.this::presentPreference);
+                        post(() -> {
+                            if (startupHero == candidate && heroItem == null && startupAllowed(candidate)
+                                    && commitHeroArtwork(requestId, targetView, source, false)) presentPreference();
+                        });
                         return false;
                     }
-                }).into(heroImage);
+                }).into(artworkTarget(targetView));
     }
 
     private void showStartupCopy(HeroCandidate candidate) {
@@ -1574,14 +1585,16 @@ final class OnlyFapHubView extends FrameLayout {
             return;
         }
         try {
-            Drawable previous = heroImage.getDrawable();
-            com.bumptech.glide.RequestBuilder<Drawable> request = Glide.with(heroImage)
+            finishHeroCrossfade();
+            final int requestId = ++artworkRequestId;
+            final ImageView targetView = preferenceImage;
+            Glide.with(targetView).clear(targetView);
+            final boolean startupCrossfade = startupHero != null && heroImage.getDrawable() != null;
+            com.bumptech.glide.RequestBuilder<Drawable> request = Glide.with(targetView)
                     .load(remoteImage(imageUrl, referer))
                     .centerCrop()
                     .diskCacheStrategy(DiskCacheStrategy.ALL)
-                    .transition(ThumbnailFades.hero())
-                    .placeholder(previous != null ? previous : new ColorDrawable(Color.rgb(13, 16, 19)))
-                    .error(previous != null ? previous : new ColorDrawable(Color.rgb(13, 16, 19)))
+                    .dontAnimate()
                     .listener(new RequestListener<Drawable>() {
                         @Override
                         public boolean onLoadFailed(
@@ -1590,10 +1603,10 @@ final class OnlyFapHubView extends FrameLayout {
                                 Target<Drawable> target,
                                 boolean first
                         ) {
-                            post(() -> handleHeroArtworkFailure(
-                                    candidate,
-                                    imageUrl
-                            ));
+                            post(() -> {
+                                if (!closed && requestId == artworkRequestId)
+                                    handleHeroArtworkFailure(candidate, imageUrl);
+                            });
                             return false;
                         }
 
@@ -1605,11 +1618,16 @@ final class OnlyFapHubView extends FrameLayout {
                                 DataSource dataSource,
                                 boolean first
                         ) {
-                            if (closed || heroItem != candidate || !startupAllowed(candidate)
+                            if (closed || requestId != artworkRequestId || heroItem != candidate || !startupAllowed(candidate)
                                     || !imageUrl.equals(candidate.currentImageUrl())) return true;
                             {
                                 heroArtworkReady = true;
-                                post(OnlyFapHubView.this::presentPreference);
+                                post(() -> {
+                                    if (heroItem == candidate && imageUrl.equals(candidate.currentImageUrl())
+                                            && startupAllowed(candidate)
+                                            && commitHeroArtwork(requestId, targetView, dataSource, startupCrossfade))
+                                        presentPreference();
+                                });
                                 startupHero = null;
                                 if (discoveryPreference == ContentPreference.ALL && !candidate.usingAvatar()) metadataIo.execute(() ->
                                         OnlyFapHeroMemory.remember(getContext(), candidate.creator, imageUrl, referer));
@@ -1617,14 +1635,75 @@ final class OnlyFapHubView extends FrameLayout {
                             return false;
                         }
                     });
-            if (startupHero != null && previous != null) {
-                request.transition(com.bumptech.glide.load.resource.drawable.DrawableTransitionOptions.with(
-                        (source, first) -> new com.bumptech.glide.request.transition.DrawableCrossFadeTransition(350, true)));
-            }
-            request.into(heroImage);
+            request.into(artworkTarget(targetView));
         } catch (Exception ignored) {
             handleHeroArtworkFailure(candidate, imageUrl);
         }
+    }
+
+    private com.bumptech.glide.request.target.DrawableImageViewTarget artworkTarget(ImageView view) {
+        return new com.bumptech.glide.request.target.DrawableImageViewTarget(view) {
+            @Override public void onLoadCleared(Drawable placeholder) {
+                // Glide can clear either owner during teardown. Drop transition references
+                // before that owner's EngineResource is released, without recursively clearing it.
+                if (heroCrossfade != null) finishHeroCrossfade(view != preferenceImage);
+                super.onLoadCleared(placeholder);
+            }
+        };
+    }
+
+    /** Never move a drawable away from its owning Glide request. Swap the live targets instead. */
+    private boolean ownsPendingArtwork(int requestId, ImageView targetView) {
+        com.bumptech.glide.request.Request request =
+                new com.bumptech.glide.request.target.DrawableImageViewTarget(targetView).getRequest();
+        return !closed && requestId == artworkRequestId && targetView == preferenceImage
+                && request != null && request.isComplete() && !request.isCleared()
+                && targetView.getDrawable() != null;
+    }
+
+    private boolean commitHeroArtwork(int requestId, ImageView targetView, DataSource source,
+            boolean startupCrossfade) {
+        if (!ownsPendingArtwork(requestId, targetView)) return false;
+        ImageView outgoing = heroImage;
+        heroImage = targetView;
+        preferenceImage = outgoing;
+        heroImage.setAlpha(1f);
+        heroImage.bringToFront();
+        if (coldSnapshot != null) coldSnapshot.setHero(heroImage);
+        if (startupCrossfade) {
+            // Keep Glide's original 350 ms crossfade, and keep A's owning target alive.
+            Drawable incoming = heroImage.getDrawable();
+            heroImage.setImageDrawable(outgoing.getDrawable());
+            new com.bumptech.glide.request.transition.DrawableCrossFadeTransition(350, true)
+                    .transition(incoming, new com.bumptech.glide.request.target.DrawableImageViewTarget(heroImage));
+            heroCrossfade = (android.graphics.drawable.TransitionDrawable) heroImage.getDrawable();
+            postDelayed(crossfadeCleanup, 350L);
+        } else {
+            // Preserve the normal 240 ms new-image reveal and its eligibility rules.
+            new com.bumptech.glide.request.target.DrawableImageViewTarget(heroImage).onResourceReady(
+                    heroImage.getDrawable(), ThumbnailFades.heroTransition(source));
+            preferenceImage.setAlpha(0f);
+            Glide.with(preferenceImage).clear(preferenceImage);
+        }
+        return true;
+    }
+
+    private void finishHeroCrossfade() {
+        finishHeroCrossfade(true);
+    }
+
+    private void finishHeroCrossfade(boolean clearOutgoing) {
+        if (heroCrossfade == null) return;
+        removeCallbacks(crossfadeCleanup);
+        com.bumptech.glide.request.Request request =
+                new com.bumptech.glide.request.target.DrawableImageViewTarget(heroImage).getRequest();
+        // A lifecycle clear may already have released B. Never reinstall it in that case.
+        if (heroImage.getDrawable() == heroCrossfade && request != null
+                && request.isComplete() && !request.isCleared())
+            heroImage.setImageDrawable(heroCrossfade.getDrawable(1));
+        heroCrossfade = null;
+        preferenceImage.setAlpha(0f);
+        if (clearOutgoing) Glide.with(preferenceImage).clear(preferenceImage);
     }
 
     /** A separate Glide target retains ownership of the outgoing image until the fade ends. */
@@ -1641,9 +1720,12 @@ final class OnlyFapHubView extends FrameLayout {
 
     private void loadPreferenceArtwork(HeroCandidate candidate, boolean startup, boolean cacheOnly,
             NativeContentItem fallback) {
+        finishHeroCrossfade();
+        final int requestId = ++artworkRequestId;
         final int generation = heroGeneration;
         final String url = candidate.currentImageUrl();
         final ImageView targetView = preferenceImage;
+        Glide.with(targetView).clear(targetView);
         if (clean(url).isEmpty()) { handleHeroArtworkFailure(candidate, url); return; }
         Glide.with(targetView).load(remoteImage(url, candidate.currentReferer()))
                 .centerCrop().diskCacheStrategy(DiskCacheStrategy.ALL).dontAnimate()
@@ -1652,7 +1734,7 @@ final class OnlyFapHubView extends FrameLayout {
                     @Override public boolean onLoadFailed(GlideException error, Object model,
                             Target<Drawable> target, boolean first) {
                         post(() -> {
-                            if (!currentPreferenceArtwork(generation, candidate, url, startup)) return;
+                            if (requestId != artworkRequestId || !currentPreferenceArtwork(generation, candidate, url, startup)) return;
                             if (!startup) { handleHeroArtworkFailure(candidate, url); return; }
                             startupHero = null;
                             if (cacheOnly) {
@@ -1665,17 +1747,18 @@ final class OnlyFapHubView extends FrameLayout {
                     }
                     @Override public boolean onResourceReady(Drawable resource, Object model,
                             Target<Drawable> target, DataSource source, boolean first) {
-                        if (!currentPreferenceArtwork(generation, candidate, url, startup)) return true;
+                        if (requestId != artworkRequestId || !currentPreferenceArtwork(generation, candidate, url, startup)) return true;
                         post(() -> {
-                            if (currentPreferenceArtwork(generation, candidate, url, startup))
-                                commitPreferenceArtwork(generation, candidate, resource);
+                            if (ownsPendingArtwork(requestId, targetView)
+                                    && currentPreferenceArtwork(generation, candidate, url, startup))
+                                commitPreferenceArtwork(generation, candidate);
                         });
                         return false;
                     }
-                }).into(targetView);
+                }).into(artworkTarget(targetView));
     }
 
-    private void commitPreferenceArtwork(int generation, HeroCandidate candidate, Drawable resource) {
+    private void commitPreferenceArtwork(int generation, HeroCandidate candidate) {
         if (closed || generation != heroGeneration || !preferenceHeroPending
                 || (heroItem != candidate && (heroItem != null || startupHero != candidate))
                 || !startupAllowed(candidate)) return;
@@ -1691,7 +1774,7 @@ final class OnlyFapHubView extends FrameLayout {
         ImageView outgoing = heroImage;
         heroImage = preferenceImage;
         preferenceImage = outgoing;
-        heroImage.setImageDrawable(resource);
+        // Glide already installed the resource on this target; its request stays attached.
         heroImage.setAlpha(0f);
         heroImage.bringToFront(); // Reorder only the stable image host, never detach a live Glide target.
         if (coldSnapshot != null) coldSnapshot.setHero(heroImage);
@@ -1779,6 +1862,7 @@ final class OnlyFapHubView extends FrameLayout {
     }
 
     private void finishHeroMorph() {
+        finishHeroCrossfade();
         if (heroMorph != null) heroMorph.end();
         if (selectorPulse != null) { selectorPulse.cancel(); selectorPulse = null; }
         preferenceSelector.setTextColor(UiPalette.PRIMARY);
