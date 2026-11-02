@@ -30,6 +30,8 @@ final class SocialKeyboardContent {
     private final BooleanSupplier allowed;
     private final Executor work, main;
     private final RemoteGif remote;
+    // Keep the IME permission grant strongly reachable until background reading has finished.
+    private ContentInfoCompat pendingContent;
 
     interface RemoteGif { SocialMedia.Prepared load(String url) throws Exception; }
 
@@ -62,10 +64,11 @@ final class SocialKeyboardContent {
             Uri uri = clip.getItemAt(0).getUri();
             ContentInfoCompat retained = parts.first;
             prepare(() -> {
-                // Keep the payload (and its IME permission grant) alive through the read.
-                retained.getClip();
+                pendingContent = retained;
                 return SocialMedia.prepare(activity, uri);
-            }, () -> true, () -> {}, () -> {});
+            }, () -> pendingContent == retained, () -> {}, () -> {
+                if (pendingContent == retained) pendingContent = null;
+            });
             return parts.second;
         });
         input.addTextChangedListener(new TextWatcher() {

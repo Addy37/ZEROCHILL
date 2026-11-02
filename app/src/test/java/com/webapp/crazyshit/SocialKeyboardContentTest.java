@@ -134,7 +134,8 @@ public class SocialKeyboardContentTest {
         androidx.core.view.inputmethod.InputContentInfoCompat content =
                 new androidx.core.view.inputmethod.InputContentInfoCompat(uri,
                         new ClipDescription("GIF", new String[]{"image/gif"}), null);
-        assertTrue(androidx.core.view.inputmethod.InputConnectionCompat.commitContent(connection, info, content, 0, null));
+        assertTrue(androidx.core.view.inputmethod.InputConnectionCompat.commitContent(connection, info, content,
+                androidx.core.view.inputmethod.InputConnectionCompat.INPUT_CONTENT_GRANT_READ_URI_PERMISSION, null));
         drain();
         assertArrayEquals(GIF, ((SocialMedia.Composer) field(dialog, "attachment")).selected.bytes);
         assertEquals("", input.getText().toString());
