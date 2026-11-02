@@ -269,6 +269,7 @@ final class InlineCommentsDialog extends BottomSheetDialog {
 
         sendControl=send;
         attachment.changed=this::updateSendState;
+        attachment.enableKeyboard(composerInput, () -> editTarget == null && !posting);
         composerInput.addTextChangedListener(new android.text.TextWatcher(){public void beforeTextChanged(CharSequence s,int a,int c,int f){} public void onTextChanged(CharSequence s,int a,int b,int c){updateSendState();}public void afterTextChanged(android.text.Editable e){}});
         updateSendState();updateComposerHint();
         return composer;
@@ -599,6 +600,7 @@ final class InlineCommentsDialog extends BottomSheetDialog {
         }
         editTarget = null;
         replyTarget = comment;
+        attachment.cancelPreparation();
         composerInput.setText("");
         showComposerMode("Replying to " + SocialUi.name(comment.displayName, comment.username) + "  ·  Cancel");
         focusComposer();

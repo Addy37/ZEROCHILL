@@ -48,11 +48,14 @@ final class SocialMedia {
         try (InputStream in = activity.getContentResolver().openInputStream(uri);
              ByteArrayOutputStream out = new ByteArrayOutputStream()) {
             if (in == null) throw new IllegalArgumentException("Unable to open this image.");
-            byte[] chunk = new byte[16384]; int size; boolean gif=false;
+            byte[] chunk = new byte[16384]; int size; boolean gif=false, checked=false;
             while ((size = in.read(chunk)) != -1) {
                 if (out.size() + size > PHOTO_SOURCE_LIMIT) throw new IllegalArgumentException("This photo is too large. Maximum source size is 20 MB.");
-                if(out.size()==0) gif=signature(java.util.Arrays.copyOf(chunk,size)).equals("image/gif");
                 out.write(chunk,0,size);
+                if (!checked && out.size() >= 6) {
+                    gif = signature(out.toByteArray()).equals("image/gif");
+                    checked = true;
+                }
                 // Detect GIF early so oversized GIFs always receive the GIF-specific message.
                 if (out.size() > GIF_LIMIT && gif)
                     throw new IllegalArgumentException("This GIF is too large. Maximum size is 10 MB.");
@@ -128,6 +131,7 @@ final class SocialMedia {
         final TextView control;
         final ImageView preview;
         boolean busy, preparing;
+        int preparationGeneration;
         Runnable changed = () -> {};
 
         Composer(Activity activity) {
@@ -165,11 +169,13 @@ final class SocialMedia {
                             return;
                         }
                         String owner = ZeroChillSessionStore.currentUserId(activity);
+                        int generation = ++preparationGeneration;
                         preparing = true;
                         refresh();
                         pick(
                                 activity,
                                 (media, error) -> {
+                                    if (generation != preparationGeneration) return;
                                     preparing = false;
                                     if (owner.equals(
                                             ZeroChillSessionStore.currentUserId(activity))) {
@@ -180,11 +186,7 @@ final class SocialMedia {
                                                             ZeroChillToast.LENGTH_LONG)
                                                     .show();
                                         else if (media != null) {
-                                            selected = media;
-                                            Glide.with(preview)
-                                                    .load(media.bytes)
-                                                    .diskCacheStrategy(DiskCacheStrategy.NONE)
-                                                    .into(preview);
+                                            select(media);
                                         }
                                     }
                                     refresh();
@@ -196,7 +198,16 @@ final class SocialMedia {
             return Math.round(value * getResources().getDisplayMetrics().density);
         }
 
-        private void refresh() {
+        void enableKeyboard(android.widget.EditText input, java.util.function.BooleanSupplier allowed) {
+            new SocialKeyboardContent((Activity) getContext(), input, this, allowed).install();
+        }
+
+        void select(Prepared media) {
+            selected = media;
+            Glide.with(preview).load(media.bytes).diskCacheStrategy(DiskCacheStrategy.NONE).into(preview);
+        }
+
+        void refresh() {
             setVisibility(selected == null ? GONE : VISIBLE);
             control.setEnabled(!busy && !preparing);
             control.setText(busy || preparing ? "…" : "＋");
@@ -213,9 +224,21 @@ final class SocialMedia {
         }
 
         void clear() {
+            cancelPreparation();
             selected = null;
             Glide.with(preview).clear(preview);
             refresh();
+        }
+
+        void cancelPreparation() {
+            preparationGeneration++;
+            preparing = false;
+            refresh();
+        }
+
+        @Override protected void onDetachedFromWindow() {
+            cancelPreparation();
+            super.onDetachedFromWindow();
         }
     }
 
