@@ -1665,12 +1665,21 @@ final class OnlyFapHubView extends FrameLayout {
             boolean startupCrossfade) {
         if (!ownsPendingArtwork(requestId, targetView)) return false;
         ImageView outgoing = heroImage;
+        // Normal replacement previously kept the same view/background. Preserve those
+        // background roles when swapping the two live targets (preference rifts still swap normally).
+        Drawable incomingBackground = targetView.getBackground();
+        targetView.setBackground(outgoing.getBackground());
+        outgoing.setBackground(incomingBackground);
         heroImage = targetView;
         preferenceImage = outgoing;
         heroImage.setAlpha(1f);
         heroImage.bringToFront();
         if (coldSnapshot != null) coldSnapshot.setHero(heroImage);
         if (startupCrossfade) {
+            preferenceImage.setAlpha(0f); // A is drawn only inside the original crossfade.
+            // The bounded reveal wrapper is tied to its own view; crossfade the owned frame itself.
+            if (outgoing.getDrawable() instanceof ThumbnailFades.FadeDrawable)
+                ((ThumbnailFades.FadeDrawable) outgoing.getDrawable()).finish();
             // Keep Glide's original 350 ms crossfade, and keep A's owning target alive.
             Drawable incoming = heroImage.getDrawable();
             heroImage.setImageDrawable(outgoing.getDrawable());

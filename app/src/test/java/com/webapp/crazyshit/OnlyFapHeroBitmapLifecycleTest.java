@@ -115,6 +115,7 @@ public class OnlyFapHeroBitmapLifecycleTest {
     @Test public void replacementKeepsAOwnedUntilBReadyThenRecyclesAWithoutDrawingIt() throws Exception {
         Object a = load("a"); complete("a"); await(() -> hasPixels(image().getDrawable()));
         ImageView outgoing = image();
+        android.graphics.drawable.Drawable background = outgoing.getBackground();
         com.bumptech.glide.request.Request ownerA = request(outgoing);
         Bitmap pixelsA = bitmap(outgoing.getDrawable());
         load("b"); await(() -> pending.containsKey(url("b")));
@@ -124,6 +125,7 @@ public class OnlyFapHeroBitmapLifecycleTest {
         assertFalse(pixelsA.isRecycled());
         draw();
         complete("b"); await(() -> image() != outgoing);
+        assertSame(background, image().getBackground());
         assertTrue(ownerA.isCleared());
         await(pixelsA::isRecycled);
         assertNull(outgoing.getDrawable());
@@ -220,8 +222,10 @@ public class OnlyFapHeroBitmapLifecycleTest {
         android.graphics.drawable.TransitionDrawable fade = ReflectionHelpers.getField(hub, "heroCrossfade");
         assertNotNull(fade);
         assertSame(fade, image().getDrawable());
+        assertTrue(fade.getDrawable(0) instanceof android.graphics.drawable.BitmapDrawable);
         assertSame(pixels, bitmap(fade.getDrawable(0)));
         assertTrue(fade.isCrossFadeEnabled());
+        assertEquals(0f, outgoing.getAlpha(), 0f); // No duplicate outgoing image below the crossfade.
         assertFalse(owner.isCleared());
         assertFalse(pixels.isRecycled());
         draw();

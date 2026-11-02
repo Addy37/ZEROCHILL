@@ -45,6 +45,9 @@ No old drawable becomes a placeholder, error drawable or request input.
 The normal new-image fade still uses ThumbnailFades' 240 ms policy, with the same
 cache, visibility and motion eligibility. The startup handoff keeps Glide's original 350 ms TransitionDrawable, backed by both owned targets. The preference effect keeps its 1040 ms clock, clipped
 liquid reveal, cyan edge, focus/RenderEffect, scale and text phases unchanged.
+Normal swaps preserve the current background roles. During the startup crossfade
+the outgoing view is hidden and its bounded reveal wrapper is settled, so the
+TransitionDrawable alone draws the two owned frames without stacking artwork.
 Outgoing targets clear immediately after their last visible use. Hero targets'
 `onLoadCleared` also collapses any active crossfade before Glide releases either
 owner, including independent lifecycle clears of the outgoing or incoming target. No global Glide
