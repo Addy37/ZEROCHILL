@@ -1,13 +1,14 @@
-# ZEROCHILL 5.6.2
+# ZEROCHILL 6.0.0
 
-This hotfix changes the updater after Google Play Protect blocked builds that could request APK installation.
+ZEROCHILL 6.0 starts the new supported release line and rolls the latest social, reliability, and backend work into one stable update.
 
-- Removed ZEROCHILL's APK installation permission and all in-app APK installer paths.
-- Kept automatic update checks, update notifications, release notes, snooze behavior, and the native ZEROCHILL update card.
-- Updates now download through Android DownloadManager after you tap Download update.
-- ZEROCHILL still shows native download progress while Android manages the file transfer.
-- When the download finishes, tap Open Downloads, then tap the downloaded ZEROCHILL APK and confirm Android's update prompt.
-- Preserved the existing application ID, signing identity, user data, settings, favorites, history, downloads, backups, accounts, and upgrade compatibility.
-- Includes all ShitTok reliability, source balance, and personalization fixes from 5.6.1.
+- Added photo and GIF attachments to comments, replies, and direct messages.
+- Added Android keyboard GIF support for comments and DMs, including KLIPY direct GIF links.
+- Refined direct messages with the compact WhatsApp-style conversation layout, reactions, media previews, and cleaner composer sizing.
+- Added first-party crash reporting through the existing Feedback system so sanitized crash diagnostics can be submitted after the next successful launch.
+- Added Analytics v2 with compact foreground-session summaries and batched reporting to sharply reduce Supabase traffic.
+- Preserved ShitTok personalization, source balance, playback, downloads, favorites, history, accounts, backups, and saved settings.
+- Kept the Play Protect-safe updater flow introduced in 5.6.2.
+- ZEROCHILL 6.0 and newer are the supported release line going forward. Older builds may continue to run, but they will not receive the same compatibility fixes and backend support.
 
-Install over your existing ZeroChill app without uninstalling.
+Install over your existing ZEROCHILL app without uninstalling.
