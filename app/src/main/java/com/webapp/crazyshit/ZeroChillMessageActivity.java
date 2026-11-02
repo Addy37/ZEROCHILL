@@ -270,6 +270,7 @@ public final class ZeroChillMessageActivity extends Activity {
         attachment=new SocialMedia.Composer(this);
         compose.addView(attachment.control,1);
         attachment.changed=this::updateSendReady;
+        attachment.enableKeyboard(composer, () -> !blockedByMe && !sending);
         composer.addTextChangedListener(new android.text.TextWatcher(){public void beforeTextChanged(CharSequence s,int a,int c,int f){}public void onTextChanged(CharSequence s,int a,int b,int c){updateSendReady();}public void afterTextChanged(android.text.Editable e){}});
         updateSendReady();root.addView(attachment);
         root.addView(compose);
