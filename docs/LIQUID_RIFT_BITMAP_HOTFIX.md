@@ -79,8 +79,8 @@ error/placeholder behavior, close during a request, preference rift settlement,
 startup crossfade/tab exit, and clear between delivery and posted commit.
 Existing startup/category/design/rotation/discover/transition tests remain part
 of validation. The debug real-Glide GPU fixture is run by the candidate workflow
-on API 29 and 36, including repeated entry, trim memory and background/foreground.
-These emulator/API checks do not establish Android 17 or physical-device approval.
+on API 29, 36 and 37.0 (Android 17), including repeated entry, trim memory and background/foreground.
+These emulator/API checks do not establish physical-device approval.
 
 Compatibility: unchanged package, signing process, minSdk 26, storage, accounts,
 preferences, favorites, history, downloads, backups, notifications and databases.

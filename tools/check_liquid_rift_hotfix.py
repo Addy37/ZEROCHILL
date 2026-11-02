@@ -13,6 +13,9 @@ def adb(*args):
 
 
 try:
+    release = adb('shell', 'getprop', 'ro.build.version.release').decode().strip()
+    sdk = adb('shell', 'getprop', 'ro.build.version.sdk').decode().strip()
+    (out / 'android-version.txt').write_text(f'Android {release}, API {sdk}\n')
     apk = next(pathlib.Path('.').glob('ZeroChill-Beta-*.apk'))
     adb('install', '-r', str(apk))
     for setting in ('animator_duration_scale', 'transition_animation_scale', 'window_animation_scale'):
