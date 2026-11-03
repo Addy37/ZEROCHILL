@@ -64,16 +64,27 @@ coordinates become invalid rather than continuing with a stale transform.
 
 `OnlyFapGalleryLayoutTest` uses real RecyclerView layout on API 29/35 and checks
 visual bounds as well as measured heights. Existing favorites, motion and viewer
-tests remain intact. `OnlyFapGalleryLayoutProbeActivity` is debug-only and decodes
+tests remain intact. `OnlyFapGalleryGlideTest` uses native graphics and real bounded
+Glide PNG decoding to check square-to-portrait-to-wide updates and late canceled
+results after item replacement. `OnlyFapGalleryLayoutProbeActivity` is debug-only and decodes
 synthetic portrait, landscape, square, very tall and very wide media through the
 real Glide request path, including late deliveries, rapid favorites, scrolling,
 tab data changes, retained-adapter reattachment and fresh creator adapters.
 
+The device probe waits up to 15 seconds for actual Glide completion and a completed
+layout pass before applying its unchanged ratio, overlay and intersection checks.
+Its initial fixed 1.5-second startup delay proved insufficient on both emulator
+APIs; those runs failed before geometry verification and do not count as passes.
+Timeout failures now include each fixture request's running/completed state.
+
 The signed-candidate workflow runs the focused tests and the repository's four-task
-debug/release command, verifies production signing/upgrade compatibility, names the
+debug/release command (all tests in both variants), verifies production
+signing/upgrade compatibility, names the
 release-package candidate with branch/SHA, and runs the probe twice on Pixel-profile
-API 35 and 36 emulators. Logs/screenshots are artifacts. Workflow configuration is
-not evidence that those jobs have passed; use the exact commit's run results.
+API 35 and 36 emulators. Logs/screenshots are artifacts. The gallery branch follows the existing focused-candidate rule: run its focused
+checks first and the complete suites once, rather than running many unrelated
+subsets repeatedly before the same full suites. No test or assertion is removed.
+Workflow configuration is not evidence that those jobs have passed; use the exact commit's run results.
 
 Physical acceptance still needs the affected Pixel with its real creator/favorites,
 and the healthy OnePlus CPH2655. Check scrolling down/back, rapid favorite/unfavorite,

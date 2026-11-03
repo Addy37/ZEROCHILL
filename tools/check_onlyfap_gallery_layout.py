@@ -33,7 +33,7 @@ try:
         deadline = time.monotonic() + 60
         log = ''
         while time.monotonic() < deadline:
-            log = adb('logcat', '-d', '--pid', pid, '-s', 'ZeroChillGalleryLayout:I', 'AndroidRuntime:E').decode(errors='replace')
+            log = adb('logcat', '-d', '--pid', pid, '-s', 'ZeroChillGalleryLayout:I', 'Glide:W', 'AndroidRuntime:E').decode(errors='replace')
             if 'PASS mixed ratios' in log or 'FAIL' in log or 'FATAL EXCEPTION' in log:
                 break
             time.sleep(.25)

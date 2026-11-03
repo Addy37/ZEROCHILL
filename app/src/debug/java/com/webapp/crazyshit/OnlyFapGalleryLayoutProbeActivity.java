@@ -28,6 +28,7 @@ public final class OnlyFapGalleryLayoutProbeActivity extends Activity {
     private RecyclerView list;
     private BunkrGalleryAdapter adapter;
     private int stage, scrollStep, toggles, checks;
+    private long readyDeadline;
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
@@ -46,6 +47,7 @@ public final class OnlyFapGalleryLayoutProbeActivity extends Activity {
         adapter = newAdapter();
         list.setAdapter(adapter);
         adapter.replace(all, false);
+        readyDeadline = android.os.SystemClock.uptimeMillis() + 15000;
         main.postDelayed(this::advance, 1500);
     }
     private BunkrGalleryAdapter newAdapter() {
@@ -99,6 +101,14 @@ public final class OnlyFapGalleryLayoutProbeActivity extends Activity {
                 adapter.setFavoriteUrls(toggles++ % 2 == 0 ? Collections.singleton(all.get(3).url) : Collections.emptySet());
                 main.postDelayed(this::advance, toggles == 12 ? 1000 : 45); return;
             }
+            // Cold WebView/CookieManager and Glide initialization can outlast a fixed
+            // startup delay. Wait for actual requests and the resulting layout pass.
+            if (!imagesReady()) {
+                if (android.os.SystemClock.uptimeMillis() >= readyDeadline)
+                    throw new AssertionError("Glide did not settle: " + requestStates());
+                main.postDelayed(this::advance, 100);
+                return;
+            }
             verify();
             android.util.Log.i(TAG, "stage=" + stage + " verified; children=" + list.getChildCount());
             stage++;
@@ -117,11 +127,32 @@ public final class OnlyFapGalleryLayoutProbeActivity extends Activity {
                 android.util.Log.i(TAG, "PASS mixed ratios, delayed Glide, favorites, scroll, tabs, reopen; checks=" + checks);
                 return;
             }
+            readyDeadline = android.os.SystemClock.uptimeMillis() + 15000;
             main.postDelayed(this::advance, stage <= 2 ? 45 : 1200);
         } catch (Throwable failure) {
             android.util.Log.e(TAG, "FAIL stage=" + stage, failure);
             throw new IllegalStateException(failure);
         }
+    }
+    private boolean imagesReady() {
+        if (list.getChildCount() < 2 || list.isLayoutRequested() || list.isComputingLayout()) return false;
+        for (int i = 0; i < list.getChildCount(); i++) {
+            BunkrGalleryAdapter.Holder holder = (BunkrGalleryAdapter.Holder) list.getChildViewHolder(list.getChildAt(i));
+            com.bumptech.glide.request.Request request = new com.bumptech.glide.request.target.DrawableImageViewTarget(holder.image).getRequest();
+            if (request == null || !request.isComplete() || holder.image.getDrawable() == null
+                    || holder.image.getDrawable().getIntrinsicWidth() <= 0) return false;
+        }
+        return true;
+    }
+    private String requestStates() {
+        StringBuilder states = new StringBuilder();
+        for (int i = 0; i < list.getChildCount(); i++) {
+            BunkrGalleryAdapter.Holder holder = (BunkrGalleryAdapter.Holder) list.getChildViewHolder(list.getChildAt(i));
+            com.bumptech.glide.request.Request request = new com.bumptech.glide.request.target.DrawableImageViewTarget(holder.image).getRequest();
+            states.append(holder.boundItem.url).append(" complete=").append(request != null && request.isComplete())
+                    .append(" running=").append(request != null && request.isRunning()).append("; ");
+        }
+        return states.toString();
     }
     private void verify() {
         if (list.getChildCount() < 2) throw new AssertionError("Empty gallery");
