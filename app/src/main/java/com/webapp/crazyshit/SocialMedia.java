@@ -27,6 +27,7 @@ final class SocialMedia {
     static final int GIF_LIMIT = 10 * 1024 * 1024;
     static final int DIMENSION = 2560;
     static final java.util.concurrent.ExecutorService WORK = Executors.newSingleThreadExecutor();
+    private static final android.os.Handler UI = new android.os.Handler(android.os.Looper.getMainLooper());
     static final class Prepared {
         final byte[] bytes;
         final String mime;
@@ -293,30 +294,84 @@ final class SocialMedia {
         }
     }
 
-    static void bind(ImageView image, String bucket, String path) {
-        String binding=ZeroChillSessionStore.currentUserId(image.getContext())+":"+bucket+":"+path;
-        if(!path.isEmpty() && binding.equals(image.getTag())) return;
-        Glide.with(image).clear(image); image.setImageDrawable(null);
-        image.setTag(binding);
-        image.setVisibility(path.isEmpty()?View.GONE:View.VISIBLE);
-        if(path.isEmpty()) return;
-        String owner=ZeroChillSessionStore.currentUserId(image.getContext());
+    private static final class Binding {
+        final Object scope;
+        final String bucket, path;
+        java.util.concurrent.Future<?> preparation;
+        boolean preparing = true;
+        Binding(Object scope, String bucket, String path) {
+            this.scope = scope; this.bucket = bucket; this.path = path;
+        }
+        boolean current(ImageView image) {
+            return image.getTag(R.id.social_media_binding) == this
+                    && SocialMediaSession.valid(scope, image.getContext())
+                    && (!(image.getContext() instanceof Activity)
+                    || !((Activity) image.getContext()).isDestroyed());
+        }
+    }
 
-        WORK.execute(() -> {
+    static void clear(ImageView image) {
+        Binding binding = (Binding) image.getTag(R.id.social_media_binding);
+        image.setTag(R.id.social_media_binding, null);
+        if (binding != null && binding.preparation != null) binding.preparation.cancel(true);
+        SocialMediaSession.forget(image);
+        Glide.with(image.getContext().getApplicationContext()).clear(image);
+        image.setImageDrawable(null);
+    }
+
+    static void bind(ImageView image, String bucket, String path) {
+        Object scope = SocialMediaSession.current(image.getContext());
+        Binding old = (Binding) image.getTag(R.id.social_media_binding);
+        com.bumptech.glide.request.Request request =
+                new com.bumptech.glide.request.target.DrawableImageViewTarget(image).getRequest();
+        if (!path.isEmpty() && old != null && old.scope == scope
+                && old.bucket.equals(bucket) && old.path.equals(path)
+                && (old.preparing || (request != null && (request.isRunning() || request.isComplete()) && !request.isCleared()))) return;
+        clear(image);
+        image.setVisibility(path.isEmpty() ? View.GONE : View.VISIBLE);
+        if (path.isEmpty()) return;
+        Binding binding = new Binding(scope, bucket, path);
+        image.setTag(R.id.social_media_binding, binding);
+        SocialMediaSession.track(image);
+        binding.preparation = WORK.submit(() -> {
             try {
-                String token=ZeroChillAccountRepository.hasStoredSession(image.getContext())
+                String token = ZeroChillAccountRepository.hasStoredSession(image.getContext())
                         ? ZeroChillAccountRepository.accessTokenBlocking(image.getContext()) : "";
-                LazyHeaders.Builder headers=new LazyHeaders.Builder().addHeader("apikey",BuildConfig.ACCOUNT_SUPABASE_PUBLISHABLE_KEY);
-                if(!token.isEmpty()) headers.addHeader("Authorization","Bearer "+token);
-                else if(BuildConfig.ACCOUNT_SUPABASE_PUBLISHABLE_KEY.startsWith("eyJ")) headers.addHeader("Authorization","Bearer "+BuildConfig.ACCOUNT_SUPABASE_PUBLISHABLE_KEY);
-                GlideUrl url = new GlideUrl(BuildConfig.ACCOUNT_SUPABASE_URL+"/storage/v1/object/authenticated/"+bucket+"/"+path,
-                        headers.build());
-                image.post(() -> {
-                    if (!binding.equals(image.getTag()) || !owner.equals(ZeroChillSessionStore.currentUserId(image.getContext()))) return;
-                    Glide.with(image).load(url).diskCacheStrategy(DiskCacheStrategy.NONE).skipMemoryCache(true)
-                            .error(R.drawable.ic_more_account).into(image);
+                LazyHeaders.Builder headers = new LazyHeaders.Builder()
+                        .addHeader("apikey", BuildConfig.ACCOUNT_SUPABASE_PUBLISHABLE_KEY);
+                if (!token.isEmpty()) headers.addHeader("Authorization", "Bearer " + token);
+                else if (BuildConfig.ACCOUNT_SUPABASE_PUBLISHABLE_KEY.startsWith("eyJ"))
+                    headers.addHeader("Authorization", "Bearer " + BuildConfig.ACCOUNT_SUPABASE_PUBLISHABLE_KEY);
+                GlideUrl url = new GlideUrl(BuildConfig.ACCOUNT_SUPABASE_URL
+                        + "/storage/v1/object/authenticated/" + bucket + "/" + path, headers.build());
+                UI.post(() -> {
+                    if (!binding.current(image)) return;
+                    binding.preparing = false;
+                    int width = image instanceof MediaView ? ((MediaView) image).maximumWidth
+                            : image.getResources().getDisplayMetrics().widthPixels;
+                    int height = image instanceof MediaView ? ((MediaView) image).maximumHeight
+                            : Math.round(image.getResources().getDisplayMetrics().heightPixels * 0.72f);
+                    Glide.with(image).load(url).signature(new com.bumptech.glide.signature.ObjectKey(scope))
+                            .override(width, height).fitCenter()
+                            .diskCacheStrategy(DiskCacheStrategy.NONE)
+                            .listener(new com.bumptech.glide.request.RequestListener<android.graphics.drawable.Drawable>() {
+                                @Override public boolean onLoadFailed(com.bumptech.glide.load.engine.GlideException error,
+                                        Object model, com.bumptech.glide.request.target.Target<android.graphics.drawable.Drawable> target,
+                                        boolean first) { return !binding.current(image); }
+                                @Override public boolean onResourceReady(android.graphics.drawable.Drawable resource,
+                                        Object model, com.bumptech.glide.request.target.Target<android.graphics.drawable.Drawable> target,
+                                        com.bumptech.glide.load.DataSource source, boolean first) {
+                                    return !binding.current(image);
+                                }
+                            }).error(R.drawable.ic_more_account).into(image);
                 });
-            } catch(Exception ignored) { }
+            } catch (Exception failure) {
+                UI.post(() -> {
+                    if (!binding.current(image)) return;
+                    binding.preparing = false;
+                    image.setImageResource(R.drawable.ic_more_account);
+                });
+            }
         });
     }
     static ImageView inline(Activity activity,String bucket,String path) {return inline(activity,bucket,path,false);}
@@ -326,12 +381,20 @@ final class SocialMedia {
         image.setOnClickListener(v->showViewer(activity,bucket,path));return image;
     }
     static void showViewer(Activity activity,String bucket,String path) {
-        ImageView large=new ImageView(activity); large.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        if (activity.isDestroyed() || activity.isFinishing() || path.isEmpty()) return;
+        ImageView large = new ImageView(activity);
+        large.setScaleType(ImageView.ScaleType.FIT_CENTER);
         large.setContentDescription("Attachment viewer");
-        large.setLayoutParams(new android.view.ViewGroup.LayoutParams(-1,
-                Math.round(activity.getResources().getDisplayMetrics().heightPixels*0.72f)));
-        bind(large,bucket,path);
-        new ZeroChillDialog.Builder(activity).setView(large).setPositiveButton("Close",null).show();
+        android.widget.FrameLayout viewport = new android.widget.FrameLayout(activity);
+        // AlertDialog replaces its custom root's LayoutParams. Keep a bounded child inside it,
+        // so an unloaded image cannot collapse the viewport and deadlock Glide's size request.
+        viewport.addView(large, new android.widget.FrameLayout.LayoutParams(-1,
+                Math.round(activity.getResources().getDisplayMetrics().heightPixels * 0.72f)));
+        android.app.AlertDialog dialog = new ZeroChillDialog.Builder(activity).setView(viewport)
+                .setPositiveButton("Close", null).create();
+        dialog.setOnDismissListener(ignored -> clear(large));
+        dialog.show();
+        bind(large, bucket, path);
     }
 
 }
