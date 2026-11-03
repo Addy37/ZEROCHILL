@@ -87,7 +87,11 @@ public class OnlyFapHeroRotationTest {
 
         shadowOf(Looper.getMainLooper()).idleFor(13, TimeUnit.SECONDS);
 
-        assertEquals(1, heroIndexField.getInt(hub));
+        // Selection is staged until artwork readiness, never published by the timer.
+        assertEquals(0, heroIndexField.getInt(hub));
+        Field pending = OnlyFapHubView.class.getDeclaredField("pendingHero");
+        pending.setAccessible(true);
+        org.junit.Assert.assertSame(second, pending.get(hub));
         hub.close();
     }
 

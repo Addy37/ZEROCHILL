@@ -275,7 +275,7 @@ public class OnlyFapFilteredHeroTest {
         java.lang.reflect.Constructor<?> constructor = type.getDeclaredConstructor(NativeContentItem.class, String.class, String.class);
         constructor.setAccessible(true);
         Object candidate = constructor.newInstance(creator, "https://cdn.example.invalid/" + title + ".jpg", creator.url);
-        ReflectionHelpers.setField(hub, "heroItem", candidate);
+        ReflectionHelpers.setField(hub, "pendingHero", candidate);
         ((List<Object>) ReflectionHelpers.getField(hub, "heroItems")).add(candidate);
         return candidate;
     }

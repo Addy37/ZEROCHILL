@@ -210,7 +210,7 @@ final class OnlyFapHubView extends FrameLayout {
     private boolean heroArtworkReady;
     private android.animation.ValueAnimator heroMorph;
     private android.graphics.drawable.TransitionDrawable heroCrossfade;
-    private final Runnable crossfadeCleanup = this::finishHeroCrossfade;
+    private final Runnable crossfadeCleanup = this::completeHeroCrossfade;
     private int artworkRequestId;
     private android.animation.ValueAnimator selectorPulse;
     private float riftProgress;
@@ -260,6 +260,10 @@ final class OnlyFapHubView extends FrameLayout {
     private List<NativeContentItem> popularItems = Collections.emptyList();
     private boolean shelvesFinished;
     private HeroCandidate heroItem;
+    private HeroCandidate pendingHero;
+    private boolean pendingHeroAnimate;
+    private volatile int heroDecodeWidth, heroDecodeHeight;
+    private final Set<FutureTarget<Drawable>> qualificationTargets = java.util.concurrent.ConcurrentHashMap.newKeySet();
     private HeroCandidate startupHero;
     private boolean startupRequested;
     private int heroIndex = -1;
@@ -676,6 +680,8 @@ final class OnlyFapHubView extends FrameLayout {
         publishedPreference = null;
         heroGeneration++;
         artworkRequestId++;
+        pendingHero = null;
+        clearQualificationTargets();
         for (java.util.concurrent.Future<?> task : new java.util.concurrent.Future<?>[]{
                 startupTask, selectionTask, resolutionTask, discoveryTask}) {
             if (task != null) task.cancel(true);
@@ -753,7 +759,7 @@ final class OnlyFapHubView extends FrameLayout {
         newItems = safe(items);
         newShelf.adapter.replace(newItems);
         newShelf.container.setVisibility(newItems.isEmpty() ? View.GONE : View.VISIBLE);
-        if (active && heroItem == null && startupHero == null) {
+        if (active && heroItem == null && pendingHero == null && startupHero == null) {
             for (NativeContentItem creator : newItems) {
                 loadStartupThumbnail(creator);
                 if (startupHero != null) break;
@@ -857,14 +863,21 @@ final class OnlyFapHubView extends FrameLayout {
         if (this.active == active) return;
         this.active = active;
         if (!active) {
+            clearQualificationTargets();
+            pendingHero = null;
+            artworkRequestId++;
             finishHeroMorph();
+            Glide.with(preferenceImage).clear(preferenceImage);
+            preferenceImage.setAlpha(0f);
+            heroCard.animate().cancel(); heroCard.setAlpha(1f);
             ContentPreferenceUi.clearPresentation(this);
             heroHandler.removeCallbacksAndMessages(null);
             heroRefreshHandler.removeCallbacksAndMessages(null);
             return;
         }
         if (publishedPreference == discoveryPreference) post(this::presentPreference);
-        if (preferenceHeroPending && heroItem != null) loadHeroArtwork(heroItem);
+        if (heroItem == null && !heroItems.isEmpty()) showHero(0, false);
+        else if (preferenceHeroPending && heroItem != null) loadHeroArtwork(heroItem);
         requestStartupHero();
         requestHeroCandidates();
         refreshFavorites();
@@ -903,6 +916,8 @@ final class OnlyFapHubView extends FrameLayout {
         if (profileAvatar != null) profileAvatar.close();
         closed = true;
         artworkRequestId++;
+        pendingHero = null;
+        clearQualificationTargets();
         finishHeroMorph();
         ContentPreferenceUi.clearPresentation(this);
         Glide.with(preferenceImage).clear(preferenceImage);
@@ -1056,7 +1071,7 @@ final class OnlyFapHubView extends FrameLayout {
     }
 
     private void requestStartupHero() {
-        if (closed || !active || heroItem != null || startupRequested) return;
+        if (closed || !active || heroItem != null || pendingHero != null || startupRequested) return;
         if (discoveryPreference != ContentPreference.ALL) {
             for (NativeContentItem creator : discoverCandidates) {
                 loadStartupThumbnail(creator);
@@ -1073,7 +1088,7 @@ final class OnlyFapHubView extends FrameLayout {
                     CreatorCatalog.all(getContext()), CreatorFavoriteStore.names(getContext()),
                     Collections.emptyList(), Collections.emptyList(), Collections.emptyList(), 1);
             post(() -> {
-                if (closed || generation != heroGeneration || heroItem != null) return;
+                if (closed || generation != heroGeneration || heroItem != null || pendingHero != null) return;
                 if (!active) { startupRequested = false; return; }
                 AppPerformance.record("OnlyFap hero -> startup metadata ready",
                         android.os.SystemClock.elapsedRealtime() - requestedAt);
@@ -1094,7 +1109,7 @@ final class OnlyFapHubView extends FrameLayout {
 
     private void loadStartupHero(HeroCandidate candidate, boolean cacheOnly,
             NativeContentItem fallback) {
-        if (closed || heroItem != null || !startupAllowed(candidate)) return;
+        if (closed || heroItem != null || pendingHero != null || !startupAllowed(candidate)) return;
         startupHero = candidate;
         final long imageStartedAt = android.os.SystemClock.elapsedRealtime();
         if (preferenceHeroPending) {
@@ -1124,11 +1139,11 @@ final class OnlyFapHubView extends FrameLayout {
                             if (startupHero == candidate) startupHero = null;
                             return true;
                         }
-                        heroArtworkReady = true;
-                        showStartupCopy(candidate);
                         post(() -> {
                             if (startupHero == candidate && heroItem == null && startupAllowed(candidate)
                                     && commitHeroArtwork(requestId, targetView, source, false)) {
+                                heroArtworkReady = true;
+                                showStartupCopy(candidate);
                                 AppPerformance.record("OnlyFap hero -> " + (cacheOnly ? "cached" : "known remote")
                                                 + " artwork visible",
                                         android.os.SystemClock.elapsedRealtime() - imageStartedAt);
@@ -1291,6 +1306,11 @@ final class OnlyFapHubView extends FrameLayout {
                 heroAction.setVisibility(View.GONE);
             }
         }
+        if (pendingHero != null && excluded.contains(CreatorFavoriteStore.key(pendingHero.creator))) {
+            pendingHero = null;
+            artworkRequestId++;
+            Glide.with(preferenceImage).clear(preferenceImage);
+        }
         boolean selectedRemoved = heroItem != null &&
                 excluded.contains(CreatorFavoriteStore.key(heroItem.creator));
         heroItems.removeIf(item -> excluded.contains(CreatorFavoriteStore.key(item.creator)));
@@ -1316,6 +1336,9 @@ final class OnlyFapHubView extends FrameLayout {
     private void resolveHeroAsync(NativeContentItem creator) {
         final int generation = heroGeneration;
         final ContentPreference mode = discoveryPreference;
+        final OnlyFapHeroTrace trace = new OnlyFapHeroTrace();
+        trace.mark("candidate_selected");
+        captureHeroDecodeSize();
         resolutionTask = heroIo.submit(() -> {
             if (closed || generation != heroGeneration) return;
 
@@ -1371,8 +1394,7 @@ final class OnlyFapHubView extends FrameLayout {
                                 OnlyFapHeroPolicy.Artwork directChoice =
                                         new OnlyFapHeroPolicy.Artwork(
                                                 directOriginal, model.url, false);
-                                if (isGoodPortraitArtwork(directChoice)) {
-                                    addQualifiedHeroArtwork(generation, creator, portraitArtwork, directChoice);
+                                if (qualifyPortraitArtwork(generation, creator, portraitArtwork, directChoice, trace)) {
                                     continue;
                                 }
                             }
@@ -1388,9 +1410,7 @@ final class OnlyFapHubView extends FrameLayout {
                                                 full.requestReferer,
                                                 false
                                         );
-                                if (isGoodPortraitArtwork(choice)) {
-                                    addQualifiedHeroArtwork(generation, creator, portraitArtwork, choice);
-                                }
+                                qualifyPortraitArtwork(generation, creator, portraitArtwork, choice, trace);
                             } catch (IOException error) {
                                 if (error instanceof FapelloSourceException &&
                                         ((FapelloSourceException) error).reason ==
@@ -1434,9 +1454,7 @@ final class OnlyFapHubView extends FrameLayout {
                         for (OnlyFapHeroPolicy.Artwork choice : candidates) {
                             if (!active || closed || generation != heroGeneration ||
                                     portraitArtwork.size() >= 2) break;
-                            if (isGoodPortraitArtwork(choice)) {
-                                addQualifiedHeroArtwork(generation, creator, portraitArtwork, choice);
-                            }
+                            qualifyPortraitArtwork(generation, creator, portraitArtwork, choice, trace);
                         }
                     }
                 } catch (IOException ignored) { }
@@ -1450,19 +1468,6 @@ final class OnlyFapHubView extends FrameLayout {
                 if (interruptedByNavigation) requestedHeroCreators.remove(CreatorFavoriteStore.key(creator));
                 finishHeroResolution(generation, creator, choices);
             });
-        });
-    }
-
-    private void addQualifiedHeroArtwork(int generation, NativeContentItem creator,
-            List<OnlyFapHeroPolicy.Artwork> choices, OnlyFapHeroPolicy.Artwork choice) {
-        choices.add(choice);
-        if (choices.size() != 1) return;
-        // Publish the first validated original while alternate-gallery work continues.
-        // The worker retains its own list; only immutable snapshots cross to the UI.
-        List<OnlyFapHeroPolicy.Artwork> first = Collections.singletonList(choice);
-        postHeroWork(generation, "hero-first-artwork", () -> {
-            if (active && findHeroCandidate(CreatorFavoriteStore.key(creator)) == null)
-                addHeroCandidate(new HeroCandidate(creator, first));
         });
     }
 
@@ -1484,27 +1489,69 @@ final class OnlyFapHubView extends FrameLayout {
         requestHeroCandidates();
     }
 
-    private boolean isGoodPortraitArtwork(OnlyFapHeroPolicy.Artwork choice) {
-        if (choice == null || clean(choice.url).isEmpty()) return false;
-        FutureTarget<Bitmap> target = null;
+    private void captureHeroDecodeSize() {
+        heroDecodeWidth = Math.max(1, heroImage.getWidth() > 0 ? heroImage.getWidth()
+                : getResources().getDisplayMetrics().widthPixels);
+        heroDecodeHeight = Math.max(1, heroImage.getHeight() > 0 ? heroImage.getHeight()
+                : dp(640));
+    }
+
+    private com.bumptech.glide.RequestBuilder<Drawable> heroArtworkRequest(
+            com.bumptech.glide.RequestManager manager, String image, String referer, boolean qualify,
+            int width, int height) {
+        com.bumptech.glide.RequestBuilder<Drawable> request = manager.load(remoteImage(image, referer))
+                .centerCrop().override(Math.max(1, width), Math.max(1, height))
+                .diskCacheStrategy(DiskCacheStrategy.ALL).dontAnimate();
+        return qualify ? request.transform(new OnlyFapHeroCrop()) : request;
+    }
+
+    private void releaseQualification(FutureTarget<Drawable> target) {
+        qualificationTargets.remove(target);
+        target.cancel(true);
+        Glide.with(getContext().getApplicationContext()).clear(target);
+    }
+
+    private void clearQualificationTargets() {
+        for (FutureTarget<Drawable> target : new ArrayList<>(qualificationTargets)) releaseQualification(target);
+    }
+
+    private boolean qualifyPortraitArtwork(int generation, NativeContentItem creator,
+            List<OnlyFapHeroPolicy.Artwork> choices, OnlyFapHeroPolicy.Artwork choice, OnlyFapHeroTrace pipeline) {
+        final OnlyFapHeroTrace trace = choices.isEmpty() ? pipeline : new OnlyFapHeroTrace();
+        final int width = choices.isEmpty() ? heroDecodeWidth : 360, height = choices.isEmpty() ? heroDecodeHeight : 540;
+        trace.mark("original_resolved");
+        trace.mark("qualification_started");
+        FutureTarget<Drawable> target = heroArtworkRequest(Glide.with(getContext().getApplicationContext()),
+                choice.url, choice.referer, true, width, height)
+                .listener(new RequestListener<Drawable>() {
+                    @Override public boolean onLoadFailed(GlideException e, Object model, Target<Drawable> t, boolean first) { return false; }
+                    @Override public boolean onResourceReady(Drawable d, Object model, Target<Drawable> t, DataSource source, boolean first) {
+                        trace.mark("qualification_completed", source.name()); return false;
+                    }
+                }).submit(width, height);
+        qualificationTargets.add(target);
+        boolean handedOff = false;
         try {
-            target = Glide.with(getContext().getApplicationContext())
-                    .asBitmap()
-                    .load(remoteImage(choice.url, choice.referer))
-                    .diskCacheStrategy(DiskCacheStrategy.ALL)
-                    .fitCenter()
-                    .submit(360, 540);
-            Bitmap bitmap = target.get();
-            return bitmap != null &&
-                    OnlyFapHeroPolicy.isGoodPortraitDimensions(
-                            bitmap.getWidth(),
-                            bitmap.getHeight()
-                    );
-        } catch (Exception ignored) {
-            return false;
-        } finally {
-            if (target != null) target.cancel(true);
-        }
+            target.get(); // Source aspect is checked before the exact display crop, in Glide's transform.
+            if (closed || generation != heroGeneration || !active) return false;
+            boolean first = choices.isEmpty();
+            choices.add(choice);
+            if (first) {
+                handedOff = true;
+                postHeroWork(generation, "hero-first-artwork", () -> {
+                    try {
+                        trace.mark("first_published");
+                        if (active && findHeroCandidate(CreatorFavoriteStore.key(creator)) == null) {
+                            HeroCandidate candidate = new HeroCandidate(creator, Collections.singletonList(choice));
+                            candidate.trace = trace;
+                            addHeroCandidate(candidate);
+                        }
+                    } finally { releaseQualification(target); }
+                });
+            }
+            return true;
+        } catch (Exception failure) { trace.mark("qualification_failed"); return false; }
+        finally { if (!handedOff) releaseQualification(target); }
     }
 
     private FapelloRepository.Model chooseFapelloMatch(
@@ -1550,10 +1597,10 @@ final class OnlyFapHubView extends FrameLayout {
         heroItems.add(candidate);
         if (discoveryPreference == ContentPreference.ALL)
             OnlyFapHeroHistory.remember(getContext(), candidate.creator);
-        if (heroItem == null) {
+        if (heroItem == null && pendingHero == null) {
             showHero(0, false);
         } else {
-            updateHeroDots();
+            if (pendingHero == null) updateHeroDots();
             scheduleHeroRotation();
         }
     }
@@ -1580,40 +1627,61 @@ final class OnlyFapHubView extends FrameLayout {
         }
 
         finishHeroMorph();
-        heroIndex = index;
-        heroItem = next;
-        if (preferenceHeroPending) {
-            loadHeroArtwork(next);
-            return;
-        }
-        heroTitle.setText(next.creator.title);
-        heroHint.setText(heroDescription(next.creator));
-        heroAction.setVisibility(View.VISIBLE);
-        heroCard.setContentDescription("Open " + next.creator.title + " gallery");
-        updateHeroDots();
+        heroCard.animate().cancel();
+        heroCard.setAlpha(1f);
+        pendingHero = next;
+        pendingHeroAnimate = animate;
+        heroHandler.removeCallbacksAndMessages(null);
+        next.trace.mark("show_requested");
+        captureHeroDecodeSize();
+        loadHeroArtwork(next);
+    }
 
-        if (animate) {
-            heroCard.animate().cancel();
-            heroCard.animate()
-                    .alpha(0.72f)
-                    .setDuration(110L)
-                    .withEndAction(() -> {
-                        loadHeroArtwork(next);
-                        heroCard.animate().alpha(1f).setDuration(180L).start();
-                    })
-                    .start();
-        } else {
-            loadHeroArtwork(next);
-        }
-        scheduleHeroRotation();
+    private void commitHeroIdentity(HeroCandidate candidate) {
+        heroItem = candidate;
+        heroIndex = heroItems.indexOf(candidate);
+        pendingHero = null;
+        heroTitle.setText(candidate.creator.title);
+        heroHint.setText(heroDescription(candidate.creator));
+        heroAction.setVisibility(View.VISIBLE);
+        heroCard.setContentDescription("Open " + candidate.creator.title + " gallery");
+        updateHeroDots();
+    }
+
+    private void traceVisible(HeroCandidate candidate, ImageView image) {
+        final long committedAt = android.os.SystemClock.uptimeMillis();
+        image.getViewTreeObserver().addOnPreDrawListener(new android.view.ViewTreeObserver.OnPreDrawListener() {
+            @Override public boolean onPreDraw() {
+                if (closed || heroItem != candidate || heroImage != image) {
+                    image.getViewTreeObserver().removeOnPreDrawListener(this); return true;
+                }
+                if (image.isShown() && image.getAlpha() > 0f
+                        && image.getGlobalVisibleRect(new android.graphics.Rect())
+                        && android.os.SystemClock.uptimeMillis() > committedAt) {
+                    image.getViewTreeObserver().removeOnPreDrawListener(this);
+                    Runnable visible = () -> {
+                        if (!closed && heroItem == candidate && heroImage == image && image.isShown())
+                            candidate.trace.mark("image_visible");
+                    };
+                    if (android.os.Build.VERSION.SDK_INT >= 29 && image.isHardwareAccelerated())
+                        image.getViewTreeObserver().registerFrameCommitCallback(visible);
+                    else image.postOnAnimation(visible);
+                } else image.postInvalidateOnAnimation();
+                return true;
+            }
+        });
+        image.invalidate();
     }
 
     private void loadHeroArtwork(HeroCandidate candidate) {
-        if (closed || candidate == null || heroItem != candidate || !startupAllowed(candidate)) return;
+        if (closed || candidate == null || !startupAllowed(candidate)) return;
+        if (pendingHero == null && heroItem == candidate) pendingHero = candidate;
+        if (pendingHero != candidate) return;
         if (preferenceHeroPending) {
             loadPreferenceArtwork(candidate);
             return;
         }
+        captureHeroDecodeSize();
         final String imageUrl = candidate.currentImageUrl();
         final String referer = candidate.currentReferer();
         if (clean(imageUrl).isEmpty()) {
@@ -1626,11 +1694,9 @@ final class OnlyFapHubView extends FrameLayout {
             final ImageView targetView = preferenceImage;
             Glide.with(targetView).clear(targetView);
             final boolean startupCrossfade = startupHero != null && heroImage.getDrawable() != null;
-            com.bumptech.glide.RequestBuilder<Drawable> request = Glide.with(targetView)
-                    .load(remoteImage(imageUrl, referer))
-                    .centerCrop()
-                    .diskCacheStrategy(DiskCacheStrategy.ALL)
-                    .dontAnimate()
+            candidate.trace.mark("display_started");
+            com.bumptech.glide.RequestBuilder<Drawable> request = heroArtworkRequest(Glide.with(targetView),
+                    imageUrl, referer, !candidate.usingAvatar(), heroDecodeWidth, heroDecodeHeight)
                     .listener(new RequestListener<Drawable>() {
                         @Override
                         public boolean onLoadFailed(
@@ -1654,17 +1720,27 @@ final class OnlyFapHubView extends FrameLayout {
                                 DataSource dataSource,
                                 boolean first
                         ) {
-                            if (closed || requestId != artworkRequestId || heroItem != candidate || !startupAllowed(candidate)
+                            if (closed || requestId != artworkRequestId || pendingHero != candidate || !startupAllowed(candidate)
                                     || !imageUrl.equals(candidate.currentImageUrl())) return true;
                             {
-                                heroArtworkReady = true;
+                                candidate.trace.mark("resource_ready", dataSource.name());
                                 post(() -> {
-                                    if (heroItem == candidate && imageUrl.equals(candidate.currentImageUrl())
-                                            && startupAllowed(candidate)
-                                            && commitHeroArtwork(requestId, targetView, dataSource, startupCrossfade))
+                                    if (pendingHero != candidate || !imageUrl.equals(candidate.currentImageUrl())
+                                            || !startupAllowed(candidate) || !ownsPendingArtwork(requestId, targetView)) return;
+                                    boolean motion = pendingHeroAnimate;
+                                    if (commitHeroArtwork(requestId, targetView, dataSource, startupCrossfade)) {
+                                        commitHeroIdentity(candidate);
+                                        heroArtworkReady = true;
+                                        startupHero = null;
+                                        candidate.trace.mark("commit_completed", dataSource.name());
+                                        traceVisible(candidate, targetView);
+                                        if (motion && active && ZeroChillMotion.animationsEnabled(getContext()))
+                                            heroCard.animate().alpha(.72f).setDuration(110L).withEndAction(() ->
+                                                    heroCard.animate().alpha(1f).setDuration(180L).start()).start();
+                                        scheduleHeroRotation();
                                         presentPreference();
+                                    }
                                 });
-                                startupHero = null;
                                 if (discoveryPreference == ContentPreference.ALL && !candidate.usingAvatar()) metadataIo.execute(() ->
                                         OnlyFapHeroMemory.remember(getContext(), candidate.creator, imageUrl, referer));
                             }
@@ -1711,7 +1787,12 @@ final class OnlyFapHubView extends FrameLayout {
         heroImage.setAlpha(1f);
         heroImage.bringToFront();
         if (coldSnapshot != null) coldSnapshot.setHero(heroImage);
-        if (startupCrossfade) {
+        com.bumptech.glide.request.Request outgoingRequest =
+                new com.bumptech.glide.request.target.DrawableImageViewTarget(outgoing).getRequest();
+        if (startupCrossfade || (ZeroChillMotion.animationsEnabled(getContext())
+                && outgoingRequest != null && outgoingRequest.isComplete()
+                && !outgoingRequest.isCleared() && outgoing.getDrawable() != null)) {
+            final int duration = startupCrossfade ? 350 : 240;
             preferenceImage.setAlpha(0f); // A is drawn only inside the original crossfade.
             // The bounded reveal wrapper is tied to its own view; crossfade the owned frame itself.
             if (outgoing.getDrawable() instanceof ThumbnailFades.FadeDrawable)
@@ -1719,10 +1800,10 @@ final class OnlyFapHubView extends FrameLayout {
             // Keep Glide's original 350 ms crossfade, and keep A's owning target alive.
             Drawable incoming = heroImage.getDrawable();
             heroImage.setImageDrawable(outgoing.getDrawable());
-            new com.bumptech.glide.request.transition.DrawableCrossFadeTransition(350, true)
+            new com.bumptech.glide.request.transition.DrawableCrossFadeTransition(duration, true)
                     .transition(incoming, new com.bumptech.glide.request.target.DrawableImageViewTarget(heroImage));
             heroCrossfade = (android.graphics.drawable.TransitionDrawable) heroImage.getDrawable();
-            postDelayed(crossfadeCleanup, 350L);
+            postDelayed(crossfadeCleanup, duration);
         } else {
             // Preserve the normal 240 ms new-image reveal and its eligibility rules.
             new com.bumptech.glide.request.target.DrawableImageViewTarget(heroImage).onResourceReady(
@@ -1731,6 +1812,11 @@ final class OnlyFapHubView extends FrameLayout {
             Glide.with(preferenceImage).clear(preferenceImage);
         }
         return true;
+    }
+
+    private void completeHeroCrossfade() {
+        finishHeroCrossfade();
+        if (heroItem != null) heroItem.trace.mark("transition_finished");
     }
 
     private void finishHeroCrossfade() {
@@ -1759,7 +1845,7 @@ final class OnlyFapHubView extends FrameLayout {
     private boolean currentPreferenceArtwork(int generation, HeroCandidate candidate, String url,
             boolean startup) {
         return !closed && generation == heroGeneration && preferenceHeroPending
-                && (startup ? heroItem == null && startupHero == candidate : heroItem == candidate)
+                && (startup ? heroItem == null && startupHero == candidate : pendingHero == candidate)
                 && url.equals(candidate.currentImageUrl()) && startupAllowed(candidate);
     }
 
@@ -1772,8 +1858,10 @@ final class OnlyFapHubView extends FrameLayout {
         final ImageView targetView = preferenceImage;
         Glide.with(targetView).clear(targetView);
         if (clean(url).isEmpty()) { handleHeroArtworkFailure(candidate, url); return; }
-        Glide.with(targetView).load(remoteImage(url, candidate.currentReferer()))
-                .centerCrop().diskCacheStrategy(DiskCacheStrategy.ALL).dontAnimate()
+        captureHeroDecodeSize();
+        candidate.trace.mark("display_started");
+        heroArtworkRequest(Glide.with(targetView), url, candidate.currentReferer(),
+                !startup && !candidate.usingAvatar(), heroDecodeWidth, heroDecodeHeight)
                 .onlyRetrieveFromCache(cacheOnly)
                 .listener(new RequestListener<Drawable>() {
                     @Override public boolean onLoadFailed(GlideException error, Object model,
@@ -1788,6 +1876,7 @@ final class OnlyFapHubView extends FrameLayout {
                     @Override public boolean onResourceReady(Drawable resource, Object model,
                             Target<Drawable> target, DataSource source, boolean first) {
                         if (requestId != artworkRequestId || !currentPreferenceArtwork(generation, candidate, url, startup)) return true;
+                        candidate.trace.mark("resource_ready", source.name());
                         post(() -> {
                             if (ownsPendingArtwork(requestId, targetView)
                                     && currentPreferenceArtwork(generation, candidate, url, startup))
@@ -1800,14 +1889,15 @@ final class OnlyFapHubView extends FrameLayout {
 
     private void commitPreferenceArtwork(int generation, HeroCandidate candidate) {
         if (closed || generation != heroGeneration || !preferenceHeroPending
-                || (heroItem != candidate && (heroItem != null || startupHero != candidate))
+                || (pendingHero != candidate && (heroItem != null || startupHero != candidate))
                 || !startupAllowed(candidate)) return;
-        boolean startup = heroItem == null;
+        boolean startup = pendingHero != candidate;
         previousHeroTitle.setText(heroTitle.getText());
         previousHeroHint.setText(heroHint.getText());
         previousHeroTitle.setVisibility(View.VISIBLE);
         previousHeroHint.setVisibility(View.VISIBLE);
         previousHeroTitle.setAlpha(1f); previousHeroHint.setAlpha(1f);
+        if (!startup) commitHeroIdentity(candidate);
         heroTitle.setText(candidate.creator.title);
         heroHint.setText(heroDescription(candidate.creator));
         heroTitle.setAlpha(0f); heroHint.setAlpha(0f);
@@ -1830,6 +1920,8 @@ final class OnlyFapHubView extends FrameLayout {
             String image = candidate.currentImageUrl(), referer = candidate.currentReferer();
             metadataIo.execute(() -> OnlyFapHeroMemory.remember(getContext(), candidate.creator, image, referer));
         }
+        candidate.trace.mark("commit_completed");
+        traceVisible(candidate, heroImage);
         ContentPreference.acknowledge(getContext(), "onlyfap");
         if (!active || !isAttachedToWindow() || !ZeroChillMotion.animationsEnabled(getContext())) {
             settleHeroMorph();
@@ -1952,7 +2044,7 @@ final class OnlyFapHubView extends FrameLayout {
                 !failedUrl.equals(candidate.currentImageUrl())) return;
         if (!clean(failedUrl).isEmpty()) rejectedHeroUrls.add(failedUrl);
         if (candidate.advance()) {
-            if (candidate == heroItem) loadHeroArtwork(candidate);
+            if (candidate == pendingHero || candidate == heroItem) loadHeroArtwork(candidate);
             return;
         }
         rejectHero(candidate);
@@ -1962,6 +2054,12 @@ final class OnlyFapHubView extends FrameLayout {
         if (closed || candidate == null) return;
         int removed = heroItems.indexOf(candidate);
         if (removed >= 0) heroItems.remove(removed);
+        if (pendingHero == candidate) pendingHero = null;
+        if (heroItem != null && heroItem != candidate) {
+            heroIndex = heroItems.indexOf(heroItem);
+            updateHeroDots(); scheduleHeroRotation(); requestHeroCandidates();
+            return;
+        }
         if (heroItems.isEmpty()) {
             heroItem = null;
             if (preferenceHeroPending) {
@@ -2007,6 +2105,9 @@ final class OnlyFapHubView extends FrameLayout {
         // Retain a usable hero until a replacement is available. No blank refresh interval.
         if (heroResolveInFlight == 0 && !heroSelectionLoading && !heroDiscoveryLoading) {
             heroGeneration++;
+            clearQualificationTargets();
+            pendingHero = null;
+            artworkRequestId++;
             if (heroItem != null) {
                 heroItems.clear();
                 heroItems.add(heroItem);
@@ -2034,7 +2135,7 @@ final class OnlyFapHubView extends FrameLayout {
 
     private void scheduleHeroRotation() {
         heroHandler.removeCallbacksAndMessages(null);
-        if (!active || closed || preferenceHeroPending || heroMorph != null || heroItems.size() <= 1) return;
+        if (!active || closed || pendingHero != null || preferenceHeroPending || heroMorph != null || heroItems.size() <= 1) return;
         heroHandler.postDelayed(
                 () -> showHero(heroIndex + 1, true),
                 HERO_ROTATION_MS
@@ -2187,6 +2288,7 @@ final class OnlyFapHubView extends FrameLayout {
 
     private static final class HeroCandidate {
         final NativeContentItem creator;
+        OnlyFapHeroTrace trace = new OnlyFapHeroTrace();
         List<OnlyFapHeroPolicy.Artwork> artwork;
         int artworkIndex;
 

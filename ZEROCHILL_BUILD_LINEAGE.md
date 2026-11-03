@@ -17,6 +17,9 @@ stale selection during list pruning (fingerprint `308eee7e75b6`); see
 `docs/SHITTOK_SELECTION_HOTFIX.md`. The LiquidRift fix remains intact. Startup
 performance work in the same hero subsystem removes metadata-queue and alternate
 artwork waits; see `docs/ONLYFAP_HERO_STARTUP_HOTFIX.md`.
+The 3cf9c476 hero speed candidate failed OnePlus Android16 physical acceptance.
+The same branch now stages normal hero identity/artwork and reuses exact display
+qualification; see `docs/ONLYFAP_ATOMIC_HERO_HANDOFF.md`. Physical approval remains pending.
 
 ## Social media, DM reactions and analytics v2 candidate
 

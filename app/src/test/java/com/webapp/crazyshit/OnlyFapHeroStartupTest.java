@@ -195,11 +195,14 @@ public class OnlyFapHeroStartupTest {
         NativeContentItem fresh = creator("Fresh", "fresh", FRESH);
         List<OnlyFapHeroPolicy.Artwork> workerChoices = new java.util.ArrayList<>();
         OnlyFapHeroPolicy.Artwork first = new OnlyFapHeroPolicy.Artwork(FRESH, fresh.url, false);
-        ReflectionHelpers.callInstanceMethod(hub, "addQualifiedHeroArtwork",
-                ReflectionHelpers.ClassParameter.from(int.class, 0),
-                ReflectionHelpers.ClassParameter.from(NativeContentItem.class, fresh),
-                ReflectionHelpers.ClassParameter.from(List.class, workerChoices),
-                ReflectionHelpers.ClassParameter.from(OnlyFapHeroPolicy.Artwork.class, first));
+        ReflectionHelpers.callInstanceMethod(hub, "captureHeroDecodeSize");
+        CompletableFuture<Boolean> qualification = CompletableFuture.supplyAsync(() ->
+                ReflectionHelpers.callInstanceMethod(hub, "qualifyPortraitArtwork",
+                        ReflectionHelpers.ClassParameter.from(int.class, 0),
+                        ReflectionHelpers.ClassParameter.from(NativeContentItem.class, fresh),
+                        ReflectionHelpers.ClassParameter.from(List.class, workerChoices),
+                        ReflectionHelpers.ClassParameter.from(OnlyFapHeroPolicy.Artwork.class, first),
+                        ReflectionHelpers.ClassParameter.from(OnlyFapHeroTrace.class, new OnlyFapHeroTrace())));
         await(() -> freshCallback != null);
         assertSame(outgoing, ReflectionHelpers.getField(hub, "heroImage"));
         assertSame(previousDrawable, outgoing.getDrawable());

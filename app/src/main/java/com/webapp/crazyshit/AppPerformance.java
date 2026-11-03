@@ -63,6 +63,17 @@ final class AppPerformance {
         totals[0]++; totals[1] += milliseconds; totals[2] = milliseconds;
     }
 
+    private static final java.util.ArrayDeque<String> HERO_EVENTS = new java.util.ArrayDeque<>();
+
+    static synchronized void heroEvent(int id, String phase, long elapsed, long delta, String source) {
+        String line = "hero=" + id + " phase=" + phase + " elapsedMs=" + elapsed
+                + " deltaMs=" + delta + " source=" + source;
+        if (HERO_EVENTS.size() == 256) HERO_EVENTS.removeFirst();
+        HERO_EVENTS.addLast(line);
+        record("OnlyFap hero " + phase, elapsed);
+        android.util.Log.i("ZeroChillHero", line);
+    }
+
     static void started(Activity activity) {
         if (!(activity instanceof NativeMainActivity || activity instanceof SearchActivity
                 || activity instanceof NativeFeedBrowserActivity || activity instanceof DownloadedActivity)) return;
@@ -108,6 +119,10 @@ final class AppPerformance {
                     .append(totals[1] / Math.max(1, totals[0])).append(" ms average\n");
         }
         text.append("\nFrames over the display's timing budget: ").append(slowFrames).append(" / ").append(frames);
+        if (!HERO_EVENTS.isEmpty()) {
+            text.append("\n\nOnlyFap hero pipeline (recent events)\n");
+            for (String line : HERO_EVENTS) text.append(line).append('\n');
+        }
         text.append("\n\nTimings reset when the app process restarts. Automatic crash reports may include sanitized timings.");
         return text.toString();
     }
