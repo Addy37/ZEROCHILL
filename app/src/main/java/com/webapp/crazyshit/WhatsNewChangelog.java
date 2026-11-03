@@ -25,9 +25,8 @@ final class WhatsNewChangelog {
     static Entry forVersion(int versionCode) {
         if (versionCode == 6_000_003) {
             return new Entry(6_000_003, "6.0.3",
-                    "A new What's New dialog shows release highlights after updates.",
-                    "The announcement uses ZEROCHILL's existing liquid glass effects.",
-                    "Each update announcement appears once, then gets out of your way.");
+                    "See what changed after each ZEROCHILL update.",
+                    "Release notes appear once, then stay out of your way.");
         }
         // Do not recycle stale release notes for unlisted future versions.
         return null;
