@@ -335,6 +335,8 @@ public class OnlyFapHeroBitmapLifecycleTest {
         ShadowLooper.idleMainLooper(400, TimeUnit.MILLISECONDS);
         ImageView outgoing = image(); Bitmap pixelsA = bitmap(outgoing.getDrawable());
         Object b = newCandidate("b");
+        String hintA = ((android.widget.TextView) ReflectionHelpers.getField(hub, "heroHint")).getText().toString();
+        String dotsA = ((android.widget.TextView) ReflectionHelpers.getField(hub, "heroDots")).getText().toString();
         long selectedAt = android.os.SystemClock.uptimeMillis();
         ReflectionHelpers.callInstanceMethod(hub, "showHero", ReflectionHelpers.ClassParameter.from(int.class, 1),
                 ReflectionHelpers.ClassParameter.from(boolean.class, true));
@@ -345,12 +347,17 @@ public class OnlyFapHeroBitmapLifecycleTest {
         assertSame(a, ReflectionHelpers.getField(hub, "heroItem"));
         assertEquals(0, (int) ReflectionHelpers.getField(hub, "heroIndex"));
         assertEquals("a", ((android.widget.TextView) ReflectionHelpers.getField(hub, "heroTitle")).getText().toString());
+        assertEquals(hintA, ((android.widget.TextView) ReflectionHelpers.getField(hub, "heroHint")).getText().toString());
+        assertEquals(dotsA, ((android.widget.TextView) ReflectionHelpers.getField(hub, "heroDots")).getText().toString());
         assertEquals(1f, ((View) ReflectionHelpers.getField(hub, "heroCard")).getAlpha(), .001f);
         ReflectionHelpers.callInstanceMethod(hub, "openHero"); assertEquals("a", opened.title);
         assertSame(outgoing, image()); assertFalse(request(outgoing).isCleared()); assertFalse(pixelsA.isRecycled()); draw();
         complete("b"); awaitOneTask(() -> ReflectionHelpers.getField(hub, "heroItem") == b);
         assertEquals(1, (int) ReflectionHelpers.getField(hub, "heroIndex"));
         assertEquals("b", ((android.widget.TextView) ReflectionHelpers.getField(hub, "heroTitle")).getText().toString());
+        assertEquals("Hint b", ((android.widget.TextView) ReflectionHelpers.getField(hub, "heroHint")).getText().toString());
+        assertEquals("○ ●", ((android.widget.TextView) ReflectionHelpers.getField(hub, "heroDots")).getText().toString());
+        assertEquals("Open b gallery", ((View) ReflectionHelpers.getField(hub, "heroCard")).getContentDescription().toString());
         ReflectionHelpers.callInstanceMethod(hub, "openHero"); assertEquals("b", opened.title);
         assertNotSame(outgoing, image()); assertNotNull(ReflectionHelpers.getField(hub, "heroCrossfade"));
         assertFalse(request(outgoing).isCleared()); assertFalse(pixelsA.isRecycled()); draw();
@@ -407,7 +414,8 @@ public class OnlyFapHeroBitmapLifecycleTest {
     }
 
     private Object newCandidate(String name) throws Exception {
-        NativeContentItem creator = creator(name, name, url(name));
+        NativeContentItem creator = new NativeContentItem(NativeContentItem.KIND_CREATOR, name,
+                "https://cum.st/creators/onlyfans/" + name, url(name), "", "", "", "Hint " + name, name);
         Class<?> type = Class.forName("com.webapp.crazyshit.OnlyFapHubView$HeroCandidate");
         java.lang.reflect.Constructor<?> ctor = type.getDeclaredConstructor(NativeContentItem.class, String.class, String.class);
         ctor.setAccessible(true); Object candidate = ctor.newInstance(creator, url(name), creator.url);
