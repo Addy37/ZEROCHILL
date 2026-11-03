@@ -523,6 +523,9 @@ public class OnlyFapFilteredHeroTest {
     }
 
     @Test public void lateShelvesAndCompletionCannotBeLostBehindAnOlderEmptySelection() {
+        // Favorites may already be loaded on a real visit. Do not let an unrelated
+        // favorites completion accidentally wake this otherwise stranded selection.
+        ReflectionHelpers.setField(hub, "favoritesLoading", true);
         List<NativeContentItem> category = creators(3);
         hub.setPreferenceShelf(ContentPreference.WOMEN, 0, category.subList(0, 1), false);
         finish(generation(), category.get(0));
