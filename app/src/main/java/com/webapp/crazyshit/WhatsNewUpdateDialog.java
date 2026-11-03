@@ -91,7 +91,8 @@ final class WhatsNewUpdateDialog {
         content.addView(heading);
 
         TextView version = label("VERSION " + entry.versionName
-                + (preview ? "  •  PREVIEW" : ""), 12f,
+                + (preview ? (entry.highlights.size() >= 10
+                        ? "  •  10-ENTRY TEST" : "  •  PREVIEW") : ""), 12f,
                 ZeroChillUi.color(activity, R.color.zc_text_secondary), false);
         LinearLayout.LayoutParams versionParams = new LinearLayout.LayoutParams(-1, -2);
         versionParams.topMargin = dp(12);
@@ -114,7 +115,8 @@ final class WhatsNewUpdateDialog {
         notesScroller.setOverScrollMode(View.OVER_SCROLL_IF_CONTENT_SCROLLS);
         TextView notes = label("", 15f,
                 ZeroChillUi.color(activity, R.color.zc_text_primary), false);
-        notes.setLineSpacing(dp(7), 1.06f);
+        // Tighten the vertical gap between entries without squeezing wrapped text.
+        notes.setLineSpacing(dp(2), 1.03f);
         notes.setPadding(0, dp(9), 0, dp(9));
         SpannableStringBuilder highlights = new SpannableStringBuilder();
         for (int index = 0; index < entry.highlights.size(); index++) {
@@ -228,8 +230,7 @@ final class WhatsNewUpdateDialog {
                                              View protectedContent, ViewPageBackdrop backdrop) {
         if (!canPreview() || activity == null || parent == null
                 || protectedContent == null || backdrop == null) return null;
-        WhatsNewChangelog.Entry entry = WhatsNewChangelog.forVersion(
-                WhatsNewChangelog.FIRST_SUPPORTED_VERSION_CODE);
+        WhatsNewChangelog.Entry entry = WhatsNewChangelog.longPreviewForTesting();
         return new WhatsNewUpdateDialog(activity, parent, protectedContent,
                 backdrop, entry, BuildConfig.VERSION_CODE, true, null);
     }
