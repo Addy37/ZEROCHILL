@@ -344,6 +344,13 @@ public class OnlyFapHeroBitmapLifecycleTest {
         System.out.println("Rotation request began after " + (android.os.SystemClock.uptimeMillis() - selectedAt) + "ms");
         assertTrue("Network/decode request must not wait for card motion",
                 android.os.SystemClock.uptimeMillis() - selectedAt < 110L);
+        // The periodic pool refresh must not invalidate an already staged display request.
+        ReflectionHelpers.setField(hub, "heroSelectionLoading", false);
+        int generation = ReflectionHelpers.getField(hub, "heroGeneration");
+        ReflectionHelpers.callInstanceMethod(hub, "refreshHeroSet");
+        ReflectionHelpers.setField(hub, "heroSelectionLoading", true);
+        assertEquals(generation, (int) ReflectionHelpers.getField(hub, "heroGeneration"));
+        assertSame(b, ReflectionHelpers.getField(hub, "pendingHero"));
         assertSame(a, ReflectionHelpers.getField(hub, "heroItem"));
         assertEquals(0, (int) ReflectionHelpers.getField(hub, "heroIndex"));
         assertEquals("a", ((android.widget.TextView) ReflectionHelpers.getField(hub, "heroTitle")).getText().toString());

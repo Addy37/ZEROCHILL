@@ -2103,11 +2103,10 @@ final class OnlyFapHubView extends FrameLayout {
     private void refreshHeroSet() {
         if (!active || closed) return;
         // Retain a usable hero until a replacement is available. No blank refresh interval.
-        if (heroResolveInFlight == 0 && !heroSelectionLoading && !heroDiscoveryLoading) {
+        if (heroResolveInFlight == 0 && !heroSelectionLoading && !heroDiscoveryLoading
+                && pendingHero == null && heroMorph == null) {
             heroGeneration++;
             clearQualificationTargets();
-            pendingHero = null;
-            artworkRequestId++;
             if (heroItem != null) {
                 heroItems.clear();
                 heroItems.add(heroItem);
