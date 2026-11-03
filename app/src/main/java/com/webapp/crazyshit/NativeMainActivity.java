@@ -198,6 +198,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     }
 
     private void previewWhatsNewForDebug() {
+        if (whatsNewDialog != null && !whatsNewDialog.isShowing()) whatsNewDialog = null;
         if (!BuildConfig.DEBUG || whatsNewDialog != null || overlayRoot == null
                 || !(shell instanceof FrostedNavigationLayout)) return;
         whatsNewDialog = WhatsNewUpdateDialog.showPreview(this, overlayRoot, shell,
