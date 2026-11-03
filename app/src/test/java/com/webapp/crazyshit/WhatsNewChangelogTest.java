@@ -20,6 +20,13 @@ public class WhatsNewChangelogTest {
         assertEquals(2, entry.highlights.size());
     }
 
+    @Test public void longPreviewHasTenTestOnlyEntries() {
+        WhatsNewChangelog.Entry entry = WhatsNewChangelog.longPreviewForTesting();
+        assertEquals(10, entry.highlights.size());
+        assertEquals(2, WhatsNewChangelog.forVersion(6_000_003).highlights.size());
+        assertEquals(6_000_003, entry.versionCode);
+    }
+
     @Test public void unknownLaterVersionDoesNotReuseStaleNotes() {
         assertNull(WhatsNewChangelog.forVersion(6_000_004));
     }
