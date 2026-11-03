@@ -65,7 +65,8 @@ public final class OnlyFapTransitionProbeActivity extends Activity {
                     check(oldImage.getAlpha() * newImage.getAlpha() < .001f, "stacked hero artwork");
                 }
                 if (expected.equals(((TextView) title).getText().toString()) &&
-                        !(boolean) field("preferenceHeroPending") && field("heroMorph") == null) {
+                        !(boolean) field("preferenceHeroPending") && field("heroMorph") == null
+                        && field("heroCrossfade") == null) {
                     if (step == 0 && controls == null) {
                         int[] currentBounds = bounds();
                         if (!Arrays.equals(initialReadyBounds, currentBounds)) {
