@@ -199,7 +199,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
 
     private void previewWhatsNewForDebug() {
         if (whatsNewDialog != null && !whatsNewDialog.isShowing()) whatsNewDialog = null;
-        if (!BuildConfig.DEBUG || whatsNewDialog != null || overlayRoot == null
+        if (!WhatsNewUpdateDialog.canPreview() || whatsNewDialog != null || overlayRoot == null
                 || !(shell instanceof FrostedNavigationLayout)) return;
         whatsNewDialog = WhatsNewUpdateDialog.showPreview(this, overlayRoot, shell,
                 ((FrostedNavigationLayout) shell).pageBackdropForOverlay());
@@ -529,8 +529,8 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         ZeroChillUi.styleTitle(headerTitle);
         headerTitle.setTextSize(28f);
         headerTitle.setSingleLine(true);
-        // Debug builds can preview the next changelog by long-pressing this title.
-        if (BuildConfig.DEBUG) {
+        // Local debug and signed preview builds allow repeat physical checks.
+        if (WhatsNewUpdateDialog.canPreview()) {
             headerTitle.setOnLongClickListener(v -> {
                 previewWhatsNewForDebug();
                 return true;
