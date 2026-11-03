@@ -53,7 +53,7 @@ public class OnlyFapHeroStartupTest {
     @Before public void setup() {
         activity = Robolectric.buildActivity(Activity.class).setup().get();
         activity.setTheme(R.style.Theme_CrazyShit);
-        Bitmap bitmap = Bitmap.createBitmap(360, 540, Bitmap.Config.ARGB_8888);
+        Bitmap bitmap = Bitmap.createBitmap(720, 1280, Bitmap.Config.ARGB_8888);
         bitmap.eraseColor(Color.BLUE);
         ByteArrayOutputStream bytes = new ByteArrayOutputStream();
         bitmap.compress(Bitmap.CompressFormat.PNG, 100, bytes);

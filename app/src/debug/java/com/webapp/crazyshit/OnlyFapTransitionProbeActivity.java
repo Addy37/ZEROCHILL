@@ -206,8 +206,8 @@ public final class OnlyFapTransitionProbeActivity extends Activity {
         int[] colors = {0xFF365D79, 0xFF546B49, 0xFF6B4673, 0xFF397A7C, 0xFF9C6440};
         byte[][] portraits = new byte[colors.length][];
         for (int i = 0; i < colors.length; i++) {
-            Bitmap bitmap = Bitmap.createBitmap(360, 640, Bitmap.Config.ARGB_8888);
-            Canvas canvas = new Canvas(bitmap); canvas.drawColor(colors[i]);
+            Bitmap bitmap = Bitmap.createBitmap(900, 1600, Bitmap.Config.ARGB_8888);
+            Canvas canvas = new Canvas(bitmap); canvas.drawColor(colors[i]); canvas.scale(2.5f, 2.5f);
             Paint paint = new Paint(3); paint.setColor(0xFFB8DDE5);
             canvas.drawCircle(180, 190, 110, paint); paint.setColor(0xFF111D29);
             canvas.drawRect(70, 300, 290, 640, paint);

@@ -21,6 +21,11 @@ The 3cf9c476 hero speed candidate failed OnePlus Android16 physical acceptance.
 The same branch now stages normal hero identity/artwork and reuses exact display
 qualification; see `docs/ONLYFAP_ATOMIC_HERO_HANDOFF.md`. Physical approval remains pending.
 
+Current PR #401 also incorporates `main` at `f3d4b1a5` (merged DM lifecycle PR #402).
+The filtered hero pool follow-up addresses bounded category backfill and original
+quality; see `docs/ONLYFAP_FILTERED_HERO_POOLS.md`. Physical pool/quality acceptance
+remains pending and the earlier first-hero optimization did not establish it.
+
 ## Social media, DM reactions and analytics v2 candidate
 
 `feature/social-media-reactions-analytics-v2` starts from GitHub main verified at

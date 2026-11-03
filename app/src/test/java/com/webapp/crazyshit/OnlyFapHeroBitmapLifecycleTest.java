@@ -55,7 +55,7 @@ public class OnlyFapHeroBitmapLifecycleTest {
                 .setMemoryCache(new com.bumptech.glide.load.engine.cache.MemoryCacheAdapter())
                 .setBitmapPool(new com.bumptech.glide.load.engine.bitmap_recycle.BitmapPoolAdapter()));
         java.util.concurrent.CompletableFuture.runAsync(() -> Glide.get(activity).clearDiskCache()).get(10, TimeUnit.SECONDS);
-        Bitmap bitmap = Bitmap.createBitmap(360, 540, Bitmap.Config.ARGB_8888);
+        Bitmap bitmap = Bitmap.createBitmap(720, 1280, Bitmap.Config.ARGB_8888);
         bitmap.eraseColor(Color.BLUE);
         ByteArrayOutputStream bytes = new ByteArrayOutputStream();
         bitmap.compress(Bitmap.CompressFormat.PNG, 100, bytes);
