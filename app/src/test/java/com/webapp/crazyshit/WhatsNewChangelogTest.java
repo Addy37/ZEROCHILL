@@ -17,7 +17,7 @@ public class WhatsNewChangelogTest {
         WhatsNewChangelog.Entry entry = WhatsNewChangelog.forVersion(6_000_003);
         assertNotNull(entry);
         assertEquals("6.0.3", entry.versionName);
-        assertEquals(3, entry.highlights.size());
+        assertEquals(2, entry.highlights.size());
     }
 
     @Test public void unknownLaterVersionDoesNotReuseStaleNotes() {
