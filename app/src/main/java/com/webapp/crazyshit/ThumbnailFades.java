@@ -43,6 +43,10 @@ final class ThumbnailFades {
     static DrawableTransitionOptions avatar() { return AVATAR; }
     static DrawableTransitionOptions hero() { return HERO; }
 
+    static com.bumptech.glide.request.transition.Transition<Drawable> heroTransition(DataSource source) {
+        return factory(240).build(source, false);
+    }
+
     static TransitionFactory<Drawable> factoryForTest(int durationMs) {
         return factory(durationMs);
     }

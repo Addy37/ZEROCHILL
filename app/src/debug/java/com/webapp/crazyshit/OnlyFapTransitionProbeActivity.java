@@ -34,6 +34,10 @@ public final class OnlyFapTransitionProbeActivity extends Activity {
     private int[] initialReadyBounds;
     private int initialStableFrames;
     private int frames;
+    private Object rotationOutgoing;
+    private android.widget.ImageView rotationImage;
+    private com.bumptech.glide.request.Request rotationOwner;
+    private NativeContentItem opened;
     private final Runnable watch = new Runnable() {
         @Override public void run() {
             try {
@@ -44,13 +48,25 @@ public final class OnlyFapTransitionProbeActivity extends Activity {
                 if (controls != null) check(Arrays.equals(controls, bounds()), "controls moved during transition");
                 String expected = step == 0 ? "Initial creator" : step == 1 ? "Fast category" :
                         step == 2 ? "Latest category with a longer name across two lines" :
-                        step == 3 ? "All content creator" : step == 4 ? "Female again" : "Qualified gallery";
+                        step == 3 ? "All content creator" : step == 4 ? "Female again" : step == 5 ? "Qualified gallery" : "Rotation creator";
+                if (step == 6 && field("pendingHero") != null) {
+                    check("Qualified gallery".equals(((TextView) title).getText().toString()), "pending rotation changed text");
+                    check(field("heroItem") == rotationOutgoing && field("heroImage") == rotationImage,
+                            "pending rotation changed visible creator/image");
+                    check(((View) field("heroCard")).getAlpha() == 1f && rotationImage.getDrawable() != null,
+                            "pending rotation darkened or blanked hero");
+                    ((View) field("heroAction")).performClick();
+                    check(opened != null && opened.title.equals("Qualified gallery"), "pending rotation opened wrong creator");
+                }
+                if (step == 6 && field("heroCrossfade") != null)
+                    check(!rotationOwner.isCleared(), "outgoing owner released during crossfade");
                 if (field("heroMorph") != null) {
                     View oldImage = (View) field("preferenceImage"), newImage = (View) field("heroImage");
                     check(oldImage.getAlpha() * newImage.getAlpha() < .001f, "stacked hero artwork");
                 }
                 if (expected.equals(((TextView) title).getText().toString()) &&
-                        !(boolean) field("preferenceHeroPending") && field("heroMorph") == null) {
+                        !(boolean) field("preferenceHeroPending") && field("heroMorph") == null
+                        && field("heroCrossfade") == null) {
                     if (step == 0 && controls == null) {
                         int[] currentBounds = bounds();
                         if (!Arrays.equals(initialReadyBounds, currentBounds)) {
@@ -67,9 +83,12 @@ public final class OnlyFapTransitionProbeActivity extends Activity {
                     android.util.Log.i("ZeroChillTransition", "stage=" + step + " ready " + expected);
                     LiquidRiftImageView image = (LiquidRiftImageView) field("heroImage");
                     check(image.getScaleX() == 1f && image.getScaleY() == 1f, "stuck hero scale");
-                    if (step == 5) {
+                    if (step == 6) {
+                        check(rotationOwner.isCleared(), "outgoing owner not released after transition");
+                        ((View) field("heroAction")).performClick();
+                        check(opened != null && opened.title.equals("Rotation creator"), "committed rotation opened wrong creator");
                         check(frames > 10, "insufficient observed animation frames");
-                        android.util.Log.i("ZeroChillTransition", "PASS real Glide startup, rapid switch, qualified artwork, stable bounds; frames=" + frames);
+                        android.util.Log.i("ZeroChillTransition", "PASS real Glide startup, rapid switch, qualified artwork, stable bounds, atomic delayed rotation; frames=" + frames);
                         return;
                     }
                     controls = bounds();
@@ -80,7 +99,8 @@ public final class OnlyFapTransitionProbeActivity extends Activity {
                                 "Latest category with a longer name across two lines"), 40);
                     } else if (step == 2) change(ContentPreference.ALL, "All content creator");
                     else if (step == 3) change(ContentPreference.WOMEN, "Female again");
-                    else qualified();
+                    else if (step == 4) qualified();
+                    else rotate();
                     step++;
                     deadline = SystemClock.uptimeMillis() + 6000;
                 }
@@ -97,7 +117,7 @@ public final class OnlyFapTransitionProbeActivity extends Activity {
         try {
             registerArtwork();
             hub = new OnlyFapHubView(this, new OnlyFapHubView.Listener() {
-                public void onOpenCreator(NativeContentItem item) { }
+                public void onOpenCreator(NativeContentItem item) { opened = item; }
                 public void onSearch() { }
                 public void onViewAllFavorites() { }
             });
@@ -154,6 +174,23 @@ public final class OnlyFapTransitionProbeActivity extends Activity {
             catch (Exception error) { throw new IllegalStateException(error); }
         });
     }
+    private void rotate() throws Exception {
+        NativeContentItem next = creator("Rotation creator", false);
+        NativeContentItem current = creator("Qualified gallery", false);
+        hub.setPreferenceCreators(Arrays.asList(current, next));
+        rotationOutgoing = field("heroItem");
+        rotationImage = (android.widget.ImageView) field("heroImage");
+        rotationOwner = new com.bumptech.glide.request.target.DrawableImageViewTarget(rotationImage).getRequest();
+        Method finish = OnlyFapHubView.class.getDeclaredMethod("finishHeroResolution", int.class, NativeContentItem.class, List.class);
+        finish.setAccessible(true);
+        finish.invoke(hub, (int) field("heroGeneration"), next, Collections.singletonList(
+                new OnlyFapHeroPolicy.Artwork("https://transition.invalid/rotation.png", next.url, false)));
+        Method show = OnlyFapHubView.class.getDeclaredMethod("showHero", int.class, boolean.class);
+        show.setAccessible(true); show.invoke(hub, 1, true);
+        com.bumptech.glide.request.Request incoming = new com.bumptech.glide.request.target.DrawableImageViewTarget(
+                (android.widget.ImageView) field("preferenceImage")).getRequest();
+        check(incoming != null && incoming.isRunning(), "rotation request waited for card fade");
+    }
     private int[] bounds() throws Exception {
         View control = (View) field("preferenceSelector");
         int[] xy = new int[2]; control.getLocationOnScreen(xy);
@@ -170,8 +207,8 @@ public final class OnlyFapTransitionProbeActivity extends Activity {
         int[] colors = {0xFF365D79, 0xFF546B49, 0xFF6B4673, 0xFF397A7C, 0xFF9C6440};
         byte[][] portraits = new byte[colors.length][];
         for (int i = 0; i < colors.length; i++) {
-            Bitmap bitmap = Bitmap.createBitmap(360, 640, Bitmap.Config.ARGB_8888);
-            Canvas canvas = new Canvas(bitmap); canvas.drawColor(colors[i]);
+            Bitmap bitmap = Bitmap.createBitmap(900, 1600, Bitmap.Config.ARGB_8888);
+            Canvas canvas = new Canvas(bitmap); canvas.drawColor(colors[i]); canvas.scale(2.5f, 2.5f);
             Paint paint = new Paint(3); paint.setColor(0xFFB8DDE5);
             canvas.drawCircle(180, 190, 110, paint); paint.setColor(0xFF111D29);
             canvas.drawRect(70, 300, 290, 640, paint);
@@ -192,7 +229,7 @@ public final class OnlyFapTransitionProbeActivity extends Activity {
                         return new LoadData<>(new ObjectKey(url), new DataFetcher<InputStream>() {
                             public void loadData(Priority priority, DataCallback<? super InputStream> callback) {
                                 handler.postDelayed(() -> callback.onDataReady(new ByteArrayInputStream(png)),
-                                        model.toStringUrl().contains("Superseded") ? 1200 : 180);
+                                        model.toStringUrl().contains("Superseded") ? 1200 : model.toStringUrl().contains("rotation") ? 900 : 180);
                             }
                             public void cleanup() { }
                             public void cancel() { } // Deliberately let late delivery exercise Glide cancellation.

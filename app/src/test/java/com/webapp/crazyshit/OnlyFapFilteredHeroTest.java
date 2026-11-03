@@ -35,15 +35,19 @@ public class OnlyFapFilteredHeroTest {
     private OnlyFapHubView hub;
     private Activity activity;
     private ManualExecutor io;
+    private byte[] tiny;
     private final AtomicInteger fetches = new AtomicInteger();
     @Before public void setup() throws Exception {
         activity = Robolectric.buildActivity(Activity.class).setup().get();
-        Bitmap bitmap = Bitmap.createBitmap(360, 540, Bitmap.Config.ARGB_8888);
+        Bitmap bitmap = Bitmap.createBitmap(720, 1280, Bitmap.Config.ARGB_8888);
         bitmap.eraseColor(Color.BLUE);
         ByteArrayOutputStream bytes = new ByteArrayOutputStream();
         bitmap.compress(Bitmap.CompressFormat.PNG, 100, bytes);
         bitmap.recycle();
         byte[] png = bytes.toByteArray();
+        Bitmap small = Bitmap.createBitmap(60, 120, Bitmap.Config.ARGB_8888);
+        ByteArrayOutputStream smallBytes = new ByteArrayOutputStream(); small.compress(Bitmap.CompressFormat.PNG, 100, smallBytes);
+        small.recycle(); tiny = smallBytes.toByteArray();
         Glide.get(activity).getRegistry().prepend(GlideUrl.class, InputStream.class,
                 new ModelLoaderFactory<GlideUrl, InputStream>() {
                     @Override public ModelLoader<GlideUrl, InputStream> build(MultiModelLoaderFactory factory) {
@@ -54,7 +58,7 @@ public class OnlyFapFilteredHeroTest {
                                 return new LoadData<>(new ObjectKey(model.toStringUrl()), new DataFetcher<InputStream>() {
                                     @Override public void loadData(Priority priority, DataCallback<? super InputStream> callback) {
                                         fetches.incrementAndGet();
-                                        callback.onDataReady(new ByteArrayInputStream(png));
+                                        callback.onDataReady(new ByteArrayInputStream(model.toStringUrl().contains("tiny") ? tiny : png));
                                     }
                                     @Override public void cleanup() { }
                                     @Override public void cancel() { }
@@ -76,6 +80,14 @@ public class OnlyFapFilteredHeroTest {
         io = new ManualExecutor();
         ReflectionHelpers.setField(hub, "heroIo", io);
         hub.setWorkScheduler((key, task) -> task.run());
+        ReflectionHelpers.setField(hub, "categoryHeroSource", new OnlyFapHubView.CategoryHeroSource() {
+            public OnlyHavenRepository.CategoryPage category(ContentPreference mode, int limit, int offset) {
+                return new OnlyHavenRepository.CategoryPage(Collections.emptyList(), false);
+            }
+            public List<NativeContentItem> media(OnlyHavenRepository.Creator creator, int page, int limit) {
+                return Collections.emptyList();
+            }
+        });
         ContentPreference.set(activity, ContentPreference.WOMEN);
         hub.preparePreference(ContentPreference.WOMEN);
     }
@@ -93,7 +105,7 @@ public class OnlyFapFilteredHeroTest {
             ShadowLooper.idleMainLooper();
             Set<String> requested = ReflectionHelpers.getField(hub, "requestedHeroCreators");
             assertEquals(i + 1, requested.size());
-            assertTrue(requested.contains(CreatorFavoriteStore.key(category.get(i))));
+            assertTrue(requested.contains(OnlyFapCategoryLoader.identity(category.get(i))));
             assertEquals(1, (int) ReflectionHelpers.getField(hub, "heroResolveInFlight"));
             assertEquals(1, io.queue.size());
             io.queue.remove(); // no network: simulate the bounded resolver's validated result
@@ -120,7 +132,7 @@ public class OnlyFapFilteredHeroTest {
         assertFalse(ReflectionHelpers.getField(hub, "heroDiscoveryLoading"));
     }
 
-    @Test public void rejectedArtworkDoesNotConsumeSlotAndExhaustedCategoryDoesNotBackfill() {
+    @Test public void rejectedArtworkDoesNotConsumeSlotAndExhaustedCategoryDoesNotBackfill() throws Exception {
         List<NativeContentItem> category = creators(2);
         hub.setPreferenceCreators(category);
         ReflectionHelpers.setField(hub, "active", true);
@@ -134,9 +146,10 @@ public class OnlyFapFilteredHeroTest {
         io.runNext(); ShadowLooper.idleMainLooper(); io.queue.remove();
         finish(generation(), category.get(1));
         io.runNext(); ShadowLooper.idleMainLooper();
+        awaitCondition(() -> (boolean) ReflectionHelpers.getField(hub, "heroDiscoveryExhausted"));
+        while (!io.queue.isEmpty()) { io.runNext(); ShadowLooper.idleMainLooper(); }
         assertEquals(1, heroes().size());
         assertTrue(io.queue.isEmpty());
-        assertFalse(ReflectionHelpers.getField(hub, "heroDiscoveryLoading"));
     }
 
     @Test public void switchingModesCancelsQueuedWorkAndCannotPublishOldCategoryEvenWithSameCreator() {
@@ -275,15 +288,17 @@ public class OnlyFapFilteredHeroTest {
         java.lang.reflect.Constructor<?> constructor = type.getDeclaredConstructor(NativeContentItem.class, String.class, String.class);
         constructor.setAccessible(true);
         Object candidate = constructor.newInstance(creator, "https://cdn.example.invalid/" + title + ".jpg", creator.url);
-        ReflectionHelpers.setField(hub, "heroItem", candidate);
+        ReflectionHelpers.setField(hub, "pendingHero", candidate);
         ((List<Object>) ReflectionHelpers.getField(hub, "heroItems")).add(candidate);
         return candidate;
     }
     private void ready(int token, Object candidate) throws Exception {
         java.lang.reflect.Method commit = OnlyFapHubView.class.getDeclaredMethod("commitPreferenceArtwork",
-                int.class, candidate.getClass(), android.graphics.drawable.Drawable.class);
+                int.class, candidate.getClass());
         commit.setAccessible(true);
-        commit.invoke(hub, token, candidate, new android.graphics.drawable.ColorDrawable(Color.RED));
+        android.graphics.drawable.Drawable resource = new android.graphics.drawable.ColorDrawable(Color.RED);
+        ((android.widget.ImageView) ReflectionHelpers.getField(hub, "preferenceImage")).setImageDrawable(resource);
+        commit.invoke(hub, token, candidate);
     }
     private String title() { return ((android.widget.TextView) ReflectionHelpers.getField(hub, "heroTitle")).getText().toString(); }
 
@@ -505,6 +520,254 @@ public class OnlyFapFilteredHeroTest {
         current.end();
         assertEquals("Latest", title());
         assertEquals(0, (int) ReflectionHelpers.getField(ReflectionHelpers.getField(hub, "heroImage"), "blurLevel"));
+    }
+
+    @Test public void lateShelvesAndCompletionCannotBeLostBehindAnOlderEmptySelection() {
+        // Favorites may already be loaded on a real visit. Do not let an unrelated
+        // favorites completion accidentally wake this otherwise stranded selection.
+        ReflectionHelpers.setField(hub, "favoritesLoading", true);
+        List<NativeContentItem> category = creators(3);
+        hub.setPreferenceShelf(ContentPreference.WOMEN, 0, category.subList(0, 1), false);
+        finish(generation(), category.get(0));
+        ((Set<String>) ReflectionHelpers.getField(hub, "requestedHeroCreators"))
+                .add(OnlyFapCategoryLoader.identity(category.get(0)));
+        ReflectionHelpers.setField(hub, "active", true);
+        call("requestHeroCandidates");
+        io.runNext(); // Snapshot has no unrequested creators and shelves are still unfinished.
+        // These publishes arrive before the UI applies that selection result.
+        hub.setPreferenceShelf(ContentPreference.WOMEN, 1, category.subList(1, 3), false);
+        hub.finishPreferenceShelves(ContentPreference.WOMEN, false);
+        ShadowLooper.idleMainLooper();
+        assertEquals("Changed inputs must re-run the coalesced selection", 1, io.queue.size());
+        io.runNext(); ShadowLooper.idleMainLooper();
+        Set<String> requested = ReflectionHelpers.getField(hub, "requestedHeroCreators");
+        assertTrue(requested.contains(OnlyFapCategoryLoader.identity(category.get(1))));
+        assertEquals(1, (int) ReflectionHelpers.getField(hub, "heroResolveInFlight"));
+    }
+
+    @Test public void femalePoolContinuesPastTinyFirstArtworkAndRejectedShelves() throws Exception {
+        filteredPoolFills(ContentPreference.WOMEN);
+    }
+    @Test public void malePoolContinuesPastTinyFirstArtworkAndRejectedShelves() throws Exception {
+        filteredPoolFills(ContentPreference.MEN);
+    }
+    @Test public void transPoolContinuesPastTinyFirstArtworkAndRejectedShelves() throws Exception {
+        filteredPoolFills(ContentPreference.TRANS_WOMEN);
+    }
+
+    private void filteredPoolFills(ContentPreference mode) throws Exception {
+        changeMode(mode);
+        CountDownLatch laterPage = new CountDownLatch(1);
+        AtomicInteger pages = new AtomicInteger();
+        ReflectionHelpers.setField(hub, "categoryHeroSource", new OnlyFapHubView.CategoryHeroSource() {
+            public OnlyHavenRepository.CategoryPage category(ContentPreference selected, int limit, int offset) throws IOException {
+                assertEquals(mode, selected); assertEquals(48, offset); pages.incrementAndGet();
+                try { if (!laterPage.await(5, TimeUnit.SECONDS)) throw new IOException("test gate timeout"); }
+                catch (InterruptedException e) { throw new IOException(e); }
+                List<OnlyHavenRepository.Creator> result = new ArrayList<>();
+                for (int i = 0; i < 9; i++) result.add(profile(mode.value + "-good" + i));
+                result.add(result.get(0)); // A repeated creator cannot take a slot.
+                return new OnlyHavenRepository.CategoryPage(result, false);
+            }
+            public List<NativeContentItem> media(OnlyHavenRepository.Creator creator, int page, int limit) {
+                if (creator.id.endsWith("first")) return page == 1
+                        ? Collections.singletonList(art("tiny-" + mode.value)) : Collections.emptyList();
+                // Two distinct creators with the exact same artwork must share no extra slot.
+                String image = creator.id.endsWith("good1") ? mode.value + "-good0" : creator.id;
+                return Collections.singletonList(art(image));
+            }
+        });
+        startRealDiscovery();
+        NativeContentItem first = OnlyHavenRepository.creatorItem(profile(mode.value + "-first"));
+        // Fast avatar is allowed, but the tiny gallery image must not complete the pool.
+        first = new NativeContentItem(NativeContentItem.KIND_CREATOR, first.title, first.url,
+                "https://cdn.example.invalid/tiny-avatar-" + mode.value + ".png", "", "", "");
+        hub.setPreferenceCreators(Collections.singletonList(first)); layoutHero();
+        try {
+            awaitCondition(() -> pages.get() == 1);
+            assertTrue(heroes().isEmpty());
+            awaitStartup(first.title);
+            assertNotNull(ReflectionHelpers.getField(hub, "startupHero"));
+        } finally { laterPage.countDown(); }
+        awaitCondition(() -> heroes().size() == 8 && !(boolean) ReflectionHelpers.getField(hub, "heroSelectionLoading"));
+        awaitCondition(() -> ReflectionHelpers.getField(hub, "heroItem") != null);
+        assertEquals(1, pages.get());
+        Set<String> urls = new HashSet<>(); Set<String> keys = new HashSet<>();
+        for (Object candidate : heroes()) {
+            NativeContentItem creator = ReflectionHelpers.getField(candidate, "creator");
+            assertTrue(creator.url.contains(mode.value)); assertTrue(keys.add(creator.url));
+            List<OnlyFapHeroPolicy.Artwork> choices = ReflectionHelpers.getField(candidate, "artwork");
+            for (OnlyFapHeroPolicy.Artwork choice : choices) { assertFalse(choice.url.contains("tiny")); assertTrue(urls.add(choice.url)); }
+        }
+        ShadowLooper.idleMainLooper(1100, TimeUnit.MILLISECONDS);
+        assertFalse(((android.graphics.drawable.BitmapDrawable) ((android.widget.ImageView)
+                ReflectionHelpers.getField(hub, "heroImage")).getDrawable()).getBitmap().isRecycled());
+    }
+
+    @Test public void qualifiedModeCacheRestoresOnlyAfterCurrentCategoryConfirmsMembership() throws Exception {
+        filteredPoolFills(ContentPreference.WOMEN);
+        List<NativeContentItem> women = new ArrayList<>();
+        for (Object candidate : heroes()) women.add(ReflectionHelpers.getField(candidate, "creator"));
+        hub.setActive(false);
+        changeMode(ContentPreference.MEN);
+        hub.setPreferenceCreators(Collections.singletonList(OnlyHavenRepository.creatorItem(profile("men-only"))));
+        assertTrue(heroes().isEmpty());
+        changeMode(ContentPreference.WOMEN);
+        hub.setPreferenceCreators(women);
+        assertTrue(heroes().isEmpty()); // Inactive tab has no new Glide work.
+        hub.setActive(true); layoutHero();
+        awaitCondition(() -> heroes().size() == 8 && ReflectionHelpers.getField(hub, "heroItem") != null);
+        for (Object candidate : heroes()) assertTrue(((NativeContentItem) ReflectionHelpers.getField(candidate, "creator")).url.contains("women"));
+    }
+
+    @Test public void tinyStartupUpgradesToOriginalOnSecondMediaPageWithoutTakingTwoSlots() throws Exception {
+        changeMode(ContentPreference.MEN);
+        CountDownLatch originalReady = new CountDownLatch(1);
+        AtomicInteger mediaPages = new AtomicInteger();
+        ReflectionHelpers.setField(hub, "categoryHeroSource", new OnlyFapHubView.CategoryHeroSource() {
+            public OnlyHavenRepository.CategoryPage category(ContentPreference mode, int limit, int offset) {
+                return new OnlyHavenRepository.CategoryPage(Collections.emptyList(), false);
+            }
+            public List<NativeContentItem> media(OnlyHavenRepository.Creator creator, int page, int limit) throws IOException {
+                mediaPages.incrementAndGet();
+                if (page == 1) return Collections.singletonList(art("tiny-gallery"));
+                try { if (!originalReady.await(5, TimeUnit.SECONDS)) throw new IOException("test gate timeout"); }
+                catch (InterruptedException e) { throw new IOException(e); }
+                return Collections.singletonList(art("sharp-original"));
+            }
+        });
+        startRealDiscovery();
+        NativeContentItem creator = thumbnailCreator("Upgrade");
+        hub.setPreferenceCreators(Collections.singletonList(creator)); layoutHero();
+        try { awaitStartup("Upgrade"); awaitCondition(() -> mediaPages.get() == 2); assertTrue(heroes().isEmpty()); }
+        finally { originalReady.countDown(); }
+        awaitCondition(() -> heroes().size() == 1 && ReflectionHelpers.getField(hub, "heroItem") != null);
+        Object current = ReflectionHelpers.getField(hub, "heroItem");
+        List<OnlyFapHeroPolicy.Artwork> choices = ReflectionHelpers.getField(current, "artwork");
+        assertTrue(choices.get(0).url.contains("sharp-original")); assertEquals("Upgrade", title());
+        assertEquals(2, mediaPages.get());
+    }
+
+    @Test public void staleCategoryPageCannotCrossRapidGenderGenerations() throws Exception {
+        CountDownLatch staleReady = new CountDownLatch(1);
+        AtomicInteger started = new AtomicInteger();
+        ReflectionHelpers.setField(hub, "categoryHeroSource", new OnlyFapHubView.CategoryHeroSource() {
+            public OnlyHavenRepository.CategoryPage category(ContentPreference mode, int limit, int offset) throws IOException {
+                started.incrementAndGet();
+                if (mode == ContentPreference.WOMEN) {
+                    // Deliberately emulate a source callback that ignores cancellation.
+                    boolean done = false;
+                    while (!done) try { done = staleReady.await(5, TimeUnit.SECONDS); }
+                    catch (InterruptedException ignored) { }
+                }
+                return new OnlyHavenRepository.CategoryPage(Collections.singletonList(profile(mode.value + "-fresh")), false);
+            }
+            public List<NativeContentItem> media(OnlyHavenRepository.Creator creator, int page, int limit) {
+                return Collections.singletonList(art(creator.id));
+            }
+        });
+        startRealDiscovery();
+        changeMode(ContentPreference.ALL); changeMode(ContentPreference.WOMEN);
+        hub.setPreferenceCreators(Collections.emptyList());
+        awaitCondition(() -> started.get() == 1);
+        try {
+            changeMode(ContentPreference.MEN); hub.setPreferenceCreators(Collections.emptyList());
+            changeMode(ContentPreference.TRANS_WOMEN); hub.setPreferenceCreators(Collections.emptyList());
+        } finally { staleReady.countDown(); }
+        layoutHero();
+        awaitCondition(() -> heroes().size() == 1 && ReflectionHelpers.getField(hub, "heroItem") != null);
+        for (NativeContentItem item : (List<NativeContentItem>) ReflectionHelpers.getField(hub, "discoverCandidates"))
+            assertTrue(item.url.contains("trans_women"));
+        assertTrue(title().contains("trans_women"));
+    }
+
+    @Test public void repeatingFilteredSourceStopsAtBudgetInsteadOfLoopingOnDuplicates() throws Exception {
+        AtomicInteger pages = new AtomicInteger();
+        changeMode(ContentPreference.MEN);
+        ReflectionHelpers.setField(hub, "categoryHeroSource", new OnlyFapHubView.CategoryHeroSource() {
+            public OnlyHavenRepository.CategoryPage category(ContentPreference mode, int limit, int offset) {
+                pages.incrementAndGet();
+                return new OnlyHavenRepository.CategoryPage(Collections.singletonList(profile("duplicate")), true);
+            }
+            public List<NativeContentItem> media(OnlyHavenRepository.Creator creator, int page, int limit) {
+                return Collections.emptyList();
+            }
+        });
+        startRealDiscovery(); hub.setPreferenceCreators(Collections.emptyList());
+        awaitCondition(() -> (boolean) ReflectionHelpers.getField(hub, "heroDiscoveryExhausted")
+                && !(boolean) ReflectionHelpers.getField(hub, "heroDiscoveryLoading"));
+        assertEquals(8, pages.get()); assertTrue(heroes().isEmpty());
+        int before = pages.get(); call("refreshHeroSet"); ShadowLooper.idleMainLooper(500, TimeUnit.MILLISECONDS);
+        assertEquals(before, pages.get());
+    }
+
+    @Test public void actuallyExhaustedFilteredSourceStopsWithoutRetryingEmptyPages() throws Exception {
+        AtomicInteger requests = new AtomicInteger();
+        changeMode(ContentPreference.TRANS_MEN);
+        ReflectionHelpers.setField(hub, "categoryHeroSource", new OnlyFapHubView.CategoryHeroSource() {
+            public OnlyHavenRepository.CategoryPage category(ContentPreference mode, int limit, int offset) {
+                assertEquals(ContentPreference.TRANS_MEN, mode); requests.incrementAndGet();
+                return new OnlyHavenRepository.CategoryPage(Collections.emptyList(), false);
+            }
+            public List<NativeContentItem> media(OnlyHavenRepository.Creator creator, int page, int limit) {
+                fail("Empty category must not resolve a creator"); return Collections.emptyList();
+            }
+        });
+        startRealDiscovery(); hub.setPreferenceCreators(Collections.emptyList());
+        awaitCondition(() -> (boolean) ReflectionHelpers.getField(hub, "heroDiscoveryExhausted")
+                && !(boolean) ReflectionHelpers.getField(hub, "heroSelectionLoading"));
+        assertEquals(1, requests.get()); assertTrue(heroes().isEmpty());
+        call("refreshHeroSet"); ShadowLooper.idleMainLooper(500, TimeUnit.MILLISECONDS);
+        assertEquals(1, requests.get());
+    }
+
+    @Test public void distinctProviderProfilesSharingANameBothQualifyButRenamedDuplicateDoesNot() throws Exception {
+        changeMode(ContentPreference.MEN);
+        Set<String> resolved = ConcurrentHashMap.newKeySet();
+        ReflectionHelpers.setField(hub, "categoryHeroSource", new OnlyFapHubView.CategoryHeroSource() {
+            public OnlyHavenRepository.CategoryPage category(ContentPreference mode, int limit, int offset) {
+                return new OnlyHavenRepository.CategoryPage(Collections.emptyList(), false);
+            }
+            public List<NativeContentItem> media(OnlyHavenRepository.Creator creator, int page, int limit) {
+                assertTrue("Provider profile must be resolved only once", resolved.add(creator.id));
+                return Collections.singletonList(art(creator.id));
+            }
+        });
+        startRealDiscovery();
+        List<NativeContentItem> category = new ArrayList<>();
+        for (String id : new String[]{"profileA", "profileB", "profileA"})
+            category.add(new NativeContentItem(NativeContentItem.KIND_CREATOR,
+                    category.size() == 2 ? "Renamed" : "Same name",
+                    "https://cum.st/creators/onlyfans/" + id, "", "", "", ""));
+        hub.setPreferenceCreators(category); layoutHero();
+        awaitCondition(() -> heroes().size() == 2 && (boolean) ReflectionHelpers.getField(hub, "heroDiscoveryExhausted"));
+        assertEquals(new HashSet<>(Arrays.asList("profileA", "profileB")), resolved);
+    }
+
+    private void startRealDiscovery() {
+        RemoteSourceConfigManager.initialize(activity);
+        ReflectionHelpers.setField(hub, "heroIo", Executors.newSingleThreadExecutor());
+        ReflectionHelpers.setField(hub, "active", true);
+    }
+    private OnlyHavenRepository.Creator profile(String id) {
+        return new OnlyHavenRepository.Creator("onlyfans", id, id, "https://cum.st/creators/onlyfans/" + id, "");
+    }
+    private NativeContentItem art(String id) {
+        return new NativeContentItem(NativeContentItem.KIND_IMAGE, id, "https://cdn.example.invalid/" + id + ".png", "", "", "", "");
+    }
+    private void awaitCondition(java.util.function.BooleanSupplier condition) throws Exception {
+        for (int i = 0; i < 800; i++) {
+            ShadowLooper.idleMainLooper(5, TimeUnit.MILLISECONDS);
+            if (condition.getAsBoolean()) return;
+            Thread.sleep(5);
+        }
+        for (String key : new String[]{"selectionTask", "resolutionTask", "discoveryTask"}) {
+            Future<?> task = ReflectionHelpers.getField(hub, key);
+            if (task != null && task.isDone() && !task.isCancelled()) task.get();
+        }
+        fail("Discovery did not settle: pool=" + heroes().size() + " title=" + title()
+                + " selection=" + ReflectionHelpers.getField(hub, "heroSelectionLoading")
+                + " inFlight=" + ReflectionHelpers.getField(hub, "heroResolveInFlight"));
     }
 
     private NativeContentItem thumbnailCreator(String title) {

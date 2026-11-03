@@ -349,4 +349,78 @@ public class ShitTokContinuityTest {
         MotionEvent event = MotionEvent.obtain(0L, 10L, action, x, y, 0);
         try { feed.dispatchTouchEvent(event); } finally { event.recycle(); }
     }
+    @Test public void refillAfterHistoryRemovalKeepsSelectedUrlAndUsesTheNewPositions() {
+        try (Fixture f = new Fixture()) {
+            for (int i = 0; i < 10; i++) {
+                NativeContentItem next = item("history" + i);
+                f.items.add(next); f.cache.put(next.url, stream(next));
+            }
+            NativeContentItem selected = f.items.get(10);
+            ReflectionHelpers.setField(f.feed, "selectedPosition", 10);
+            ReflectionHelpers.callInstanceMethod(f.feed, "reconcilePlaybackWindow");
+            int token = f.owner.token(selected.url);
+            ReflectionHelpers.callInstanceMethod(f.feed, "hideFromChaos", from(NativeContentItem.class, f.items.get(0)));
+            assertEquals(9, (int) ReflectionHelpers.getField(f.feed, "selectedPosition"));
+            f.candidates("new1", "new2");
+            call(f.feed, "loadMorePool");
+            f.io.tasks.removeFirst().run();
+            org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
+            assertEquals(12, f.items.size());
+            assertSame(selected, f.items.get(9));
+            assertEquals(9, (int) ReflectionHelpers.getField(f.feed, "selectedPosition"));
+            assertEquals(token, f.owner.token(selected.url));
+            assertEquals(selected.url, ReflectionHelpers.getField(f.owner, "selected"));
+        }
+    }
+
+    @Test public void refreshRejectsAlreadyDeferredOldGenerationRefillThenAcceptsNewGeneration() {
+        try (Fixture f = new Fixture()) {
+            f.candidates("old1", "old2");
+            ReflectionHelpers.setField(f.feed, "userPaging", true);
+            call(f.feed, "wakeForwardContinuity");
+            f.io.tasks.removeFirst().run();
+            org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
+            Deque<Runnable> deferred = ReflectionHelpers.getField(f.feed, "deferredUiApplies");
+            List<Runnable> stale = new ArrayList<>(deferred);
+            assertFalse(stale.isEmpty());
+            ReflectionHelpers.setField(f.feed, "userPaging", false);
+            f.feed.refresh();
+            assertTrue(f.items.isEmpty());
+            for (Runnable callback : stale) callback.run();
+            assertTrue(f.items.isEmpty());
+            f.io.tasks.clear();
+            ReflectionHelpers.setField(f.feed, "poolLoading", false);
+            f.candidates("fresh");
+            call(f.feed, "loadMorePool"); f.io.tasks.removeFirst().run();
+            org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
+            assertEquals(1, f.items.size());
+            assertEquals("fresh", f.items.get(0).title);
+            assertEquals(0, (int) ReflectionHelpers.getField(f.feed, "selectedPosition"));
+            assertEquals(f.items.get(0).url, ReflectionHelpers.getField(f.owner, "selected"));
+        }
+    }
+
+    @Test public void automaticAdvanceWaitsForRefillLayoutInsteadOfConsumingTheSelection() {
+        try (Fixture f = new Fixture()) {
+            androidx.viewpager2.widget.ViewPager2 pager = ReflectionHelpers.getField(f.feed, "pager");
+            f.host.get().setContentView(f.feed);
+            layoutFeed(f.feed);
+            f.candidates("automatic-next");
+            ReflectionHelpers.callInstanceMethod(f.feed, "requestAutoAdvance", from(int.class, 0));
+            f.io.tasks.removeFirst().run();
+            org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
+            assertEquals(2, f.items.size());
+            layoutFeed(f.feed);
+            org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(1000));
+            assertEquals(1, pager.getCurrentItem());
+            assertEquals(1, (int) ReflectionHelpers.getField(f.feed, "selectedPosition"));
+        }
+    }
+    private static void layoutFeed(ChaosFeedView feed) {
+        feed.forceLayout();
+        feed.measure(android.view.View.MeasureSpec.makeMeasureSpec(800, android.view.View.MeasureSpec.EXACTLY),
+                android.view.View.MeasureSpec.makeMeasureSpec(1600, android.view.View.MeasureSpec.EXACTLY));
+        feed.layout(0, 0, 800, 1600);
+    }
+
 }

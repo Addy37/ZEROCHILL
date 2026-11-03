@@ -62,10 +62,14 @@ final class OnlyFapHeroPolicy {
         return new ArrayList<>(selected.values());
     }
 
-    /** Filtered shelves are the complete membership authority, without All-mode exclusions. */
+    /** Filtered category results are the membership authority, without All-mode exclusions. */
     static List<NativeContentItem> selectCategory(List<NativeContentItem> category, int limit) {
         LinkedHashMap<String, NativeContentItem> selected = new LinkedHashMap<>();
-        append(selected, category, Collections.emptySet(), limit);
+        if (category != null) for (NativeContentItem creator : category) {
+            if (selected.size() >= limit) break;
+            if (creator != null && creator.isCreator() && !creator.url.isEmpty())
+                selected.putIfAbsent(OnlyFapCategoryLoader.identity(creator), creator);
+        }
         return new ArrayList<>(selected.values());
     }
 
@@ -73,7 +77,7 @@ final class OnlyFapHeroPolicy {
         if (creator == null || !creator.isCreator() || category == null) return false;
         for (NativeContentItem member : category)
             if (member != null && member.isCreator() && !creator.url.isEmpty()
-                    && creator.url.equals(member.url)) return true;
+                    && OnlyFapCategoryLoader.identity(creator).equals(OnlyFapCategoryLoader.identity(member))) return true;
         return false;
     }
 
@@ -84,12 +88,12 @@ final class OnlyFapHeroPolicy {
         if (destination == null || source == null || source.isEmpty()) return;
         HashSet<String> keys = new HashSet<>();
         for (NativeContentItem item : destination) {
-            String key = CreatorFavoriteStore.key(item);
+            String key = OnlyFapCategoryLoader.identity(item);
             if (!key.isEmpty()) keys.add(key);
         }
         for (NativeContentItem item : source) {
             if (item == null || !item.isCreator()) continue;
-            String key = CreatorFavoriteStore.key(item);
+            String key = OnlyFapCategoryLoader.identity(item);
             if (key.isEmpty() || !keys.add(key)) continue;
             destination.add(item);
         }
@@ -100,12 +104,17 @@ final class OnlyFapHeroPolicy {
             Set<String> requested,
             int limit
     ) {
+        return nextUnrequested(candidates, requested, limit, false);
+    }
+
+    static List<NativeContentItem> nextUnrequested(List<NativeContentItem> candidates,
+            Set<String> requested, int limit, boolean category) {
         ArrayList<NativeContentItem> result = new ArrayList<>();
         if (candidates == null || limit <= 0) return result;
         for (NativeContentItem item : candidates) {
             if (result.size() >= limit) break;
             if (item == null || !item.isCreator()) continue;
-            String key = CreatorFavoriteStore.key(item);
+            String key = category ? OnlyFapCategoryLoader.identity(item) : CreatorFavoriteStore.key(item);
             if (key.isEmpty() || (requested != null && requested.contains(key))) continue;
             result.add(item);
         }
@@ -167,7 +176,7 @@ final class OnlyFapHeroPolicy {
         // Keep a wider sample for portrait qualification. The resolver still admits only
         // a couple of final hero images, so this broadens discovery without bloating the hero.
         for (NativeContentItem item : media) {
-            if (item == null || !item.isImage() || !directImage(item.url)) continue;
+            if (item == null || !item.isImage() || !directImage(item.url) || knownPreview(item.url)) continue;
             artwork.add(new Artwork(item.url, referer, false));
             if (artwork.size() >= 12) return;
         }
@@ -182,6 +191,10 @@ final class OnlyFapHeroPolicy {
             artwork.add(new Artwork(item.imageUrl, referer, false));
             if (artwork.size() >= 3) return;
         }
+    }
+
+    private static boolean knownPreview(String url) {
+        return url.toLowerCase(Locale.US).matches(".*(?:/thumbnail/|/avatar/|/(?:preview|thumb)\\.[^/]+).*");
     }
 
     static boolean isGoodPortraitDimensions(int width, int height) {

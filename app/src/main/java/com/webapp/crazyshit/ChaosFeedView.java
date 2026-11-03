@@ -227,6 +227,11 @@ public final class ChaosFeedView extends FrameLayout {
     private int autoAdvanceFrom = -1;
     private int consecutiveDryLoads;
     private volatile int selectedPosition;
+    private String selectedUrl = "";
+    private int queueUpdateDepth;
+    private String queueSelectedUrl = "";
+    private int queueSelectedPosition;
+    private boolean queueChanged, queueLayoutPending, syncingQueuePager;
     private volatile boolean userPaging;
     private boolean userDragInProgress;
     private boolean settledSelectionPending;
@@ -378,6 +383,16 @@ public final class ChaosFeedView extends FrameLayout {
             }
 
             private void selectPage(int position) {
+                if (queueUpdateDepth > 0 || syncingQueuePager) return;
+                RecyclerView recycler = pagerRecycler();
+                // Adapter changes precede the next layout. Its page indices still describe
+                // the old queue, even when such an index happens to fit the new list.
+                if (position < 0 || position >= items.size() || position != pager.getCurrentItem()
+                        || (queueLayoutPending && recycler != null && recycler.hasPendingAdapterUpdates())) {
+                    syncQueuePager();
+                    return;
+                }
+                queueLayoutPending = false;
                 if (position != selectedPosition && position >= 0 && position < items.size()
                         && !eligiblePreference(items.get(position), ContentPreference.get(activity))) {
                     pager.setCurrentItem(selectedPosition, false);
@@ -403,6 +418,7 @@ public final class ChaosFeedView extends FrameLayout {
                 }
                 if (manualFullscreen && position != selectedPosition) exitManualFullscreen();
                 selectedPosition = position;
+                selectedUrl = items.get(position).url;
                 if (changed) creatorMetadata.select(null);
                 if (changed) {
                     sessionResume.clear();
@@ -552,6 +568,8 @@ public final class ChaosFeedView extends FrameLayout {
             return;
         }
         // Failed future clips must not occupy the next page forever. Keep session anti-repeat IDs.
+        beginQueueUpdate();
+        try {
         boolean removed = false;
         for (int i = items.size() - 1; i > selectedPosition; i--) {
             NativeContentItem item = items.get(i);
@@ -561,10 +579,12 @@ public final class ChaosFeedView extends FrameLayout {
             }
             streamCache.remove(item.url);
             items.remove(i);
-            adapter.notifyItemRemoved(i);
+            final int removedIndex = i;
+            publishQueueChange(() -> adapter.notifyItemRemoved(removedIndex));
             removed = true;
         }
         if (removed) { plannedPosition = -1; syncHolderPositionsAfterQueuePrune(); }
+        } finally { endQueueUpdate(); }
         reconcilePlaybackWindow();
         continuityWorkNeeded = needsContinuity();
         // One immediate neighbor may warm during READY recovery, never while current is buffering.
@@ -597,6 +617,7 @@ public final class ChaosFeedView extends FrameLayout {
     }
 
     private void handlePagerScrollState(int state) {
+        if (queueUpdateDepth > 0 || syncingQueuePager) return;
         if (searchCoverActive) return;
         if (state == ViewPager2.SCROLL_STATE_DRAGGING) userDragInProgress = true;
         else if (state == ViewPager2.SCROLL_STATE_IDLE) userDragInProgress = false;
@@ -623,6 +644,91 @@ public final class ChaosFeedView extends FrameLayout {
         }
     }
 
+    private boolean hasSelectedPage() {
+        return selectedPosition >= 0 && selectedPosition < items.size();
+    }
+
+    /** A queue edit is one URL-preserving selection transition, not a series of pager selections. */
+    private void beginQueueUpdate() {
+        if (queueUpdateDepth++ != 0) return;
+        queueChanged = false;
+        queueSelectedPosition = selectedPosition;
+        queueSelectedUrl = hasSelectedPage() ? items.get(selectedPosition).url : selectedUrl;
+        syncQueueSelection();
+    }
+
+    private void syncQueueSelection() {
+        int retained = indexOfUrl(queueSelectedUrl);
+        selectedPosition = items.isEmpty() ? 0 : retained >= 0 ? retained
+                : Math.max(0, Math.min(queueSelectedPosition, items.size() - 1));
+        selectedUrl = hasSelectedPage() ? items.get(selectedPosition).url : "";
+    }
+
+    private void publishQueueChange(Runnable notification) {
+        boolean standalone = queueUpdateDepth == 0;
+        if (standalone) beginQueueUpdate();
+        try {
+            queueChanged = queueLayoutPending = true;
+            syncQueueSelection();
+            plannedPosition = -1; plannedUrl = "";
+            syncHolderPositionsAfterQueuePrune();
+            notification.run();
+        } finally {
+            if (standalone) endQueueUpdate();
+        }
+    }
+
+    private void endQueueUpdate() {
+        if (queueUpdateDepth > 1) { queueUpdateDepth--; return; }
+        try {
+            syncQueueSelection();
+            if (!queueChanged) return;
+            cancelSwipePlayerMaintenance();
+            if (selectedPosition != queueSelectedPosition || !selectedUrl.equals(queueSelectedUrl)) {
+                cancelPendingAutoAdvance();
+            }
+            if (!selectedUrl.equals(queueSelectedUrl)) {
+                sessionResume.clear();
+                settledSelectionPending = hasSelectedPage();
+            }
+            plannedPosition = -1; plannedUrl = "";
+            syncHolderPositionsAfterQueuePrune();
+            syncQueuePager();
+            if (items.isEmpty()) {
+                playbackOwner.clearSession();
+                creatorMetadata.select(null);
+                settledSelectionPending = false;
+            }
+        } finally {
+            queueUpdateDepth = 0;
+        }
+        reconcilePlaybackWindow();
+        if (active && hostResumed && !closed) pager.post(() -> {
+            if (closed || !active || !hostResumed || isPaging()) return;
+            if (items.isEmpty()) loadMorePool();
+            else {
+                settleSelectedPage();
+                scheduleSwipePlayerMaintenance(selectedPosition);
+            }
+        });
+    }
+
+    private void syncQueuePager() {
+        if (syncingQueuePager) return;
+        syncingQueuePager = true;
+        try {
+            if (!hasSelectedPage() && !items.isEmpty()) {
+                int retained = indexOfUrl(selectedUrl);
+                selectedPosition = retained >= 0 ? retained : Math.max(0, Math.min(selectedPosition, items.size() - 1));
+                selectedUrl = items.get(selectedPosition).url;
+            }
+            // ViewPager2 ignores setCurrentItem when itemCount == 0 and otherwise keeps
+            // its old currentItem. Reattaching the same adapter resets that empty sentinel.
+            if (items.isEmpty() && pager.getCurrentItem() != 0) pager.setAdapter(adapter);
+            else pager.setCurrentItem(items.isEmpty() ? 0 : selectedPosition, false);
+        } finally { syncingQueuePager = false; }
+    }
+
     private int indexOfUrl(String url) {
         for (int i = 0; i < items.size(); i++) if (url.equals(items.get(i).url)) return i;
         return -1;
@@ -630,7 +736,7 @@ public final class ChaosFeedView extends FrameLayout {
 
     private void reconcilePlaybackWindow() {
         if (searchCoverActive) return;
-        if (closed || !active || !hostResumed || isPaging() || selectedPosition >= items.size()) return;
+        if (closed || !active || !hostResumed || isPaging() || queueUpdateDepth > 0 || !hasSelectedPage()) return;
         String url = items.get(selectedPosition).url;
         creatorMetadata.select(items.get(selectedPosition));
         AppPerformance.startupItem("owner_select", url, "");
@@ -669,6 +775,12 @@ public final class ChaosFeedView extends FrameLayout {
 
     private void settleSelectedPage() {
         if (closed || !active || !hostResumed || isPaging()) return;
+        if (queueUpdateDepth > 0) return;
+        if (items.isEmpty()) { selectedPosition = 0; selectedUrl = ""; return; }
+        if (!hasSelectedPage()) {
+            beginQueueUpdate(); queueChanged = true; endQueueUpdate();
+            if (!hasSelectedPage()) return;
+        }
         pruneIncompatibleHistory();
         reconcilePlaybackWindow();
         pauseNonSelected(selectedPosition);
@@ -821,7 +933,7 @@ public final class ChaosFeedView extends FrameLayout {
         pager.setUserInputEnabled(active && hostResumed && !closed);
         if (!active || !hostResumed || closed) return;
         reconcilePlaybackWindow();
-        if (selectedPosition < items.size() && playbackOwner.stream(items.get(selectedPosition).url) == null)
+        if (hasSelectedPage() && playbackOwner.stream(items.get(selectedPosition).url) == null)
             playSelected();
         resolveAt(selectedPosition + 1);
         resolveAt(selectedPosition + 2);
@@ -837,6 +949,8 @@ public final class ChaosFeedView extends FrameLayout {
 
     public void refresh() {
     if (isPaging()) { deferUiApply(this::refresh); return; }
+        beginQueueUpdate();
+        try {
     resetTemporaryPinch();
     feedGeneration++;
     cancelInventoryBatch();
@@ -866,16 +980,19 @@ public final class ChaosFeedView extends FrameLayout {
     unplayable.clear();
     resolveRetried.clear();
     // Keep sessionUrls so Refresh cannot immediately deal the same clips back again.
+    queueSelectedUrl = ""; queueSelectedPosition = 0;
     items.clear();
+    selectedPosition = 0; selectedUrl = "";
     verifiedQueueEmpty = true;
     exitManualFullscreen();
-    adapter.notifyDataSetChanged();
+    publishQueueChange(() -> adapter.notifyDataSetChanged());
     initialProgress.setVisibility(View.VISIBLE);
     empty.setVisibility(View.GONE);
     selectedPosition = 0;
     pager.setCurrentItem(0, false);
+    } finally { endQueueUpdate(); }
     loadMorePool();
-}
+    }
 
     public void close() {
         searchCoverActive = false;
@@ -949,6 +1066,8 @@ public final class ChaosFeedView extends FrameLayout {
             cancelInventoryBatch();
         }
         if (isPaging()) { deferUiApply(this::applyContentPreference); return; }
+        beginQueueUpdate();
+        try {
         ContentPreference previous = queuePreference;
         warmCategories.save(queueSources, previous, new ArrayList<>(items.subList(
                 Math.min(items.size(), selectedPosition + 1), items.size())), streamCache,
@@ -975,7 +1094,7 @@ public final class ChaosFeedView extends FrameLayout {
             releaseFutureHolder(item.url);
         }
         items.subList(first, items.size()).clear();
-        if (removed > 0) adapter.notifyItemRangeRemoved(first, removed);
+        if (removed > 0) publishQueueChange(() -> adapter.notifyItemRangeRemoved(first, removed));
         pruneIncompatibleHistory();
         reconcilePlaybackWindow(); // Retire old neighbors while retaining the current URL lease.
         // Establish the category session before rechecking cached clip evidence.
@@ -988,18 +1107,21 @@ public final class ChaosFeedView extends FrameLayout {
         int warmStart = items.size();
         appendUnique(warm);
         if (items.size() > warmStart) {
-            adapter.notifyItemRangeInserted(warmStart, items.size() - warmStart);
+            publishQueueChange(() -> adapter.notifyItemRangeInserted(warmStart, items.size() - warmStart));
             sequenceFilteredFuture();
             reconcilePlaybackWindow();
         }
         refillDeferred = true;
         continuityWorkNeeded = true;
         post(this::loadMorePool);
+        } finally { endQueueUpdate(); }
     }
 
     private void pruneIncompatibleHistory() {
         ContentPreference mode = ContentPreference.get(activity);
         if (!creatorInventory() || isPaging()) return;
+        beginQueueUpdate();
+        try {
         ArrayList<Integer> removed = new ArrayList<>();
         for (int i = selectedPosition - 1; i >= 0; i--) {
             NativeContentItem item = items.get(i);
@@ -1013,9 +1135,10 @@ public final class ChaosFeedView extends FrameLayout {
         if (removed.isEmpty()) return;
         // Targeted removals retain the current holder/URL lease while shifting its position.
         syncHolderPositionsAfterQueuePrune();
-        for (int index : removed) adapter.notifyItemRemoved(index);
+        publishQueueChange(() -> { for (int index : removed) adapter.notifyItemRemoved(index); });
         pager.setCurrentItem(selectedPosition, false);
         plannedPosition = -1;
+        } finally { endQueueUpdate(); }
     }
 
     private void releaseFutureHolder(String url) {
@@ -1041,6 +1164,7 @@ public final class ChaosFeedView extends FrameLayout {
     }
 
     private void loadMorePool() {
+        if (queueUpdateDepth > 0) { refillDeferred = true; return; }
         if (searchCoverActive) return;
     applyContentPreference();
     if (queuePreference == null) queuePreference = ContentPreference.get(activity);
@@ -1239,7 +1363,7 @@ public final class ChaosFeedView extends FrameLayout {
                             publishedFresh[0]++;
                         if (added == 0) return;
                         recordFirstAdmission();
-                        adapter.notifyItemRangeInserted(before, added);
+                        publishQueueChange(() -> adapter.notifyItemRangeInserted(before, added));
                         sequenceFilteredFuture();
                         initialProgress.setVisibility(View.GONE);
                         empty.setVisibility(View.GONE);
@@ -1287,7 +1411,7 @@ public final class ChaosFeedView extends FrameLayout {
             if (added > 0) {
                 recordFirstAdmission();
                 long mutationAt = android.os.SystemClock.elapsedRealtime();
-                adapter.notifyItemRangeInserted(before, added);
+                publishQueueChange(() -> adapter.notifyItemRangeInserted(before, added));
                 sequenceFilteredFuture();
                 ShitTokPoolDiagnostics.record("adapterInsert", "count=" + added + " ms=" + (android.os.SystemClock.elapsedRealtime()-mutationAt));
                 initialProgress.setVisibility(View.GONE);
@@ -1626,6 +1750,8 @@ public final class ChaosFeedView extends FrameLayout {
 
     private void sequenceFilteredFuture() {
         if (!creatorInventory() || isPaging()) return;
+        beginQueueUpdate();
+        try {
         int first = Math.min(items.size(), selectedPosition + 1);
         if (items.size() - first < 2) return;
         ShitTokCreatorDiversity diversity = new ShitTokCreatorDiversity();
@@ -1637,13 +1763,14 @@ public final class ChaosFeedView extends FrameLayout {
             int target = first + i, from = items.indexOf(ordered.get(i));
             if (from == target) continue;
             items.add(target, items.remove(from));
-            adapter.notifyItemMoved(from, target);
+            publishQueueChange(() -> adapter.notifyItemMoved(from, target));
             moved = true;
         }
         if (moved) {
             syncHolderPositionsAfterQueuePrune();
             plannedPosition = -1; plannedUrl = "";
         }
+        } finally { endQueueUpdate(); }
     }
 
     private boolean creatorInventory() {
@@ -1741,14 +1868,21 @@ public final class ChaosFeedView extends FrameLayout {
 
         if (fromPosition + 1 < items.size()) {
             if (items.size() - fromPosition <= LOAD_AHEAD_AT) loadMorePool();
-            pager.post(() -> {
+            pager.post(new Runnable() {
+                @Override public void run() {
                 if (generation != autoAdvanceGeneration || !autoAdvancePending
                         || !active || !hostResumed || selectedPosition != fromPosition) return;
                 if (pinchingHolder != null) return;
                 if (fromPosition + 1 >= items.size()) return;
+                RecyclerView recycler = pagerRecycler();
+                if (queueUpdateDepth > 0 || (recycler != null && recycler.hasPendingAdapterUpdates())) {
+                    pager.postOnAnimation(this);
+                    return;
+                }
                 cancelPendingAutoAdvance();
                 autoAdvanceIssuedFrom = fromPosition;
                 pager.setCurrentItem(fromPosition + 1, true);
+                }
             });
             return;
         }
@@ -1880,7 +2014,7 @@ public final class ChaosFeedView extends FrameLayout {
      * consume the URL cache on the next UI turn, after a quick return to that same item. */
     private void wakeSelectedFromCache(String url) {
         pager.post(() -> {
-            if (closed || !active || !hostResumed || isPaging() || selectedPosition >= items.size()) return;
+            if (closed || !active || !hostResumed || isPaging() || queueUpdateDepth > 0 || !hasSelectedPage()) return;
             if (!url.equals(items.get(selectedPosition).url)) return;
             playSelected();
         });
@@ -1936,7 +2070,7 @@ public final class ChaosFeedView extends FrameLayout {
 
     private void playSelected() {
         if (searchCoverActive) return;
-        if (!active || !hostResumed || isPaging()) return;
+        if (!active || !hostResumed || isPaging() || queueUpdateDepth > 0) return;
         if (selectedPosition < 0 || selectedPosition >= items.size()) return;
         if (plannedPosition != selectedPosition || !items.get(selectedPosition).url.equals(plannedUrl)) reconcilePlaybackWindow();
         // Cache hits prepare through resolveAt; async completion prepares through
@@ -2098,7 +2232,7 @@ public final class ChaosFeedView extends FrameLayout {
     private void rememberSelectedPosition() {
         for (ChaosHolder holder : playerHolders) {
             if (holder.boundPosition != selectedPosition || holder.item == null ||
-                    holder.player == null || selectedPosition >= items.size() ||
+                    holder.player == null || !hasSelectedPage() ||
                     !holder.item.url.equals(items.get(selectedPosition).url)) continue;
             try {
                 playbackOwner.remember(holder.item.url, holder.player.getCurrentPosition());
@@ -2167,10 +2301,19 @@ public final class ChaosFeedView extends FrameLayout {
     }
 
     private ChaosHolder holderAt(int position) {
+        if (position < 0 || position >= items.size()) return null;
         RecyclerView rv = pagerRecycler();
         if (rv == null) return null;
         RecyclerView.ViewHolder raw = rv.findViewHolderForAdapterPosition(position);
-        return raw instanceof ChaosHolder ? (ChaosHolder) raw : null;
+        if (raw instanceof ChaosHolder && ((ChaosHolder) raw).isBoundTo(items.get(position).url, position))
+            return (ChaosHolder) raw;
+        // Targeted removals can update our URL binding before RecyclerView completes layout.
+        for (int i = 0; i < rv.getChildCount(); i++) {
+            raw = rv.getChildViewHolder(rv.getChildAt(i));
+            if (raw instanceof ChaosHolder && ((ChaosHolder) raw).isBoundTo(items.get(position).url, position))
+                return (ChaosHolder) raw;
+        }
+        return null;
     }
 
     boolean canReplayCompletedPage(int position) {
@@ -2284,12 +2427,17 @@ public final class ChaosFeedView extends FrameLayout {
 
     private void removeBlockedCreatorsFromQueue() {
         if (isPaging()) { deferUiApply(this::removeBlockedCreatorsFromQueue); return; }
+        beginQueueUpdate();
+        try {
         ShitTokQueuePruner.Result result = ShitTokQueuePruner.removeBlockedCreators(
                 items,
                 blockedCreatorKeys,
                 selectedPosition
         );
         if (result.removed.isEmpty()) return;
+        queueSelectedUrl = items.isEmpty() ? "" : items.get(result.targetPosition).url;
+        queueSelectedPosition = result.targetPosition;
+        syncQueueSelection();
         playbackOwner.revokeAudio();
         plannedPosition = -1;
 
@@ -2314,9 +2462,10 @@ public final class ChaosFeedView extends FrameLayout {
         }
 
         selectedPosition = result.targetPosition;
-        for (int index = result.removedPositions.size() - 1; index >= 0; index--) {
-            adapter.notifyItemRemoved(result.removedPositions.get(index));
-        }
+        publishQueueChange(() -> {
+            for (int index = result.removedPositions.size() - 1; index >= 0; index--)
+                adapter.notifyItemRemoved(result.removedPositions.get(index));
+        });
         syncHolderPositionsAfterQueuePrune();
         if (items.isEmpty()) {
             initialProgress.setVisibility(View.VISIBLE);
@@ -2334,6 +2483,7 @@ public final class ChaosFeedView extends FrameLayout {
         resolveAhead(selectedPosition);
         playSelected();
         if (items.size() - selectedPosition <= LOAD_AHEAD_AT) loadMorePool();
+        } finally { endQueueUpdate(); }
     }
 
     private void syncHolderPositionsAfterQueuePrune() {
@@ -2349,13 +2499,16 @@ public final class ChaosFeedView extends FrameLayout {
         for (ChaosHolder holder : holders) {
             if (holder.item == null) continue;
             int position = items.indexOf(holder.item);
-            if (position >= 0) holder.boundPosition = position;
+            holder.boundPosition = position >= 0 ? position : RecyclerView.NO_POSITION;
+            if (position < 0) { silencePlayer(holder.player); holder.releasePlayer(); }
         }
     }
 
     private void hideFromChaos(NativeContentItem item) {
         if (isPaging()) { deferUiApply(() -> hideFromChaos(item)); return; }
         if (item == null || item.url == null || item.url.isEmpty()) return;
+        beginQueueUpdate();
+        try {
         hiddenUrls.remove(item.url);
         hiddenUrls.add(item.url);
         while (hiddenUrls.size() > MAX_HIDDEN) {
@@ -2374,7 +2527,7 @@ public final class ChaosFeedView extends FrameLayout {
         resolving.remove(item.url);
         resolveRetried.remove(item.url);
         items.remove(index);
-        adapter.notifyDataSetChanged();
+        publishQueueChange(() -> adapter.notifyDataSetChanged());
         ZeroChillToast.makeText(activity, "Won't show this clip again.", ZeroChillToast.LENGTH_SHORT).show();
 
         if (items.isEmpty()) {
@@ -2385,12 +2538,12 @@ public final class ChaosFeedView extends FrameLayout {
             return;
         }
 
-        int target = Math.min(index, items.size() - 1);
-        selectedPosition = target;
+        int target = selectedPosition;
         pager.setCurrentItem(target, false);
         markSeen(target);
         resolveAhead(target);
         playSelected();
+        } finally { endQueueUpdate(); }
     }
 
     static boolean shouldOfferLandscapeFullscreen(float aspectRatio) {
@@ -4190,7 +4343,7 @@ public final class ChaosFeedView extends FrameLayout {
 
         private void syncLoading() {
             boolean selected = !closed && active && hostResumed && item != null
-                    && boundPosition == selectedPosition && selectedPosition < items.size()
+                    && boundPosition == selectedPosition && hasSelectedPage()
                     && item.url.equals(items.get(selectedPosition).url) && holderAt(boundPosition) == this;
             boolean waiting = player == null || player.getPlaybackState() == Player.STATE_IDLE
                     || player.getPlaybackState() == Player.STATE_BUFFERING;
