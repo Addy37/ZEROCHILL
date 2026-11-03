@@ -172,11 +172,11 @@ public final class SourceExpansionTest {
 
         assertEquals(2, items.size());
         assertEquals(NativeContentItem.KIND_MEDIA, items.get(0).kind);
-        assertEquals("https://e1.cum.st/media/" + videoKey + "/original.mp4", items.get(0).url);
+        assertEquals("https://cdn.cum.st/media/" + videoKey + "/original.mp4", items.get(0).url);
         assertEquals("https://img.cum.st/thumbnail/" + videoKey + "/preview.webp",
                 items.get(0).imageUrl);
         assertEquals(NativeContentItem.KIND_IMAGE, items.get(1).kind);
-        assertEquals("https://e1.cum.st/media/" + imageKey + "/original.jpg", items.get(1).url);
+        assertEquals("https://cdn.cum.st/media/" + imageKey + "/original.jpg", items.get(1).url);
         assertEquals("https://img.cum.st/thumbnail/" + imageKey + "/preview.webp",
                 items.get(1).imageUrl);
     }
