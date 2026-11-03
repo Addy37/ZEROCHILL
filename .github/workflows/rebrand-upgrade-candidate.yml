@@ -58,10 +58,11 @@ jobs:
           gradle-version: '8.11.1'
           cache-provider: basic
 
-      - name: Verify LiquidRift bitmap ownership before full build
+      - name: Verify 6.0.1 hero and ShitTok crash regressions
         if: github.head_ref == 'hotfix/liquid-rift-bitmap-crash'
         run: >-
           gradle --no-daemon :app:testDebugUnitTest
+          --tests 'com.webapp.crazyshit.ShitTok*'
           --tests 'com.webapp.crazyshit.OnlyFapHero*'
           --tests 'com.webapp.crazyshit.OnlyFapFilteredHeroTest'
           --tests 'com.webapp.crazyshit.OnlyFapDiscoverLifecycleTest'

@@ -30,9 +30,10 @@ try:
                      f'{package}/com.webapp.crazyshit.OnlyFapTransitionProbeActivity')
         (out / f'launch-{attempt}.txt').write_bytes(launch)
         assert b'Error' not in launch, launch
+        pid = adb('shell', 'pidof', package).decode().strip().split()[0]
         deadline = time.monotonic() + 30
         while time.monotonic() < deadline:
-            log = adb('logcat', '-d', '-s', 'ZeroChillTransition:I', 'AndroidRuntime:E').decode(errors='replace')
+            log = adb('logcat', '-d', '--pid', pid, '-s', 'ZeroChillTransition:I', 'AndroidRuntime:E').decode(errors='replace')
             if 'PASS real Glide' in log or 'FAIL' in log or 'FATAL EXCEPTION' in log:
                 break
             time.sleep(.25)
@@ -45,5 +46,33 @@ try:
             f'{package}/com.webapp.crazyshit.OnlyFapTransitionProbeActivity')
         adb('shell', 'input', 'keyevent', 'KEYCODE_BACK')
     print('PASS real Glide/rift rapid replacement, reentry and lifecycle smoke check')
+    adb('shell', 'am', 'force-stop', package)
+    adb('logcat', '-c')
+    launch = adb('shell', 'am', 'start', '-W', '-n',
+                 f'{package}/com.webapp.crazyshit.SearchShitTokProbeActivity',
+                 '--ez', 'prune_regression', 'true')
+    (out / 'shittok-launch.txt').write_bytes(launch)
+    assert b'Error' not in launch, launch
+    pid = adb('shell', 'pidof', package).decode().strip().split()[0]
+    deadline = time.monotonic() + 35
+    while time.monotonic() < deadline:
+        log = adb('logcat', '-d', '--pid', pid, '-s', 'ZeroChillShitTokPrune:I',
+                  'ZeroChillSearchVideo:I', 'AndroidRuntime:E').decode(errors='replace')
+        if 'PASS deep source prune' in log or 'FAIL' in log or 'FATAL EXCEPTION' in log:
+            break
+        time.sleep(.25)
+    (out / 'shittok-prune.txt').write_text(log)
+    assert 'PASS deep source prune' in log and 'FAIL' not in log and 'FATAL EXCEPTION' not in log, log
+    adb('shell', 'input', 'keyevent', 'KEYCODE_HOME')
+    deadline = time.monotonic() + 5
+    while True:
+        lifecycle = adb('logcat', '-d', '--pid', pid, '-s', 'ZeroChillSearchVideo:I',
+                        'AndroidRuntime:E').decode(errors='replace')
+        if 'PASS background released playback' in lifecycle or 'FAIL' in lifecycle or time.monotonic() >= deadline:
+            break
+        time.sleep(.1)
+    (out / 'shittok-lifecycle.txt').write_text(lifecycle)
+    assert 'PASS background released playback' in lifecycle and 'FAIL' not in lifecycle and 'FATAL EXCEPTION' not in lifecycle, lifecycle
+    print('PASS real-player ShitTok deep pruning and background release')
 finally:
     (out / 'logcat.txt').write_bytes(adb('logcat', '-d', '-v', 'threadtime'))

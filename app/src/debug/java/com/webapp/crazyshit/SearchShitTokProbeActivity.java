@@ -26,6 +26,9 @@ public final class SearchShitTokProbeActivity extends Activity {
     private PlayerView surface;
     private ExoPlayer player;
     private boolean manualPause;
+    private boolean pruneProbe, pruned;
+    private ExoPlayer retainedPrunePlayer;
+    private long beforePrunePosition;
     private Bitmap motionFrame;
     private long openedAt;
     private long pausedAt;
@@ -38,6 +41,11 @@ public final class SearchShitTokProbeActivity extends Activity {
         getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING);
         getSharedPreferences("app_prefs", 0).edit().putBoolean("immersive_motion_enabled", true).apply();
         getSharedPreferences("chaos_feed", 0).edit().putBoolean("muted", false).apply();
+        pruneProbe = getIntent().getBooleanExtra("prune_regression", false);
+        if (pruneProbe) {
+            ContentPreference.set(this, ContentPreference.ALL);
+            ShitTokSourceMode.set(this, ShitTokSourceMode.ALL);
+        }
         manualPause = getIntent().getBooleanExtra("manual_pause", false);
         root = new FrameLayout(this);
         shell = new FrostedNavigationLayout(this);
@@ -53,26 +61,67 @@ public final class SearchShitTokProbeActivity extends Activity {
         setContentView(root);
         try {
             ArrayList<NativeContentItem> items = field(feed, "items");
+            if (pruneProbe) for (int i = 0; i < 10; i++)
+                items.add(new NativeContentItem(NativeContentItem.KIND_MEDIA, "History " + i,
+                        "https://example.invalid/prune-history-" + i, "", "", "Kaotic", ""));
             items.add(new NativeContentItem(NativeContentItem.KIND_MEDIA, "Local video", url, "", "", "", ""));
             Map<String, CrazyShitRepository.StreamInfo> cache = field(feed, "streamCache");
             String mediaUrl = "https://example.invalid/local-search-probe.mp4";
             seedVideoCache(mediaUrl);
             cache.put(url, new CrazyShitRepository.StreamInfo(mediaUrl, url, "Local video"));
-            ViewPager2 pager = field(feed, "pager"); pager.getAdapter().notifyItemInserted(0);
+            if (pruneProbe) for (NativeContentItem history : items)
+                cache.put(history.url, new CrazyShitRepository.StreamInfo(mediaUrl, history.url, history.title));
+            ViewPager2 pager = field(feed, "pager"); pager.getAdapter().notifyItemRangeInserted(0, items.size());
             feed.setActive(true);
             deadline = SystemClock.uptimeMillis() + 15000;
+            if (pruneProbe) pager.post(() -> pager.setCurrentItem(10, false));
             handler.postDelayed(this::awaitVideo, 100);
         } catch (Exception e) { fail(e); }
     }
     private void awaitVideo() {
         try {
             ViewPager2 pager = field(feed, "pager");
-            RecyclerView.ViewHolder holder = ((RecyclerView) pager.getChildAt(0)).findViewHolderForAdapterPosition(0);
+            RecyclerView.ViewHolder holder = ((RecyclerView) pager.getChildAt(0)).findViewHolderForAdapterPosition(pager.getCurrentItem());
             if (holder != null) surface = field(holder, "playerView");
             player = surface == null ? null : (ExoPlayer) surface.getPlayer();
             if (player == null || player.getCurrentPosition() < 150 || !hasVideo()) {
                 check(SystemClock.uptimeMillis() < deadline, "video never rendered");
                 handler.postDelayed(this::awaitVideo, 100); return;
+            }
+            if (pruneProbe) {
+                ShitTokPlaybackOwner owner = field(feed, "playbackOwner");
+                if (!pruned) {
+                    retainedPrunePlayer = player;
+                    beforePrunePosition = player.getCurrentPosition();
+                    int token = owner.token(url);
+                    pager.getAdapter().registerAdapterDataObserver(new RecyclerView.AdapterDataObserver() {
+                        private boolean delivered;
+                        @Override public void onItemRangeRemoved(int first, int count) {
+                            if (delivered) return;
+                            delivered = true;
+                            try {
+                                Object callbacks = field(pager, "mExternalPageChangeCallbacks");
+                                java.lang.reflect.Method callback = callbacks.getClass().getDeclaredMethod("onPageSelected", int.class);
+                                callback.setAccessible(true); callback.invoke(callbacks, 10);
+                            } catch (Exception e) { throw new IllegalStateException(e); }
+                        }
+                    });
+                    ShitTokSourceMode.set(this, ShitTokSourceMode.ONLY_FAP);
+                    java.lang.reflect.Method apply = ChaosFeedView.class.getDeclaredMethod("applyContentPreference");
+                    apply.setAccessible(true); apply.invoke(feed);
+                    check(((ArrayList<?>) field(feed, "items")).size() == 1, "history was not pruned");
+                    check((int) field(feed, "selectedPosition") == 0 && pager.getCurrentItem() == 0,
+                            "pager/selection diverged after prune");
+                    check(owner.token(url) == token && owner.player(url) == player, "prune replaced current lease");
+                    pruned = true;
+                    handler.postDelayed(this::awaitVideo, 250); return;
+                }
+                check(player == retainedPrunePlayer && player.getCurrentPosition() >= beforePrunePosition - 50,
+                        "prune reset selected playback");
+                feed.onSearchOpened(); feed.onSearchClosed();
+                check(owner.player(url) == player && hasVideo(), "Search return lost pruned playback");
+                android.util.Log.i("ZeroChillShitTokPrune", "PASS deep source prune, stale pager callback, retained player/position, Search return");
+                return;
             }
             if (manualPause) ((ShitTokPlaybackOwner) field(feed, "playbackOwner")).setUserPaused(url, true);
             pausedAt = player.getCurrentPosition();
@@ -128,6 +177,14 @@ public final class SearchShitTokProbeActivity extends Activity {
     }
     private boolean hasVideo() {
         if (surface == null || !(surface.getVideoSurfaceView() instanceof TextureView)) return false;
+        // Android 17's emulator can assert in texture/screenshot readback. Decoder output
+        // counters prove the pruning probe still renders to its live TextureView without readback.
+        if (pruneProbe) {
+            androidx.media3.exoplayer.DecoderCounters counters = player == null ? null : player.getVideoDecoderCounters();
+            if (counters != null) counters.ensureUpdated();
+            return ((TextureView) surface.getVideoSurfaceView()).isAvailable()
+                    && counters != null && counters.renderedOutputBufferCount > 0;
+        }
         Bitmap bitmap = ((TextureView) surface.getVideoSurfaceView()).getBitmap(24, 40);
         if (bitmap == null) return false;
         int lit = 0;
