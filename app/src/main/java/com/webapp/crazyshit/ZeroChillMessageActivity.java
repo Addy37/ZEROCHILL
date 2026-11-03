@@ -774,6 +774,22 @@ public final class ZeroChillMessageActivity extends Activity {
     private final class MessageAdapter extends RecyclerView.Adapter<MessageAdapter.Holder> {
         private final ArrayList<ZeroChillSocialRepository.DirectMessage> items = new ArrayList<>();
 
+        private final java.util.Map<String, Long> rowIds = new java.util.HashMap<>();
+        private long nextRowId;
+
+        MessageAdapter() { setHasStableIds(true); }
+
+        @Override public long getItemId(int position) {
+            return rowIds.computeIfAbsent(items.get(position).id, ignored -> nextRowId++);
+        }
+
+        @Override public void onViewRecycled(Holder holder) {
+            SocialMedia.clear(holder.media);
+            holder.media.setOnClickListener(null);
+            holder.media.setOnLongClickListener(null);
+            super.onViewRecycled(holder);
+        }
+
         // Retain local rows until a refresh includes their UUID, even if that
         // refresh started before Send. Confirmed echoes are retained the same way.
         private final LinkedHashMap<String, ZeroChillSocialRepository.DirectMessage> echoes = new LinkedHashMap<>();
