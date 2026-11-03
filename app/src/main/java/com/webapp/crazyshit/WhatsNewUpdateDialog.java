@@ -9,6 +9,9 @@ import android.content.res.ColorStateList;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
+import android.text.SpannableStringBuilder;
+import android.text.Spanned;
+import android.text.style.ForegroundColorSpan;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
@@ -50,7 +53,7 @@ final class WhatsNewUpdateDialog {
         contentAccessibilityBefore = protectedContent.getImportantForAccessibility();
 
         scrim = new FrameLayout(activity);
-        scrim.setBackgroundColor(Color.argb(175, 0, 0, 0));
+        scrim.setBackgroundColor(Color.argb(207, 0, 0, 0));
         scrim.setClickable(true);
         scrim.setFocusableInTouchMode(true);
         if (android.os.Build.VERSION.SDK_INT >= 28) {
@@ -59,7 +62,7 @@ final class WhatsNewUpdateDialog {
 
         LinearLayout content = new LinearLayout(activity);
         content.setOrientation(LinearLayout.VERTICAL);
-        content.setPadding(dp(22), dp(21), dp(22), dp(19));
+        content.setPadding(dp(22), dp(20), dp(22), dp(19));
         content.setBackground(panelFilm());
         content.setClickable(true);
         content.setFocusable(true);
@@ -71,17 +74,17 @@ final class WhatsNewUpdateDialog {
         mascot.setImageResource(R.mipmap.ic_launcher);
         mascot.setContentDescription(null);
         mascot.setScaleType(ImageView.ScaleType.FIT_CENTER);
-        heading.addView(mascot, new LinearLayout.LayoutParams(dp(46), dp(46)));
+        heading.addView(mascot, new LinearLayout.LayoutParams(dp(42), dp(42)));
 
         LinearLayout headingText = new LinearLayout(activity);
         headingText.setOrientation(LinearLayout.VERTICAL);
         headingText.setPadding(dp(12), 0, 0, 0);
 
-        TextView eyebrow = label("WHAT'S NEW", 12f, UiPalette.PRIMARY, true);
+        TextView eyebrow = label("WHAT'S NEW", 11f, UiPalette.PRIMARY, true);
         eyebrow.setLetterSpacing(.12f);
         headingText.addView(eyebrow);
 
-        TextView wordmark = label("ZEROCHILL", 21f, Color.WHITE, true);
+        TextView wordmark = label("ZEROCHILL", 20f, Color.WHITE, true);
         wordmark.setText(ZeroChillUi.sectionTitle(activity, "ZEROCHILL", 4, 9));
         headingText.addView(wordmark);
         heading.addView(headingText, new LinearLayout.LayoutParams(0, -2, 1f));
@@ -91,21 +94,41 @@ final class WhatsNewUpdateDialog {
                 + (preview ? "  •  PREVIEW" : ""), 12f,
                 ZeroChillUi.color(activity, R.color.zc_text_secondary), false);
         LinearLayout.LayoutParams versionParams = new LinearLayout.LayoutParams(-1, -2);
-        versionParams.topMargin = dp(13);
+        versionParams.topMargin = dp(12);
         content.addView(version, versionParams);
 
-        notesScroller = new ScrollView(activity);
+        // A single measured text surface avoids clipped wrapped lines from the
+        // old weighted rows, while short release notes take only their natural height.
+        notesScroller = new ScrollView(activity) {
+            @Override
+            protected void onMeasure(int widthSpec, int heightSpec) {
+                int viewport = parent.getHeight() > 0 ? parent.getHeight()
+                        : activity.getResources().getDisplayMetrics().heightPixels;
+                super.onMeasure(widthSpec, View.MeasureSpec.makeMeasureSpec(
+                        maxNotesHeight(viewport), View.MeasureSpec.AT_MOST));
+            }
+        };
         notesScroller.setFillViewport(false);
-        notesScroller.setVerticalScrollBarEnabled(false);
-        notesScroller.setClipToPadding(false);
-        LinearLayout notes = new LinearLayout(activity);
-        notes.setOrientation(LinearLayout.VERTICAL);
-        notes.setPadding(0, dp(10), 0, dp(9));
-        for (String highlight : entry.highlights) {
-            notes.addView(highlightRow(highlight));
+        notesScroller.setVerticalScrollBarEnabled(true);
+        notesScroller.setClipToPadding(true);
+        notesScroller.setOverScrollMode(View.OVER_SCROLL_IF_CONTENT_SCROLLS);
+        TextView notes = label("", 15f,
+                ZeroChillUi.color(activity, R.color.zc_text_primary), false);
+        notes.setLineSpacing(dp(7), 1.06f);
+        notes.setPadding(0, dp(9), 0, dp(9));
+        SpannableStringBuilder highlights = new SpannableStringBuilder();
+        for (int index = 0; index < entry.highlights.size(); index++) {
+            if (index > 0) highlights.append("\n\n");
+            int start = highlights.length();
+            highlights.append("• ");
+            highlights.setSpan(new ForegroundColorSpan(UiPalette.PRIMARY),
+                    start, highlights.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            highlights.append(entry.highlights.get(index));
         }
+        notes.setText(highlights);
         notesScroller.addView(notes, new ScrollView.LayoutParams(-1, -2));
-        LinearLayout.LayoutParams notesParams = new LinearLayout.LayoutParams(-1, dp(235));
+        LinearLayout.LayoutParams notesParams = new LinearLayout.LayoutParams(-1, -2);
+        notesParams.topMargin = dp(12);
         content.addView(notesScroller, notesParams);
 
         MaterialButton gotIt = new MaterialButton(activity);
@@ -122,14 +145,14 @@ final class WhatsNewUpdateDialog {
         gotIt.setContentDescription("Got it. Close What's New.");
         ZeroChillMotion.installPressFeedback(gotIt);
         LinearLayout.LayoutParams buttonParams = new LinearLayout.LayoutParams(-1, dp(49));
-        buttonParams.topMargin = dp(9);
+        buttonParams.topMargin = dp(16);
         content.addView(gotIt, buttonParams);
 
         // GlassHeaderView is the SAME Compose/AGSL material and live page backdrop
         // used by the top bar, Search and navbar. No bitmap capture or copy of shaders.
         FrameLayout controls = new FrameLayout(activity);
         controls.addView(content, new FrameLayout.LayoutParams(-1, -2));
-        glassCard = new GlassHeaderView(activity, controls, 25f, true, false, false, 0f);
+        glassCard = new GlassHeaderView(activity, controls, 24f, true, false, false, 0f);
         glassCard.setPageBackdrop(backdrop);
         glassCard.setClickable(true);
         cardParams = new FrameLayout.LayoutParams(dp(350), -2, Gravity.CENTER);
@@ -216,17 +239,13 @@ final class WhatsNewUpdateDialog {
                 : activity.getResources().getDisplayMetrics().widthPixels;
         int h = parent.getHeight() > 0 ? parent.getHeight()
                 : activity.getResources().getDisplayMetrics().heightPixels;
-        int panelWidth = Math.min(Math.max(dp(190), w - dp(32)), dp(440));
+        int panelWidth = Math.min(Math.max(dp(190), w - dp(40)), dp(380));
         if (cardParams.width != panelWidth) {
             cardParams.width = panelWidth;
             glassCard.setLayoutParams(cardParams);
         }
-        ViewGroup.LayoutParams notesParams = notesScroller.getLayoutParams();
-        int scrollerHeight = Math.min(dp(235), Math.max(dp(68), h - dp(255)));
-        if (notesParams.height != scrollerHeight) {
-            notesParams.height = scrollerHeight;
-            notesScroller.setLayoutParams(notesParams);
-        }
+        // Long release notes scroll, short ones use their natural height.
+        notesScroller.requestLayout();
     }
 
     /** On navigation or activity destruction do not acknowledge an unseen release. */
@@ -254,19 +273,9 @@ final class WhatsNewUpdateDialog {
         }
     }
 
-    private View highlightRow(String value) {
-        LinearLayout row = new LinearLayout(activity);
-        row.setGravity(Gravity.TOP);
-        row.setPadding(0, dp(10), 0, dp(10));
-
-        TextView bullet = label("•", 22f, UiPalette.PRIMARY, true);
-        bullet.setGravity(Gravity.TOP);
-        row.addView(bullet, new LinearLayout.LayoutParams(dp(22), -2));
-        TextView body = label(value, 14f,
-                ZeroChillUi.color(activity, R.color.zc_text_primary), false);
-        body.setLineSpacing(dp(2), 1.08f);
-        row.addView(body, new LinearLayout.LayoutParams(0, -2, 1f));
-        return row;
+    /** Caps long notes without forcing short releases into a tall dialog. */
+    private int maxNotesHeight(int viewportPx) {
+        return Math.min(dp(210), Math.max(dp(68), viewportPx - dp(228)));
     }
 
     private TextView label(String text, float sizeSp, int color, boolean bold) {
@@ -279,10 +288,14 @@ final class WhatsNewUpdateDialog {
     }
 
     private GradientDrawable panelFilm() {
-        GradientDrawable result = new GradientDrawable();
-        result.setColor(Color.argb(176, 9, 15, 23));
-        result.setCornerRadius(dp(25));
-        result.setStroke(dp(1), Color.argb(180, 8, 146, 208));
+        // A dense dark film over the existing optical lens keeps moving video
+        // from competing with text. The live glass and cyan rim remain.
+        GradientDrawable result = new GradientDrawable(
+                GradientDrawable.Orientation.TOP_BOTTOM,
+                new int[] { Color.argb(228, 12, 19, 29),
+                        Color.argb(238, 6, 11, 19) });
+        result.setCornerRadius(dp(24));
+        result.setStroke(dp(1), Color.argb(166, 8, 146, 208));
         return result;
     }
 
