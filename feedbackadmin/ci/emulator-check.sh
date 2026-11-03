@@ -8,7 +8,8 @@ if [ -f baseline-admin.apk ]; then
   bash feedbackadmin/ci/token-upgrade-check.sh || UPGRADE_RESULT=$?
 fi
 RESULT=0
-gradle --no-daemon :feedbackadmin:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.addy37.crazyshitadmin.ConsoleFlowTest || RESULT=$?
+gradle --no-daemon :feedbackadmin:connectedDebugAndroidTest \
+  -Pandroid.testInstrumentationRunnerArguments.class=com.addy37.crazyshitadmin.ConsoleFlowTest,com.addy37.crazyshitadmin.CommunityMessagesFlowTest || RESULT=$?
 adb pull /sdcard/Pictures/ZeroChillAdminReview console-review || true
 if [ "$RESULT" -ne 0 ]; then exit "$RESULT"; fi
 exit "$UPGRADE_RESULT"
