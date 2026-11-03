@@ -44,6 +44,9 @@ public class OnlyFapHeroStartupTest {
     private OnlyFapHubView hub;
     private final AtomicInteger fetches = new AtomicInteger();
     private NativeContentItem opened;
+    private volatile boolean delayFresh;
+    private volatile DataFetcher.DataCallback<? super InputStream> freshCallback;
+    private byte[] imageBytes;
     private static final String IMAGE = "https://cdn.example.com/remembered.jpg";
     private static final String FRESH = "https://cdn.example.com/fresh.jpg";
 
@@ -56,6 +59,7 @@ public class OnlyFapHeroStartupTest {
         bitmap.compress(Bitmap.CompressFormat.PNG, 100, bytes);
         bitmap.recycle();
         byte[] png = bytes.toByteArray();
+        imageBytes = png;
         Glide.get(activity).getRegistry().prepend(GlideUrl.class, InputStream.class,
                 new ModelLoaderFactory<GlideUrl, InputStream>() {
                     @Override public ModelLoader<GlideUrl, InputStream> build(MultiModelLoaderFactory factory) {
@@ -66,6 +70,10 @@ public class OnlyFapHeroStartupTest {
                                 return new LoadData<>(new ObjectKey(model.toStringUrl()), new DataFetcher<InputStream>() {
                                     @Override public void loadData(Priority priority, DataCallback<? super InputStream> callback) {
                                         fetches.incrementAndGet();
+                                        if (delayFresh && model.toStringUrl().equals(FRESH)) {
+                                            freshCallback = callback;
+                                            return;
+                                        }
                                         callback.onDataReady(new ByteArrayInputStream(png));
                                     }
                                     @Override public void cleanup() { }
@@ -131,13 +139,13 @@ public class OnlyFapHeroStartupTest {
         assertEquals(1, ((List<?>) ReflectionHelpers.getField(hub, "heroItems")).size());
     }
 
-    @Test public void uncachedRememberedHeroFallsBackToKnownThumbnail() throws Exception {
+    @Test public void uncachedRememberedHeroFetchesKnownArtworkWithoutGalleryRediscovery() throws Exception {
         NativeContentItem previous = creator("Fallback", "fallback", "https://cdn.example.com/avatar.jpg");
         OnlyFapHeroMemory.remember(activity, previous, "https://cdn.example.com/not-cached.jpg", previous.url);
         ReflectionHelpers.callInstanceMethod(hub, "requestStartupHero");
         await(() -> title().equals("Fallback"));
-        await(() -> OnlyFapHeroMemory.read(activity) == null);
-        assertTrue(fetches.get() > 0);
+        assertEquals("https://cdn.example.com/not-cached.jpg", OnlyFapHeroMemory.read(activity).imageUrl);
+        assertEquals(1, fetches.get());
         assertNull(ReflectionHelpers.getField(hub, "heroItem"));
     }
 
@@ -148,6 +156,69 @@ public class OnlyFapHeroStartupTest {
         assertNull(ReflectionHelpers.getField(hub, "heroItem"));
         assertTrue(((List<?>) ReflectionHelpers.getField(hub, "heroItems")).isEmpty());
         assertNull(OnlyFapHeroMemory.read(activity));
+    }
+
+    @Test public void cachedHeroDoesNotWaitForBlockedFavoritesMetadataQueue() throws Exception {
+        NativeContentItem previous = creator("Previous", "previous", IMAGE);
+        OnlyFapHeroMemory.remember(activity, previous, IMAGE, previous.url);
+        warm(IMAGE, previous.url);
+        java.util.concurrent.CountDownLatch release = new java.util.concurrent.CountDownLatch(1);
+        java.util.concurrent.CountDownLatch started = new java.util.concurrent.CountDownLatch(1);
+        java.util.concurrent.ExecutorService metadata = ReflectionHelpers.getField(hub, "metadataIo");
+        metadata.execute(() -> {
+            started.countDown();
+            try { release.await(); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+        });
+        assertTrue(started.await(5, TimeUnit.SECONDS));
+        int before = fetches.get();
+        long start = System.nanoTime();
+        try {
+            ReflectionHelpers.callInstanceMethod(hub, "requestStartupHero");
+            await(() -> title().equals("Previous") && ((ImageView) ReflectionHelpers.getField(hub, "heroImage"))
+                    .getDrawable() instanceof android.graphics.drawable.BitmapDrawable);
+            System.out.println("Cached hero visible with blocked metadata queue in "
+                    + TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start) + "ms (test runtime)");
+            assertEquals(before, fetches.get());
+            assertEquals(1L, release.getCount());
+        } finally { release.countDown(); }
+    }
+
+    @Test public void firstQualifiedRemoteHeroReplacesCacheWhileAlternateWorkIsStillPending() throws Exception {
+        NativeContentItem previous = creator("Previous", "previous", IMAGE);
+        OnlyFapHeroMemory.remember(activity, previous, IMAGE, previous.url);
+        warm(IMAGE, previous.url);
+        ReflectionHelpers.callInstanceMethod(hub, "requestStartupHero");
+        await(() -> title().equals("Previous"));
+        ImageView outgoing = ReflectionHelpers.getField(hub, "heroImage");
+        android.graphics.drawable.Drawable previousDrawable = outgoing.getDrawable();
+        delayFresh = true;
+        NativeContentItem fresh = creator("Fresh", "fresh", FRESH);
+        List<OnlyFapHeroPolicy.Artwork> workerChoices = new java.util.ArrayList<>();
+        OnlyFapHeroPolicy.Artwork first = new OnlyFapHeroPolicy.Artwork(FRESH, fresh.url, false);
+        ReflectionHelpers.callInstanceMethod(hub, "addQualifiedHeroArtwork",
+                ReflectionHelpers.ClassParameter.from(int.class, 0),
+                ReflectionHelpers.ClassParameter.from(NativeContentItem.class, fresh),
+                ReflectionHelpers.ClassParameter.from(List.class, workerChoices),
+                ReflectionHelpers.ClassParameter.from(OnlyFapHeroPolicy.Artwork.class, first));
+        await(() -> freshCallback != null);
+        assertSame(outgoing, ReflectionHelpers.getField(hub, "heroImage"));
+        assertSame(previousDrawable, outgoing.getDrawable());
+        assertTrue(new com.bumptech.glide.request.target.DrawableImageViewTarget(outgoing).getRequest().isComplete());
+        freshCallback.onDataReady(new ByteArrayInputStream(imageBytes));
+        await(() -> title().equals("Fresh") && ReflectionHelpers.getField(hub, "heroImage") != outgoing);
+        assertNotNull(ReflectionHelpers.getField(hub, "heroCrossfade"));
+        Object selected = ReflectionHelpers.getField(hub, "heroItem");
+        workerChoices.add(new OnlyFapHeroPolicy.Artwork("https://cdn.example.com/alternate.jpg", fresh.url, false));
+        // The first published candidate owns a snapshot, not the worker's mutable list.
+        assertEquals(1, ((List<?>) ReflectionHelpers.getField(selected, "artwork")).size());
+        ReflectionHelpers.callInstanceMethod(hub, "finishHeroResolution",
+                ReflectionHelpers.ClassParameter.from(int.class, 0),
+                ReflectionHelpers.ClassParameter.from(NativeContentItem.class, fresh),
+                ReflectionHelpers.ClassParameter.from(List.class, workerChoices));
+        assertSame(selected, ReflectionHelpers.getField(hub, "heroItem"));
+        assertEquals(2, ((List<?>) ReflectionHelpers.getField(selected, "artwork")).size());
+        ShadowLooper.idleMainLooper(400, TimeUnit.MILLISECONDS);
+        assertNull(outgoing.getDrawable());
     }
 
     @Test public void staleOrCorruptMetadataIsIgnoredAndForgetDoesNotEraseNewerHero() {
@@ -174,7 +245,7 @@ public class OnlyFapHeroStartupTest {
         warm(IMAGE, previous.url);
         ReflectionHelpers.setField(hub, "hotItems", Collections.singletonList(previous));
         ReflectionHelpers.callInstanceMethod(hub, "requestStartupHero");
-        java.util.concurrent.ExecutorService io = ReflectionHelpers.getField(hub, "metadataIo");
+        java.util.concurrent.ExecutorService io = ReflectionHelpers.getField(hub, "startupIo");
         io.submit(() -> { }).get(5, TimeUnit.SECONDS);
         ShadowLooper.idleMainLooper();
         assertNull(ReflectionHelpers.getField(hub, "startupHero"));

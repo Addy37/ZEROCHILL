@@ -14,7 +14,9 @@ user physically approves the signed APK. No migration, backend, Supabase, or
 remote-config change is required. See `docs/LIQUID_RIFT_BITMAP_HOTFIX.md` for the
 ownership trace and regression coverage. This same candidate also fixes ShitTok
 stale selection during list pruning (fingerprint `308eee7e75b6`); see
-`docs/SHITTOK_SELECTION_HOTFIX.md`. The LiquidRift fix remains intact.
+`docs/SHITTOK_SELECTION_HOTFIX.md`. The LiquidRift fix remains intact. Startup
+performance work in the same hero subsystem removes metadata-queue and alternate
+artwork waits; see `docs/ONLYFAP_HERO_STARTUP_HOTFIX.md`.
 
 ## Social media, DM reactions and analytics v2 candidate
 

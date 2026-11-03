@@ -244,6 +244,8 @@ final class OnlyFapHubView extends FrameLayout {
     private final Handler heroHandler = new Handler(Looper.getMainLooper());
     private final Handler heroRefreshHandler = new Handler(Looper.getMainLooper());
     private final ExecutorService metadataIo = Executors.newSingleThreadExecutor();
+    // Startup must not queue behind catalog/favorite grouping or persistence.
+    private final ExecutorService startupIo = Executors.newSingleThreadExecutor();
     private final ExecutorService heroIo = Executors.newSingleThreadExecutor();
     private final ExecutorService heroDiscoveryIo = Executors.newSingleThreadExecutor();
     private final Set<String> requestedHeroCreators = new HashSet<>();
@@ -911,6 +913,7 @@ final class OnlyFapHubView extends FrameLayout {
             prefs.unregisterOnSharedPreferenceChangeListener(favoriteInvalidation);
         }
         metadataIo.shutdownNow();
+        startupIo.shutdownNow();
         heroIo.shutdownNow();
         heroDiscoveryIo.shutdownNow();
         Glide.with(heroImage).clear(heroImage);
@@ -1062,8 +1065,9 @@ final class OnlyFapHubView extends FrameLayout {
             return;
         }
         startupRequested = true;
+        final long requestedAt = android.os.SystemClock.elapsedRealtime();
         final int generation = heroGeneration;
-        startupTask = metadataIo.submit(() -> {
+        startupTask = startupIo.submit(() -> {
             OnlyFapHeroMemory.Entry remembered = OnlyFapHeroMemory.read(getContext());
             List<NativeContentItem> known = remembered != null ? Collections.emptyList() : OnlyFapHeroPolicy.select(Collections.emptyList(),
                     CreatorCatalog.all(getContext()), CreatorFavoriteStore.names(getContext()),
@@ -1071,6 +1075,8 @@ final class OnlyFapHubView extends FrameLayout {
             post(() -> {
                 if (closed || generation != heroGeneration || heroItem != null) return;
                 if (!active) { startupRequested = false; return; }
+                AppPerformance.record("OnlyFap hero -> startup metadata ready",
+                        android.os.SystemClock.elapsedRealtime() - requestedAt);
                 HeroCandidate cached = remembered == null ? null : new HeroCandidate(
                         remembered.creator, remembered.imageUrl, remembered.referer);
                 NativeContentItem fallback = known.isEmpty() ? null : known.get(0);
@@ -1090,6 +1096,7 @@ final class OnlyFapHubView extends FrameLayout {
             NativeContentItem fallback) {
         if (closed || heroItem != null || !startupAllowed(candidate)) return;
         startupHero = candidate;
+        final long imageStartedAt = android.os.SystemClock.elapsedRealtime();
         if (preferenceHeroPending) {
             loadPreferenceArtwork(candidate, true, cacheOnly, fallback);
             return;
@@ -1106,13 +1113,7 @@ final class OnlyFapHubView extends FrameLayout {
                             Target<Drawable> target, boolean first) {
                         post(() -> {
                             if (closed || requestId != artworkRequestId || startupHero != candidate || heroItem != null) return;
-                            startupHero = null;
-                            if (cacheOnly) {
-                                metadataIo.execute(() -> OnlyFapHeroMemory.forget(
-                                        getContext(), candidate.currentImageUrl()));
-                                loadStartupThumbnail(OnlyFapHeroMemory.isRemoteImage(candidate.creator.imageUrl)
-                                        ? candidate.creator : fallback);
-                            }
+                            retryStartupHero(candidate, cacheOnly, fallback);
                         });
                         return false;
                     }
@@ -1127,11 +1128,31 @@ final class OnlyFapHubView extends FrameLayout {
                         showStartupCopy(candidate);
                         post(() -> {
                             if (startupHero == candidate && heroItem == null && startupAllowed(candidate)
-                                    && commitHeroArtwork(requestId, targetView, source, false)) presentPreference();
+                                    && commitHeroArtwork(requestId, targetView, source, false)) {
+                                AppPerformance.record("OnlyFap hero -> " + (cacheOnly ? "cached" : "known remote")
+                                                + " artwork visible",
+                                        android.os.SystemClock.elapsedRealtime() - imageStartedAt);
+                                presentPreference();
+                            }
                         });
                         return false;
                     }
                 }).into(artworkTarget(targetView));
+    }
+
+    private void retryStartupHero(HeroCandidate candidate, boolean cacheOnly,
+            NativeContentItem fallback) {
+        startupHero = null;
+        if (cacheOnly) {
+            // A disk-cache miss does not invalidate known artwork. Fetch it directly.
+            loadStartupHero(candidate, false, fallback);
+        } else {
+            metadataIo.execute(() -> OnlyFapHeroMemory.forget(getContext(), candidate.currentImageUrl()));
+            NativeContentItem thumbnail = OnlyFapHeroMemory.isRemoteImage(candidate.creator.imageUrl)
+                    && !candidate.currentImageUrl().equals(candidate.creator.imageUrl)
+                    ? candidate.creator : fallback;
+            loadStartupThumbnail(thumbnail);
+        }
     }
 
     private void showStartupCopy(HeroCandidate candidate) {
@@ -1351,7 +1372,7 @@ final class OnlyFapHubView extends FrameLayout {
                                         new OnlyFapHeroPolicy.Artwork(
                                                 directOriginal, model.url, false);
                                 if (isGoodPortraitArtwork(directChoice)) {
-                                    portraitArtwork.add(directChoice);
+                                    addQualifiedHeroArtwork(generation, creator, portraitArtwork, directChoice);
                                     continue;
                                 }
                             }
@@ -1368,7 +1389,7 @@ final class OnlyFapHubView extends FrameLayout {
                                                 false
                                         );
                                 if (isGoodPortraitArtwork(choice)) {
-                                    portraitArtwork.add(choice);
+                                    addQualifiedHeroArtwork(generation, creator, portraitArtwork, choice);
                                 }
                             } catch (IOException error) {
                                 if (error instanceof FapelloSourceException &&
@@ -1414,7 +1435,7 @@ final class OnlyFapHubView extends FrameLayout {
                             if (!active || closed || generation != heroGeneration ||
                                     portraitArtwork.size() >= 2) break;
                             if (isGoodPortraitArtwork(choice)) {
-                                portraitArtwork.add(choice);
+                                addQualifiedHeroArtwork(generation, creator, portraitArtwork, choice);
                             }
                         }
                     }
@@ -1432,6 +1453,19 @@ final class OnlyFapHubView extends FrameLayout {
         });
     }
 
+    private void addQualifiedHeroArtwork(int generation, NativeContentItem creator,
+            List<OnlyFapHeroPolicy.Artwork> choices, OnlyFapHeroPolicy.Artwork choice) {
+        choices.add(choice);
+        if (choices.size() != 1) return;
+        // Publish the first validated original while alternate-gallery work continues.
+        // The worker retains its own list; only immutable snapshots cross to the UI.
+        List<OnlyFapHeroPolicy.Artwork> first = Collections.singletonList(choice);
+        postHeroWork(generation, "hero-first-artwork", () -> {
+            if (active && findHeroCandidate(CreatorFavoriteStore.key(creator)) == null)
+                addHeroCandidate(new HeroCandidate(creator, first));
+        });
+    }
+
     private void finishHeroResolution(
             int generation,
             NativeContentItem creator,
@@ -1442,8 +1476,10 @@ final class OnlyFapHubView extends FrameLayout {
 
         // A rejected portrait candidate does not consume a hero slot. Keep searching deeper
         // into the discovery pool until all eight slots are filled or candidates are exhausted.
-        if (choices != null && !choices.isEmpty() && heroItems.size() < HERO_MAX_ITEMS) {
-            addHeroCandidate(new HeroCandidate(creator, choices));
+        if (choices != null && !choices.isEmpty()) {
+            HeroCandidate existing = findHeroCandidate(CreatorFavoriteStore.key(creator));
+            if (existing == null) addHeroCandidate(new HeroCandidate(creator, choices));
+            else existing.artwork = choices; // Append validated alternatives without restarting the hero.
         }
         requestHeroCandidates();
     }
@@ -1745,12 +1781,7 @@ final class OnlyFapHubView extends FrameLayout {
                         post(() -> {
                             if (requestId != artworkRequestId || !currentPreferenceArtwork(generation, candidate, url, startup)) return;
                             if (!startup) { handleHeroArtworkFailure(candidate, url); return; }
-                            startupHero = null;
-                            if (cacheOnly) {
-                                metadataIo.execute(() -> OnlyFapHeroMemory.forget(getContext(), url));
-                                loadStartupThumbnail(OnlyFapHeroMemory.isRemoteImage(candidate.creator.imageUrl)
-                                        ? candidate.creator : fallback);
-                            }
+                            retryStartupHero(candidate, cacheOnly, fallback);
                         });
                         return false;
                     }
@@ -2156,7 +2187,7 @@ final class OnlyFapHubView extends FrameLayout {
 
     private static final class HeroCandidate {
         final NativeContentItem creator;
-        final List<OnlyFapHeroPolicy.Artwork> artwork;
+        List<OnlyFapHeroPolicy.Artwork> artwork;
         int artworkIndex;
 
         HeroCandidate(NativeContentItem creator, List<OnlyFapHeroPolicy.Artwork> artwork) {
