@@ -63,6 +63,9 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
     private final boolean adaptiveAspectRatios;
     private int gridColumns = 2;
     private RecyclerView previewViewport;
+    private androidx.core.view.OneShotPreDrawListener pendingFavoriteMove;
+    private final LinkedHashSet<View> favoriteMovingTiles = new LinkedHashSet<>();
+    private int favoriteMoveGeneration;
     private boolean previewsActive = true;
     private final LinkedHashSet<Holder> previewHolders = new LinkedHashSet<>();
     private final Rect previewBounds = new Rect();
@@ -102,6 +105,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
     }
 
     void replace(List<NativeContentItem> incoming, boolean preloadAhead) {
+        stopFavoriteMoves();
         items.clear();
         normalOrder.clear();
         addUnique(incoming);
@@ -168,8 +172,10 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
             if (anchorUrl.isEmpty() && !changed.contains(url) && child.getBottom() > list.getPaddingTop()) {
                 anchorUrl = url; anchorOffset = child.getTop() - list.getPaddingTop();
             }
-            child.animate().cancel(); child.setTranslationX(0f); child.setTranslationY(0f);
         }
+        stopFavoriteMoves();
+        if (list != null) for (int i = 0; i < list.getChildCount(); i++)
+            resetTileTransform(list.getChildAt(i));
         androidx.recyclerview.widget.DiffUtil.calculateDiff(new androidx.recyclerview.widget.DiffUtil.Callback() {
             public int getOldListSize() { return before.size(); }
             public int getNewListSize() { return items.size(); }
@@ -180,7 +186,11 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         if (!anchorUrl.isEmpty() && list.getLayoutManager() instanceof androidx.recyclerview.widget.StaggeredGridLayoutManager)
             ((androidx.recyclerview.widget.StaggeredGridLayoutManager) list.getLayoutManager())
                     .scrollToPositionWithOffset(indexOfUrl(anchorUrl), anchorOffset);
-        androidx.core.view.OneShotPreDrawListener.add(list, () -> {
+        if (!previewsActive) return;
+        final int moveGeneration = favoriteMoveGeneration;
+        pendingFavoriteMove = androidx.core.view.OneShotPreDrawListener.add(list, () -> {
+            if (moveGeneration != favoriteMoveGeneration || previewViewport != list) return;
+            pendingFavoriteMove = null;
             if (!android.animation.ValueAnimator.areAnimatorsEnabled()) return;
             for (int i = 0; i < list.getChildCount(); i++) {
                 View child = list.getChildAt(i);
@@ -188,11 +198,32 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
                 if (position < 0 || position >= items.size()) continue;
                 android.graphics.PointF old = locations.get(items.get(position).url);
                 if (old == null) continue;
+                favoriteMovingTiles.add(child);
                 child.setTranslationX(old.x - child.getLeft()); child.setTranslationY(old.y - child.getTop());
                 child.animate().translationX(0).translationY(0).setDuration(240)
-                        .setInterpolator(new android.view.animation.PathInterpolator(.20f, 0f, .05f, 1f)).start();
+                        .setInterpolator(new android.view.animation.PathInterpolator(.20f, 0f, .05f, 1f))
+                        .withEndAction(() -> favoriteMovingTiles.remove(child)).start();
             }
         });
+    }
+
+    // RecyclerView has no ItemAnimator here: it cannot retire our ViewPropertyAnimator
+    // transforms. A canceled/detached move otherwise survives in a recycled tile and
+    // draws outside the bounds used by the staggered layout manager.
+    private void resetTileTransform(View tile) {
+        favoriteMovingTiles.remove(tile);
+        tile.animate().cancel();
+        tile.setTranslationX(0f);
+        tile.setTranslationY(0f);
+        tile.setScaleX(1f);
+        tile.setScaleY(1f);
+    }
+
+    private void stopFavoriteMoves() {
+        favoriteMoveGeneration++;
+        if (pendingFavoriteMove != null) pendingFavoriteMove.removeListener();
+        pendingFavoriteMove = null;
+        for (View tile : new ArrayList<>(favoriteMovingTiles)) resetTileTransform(tile);
     }
 
     void setHighlightedUrls(Collection<String> urls) {
@@ -433,6 +464,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
 
     @Override
     public void onBindViewHolder(@NonNull Holder holder, int position) {
+        resetTileTransform(holder.itemView);
         holder.morphPulse.animate().cancel();
         holder.morphPulse.setAlpha(0f);
         NativeContentItem item = items.get(position);
@@ -624,6 +656,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
     void setPreviewsActive(boolean active) {
         if (previewsActive == active) return;
         previewsActive = active;
+        if (!active) stopFavoriteMoves();
         for (Holder holder : previewHolders) {
             if (!active) {
                 cancelPreview(holder);
@@ -642,6 +675,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
     }
 
     @Override public void onDetachedFromRecyclerView(@NonNull RecyclerView recycler) {
+        stopFavoriteMoves();
         recycler.getViewTreeObserver().removeOnPreDrawListener(previewVisibility);
         for (int i = 0; i < recycler.getChildCount(); i++) {
             RecyclerView.ViewHolder raw = recycler.getChildViewHolder(recycler.getChildAt(i));
@@ -662,6 +696,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
     }
 
     @Override public void onViewDetachedFromWindow(@NonNull Holder holder) {
+        resetTileTransform(holder.itemView);
         previewHolders.remove(holder);
         holder.attached = false;
         cancelPreview(holder);
@@ -693,6 +728,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
 
     @Override
     public void onViewRecycled(@NonNull Holder holder) {
+        resetTileTransform(holder.itemView);
         previewHolders.remove(holder);
         holder.bindGeneration++;
         cancelPreview(holder);
@@ -754,7 +790,9 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         int current = holder.getBindingAdapterPosition();
         if (current == RecyclerView.NO_POSITION || current >= items.size() ||
                 !item.url.equals(items.get(current).url)) return;
-        holder.tile.setAspectRatio(ratio);
+        // A delayed decode changes this tile and its neighbors' layout coordinates.
+        // An earlier favorite snapshot must not translate those new bounds.
+        if (holder.tile.setAspectRatio(ratio)) stopFavoriteMoves();
     }
 
     private GlideUrl withHeaders(String imageUrl, String pageUrl) {
@@ -907,11 +945,12 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
             super(context);
         }
 
-        void setAspectRatio(float next) {
+        boolean setAspectRatio(float next) {
             float safe = Float.isFinite(next) && next > 0f ? next : 1f;
-            if (Math.abs(aspectRatio - safe) < 0.01f) return;
+            if (Math.abs(aspectRatio - safe) < 0.01f) return false;
             aspectRatio = safe;
             requestLayout();
+            return true;
         }
 
         @Override
