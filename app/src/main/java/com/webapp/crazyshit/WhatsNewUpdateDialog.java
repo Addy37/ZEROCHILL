@@ -218,10 +218,15 @@ final class WhatsNewUpdateDialog {
                 backdrop, entry, currentCode, false, onDismiss);
     }
 
-    /** Debug-only entry point used by a long press on the main header. */
+    /** Only local debug and signed preview candidates expose the manual preview. */
+    static boolean canPreview() {
+        return BuildConfig.DEBUG || (BuildConfig.VERSION_NAME != null
+                && BuildConfig.VERSION_NAME.contains("-zerochill-preview"));
+    }
+
     static WhatsNewUpdateDialog showPreview(Activity activity, FrameLayout parent,
                                              View protectedContent, ViewPageBackdrop backdrop) {
-        if (!BuildConfig.DEBUG || activity == null || parent == null
+        if (!canPreview() || activity == null || parent == null
                 || protectedContent == null || backdrop == null) return null;
         WhatsNewChangelog.Entry entry = WhatsNewChangelog.forVersion(
                 WhatsNewChangelog.FIRST_SUPPORTED_VERSION_CODE);
