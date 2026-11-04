@@ -16,13 +16,21 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "17"
-      - uses: android-actions/setup-android@v3
+      - uses: android-actions/setup-android@v4
+        with:
+          packages: platform-tools
+      - name: Install Android API 36
+        run: sdkmanager "platforms;android-36" "build-tools;35.0.0"
+      - uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: "8.11.1"
+          cache-provider: basic
       - name: Build separate V2 debug APK
-        run: ./gradlew --no-daemon :v2preview:assembleDebug
+        run: gradle --no-daemon :v2preview:assembleDebug
       - uses: actions/upload-artifact@v4
         with:
           name: ZEROCHILL-V2-Skeleton-${{ github.sha }}
