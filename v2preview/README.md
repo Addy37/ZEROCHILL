@@ -14,7 +14,7 @@ It does not replace the existing ZEROCHILL application and it is not a productio
 App package: `com.addy37.zerochill.v2preview`, intentionally different from production.
 Production package: `com.addy37.crazyshitunofficial`, unchanged in `:app`.
 
-Build: `./gradlew :v2preview:assembleDebug`.
+Build: `gradle :v2preview:assembleDebug` (Gradle 8.11.1).
 APK: `v2preview/build/outputs/apk/debug/v2preview-debug.apk`.
 
 Do not merge, release, change production package IDs, or claim upgrade compatibility for this preview.
