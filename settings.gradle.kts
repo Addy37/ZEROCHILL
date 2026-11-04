@@ -18,3 +18,4 @@ rootProject.name = "CrazyShitAndroid"
 include(":app")
 include(":baselineprofile")
 include(":feedbackadmin")
+include(":v2preview")
