@@ -1,10 +1,8 @@
 name: Primary Tab Activation Comparison
 
+# Manual only: physical device testing replaces automatic UI/emulator suites.
 on:
   workflow_dispatch:
-  pull_request:
-    branches: [ rebrand/zerochill ]
-    paths: [ 'app/**', '.github/workflows/primary-tab-performance.yml' ]
 
 permissions:
   contents: read

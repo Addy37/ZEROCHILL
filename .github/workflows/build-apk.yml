@@ -1,9 +1,7 @@
 name: Build Android APK
 
+# Manual only: physical device testing replaces automatic UI/emulator suites.
 on:
-  push:
-    branches: [ main, rebrand/zerochill ]
-  pull_request:
   workflow_dispatch:
 
 concurrency:

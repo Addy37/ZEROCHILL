@@ -1,15 +1,8 @@
 name: Spotlight search focused validation
+# Manual only: physical device testing replaces automatic UI/emulator suites.
 on:
-  push:
-    branches: [feature/spotlight-glass-search]
-  pull_request:
-    branches: [rebrand/zerochill]
-    paths:
-      - 'app/src/main/java/com/webapp/crazyshit/Search*'
-      - 'app/src/main/java/com/webapp/crazyshit/CreatorSuggestionsController.java'
-      - 'app/src/test/java/com/webapp/crazyshit/Search*'
-      - 'baselineprofile/src/main/java/com/webapp/crazyshit/baselineprofile/SearchImeSmokeBenchmark.kt'
-      - '.github/workflows/spotlight-search.yml'
+  workflow_dispatch:
+
 concurrency:
   group: spotlight-search-${{ github.ref }}
   cancel-in-progress: true

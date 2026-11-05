@@ -1,13 +1,7 @@
 name: ZeroChill Signed Upgrade Candidate
 
+# Manual only: physical device testing replaces automatic UI/emulator suites.
 on:
-  pull_request:
-    branches: [ main, rebrand/zerochill, feature/shittok-smooth-pinch-focus-mode ]
-    paths:
-      - 'app/**'
-      - 'RELEASE_VERSION'
-      - 'RELEASE_NOTES.md'
-      - '.github/workflows/rebrand-upgrade-candidate.yml'
   workflow_dispatch:
 
 concurrency:

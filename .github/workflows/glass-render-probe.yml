@@ -1,17 +1,8 @@
 name: Glass renderer visual probe
+# Manual only: physical device testing replaces automatic UI/emulator suites.
 on:
-  pull_request:
-    branches: [ rebrand/zerochill ]
-    paths:
-      - 'app/src/main/java/com/webapp/crazyshit/*Glass*'
-      - 'app/src/main/java/com/webapp/crazyshit/glass/**'
-      - 'app/src/main/java/com/webapp/crazyshit/*Navigation*'
-      - 'app/src/main/java/com/webapp/crazyshit/ViewPageBackdrop.kt'
-      - 'app/src/main/java/com/webapp/crazyshit/Frosted*'
-      - 'app/src/debug/**'
-      - '.github/workflows/glass-render-probe.yml'
-      - 'tools/capture_glass_probe.py'
   workflow_dispatch:
+
 permissions:
   contents: read
 jobs:

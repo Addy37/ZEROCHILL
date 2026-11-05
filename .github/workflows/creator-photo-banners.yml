@@ -1,7 +1,8 @@
 name: Creator photo and banner validation
+# Manual only: physical device testing replaces automatic UI/emulator suites.
 on:
-  push:
-    branches: [fix/creator-photo-routing-banners]
+  workflow_dispatch:
+
 permissions:
   contents: read
 jobs:

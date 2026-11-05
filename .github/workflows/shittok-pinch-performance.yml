@@ -1,9 +1,8 @@
 name: ShitTok Pinch Scroll Comparison
 
+# Manual only: physical device testing replaces automatic UI/emulator suites.
 on:
-  pull_request:
-    branches: [ main, rebrand/zerochill ]
-    paths: [ 'app/**', '.github/workflows/shittok-pinch-performance.yml' ]
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}

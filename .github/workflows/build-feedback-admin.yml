@@ -1,29 +1,8 @@
 name: Build Private Feedback Admin APK
 
+# Manual only: physical device testing replaces automatic UI/emulator suites.
 on:
-  push:
-    branches: [ main, rebrand/zerochill ]
-    paths:
-      - '.github/workflows/build-feedback-admin.yml'
-      - 'feedbackadmin/**'
-      - 'supabase/functions/feedback-admin/**'
-      - 'supabase/functions/dynamic-api/**'
-      - 'supabase/functions/app-config-admin/**'
-      - 'supabase/functions/_shared/**'
-      - 'supabase/migrations/*source_config.sql'
-      - 'supabase/migrations/*analytics.sql'
-      - 'supabase/migrations/*feedback*.sql'
   workflow_dispatch:
-  pull_request:
-    paths:
-      - 'feedbackadmin/**'
-      - 'supabase/functions/feedback-admin/**'
-      - 'supabase/functions/app-config-admin/**'
-      - 'supabase/functions/_shared/**'
-      - 'supabase/migrations/*source_config.sql'
-      - 'supabase/migrations/*analytics.sql'
-      - 'settings.gradle.kts'
-      - '.github/workflows/build-feedback-admin.yml'
 
 permissions:
   contents: read

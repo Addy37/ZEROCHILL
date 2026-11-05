@@ -1,7 +1,8 @@
 name: Glass headers focused validation
+# Manual only: physical device testing replaces automatic UI/emulator suites.
 on:
-  push:
-    branches: [feature/subtle-glass-headers]
+  workflow_dispatch:
+
 permissions:
   contents: read
 jobs:

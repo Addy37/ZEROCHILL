@@ -1,8 +1,8 @@
 name: ShitTok cold process startup
+# Manual only: physical device testing replaces automatic UI/emulator suites.
 on:
-  pull_request:
-    branches: [rebrand/zerochill]
-    paths: ['app/**', 'tools/measure_shittok_cold_start.sh', '.github/workflows/shittok-startup.yml']
+  workflow_dispatch:
+
 permissions:
   contents: read
 concurrency:

@@ -1,12 +1,8 @@
 name: ShitTok speed and mute validation
+# Manual only: physical device testing replaces automatic UI/emulator suites.
 on:
-  pull_request:
-    branches: [rebrand/zerochill]
-    paths:
-      - 'app/src/main/java/com/webapp/crazyshit/ChaosFeedView.java'
-      - 'app/src/main/java/com/webapp/crazyshit/ShitTok*'
-      - 'app/src/test/java/com/webapp/crazyshit/ShitTok*'
-      - '.github/workflows/shittok-speed-mute.yml'
+  workflow_dispatch:
+
 permissions:
   contents: read
 concurrency:
