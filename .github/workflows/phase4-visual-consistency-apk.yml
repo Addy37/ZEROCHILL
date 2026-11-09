@@ -92,6 +92,7 @@ jobs:
           --tests 'com.webapp.crazyshit.SearchResultsPolishTest'
           --tests 'com.webapp.crazyshit.SocialMediaTest'
           --tests 'com.webapp.crazyshit.ZeroChillMessageThreadUiTest'
+          --tests 'com.webapp.crazyshit.FeedbackConversationTest'
           --tests 'com.webapp.crazyshit.NavigationResponsivenessTest'
           --tests 'com.webapp.crazyshit.NavigationBadgeReadTest'
           --tests 'com.webapp.crazyshit.NotificationNavigationWorkTest'

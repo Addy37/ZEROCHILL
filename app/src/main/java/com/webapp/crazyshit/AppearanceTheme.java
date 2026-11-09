@@ -289,6 +289,11 @@ final class AppearanceTheme {
 
     static int outline(Context context) { return 0xFF293039; }
 
+    static int selectionSurface(Context context) {
+        if (accentChoice(context) == Accent.CYAN) return 0xFF0C3841;
+        return androidx.core.graphics.ColorUtils.blendARGB(surface(context), accent(context), .22f);
+    }
+
     static int onAccent(Context context) {
         return accentChoice(context) == Accent.WHITE ? 0xFF15202E : 0xFF020F17;
     }

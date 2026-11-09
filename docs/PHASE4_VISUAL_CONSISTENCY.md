@@ -25,8 +25,9 @@ dependency, package or signing-identity migration is introduced.
   existing AppearanceTheme palette instead of fixed UiPalette cyan.
 - ShitTok favorites/likes/seek controls, Shows fullscreen favorites/likes and
   timeline, detail/mini-player progress and media composer actions follow accent.
-  Message/inbox bubbles and actions already used the existing theme; the working
-  message logic is unchanged.
+  Message/inbox bubbles and actions already used the existing theme; selected
+  message fills and feedback conversation highlights now follow the accent too.
+  The working message logic is unchanged.
 - PreferenceGlassPanel and shared Compose menu rims respect edge highlights.
   Popup glass applies vibrancy and skips backdrop sampling for Off/Fast. Zero blur
   and refraction avoid unnecessary effects; effect caching tracks individual
@@ -46,6 +47,13 @@ contexts, shared controls, cyan restoration, OLED background and re-created host
 preference retention. PreferenceGlassSettingsTest checks Off/Fast optical bypass,
 quality restore and custom edge settings. Activity recreation tests are not a
 claim of physical process-restart testing.
+
+The initial expanded local run passed 171/172 tests. Its single failure was an
+older Messages assertion expecting UiPalette.FLOATING rather than the existing
+AppearanceTheme.floating value (the message source blob was identical to the
+base). Updated the legacy surface/text assertions to the established theme
+contract; the selected-media action test also exercises a purple highlight.
+Executed follow-up results are recorded on the PR.
 
 The isolated `phase4-visual-consistency-apk.yml` workflow runs focused appearance,
 menu, media, messaging and #409 navigation/work-bound regressions, then one

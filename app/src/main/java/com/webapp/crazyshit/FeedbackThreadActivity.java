@@ -163,10 +163,11 @@ public final class FeedbackThreadActivity extends Activity {
         row.setGravity(developer ? Gravity.START : Gravity.END);
 
         MaterialCardView bubble = new MaterialCardView(this);
-        bubble.setCardBackgroundColor(developer ? SURFACE : USER_BUBBLE);
+        boolean cyan = AppearanceTheme.accentChoice(this) == AppearanceTheme.Accent.CYAN;
+        bubble.setCardBackgroundColor(developer ? SURFACE : cyan ? USER_BUBBLE : AppearanceTheme.selectionSurface(this));
         bubble.setStrokeWidth(dp(1));
         bubble.setStrokeColor(
-                developer ? Color.rgb(45, 45, 51) : Color.rgb(10, 106, 137)
+                developer ? Color.rgb(45, 45, 51) : cyan ? Color.rgb(10, 106, 137) : AppearanceTheme.accent(this)
         );
         bubble.setRadius(dp(16));
         bubble.setCardElevation(0);

@@ -47,7 +47,7 @@ internal class PreferenceGlassPanel @JvmOverloads constructor(context: Context, 
 
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
-        if (usesOpticalLayer(context)) {
+        if (Build.VERSION.SDK_INT >= 31 && usesOpticalLayer(context)) {
             source?.viewTreeObserver?.let { observer = it; it.addOnDrawListener(sourceDraw) }
         }
         if (formation < 1f) post {
@@ -118,7 +118,11 @@ internal class PreferenceGlassPanel @JvmOverloads constructor(context: Context, 
             // High-contrast dark film keeps text legible over faces, hero artwork,
             // and fast-moving videos, including at the lowest tint setting.
             // Optical sampling remains underneath this film.
-            val alpha = if (sampled) (157 + opacity * 50f * (1f - transparency * .25f)).toInt()
+            // Fast uses window compositing for transparency, without recording
+            // the page. Keep its saved transparency/tint film just as readable.
+            val fast = AppearanceTheme.hasAdvancedGlass(context) &&
+                AppearanceTheme.glassPreset(context) == AppearanceTheme.GlassPreset.FAST
+            val alpha = if (sampled || fast) (157 + opacity * 50f * (1f - transparency * .25f)).toInt()
                 else (212 + opacity * 34f).toInt()
             wash.color = Color.argb(alpha, Color.red(tintColor), Color.green(tintColor), Color.blue(tintColor))
             canvas.drawPath(shape, wash)
