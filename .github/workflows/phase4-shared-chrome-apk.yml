@@ -17,9 +17,11 @@ jobs:
   phase4-preview:
     runs-on: ubuntu-latest
     env:
-      APP_VERSION_CODE: "6000010"
-      APP_VERSION_NAME: "7.0.0-compose-preview.8"
+      APP_VERSION_CODE: "6000011"
+      APP_VERSION_NAME: "7.0.0-compose-preview.9"
       ZEROCHILL_SOURCE_SHA: ${{ github.sha }}
+      # Match the working release workflow. This is the client/anon key, never a service-role key.
+      SUPABASE_PUBLISHABLE_KEY: ${{ secrets.FEEDBACK_ANON_KEY }}
       ANALYTICS_ENDPOINT: ""
       ANALYTICS_V2_ENDPOINT: ""
 
@@ -69,6 +71,14 @@ jobs:
               out.write(f"ANDROID_KEY_PASSWORD={data['key_password']}\n")
           PY
 
+      - name: Verify public Supabase client configuration
+        run: |
+          set -euo pipefail
+          if [[ -z "${SUPABASE_PUBLISHABLE_KEY:-}" ]]; then
+            echo "::error::Missing publishable Supabase key for signed preview"
+            exit 1
+          fi
+
       - name: Focused appearance tests and one signed release build
         run: >-
           gradle --no-daemon :app:testDebugUnitTest
@@ -95,7 +105,7 @@ jobs:
           "$BUILD_TOOLS/apksigner" verify --print-certs "$APK"
           BADGING="$("$BUILD_TOOLS/aapt2" dump badging "$APK")"
           echo "$BADGING" | grep -q "package: name='com.addy37.crazyshitunofficial'"
-          echo "$BADGING" | grep -q "versionCode='6000010'"
+          echo "$BADGING" | grep -q "versionCode='6000011'"
           mkdir -p "$RUNNER_TEMP/stable"
           gh release download v6.0.2 --repo "$GITHUB_REPOSITORY" \
             --pattern ZeroChill.apk --dir "$RUNNER_TEMP/stable"
@@ -105,8 +115,8 @@ jobs:
           test "$CANDIDATE_CERT" = "$STABLE_CERT"
           STABLE_BADGING="$("$BUILD_TOOLS/aapt2" dump badging "$RUNNER_TEMP/stable/ZeroChill.apk")"
           STABLE_CODE="$(echo "$STABLE_BADGING" | sed -n "s/.*versionCode='\([0-9]*\)'.*/\1/p" | head -n 1)"
-          test 6000010 -gt "$STABLE_CODE"
-          test 6000010 -gt 6000009
+          test 6000011 -gt "$STABLE_CODE"
+          test 6000011 -gt 6000010
           OUT="ZeroChill-OG-Phase4-${GITHUB_REF_NAME//\//-}-${GITHUB_SHA:0:7}.apk"
           cp "$APK" "$OUT"
           sha256sum "$OUT" > SHA256SUMS-phase4.txt
