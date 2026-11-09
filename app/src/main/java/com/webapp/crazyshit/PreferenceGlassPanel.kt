@@ -114,8 +114,11 @@ internal class PreferenceGlassPanel @JvmOverloads constructor(context: Context, 
             val opacity = AppearanceTheme.menuTint(context)
             val transparency = if (AppearanceTheme.hasAdvancedGlass(context))
                 AppearanceTheme.glassTransparency(context) else .78f
-            val alpha = if (sampled) (30 + opacity * 86f * (1f - transparency * .45f)).toInt()
-                else (150 + opacity * 74f).toInt()
+            // High-contrast dark film keeps text legible over faces, hero artwork,
+            // and fast-moving videos, including at the lowest tint setting.
+            // Optical sampling remains underneath this film.
+            val alpha = if (sampled) (157 + opacity * 50f * (1f - transparency * .25f)).toInt()
+                else (212 + opacity * 34f).toInt()
             wash.color = Color.argb(alpha, Color.red(tintColor), Color.green(tintColor), Color.blue(tintColor))
             canvas.drawPath(shape, wash)
             val accent = AppearanceTheme.accent(context)
