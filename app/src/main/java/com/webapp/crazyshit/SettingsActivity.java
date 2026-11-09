@@ -1,6 +1,6 @@
 package com.webapp.crazyshit;
 
-import android.app.Activity;
+import androidx.activity.ComponentActivity;
 import android.app.AlertDialog;
 import android.content.BroadcastReceiver;
 import android.content.Context;
@@ -29,14 +29,14 @@ import androidx.core.view.WindowInsetsCompat;
 
 import com.google.android.material.card.MaterialCardView;
 
-public class SettingsActivity extends Activity {
+public class SettingsActivity extends ComponentActivity {
     public static final String EXTRA_CHECK_FOR_UPDATES = "check_for_updates";
 
     private SharedPreferences prefs;
     private AppUpdater appUpdater;
     private AppBackupController backup;
-    private TextView notificationStatusView;
-    private TextView sourceConfigStatusView;
+    private SettingsComposeScreen.Item notificationStatusView;
+    private SettingsComposeScreen.Item sourceConfigStatusView;
     private String renderedAppearanceSignature;
     private String appliedAppearanceColors;
     private boolean notificationReceiverRegistered;
@@ -45,7 +45,7 @@ public class SettingsActivity extends Activity {
         @Override
         public void onReceive(Context context, Intent intent) {
             if (notificationStatusView != null) {
-                notificationStatusView.setText(
+                notificationStatusView.setSubtitle(
                         NotificationCoordinator.statusSummary(SettingsActivity.this)
                 );
             }
@@ -79,45 +79,12 @@ public class SettingsActivity extends Activity {
         }
     }
 
+    private final java.util.List<SettingsComposeScreen.Section> settingsSections = new java.util.ArrayList<>();
+
+    /** Keep all original actions and preference keys; only the presentation changes. */
     private void buildUi() {
-        int background = ZeroChillUi.background(this);
-
-        ScrollView scroll = new ScrollView(this);
-        scroll.setFillViewport(true);
-        scroll.setBackgroundColor(background);
-        scroll.setClipToPadding(false);
-
-        LinearLayout root = new LinearLayout(this);
-        root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(dp(12), 0, dp(12), dp(24));
-        root.setBackgroundColor(background);
-        scroll.addView(root, new ScrollView.LayoutParams(-1, -2));
-
-        LinearLayout header = new LinearLayout(this);
-        header.setOrientation(LinearLayout.HORIZONTAL);
-        header.setGravity(Gravity.CENTER_VERTICAL);
-        header.setPadding(0, 0, 0, dp(4));
-
-        TextView back = text("‹", 31f, AppearanceTheme.primaryText(this));
-        back.setGravity(Gravity.CENTER);
-        back.setContentDescription("Back");
-        back.setClickable(true);
-        back.setFocusable(true);
-        back.setOnClickListener(v -> {
-            haptic(v);
-            finish();
-        });
-        ZeroChillMotion.installPressFeedback(back);
-        header.addView(back, new LinearLayout.LayoutParams(dp(42), dp(48)));
-
-        TextView title = text("Settings", 25f, AppearanceTheme.primaryText(this));
-        title.setTypeface(null, android.graphics.Typeface.BOLD);
-        LinearLayout.LayoutParams titleParams = new LinearLayout.LayoutParams(0, -2, 1f);
-        titleParams.leftMargin = dp(6);
-        header.addView(title, titleParams);
-        root.addView(header);
-
-        LinearLayout notifications = addGroup(root, "Notifications & updates");
+        settingsSections.clear();
+        SettingsComposeScreen.Section notifications = addGroup("Notifications & updates");
         addSwitch(
                 notifications,
                 "Favorite creator updates",
@@ -173,11 +140,11 @@ public class SettingsActivity extends Activity {
             );
         }
 
-        LinearLayout content = addGroup(root, "Content");
+        SettingsComposeScreen.Section content = addGroup("Content");
         addAction(content, "Content preference", ContentPreference.get(this).label, "",
                 () -> ContentPreferenceUi.choose(this, this::recreate));
 
-        LinearLayout playback = addGroup(root, "Playback");
+        SettingsComposeScreen.Section playback = addGroup("Playback");
         addAction(
                 playback,
                 "ShitTok preloading",
@@ -193,7 +160,7 @@ public class SettingsActivity extends Activity {
                 this::showBlockedShitTokCreators
         );
 
-        LinearLayout appearance = addGroup(root, "Appearance");
+        SettingsComposeScreen.Section appearance = addGroup("Appearance");
         addAction(
                 appearance,
                 "Customize appearance",
@@ -220,7 +187,7 @@ public class SettingsActivity extends Activity {
                 }
         );
 
-        LinearLayout library = addGroup(root, "Library & data");
+        SettingsComposeScreen.Section library = addGroup("Library & data");
         addAction(
                 library,
                 "Favorite creators",
@@ -250,7 +217,7 @@ public class SettingsActivity extends Activity {
                 this::showManageLibraryData
         );
 
-        LinearLayout privacy = addGroup(root, "Privacy");
+        SettingsComposeScreen.Section privacy = addGroup("Privacy");
         addAction(
                 privacy,
                 "Clear site data",
@@ -259,7 +226,7 @@ public class SettingsActivity extends Activity {
                 this::confirmClearSiteData
         );
 
-        LinearLayout advanced = addGroup(root, "Advanced");
+        SettingsComposeScreen.Section advanced = addGroup("Advanced");
         sourceConfigStatusView = addAction(
                 advanced,
                 "Source configuration",
@@ -282,252 +249,53 @@ public class SettingsActivity extends Activity {
                 () -> NotificationCoordinator.showTestNotification(this)
         );
 
-        TextView footer = text(
-                "ZeroChill  •  " + BuildConfig.VERSION_NAME
-                        + "\nCommunity Android client",
-                11.5f,
-                ZeroChillUi.color(this, R.color.zc_text_muted)
-        );
-        footer.setGravity(Gravity.CENTER);
-        footer.setPadding(dp(8), dp(20), dp(8), 0);
-        root.addView(footer);
 
-        FrameLayout shell = new FrameLayout(this);
-        shell.setBackgroundColor(background);
-        shell.addView(scroll, new FrameLayout.LayoutParams(-1, -1));
-
-        View topScrim = new View(this);
-        topScrim.setClickable(false);
-        topScrim.setFocusable(false);
-        topScrim.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
-        int scrimBase = AppearanceTheme.background(this);
-        GradientDrawable scrim = new GradientDrawable(
-                GradientDrawable.Orientation.TOP_BOTTOM,
-                new int[]{
-                        scrimBase,
-                        Color.argb(105, Color.red(scrimBase), Color.green(scrimBase), Color.blue(scrimBase)),
-                        Color.TRANSPARENT
-                }
-        );
-        topScrim.setBackground(scrim);
-        FrameLayout.LayoutParams scrimParams =
-                new FrameLayout.LayoutParams(-1, dp(40));
-        scrimParams.gravity = Gravity.TOP;
-        shell.addView(topScrim, scrimParams);
-
-        applyWindowInsets(scroll, topScrim);
-        setContentView(shell);
+        SettingsComposeScreen.mount(this, new java.util.ArrayList<>(settingsSections));
     }
 
-    private void applyWindowInsets(ScrollView scroll, View topScrim) {
-        if (scroll == null) return;
-        scroll.setClipToPadding(true);
-        ViewCompat.setOnApplyWindowInsetsListener(scroll, (view, windowInsets) -> {
-            Insets systemBars = windowInsets.getInsets(
-                    WindowInsetsCompat.Type.systemBars()
-            );
-            Insets cutout = windowInsets.getInsets(
-                    WindowInsetsCompat.Type.displayCutout()
-            );
-            Insets statusBars = windowInsets.getInsets(
-                    WindowInsetsCompat.Type.statusBars()
-            );
-
-            int safeLeft = Math.max(systemBars.left, cutout.left);
-            int safeRight = Math.max(systemBars.right, cutout.right);
-            view.setPadding(safeLeft, 0, safeRight, systemBars.bottom);
-
-            if (topScrim != null) {
-                // Only shade the visible status-bar strip. Do not size this from the cutout
-                // inset because some devices report a much taller safe area than the icons use.
-                int statusProtection = Math.min(statusBars.top, dp(30));
-                android.view.ViewGroup.LayoutParams params = topScrim.getLayoutParams();
-                if (params != null && params.height != statusProtection) {
-                    params.height = statusProtection;
-                    topScrim.setLayoutParams(params);
-                }
-            }
-            return WindowInsetsCompat.CONSUMED;
-        });
-        ViewCompat.requestApplyInsets(scroll);
-    }
-
-    private LinearLayout addGroup(LinearLayout root, String title) {
-        TextView label = text(
-                title.toUpperCase(java.util.Locale.US),
-                11f,
-                ZeroChillUi.color(this, R.color.zc_text_muted)
-        );
-        label.setTypeface(null, android.graphics.Typeface.BOLD);
-        label.setLetterSpacing(0.06f);
-        label.setPadding(dp(4), dp(14), dp(4), dp(6));
-        root.addView(label);
-
-        MaterialCardView card = new MaterialCardView(this);
-        card.setCardBackgroundColor(AppearanceTheme.surface(this));
-        card.setRadius(dp(16));
-        card.setCardElevation(0f);
-        card.setStrokeWidth(dp(1));
-        card.setStrokeColor(AppearanceTheme.outline(this));
-        card.setRippleColor(ColorStateList.valueOf(ZeroChillUi.color(this, R.color.zc_ripple)));
-
-        LinearLayout content = new LinearLayout(this);
-        content.setOrientation(LinearLayout.VERTICAL);
-        card.addView(content, new MaterialCardView.LayoutParams(-1, -2));
-
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, -2);
-        params.bottomMargin = dp(1);
-        root.addView(card, params);
-        return content;
+    private SettingsComposeScreen.Section addGroup(String title) {
+        SettingsComposeScreen.Section section = new SettingsComposeScreen.Section(title);
+        settingsSections.add(section);
+        return section;
     }
 
     private void addSwitch(
-            LinearLayout group,
+            SettingsComposeScreen.Section group,
             String title,
             String subtitle,
             String key,
             boolean defaultValue
     ) {
-        addDividerIfNeeded(group);
-
-        LinearLayout row = row();
-        LinearLayout copy = copy(title, subtitle);
-        row.addView(copy, new LinearLayout.LayoutParams(0, -2, 1f));
-
-        ZeroChillSwitch toggle = new ZeroChillSwitch(this, true);
-        toggle.setChecked(prefs.getBoolean(key, defaultValue));
-        toggle.setContentDescription(title);
-        toggle.setMinWidth(dp(48));
-        toggle.setMinimumWidth(dp(48));
-        toggle.setMinHeight(dp(48));
-        toggle.setMinimumHeight(dp(48));
-
-        toggle.setOnCheckedChangeListener((button, checked) -> {
+        group.addSwitch(title, subtitle, prefs.getBoolean(key, defaultValue), checked -> {
             prefs.edit().putBoolean(key, checked).apply();
-            haptic(button);
+            haptic(getWindow().getDecorView());
 
             if (NotificationCoordinator.isNotificationPreference(key)) {
                 NotificationCoordinator.onPreferencesChanged(this);
-                if (checked
-                        && (NotificationCoordinator.PREF_NEW_VIDEO_ALERTS.equals(key)
+                if (checked && (NotificationCoordinator.PREF_NEW_VIDEO_ALERTS.equals(key)
                         || NotificationCoordinator.PREF_UPDATE_ALERTS.equals(key))) {
                     NotificationCoordinator.requestPermissionFromSettings(this);
                 }
             }
         });
-
-        row.setOnClickListener(v -> toggle.setChecked(!toggle.isChecked()));
-        row.addView(toggle);
-        group.addView(row);
     }
 
-    private TextView addAction(
-            LinearLayout group,
+    private SettingsComposeScreen.Item addAction(
+            SettingsComposeScreen.Section group,
             String title,
             String subtitle,
             String trailing,
             Runnable action
     ) {
-        addDividerIfNeeded(group);
-
-        LinearLayout row = row();
-        row.setClickable(true);
-        row.setFocusable(true);
-        row.setOnClickListener(v -> {
-            haptic(v);
+        return group.addAction(title, subtitle, trailing, () -> {
+            haptic(getWindow().getDecorView());
             action.run();
         });
-        ZeroChillMotion.installPressFeedback(row);
-
-        LinearLayout copy = copy(title, subtitle);
-        row.addView(copy, new LinearLayout.LayoutParams(0, -2, 1f));
-
-        if (trailing != null && !trailing.trim().isEmpty()) {
-            TextView value = text(
-                    trailing.trim(),
-                    11.5f,
-                    ZeroChillUi.color(this, R.color.zc_cyan)
-            );
-            value.setSingleLine(true);
-            value.setEllipsize(TextUtils.TruncateAt.END);
-            value.setGravity(Gravity.END | Gravity.CENTER_VERTICAL);
-            value.setMaxWidth(dp(118));
-            LinearLayout.LayoutParams valueParams =
-                    new LinearLayout.LayoutParams(-2, dp(38));
-            valueParams.leftMargin = dp(8);
-            row.addView(value, valueParams);
-        }
-
-        TextView chevron = text(
-                "›",
-                24f,
-                ZeroChillUi.color(this, R.color.zc_text_muted)
-        );
-        chevron.setGravity(Gravity.CENTER);
-        chevron.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
-        row.addView(chevron, new LinearLayout.LayoutParams(dp(22), dp(40)));
-
-        group.addView(row);
-
-        if (copy.getChildCount() > 1) {
-            return (TextView) copy.getChildAt(1);
-        }
-        return null;
-    }
-
-    private LinearLayout row() {
-        LinearLayout row = new LinearLayout(this);
-        row.setOrientation(LinearLayout.HORIZONTAL);
-        row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setPadding(dp(12), dp(6), dp(8), dp(6));
-        row.setMinimumHeight(dp(52));
-        return row;
-    }
-
-    private LinearLayout copy(String title, String subtitle) {
-        LinearLayout copy = new LinearLayout(this);
-        copy.setOrientation(LinearLayout.VERTICAL);
-        copy.setGravity(Gravity.CENTER_VERTICAL);
-
-        TextView titleView = text(
-                title,
-                14f,
-                ZeroChillUi.color(this, R.color.zc_text_primary)
-        );
-        titleView.setTypeface(null, android.graphics.Typeface.BOLD);
-        copy.addView(titleView, new LinearLayout.LayoutParams(-1, -2));
-
-        if (subtitle != null && !subtitle.trim().isEmpty()) {
-            TextView sub = text(
-                    subtitle.trim(),
-                    12f,
-                    Color.rgb(148, 148, 158)
-            );
-            sub.setLineSpacing(0f, 1.02f);
-            sub.setPadding(0, dp(1), dp(4), 0);
-            sub.setMaxLines(2);
-            sub.setEllipsize(TextUtils.TruncateAt.END);
-            copy.addView(sub, new LinearLayout.LayoutParams(-1, -2));
-        }
-        return copy;
-    }
-
-    private void addDividerIfNeeded(LinearLayout group) {
-        if (group.getChildCount() == 0) return;
-        View divider = new View(this);
-        divider.setBackgroundColor(
-                ZeroChillUi.color(this, R.color.zc_divider)
-        );
-        LinearLayout.LayoutParams params =
-                new LinearLayout.LayoutParams(-1, dp(1));
-        params.leftMargin = dp(12);
-        params.rightMargin = dp(12);
-        group.addView(divider, params);
     }
 
     private void checkNotificationsNow() {
         if (notificationStatusView != null) {
-            notificationStatusView.setText("Checking favorite creators…");
+            notificationStatusView.setSubtitle("Checking favorite creators…");
         }
         NotificationCoordinator.checkNow(this);
         ZeroChillToast.makeText(
@@ -691,11 +459,11 @@ public class SettingsActivity extends Activity {
 
     private void checkSourceConfigNow() {
         if (sourceConfigStatusView != null) {
-            sourceConfigStatusView.setText("Refreshing source configuration…");
+            sourceConfigStatusView.setSubtitle("Refreshing source configuration…");
         }
         RemoteSourceConfigManager.refreshNow(this, success -> {
             if (sourceConfigStatusView != null) {
-                sourceConfigStatusView.setText(sourceConfigSummary());
+                sourceConfigStatusView.setSubtitle(sourceConfigSummary());
             }
             ZeroChillToast.makeText(
                     this,
@@ -827,12 +595,12 @@ public class SettingsActivity extends Activity {
             appUpdater.onHostResume();
         }
         if (notificationStatusView != null) {
-            notificationStatusView.setText(
+            notificationStatusView.setSubtitle(
                     NotificationCoordinator.statusSummary(this)
             );
         }
         if (sourceConfigStatusView != null) {
-            sourceConfigStatusView.setText(sourceConfigSummary());
+            sourceConfigStatusView.setSubtitle(sourceConfigSummary());
         }
     }
 
