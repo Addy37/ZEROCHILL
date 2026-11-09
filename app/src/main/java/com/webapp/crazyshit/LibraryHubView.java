@@ -761,10 +761,11 @@ final class LibraryHubView extends ScrollView {
 
         headingRow.addView(copy, new LinearLayout.LayoutParams(0, -2, 1f));
 
-        TextView viewAll = text(actionLabel, 13f, AppearanceTheme.secondaryText(activity));
+        TextView viewAll = text(actionLabel, 13f, AppearanceTheme.accent(activity));
         viewAll.setTypeface(null, android.graphics.Typeface.BOLD);
         viewAll.setGravity(Gravity.CENTER);
-        viewAll.setPadding(dp(12), dp(10), dp(8), dp(10));
+        viewAll.setPadding(dp(14), dp(10), dp(14), dp(10));
+        viewAll.setBackground(BrowseUi.rounded(activity, AppearanceTheme.surface(activity), 18));
         viewAll.setClickable(true);
         viewAll.setFocusable(true);
         viewAll.setContentDescription(actionLabel + " " + title);
