@@ -52,7 +52,7 @@ final class ZeroChillMenu {
         // fallback here. Full backdrop refraction will be integrated separately.
         int baseColor = AppearanceTheme.surface(context);
         float tint = AppearanceTheme.menuTint(context);
-        int tinted = Color.argb(Math.round(160 + tint * 90),
+        int tinted = Color.argb(Math.round(86 + tint * 120),
                 Color.red(baseColor), Color.green(baseColor), Color.blue(baseColor));
         GradientDrawable sheet = new GradientDrawable();
         sheet.setColor(tinted);
@@ -84,7 +84,7 @@ final class ZeroChillMenu {
                     item.isEnabled() ? R.color.zc_text_primary : R.color.zc_text_muted));
             row.setGravity(Gravity.CENTER_VERTICAL);
             row.setMinHeight(dp(48));
-            row.setBackgroundResource(R.drawable.zc_dialog_action);
+            row.setBackground(ZeroChillUi.actionSurface(context, false));
             row.setPadding(dp(14), 0, dp(14), 0);
             row.setContentDescription(item.getTitle());
             row.setEnabled(item.isEnabled());

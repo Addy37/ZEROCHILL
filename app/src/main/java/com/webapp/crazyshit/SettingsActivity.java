@@ -298,11 +298,12 @@ public class SettingsActivity extends Activity {
         topScrim.setClickable(false);
         topScrim.setFocusable(false);
         topScrim.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        int scrimBase = AppearanceTheme.background(this);
         GradientDrawable scrim = new GradientDrawable(
                 GradientDrawable.Orientation.TOP_BOTTOM,
                 new int[]{
-                        Color.BLACK,
-                        Color.argb(105, 0, 0, 0),
+                        scrimBase,
+                        Color.argb(105, Color.red(scrimBase), Color.green(scrimBase), Color.blue(scrimBase)),
                         Color.TRANSPARENT
                 }
         );

@@ -58,24 +58,43 @@ final class ZeroChillUi {
         decor.setSystemUiVisibility(flags);
     }
 
+    /** Native drawables follow the global theme. Original OLED paint stays unchanged. */
+    private static boolean originalAppearance(Context context) {
+        return AppearanceTheme.isOled(context)
+                && AppearanceTheme.accentChoice(context) == AppearanceTheme.Accent.CYAN
+                && AppearanceTheme.menuTint(context) == 0.5f;
+    }
+
+    private static Drawable themedSurface(Context context, int resource, int radiusDp, boolean sheet) {
+        if (originalAppearance(context)) return ContextCompat.getDrawable(context, resource);
+        int fill = sheet ? AppearanceTheme.floating(context) : AppearanceTheme.surface(context);
+        int opacity = sheet ? Math.round(155 + AppearanceTheme.menuTint(context) * 85) : 245;
+        GradientDrawable shape = new GradientDrawable();
+        shape.setColor(Color.argb(opacity, Color.red(fill), Color.green(fill), Color.blue(fill)));
+        shape.setCornerRadius(context.getResources().getDisplayMetrics().density * radiusDp);
+        shape.setStroke(Math.max(1, Math.round(context.getResources().getDisplayMetrics().density)),
+                AppearanceTheme.outline(context));
+        return shape;
+    }
+
     static Drawable glass(Context context) {
-        return ContextCompat.getDrawable(context, R.drawable.zc_glass_surface);
+        return themedSurface(context, R.drawable.zc_glass_surface, 17, false);
     }
 
     static Drawable navigationGlass(Context context) {
-        return ContextCompat.getDrawable(context, R.drawable.zc_glass_navigation);
+        return themedSurface(context, R.drawable.zc_glass_navigation, 28, true);
     }
 
     static Drawable sourceRailGlass(Context context) {
-        return ContextCompat.getDrawable(context, R.drawable.zc_glass_source_rail);
+        return themedSurface(context, R.drawable.zc_glass_source_rail, 16, true);
     }
 
     static Drawable sheetGlass(Context context) {
-        return ContextCompat.getDrawable(context, R.drawable.zc_glass_sheet);
+        return themedSurface(context, R.drawable.zc_glass_sheet, 19, true);
     }
 
     static Drawable panelGlass(Context context) {
-        return ContextCompat.getDrawable(context, R.drawable.zc_glass_panel);
+        return themedSurface(context, R.drawable.zc_glass_panel, 22, false);
     }
 
     static GradientDrawable rounded(Context context, int fillColor, int strokeColor, int radiusResource) {
