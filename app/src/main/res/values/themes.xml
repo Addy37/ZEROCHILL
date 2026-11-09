@@ -31,4 +31,82 @@
         <item name="android:windowBackground">@android:color/transparent</item>
         <item name="android:windowAnimationStyle">@null</item>
     </style>
+    <!-- Global theme colors for the main native UI. Media transition windows stay unchanged. -->
+    <style name="Theme.ZeroChill.Light" parent="Theme.Material3.Light.NoActionBar">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowActionModeOverlay">true</item>
+        <item name="android:windowBackground">#FFF7F9FC</item>
+        <item name="android:colorBackground">#FFF7F9FC</item>
+        <item name="android:statusBarColor">#FFF7F9FC</item>
+        <item name="android:navigationBarColor">#FFF7F9FC</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar">true</item>
+        <item name="colorPrimary">#0892D0</item>
+        <item name="colorOnPrimary">#020F17</item>
+        <item name="colorSecondary">#0892D0</item>
+        <item name="colorOnSecondary">#020F17</item>
+        <item name="colorSurface">#FFFFFF</item>
+        <item name="colorOnSurface">#15202E</item>
+        <item name="colorSurfaceVariant">#FFF0F3F8</item>
+        <item name="colorOnSurfaceVariant">#4F5C6C</item>
+        <item name="bottomNavigationStyle">@style/Widget.ZeroChill.BottomNavigation</item>
+    </style>
+    <style name="Theme.ZeroChill.Dark" parent="Theme.CrazyShit">
+        <item name="android:windowBackground">#0D1117</item>
+        <item name="android:colorBackground">#0D1117</item>
+        <item name="android:statusBarColor">#0D1117</item>
+        <item name="android:navigationBarColor">#0D1117</item>
+        <item name="colorSurface">#171B21</item>
+        <item name="colorOnSurface">#F5F7FA</item>
+        <item name="colorSurfaceVariant">#1B2027</item>
+    </style>
+    <style name="Theme.ZeroChill.Light.Account" parent="Theme.ZeroChill.Light">
+        <item name="android:autofilledHighlight">@drawable/zc_autofill_highlight</item>
+    </style>
+    <style name="Theme.ZeroChill.Dark.Account" parent="Theme.ZeroChill.Dark">
+        <item name="android:autofilledHighlight">@drawable/zc_autofill_highlight</item>
+    </style>
+    <style name="ThemeOverlay.ZeroChill.Accent.Purple">
+        <item name="colorPrimary">#A06CFF</item>
+        <item name="colorSecondary">#A06CFF</item>
+        <item name="colorControlActivated">#A06CFF</item>
+        <item name="android:colorAccent">#A06CFF</item>
+        <item name="colorOnPrimary">#020F17</item>
+    </style>
+    <style name="ThemeOverlay.ZeroChill.Accent.Blue">
+        <item name="colorPrimary">#4A89FF</item>
+        <item name="colorSecondary">#4A89FF</item>
+        <item name="colorControlActivated">#4A89FF</item>
+        <item name="android:colorAccent">#4A89FF</item>
+        <item name="colorOnPrimary">#020F17</item>
+    </style>
+    <style name="ThemeOverlay.ZeroChill.Accent.Green">
+        <item name="colorPrimary">#42D39B</item>
+        <item name="colorSecondary">#42D39B</item>
+        <item name="colorControlActivated">#42D39B</item>
+        <item name="android:colorAccent">#42D39B</item>
+        <item name="colorOnPrimary">#020F17</item>
+    </style>
+    <style name="ThemeOverlay.ZeroChill.Accent.Red">
+        <item name="colorPrimary">#FF5B65</item>
+        <item name="colorSecondary">#FF5B65</item>
+        <item name="colorControlActivated">#FF5B65</item>
+        <item name="android:colorAccent">#FF5B65</item>
+        <item name="colorOnPrimary">#020F17</item>
+    </style>
+    <style name="ThemeOverlay.ZeroChill.Accent.Pink">
+        <item name="colorPrimary">#FF69B6</item>
+        <item name="colorSecondary">#FF69B6</item>
+        <item name="colorControlActivated">#FF69B6</item>
+        <item name="android:colorAccent">#FF69B6</item>
+        <item name="colorOnPrimary">#020F17</item>
+    </style>
+    <style name="ThemeOverlay.ZeroChill.Accent.White">
+        <item name="colorPrimary">#FFFFFF</item>
+        <item name="colorSecondary">#FFFFFF</item>
+        <item name="colorControlActivated">#FFFFFF</item>
+        <item name="android:colorAccent">#FFFFFF</item>
+        <item name="colorOnPrimary">#020F17</item>
+    </style>
 </resources>
