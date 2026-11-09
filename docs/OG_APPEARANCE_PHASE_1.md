@@ -10,6 +10,9 @@ Source: current OG main, not historical rebrand/zerochill.
 - Shared semantic colors used by ZeroChillUi, Settings, dialog text, and the bottom Compose navigation.
 - Navigation glass-intensity control using the existing OG glass engine, not V2's dependency.
 - Glass follow-up: at maximum intensity, strengthen lens and rim instead of darkening the film; allow shared headers and native preference panels to follow intensity.
+- V2-style optics added: Off/Fast/Balanced/Quality, transparency, blur, refraction, vibrancy, edge highlights, and Android 13+ color splitting (using OG's native shader parameters).
+- Native Light/Dark Material themes and accent overlays are applied before supported activities inflate views. Main/Settings rebuild once when returning from theme changes; main preserves the selected page using its existing save/restore.
+- Account, public profile, inbox, message and light dialogs now use dynamic semantic colors. Other older visual surfaces still need explicit conversion; no promise of full light-theme parity yet.
 - Main library, Shows, OnlyFap section chrome, native cards/menus and social settings now use theme-aware colors. Media artwork overlays remain white/dark as needed.
 - Appearance preview now reacts to glass intensity and tint changes without pretending to show real backdrop refraction.
 - Theme-aware native popup tint as a readable fallback. No background capture in PopupWindow.
