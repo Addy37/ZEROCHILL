@@ -154,8 +154,8 @@ public final class FeedbackActivity extends Activity {
         updateStars(stars);
 
         submit = button("Send feedback");
-        submit.setTextColor(UiPalette.ON_PRIMARY);
-        submit.setBackgroundTintList(android.content.res.ColorStateList.valueOf(UiPalette.PRIMARY));
+        submit.setTextColor(AppearanceTheme.onAccent(this));
+        submit.setBackgroundTintList(android.content.res.ColorStateList.valueOf(AppearanceTheme.accent(this)));
         submit.setOnClickListener(v -> submit());
         content.addView(submit, marginParams(-1, dp(52), 0, dp(16), 0, 0));
 
@@ -182,9 +182,9 @@ public final class FeedbackActivity extends Activity {
         for (int i = 0; i < parent.getChildCount(); i++) {
             MaterialButton value = (MaterialButton) parent.getChildAt(i);
             boolean selected = selectedType.equals(value.getTag());
-            value.setTextColor(selected ? UiPalette.PRIMARY : Color.WHITE);
+            value.setTextColor(selected ? AppearanceTheme.accent(this) : Color.WHITE);
             value.setStrokeWidth(selected ? dp(1) : 0);
-            value.setStrokeColor(android.content.res.ColorStateList.valueOf(UiPalette.PRIMARY));
+            value.setStrokeColor(android.content.res.ColorStateList.valueOf(AppearanceTheme.accent(this)));
         }
     }
 
@@ -193,7 +193,7 @@ public final class FeedbackActivity extends Activity {
             MaterialButton star = (MaterialButton) stars.getChildAt(i);
             int value = (int) star.getTag();
             star.setText(value <= selectedRating ? "★" : "☆");
-            star.setTextColor(value <= selectedRating ? UiPalette.PRIMARY : MUTED);
+            star.setTextColor(value <= selectedRating ? AppearanceTheme.accent(this) : MUTED);
         }
     }
 
@@ -270,7 +270,7 @@ public final class FeedbackActivity extends Activity {
 
         LinearLayout top = new LinearLayout(this);
         top.setGravity(Gravity.CENTER_VERTICAL);
-        TextView type = text(typeLabel(item.type), 12, UiPalette.PRIMARY, true);
+        TextView type = text(typeLabel(item.type), 12, AppearanceTheme.accent(this), true);
         top.addView(type, new LinearLayout.LayoutParams(0, -2, 1f));
         TextView status = text(statusLabel(item.status), 12, statusColor(item.status), true);
         top.addView(status);
@@ -280,7 +280,7 @@ public final class FeedbackActivity extends Activity {
             TextView unread = text(
                     item.unreadCount == 1 ? "NEW REPLY" : item.unreadCount + " NEW REPLIES",
                     11,
-                    UiPalette.PRIMARY,
+                    AppearanceTheme.accent(this),
                     true
             );
             unread.setPadding(0, dp(9), 0, 0);
@@ -290,7 +290,7 @@ public final class FeedbackActivity extends Activity {
         TextView sender = text(
                 "developer".equals(item.lastSender) ? "ZEROCHILL" : "YOU",
                 11,
-                "developer".equals(item.lastSender) ? UiPalette.PRIMARY : MUTED,
+                "developer".equals(item.lastSender) ? AppearanceTheme.accent(this) : MUTED,
                 true
         );
         sender.setPadding(0, dp(10), 0, dp(3));
@@ -303,7 +303,7 @@ public final class FeedbackActivity extends Activity {
         box.addView(copy);
 
         if (item.rating > 0) {
-            TextView rating = text("★★★★★".substring(0, item.rating), 15, UiPalette.PRIMARY, false);
+            TextView rating = text("★★★★★".substring(0, item.rating), 15, AppearanceTheme.accent(this), false);
             box.addView(rating);
         }
 
@@ -318,9 +318,9 @@ public final class FeedbackActivity extends Activity {
     }
 
     private void selectTab(MaterialButton selected, MaterialButton other) {
-        selected.setTextColor(UiPalette.PRIMARY);
+        selected.setTextColor(AppearanceTheme.accent(this));
         selected.setStrokeWidth(dp(1));
-        selected.setStrokeColor(android.content.res.ColorStateList.valueOf(UiPalette.PRIMARY));
+        selected.setStrokeColor(android.content.res.ColorStateList.valueOf(AppearanceTheme.accent(this)));
         other.setTextColor(MUTED);
         other.setStrokeWidth(0);
     }
@@ -381,7 +381,7 @@ public final class FeedbackActivity extends Activity {
 
     private int statusColor(String status) {
         if ("completed".equals(status)) return Color.rgb(80, 210, 130);
-        if ("planned".equals(status) || "in_progress".equals(status)) return UiPalette.PRIMARY;
+        if ("planned".equals(status) || "in_progress".equals(status)) return AppearanceTheme.accent(this);
         return MUTED;
     }
 

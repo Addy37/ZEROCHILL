@@ -69,7 +69,7 @@ final class SocialActivityBanner implements SocialActivityCoordinator.Presenter 
         action.setTextSize(12);
         copy.addView(action);
         TextView arrow = new TextView(activity);
-        arrow.setText("›"); arrow.setTextSize(24); arrow.setTextColor(UiPalette.PRIMARY);
+        arrow.setText("›"); arrow.setTextSize(24); arrow.setTextColor(AppearanceTheme.accent(activity));
         row.addView(arrow);
         int topInset = insets == null ? dp(28)
                 : insets.getInsets(WindowInsetsCompat.Type.statusBars() | WindowInsetsCompat.Type.displayCutout()).top;

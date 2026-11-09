@@ -54,7 +54,7 @@ final class XMegaDriveAgePrompt {
         ));
 
         TextView eyebrow = text(activity, "ZEROCHILL • XMEGADRIVE", 12,
-                activity.getColor(R.color.zc_cyan), Typeface.BOLD);
+                AppearanceTheme.accent(activity), Typeface.BOLD);
         eyebrow.setLetterSpacing(0.08f);
         card.addView(eyebrow, wrap());
 
@@ -87,8 +87,8 @@ final class XMegaDriveAgePrompt {
         continueButton.setFocusable(true);
         continueButton.setBackground(rounded(
                 activity,
-                activity.getColor(R.color.zc_cyan),
-                activity.getColor(R.color.zc_cyan),
+                AppearanceTheme.accent(activity),
+                AppearanceTheme.accent(activity),
                 0,
                 18
         ));

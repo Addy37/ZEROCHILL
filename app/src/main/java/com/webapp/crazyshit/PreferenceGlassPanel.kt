@@ -47,7 +47,9 @@ internal class PreferenceGlassPanel @JvmOverloads constructor(context: Context, 
 
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
-        source?.viewTreeObserver?.let { observer = it; it.addOnDrawListener(sourceDraw) }
+        if (Build.VERSION.SDK_INT >= 31 && usesOpticalLayer(context)) {
+            source?.viewTreeObserver?.let { observer = it; it.addOnDrawListener(sourceDraw) }
+        }
         if (formation < 1f) post {
             if (!isAttachedToWindow) return@post
             forming = ValueAnimator.ofFloat(0f, 1f).apply {
@@ -86,8 +88,7 @@ internal class PreferenceGlassPanel @JvmOverloads constructor(context: Context, 
                 android.util.Log.i("ZeroChillGlass", "preference canvas hardware=" + canvas.isHardwareAccelerated)
             }
             if (!glassFailed && Build.VERSION.SDK_INT >= 31 && canvas.isHardwareAccelerated &&
-                !(AppearanceTheme.hasAdvancedGlass(context) &&
-                    AppearanceTheme.glassPreset(context) == AppearanceTheme.GlassPreset.OFF)) {
+                usesOpticalLayer(context)) {
                 try {
                     val page = sharedPage?.takeIf { it.recordings > 0 } ?: fallbackPage
                     if (page === fallbackPage && fallbackDirty && source != null && source.width > 0 && source.height > 0) {
@@ -117,18 +118,24 @@ internal class PreferenceGlassPanel @JvmOverloads constructor(context: Context, 
             // High-contrast dark film keeps text legible over faces, hero artwork,
             // and fast-moving videos, including at the lowest tint setting.
             // Optical sampling remains underneath this film.
-            val alpha = if (sampled) (157 + opacity * 50f * (1f - transparency * .25f)).toInt()
+            // Fast uses window compositing for transparency, without recording
+            // the page. Keep its saved transparency/tint film just as readable.
+            val fast = AppearanceTheme.hasAdvancedGlass(context) &&
+                AppearanceTheme.glassPreset(context) == AppearanceTheme.GlassPreset.FAST
+            val alpha = if (sampled || fast) (157 + opacity * 50f * (1f - transparency * .25f)).toInt()
                 else (212 + opacity * 34f).toInt()
             wash.color = Color.argb(alpha, Color.red(tintColor), Color.green(tintColor), Color.blue(tintColor))
             canvas.drawPath(shape, wash)
             val accent = AppearanceTheme.accent(context)
             wash.shader = LinearGradient(0f, bounds.top, width.toFloat(), bounds.bottom,
                 intArrayOf(0x22FFFFFF, 0x03FFFFFF, (accent and 0x00FFFFFF) or 0x18000000), null, Shader.TileMode.CLAMP)
+            wash.alpha = (wash.alpha * edgeStrength(context)).toInt().coerceIn(0, 255)
             canvas.drawPath(shape, wash)
             super.dispatchDraw(canvas)
             rim.strokeWidth = dp(1f)
             rim.shader = LinearGradient(bounds.left, bounds.top, bounds.right, bounds.bottom,
                 intArrayOf(0xB0FFFFFF.toInt(), 0x18FFFFFF, (accent and 0x00FFFFFF) or 0x50000000, 0x70FFFFFF), null, Shader.TileMode.CLAMP)
+            rim.alpha = (255 * edgeStrength(context)).toInt().coerceIn(0, 255)
             canvas.drawPath(shape, rim)
         }
     }
@@ -148,19 +155,33 @@ internal class PreferenceGlassPanel @JvmOverloads constructor(context: Context, 
         private var effectWidth = 0
         private var effectHeight = 0
         private var effectIntensity = -1f
+        private var effectBlur = -1f
+        private var effectRefraction = -1f
+        private var effectVibrancy = -1f
         fun draw(canvas: Canvas, page: ViewPageBackdrop) {
             val intensity = AppearanceTheme.glassIntensity(context)
             val advanced = AppearanceTheme.hasAdvancedGlass(context)
             val blurValue = if (advanced) AppearanceTheme.glassBlur(context) else 1.4f + intensity * 2f
-            val blurDp = blurValue.coerceAtLeast(.01f)
             val refraction = if (advanced) AppearanceTheme.glassRefraction(context) else 21f
-            val signature = intensity + blurDp * .0001f + refraction * .000001f
-            if (effectWidth != width || effectHeight != height || effectIntensity != signature) {
-                val blur = RenderEffect.createBlurEffect(dp(blurDp), dp(blurDp), Shader.TileMode.CLAMP)
-                val effect = if (Build.VERSION.SDK_INT >= 33) lens(blur) else blur
+            val vibrancy = if (advanced) AppearanceTheme.glassVibrancy(context) else 1f
+            if (effectWidth != width || effectHeight != height || effectIntensity != intensity ||
+                effectBlur != blurValue || effectRefraction != refraction || effectVibrancy != vibrancy) {
+                var effect: RenderEffect? = if (blurValue > 0f)
+                    RenderEffect.createBlurEffect(dp(blurValue), dp(blurValue), Shader.TileMode.CLAMP) else null
+                if (vibrancy != 1f) {
+                    val matrix = ColorMatrix().apply { setSaturation(vibrancy) }
+                    val color = RenderEffect.createColorFilterEffect(ColorMatrixColorFilter(matrix))
+                    effect = effect?.let { RenderEffect.createChainEffect(color, it) } ?: color
+                }
+                if (Build.VERSION.SDK_INT >= 33 && refraction > 0f && intensity > 0f) {
+                    val lens = lens()
+                    effect = effect?.let { RenderEffect.createChainEffect(lens, it) } ?: lens
+                }
                 node.setRenderEffect(effect)
                 node.setPosition(0, 0, width, height)
-                effectWidth = width; effectHeight = height; effectIntensity = signature
+                effectWidth = width; effectHeight = height
+                effectIntensity = intensity; effectBlur = blurValue
+                effectRefraction = refraction; effectVibrancy = vibrancy
             }
             val recording = node.beginRecording(width, height)
             try { page.drawPageIntoDialog(recording, this@PreferenceGlassPanel) }
@@ -168,7 +189,7 @@ internal class PreferenceGlassPanel @JvmOverloads constructor(context: Context, 
             canvas.drawRenderNode(node)
         }
         @RequiresApi(33)
-        private fun lens(blur: RenderEffect): RenderEffect {
+        private fun lens(): RenderEffect {
             // Same shader, edge height, amount and center magnification as navigationGlassConfig.
             val shader = RuntimeShader(RoundedRectRefractionShaderString)
             shader.setFloatUniform("size", width.toFloat(), height.toFloat())
@@ -183,9 +204,23 @@ internal class PreferenceGlassPanel @JvmOverloads constructor(context: Context, 
             shader.setFloatUniform("depthEffect", 0f)
             shader.setFloatUniform("magnification", 1f + .025f * (AppearanceTheme.glassIntensity(context) * 2f))
             shader.setFloatUniform("sideEdges", 1f)
-            return RenderEffect.createChainEffect(RenderEffect.createRuntimeShaderEffect(shader, "content"), blur)
+            return RenderEffect.createRuntimeShaderEffect(shader, "content")
         }
         fun release() = node.discardDisplayList()
+    }
+
+    companion object {
+        @JvmStatic internal fun usesOpticalLayer(context: Context): Boolean {
+            if (!AppearanceTheme.hasAdvancedGlass(context)) return true
+            return when (AppearanceTheme.glassPreset(context)) {
+                AppearanceTheme.GlassPreset.OFF, AppearanceTheme.GlassPreset.FAST -> false
+                else -> true
+            }
+        }
+
+        @JvmStatic internal fun edgeStrength(context: Context): Float =
+            if (AppearanceTheme.hasAdvancedGlass(context))
+                (AppearanceTheme.glassEdge(context) / .7f).coerceIn(0f, 1.5f) else 1f
     }
 
     private fun dp(value: Float) = value * resources.displayMetrics.density

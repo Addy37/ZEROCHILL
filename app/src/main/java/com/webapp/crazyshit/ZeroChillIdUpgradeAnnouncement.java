@@ -105,16 +105,16 @@ final class ZeroChillIdUpgradeAnnouncement {
 
         ImageView icon = new ImageView(activity);
         icon.setImageResource(R.drawable.ic_more_account);
-        icon.setImageTintList(ColorStateList.valueOf(Color.WHITE));
+        icon.setImageTintList(ColorStateList.valueOf(AppearanceTheme.onAccent(activity)));
         icon.setPadding(dp(activity, 11), dp(activity, 11), dp(activity, 11), dp(activity, 11));
-        icon.setBackground(circle(UiPalette.PRIMARY));
+        icon.setBackground(circle(AppearanceTheme.accent(activity)));
         hero.addView(icon, new LinearLayout.LayoutParams(dp(activity, 48), dp(activity, 48)));
 
         LinearLayout heroText = new LinearLayout(activity);
         heroText.setOrientation(LinearLayout.VERTICAL);
         heroText.setPadding(dp(activity, 13), 0, 0, 0);
 
-        TextView eyebrow = text(activity, "NEW IN 4.3", 10f, UiPalette.PRIMARY, true);
+        TextView eyebrow = text(activity, "NEW IN 4.3", 10f, AppearanceTheme.accent(activity), true);
         eyebrow.setLetterSpacing(0.10f);
         heroText.addView(eyebrow);
 
@@ -235,7 +235,7 @@ final class ZeroChillIdUpgradeAnnouncement {
         row.setPadding(0, dp(activity, 5), 0, dp(activity, 5));
 
         View dot = new View(activity);
-        dot.setBackground(circle(UiPalette.PRIMARY));
+        dot.setBackground(circle(AppearanceTheme.accent(activity)));
         LinearLayout.LayoutParams dotParams = new LinearLayout.LayoutParams(dp(activity, 7), dp(activity, 7));
         dotParams.topMargin = dp(activity, 6);
         dotParams.rightMargin = dp(activity, 11);
@@ -267,13 +267,13 @@ final class ZeroChillIdUpgradeAnnouncement {
         button.setInsetTop(0);
         button.setInsetBottom(0);
         button.setMinHeight(0);
-        button.setTextColor(primary ? Color.WHITE : ZeroChillUi.color(activity, R.color.zc_text_primary));
+        button.setTextColor(primary ? AppearanceTheme.onAccent(activity) : ZeroChillUi.color(activity, R.color.zc_text_primary));
         button.setBackgroundTintList(ColorStateList.valueOf(
-                primary ? UiPalette.PRIMARY : Color.rgb(22, 27, 33)
+                primary ? AppearanceTheme.accent(activity) : Color.rgb(22, 27, 33)
         ));
         button.setStrokeWidth(dp(activity, 1));
         button.setStrokeColor(ColorStateList.valueOf(
-                primary ? UiPalette.PRIMARY : ZeroChillUi.color(activity, R.color.zc_divider)
+                primary ? AppearanceTheme.accent(activity) : ZeroChillUi.color(activity, R.color.zc_divider)
         ));
         ZeroChillMotion.installPressFeedback(button);
         return button;

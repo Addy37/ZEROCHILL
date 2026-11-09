@@ -211,7 +211,7 @@ public final class ZeroChillAccountSecurityActivity extends Activity {
     }
 
     private void button(String label, Runnable click) {
-        action = label(label, 14, UiPalette.ON_PRIMARY);
+        action = label(label, 14, AppearanceTheme.onAccent(this));
         ZeroChillUi.styleAction(action, !"delete".equals(mode));
         if ("delete".equals(mode)) action.setTextColor(UiPalette.DESTRUCTIVE);
         action.setMinHeight(dp(52));

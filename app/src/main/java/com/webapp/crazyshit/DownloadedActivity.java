@@ -309,7 +309,7 @@ public final class DownloadedActivity extends Activity {
         int statusColor = entry.status == DownloadManager.STATUS_FAILED
                 ? Color.rgb(255, 130, 120)
                 : entry.status == DownloadManager.STATUS_SUCCESSFUL
-                ? UiPalette.PRIMARY
+                ? AppearanceTheme.accent(this)
                 : Color.WHITE;
         TextView status = overlayPill(VideoDownloadStore.statusText(entry), statusColor);
         FrameLayout.LayoutParams statusParams =
@@ -344,7 +344,7 @@ public final class DownloadedActivity extends Activity {
             media.addView(track, trackParams);
 
             View fill = new View(this);
-            fill.setBackground(rounded(UiPalette.PRIMARY, dp(2)));
+            fill.setBackground(rounded(AppearanceTheme.accent(this), dp(2)));
             int percent = entry.totalBytes > 0L
                     ? (int) Math.min(100L, entry.downloadedBytes * 100L / entry.totalBytes)
                     : 8;
@@ -429,14 +429,14 @@ public final class DownloadedActivity extends Activity {
                     .into(image);
         } else {
             image.setImageResource(R.drawable.ic_action_download);
-            image.setColorFilter(UiPalette.PRIMARY);
+            image.setColorFilter(AppearanceTheme.accent(this));
             image.setPadding(dp(34), dp(18), dp(34), dp(18));
         }
         return frame;
     }
 
     private TextView action(String label, Runnable run) {
-        TextView view = text(label, 10, UiPalette.PRIMARY, true);
+        TextView view = text(label, 10, AppearanceTheme.accent(this), true);
         view.setGravity(Gravity.CENTER);
         view.setPadding(dp(9), 0, dp(9), 0);
         view.setClickable(true);

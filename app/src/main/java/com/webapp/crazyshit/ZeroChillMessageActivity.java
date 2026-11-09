@@ -964,7 +964,7 @@ public final class ZeroChillMessageActivity extends Activity {
             holder.body.setMaxWidth(bodyWidth);
             holder.time.setMaxWidth(bodyWidth);
             GradientDrawable background=messageBubble(!incoming,joinsPrevious,joinsNext);
-            if(selectedMessage!=null&&selectedMessage.id.equals(item.id)){background.setColor(Color.rgb(12,56,65));background.setStroke(dp(2),AppearanceTheme.accent(ZeroChillMessageActivity.this));}
+            if(selectedMessage!=null&&selectedMessage.id.equals(item.id)){background.setColor(AppearanceTheme.selectionSurface(ZeroChillMessageActivity.this));background.setStroke(dp(2),AppearanceTheme.accent(ZeroChillMessageActivity.this));}
             holder.bubble.setBackground(background);
             holder.body.setText(item.body);
             holder.body.setVisibility(

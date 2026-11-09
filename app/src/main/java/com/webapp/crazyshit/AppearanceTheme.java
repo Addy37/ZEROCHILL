@@ -241,30 +241,26 @@ final class AppearanceTheme {
 
     /** Apply accent overlays before inflation, while keeping OG's OLED theme. */
     static void applyRuntimeTheme(Activity activity) {
-        boolean supported = activity instanceof NativeMainActivity
-                || activity instanceof SettingsActivity
-                || activity instanceof AppearanceActivity
-                || activity instanceof ZeroChillSocialSettingsActivity
-                || activity instanceof ZeroChillAccountActivity
-                || activity instanceof ZeroChillPublicProfileActivity
-                || activity instanceof ZeroChillInboxActivity
-                || activity instanceof ZeroChillMessageActivity;
         // Older previews could save Light or Dark. Convert those preferences to OLED
         // without touching account data, media, favorites, downloads or backups.
         if (!prefs(activity).getBoolean("oled_black_enabled", true)
                 || !Mode.OLED.name().equals(prefs(activity).getString(KEY_MODE, Mode.OLED.name()))) {
             setMode(activity, Mode.OLED);
         }
-        if (!supported) return;
-        // Keep the original OG dark Material theme. Change only its accent.
-        switch (accentChoice(activity)) {
-            case PURPLE: activity.getTheme().applyStyle(R.style.ZeroChillAccentPurple, true); break;
-            case BLUE: activity.getTheme().applyStyle(R.style.ZeroChillAccentBlue, true); break;
-            case GREEN: activity.getTheme().applyStyle(R.style.ZeroChillAccentGreen, true); break;
-            case RED: activity.getTheme().applyStyle(R.style.ZeroChillAccentRed, true); break;
-            case PINK: activity.getTheme().applyStyle(R.style.ZeroChillAccentPink, true); break;
-            case WHITE: activity.getTheme().applyStyle(R.style.ZeroChillAccentWhite, true); break;
-            default: break;
+        // Every app Activity, including native viewers, uses the same accent overlay.
+        // These styles contain colors only; translucent media windows keep their theme.
+        applyAccentOverlay(activity);
+    }
+
+    static void applyAccentOverlay(Context context) {
+        switch (accentChoice(context)) {
+            case PURPLE: context.getTheme().applyStyle(R.style.ZeroChillAccentPurple, true); break;
+            case BLUE: context.getTheme().applyStyle(R.style.ZeroChillAccentBlue, true); break;
+            case GREEN: context.getTheme().applyStyle(R.style.ZeroChillAccentGreen, true); break;
+            case RED: context.getTheme().applyStyle(R.style.ZeroChillAccentRed, true); break;
+            case PINK: context.getTheme().applyStyle(R.style.ZeroChillAccentPink, true); break;
+            case WHITE: context.getTheme().applyStyle(R.style.ZeroChillAccentWhite, true); break;
+            default: context.getTheme().applyStyle(R.style.ZeroChillAccentCyan, true); break;
         }
     }
 
@@ -292,6 +288,11 @@ final class AppearanceTheme {
     static int mutedText(Context context) { return 0xFF929DAC; }
 
     static int outline(Context context) { return 0xFF293039; }
+
+    static int selectionSurface(Context context) {
+        if (accentChoice(context) == Accent.CYAN) return 0xFF0C3841;
+        return androidx.core.graphics.ColorUtils.blendARGB(surface(context), accent(context), .22f);
+    }
 
     static int onAccent(Context context) {
         return accentChoice(context) == Accent.WHITE ? 0xFF15202E : 0xFF020F17;

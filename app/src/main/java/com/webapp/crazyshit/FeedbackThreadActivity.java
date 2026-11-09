@@ -76,7 +76,7 @@ public final class FeedbackThreadActivity extends Activity {
         root.addView(header);
 
         refresh = new ZeroChillRefreshLayout(this);
-        refresh.setColorSchemeColors(UiPalette.PRIMARY);
+        refresh.setColorSchemeColors(AppearanceTheme.accent(this));
         refresh.setOnRefreshListener(this::loadThread);
 
         messageScroll = new ScrollView(this);
@@ -107,9 +107,9 @@ public final class FeedbackThreadActivity extends Activity {
         composeRow.addView(composer, new LinearLayout.LayoutParams(0, -2, 1f));
 
         send = button("Send");
-        send.setTextColor(UiPalette.ON_PRIMARY);
+        send.setTextColor(AppearanceTheme.onAccent(this));
         send.setBackgroundTintList(
-                android.content.res.ColorStateList.valueOf(UiPalette.PRIMARY)
+                android.content.res.ColorStateList.valueOf(AppearanceTheme.accent(this))
         );
         send.setOnClickListener(v -> sendReply());
         LinearLayout.LayoutParams sendParams = new LinearLayout.LayoutParams(dp(84), dp(52));
@@ -163,10 +163,11 @@ public final class FeedbackThreadActivity extends Activity {
         row.setGravity(developer ? Gravity.START : Gravity.END);
 
         MaterialCardView bubble = new MaterialCardView(this);
-        bubble.setCardBackgroundColor(developer ? SURFACE : USER_BUBBLE);
+        boolean cyan = AppearanceTheme.accentChoice(this) == AppearanceTheme.Accent.CYAN;
+        bubble.setCardBackgroundColor(developer ? SURFACE : cyan ? USER_BUBBLE : AppearanceTheme.selectionSurface(this));
         bubble.setStrokeWidth(dp(1));
         bubble.setStrokeColor(
-                developer ? Color.rgb(45, 45, 51) : Color.rgb(10, 106, 137)
+                developer ? Color.rgb(45, 45, 51) : cyan ? Color.rgb(10, 106, 137) : AppearanceTheme.accent(this)
         );
         bubble.setRadius(dp(16));
         bubble.setCardElevation(0);
@@ -178,7 +179,7 @@ public final class FeedbackThreadActivity extends Activity {
         TextView sender = text(
                 developer ? "ZEROCHILL" : "YOU",
                 11,
-                developer ? UiPalette.PRIMARY : Color.WHITE,
+                developer ? AppearanceTheme.accent(this) : Color.WHITE,
                 true
         );
         body.addView(sender);
@@ -195,7 +196,7 @@ public final class FeedbackThreadActivity extends Activity {
             TextView seen = text(
                     "Seen by ZEROCHILL · " + formatDate(message.readAt),
                     11,
-                    UiPalette.PRIMARY,
+                    AppearanceTheme.accent(this),
                     false
             );
             seen.setPadding(0, dp(3), 0, 0);
@@ -274,7 +275,7 @@ public final class FeedbackThreadActivity extends Activity {
 
     private int statusColor(String value) {
         if ("completed".equals(value)) return Color.rgb(80, 210, 130);
-        if ("planned".equals(value) || "in_progress".equals(value)) return UiPalette.PRIMARY;
+        if ("planned".equals(value) || "in_progress".equals(value)) return AppearanceTheme.accent(this);
         return MUTED;
     }
 
