@@ -38,6 +38,7 @@ public class SettingsActivity extends Activity {
     private TextView notificationStatusView;
     private TextView sourceConfigStatusView;
     private String renderedAppearanceSignature;
+    private String appliedAppearanceColors;
     private boolean notificationReceiverRegistered;
 
     private final BroadcastReceiver notificationCheckReceiver = new BroadcastReceiver() {
@@ -68,6 +69,7 @@ public class SettingsActivity extends Activity {
         ZeroChillUi.applySystemBars(this);
         buildUi();
         renderedAppearanceSignature = AppearanceTheme.signature(this);
+        appliedAppearanceColors = AppearanceTheme.colorSignature(this);
 
         if (getIntent().getBooleanExtra(EXTRA_CHECK_FOR_UPDATES, false)) {
             getIntent().removeExtra(EXTRA_CHECK_FOR_UPDATES);
@@ -809,6 +811,11 @@ public class SettingsActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
+        String currentColors = AppearanceTheme.colorSignature(this);
+        if (appliedAppearanceColors != null && !appliedAppearanceColors.equals(currentColors)) {
+            recreate();
+            return;
+        }
         String currentAppearance = AppearanceTheme.signature(this);
         if (renderedAppearanceSignature != null && !renderedAppearanceSignature.equals(currentAppearance)) {
             ZeroChillUi.applySystemBars(this);
