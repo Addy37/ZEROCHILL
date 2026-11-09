@@ -14,7 +14,7 @@ permissions:
   contents: read
 
 jobs:
-  appearance-preview:
+  phase4-preview:
     runs-on: ubuntu-latest
     env:
       APP_VERSION_CODE: "6000009"
