@@ -798,7 +798,7 @@ final class ShowsHubView extends FrameLayout {
         heading.setOrientation(LinearLayout.VERTICAL);
         heading.setPadding(dp(3), 0, dp(3), dp(9));
 
-        TextView titleView = text("Continue Watching", 19f, Color.WHITE);
+        TextView titleView = text("Continue Watching", 19f, AppearanceTheme.primaryText(getContext()));
         ZeroChillTypography.apply(titleView, ZeroChillTypography.Role.SECTION);
         titleView.setBackground(null);
         titleView.setPadding(0, 0, 0, 0);
@@ -845,7 +845,7 @@ final class ShowsHubView extends FrameLayout {
         heading.setOrientation(LinearLayout.VERTICAL);
         heading.setPadding(dp(3), 0, dp(3), dp(10));
 
-        TextView titleView = text(title, 19f, Color.WHITE);
+        TextView titleView = text(title, 19f, AppearanceTheme.primaryText(getContext()));
         ZeroChillTypography.apply(titleView, ZeroChillTypography.Role.SECTION);
         heading.addView(titleView);
 
@@ -1141,7 +1141,7 @@ final class ShowsHubView extends FrameLayout {
             frame.addView(progressTrack, trackParams);
 
             View progressFill = new View(getContext());
-            progressFill.setBackgroundColor(UiPalette.PRIMARY);
+            progressFill.setBackgroundColor(AppearanceTheme.accent(getContext()));
             progressFill.setPivotX(0f);
             progressTrack.addView(progressFill, new FrameLayout.LayoutParams(-1, -1));
 
@@ -1280,7 +1280,7 @@ final class ShowsHubView extends FrameLayout {
             ));
             if (portrait) frame.addView(shade, new FrameLayout.LayoutParams(-1, -1));
 
-            TextView source = text("", 10.5f, UiPalette.PRIMARY);
+            TextView source = text("", 10.5f, AppearanceTheme.accent(getContext()));
             source.setTypeface(null, android.graphics.Typeface.BOLD);
             source.setLetterSpacing(0.06f);
             source.setVisibility(showSource ? View.VISIBLE : View.GONE);

@@ -1097,7 +1097,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         page.root.setBackgroundColor(ZeroChillUi.background(activity));
 
         page.refresh = new ZeroChillRefreshLayout(activity);
-        page.refresh.setColorSchemeColors(UiPalette.PRIMARY);
+        page.refresh.setColorSchemeColors(AppearanceTheme.accent(activity));
         page.root.addView(page.refresh, new FrameLayout.LayoutParams(-1, -1));
 
         page.recycler = new RecyclerView(activity);

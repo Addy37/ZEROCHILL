@@ -23,7 +23,7 @@ final class GalleryVideoLoadingView extends View {
     GalleryVideoLoadingView(Context context) {
         super(context);
         density = getResources().getDisplayMetrics().density;
-        paint.setColor(UiPalette.PRIMARY);
+        paint.setColor(AppearanceTheme.accent(context));
         setContentDescription("Loading video");
         setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_YES);
         setAccessibilityLiveRegion(ACCESSIBILITY_LIVE_REGION_POLITE);

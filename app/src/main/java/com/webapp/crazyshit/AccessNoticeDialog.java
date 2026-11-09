@@ -113,7 +113,7 @@ final class AccessNoticeDialog {
         header.setGravity(Gravity.CENTER_VERTICAL);
         header.setPadding(0, 0, 0, dp(activity, 14));
 
-        TextView badge = text(activity, "18+", 15, UiPalette.ON_PRIMARY, true);
+        TextView badge = text(activity, "18+", 15, AppearanceTheme.onAccent(activity), true);
         badge.setGravity(Gravity.CENTER);
         badge.setBackground(badgeBackground(activity));
         header.addView(badge, new LinearLayout.LayoutParams(dp(activity, 54), dp(activity, 54)));
@@ -147,7 +147,7 @@ final class AccessNoticeDialog {
                 dp(activity, 14), dp(activity, 12));
         card.setBackground(cardBackground(activity));
 
-        TextView labelView = text(activity, label, 11, UiPalette.PRIMARY, true);
+        TextView labelView = text(activity, label, 11, AppearanceTheme.accent(activity), true);
         labelView.setLetterSpacing(0.08f);
         card.addView(labelView);
 
@@ -163,7 +163,7 @@ final class AccessNoticeDialog {
 
     private static void styleDialog(Activity activity, AlertDialog dialog) {
         if (dialog.getButton(AlertDialog.BUTTON_POSITIVE) != null) {
-            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setTextColor(UiPalette.PRIMARY);
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setTextColor(AppearanceTheme.accent(activity));
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         }
         if (dialog.getButton(AlertDialog.BUTTON_NEGATIVE) != null) {
@@ -212,7 +212,7 @@ final class AccessNoticeDialog {
 
     private static GradientDrawable badgeBackground(Activity activity) {
         GradientDrawable background = new GradientDrawable();
-        background.setColor(UiPalette.PRIMARY);
+        background.setColor(AppearanceTheme.accent(activity));
         background.setCornerRadius(dp(activity, 17));
         return background;
     }

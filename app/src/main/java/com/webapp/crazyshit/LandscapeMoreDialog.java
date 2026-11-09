@@ -255,7 +255,7 @@ final class LandscapeMoreDialog {
                     activity,
                     action.badgeCount > 99 ? "99+" : String.valueOf(action.badgeCount),
                     10,
-                    Color.WHITE,
+                    AppearanceTheme.onAccent(activity),
                     true
             );
             badge.setGravity(Gravity.CENTER);
@@ -263,7 +263,7 @@ final class LandscapeMoreDialog {
             badge.setPadding(dp(activity, 6), 0, dp(activity, 6), 0);
             badge.setBackground(ZeroChillUi.rounded(
                     activity,
-                    UiPalette.PRIMARY,
+                    AppearanceTheme.accent(activity),
                     Color.TRANSPARENT,
                     R.dimen.zc_radius_pill
             ));
@@ -320,7 +320,7 @@ final class LandscapeMoreDialog {
     ) {
         ImageView view = new ImageView(activity);
         view.setImageResource(iconRes);
-        view.setImageTintList(ColorStateList.valueOf(UiPalette.PRIMARY));
+        view.setImageTintList(ColorStateList.valueOf(AppearanceTheme.accent(activity)));
         view.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
         view.setPadding(
                 dp(activity, paddingDp),

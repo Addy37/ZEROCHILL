@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Animation.ZeroChill.Menu" parent="@android:style/Animation">
+        <item name="android:windowEnterAnimation">@anim/zerochill_menu_enter</item>
+        <item name="android:windowExitAnimation">@anim/zerochill_menu_exit</item>
+    </style>
+</resources>

@@ -546,7 +546,7 @@ public final class NativeFeedBrowserActivity extends Activity {
                                 ? "FROM UPDATES  •  1 NEW ITEM"
                                 : "FROM UPDATES  •  " + notificationFreshUrls.size() + " NEW ITEMS",
                         11,
-                        UiPalette.PRIMARY
+                        AppearanceTheme.accent(this)
                 );
                 notificationContext.setGravity(Gravity.CENTER);
                 notificationContext.setTypeface(null, android.graphics.Typeface.BOLD);
@@ -562,8 +562,8 @@ public final class NativeFeedBrowserActivity extends Activity {
 
             creatorTabs = new TabLayout(this);
             creatorTabs.setBackgroundColor(Color.BLACK);
-            creatorTabs.setSelectedTabIndicatorColor(UiPalette.PRIMARY);
-            creatorTabs.setTabTextColors(Color.rgb(174, 174, 182), UiPalette.PRIMARY);
+            creatorTabs.setSelectedTabIndicatorColor(AppearanceTheme.accent(this));
+            creatorTabs.setTabTextColors(Color.rgb(174, 174, 182), AppearanceTheme.accent(this));
             creatorTabs.setTabMode(TabLayout.MODE_FIXED);
             creatorTabs.setTabGravity(TabLayout.GRAVITY_FILL);
             creatorAppBar.addView(
@@ -645,7 +645,7 @@ public final class NativeFeedBrowserActivity extends Activity {
         }
 
         refresh = new ZeroChillRefreshLayout(this);
-        refresh.setColorSchemeColors(UiPalette.PRIMARY);
+        refresh.setColorSchemeColors(AppearanceTheme.accent(this));
         refresh.setOnRefreshListener(this::reload);
         if (showDetailsMode) {
             LinearLayout episodeBar = new LinearLayout(this);
@@ -655,7 +655,7 @@ public final class NativeFeedBrowserActivity extends Activity {
             episodeBar.setPadding(dp(16), dp(5), dp(12), dp(5));
             episodeBar.setBackgroundColor(Color.BLACK);
 
-            TextView section = text("EPISODES", 12, UiPalette.PRIMARY);
+            TextView section = text("EPISODES", 12, AppearanceTheme.accent(this));
             section.setTypeface(null, android.graphics.Typeface.BOLD);
             section.setLetterSpacing(0.12f);
             section.setGravity(Gravity.CENTER_VERTICAL);
@@ -680,8 +680,8 @@ public final class NativeFeedBrowserActivity extends Activity {
             episodePager.setBackgroundColor(Color.BLACK);
             episodePager.setPadding(dp(16), dp(16), dp(16), dp(24));
             View divider = new View(this);
-            divider.setBackgroundColor(Color.argb(110, Color.red(UiPalette.PRIMARY),
-                    Color.green(UiPalette.PRIMARY), Color.blue(UiPalette.PRIMARY)));
+            divider.setBackgroundColor(Color.argb(110, Color.red(AppearanceTheme.accent(this)),
+                    Color.green(AppearanceTheme.accent(this)), Color.blue(AppearanceTheme.accent(this))));
             LinearLayout.LayoutParams dividerParams = new LinearLayout.LayoutParams(-1, dp(1));
             dividerParams.bottomMargin = dp(16);
             episodePager.addView(divider, dividerParams);
@@ -699,7 +699,7 @@ public final class NativeFeedBrowserActivity extends Activity {
             controls.addView(gap, new LinearLayout.LayoutParams(dp(8), 1));
             controls.addView(episodeNext, new LinearLayout.LayoutParams(0, dp(48), 1f));
             episodePager.addView(controls, new LinearLayout.LayoutParams(-1, dp(48)));
-            episodeLoadMore = text("Load more videos", 12, UiPalette.PRIMARY);
+            episodeLoadMore = text("Load more videos", 12, AppearanceTheme.accent(this));
             episodeLoadMore.setGravity(Gravity.CENTER);
             styleEpisodeControl(episodeLoadMore, true);
             episodeLoadMore.setOnClickListener(v -> {
@@ -2772,7 +2772,7 @@ public final class NativeFeedBrowserActivity extends Activity {
                         ZeroChillUi.color(this, R.color.zc_ripple)),
                 new android.graphics.drawable.ColorDrawable(Color.TRANSPARENT),
                 ZeroChillUi.rounded(this, Color.WHITE, Color.TRANSPARENT, R.dimen.zc_radius_pill)));
-        button.setTextColor(forward ? UiPalette.PRIMARY : Color.WHITE);
+        button.setTextColor(forward ? AppearanceTheme.accent(this) : Color.WHITE);
         button.setLetterSpacing(0.02f);
         button.setPadding(dp(12), 0, dp(12), 0);
         button.setSingleLine(true);

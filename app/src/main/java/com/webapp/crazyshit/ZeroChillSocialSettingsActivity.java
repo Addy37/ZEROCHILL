@@ -60,20 +60,20 @@ public final class ZeroChillSocialSettingsActivity extends Activity {
     private void buildShell() {
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setBackgroundColor(Color.BLACK);
+        root.setBackgroundColor(AppearanceTheme.background(this));
         LinearLayout header = new LinearLayout(this);
         header.setGravity(Gravity.CENTER_VERTICAL);
         header.setPadding(dp(10), 0, dp(20), 0);
         header.setMinimumHeight(dp(58));
         root.addView(header, new LinearLayout.LayoutParams(-1, -2));
-        TextView back = label("‹", 31, Color.WHITE, false);
+        TextView back = label("‹", 31, AppearanceTheme.primaryText(this), false);
         back.setGravity(Gravity.CENTER);
         back.setContentDescription("Back");
         back.setOnClickListener(v -> finish());
         ZeroChillMotion.installPressFeedback(back);
         header.addView(back, new LinearLayout.LayoutParams(dp(44), dp(44)));
         TextView title = label(MODE_BLOCKED.equals(mode) ? "Blocked users" : "Notification preferences",
-                19, Color.WHITE, true);
+                19, AppearanceTheme.primaryText(this), true);
         title.setPadding(dp(6), dp(12), 0, dp(12));
         header.addView(title, new LinearLayout.LayoutParams(0, -2, 1f));
 
@@ -172,7 +172,7 @@ public final class ZeroChillSocialSettingsActivity extends Activity {
                     Color.WHITE, true));
             if (!profile.displayName.isEmpty()) names.addView(label(SocialUi.cleanName(profile.username),
                     11, Color.rgb(155, 171, 182), false));
-            TextView unblock = label("Unblock", 12, UiPalette.PRIMARY, true);
+            TextView unblock = label("Unblock", 12, AppearanceTheme.accent(this), true);
             unblock.setGravity(Gravity.CENTER);
             unblock.setPadding(dp(8), 0, dp(8), 0);
             row.addView(unblock, new LinearLayout.LayoutParams(-2, dp(48)));
@@ -319,7 +319,7 @@ public final class ZeroChillSocialSettingsActivity extends Activity {
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, -2);
         params.bottomMargin = dp(8);
         content.addView(row, params);
-        TextView name = label(title, 14, Color.WHITE, false);
+        TextView name = label(title, 14, AppearanceTheme.primaryText(this), false);
         row.addView(name, new LinearLayout.LayoutParams(0, -2, 1f));
         Switch toggle = new ZeroChillSwitch(this);
         toggle.setChecked(checked);
@@ -342,7 +342,7 @@ public final class ZeroChillSocialSettingsActivity extends Activity {
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, -2);
         params.bottomMargin = dp(8);
         content.addView(row, params);
-        TextView name = label(title, 14, Color.WHITE, false);
+        TextView name = label(title, 14, AppearanceTheme.primaryText(this), false);
         row.addView(name, new LinearLayout.LayoutParams(0, -2, 1f));
         Switch toggle = new ZeroChillSwitch(this);
         toggle.setChecked(checked);
@@ -358,7 +358,7 @@ public final class ZeroChillSocialSettingsActivity extends Activity {
     }
 
     private void section(String title) {
-        TextView label = label(title, 11, UiPalette.PRIMARY, true);
+        TextView label = label(title, 11, AppearanceTheme.accent(this), true);
         label.setLetterSpacing(0.1f);
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, -2);
         params.topMargin = dp(23);
@@ -378,10 +378,10 @@ public final class ZeroChillSocialSettingsActivity extends Activity {
     }
 
     private TextView action(String value) {
-        TextView view = label(value, 12, Color.rgb(5, 19, 28), true);
+        TextView view = label(value, 12, AppearanceTheme.onAccent(this), true);
         view.setGravity(Gravity.CENTER);
         GradientDrawable background = new GradientDrawable();
-        background.setColor(UiPalette.PRIMARY);
+        background.setColor(AppearanceTheme.accent(this));
         background.setCornerRadius(dp(16));
         view.setBackground(background);
         ZeroChillMotion.installPressFeedback(view);
@@ -399,16 +399,16 @@ public final class ZeroChillSocialSettingsActivity extends Activity {
 
     private GradientDrawable panel() {
         GradientDrawable drawable = new GradientDrawable();
-        drawable.setColor(Color.rgb(15, 19, 24));
+        drawable.setColor(AppearanceTheme.surface(this));
         drawable.setCornerRadius(dp(16));
-        drawable.setStroke(dp(1), Color.rgb(36, 54, 65));
+        drawable.setStroke(dp(1), AppearanceTheme.outline(this));
         return drawable;
     }
 
     private GradientDrawable circle() {
         GradientDrawable drawable = new GradientDrawable();
         drawable.setShape(GradientDrawable.OVAL);
-        drawable.setColor(Color.rgb(22, 31, 38));
+        drawable.setColor(AppearanceTheme.raised(this));
         return drawable;
     }
 

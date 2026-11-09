@@ -80,6 +80,12 @@
         </activity>
 
         <activity
+            android:name=".AppearanceActivity"
+            android:screenOrientation="portrait"
+            android:enableOnBackInvokedCallback="true"
+            android:exported="false" />
+
+        <activity
             android:name=".SettingsActivity"
             android:screenOrientation="portrait"
             android:enableOnBackInvokedCallback="true"

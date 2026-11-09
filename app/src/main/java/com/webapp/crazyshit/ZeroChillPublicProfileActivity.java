@@ -71,7 +71,7 @@ public final class ZeroChillPublicProfileActivity extends Activity {
 
     private void buildShell() {
         FrameLayout root = new FrameLayout(this);
-        root.setBackgroundColor(Color.BLACK);
+        root.setBackgroundColor(AppearanceTheme.background(this));
 
         LinearLayout shell = new LinearLayout(this);
         shell.setOrientation(LinearLayout.VERTICAL);
@@ -84,7 +84,7 @@ public final class ZeroChillPublicProfileActivity extends Activity {
         top.setMinimumHeight(dp(58));
         shell.addView(top, new LinearLayout.LayoutParams(-1, -2));
 
-        TextView back = text("‹", 31, Color.WHITE, false);
+        TextView back = text("‹", 31, AppearanceTheme.primaryText(this), false);
         back.setGravity(Gravity.CENTER);
         back.setContentDescription("Back");
         back.setOnClickListener(v -> finish());
@@ -96,7 +96,7 @@ public final class ZeroChillPublicProfileActivity extends Activity {
         titles.setPadding(dp(6), 0, 0, 0);
         top.addView(titles, new LinearLayout.LayoutParams(0, -2, 1f));
 
-        titles.addView(text("Profile", 24, Color.WHITE, true));
+        titles.addView(text("Profile", 24, AppearanceTheme.primaryText(this), true));
         TextView subtitle = text("ZEROCHILL ID", 11, ZeroChillUi.color(this, R.color.zc_text_muted), true);
         subtitle.setLetterSpacing(0.10f);
         titles.addView(subtitle);
@@ -143,7 +143,7 @@ public final class ZeroChillPublicProfileActivity extends Activity {
         sharedSection = null;
         content.removeAllViews();
 
-        TextView eyebrow = text("ZEROCHILL MEMBER", 12, UiPalette.TEXT_MUTED, true);
+        TextView eyebrow = text("ZEROCHILL MEMBER", 12, AppearanceTheme.mutedText(ZeroChillPublicProfileActivity.this), true);
         eyebrow.setLetterSpacing(0.12f);
         content.addView(eyebrow);
 
@@ -157,7 +157,7 @@ public final class ZeroChillPublicProfileActivity extends Activity {
         content.addView(card, cardParams);
 
         FrameLayout halo = new FrameLayout(this);
-        halo.setBackground(circle(UiPalette.RAISED));
+        halo.setBackground(circle(AppearanceTheme.raised(ZeroChillPublicProfileActivity.this)));
         halo.setPadding(dp(3), dp(3), dp(3), dp(3));
         card.addView(halo, new LinearLayout.LayoutParams(dp(96), dp(96)));
 
@@ -175,7 +175,7 @@ public final class ZeroChillPublicProfileActivity extends Activity {
         if (avatarUrl.isEmpty()) {
             avatar.setImageResource(R.drawable.ic_more_account);
             avatar.setPadding(dp(28), dp(28), dp(28), dp(28));
-            avatar.setColorFilter(UiPalette.TEXT_SECONDARY);
+            avatar.setColorFilter(AppearanceTheme.secondaryText(ZeroChillPublicProfileActivity.this));
         } else {
             AccountAvatarImages.bind(avatar, profile.userId, profile.avatarPath);
         }
@@ -189,7 +189,7 @@ public final class ZeroChillPublicProfileActivity extends Activity {
         }
 
         TextView username = text(SocialUi.cleanName(profile.username), profile.displayName.isEmpty() ? 23 : 14,
-                profile.displayName.isEmpty() ? UiPalette.TEXT_PRIMARY : UiPalette.TEXT_SECONDARY, true);
+                profile.displayName.isEmpty() ? AppearanceTheme.primaryText(ZeroChillPublicProfileActivity.this) : AppearanceTheme.secondaryText(ZeroChillPublicProfileActivity.this), true);
         LinearLayout.LayoutParams userParams = new LinearLayout.LayoutParams(-2, -2);
         userParams.topMargin = dp(profile.displayName.isEmpty() ? 12 : 2);
         card.addView(username, userParams);
@@ -252,7 +252,7 @@ public final class ZeroChillPublicProfileActivity extends Activity {
             note.setOrientation(LinearLayout.VERTICAL);
             note.setPadding(dp(15), dp(13), dp(15), dp(13));
             note.setBackground(panelBackground());
-            TextView label = text("SOCIAL IDENTITY", 12, UiPalette.TEXT_MUTED, true);
+            TextView label = text("SOCIAL IDENTITY", 12, AppearanceTheme.mutedText(ZeroChillPublicProfileActivity.this), true);
             label.setLetterSpacing(0.08f);
             note.addView(label);
             TextView body = text(
@@ -323,7 +323,7 @@ public final class ZeroChillPublicProfileActivity extends Activity {
                     if (error != null || shared == null || shared.isEmpty()) return;
                     sharedSection.setPadding(dp(15), dp(14), dp(15), dp(16));
                     sharedSection.setBackground(panelBackground());
-                    TextView label = text("SHARED WITH YOU", 12, UiPalette.TEXT_MUTED, true);
+                    TextView label = text("SHARED WITH YOU", 12, AppearanceTheme.mutedText(ZeroChillPublicProfileActivity.this), true);
                     label.setLetterSpacing(0.08f);
                     sharedSection.addView(label);
                     TextView title = text("Shared creators", 15, Color.WHITE, true);
@@ -397,7 +397,7 @@ public final class ZeroChillPublicProfileActivity extends Activity {
         handleParams.bottomMargin = dp(14);
         sheet.addView(handle, handleParams);
 
-        TextView title = text("Shared creators", 20, Color.WHITE, true);
+        TextView title = text("Shared creators", 20, AppearanceTheme.primaryText(this), true);
         sheet.addView(title);
 
         TextView subtitle = text(
@@ -441,7 +441,7 @@ public final class ZeroChillPublicProfileActivity extends Activity {
             labelsParams.setMarginStart(dp(12));
             row.addView(labels, labelsParams);
 
-            TextView name = text(creatorName, 14, Color.WHITE, true);
+            TextView name = text(creatorName, 14, AppearanceTheme.primaryText(this), true);
             name.setSingleLine(true);
             name.setEllipsize(android.text.TextUtils.TruncateAt.END);
             labels.addView(name);
@@ -456,7 +456,7 @@ public final class ZeroChillPublicProfileActivity extends Activity {
             hintParams.topMargin = dp(2);
             labels.addView(hint, hintParams);
 
-            TextView chevron = text("›", 28, UiPalette.TEXT_MUTED, false);
+            TextView chevron = text("›", 28, AppearanceTheme.mutedText(ZeroChillPublicProfileActivity.this), false);
             chevron.setGravity(Gravity.CENTER);
             row.addView(chevron, new LinearLayout.LayoutParams(dp(32), dp(44)));
 
@@ -529,7 +529,7 @@ public final class ZeroChillPublicProfileActivity extends Activity {
         if (metadata == null || metadata.imageUrl == null || metadata.imageUrl.trim().isEmpty()) {
             avatar.setImageResource(R.drawable.ic_more_account);
             avatar.setPadding(dp(11), dp(11), dp(11), dp(11));
-            avatar.setColorFilter(UiPalette.TEXT_SECONDARY);
+            avatar.setColorFilter(AppearanceTheme.secondaryText(ZeroChillPublicProfileActivity.this));
             return;
         }
 
@@ -552,17 +552,17 @@ public final class ZeroChillPublicProfileActivity extends Activity {
 
     private GradientDrawable sharedSheetBackground() {
         GradientDrawable background = new GradientDrawable();
-        background.setColor(UiPalette.FLOATING);
+        background.setColor(AppearanceTheme.floating(ZeroChillPublicProfileActivity.this));
         background.setCornerRadius(dp(24));
-        background.setStroke(dp(1), UiPalette.DIVIDER);
+        background.setStroke(dp(1), AppearanceTheme.outline(ZeroChillPublicProfileActivity.this));
         return background;
     }
 
     private GradientDrawable sharedCreatorRowBackground() {
         GradientDrawable background = new GradientDrawable();
-        background.setColor(UiPalette.SURFACE);
+        background.setColor(AppearanceTheme.surface(ZeroChillPublicProfileActivity.this));
         background.setCornerRadius(dp(16));
-        background.setStroke(dp(1), UiPalette.DIVIDER);
+        background.setStroke(dp(1), AppearanceTheme.outline(ZeroChillPublicProfileActivity.this));
         return background;
     }
 
@@ -642,14 +642,14 @@ public final class ZeroChillPublicProfileActivity extends Activity {
     }
 
     private TextView button(String label) {
-        TextView view = text(label, 14, UiPalette.TEXT_PRIMARY, true);
+        TextView view = text(label, 14, AppearanceTheme.primaryText(ZeroChillPublicProfileActivity.this), true);
         ZeroChillUi.styleAction(view, true);
         ZeroChillMotion.installPressFeedback(view);
         return view;
     }
 
     private TextView secondaryButton(String label) {
-        TextView view = text(label, 14, UiPalette.TEXT_PRIMARY, true);
+        TextView view = text(label, 14, AppearanceTheme.primaryText(ZeroChillPublicProfileActivity.this), true);
         ZeroChillUi.styleAction(view, false);
         ZeroChillMotion.installPressFeedback(view);
         return view;
@@ -682,15 +682,15 @@ public final class ZeroChillPublicProfileActivity extends Activity {
 
     private GradientDrawable headerBackground() {
         GradientDrawable background = new GradientDrawable();
-        background.setColor(UiPalette.BACKGROUND);
+        background.setColor(AppearanceTheme.background(ZeroChillPublicProfileActivity.this));
         return background;
     }
 
     private GradientDrawable panelBackground() {
         GradientDrawable background = new GradientDrawable();
-        background.setColor(UiPalette.SURFACE);
+        background.setColor(AppearanceTheme.surface(ZeroChillPublicProfileActivity.this));
         background.setCornerRadius(dp(16));
-        background.setStroke(dp(1), UiPalette.DIVIDER);
+        background.setStroke(dp(1), AppearanceTheme.outline(ZeroChillPublicProfileActivity.this));
         return background;
     }
 

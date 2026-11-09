@@ -25,7 +25,11 @@ final class AppBackupStore {
         JSONObject settings = new JSONObject();
         for (Map.Entry<String, ?> entry : context.getSharedPreferences("app_prefs", Context.MODE_PRIVATE).getAll().entrySet()) {
             if (BackupDocument.BOOLEAN_SETTINGS.contains(entry.getKey())
-                    || BackupDocument.INTEGER_SETTINGS.contains(entry.getKey()) || "chaos_preload_mode".equals(entry.getKey()))
+                    || BackupDocument.INTEGER_SETTINGS.contains(entry.getKey())
+                    || BackupDocument.APPEARANCE_STRING_SETTINGS.contains(entry.getKey())
+                    || BackupDocument.APPEARANCE_FLOAT_SETTINGS.contains(entry.getKey())
+                    || BackupDocument.APPEARANCE_BOOLEAN_SETTINGS.contains(entry.getKey())
+                    || "chaos_preload_mode".equals(entry.getKey()))
                 settings.put(entry.getKey(), entry.getValue());
         }
         document.put("settings", settings);
@@ -82,7 +86,14 @@ final class AppBackupStore {
         Map<String, Object> settings = new LinkedHashMap<>();
         JSONObject values = document.getJSONObject("settings");
         java.util.Iterator<String> keys = values.keys();
-        while (keys.hasNext()) { String key = keys.next(); settings.put(key, values.get(key)); }
+        while (keys.hasNext()) {
+            String key = keys.next();
+            Object value = values.get(key);
+            // JSON numbers deserialize as Double/Integer; SharedPreferences uses Float.
+            if (BackupDocument.APPEARANCE_FLOAT_SETTINGS.contains(key) && value instanceof Number)
+                settings.put(key, ((Number) value).floatValue());
+            else settings.put(key, value);
+        }
         changes.put("app_prefs", settings);
 
         Map<String, Map<String, ?>> originals = new LinkedHashMap<>();

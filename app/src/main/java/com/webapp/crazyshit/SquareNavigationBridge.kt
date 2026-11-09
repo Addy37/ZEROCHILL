@@ -2,6 +2,7 @@ package com.webapp.crazyshit
 
 import android.app.Activity
 import android.app.Application
+import android.content.SharedPreferences
 import android.os.Bundle
 import android.view.ViewGroup
 import android.widget.FrameLayout
@@ -48,11 +49,20 @@ internal class SquareNavigationBridge(private val nav: ZeroChillBottomNavigation
     private val committedIndex = mutableIntStateOf(0)
     private val collapse = mutableFloatStateOf(0f)
     private val unread = mutableStateOf(false)
+    private val appearanceRevision = mutableIntStateOf(0)
+    private val appearancePrefs = AppearanceTheme.prefs(activity)
+    private val appearanceListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+        if (key == AppearanceTheme.KEY_MODE || key == AppearanceTheme.KEY_ACCENT ||
+            key == AppearanceTheme.KEY_MENU_TINT || key?.startsWith("appearance_glass_") == true) {
+            appearanceRevision.intValue++
+        }
+    }
     private var owner: NavOwner? = null
     private var view: ComposeView? = null
 
     fun attach() {
         if (view != null) return
+        appearancePrefs.registerOnSharedPreferenceChangeListener(appearanceListener)
         val lifecycle = NavOwner(activity)
         owner = lifecycle
         // WindowRecomposer is installed on the Activity content root, above ComposeView.
@@ -67,7 +77,14 @@ internal class SquareNavigationBridge(private val nav: ZeroChillBottomNavigation
             compose.clipChildren = false
             compose.clipToPadding = false
             compose.setContent {
-                MaterialTheme(colorScheme = darkColorScheme(primary = SelectedInk)) { Navigation() }
+                appearanceRevision.intValue
+                val selected = Color(AppearanceTheme.accent(activity))
+                val scheme = darkColorScheme(
+                    primary = selected,
+                    surface = Color(AppearanceTheme.surface(activity)),
+                    onSurface = Color(AppearanceTheme.primaryText(activity)),
+                )
+                MaterialTheme(colorScheme = scheme) { Navigation() }
             }
             nav.addView(compose, FrameLayout.LayoutParams(-1, -1))
         }
@@ -84,6 +101,7 @@ internal class SquareNavigationBridge(private val nav: ZeroChillBottomNavigation
     }
     fun dispatchInsets() { view?.setPadding(0, 0, 0, 0) }
     fun detach() {
+        appearancePrefs.unregisterOnSharedPreferenceChangeListener(appearanceListener)
         view?.let { it.disposeComposition(); nav.removeView(it) }
         view = null
         owner?.close()
@@ -94,9 +112,9 @@ internal class SquareNavigationBridge(private val nav: ZeroChillBottomNavigation
         val selectedIndex = remember { { committedIndex.intValue } }
         val externalPosition = remember { { position.floatValue } }
         val shell = rememberLayerBackdrop()
-        val config = remember {
-            navigationGlassConfig(activity)
-        }
+        val config = remember(appearanceRevision.intValue) { navigationGlassConfig(activity) }
+        val selectedInk = Color(AppearanceTheme.accent(activity))
+        val inactiveInk = Color(AppearanceTheme.secondaryText(activity))
         val shape = remember { RoundedCornerShape(50) }
         val height = (61f - 11f * collapse.floatValue).dp
         val film = Color.White.copy(alpha = .04f)
@@ -110,13 +128,13 @@ internal class SquareNavigationBridge(private val nav: ZeroChillBottomNavigation
                 // selector siblings. Keep that ordering, without its player/search slots.
                 Box(Modifier.fillMaxSize().layerBackdrop(shell)
                     .background(film, shape).clip(shape)
-                    .liquidGlass(config, shape, highlightAlpha = .3f))
+                    .liquidGlass(config, shape, highlightAlpha = glassRimAlpha(activity)))
                 LiquidBottomTabs(
                     selectedTabIndex = selectedIndex,
                     onTabSelected = nav::selectSquareTab,
                     backdrop = page,
                     tabsCount = 4,
-                    accentColor = SelectedInk,
+                    accentColor = selectedInk,
                     containerColor = film,
                     indicatorColor = Color.Black.copy(alpha = .10f),
                     height = height,
@@ -131,7 +149,7 @@ internal class SquareNavigationBridge(private val nav: ZeroChillBottomNavigation
                 ) {
                     val replica = LocalLiquidBottomTabsReplica.current
                     for (index in 0..3) {
-                        val ink = if (replica || selectedIndex() == index) SelectedInk else InactiveInk
+                        val ink = if (replica || selectedIndex() == index) selectedInk else inactiveInk
                         LiquidBottomTab(
                             onClick = { nav.selectSquareTab(index) },
                             modifier = Modifier.semantics { selected = selectedIndex() == index },
@@ -140,7 +158,7 @@ internal class SquareNavigationBridge(private val nav: ZeroChillBottomNavigation
                                 Icon(painterResource(Icons[index]), Labels[index], tint = ink,
                                     modifier = Modifier.size(26.dp))
                                 if (index == 3 && unread.value) Box(Modifier.align(Alignment.TopEnd)
-                                    .size(5.dp).background(SelectedInk, RoundedCornerShape(50)))
+                                    .size(5.dp).background(selectedInk, RoundedCornerShape(50)))
                             }
                             // Preserve ZEROCHILL's four-icon collapse instead of Square's
                             // player/search fold. Expanded typography follows Square.
@@ -194,14 +212,51 @@ internal class NavOwner(private val activity: Activity) : SavedStateRegistryOwne
 }
 
 /** One material definition for the navigation shell and pinned primary header. */
+/**
+ * Intensity boosts the optical refraction and rim, not the dark coating.
+ * Midpoint keeps OG's approved clear material, while 100% is more reflective.
+ */
 internal fun navigationGlassConfig(activity: Activity): GlassEffectConfig {
+    val intensity = AppearanceTheme.glassIntensity(activity)
+    val scale = (intensity * 2f).coerceIn(0f, 2f)
+    val extra = ((intensity - .5f) * 2f).coerceIn(0f, 1f)
     val clearGlass = GlassEffectConfig(
-        blurRadius = .7f,
-        surfaceOpacity = .16f,
-        lensHeight = .44f,
-        centerMagnification = 1.025f,
+        blurRadius = .7f * scale.coerceAtMost(1.4f),
+        surfaceOpacity = if (scale == 0f) .10f else .16f - extra * .07f,
+        lensHeight = (.44f * scale).coerceAtMost(.65f),
+        lensAmount = (.60f * scale).coerceAtMost(.90f),
+        centerMagnification = 1f + .025f * scale + .015f * extra,
+        vibrancy = 1.2f + .3f * extra,
+        highlightOpacity = .55f + .25f * extra,
+        style = if (scale == 0f) GlassStyle.TRANSPARENT else GlassStyle.LIQUID,
     )
+    val configuredGlass = if (!AppearanceTheme.hasAdvancedGlass(activity)) clearGlass else {
+        val profile = AppearanceTheme.glassPreset(activity)
+        val optical = AppearanceTheme.glassRefraction(activity) / 48f
+        val transparency = AppearanceTheme.glassTransparency(activity)
+        clearGlass.copy(
+            blurRadius = (AppearanceTheme.glassBlur(activity) * scale).coerceAtMost(12f),
+            lensHeight = (optical * scale).coerceAtMost(.65f),
+            lensAmount = (optical * 1.20f * scale).coerceAtMost(.9f),
+            surfaceOpacity = (.07f + (1f - transparency) * .4f).coerceIn(.06f, .45f),
+            vibrancy = AppearanceTheme.glassVibrancy(activity),
+            highlightOpacity = .55f * (AppearanceTheme.glassEdge(activity) / .7f).coerceIn(0f, 1.6f),
+            chromaticAberration = AppearanceTheme.glassColorSplitting(activity) &&
+                android.os.Build.VERSION.SDK_INT >= 33,
+            style = when (profile) {
+                AppearanceTheme.GlassPreset.OFF, AppearanceTheme.GlassPreset.FAST -> GlassStyle.TRANSPARENT
+                else -> GlassStyle.LIQUID
+            },
+        )
+    }
     return if (BuildConfig.DEBUG && activity.intent.getBooleanExtra("probe_no_lens", false))
-        clearGlass.copy(lensHeight = 0f, lensAmount = 0f, centerMagnification = 1f)
-    else clearGlass
+        configuredGlass.copy(lensHeight = 0f, lensAmount = 0f, centerMagnification = 1f)
+    else configuredGlass
+}
+
+/** One rim strength for navbar and floating headers. */
+internal fun glassRimAlpha(activity: Activity): Float {
+    val original = .30f + ((AppearanceTheme.glassIntensity(activity) - .5f) * .40f).coerceIn(-.20f, .20f)
+    return if (!AppearanceTheme.hasAdvancedGlass(activity)) original
+        else original * (AppearanceTheme.glassEdge(activity) / .7f).coerceIn(0f, 1.5f)
 }

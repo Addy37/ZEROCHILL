@@ -2772,7 +2772,7 @@ public final class ChaosFeedView extends FrameLayout {
                 0,
                 0
         );
-        button.setCompoundDrawableTintList(ColorStateList.valueOf(saved ? UiPalette.PRIMARY : Color.WHITE));
+        button.setCompoundDrawableTintList(ColorStateList.valueOf(saved ? AppearanceTheme.accent(activity) : Color.WHITE));
         button.setContentDescription(saved ? "Remove from Watch Later" : "Save to Watch Later");
     }
 
@@ -3114,7 +3114,7 @@ public final class ChaosFeedView extends FrameLayout {
             creatorAvatarControl.setFocusable(true);
 
             FrameLayout avatarRing = new FrameLayout(activity);
-            avatarRing.setBackground(circleDrawable(Color.BLACK, UiPalette.PRIMARY, 2));
+            avatarRing.setBackground(circleDrawable(Color.BLACK, AppearanceTheme.accent(activity), 2));
             avatarRing.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
             FrameLayout.LayoutParams ringParams =
                     new FrameLayout.LayoutParams(dp(48), dp(48), Gravity.TOP | Gravity.CENTER_HORIZONTAL);
@@ -3133,11 +3133,11 @@ public final class ChaosFeedView extends FrameLayout {
 
             creatorFavoriteBadge = new TextView(activity);
             creatorFavoriteBadge.setText("+");
-            creatorFavoriteBadge.setTextColor(Color.WHITE);
+            creatorFavoriteBadge.setTextColor(AppearanceTheme.onAccent(activity));
             creatorFavoriteBadge.setTextSize(16);
             creatorFavoriteBadge.setTypeface(null, android.graphics.Typeface.BOLD);
             creatorFavoriteBadge.setGravity(Gravity.CENTER);
-            creatorFavoriteBadge.setBackground(circleDrawable(UiPalette.PRIMARY, Color.BLACK, 2));
+            creatorFavoriteBadge.setBackground(circleDrawable(AppearanceTheme.accent(activity), Color.BLACK, 2));
             creatorFavoriteBadge.setTag("shittok_creator_favorite");
             creatorFavoriteBadge.setClickable(true);
             creatorFavoriteBadge.setFocusable(true);
@@ -3319,9 +3319,9 @@ public final class ChaosFeedView extends FrameLayout {
             seekBar.setProgress(0);
             seekBar.setPadding(0, dp(18), 0, 0);
             seekBar.setContentDescription("Video progress");
-            seekBar.setProgressTintList(ColorStateList.valueOf(UiPalette.PRIMARY));
+            seekBar.setProgressTintList(ColorStateList.valueOf(AppearanceTheme.accent(activity)));
             seekBar.setProgressBackgroundTintList(ColorStateList.valueOf(Color.argb(150, 210, 210, 215)));
-            seekBar.setThumbTintList(ColorStateList.valueOf(UiPalette.PRIMARY));
+            seekBar.setThumbTintList(ColorStateList.valueOf(AppearanceTheme.accent(activity)));
             progressRow = new LinearLayout(activity);
             progressRow.setGravity(Gravity.CENTER_VERTICAL);
             progressRow.setTag("shittok_progress_row");
@@ -3705,7 +3705,7 @@ public final class ChaosFeedView extends FrameLayout {
             if (heartOverlay == null) {
                 heartOverlay = new ImageView(activity);
                 heartOverlay.setImageResource(R.drawable.ic_action_heart_filled);
-                heartOverlay.setImageTintList(ColorStateList.valueOf(UiPalette.PRIMARY));
+                heartOverlay.setImageTintList(ColorStateList.valueOf(AppearanceTheme.accent(activity)));
                 heartOverlay.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
                 heartOverlay.setTag("shittok_double_tap_heart");
                 root.addView(heartOverlay, new FrameLayout.LayoutParams(dp(88), dp(88)));
@@ -4077,11 +4077,11 @@ public final class ChaosFeedView extends FrameLayout {
                     0
             );
             like.setCompoundDrawableTintList(ColorStateList.valueOf(
-                    videoLiked ? UiPalette.PRIMARY : Color.WHITE
+                    videoLiked ? AppearanceTheme.accent(activity) : Color.WHITE
             ));
             like.setText(videoLikeCount > 0 ? String.valueOf(videoLikeCount) : "");
             like.setTextSize(10);
-            like.setTextColor(videoLiked ? UiPalette.PRIMARY : Color.WHITE);
+            like.setTextColor(videoLiked ? AppearanceTheme.accent(activity) : Color.WHITE);
             like.setContentDescription(
             videoLiked ? "Unlike video" : "Like video"
             );
@@ -4089,7 +4089,7 @@ public final class ChaosFeedView extends FrameLayout {
                     0, videoLiked ? R.drawable.ic_action_heart_filled
                             : R.drawable.ic_action_heart_outline, 0, 0);
             TextViewCompat.setCompoundDrawableTintList(landscapeLike, ColorStateList.valueOf(
-                    videoLiked ? UiPalette.PRIMARY : Color.WHITE));
+                    videoLiked ? AppearanceTheme.accent(activity) : Color.WHITE));
             landscapeLike.setContentDescription(videoLiked ? "Unlike video" : "Like video");
             like.setEnabled(!videoLikePending);
             landscapeLike.setEnabled(!videoLikePending);
@@ -4653,7 +4653,7 @@ public final class ChaosFeedView extends FrameLayout {
             String description = autoScrollEnabled
                     ? "Auto Scroll on. Tap to turn off"
                     : "Auto Scroll off. Tap to turn on";
-            int color = autoScrollEnabled ? UiPalette.PRIMARY : Color.WHITE;
+            int color = autoScrollEnabled ? AppearanceTheme.accent(activity) : Color.WHITE;
             for (TextView button : new TextView[] { autoScroll, landscapeAutoScroll }) {
                 button.setContentDescription(description);
                 TextViewCompat.setCompoundDrawableTintList(button, ColorStateList.valueOf(color));

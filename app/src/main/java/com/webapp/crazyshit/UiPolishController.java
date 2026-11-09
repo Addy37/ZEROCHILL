@@ -25,7 +25,6 @@ import java.util.WeakHashMap;
  * hierarchy scan every few hundred milliseconds.
  */
 final class UiPolishController {
-    private static final int PRIMARY = UiPalette.PRIMARY;
     private static final int MUTED = Color.rgb(166, 166, 176);
 
     private static final Map<NativeMainActivity, State> STATES = new WeakHashMap<>();
@@ -125,7 +124,7 @@ final class UiPolishController {
             polishCard(activity, (MaterialCardView) view);
         }
         if (view instanceof ProgressBar) {
-            ((ProgressBar) view).setIndeterminateTintList(ColorStateList.valueOf(PRIMARY));
+            ZeroChillUi.styleProgress((ProgressBar) view);
         }
 
         if (!(view instanceof ViewGroup)) return;

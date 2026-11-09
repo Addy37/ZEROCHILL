@@ -143,7 +143,7 @@ final class SocialMedia {
             control = new TextView(activity);
             control.setText("＋");
             control.setTextSize(24);
-            control.setTextColor(UiPalette.PRIMARY);
+            control.setTextColor(AppearanceTheme.accent(activity));
             control.setGravity(android.view.Gravity.CENTER);
             control.setContentDescription("Attach photo or GIF");
             control.setLayoutParams(new LayoutParams(dp(48), dp(48)));
@@ -153,7 +153,7 @@ final class SocialMedia {
             TextView remove = new TextView(activity);
             remove.setText("×");
             remove.setTextSize(24);
-            remove.setTextColor(UiPalette.PRIMARY);
+            remove.setTextColor(AppearanceTheme.accent(activity));
             remove.setGravity(android.view.Gravity.CENTER);
             remove.setContentDescription("Remove attachment");
             addView(remove, new LayoutParams(dp(48), dp(48)));

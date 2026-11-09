@@ -36,6 +36,39 @@ public class NotificationCenterUiTest {
         PlaybackHistoryStore.resetForTests();
     }
 
+    @Test public void filtersAndUnreadDotsUseSavedAccent() throws Exception {
+        Context app = org.robolectric.RuntimeEnvironment.getApplication();
+        AppearanceTheme.setAccent(app, AppearanceTheme.Accent.PURPLE);
+        ActivityController<UpdateInboxActivity> controller = null;
+        try {
+            controller = Robolectric.buildActivity(UpdateInboxActivity.class).setup();
+            UpdateInboxActivity activity = controller.get();
+            NotificationInboxTestIdle.await(activity);
+            TextView selected = text(activity, "allFilter");
+            android.graphics.drawable.InsetDrawable inset =
+                    (android.graphics.drawable.InsetDrawable) selected.getBackground();
+            android.graphics.drawable.GradientDrawable surface =
+                    (android.graphics.drawable.GradientDrawable) inset.getDrawable();
+            assertEquals(AppearanceTheme.accent(activity), surface.getColor().getDefaultColor());
+            assertEquals(AppearanceTheme.onAccent(activity), selected.getCurrentTextColor());
+            UpdateInboxStore.recordAppUpdate(activity, "accent-preview", "Accent test", false);
+            render(activity);
+            RecyclerView recycler = (RecyclerView) value(activity, "recycler");
+            RecyclerView.Adapter rows = recycler.getAdapter();
+            RecyclerView.ViewHolder holder = rows.createViewHolder(recycler, 0);
+            rows.bindViewHolder(holder, 0);
+            android.widget.LinearLayout shell = (android.widget.LinearLayout) holder.itemView;
+            android.widget.LinearLayout row = (android.widget.LinearLayout) shell.getChildAt(1);
+            android.widget.FrameLayout trailing = (android.widget.FrameLayout) row.getChildAt(2);
+            android.graphics.drawable.GradientDrawable dot =
+                    (android.graphics.drawable.GradientDrawable) trailing.getChildAt(1).getBackground();
+            assertEquals(AppearanceTheme.accent(activity), dot.getColor().getDefaultColor());
+        } finally {
+            if (controller != null) controller.pause().stop().destroy();
+            AppearanceTheme.prefs(app).edit().remove(AppearanceTheme.KEY_ACCENT).commit();
+        }
+    }
+
     @Test public void emptyHistoryAndZeroUnreadRemainCleanAcrossRecreation() throws Exception {
         ActivityController<UpdateInboxActivity> controller = Robolectric.buildActivity(UpdateInboxActivity.class).setup();
         UpdateInboxActivity activity = controller.get();

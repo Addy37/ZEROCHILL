@@ -111,10 +111,10 @@ final class CreatorMergeSheet {
         cancel.setPadding(dp(activity, 17), dp(activity, 14), dp(activity, 17), dp(activity, 14));
         cancel.setOnClickListener(v -> dialog.dismiss());
         if (!readOnly) buttons.addView(cancel);
-        TextView accept = label(activity, action, 14, UiPalette.ON_PRIMARY);
+        TextView accept = label(activity, action, 14, AppearanceTheme.onAccent(activity));
         accept.setTypeface(null, android.graphics.Typeface.BOLD);
         accept.setPadding(dp(activity, 22), dp(activity, 12), dp(activity, 22), dp(activity, 12));
-        accept.setBackground(background(activity, UiPalette.PRIMARY, 16, 0));
+        accept.setBackground(background(activity, AppearanceTheme.accent(activity), 16, 0));
         accept.setOnClickListener(v -> { dialog.dismiss(); confirm.onConfirm(name[0], avatar[0]); });
         buttons.addView(accept);
         panel.addView(buttons);
@@ -133,7 +133,7 @@ final class CreatorMergeSheet {
         GradientDrawable drawable = new GradientDrawable();
         drawable.setColor(color);
         drawable.setCornerRadius(dp(activity, radius));
-        if (stroke > 0) drawable.setStroke(stroke, UiPalette.PRIMARY);
+        if (stroke > 0) drawable.setStroke(stroke, AppearanceTheme.accent(activity));
         return drawable;
     }
 

@@ -10,6 +10,7 @@
         <item name="android:navigationBarColor">@color/zc_background</item>
         <item name="android:windowLightStatusBar">false</item>
         <item name="android:windowLightNavigationBar">false</item>
+        <item name="android:colorAccent">@color/zc_cyan</item>
         <item name="colorPrimary">@color/zc_cyan</item>
         <item name="colorOnPrimary">@color/app_on_primary</item>
         <item name="colorSecondary">@color/zc_cyan</item>
@@ -30,5 +31,54 @@
         <item name="android:windowIsTranslucent">true</item>
         <item name="android:windowBackground">@android:color/transparent</item>
         <item name="android:windowAnimationStyle">@null</item>
+    </style>
+    <style name="ZeroChillAccentCyan">
+        <item name="colorPrimary">#0892D0</item>
+        <item name="colorSecondary">#0892D0</item>
+        <item name="colorControlActivated">#0892D0</item>
+        <item name="android:colorAccent">#0892D0</item>
+        <item name="colorOnPrimary">#020F17</item>
+    </style>
+    <style name="ZeroChillAccentPurple">
+        <item name="colorPrimary">#A06CFF</item>
+        <item name="colorSecondary">#A06CFF</item>
+        <item name="colorControlActivated">#A06CFF</item>
+        <item name="android:colorAccent">#A06CFF</item>
+        <item name="colorOnPrimary">#020F17</item>
+    </style>
+    <style name="ZeroChillAccentBlue">
+        <item name="colorPrimary">#4A89FF</item>
+        <item name="colorSecondary">#4A89FF</item>
+        <item name="colorControlActivated">#4A89FF</item>
+        <item name="android:colorAccent">#4A89FF</item>
+        <item name="colorOnPrimary">#020F17</item>
+    </style>
+    <style name="ZeroChillAccentGreen">
+        <item name="colorPrimary">#42D39B</item>
+        <item name="colorSecondary">#42D39B</item>
+        <item name="colorControlActivated">#42D39B</item>
+        <item name="android:colorAccent">#42D39B</item>
+        <item name="colorOnPrimary">#020F17</item>
+    </style>
+    <style name="ZeroChillAccentRed">
+        <item name="colorPrimary">#FF5B65</item>
+        <item name="colorSecondary">#FF5B65</item>
+        <item name="colorControlActivated">#FF5B65</item>
+        <item name="android:colorAccent">#FF5B65</item>
+        <item name="colorOnPrimary">#020F17</item>
+    </style>
+    <style name="ZeroChillAccentPink">
+        <item name="colorPrimary">#FF69B6</item>
+        <item name="colorSecondary">#FF69B6</item>
+        <item name="colorControlActivated">#FF69B6</item>
+        <item name="android:colorAccent">#FF69B6</item>
+        <item name="colorOnPrimary">#020F17</item>
+    </style>
+    <style name="ZeroChillAccentWhite">
+        <item name="colorPrimary">#FFFFFF</item>
+        <item name="colorSecondary">#FFFFFF</item>
+        <item name="colorControlActivated">#FFFFFF</item>
+        <item name="android:colorAccent">#FFFFFF</item>
+        <item name="colorOnPrimary">#020F17</item>
     </style>
 </resources>

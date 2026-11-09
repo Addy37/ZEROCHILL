@@ -205,7 +205,7 @@ public class MainActivity extends Activity {
 
         progress = new ZeroChillProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
         progress.setMax(100);
-        progress.getProgressDrawable().setTint(UiPalette.PRIMARY);
+        progress.getProgressDrawable().setTint(AppearanceTheme.accent(this));
         progress.setVisibility(View.GONE);
         FrameLayout.LayoutParams progressParams = new FrameLayout.LayoutParams(-1, dp(3));
         progressParams.gravity = Gravity.TOP;
@@ -870,7 +870,7 @@ public class MainActivity extends Activity {
         title.setPadding(dp(6), 0, dp(6), dp(4));
         content.addView(title);
 
-        TextView subtitle = sheetText("Quick controls", 13, UiPalette.PRIMARY);
+        TextView subtitle = sheetText("Quick controls", 13, AppearanceTheme.accent(this));
         subtitle.setPadding(dp(6), 0, dp(6), dp(8));
         content.addView(subtitle);
 

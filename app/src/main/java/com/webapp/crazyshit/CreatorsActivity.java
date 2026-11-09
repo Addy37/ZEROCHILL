@@ -530,7 +530,7 @@ public final class CreatorsActivity extends Activity {
             updateBadge.setPadding(dp(7), 0, dp(7), 0);
             updateBadge.setBackground(BrowseUi.rounded(
                     CreatorsActivity.this,
-                    UiPalette.PRIMARY,
+                    AppearanceTheme.accent(CreatorsActivity.this),
                     13
             ));
             updateBadge.setVisibility(View.GONE);

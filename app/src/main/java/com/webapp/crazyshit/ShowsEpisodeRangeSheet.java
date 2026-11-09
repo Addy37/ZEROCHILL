@@ -176,7 +176,7 @@ final class ShowsEpisodeRangeSheet {
                 activity,
                 label,
                 15f,
-                selected ? UiPalette.PRIMARY : Color.WHITE
+                selected ? AppearanceTheme.accent(activity) : Color.WHITE
         );
         row.setGravity(Gravity.CENTER_VERTICAL);
         row.setTypeface(null, selected
@@ -188,7 +188,7 @@ final class ShowsEpisodeRangeSheet {
                 selected
                         ? ZeroChillUi.color(activity, R.color.zc_cyan_container)
                         : ZeroChillUi.color(activity, R.color.zc_surface_glass_strong),
-                selected ? UiPalette.PRIMARY : ZeroChillUi.color(activity, R.color.zc_edge),
+                selected ? AppearanceTheme.accent(activity) : ZeroChillUi.color(activity, R.color.zc_edge),
                 R.dimen.zc_radius_medium
         ));
         row.setOnClickListener(v -> action.run());

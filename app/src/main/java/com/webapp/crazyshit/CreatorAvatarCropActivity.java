@@ -106,7 +106,7 @@ public final class CreatorAvatarCropActivity extends Activity {
         MaterialCardView cropCard = new MaterialCardView(this);
         cropCard.setRadius(previewSize / 2f);
         cropCard.setCardElevation(0f);
-        cropCard.setStrokeColor(UiPalette.PRIMARY);
+        cropCard.setStrokeColor(AppearanceTheme.accent(this));
         cropCard.setStrokeWidth(dp(2));
         cropCard.setCardBackgroundColor(Color.rgb(19, 23, 27));
         cropCard.setClipToOutline(true);
@@ -235,7 +235,7 @@ public final class CreatorAvatarCropActivity extends Activity {
         save.setTextSize(14);
         save.setTextColor(Color.BLACK);
         save.setTypeface(null, android.graphics.Typeface.BOLD);
-        save.setBackground(BrowseUi.rounded(this, UiPalette.PRIMARY, 16));
+        save.setBackground(BrowseUi.rounded(this, AppearanceTheme.accent(this), 16));
         LinearLayout.LayoutParams saveParams = new LinearLayout.LayoutParams(0, dp(48), 1);
         saveParams.setMargins(dp(8), 0, 0, 0);
         buttons.addView(save, saveParams);

@@ -146,13 +146,13 @@ public final class ZeroChillMessageActivity extends Activity {
     private void buildUi() {
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setBackgroundColor(Color.BLACK);
+        root.setBackgroundColor(AppearanceTheme.background(this));
 
         LinearLayout header = new LinearLayout(this);
         header.setGravity(Gravity.CENTER_VERTICAL);
         header.setPadding(dp(8), dp(4), dp(8), dp(4));
 
-        TextView back = text("‹", 31, Color.WHITE, false);
+        TextView back = text("‹", 31, AppearanceTheme.primaryText(this), false);
         back.setGravity(Gravity.CENTER);
         back.setContentDescription("Back");
         headerBack=back;
@@ -164,7 +164,7 @@ public final class ZeroChillMessageActivity extends Activity {
         avatar.setScaleType(ImageView.ScaleType.CENTER_CROP);
         avatar.setImageResource(R.drawable.ic_more_account);
         avatar.setPadding(dp(8), dp(8), dp(8), dp(8));
-        avatar.setColorFilter(UiPalette.TEXT_SECONDARY);
+        avatar.setColorFilter(AppearanceTheme.secondaryText(ZeroChillMessageActivity.this));
         avatar.setOnClickListener(v -> openProfile());
         header.addView(avatar, new LinearLayout.LayoutParams(dp(40), dp(40)));
 
@@ -172,7 +172,7 @@ public final class ZeroChillMessageActivity extends Activity {
         labels.setOrientation(LinearLayout.VERTICAL);
         labels.setPadding(dp(10), 0, dp(6), 0);
         labels.setOnClickListener(v -> {if(selectedMessage==null)openProfile();});
-        title = text("Loading…", 16, Color.WHITE, true);
+        title = text("Loading…", 16, AppearanceTheme.primaryText(this), true);
         title.setSingleLine(true);
         title.setEllipsize(TextUtils.TruncateAt.END);
         labels.addView(title);
@@ -185,7 +185,7 @@ public final class ZeroChillMessageActivity extends Activity {
         ImageView more = new ImageView(this);
         headerMore=more;
         more.setImageResource(R.drawable.ic_more_overflow);
-        more.setColorFilter(Color.WHITE);
+        more.setColorFilter(AppearanceTheme.primaryText(this));
         more.setPadding(dp(9), dp(9), dp(9), dp(9));
         more.setContentDescription("Conversation options");
         more.setOnClickListener(this::showOptions);
@@ -218,11 +218,11 @@ public final class ZeroChillMessageActivity extends Activity {
         threadState.setGravity(Gravity.CENTER);
         threadState.setPadding(dp(24), dp(24), dp(24), dp(24));
         threadState.setVisibility(View.GONE);
-        threadStateText = text("", 14, UiPalette.TEXT_SECONDARY, false);
+        threadStateText = text("", 14, AppearanceTheme.secondaryText(ZeroChillMessageActivity.this), false);
         threadStateText.setGravity(Gravity.CENTER);
         threadStateText.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
         threadState.addView(threadStateText, new LinearLayout.LayoutParams(-1, -2));
-        retryThread = text("Try again", 14, UiPalette.TEXT_PRIMARY, true);
+        retryThread = text("Try again", 14, AppearanceTheme.primaryText(ZeroChillMessageActivity.this), true);
         ZeroChillUi.styleAction(retryThread, false);
         retryThread.setPadding(dp(16), 0, dp(16), 0);
         retryThread.setOnClickListener(v -> loadThread(true));
@@ -234,12 +234,12 @@ public final class ZeroChillMessageActivity extends Activity {
         LinearLayout compose = new LinearLayout(this);
         compose.setGravity(Gravity.BOTTOM | Gravity.CENTER_VERTICAL);
         compose.setPadding(dp(10), dp(7), dp(10), dp(10));
-        compose.setBackgroundColor(Color.rgb(5, 6, 8));
+        compose.setBackgroundColor(AppearanceTheme.surface(this));
 
         composer = new ZeroChillEditText(this);
         composer.setHint("Message @" + partnerId);
         composer.setHintTextColor(Color.rgb(116, 122, 132));
-        composer.setTextColor(Color.WHITE);
+        composer.setTextColor(AppearanceTheme.primaryText(this));
         composer.setTextSize(14);
         composer.setMinLines(1);
         composer.setMaxLines(5);
@@ -259,7 +259,7 @@ public final class ZeroChillMessageActivity extends Activity {
         send.setImageResource(R.drawable.ic_action_send);
         send.setColorFilter(Color.rgb(5, 19, 28));
         send.setPadding(dp(12), dp(12), dp(12), dp(12));
-        send.setBackground(circle(UiPalette.PRIMARY));
+        send.setBackground(circle(AppearanceTheme.accent(ZeroChillMessageActivity.this)));
         send.setContentDescription("Send message");
         send.setOnClickListener(v -> sendMessage());
         ZeroChillMotion.installPressFeedback(send);
@@ -303,7 +303,7 @@ public final class ZeroChillMessageActivity extends Activity {
             if (url.isEmpty()) {
                 avatar.setImageResource(R.drawable.ic_more_account);
                 avatar.setPadding(dp(8), dp(8), dp(8), dp(8));
-                avatar.setColorFilter(UiPalette.TEXT_SECONDARY);
+                avatar.setColorFilter(AppearanceTheme.secondaryText(ZeroChillMessageActivity.this));
             } else {
                 avatar.setPadding(0, 0, 0, 0);
                 avatar.clearColorFilter();
@@ -576,7 +576,7 @@ public final class ZeroChillMessageActivity extends Activity {
     }
 
     private void selectionAction(String label, Runnable action) {
-        TextView button = text(label, 13, UiPalette.PRIMARY, true);
+        TextView button = text(label, 13, AppearanceTheme.accent(ZeroChillMessageActivity.this), true);
         button.setGravity(Gravity.CENTER);
         button.setPadding(dp(12), 0, dp(12), 0);
         button.setMinHeight(dp(48));
@@ -865,7 +865,7 @@ public final class ZeroChillMessageActivity extends Activity {
             row.setGravity(Gravity.BOTTOM);
             LinearLayout outer=new LinearLayout(ZeroChillMessageActivity.this);outer.setOrientation(LinearLayout.VERTICAL);
             outer.setLayoutParams(new RecyclerView.LayoutParams(-1,-2));
-            TextView separator = text("", 11, UiPalette.TEXT_MUTED, false);
+            TextView separator = text("", 11, AppearanceTheme.mutedText(ZeroChillMessageActivity.this), false);
             separator.setGravity(Gravity.CENTER);separator.setPadding(0,dp(10),0,dp(10));
             outer.addView(separator,new LinearLayout.LayoutParams(-1,-2));outer.addView(row,new LinearLayout.LayoutParams(-1,-2));
 
@@ -883,7 +883,7 @@ public final class ZeroChillMessageActivity extends Activity {
             bubble.setOrientation(LinearLayout.VERTICAL);
             bubble.setPadding(dp(10), dp(6), dp(10), dp(5));
 
-            TextView body = text("", 14, Color.WHITE, false);
+            TextView body = text("", 14, AppearanceTheme.primaryText(ZeroChillMessageActivity.this), false);
             body.setTextDirection(View.TEXT_DIRECTION_FIRST_STRONG);
             // Vertical LinearLayout defaults to MATCH_PARENT width. Its uniform-width
             // second pass freezes the first height while narrowing the text, clipping
@@ -892,9 +892,9 @@ public final class ZeroChillMessageActivity extends Activity {
 
             ImageView media=SocialMedia.inline(ZeroChillMessageActivity.this,"","",true);
             bubble.addView(media,new LinearLayout.LayoutParams(-2,-2));
-            TextView reactions=text("",13,UiPalette.PRIMARY,false);
+            TextView reactions=text("",13,AppearanceTheme.accent(ZeroChillMessageActivity.this),false);
             bubble.addView(reactions,new LinearLayout.LayoutParams(-2,-2));
-            TextView time = text("", 10, UiPalette.TEXT_MUTED, false);
+            TextView time = text("", 10, AppearanceTheme.mutedText(ZeroChillMessageActivity.this), false);
             time.setPadding(0, dp(4), 0, 0);
             LinearLayout.LayoutParams timeParams = new LinearLayout.LayoutParams(-2, -2);
             timeParams.gravity = Gravity.END;
@@ -946,7 +946,7 @@ public final class ZeroChillMessageActivity extends Activity {
                 if (url.isEmpty()) {
                     holder.senderAvatar.setImageResource(R.drawable.ic_more_account);
                     holder.senderAvatar.setPadding(dp(6), dp(6), dp(6), dp(6));
-                    holder.senderAvatar.setColorFilter(UiPalette.TEXT_SECONDARY);
+                    holder.senderAvatar.setColorFilter(AppearanceTheme.secondaryText(ZeroChillMessageActivity.this));
                 } else {
                     AccountAvatarImages.bind(holder.senderAvatar, partnerId, partner.avatarPath);
                 }
@@ -964,7 +964,7 @@ public final class ZeroChillMessageActivity extends Activity {
             holder.body.setMaxWidth(bodyWidth);
             holder.time.setMaxWidth(bodyWidth);
             GradientDrawable background=messageBubble(!incoming,joinsPrevious,joinsNext);
-            if(selectedMessage!=null&&selectedMessage.id.equals(item.id)){background.setColor(Color.rgb(12,56,65));background.setStroke(dp(2),UiPalette.PRIMARY);}
+            if(selectedMessage!=null&&selectedMessage.id.equals(item.id)){background.setColor(AppearanceTheme.selectionSurface(ZeroChillMessageActivity.this));background.setStroke(dp(2),AppearanceTheme.accent(ZeroChillMessageActivity.this));}
             holder.bubble.setBackground(background);
             holder.body.setText(item.body);
             holder.body.setVisibility(
@@ -989,7 +989,7 @@ public final class ZeroChillMessageActivity extends Activity {
             if (settled) holder.bubble.animate().alpha(1f).setDuration(ZeroChillMotion.duration(ZeroChillMessageActivity.this, ZeroChillMotion.QUICK_MS)).start();
             holder.boundId = item.id;
             holder.wasPending = item.pending;
-            holder.time.setTextColor(incoming ? UiPalette.TEXT_MUTED : UiPalette.TEXT_SECONDARY);
+            holder.time.setTextColor(incoming ? AppearanceTheme.mutedText(ZeroChillMessageActivity.this) : AppearanceTheme.secondaryText(ZeroChillMessageActivity.this));
             holder.itemView.setContentDescription((incoming ? "From " : "You: ") + item.body);
             holder.bubble.setOnLongClickListener(v -> {
                 showReactions(holder.bubble,item);
@@ -1024,7 +1024,7 @@ public final class ZeroChillMessageActivity extends Activity {
 
     private GradientDrawable messageBubble(boolean mine, boolean joinsPrevious, boolean joinsNext) {
         GradientDrawable background = new GradientDrawable();
-        background.setColor(mine ? UiPalette.FLOATING : UiPalette.SURFACE);
+        background.setColor(mine ? AppearanceTheme.floating(ZeroChillMessageActivity.this) : AppearanceTheme.surface(ZeroChillMessageActivity.this));
         float round = dp(16);
         float joined = dp(7);
         float top = joinsPrevious ? joined : round;
@@ -1037,9 +1037,9 @@ public final class ZeroChillMessageActivity extends Activity {
 
     private GradientDrawable inputBackground() {
         GradientDrawable background = new GradientDrawable();
-        background.setColor(UiPalette.SURFACE);
+        background.setColor(AppearanceTheme.surface(ZeroChillMessageActivity.this));
         background.setCornerRadius(dp(17));
-        background.setStroke(dp(1), UiPalette.DIVIDER);
+        background.setStroke(dp(1), AppearanceTheme.outline(ZeroChillMessageActivity.this));
         return background;
     }
 

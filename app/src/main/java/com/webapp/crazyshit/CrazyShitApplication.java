@@ -52,6 +52,7 @@ public final class CrazyShitApplication extends Application {
         registerActivityLifecycleCallbacks(new ActivityLifecycleCallbacks() {
             @Override
             public void onActivityPreCreated(Activity activity, Bundle savedInstanceState) {
+                AppearanceTheme.applyRuntimeTheme(activity);
                 PhoneOrientationPolicy.applyBrowsingOrientation(activity);
             }
 

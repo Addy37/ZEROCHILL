@@ -5,6 +5,7 @@ import android.content.Context;
 import android.view.Menu;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
+import android.graphics.drawable.GradientDrawable;
 import android.view.Gravity;
 import android.view.MenuItem;
 import android.view.View;
@@ -43,11 +44,24 @@ final class ZeroChillMenu {
 
     void show() {
         if (!anchor.isAttachedToWindow() || menu.size() == 0) return;
+        // Compose is presentation only: menu actions stay with their original callers.
+        // Preserve the native popup fallback for uncommon non-Activity contexts.
+        if (ZeroChillComposeMenu.show(context, anchor, menu, this::dispatch)) return;
         LinearLayout rows = new LinearLayout(context);
         rows.setOrientation(LinearLayout.VERTICAL);
         int inset = dp(6);
         rows.setPadding(inset, inset, inset, inset);
-        rows.setBackground(ZeroChillUi.sheetGlass(context));
+        // PopupWindow is a separate window, so use a theme-aware translucent
+        // fallback here. Full backdrop refraction will be integrated separately.
+        int baseColor = AppearanceTheme.surface(context);
+        float tint = AppearanceTheme.menuTint(context);
+        int tinted = Color.argb(Math.round(86 + tint * 120),
+                Color.red(baseColor), Color.green(baseColor), Color.blue(baseColor));
+        GradientDrawable sheet = new GradientDrawable();
+        sheet.setColor(tinted);
+        sheet.setCornerRadius(dp(18));
+        sheet.setStroke(dp(1), AppearanceTheme.outline(context));
+        rows.setBackground(sheet);
         ScrollView scroll = new ScrollView(context);
         scroll.setFillViewport(true);
         scroll.addView(rows);
@@ -73,7 +87,7 @@ final class ZeroChillMenu {
                     item.isEnabled() ? R.color.zc_text_primary : R.color.zc_text_muted));
             row.setGravity(Gravity.CENTER_VERTICAL);
             row.setMinHeight(dp(48));
-            row.setBackgroundResource(R.drawable.zc_dialog_action);
+            row.setBackground(ZeroChillUi.actionSurface(context, false));
             row.setPadding(dp(14), 0, dp(14), 0);
             row.setContentDescription(item.getTitle());
             row.setEnabled(item.isEnabled());

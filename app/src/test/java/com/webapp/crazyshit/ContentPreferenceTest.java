@@ -63,9 +63,18 @@ public class ContentPreferenceTest {
         org.robolectric.android.controller.ActivityController<SettingsActivity> controller =
                 Robolectric.buildActivity(SettingsActivity.class).create();
         SettingsActivity settings = controller.get();
-        android.view.View title = findText(settings.getWindow().getDecorView(), "Content preference");
-        assertNotNull(title);
-        ((android.view.View) title.getParent().getParent()).performClick();
+        // Settings uses Compose, so exercise the real Java-backed action model
+        // instead of searching for retired Android TextView rows.
+        java.util.List<SettingsComposeScreen.Section> sections =
+                org.robolectric.util.ReflectionHelpers.getField(settings, "settingsSections");
+        SettingsComposeScreen.Item preferenceAction = null;
+        for (SettingsComposeScreen.Section section : sections) {
+            for (SettingsComposeScreen.Item item : section.getItems()) {
+                if ("Content preference".equals(item.getTitle())) preferenceAction = item;
+            }
+        }
+        assertNotNull(preferenceAction);
+        preferenceAction.getAction().run();
         ShadowAlertDialog.getLatestAlertDialog().getWindow().getDecorView().findViewWithTag("preference_men").performClick();
         Activity host = Robolectric.buildActivity(Activity.class).setup().get();
         OnlyFapHubView hub = new OnlyFapHubView(host, new OnlyFapHubView.Listener() {

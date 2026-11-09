@@ -20,8 +20,8 @@ class HeaderGlassMaterialTest {
         val results = searchResultsGlassConfig(activity)
         val recent = recentSearchGlassConfig(activity)
         assertEquals(results, recent)
-        assertEquals(1.5f, results.blurRadius)
-        assertEquals(.25f, results.surfaceOpacity)
+        assertEquals(nav.blurRadius * 1.6f, results.blurRadius)
+        assertEquals(nav.surfaceOpacity + .06f, results.surfaceOpacity)
         assertTrue(results.surfaceOpacity > 0f && results.surfaceOpacity < .40f)
         assertTrue(results.blurRadius < 3f)
         assertEquals(Color.Black, results.surfaceTintColor)
@@ -37,7 +37,7 @@ class HeaderGlassMaterialTest {
         val activity = controller.get()
         val header = headerGlassConfig(activity)
         val controls = searchControlsGlassConfig(activity)
-        assertEquals(.20f, controls.surfaceOpacity)
+        assertEquals(header.surfaceOpacity + .04f, controls.surfaceOpacity)
         assertEquals(.16f, header.surfaceOpacity)
         assertEquals(.16f, navigationGlassConfig(activity).surfaceOpacity)
         assertEquals(header, controls.copy(surfaceOpacity = header.surfaceOpacity))
@@ -61,6 +61,21 @@ class HeaderGlassMaterialTest {
         assertEquals(navigationGlassConfig(activity).centerMagnification, results.centerMagnification)
         assertEquals(results, recentSearchGlassConfig(activity))
         controller.pause().stop().destroy()
+    }
+
+    @Test fun qualityPresetUsesTheExistingOpticsAndColorSplitting() {
+        val activity = Robolectric.buildActivity(Activity::class.java).setup().get()
+        AppearanceTheme.prefs(activity).edit().clear().commit()
+        val original = navigationGlassConfig(activity)
+        AppearanceTheme.setGlassPreset(activity, AppearanceTheme.GlassPreset.QUALITY)
+        val quality = navigationGlassConfig(activity)
+        assertTrue(quality.chromaticAberration)
+        assertTrue(quality.lensHeight >= original.lensHeight)
+        assertTrue(quality.lensAmount >= original.lensAmount)
+        assertTrue(quality.surfaceOpacity < original.surfaceOpacity)
+        AppearanceTheme.setGlassPreset(activity, AppearanceTheme.GlassPreset.OFF)
+        assertEquals(com.webapp.crazyshit.glass.GlassStyle.TRANSPARENT, navigationGlassConfig(activity).style)
+        AppearanceTheme.prefs(activity).edit().clear().commit()
     }
 
     @Test fun headerUsesBlackFilmWithoutChangingNavbarOptics() {

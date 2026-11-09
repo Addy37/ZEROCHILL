@@ -21,6 +21,7 @@ final class ShitTokSourceControl extends FrameLayout {
     private final TextView[] labels = new TextView[2];
     private boolean dirty = true, installed;
     private ShitTokSourceMode displayed;
+    private int displayedAccent = Integer.MIN_VALUE;
 
     ShitTokSourceControl(Activity activity, View source) {
         super(activity);
@@ -54,11 +55,13 @@ final class ShitTokSourceControl extends FrameLayout {
     }
     void refresh(boolean animate) {
         ShitTokSourceMode mode = ShitTokSourceMode.get(activity);
-        if (displayed == mode) return;
+        int accent = AppearanceTheme.accent(activity);
+        if (displayed == mode && displayedAccent == accent) return;
         displayed = mode;
+        displayedAccent = accent;
         if (selectedGlass != null) selectedGlass.select(mode.ordinal());
         for (int i = 0; i < labels.length; i++) {
-            labels[i].setTextColor(i == mode.ordinal() ? SquareNavigationBridge.SELECTED_ARGB : 0xFFE0E7ED);
+            labels[i].setTextColor(i == mode.ordinal() ? accent : 0xFFE0E7ED);
             labels[i].setSelected(i == mode.ordinal());
         }
         selection.animate().cancel();

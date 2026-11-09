@@ -136,7 +136,7 @@ final class CreatorListAdapter extends RecyclerView.Adapter<CreatorListAdapter.H
                 ? "Open gallery"
                 : (favorite ? "Favorite" : source) + " · Open gallery");
         holder.star.setText(favorite ? "★" : "☆");
-        holder.star.setTextColor(favorite ? UiPalette.PRIMARY : BrowseUi.MUTED);
+        holder.star.setTextColor(favorite ? AppearanceTheme.accent(context) : BrowseUi.MUTED);
         holder.star.setBackgroundColor(Color.TRANSPARENT);
         holder.star.setContentDescription((favorite ? "Unfavorite " : "Favorite ") + item.title);
         holder.itemView.setOnClickListener(v -> open.accept(item));

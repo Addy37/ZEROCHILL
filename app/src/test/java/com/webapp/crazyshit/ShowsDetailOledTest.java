@@ -44,6 +44,21 @@ import static org.robolectric.Shadows.shadowOf;
 @RunWith(RobolectricTestRunner.class)
 @Config(application = Application.class, sdk = 35, qualifiers = "w360dp-h800dp-port-mdpi")
 public class ShowsDetailOledTest {
+    @Test public void primaryHeroActionFollowsAccentAndReadableText() {
+        android.content.Context app = org.robolectric.RuntimeEnvironment.getApplication();
+        AppearanceTheme.setAccent(app, AppearanceTheme.Accent.PURPLE);
+        try (Fixture f = new Fixture(null)) {
+            ShowDetailsHeader hero = field(f.browser, "showDetailsHeader");
+            TextView action = field(hero, "action");
+            android.graphics.drawable.GradientDrawable button =
+                    (android.graphics.drawable.GradientDrawable) action.getBackground();
+            assertEquals(AppearanceTheme.accent(f.browser), button.getColor().getDefaultColor());
+            assertEquals(AppearanceTheme.onAccent(f.browser), action.getCurrentTextColor());
+        } finally {
+            AppearanceTheme.prefs(app).edit().remove(AppearanceTheme.KEY_ACCENT).commit();
+        }
+    }
+
     @Test public void heroStartsAtTopAndToolbarOverlaysArtworkThenTurnsBlack() {
         try (Fixture f = new Fixture(null)) {
             View hero = field(f.browser, "showDetailsHeader");

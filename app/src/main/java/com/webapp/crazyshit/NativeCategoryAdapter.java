@@ -233,7 +233,7 @@ public final class NativeCategoryAdapter extends RecyclerView.Adapter<NativeCate
         frame.addView(shade, shadeParams);
 
         TextView rank = new TextView(parent.getContext());
-        rank.setTextColor(UiPalette.PRIMARY);
+        rank.setTextColor(AppearanceTheme.accent(appContext));
         rank.setTextSize(viewType == VIEW_TYPE_CREATOR_HERO ? 13f : 11.5f);
         rank.setTypeface(null, android.graphics.Typeface.BOLD);
         rank.setGravity(Gravity.CENTER);
@@ -249,7 +249,7 @@ public final class NativeCategoryAdapter extends RecyclerView.Adapter<NativeCate
 
         TextView favoriteStar = new TextView(parent.getContext());
         favoriteStar.setText("★");
-        favoriteStar.setTextColor(UiPalette.PRIMARY);
+        favoriteStar.setTextColor(AppearanceTheme.accent(appContext));
         favoriteStar.setTextSize(viewType == VIEW_TYPE_CREATOR_HERO ? 20f : 18f);
         favoriteStar.setGravity(Gravity.CENTER);
         favoriteStar.setContentDescription("Favorite creator");

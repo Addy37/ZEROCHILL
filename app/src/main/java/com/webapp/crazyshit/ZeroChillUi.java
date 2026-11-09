@@ -27,7 +27,8 @@ final class ZeroChillUi {
     }
 
     static int color(Context context, int resource) {
-        return ContextCompat.getColor(context, resource);
+        Integer overridden = AppearanceTheme.colorOverride(context, resource);
+        return overridden != null ? overridden : ContextCompat.getColor(context, resource);
     }
 
     static int dimension(Context context, int resource) {
@@ -35,9 +36,7 @@ final class ZeroChillUi {
     }
 
     static int background(Context context) {
-        boolean oled = context.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
-                .getBoolean("oled_black_enabled", true);
-        return color(context, oled ? R.color.zc_background : R.color.app_background);
+        return AppearanceTheme.background(context);
     }
 
     static void applySystemBars(Activity activity) {
@@ -50,29 +49,52 @@ final class ZeroChillUi {
             window.setNavigationBarContrastEnforced(false);
         }
         View decor = window.getDecorView();
-        decor.setSystemUiVisibility(decor.getSystemUiVisibility()
+        int flags = decor.getSystemUiVisibility()
                 & ~View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR
-                & ~View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR);
+                & ~View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
+        if (AppearanceTheme.isLight(activity)) {
+            flags |= View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR | View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
+        }
+        decor.setSystemUiVisibility(flags);
+    }
+
+    /** Native drawables follow the global theme. Original OLED paint stays unchanged. */
+    private static boolean originalAppearance(Context context) {
+        return AppearanceTheme.isOled(context)
+                && AppearanceTheme.accentChoice(context) == AppearanceTheme.Accent.CYAN
+                && AppearanceTheme.menuTint(context) == 0.5f;
+    }
+
+    private static Drawable themedSurface(Context context, int resource, int radiusDp, boolean sheet) {
+        if (originalAppearance(context)) return ContextCompat.getDrawable(context, resource);
+        int fill = sheet ? AppearanceTheme.floating(context) : AppearanceTheme.surface(context);
+        int opacity = sheet ? Math.round(155 + AppearanceTheme.menuTint(context) * 85) : 245;
+        GradientDrawable shape = new GradientDrawable();
+        shape.setColor(Color.argb(opacity, Color.red(fill), Color.green(fill), Color.blue(fill)));
+        shape.setCornerRadius(context.getResources().getDisplayMetrics().density * radiusDp);
+        shape.setStroke(Math.max(1, Math.round(context.getResources().getDisplayMetrics().density)),
+                AppearanceTheme.outline(context));
+        return shape;
     }
 
     static Drawable glass(Context context) {
-        return ContextCompat.getDrawable(context, R.drawable.zc_glass_surface);
+        return themedSurface(context, R.drawable.zc_glass_surface, 17, false);
     }
 
     static Drawable navigationGlass(Context context) {
-        return ContextCompat.getDrawable(context, R.drawable.zc_glass_navigation);
+        return themedSurface(context, R.drawable.zc_glass_navigation, 28, true);
     }
 
     static Drawable sourceRailGlass(Context context) {
-        return ContextCompat.getDrawable(context, R.drawable.zc_glass_source_rail);
+        return themedSurface(context, R.drawable.zc_glass_source_rail, 16, true);
     }
 
     static Drawable sheetGlass(Context context) {
-        return ContextCompat.getDrawable(context, R.drawable.zc_glass_sheet);
+        return themedSurface(context, R.drawable.zc_glass_sheet, 19, true);
     }
 
     static Drawable panelGlass(Context context) {
-        return ContextCompat.getDrawable(context, R.drawable.zc_glass_panel);
+        return themedSurface(context, R.drawable.zc_glass_panel, 22, false);
     }
 
     static GradientDrawable rounded(Context context, int fillColor, int strokeColor, int radiusResource) {
@@ -136,7 +158,7 @@ final class ZeroChillUi {
     }
 
     static Drawable actionSurface(Context context, boolean primary) {
-        Drawable fill = rounded(context, primary ? UiPalette.PRIMARY : UiPalette.RAISED,
+        Drawable fill = rounded(context, primary ? AppearanceTheme.accent(context) : AppearanceTheme.raised(context),
                 Color.TRANSPARENT, R.dimen.zc_radius_small);
         Drawable mask = rounded(context, Color.WHITE, Color.TRANSPARENT, R.dimen.zc_radius_small);
         return new RippleDrawable(ColorStateList.valueOf(color(context, R.color.zc_ripple)), fill, mask);
@@ -146,7 +168,7 @@ final class ZeroChillUi {
         ZeroChillTypography.apply(action, ZeroChillTypography.Role.BODY);
         action.setTypeface(android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL));
         action.setTextColor(new ColorStateList(new int[][] { new int[] {-android.R.attr.state_enabled}, new int[] {} },
-                new int[] { color(action.getContext(), R.color.zc_disabled), primary ? UiPalette.ON_PRIMARY : UiPalette.TEXT_PRIMARY }));
+                new int[] { color(action.getContext(), R.color.zc_disabled), primary ? AppearanceTheme.onAccent(action.getContext()) : AppearanceTheme.primaryText(action.getContext()) }));
         action.setBackground(actionSurface(action.getContext(), primary));
         action.setMinHeight(dimension(action.getContext(), R.dimen.zc_touch_target));
         action.setMinWidth(dimension(action.getContext(), R.dimen.zc_touch_target));
@@ -174,7 +196,8 @@ final class ZeroChillUi {
         Context context = chip.getContext();
         chip.setTextColor(color(context, selected ? R.color.zc_cyan : R.color.zc_text_secondary));
         chip.setBackground(selected
-                ? ContextCompat.getDrawable(context, R.drawable.zc_source_rail_selected_glass)
+                ? rounded(context, color(context, R.color.zc_cyan_container),
+                        Color.TRANSPARENT, R.dimen.zc_radius_pill)
                 : rounded(
                         context,
                         Color.TRANSPARENT,

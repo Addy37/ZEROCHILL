@@ -45,8 +45,9 @@ final class ContentPreferenceUi {
             row.setGravity(Gravity.CENTER_VERTICAL);
             row.setMinimumHeight(dp(context, 48));
             row.setPadding(dp(context, 8), dp(context, 6), dp(context, 8), dp(context, 6));
-            row.setBackground(selected ? ZeroChillUi.rounded(context, 0x300892D0,
-                    0x600892D0, R.dimen.zc_radius_medium) : null);
+            row.setBackground(selected ? ZeroChillUi.rounded(context,
+                    (cyan & 0x00FFFFFF) | 0x30000000,
+                    (cyan & 0x00FFFFFF) | 0x60000000, R.dimen.zc_radius_medium) : null);
             row.setClickable(true); row.setFocusable(true);
             row.setContentDescription(option.label);
             if (option.icon() != 0) {
@@ -156,6 +157,15 @@ final class ContentPreferenceUi {
         }
     }
 
+    /** Keep the picker bloom colored to the selected accent, including bright white. */
+    static int[] noticeSheenColors(int accent) {
+        int light = Color.rgb((Color.red(accent) + 255) / 2,
+                (Color.green(accent) + 255) / 2, (Color.blue(accent) + 255) / 2);
+        int rgb = accent & 0x00FFFFFF;
+        return new int[]{(light & 0x00FFFFFF) | 0x40000000,
+                rgb | 0x0A000000, rgb | 0x08000000};
+    }
+
     private static int weight(ContentPreference mode) {
         return mode == ContentPreference.ALL || mode == ContentPreference.MEN
                 || mode == ContentPreference.TRANS_MEN ? android.graphics.Typeface.BOLD
@@ -191,10 +201,11 @@ final class ContentPreferenceUi {
         notice.setClickable(false); notice.setFocusable(false);
         int cyan = ZeroChillUi.color(context, R.color.zc_cyan);
         android.graphics.drawable.GradientDrawable glass = heroButtonBackground(context);
-        glass.setColor(0xB015222C); glass.setStroke(dp(context, 1), 0x900892D0);
+        glass.setColor(0xD015222C); glass.setStroke(dp(context, 1),
+                (cyan & 0x00FFFFFF) | 0x90000000);
         android.graphics.drawable.GradientDrawable sheen = new android.graphics.drawable.GradientDrawable(
                 android.graphics.drawable.GradientDrawable.Orientation.TL_BR,
-                new int[]{0x40B4EFFF, 0x0A0892D0, 0x080892D0});
+                noticeSheenColors(cyan));
         sheen.setCornerRadius(dp(context, 24));
         notice.setBackground(new android.graphics.drawable.LayerDrawable(
                 new android.graphics.drawable.Drawable[]{glass, sheen}));
@@ -206,7 +217,8 @@ final class ContentPreferenceUi {
         } else {
             TextView icon = label(context, mode.symbol, 18, cyan);
             icon.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
-            icon.setShadowLayer(dp(context, 6), 0, 0, 0x600892D0);
+            icon.setShadowLayer(dp(context, 6), 0, 0,
+                    (cyan & 0x00FFFFFF) | 0x60000000);
             notice.addView(icon);
         }
         TextView title = label(context, mode.label + (shittok && mode != ContentPreference.ALL ? " only" : ""), 14, Color.WHITE);
