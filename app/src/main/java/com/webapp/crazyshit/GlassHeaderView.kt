@@ -1,6 +1,7 @@
 package com.webapp.crazyshit
 
 import android.app.Activity
+import android.content.SharedPreferences
 import android.widget.FrameLayout
 import android.view.View
 import androidx.compose.foundation.layout.Box
@@ -12,6 +13,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -34,6 +36,13 @@ internal class GlassHeaderView @JvmOverloads constructor(
     }
     private var backdrop by mutableStateOf<ViewPageBackdrop?>(null)
     private var recentMaterial by mutableStateOf(false)
+    private var appearanceRevision by mutableIntStateOf(0)
+    private val preferences = AppearanceTheme.prefs(activity)
+    private val appearanceListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+        if (key == AppearanceTheme.KEY_GLASS || key == AppearanceTheme.KEY_MODE || key == AppearanceTheme.KEY_ACCENT) {
+            post { if (isAttachedToWindow) appearanceRevision++ }
+        }
+    }
 
     init {
         if (cornerRadius > 0f) {
@@ -76,11 +85,12 @@ internal class GlassHeaderView @JvmOverloads constructor(
 
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
+        preferences.registerOnSharedPreferenceChangeListener(appearanceListener)
         // Navbar installs the legacy Activity's AndroidX owners during this attach pass.
         post {
             if (!isAttachedToWindow) return@post
             glass.setContent {
-                val config = remember(recentMaterial) { (if (resultsSurface && recentMaterial) recentSearchGlassConfig(activity)
+                val config = remember(recentMaterial, appearanceRevision) { (if (resultsSurface && recentMaterial) recentSearchGlassConfig(activity)
                     else if (resultsSurface) searchResultsGlassConfig(activity)
                     else if (searchControlSurface) searchControlsGlassConfig(activity)
                     else if (navigationSurface) navigationGlassConfig(activity)
@@ -93,31 +103,40 @@ internal class GlassHeaderView @JvmOverloads constructor(
                         LocalGlassEffectConfig provides config) {
                         Box(Modifier.fillMaxSize().padding(surfaceInset.dp).clipToBounds()
                             // Floating capsules share the navbar rim; full-width headers keep none.
-                            .liquidGlass(config, shape, highlightAlpha = if (cornerRadius > 0f) .3f else 0f))
+                            .liquidGlass(config, shape, highlightAlpha = if (cornerRadius > 0f) glassRimAlpha(activity) else 0f))
                     }
                 }
             }
         }
     }
+    override fun onDetachedFromWindow() {
+        preferences.unregisterOnSharedPreferenceChangeListener(appearanceListener)
+        super.onDetachedFromWindow()
+    }
 }
 
-/** Black adds no light on an empty OLED header; only the live backdrop reveals the pane. */
+/** Shared header material follows the selected theme. */
 internal fun headerGlassConfig(activity: Activity): GlassEffectConfig =
-    navigationGlassConfig(activity).copy(surfaceTintColor = Color.Black, lensSideEdges = false)
+    navigationGlassConfig(activity).copy(
+        surfaceTintColor = if (AppearanceTheme.isLight(activity)) Color.White else Color.Black,
+        lensSideEdges = false,
+    )
 
 /** Search keeps the navbar lens and rim, with a little local diffusion for native text.
  * Both states deliberately use one material; geometry and recording stay native-owned.
  */
 internal fun searchResultsGlassConfig(activity: Activity): GlassEffectConfig =
-    navigationGlassConfig(activity).copy(
-        surfaceTintColor = Color.Black,
-        blurRadius = 1.5f,
-        surfaceOpacity = .25f,
-    )
+    navigationGlassConfig(activity).let { base ->
+        base.copy(
+            surfaceTintColor = if (AppearanceTheme.isLight(activity)) Color.White else Color.Black,
+            blurRadius = (base.blurRadius * 1.6f).coerceAtMost(2f),
+            surfaceOpacity = (base.surfaceOpacity + .06f).coerceAtMost(.30f),
+        )
+    }
 
 /** Search capsules add a local black film without changing shared header/navbar material. */
 internal fun searchControlsGlassConfig(activity: Activity): GlassEffectConfig =
-    headerGlassConfig(activity).copy(surfaceOpacity = .20f)
+    headerGlassConfig(activity).let { it.copy(surfaceOpacity = (it.surfaceOpacity + .04f).coerceAtMost(.27f)) }
 
 internal fun recentSearchGlassConfig(activity: Activity): GlassEffectConfig =
     searchResultsGlassConfig(activity)

@@ -132,7 +132,7 @@ internal class SquareNavigationBridge(private val nav: ZeroChillBottomNavigation
                 // selector siblings. Keep that ordering, without its player/search slots.
                 Box(Modifier.fillMaxSize().layerBackdrop(shell)
                     .background(film, shape).clip(shape)
-                    .liquidGlass(config, shape, highlightAlpha = .3f))
+                    .liquidGlass(config, shape, highlightAlpha = glassRimAlpha(activity)))
                 LiquidBottomTabs(
                     selectedTabIndex = selectedIndex,
                     onTabSelected = nav::selectSquareTab,
@@ -216,16 +216,29 @@ internal class NavOwner(private val activity: Activity) : SavedStateRegistryOwne
 }
 
 /** One material definition for the navigation shell and pinned primary header. */
+/**
+ * Intensity boosts the optical refraction and rim, not the dark coating.
+ * Midpoint keeps OG's approved clear material, while 100% is more reflective.
+ */
 internal fun navigationGlassConfig(activity: Activity): GlassEffectConfig {
-    val strength = (AppearanceTheme.glassIntensity(activity) * 2f).coerceIn(0f, 2f)
+    val intensity = AppearanceTheme.glassIntensity(activity)
+    val scale = (intensity * 2f).coerceIn(0f, 2f)
+    val extra = ((intensity - .5f) * 2f).coerceIn(0f, 1f)
     val clearGlass = GlassEffectConfig(
-        blurRadius = .7f * strength,
-        surfaceOpacity = (.16f * strength).coerceIn(.04f, .32f),
-        lensHeight = (.44f * strength).coerceAtMost(1f),
-        centerMagnification = 1f + (.025f * strength),
-        style = if (strength == 0f) GlassStyle.TRANSPARENT else GlassStyle.LIQUID,
+        blurRadius = .7f * scale.coerceAtMost(1.4f),
+        surfaceOpacity = if (scale == 0f) .10f else .16f - extra * .07f,
+        lensHeight = (.44f * scale).coerceAtMost(.65f),
+        lensAmount = (.60f * scale).coerceAtMost(.90f),
+        centerMagnification = 1f + .025f * scale + .015f * extra,
+        vibrancy = 1.2f + .3f * extra,
+        highlightOpacity = .55f + .25f * extra,
+        style = if (scale == 0f) GlassStyle.TRANSPARENT else GlassStyle.LIQUID,
     )
     return if (BuildConfig.DEBUG && activity.intent.getBooleanExtra("probe_no_lens", false))
         clearGlass.copy(lensHeight = 0f, lensAmount = 0f, centerMagnification = 1f)
     else clearGlass
 }
+
+/** One rim strength for navbar and floating headers. */
+internal fun glassRimAlpha(activity: Activity): Float =
+    .30f + ((AppearanceTheme.glassIntensity(activity) - .5f) * .40f).coerceIn(-.20f, .20f)

@@ -108,15 +108,19 @@ internal class PreferenceGlassPanel @JvmOverloads constructor(context: Context, 
             }
             // Readability wash is separate from the optical layer and never blurs native ink.
             wash.shader = null
-            wash.color = if (sampled) 0x58030910 else 0xEB0A121B.toInt()
+            val tintColor = AppearanceTheme.surface(context)
+            val opacity = AppearanceTheme.menuTint(context)
+            val alpha = if (sampled) (30 + opacity * 86f).toInt() else (150 + opacity * 74f).toInt()
+            wash.color = Color.argb(alpha, Color.red(tintColor), Color.green(tintColor), Color.blue(tintColor))
             canvas.drawPath(shape, wash)
+            val accent = AppearanceTheme.accent(context)
             wash.shader = LinearGradient(0f, bounds.top, width.toFloat(), bounds.bottom,
-                intArrayOf(0x22FFFFFF, 0x03FFFFFF, 0x0C0892D0), null, Shader.TileMode.CLAMP)
+                intArrayOf(0x22FFFFFF, 0x03FFFFFF, (accent and 0x00FFFFFF) or 0x18000000), null, Shader.TileMode.CLAMP)
             canvas.drawPath(shape, wash)
             super.dispatchDraw(canvas)
             rim.strokeWidth = dp(1f)
             rim.shader = LinearGradient(bounds.left, bounds.top, bounds.right, bounds.bottom,
-                intArrayOf(0xB0FFFFFF.toInt(), 0x18FFFFFF, 0x500892D0, 0x70FFFFFF), null, Shader.TileMode.CLAMP)
+                intArrayOf(0xB0FFFFFF.toInt(), 0x18FFFFFF, (accent and 0x00FFFFFF) or 0x50000000, 0x70FFFFFF), null, Shader.TileMode.CLAMP)
             canvas.drawPath(shape, rim)
         }
     }
@@ -135,13 +139,15 @@ internal class PreferenceGlassPanel @JvmOverloads constructor(context: Context, 
         private val node = RenderNode("ZEROCHILL preference glass")
         private var effectWidth = 0
         private var effectHeight = 0
+        private var effectIntensity = -1f
         fun draw(canvas: Canvas, page: ViewPageBackdrop) {
-            if (effectWidth != width || effectHeight != height) {
-                val blur = RenderEffect.createBlurEffect(dp(3f), dp(3f), Shader.TileMode.CLAMP)
+            val intensity = AppearanceTheme.glassIntensity(context)
+            if (effectWidth != width || effectHeight != height || effectIntensity != intensity) {
+                val blur = RenderEffect.createBlurEffect(dp(1.4f + intensity * 2f), dp(1.4f + intensity * 2f), Shader.TileMode.CLAMP)
                 val effect = if (Build.VERSION.SDK_INT >= 33) lens(blur) else blur
                 node.setRenderEffect(effect)
                 node.setPosition(0, 0, width, height)
-                effectWidth = width; effectHeight = height
+                effectWidth = width; effectHeight = height; effectIntensity = intensity
             }
             val recording = node.beginRecording(width, height)
             try { page.drawPageIntoDialog(recording, this@PreferenceGlassPanel) }
@@ -156,10 +162,11 @@ internal class PreferenceGlassPanel @JvmOverloads constructor(context: Context, 
             shader.setFloatUniform("offset", 0f, 0f)
             val radius = dp(28f)
             shader.setFloatUniform("cornerRadii", radius, radius, radius, radius)
-            shader.setFloatUniform("refractionHeight", dp(.44f * 48f))
-            shader.setFloatUniform("refractionAmount", -dp(.6f * 48f))
+            val optical = (AppearanceTheme.glassIntensity(context) * 2f).coerceIn(0f, 1.45f)
+            shader.setFloatUniform("refractionHeight", dp(.44f * optical * 48f))
+            shader.setFloatUniform("refractionAmount", -dp(.6f * optical * 48f))
             shader.setFloatUniform("depthEffect", 0f)
-            shader.setFloatUniform("magnification", 1.025f)
+            shader.setFloatUniform("magnification", 1f + .025f * (AppearanceTheme.glassIntensity(context) * 2f))
             shader.setFloatUniform("sideEdges", 1f)
             return RenderEffect.createChainEffect(RenderEffect.createRuntimeShaderEffect(shader, "content"), blur)
         }
