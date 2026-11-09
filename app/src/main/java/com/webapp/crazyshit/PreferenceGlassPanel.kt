@@ -85,7 +85,9 @@ internal class PreferenceGlassPanel @JvmOverloads constructor(context: Context, 
                 reportedCanvas = true
                 android.util.Log.i("ZeroChillGlass", "preference canvas hardware=" + canvas.isHardwareAccelerated)
             }
-            if (!glassFailed && Build.VERSION.SDK_INT >= 31 && canvas.isHardwareAccelerated) {
+            if (!glassFailed && Build.VERSION.SDK_INT >= 31 && canvas.isHardwareAccelerated &&
+                !(AppearanceTheme.hasAdvancedGlass(context) &&
+                    AppearanceTheme.glassPreset(context) == AppearanceTheme.GlassPreset.OFF)) {
                 try {
                     val page = sharedPage?.takeIf { it.recordings > 0 } ?: fallbackPage
                     if (page === fallbackPage && fallbackDirty && source != null && source.width > 0 && source.height > 0) {
@@ -110,7 +112,10 @@ internal class PreferenceGlassPanel @JvmOverloads constructor(context: Context, 
             wash.shader = null
             val tintColor = AppearanceTheme.surface(context)
             val opacity = AppearanceTheme.menuTint(context)
-            val alpha = if (sampled) (30 + opacity * 86f).toInt() else (150 + opacity * 74f).toInt()
+            val transparency = if (AppearanceTheme.hasAdvancedGlass(context))
+                AppearanceTheme.glassTransparency(context) else .78f
+            val alpha = if (sampled) (30 + opacity * 86f * (1f - transparency * .45f)).toInt()
+                else (150 + opacity * 74f).toInt()
             wash.color = Color.argb(alpha, Color.red(tintColor), Color.green(tintColor), Color.blue(tintColor))
             canvas.drawPath(shape, wash)
             val accent = AppearanceTheme.accent(context)
@@ -142,12 +147,17 @@ internal class PreferenceGlassPanel @JvmOverloads constructor(context: Context, 
         private var effectIntensity = -1f
         fun draw(canvas: Canvas, page: ViewPageBackdrop) {
             val intensity = AppearanceTheme.glassIntensity(context)
-            if (effectWidth != width || effectHeight != height || effectIntensity != intensity) {
-                val blur = RenderEffect.createBlurEffect(dp(1.4f + intensity * 2f), dp(1.4f + intensity * 2f), Shader.TileMode.CLAMP)
+            val advanced = AppearanceTheme.hasAdvancedGlass(context)
+            val blurValue = if (advanced) AppearanceTheme.glassBlur(context) else 1.4f + intensity * 2f
+            val blurDp = blurValue.coerceAtLeast(.01f)
+            val refraction = if (advanced) AppearanceTheme.glassRefraction(context) else 21f
+            val signature = intensity + blurDp * .0001f + refraction * .000001f
+            if (effectWidth != width || effectHeight != height || effectIntensity != signature) {
+                val blur = RenderEffect.createBlurEffect(dp(blurDp), dp(blurDp), Shader.TileMode.CLAMP)
                 val effect = if (Build.VERSION.SDK_INT >= 33) lens(blur) else blur
                 node.setRenderEffect(effect)
                 node.setPosition(0, 0, width, height)
-                effectWidth = width; effectHeight = height; effectIntensity = intensity
+                effectWidth = width; effectHeight = height; effectIntensity = signature
             }
             val recording = node.beginRecording(width, height)
             try { page.drawPageIntoDialog(recording, this@PreferenceGlassPanel) }
@@ -163,8 +173,10 @@ internal class PreferenceGlassPanel @JvmOverloads constructor(context: Context, 
             val radius = dp(28f)
             shader.setFloatUniform("cornerRadii", radius, radius, radius, radius)
             val optical = (AppearanceTheme.glassIntensity(context) * 2f).coerceIn(0f, 1.45f)
-            shader.setFloatUniform("refractionHeight", dp(.44f * optical * 48f))
-            shader.setFloatUniform("refractionAmount", -dp(.6f * optical * 48f))
+            val depth = if (AppearanceTheme.hasAdvancedGlass(context))
+                AppearanceTheme.glassRefraction(context) * optical else .44f * optical * 48f
+            shader.setFloatUniform("refractionHeight", dp(depth.coerceAtMost(30f)))
+            shader.setFloatUniform("refractionAmount", -dp((depth * 1.20f).coerceAtMost(38f)))
             shader.setFloatUniform("depthEffect", 0f)
             shader.setFloatUniform("magnification", 1f + .025f * (AppearanceTheme.glassIntensity(context) * 2f))
             shader.setFloatUniform("sideEdges", 1f)

@@ -39,7 +39,8 @@ internal class GlassHeaderView @JvmOverloads constructor(
     private var appearanceRevision by mutableIntStateOf(0)
     private val preferences = AppearanceTheme.prefs(activity)
     private val appearanceListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
-        if (key == AppearanceTheme.KEY_GLASS || key == AppearanceTheme.KEY_MODE || key == AppearanceTheme.KEY_ACCENT) {
+        if (key == AppearanceTheme.KEY_MODE || key == AppearanceTheme.KEY_ACCENT ||
+            key?.startsWith("appearance_glass_") == true) {
             post { if (isAttachedToWindow) appearanceRevision++ }
         }
     }

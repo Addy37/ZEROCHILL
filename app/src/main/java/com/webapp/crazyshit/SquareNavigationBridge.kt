@@ -53,7 +53,7 @@ internal class SquareNavigationBridge(private val nav: ZeroChillBottomNavigation
     private val appearancePrefs = AppearanceTheme.prefs(activity)
     private val appearanceListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
         if (key == AppearanceTheme.KEY_MODE || key == AppearanceTheme.KEY_ACCENT ||
-            key == AppearanceTheme.KEY_GLASS || key == AppearanceTheme.KEY_MENU_TINT) {
+            key == AppearanceTheme.KEY_MENU_TINT || key?.startsWith("appearance_glass_") == true) {
             appearanceRevision.intValue++
         }
     }
@@ -234,11 +234,33 @@ internal fun navigationGlassConfig(activity: Activity): GlassEffectConfig {
         highlightOpacity = .55f + .25f * extra,
         style = if (scale == 0f) GlassStyle.TRANSPARENT else GlassStyle.LIQUID,
     )
+    val configuredGlass = if (!AppearanceTheme.hasAdvancedGlass(activity)) clearGlass else {
+        val profile = AppearanceTheme.glassPreset(activity)
+        val optical = AppearanceTheme.glassRefraction(activity) / 48f
+        val transparency = AppearanceTheme.glassTransparency(activity)
+        clearGlass.copy(
+            blurRadius = (AppearanceTheme.glassBlur(activity) * scale).coerceAtMost(12f),
+            lensHeight = (optical * scale).coerceAtMost(.65f),
+            lensAmount = (optical * 1.20f * scale).coerceAtMost(.9f),
+            surfaceOpacity = (.07f + (1f - transparency) * .4f).coerceIn(.06f, .45f),
+            vibrancy = AppearanceTheme.glassVibrancy(activity),
+            highlightOpacity = .55f * (AppearanceTheme.glassEdge(activity) / .7f).coerceIn(0f, 1.6f),
+            chromaticAberration = AppearanceTheme.glassColorSplitting(activity) &&
+                android.os.Build.VERSION.SDK_INT >= 33,
+            style = when (profile) {
+                AppearanceTheme.GlassPreset.OFF, AppearanceTheme.GlassPreset.FAST -> GlassStyle.TRANSPARENT
+                else -> GlassStyle.LIQUID
+            },
+        )
+    }
     return if (BuildConfig.DEBUG && activity.intent.getBooleanExtra("probe_no_lens", false))
-        clearGlass.copy(lensHeight = 0f, lensAmount = 0f, centerMagnification = 1f)
-    else clearGlass
+        configuredGlass.copy(lensHeight = 0f, lensAmount = 0f, centerMagnification = 1f)
+    else configuredGlass
 }
 
 /** One rim strength for navbar and floating headers. */
-internal fun glassRimAlpha(activity: Activity): Float =
-    .30f + ((AppearanceTheme.glassIntensity(activity) - .5f) * .40f).coerceIn(-.20f, .20f)
+internal fun glassRimAlpha(activity: Activity): Float {
+    val original = .30f + ((AppearanceTheme.glassIntensity(activity) - .5f) * .40f).coerceIn(-.20f, .20f)
+    return if (!AppearanceTheme.hasAdvancedGlass(activity)) original
+        else original * (AppearanceTheme.glassEdge(activity) / .7f).coerceIn(0f, 1.5f)
+}

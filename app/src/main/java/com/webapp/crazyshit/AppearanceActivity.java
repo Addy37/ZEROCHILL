@@ -121,8 +121,57 @@ public final class AppearanceActivity extends Activity {
         LinearLayout glass = card(body);
         label(glass, "Glass", ink);
         supporting(glass, "Adjust the existing liquid-glass effects without replacing them.", secondary);
-        slider(glass, "Glass intensity", AppearanceTheme.glassIntensity(this), true);
+        supporting(glass, "Preset", secondary);
+        AppearanceTheme.GlassPreset[] presets = {
+                AppearanceTheme.GlassPreset.OFF, AppearanceTheme.GlassPreset.FAST,
+                AppearanceTheme.GlassPreset.BALANCED, AppearanceTheme.GlassPreset.QUALITY
+        };
+        for (int start = 0; start < presets.length; start += 2) {
+            LinearLayout choices = row();
+            for (int i = start; i < start + 2; i++) {
+                final AppearanceTheme.GlassPreset preset = presets[i];
+                TextView chip = option(preset.label, preset == AppearanceTheme.glassPreset(this));
+                chip.setOnClickListener(view -> {
+                    AppearanceTheme.setGlassPreset(this, preset);
+                    render(scroll.getScrollY());
+                });
+                LinearLayout.LayoutParams chipParams = new LinearLayout.LayoutParams(0, dp(42), 1);
+                if (i > start) chipParams.leftMargin = dp(8);
+                choices.addView(chip, chipParams);
+            }
+            glass.addView(choices);
+            spacer(glass, 7);
+        }
+        supporting(glass, "Glass strength", secondary);
+        slider(glass, "Optical strength", AppearanceTheme.glassIntensity(this), true);
         slider(glass, "Menu tint", AppearanceTheme.menuTint(this), false);
+        spacer(glass, 6);
+        supporting(glass, "Advanced optics", secondary);
+        glassFloat(glass, "Transparency", "How clearly you can see through glass",
+                AppearanceTheme.KEY_GLASS_TRANSPARENCY, AppearanceTheme.glassTransparency(this), 0f, 1f, "%");
+        glassFloat(glass, "Blur", "Frost behind the surface",
+                AppearanceTheme.KEY_GLASS_BLUR, AppearanceTheme.glassBlur(this), 0f, 12f, "dp");
+        glassFloat(glass, "Refraction", "Bend the image at glass edges",
+                AppearanceTheme.KEY_GLASS_REFRACTION, AppearanceTheme.glassRefraction(this), 0f, 30f, "dp");
+        glassFloat(glass, "Vibrancy", "Color passing through glass",
+                AppearanceTheme.KEY_GLASS_VIBRANCY, AppearanceTheme.glassVibrancy(this), 1f, 2f, "×");
+        glassFloat(glass, "Edge highlights", "Brightness of the reflective rim",
+                AppearanceTheme.KEY_GLASS_EDGE, AppearanceTheme.glassEdge(this), 0f, 1f, "%");
+        LinearLayout dispersionRow = row();
+        LinearLayout dispersionCopy = column();
+        dispersionCopy.addView(text("Color splitting", 14, ink, true));
+        dispersionCopy.addView(text("Subtle rainbow edges on Android 13+", 12, secondary, false));
+        dispersionRow.addView(dispersionCopy, new LinearLayout.LayoutParams(0, -2, 1));
+        Switch dispersion = new Switch(this);
+        dispersion.setChecked(AppearanceTheme.glassColorSplitting(this));
+        dispersion.setThumbTintList(ColorStateList.valueOf(accent));
+        dispersion.setEnabled(android.os.Build.VERSION.SDK_INT >= 33);
+        dispersion.setOnCheckedChangeListener((button, checked) -> {
+            AppearanceTheme.setGlassColorSplitting(this, checked);
+            updateGlassSample();
+        });
+        dispersionRow.addView(dispersion, new LinearLayout.LayoutParams(dp(54), dp(48)));
+        glass.addView(dispersionRow);
 
         spacer(body, 12);
         LinearLayout motion = card(body);
@@ -197,7 +246,8 @@ public final class AppearanceActivity extends Activity {
                 GradientDrawable.Orientation.TL_BR,
                 new int[]{Color.argb(Math.round(20 + intensity * 50), 255, 255, 255), film, film});
         surface.setCornerRadius(dp(14));
-        surface.setStroke(dp(1), Color.argb(Math.round(45 + intensity * 190),
+        float rim = AppearanceTheme.glassEdge(this);
+        surface.setStroke(dp(1), Color.argb(Math.round(40 + intensity * 160 * rim),
                 Color.red(accent), Color.green(accent), Color.blue(accent)));
         glassSample.setBackground(surface);
     }
@@ -226,6 +276,47 @@ public final class AppearanceActivity extends Activity {
             @Override public void onStopTrackingTouch(SeekBar bar) {}
         });
         parent.addView(slider, new LinearLayout.LayoutParams(-1, dp(42)));
+    }
+
+    private void glassFloat(
+            LinearLayout parent, String title, String help, String key,
+            float value, float min, float max, String suffix
+    ) {
+        LinearLayout line = row();
+        line.addView(text(title, 14, AppearanceTheme.primaryText(this), true),
+                new LinearLayout.LayoutParams(0, -2, 1));
+        TextView amount = text(glassAmount(value, suffix), 12,
+                AppearanceTheme.secondaryText(this), false);
+        line.addView(amount);
+        parent.addView(line);
+        parent.addView(text(help, 11, AppearanceTheme.mutedText(this), false));
+        SeekBar seek = new SeekBar(this);
+        seek.setContentDescription(title);
+        seek.setMax(100);
+        seek.setProgress(Math.round((value - min) * 100f / (max - min)));
+        seek.setProgressTintList(ColorStateList.valueOf(AppearanceTheme.accent(this)));
+        seek.setThumbTintList(ColorStateList.valueOf(AppearanceTheme.accent(this)));
+        seek.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            private boolean modified;
+            @Override public void onProgressChanged(SeekBar bar, int progress, boolean fromUser) {
+                if (!fromUser) return;
+                float updated = min + (max - min) * (progress / 100f);
+                amount.setText(glassAmount(updated, suffix));
+                AppearanceTheme.setGlassFloat(AppearanceActivity.this, key, updated);
+                modified = true;
+                updateGlassSample();
+            }
+            @Override public void onStartTrackingTouch(SeekBar bar) { modified = false; }
+            @Override public void onStopTrackingTouch(SeekBar bar) {
+                if (modified) render(scroll.getScrollY());
+            }
+        });
+        parent.addView(seek, new LinearLayout.LayoutParams(-1, dp(38)));
+    }
+
+    private String glassAmount(float value, String suffix) {
+        if ("%".equals(suffix)) return Math.round(value * 100f) + "%";
+        return (Math.round(value * 10f) / 10f) + " " + suffix;
     }
 
     private TextView option(String label, boolean selected) {
