@@ -883,7 +883,7 @@ public final class ZeroChillMessageActivity extends Activity {
             bubble.setOrientation(LinearLayout.VERTICAL);
             bubble.setPadding(dp(10), dp(6), dp(10), dp(5));
 
-            TextView body = text("", 14, AppearanceTheme.primaryText(this), false);
+            TextView body = text("", 14, AppearanceTheme.primaryText(ZeroChillMessageActivity.this), false);
             body.setTextDirection(View.TEXT_DIRECTION_FIRST_STRONG);
             // Vertical LinearLayout defaults to MATCH_PARENT width. Its uniform-width
             // second pass freezes the first height while narrowing the text, clipping
