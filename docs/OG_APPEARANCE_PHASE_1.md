@@ -1,36 +1,27 @@
-# ZEROCHILL 7.0 Appearance, first stage
+# ZEROCHILL 7.0 Appearance | OLED-only direction
 
-Source: current OG main, not historical rebrand/zerochill.
+Source: current approved OG main lineage. Development branch: `feature/og-appearance-foundation-7`.
 
-## Included in the first draft
+## User decision (2026-11-09)
 
-- Compact Appearance activity from Settings, organized as Colors, Glass and Motion.
-- Four theme modes, seven accent choices, and immediate persistence in existing app_prefs.
-- OLED black and electric cyan defaults, with legacy oled_black_enabled fallback and compatibility.
-- Shared semantic colors used by ZeroChillUi, Settings, dialog text, and the bottom Compose navigation.
-- Navigation glass-intensity control using the existing OG glass engine, not V2's dependency.
-- Glass follow-up: at maximum intensity, strengthen lens and rim instead of darkening the film; allow shared headers and native preference panels to follow intensity.
-- V2-style optics added: Off/Fast/Balanced/Quality, transparency, blur, refraction, vibrancy, edge highlights, and Android 13+ color splitting (using OG's native shader parameters).
-- Native Light/Dark Material themes and accent overlays are applied before supported activities inflate views. Main/Settings rebuild once when returning from theme changes; main preserves the selected page using its existing save/restore.
-- Account, public profile, inbox, message and light dialogs now use dynamic semantic colors. Other older visual surfaces still need explicit conversion; no promise of full light-theme parity yet.
-- Main library, Shows, OnlyFap section chrome, native cards/menus and social settings now use theme-aware colors. Media artwork overlays remain white/dark as needed.
-- Appearance preview now reacts to glass intensity and tint changes without pretending to show real backdrop refraction.
-- Theme-aware native popup tint as a readable fallback. No background capture in PopupWindow.
-- Existing immersive_motion_enabled remains authoritative, including Android animation preference.
-- The existing validated backup format now retains the two appearance strings and two glass floats.
-- Focused migration and persistence unit tests.
+ZEROCHILL keeps OLED black as its **only** app theme. The user explicitly wants to retain the **seven accent color choices** (cyan default, purple, blue, green, red, pink, white). Do not add Light, Dark, Follow System, or alternate app-background themes. Next phase is general UI polish, not more theme modes.
 
-## Known limits, must not ship as a completed global theme
+## What the draft includes
 
-Many OG native surfaces use hardcoded UiPalette constants, drawable resources or inline black/white.
-The screen is an operational foundation but Light/Follow System is not yet uniformly readable
-throughout every tab, photo/video viewer, dialog and account surface. Fullscreen media canvases
-must remain black independently of the selected app chrome. A later, scoped pass must connect
-remaining theme consumers before calling the system app-wide or shipping as a completed 7.0 theme.
+- Appearance screen with accent-color swatches, advanced liquid-glass controls, and motion.
+- V2-style glass options through OG rendering: Off, Fast, Balanced, Quality, transparency, blur, refraction, vibrancy, rim highlights, optical strength, menu tint and Android 13+ color splitting.
+- Dynamic accent propagation into shared UI, bottom Compose navigation, headers, switches, selected native surfaces, account, profile, inbox and messages.
+- The default remains OG's OLED black background, white/gray text and electric cyan accents. Other accent choices recolor highlights, **not** the background.
+- Previous preview Light/Dark preferences are treated as legacy only. The app reports OLED and returns the compatibility `oled_black_enabled` flag to true without clearing account or user data.
+- Pre-existing preview backups with older theme keys remain readable. Saved accent/glass preferences stay in the existing backup format and app_prefs store.
+- Media players, content sources, Supabase, downloads, favorites, history, update compatibility, application ID and signing remain unchanged.
 
-Native PopupWindow menus cannot sample the Activity backdrop as the existing Compose navbar
-can. The initial menu tint control affects translucent menu paint only; V2-like real refraction
-for menus requires a tested in-window overlay migration that preserves anchors and actions.
+## Current limits
 
-This draft does not change app identifiers, signing, provider traffic, Supabase, content,
-downloads, user database, or existing backups. Do not merge before tests and phone validation.
+- Some older components still use hardcoded accent colors and will be covered by later **targeted** UI polish.
+- Popup menus use theme-aware translucent paint, not the exact live refraction path of the navbar.
+- Do not merge before a signed build and physical test on OnePlus Android 16. This draft is not a public release.
+
+## Validation
+
+Previous preview-3 build was successful at `b2ab28c` with focused AppearanceTheme and HeaderGlassMaterial tests and a signed release artifact. The OLED-only accent-preserving revision is newer and **has not been built or tested yet**.
