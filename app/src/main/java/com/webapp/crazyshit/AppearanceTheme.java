@@ -275,12 +275,12 @@ final class AppearanceTheme {
                     ? R.style.Theme_ZeroChill_Dark_Account : R.style.Theme_ZeroChill_Dark);
         }
         switch (accentChoice(activity)) {
-            case PURPLE: activity.getTheme().applyStyle(R.style.ThemeOverlay_ZeroChill_Accent_Purple, true); break;
-            case BLUE: activity.getTheme().applyStyle(R.style.ThemeOverlay_ZeroChill_Accent_Blue, true); break;
-            case GREEN: activity.getTheme().applyStyle(R.style.ThemeOverlay_ZeroChill_Accent_Green, true); break;
-            case RED: activity.getTheme().applyStyle(R.style.ThemeOverlay_ZeroChill_Accent_Red, true); break;
-            case PINK: activity.getTheme().applyStyle(R.style.ThemeOverlay_ZeroChill_Accent_Pink, true); break;
-            case WHITE: activity.getTheme().applyStyle(R.style.ThemeOverlay_ZeroChill_Accent_White, true); break;
+            case PURPLE: activity.getTheme().applyStyle(R.style.ZeroChillAccentPurple, true); break;
+            case BLUE: activity.getTheme().applyStyle(R.style.ZeroChillAccentBlue, true); break;
+            case GREEN: activity.getTheme().applyStyle(R.style.ZeroChillAccentGreen, true); break;
+            case RED: activity.getTheme().applyStyle(R.style.ZeroChillAccentRed, true); break;
+            case PINK: activity.getTheme().applyStyle(R.style.ZeroChillAccentPink, true); break;
+            case WHITE: activity.getTheme().applyStyle(R.style.ZeroChillAccentWhite, true); break;
             default: break;
         }
     }
