@@ -329,7 +329,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         shell.addView(primaryPager, new LinearLayout.LayoutParams(-1, 0, 1f));
 
         swipeRefresh = new ZeroChillRefreshLayout(this);
-        swipeRefresh.setColorSchemeColors(UiPalette.PRIMARY);
+        swipeRefresh.setColorSchemeColors(AppearanceTheme.accent(this));
         swipeRefresh.setOnRefreshListener(this::refreshCurrentScreen);
         content.addView(swipeRefresh, new FrameLayout.LayoutParams(-1, -1));
 
@@ -512,7 +512,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         search.setImageResource(R.drawable.ic_nav_search);
         search.setPadding(dp(10), dp(10), dp(10), dp(10));
         search.setContentDescription("Search");
-        search.setColorFilter(Color.WHITE);
+        search.setColorFilter(AppearanceTheme.primaryText(this));
         search.setClickable(true);
         search.setFocusable(true);
         ZeroChillMotion.installPressFeedback(search);
@@ -529,7 +529,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         more.setImageResource(R.drawable.ic_more_overflow);
         more.setPadding(dp(10), dp(10), dp(10), dp(10));
         more.setContentDescription("More");
-        more.setColorFilter(Color.WHITE);
+        more.setColorFilter(AppearanceTheme.primaryText(this));
         more.setClickable(true);
         more.setFocusable(true);
         ZeroChillMotion.installPressFeedback(more);
@@ -1350,7 +1350,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         BadgeDrawable badge = bottomNavigation.getOrCreateBadge(NAV_LIBRARY);
         badge.clearNumber();
         badge.setBadgeGravity(BadgeDrawable.TOP_END);
-        badge.setBackgroundColor(UiPalette.PRIMARY);
+        badge.setBackgroundColor(AppearanceTheme.accent(this));
         badge.setVisible(true);
     }
 
