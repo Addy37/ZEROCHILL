@@ -18,7 +18,8 @@ final class ZeroChillDialog {
         private boolean destructive;
 
         Builder(Context context) {
-            super(context, R.style.Theme_ZeroChill_Dialog);
+            super(context, AppearanceTheme.isLight(context)
+                    ? R.style.Theme_ZeroChill_Dialog_Light : R.style.Theme_ZeroChill_Dialog);
             this.context = context;
         }
 
