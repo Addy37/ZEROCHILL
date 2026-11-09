@@ -16,6 +16,14 @@ ZEROCHILL keeps OLED black as its **only** app theme. The user explicitly wants 
 - Pre-existing preview backups with older theme keys remain readable. Saved accent/glass preferences stay in the existing backup format and app_prefs store.
 - Media players, content sources, Supabase, downloads, favorites, history, update compatibility, application ID and signing remain unchanged.
 
+## Compose remodel phase 1
+
+- Appearance is hosted in `androidx.activity.ComponentActivity` and rendered by `AppearanceComposeScreen.kt`.
+- The Java View tree for Appearance was replaced with Compose Material 3 surfaces, native Compose sliders, switches, reset dialog, and accent-color swatches.
+- Values still read/write the existing `AppearanceTheme` preferences. The native glass engine and saved content are unchanged.
+- The preview is a simple visual approximation, not a background-sampling lens. The navbar/header use the real OG glass renderer.
+- Main Settings remains Java Views for this stage. Conversion is intentionally sequenced to avoid disrupting existing settings and actions.
+
 ## Current limits
 
 - Some older components still use hardcoded accent colors and will be covered by later **targeted** UI polish.
@@ -24,4 +32,4 @@ ZEROCHILL keeps OLED black as its **only** app theme. The user explicitly wants 
 
 ## Validation
 
-Previous preview-3 build was successful at `b2ab28c` with focused AppearanceTheme and HeaderGlassMaterial tests and a signed release artifact. The OLED-only accent-preserving revision is newer and **has not been built or tested yet**.
+Previous preview-3 build was successful at `b2ab28c` with focused AppearanceTheme and HeaderGlassMaterial tests and a signed release artifact. The OLED-only accent-preserving revision was followed by the new Compose Appearance phase. Focused compilation and device validation are pending.
