@@ -48,13 +48,16 @@ jobs:
           gradle-version: '8.11.1'
           cache-provider: basic
       - name: Focused Library, appearance, glass and navigation checks
-        run: >-
-          gradle --no-daemon :app:testDebugUnitTest :app:testReleaseUnitTest
-          --tests '*LibraryProfileTest' --tests '*LibrarySocialHubTest'
-          --tests '*PrimaryTabLibraryTest' --tests '*AppearanceThemeTest'
-          --tests '*PrimaryTabNavigationTest' --tests '*NavigationMotionControllerTest'
-          --tests '*NavigationIaTest' --tests '*PreferenceGlass*Test*'
-          --tests '*PrimaryTabWorkQueueTest'
+        run: |
+          filters=()
+          for test in LibraryProfileTest LibrarySocialHubTest PrimaryTabLibraryTest \
+            AppearanceThemeTest PrimaryTabNavigationTest NavigationMotionControllerTest \
+            NavigationIaTest 'PreferenceGlass*Test*' PrimaryTabWorkQueueTest; do
+            filters+=(--tests "*$test")
+          done
+          # Gradle task options belong to the preceding task, so filter each variant.
+          gradle --no-daemon :app:testDebugUnitTest "${filters[@]}" \
+            :app:testReleaseUnitTest "${filters[@]}"
       - name: Restore existing production signing identity
         env:
           SIGNING_BUNDLE: ${{ secrets.ANDROID_SIGNING_BUNDLE }}
