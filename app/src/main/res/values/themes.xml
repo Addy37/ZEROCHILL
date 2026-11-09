@@ -67,42 +67,42 @@
     <style name="Theme.ZeroChill.Dark.Account" parent="Theme.ZeroChill.Dark">
         <item name="android:autofilledHighlight">@drawable/zc_autofill_highlight</item>
     </style>
-    <style name="ThemeOverlay.ZeroChill.Accent.Purple">
+    <style name="ZeroChillAccentPurple">
         <item name="colorPrimary">#A06CFF</item>
         <item name="colorSecondary">#A06CFF</item>
         <item name="colorControlActivated">#A06CFF</item>
         <item name="android:colorAccent">#A06CFF</item>
         <item name="colorOnPrimary">#020F17</item>
     </style>
-    <style name="ThemeOverlay.ZeroChill.Accent.Blue">
+    <style name="ZeroChillAccentBlue">
         <item name="colorPrimary">#4A89FF</item>
         <item name="colorSecondary">#4A89FF</item>
         <item name="colorControlActivated">#4A89FF</item>
         <item name="android:colorAccent">#4A89FF</item>
         <item name="colorOnPrimary">#020F17</item>
     </style>
-    <style name="ThemeOverlay.ZeroChill.Accent.Green">
+    <style name="ZeroChillAccentGreen">
         <item name="colorPrimary">#42D39B</item>
         <item name="colorSecondary">#42D39B</item>
         <item name="colorControlActivated">#42D39B</item>
         <item name="android:colorAccent">#42D39B</item>
         <item name="colorOnPrimary">#020F17</item>
     </style>
-    <style name="ThemeOverlay.ZeroChill.Accent.Red">
+    <style name="ZeroChillAccentRed">
         <item name="colorPrimary">#FF5B65</item>
         <item name="colorSecondary">#FF5B65</item>
         <item name="colorControlActivated">#FF5B65</item>
         <item name="android:colorAccent">#FF5B65</item>
         <item name="colorOnPrimary">#020F17</item>
     </style>
-    <style name="ThemeOverlay.ZeroChill.Accent.Pink">
+    <style name="ZeroChillAccentPink">
         <item name="colorPrimary">#FF69B6</item>
         <item name="colorSecondary">#FF69B6</item>
         <item name="colorControlActivated">#FF69B6</item>
         <item name="android:colorAccent">#FF69B6</item>
         <item name="colorOnPrimary">#020F17</item>
     </style>
-    <style name="ThemeOverlay.ZeroChill.Accent.White">
+    <style name="ZeroChillAccentWhite">
         <item name="colorPrimary">#FFFFFF</item>
         <item name="colorSecondary">#FFFFFF</item>
         <item name="colorControlActivated">#FFFFFF</item>
