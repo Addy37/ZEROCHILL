@@ -43,6 +43,18 @@ public class AppearanceThemeTest {
         assertEquals(0xFFF7F9FC, ZeroChillUi.background(app));
     }
 
+    @Test public void sharedComponentsUseThemeColors() {
+        Context app = app();
+        AppearanceTheme.setMode(app, AppearanceTheme.Mode.LIGHT);
+        AppearanceTheme.setAccent(app, AppearanceTheme.Accent.GREEN);
+        assertEquals(AppearanceTheme.accent(app), ZeroChillUi.color(app, R.color.zc_cyan));
+        assertEquals(AppearanceTheme.primaryText(app), ZeroChillUi.color(app, R.color.zc_text_primary));
+        assertTrue(ZeroChillUi.glass(app) instanceof android.graphics.drawable.GradientDrawable);
+        android.widget.TextView label = new android.widget.TextView(app);
+        ZeroChillTypography.apply(label, ZeroChillTypography.Role.TITLE);
+        assertEquals(AppearanceTheme.primaryText(app), label.getCurrentTextColor());
+    }
+
     @Test public void resetDoesNotTouchSavedMotionPreferences() {
         Context app = app();
         AppearanceTheme.prefs(app).edit().putBoolean("immersive_motion_enabled", false).commit();

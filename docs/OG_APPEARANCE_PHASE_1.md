@@ -9,6 +9,9 @@ Source: current OG main, not historical rebrand/zerochill.
 - OLED black and electric cyan defaults, with legacy oled_black_enabled fallback and compatibility.
 - Shared semantic colors used by ZeroChillUi, Settings, dialog text, and the bottom Compose navigation.
 - Navigation glass-intensity control using the existing OG glass engine, not V2's dependency.
+- Glass follow-up: at maximum intensity, strengthen lens and rim instead of darkening the film; allow shared headers and native preference panels to follow intensity.
+- Main library, Shows, OnlyFap section chrome, native cards/menus and social settings now use theme-aware colors. Media artwork overlays remain white/dark as needed.
+- Appearance preview now reacts to glass intensity and tint changes without pretending to show real backdrop refraction.
 - Theme-aware native popup tint as a readable fallback. No background capture in PopupWindow.
 - Existing immersive_motion_enabled remains authoritative, including Android animation preference.
 - The existing validated backup format now retains the two appearance strings and two glass floats.

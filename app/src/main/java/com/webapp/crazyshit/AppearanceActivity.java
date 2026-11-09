@@ -23,6 +23,7 @@ import androidx.core.view.WindowInsetsCompat;
 /** Compact appearance studio, backed by the same settings store as the working OG app. */
 public final class AppearanceActivity extends Activity {
     private ScrollView scroll;
+    private TextView glassSample;
 
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
@@ -177,12 +178,28 @@ public final class AppearanceActivity extends Activity {
         spacer(surface, 9);
         TextView action = text("Sample glass control", 13, AppearanceTheme.primaryText(this), false);
         action.setPadding(dp(13), dp(11), dp(13), dp(11));
-        int tintAlpha = Math.round(45 + AppearanceTheme.menuTint(this) * 120);
-        int tint = AppearanceTheme.surface(this);
-        int translucent = Color.argb(tintAlpha, Color.red(tint), Color.green(tint), Color.blue(tint));
-        action.setBackground(shape(translucent, AppearanceTheme.outline(this), 14));
+        glassSample = action;
+        updateGlassSample();
         surface.addView(action);
         parent.addView(surface);
+    }
+
+    /** Immediate optical/tint preview; actual page refraction comes from OG's glass engine. */
+    private void updateGlassSample() {
+        if (glassSample == null) return;
+        float intensity = AppearanceTheme.glassIntensity(this);
+        float tint = AppearanceTheme.menuTint(this);
+        int background = AppearanceTheme.surface(this);
+        int accent = AppearanceTheme.accent(this);
+        int alpha = Math.round(50 + tint * 130);
+        int film = Color.argb(alpha, Color.red(background), Color.green(background), Color.blue(background));
+        GradientDrawable surface = new GradientDrawable(
+                GradientDrawable.Orientation.TL_BR,
+                new int[]{Color.argb(Math.round(20 + intensity * 50), 255, 255, 255), film, film});
+        surface.setCornerRadius(dp(14));
+        surface.setStroke(dp(1), Color.argb(Math.round(45 + intensity * 190),
+                Color.red(accent), Color.green(accent), Color.blue(accent)));
+        glassSample.setBackground(surface);
     }
 
     private void slider(LinearLayout parent, String title, float value, boolean glassIntensity) {
@@ -203,6 +220,7 @@ public final class AppearanceActivity extends Activity {
                 if (!fromUser) return;
                 if (glassIntensity) AppearanceTheme.setGlassIntensity(AppearanceActivity.this, progress / 100f);
                 else AppearanceTheme.setMenuTint(AppearanceActivity.this, progress / 100f);
+                updateGlassSample();
             }
             @Override public void onStartTrackingTouch(SeekBar bar) {}
             @Override public void onStopTrackingTouch(SeekBar bar) {}

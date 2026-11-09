@@ -173,6 +173,9 @@ final class AppearanceTheme {
         if (resource == R.color.zc_text_muted || resource == R.color.app_on_surface_muted) return mutedText(context);
         if (resource == R.color.zc_edge || resource == R.color.zc_divider) return outline(context);
         if (resource == R.color.zc_cyan || resource == R.color.app_primary) return accent(context);
+        if (resource == R.color.zc_cyan_dim) return (accent(context) & 0x00FFFFFF) | 0x99000000;
+        if (resource == R.color.app_primary_dim) return accent(context);
+        if (resource == R.color.zc_surface_pressed) return raised(context);
         if (resource == R.color.zc_cyan_container || resource == R.color.app_primary_container)
             return (accent(context) & 0x00FFFFFF) | 0x33000000;
         if (resource == R.color.app_on_primary) return onAccent(context);
