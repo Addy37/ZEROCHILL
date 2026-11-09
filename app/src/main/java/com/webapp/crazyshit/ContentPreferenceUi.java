@@ -45,8 +45,9 @@ final class ContentPreferenceUi {
             row.setGravity(Gravity.CENTER_VERTICAL);
             row.setMinimumHeight(dp(context, 48));
             row.setPadding(dp(context, 8), dp(context, 6), dp(context, 8), dp(context, 6));
-            row.setBackground(selected ? ZeroChillUi.rounded(context, 0x300892D0,
-                    0x600892D0, R.dimen.zc_radius_medium) : null);
+            row.setBackground(selected ? ZeroChillUi.rounded(context,
+                    (cyan & 0x00FFFFFF) | 0x30000000,
+                    (cyan & 0x00FFFFFF) | 0x60000000, R.dimen.zc_radius_medium) : null);
             row.setClickable(true); row.setFocusable(true);
             row.setContentDescription(option.label);
             if (option.icon() != 0) {
@@ -191,7 +192,8 @@ final class ContentPreferenceUi {
         notice.setClickable(false); notice.setFocusable(false);
         int cyan = ZeroChillUi.color(context, R.color.zc_cyan);
         android.graphics.drawable.GradientDrawable glass = heroButtonBackground(context);
-        glass.setColor(0xB015222C); glass.setStroke(dp(context, 1), 0x900892D0);
+        glass.setColor(0xD015222C); glass.setStroke(dp(context, 1),
+                (cyan & 0x00FFFFFF) | 0x90000000);
         android.graphics.drawable.GradientDrawable sheen = new android.graphics.drawable.GradientDrawable(
                 android.graphics.drawable.GradientDrawable.Orientation.TL_BR,
                 new int[]{0x40B4EFFF, 0x0A0892D0, 0x080892D0});

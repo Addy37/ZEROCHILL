@@ -1,7 +1,7 @@
 package com.webapp.crazyshit;
 
 import static org.junit.Assert.*;
-import android.app.Activity;
+import android.app.Application;
 import androidx.appcompat.view.menu.MenuBuilder;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -10,7 +10,7 @@ import org.robolectric.RuntimeEnvironment;
 import org.robolectric.annotation.Config;
 
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = 35)
+@Config(application = Application.class, sdk = 35)
 public class ZeroChillComposeMenuTest {
     @Test public void visibleItemsKeepOriginalMenuItemIdentityAndOrder() {
         MenuBuilder menu = new MenuBuilder(RuntimeEnvironment.getApplication());

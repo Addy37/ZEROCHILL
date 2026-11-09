@@ -25,7 +25,7 @@ ZEROCHILL keeps OLED black as its **only** app theme. The user explicitly wants 
 - Settings is now rendered by `SettingsComposeScreen.kt` with the same Compose OLED cards, controls, accent, and section layout as Appearance.
 - The existing Java `SettingsActivity` retains all notification, privacy, backup, history, content, source-config and app-update handlers. It now creates a Compose section/row model, and live status updates still flow through that model.
 - Settings and Appearance both use `ComponentActivity` for safe Compose lifecycle integration. Existing callback and preference keys stay unchanged.
-- Next visual work after phone validation: shared menus, Search contrast, and leftover fixed-cyan controls.
+- The next visual phase converts shared anchored action menus to Compose using the existing native MenuItem callbacks, with preference-glass optics underneath and an opaque-enough film for readability.
 
 ## Settings Compose validation checklist
 
@@ -37,10 +37,28 @@ ZEROCHILL keeps OLED black as its **only** app theme. The user explicitly wants 
 - Verify Library navigation, backup export/import, history deletion confirmations, site-data confirmation, performance details, source-config status/refresh and test notification.
 - For backup, history clearing, site data and source refresh: confirm only the dialog or flow opens; do not destructively delete data to test styling.
 
+## Compose glass menus, phase 3
+
+- ZeroChillMenu now prefers a Compose UI inside the existing anchored PopupWindow. The original Java menu dispatcher still owns item IDs, visibility, disabled items and action callbacks, with a native fallback outside Activity contexts.
+- The Compose menu is placed inside the existing PreferenceGlassPanel. On capable Android devices it samples the underlying app and renders the OG blur/refraction optics, using screen-aligned recording.
+- The dark visual wash is stronger, so text remains legible above faces, previews and moving artwork. Existing menu tint controls still apply. On unsupported devices, a dark non-refracting fallback remains readable.
+- The color-splitting preference adds a subtle multi-colored reflective rim to Compose menus, not a new content shader.
+- Menu opening/closing uses short native window animations and respects the existing `immersive_motion_enabled` preference.
+- Content-preference choices retain the existing native picker, but its selected row and confirmation accents now follow the chosen accent color. Its preference glass inherits the stronger readable wash.
+- Targeted regression tests cover menu filtering, item identity, and the original action callback contract.
+
+## Menu acceptance checklist
+
+- Open a creator overflow menu in Library, a video menu in Shows/OnlyFap galleries, and an options menu in Messages.
+- Confirm each action still works, disabled choices remain disabled, and touch-outside/back dismisses the menu.
+- Check menus against bright and dark thumbnails, on your selected accent and default cyan.
+- Open the content-preference picker over a busy ShitTok hero and verify its text is readable and every option is reachable.
+- Return from a menu without changing the selected tab, playback position, or data.
+
 ## Current limits
 
 - Some older components still use hardcoded accent colors and will be covered by later **targeted** UI polish.
-- Popup menus use theme-aware translucent paint, not the exact live refraction path of the navbar.
+- The shared Compose menu now requests the OG page-sampled lens; some other screen-specific menus remain native and need a later targeted visual pass.
 - Do not merge before a signed build and physical test on OnePlus Android 16. This draft is not a public release.
 
 ## Validation

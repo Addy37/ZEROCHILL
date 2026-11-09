@@ -1,7 +1,7 @@
 name: ZEROCHILL Appearance Phase 1 APK
 
 # Single scoped push build for this file, not repeated on every code edit.
-# Single signed Compose Settings and Appearance candidate with scoped tests.
+# Signed candidate for Compose menus, Settings, and Appearance with scoped tests.
 on:
   push:
     branches:
@@ -17,8 +17,8 @@ jobs:
   appearance-preview:
     runs-on: ubuntu-latest
     env:
-      APP_VERSION_CODE: "6000007"
-      APP_VERSION_NAME: "7.0.0-compose-preview.5"
+      APP_VERSION_CODE: "6000008"
+      APP_VERSION_NAME: "7.0.0-compose-preview.6"
       ZEROCHILL_SOURCE_SHA: ${{ github.sha }}
       ANALYTICS_ENDPOINT: ""
       ANALYTICS_V2_ENDPOINT: ""
@@ -75,6 +75,8 @@ jobs:
           --tests 'com.webapp.crazyshit.AppearanceThemeTest'
           --tests 'com.webapp.crazyshit.HeaderGlassMaterialTest'
           --tests 'com.webapp.crazyshit.SettingsComposeScreenModelTest'
+          --tests 'com.webapp.crazyshit.ZeroChillComposeMenuTest'
+          --tests 'com.webapp.crazyshit.ZeroChillControlsTest.menuDispatchesItemCallbackAndControlStylesKeepNativeState'
           :app:assembleRelease
 
       - name: Verify production upgrade identity
@@ -87,7 +89,7 @@ jobs:
           "$BUILD_TOOLS/apksigner" verify --print-certs "$APK"
           BADGING="$("$BUILD_TOOLS/aapt2" dump badging "$APK")"
           echo "$BADGING" | grep -q "package: name='com.addy37.crazyshitunofficial'"
-          echo "$BADGING" | grep -q "versionCode='6000007'"
+          echo "$BADGING" | grep -q "versionCode='6000008'"
           mkdir -p "$RUNNER_TEMP/stable"
           gh release download v6.0.2 --repo "$GITHUB_REPOSITORY" \
             --pattern ZeroChill.apk --dir "$RUNNER_TEMP/stable"
@@ -97,7 +99,7 @@ jobs:
           test "$CANDIDATE_CERT" = "$STABLE_CERT"
           STABLE_BADGING="$("$BUILD_TOOLS/aapt2" dump badging "$RUNNER_TEMP/stable/ZeroChill.apk")"
           STABLE_CODE="$(echo "$STABLE_BADGING" | sed -n "s/.*versionCode='\([0-9]*\)'.*/\1/p" | head -n 1)"
-          test 6000007 -gt "$STABLE_CODE"
+          test 6000008 -gt "$STABLE_CODE"
           OUT="ZeroChill-OG-Appearance-${GITHUB_REF_NAME//\//-}-${GITHUB_SHA:0:7}.apk"
           cp "$APK" "$OUT"
           sha256sum "$OUT" > SHA256SUMS-appearance.txt
