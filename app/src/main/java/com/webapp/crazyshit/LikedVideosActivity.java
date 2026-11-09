@@ -45,9 +45,10 @@ public final class LikedVideosActivity extends Activity {
         heading.addView(title, new LinearLayout.LayoutParams(0, -2, 1));
         refresh = BrowseUi.action(this, "Refresh", "Refresh liked videos", v -> loadPage(0));
         heading.addView(refresh, new LinearLayout.LayoutParams(-2, dp(48)));
-        root.addView(heading);
+        LibraryDestinationChrome.attachHeader(root, heading, title);
         status = BrowseUi.text(this, "Loading your likes…", 13, UiPalette.TEXT_MUTED);
         status.setPadding(dp(16), dp(8), dp(16), dp(12));
+        LibraryDestinationChrome.styleSummary(this, status);
         root.addView(status);
         recycler = new RecyclerView(this);
         recycler.setLayoutManager(new LinearLayoutManager(this));
@@ -57,6 +58,7 @@ public final class LikedVideosActivity extends Activity {
         root.addView(recycler, new LinearLayout.LayoutParams(-1, 0, 1));
         more = BrowseUi.action(this, "Load more", "Load more liked videos", v -> loadPage(nextOffset));
         more.setVisibility(View.GONE);
+        LibraryDestinationChrome.styleAction(more, this);
         root.addView(more, new LinearLayout.LayoutParams(-1, dp(48)));
         setContentView(root);
         ZeroChillSessionStore.preferences(this).registerOnSharedPreferenceChangeListener(sessionListener);
@@ -171,12 +173,14 @@ public final class LikedVideosActivity extends Activity {
             ImageView image = new ImageView(LikedVideosActivity.this);
             image.setScaleType(ImageView.ScaleType.CENTER_CROP);
             image.setBackground(BrowseUi.rounded(LikedVideosActivity.this, UiPalette.SURFACE, 12));
-            row.addView(image, new LinearLayout.LayoutParams(dp(120), dp(68)));
+            row.addView(image, new LinearLayout.LayoutParams(dp(112), dp(72)));
             TextView title = BrowseUi.text(LikedVideosActivity.this, "", 14, UiPalette.TEXT_PRIMARY);
             title.setMaxLines(3); title.setEllipsize(android.text.TextUtils.TruncateAt.END);
             title.setPadding(dp(12), 0, 0, 0);
             row.addView(title, new LinearLayout.LayoutParams(0, -2, 1));
             row.setLayoutParams(new RecyclerView.LayoutParams(-1, -2));
+            LibraryDestinationChrome.styleLikedRow(LikedVideosActivity.this, row);
+            LibraryDestinationChrome.styleLikedArtwork(LikedVideosActivity.this, image);
             ZeroChillMotion.installPressFeedback(row);
             return new Holder(row, image, title);
         }
