@@ -5,6 +5,7 @@ import android.content.Context;
 import android.view.Menu;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
+import android.graphics.drawable.GradientDrawable;
 import android.view.Gravity;
 import android.view.MenuItem;
 import android.view.View;
@@ -47,7 +48,17 @@ final class ZeroChillMenu {
         rows.setOrientation(LinearLayout.VERTICAL);
         int inset = dp(6);
         rows.setPadding(inset, inset, inset, inset);
-        rows.setBackground(ZeroChillUi.sheetGlass(context));
+        // PopupWindow is a separate window, so use a theme-aware translucent
+        // fallback here. Full backdrop refraction will be integrated separately.
+        int baseColor = AppearanceTheme.surface(context);
+        float tint = AppearanceTheme.menuTint(context);
+        int tinted = Color.argb(Math.round(160 + tint * 90),
+                Color.red(baseColor), Color.green(baseColor), Color.blue(baseColor));
+        GradientDrawable sheet = new GradientDrawable();
+        sheet.setColor(tinted);
+        sheet.setCornerRadius(dp(18));
+        sheet.setStroke(dp(1), AppearanceTheme.outline(context));
+        rows.setBackground(sheet);
         ScrollView scroll = new ScrollView(context);
         scroll.setFillViewport(true);
         scroll.addView(rows);

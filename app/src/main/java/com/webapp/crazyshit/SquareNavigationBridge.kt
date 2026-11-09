@@ -2,6 +2,7 @@ package com.webapp.crazyshit
 
 import android.app.Activity
 import android.app.Application
+import android.content.SharedPreferences
 import android.os.Bundle
 import android.view.ViewGroup
 import android.widget.FrameLayout
@@ -48,11 +49,20 @@ internal class SquareNavigationBridge(private val nav: ZeroChillBottomNavigation
     private val committedIndex = mutableIntStateOf(0)
     private val collapse = mutableFloatStateOf(0f)
     private val unread = mutableStateOf(false)
+    private val appearanceRevision = mutableIntStateOf(0)
+    private val appearancePrefs = AppearanceTheme.prefs(activity)
+    private val appearanceListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+        if (key == AppearanceTheme.KEY_MODE || key == AppearanceTheme.KEY_ACCENT ||
+            key == AppearanceTheme.KEY_GLASS || key == AppearanceTheme.KEY_MENU_TINT) {
+            appearanceRevision.intValue++
+        }
+    }
     private var owner: NavOwner? = null
     private var view: ComposeView? = null
 
     fun attach() {
         if (view != null) return
+        appearancePrefs.registerOnSharedPreferenceChangeListener(appearanceListener)
         val lifecycle = NavOwner(activity)
         owner = lifecycle
         // WindowRecomposer is installed on the Activity content root, above ComposeView.
@@ -67,7 +77,18 @@ internal class SquareNavigationBridge(private val nav: ZeroChillBottomNavigation
             compose.clipChildren = false
             compose.clipToPadding = false
             compose.setContent {
-                MaterialTheme(colorScheme = darkColorScheme(primary = SelectedInk)) { Navigation() }
+                appearanceRevision.intValue
+                val selected = Color(AppearanceTheme.accent(activity))
+                val scheme = if (AppearanceTheme.isLight(activity)) lightColorScheme(
+                    primary = selected,
+                    surface = Color(AppearanceTheme.surface(activity)),
+                    onSurface = Color(AppearanceTheme.primaryText(activity)),
+                ) else darkColorScheme(
+                    primary = selected,
+                    surface = Color(AppearanceTheme.surface(activity)),
+                    onSurface = Color(AppearanceTheme.primaryText(activity)),
+                )
+                MaterialTheme(colorScheme = scheme) { Navigation() }
             }
             nav.addView(compose, FrameLayout.LayoutParams(-1, -1))
         }
@@ -84,6 +105,7 @@ internal class SquareNavigationBridge(private val nav: ZeroChillBottomNavigation
     }
     fun dispatchInsets() { view?.setPadding(0, 0, 0, 0) }
     fun detach() {
+        appearancePrefs.unregisterOnSharedPreferenceChangeListener(appearanceListener)
         view?.let { it.disposeComposition(); nav.removeView(it) }
         view = null
         owner?.close()
@@ -94,12 +116,12 @@ internal class SquareNavigationBridge(private val nav: ZeroChillBottomNavigation
         val selectedIndex = remember { { committedIndex.intValue } }
         val externalPosition = remember { { position.floatValue } }
         val shell = rememberLayerBackdrop()
-        val config = remember {
-            navigationGlassConfig(activity)
-        }
+        val config = remember(appearanceRevision.intValue) { navigationGlassConfig(activity) }
+        val selectedInk = Color(AppearanceTheme.accent(activity))
+        val inactiveInk = Color(AppearanceTheme.secondaryText(activity))
         val shape = remember { RoundedCornerShape(50) }
         val height = (61f - 11f * collapse.floatValue).dp
-        val film = Color.White.copy(alpha = .04f)
+        val film = Color.White.copy(alpha = if (AppearanceTheme.isLight(activity)) .14f else .04f)
         CompositionLocalProvider(
             LocalAppBackdrop provides page,
             LocalGlassEffectConfig provides config,
@@ -116,7 +138,7 @@ internal class SquareNavigationBridge(private val nav: ZeroChillBottomNavigation
                     onTabSelected = nav::selectSquareTab,
                     backdrop = page,
                     tabsCount = 4,
-                    accentColor = SelectedInk,
+                    accentColor = selectedInk,
                     containerColor = film,
                     indicatorColor = Color.Black.copy(alpha = .10f),
                     height = height,
@@ -131,7 +153,7 @@ internal class SquareNavigationBridge(private val nav: ZeroChillBottomNavigation
                 ) {
                     val replica = LocalLiquidBottomTabsReplica.current
                     for (index in 0..3) {
-                        val ink = if (replica || selectedIndex() == index) SelectedInk else InactiveInk
+                        val ink = if (replica || selectedIndex() == index) selectedInk else inactiveInk
                         LiquidBottomTab(
                             onClick = { nav.selectSquareTab(index) },
                             modifier = Modifier.semantics { selected = selectedIndex() == index },
@@ -140,7 +162,7 @@ internal class SquareNavigationBridge(private val nav: ZeroChillBottomNavigation
                                 Icon(painterResource(Icons[index]), Labels[index], tint = ink,
                                     modifier = Modifier.size(26.dp))
                                 if (index == 3 && unread.value) Box(Modifier.align(Alignment.TopEnd)
-                                    .size(5.dp).background(SelectedInk, RoundedCornerShape(50)))
+                                    .size(5.dp).background(selectedInk, RoundedCornerShape(50)))
                             }
                             // Preserve ZEROCHILL's four-icon collapse instead of Square's
                             // player/search fold. Expanded typography follows Square.
@@ -195,11 +217,13 @@ internal class NavOwner(private val activity: Activity) : SavedStateRegistryOwne
 
 /** One material definition for the navigation shell and pinned primary header. */
 internal fun navigationGlassConfig(activity: Activity): GlassEffectConfig {
+    val strength = (AppearanceTheme.glassIntensity(activity) * 2f).coerceIn(0f, 2f)
     val clearGlass = GlassEffectConfig(
-        blurRadius = .7f,
-        surfaceOpacity = .16f,
-        lensHeight = .44f,
-        centerMagnification = 1.025f,
+        blurRadius = .7f * strength,
+        surfaceOpacity = (.16f * strength).coerceIn(.04f, .32f),
+        lensHeight = (.44f * strength).coerceAtMost(1f),
+        centerMagnification = 1f + (.025f * strength),
+        style = if (strength == 0f) GlassStyle.TRANSPARENT else GlassStyle.LIQUID,
     )
     return if (BuildConfig.DEBUG && activity.intent.getBooleanExtra("probe_no_lens", false))
         clearGlass.copy(lensHeight = 0f, lensAmount = 0f, centerMagnification = 1f)

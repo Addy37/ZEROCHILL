@@ -37,6 +37,7 @@ public class SettingsActivity extends Activity {
     private AppBackupController backup;
     private TextView notificationStatusView;
     private TextView sourceConfigStatusView;
+    private String renderedAppearanceSignature;
     private boolean notificationReceiverRegistered;
 
     private final BroadcastReceiver notificationCheckReceiver = new BroadcastReceiver() {
@@ -66,6 +67,7 @@ public class SettingsActivity extends Activity {
         backup = new AppBackupController(this);
         ZeroChillUi.applySystemBars(this);
         buildUi();
+        renderedAppearanceSignature = AppearanceTheme.signature(this);
 
         if (getIntent().getBooleanExtra(EXTRA_CHECK_FOR_UPDATES, false)) {
             getIntent().removeExtra(EXTRA_CHECK_FOR_UPDATES);
@@ -94,7 +96,7 @@ public class SettingsActivity extends Activity {
         header.setGravity(Gravity.CENTER_VERTICAL);
         header.setPadding(0, 0, 0, dp(4));
 
-        TextView back = text("‹", 31f, Color.WHITE);
+        TextView back = text("‹", 31f, AppearanceTheme.primaryText(this));
         back.setGravity(Gravity.CENTER);
         back.setContentDescription("Back");
         back.setClickable(true);
@@ -106,7 +108,7 @@ public class SettingsActivity extends Activity {
         ZeroChillMotion.installPressFeedback(back);
         header.addView(back, new LinearLayout.LayoutParams(dp(42), dp(48)));
 
-        TextView title = text("Settings", 25f, Color.WHITE);
+        TextView title = text("Settings", 25f, AppearanceTheme.primaryText(this));
         title.setTypeface(null, android.graphics.Typeface.BOLD);
         LinearLayout.LayoutParams titleParams = new LinearLayout.LayoutParams(0, -2, 1f);
         titleParams.leftMargin = dp(6);
@@ -190,6 +192,13 @@ public class SettingsActivity extends Activity {
         );
 
         LinearLayout appearance = addGroup(root, "Appearance");
+        addAction(
+                appearance,
+                "Customize appearance",
+                "Themes, accent colors, glass and motion.",
+                "",
+                () -> startActivity(new Intent(this, AppearanceActivity.class))
+        );
         addSwitch(
                 appearance,
                 "Haptic feedback",
@@ -352,12 +361,12 @@ public class SettingsActivity extends Activity {
         root.addView(label);
 
         MaterialCardView card = new MaterialCardView(this);
-        card.setCardBackgroundColor(Color.rgb(8, 8, 10));
+        card.setCardBackgroundColor(AppearanceTheme.surface(this));
         card.setRadius(dp(16));
         card.setCardElevation(0f);
         card.setStrokeWidth(dp(1));
-        card.setStrokeColor(Color.rgb(43, 43, 50));
-        card.setRippleColor(ColorStateList.valueOf(Color.rgb(28, 28, 34)));
+        card.setStrokeColor(AppearanceTheme.outline(this));
+        card.setRippleColor(ColorStateList.valueOf(ZeroChillUi.color(this, R.color.zc_ripple)));
 
         LinearLayout content = new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL);
@@ -799,6 +808,12 @@ public class SettingsActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
+        String currentAppearance = AppearanceTheme.signature(this);
+        if (renderedAppearanceSignature != null && !renderedAppearanceSignature.equals(currentAppearance)) {
+            ZeroChillUi.applySystemBars(this);
+            buildUi();
+            renderedAppearanceSignature = currentAppearance;
+        }
         OledThemeController.applySoon(this);
         if (appUpdater != null) {
             appUpdater.onHostResume();
