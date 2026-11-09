@@ -92,6 +92,9 @@ jobs:
           --tests 'com.webapp.crazyshit.SearchOverlayTest'
           --tests 'com.webapp.crazyshit.SearchShitTokPauseTest'
           --tests 'com.webapp.crazyshit.ShitTokAudioOwnershipTest'
+          --tests 'com.webapp.crazyshit.ShowsWatchPageTest.scopedBackWithMotionEnabledFinishesInSameDispatch'
+          --tests 'com.webapp.crazyshit.ShowsWatchPageTest.backExitsDirectlyAfterSelectionsWithoutRelatedHistory'
+          --tests 'com.webapp.crazyshit.ShowsWatchMotionTest'
           :app:assembleRelease
 
       - name: Preserve focused test evidence

@@ -6,13 +6,14 @@ Started from PR #408 head `de2117512531bea2f384d8faaf231993caef95e1`.
 PRs #407 and #408 were both open, draft and unmerged when verified.
 The performance PR targets `feature/zerochill-7-shared-chrome-phase4`.
 
-Three focused before-change Robolectric checks reproduced the targeted defects:
+Focused before-change Robolectric checks reproduced the targeted defects:
 
 | Observation | Before | After (executed) |
 | --- | --- | --- |
 | Tab handler returns with pager state | SETTLING (2) | IDLE (0) |
 | Header title writes for one Library selection | 2 | 1 |
 | Search close callback complete in Back dispatch | false | true |
+| Scoped Shows player finishes in Back dispatch (motion on) | false | true |
 
 These are deterministic behavior/work counts, not measured frame-time gains.
 Search's original exit explicitly used `260 ms * remaining morph fraction` and
@@ -36,6 +37,13 @@ no fixed physical-device latency is claimed.
   Closing now hides the keyboard and completes synchronously, including before
   the opening layout. Opening visuals remain; IME-first Back behavior remains.
 
+- The Shows player Back path also gated `finish()` on a reverse artwork morph
+  (400 ms from a settled frame) or a 140 ms fallback fade. A motion-enabled
+  scoped-host regression failed on the original path. Back now cancels that
+  motion and finishes immediately after the existing save/pause/cancel steps.
+  The opening handoff, completion/history save guard, player ownership and
+  non-Shows fullscreen/related-history/minimize routing remain unchanged.
+
 ## Investigated and retained
 
 - `MainPagerAdapter` is a retained View adapter, not a fragment navigator. Its
@@ -57,8 +65,9 @@ no fixed physical-device latency is claimed.
   playback through existing owners. These paths are preserved.
 - The Android 33+ Back dispatcher and legacy Back entry both still call the same
   handler. Search, ShitTok fullscreen, legacy content, return-to-ShitTok, then
-  Activity finish retain their priority. Player/overlay Activity handlers are
-  unchanged. Gesture fidelity requires physical testing.
+  Activity finish retain their priority. The Shows player's finish timing is
+  changed as above; other player/overlay handlers remain unchanged. Gesture
+  fidelity requires physical testing.
 
 ## Validation
 
@@ -68,14 +77,20 @@ retention, coalesced primary work, fake-drag/insets, and ShitTok audio/search
 ownership. Local scoped run: 47 tests passed, zero failures/errors/skips.
 The additional integrated Search-before-Library-Back check then passed separately
 (48 focused cases total). After-change probe output: tab state 0, Back state 0,
-header title writes 1. The new tests reproduced three failures on the original
-application source before the fix. Signed workflow evidence is recorded on the
+header title writes 1. The initial tests reproduced three failures on the original
+application source before the fix. The additional scoped Shows Back test also
+failed before its targeted fix. All 13 follow-up checks passed: scoped-host
+finish, existing related-selection Back behavior, early/duplicate Back, and
+opening artwork motion. Total local focused coverage: 61 cases passed, zero
+remaining failures/errors/skips. Signed workflow evidence is recorded on the
 PR after execution. Full repository suites and emulator build matrices are
 intentionally excluded.
 
 Local setup initially hit a missing test import and a read-only Robolectric
 home lock; corrected the import and ran the JVM with a workspace user.home.
-Neither is an application regression.
+Neither is an application regression. The Shows follow-up initially exposed a
+null-root case in the existing early/duplicate-Back fixture; guarded animation
+cancellation before the successful rerun.
 
 ## Compatibility and remaining risks
 
@@ -84,8 +99,8 @@ code, backend, auth, downloads, favorites, history, backups, signing setup or
 application ID changed. The workflow preserves the Preview 9 publishable key
 and verifies it is present in the APK's DEX without logging the value.
 
-The visible behavior change is immediate tap/Back destination changes and Search
-exit. Navbar dragging remains animated. Main-thread first-time construction,
+The visible behavior change is immediate tap/Back destination changes, Search
+exit and Shows player exit. Navbar dragging remains animated. Main-thread first-time construction,
 image decoding, player resumption, network responses and GPU glass cost can
 still affect responsiveness. No physical-device speedup or Android 16 gesture
 acceptance is claimed. Test rapid taps, Library/OnlyFap scroll retention, Search
