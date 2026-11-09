@@ -196,7 +196,7 @@ public final class ZeroChillAccountActivity extends Activity {
 
     private void buildShell() {
         FrameLayout root = new FrameLayout(this);
-        root.setBackgroundColor(AppearanceTheme.background(this));
+        root.setBackgroundColor(Color.BLACK);
 
         LinearLayout shell = new LinearLayout(this);
         shell.setOrientation(LinearLayout.VERTICAL);
@@ -211,7 +211,7 @@ public final class ZeroChillAccountActivity extends Activity {
         top.setMinimumHeight(dp(58));
         shell.addView(top, new LinearLayout.LayoutParams(-1, -2));
 
-        TextView back = text("‹", 31, AppearanceTheme.primaryText(this), false);
+        TextView back = text("‹", 31, Color.WHITE, false);
         back.setGravity(Gravity.CENTER);
         back.setContentDescription("Back");
         back.setOnClickListener(v -> finish());
@@ -223,7 +223,7 @@ public final class ZeroChillAccountActivity extends Activity {
         titles.setPadding(dp(6), 0, 0, 0);
         top.addView(titles, new LinearLayout.LayoutParams(0, -2, 1f));
 
-        TextView title = text("Account", 24, AppearanceTheme.primaryText(this), true);
+        TextView title = text("Account", 24, Color.WHITE, true);
         titles.addView(title);
         TextView subtitle = text("ZEROCHILL ID", 11,
                 ZeroChillUi.color(this, R.color.zc_text_muted), true);
@@ -426,7 +426,7 @@ public final class ZeroChillAccountActivity extends Activity {
         privacyCard.setGravity(Gravity.CENTER_VERTICAL);
         privacyCard.setPadding(dp(13), dp(11), dp(13), dp(11));
         privacyCard.setBackground(panelBackground(16));
-        TextView lock = text("◆", 12, AppearanceTheme.mutedText(ZeroChillAccountActivity.this), true);
+        TextView lock = text("◆", 12, UiPalette.TEXT_MUTED, true);
         lock.setGravity(Gravity.TOP);
         privacyCard.addView(lock, new LinearLayout.LayoutParams(dp(24), -2));
         TextView privacy = text(
@@ -478,7 +478,7 @@ public final class ZeroChillAccountActivity extends Activity {
     ) {
         content.removeAllViews();
         addEyebrow(content, eyebrowValue);
-        TextView title = text(titleValue, 28, AppearanceTheme.primaryText(this), true);
+        TextView title = text(titleValue, 28, Color.WHITE, true);
         LinearLayout.LayoutParams titleParams = new LinearLayout.LayoutParams(-1, -2);
         titleParams.topMargin = dp(7);
         content.addView(title, titleParams);
@@ -525,7 +525,7 @@ public final class ZeroChillAccountActivity extends Activity {
         hero.setBackground(panelBackground(20));
 
         FrameLayout avatarHalo = new FrameLayout(this);
-        avatarHalo.setBackground(circle(AppearanceTheme.raised(ZeroChillAccountActivity.this)));
+        avatarHalo.setBackground(circle(UiPalette.RAISED));
         avatarHalo.setPadding(dp(3), dp(3), dp(3), dp(3));
 
         ImageView avatar = new ImageView(this);
@@ -544,7 +544,7 @@ public final class ZeroChillAccountActivity extends Activity {
         } else {
             avatar.setImageResource(R.drawable.ic_more_account);
             avatar.setPadding(dp(20), dp(20), dp(20), dp(20));
-            avatar.setColorFilter(AppearanceTheme.secondaryText(ZeroChillAccountActivity.this));
+            avatar.setColorFilter(UiPalette.TEXT_SECONDARY);
         }
         avatarHalo.addView(avatar, new FrameLayout.LayoutParams(-1, -1));
         hero.addView(avatarHalo, new LinearLayout.LayoutParams(dp(82), dp(82)));
@@ -566,7 +566,7 @@ public final class ZeroChillAccountActivity extends Activity {
             TextView display = text(
                     SocialUi.cleanName(state.username),
                     13,
-                    AppearanceTheme.secondaryText(ZeroChillAccountActivity.this),
+                    UiPalette.TEXT_SECONDARY,
                     true
             );
             LinearLayout.LayoutParams displayParams = new LinearLayout.LayoutParams(-1, -2);
@@ -590,7 +590,7 @@ public final class ZeroChillAccountActivity extends Activity {
         LinearLayout.LayoutParams profileBioParams = new LinearLayout.LayoutParams(-1, -2);
         profileBioParams.topMargin = dp(8);
         identity.addView(profileBio, profileBioParams);
-        TextView publicLink = text("View public profile  ›", 12, AppearanceTheme.accent(ZeroChillAccountActivity.this), true);
+        TextView publicLink = text("View public profile  ›", 12, UiPalette.PRIMARY, true);
         publicLink.setGravity(Gravity.CENTER_VERTICAL);
         publicLink.setMinHeight(dp(48));
         publicLink.setContentDescription("View public profile");
@@ -633,7 +633,7 @@ public final class ZeroChillAccountActivity extends Activity {
         });
         editProfile.setText(editingProfile ? "Close editor" : "Edit profile");
 
-        TextView section = text("PROFILE", 12, AppearanceTheme.mutedText(ZeroChillAccountActivity.this), true);
+        TextView section = text("PROFILE", 12, UiPalette.TEXT_MUTED, true);
         section.setLetterSpacing(0.11f);
         LinearLayout.LayoutParams sectionParams = new LinearLayout.LayoutParams(-1, -2);
         sectionParams.topMargin = dp(24);
@@ -778,7 +778,7 @@ public final class ZeroChillAccountActivity extends Activity {
     }
 
     private void section(String title) {
-        TextView heading = text(title, 12, AppearanceTheme.mutedText(ZeroChillAccountActivity.this), true);
+        TextView heading = text(title, 12, UiPalette.TEXT_MUTED, true);
         heading.setLetterSpacing(0.11f);
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, -2);
         params.topMargin = dp(25);
@@ -795,10 +795,10 @@ public final class ZeroChillAccountActivity extends Activity {
         row.setBackground(panelBackground(14));
         ImageView symbol = new ImageView(this);
         symbol.setImageResource(iconRes);
-        symbol.setColorFilter(AppearanceTheme.secondaryText(ZeroChillAccountActivity.this));
+        symbol.setColorFilter(UiPalette.TEXT_SECONDARY);
         symbol.setPadding(dp(4), dp(4), dp(4), dp(4));
         row.addView(symbol, new LinearLayout.LayoutParams(dp(28), dp(28)));
-        TextView title = text(label, 14, AppearanceTheme.primaryText(this), true);
+        TextView title = text(label, 14, Color.WHITE, true);
         LinearLayout.LayoutParams titleParams = new LinearLayout.LayoutParams(0, -2, 1f);
         titleParams.setMarginStart(dp(10));
         row.addView(title, titleParams);
@@ -914,7 +914,7 @@ public final class ZeroChillAccountActivity extends Activity {
         TextView view = text(
                 label,
                 11,
-                selected ? AppearanceTheme.accent(ZeroChillAccountActivity.this) : ZeroChillUi.color(this, R.color.zc_text_secondary),
+                selected ? UiPalette.PRIMARY : ZeroChillUi.color(this, R.color.zc_text_secondary),
                 true
         );
         view.setGravity(Gravity.CENTER);
@@ -925,21 +925,21 @@ public final class ZeroChillAccountActivity extends Activity {
     }
 
     private TextView primaryButton(String label) {
-        TextView view = text(label, 14, AppearanceTheme.primaryText(ZeroChillAccountActivity.this), true);
+        TextView view = text(label, 14, UiPalette.TEXT_PRIMARY, true);
         ZeroChillUi.styleAction(view, true);
         ZeroChillMotion.installPressFeedback(view);
         return view;
     }
 
     private TextView secondaryButton(String label) {
-        TextView view = text(label, 14, AppearanceTheme.primaryText(ZeroChillAccountActivity.this), true);
+        TextView view = text(label, 14, UiPalette.TEXT_PRIMARY, true);
         ZeroChillUi.styleAction(view, false);
         ZeroChillMotion.installPressFeedback(view);
         return view;
     }
 
     private void addEyebrow(LinearLayout parent, String value) {
-        TextView eyebrow = text(value, 12, AppearanceTheme.mutedText(ZeroChillAccountActivity.this), true);
+        TextView eyebrow = text(value, 12, UiPalette.TEXT_MUTED, true);
         eyebrow.setLetterSpacing(0.12f);
         parent.addView(eyebrow);
     }
@@ -965,33 +965,33 @@ public final class ZeroChillAccountActivity extends Activity {
 
     private GradientDrawable fieldBackground() {
         GradientDrawable background = new GradientDrawable();
-        background.setColor(AppearanceTheme.surface(ZeroChillAccountActivity.this));
+        background.setColor(UiPalette.SURFACE);
         background.setCornerRadius(dp(15));
-        background.setStroke(dp(1), AppearanceTheme.outline(ZeroChillAccountActivity.this));
+        background.setStroke(dp(1), UiPalette.DIVIDER);
         return background;
     }
 
     private GradientDrawable panelBackground(int radiusDp) {
         GradientDrawable background = new GradientDrawable();
-        background.setColor(AppearanceTheme.surface(ZeroChillAccountActivity.this));
+        background.setColor(UiPalette.SURFACE);
         background.setCornerRadius(dp(radiusDp));
-        background.setStroke(dp(1), AppearanceTheme.outline(ZeroChillAccountActivity.this));
+        background.setStroke(dp(1), UiPalette.DIVIDER);
         return background;
     }
 
     private GradientDrawable selectedTabBackground() {
         GradientDrawable background = new GradientDrawable();
-        background.setColor(ZeroChillUi.color(ZeroChillAccountActivity.this, R.color.zc_cyan_container));
+        background.setColor(UiPalette.PRIMARY_CONTAINER);
         background.setCornerRadius(dp(12));
-        background.setStroke(dp(1), AppearanceTheme.accent(ZeroChillAccountActivity.this));
+        background.setStroke(dp(1), UiPalette.PRIMARY);
         return background;
     }
 
     private GradientDrawable quietTabBackground() {
         GradientDrawable background = new GradientDrawable();
-        background.setColor(AppearanceTheme.surface(ZeroChillAccountActivity.this));
+        background.setColor(UiPalette.SURFACE);
         background.setCornerRadius(dp(12));
-        background.setStroke(dp(1), AppearanceTheme.outline(ZeroChillAccountActivity.this));
+        background.setStroke(dp(1), UiPalette.DIVIDER);
         return background;
     }
 
@@ -1004,7 +1004,7 @@ public final class ZeroChillAccountActivity extends Activity {
 
     private GradientDrawable headerBackground() {
         GradientDrawable background = new GradientDrawable();
-        background.setColor(AppearanceTheme.background(ZeroChillAccountActivity.this));
+        background.setColor(UiPalette.BACKGROUND);
         return background;
     }
 

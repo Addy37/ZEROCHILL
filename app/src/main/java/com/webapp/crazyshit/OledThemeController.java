@@ -36,12 +36,9 @@ final class OledThemeController {
         // container black would cover the browsing page beneath them.
         if (activity instanceof BunkrGalleryActivity ||
                 activity instanceof ShowsWatchActivity) return;
-        boolean enabled = AppearanceTheme.isOled(activity);
-        if (!enabled) {
-            // Do not normalize light or dark themed screens back to true black.
-            ZeroChillUi.applySystemBars(activity);
-            return;
-        }
+        boolean enabled = activity.getSharedPreferences("app_prefs", Activity.MODE_PRIVATE)
+                .getBoolean("oled_black_enabled", true);
+        if (!enabled) return;
 
         Window window = activity.getWindow();
         if (window != null) {

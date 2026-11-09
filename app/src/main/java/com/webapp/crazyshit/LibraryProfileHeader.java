@@ -49,7 +49,7 @@ final class LibraryProfileHeader extends LinearLayout {
         identity.setOnClickListener(v -> activity.startActivity(new Intent(activity, ZeroChillAccountActivity.class)));
         avatar = new ImageView(activity);
         avatar.setScaleType(ImageView.ScaleType.CENTER_CROP);
-        avatar.setBackground(BrowseUi.rounded(activity, AppearanceTheme.raised(activity), 30));
+        avatar.setBackground(BrowseUi.rounded(activity, UiPalette.RAISED, 30));
         avatar.setOutlineProvider(new android.view.ViewOutlineProvider() {
             @Override public void getOutline(View view, android.graphics.Outline outline) {
                 outline.setOval(0, 0, view.getWidth(), view.getHeight());
@@ -60,7 +60,7 @@ final class LibraryProfileHeader extends LinearLayout {
         LinearLayout copy = new LinearLayout(activity);
         copy.setOrientation(VERTICAL);
         copy.setPadding(dp(14), 0, 0, 0);
-        name = label("Your Library", 24, AppearanceTheme.primaryText(activity));
+        name = label("Your Library", 24, UiPalette.TEXT_PRIMARY);
         ZeroChillTypography.apply(name, ZeroChillTypography.Role.SECTION);
         name.setMaxLines(2);
         name.setEllipsize(android.text.TextUtils.TruncateAt.END);
@@ -70,7 +70,7 @@ final class LibraryProfileHeader extends LinearLayout {
 
         LinearLayout actions = new LinearLayout(activity);
         actions.setGravity(Gravity.CENTER_VERTICAL);
-        actions.setBackground(BrowseUi.rounded(activity, AppearanceTheme.surface(activity), 18));
+        actions.setBackground(BrowseUi.rounded(activity, UiPalette.SURFACE, 18));
         messages = action(actions, "Messages", R.drawable.ic_action_message, ZeroChillInboxActivity.class);
         notifications = action(actions, "Notifications", R.drawable.ic_more_update, UpdateInboxActivity.class);
         ((View) messages.getParent()).setContentDescription("Messages. Open your inbox");
@@ -101,9 +101,9 @@ final class LibraryProfileHeader extends LinearLayout {
         ZeroChillMotion.installPressFeedback(action);
         ImageView icon = new ImageView(activity);
         icon.setImageResource(drawable);
-        icon.setColorFilter(AppearanceTheme.accent(activity));
+        icon.setColorFilter(UiPalette.PRIMARY);
         action.addView(icon, new LayoutParams(dp(22), dp(22)));
-        TextView caption = label(title, 11, AppearanceTheme.secondaryText(activity));
+        TextView caption = label(title, 11, UiPalette.TEXT_SECONDARY);
         caption.setGravity(Gravity.CENTER);
         LayoutParams captionParams = new LayoutParams(-1, -2);
         captionParams.topMargin = dp(6);
@@ -122,7 +122,7 @@ final class LibraryProfileHeader extends LinearLayout {
             Glide.with(avatar).clear(avatar);
             AccountAvatarImages.track(avatar, owner);
             avatar.setImageResource(R.drawable.ic_more_account);
-            avatar.setColorFilter(AppearanceTheme.accent(activity));
+            avatar.setColorFilter(UiPalette.PRIMARY);
             avatar.setPadding(dp(14), dp(14), dp(14), dp(14));
         }
         final int token = ++readRevision;
@@ -160,7 +160,7 @@ final class LibraryProfileHeader extends LinearLayout {
             Glide.with(avatar).clear(avatar);
             AccountAvatarImages.track(avatar, owner);
             avatar.setImageResource(R.drawable.ic_more_account);
-            avatar.setColorFilter(AppearanceTheme.accent(activity));
+            avatar.setColorFilter(UiPalette.PRIMARY);
             avatar.setPadding(dp(14), dp(14), dp(14), dp(14));
             if (!owner.isEmpty() && !path.isEmpty()) {
                 avatar.clearColorFilter();

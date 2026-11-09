@@ -138,7 +138,7 @@ public final class ZeroChillInboxActivity extends Activity {
         LinearLayout labels = new LinearLayout(this);
         labels.setOrientation(LinearLayout.VERTICAL);
         labels.setPadding(dp(8), 0, 0, 0);
-        title = BrowseUi.text(this, "Messages", 24, AppearanceTheme.primaryText(ZeroChillInboxActivity.this));
+        title = BrowseUi.text(this, "Messages", 24, UiPalette.TEXT_PRIMARY);
         title.setTypeface(null, android.graphics.Typeface.BOLD);
         title.setSingleLine(true);
         title.setEllipsize(TextUtils.TruncateAt.END);
@@ -195,7 +195,7 @@ public final class ZeroChillInboxActivity extends Activity {
     }
 
     private TextView headerAction(String label, String description, View.OnClickListener click) {
-        TextView action = BrowseUi.text(this, label, 12, AppearanceTheme.accent(ZeroChillInboxActivity.this));
+        TextView action = BrowseUi.text(this, label, 12, UiPalette.PRIMARY);
         action.setGravity(Gravity.CENTER);
         action.setMinWidth(dp(48));
         action.setMinHeight(dp(48));
@@ -411,7 +411,7 @@ public final class ZeroChillInboxActivity extends Activity {
                 this,
                 label,
                 14,
-                primary ? AppearanceTheme.accent(ZeroChillInboxActivity.this) : ZeroChillUi.color(this, R.color.zc_text_secondary)
+                primary ? UiPalette.PRIMARY : ZeroChillUi.color(this, R.color.zc_text_secondary)
         );
         action.setTypeface(null, android.graphics.Typeface.BOLD);
         action.setGravity(Gravity.CENTER);
@@ -420,7 +420,7 @@ public final class ZeroChillInboxActivity extends Activity {
         action.setBackground(ZeroChillUi.rounded(
                 this,
                 primary ? Color.rgb(5, 27, 36) : Color.rgb(22, 25, 30),
-                primary ? AppearanceTheme.accent(ZeroChillInboxActivity.this) : ZeroChillUi.color(this, R.color.zc_edge),
+                primary ? UiPalette.PRIMARY : ZeroChillUi.color(this, R.color.zc_edge),
                 R.dimen.zc_radius_medium
         ));
         action.setFocusable(true);
@@ -491,11 +491,11 @@ public final class ZeroChillInboxActivity extends Activity {
     }
 
     private Drawable conversationBackground(boolean selected) {
-        if (!selected) return ZeroChillUi.rounded(this, AppearanceTheme.surface(ZeroChillInboxActivity.this), AppearanceTheme.outline(ZeroChillInboxActivity.this), R.dimen.zc_radius_large);
+        if (!selected) return ZeroChillUi.rounded(this, UiPalette.SURFACE, UiPalette.DIVIDER, R.dimen.zc_radius_large);
         return ZeroChillUi.rounded(
                 this,
-                AppearanceTheme.raised(ZeroChillInboxActivity.this),
-                AppearanceTheme.accent(ZeroChillInboxActivity.this),
+                UiPalette.RAISED,
+                UiPalette.PRIMARY,
                 R.dimen.zc_radius_large
         );
     }
@@ -503,8 +503,8 @@ public final class ZeroChillInboxActivity extends Activity {
     private Drawable selectionMarkBackground(boolean selected) {
         return ZeroChillUi.rounded(
                 this,
-                selected ? AppearanceTheme.accent(ZeroChillInboxActivity.this) : Color.TRANSPARENT,
-                AppearanceTheme.accent(ZeroChillInboxActivity.this),
+                selected ? UiPalette.PRIMARY : Color.TRANSPARENT,
+                UiPalette.PRIMARY,
                 R.dimen.zc_radius_pill
         );
     }
@@ -577,14 +577,14 @@ public final class ZeroChillInboxActivity extends Activity {
             labels.addView(time);
             row.addView(labels, new LinearLayout.LayoutParams(0, -2, 1f));
 
-            TextView unread = BrowseUi.text(ZeroChillInboxActivity.this, "", 12, AppearanceTheme.onAccent(ZeroChillInboxActivity.this));
+            TextView unread = BrowseUi.text(ZeroChillInboxActivity.this, "", 12, UiPalette.ON_PRIMARY);
             unread.setTypeface(null, android.graphics.Typeface.BOLD);
             unread.setGravity(Gravity.CENTER);
             unread.setMinWidth(dp(24));
             unread.setPadding(dp(6), 0, dp(6), 0);
             unread.setBackground(BrowseUi.rounded(
                     ZeroChillInboxActivity.this,
-                    AppearanceTheme.accent(ZeroChillInboxActivity.this),
+                    UiPalette.PRIMARY,
                     12
             ));
             row.addView(unread, new LinearLayout.LayoutParams(-2, dp(24)));
@@ -614,7 +614,7 @@ public final class ZeroChillInboxActivity extends Activity {
             holder.unread.setText(item.unreadCount > 99 ? "99+" : String.valueOf(item.unreadCount));
             holder.selection.setVisibility(selecting ? View.VISIBLE : View.GONE);
             holder.selection.setText(selected ? "✓" : "");
-            holder.selection.setTextColor(selected ? Color.BLACK : AppearanceTheme.accent(ZeroChillInboxActivity.this));
+            holder.selection.setTextColor(selected ? Color.BLACK : UiPalette.PRIMARY);
             holder.selection.setBackground(selectionMarkBackground(selected));
             holder.itemView.setBackground(conversationBackground(selected));
             holder.itemView.setAlpha(1f);
@@ -638,7 +638,7 @@ public final class ZeroChillInboxActivity extends Activity {
             if (avatarUrl.isEmpty()) {
                 holder.avatar.setImageResource(R.drawable.ic_more_account);
                 holder.avatar.setPadding(dp(12), dp(12), dp(12), dp(12));
-                holder.avatar.setColorFilter(AppearanceTheme.secondaryText(ZeroChillInboxActivity.this));
+                holder.avatar.setColorFilter(UiPalette.TEXT_SECONDARY);
             } else {
                 holder.avatar.setPadding(0, 0, 0, 0);
                 holder.avatar.clearColorFilter();

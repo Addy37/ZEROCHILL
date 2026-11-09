@@ -108,7 +108,6 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     private String feedBaseUrl = CrazyShitRepository.HOME;
     private String feedTitle = "Home";
     private int currentPage;
-    private String appliedAppearanceColors;
     private boolean loading;
     private boolean endReached;
     private int generation;
@@ -122,7 +121,6 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     @Override
     protected void onCreate(Bundle state) {
         super.onCreate(state);
-        appliedAppearanceColors = AppearanceTheme.colorSignature(this);
         long activityStartedAt = android.os.SystemClock.elapsedRealtime();
         AppPerformance.startup("main");
         android.os.Trace.beginSection("zc.startup.main_activity");
@@ -331,7 +329,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         shell.addView(primaryPager, new LinearLayout.LayoutParams(-1, 0, 1f));
 
         swipeRefresh = new ZeroChillRefreshLayout(this);
-        swipeRefresh.setColorSchemeColors(AppearanceTheme.accent(this));
+        swipeRefresh.setColorSchemeColors(UiPalette.PRIMARY);
         swipeRefresh.setOnRefreshListener(this::refreshCurrentScreen);
         content.addView(swipeRefresh, new FrameLayout.LayoutParams(-1, -1));
 
@@ -514,7 +512,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         search.setImageResource(R.drawable.ic_nav_search);
         search.setPadding(dp(10), dp(10), dp(10), dp(10));
         search.setContentDescription("Search");
-        search.setColorFilter(AppearanceTheme.primaryText(this));
+        search.setColorFilter(Color.WHITE);
         search.setClickable(true);
         search.setFocusable(true);
         ZeroChillMotion.installPressFeedback(search);
@@ -531,7 +529,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         more.setImageResource(R.drawable.ic_more_overflow);
         more.setPadding(dp(10), dp(10), dp(10), dp(10));
         more.setContentDescription("More");
-        more.setColorFilter(AppearanceTheme.primaryText(this));
+        more.setColorFilter(Color.WHITE);
         more.setClickable(true);
         more.setFocusable(true);
         ZeroChillMotion.installPressFeedback(more);
@@ -1352,7 +1350,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         BadgeDrawable badge = bottomNavigation.getOrCreateBadge(NAV_LIBRARY);
         badge.clearNumber();
         badge.setBadgeGravity(BadgeDrawable.TOP_END);
-        badge.setBackgroundColor(AppearanceTheme.accent(this));
+        badge.setBackgroundColor(UiPalette.PRIMARY);
         badge.setVisible(true);
     }
 
@@ -1364,11 +1362,6 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     @Override
     public void onConfigurationChanged(android.content.res.Configuration newConfig) {
         super.onConfigurationChanged(newConfig);
-        // NativeMain owns uiMode changes; Android does not recreate it automatically.
-        if (!AppearanceTheme.colorSignature(this).equals(appliedAppearanceColors)) {
-            recreate();
-            return;
-        }
         if (primaryPagerAdapter != null) primaryPagerAdapter.onConfigurationChanged();
         if (newConfig.orientation != android.content.res.Configuration.ORIENTATION_LANDSCAPE
                 && restoringPortraitFromFullscreen) {
@@ -1459,12 +1452,6 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     @Override
     protected void onResume() {
         super.onResume();
-        // Rebuild native colors once after returning from Appearance, never per glass slider tick.
-        // The existing adapter saves the selected page when the Activity is recreated.
-        if (!AppearanceTheme.colorSignature(this).equals(appliedAppearanceColors)) {
-            recreate();
-            return;
-        }
         if (headerProfileAvatar != null) headerProfileAvatar.resume();
         if (miniPlayer != null) miniPlayer.onResume();
         if (searchPanel != null) searchPanel.resume();

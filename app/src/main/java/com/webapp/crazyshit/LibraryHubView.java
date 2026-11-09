@@ -394,7 +394,7 @@ final class LibraryHubView extends ScrollView {
 
     private void addLikedSection(List<NativeContentItem> items) {
         if (items.isEmpty()) {
-            TextView open = text("Liked Videos  ›", 15f, AppearanceTheme.secondaryText(activity));
+            TextView open = text("Liked Videos  ›", 15f, UiPalette.TEXT_SECONDARY);
             open.setPadding(dp(4), dp(12), dp(4), dp(12));
             open.setMinimumHeight(dp(48));
             open.setClickable(true);
@@ -456,7 +456,7 @@ final class LibraryHubView extends ScrollView {
 
             View fill = new View(activity);
             GradientDrawable fillBg = new GradientDrawable();
-            fillBg.setColor(AppearanceTheme.accent(activity));
+            fillBg.setColor(UiPalette.PRIMARY);
             fillBg.setCornerRadius(dp(2));
             fill.setBackground(fillBg);
             int fillWidth = Math.max(dp(4),
@@ -621,7 +621,7 @@ final class LibraryHubView extends ScrollView {
             image.setImageResource(R.drawable.ic_action_download);
             image.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
             image.setPadding(dp(58), dp(32), dp(58), dp(32));
-            image.setColorFilter(AppearanceTheme.accent(activity));
+            image.setColorFilter(UiPalette.PRIMARY);
         }
 
         View shade = new View(activity);
@@ -631,7 +631,7 @@ final class LibraryHubView extends ScrollView {
         if (entry.status == android.app.DownloadManager.STATUS_SUCCESSFUL) {
             ImageView offline = new ImageView(activity);
             offline.setImageResource(R.drawable.ic_library_offline);
-            offline.setColorFilter(AppearanceTheme.accent(activity));
+            offline.setColorFilter(UiPalette.PRIMARY);
             offline.setPadding(dp(5), dp(5), dp(5), dp(5));
             offline.setBackground(BrowseUi.rounded(activity, Color.argb(190, 5, 7, 9), 9));
             offline.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
@@ -761,7 +761,7 @@ final class LibraryHubView extends ScrollView {
 
         headingRow.addView(copy, new LinearLayout.LayoutParams(0, -2, 1f));
 
-        TextView viewAll = text(actionLabel, 13f, AppearanceTheme.secondaryText(activity));
+        TextView viewAll = text(actionLabel, 13f, UiPalette.TEXT_SECONDARY);
         viewAll.setTypeface(null, android.graphics.Typeface.BOLD);
         viewAll.setGravity(Gravity.CENTER);
         viewAll.setPadding(dp(12), dp(10), dp(8), dp(10));
@@ -801,12 +801,12 @@ final class LibraryHubView extends ScrollView {
         LinearLayout loadingState = new LinearLayout(activity);
         loadingState.setOrientation(LinearLayout.VERTICAL);
         loadingState.setContentDescription("Loading your Library");
-        TextView label = text("Loading your Library…", 13f, AppearanceTheme.mutedText(activity));
+        TextView label = text("Loading your Library…", 13f, UiPalette.TEXT_MUTED);
         label.setPadding(dp(4), dp(16), 0, dp(12));
         label.setTag("library-loading-label");
         loadingState.addView(label);
         View placeholder = new View(activity);
-        placeholder.setBackground(BrowseUi.rounded(activity, AppearanceTheme.surface(activity), 16));
+        placeholder.setBackground(BrowseUi.rounded(activity, UiPalette.SURFACE, 16));
         loadingState.addView(placeholder, new LinearLayout.LayoutParams(-1, dp(105)));
         mediaContent.addView(loadingState, new LinearLayout.LayoutParams(-1, -2));
     }
@@ -817,7 +817,7 @@ final class LibraryHubView extends ScrollView {
         empty.setGravity(Gravity.CENTER);
         empty.setPadding(dp(26), dp(54), dp(26), dp(42));
 
-        TextView icon = text("♡", 36f, AppearanceTheme.mutedText(activity));
+        TextView icon = text("♡", 36f, UiPalette.TEXT_MUTED);
         icon.setGravity(Gravity.CENTER);
         empty.addView(icon, new LinearLayout.LayoutParams(dp(60), dp(60)));
 
@@ -1112,7 +1112,7 @@ final class LibraryHubView extends ScrollView {
     }
 
     private int creatorCardHeight() {
-        TextView title = text("", 12.5f, AppearanceTheme.primaryText(activity));
+        TextView title = text("", 12.5f, UiPalette.TEXT_PRIMARY);
         return dp(72 + 7 + 4) + title.getLineHeight() * 2;
     }
 
