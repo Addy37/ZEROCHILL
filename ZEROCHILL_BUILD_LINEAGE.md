@@ -10,8 +10,11 @@ The user explicitly selected draft PR #408, branch
 PRs #407 and #408 remain unmerged drafts. Independent branch
 `perf/zerochill-7-navigation-back` descends from that exact head and targets
 #408's branch, not main. See `docs/NAVIGATION_BACK_PERFORMANCE.md`.
-The isolated signed candidate workflow uses version code `6000012`, above
-Preview 9 (`6000011`), the unchanged production package/signing identity,
+Preview 10 (`6000012`) passed signing/CI, but the physical recording reports
+remaining delays. The follow-up keeps that lineage and moves populated-inbox
+badge work off navigation dispatch, with bounded creator grouping.
+The isolated signed candidate workflow now uses version code `6000013`, above
+Preview 10 (`6000012`), the unchanged production package/signing identity,
 and the Preview 9 Supabase client-key injection plus an APK-content guard.
 No tag, public release, merge, backend deployment or data migration is authorized.
 Physical acceptance on OnePlus CPH2655 / Android 16 remains pending.

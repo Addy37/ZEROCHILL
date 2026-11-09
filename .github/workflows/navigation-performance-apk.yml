@@ -17,8 +17,8 @@ jobs:
   navigation-preview:
     runs-on: ubuntu-latest
     env:
-      APP_VERSION_CODE: "6000012"
-      APP_VERSION_NAME: "7.0.0-navigation-preview.10"
+      APP_VERSION_CODE: "6000013"
+      APP_VERSION_NAME: "7.0.0-navigation-preview.11"
       ZEROCHILL_SOURCE_SHA: ${{ github.sha }}
       # Match the working release workflow. This is the client/anon key, never a service-role key.
       SUPABASE_PUBLISHABLE_KEY: ${{ secrets.FEEDBACK_ANON_KEY }}
@@ -83,6 +83,14 @@ jobs:
         run: >-
           gradle --no-daemon :app:testDebugUnitTest
           --tests 'com.webapp.crazyshit.NavigationResponsivenessTest'
+          --tests 'com.webapp.crazyshit.NavigationBadgeReadTest'
+          --tests 'com.webapp.crazyshit.NotificationNavigationWorkTest'
+          --tests 'com.webapp.crazyshit.UpdateInboxStoreTest'
+          --tests 'com.webapp.crazyshit.CreatorNameMatcherTest'
+          --tests 'com.webapp.crazyshit.CreatorNotificationsTest'
+          --tests 'com.webapp.crazyshit.ManualCreatorMergeTest'
+          --tests 'com.webapp.crazyshit.NotificationEntryLatencyTest'
+          --tests 'com.webapp.crazyshit.NotificationCenterUiTest'
           --tests 'com.webapp.crazyshit.PrimaryTabNavigationTest'
           --tests 'com.webapp.crazyshit.PrimaryTabLibraryTest'
           --tests 'com.webapp.crazyshit.PrimaryTabWorkQueueTest'
@@ -124,7 +132,7 @@ jobs:
           PYKEY
           BADGING="$("$BUILD_TOOLS/aapt2" dump badging "$APK")"
           echo "$BADGING" | grep -q "package: name='com.addy37.crazyshitunofficial'"
-          echo "$BADGING" | grep -q "versionCode='6000012'"
+          echo "$BADGING" | grep -q "versionCode='6000013'"
           mkdir -p "$RUNNER_TEMP/stable"
           gh release download v6.0.2 --repo "$GITHUB_REPOSITORY" \
             --pattern ZeroChill.apk --dir "$RUNNER_TEMP/stable"
@@ -134,8 +142,8 @@ jobs:
           test "$CANDIDATE_CERT" = "$STABLE_CERT"
           STABLE_BADGING="$("$BUILD_TOOLS/aapt2" dump badging "$RUNNER_TEMP/stable/ZeroChill.apk")"
           STABLE_CODE="$(echo "$STABLE_BADGING" | sed -n "s/.*versionCode='\([0-9]*\)'.*/\1/p" | head -n 1)"
-          test 6000012 -gt "$STABLE_CODE"
-          test 6000012 -gt 6000011
+          test 6000013 -gt "$STABLE_CODE"
+          test 6000013 -gt 6000012
           OUT="ZeroChill-Navigation-${GITHUB_REF_NAME//\//-}-${GITHUB_SHA:0:7}.apk"
           cp "$APK" "$OUT"
           sha256sum "$OUT" > SHA256SUMS-navigation.txt

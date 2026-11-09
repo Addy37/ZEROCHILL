@@ -1350,9 +1350,27 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         if (item != null) item.setChecked(true);
     }
 
+    private java.util.concurrent.Future<?> libraryBadgeRead;
+    private int libraryBadgeRevision;
+
     private void refreshLibraryUpdateIndicator() {
-        if (bottomNavigation == null) return;
-        int unread = UpdateInboxStore.unreadCount(this);
+        if (bottomNavigation == null || isFinishing() || isDestroyed()) return;
+        int revision = ++libraryBadgeRevision;
+        String owner = ZeroChillSessionStore.currentUserId(this);
+        if (libraryBadgeRead != null) libraryBadgeRead.cancel(false);
+        // Counting groups decodes local notification/catalog data and can wait
+        // for the history lock. Never put that work on a tab or Back dispatch.
+        libraryBadgeRead = io.submit(() -> {
+            int unread = UpdateInboxStore.unreadCount(getApplicationContext());
+            runOnUiThread(() -> {
+                if (revision != libraryBadgeRevision || isFinishing() || isDestroyed()
+                        || !owner.equals(ZeroChillSessionStore.currentUserId(this))) return;
+                applyLibraryUpdateIndicator(unread);
+            });
+        });
+    }
+
+    private void applyLibraryUpdateIndicator(int unread) {
         bottomNavigation.setLibraryUnread(unread > 0);
         if (unread <= 0) {
             bottomNavigation.removeBadge(NAV_LIBRARY);

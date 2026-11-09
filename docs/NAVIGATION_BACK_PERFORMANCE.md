@@ -106,3 +106,56 @@ still affect responsiveness. No physical-device speedup or Android 16 gesture
 acceptance is claimed. Test rapid taps, Library/OnlyFap scroll retention, Search
 IME-first Back, fullscreen exit, overlay dismissal, playback continuity, and
 in-place upgrade on the OnePlus before approval. Do not merge or release.
+
+
+## Physical Preview 10 follow-up: notification work on navigation
+
+The supplied 67-second OnePlus recording confirms partial improvement, with
+remaining delays. It shows repeated Library/OnlyFap/Shows navigation during
+0–30 seconds, Settings and return around 31–42 seconds, Messages around 43–51
+seconds, and Notifications showing its loading label around 56–60 seconds.
+These are video timeline observations, not exact input latency or CPU traces.
+No physical acceptance or merge approval was supplied.
+
+The first pass tested dispatch with empty notification stores and missed a
+populated-data main-thread path. `NativeMainActivity` called
+`UpdateInboxStore.unreadCount` directly on Library activation and Activity
+resume. Counting decoded, pruned and grouped the complete local inbox, including
+creator catalog and aliases. That work could occupy the main thread or wait for
+the same lock as notification loading. The Notifications loading label precedes
+local history publication; its social refresh starts afterward, so this initial
+local-history cost is separate from later network freshness.
+
+The populated-data check uses 200 notification entries, 80 favorites and a 1000
+creator catalog. Before: 400 ms and 202 favorite preference reads. After: 69 ms
+and 3 reads, with the same 80 groups and all 200 children. These are one controlled
+local before/after pair, not statistically stable or physical-device timings.
+The bounded-work assertion failed before the change and passed afterward.
+
+Follow-up implementation:
+
+- Read Library badges on the existing IO executor, coalescing queued requests;
+  apply results only for the latest request and same account on a live Activity.
+- Snapshot favorite names once during pruning, index group aliases once, and
+  preserve original first-group ordering and reviewed/manual alias matching.
+- Reuse compiled name-normalization patterns with identical normalization rules.
+- Group the call's decoded snapshot after releasing the inbox lock. Storage
+  decoding/pruning/writes remain under the existing lock. Skip catalog grouping
+  when the visible inbox has no creator notifications.
+
+Focused protection includes a deliberately blocked badge reader while tabs and
+Back execute, stale-account result rejection, populated inbox work bounds,
+notification read/delete/history semantics, merged names, Unicode matching,
+notification lifecycle/account isolation and Library scroll retention. The local
+follow-up selection passed 59 cases with no failures/errors/skips, including the
+blocked-read/account guard and populated-store regression. A later warmed run of
+the same fixture printed 20 ms, illustrating why these are workload observations
+rather than a device latency promise. Final CI results and the Preview 11 signed
+candidate are recorded on PR #409.
+The signed workflow now uses `6000013`, above Preview 10 (`6000012`), with the
+same production identity and Preview 9 client-key safeguards.
+
+No animation or glass changes accompany this follow-up. Initial remote Messages
+loads, media preparation, GPU cost and other unprofiled work can still take time.
+The recording supplies evidence for a shared populated-inbox bottleneck; only
+new physical testing can establish how much of the remaining delay it resolves.
