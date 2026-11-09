@@ -316,7 +316,7 @@ public final class UpdateInboxActivity extends Activity {
                     View row = holder.itemView;
                     paint.setColor(Color.rgb(24, 27, 32));
                     canvas.drawRect(row.getRight() + dx, row.getTop(), row.getRight(), row.getBottom(), paint);
-                    paint.setColor(UiPalette.PRIMARY);
+                    paint.setColor(AppearanceTheme.accent(UpdateInboxActivity.this));
                     paint.setTextSize(dp(14));
                     paint.setTextAlign(Paint.Align.RIGHT);
                     canvas.drawText("Delete", row.getRight() - dp(24),
@@ -461,10 +461,10 @@ public final class UpdateInboxActivity extends Activity {
     }
 
     private void styleFilter(TextView view, boolean selected) {
-        view.setTextColor(selected ? UiPalette.ON_PRIMARY : UiPalette.TEXT_SECONDARY);
+        view.setTextColor(selected ? AppearanceTheme.onAccent(UpdateInboxActivity.this) : UiPalette.TEXT_SECONDARY);
         view.setBackground(new InsetDrawable(BrowseUi.rounded(
                 this,
-                selected ? UiPalette.PRIMARY : UiPalette.SURFACE,
+                selected ? AppearanceTheme.accent(UpdateInboxActivity.this) : UiPalette.SURFACE,
                 13
         ), 0, dp(5), 0, dp(5)));
         view.setSelected(selected);
@@ -706,7 +706,7 @@ public final class UpdateInboxActivity extends Activity {
             trailing.addView(thumbnail, new android.widget.FrameLayout.LayoutParams(dp(48), dp(48), Gravity.CENTER));
 
             View unread = new View(UpdateInboxActivity.this);
-            unread.setBackground(circle(UiPalette.PRIMARY));
+            unread.setBackground(circle(AppearanceTheme.accent(UpdateInboxActivity.this)));
             android.widget.FrameLayout.LayoutParams dotParams =
                     new android.widget.FrameLayout.LayoutParams(dp(9), dp(9), Gravity.TOP | Gravity.END);
             dotParams.setMargins(0, dp(1), dp(1), 0);
@@ -734,7 +734,7 @@ public final class UpdateInboxActivity extends Activity {
             image.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
             tile.addView(image, new android.widget.FrameLayout.LayoutParams(-1, -1));
             View unread = new View(UpdateInboxActivity.this);
-            unread.setBackground(circle(UiPalette.PRIMARY));
+            unread.setBackground(circle(AppearanceTheme.accent(UpdateInboxActivity.this)));
             unread.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
             android.widget.FrameLayout.LayoutParams dot = new android.widget.FrameLayout.LayoutParams(
                     dp(8), dp(8), Gravity.TOP | Gravity.END);
@@ -927,10 +927,10 @@ public final class UpdateInboxActivity extends Activity {
                     0
             );
             holder.like.setCompoundDrawableTintList(android.content.res.ColorStateList.valueOf(
-                    state.likedByMe ? UiPalette.PRIMARY : Color.WHITE
+                    state.likedByMe ? AppearanceTheme.accent(UpdateInboxActivity.this) : Color.WHITE
             ));
             holder.like.setText(state.likeCount > 0 ? String.valueOf(state.likeCount) : "");
-            holder.like.setTextColor(state.likedByMe ? UiPalette.PRIMARY : Color.WHITE);
+            holder.like.setTextColor(state.likedByMe ? AppearanceTheme.accent(UpdateInboxActivity.this) : Color.WHITE);
             holder.like.setContentDescription(state.likedByMe ? "Unlike reply" : "Like reply");
             holder.like.setOnClickListener(v -> toggleNotificationCommentLike(holder, entry));
         }

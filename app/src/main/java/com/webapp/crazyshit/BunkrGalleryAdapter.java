@@ -392,7 +392,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
 
         ImageView favorite = new ImageView(parent.getContext());
         favorite.setImageResource(R.drawable.ic_action_heart_filled);
-        favorite.setColorFilter(UiPalette.PRIMARY);
+        favorite.setColorFilter(AppearanceTheme.accent(context));
         favorite.setBackground(BrowseUi.rounded(parent.getContext(), Color.argb(160, 0, 0, 0), 16));
         favorite.setPadding(dp(parent, 5), dp(parent, 5), dp(parent, 5), dp(parent, 5));
         favorite.setContentDescription("Favorited media");
@@ -424,7 +424,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         GradientDrawable morphPulseBackground = new GradientDrawable();
         morphPulseBackground.setColor(Color.TRANSPARENT);
         morphPulseBackground.setCornerRadius(dp(parent, 10));
-        morphPulseBackground.setStroke(dp(parent, 1), UiPalette.PRIMARY);
+        morphPulseBackground.setStroke(dp(parent, 1), AppearanceTheme.accent(context));
         morphPulse.setBackground(morphPulseBackground);
         morphPulse.setAlpha(0f);
         morphPulse.setClickable(false);

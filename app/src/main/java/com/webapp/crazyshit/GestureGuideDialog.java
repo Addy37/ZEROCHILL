@@ -179,7 +179,7 @@ final class GestureGuideDialog {
         dialog.setOnDismissListener(ignored -> clearPending(activity));
         dialog.show();
         if (dialog.getButton(AlertDialog.BUTTON_POSITIVE) != null) {
-            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setTextColor(UiPalette.PRIMARY);
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setTextColor(AppearanceTheme.accent(activity));
         }
     }
 
@@ -235,7 +235,7 @@ final class GestureGuideDialog {
 
     private static GradientDrawable badgeBackground(Activity activity) {
         GradientDrawable background = new GradientDrawable();
-        background.setColor(UiPalette.PRIMARY);
+        background.setColor(AppearanceTheme.accent(activity));
         background.setCornerRadius(dp(activity, 12));
         return background;
     }

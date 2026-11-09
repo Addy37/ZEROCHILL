@@ -522,7 +522,7 @@ public class VideoDetailActivity extends Activity {
         startupPosterLoading = new ZeroChillProgressBar(this);
         startupPosterLoading.setClickable(false);
         if (startupPosterLoading.getIndeterminateDrawable() != null) {
-            startupPosterLoading.getIndeterminateDrawable().setTint(UiPalette.PRIMARY);
+            startupPosterLoading.getIndeterminateDrawable().setTint(AppearanceTheme.accent(this));
         }
         FrameLayout.LayoutParams startupLoadingParams =
                 new FrameLayout.LayoutParams(dp(38), dp(38), Gravity.CENTER);
@@ -548,7 +548,7 @@ public class VideoDetailActivity extends Activity {
             preview.addView(copy, new LinearLayout.LayoutParams(0, -2, 1f));
             TextView nextLabel = new TextView(this);
             nextLabel.setText(R.string.shows_watch_up_next);
-            nextLabel.setTextColor(UiPalette.PRIMARY);
+            nextLabel.setTextColor(AppearanceTheme.accent(this));
             nextLabel.setTextSize(12);
             copy.addView(nextLabel);
             showsNextTitle = new TextView(this);
@@ -566,7 +566,7 @@ public class VideoDetailActivity extends Activity {
             countdownActions.addView(showsNextText, new LinearLayout.LayoutParams(0, -2, 1f));
             TextView cancelNext = new TextView(this);
             cancelNext.setText(android.R.string.cancel);
-            cancelNext.setTextColor(UiPalette.PRIMARY);
+            cancelNext.setTextColor(AppearanceTheme.accent(this));
             cancelNext.setTextSize(14);
             cancelNext.setGravity(Gravity.CENTER);
             cancelNext.setPadding(dp(10), dp(12), dp(12), dp(12));
@@ -1478,7 +1478,7 @@ public class VideoDetailActivity extends Activity {
         avatarFrame.setBackground(BrowseUi.rounded(this, Color.rgb(28, 37, 43), 22));
         avatarFrame.setClipToOutline(true);
         TextView initial = BrowseUi.text(this, creator.title.substring(0, 1).toUpperCase(java.util.Locale.ROOT),
-                22, UiPalette.PRIMARY);
+                22, AppearanceTheme.accent(this));
         initial.setGravity(Gravity.CENTER);
         avatarFrame.addView(initial, new FrameLayout.LayoutParams(-1, -1));
         avatarFrame.addView(avatar, new FrameLayout.LayoutParams(-1, -1));
@@ -1503,7 +1503,7 @@ public class VideoDetailActivity extends Activity {
         onlyFapCreatorRow.addView(gallery, new LinearLayout.LayoutParams(0, -2, 1f));
         boolean favorite = CreatorFavoriteStore.contains(this, creator);
         TextView star = BrowseUi.text(this, favorite ? "★" : "☆", 28,
-                favorite ? UiPalette.PRIMARY : Color.WHITE);
+                favorite ? AppearanceTheme.accent(this) : Color.WHITE);
         star.setGravity(Gravity.CENTER);
         star.setContentDescription((favorite ? "Remove " : "Add ") + creator.title
                 + (favorite ? " from Favorite Creators" : " to Favorite Creators"));
@@ -2534,12 +2534,12 @@ public class VideoDetailActivity extends Activity {
                     0
             );
             videoLikeButton.setCompoundDrawableTintList(ColorStateList.valueOf(
-                    videoLiked ? UiPalette.PRIMARY : Color.WHITE
+                    videoLiked ? AppearanceTheme.accent(this) : Color.WHITE
             ));
             boolean showCount = videoLikeCount > 0;
             videoLikeButton.setText(showCount ? String.valueOf(videoLikeCount) : " ");
             videoLikeButton.setTextColor(showCount
-                    ? (videoLiked ? UiPalette.PRIMARY : Color.rgb(238, 238, 242))
+                    ? (videoLiked ? AppearanceTheme.accent(this) : Color.rgb(238, 238, 242))
                     : Color.TRANSPARENT);
             videoLikeButton.setEnabled(true);
             videoLikeButton.setContentDescription(
@@ -2550,7 +2550,7 @@ public class VideoDetailActivity extends Activity {
             showsLandscapeLike.setCompoundDrawablesWithIntrinsicBounds(0,
                     videoLiked ? R.drawable.ic_action_heart_filled : R.drawable.ic_action_heart_outline, 0, 0);
             androidx.core.widget.TextViewCompat.setCompoundDrawableTintList(showsLandscapeLike,
-                    ColorStateList.valueOf(videoLiked ? UiPalette.PRIMARY : Color.WHITE));
+                    ColorStateList.valueOf(videoLiked ? AppearanceTheme.accent(this) : Color.WHITE));
             showsLandscapeLike.setContentDescription(videoLiked ? "Unlike this video" : "Like this video");
             showsLandscapeLike.setEnabled(true);
         }
@@ -2617,7 +2617,7 @@ public class VideoDetailActivity extends Activity {
                 0
         );
         watchLaterButton.setCompoundDrawableTintList(ColorStateList.valueOf(
-                saved ? UiPalette.PRIMARY : Color.WHITE
+                saved ? AppearanceTheme.accent(this) : Color.WHITE
         ));
         watchLaterButton.setText(" ");
         watchLaterButton.setTextColor(Color.TRANSPARENT);
@@ -2628,7 +2628,7 @@ public class VideoDetailActivity extends Activity {
             showsLandscapeSave.setCompoundDrawablesWithIntrinsicBounds(0,
                     saved ? R.drawable.ic_nav_saved : R.drawable.ic_action_save_outline, 0, 0);
             androidx.core.widget.TextViewCompat.setCompoundDrawableTintList(showsLandscapeSave,
-                    ColorStateList.valueOf(saved ? UiPalette.PRIMARY : Color.WHITE));
+                    ColorStateList.valueOf(saved ? AppearanceTheme.accent(this) : Color.WHITE));
             showsLandscapeSave.setContentDescription(watchLaterButton.getContentDescription());
         }
     }
@@ -3240,18 +3240,12 @@ public class VideoDetailActivity extends Activity {
                 startupPosterLoading.setVisibility(View.GONE);
             }
             cancelShowsCountdown();
-            Runnable finishShows = () -> {
-                finish();
-                overridePendingTransition(0, 0);
-            };
-            if (!ShowsWatchLaunch.animateExit(
-                    this, getIntent(), root, playerContainer, detailsScroll, startupPoster,
-                    finishShows)) {
-                ShowsWatchLaunch.cancel(root);
-                if (ShowsWatchLaunch.isScoped(this) && ZeroChillMotion.animationsEnabled(this)) {
-                    root.animate().alpha(0f).setDuration(140L).withEndAction(finishShows).start();
-                } else finishShows.run();
-            }
+            // Back must finish in this dispatch. The reverse artwork morph
+            // (400 ms) and fallback fade delayed the retained destination.
+            ShowsWatchLaunch.cancel(root);
+            if (root != null) root.animate().cancel();
+            finish();
+            overridePendingTransition(0, 0);
             return;
         }
         if (portraitFullscreen) {

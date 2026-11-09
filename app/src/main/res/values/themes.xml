@@ -10,6 +10,7 @@
         <item name="android:navigationBarColor">@color/zc_background</item>
         <item name="android:windowLightStatusBar">false</item>
         <item name="android:windowLightNavigationBar">false</item>
+        <item name="android:colorAccent">@color/zc_cyan</item>
         <item name="colorPrimary">@color/zc_cyan</item>
         <item name="colorOnPrimary">@color/app_on_primary</item>
         <item name="colorSecondary">@color/zc_cyan</item>
@@ -30,6 +31,13 @@
         <item name="android:windowIsTranslucent">true</item>
         <item name="android:windowBackground">@android:color/transparent</item>
         <item name="android:windowAnimationStyle">@null</item>
+    </style>
+    <style name="ZeroChillAccentCyan">
+        <item name="colorPrimary">#0892D0</item>
+        <item name="colorSecondary">#0892D0</item>
+        <item name="colorControlActivated">#0892D0</item>
+        <item name="android:colorAccent">#0892D0</item>
+        <item name="colorOnPrimary">#020F17</item>
     </style>
     <style name="ZeroChillAccentPurple">
         <item name="colorPrimary">#A06CFF</item>

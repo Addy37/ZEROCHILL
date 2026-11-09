@@ -203,12 +203,12 @@ final class LibrarySocialHubView extends LinearLayout {
         TextView subtitleView = label(subtitle, 12, BrowseUi.MUTED);
         details.addView(subtitleView);
         row.addView(details, new LayoutParams(0, -2, 1));
-        TextView badge = label("", 12, UiPalette.ON_PRIMARY);
+        TextView badge = label("", 12, AppearanceTheme.onAccent(activity));
         badge.setTypeface(null, android.graphics.Typeface.BOLD);
         badge.setGravity(Gravity.CENTER);
         badge.setMinWidth(dp(24));
         badge.setPadding(dp(6), 0, dp(6), 0);
-        badge.setBackground(BrowseUi.rounded(activity, UiPalette.PRIMARY, 12));
+        badge.setBackground(BrowseUi.rounded(activity, AppearanceTheme.accent(activity), 12));
         badge.setVisibility(GONE);
         row.addView(badge, new LayoutParams(-2, dp(24)));
         card.addView(row);

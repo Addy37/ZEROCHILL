@@ -27,7 +27,7 @@ final class SearchResultFavorites {
     private static void update(TextView star, NativeContentItem creator) {
         boolean saved = CreatorFavoriteStore.contains(star.getContext(), creator);
         star.setText(saved ? "★" : "☆");
-        star.setTextColor(saved ? UiPalette.PRIMARY : BrowseUi.MUTED);
+        star.setTextColor(saved ? AppearanceTheme.accent(star.getContext()) : BrowseUi.MUTED);
         star.setContentDescription((saved ? "Unfavorite " : "Favorite ") + creator.title);
     }
 }

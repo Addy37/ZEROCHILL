@@ -2092,12 +2092,13 @@ final class OnlyFapHubView extends FrameLayout {
         if (selectorPulse != null) { selectorPulse.cancel(); selectorPulse = null; }
         preferenceSelector.setTextColor(AppearanceTheme.accent(getContext()));
         if (!active || !ZeroChillMotion.animationsEnabled(getContext())) return;
+        final int accent = AppearanceTheme.accent(getContext());
         selectorPulse = android.animation.ValueAnimator.ofFloat(0f, 1f);
         selectorPulse.setDuration(150L);
         selectorPulse.addUpdateListener(a -> {
             float pulse = (float) Math.sin(Math.PI * (float) a.getAnimatedValue());
             preferenceSelector.setTextColor((int) selectorColors.evaluate(
-                    pulse * .7f, UiPalette.PRIMARY, 0xFF0892D0));
+                    pulse * .7f, accent, accent));
         });
         selectorPulse.start();
     }
@@ -2552,7 +2553,7 @@ final class OnlyFapHubView extends FrameLayout {
 
             TextView favorite = new TextView(context);
             favorite.setText("★");
-            favorite.setTextColor(UiPalette.PRIMARY);
+            favorite.setTextColor(AppearanceTheme.accent(context));
             favorite.setTextSize(17f);
             favorite.setGravity(Gravity.CENTER);
             favorite.setVisibility(View.GONE);

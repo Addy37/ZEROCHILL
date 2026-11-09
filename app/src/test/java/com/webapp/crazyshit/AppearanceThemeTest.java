@@ -58,6 +58,32 @@ public class AppearanceThemeTest {
         assertEquals(AppearanceTheme.primaryText(app), label.getCurrentTextColor());
     }
 
+    @Test public void sharedChromeUsesSelectedAccentWithoutChangingOledSurface() {
+        Context app = app();
+        AppearanceTheme.setAccent(app, AppearanceTheme.Accent.PURPLE);
+        int purple = AppearanceTheme.accent(app);
+
+        android.widget.TextView sourceChip = new android.widget.TextView(app);
+        ZeroChillUi.styleSourceRailChip(sourceChip, true);
+        assertEquals(purple, sourceChip.getCurrentTextColor());
+        assertTrue(sourceChip.getBackground() instanceof android.graphics.drawable.GradientDrawable);
+        android.graphics.drawable.GradientDrawable selected =
+                (android.graphics.drawable.GradientDrawable) sourceChip.getBackground();
+        assertEquals((purple & 0x00FFFFFF) | 0x33000000,
+                selected.getColor().getDefaultColor());
+
+        android.widget.ProgressBar progress = new android.widget.ProgressBar(app);
+        ZeroChillUi.styleProgress(progress);
+        assertEquals(purple, progress.getIndeterminateTintList().getDefaultColor());
+
+        int[] sheen = ContentPreferenceUi.noticeSheenColors(purple);
+        assertEquals(3, sheen.length);
+        assertEquals(0x40, android.graphics.Color.alpha(sheen[0]));
+        assertEquals(0x0A, android.graphics.Color.alpha(sheen[1]));
+        assertEquals(purple & 0x00FFFFFF, sheen[1] & 0x00FFFFFF);
+        assertEquals(android.graphics.Color.BLACK, ZeroChillUi.background(app));
+    }
+
     @Test public void v2GlassOptionsPersistWithoutChangingLegacySettings() {
         Context app = app();
         AppearanceTheme.setGlassPreset(app, AppearanceTheme.GlassPreset.QUALITY);

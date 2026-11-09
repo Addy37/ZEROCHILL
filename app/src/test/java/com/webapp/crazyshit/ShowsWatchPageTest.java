@@ -55,8 +55,12 @@ public class ShowsWatchPageTest {
     }
 
     private VideoDetailActivity watch(NativeContentItem... episodes) {
+        return watch(VideoDetailActivity.class, episodes);
+    }
+
+    private VideoDetailActivity watch(Class<? extends VideoDetailActivity> type, NativeContentItem... episodes) {
         // Build the UI without preparing a decoder or fetching a source.
-        VideoDetailActivity activity = Robolectric.buildActivity(VideoDetailActivity.class, new Intent()).get();
+        VideoDetailActivity activity = Robolectric.buildActivity(type, new Intent()).get();
         activity.setTheme(R.style.Theme_CrazyShit);
         ReflectionHelpers.setField(activity, "showsOrigin", true);
         ReflectionHelpers.setField(activity, "showsSession", ShowsWatchSession.from(
@@ -260,6 +264,18 @@ public class ShowsWatchPageTest {
             assertTrue(full.left + full.width <= size[0] + .01f);
             assertTrue(full.top + full.height <= size[1] + .01f);
         }
+    }
+
+    @Test public void scopedBackWithMotionEnabledFinishesInSameDispatch() {
+        VideoDetailActivity activity = watch(ShowsWatchActivity.class, item("1"), item("2"));
+        activity.getSharedPreferences("app_prefs", 0).edit()
+                .putBoolean("immersive_motion_enabled", true).commit();
+        assertTrue(ZeroChillMotion.animationsEnabled(activity));
+        activity.onBackPressed();
+        assertTrue("Shows Back must not wait for its fallback fade", activity.isFinishing());
+        assertTrue(ReflectionHelpers.<Boolean>getField(activity, "showsSavedOnExit"));
+        activity.onBackPressed(); // Saved-on-exit guard remains idempotent.
+        assertTrue(activity.isFinishing());
     }
 
     @Test public void backExitsDirectlyAfterSelectionsWithoutRelatedHistory() {

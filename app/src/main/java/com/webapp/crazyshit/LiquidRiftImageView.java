@@ -20,6 +20,7 @@ final class LiquidRiftImageView extends ImageView {
 
     LiquidRiftImageView(Context context) {
         super(context);
+        rim.setColor(AppearanceTheme.accent(context));
         rim.setStyle(Paint.Style.STROKE);
         rim.setStrokeWidth(2f * getResources().getDisplayMetrics().density);
     }
@@ -66,7 +67,6 @@ final class LiquidRiftImageView extends ImageView {
         canvas.translate(bend * .09f, 0);
         super.onDraw(canvas);
         canvas.restoreToCount(save);
-        rim.setColor(0xFF0892D0);
         rim.setAlpha(Math.round(105f * (float) Math.sin(Math.PI * reveal)));
         canvas.drawPath(wave, rim);
     }

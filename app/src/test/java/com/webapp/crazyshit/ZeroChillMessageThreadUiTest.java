@@ -58,6 +58,7 @@ public class ZeroChillMessageThreadUiTest {
         assertFalse(ZeroChillMessageActivity.separator(a,message("me","2026-10-01T12:00:00Z","next day")).isEmpty());
     }
     @Test public void selectionHighlightsMediaAndExposesOnlySupportedActions() throws Exception {
+        AppearanceTheme.setAccent(org.robolectric.RuntimeEnvironment.getApplication(), AppearanceTheme.Accent.PURPLE);
         ZeroChillMessageActivity activity=shell();RecyclerView recycler=(RecyclerView)field(activity,"recycler");
         RecyclerView.Adapter adapter=recycler.getAdapter();Method replace=adapter.getClass().getDeclaredMethod("replace",java.util.List.class);replace.setAccessible(true);
         ZeroChillSocialRepository.DirectMessage media=new ZeroChillSocialRepository.DirectMessage(new JSONObject().put("id","media").put("sender_id","other").put("body","GIF").put("created_at","2026-09-30T12:00:00Z").put("attachment_path","other/test.gif").put("attachment_bucket","social-gifs"));
@@ -68,7 +69,7 @@ public class ZeroChillMessageThreadUiTest {
         android.widget.PopupWindow popup=(android.widget.PopupWindow)field(activity,"reactionPopup");assertTrue(popup.isShowing());
         assertEquals(6,((LinearLayout)popup.getContentView()).getChildCount());
         LinearLayout actions=(LinearLayout)field(activity,"selectionActions");assertEquals(1,actions.getChildCount());assertEquals("Report",((TextView)actions.getChildAt(0)).getText().toString());
-        adapter.bindViewHolder(holder,0);assertEquals(Color.rgb(12,56,65),((GradientDrawable)((View)field(holder,"bubble")).getBackground()).getColor().getDefaultColor());
+        adapter.bindViewHolder(holder,0);assertEquals(AppearanceTheme.selectionSurface(activity),((GradientDrawable)((View)field(holder,"bubble")).getBackground()).getColor().getDefaultColor());
         activity.onBackPressed();assertNull(field(activity,"selectedMessage"));assertFalse(popup.isShowing());
         setField(activity,"blockedByMe",true);select.invoke(activity,field(holder,"bubble"),media);assertNull(field(activity,"selectedMessage"));
     }
@@ -105,7 +106,7 @@ public class ZeroChillMessageThreadUiTest {
         assertEquals(Gravity.LEFT, row.getGravity() & Gravity.HORIZONTAL_GRAVITY_MASK);
         assertEquals(View.INVISIBLE, avatar.getVisibility());
         assertEquals(View.GONE, time.getVisibility());
-        assertEquals(UiPalette.SURFACE, ((GradientDrawable) bubble.getBackground()).getColor().getDefaultColor());
+        assertEquals(AppearanceTheme.surface(activity), ((GradientDrawable) bubble.getBackground()).getColor().getDefaultColor());
         int firstGap = ((LinearLayout.LayoutParams) row.getLayoutParams()).topMargin;
         adapter.bindViewHolder(holder, 1);
         assertEquals(View.VISIBLE, avatar.getVisibility());
@@ -115,8 +116,8 @@ public class ZeroChillMessageThreadUiTest {
         adapter.bindViewHolder(holder, 2);
         assertEquals(Gravity.RIGHT, row.getGravity() & Gravity.HORIZONTAL_GRAVITY_MASK);
         assertEquals(View.GONE, avatar.getVisibility());
-        assertEquals(UiPalette.FLOATING, ((GradientDrawable) bubble.getBackground()).getColor().getDefaultColor());
-        assertEquals(Color.WHITE, body.getCurrentTextColor());
+        assertEquals(AppearanceTheme.floating(activity), ((GradientDrawable) bubble.getBackground()).getColor().getDefaultColor());
+        assertEquals(AppearanceTheme.primaryText(activity), body.getCurrentTextColor());
         assertEquals(View.GONE, time.getVisibility());
         adapter.bindViewHolder(holder, 3);
         assertEquals(View.VISIBLE, time.getVisibility());

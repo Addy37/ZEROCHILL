@@ -640,7 +640,7 @@ public final class StartupWizardActivity extends Activity {
             View dot = new View(this);
             boolean active = index == page;
             GradientDrawable bg = new GradientDrawable();
-            bg.setColor(active ? UiPalette.PRIMARY : Color.rgb(61, 65, 72));
+            bg.setColor(active ? AppearanceTheme.accent(this) : Color.rgb(61, 65, 72));
             bg.setCornerRadius(dp(5));
             dot.setBackground(bg);
             LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
@@ -930,7 +930,7 @@ public final class StartupWizardActivity extends Activity {
         TextView button = text(
                 label,
                 13f,
-                primary ? UiPalette.ON_PRIMARY : Color.WHITE,
+                primary ? AppearanceTheme.onAccent(this) : Color.WHITE,
                 true
         );
         button.setGravity(Gravity.CENTER);
@@ -946,9 +946,9 @@ public final class StartupWizardActivity extends Activity {
 
     private GradientDrawable primaryButtonBackground(boolean enabled) {
         GradientDrawable background = new GradientDrawable();
-        background.setColor(enabled ? UiPalette.PRIMARY : Color.rgb(47, 54, 59));
+        background.setColor(enabled ? AppearanceTheme.accent(this) : Color.rgb(47, 54, 59));
         background.setCornerRadius(dp(17));
-        background.setStroke(dp(1), enabled ? Color.rgb(74, 191, 240) : Color.rgb(67, 72, 78));
+        background.setStroke(dp(1), enabled ? AppearanceTheme.accent(this) : Color.rgb(67, 72, 78));
         return background;
     }
 

@@ -206,7 +206,7 @@ final class InlineCommentsDialog extends BottomSheetDialog {
         composer.setPadding(dp(8), dp(5), dp(8), dp(6));
         composer.setBackgroundColor(UiPalette.SURFACE);
 
-        replyContext = text("", 12, UiPalette.PRIMARY, false);
+        replyContext = text("", 12, AppearanceTheme.accent(activity), false);
         replyContext.setPadding(dp(6), 0, dp(6), 0);
         replyContext.setVisibility(View.GONE);
         replyContext.setOnClickListener(v -> { if (!posting) cancelReply(); });
@@ -257,9 +257,9 @@ final class InlineCommentsDialog extends BottomSheetDialog {
         row.addView(composerInput, new LinearLayout.LayoutParams(0, -2, 1f));
 
         row.addView(attachment.control);
-        TextView send = text("↑", 23, UiPalette.ON_PRIMARY, true);
+        TextView send = text("↑", 23, AppearanceTheme.onAccent(activity), true);
         send.setGravity(Gravity.CENTER);
-        send.setBackground(circle(UiPalette.PRIMARY));
+        send.setBackground(circle(AppearanceTheme.accent(activity)));
         send.setContentDescription("Post comment");
         ZeroChillMotion.installPressFeedback(send);
         send.setOnClickListener(v -> submit());
@@ -524,7 +524,7 @@ final class InlineCommentsDialog extends BottomSheetDialog {
         TextView like = text(
                 (comment.likedByMe ? "♥ " : "♡ ") + comment.likeCount,
                 12,
-                comment.likedByMe ? UiPalette.PRIMARY : Color.rgb(170, 170, 180),
+                comment.likedByMe ? AppearanceTheme.accent(activity) : Color.rgb(170, 170, 180),
                 true
         );
         like.setPadding(dp(8), dp(7), dp(10), dp(7));
@@ -552,7 +552,7 @@ final class InlineCommentsDialog extends BottomSheetDialog {
         TextView like = likeViews.get(comment.id);
         if (like == null) return;
         like.setText((comment.likedByMe ? "♥ " : "♡ ") + comment.likeCount);
-        like.setTextColor(comment.likedByMe ? UiPalette.PRIMARY : Color.rgb(156, 169, 181));
+        like.setTextColor(comment.likedByMe ? AppearanceTheme.accent(activity) : Color.rgb(156, 169, 181));
         like.setContentDescription((comment.likedByMe ? "Unlike" : "Like") + " comment. " + comment.likeCount + " likes");
     }
 

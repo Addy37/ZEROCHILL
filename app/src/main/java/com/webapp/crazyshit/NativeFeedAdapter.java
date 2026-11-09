@@ -58,7 +58,6 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
             "Mozilla/5.0 (Linux; Android 16) AppleWebKit/537.36 " +
             "(KHTML, like Gecko) Chrome/139.0 Mobile Safari/537.36";
     private static final long MIN_FEED_PROGRESS_MS = 5_000L;
-    private static final int SECTION_ACCENT = UiPalette.PRIMARY;
 
     public interface Listener {
         void onOpen(NativeContentItem item);
@@ -541,7 +540,7 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
         mediaFrame.addView(progressTrack, trackParams);
 
         View progressFill = new View(parent.getContext());
-        progressFill.setBackgroundColor(UiPalette.PRIMARY);
+        progressFill.setBackgroundColor(AppearanceTheme.accent(context));
         progressFill.setPivotX(0f);
         progressFill.setScaleX(0f);
         progressTrack.addView(progressFill, new FrameLayout.LayoutParams(-1, -1));
@@ -585,7 +584,7 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
         TextView episodeNumber = null;
         if (episodePresentation) {
             episodeNumber = new TextView(parent.getContext());
-            episodeNumber.setTextColor(UiPalette.PRIMARY);
+            episodeNumber.setTextColor(AppearanceTheme.accent(context));
             episodeNumber.setTextSize(11f);
             episodeNumber.setTypeface(null, android.graphics.Typeface.BOLD);
             copy.addView(episodeNumber, new LinearLayout.LayoutParams(-1, -2));
@@ -628,7 +627,7 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
         metaRow.addView(info, new LinearLayout.LayoutParams(0, -2, 1f));
 
         TextView comments = new TextView(parent.getContext());
-        comments.setTextColor(UiPalette.PRIMARY);
+        comments.setTextColor(AppearanceTheme.accent(context));
         comments.setTextSize(infoSize);
         comments.setGravity(Gravity.END | Gravity.CENTER_VERTICAL);
         comments.setPadding(dp(parent, 7), dp(parent, 3), 0, dp(parent, 3));
@@ -735,7 +734,7 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
         int accentEnd = split > 0 ? split : title.length();
         if (accentEnd > 0) {
             text.setSpan(
-                    new ForegroundColorSpan(SECTION_ACCENT),
+                    new ForegroundColorSpan(AppearanceTheme.accent(context)),
                     0,
                     accentEnd,
                     Spanned.SPAN_EXCLUSIVE_EXCLUSIVE

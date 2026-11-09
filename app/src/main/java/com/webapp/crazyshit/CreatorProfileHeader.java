@@ -242,7 +242,7 @@ final class CreatorProfileHeader extends LinearLayout {
         FrameLayout ring = new FrameLayout(getContext());
         ring.setTag("creator_favorite_ring");
         GradientDrawable outline = BrowseUi.rounded(getContext(), Color.BLACK, 18);
-        outline.setStroke(dp(1), UiPalette.PRIMARY);
+        outline.setStroke(dp(1), AppearanceTheme.accent(getContext()));
         ring.setBackground(outline);
         ring.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);
         FrameLayout.LayoutParams ringParams =
@@ -258,14 +258,14 @@ final class CreatorProfileHeader extends LinearLayout {
         ring.addView(compactAvatar, new FrameLayout.LayoutParams(dp(32), dp(32), Gravity.CENTER));
         loadAvatar(compactAvatar);
 
-        compactFavoriteBadge = BrowseUi.text(getContext(), "+", 13, UiPalette.ON_PRIMARY);
+        compactFavoriteBadge = BrowseUi.text(getContext(), "+", 13, AppearanceTheme.onAccent(getContext()));
         // A decorative icon, not body text: keep its glyph inside the badge at large font sizes.
         compactFavoriteBadge.setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX, dp(12));
         compactFavoriteBadge.setIncludeFontPadding(false);
         compactFavoriteBadge.setTag("creator_favorite_badge");
         compactFavoriteBadge.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         compactFavoriteBadge.setGravity(Gravity.CENTER);
-        GradientDrawable badge = BrowseUi.rounded(getContext(), UiPalette.PRIMARY, 8);
+        GradientDrawable badge = BrowseUi.rounded(getContext(), AppearanceTheme.accent(getContext()), 8);
         badge.setStroke(dp(1), Color.BLACK);
         compactFavoriteBadge.setBackground(badge);
         compactFavoriteBadge.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
@@ -298,10 +298,10 @@ final class CreatorProfileHeader extends LinearLayout {
     void refresh() {
         boolean saved = CreatorFavoriteStore.contains(getContext(), creator);
         favorite.setText(saved ? "★  Favorited" : "☆  Favorite");
-        favorite.setTextColor(saved ? UiPalette.ON_PRIMARY : Color.WHITE);
+        favorite.setTextColor(saved ? AppearanceTheme.onAccent(getContext()) : Color.WHITE);
         favorite.setBackground(BrowseUi.rounded(
                 getContext(),
-                saved ? UiPalette.PRIMARY : Color.argb(190, 20, 24, 29),
+                saved ? AppearanceTheme.accent(getContext()) : Color.argb(190, 20, 24, 29),
                 23
         ));
         String description = (saved ? "Unfavorite " : "Favorite ") + creator.title;

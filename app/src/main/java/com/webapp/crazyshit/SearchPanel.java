@@ -1310,6 +1310,10 @@ final class SearchPanel {
         if (!expanding) {
             BrowseUi.hideKeyboard(activity, input);
             if (resultsAnimator != null) { resultsAnimator.removeAllListeners(); resultsAnimator.cancel(); }
+            // Return to the retained page in this Back dispatch, even if the
+            // opening morph has not laid out yet. close() cancels pending work.
+            finished.run();
+            return;
         }
         if (expanding && morphProgress == 0f) {
             header.setAlpha(0f);

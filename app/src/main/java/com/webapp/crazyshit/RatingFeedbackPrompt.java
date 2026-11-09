@@ -219,7 +219,7 @@ final class RatingFeedbackPrompt {
             TextView star = (TextView) stars.getChildAt(index);
             int value = (int) star.getTag();
             star.setText(value <= selected ? "★" : "☆");
-            star.setTextColor(value <= selected ? UiPalette.PRIMARY : Color.rgb(126, 126, 136));
+            star.setTextColor(value <= selected ? AppearanceTheme.accent(stars.getContext()) : Color.rgb(126, 126, 136));
         }
     }
 
@@ -267,11 +267,11 @@ final class RatingFeedbackPrompt {
         MaterialButton button = new MaterialButton(context);
         button.setText(label);
         button.setAllCaps(false);
-        button.setTextColor(primary ? UiPalette.ON_PRIMARY : Color.WHITE);
+        button.setTextColor(primary ? AppearanceTheme.onAccent(context) : Color.WHITE);
         button.setTextSize(15);
         button.setCornerRadius(dp(context, 15));
         button.setBackgroundTintList(ColorStateList.valueOf(
-                primary ? UiPalette.PRIMARY : Color.rgb(38, 38, 43)));
+                primary ? AppearanceTheme.accent(context) : Color.rgb(38, 38, 43)));
         return button;
     }
 

@@ -98,6 +98,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     private int contentTouchPage;
 
     private Screen screen = Screen.CHAOS;
+    private int renderedPrimaryPage = -1;
     private final Runnable ratingPromptCheck = () -> {
         if (screen != Screen.CHAOS || primaryPager == null
                 || currentPrimaryPage() != MainPagerAdapter.PAGE_CHAOS
@@ -154,7 +155,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         if (primaryPagerAdapter == null || !MainPagerAdapter.isPrimaryPage(startPage)) {
             startPage = MainPagerAdapter.PAGE_CHAOS;
         }
-        showPrimaryPage(startPage, false);
+        showPrimaryPage(startPage);
         dispatchLauncherShortcut();
 
         boolean shortcutLaunch = getIntent() != null
@@ -185,7 +186,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         if (!AccessNoticeDialog.isAccepted(this)) {
             return;
         }
-        showPrimaryPage(MainPagerAdapter.PAGE_CHAOS, false);
+        showPrimaryPage(MainPagerAdapter.PAGE_CHAOS);
         dispatchLauncherShortcut();
     }
 
@@ -455,11 +456,11 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
                 return true;
             }
             if (id == NAV_CHAOS) {
-                showPrimaryPage(MainPagerAdapter.PAGE_CHAOS, true);
+                showPrimaryPage(MainPagerAdapter.PAGE_CHAOS);
                 return true;
             }
             if (id == NAV_LIBRARY) {
-                showPrimaryPage(MainPagerAdapter.PAGE_LIBRARY, true);
+                showPrimaryPage(MainPagerAdapter.PAGE_LIBRARY);
                 return true;
             }
             return false;
@@ -547,15 +548,15 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     }
 
     private void showHome() {
-        showPrimaryPage(MainPagerAdapter.PAGE_CHAOS, true);
+        showPrimaryPage(MainPagerAdapter.PAGE_CHAOS);
     }
 
     private void showSeries() {
-        showPrimaryPage(MainPagerAdapter.PAGE_SERIES, true);
+        showPrimaryPage(MainPagerAdapter.PAGE_SERIES);
     }
 
     private void showOnlyFapPage() {
-        showPrimaryPage(MainPagerAdapter.PAGE_ONLYFAP, true);
+        showPrimaryPage(MainPagerAdapter.PAGE_ONLYFAP);
     }
 
     boolean isOnlyFapSearchContext() {
@@ -642,7 +643,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         return MainPagerAdapter.pageForPagerPosition(primaryPager.getCurrentItem());
     }
 
-    private void showPrimaryPage(int position, boolean smooth) {
+    private void showPrimaryPage(int position) {
         if (primaryPager == null) return;
         int pagerPosition = MainPagerAdapter.pagerPositionForPage(position);
         if (pagerPosition < 0) return;
@@ -654,15 +655,14 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
             return;
         }
         primaryPagerAdapter.onPrimaryRequested(position);
-        primaryPagerAdapter.onPrimaryMotionChanged(false);
         int navId = position == MainPagerAdapter.PAGE_SERIES ? NAV_SERIES
                 : position == MainPagerAdapter.PAGE_CHAOS ? NAV_CHAOS
                 : position == MainPagerAdapter.PAGE_ONLYFAP ? NAV_ONLYFAP : NAV_LIBRARY;
         selectNavSilently(navId);
-        primaryPager.setCurrentItem(
-                pagerPosition,
-                smooth && ZeroChillMotion.animationsEnabled(this)
-        );
+        // A tap or Back selects an already retained screen. Do not gate its
+        // activation on ViewPager2's smooth-scroll duration. Navbar drags keep
+        // their own fake-drag/settling path above.
+        primaryPager.setCurrentItem(pagerPosition, false);
         // Chrome also restores the pager when returning from legacy secondary screens.
         showPagerChrome(position);
         primaryPagerAdapter.onPrimaryMotionChanged(
@@ -670,6 +670,12 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     }
 
     private void showPagerChrome(int position) {
+        // setCurrentItem dispatches onPageSelected synchronously; the explicit
+        // restore below can reach here again for the same destination.
+        if (renderedPrimaryPage == position && primaryPager != null
+                && primaryPager.getVisibility() == View.VISIBLE
+                && (legacyContent == null || legacyContent.getVisibility() == View.GONE)) return;
+        renderedPrimaryPage = position;
         // Library already presents the current account in its profile header.
         if (headerProfileAvatar != null) headerProfileAvatar.setProfileInContent(
                 position == MainPagerAdapter.PAGE_LIBRARY);
@@ -681,16 +687,20 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         if (legacyContent != null) {
             legacyContent.setVisibility(View.GONE);
             LinearLayout.LayoutParams old = (LinearLayout.LayoutParams) legacyContent.getLayoutParams();
-            old.weight = 0f;
-            old.height = 0;
-            legacyContent.setLayoutParams(old);
+            if (old.weight != 0f || old.height != 0) {
+                old.weight = 0f;
+                old.height = 0;
+                legacyContent.setLayoutParams(old);
+            }
         }
         if (primaryPager != null) {
             primaryPager.setVisibility(View.VISIBLE);
             LinearLayout.LayoutParams pp = (LinearLayout.LayoutParams) primaryPager.getLayoutParams();
-            pp.weight = 1f;
-            pp.height = 0;
-            primaryPager.setLayoutParams(pp);
+            if (pp.weight != 1f || pp.height != 0) {
+                pp.weight = 1f;
+                pp.height = 0;
+                primaryPager.setLayoutParams(pp);
+            }
         }
 
         if (position == MainPagerAdapter.PAGE_SERIES) {
@@ -1283,7 +1293,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         launchIntent.putExtra(AppShortcuts.EXTRA_SHORTCUT_ROUTED, true);
         AppShortcuts.reportUsed(this, action);
         if (AppShortcuts.ACTION_CHAOS.equals(action)) {
-            showPrimaryPage(MainPagerAdapter.PAGE_CHAOS, false);
+            showPrimaryPage(MainPagerAdapter.PAGE_CHAOS);
             return;
         }
         if (AppShortcuts.ACTION_SEARCH.equals(action)) {
@@ -1324,11 +1334,11 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
             return;
         }
         if (legacyContent != null && legacyContent.getVisibility() == View.VISIBLE) {
-            showPrimaryPage(MainPagerAdapter.PAGE_CHAOS, true);
+            showPrimaryPage(MainPagerAdapter.PAGE_CHAOS);
             return;
         }
         if (primaryPager != null && currentPrimaryPage() != MainPagerAdapter.PAGE_CHAOS) {
-            showPrimaryPage(MainPagerAdapter.PAGE_CHAOS, true);
+            showPrimaryPage(MainPagerAdapter.PAGE_CHAOS);
             return;
         }
         finish();
@@ -1340,9 +1350,27 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         if (item != null) item.setChecked(true);
     }
 
+    private java.util.concurrent.Future<?> libraryBadgeRead;
+    private int libraryBadgeRevision;
+
     private void refreshLibraryUpdateIndicator() {
-        if (bottomNavigation == null) return;
-        int unread = UpdateInboxStore.unreadCount(this);
+        if (bottomNavigation == null || isFinishing() || isDestroyed()) return;
+        int revision = ++libraryBadgeRevision;
+        String owner = ZeroChillSessionStore.currentUserId(this);
+        if (libraryBadgeRead != null) libraryBadgeRead.cancel(false);
+        // Counting groups decodes local notification/catalog data and can wait
+        // for the history lock. Never put that work on a tab or Back dispatch.
+        libraryBadgeRead = io.submit(() -> {
+            int unread = UpdateInboxStore.unreadCount(getApplicationContext());
+            runOnUiThread(() -> {
+                if (revision != libraryBadgeRevision || isFinishing() || isDestroyed()
+                        || !owner.equals(ZeroChillSessionStore.currentUserId(this))) return;
+                applyLibraryUpdateIndicator(unread);
+            });
+        });
+    }
+
+    private void applyLibraryUpdateIndicator(int unread) {
         bottomNavigation.setLibraryUnread(unread > 0);
         if (unread <= 0) {
             bottomNavigation.removeBadge(NAV_LIBRARY);

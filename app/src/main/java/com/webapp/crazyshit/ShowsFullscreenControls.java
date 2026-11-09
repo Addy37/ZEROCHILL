@@ -74,6 +74,12 @@ final class ShowsFullscreenControls {
             if (!scrubbing) updateTimes(position);
         });
         TimeBar progressBar = view.findViewById(androidx.media3.ui.R.id.exo_progress);
+        if (progressBar instanceof androidx.media3.ui.DefaultTimeBar) {
+            androidx.media3.ui.DefaultTimeBar themed = (androidx.media3.ui.DefaultTimeBar) progressBar;
+            int accent = AppearanceTheme.accent(view.getContext());
+            themed.setPlayedColor(accent);
+            themed.setScrubberColor(accent);
+        }
         progressBar.addListener(new TimeBar.OnScrubListener() {
             @Override public void onScrubStart(TimeBar timeBar, long position) {
                 scrubbing = true;
@@ -247,14 +253,14 @@ final class ShowsFullscreenControls {
     void syncSaved(boolean saved) {
         ImageButton save = view.findViewById(R.id.shows_save);
         save.setImageResource(saved ? R.drawable.ic_action_save_outline : R.drawable.ic_action_save_outline);
-        save.setColorFilter(saved ? UiPalette.PRIMARY : Color.WHITE);
+        save.setColorFilter(saved ? AppearanceTheme.accent(view.getContext()) : Color.WHITE);
         save.setContentDescription(saved ? "Remove from Watch Later" : "Save to Watch Later");
     }
 
     void syncLiked(boolean liked, boolean enabled) {
         ImageButton like = view.findViewById(R.id.shows_like);
         like.setImageResource(liked ? R.drawable.ic_action_heart_filled : R.drawable.ic_action_heart_outline);
-        like.setColorFilter(liked ? UiPalette.PRIMARY : Color.WHITE);
+        like.setColorFilter(liked ? AppearanceTheme.accent(view.getContext()) : Color.WHITE);
         like.setEnabled(enabled);
         like.setContentDescription(liked ? "Unlike this video" : "Like this video");
     }

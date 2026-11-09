@@ -157,6 +157,15 @@ final class ContentPreferenceUi {
         }
     }
 
+    /** Keep the picker bloom colored to the selected accent, including bright white. */
+    static int[] noticeSheenColors(int accent) {
+        int light = Color.rgb((Color.red(accent) + 255) / 2,
+                (Color.green(accent) + 255) / 2, (Color.blue(accent) + 255) / 2);
+        int rgb = accent & 0x00FFFFFF;
+        return new int[]{(light & 0x00FFFFFF) | 0x40000000,
+                rgb | 0x0A000000, rgb | 0x08000000};
+    }
+
     private static int weight(ContentPreference mode) {
         return mode == ContentPreference.ALL || mode == ContentPreference.MEN
                 || mode == ContentPreference.TRANS_MEN ? android.graphics.Typeface.BOLD
@@ -196,7 +205,7 @@ final class ContentPreferenceUi {
                 (cyan & 0x00FFFFFF) | 0x90000000);
         android.graphics.drawable.GradientDrawable sheen = new android.graphics.drawable.GradientDrawable(
                 android.graphics.drawable.GradientDrawable.Orientation.TL_BR,
-                new int[]{0x40B4EFFF, 0x0A0892D0, 0x080892D0});
+                noticeSheenColors(cyan));
         sheen.setCornerRadius(dp(context, 24));
         notice.setBackground(new android.graphics.drawable.LayerDrawable(
                 new android.graphics.drawable.Drawable[]{glass, sheen}));
@@ -208,7 +217,8 @@ final class ContentPreferenceUi {
         } else {
             TextView icon = label(context, mode.symbol, 18, cyan);
             icon.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
-            icon.setShadowLayer(dp(context, 6), 0, 0, 0x600892D0);
+            icon.setShadowLayer(dp(context, 6), 0, 0,
+                    (cyan & 0x00FFFFFF) | 0x60000000);
             notice.addView(icon);
         }
         TextView title = label(context, mode.label + (shittok && mode != ContentPreference.ALL ? " only" : ""), 14, Color.WHITE);
