@@ -102,7 +102,7 @@ final class ShowDetailsHeader extends FrameLayout {
 
         TextView source = text(clean(sourceLabel, "SHOW")
                 .replace(" CATEGORY", "").replace(" SERIES", "").replace(" SHOW", ""),
-                11f, UiPalette.PRIMARY);
+                11f, AppearanceTheme.accent(context));
         source.setTypeface(null, android.graphics.Typeface.BOLD);
         source.setLetterSpacing(0.10f);
         copy.addView(source);
@@ -145,13 +145,13 @@ final class ShowDetailsHeader extends FrameLayout {
         );
         metaRow.addView(count, new LinearLayout.LayoutParams(0, -2, 1f));
 
-        action = text("PLAY FIRST", 12f, Color.BLACK);
+        action = text("PLAY FIRST", 12f, AppearanceTheme.onAccent(context));
         action.setTypeface(null, android.graphics.Typeface.BOLD);
         action.setGravity(Gravity.CENTER);
         action.setContentDescription("Play first episode");
         action.setEnabled(false);
         GradientDrawable actionBackground = new GradientDrawable();
-        actionBackground.setColor(UiPalette.PRIMARY);
+        actionBackground.setColor(AppearanceTheme.accent(context));
         actionBackground.setCornerRadius(dp(19));
         action.setBackground(actionBackground);
         action.setClickable(true);
