@@ -1,5 +1,6 @@
 package com.webapp.crazyshit;
 
+import android.app.Activity;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.content.res.Configuration;
@@ -248,6 +249,40 @@ final class AppearanceTheme {
                 .remove(KEY_GLASS_SPLIT)
                 .apply();
         // Motion preference is intentionally left alone: it predates Appearance.
+    }
+
+    /** Values requiring new native View colors. The glass sliders update live. */
+    static String colorSignature(Context context) {
+        return mode(context).name() + "/" + isLight(context) + "/" + accentChoice(context).name();
+    }
+
+    /** Select native light/dark styles before UI inflation; leave fullscreen media themes alone. */
+    static void applyRuntimeTheme(Activity activity) {
+        boolean supported = activity instanceof NativeMainActivity
+                || activity instanceof SettingsActivity
+                || activity instanceof AppearanceActivity
+                || activity instanceof ZeroChillSocialSettingsActivity
+                || activity instanceof ZeroChillAccountActivity
+                || activity instanceof ZeroChillPublicProfileActivity
+                || activity instanceof ZeroChillInboxActivity
+                || activity instanceof ZeroChillMessageActivity;
+        if (!supported) return;
+        if (isLight(activity)) {
+            activity.setTheme(activity instanceof ZeroChillAccountActivity
+                    ? R.style.Theme_ZeroChill_Light_Account : R.style.Theme_ZeroChill_Light);
+        } else if (mode(activity) == Mode.DARK || mode(activity) == Mode.FOLLOW_SYSTEM) {
+            activity.setTheme(activity instanceof ZeroChillAccountActivity
+                    ? R.style.Theme_ZeroChill_Dark_Account : R.style.Theme_ZeroChill_Dark);
+        }
+        switch (accentChoice(activity)) {
+            case PURPLE: activity.getTheme().applyStyle(R.style.ThemeOverlay_ZeroChill_Accent_Purple, true); break;
+            case BLUE: activity.getTheme().applyStyle(R.style.ThemeOverlay_ZeroChill_Accent_Blue, true); break;
+            case GREEN: activity.getTheme().applyStyle(R.style.ThemeOverlay_ZeroChill_Accent_Green, true); break;
+            case RED: activity.getTheme().applyStyle(R.style.ThemeOverlay_ZeroChill_Accent_Red, true); break;
+            case PINK: activity.getTheme().applyStyle(R.style.ThemeOverlay_ZeroChill_Accent_Pink, true); break;
+            case WHITE: activity.getTheme().applyStyle(R.style.ThemeOverlay_ZeroChill_Accent_White, true); break;
+            default: break;
+        }
     }
 
     static String signature(Context context) {
