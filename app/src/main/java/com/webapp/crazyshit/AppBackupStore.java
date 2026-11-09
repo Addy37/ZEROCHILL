@@ -28,6 +28,7 @@ final class AppBackupStore {
                     || BackupDocument.INTEGER_SETTINGS.contains(entry.getKey())
                     || BackupDocument.APPEARANCE_STRING_SETTINGS.contains(entry.getKey())
                     || BackupDocument.APPEARANCE_FLOAT_SETTINGS.contains(entry.getKey())
+                    || BackupDocument.APPEARANCE_BOOLEAN_SETTINGS.contains(entry.getKey())
                     || "chaos_preload_mode".equals(entry.getKey()))
                 settings.put(entry.getKey(), entry.getValue());
         }

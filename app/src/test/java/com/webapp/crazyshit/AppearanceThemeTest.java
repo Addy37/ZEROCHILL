@@ -55,6 +55,21 @@ public class AppearanceThemeTest {
         assertEquals(AppearanceTheme.primaryText(app), label.getCurrentTextColor());
     }
 
+    @Test public void v2GlassOptionsPersistWithoutChangingLegacySettings() {
+        Context app = app();
+        AppearanceTheme.setGlassPreset(app, AppearanceTheme.GlassPreset.QUALITY);
+        assertEquals(AppearanceTheme.GlassPreset.QUALITY, AppearanceTheme.glassPreset(app));
+        assertTrue(AppearanceTheme.glassColorSplitting(app));
+        assertEquals(30f, AppearanceTheme.glassRefraction(app), .001f);
+        AppearanceTheme.setGlassFloat(app, AppearanceTheme.KEY_GLASS_BLUR, 3.5f);
+        assertEquals(AppearanceTheme.GlassPreset.CUSTOM, AppearanceTheme.glassPreset(app));
+        assertEquals(3.5f, AppearanceTheme.glassBlur(app), .001f);
+        AppearanceTheme.setGlassColorSplitting(app, false);
+        assertFalse(AppearanceTheme.glassColorSplitting(app));
+        assertEquals(.5f, AppearanceTheme.glassIntensity(app), .001f);
+        assertEquals(.5f, AppearanceTheme.menuTint(app), .001f);
+    }
+
     @Test public void resetDoesNotTouchSavedMotionPreferences() {
         Context app = app();
         AppearanceTheme.prefs(app).edit().putBoolean("immersive_motion_enabled", false).commit();

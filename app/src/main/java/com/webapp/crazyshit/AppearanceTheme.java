@@ -14,6 +14,13 @@ final class AppearanceTheme {
     static final String KEY_ACCENT = "appearance_accent";
     static final String KEY_GLASS = "appearance_glass_intensity";
     static final String KEY_MENU_TINT = "appearance_menu_tint";
+    static final String KEY_GLASS_PRESET = "appearance_glass_preset";
+    static final String KEY_GLASS_TRANSPARENCY = "appearance_glass_transparency";
+    static final String KEY_GLASS_BLUR = "appearance_glass_blur";
+    static final String KEY_GLASS_REFRACTION = "appearance_glass_refraction";
+    static final String KEY_GLASS_VIBRANCY = "appearance_glass_vibrancy";
+    static final String KEY_GLASS_EDGE = "appearance_glass_edge_light";
+    static final String KEY_GLASS_SPLIT = "appearance_glass_color_splitting";
     private static final String PREFS = "app_prefs";
     private static final int CYAN = 0xFF0892D0;
 
@@ -39,6 +46,12 @@ final class AppearanceTheme {
         final String label;
         final int color;
         Accent(String label, int color) { this.label = label; this.color = color; }
+    }
+
+    enum GlassPreset {
+        OFF("Off"), FAST("Fast"), BALANCED("Balanced"), QUALITY("Quality"), CUSTOM("Custom");
+        final String label;
+        GlassPreset(String label) { this.label = label; }
     }
 
     private AppearanceTheme() {}
@@ -108,19 +121,142 @@ final class AppearanceTheme {
         prefs(context).edit().putFloat(KEY_MENU_TINT, clamp(value)).apply();
     }
 
+    static GlassPreset glassPreset(Context context) {
+        String name = prefs(context).getString(KEY_GLASS_PRESET, null);
+        if (name != null) try { return GlassPreset.valueOf(name); }
+        catch (IllegalArgumentException ignored) { }
+        return GlassPreset.BALANCED;
+    }
+
+    static boolean hasAdvancedGlass(Context context) {
+        return prefs(context).contains(KEY_GLASS_PRESET)
+                || prefs(context).contains(KEY_GLASS_TRANSPARENCY)
+                || prefs(context).contains(KEY_GLASS_REFRACTION);
+    }
+
+    static float glassTransparency(Context context) {
+        return readFloat(context, KEY_GLASS_TRANSPARENCY, 0.78f, 0f, 1f);
+    }
+
+    static float glassBlur(Context context) {
+        return readFloat(context, KEY_GLASS_BLUR, 0.7f, 0f, 12f);
+    }
+
+    static float glassRefraction(Context context) {
+        return readFloat(context, KEY_GLASS_REFRACTION, 21f, 0f, 30f);
+    }
+
+    static float glassVibrancy(Context context) {
+        return readFloat(context, KEY_GLASS_VIBRANCY, 1.2f, 1f, 2f);
+    }
+
+    static float glassEdge(Context context) {
+        return readFloat(context, KEY_GLASS_EDGE, .70f, 0f, 1f);
+    }
+
+    static boolean glassColorSplitting(Context context) {
+        return prefs(context).getBoolean(KEY_GLASS_SPLIT, false);
+    }
+
+    static void setGlassPreset(Context context, GlassPreset preset) {
+        SharedPreferences.Editor edit = prefs(context).edit().putString(KEY_GLASS_PRESET, preset.name());
+        switch (preset) {
+            case OFF:
+                edit.putFloat(KEY_GLASS_TRANSPARENCY, .85f)
+                    .putFloat(KEY_GLASS_BLUR, 0f)
+                    .putFloat(KEY_GLASS_REFRACTION, 0f)
+                    .putFloat(KEY_GLASS_VIBRANCY, 1f)
+                    .putFloat(KEY_GLASS_EDGE, 0f)
+                    .putBoolean(KEY_GLASS_SPLIT, false);
+                break;
+            case FAST:
+                edit.putFloat(KEY_GLASS_TRANSPARENCY, .65f)
+                    .putFloat(KEY_GLASS_BLUR, 0f)
+                    .putFloat(KEY_GLASS_REFRACTION, 0f)
+                    .putFloat(KEY_GLASS_VIBRANCY, 1.1f)
+                    .putFloat(KEY_GLASS_EDGE, .3f)
+                    .putBoolean(KEY_GLASS_SPLIT, false);
+                break;
+            case BALANCED:
+                edit.putFloat(KEY_GLASS_TRANSPARENCY, .78f)
+                    .putFloat(KEY_GLASS_BLUR, .7f)
+                    .putFloat(KEY_GLASS_REFRACTION, 21f)
+                    .putFloat(KEY_GLASS_VIBRANCY, 1.2f)
+                    .putFloat(KEY_GLASS_EDGE, .7f)
+                    .putBoolean(KEY_GLASS_SPLIT, false);
+                break;
+            case QUALITY:
+                edit.putFloat(KEY_GLASS_TRANSPARENCY, .88f)
+                    .putFloat(KEY_GLASS_BLUR, 1.1f)
+                    .putFloat(KEY_GLASS_REFRACTION, 30f)
+                    .putFloat(KEY_GLASS_VIBRANCY, 1.5f)
+                    .putFloat(KEY_GLASS_EDGE, 1f)
+                    .putBoolean(KEY_GLASS_SPLIT, true);
+                break;
+            default: break;
+        }
+        edit.apply();
+    }
+
+    static void setGlassFloat(Context context, String key, float value) {
+        float min = KEY_GLASS_VIBRANCY.equals(key) ? 1f : 0f;
+        float max = KEY_GLASS_BLUR.equals(key) ? 12f
+                : KEY_GLASS_REFRACTION.equals(key) ? 30f
+                : KEY_GLASS_VIBRANCY.equals(key) ? 2f : 1f;
+        if (!isGlassFloatKey(key)) throw new IllegalArgumentException("Unknown glass preference");
+        prefs(context).edit().putFloat(key, Math.max(min, Math.min(max, Float.isNaN(value) ? min : value)))
+                .putString(KEY_GLASS_PRESET, GlassPreset.CUSTOM.name()).apply();
+    }
+
+    static void setGlassColorSplitting(Context context, boolean enabled) {
+        prefs(context).edit().putBoolean(KEY_GLASS_SPLIT, enabled)
+                .putString(KEY_GLASS_PRESET, GlassPreset.CUSTOM.name()).apply();
+    }
+
+    static boolean isGlassFloatKey(String key) {
+        return KEY_GLASS_TRANSPARENCY.equals(key) || KEY_GLASS_BLUR.equals(key)
+                || KEY_GLASS_REFRACTION.equals(key) || KEY_GLASS_VIBRANCY.equals(key)
+                || KEY_GLASS_EDGE.equals(key);
+    }
+
+    static boolean validGlassFloat(String key, double value) {
+        if (!isGlassFloatKey(key) || !Double.isFinite(value)) return false;
+        double min = KEY_GLASS_VIBRANCY.equals(key) ? 1d : 0d;
+        double max = KEY_GLASS_BLUR.equals(key) ? 12d
+                : KEY_GLASS_REFRACTION.equals(key) ? 30d
+                : KEY_GLASS_VIBRANCY.equals(key) ? 2d : 1d;
+        return value >= min && value <= max;
+    }
+
+    private static float readFloat(Context context, String key, float fallback, float min, float max) {
+        float saved = prefs(context).getFloat(key, fallback);
+        return Float.isNaN(saved) ? fallback : Math.max(min, Math.min(max, saved));
+    }
+
     static void reset(Context context) {
         setMode(context, Mode.OLED);
         prefs(context).edit()
                 .remove(KEY_ACCENT)
                 .remove(KEY_GLASS)
                 .remove(KEY_MENU_TINT)
+                .remove(KEY_GLASS_PRESET)
+                .remove(KEY_GLASS_TRANSPARENCY)
+                .remove(KEY_GLASS_BLUR)
+                .remove(KEY_GLASS_REFRACTION)
+                .remove(KEY_GLASS_VIBRANCY)
+                .remove(KEY_GLASS_EDGE)
+                .remove(KEY_GLASS_SPLIT)
                 .apply();
         // Motion preference is intentionally left alone: it predates Appearance.
     }
 
     static String signature(Context context) {
         return mode(context).name() + "/" + accentChoice(context).name()
-                + "/" + glassIntensity(context) + "/" + menuTint(context);
+                + "/" + glassIntensity(context) + "/" + menuTint(context)
+                + "/" + glassPreset(context).name() + "/" + glassTransparency(context)
+                + "/" + glassBlur(context) + "/" + glassRefraction(context)
+                + "/" + glassVibrancy(context) + "/" + glassEdge(context)
+                + "/" + glassColorSplitting(context);
     }
 
     static int background(Context context) {

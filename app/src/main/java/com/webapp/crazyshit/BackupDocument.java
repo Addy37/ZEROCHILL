@@ -24,9 +24,14 @@ final class BackupDocument {
     static final Set<String> INTEGER_SETTINGS = new HashSet<>(Arrays.asList(
             "native_view_home", "native_view_collection", "notification_check_frequency_hours"));
     static final Set<String> APPEARANCE_STRING_SETTINGS = new HashSet<>(Arrays.asList(
-            AppearanceTheme.KEY_MODE, AppearanceTheme.KEY_ACCENT));
+            AppearanceTheme.KEY_MODE, AppearanceTheme.KEY_ACCENT, AppearanceTheme.KEY_GLASS_PRESET));
     static final Set<String> APPEARANCE_FLOAT_SETTINGS = new HashSet<>(Arrays.asList(
-            AppearanceTheme.KEY_GLASS, AppearanceTheme.KEY_MENU_TINT));
+            AppearanceTheme.KEY_GLASS, AppearanceTheme.KEY_MENU_TINT,
+            AppearanceTheme.KEY_GLASS_TRANSPARENCY, AppearanceTheme.KEY_GLASS_BLUR,
+            AppearanceTheme.KEY_GLASS_REFRACTION, AppearanceTheme.KEY_GLASS_VIBRANCY,
+            AppearanceTheme.KEY_GLASS_EDGE));
+    static final Set<String> APPEARANCE_BOOLEAN_SETTINGS = new HashSet<>(Arrays.asList(
+            AppearanceTheme.KEY_GLASS_SPLIT));
 
     private BackupDocument() { }
 
@@ -99,6 +104,11 @@ final class BackupDocument {
                 if ("notification_check_frequency_hours".equals(key) && (number == 1 || number == 3 || number == 6)) continue;
                 if (!"notification_check_frequency_hours".equals(key) && number >= 0 && number <= 3) continue;
             }
+            if (APPEARANCE_BOOLEAN_SETTINGS.contains(key) && value instanceof Boolean) continue;
+            if (AppearanceTheme.KEY_GLASS_PRESET.equals(key) && value instanceof String) {
+                try { AppearanceTheme.GlassPreset.valueOf((String) value); continue; }
+                catch (IllegalArgumentException ignored) { }
+            }
             if (AppearanceTheme.KEY_MODE.equals(key) && value instanceof String) {
                 try { AppearanceTheme.Mode.valueOf((String) value); continue; }
                 catch (IllegalArgumentException ignored) { }
@@ -109,7 +119,9 @@ final class BackupDocument {
             }
             if (APPEARANCE_FLOAT_SETTINGS.contains(key) && value instanceof Number) {
                 double number = ((Number) value).doubleValue();
-                if (Double.isFinite(number) && number >= 0d && number <= 1d) continue;
+                if (AppearanceTheme.KEY_GLASS.equals(key) || AppearanceTheme.KEY_MENU_TINT.equals(key)) {
+                    if (Double.isFinite(number) && number >= 0d && number <= 1d) continue;
+                } else if (AppearanceTheme.validGlassFloat(key, number)) continue;
             }
             if ("chaos_preload_mode".equals(key) && ("full".equals(value) || "unmetered".equals(value) || "minimal".equals(value))) continue;
             throw new IOException("The backup contains an unsupported setting: " + key);
