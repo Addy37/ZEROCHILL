@@ -125,6 +125,7 @@ internal class SquareNavigationBridge(private val nav: ZeroChillBottomNavigation
         CompositionLocalProvider(
             LocalAppBackdrop provides page,
             LocalGlassEffectConfig provides config,
+            LocalLightTheme provides AppearanceTheme.isLight(activity),
             LocalLiquidBottomTabsSurfaceBackdrop provides shell,
         ) {
             Box(Modifier.fillMaxSize()) {
