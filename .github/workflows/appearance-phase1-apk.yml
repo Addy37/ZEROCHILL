@@ -1,7 +1,7 @@
 name: ZEROCHILL Appearance Phase 1 APK
 
 # Single scoped push build for this file, not repeated on every code edit.
-# Rerun after correcting one message-adapter context compile error.
+# Single signed Compose Appearance candidate, no unrelated tests.
 on:
   push:
     branches:
@@ -17,8 +17,8 @@ jobs:
   appearance-preview:
     runs-on: ubuntu-latest
     env:
-      APP_VERSION_CODE: "6000005"
-      APP_VERSION_NAME: "7.0.0-appearance-preview.3"
+      APP_VERSION_CODE: "6000006"
+      APP_VERSION_NAME: "7.0.0-compose-preview.4"
       ZEROCHILL_SOURCE_SHA: ${{ github.sha }}
       ANALYTICS_ENDPOINT: ""
       ANALYTICS_V2_ENDPOINT: ""
@@ -86,7 +86,7 @@ jobs:
           "$BUILD_TOOLS/apksigner" verify --print-certs "$APK"
           BADGING="$("$BUILD_TOOLS/aapt2" dump badging "$APK")"
           echo "$BADGING" | grep -q "package: name='com.addy37.crazyshitunofficial'"
-          echo "$BADGING" | grep -q "versionCode='6000005'"
+          echo "$BADGING" | grep -q "versionCode='6000006'"
           mkdir -p "$RUNNER_TEMP/stable"
           gh release download v6.0.2 --repo "$GITHUB_REPOSITORY" \
             --pattern ZeroChill.apk --dir "$RUNNER_TEMP/stable"
@@ -96,7 +96,7 @@ jobs:
           test "$CANDIDATE_CERT" = "$STABLE_CERT"
           STABLE_BADGING="$("$BUILD_TOOLS/aapt2" dump badging "$RUNNER_TEMP/stable/ZeroChill.apk")"
           STABLE_CODE="$(echo "$STABLE_BADGING" | sed -n "s/.*versionCode='\([0-9]*\)'.*/\1/p" | head -n 1)"
-          test 6000005 -gt "$STABLE_CODE"
+          test 6000006 -gt "$STABLE_CODE"
           OUT="ZeroChill-OG-Appearance-${GITHUB_REF_NAME//\//-}-${GITHUB_SHA:0:7}.apk"
           cp "$APK" "$OUT"
           sha256sum "$OUT" > SHA256SUMS-appearance.txt
