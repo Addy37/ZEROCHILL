@@ -684,7 +684,7 @@ public final class NativeMiniPlayer {
         content.addView(track, trackParams);
 
         progressFill = new View(activity);
-        progressFill.setBackgroundColor(UiPalette.PRIMARY);
+        progressFill.setBackgroundColor(AppearanceTheme.accent(activity));
         progressFill.setScaleX(0f);
         progressFill.setPivotX(0f);
         FrameLayout.LayoutParams fillParams = new FrameLayout.LayoutParams(-1, dp(3));

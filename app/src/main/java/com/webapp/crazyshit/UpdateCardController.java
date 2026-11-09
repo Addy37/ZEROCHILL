@@ -96,7 +96,7 @@ final class UpdateCardController {
         progress.setMax(1000);
         progress.setProgress(0);
         progress.setIndeterminate(false);
-        progress.setProgressTintList(ColorStateList.valueOf(UiPalette.PRIMARY));
+        progress.setProgressTintList(ColorStateList.valueOf(AppearanceTheme.accent(activity)));
         progress.setProgressBackgroundTintList(ColorStateList.valueOf(Color.rgb(47, 53, 61)));
         progress.setVisibility(View.GONE);
         LinearLayout.LayoutParams progressParams =
@@ -182,7 +182,7 @@ final class UpdateCardController {
         title.setText(cleanVersion(version) + " is ready to install");
         body.setText("Open Downloads, then tap the ZEROCHILL APK to finish the update.");
         percent.setText("✓");
-        percent.setTextColor(UiPalette.PRIMARY);
+        percent.setTextColor(AppearanceTheme.accent(activity));
         progress.setVisibility(View.VISIBLE);
         progress.setIndeterminate(false);
         progress.setProgress(1000);
@@ -197,7 +197,7 @@ final class UpdateCardController {
         title.setText(cleanVersion(version) + " is ready");
         body.setText("This was a safe UI preview. No APK was downloaded or installed.");
         percent.setText("✓");
-        percent.setTextColor(UiPalette.PRIMARY);
+        percent.setTextColor(AppearanceTheme.accent(activity));
         progress.setVisibility(View.VISIBLE);
         progress.setIndeterminate(false);
         progress.setProgress(1000);
@@ -295,7 +295,7 @@ final class UpdateCardController {
         });
         button.setTextColor(emphasized ? Color.BLACK : Color.WHITE);
         button.setBackgroundTintList(ColorStateList.valueOf(
-                emphasized ? UiPalette.PRIMARY : Color.rgb(31, 36, 43)
+                emphasized ? AppearanceTheme.accent(activity) : Color.rgb(31, 36, 43)
         ));
         button.setStrokeWidth(emphasized ? 0 : dp(1));
         button.setStrokeColor(ColorStateList.valueOf(Color.rgb(65, 73, 84)));
@@ -321,7 +321,7 @@ final class UpdateCardController {
 
     private void primaryStyle(MaterialButton button) {
         button.setTextColor(Color.BLACK);
-        button.setBackgroundTintList(ColorStateList.valueOf(UiPalette.PRIMARY));
+        button.setBackgroundTintList(ColorStateList.valueOf(AppearanceTheme.accent(activity)));
     }
 
     private TextView text(String value, int size, int color) {

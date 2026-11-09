@@ -334,7 +334,7 @@ final class UnifiedVideoController {
         content.addView(track, trackParams);
 
         miniProgressFill = new View(activity);
-        miniProgressFill.setBackgroundColor(UiPalette.PRIMARY);
+        miniProgressFill.setBackgroundColor(AppearanceTheme.accent(activity));
         miniProgressFill.setScaleX(0f);
         miniProgressFill.setPivotX(0f);
         FrameLayout.LayoutParams fillParams = new FrameLayout.LayoutParams(-1, dp(3));
@@ -846,7 +846,7 @@ final class UnifiedVideoController {
         if (!clean(item.comments).isEmpty()) {
             TextView count = new TextView(activity);
             count.setText(item.comments + " comments");
-            count.setTextColor(UiPalette.PRIMARY);
+            count.setTextColor(AppearanceTheme.accent(activity));
             count.setTextSize(11);
             count.setPadding(0, dp(5), 0, 0);
             copy.addView(count);

@@ -10,6 +10,7 @@
         <item name="android:navigationBarColor">@color/zc_background</item>
         <item name="android:windowLightStatusBar">false</item>
         <item name="android:windowLightNavigationBar">false</item>
+        <item name="android:colorAccent">@color/zc_cyan</item>
         <item name="colorPrimary">@color/zc_cyan</item>
         <item name="colorOnPrimary">@color/app_on_primary</item>
         <item name="colorSecondary">@color/zc_cyan</item>

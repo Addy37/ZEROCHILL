@@ -172,7 +172,7 @@ public final class ZeroChillSocialSettingsActivity extends Activity {
                     Color.WHITE, true));
             if (!profile.displayName.isEmpty()) names.addView(label(SocialUi.cleanName(profile.username),
                     11, Color.rgb(155, 171, 182), false));
-            TextView unblock = label("Unblock", 12, UiPalette.PRIMARY, true);
+            TextView unblock = label("Unblock", 12, AppearanceTheme.accent(this), true);
             unblock.setGravity(Gravity.CENTER);
             unblock.setPadding(dp(8), 0, dp(8), 0);
             row.addView(unblock, new LinearLayout.LayoutParams(-2, dp(48)));

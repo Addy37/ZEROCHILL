@@ -185,7 +185,7 @@ final class NotificationCoordinator {
                 .create();
         dialog.setOnShowListener(ignored -> {
             if (dialog.getButton(AlertDialog.BUTTON_POSITIVE) != null) {
-                dialog.getButton(AlertDialog.BUTTON_POSITIVE).setTextColor(UiPalette.PRIMARY);
+                dialog.getButton(AlertDialog.BUTTON_POSITIVE).setTextColor(AppearanceTheme.accent(activity));
             }
         });
         dialog.show();

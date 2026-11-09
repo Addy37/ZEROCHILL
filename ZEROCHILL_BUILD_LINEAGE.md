@@ -2,6 +2,20 @@
 
 This file identifies the current approved ZEROCHILL product baseline for test APKs and future feature work.
 
+## Phase 4 visual consistency candidate
+
+The user selected the latest development lineage containing merged PR #409.
+`fix/zerochill-phase4-visual-consistency` starts at `3835f1591dd3c12d0c838310a6e6862b97ccb0b1`
+on `feature/zerochill-7-shared-chrome-phase4`; it does not start from released main
+or the separate V2 application. Preview 12 uses `6000014` above approved
+navigation Preview 11 (`6000013`) and retains the existing production signing
+identity and package. The isolated visual-consistency workflow verifies identity
+and exports a branch/SHA-named signed APK. No merge, tag or release is authorized;
+wait for the user's APK approval. See `docs/PHASE4_VISUAL_CONSISTENCY.md` and the
+candidate PR for actual validation and artifact evidence. No backend, remote
+configuration, preference migration or integration-branch synchronization is part
+of this isolated development candidate.
+
 ## ZEROCHILL 7 navigation performance candidate
 
 The user explicitly selected draft PR #408, branch

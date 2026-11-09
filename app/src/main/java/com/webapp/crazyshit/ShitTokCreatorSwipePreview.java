@@ -73,8 +73,8 @@ final class ShitTokCreatorSwipePreview extends FrameLayout {
 
         tabs = new TabLayout(activity);
         tabs.setBackgroundColor(Color.BLACK);
-        tabs.setSelectedTabIndicatorColor(UiPalette.PRIMARY);
-        tabs.setTabTextColors(Color.rgb(174, 174, 182), UiPalette.PRIMARY);
+        tabs.setSelectedTabIndicatorColor(AppearanceTheme.accent(activity));
+        tabs.setTabTextColors(Color.rgb(174, 174, 182), AppearanceTheme.accent(activity));
         tabs.setTabMode(TabLayout.MODE_FIXED);
         tabs.setTabGravity(TabLayout.GRAVITY_FILL);
         shell.addView(tabs, new LinearLayout.LayoutParams(-1, dp(48)));

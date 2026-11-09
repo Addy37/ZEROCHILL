@@ -20,6 +20,9 @@ final class ZeroChillDialog {
         Builder(Context context) {
             super(context, R.style.Theme_ZeroChill_Dialog);
             this.context = context;
+            // The platform dialog theme has its own defaults. Reuse the existing
+            // app overlay on its context before list indicators are inflated.
+            AppearanceTheme.applyAccentOverlay(getContext());
         }
 
         Builder destructive() { destructive = true; return this; }
@@ -35,6 +38,10 @@ final class ZeroChillDialog {
 
         @Override public AlertDialog create() {
             AlertDialog dialog = super.create();
+            if (dialog.getListView() != null) {
+                dialog.getListView().setSelector(new android.graphics.drawable.ColorDrawable(
+                        ZeroChillUi.color(context, R.color.zc_cyan_container)));
+            }
             ZeroChillToast.registerDialog(dialog);
             return dialog;
         }

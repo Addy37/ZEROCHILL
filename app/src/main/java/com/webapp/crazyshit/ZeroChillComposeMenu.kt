@@ -88,6 +88,7 @@ internal object ZeroChillComposeMenu {
                     menuTint = AppearanceTheme.menuTint(activity),
                     maxHeightDp = maxHeight / resources.displayMetrics.density,
                     colorSplitting = AppearanceTheme.glassColorSplitting(activity),
+                    edgeStrength = PreferenceGlassPanel.edgeStrength(activity),
                     onChoose = { item ->
                         popup.dismiss()
                         onSelected.accept(item)
@@ -142,17 +143,18 @@ internal object ZeroChillComposeMenu {
         menuTint: Float,
         maxHeightDp: Float,
         colorSplitting: Boolean,
+        edgeStrength: Float,
         onChoose: (MenuItem) -> Unit,
     ) {
         val rim: Brush = if (colorSplitting && android.os.Build.VERSION.SDK_INT >= 33) {
             Brush.linearGradient(
-                listOf(accent.copy(alpha = .9f), Color(0xFF9B7BFF).copy(alpha = .7f),
-                    Color(0xFF66DBE5).copy(alpha = .7f), accent.copy(alpha = .9f)),
+                listOf(accent.copy(alpha = (.9f * edgeStrength).coerceAtMost(1f)), Color(0xFF9B7BFF).copy(alpha = (.7f * edgeStrength).coerceAtMost(1f)),
+                    Color(0xFF66DBE5).copy(alpha = (.7f * edgeStrength).coerceAtMost(1f)), accent.copy(alpha = (.9f * edgeStrength).coerceAtMost(1f))),
             )
         } else {
             Brush.linearGradient(
-                listOf(Color.White.copy(alpha = .4f), accent.copy(alpha = .42f),
-                    Color.White.copy(alpha = .16f)),
+                listOf(Color.White.copy(alpha = (.4f * edgeStrength).coerceAtMost(1f)), accent.copy(alpha = (.42f * edgeStrength).coerceAtMost(1f)),
+                    Color.White.copy(alpha = (.16f * edgeStrength).coerceAtMost(1f))),
             )
         }
         val shape = remember { RoundedCornerShape(22.dp) }

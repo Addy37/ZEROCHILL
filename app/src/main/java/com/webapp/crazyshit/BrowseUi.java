@@ -42,7 +42,7 @@ final class BrowseUi {
     }
 
     static TextView action(Context context, String label, String description, View.OnClickListener click) {
-        TextView action = text(context, label, 15, UiPalette.PRIMARY);
+        TextView action = text(context, label, 15, AppearanceTheme.accent(context));
         action.setGravity(Gravity.CENTER);
         action.setPadding(dp(context, 12), 0, dp(context, 12), 0);
         action.setMinHeight(dp(context, 48));

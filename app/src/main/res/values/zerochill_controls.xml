@@ -4,7 +4,6 @@
         <item name="android:windowBackground">@drawable/zc_glass_sheet</item>
         <item name="android:listChoiceIndicatorSingle">@drawable/zc_choice_indicator</item>
         <item name="android:listSelector">@color/zc_cyan_container</item>
-        <item name="android:colorAccent">@color/zc_cyan</item>
         <item name="android:textColorPrimary">@color/zc_text_primary</item>
         <item name="android:textColorSecondary">@color/zc_text_secondary</item>
         <item name="android:buttonBarButtonStyle">@style/Widget.ZeroChill.DialogButton</item>

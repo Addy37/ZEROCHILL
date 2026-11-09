@@ -299,7 +299,7 @@ public class FavoritesActivity extends Activity {
             media.addView(track, trackParams);
 
             View fill = new View(this);
-            fill.setBackground(rounded(UiPalette.PRIMARY, dp(2)));
+            fill.setBackground(rounded(AppearanceTheme.accent(this), dp(2)));
             int width = Math.max(dp(3), Math.round(dp(142) * (item.progressPercent() / 100f)));
             track.addView(fill, new FrameLayout.LayoutParams(width, -1));
         }

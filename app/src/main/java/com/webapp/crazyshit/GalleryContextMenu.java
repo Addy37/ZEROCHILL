@@ -47,12 +47,12 @@ final class GalleryContextMenu extends FrameLayout {
             final int index = i;
             TextView row = new TextView(activity);
             row.setText(labels[i]); row.setTextSize(15);
-            row.setTextColor(i == 1 && favorite ? UiPalette.PRIMARY : Color.WHITE);
+            row.setTextColor(i == 1 && favorite ? AppearanceTheme.accent(activity) : Color.WHITE);
             row.setGravity(Gravity.CENTER_VERTICAL);
             row.setPadding(dp(16), dp(4), dp(16), dp(4));
             row.setCompoundDrawablePadding(dp(16));
             android.graphics.drawable.Drawable icon = androidx.appcompat.content.res.AppCompatResources.getDrawable(activity, icons[i]).mutate();
-            icon.setTint(i == 1 && favorite ? UiPalette.PRIMARY : Color.WHITE);
+            icon.setTint(i == 1 && favorite ? AppearanceTheme.accent(activity) : Color.WHITE);
             icon.setBounds(0, 0, dp(22), dp(22));
             row.setCompoundDrawables(icon, null, null, null);
             row.setMinHeight(dp(48)); row.setFocusable(true);
