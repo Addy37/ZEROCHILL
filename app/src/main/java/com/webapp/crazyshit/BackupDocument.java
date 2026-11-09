@@ -23,6 +23,10 @@ final class BackupDocument {
             "notification_show_video_titles"));
     static final Set<String> INTEGER_SETTINGS = new HashSet<>(Arrays.asList(
             "native_view_home", "native_view_collection", "notification_check_frequency_hours"));
+    static final Set<String> APPEARANCE_STRING_SETTINGS = new HashSet<>(Arrays.asList(
+            AppearanceTheme.KEY_MODE, AppearanceTheme.KEY_ACCENT));
+    static final Set<String> APPEARANCE_FLOAT_SETTINGS = new HashSet<>(Arrays.asList(
+            AppearanceTheme.KEY_GLASS, AppearanceTheme.KEY_MENU_TINT));
 
     private BackupDocument() { }
 
@@ -94,6 +98,18 @@ final class BackupDocument {
                 int number = (Integer) value;
                 if ("notification_check_frequency_hours".equals(key) && (number == 1 || number == 3 || number == 6)) continue;
                 if (!"notification_check_frequency_hours".equals(key) && number >= 0 && number <= 3) continue;
+            }
+            if (AppearanceTheme.KEY_MODE.equals(key) && value instanceof String) {
+                try { AppearanceTheme.Mode.valueOf((String) value); continue; }
+                catch (IllegalArgumentException ignored) { }
+            }
+            if (AppearanceTheme.KEY_ACCENT.equals(key) && value instanceof String) {
+                try { AppearanceTheme.Accent.valueOf((String) value); continue; }
+                catch (IllegalArgumentException ignored) { }
+            }
+            if (APPEARANCE_FLOAT_SETTINGS.contains(key) && value instanceof Number) {
+                double number = ((Number) value).doubleValue();
+                if (Double.isFinite(number) && number >= 0d && number <= 1d) continue;
             }
             if ("chaos_preload_mode".equals(key) && ("full".equals(value) || "unmetered".equals(value) || "minimal".equals(value))) continue;
             throw new IOException("The backup contains an unsupported setting: " + key);

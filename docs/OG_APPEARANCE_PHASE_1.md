@@ -11,6 +11,7 @@ Source: current OG main, not historical rebrand/zerochill.
 - Navigation glass-intensity control using the existing OG glass engine, not V2's dependency.
 - Theme-aware native popup tint as a readable fallback. No background capture in PopupWindow.
 - Existing immersive_motion_enabled remains authoritative, including Android animation preference.
+- The existing validated backup format now retains the two appearance strings and two glass floats.
 - Focused migration and persistence unit tests.
 
 ## Known limits, must not ship as a completed global theme
