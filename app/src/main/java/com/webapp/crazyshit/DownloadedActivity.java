@@ -107,7 +107,7 @@ public final class DownloadedActivity extends Activity {
         TextView title = BrowseUi.text(this, "Downloads", 20, Color.WHITE);
         title.setPadding(dp(12), 0, 0, 0);
         header.addView(title, new LinearLayout.LayoutParams(0, -2, 1f));
-        root.addView(header);
+        LibraryDestinationChrome.attachHeader(root, header, title);
 
         input = new ZeroChillEditText(this);
         input.setHint("Search Downloads");
@@ -116,7 +116,7 @@ public final class DownloadedActivity extends Activity {
         input.setTextSize(16);
         input.setSingleLine(true);
         input.setPadding(dp(14), 0, dp(14), 0);
-        input.setBackgroundResource(R.drawable.zc_input_field);
+        LibraryDestinationChrome.styleSearch(this, input);
         input.setContentDescription("Search Downloads");
         LinearLayout.LayoutParams inputParams = new LinearLayout.LayoutParams(-1, dp(50));
         inputParams.setMargins(dp(12), 0, dp(12), dp(8));
@@ -124,13 +124,17 @@ public final class DownloadedActivity extends Activity {
 
         count = BrowseUi.text(this, "", 12, BrowseUi.MUTED);
         count.setPadding(dp(16), dp(4), dp(16), dp(8));
+        LibraryDestinationChrome.styleSummary(this, count);
         root.addView(count);
 
         empty = BrowseUi.text(this, "", 15, BrowseUi.MUTED);
         empty.setGravity(Gravity.CENTER);
         empty.setPadding(dp(24), dp(32), dp(24), dp(24));
         empty.setVisibility(View.GONE);
-        root.addView(empty);
+        LibraryDestinationChrome.styleEmpty(this, empty);
+        LinearLayout.LayoutParams emptyParams = new LinearLayout.LayoutParams(-1, -2);
+        emptyParams.setMargins(dp(16), dp(16), dp(16), dp(8));
+        root.addView(empty, emptyParams);
 
         recycler = new androidx.recyclerview.widget.RecyclerView(this);
         recycler.setLayoutManager(new GridLayoutManager(this, 2));
@@ -289,7 +293,7 @@ public final class DownloadedActivity extends Activity {
         card.setCardBackgroundColor(UiPalette.SURFACE);
         card.setRadius(dp(16));
         card.setCardElevation(0f);
-        card.setStrokeWidth(0);
+        LibraryDestinationChrome.styleMediaCard(this, card);
 
         FrameLayout media = new FrameLayout(this);
         card.addView(media, new MaterialCardView.LayoutParams(-1, -1));
