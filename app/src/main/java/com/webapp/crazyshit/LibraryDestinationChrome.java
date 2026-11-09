@@ -1,13 +1,10 @@
 package com.webapp.crazyshit;
 
-import android.app.Activity;
 import android.content.Context;
-import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.view.Gravity;
 import android.view.View;
-import android.view.ViewGroup;
 import android.widget.EditText;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
@@ -33,7 +30,6 @@ final class LibraryDestinationChrome {
 
     static void attachHeader(LinearLayout root, LinearLayout header, TextView title) {
         Context context = root.getContext();
-        int accent = AppearanceTheme.accent(context);
         header.setGravity(Gravity.CENTER_VERTICAL);
         header.setPadding(dp(context, 8), dp(context, 8), dp(context, 8), dp(context, 8));
         header.setMinimumHeight(dp(context, 64));
@@ -42,7 +38,7 @@ final class LibraryDestinationChrome {
         title.setTextSize(22);
         title.setTextColor(AppearanceTheme.primaryText(context));
         title.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
-        title.setSingleLine(true);
+        title.setMaxLines(2);
         title.setEllipsize(android.text.TextUtils.TruncateAt.END);
         for (int i = 0; i < header.getChildCount(); i++) {
             View child = header.getChildAt(i);
