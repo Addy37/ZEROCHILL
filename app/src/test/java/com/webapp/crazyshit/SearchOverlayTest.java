@@ -97,14 +97,24 @@ public class SearchOverlayTest {
         assertTrue(dismissed[0]);
         boolean[] collapsed = {false};
         panel.morph(origin, false, () -> collapsed[0] = true);
-        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idleFor(
-                java.time.Duration.ofMillis(300));
-        assertTrue(collapsed[0]);
+        assertTrue("Back must finish closing in the same dispatch", collapsed[0]);
         root.removeView(panel.view);
         panel.close();
         assertEquals(350, underlying.getScrollY());
         assertSame(page, underlying.getChildAt(0));
         owner.close();
+        host.pause().stop().destroy();
+    }
+
+    @Test public void backBeforeFirstLayoutFinishesWithoutWaitingForPreDraw() {
+        ActivityController<Activity> host = Robolectric.buildActivity(Activity.class).create().start().resume();
+        SearchPanel panel = new SearchPanel(host.get(), new Intent(), true, () -> {});
+        panel.create(null);
+        boolean[] closed = {false};
+        panel.morph(new View(host.get()), true, () -> fail("Cancelled open must not complete"));
+        panel.morph(new View(host.get()), false, () -> closed[0] = true);
+        assertTrue("Back before layout must complete immediately", closed[0]);
+        panel.close();
         host.pause().stop().destroy();
     }
 

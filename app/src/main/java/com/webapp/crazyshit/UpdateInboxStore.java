@@ -410,10 +410,10 @@ final class UpdateInboxStore {
     }
 
     static List<Entry> allForAccount(Context context, String accountId) {
+        ArrayList<Entry> visible = new ArrayList<>();
         synchronized (LOCK) {
             ArrayList<Entry> entries = readLocked(context);
             if (pruneNonFavoriteContent(context, entries)) writeLocked(context, entries);
-            ArrayList<Entry> visible = new ArrayList<>();
             String current = clean(accountId);
             for (Entry entry : entries) {
                 if (CATEGORY_SOCIAL.equals(entry.category)
@@ -422,8 +422,10 @@ final class UpdateInboxStore {
                 }
                 visible.add(entry);
             }
-            return groupCreators(context, visible);
         }
+        // Entries were decoded into this call's own snapshot. Grouping does not
+        // mutate storage and must not hold the inbox lock during catalog work.
+        return groupCreators(context, visible);
     }
 
     static List<Entry> filtered(Context context, String category) {
@@ -548,23 +550,34 @@ final class UpdateInboxStore {
 
     /** Display grouping follows current aliases and the user's selected name/artwork. */
     private static List<Entry> groupCreators(Context context, List<Entry> entries) {
+        if (entries.stream().noneMatch(entry -> CATEGORY_ONLYFAP.equals(entry.category)))
+            return new ArrayList<>(entries);
         ArrayList<Entry> result = new ArrayList<>();
         LinkedHashMap<String, Entry> creators = new LinkedHashMap<>();
         List<CreatorCatalog.FavoriteGroup> favorites = CreatorCatalog.favoriteGroups(context);
+        // Match aliases once per favorite group, rather than normalizing every
+        // favorite/member again for every notification. Preserve first-group order.
+        java.util.Map<String, CreatorCatalog.FavoriteGroup> byName = new java.util.HashMap<>();
+        java.util.Map<String, CreatorCatalog.FavoriteGroup> byReviewedIdentity = new java.util.HashMap<>();
+        java.util.Map<CreatorCatalog.FavoriteGroup, Integer> order = new java.util.IdentityHashMap<>();
+        for (int i = 0; i < favorites.size(); i++) {
+            CreatorCatalog.FavoriteGroup group = favorites.get(i);
+            order.put(group, i);
+            byName.putIfAbsent(CreatorNameMatcher.normalized(group.item.title), group);
+            if (CreatorIdentity.reviewed(group.item.title))
+                byReviewedIdentity.putIfAbsent(CreatorIdentity.key(group.item.title), group);
+            for (NativeContentItem member : group.members.values()) {
+                byName.putIfAbsent(CreatorNameMatcher.normalized(member.title), group);
+                byName.putIfAbsent(CreatorNameMatcher.normalized(member.searchQuery), group);
+            }
+            for (String alias : group.relationshipKeys)
+                byName.putIfAbsent(CreatorNameMatcher.normalized(alias), group);
+        }
         for (Entry entry : entries) {
             if (!CATEGORY_ONLYFAP.equals(entry.category)) { result.add(entry); continue; }
-            CreatorCatalog.FavoriteGroup favorite = null;
-            String wanted = CreatorNameMatcher.normalized(entry.creatorName);
-            for (CreatorCatalog.FavoriteGroup group : favorites) {
-                boolean matches = wanted.equals(CreatorNameMatcher.normalized(group.item.title))
-                        || CreatorIdentity.sameReviewedIdentity(group.item.title, entry.creatorName);
-                for (NativeContentItem member : group.members.values()) matches |=
-                        wanted.equals(CreatorNameMatcher.normalized(member.title))
-                        || wanted.equals(CreatorNameMatcher.normalized(member.searchQuery));
-                for (String alias : group.relationshipKeys) matches |=
-                        wanted.equals(CreatorNameMatcher.normalized(alias));
-                if (matches) { favorite = group; break; }
-            }
+            CreatorCatalog.FavoriteGroup favorite = byName.get(CreatorNameMatcher.normalized(entry.creatorName));
+            CreatorCatalog.FavoriteGroup reviewed = byReviewedIdentity.get(CreatorIdentity.key(entry.creatorName));
+            if (reviewed != null && (favorite == null || order.get(reviewed) < order.get(favorite))) favorite = reviewed;
             String name = favorite == null ? entry.creatorName : favorite.item.title;
             String key = CreatorNameMatcher.normalized(name);
             Entry grouped = creators.get(key);
@@ -814,6 +827,24 @@ final class UpdateInboxStore {
                 || "wikifeet".equals(key) || "wikifeetx".equals(key);
     }
 
+    /** Immutable names for one inbox operation; no persisted identity changes. */
+    private static final class FavoriteCreators {
+        final Set<String> normalized = new java.util.HashSet<>();
+        final Set<String> reviewed = new java.util.HashSet<>();
+        FavoriteCreators(Context context) {
+            for (String name : CreatorFavoriteStore.names(context)) {
+                normalized.add(CreatorNameMatcher.normalized(name));
+                if (CreatorIdentity.reviewed(name)) reviewed.add(CreatorIdentity.key(name));
+            }
+        }
+        boolean contains(String name) {
+            if (name == null || name.trim().isEmpty()) return false;
+            String wanted = CreatorNameMatcher.normalized(name);
+            return !wanted.isEmpty() && (normalized.contains(wanted)
+                    || (!reviewed.isEmpty() && reviewed.contains(CreatorIdentity.key(name))));
+        }
+    }
+
     static boolean isFavoriteCreator(Context context, String creatorName) {
         if (context == null || creatorName == null || creatorName.trim().isEmpty()) return false;
         String wanted = CreatorNameMatcher.normalized(creatorName);
@@ -826,6 +857,7 @@ final class UpdateInboxStore {
     }
 
     private static boolean pruneNonFavoriteContent(Context context, ArrayList<Entry> entries) {
+        FavoriteCreators favorites = new FavoriteCreators(context);
         boolean changed = false;
         java.util.Iterator<Entry> iterator = entries.iterator();
         while (iterator.hasNext()) {
@@ -838,7 +870,7 @@ final class UpdateInboxStore {
             if (CATEGORY_APP.equals(entry.category) || CATEGORY_SOCIAL.equals(entry.category)) continue;
             boolean keepFavoriteCreator = CATEGORY_ONLYFAP.equals(entry.category)
                     && !entry.creatorName.isEmpty()
-                    && isFavoriteCreator(context, entry.creatorName);
+                    && favorites.contains(entry.creatorName);
             if (!keepFavoriteCreator) {
                 iterator.remove();
                 changed = true;
