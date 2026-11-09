@@ -72,46 +72,35 @@ public class LibraryProfileTest {
         } finally { view.close(); }
     }
 
-    @Test public void historyUnifiesResumeAndCompletedEntriesAndKeepsContentWhileRefreshing() throws Exception {
+    @Test public void historyShortcutKeepsResumeAndCompletedRecordsAcrossRefreshAndRecreation() throws Exception {
         PlaybackHistoryStore.record(activity, "In progress", "https://fixture.invalid/in-progress", "",
                 60_000, 180_000, false, true);
         PlaybackHistoryStore.record(activity, "Finished", "https://fixture.invalid/finished", "",
                 180_000, 180_000, true, true);
         PlaybackHistoryStore.awaitPendingWritesForTests();
-        List<PlaybackHistoryStore.Item> selected = new java.util.ArrayList<>();
-        LibraryHubView view = new LibraryHubView(activity, new LibraryHubView.Listener() {
-            public void onOpenWatchLater(NativeContentItem item) { }
-            public void onOpenCreator(NativeContentItem item) { }
-            public void onOpenHistory(PlaybackHistoryStore.Item item) { selected.add(item); }
-        });
-        activity.setContentView(view);
-        Map<String, Runnable> work = new LinkedHashMap<>(); view.setWorkScheduler(work::put);
-        try {
-            view.setSocialActive(true); publish(view, work);
-            assertNull(view.findViewWithTag("Continue Watching"));
-            assertNotNull(view.findViewWithTag("History"));
-            description(view, "Resume In progress").performClick();
-            assertEquals(60_000L, selected.get(0).positionMs);
-            description(view, "Watch again Finished").performClick();
-            assertTrue(selected.get(1).complete);
-            View rail = view.findViewWithTag("History");
-            view.refresh();
-            assertSame(rail, view.findViewWithTag("History"));
-            assertNull(text(view, "Your Library is ready"));
-            // Wait for the unchanged snapshot before closing/recreating the view.
-            ((ExecutorService) ReflectionHelpers.getField(view, "refreshIo")).submit(() -> {}).get(5, TimeUnit.SECONDS);
-            shadowOf(Looper.getMainLooper()).idle();
-            Runnable apply = work.remove("library-publish"); if (apply != null) apply.run();
-            LibraryHubView recreated = new LibraryHubView(activity, null);
-            activity.setContentView(recreated);
-            Map<String, Runnable> recreatedWork = new LinkedHashMap<>(); recreated.setWorkScheduler(recreatedWork::put);
+        String before = activity.getSharedPreferences("playback_history", 0).getString("items", "");
+        for (int i = 0; i < 2; i++) {
+            LibraryHubView view = new LibraryHubView(activity, null);
+            activity.setContentView(view);
+            Map<String, Runnable> work = new LinkedHashMap<>(); view.setWorkScheduler(work::put);
             try {
-                recreated.setSocialActive(true); publish(recreated, recreatedWork);
-                assertNotNull(description(recreated, "Resume In progress"));
-                android.widget.LinearLayout content = ReflectionHelpers.getField(recreated, "content");
-                assertTrue(content.getPaddingBottom() >= ZeroChillUi.dimension(activity, R.dimen.zc_bottom_nav_height) + BrowseUi.dp(activity, 24));
-            } finally { recreated.close(); }
-        } finally { view.close(); }
+                view.setSocialActive(true); publish(view, work);
+                assertNull(view.findViewWithTag("History"));
+                View shortcut = view.findViewWithTag("library-collection-history");
+                assertNotNull(shortcut);
+                shortcut.performClick();
+                android.content.Intent intent = shadowOf(activity).getNextStartedActivity();
+                assertEquals(FavoritesActivity.START_HISTORY,
+                        intent.getIntExtra(FavoritesActivity.EXTRA_START_TAB, -1));
+                assertEquals(before, activity.getSharedPreferences("playback_history", 0).getString("items", ""));
+                List<PlaybackHistoryStore.Item> records = PlaybackHistoryStore.load(activity);
+                assertEquals(2, records.size());
+                assertTrue(records.stream().anyMatch(item -> item.complete));
+                assertTrue(records.stream().anyMatch(item -> item.positionMs == 60_000));
+                view.setSocialActive(false); view.setSocialActive(true); publish(view, work);
+                assertSame(shortcut, view.findViewWithTag("library-collection-history"));
+            } finally { view.close(); }
+        }
     }
 
     @Test public void confirmedLikesReuseMetadataAndRemoveOnUnlikeWithoutChangingSavedOrHistory() throws Exception {
@@ -128,7 +117,7 @@ public class LibraryProfileTest {
             view.setSocialActive(true); publish(view, work);
             assertNotNull(view.findViewWithTag("Liked Videos"));
             assertNotNull(text(view, "A liked video"));
-            assertNotNull(view.findViewWithTag("Watch Later"));
+            assertNotNull(view.findViewWithTag("library-collection-watch-later"));
             SocialContentContextStore.confirmLike(activity, owner, url, false);
             shadowOf(Looper.getMainLooper()).idle(); publish(view, work);
             assertNull(view.findViewWithTag("Liked Videos"));
@@ -301,7 +290,7 @@ public class LibraryProfileTest {
         } finally { view.close(); }
     }
 
-    @Test public void realThumbnailDimensionsSeparateEveryMediaCollectionWithoutChangingStores() throws Exception {
+    @Test public void likedThumbnailsKeepTheirOrientationWhileCollectionsBecomeShortcuts() throws Exception {
         String portrait = thumbnailFile("portrait", 240, 426, android.graphics.Color.rgb(7, 70, 90));
         String horizontal = thumbnailFile("landscape", 480, 270, android.graphics.Color.rgb(26, 42, 65));
         String[] urls = {"https://fixture.invalid/portrait", "https://fixture.invalid/landscape"};
@@ -337,7 +326,7 @@ public class LibraryProfileTest {
                 Thread.sleep(10);
             }
             layoutLibrary(view, 320, 800);
-            for (String section : new String[]{"Liked Videos", "Downloads", "Watch Later", "History"}) {
+            for (String section : new String[]{"Liked Videos"}) {
                 ViewGroup shell = (ViewGroup) view.findViewWithTag(section);
                 assertNotNull(section, shell);
                 LibraryMediaRows rows = (LibraryMediaRows) shell.getChildAt(1);
@@ -346,8 +335,9 @@ public class LibraryProfileTest {
                 assertTrue(row(rows, 0).getChildAt(0).getHeight() > row(rows, 0).getChildAt(0).getWidth());
                 assertTrue(row(rows, 1).getChildAt(0).getWidth() > row(rows, 1).getChildAt(0).getHeight());
             }
-            ViewGroup history = (ViewGroup) view.findViewWithTag("History");
-            saveRender(history, "library-orientation-history");
+            for (String section : new String[]{"Downloads", "Watch Later", "History", "Favorites"})
+                assertNull(view.findViewWithTag(section));
+            assertNotNull(view.findViewWithTag("library-collection"));
             saveRender((View) view.findViewWithTag("Liked Videos"), "library-orientation-likes");
             assertEquals(savedBefore, activity.getSharedPreferences("watch_later", 0).getString("items", ""));
             assertEquals(historyBefore, activity.getSharedPreferences("playback_history", 0).getString("items", ""));
@@ -355,8 +345,11 @@ public class LibraryProfileTest {
         } finally { view.close(); }
     }
 
-    @Test public void cleanerPreviewsKeepOriginalMetadataPlaybackAndDownloadStatus() throws Exception {
+    @Test public void likedPreviewKeepsOriginalMetadataAndPlaybackPayload() throws Exception {
         String title = "OnlyFap video #32409216", url = "https://fixture.invalid/generated";
+        NativeContentItem video = new NativeContentItem(NativeContentItem.KIND_MEDIA, title, url, "", "", "", "");
+        SocialContentContextStore.remember(activity, video);
+        SocialContentContextStore.confirmLike(activity, owner, url, true);
         FavoriteStore.add(activity, title, url);
         String before = activity.getSharedPreferences("watch_later", 0).getString("items", "");
         List<NativeContentItem> opened = new java.util.ArrayList<>();
@@ -369,40 +362,16 @@ public class LibraryProfileTest {
         Map<String, Runnable> work = new LinkedHashMap<>(); view.setWorkScheduler(work::put);
         try {
             view.setSocialActive(true); publish(view, work);
-            assertNull(text(view, "Saved for another time"));
-            assertNull(text(view, "Your personal media collection"));
-            assertNull(text(view, title));
             TextView preview = (TextView) text(view, "OnlyFap video");
             assertNotNull(preview);
             assertEquals(2, preview.getMinLines());
             assertEquals(2, preview.getMaxLines());
-            assertEquals(android.view.Gravity.BOTTOM,
-                    preview.getGravity() & android.view.Gravity.VERTICAL_GRAVITY_MASK);
             description(view, title).performClick();
             assertEquals(title, opened.get(0).title);
             assertEquals(url, opened.get(0).url);
             assertEquals(before, activity.getSharedPreferences("watch_later", 0).getString("items", ""));
-            for (int status : new int[]{android.app.DownloadManager.STATUS_SUCCESSFUL,
-                    android.app.DownloadManager.STATUS_RUNNING, android.app.DownloadManager.STATUS_FAILED}) {
-                VideoDownloadStore.Entry entry = new VideoDownloadStore.Entry(-20, title, url, "", "", "video/mp4",
-                        1, status, 50, 100, "file:///fixture.mp4", 0);
-                View card = ReflectionHelpers.callInstanceMethod(view, "downloadCard",
-                        ReflectionHelpers.ClassParameter.from(VideoDownloadStore.Entry.class, entry));
-                assertTrue(card.getContentDescription().toString().contains(title));
-                if (status == android.app.DownloadManager.STATUS_SUCCESSFUL) {
-                    assertNotNull(card.findViewWithTag("library-offline"));
-                    assertNull(text(card, "Ready offline"));
-                    assertTrue(card.getContentDescription().toString().contains("Ready offline"));
-                } else {
-                    assertNull(card.findViewWithTag("library-offline"));
-                    assertNotNull(text(card, status == android.app.DownloadManager.STATUS_FAILED
-                            ? "Download failed" : VideoDownloadStore.statusText(entry)));
-                }
-                android.widget.FrameLayout host = new android.widget.FrameLayout(activity);
-                host.addView(card, new android.widget.FrameLayout.LayoutParams(BrowseUi.dp(activity, 104), BrowseUi.dp(activity, 185)));
-                layoutLibrary(host, 104, 185);
-                saveRender(host, "library-clean-download-" + status);
-            }
+            layoutLibrary(view, 320, 800);
+            saveRender(view.findViewWithTag("library-collection"), "library-collection-phone");
         } finally { view.close(); }
     }
 

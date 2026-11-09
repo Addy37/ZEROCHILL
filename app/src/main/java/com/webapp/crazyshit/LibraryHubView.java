@@ -32,8 +32,8 @@ import java.util.Map;
 /**
  * Personal ZEROCHILL media hub.
  *
- * Existing stores remain the source of truth. Profile actions precede bounded previews of
- * confirmed likes, creators, downloads, Watch Later and recent History with resume progress.
+ * Existing stores remain the source of truth. Profile actions precede bounded creator/like
+ * previews and a compact grid opening the existing collection screens.
  */
 final class LibraryHubView extends ScrollView {
     interface Listener {
@@ -50,6 +50,7 @@ final class LibraryHubView extends ScrollView {
     private final Listener listener;
     private final LinearLayout content;
     private LibraryProfileHeader socialHub;
+    private LibraryCollectionView collection;
     private final Map<String, List<ImageView>> thumbnailTargets = new HashMap<>();
     private final Map<String, String> resolvedThumbnails = new HashMap<>();
     private final Map<String, Boolean> portraitThumbnails = new HashMap<>();
@@ -63,6 +64,9 @@ final class LibraryHubView extends ScrollView {
     private final List<SharedPreferences> observedPreferences = new ArrayList<>();
     private final SharedPreferences.OnSharedPreferenceChangeListener invalidation = (prefs, key) ->
             activityOnInvalidation(prefs);
+    private final SharedPreferences.OnSharedPreferenceChangeListener accentChange = (prefs, key) -> {
+        if (AppearanceTheme.KEY_ACCENT.equals(key)) post(this::recolorSectionActions);
+    };
 
     private void activityOnInvalidation(SharedPreferences changedPreferences) {
         activity.runOnUiThread(() -> {
@@ -125,6 +129,11 @@ final class LibraryHubView extends ScrollView {
         mediaContent.setOrientation(LinearLayout.VERTICAL);
         content.addView(mediaContent, new LinearLayout.LayoutParams(-1, -2));
         addLoadingState();
+        collection = new LibraryCollectionView(activity,
+                () -> openSavedVideos(FavoritesActivity.START_WATCH_LATER),
+                () -> activity.startActivity(new Intent(activity, DownloadedActivity.class)),
+                () -> openSavedVideos(FavoritesActivity.START_HISTORY), this::openMediaFavorites);
+        content.addView(collection, new LinearLayout.LayoutParams(-1, -2));
     }
 
     private void ensureContent() {
@@ -209,12 +218,6 @@ final class LibraryHubView extends ScrollView {
         mediaContent.setOrientation(LinearLayout.VERTICAL);
         // Unchanged rails keep their existing views, image requests and horizontal position.
         List<PlaybackHistoryStore.Item> history = snapshot.history;
-        Map<String, PlaybackHistoryStore.Item> historyByUrl = new HashMap<>();
-        for (PlaybackHistoryStore.Item item : history) {
-            if (item != null && item.pageUrl != null && !item.pageUrl.isEmpty()) {
-                historyByUrl.put(item.pageUrl, item);
-            }
-        }
         List<Object> creatorState = new ArrayList<>(snapshot.inputs.subList(2, 6));
         creatorState.addAll(snapshot.inputs.subList(8, snapshot.inputs.size() - 1));
         retainSection("creators", creatorState, () -> {
@@ -222,23 +225,12 @@ final class LibraryHubView extends ScrollView {
         });
         retainSection("liked", java.util.Arrays.asList(snapshot.owner, snapshot.inputs.get(0),
                 snapshot.inputs.get(snapshot.inputs.size() - 1), snapshot.metadataKey), () -> addLikedSection(snapshot.likedVideos));
-        retainSection("downloads", java.util.Arrays.asList(snapshot.inputs.get(6), snapshot.downloadState, snapshot.metadataKey), () -> {
-            if (!snapshot.downloads.isEmpty()) addDownloadsSection(snapshot.downloads);
-        });
-        retainSection("media-favorites", java.util.Arrays.asList(snapshot.inputs.get(1), snapshot.metadataKey), () -> {
-            if (!snapshot.mediaFavorites.isEmpty()) addMediaFavoritesSection(snapshot.mediaFavorites);
-        });
-        retainSection("watch-later", java.util.Arrays.asList(snapshot.inputs.get(0), snapshot.inputs.get(1), snapshot.metadataKey), () -> {
-            if (!snapshot.watchLater.isEmpty()) addWatchLaterSection(snapshot.watchLater, historyByUrl);
-        });
-        retainSection("history", java.util.Arrays.asList(snapshot.inputs.get(0), snapshot.metadataKey), () -> {
-            if (!history.isEmpty()) addHistorySection(history);
-        });
         if (snapshot.likedVideos.isEmpty() && snapshot.creators.isEmpty() && snapshot.watchLater.isEmpty() && snapshot.mediaFavorites.isEmpty()
                 && snapshot.downloads.isEmpty() && history.isEmpty()) retainSection("empty", true, this::addGlobalEmptyState);
         else sectionStates.remove("empty");
+        int mediaIndex = content.indexOfChild(previous);
         content.removeView(previous);
-        content.addView(mediaContent, new LinearLayout.LayoutParams(-1, -2));
+        content.addView(mediaContent, mediaIndex, new LinearLayout.LayoutParams(-1, -2));
         clearImages(previous);
         for (List<ImageView> targets : thumbnailTargets.values()) {
             targets.removeIf(image -> !belongsToMediaContent(image));
@@ -366,6 +358,7 @@ final class LibraryHubView extends ScrollView {
         if (closed) return;
         closed = true;
         active = false;
+        AppearanceTheme.prefs(activity).unregisterOnSharedPreferenceChangeListener(accentChange);
         refreshIo.shutdownNow();
         for (SharedPreferences prefs : observedPreferences) {
             prefs.unregisterOnSharedPreferenceChangeListener(invalidation);
@@ -388,8 +381,31 @@ final class LibraryHubView extends ScrollView {
         if (active) ensureContent();
         if (socialHub != null) socialHub.setActive(active);
         for (RenderedThumbnailResolver resolver : thumbnailResolvers) resolver.setActive(active);
+        if (active) {
+            AppearanceTheme.prefs(activity).registerOnSharedPreferenceChangeListener(accentChange);
+            recolorSectionActions();
+        } else {
+            AppearanceTheme.prefs(activity).unregisterOnSharedPreferenceChangeListener(accentChange);
+        }
         // DownloadManager can change without a preference write. Check once on settled entry.
         if (active) scheduleRefresh();
+    }
+
+    private void recolorSectionActions() {
+        if (closed || !active || mediaContent == null) return;
+        if (collection != null) collection.applyTheme();
+        int accent = AppearanceTheme.accent(activity);
+        for (int i = 0; i < mediaContent.getChildCount(); i++) {
+            View section = mediaContent.getChildAt(i);
+            if (!(section instanceof LinearLayout) || ((LinearLayout) section).getChildCount() == 0) continue;
+            View heading = ((LinearLayout) section).getChildAt(0);
+            if (!(heading instanceof LinearLayout) || ((LinearLayout) heading).getChildCount() < 2) continue;
+            View action = ((LinearLayout) heading).getChildAt(1);
+            if (action instanceof TextView && action.getContentDescription() != null
+                    && action.getContentDescription().toString().startsWith("View all ")) {
+                ((TextView) action).setTextColor(accent);
+            }
+        }
     }
 
     private void addLikedSection(List<NativeContentItem> items) {
@@ -557,12 +573,7 @@ final class LibraryHubView extends ScrollView {
 
     @androidx.annotation.OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)
     private void addMediaFavoritesSection(List<FavoriteStore.Item> items) {
-        LibraryMediaRows rail = addMediaSectionShell("Favorites", "View all", () -> {
-            Intent intent = new Intent(activity, FavoritesActivity.class)
-                    .putExtra(FavoritesActivity.EXTRA_START_TAB, FavoritesActivity.START_WATCH_LATER)
-                    .putExtra(FavoritesActivity.EXTRA_MEDIA_FAVORITES, true);
-            activity.startActivityForResult(intent, NativeMainActivity.FAVORITES_REQUEST);
-        });
+        LibraryMediaRows rail = addMediaSectionShell("Favorites", "View all", this::openMediaFavorites);
         for (FavoriteStore.Item item : items) {
             NativeContentItem content = item.content;
             if (content == null) continue;
@@ -761,10 +772,11 @@ final class LibraryHubView extends ScrollView {
 
         headingRow.addView(copy, new LinearLayout.LayoutParams(0, -2, 1f));
 
-        TextView viewAll = text(actionLabel, 13f, AppearanceTheme.secondaryText(activity));
+        TextView viewAll = text(actionLabel, 13f, AppearanceTheme.accent(activity));
         viewAll.setTypeface(null, android.graphics.Typeface.BOLD);
         viewAll.setGravity(Gravity.CENTER);
-        viewAll.setPadding(dp(12), dp(10), dp(8), dp(10));
+        viewAll.setPadding(dp(14), dp(10), dp(14), dp(10));
+        viewAll.setBackground(BrowseUi.rounded(activity, AppearanceTheme.surface(activity), 18));
         viewAll.setClickable(true);
         viewAll.setFocusable(true);
         viewAll.setContentDescription(actionLabel + " " + title);
@@ -1056,6 +1068,13 @@ final class LibraryHubView extends ScrollView {
     private void openSavedVideos(int startTab) {
         Intent intent = new Intent(activity, FavoritesActivity.class)
                 .putExtra(FavoritesActivity.EXTRA_START_TAB, startTab);
+        activity.startActivityForResult(intent, NativeMainActivity.FAVORITES_REQUEST);
+    }
+
+    private void openMediaFavorites() {
+        Intent intent = new Intent(activity, FavoritesActivity.class)
+                .putExtra(FavoritesActivity.EXTRA_START_TAB, FavoritesActivity.START_WATCH_LATER)
+                .putExtra(FavoritesActivity.EXTRA_MEDIA_FAVORITES, true);
         activity.startActivityForResult(intent, NativeMainActivity.FAVORITES_REQUEST);
     }
 
