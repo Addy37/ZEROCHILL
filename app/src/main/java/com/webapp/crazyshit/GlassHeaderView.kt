@@ -101,7 +101,8 @@ internal class GlassHeaderView @JvmOverloads constructor(
                 val shape = remember { RoundedCornerShape(cornerRadius.dp) }
                 backdrop?.let { page ->
                     CompositionLocalProvider(LocalAppBackdrop provides page,
-                        LocalGlassEffectConfig provides config) {
+                        LocalGlassEffectConfig provides config,
+                        LocalLightTheme provides AppearanceTheme.isLight(activity)) {
                         Box(Modifier.fillMaxSize().padding(surfaceInset.dp).clipToBounds()
                             // Floating capsules share the navbar rim; full-width headers keep none.
                             .liquidGlass(config, shape, highlightAlpha = if (cornerRadius > 0f) glassRimAlpha(activity) else 0f))
