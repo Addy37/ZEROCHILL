@@ -16,8 +16,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 35
     env:
-      APP_VERSION_CODE: '6000015'
-      APP_VERSION_NAME: '7.0-preview.13-library'
+      APP_VERSION_CODE: '6000016'
+      APP_VERSION_NAME: '7.0-preview.14-collections'
       ZEROCHILL_SOURCE_SHA: ${{ github.sha }}
       FEEDBACK_ENDPOINT: ${{ secrets.FEEDBACK_ENDPOINT }}
       FEEDBACK_ANON_KEY: ${{ secrets.FEEDBACK_ANON_KEY }}
@@ -50,7 +50,7 @@ jobs:
       - name: Focused Library, appearance, glass and navigation checks
         run: |
           filters=()
-          for test in LibraryProfileTest LibrarySocialHubTest PrimaryTabLibraryTest \
+          for test in LibraryCollectionTest LibraryProfileTest LibrarySocialHubTest PrimaryTabLibraryTest \
             AppearanceThemeTest PrimaryTabNavigationTest NavigationMotionControllerTest \
             NavigationIaTest 'PreferenceGlass*Test*' PrimaryTabWorkQueueTest; do
             filters+=(--tests "*$test")
@@ -113,7 +113,7 @@ jobs:
               return package[1], int(package[2]), cert[1]
           current, previous = inspect(candidate), inspect(stable)
           assert current[0] == previous[0] == 'com.addy37.crazyshitunofficial'
-          assert current[1] == 6000015 and current[1] > max(6000014, previous[1])
+          assert current[1] == 6000016 and current[1] > max(6000015, previous[1])
           assert current[2] == previous[2], 'Production signing certificate changed'
           report = (f'Source: {os.environ["GITHUB_SHA"]}\n'
                     f'Branch: {os.environ["GITHUB_REF_NAME"]}\n'
