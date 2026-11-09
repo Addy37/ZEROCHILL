@@ -82,6 +82,7 @@ public final class AppearanceActivity extends Activity {
                 TextView chip = option(mode.label, mode == AppearanceTheme.mode(this));
                 chip.setOnClickListener(view -> {
                     AppearanceTheme.setMode(this, mode);
+                    AppearanceTheme.applyRuntimeTheme(this);
                     render(scroll.getScrollY());
                 });
                 LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(0, dp(44), 1);
@@ -103,6 +104,7 @@ public final class AppearanceActivity extends Activity {
             outer.setFocusable(true);
             outer.setOnClickListener(view -> {
                 AppearanceTheme.setAccent(this, choice);
+                AppearanceTheme.applyRuntimeTheme(this);
                 render(scroll.getScrollY());
             });
             View dot = new View(this);
@@ -200,6 +202,7 @@ public final class AppearanceActivity extends Activity {
                 .setNegativeButton("Cancel", null)
                 .setPositiveButton("Reset", (dialog, which) -> {
                     AppearanceTheme.reset(this);
+                    AppearanceTheme.applyRuntimeTheme(this);
                     render(0);
                 }).show());
         body.addView(reset);
