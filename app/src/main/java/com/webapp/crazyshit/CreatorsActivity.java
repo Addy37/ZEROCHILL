@@ -102,7 +102,7 @@ public final class CreatorsActivity extends Activity {
                     .setItems(new String[]{"Fetch missing artwork"}, (dialog, which) -> fetchMissingArtwork())
                     .setNegativeButton("Cancel", null).show();
         }), new LinearLayout.LayoutParams(dp(48), dp(48)));
-        root.addView(header);
+        LibraryDestinationChrome.attachHeader(root, header, title);
         input = new ZeroChillEditText(this);
         input.setHint("Search your favorite creators");
         input.setHintTextColor(BrowseUi.MUTED);
@@ -110,17 +110,21 @@ public final class CreatorsActivity extends Activity {
         input.setTextSize(16);
         input.setSingleLine(true);
         input.setPadding(dp(14), 0, dp(14), 0);
-        input.setBackgroundResource(R.drawable.zc_input_field);
+        LibraryDestinationChrome.styleSearch(this, input);
         LinearLayout.LayoutParams inputParams = new LinearLayout.LayoutParams(-1, dp(50));
         inputParams.setMargins(dp(12), 0, dp(12), dp(8));
         root.addView(input, inputParams);
         count = BrowseUi.text(this, "", 12, BrowseUi.MUTED);
         count.setPadding(dp(16), dp(4), dp(16), dp(8));
+        LibraryDestinationChrome.styleSummary(this, count);
         root.addView(count);
         empty = BrowseUi.text(this, "", 15, BrowseUi.MUTED);
         empty.setGravity(Gravity.CENTER);
         empty.setPadding(dp(24), dp(32), dp(24), dp(24));
-        root.addView(empty);
+        LibraryDestinationChrome.styleEmpty(this, empty);
+        LinearLayout.LayoutParams emptyParams = new LinearLayout.LayoutParams(-1, -2);
+        emptyParams.setMargins(dp(12), dp(6), dp(12), dp(12));
+        root.addView(empty, emptyParams);
         recycler = new RecyclerView(this);
         GridLayoutManager grid = new GridLayoutManager(this, 3);
         grid.setInitialPrefetchItemCount(6);
@@ -514,7 +518,9 @@ public final class CreatorsActivity extends Activity {
             MaterialCardView avatarCard = new MaterialCardView(CreatorsActivity.this);
             avatarCard.setRadius(dp(43));
             avatarCard.setCardElevation(0f);
-            avatarCard.setStrokeWidth(0);
+            avatarCard.setStrokeWidth(dp(1));
+            avatarCard.setStrokeColor(androidx.core.graphics.ColorUtils.setAlphaComponent(
+                    AppearanceTheme.accent(CreatorsActivity.this), 72));
             avatarCard.setCardBackgroundColor(Color.rgb(19, 23, 27));
             avatarCard.setClipToOutline(true);
             avatarFrame.addView(avatarCard, new FrameLayout.LayoutParams(-1, -1));
