@@ -30,7 +30,9 @@ final class LibraryProfileHeader extends LinearLayout {
     private final List<SharedPreferences> observed = new ArrayList<>();
     private final Runnable update = this::refresh;
     private final Runnable recolor = this::applyTheme;
-    private final SharedPreferences.OnSharedPreferenceChangeListener changed = (prefs, key) -> {
+    private final SharedPreferences.OnSharedPreferenceChangeListener changed = this::onPreferenceChanged;
+
+    private void onPreferenceChanged(SharedPreferences prefs, String key) {
         if (prefs == AppearanceTheme.prefs(activity)) {
             if (!AppearanceTheme.KEY_ACCENT.equals(key)) return;
             removeCallbacks(recolor);
@@ -39,7 +41,7 @@ final class LibraryProfileHeader extends LinearLayout {
         }
         removeCallbacks(update);
         post(update);
-    };
+    }
     private boolean active;
     private final java.util.concurrent.ExecutorService reader;
     private int readRevision;
