@@ -63,6 +63,21 @@ class HeaderGlassMaterialTest {
         controller.pause().stop().destroy()
     }
 
+    @Test fun qualityPresetUsesTheExistingOpticsAndColorSplitting() {
+        val activity = Robolectric.buildActivity(Activity::class.java).setup().get()
+        AppearanceTheme.prefs(activity).edit().clear().commit()
+        val original = navigationGlassConfig(activity)
+        AppearanceTheme.setGlassPreset(activity, AppearanceTheme.GlassPreset.QUALITY)
+        val quality = navigationGlassConfig(activity)
+        assertTrue(quality.chromaticAberration)
+        assertTrue(quality.lensHeight >= original.lensHeight)
+        assertTrue(quality.lensAmount >= original.lensAmount)
+        assertTrue(quality.surfaceOpacity < original.surfaceOpacity)
+        AppearanceTheme.setGlassPreset(activity, AppearanceTheme.GlassPreset.OFF)
+        assertEquals(com.webapp.crazyshit.glass.GlassStyle.TRANSPARENT, navigationGlassConfig(activity).style)
+        AppearanceTheme.prefs(activity).edit().clear().commit()
+    }
+
     @Test fun headerUsesBlackFilmWithoutChangingNavbarOptics() {
         val controller = Robolectric.buildActivity(Activity::class.java).setup()
         val activity = controller.get()
