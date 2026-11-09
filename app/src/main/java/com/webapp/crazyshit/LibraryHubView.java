@@ -63,6 +63,9 @@ final class LibraryHubView extends ScrollView {
     private final List<SharedPreferences> observedPreferences = new ArrayList<>();
     private final SharedPreferences.OnSharedPreferenceChangeListener invalidation = (prefs, key) ->
             activityOnInvalidation(prefs);
+    private final SharedPreferences.OnSharedPreferenceChangeListener accentChange = (prefs, key) -> {
+        if (AppearanceTheme.KEY_ACCENT.equals(key)) post(this::recolorSectionActions);
+    };
 
     private void activityOnInvalidation(SharedPreferences changedPreferences) {
         activity.runOnUiThread(() -> {
@@ -366,6 +369,7 @@ final class LibraryHubView extends ScrollView {
         if (closed) return;
         closed = true;
         active = false;
+        AppearanceTheme.prefs(activity).unregisterOnSharedPreferenceChangeListener(accentChange);
         refreshIo.shutdownNow();
         for (SharedPreferences prefs : observedPreferences) {
             prefs.unregisterOnSharedPreferenceChangeListener(invalidation);
@@ -388,8 +392,30 @@ final class LibraryHubView extends ScrollView {
         if (active) ensureContent();
         if (socialHub != null) socialHub.setActive(active);
         for (RenderedThumbnailResolver resolver : thumbnailResolvers) resolver.setActive(active);
+        if (active) {
+            AppearanceTheme.prefs(activity).registerOnSharedPreferenceChangeListener(accentChange);
+            recolorSectionActions();
+        } else {
+            AppearanceTheme.prefs(activity).unregisterOnSharedPreferenceChangeListener(accentChange);
+        }
         // DownloadManager can change without a preference write. Check once on settled entry.
         if (active) scheduleRefresh();
+    }
+
+    private void recolorSectionActions() {
+        if (closed || !active || mediaContent == null) return;
+        int accent = AppearanceTheme.accent(activity);
+        for (int i = 0; i < mediaContent.getChildCount(); i++) {
+            View section = mediaContent.getChildAt(i);
+            if (!(section instanceof LinearLayout) || ((LinearLayout) section).getChildCount() == 0) continue;
+            View heading = ((LinearLayout) section).getChildAt(0);
+            if (!(heading instanceof LinearLayout) || ((LinearLayout) heading).getChildCount() < 2) continue;
+            View action = ((LinearLayout) heading).getChildAt(1);
+            if (action instanceof TextView && action.getContentDescription() != null
+                    && action.getContentDescription().toString().startsWith("View all ")) {
+                ((TextView) action).setTextColor(accent);
+            }
+        }
     }
 
     private void addLikedSection(List<NativeContentItem> items) {
