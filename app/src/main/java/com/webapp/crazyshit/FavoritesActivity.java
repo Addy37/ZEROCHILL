@@ -135,7 +135,7 @@ public class FavoritesActivity extends Activity {
         clearAction = BrowseUi.action(this, "⋮", "Section options", this::showSectionMenu);
         clearAction.setTextSize(24);
         header.addView(clearAction, new LinearLayout.LayoutParams(dp(48), dp(48)));
-        root.addView(header);
+        LibraryDestinationChrome.attachHeader(root, header, title);
 
         input = new ZeroChillEditText(this);
         input.setHint("Search " + sectionTitle());
@@ -144,7 +144,7 @@ public class FavoritesActivity extends Activity {
         input.setTextSize(16);
         input.setSingleLine(true);
         input.setPadding(dp(14), 0, dp(14), 0);
-        input.setBackgroundResource(R.drawable.zc_input_field);
+        LibraryDestinationChrome.styleSearch(this, input);
         input.setContentDescription("Search " + sectionTitle());
         LinearLayout.LayoutParams inputParams = new LinearLayout.LayoutParams(-1, dp(50));
         inputParams.setMargins(dp(12), 0, dp(12), dp(8));
@@ -152,6 +152,7 @@ public class FavoritesActivity extends Activity {
 
         count = BrowseUi.text(this, "", 12, BrowseUi.MUTED);
         count.setPadding(dp(16), dp(4), dp(16), dp(8));
+        LibraryDestinationChrome.styleSummary(this, count);
         root.addView(count);
 
         for (int i = 0; i < PAGE_COUNT; i++) pageViews[i] = buildPage(i);
@@ -174,7 +175,7 @@ public class FavoritesActivity extends Activity {
 
     private View buildPage(int index) {
         FrameLayout page = new FrameLayout(this);
-        page.setBackgroundColor(Color.rgb(13, 13, 15));
+        page.setBackgroundColor(Color.BLACK);
         ScrollView scroll = new ScrollView(this);
         scroll.setFillViewport(true);
         LinearLayout list = new LinearLayout(this);
@@ -263,7 +264,7 @@ public class FavoritesActivity extends Activity {
         card.setCardBackgroundColor(UiPalette.SURFACE);
         card.setRadius(dp(16));
         card.setCardElevation(0f);
-        card.setStrokeWidth(0);
+        LibraryDestinationChrome.styleMediaCard(this, card);
 
         FrameLayout media = new FrameLayout(this);
         card.addView(media, new MaterialCardView.LayoutParams(-1, -1));
@@ -390,7 +391,7 @@ public class FavoritesActivity extends Activity {
         card.setCardBackgroundColor(UiPalette.SURFACE);
         card.setRadius(dp(16));
         card.setCardElevation(0f);
-        card.setStrokeWidth(0);
+        LibraryDestinationChrome.styleMediaCard(this, card);
 
         FrameLayout media = new FrameLayout(this);
         card.addView(media, new MaterialCardView.LayoutParams(-1, -1));
