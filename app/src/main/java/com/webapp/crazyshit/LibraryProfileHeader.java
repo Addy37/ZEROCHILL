@@ -29,7 +29,14 @@ final class LibraryProfileHeader extends LinearLayout {
     private final List<ImageView> actionIcons = new ArrayList<>();
     private final List<SharedPreferences> observed = new ArrayList<>();
     private final Runnable update = this::refresh;
+    private final Runnable recolor = this::applyTheme;
     private final SharedPreferences.OnSharedPreferenceChangeListener changed = (prefs, key) -> {
+        if (prefs == AppearanceTheme.prefs(activity)) {
+            if (!AppearanceTheme.KEY_ACCENT.equals(key)) return;
+            removeCallbacks(recolor);
+            post(recolor);
+            return;
+        }
         removeCallbacks(update);
         post(update);
     };
@@ -106,6 +113,7 @@ final class LibraryProfileHeader extends LinearLayout {
 
     private void observe() {
         if (!observed.isEmpty()) return;
+        observed.add(AppearanceTheme.prefs(activity));
         observed.add(AccountProfileCache.preferences(activity));
         observed.add(ZeroChillSessionStore.preferences(activity));
         observed.add(activity.getSharedPreferences(ZeroChillMessageBadgeStore.PREFS, 0));
