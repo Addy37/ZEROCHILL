@@ -196,7 +196,8 @@ final class ZeroChillUi {
         Context context = chip.getContext();
         chip.setTextColor(color(context, selected ? R.color.zc_cyan : R.color.zc_text_secondary));
         chip.setBackground(selected
-                ? ContextCompat.getDrawable(context, R.drawable.zc_source_rail_selected_glass)
+                ? rounded(context, color(context, R.color.zc_cyan_container),
+                        Color.TRANSPARENT, R.dimen.zc_radius_pill)
                 : rounded(
                         context,
                         Color.TRANSPARENT,
