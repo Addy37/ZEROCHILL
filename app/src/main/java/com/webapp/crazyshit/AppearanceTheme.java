@@ -61,22 +61,13 @@ final class AppearanceTheme {
         return context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
     }
 
-    static Mode mode(Context context) {
-        String saved = prefs(context).getString(KEY_MODE, null);
-        if (saved != null) {
-            try { return Mode.valueOf(saved); }
-            catch (IllegalArgumentException ignored) { /* Older builds may use a different value. */ }
-        }
-        // Never override a pre-existing OLED preference during migration.
-        return prefs(context).getBoolean("oled_black_enabled", true) ? Mode.OLED : Mode.DARK;
-    }
+    // Legacy Mode values are retained only for importing earlier preview backups.
+    // ZEROCHILL has one appearance: OLED black, with configurable accent colors.
+    static Mode mode(Context context) { return Mode.OLED; }
 
-    static void setMode(Context context, Mode mode) {
-        prefs(context).edit()
-                .putString(KEY_MODE, mode.name())
-                // Legacy native viewers still inspect this flag. Keep it in step.
-                .putBoolean("oled_black_enabled", mode == Mode.OLED)
-                .apply();
+    static void setMode(Context context, Mode ignored) {
+        prefs(context).edit().putString(KEY_MODE, Mode.OLED.name())
+                .putBoolean("oled_black_enabled", true).apply();
     }
 
     static Accent accentChoice(Context context) {
@@ -94,17 +85,9 @@ final class AppearanceTheme {
 
     static int accent(Context context) { return accentChoice(context).color; }
 
-    static boolean isLight(Context context) {
-        switch (mode(context)) {
-            case LIGHT: return true;
-            case FOLLOW_SYSTEM:
-                return (context.getResources().getConfiguration().uiMode
-                        & Configuration.UI_MODE_NIGHT_MASK) != Configuration.UI_MODE_NIGHT_YES;
-            default: return false;
-        }
-    }
+    static boolean isLight(Context context) { return false; }
 
-    static boolean isOled(Context context) { return mode(context) == Mode.OLED; }
+    static boolean isOled(Context context) { return true; }
 
     static float glassIntensity(Context context) {
         return clamp(prefs(context).getFloat(KEY_GLASS, 0.50f));
@@ -253,10 +236,10 @@ final class AppearanceTheme {
 
     /** Values requiring new native View colors. The glass sliders update live. */
     static String colorSignature(Context context) {
-        return mode(context).name() + "/" + isLight(context) + "/" + accentChoice(context).name();
+        return accentChoice(context).name();
     }
 
-    /** Select native light/dark styles before UI inflation; leave fullscreen media themes alone. */
+    /** Apply accent overlays before inflation, while keeping OG's OLED theme. */
     static void applyRuntimeTheme(Activity activity) {
         boolean supported = activity instanceof NativeMainActivity
                 || activity instanceof SettingsActivity
@@ -266,14 +249,14 @@ final class AppearanceTheme {
                 || activity instanceof ZeroChillPublicProfileActivity
                 || activity instanceof ZeroChillInboxActivity
                 || activity instanceof ZeroChillMessageActivity;
-        if (!supported) return;
-        if (isLight(activity)) {
-            activity.setTheme(activity instanceof ZeroChillAccountActivity
-                    ? R.style.Theme_ZeroChill_Light_Account : R.style.Theme_ZeroChill_Light);
-        } else if (mode(activity) == Mode.DARK || mode(activity) == Mode.FOLLOW_SYSTEM) {
-            activity.setTheme(activity instanceof ZeroChillAccountActivity
-                    ? R.style.Theme_ZeroChill_Dark_Account : R.style.Theme_ZeroChill_Dark);
+        // Older previews could save Light or Dark. Convert those preferences to OLED
+        // without touching account data, media, favorites, downloads or backups.
+        if (!prefs(activity).getBoolean("oled_black_enabled", true)
+                || !Mode.OLED.name().equals(prefs(activity).getString(KEY_MODE, Mode.OLED.name()))) {
+            setMode(activity, Mode.OLED);
         }
+        if (!supported) return;
+        // Keep the original OG dark Material theme. Change only its accent.
         switch (accentChoice(activity)) {
             case PURPLE: activity.getTheme().applyStyle(R.style.ZeroChillAccentPurple, true); break;
             case BLUE: activity.getTheme().applyStyle(R.style.ZeroChillAccentBlue, true); break;
@@ -286,7 +269,7 @@ final class AppearanceTheme {
     }
 
     static String signature(Context context) {
-        return mode(context).name() + "/" + accentChoice(context).name()
+        return accentChoice(context).name()
                 + "/" + glassIntensity(context) + "/" + menuTint(context)
                 + "/" + glassPreset(context).name() + "/" + glassTransparency(context)
                 + "/" + glassBlur(context) + "/" + glassRefraction(context)
@@ -294,38 +277,21 @@ final class AppearanceTheme {
                 + "/" + glassColorSplitting(context);
     }
 
-    static int background(Context context) {
-        if (isLight(context)) return 0xFFF7F9FC;
-        return isOled(context) ? Color.BLACK : 0xFF0D1117;
-    }
+    static int background(Context context) { return Color.BLACK; }
 
-    static int surface(Context context) {
-        return isLight(context) ? Color.WHITE : isOled(context) ? 0xFF101216 : 0xFF171B21;
-    }
+    static int surface(Context context) { return 0xFF101216; }
 
-    static int raised(Context context) {
-        return isLight(context) ? 0xFFF0F3F8 : 0xFF1B2027;
-    }
+    static int raised(Context context) { return 0xFF1B2027; }
 
-    static int floating(Context context) {
-        return isLight(context) ? 0xFFE7EDF5 : 0xFF242A32;
-    }
+    static int floating(Context context) { return 0xFF242A32; }
 
-    static int primaryText(Context context) {
-        return isLight(context) ? 0xFF15202E : 0xFFF5F7FA;
-    }
+    static int primaryText(Context context) { return 0xFFF5F7FA; }
 
-    static int secondaryText(Context context) {
-        return isLight(context) ? 0xFF4F5C6C : 0xFFB8C0CC;
-    }
+    static int secondaryText(Context context) { return 0xFFB8C0CC; }
 
-    static int mutedText(Context context) {
-        return isLight(context) ? 0xFF697989 : 0xFF929DAC;
-    }
+    static int mutedText(Context context) { return 0xFF929DAC; }
 
-    static int outline(Context context) {
-        return isLight(context) ? 0xFFD5DEE9 : 0xFF293039;
-    }
+    static int outline(Context context) { return 0xFF293039; }
 
     static int onAccent(Context context) {
         return accentChoice(context) == Accent.WHITE ? 0xFF15202E : 0xFF020F17;

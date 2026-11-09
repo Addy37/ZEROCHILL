@@ -79,11 +79,7 @@ internal class SquareNavigationBridge(private val nav: ZeroChillBottomNavigation
             compose.setContent {
                 appearanceRevision.intValue
                 val selected = Color(AppearanceTheme.accent(activity))
-                val scheme = if (AppearanceTheme.isLight(activity)) lightColorScheme(
-                    primary = selected,
-                    surface = Color(AppearanceTheme.surface(activity)),
-                    onSurface = Color(AppearanceTheme.primaryText(activity)),
-                ) else darkColorScheme(
+                val scheme = darkColorScheme(
                     primary = selected,
                     surface = Color(AppearanceTheme.surface(activity)),
                     onSurface = Color(AppearanceTheme.primaryText(activity)),
@@ -121,11 +117,10 @@ internal class SquareNavigationBridge(private val nav: ZeroChillBottomNavigation
         val inactiveInk = Color(AppearanceTheme.secondaryText(activity))
         val shape = remember { RoundedCornerShape(50) }
         val height = (61f - 11f * collapse.floatValue).dp
-        val film = Color.White.copy(alpha = if (AppearanceTheme.isLight(activity)) .14f else .04f)
+        val film = Color.White.copy(alpha = .04f)
         CompositionLocalProvider(
             LocalAppBackdrop provides page,
             LocalGlassEffectConfig provides config,
-            LocalLightTheme provides AppearanceTheme.isLight(activity),
             LocalLiquidBottomTabsSurfaceBackdrop provides shell,
         ) {
             Box(Modifier.fillMaxSize()) {

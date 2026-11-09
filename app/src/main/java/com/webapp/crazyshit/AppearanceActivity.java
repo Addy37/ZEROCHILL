@@ -64,7 +64,7 @@ public final class AppearanceActivity extends Activity {
         header.addView(back, new LinearLayout.LayoutParams(dp(42), dp(48)));
         LinearLayout headings = column();
         headings.addView(text("Appearance", 24, ink, true));
-        headings.addView(text("ZEROCHILL 7.0", 11, secondary, false));
+        headings.addView(text("OLED black · Your accent · Liquid glass", 11, secondary, false));
         LinearLayout.LayoutParams headerText = new LinearLayout.LayoutParams(0, -2, 1);
         headerText.leftMargin = dp(8);
         header.addView(headings, headerText);
@@ -73,27 +73,7 @@ public final class AppearanceActivity extends Activity {
 
         LinearLayout colors = card(body);
         label(colors, "Colors", ink);
-        supporting(colors, "Theme", secondary);
-        AppearanceTheme.Mode[] modes = AppearanceTheme.Mode.values();
-        for (int start = 0; start < modes.length; start += 2) {
-            LinearLayout choices = row();
-            for (int i = start; i < start + 2 && i < modes.length; i++) {
-                final AppearanceTheme.Mode mode = modes[i];
-                TextView chip = option(mode.label, mode == AppearanceTheme.mode(this));
-                chip.setOnClickListener(view -> {
-                    AppearanceTheme.setMode(this, mode);
-                    AppearanceTheme.applyRuntimeTheme(this);
-                    render(scroll.getScrollY());
-                });
-                LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(0, dp(44), 1);
-                if (i > start) p.leftMargin = dp(8);
-                choices.addView(chip, p);
-            }
-            colors.addView(choices);
-            spacer(colors, 8);
-        }
-
-        supporting(colors, "Accent", secondary);
+        supporting(colors, "Accent color", secondary);
         LinearLayout swatches = row();
         for (AppearanceTheme.Accent choice : AppearanceTheme.Accent.values()) {
             FrameLayout outer = new FrameLayout(this);

@@ -25,22 +25,25 @@ public class AppearanceThemeTest {
         assertEquals(0xFF000000, AppearanceTheme.background(app));
     }
 
-    @Test public void legacyNonOledChoiceIsPreserved() {
+    @Test public void legacyLightPreferencesCannotChangeOledAppearance() {
         Context app = app();
-        AppearanceTheme.prefs(app).edit().putBoolean("oled_black_enabled", false).commit();
-        assertEquals(AppearanceTheme.Mode.DARK, AppearanceTheme.mode(app));
-        assertFalse(AppearanceTheme.isOled(app));
+        AppearanceTheme.prefs(app).edit().putBoolean("oled_black_enabled", false)
+                .putString(AppearanceTheme.KEY_MODE, "LIGHT").commit();
+        assertEquals(AppearanceTheme.Mode.OLED, AppearanceTheme.mode(app));
+        assertTrue(AppearanceTheme.isOled(app));
+        assertFalse(AppearanceTheme.isLight(app));
+        assertEquals(0xFF000000, AppearanceTheme.background(app));
     }
 
     @Test public void themeAndAccentPersistInOriginalStore() {
         Context app = app();
         AppearanceTheme.setMode(app, AppearanceTheme.Mode.LIGHT);
         AppearanceTheme.setAccent(app, AppearanceTheme.Accent.PURPLE);
-        assertEquals(AppearanceTheme.Mode.LIGHT, AppearanceTheme.mode(app));
-        assertTrue(AppearanceTheme.isLight(app));
+        assertEquals(AppearanceTheme.Mode.OLED, AppearanceTheme.mode(app));
+        assertFalse(AppearanceTheme.isLight(app));
         assertEquals(0xFFA06CFF, AppearanceTheme.accent(app));
-        assertFalse(AppearanceTheme.prefs(app).getBoolean("oled_black_enabled", true));
-        assertEquals(0xFFF7F9FC, ZeroChillUi.background(app));
+        assertTrue(AppearanceTheme.prefs(app).getBoolean("oled_black_enabled", true));
+        assertEquals(0xFF000000, ZeroChillUi.background(app));
     }
 
     @Test public void sharedComponentsUseThemeColors() {
