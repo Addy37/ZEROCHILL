@@ -1,6 +1,7 @@
 name: ZEROCHILL Appearance Phase 1 APK
 
 # Single scoped push build for this file, not repeated on every code edit.
+# Rerun after correcting Android resource style parent references.
 on:
   push:
     branches:
