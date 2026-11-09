@@ -161,13 +161,11 @@ final class OledImmersiveUiController {
     }
 
     private static int baseBackground(Activity activity) {
-        boolean oled = activity.getSharedPreferences("app_prefs", Activity.MODE_PRIVATE)
-                .getBoolean("oled_black_enabled", true);
-        return oled ? OLED_BG : CLASSIC_BG;
+        return AppearanceTheme.background(activity);
     }
 
     private static boolean oled(Activity activity) {
-        return baseBackground(activity) == OLED_BG;
+        return AppearanceTheme.isOled(activity);
     }
 
     private static void bindCurrentMainRecycler(NativeMainActivity activity, State state) {
@@ -297,7 +295,7 @@ final class OledImmersiveUiController {
 
     private static void styleTopBar(Activity activity, View topBar) {
         if (topBar == null) return;
-        topBar.setBackgroundColor(Color.BLACK);
+        topBar.setBackgroundColor(AppearanceTheme.background(activity));
         topBar.setElevation(0f);
     }
 

@@ -20,7 +20,13 @@ final class ZeroChillTypography {
     static void apply(TextView view, Role role) {
         if (view == null) return;
         view.setTextSize(TypedValue.COMPLEX_UNIT_SP, role.size);
-        view.setTextColor(role.color);
+        // Shared typography uses the current theme without changing font roles.
+        switch (role) {
+            case SUPPORT: view.setTextColor(AppearanceTheme.secondaryText(view.getContext())); break;
+            case META:
+            case MICRO: view.setTextColor(AppearanceTheme.mutedText(view.getContext())); break;
+            default: view.setTextColor(AppearanceTheme.primaryText(view.getContext())); break;
+        }
         view.setTypeface(Typeface.create(role.bold ? "sans-serif-medium" : "sans-serif", Typeface.NORMAL));
         view.setLetterSpacing(role == Role.DISPLAY || role == Role.TITLE ? -0.015f : 0f);
         view.setLineSpacing(0f, role == Role.BODY || role == Role.SUPPORT ? 1.12f : 1f);

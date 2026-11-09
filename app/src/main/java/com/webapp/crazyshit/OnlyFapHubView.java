@@ -416,7 +416,7 @@ final class OnlyFapHubView extends FrameLayout {
         heroMoreParams.setMarginStart(dp(2));
         heroBar.addView(heroMore, heroMoreParams);
 
-        preferenceSelector = text("", 13f, UiPalette.PRIMARY);
+        preferenceSelector = text("", 13f, AppearanceTheme.accent(getContext()));
         preferenceSelector.setGravity(Gravity.CENTER);
         preferenceSelector.setPadding(dp(8), dp(8), dp(8), dp(8));
         preferenceSelector.setMinimumHeight(dp(48));
@@ -557,11 +557,11 @@ final class OnlyFapHubView extends FrameLayout {
         favoriteHeading.setOrientation(LinearLayout.HORIZONTAL);
         favoriteHeading.setGravity(Gravity.CENTER_VERTICAL);
 
-        TextView favoriteTitle = text("Favorite Creators", 19f, Color.WHITE);
+        TextView favoriteTitle = text("Favorite Creators", 19f, AppearanceTheme.primaryText(getContext()));
         ZeroChillTypography.apply(favoriteTitle, ZeroChillTypography.Role.SECTION);
         favoriteHeading.addView(favoriteTitle, new LinearLayout.LayoutParams(0, -2, 1f));
 
-        TextView favoriteAll = text("View all", 13f, UiPalette.TEXT_SECONDARY);
+        TextView favoriteAll = text("View all", 13f, AppearanceTheme.secondaryText(getContext()));
         favoriteAll.setGravity(Gravity.CENTER);
         favoriteAll.setMinHeight(dp(48));
         favoriteAll.setMinWidth(dp(48));
@@ -972,7 +972,7 @@ final class OnlyFapHubView extends FrameLayout {
         section.setOrientation(LinearLayout.VERTICAL);
         section.setVisibility(View.GONE);
 
-        TextView titleView = text(title, 19f, Color.WHITE);
+        TextView titleView = text(title, 19f, AppearanceTheme.primaryText(getContext()));
         ZeroChillTypography.apply(titleView, ZeroChillTypography.Role.SECTION);
         section.addView(titleView);
 
@@ -2090,7 +2090,7 @@ final class OnlyFapHubView extends FrameLayout {
 
     private void pulsePreferenceSelector() {
         if (selectorPulse != null) { selectorPulse.cancel(); selectorPulse = null; }
-        preferenceSelector.setTextColor(UiPalette.PRIMARY);
+        preferenceSelector.setTextColor(AppearanceTheme.accent(getContext()));
         if (!active || !ZeroChillMotion.animationsEnabled(getContext())) return;
         selectorPulse = android.animation.ValueAnimator.ofFloat(0f, 1f);
         selectorPulse.setDuration(150L);
@@ -2120,7 +2120,7 @@ final class OnlyFapHubView extends FrameLayout {
         finishHeroCrossfade();
         if (heroMorph != null) heroMorph.end();
         if (selectorPulse != null) { selectorPulse.cancel(); selectorPulse = null; }
-        preferenceSelector.setTextColor(UiPalette.PRIMARY);
+        preferenceSelector.setTextColor(AppearanceTheme.accent(getContext()));
     }
 
     private void settleHeroMorph() {
