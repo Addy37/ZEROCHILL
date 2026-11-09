@@ -1,33 +1,21 @@
 package com.webapp.crazyshit;
 
 import androidx.activity.ComponentActivity;
-import android.app.AlertDialog;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.SharedPreferences;
-import android.content.res.ColorStateList;
-import android.graphics.Color;
-import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
-import android.text.TextUtils;
-import android.view.Gravity;
 import android.view.HapticFeedbackConstants;
 import android.view.View;
 import android.webkit.CookieManager;
 import android.webkit.WebStorage;
-import android.widget.FrameLayout;
-import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
 
 import androidx.core.content.ContextCompat;
-import androidx.core.graphics.Insets;
-import androidx.core.view.ViewCompat;
-import androidx.core.view.WindowInsetsCompat;
 
-import com.google.android.material.card.MaterialCardView;
 
 public class SettingsActivity extends ComponentActivity {
     public static final String EXTRA_CHECK_FOR_UPDATES = "check_for_updates";
