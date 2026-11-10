@@ -376,3 +376,12 @@ including progress-scaled interrupted entry. Preview 33 uses
 `7.0-preview.33-gallery-close`, code `6000035`, above Preview 32 `6000034`, with
 unchanged production package/certificate. One signed test candidate; no merge,
 release, migration or backend change.
+
+
+## PR 414 Preview 34: requested 350ms gallery close
+
+The user specified 350ms closing. The same unmerged PR #414 branch sets reverse
+reveal to 350ms while retaining 650ms opening, synchronized rings and the existing
+progress/system-scale handling. Preview 34 uses `7.0-preview.34-close-350ms`, code
+`6000036`, above Preview 33 `6000035`, with the production package/certificate.
+One signed test candidate; no merge, release, migration or backend change.

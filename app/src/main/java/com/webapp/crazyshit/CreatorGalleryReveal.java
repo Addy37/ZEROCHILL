@@ -19,7 +19,7 @@ import android.widget.FrameLayout;
 /** Finite circular reveal of the real gallery tree, independent of its loading. */
 final class CreatorGalleryReveal extends FrameLayout {
     static final long DURATION_MS = 650L;
-    static final long CLOSE_DURATION_MS = 550L;
+    static final long CLOSE_DURATION_MS = 350L;
     static final long FALLBACK_MS = DURATION_MS + 400L;
     private final OnlyFapHeroRippleView ripple;
     private final Intent launchIntent;

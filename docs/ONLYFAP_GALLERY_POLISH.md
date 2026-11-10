@@ -45,7 +45,7 @@ browser headers and Shows remain on their existing paths.
 Production application ID, signing identity, preferences, saved items, backups,
 creator identity, filtering, media ordering, source pagination, playback recovery,
 downloads and backend configuration remain. No migration, Supabase or remote-config
-change. Preview 33 uses `6000035`, above Preview 32 `6000034`, signed with
+change. Preview 34 uses `6000036`, above Preview 33 `6000035`, signed with
 the existing production key. One scoped candidate workflow verifies ancestry,
 package, stable certificate and upgrade version, and exports a branch/SHA-named
 APK. This does not authorize a public release.
@@ -138,3 +138,15 @@ Preview 33 code `6000035` updates over Preview 32 without changing signing ident
 
 Preview 33 local validation passed: 56 tests across the existing transition and
 reveal-integration classes, plus `:app:assembleDebug` and `git diff --check`.
+
+## Preview 34: requested 350ms closing duration
+
+The user specified 350ms for gallery closing. `CLOSE_DURATION_MS` is now 350ms;
+opening remains 650ms. Native reveal and rings remain synchronized, with duration
+scaled by the current reveal fraction when Back interrupts entry and by Android's
+system animation scale. Existing full/partial reverse assertions now expect 350ms.
+Preview 34 code `6000036` supersedes Preview 33 for physical testing on the same
+draft PR #414. Production package/certificate remain; no merge or release.
+
+Preview 34 local validation passed: 56 transition/reveal-integration tests,
+`:app:assembleDebug` and `git diff --check`.
