@@ -108,10 +108,15 @@ final class LibraryMixedMediaGrid extends LinearLayout {
         }
     }
 
-    private LibraryAspectMediaCard findAspectCard(View wrapper) {
-        if (!(wrapper instanceof ViewGroup) || ((ViewGroup) wrapper).getChildCount() == 0) return null;
-        View child = ((ViewGroup) wrapper).getChildAt(0);
-        return child instanceof LibraryAspectMediaCard ? (LibraryAspectMediaCard) child : null;
+    private LibraryAspectMediaCard findAspectCard(View root) {
+        if (root instanceof LibraryAspectMediaCard) return (LibraryAspectMediaCard) root;
+        if (!(root instanceof ViewGroup)) return null;
+        ViewGroup group = (ViewGroup) root;
+        for (int i = 0; i < group.getChildCount(); i++) {
+            LibraryAspectMediaCard card = findAspectCard(group.getChildAt(i));
+            if (card != null) return card;
+        }
+        return null;
     }
 
     private LinearLayout row() {
