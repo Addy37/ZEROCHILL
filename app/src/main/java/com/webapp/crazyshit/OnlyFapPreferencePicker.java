@@ -15,7 +15,7 @@ import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
 
-/** OnlyFap's anchored presentation; the shared preference store and actions remain unchanged. */
+/** OnlyFap's centered presentation; the shared preference store and actions remain unchanged. */
 final class OnlyFapPreferencePicker {
     private OnlyFapPreferencePicker() { }
 
@@ -147,16 +147,12 @@ final class OnlyFapPreferencePicker {
                 Math.max(1, frame.height() - margin * 2 - chrome));
         controls.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
                 View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
-        int[] location = new int[2]; anchor.getLocationOnScreen(location);
-        int x = Math.max(frame.left + margin,
-                Math.min(location[0] + anchor.getWidth() - width, frame.right - margin - width));
-        int y = location[1] + anchor.getHeight() + dp(context, 6);
-        if (y + controls.getMeasuredHeight() > frame.bottom - margin)
-            y = Math.max(frame.top + margin, location[1] - controls.getMeasuredHeight() - dp(context, 6));
         WindowManager.LayoutParams attributes = window.getAttributes();
-        attributes.gravity = Gravity.TOP | Gravity.LEFT;
-        attributes.x = x - frame.left;
-        attributes.y = y - frame.top;
+        // Let the window manager center within the task's safe, available area.
+        // The selector still owns dismissal, but no longer pulls the grid sideways.
+        attributes.gravity = Gravity.CENTER;
+        attributes.x = 0;
+        attributes.y = 0;
         attributes.width = width; attributes.height = -2;
         attributes.dimAmount = .12f;
         window.setAttributes(attributes);

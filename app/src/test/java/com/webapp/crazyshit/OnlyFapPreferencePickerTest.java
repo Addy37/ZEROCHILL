@@ -80,4 +80,36 @@ public class OnlyFapPreferencePickerTest {
         dialog.getWindow().getDecorView().findViewWithTag("preference_cancel").performClick();
         assertEquals(ContentPreference.ALL, ContentPreference.get(host));
     }
+    @Test @Config(sdk = {35, 36})
+    public void panelStaysCenteredWhenOpenedFromOppositeScreenEdges() {
+        for (int left : new int[]{0, 900}) {
+            anchor.layout(left, 500, left + 144, 644);
+            ContentPreferenceUi.chooseAnchored(anchor, null);
+            AlertDialog dialog = ShadowAlertDialog.getLatestAlertDialog();
+            android.view.WindowManager.LayoutParams placement = dialog.getWindow().getAttributes();
+            assertEquals(android.view.Gravity.CENTER, placement.gravity);
+            assertEquals(0, placement.x);
+            assertEquals(0, placement.y);
+            assertTrue(placement.width <= host.getResources().getDisplayMetrics().widthPixels);
+            dialog.getWindow().getDecorView().findViewWithTag("preference_cancel").performClick();
+            org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
+            assertEquals(ContentPreference.ALL, ContentPreference.get(host));
+        }
+    }
+
+    @Test @Config(sdk = {35, 36}, qualifiers = "w320dp-h240dp-xhdpi")
+    public void landscapeCenteredPanelKeepsEveryOptionReachableWithoutChangingSelection() {
+        ContentPreference.set(host, ContentPreference.WOMEN);
+        ContentPreferenceUi.chooseAnchored(anchor, null);
+        AlertDialog dialog = ShadowAlertDialog.getLatestAlertDialog();
+        assertEquals(android.view.Gravity.CENTER, dialog.getWindow().getAttributes().gravity);
+        View root = dialog.getWindow().getDecorView();
+        GridLayout grid = root.findViewWithTag("onlyfap_preference_grid");
+        assertEquals(6, grid.getChildCount());
+        assertTrue(root.findViewWithTag("preference_women").isSelected());
+        assertTrue(grid.getParent() instanceof android.widget.ScrollView);
+        root.findViewWithTag("preference_cancel").performClick();
+        assertEquals(ContentPreference.WOMEN, ContentPreference.get(host));
+    }
+
 }

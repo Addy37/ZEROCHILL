@@ -49,7 +49,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /** Native media feed opened from a Series or Category card. */
-public final class NativeFeedBrowserActivity extends Activity {
+public class NativeFeedBrowserActivity extends Activity {
     private static final int CREATOR_TAB_ALL = 0;
     private static final int CREATOR_TAB_PICTURES = 1;
     private static final int CREATOR_TAB_VIDEOS = 2;
@@ -349,10 +349,6 @@ public final class NativeFeedBrowserActivity extends Activity {
 
     @Override
     protected void onCreate(Bundle state) {
-        if (CreatorGalleryTransition.ownsRevealWindow(this)) {
-            setTheme(R.style.Theme_ZeroChill_ShowsWatch);
-            AppearanceTheme.applyAccentOverlay(this);
-        }
         super.onCreate(state);
         GalleryMediaTransition.requestWindowFeature(this);
         GalleryMediaTransition.configureSource(this);

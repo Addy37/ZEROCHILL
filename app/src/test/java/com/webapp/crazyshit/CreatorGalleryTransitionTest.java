@@ -358,7 +358,7 @@ public class CreatorGalleryTransitionTest {
 
     @Test public void delayedOledPassesCannotPaintOutsideScopedRevealRoot() {
         Intent scoped = new Intent().putExtra(CreatorGalleryTransition.EXTRA_RIPPLE_REVEAL, true);
-        NativeFeedBrowserActivity activity = Robolectric.buildActivity(NativeFeedBrowserActivity.class, scoped).get();
+        NativeFeedBrowserActivity activity = Robolectric.buildActivity(OnlyFapGalleryActivity.class, scoped).get();
         activity.setTheme(R.style.Theme_ZeroChill_ShowsWatch);
         FrameLayout content = new FrameLayout(activity);
         activity.setContentView(content);

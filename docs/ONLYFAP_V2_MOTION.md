@@ -4,7 +4,7 @@ Production baseline: `7269d41e37732a4744ef6d23927e223017caa7bb` (merged PR #412)
 Reference: ZEROCHILL-V2 main `9ce121f`, its actual imported native hero ripple,
 indicators and preference implementation. One branch and draft PR #413.
 
-## Current candidate: Preview 28
+## Current candidate: Preview 29
 
 The user tested Preview 26 (`f1f3daa4`) and supplied
 `Record_2026-11-10-07-25-37_62c688c2cc5660a137780e37d3cb9d1a.mp4`.
@@ -12,6 +12,11 @@ Preview 27 (`51c7c2bd`) replaced the opening morph with a reveal of the whole
 gallery and added the accent-filled View Gallery action. The user approved that
 visual direction, supplied `Record_2026-11-10-07-51-43_62c688c2cc5660a137780e37d3cb9d1a.mp4`,
 and requested opening from the actual tap and reversing Back to its origin.
+Preview 28 (`bfbc58be`) added those origins/reverse motion. The next physical
+recording, `Record_2026-11-10-08-48-06_62c688c2cc5660a137780e37d3cb9d1a.mp4`,
+exposed black outside the circle instead of the homepage. It also requested a
+screen-centered gender panel. Preview 29 addresses both.
+
 
 - Ready normal hero changes retain V2's 650ms native circular reveal at 50%/47%
   with white/accent rings. The existing two Glide owners remain alive through
@@ -20,7 +25,7 @@ and requested opening from the actual tap and reversing Back to its origin.
 - Centered 6dp pagination dots use a sliding/pulsing accent pill and a seven-slot
   window, with 18dp spacing and 14dp active width. Index updates follow committed
   image identity; automatic rotation, swipes and dot taps share the ready path.
-- The anchored two-column preference grid retains all six options and original
+- The screen-centered two-column preference grid retains all six options and original
   persistence/filter callbacks, existing glass settings, small-window scrolling
   and lifecycle dismissal. V2 main actually has a vertical list, so the requested
   grid is an intentional difference; icons/accent/glass follow that reference.
@@ -48,8 +53,20 @@ and requested opening from the actual tap and reversing Back to its origin.
 
 ## Styling ownership and compatibility
 
-The existing Shows Watch translucent-window theme is reused only for the scoped
-OnlyFap gallery intent. The accent overlay is reapplied after theme selection.
+The dedicated, non-exported OnlyFapGalleryActivity declares a translucent theme in
+the manifest, inheriting the existing Shows Watch style. Android resolves an
+Activity's occlusion from ActivityInfo before onCreate; Preview 28's runtime
+setTheme left ActivityRecord treating the browser as opaque and hiding the source
+surface. The new manifest host informs Android before launch so the paused live
+homepage can remain visible behind both circles. No bitmap/screen capture is used.
+The host inherits NativeFeedBrowserActivity's gallery state and behavior. API 27+
+routes only scoped OnlyFap launches there while preserving every Intent extra;
+API 26 stays on the original opaque host. Restored old NativeFeed tasks cannot
+claim a translucent reveal window. Colors-only accent application preserves the
+manifest theme, including on API 27/28 without pre-created lifecycle callbacks.
+The gender dialog now uses the window manager's safe-area center, independent of
+the selector's horizontal position; width limits, scrolling and anchor-owned
+dismissal stay intact.
 OledThemeController excludes that window so its delayed passes cannot paint an
 opaque rectangle behind the circular root. OledImmersiveUiController unwraps the
 new reveal host before resolving the original toolbar, preserving its geometry.
@@ -58,8 +75,8 @@ Library, Shows and full-screen media viewing retain their original behavior.
 
 Production package, signing identity, preferences, backups, source parsers,
 gallery data, media playback, downloads and favorites are unchanged. No migration,
-backend, Supabase or remote-config change. Preview 28 uses `6000030`, above Preview
-27 `6000029`. The scoped workflow builds one signed release APK and compares the
+backend, Supabase or remote-config change. Preview 29 uses `6000031`, above Preview
+28 `6000030`. The scoped workflow builds one signed release APK and compares the
 actual package/certificate with stable plus the preview upgrade floor. Filename
 includes branch and SHA. No merge, tag, public release or publication is authorized.
 
@@ -86,7 +103,8 @@ window retains the paused source Activity, as the existing Shows transition does
 Core surfaces: OnlyFapHubView, OnlyFapHeroRippleView, OnlyFapHeroIndicators,
 OnlyFapPreferencePicker, ContentPreferenceUi, onlyfap_preference_ids.xml.
 Gallery integration: CreatorGalleryTransition, CreatorGalleryReveal,
-NativeFeedBrowserActivity, MainPagerAdapter. CreatorProfileHeader and
+NativeFeedBrowserActivity, OnlyFapGalleryActivity, AndroidManifest.xml, themes.xml,
+MainPagerAdapter. CreatorProfileHeader and
 NativeMainActivity remove the Preview 26 morph-only additions.
 Styling integration: OledThemeController, OledImmersiveUiController.
 Tests: OnlyFapHeroDesignTest, OnlyFapHeroIndicatorsTest,
@@ -116,3 +134,17 @@ and real NativeFeed Back/pause integration. Original hero, gallery, preference,
 quality/cache and accent regressions remain passing. Diff checks passed. No
 physical-device or full unfiltered test claim is made; CI/signed artifact evidence
 is recorded on PR #413 after completion.
+
+## Preview 29 local verification
+
+The focused host/menu run passed, followed by **239 tests across 20 focused suites**
+and `:app:assembleDebug` (2m16s). Java 17 compiled the APK; Java 21 ran Robolectric.
+New coverage resolves real ActivityInfo and theme metadata before onCreate,
+compares original opaque vs private translucent host, preserves complete gallery
+extras and Parcel-restored origins, checks cold/restored accent/transparency on
+API 27/28/35/36 and keeps API 26 on its opaque route. Centered-panel tests cover
+opposite selector positions, small landscape, all options and saved selections.
+Diff and review checks passed. Earlier unit tests did not model Android's server
+surface occlusion; these tests now guard the manifest cause, but actual source
+surface visibility on OnePlus still requires the next physical test. No emulator,
+physical installation, full unfiltered test or optical performance claim is made.

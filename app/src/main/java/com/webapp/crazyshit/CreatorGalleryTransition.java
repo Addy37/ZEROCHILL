@@ -57,7 +57,7 @@ final class CreatorGalleryTransition {
     static boolean ownsRevealWindow(Activity activity) {
         // Android 8.0 rejects translucent Activities with a requested orientation.
         return android.os.Build.VERSION.SDK_INT >= 27
-                && activity instanceof NativeFeedBrowserActivity && isScoped(activity.getIntent());
+                && activity instanceof OnlyFapGalleryActivity && isScoped(activity.getIntent());
     }
 
     static boolean shouldAnimate(Activity activity, boolean recreated) {
@@ -96,6 +96,10 @@ final class CreatorGalleryTransition {
                     location[1] + fallback.getHeight() * .5f);
         }
         clearTap(activity);
+        // ActivityRecord resolves translucency from ActivityInfo before onCreate.
+        // A late setTheme cannot keep the source Activity's surface visible.
+        intent.setClass(activity, android.os.Build.VERSION.SDK_INT >= 27
+                ? OnlyFapGalleryActivity.class : NativeFeedBrowserActivity.class);
         intent.putExtra(EXTRA_RIPPLE_REVEAL, true);
         intent.putExtra(EXTRA_ORIGIN_SCREEN_X, origin.x);
         intent.putExtra(EXTRA_ORIGIN_SCREEN_Y, origin.y);

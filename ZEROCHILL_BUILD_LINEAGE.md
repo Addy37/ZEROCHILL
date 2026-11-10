@@ -318,3 +318,15 @@ Preview 27 `6000029`, with the original production package/certificate. Persist
 origin metadata only; no screenshot, source-image morph, data or backend changes.
 Physical OnePlus Android 16 acceptance remains pending. One signed test APK;
 no merge, tag, release or publication authorized.
+
+
+## PR 413 live return backdrop and centered picker (Preview 29)
+
+The user tested Preview 28 `bfbc58be` and supplied a recording showing black
+outside the closing circle. Continue the same branch/PR #413; the manifest now
+declares a private translucent OnlyFapGalleryActivity host rather than swapping an
+opaque browser's theme after launch. The gender panel is centered in the available
+screen area. Preview 29 uses `6000031`, above Preview 28 `6000030`, with original
+production package/certificate. No screenshots, data, preferences or backend
+migration. Physical OnePlus Android 16 backdrop/menu acceptance remains pending.
+One signed test APK; no merge, tag, publication or release authorized.
