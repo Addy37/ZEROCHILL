@@ -97,6 +97,7 @@ public final class BunkrGalleryActivity extends Activity {
     private TextView countView;
     private TextView downloadAction;
     private TextView itemTitleView;
+    private TextView creatorTitleView;
     private TextView itemMetaView;
     private ZeroChillLoadingView initialLoading;
     private ProgressBar loadMoreLoading;
@@ -266,6 +267,7 @@ public final class BunkrGalleryActivity extends Activity {
         heading.setPadding(dp(5), 0, dp(5), 0);
 
         TextView album = new TextView(this);
+        creatorTitleView = album;
         album.setText(albumTitle);
         album.setTextColor(Color.WHITE);
         album.setTextSize(17);
@@ -1166,6 +1168,19 @@ public final class BunkrGalleryActivity extends Activity {
         }
         downloadAction.setVisibility(item.isVideo() ? View.VISIBLE : View.GONE);
         itemTitleView.setText(item.title);
+        if (savedFavoriteImage(item)) {
+            Intent gallery = savedCreatorGallery();
+            String name = gallery == null ? "" : value(gallery.getStringExtra(NativeFeedBrowserActivity.EXTRA_TITLE));
+            if (name.isEmpty()) name = item.title;
+            itemTitleView.setText(name);
+            creatorTitleView.setText(name);
+            for (TextView label : new TextView[]{creatorTitleView, itemTitleView}) {
+                label.setOnClickListener(gallery == null ? null : v -> openSavedCreatorGallery());
+                label.setClickable(gallery != null);
+                label.setFocusable(gallery != null);
+                label.setContentDescription(gallery == null ? name : "Open gallery for " + name);
+            }
+        }
         ArrayList<String> meta = new ArrayList<>();
         meta.add(item.isVideo() ? "Video" : "Photo");
         if (item.views != null && !item.views.isEmpty()) meta.add(item.views);
@@ -1245,6 +1260,18 @@ public final class BunkrGalleryActivity extends Activity {
     private void showMenu(View anchor) {
         NativeContentItem current = adapter.itemAt(pager.getCurrentItem());
         ZeroChillMenu menu = new ZeroChillMenu(this, anchor);
+        if (savedFavoriteImage(current)) {
+            menu.getMenu().add("Open gallery").setEnabled(savedCreatorGallery() != null)
+                    .setOnMenuItemClickListener(item -> { openSavedCreatorGallery(); return true; });
+            menu.getMenu().add("Remove from favorites").setOnMenuItemClickListener(item -> {
+                FavoriteStore.setMediaFavorite(this, current, false);
+                ZeroChillToast.makeText(this, "Removed from favorites.", ZeroChillToast.LENGTH_SHORT).show();
+                finish();
+                return true;
+            });
+            menu.show();
+            return;
+        }
         if (current != null && current.isVideo()) {
             menu.getMenu().add(Menu.NONE, 3, 0, "Download video");
         }
@@ -1271,6 +1298,23 @@ public final class BunkrGalleryActivity extends Activity {
             return false;
         });
         menu.show();
+    }
+
+    private boolean savedFavoriteImage(NativeContentItem item) {
+        return item != null && item.isImage()
+                && getIntent().getBooleanExtra(SavedGalleryMedia.EXTRA_FAVORITE, false);
+    }
+
+    private Intent savedCreatorGallery() {
+        Intent gallery = getIntent().getParcelableExtra(SavedGalleryMedia.EXTRA_CREATOR_GALLERY);
+        return gallery != null && gallery.getComponent() != null
+                && NativeFeedBrowserActivity.class.getName().equals(gallery.getComponent().getClassName())
+                ? gallery : null;
+    }
+
+    private void openSavedCreatorGallery() {
+        Intent gallery = savedCreatorGallery();
+        if (gallery != null) startActivity(new Intent(gallery));
     }
 
     private void showMediaContextMenu(int position, NativeContentItem item) {

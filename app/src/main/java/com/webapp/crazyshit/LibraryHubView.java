@@ -578,7 +578,7 @@ final class LibraryHubView extends ScrollView {
             NativeContentItem content = item.content;
             if (content == null) continue;
             View card = compactMediaCard(item.title, item.url, content.imageUrl, "♥", false);
-            card.setOnClickListener(v -> SavedGalleryMedia.open(activity, content));
+            card.setOnClickListener(v -> SavedGalleryMedia.open(activity, item));
             rail.addCard(card, item.url, portraitThumbnails.getOrDefault(item.url, false));
         }
     }

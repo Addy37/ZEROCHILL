@@ -273,3 +273,15 @@ gallery and all menu actions/data. See `docs/LIBRARY_GLASS_SUBMENUS.md`.
 Preview 24 (`6000026`) produces one signed APK with the existing production
 package/certificate. No merge, publication, backend deployment or migration.
 Physical submenu behavior and hardware liquid-glass acceptance remain pending.
+
+## PR 412 favorited-image creator navigation follow-up (Preview 25)
+
+The user requests native creator-gallery navigation from favorited images, with
+Open gallery / Remove from favorites and clickable creator names, after testing
+Preview 24 `79bf8414`. Continue the same Library branch and retain the corrected
+liquid-glass popup host, headers and thumbnail layout. Pass saved gallery context
+through the singleton favorite-image viewer, preserve merged creator seeds and
+independent Watch Later membership. See `docs/FAVORITE_IMAGE_GALLERY_NAVIGATION.md`.
+Preview 25 (`6000027`) builds one signed APK with the same production package and
+certificate. No migration, backend or remote-config changes. Keep PR 412 draft;
+no merge or public release. Physical gallery-route acceptance remains pending.

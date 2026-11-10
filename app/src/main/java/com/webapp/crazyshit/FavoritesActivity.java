@@ -409,7 +409,7 @@ public class FavoritesActivity extends Activity {
         wrapper.setFocusable(true);
         wrapper.setContentDescription((mediaFavorites ? "Favorite " : "Watch Later ") + item.title);
         wrapper.setOnClickListener(v -> {
-            if (mediaFavorites && item.content != null) SavedGalleryMedia.open(this, item.content);
+            if (mediaFavorites && item.content != null) SavedGalleryMedia.open(this, item);
             else select(item.url, item.title);
         });
         ZeroChillMotion.installPressFeedback(wrapper);
@@ -438,6 +438,13 @@ public class FavoritesActivity extends Activity {
         title.setTypeface(null, android.graphics.Typeface.BOLD);
         title.setMaxLines(2);
         title.setEllipsize(TextUtils.TruncateAt.END);
+        if (mediaFavorites && item.content != null && item.content.isImage()) {
+            title.setMinHeight(dp(48));
+            title.setGravity(Gravity.BOTTOM);
+            title.setFocusable(true);
+            title.setContentDescription("Open gallery for " + title.getText());
+            title.setOnClickListener(v -> SavedGalleryMedia.openCreator(this, item));
+        }
         FrameLayout.LayoutParams titleParams =
                 new FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM);
         titleParams.setMargins(dp(10), 0, dp(34), dp(10));
@@ -463,7 +470,12 @@ public class FavoritesActivity extends Activity {
 
     private void showWatchLaterMenu(View anchor, FavoriteStore.Item item) {
         ZeroChillMenu menu = new ZeroChillMenu(this, anchor);
-        menu.getMenu().add(mediaFavorites ? "Unfavorite" : "Remove from Watch Later");
+        if (mediaFavorites && item.content != null && item.content.isImage()) {
+            Intent gallery = SavedGalleryMedia.creatorGallery(this, item);
+            menu.getMenu().add("Open gallery").setEnabled(gallery != null)
+                    .setOnMenuItemClickListener(clicked -> { startActivity(gallery); return true; });
+        }
+        menu.getMenu().add(mediaFavorites ? "Remove from favorites" : "Remove from Watch Later");
         menu.setOnMenuItemClickListener(clicked -> {
             haptic(anchor);
             if (mediaFavorites && item.content != null) FavoriteStore.setMediaFavorite(this, item.content, false);

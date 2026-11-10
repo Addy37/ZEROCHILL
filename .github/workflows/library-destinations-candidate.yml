@@ -1,6 +1,6 @@
-name: Phase 5 Library Liquid Glass Menus Candidate
+name: Phase 5 Favorite Image Gallery Navigation Candidate
 
-# Preview 24: repair popup window lifecycle ownership and restore Library liquid-glass menus.
+# Preview 25: favorite image names and menus open native creator galleries.
 # One scoped candidate run; no release publication or additional APK variants.
 on:
   push:
@@ -17,8 +17,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 35
     env:
-      APP_VERSION_CODE: '6000026'
-      APP_VERSION_NAME: '7.0-preview.24-library-glass-menus'
+      APP_VERSION_CODE: '6000027'
+      APP_VERSION_NAME: '7.0-preview.25-favorite-image-gallery'
       ZEROCHILL_SOURCE_SHA: ${{ github.sha }}
       FEEDBACK_ENDPOINT: ${{ secrets.FEEDBACK_ENDPOINT }}
       FEEDBACK_ANON_KEY: ${{ secrets.FEEDBACK_ANON_KEY }}
@@ -68,7 +68,8 @@ jobs:
             PrimaryTabLibraryTest AppearanceThemeTest FavoriteCreatorsScrollTest \
             CreatorAvatarOverrideTest ManualCreatorMergeTest FavoriteArtworkFetchTest \
             ZeroChillComposeMenuTest LibrarySubmenuTest GalleryViewerLifecycleTest \
-            OnlyFapGalleryFavoritesTest CreatorMergeUiTest PreferenceGlassPanelTest PreferenceGlassSettingsTest; do
+            OnlyFapGalleryFavoritesTest FavoriteImageNavigationTest OnlyFapLibraryMetadataTest \
+            CreatorMergeUiTest PreferenceGlassPanelTest PreferenceGlassSettingsTest; do
             filters+=(--tests "*$test")
           done
           # Gradle task options belong to the preceding task, so filter each variant.
@@ -128,7 +129,7 @@ jobs:
               return package[1], int(package[2]), cert[1]
           current, previous = inspect(candidate), inspect(stable)
           assert current[0] == previous[0] == 'com.addy37.crazyshitunofficial'
-          assert current[1] == 6000026 and current[1] > max(6000025, previous[1])
+          assert current[1] == 6000027 and current[1] > max(6000026, previous[1])
           assert current[2] == previous[2], 'Production signing certificate changed'
           report = (f'Source: {os.environ["GITHUB_SHA"]}\n'
                     f'Branch: {os.environ["GITHUB_REF_NAME"]}\n'
@@ -144,7 +145,7 @@ jobs:
       - name: Upload APK and checksum
         uses: actions/upload-artifact@v4
         with:
-          name: ZeroChill-Phase5-LibraryGlassMenus-signed
+          name: ZeroChill-Phase5-FavoriteImageGallery-signed
           path: candidate/
           if-no-files-found: error
           retention-days: 14
@@ -152,7 +153,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ZeroChill-Phase5-LibraryGlassMenus-validation
+          name: ZeroChill-Phase5-FavoriteImageGallery-validation
           path: |
             app/build/test-results/testDebugUnitTest/
             app/build/reports/visual-tests/

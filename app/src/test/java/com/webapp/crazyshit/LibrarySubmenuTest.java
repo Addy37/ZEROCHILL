@@ -42,7 +42,7 @@ public class LibrarySubmenuTest {
                 ReflectionHelpers.callInstanceMethod(activity, "showWatchLaterMenu",
                         ReflectionHelpers.ClassParameter.from(View.class, anchor),
                         ReflectionHelpers.ClassParameter.from(FavoriteStore.Item.class, saved));
-                check(activity, favorite ? "Unfavorite" : "Remove from Watch Later");
+                check(activity, favorite ? "Remove from favorites" : "Remove from Watch Later");
                 if (favorite) {
                     ReflectionHelpers.callInstanceMethod(activity, "showSectionMenu",
                             ReflectionHelpers.ClassParameter.from(View.class, anchor));

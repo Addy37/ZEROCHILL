@@ -41,6 +41,12 @@ object GlassMenuTestSupport {
         return actionNode(popup, label) != null
     }
 
+    @JvmStatic fun enabled(popup: PopupWindow, label: String): Boolean {
+        settle()
+        val node = actionNode(popup, label) ?: return false
+        return node.config.getOrNull(SemanticsProperties.Disabled) == null
+    }
+
     @JvmStatic fun click(popup: PopupWindow, label: String): Boolean {
         settle()
         val node = actionNode(popup, label) ?: return false
