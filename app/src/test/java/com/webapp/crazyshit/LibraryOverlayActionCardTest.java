@@ -3,6 +3,8 @@ package com.webapp.crazyshit;
 import android.app.Activity;
 import android.app.Application;
 import android.os.SystemClock;
+import android.os.Looper;
+import org.robolectric.Shadows;
 import android.view.MotionEvent;
 import android.view.View;
 import android.widget.FrameLayout;
@@ -58,6 +60,8 @@ public class LibraryOverlayActionCardTest {
         float x = target.getLeft() + BrowseUi.dp(activity, 4);
         float y = target.getTop() + BrowseUi.dp(activity, 4);
         tap(tile, x, y);
+        // Android posts touch click handling to the main queue. Robolectric must drain it.
+        Shadows.shadowOf(Looper.getMainLooper()).idle();
         assertEquals("Options should open", 1, menus.get());
         assertEquals("Media must not open", 0, opens.get());
 
