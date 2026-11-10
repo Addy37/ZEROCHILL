@@ -1,6 +1,6 @@
 name: Phase 5 Library Menu Fix Signed Candidate
 
-# Preview 17 retry after fixing asynchronous UI-tap test scheduling.
+# Preview 17 final candidate: independent overflow callbacks and one accessible tap target.
 # One scoped candidate run; no release publication or additional APK variants.
 on:
   push:
