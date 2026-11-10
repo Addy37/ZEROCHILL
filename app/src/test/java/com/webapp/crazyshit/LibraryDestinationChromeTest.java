@@ -2,6 +2,9 @@ package com.webapp.crazyshit;
 
 import android.app.Activity;
 import android.app.Application;
+import androidx.core.graphics.Insets;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowInsetsCompat;
 import android.graphics.drawable.GradientDrawable;
 import android.view.View;
 import android.widget.EditText;
@@ -27,6 +30,31 @@ import static org.junit.Assert.*;
 @RunWith(RobolectricTestRunner.class)
 @Config(application = Application.class, sdk = 35)
 public class LibraryDestinationChromeTest {
+    @Test public void destinationHeaderUsesOneSafeTopInset() {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        LibraryDestinationChrome.prepareWindow(activity);
+        LinearLayout root = BrowseUi.screen(activity);
+        LinearLayout header = new LinearLayout(activity);
+        TextView title = BrowseUi.text(activity, "History", 20, 0xFFFFFFFF);
+        header.addView(title);
+        LibraryDestinationChrome.attachHeader(root, header, title);
+        activity.setContentView(root);
+
+        WindowInsetsCompat simulated = new WindowInsetsCompat.Builder()
+                .setInsets(WindowInsetsCompat.Type.statusBars(), Insets.of(0, 48, 0, 0))
+                .setInsets(WindowInsetsCompat.Type.displayCutout(), Insets.of(0, 36, 0, 0))
+                .setInsets(WindowInsetsCompat.Type.navigationBars(), Insets.of(0, 0, 0, 28))
+                .build();
+        ViewCompat.dispatchApplyWindowInsets(root, simulated);
+
+        // The root owns one combined safe inset; the header adds only its small margin.
+        assertEquals(48, root.getPaddingTop());
+        assertEquals(28, root.getPaddingBottom());
+        LinearLayout.LayoutParams params = (LinearLayout.LayoutParams) header.getLayoutParams();
+        assertTrue(params.topMargin <= BrowseUi.dp(activity, 10));
+        assertSame(header, root.getChildAt(0));
+    }
+
     @Test public void headerPreservesBackAndOverflowActions() {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
         AppearanceTheme.setAccent(activity, AppearanceTheme.Accent.PURPLE);
