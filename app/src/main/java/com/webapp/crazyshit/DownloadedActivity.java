@@ -32,6 +32,8 @@ import java.text.DateFormat;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
+import java.util.HashMap;
+import java.util.Map;
 
 /** Local view of videos queued through Android's download service. */
 public final class DownloadedActivity extends Activity {
@@ -41,6 +43,8 @@ public final class DownloadedActivity extends Activity {
     private LinearLayout list;
     private androidx.recyclerview.widget.RecyclerView recycler;
     private DownloadsAdapter downloadsAdapter;
+    private GridLayoutManager galleryLayout;
+    private final Map<Long, Boolean> portraitDownloads = new HashMap<>();
     private final java.util.concurrent.ExecutorService loader = java.util.concurrent.Executors.newSingleThreadExecutor();
     private boolean reading;
     private android.os.Parcelable restoredScroll;
@@ -137,7 +141,13 @@ public final class DownloadedActivity extends Activity {
         root.addView(empty, emptyParams);
 
         recycler = new androidx.recyclerview.widget.RecyclerView(this);
-        recycler.setLayoutManager(new GridLayoutManager(this, 2));
+        galleryLayout = new GridLayoutManager(this, 2);
+        galleryLayout.setSpanSizeLookup(new GridLayoutManager.SpanSizeLookup() {
+            @Override public int getSpanSize(int position) {
+                return downloadsAdapter != null && downloadsAdapter.isPortrait(position) ? 1 : 2;
+            }
+        });
+        recycler.setLayoutManager(galleryLayout);
         recycler.setItemAnimator(null);
         recycler.setPadding(dp(10), dp(2), dp(10), dp(20));
         recycler.setClipToPadding(false);
@@ -249,6 +259,15 @@ public final class DownloadedActivity extends Activity {
             entries = new java.util.ArrayList<>(next);
             diff.dispatchUpdatesTo(this);
         }
+        boolean isPortrait(int position) {
+            return position >= 0 && position < entries.size()
+                    && Boolean.TRUE.equals(portraitDownloads.get(entries.get(position).id));
+        }
+        int positionOf(long id) {
+            for (int i = 0; i < entries.size(); i++)
+                if (entries.get(i).id == id) return i;
+            return -1;
+        }
         public int getItemCount() { return entries.size(); }
         public DownloadHolder onCreateViewHolder(android.view.ViewGroup parent, int type) {
             FrameLayout frame = new FrameLayout(DownloadedActivity.this);
@@ -289,7 +308,8 @@ public final class DownloadedActivity extends Activity {
         wrapper.setOnClickListener(v -> VideoDownloadStore.open(this, entry));
         ZeroChillMotion.installPressFeedback(wrapper);
 
-        MaterialCardView card = new MaterialCardView(this);
+        LibraryAspectMediaCard card = new LibraryAspectMediaCard(this);
+        card.setPortrait(Boolean.TRUE.equals(portraitDownloads.get(entry.id)));
         card.setCardBackgroundColor(UiPalette.SURFACE);
         card.setRadius(dp(16));
         card.setCardElevation(0f);
@@ -356,7 +376,7 @@ public final class DownloadedActivity extends Activity {
             track.addView(fill, new FrameLayout.LayoutParams(width, -1));
         }
 
-        wrapper.addView(card, new LinearLayout.LayoutParams(-1, dp(102)));
+        wrapper.addView(card, new LinearLayout.LayoutParams(-1, -2));
 
         TextView details = text(detailText(entry), 12, UiPalette.TEXT_MUTED, false);
         details.setMaxLines(1);
@@ -421,14 +441,33 @@ public final class DownloadedActivity extends Activity {
         frame.setCardBackgroundColor(Color.rgb(34, 34, 39));
         frame.setCardElevation(0f);
         ImageView image = new ImageView(this);
-        image.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        image.setScaleType(ImageView.ScaleType.FIT_CENTER);
         image.setBackgroundColor(Color.BLACK);
         frame.addView(image, new FrameLayout.LayoutParams(-1, -1));
         if (!entry.imageUrl.isEmpty()) {
             Glide.with(this)
                     .load(entry.imageUrl)
+                    .dontTransform()
+                    .downsample(com.bumptech.glide.load.resource.bitmap.DownsampleStrategy.AT_MOST)
+                    .override(dp(512), dp(512))
+                    .listener(new com.bumptech.glide.request.RequestListener<android.graphics.drawable.Drawable>() {
+                        @Override public boolean onLoadFailed(com.bumptech.glide.load.engine.GlideException error,
+                                Object model, com.bumptech.glide.request.target.Target<android.graphics.drawable.Drawable> target,
+                                boolean first) { return false; }
+                        @Override public boolean onResourceReady(android.graphics.drawable.Drawable drawable,
+                                Object model, com.bumptech.glide.request.target.Target<android.graphics.drawable.Drawable> target,
+                                com.bumptech.glide.load.DataSource source, boolean first) {
+                            if (drawable.getIntrinsicHeight() > 0 && drawable.getIntrinsicWidth() > 0) {
+                                boolean portrait = drawable.getIntrinsicHeight() > drawable.getIntrinsicWidth();
+                                image.post(() -> {
+                                    if (!isFinishing() && !isDestroyed() && image.isAttachedToWindow())
+                                        onThumbnailOrientation(entry.id, portrait);
+                                });
+                            }
+                            return false;
+                        }
+                    })
                     .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
-                    .centerCrop()
                     .transition(ThumbnailFades.thumbnail())
                     .into(image);
         } else {
@@ -437,6 +476,16 @@ public final class DownloadedActivity extends Activity {
             image.setPadding(dp(34), dp(18), dp(34), dp(18));
         }
         return frame;
+    }
+
+    private void onThumbnailOrientation(long id, boolean portrait) {
+        Boolean previous = portraitDownloads.put(id, portrait);
+        if (previous != null && previous == portrait) return;
+        if (downloadsAdapter == null || galleryLayout == null || recycler == null) return;
+        int position = downloadsAdapter.positionOf(id);
+        if (position < 0) return;
+        galleryLayout.getSpanSizeLookup().invalidateSpanIndexCache();
+        downloadsAdapter.notifyItemChanged(position);
     }
 
     private TextView action(String label, Runnable run) {
