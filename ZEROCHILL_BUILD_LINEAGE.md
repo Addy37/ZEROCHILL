@@ -249,3 +249,15 @@ Downloads corner surface. See `docs/LIBRARY_THUMBNAIL_FIT.md`. One signed APK us
 the existing production package/signing identity. Keep PR 412 draft and unmerged;
 no public release, backend change or data migration. Thumbnail crop acceptance
 still needs physical testing.
+
+## PR 412 Favorite Creators avatar menu follow-up (Preview 23)
+
+The user accepted Preview 22's thumbnail fitting at `b4de0fcc` and supplied a
+recording, clarifying that a favorite creator's avatar dots do not open its menu.
+Continue the exact `feature/zerochill-7-library-destinations` lineage. The real
+creator-grid touch regression reproduces a missing ViewTreeLifecycleOwner in the
+Compose popup host on API 35/36. Scope the fix to CreatorsActivity's existing
+native Library popup call; preserve approved headers, thumbnails and galleries.
+See `docs/CREATOR_AVATAR_MENU.md`. Preview 23 (`6000025`) produces one signed APK
+with the original production package/certificate. No merge, release publication,
+backend deployment or data migration. Physical avatar-menu acceptance is pending.

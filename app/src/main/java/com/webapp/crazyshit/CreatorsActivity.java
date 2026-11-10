@@ -347,7 +347,8 @@ public final class CreatorsActivity extends Activity {
         menu.getMenu().add("Remove from favorites").setOnMenuItemClickListener(item -> {
             removeGroup(group); return true;
         });
-        menu.show();
+        // This standard Activity uses the same native popup as the other Library destinations.
+        menu.showNative();
     }
 
     private void pickAvatar(CreatorCatalog.FavoriteGroup group) {
