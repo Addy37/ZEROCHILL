@@ -43,10 +43,21 @@ final class ZeroChillMenu {
     void setOnMenuItemClickListener(OnMenuItemClickListener listener) { this.listener = listener; }
 
     void show() {
+        showInternal(true);
+    }
+
+    /**
+     * Plain Android popup for secondary Library activities.
+     * Unlike the Compose popup this doesn't depend on a secondary lifecycle owner,
+     * making it safe to launch over a standard Activity on Android 16.
+     */
+    void showNative() {
+        showInternal(false);
+    }
+
+    private void showInternal(boolean preferCompose) {
         if (!anchor.isAttachedToWindow() || menu.size() == 0) return;
-        // Compose is presentation only: menu actions stay with their original callers.
-        // Preserve the native popup fallback for uncommon non-Activity contexts.
-        if (ZeroChillComposeMenu.show(context, anchor, menu, this::dispatch)) return;
+        if (preferCompose && ZeroChillComposeMenu.show(context, anchor, menu, this::dispatch)) return;
         LinearLayout rows = new LinearLayout(context);
         rows.setOrientation(LinearLayout.VERTICAL);
         int inset = dp(6);
