@@ -1,4 +1,4 @@
-name: Phase 5 Library Gallery Signed Candidate
+name: Phase 5 Library Menu Fix Signed Candidate
 
 # One scoped candidate run; no release publication or additional APK variants.
 on:
@@ -16,8 +16,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 35
     env:
-      APP_VERSION_CODE: '6000018'
-      APP_VERSION_NAME: '7.0-preview.16-library-gallery'
+      APP_VERSION_CODE: '6000019'
+      APP_VERSION_NAME: '7.0-preview.17-library-menus'
       ZEROCHILL_SOURCE_SHA: ${{ github.sha }}
       FEEDBACK_ENDPOINT: ${{ secrets.FEEDBACK_ENDPOINT }}
       FEEDBACK_ANON_KEY: ${{ secrets.FEEDBACK_ANON_KEY }}
@@ -50,8 +50,8 @@ jobs:
       - name: Focused Library, appearance, glass and navigation checks
         run: |
           filters=()
-          for test in LibraryMixedMediaGridTest LibraryDestinationChromeTest LibraryCollectionTest \
-            LibraryProfileTest PrimaryTabLibraryTest AppearanceThemeTest; do
+          for test in LibraryOverlayActionCardTest LibraryMixedMediaGridTest LibraryDestinationChromeTest \
+            LibraryCollectionTest LibraryProfileTest PrimaryTabLibraryTest AppearanceThemeTest; do
             filters+=(--tests "*$test")
           done
           # Gradle task options belong to the preceding task, so filter each variant.
@@ -111,7 +111,7 @@ jobs:
               return package[1], int(package[2]), cert[1]
           current, previous = inspect(candidate), inspect(stable)
           assert current[0] == previous[0] == 'com.addy37.crazyshitunofficial'
-          assert current[1] == 6000018 and current[1] > max(6000017, previous[1])
+          assert current[1] == 6000019 and current[1] > max(6000018, previous[1])
           assert current[2] == previous[2], 'Production signing certificate changed'
           report = (f'Source: {os.environ["GITHUB_SHA"]}\n'
                     f'Branch: {os.environ["GITHUB_REF_NAME"]}\n'
@@ -127,7 +127,7 @@ jobs:
       - name: Upload APK and checksum
         uses: actions/upload-artifact@v4
         with:
-          name: ZeroChill-Phase5-LibraryGallery-signed
+          name: ZeroChill-Phase5-LibraryMenuFix-signed
           path: candidate/
           if-no-files-found: error
           retention-days: 14
@@ -135,7 +135,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ZeroChill-Phase5-LibraryGallery-validation
+          name: ZeroChill-Phase5-LibraryMenuFix-validation
           path: |
             app/build/test-results/testDebugUnitTest/
             app/build/reports/visual-tests/
