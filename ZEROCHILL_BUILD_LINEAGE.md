@@ -385,3 +385,18 @@ reveal to 350ms while retaining 650ms opening, synchronized rings and the existi
 progress/system-scale handling. Preview 34 uses `7.0-preview.34-close-350ms`, code
 `6000036`, above Preview 33 `6000035`, with the production package/certificate.
 One signed test candidate; no merge, release, migration or backend change.
+
+
+## ShitTok visual polish candidate (Preview 35)
+
+The user's request selects the latest complete approved product baseline including
+Library and OnlyFap. Fetched main is `5f24b294a0e2c3155a7b395894c931608be93dd9`,
+the merged PR #414 lineage, including Library #412 and OnlyFap #413. The historical
+`rebrand/zerochill` branch is superseded by this complete lineage under the APK rule.
+`feature/zerochill-shittok-visual-polish` starts from that exact main commit.
+Preview 35 uses `7.0-preview.35-shittok`, code `6000037`, above Preview 34 `6000036`,
+with the production package and signing certificate. One scoped signed candidate
+workflow verifies lineage, focused tests, package, certificate and upgrade version.
+See `docs/SHITTOK_VISUAL_POLISH.md` and the PR for actual validation evidence.
+No merge before physical APK approval. No release, tag, backend deployment, remote
+source change, preference/data migration or integration synchronization is authorized.
