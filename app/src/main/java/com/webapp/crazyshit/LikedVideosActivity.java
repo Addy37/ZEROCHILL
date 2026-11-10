@@ -41,6 +41,7 @@ public final class LikedVideosActivity extends Activity {
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
         ZeroChillUi.applySystemBars(this);
+        LibraryDestinationChrome.prepareWindow(this);
         owner = ZeroChillSessionStore.currentUserId(this);
         LinearLayout root = BrowseUi.screen(this);
         LinearLayout heading = new LinearLayout(this);
