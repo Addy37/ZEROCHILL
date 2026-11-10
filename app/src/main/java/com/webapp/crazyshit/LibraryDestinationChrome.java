@@ -1,6 +1,8 @@
 package com.webapp.crazyshit;
 
+import android.app.Activity;
 import android.content.Context;
+import androidx.core.view.WindowCompat;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.view.Gravity;
@@ -27,6 +29,15 @@ final class LibraryDestinationChrome {
     private static final int INSET = 0xFF101720;
 
     private LibraryDestinationChrome() { }
+
+    /**
+     * Library detail screens handle system-bar and cutout insets in BrowseUi.screen.
+     * Opt out of the framework's extra content fitting to avoid reserving the
+     * same status-bar space twice on modern Android versions.
+     */
+    static void prepareWindow(Activity activity) {
+        WindowCompat.setDecorFitsSystemWindows(activity.getWindow(), false);
+    }
 
     static void attachHeader(LinearLayout root, LinearLayout header, TextView title) {
         Context context = root.getContext();
