@@ -429,7 +429,7 @@ public final class DownloadedActivity extends Activity {
             }
             return true;
         });
-        menu.showNative();
+        menu.show();
     }
 
     private View thumbnail(VideoDownloadStore.Entry entry) {

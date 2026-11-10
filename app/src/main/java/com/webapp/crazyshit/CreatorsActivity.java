@@ -99,9 +99,10 @@ public final class CreatorsActivity extends Activity {
         header.addView(BrowseUi.action(this, "+", "Find creators", v -> startActivity(SearchActivity.createBunkrSearch(this))),
                 new LinearLayout.LayoutParams(dp(48), dp(48)));
         header.addView(BrowseUi.action(this, "⋮", "Favorite creators menu", v -> {
-            new ZeroChillDialog.Builder(this).setTitle("Favorite creators")
-                    .setItems(new String[]{"Fetch missing artwork"}, (dialog, which) -> fetchMissingArtwork())
-                    .setNegativeButton("Cancel", null).show();
+            ZeroChillMenu menu = new ZeroChillMenu(this, v);
+            menu.getMenu().add("Fetch missing artwork");
+            menu.setOnMenuItemClickListener(item -> { fetchMissingArtwork(); return true; });
+            menu.show();
         }), new LinearLayout.LayoutParams(dp(48), dp(48)));
         LibraryDestinationChrome.attachHeader(root, header, title);
         input = new ZeroChillEditText(this);
@@ -347,8 +348,7 @@ public final class CreatorsActivity extends Activity {
         menu.getMenu().add("Remove from favorites").setOnMenuItemClickListener(item -> {
             removeGroup(group); return true;
         });
-        // This standard Activity uses the same native popup as the other Library destinations.
-        menu.showNative();
+        menu.show();
     }
 
     private void pickAvatar(CreatorCatalog.FavoriteGroup group) {

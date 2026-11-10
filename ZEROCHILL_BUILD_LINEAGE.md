@@ -261,3 +261,15 @@ native Library popup call; preserve approved headers, thumbnails and galleries.
 See `docs/CREATOR_AVATAR_MENU.md`. Preview 23 (`6000025`) produces one signed APK
 with the original production package/certificate. No merge, release publication,
 backend deployment or data migration. Physical avatar-menu acceptance is pending.
+
+## PR 412 Library liquid-glass submenu follow-up (Preview 24)
+
+The user provided a new saved-photo viewer overflow failure and requested liquid
+glass for avatar and other Library menus. Continue Preview 23 `08588a9c` on
+`feature/zerochill-7-library-destinations`. Repair lifecycle/saved-state ownership
+at the shared popup window root before Compose attaches, then restore Library's
+existing liquid-glass menu path. Preserve the approved headers, thumbnail fitting,
+gallery and all menu actions/data. See `docs/LIBRARY_GLASS_SUBMENUS.md`.
+Preview 24 (`6000026`) produces one signed APK with the existing production
+package/certificate. No merge, publication, backend deployment or migration.
+Physical submenu behavior and hardware liquid-glass acceptance remain pending.

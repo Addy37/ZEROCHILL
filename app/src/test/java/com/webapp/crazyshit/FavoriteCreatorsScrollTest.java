@@ -244,10 +244,9 @@ public class FavoriteCreatorsScrollTest {
             assertTrue(popup.isShowing());
             assertFalse(activity.isFinishing());
             assertNull("Opening options must not navigate", shadowOf(activity).getNextStartedActivity());
-            TextView change = menuText(popup.getContentView(), "Change avatar");
-            assertNotNull("Native creator menu exposes Change avatar", change);
-            assertNotNull(menuText(popup.getContentView(), "Remove from favorites"));
-            assertTrue(change.performClick());
+            GlassMenuTestSupport.assertGlass(popup);
+            assertTrue(GlassMenuTestSupport.hasAction(popup, "Remove from favorites"));
+            assertTrue(GlassMenuTestSupport.click(popup, "Change avatar"));
             assertFalse(popup.isShowing());
             Intent picker = shadowOf(activity).getNextStartedActivity();
             assertNotNull("Existing avatar picker must launch", picker);
@@ -280,7 +279,7 @@ public class FavoriteCreatorsScrollTest {
             assertTrue(popup.isShowing());
             for (String option : Arrays.asList("Merged creators", "Change primary", "Unmerge",
                     "Change avatar", "Use default avatar", "Remove from favorites"))
-                assertNotNull(option, menuText(popup.getContentView(), option));
+                assertTrue(option, GlassMenuTestSupport.hasAction(popup, option));
             popup.dismiss();
             assertTrue(CreatorAvatarOverrideStore.has(context, keys));
             assertEquals(favorites, CreatorFavoriteStore.names(context));
@@ -289,7 +288,8 @@ public class FavoriteCreatorsScrollTest {
 
             assertTrue(more.performClick());
             popup = shadowOf(RuntimeEnvironment.getApplication()).getLatestPopupWindow();
-            assertTrue(menuText(popup.getContentView(), "Use default avatar").performClick());
+            GlassMenuTestSupport.assertGlass(popup);
+            assertTrue(GlassMenuTestSupport.click(popup, "Use default avatar"));
             assertFalse(popup.isShowing());
             assertFalse(CreatorAvatarOverrideStore.has(context, keys));
             assertEquals(favorites, CreatorFavoriteStore.names(context));
@@ -299,17 +299,23 @@ public class FavoriteCreatorsScrollTest {
         }
     }
 
-    private TextView menuText(View view, String text) {
-        if (view instanceof TextView && text.contentEquals(((TextView) view).getText()))
-            return (TextView) view;
-        if (view instanceof android.view.ViewGroup) {
-            android.view.ViewGroup group = (android.view.ViewGroup) view;
-            for (int i = 0; i < group.getChildCount(); i++) {
-                TextView result = menuText(group.getChildAt(i), text);
-                if (result != null) return result;
-            }
+    @Test @Config(sdk = {35, 36})
+    public void creatorHeaderArtworkMenuUsesTheSameGlassHost() {
+        seedFavorites(1);
+        try (ActivityController<CreatorsActivity> controller = Robolectric.buildActivity(CreatorsActivity.class).setup()) {
+            CreatorsActivity activity = controller.get();
+            View header = GlassMenuTestSupport.description(activity.getWindow().getDecorView(),
+                    "Favorite creators menu");
+            assertNotNull(header);
+            assertTrue(header.performClick());
+            android.widget.PopupWindow popup = shadowOf(RuntimeEnvironment.getApplication()).getLatestPopupWindow();
+            GlassMenuTestSupport.assertGlass(popup);
+            assertTrue(GlassMenuTestSupport.hasAction(popup, "Fetch missing artwork"));
+            popup.dismiss();
+            assertFalse(activity.isFinishing());
+            assertNull(shadowOf(activity).getNextStartedActivity());
+            assertEquals(1, CreatorFavoriteStore.names(context).size());
         }
-        return null;
     }
 
     private void writeUnread(String name, int count) throws Exception {

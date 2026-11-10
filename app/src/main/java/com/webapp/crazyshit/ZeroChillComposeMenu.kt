@@ -97,7 +97,20 @@ internal object ZeroChillComposeMenu {
             }
         }
 
-        val glass = PreferenceGlassPanel(activity, content)
+        val glass = PreferenceGlassPanel(activity, content).apply {
+            setViewTreeLifecycleOwner(owner)
+            setViewTreeSavedStateRegistryOwner(owner)
+            // WindowRecomposer looks up the popup decor root, not just ComposeView.
+            // This parent attaches before its Compose child, so install the window
+            // owners here before that child attempts to create its composition.
+            addOnAttachStateChangeListener(object : View.OnAttachStateChangeListener {
+                override fun onViewAttachedToWindow(view: View) {
+                    view.rootView.setViewTreeLifecycleOwner(owner)
+                    view.rootView.setViewTreeSavedStateRegistryOwner(owner)
+                }
+                override fun onViewDetachedFromWindow(view: View) = Unit
+            })
+        }
         popup = PopupWindow(glass, width, android.view.ViewGroup.LayoutParams.WRAP_CONTENT, true).apply {
             setBackgroundDrawable(ColorDrawable(AndroidColor.TRANSPARENT))
             isOutsideTouchable = true

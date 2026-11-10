@@ -46,11 +46,7 @@ final class ZeroChillMenu {
         showInternal(true);
     }
 
-    /**
-     * Plain Android popup for secondary Library activities.
-     * Unlike the Compose popup this doesn't depend on a secondary lifecycle owner,
-     * making it safe to launch over a standard Activity on Android 16.
-     */
+    /** Explicit platform-rendered variant; show() uses the shared liquid-glass presentation. */
     void showNative() {
         showInternal(false);
     }

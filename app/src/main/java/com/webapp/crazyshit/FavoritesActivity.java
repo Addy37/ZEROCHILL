@@ -368,7 +368,7 @@ public class FavoritesActivity extends Activity {
             renderAllPages();
             return true;
         });
-        menu.showNative();
+        menu.show();
     }
 
     private void renderWatchLater(LinearLayout target) {
@@ -472,7 +472,7 @@ public class FavoritesActivity extends Activity {
             renderAllPages();
             return true;
         });
-        menu.showNative();
+        menu.show();
     }
 
     private void addMixedGallery(LinearLayout target, List<View> cards, List<String> keys) {
@@ -694,7 +694,7 @@ public class FavoritesActivity extends Activity {
             confirmClear();
             return true;
         });
-        menu.showNative();
+        menu.show();
     }
 
     private void confirmClear() {
