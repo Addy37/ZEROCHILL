@@ -2,7 +2,10 @@ package com.webapp.crazyshit;
 
 import android.app.Activity;
 import android.content.Context;
+import androidx.core.graphics.Insets;
+import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowCompat;
+import androidx.core.view.WindowInsetsCompat;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.view.Gravity;
@@ -37,6 +40,31 @@ final class LibraryDestinationChrome {
      */
     static void prepareWindow(Activity activity) {
         WindowCompat.setDecorFitsSystemWindows(activity.getWindow(), false);
+    }
+
+    /**
+     * Library gallery destinations can get an oversized top inset with some
+     * immersive/edge-to-edge window transitions. Keep a bounded status-bar
+     * allowance while retaining side, cutout and keyboard insets.
+     *
+     * Downloads uses the existing BrowseUi.screen() path, which already works
+     * correctly on the physical device.
+     */
+    static LinearLayout compactRoot(Activity activity) {
+        LinearLayout root = BrowseUi.screen(activity);
+        ViewCompat.setOnApplyWindowInsetsListener(root, (view, insets) -> {
+            Insets system = insets.getInsets(
+                    WindowInsetsCompat.Type.systemBars()
+                            | WindowInsetsCompat.Type.displayCutout()
+                            | WindowInsetsCompat.Type.ime());
+            int statusTop = insets.getInsets(WindowInsetsCompat.Type.statusBars()).top;
+            int cutoutTop = insets.getInsets(WindowInsetsCompat.Type.displayCutout()).top;
+            int top = Math.max(dp(activity, 24),
+                    Math.min(Math.max(statusTop, cutoutTop), dp(activity, 42)));
+            view.setPadding(system.left, top, system.right, system.bottom);
+            return insets;
+        });
+        return root;
     }
 
     static void attachHeader(LinearLayout root, LinearLayout header, TextView title) {
