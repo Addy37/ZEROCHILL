@@ -58,7 +58,7 @@ final class LibraryDestinationChrome {
             }
         }
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, -2);
-        params.setMargins(dp(context, 12), dp(context, 10), dp(context, 12), dp(context, 10));
+        params.setMargins(dp(context, 12), dp(context, 6), dp(context, 12), dp(context, 10));
         root.addView(header, params);
     }
 
