@@ -55,10 +55,10 @@ public class LibraryDestinationChromeTest {
         assertSame(header, root.getChildAt(0));
     }
 
-    @Test public void compactRootBoundsOversizeTopGapWithoutLosingKeyboardAndCutoutInsets() {
+    @Test public void rootPreservesRealLargeInsetsAndKeyboard() {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
         LibraryDestinationChrome.prepareWindow(activity);
-        LinearLayout root = LibraryDestinationChrome.compactRoot(activity);
+        LinearLayout root = BrowseUi.screen(activity);
         activity.setContentView(root);
 
         WindowInsetsCompat oversized = new WindowInsetsCompat.Builder()
@@ -68,7 +68,7 @@ public class LibraryDestinationChromeTest {
                 .build();
         ViewCompat.dispatchApplyWindowInsets(root, oversized);
 
-        assertEquals(BrowseUi.dp(activity, 42), root.getPaddingTop());
+        assertEquals(146, root.getPaddingTop());
         assertEquals(28, root.getPaddingBottom());
 
         WindowInsetsCompat keyboard = new WindowInsetsCompat.Builder()
@@ -77,13 +77,13 @@ public class LibraryDestinationChromeTest {
                 .setInsets(WindowInsetsCompat.Type.ime(), Insets.of(0, 0, 0, 275))
                 .build();
         ViewCompat.dispatchApplyWindowInsets(root, keyboard);
-        assertEquals(BrowseUi.dp(activity, 42), root.getPaddingTop());
+        assertEquals(146, root.getPaddingTop());
         assertEquals(275, root.getPaddingBottom());
     }
 
-    @Test public void compactRootRespectsOrdinarySafeInsets() {
+    @Test public void rootRespectsOrdinarySafeInsets() {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
-        LinearLayout root = LibraryDestinationChrome.compactRoot(activity);
+        LinearLayout root = BrowseUi.screen(activity);
         activity.setContentView(root);
         WindowInsetsCompat ordinary = new WindowInsetsCompat.Builder()
                 .setInsets(WindowInsetsCompat.Type.statusBars(), Insets.of(0, 32, 0, 0))

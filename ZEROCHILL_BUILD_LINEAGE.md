@@ -224,3 +224,16 @@ Before producing or sharing a ZEROCHILL test APK:
 4. Include the source branch and short commit SHA in a test APK filename.
 5. Preserve the application ID, production signing identity, existing installs, and saved data.
 6. Record subsequent approved baselines and production release evidence here without replacing historical release records.
+
+## PR 412 Library header ownership follow-up (Preview 21)
+
+The user selected `feature/zerochill-7-library-destinations`, Preview 20 head
+`f61b8578e9a90dfa385d49f914d3c5a7b85b7c6c`, after failed physical header-spacing
+acceptance. Continue this exact lineage, which includes merged PR 411 / approved
+main `b5020604`. Preview 21 uses `6000023`, the same production package and signing
+identity. Remove FavoritesActivity's resume-time duplicate inset installation and
+the Preview 20 inset cap; preserve the gallery design and Downloads layout.
+See `docs/LIBRARY_HEADER_INSET_OWNERSHIP.md`. The scoped Actions workflow produces
+one branch/SHA-named signed APK and validation report. No merge, publication,
+backend deployment, data migration or integration-branch synchronization is part
+of this physical candidate. Physical OnePlus Android 16 acceptance remains pending.

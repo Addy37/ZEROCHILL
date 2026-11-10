@@ -1,6 +1,6 @@
-name: Phase 5 Library Compact Header Candidate
+name: Phase 5 Library Inset Ownership Candidate
 
-# Preview 20: bound oversized top insets for History/Favorites/Creators/Liked screens.
+# Preview 21: remove resume-time duplicate inset handling; preserve real cutout/IME geometry.
 # One scoped candidate run; no release publication or additional APK variants.
 on:
   push:
@@ -17,8 +17,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 35
     env:
-      APP_VERSION_CODE: '6000022'
-      APP_VERSION_NAME: '7.0-preview.20-compact-library-header'
+      APP_VERSION_CODE: '6000023'
+      APP_VERSION_NAME: '7.0-preview.21-library-inset-owner'
       ZEROCHILL_SOURCE_SHA: ${{ github.sha }}
       FEEDBACK_ENDPOINT: ${{ secrets.FEEDBACK_ENDPOINT }}
       FEEDBACK_ANON_KEY: ${{ secrets.FEEDBACK_ANON_KEY }}
@@ -35,6 +35,11 @@ jobs:
           for baseline in 19facdc2 eaefd588 3835f159 0c49c30c; do
             git merge-base --is-ancestor "$baseline" HEAD
           done
+      # Robolectric API 36 requires Java 21; compilation/signing stay on Java 17.
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
@@ -50,14 +55,21 @@ jobs:
           cache-provider: basic
       - name: Focused Library, appearance, glass and navigation checks
         run: |
+          cat > "$RUNNER_TEMP/library-test-jdk.gradle" <<'GRADLE'
+          allprojects {
+              tasks.withType(Test).configureEach {
+                  executable = System.getenv('JAVA_HOME_21_X64') + '/bin/java'
+              }
+          }
+          GRADLE
           filters=()
           for test in ZeroChillLibraryNativeMenuTest LibraryOverlayActionCardTest LibraryMixedMediaGridTest \
-            LibraryDestinationChromeTest LibraryCollectionTest LibraryProfileTest \
+            LibraryDestinationInsetsTest LibraryDestinationChromeTest LibraryCollectionTest LibraryProfileTest \
             PrimaryTabLibraryTest AppearanceThemeTest; do
             filters+=(--tests "*$test")
           done
           # Gradle task options belong to the preceding task, so filter each variant.
-          gradle --no-daemon :app:testDebugUnitTest "${filters[@]}"
+          gradle --no-daemon --init-script "$RUNNER_TEMP/library-test-jdk.gradle" :app:testDebugUnitTest "${filters[@]}"
       - name: Restore existing production signing identity
         env:
           SIGNING_BUNDLE: ${{ secrets.ANDROID_SIGNING_BUNDLE }}
@@ -113,7 +125,7 @@ jobs:
               return package[1], int(package[2]), cert[1]
           current, previous = inspect(candidate), inspect(stable)
           assert current[0] == previous[0] == 'com.addy37.crazyshitunofficial'
-          assert current[1] == 6000022 and current[1] > max(6000021, previous[1])
+          assert current[1] == 6000023 and current[1] > max(6000022, previous[1])
           assert current[2] == previous[2], 'Production signing certificate changed'
           report = (f'Source: {os.environ["GITHUB_SHA"]}\n'
                     f'Branch: {os.environ["GITHUB_REF_NAME"]}\n'
@@ -129,7 +141,7 @@ jobs:
       - name: Upload APK and checksum
         uses: actions/upload-artifact@v4
         with:
-          name: ZeroChill-Phase5-LibraryCompactHeader-signed
+          name: ZeroChill-Phase5-LibraryInsetOwner-signed
           path: candidate/
           if-no-files-found: error
           retention-days: 14
@@ -137,7 +149,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ZeroChill-Phase5-LibraryCompactHeader-validation
+          name: ZeroChill-Phase5-LibraryInsetOwner-validation
           path: |
             app/build/test-results/testDebugUnitTest/
             app/build/reports/visual-tests/

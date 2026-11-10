@@ -58,7 +58,8 @@ final class ResponsiveFitmentController {
             installSafeInsets(activity);
             fitSingleColumn(activity, widthDp, 720);
         } else if (activity instanceof FavoritesActivity) {
-            installSafeInsets(activity);
+            // BrowseUi.screen owns system-bar, cutout and IME insets already.
+            // Reinstalling here captures inset padding as a base and adds it twice.
             fitSingleColumn(activity, widthDp, 920);
         } else if (activity instanceof ZeroChillMessageActivity) {
             installSafeInsets(activity, true);

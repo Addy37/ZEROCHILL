@@ -135,7 +135,7 @@ public class FavoritesActivity extends Activity {
     }
 
     private void buildUi() {
-        LinearLayout root = LibraryDestinationChrome.compactRoot(this);
+        LinearLayout root = BrowseUi.screen(this);
 
         LinearLayout header = new LinearLayout(this);
         header.setOrientation(LinearLayout.HORIZONTAL);
