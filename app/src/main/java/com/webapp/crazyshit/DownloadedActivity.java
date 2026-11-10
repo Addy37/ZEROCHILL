@@ -343,10 +343,6 @@ public final class DownloadedActivity extends Activity {
 
         TextView more = overflowButton("Download options for " + entry.title);
         more.setOnClickListener(v -> showDownloadMenu(v, entry));
-        FrameLayout.LayoutParams moreParams =
-                new FrameLayout.LayoutParams(dp(34), dp(34), Gravity.TOP | Gravity.END);
-        moreParams.setMargins(0, dp(5), dp(5), 0);
-        media.addView(more, moreParams);
 
         TextView title = text(OnlyFapVideoMetadata.displayTitle(entry.content == null
                 ? OnlyFapVideoMetadata.basic(entry.title, entry.pageUrl, entry.imageUrl) : entry.content), 13, Color.WHITE, true);
@@ -384,7 +380,7 @@ public final class DownloadedActivity extends Activity {
         LinearLayout.LayoutParams detailParams = new LinearLayout.LayoutParams(-1, -2);
         detailParams.setMargins(dp(3), dp(6), dp(3), dp(2));
         wrapper.addView(details, detailParams);
-        return wrapper;
+        return LibraryOverlayActionCard.wrap(this, wrapper, more);
     }
 
     private TextView overlayPill(String value, int textColor) {
