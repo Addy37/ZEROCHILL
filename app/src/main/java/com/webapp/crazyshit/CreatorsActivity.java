@@ -87,6 +87,7 @@ public final class CreatorsActivity extends Activity {
 
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
+        LibraryDestinationChrome.prepareWindow(this);
         LinearLayout root = BrowseUi.screen(this);
         LinearLayout header = new LinearLayout(this);
         header.setGravity(Gravity.CENTER_VERTICAL);
