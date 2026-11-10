@@ -24,7 +24,7 @@ final class LibraryAspectMediaCard extends MaterialCardView {
     @Override protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
         int width = View.MeasureSpec.getSize(widthMeasureSpec);
         if (width > 0 && View.MeasureSpec.getMode(widthMeasureSpec) != View.MeasureSpec.UNSPECIFIED) {
-            // Landscape 16:9, portrait 9:16. Preserve original pixels using FIT_CENTER on ImageView.
+            // Landscape 16:9, portrait 9:16. ImageView fills the tile with a proportional center crop.
             int height = Math.max(BrowseUi.dp(getContext(), 64),
                     Math.round(width * (portrait ? 16f / 9f : 9f / 16f)));
             super.onMeasure(widthMeasureSpec, View.MeasureSpec.makeMeasureSpec(height, View.MeasureSpec.EXACTLY));

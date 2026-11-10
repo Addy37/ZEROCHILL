@@ -524,7 +524,7 @@ public class FavoritesActivity extends Activity {
         media.setBackgroundColor(UiPalette.SURFACE);
 
         ImageView image = new ImageView(this);
-        image.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        image.setScaleType(ImageView.ScaleType.CENTER_CROP);
         image.setBackgroundColor(UiPalette.SURFACE);
         media.addView(image, new FrameLayout.LayoutParams(-1, -1));
 

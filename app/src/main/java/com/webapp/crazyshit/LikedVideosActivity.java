@@ -189,7 +189,7 @@ public final class LikedVideosActivity extends Activity {
             row.addView(card, new LinearLayout.LayoutParams(-1, -2));
 
             ImageView image = new ImageView(LikedVideosActivity.this);
-            image.setScaleType(ImageView.ScaleType.FIT_CENTER);
+            image.setScaleType(ImageView.ScaleType.CENTER_CROP);
             image.setBackgroundColor(android.graphics.Color.BLACK);
             card.addView(image, new MaterialCardView.LayoutParams(-1, -1));
 
@@ -211,6 +211,8 @@ public final class LikedVideosActivity extends Activity {
             holder.itemView.setContentDescription("Play liked video " + item.title);
             Glide.with(holder.image).clear(holder.image);
             holder.image.setTag(item.url);
+            holder.image.setScaleType(item.imageUrl.isEmpty()
+                    ? ImageView.ScaleType.CENTER_INSIDE : ImageView.ScaleType.CENTER_CROP);
             holder.image.setImageResource(R.drawable.ic_more_account);
             if (!item.imageUrl.isEmpty()) {
                 Glide.with(holder.image).load(LibraryHubView.remoteImage(item.imageUrl, item.url))

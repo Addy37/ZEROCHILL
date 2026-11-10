@@ -237,3 +237,15 @@ See `docs/LIBRARY_HEADER_INSET_OWNERSHIP.md`. The scoped Actions workflow produc
 one branch/SHA-named signed APK and validation report. No merge, publication,
 backend deployment, data migration or integration-branch synchronization is part
 of this physical candidate. Physical OnePlus Android 16 acceptance remains pending.
+
+## PR 412 Library thumbnail fit follow-up (Preview 22)
+
+The user physically approved Preview 21's header fix at `480e3d41`, then asked
+for thumbnails to fit perfectly and an intelligent Library visual check. Continue
+`feature/zerochill-7-library-destinations` from that exact source. Preserve its
+inset fix and mixed portrait/landscape gallery. Preview 22 (`6000024`) fills photo
+tiles proportionally, retains contained fallback icons and removes the nested
+Downloads corner surface. See `docs/LIBRARY_THUMBNAIL_FIT.md`. One signed APK uses
+the existing production package/signing identity. Keep PR 412 draft and unmerged;
+no public release, backend change or data migration. Thumbnail crop acceptance
+still needs physical testing.

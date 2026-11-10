@@ -433,12 +433,10 @@ public final class DownloadedActivity extends Activity {
     }
 
     private View thumbnail(VideoDownloadStore.Entry entry) {
-        MaterialCardView frame = new MaterialCardView(this);
-        frame.setRadius(dp(12));
-        frame.setCardBackgroundColor(Color.rgb(34, 34, 39));
-        frame.setCardElevation(0f);
+        // The outer media card owns rounding; a second rounded card leaves inset corners.
+        FrameLayout frame = new FrameLayout(this);
         ImageView image = new ImageView(this);
-        image.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        image.setScaleType(ImageView.ScaleType.CENTER_CROP);
         image.setBackgroundColor(Color.BLACK);
         frame.addView(image, new FrameLayout.LayoutParams(-1, -1));
         if (!entry.imageUrl.isEmpty()) {
@@ -468,6 +466,7 @@ public final class DownloadedActivity extends Activity {
                     .transition(ThumbnailFades.thumbnail())
                     .into(image);
         } else {
+            image.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
             image.setImageResource(R.drawable.ic_action_download);
             image.setColorFilter(AppearanceTheme.accent(this));
             image.setPadding(dp(34), dp(18), dp(34), dp(18));
