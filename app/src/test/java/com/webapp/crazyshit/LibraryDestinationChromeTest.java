@@ -55,6 +55,44 @@ public class LibraryDestinationChromeTest {
         assertSame(header, root.getChildAt(0));
     }
 
+    @Test public void compactRootBoundsOversizeTopGapWithoutLosingKeyboardAndCutoutInsets() {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        LibraryDestinationChrome.prepareWindow(activity);
+        LinearLayout root = LibraryDestinationChrome.compactRoot(activity);
+        activity.setContentView(root);
+
+        WindowInsetsCompat oversized = new WindowInsetsCompat.Builder()
+                .setInsets(WindowInsetsCompat.Type.statusBars(), Insets.of(0, 146, 0, 0))
+                .setInsets(WindowInsetsCompat.Type.displayCutout(), Insets.of(0, 30, 0, 0))
+                .setInsets(WindowInsetsCompat.Type.navigationBars(), Insets.of(0, 0, 0, 28))
+                .build();
+        ViewCompat.dispatchApplyWindowInsets(root, oversized);
+
+        assertEquals(BrowseUi.dp(activity, 42), root.getPaddingTop());
+        assertEquals(28, root.getPaddingBottom());
+
+        WindowInsetsCompat keyboard = new WindowInsetsCompat.Builder()
+                .setInsets(WindowInsetsCompat.Type.statusBars(), Insets.of(0, 146, 0, 0))
+                .setInsets(WindowInsetsCompat.Type.displayCutout(), Insets.of(0, 30, 0, 0))
+                .setInsets(WindowInsetsCompat.Type.ime(), Insets.of(0, 0, 0, 275))
+                .build();
+        ViewCompat.dispatchApplyWindowInsets(root, keyboard);
+        assertEquals(BrowseUi.dp(activity, 42), root.getPaddingTop());
+        assertEquals(275, root.getPaddingBottom());
+    }
+
+    @Test public void compactRootRespectsOrdinarySafeInsets() {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        LinearLayout root = LibraryDestinationChrome.compactRoot(activity);
+        activity.setContentView(root);
+        WindowInsetsCompat ordinary = new WindowInsetsCompat.Builder()
+                .setInsets(WindowInsetsCompat.Type.statusBars(), Insets.of(0, 32, 0, 0))
+                .setInsets(WindowInsetsCompat.Type.displayCutout(), Insets.of(0, 34, 0, 0))
+                .build();
+        ViewCompat.dispatchApplyWindowInsets(root, ordinary);
+        assertEquals(34, root.getPaddingTop());
+    }
+
     @Test public void headerPreservesBackAndOverflowActions() {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
         AppearanceTheme.setAccent(activity, AppearanceTheme.Accent.PURPLE);
