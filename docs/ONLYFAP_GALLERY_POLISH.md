@@ -45,12 +45,12 @@ browser headers and Shows remain on their existing paths.
 Production application ID, signing identity, preferences, saved items, backups,
 creator identity, filtering, media ordering, source pagination, playback recovery,
 downloads and backend configuration remain. No migration, Supabase or remote-config
-change. Preview 30 uses `6000032`, above approved Preview 29 `6000031`, signed with
+change. Preview 31 uses `6000033`, above Preview 30 `6000032`, signed with
 the existing production key. One scoped candidate workflow verifies ancestry,
 package, stable certificate and upgrade version, and exports a branch/SHA-named
 APK. This does not authorize a public release.
 
-Local validation passed: 34 focused classes / 344 tests in each of debug and
+Initial Preview 30 local validation passed: 34 focused classes / 344 tests in each of debug and
 release (688 total), plus `:app:assembleDebug` and `git diff --check`. This covers
 hero Glide ownership, stale/failure results, random rotation, reduced motion,
 status-bar/header geometry, menu lifetime, interrupted seeks, gestures, gallery
@@ -73,10 +73,36 @@ Native rendering is intentionally used instead of importing V2's backdrop packag
 - `BunkrGalleryActivity.java`, `BunkrGalleryPagerAdapter.java`,
   `FullscreenVideoGestures.java` and new `OnlyFapViewerChrome.java`: native V2 dock,
   same-player actions and gestures, artwork readiness and lifecycle cleanup.
-- `ZeroChillMenu.java`, `ZeroChillComposeMenu.kt`: optional dismissal callback so
+- `ZeroChillMenu.java`, `ZeroChillComposeMenu.kt`, new `AnchoredMenuPopup.java`: upward
+  viewer popup placement and optional dismissal callback so
   controls remain reachable while menus are open.
 - New `CreatorGalleryHeroTest.java`, `CreatorGalleryHeaderLayoutTest.java`,
   `OnlyFapViewerChromeTest.java`, `OnlyFapViewerGesturesTest.java`, and updated
-  `ZeroChillComposeMenuTest.java`: focused regression coverage.
+  `ZeroChillComposeMenuTest.java` and new `GalleryViewerMenuPlacementTest.java`:
+  focused regression coverage.
 - `.github/workflows/onlyfap-gallery-polish-candidate.yml`, this document and
   `ZEROCHILL_BUILD_LINEAGE.md`: signed test candidate and lineage record.
+
+## Preview 31: bottom-dock overflow correction
+
+The Preview 30 physical screenshot showed the menu clipped beneath the media dock.
+The viewer's More buttons had moved to the bottom while the shared Compose popup
+still used dropdown placement and an initially unmeasured WRAP_CONTENT height.
+Photo, video and saved-image menus now use explicit upward placement: the popup's
+bottom edge sits above the tapped button and can measure its content upward.
+Height is limited to available space above the anchor; long menus scroll. The
+native fallback follows the same policy. Other callers keep their existing
+dropdown placement. Menu items, callbacks, dismissal ownership and player state
+remain unchanged. Regression coverage uses actual photo/video viewer controls in
+portrait and landscape on API 35/36, plus native fallback action dispatch.
+
+The correction stays in draft PR #414 on the same branch. Its signed Preview 31
+candidate supersedes Preview 30 for physical testing; no merge or release is
+requested. Updated test/build evidence and artifact links are recorded in the PR.
+
+Preview 31 local validation passed: 53 tests in each of debug and release
+(106 total) across `GalleryViewerMenuPlacementTest`, `ZeroChillComposeMenuTest`,
+`OnlyFapViewerChromeTest`, `GalleryViewerLifecycleTest` and
+`FavoriteImageNavigationTest`, plus `:app:assembleDebug` and `git diff --check`.
+The signed candidate repeats the broader 35-class suite including the new menu
+placement regressions. Physical menu visibility/touch acceptance remains pending.

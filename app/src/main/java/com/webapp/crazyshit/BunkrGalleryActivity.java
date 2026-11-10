@@ -1194,7 +1194,7 @@ public final class BunkrGalleryActivity extends Activity {
                 finish();
                 return true;
             });
-            menu.show();
+            menu.showAbove();
             return;
         }
         menu.getMenu().add("Share item").setEnabled(current != null).setOnMenuItemClickListener(item -> { shareCurrent(); return true; });
@@ -1225,7 +1225,7 @@ public final class BunkrGalleryActivity extends Activity {
             }
             return false;
         });
-        menu.show();
+        menu.showAbove();
     }
 
     private boolean savedFavoriteImage(NativeContentItem item) {

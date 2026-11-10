@@ -343,3 +343,15 @@ above Preview 29 `6000031`, with original production package/signing identity.
 See `docs/ONLYFAP_GALLERY_POLISH.md`. One new draft PR and signed test APK; do not
 merge this follow-up, publish or release before new physical approval. No backend,
 source configuration, data migration or integration-branch change is authorized.
+
+
+## PR 414 Preview 31: media overflow placement correction
+
+Physical feedback on Preview 30 reported malfunctioning image/video More menus.
+The same unmerged `feature/zerochill-onlyfap-gallery-polish` branch and draft PR
+#414 now place media menus above their bottom-dock anchors instead of relying on
+an unmeasured Compose dropdown beneath the dock. Native fallback uses the same
+placement. Preview 31 uses version `7.0-preview.31-viewer-menu`, code `6000033`,
+above Preview 30 `6000032`; production package and signing certificate are retained.
+A single updated signed candidate workflow runs after local focused validation.
+No merge, release, backend change, data migration or integration-branch change.
