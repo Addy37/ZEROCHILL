@@ -224,3 +224,64 @@ Before producing or sharing a ZEROCHILL test APK:
 4. Include the source branch and short commit SHA in a test APK filename.
 5. Preserve the application ID, production signing identity, existing installs, and saved data.
 6. Record subsequent approved baselines and production release evidence here without replacing historical release records.
+
+## PR 412 Library header ownership follow-up (Preview 21)
+
+The user selected `feature/zerochill-7-library-destinations`, Preview 20 head
+`f61b8578e9a90dfa385d49f914d3c5a7b85b7c6c`, after failed physical header-spacing
+acceptance. Continue this exact lineage, which includes merged PR 411 / approved
+main `b5020604`. Preview 21 uses `6000023`, the same production package and signing
+identity. Remove FavoritesActivity's resume-time duplicate inset installation and
+the Preview 20 inset cap; preserve the gallery design and Downloads layout.
+See `docs/LIBRARY_HEADER_INSET_OWNERSHIP.md`. The scoped Actions workflow produces
+one branch/SHA-named signed APK and validation report. No merge, publication,
+backend deployment, data migration or integration-branch synchronization is part
+of this physical candidate. Physical OnePlus Android 16 acceptance remains pending.
+
+## PR 412 Library thumbnail fit follow-up (Preview 22)
+
+The user physically approved Preview 21's header fix at `480e3d41`, then asked
+for thumbnails to fit perfectly and an intelligent Library visual check. Continue
+`feature/zerochill-7-library-destinations` from that exact source. Preserve its
+inset fix and mixed portrait/landscape gallery. Preview 22 (`6000024`) fills photo
+tiles proportionally, retains contained fallback icons and removes the nested
+Downloads corner surface. See `docs/LIBRARY_THUMBNAIL_FIT.md`. One signed APK uses
+the existing production package/signing identity. Keep PR 412 draft and unmerged;
+no public release, backend change or data migration. Thumbnail crop acceptance
+still needs physical testing.
+
+## PR 412 Favorite Creators avatar menu follow-up (Preview 23)
+
+The user accepted Preview 22's thumbnail fitting at `b4de0fcc` and supplied a
+recording, clarifying that a favorite creator's avatar dots do not open its menu.
+Continue the exact `feature/zerochill-7-library-destinations` lineage. The real
+creator-grid touch regression reproduces a missing ViewTreeLifecycleOwner in the
+Compose popup host on API 35/36. Scope the fix to CreatorsActivity's existing
+native Library popup call; preserve approved headers, thumbnails and galleries.
+See `docs/CREATOR_AVATAR_MENU.md`. Preview 23 (`6000025`) produces one signed APK
+with the original production package/certificate. No merge, release publication,
+backend deployment or data migration. Physical avatar-menu acceptance is pending.
+
+## PR 412 Library liquid-glass submenu follow-up (Preview 24)
+
+The user provided a new saved-photo viewer overflow failure and requested liquid
+glass for avatar and other Library menus. Continue Preview 23 `08588a9c` on
+`feature/zerochill-7-library-destinations`. Repair lifecycle/saved-state ownership
+at the shared popup window root before Compose attaches, then restore Library's
+existing liquid-glass menu path. Preserve the approved headers, thumbnail fitting,
+gallery and all menu actions/data. See `docs/LIBRARY_GLASS_SUBMENUS.md`.
+Preview 24 (`6000026`) produces one signed APK with the existing production
+package/certificate. No merge, publication, backend deployment or migration.
+Physical submenu behavior and hardware liquid-glass acceptance remain pending.
+
+## PR 412 favorited-image creator navigation follow-up (Preview 25)
+
+The user requests native creator-gallery navigation from favorited images, with
+Open gallery / Remove from favorites and clickable creator names, after testing
+Preview 24 `79bf8414`. Continue the same Library branch and retain the corrected
+liquid-glass popup host, headers and thumbnail layout. Pass saved gallery context
+through the singleton favorite-image viewer, preserve merged creator seeds and
+independent Watch Later membership. See `docs/FAVORITE_IMAGE_GALLERY_NAVIGATION.md`.
+Preview 25 (`6000027`) builds one signed APK with the same production package and
+certificate. No migration, backend or remote-config changes. Keep PR 412 draft;
+no merge or public release. Physical gallery-route acceptance remains pending.

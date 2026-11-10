@@ -32,6 +32,8 @@ import java.text.DateFormat;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
+import java.util.HashMap;
+import java.util.Map;
 
 /** Local view of videos queued through Android's download service. */
 public final class DownloadedActivity extends Activity {
@@ -41,6 +43,8 @@ public final class DownloadedActivity extends Activity {
     private LinearLayout list;
     private androidx.recyclerview.widget.RecyclerView recycler;
     private DownloadsAdapter downloadsAdapter;
+    private GridLayoutManager galleryLayout;
+    private final Map<Long, Boolean> portraitDownloads = new HashMap<>();
     private final java.util.concurrent.ExecutorService loader = java.util.concurrent.Executors.newSingleThreadExecutor();
     private boolean reading;
     private android.os.Parcelable restoredScroll;
@@ -63,6 +67,7 @@ public final class DownloadedActivity extends Activity {
     @Override
     protected void onCreate(Bundle state) {
         super.onCreate(state);
+        LibraryDestinationChrome.prepareWindow(this);
         getWindow().setStatusBarColor(Color.rgb(13, 13, 15));
         getWindow().setNavigationBarColor(Color.BLACK);
         buildUi();
@@ -107,7 +112,7 @@ public final class DownloadedActivity extends Activity {
         TextView title = BrowseUi.text(this, "Downloads", 20, Color.WHITE);
         title.setPadding(dp(12), 0, 0, 0);
         header.addView(title, new LinearLayout.LayoutParams(0, -2, 1f));
-        root.addView(header);
+        LibraryDestinationChrome.attachHeader(root, header, title);
 
         input = new ZeroChillEditText(this);
         input.setHint("Search Downloads");
@@ -116,7 +121,7 @@ public final class DownloadedActivity extends Activity {
         input.setTextSize(16);
         input.setSingleLine(true);
         input.setPadding(dp(14), 0, dp(14), 0);
-        input.setBackgroundResource(R.drawable.zc_input_field);
+        LibraryDestinationChrome.styleSearch(this, input);
         input.setContentDescription("Search Downloads");
         LinearLayout.LayoutParams inputParams = new LinearLayout.LayoutParams(-1, dp(50));
         inputParams.setMargins(dp(12), 0, dp(12), dp(8));
@@ -124,16 +129,26 @@ public final class DownloadedActivity extends Activity {
 
         count = BrowseUi.text(this, "", 12, BrowseUi.MUTED);
         count.setPadding(dp(16), dp(4), dp(16), dp(8));
+        LibraryDestinationChrome.styleSummary(this, count);
         root.addView(count);
 
         empty = BrowseUi.text(this, "", 15, BrowseUi.MUTED);
         empty.setGravity(Gravity.CENTER);
         empty.setPadding(dp(24), dp(32), dp(24), dp(24));
         empty.setVisibility(View.GONE);
-        root.addView(empty);
+        LibraryDestinationChrome.styleEmpty(this, empty);
+        LinearLayout.LayoutParams emptyParams = new LinearLayout.LayoutParams(-1, -2);
+        emptyParams.setMargins(dp(16), dp(16), dp(16), dp(8));
+        root.addView(empty, emptyParams);
 
         recycler = new androidx.recyclerview.widget.RecyclerView(this);
-        recycler.setLayoutManager(new GridLayoutManager(this, 2));
+        galleryLayout = new GridLayoutManager(this, 2);
+        galleryLayout.setSpanSizeLookup(new GridLayoutManager.SpanSizeLookup() {
+            @Override public int getSpanSize(int position) {
+                return downloadsAdapter != null && downloadsAdapter.isPortrait(position) ? 1 : 2;
+            }
+        });
+        recycler.setLayoutManager(galleryLayout);
         recycler.setItemAnimator(null);
         recycler.setPadding(dp(10), dp(2), dp(10), dp(20));
         recycler.setClipToPadding(false);
@@ -245,6 +260,15 @@ public final class DownloadedActivity extends Activity {
             entries = new java.util.ArrayList<>(next);
             diff.dispatchUpdatesTo(this);
         }
+        boolean isPortrait(int position) {
+            return position >= 0 && position < entries.size()
+                    && Boolean.TRUE.equals(portraitDownloads.get(entries.get(position).id));
+        }
+        int positionOf(long id) {
+            for (int i = 0; i < entries.size(); i++)
+                if (entries.get(i).id == id) return i;
+            return -1;
+        }
         public int getItemCount() { return entries.size(); }
         public DownloadHolder onCreateViewHolder(android.view.ViewGroup parent, int type) {
             FrameLayout frame = new FrameLayout(DownloadedActivity.this);
@@ -285,11 +309,12 @@ public final class DownloadedActivity extends Activity {
         wrapper.setOnClickListener(v -> VideoDownloadStore.open(this, entry));
         ZeroChillMotion.installPressFeedback(wrapper);
 
-        MaterialCardView card = new MaterialCardView(this);
+        LibraryAspectMediaCard card = new LibraryAspectMediaCard(this);
+        card.setPortrait(Boolean.TRUE.equals(portraitDownloads.get(entry.id)));
         card.setCardBackgroundColor(UiPalette.SURFACE);
         card.setRadius(dp(16));
         card.setCardElevation(0f);
-        card.setStrokeWidth(0);
+        LibraryDestinationChrome.styleMediaCard(this, card);
 
         FrameLayout media = new FrameLayout(this);
         card.addView(media, new MaterialCardView.LayoutParams(-1, -1));
@@ -319,10 +344,6 @@ public final class DownloadedActivity extends Activity {
 
         TextView more = overflowButton("Download options for " + entry.title);
         more.setOnClickListener(v -> showDownloadMenu(v, entry));
-        FrameLayout.LayoutParams moreParams =
-                new FrameLayout.LayoutParams(dp(34), dp(34), Gravity.TOP | Gravity.END);
-        moreParams.setMargins(0, dp(5), dp(5), 0);
-        media.addView(more, moreParams);
 
         TextView title = text(OnlyFapVideoMetadata.displayTitle(entry.content == null
                 ? OnlyFapVideoMetadata.basic(entry.title, entry.pageUrl, entry.imageUrl) : entry.content), 13, Color.WHITE, true);
@@ -352,7 +373,7 @@ public final class DownloadedActivity extends Activity {
             track.addView(fill, new FrameLayout.LayoutParams(width, -1));
         }
 
-        wrapper.addView(card, new LinearLayout.LayoutParams(-1, dp(102)));
+        wrapper.addView(card, new LinearLayout.LayoutParams(-1, -2));
 
         TextView details = text(detailText(entry), 12, UiPalette.TEXT_MUTED, false);
         details.setMaxLines(1);
@@ -360,7 +381,7 @@ public final class DownloadedActivity extends Activity {
         LinearLayout.LayoutParams detailParams = new LinearLayout.LayoutParams(-1, -2);
         detailParams.setMargins(dp(3), dp(6), dp(3), dp(2));
         wrapper.addView(details, detailParams);
-        return wrapper;
+        return LibraryOverlayActionCard.wrap(this, wrapper, more);
     }
 
     private TextView overlayPill(String value, int textColor) {
@@ -412,10 +433,8 @@ public final class DownloadedActivity extends Activity {
     }
 
     private View thumbnail(VideoDownloadStore.Entry entry) {
-        MaterialCardView frame = new MaterialCardView(this);
-        frame.setRadius(dp(12));
-        frame.setCardBackgroundColor(Color.rgb(34, 34, 39));
-        frame.setCardElevation(0f);
+        // The outer media card owns rounding; a second rounded card leaves inset corners.
+        FrameLayout frame = new FrameLayout(this);
         ImageView image = new ImageView(this);
         image.setScaleType(ImageView.ScaleType.CENTER_CROP);
         image.setBackgroundColor(Color.BLACK);
@@ -423,16 +442,46 @@ public final class DownloadedActivity extends Activity {
         if (!entry.imageUrl.isEmpty()) {
             Glide.with(this)
                     .load(entry.imageUrl)
+                    .dontTransform()
+                    .downsample(com.bumptech.glide.load.resource.bitmap.DownsampleStrategy.AT_MOST)
+                    .override(dp(512), dp(512))
+                    .listener(new com.bumptech.glide.request.RequestListener<android.graphics.drawable.Drawable>() {
+                        @Override public boolean onLoadFailed(com.bumptech.glide.load.engine.GlideException error,
+                                Object model, com.bumptech.glide.request.target.Target<android.graphics.drawable.Drawable> target,
+                                boolean first) { return false; }
+                        @Override public boolean onResourceReady(android.graphics.drawable.Drawable drawable,
+                                Object model, com.bumptech.glide.request.target.Target<android.graphics.drawable.Drawable> target,
+                                com.bumptech.glide.load.DataSource source, boolean first) {
+                            if (drawable.getIntrinsicHeight() > 0 && drawable.getIntrinsicWidth() > 0) {
+                                boolean portrait = drawable.getIntrinsicHeight() > drawable.getIntrinsicWidth();
+                                image.post(() -> {
+                                    if (!isFinishing() && !isDestroyed() && image.isAttachedToWindow())
+                                        onThumbnailOrientation(entry.id, portrait);
+                                });
+                            }
+                            return false;
+                        }
+                    })
                     .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
-                    .centerCrop()
                     .transition(ThumbnailFades.thumbnail())
                     .into(image);
         } else {
+            image.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
             image.setImageResource(R.drawable.ic_action_download);
             image.setColorFilter(AppearanceTheme.accent(this));
             image.setPadding(dp(34), dp(18), dp(34), dp(18));
         }
         return frame;
+    }
+
+    private void onThumbnailOrientation(long id, boolean portrait) {
+        Boolean previous = portraitDownloads.put(id, portrait);
+        if (previous != null && previous == portrait) return;
+        if (downloadsAdapter == null || galleryLayout == null || recycler == null) return;
+        int position = downloadsAdapter.positionOf(id);
+        if (position < 0) return;
+        galleryLayout.getSpanSizeLookup().invalidateSpanIndexCache();
+        downloadsAdapter.notifyItemChanged(position);
     }
 
     private TextView action(String label, Runnable run) {

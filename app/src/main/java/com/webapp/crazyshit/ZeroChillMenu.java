@@ -43,10 +43,17 @@ final class ZeroChillMenu {
     void setOnMenuItemClickListener(OnMenuItemClickListener listener) { this.listener = listener; }
 
     void show() {
+        showInternal(true);
+    }
+
+    /** Explicit platform-rendered variant; show() uses the shared liquid-glass presentation. */
+    void showNative() {
+        showInternal(false);
+    }
+
+    private void showInternal(boolean preferCompose) {
         if (!anchor.isAttachedToWindow() || menu.size() == 0) return;
-        // Compose is presentation only: menu actions stay with their original callers.
-        // Preserve the native popup fallback for uncommon non-Activity contexts.
-        if (ZeroChillComposeMenu.show(context, anchor, menu, this::dispatch)) return;
+        if (preferCompose && ZeroChillComposeMenu.show(context, anchor, menu, this::dispatch)) return;
         LinearLayout rows = new LinearLayout(context);
         rows.setOrientation(LinearLayout.VERTICAL);
         int inset = dp(6);

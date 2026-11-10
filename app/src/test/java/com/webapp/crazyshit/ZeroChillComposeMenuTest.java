@@ -40,4 +40,47 @@ public class ZeroChillComposeMenuTest {
         menu.performItemAction(action, 0);
         assertEquals(37, calls.get());
     }
+    @Test @Config(sdk = {35, 36})
+    public void standardActivityPopupOwnsItsWindowCompositionAndClosesCleanly() {
+        try (org.robolectric.android.controller.ActivityController<android.app.Activity> controller =
+                org.robolectric.Robolectric.buildActivity(android.app.Activity.class).setup()) {
+            android.app.Activity activity = controller.get();
+            android.widget.FrameLayout root = new android.widget.FrameLayout(activity);
+            android.widget.TextView anchor = new android.widget.TextView(activity);
+            anchor.setText("Options");
+            root.addView(anchor, new android.widget.FrameLayout.LayoutParams(96, 96));
+            activity.setContentView(root);
+            java.util.concurrent.atomic.AtomicInteger calls = new java.util.concurrent.atomic.AtomicInteger();
+            for (int i = 0; i < 2; i++) {
+                ZeroChillMenu menu = new ZeroChillMenu(activity, anchor);
+                menu.getMenu().add("Change avatar");
+                menu.getMenu().add("Hidden").setVisible(false);
+                menu.setOnMenuItemClickListener(item -> { calls.incrementAndGet(); return true; });
+                menu.show();
+                android.widget.PopupWindow popup = org.robolectric.Shadows.shadowOf(
+                        RuntimeEnvironment.getApplication()).getLatestPopupWindow();
+                assertNotNull(popup);
+                GlassMenuTestSupport.assertGlass(popup);
+                androidx.lifecycle.LifecycleOwner owner = GlassMenuTestSupport.owner(popup);
+                assertEquals(androidx.lifecycle.Lifecycle.State.RESUMED, owner.getLifecycle().getCurrentState());
+                assertFalse(GlassMenuTestSupport.hasAction(popup, "Hidden"));
+                assertTrue(GlassMenuTestSupport.click(popup, "Change avatar"));
+                assertFalse(popup.isShowing());
+                assertEquals(androidx.lifecycle.Lifecycle.State.DESTROYED, owner.getLifecycle().getCurrentState());
+                assertEquals(i + 1, calls.get());
+                assertFalse(activity.isFinishing());
+            }
+            ZeroChillMenu menu = new ZeroChillMenu(activity, anchor);
+            menu.getMenu().add("Detach test");
+            menu.show();
+            android.widget.PopupWindow popup = org.robolectric.Shadows.shadowOf(
+                    RuntimeEnvironment.getApplication()).getLatestPopupWindow();
+            GlassMenuTestSupport.assertGlass(popup);
+            androidx.lifecycle.LifecycleOwner owner = GlassMenuTestSupport.owner(popup);
+            root.removeView(anchor);
+            assertFalse(popup.isShowing());
+            assertEquals(androidx.lifecycle.Lifecycle.State.DESTROYED, owner.getLifecycle().getCurrentState());
+        }
+    }
+
 }

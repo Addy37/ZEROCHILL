@@ -58,6 +58,7 @@ final class RenderedThumbnailResolver {
 
     private final Context context;
     private final Callback callback;
+    private final boolean renderedPageFallback;
     private final Handler main = new Handler(Looper.getMainLooper());
     private final ExecutorService io = Executors.newSingleThreadExecutor();
     private final ArrayDeque<String> queue = new ArrayDeque<>();
@@ -76,8 +77,14 @@ final class RenderedThumbnailResolver {
     private int attempt;
 
     RenderedThumbnailResolver(Context context, Callback callback) {
+        this(context, callback, true);
+    }
+
+    /** Use false for Library detail cards: never open a hidden media page just to find artwork. */
+    RenderedThumbnailResolver(Context context, Callback callback, boolean renderedPageFallback) {
         this.context = context.getApplicationContext();
         this.callback = callback;
+        this.renderedPageFallback = renderedPageFallback;
         this.cachePrefs = this.context.getSharedPreferences("native_thumbnail_cache", Context.MODE_PRIVATE);
     }
 
@@ -125,8 +132,14 @@ final class RenderedThumbnailResolver {
             currentPage = null;
             busy = false;
             if (webView != null) {
-                webView.stopLoading();
-                webView.onPause();
+                try {
+                    webView.stopLoading();
+                    // onPause alone can leave Chromium audio running in a background Activity.
+                    webView.loadUrl("about:blank");
+                    webView.onPause();
+                } catch (RuntimeException ignored) {
+                    // A renderer shutdown must not break Library navigation.
+                }
             }
         } else {
             if (webView != null) webView.onResume();
@@ -219,8 +232,11 @@ final class RenderedThumbnailResolver {
                 if (!current(token, page)) return;
                 if (isUsable(resolved) && !isRejected(page, resolved)) {
                     finish(token, page, resolved);
-                } else {
+                } else if (renderedPageFallback) {
                     loadRenderedPage(token, page);
+                } else {
+                    // Static poster resolution + MediaMetadataRetriever never plays audio.
+                    fallbackToVideo(token, page);
                 }
             });
         });

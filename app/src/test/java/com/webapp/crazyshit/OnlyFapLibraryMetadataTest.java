@@ -162,32 +162,44 @@ public class OnlyFapLibraryMetadataTest {
         assertEquals("CarrotSoki", intent.getStringExtra(NativeFeedBrowserActivity.EXTRA_BUNKR_CREATOR_QUERY));
     }
 
-    @Test public void libraryShowsCreatorForSavedClipAndRetainsItsPlaybackUrl() throws Exception {
+    @Test public void libraryShowsCreatorForSavedClipAndRetainsItsPlaybackUrl() {
         owner = "";
         FavoriteStore.add(context, clip());
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
-        NativeContentItem[] opened = {null};
-        LibraryHubView view = new LibraryHubView(activity, new LibraryHubView.Listener() {
-            @Override public void onOpenWatchLater(NativeContentItem item) { opened[0] = item; }
-            @Override public void onOpenHistory(PlaybackHistoryStore.Item item) { }
-            @Override public void onOpenCreator(NativeContentItem creator) { }
-        });
+        LibraryHubView view = new LibraryHubView(activity, null, true);
         activity.setContentView(view);
-        Map<String, Runnable> work = new LinkedHashMap<>();
-        view.setWorkScheduler(work::put);
         try {
-            view.setSocialActive(true);
-            Runnable refresh = work.remove("library-refresh");
-            assertNotNull(refresh); refresh.run();
-            ((ExecutorService) ReflectionHelpers.getField(view, "refreshIo")).submit(() -> {}).get(5, TimeUnit.SECONDS);
-            shadowOf(Looper.getMainLooper()).idle();
-            Runnable publish = work.remove("library-publish");
-            assertNotNull(publish); publish.run();
-            View card = find(view, "CarrotSoki");
-            assertNotNull(card); card.performClick();
-            assertEquals(URL, opened[0].url);
-            assertEquals(PROFILE, OnlyFapVideoMetadata.creator(opened[0]).url);
+            // Library home routes Watch Later through its collection destination.
+            View collection = view.findViewWithTag("library-collection-watch-later");
+            assertNotNull(collection);
+            assertTrue(collection.performClick());
+            Intent destination = shadowOf(activity).getNextStartedActivity();
+            assertEquals(FavoritesActivity.class.getName(), destination.getComponent().getClassName());
+            try (org.robolectric.android.controller.ActivityController<FavoritesActivity> controller =
+                    Robolectric.buildActivity(FavoritesActivity.class, destination).setup()) {
+                FavoritesActivity saved = controller.get();
+                View decor = saved.getWindow().getDecorView();
+                decor.measure(View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY),
+                        View.MeasureSpec.makeMeasureSpec(1920, View.MeasureSpec.EXACTLY));
+                decor.layout(0, 0, 1080, 1920);
+                shadowOf(Looper.getMainLooper()).idle();
+                View card = find(decor, "Watch Later " + clip().title);
+                assertNotNull(card);
+                assertNotNull(findText(card, "CarrotSoki"));
+                assertTrue(card.performClick());
+                assertEquals(URL, shadowOf(saved).getResultIntent().getStringExtra(FavoritesActivity.EXTRA_SELECTED_URL));
+                assertEquals(PROFILE, OnlyFapVideoMetadata.creator(FavoriteStore.watchLater(context).get(0).content).url);
+            }
         } finally { view.close(); }
+    }
+
+    private static View findText(View root, String text) {
+        if (root instanceof TextView && text.contentEquals(((TextView) root).getText())) return root;
+        if (root instanceof ViewGroup) for (int i = 0; i < ((ViewGroup) root).getChildCount(); i++) {
+            View result = findText(((ViewGroup) root).getChildAt(i), text);
+            if (result != null) return result;
+        }
+        return null;
     }
 
     @Test public void profileRecoveryUsesExplicitCreatorLinkAndRejectsAmbiguousPages() {

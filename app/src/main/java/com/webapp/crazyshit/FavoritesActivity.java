@@ -79,6 +79,8 @@ public class FavoritesActivity extends Activity {
 
     private final Map<String, List<ImageView>> thumbnailTargets = new HashMap<>();
     private final Map<String, String> resolvedThumbnails = new HashMap<>();
+    private final Map<String, Boolean> portraitThumbnails = new HashMap<>();
+    private LibraryMixedMediaGrid activeMixedGrid;
     private final Set<String> requestedThumbnails = new HashSet<>();
     private RenderedThumbnailResolver[] thumbnailResolvers;
     private int resolverCursor;
@@ -86,6 +88,7 @@ public class FavoritesActivity extends Activity {
     @Override
     protected void onCreate(Bundle state) {
         super.onCreate(state);
+        LibraryDestinationChrome.prepareWindow(this);
         tab = getIntent() == null
                 ? TAB_CONTINUE
                 : getIntent().getIntExtra(EXTRA_START_TAB, TAB_CONTINUE);
@@ -94,8 +97,8 @@ public class FavoritesActivity extends Activity {
         getWindow().setStatusBarColor(Color.rgb(13, 13, 15));
         getWindow().setNavigationBarColor(Color.BLACK);
         thumbnailResolvers = new RenderedThumbnailResolver[] {
-                new RenderedThumbnailResolver(this, this::onThumbnailResolved),
-                new RenderedThumbnailResolver(this, this::onThumbnailResolved)
+                new RenderedThumbnailResolver(this, this::onThumbnailResolved, false),
+                new RenderedThumbnailResolver(this, this::onThumbnailResolved, false)
         };
         buildUi();
         if (state != null && input != null) {
@@ -107,7 +110,22 @@ public class FavoritesActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
+        for (RenderedThumbnailResolver resolver : thumbnailResolvers) resolver.setActive(true);
         renderAllPages();
+    }
+
+    @Override protected void onPause() {
+        for (RenderedThumbnailResolver resolver : thumbnailResolvers) resolver.setActive(false);
+        super.onPause();
+    }
+
+    @Override protected void onDestroy() {
+        if (activeMixedGrid != null) activeMixedGrid.dispose();
+        for (RenderedThumbnailResolver resolver : thumbnailResolvers) resolver.close();
+        for (List<ImageView> targets : thumbnailTargets.values())
+            for (ImageView image : targets) Glide.with(image).clear(image);
+        thumbnailTargets.clear();
+        super.onDestroy();
     }
 
     @Override
@@ -135,7 +153,7 @@ public class FavoritesActivity extends Activity {
         clearAction = BrowseUi.action(this, "⋮", "Section options", this::showSectionMenu);
         clearAction.setTextSize(24);
         header.addView(clearAction, new LinearLayout.LayoutParams(dp(48), dp(48)));
-        root.addView(header);
+        LibraryDestinationChrome.attachHeader(root, header, title);
 
         input = new ZeroChillEditText(this);
         input.setHint("Search " + sectionTitle());
@@ -144,7 +162,7 @@ public class FavoritesActivity extends Activity {
         input.setTextSize(16);
         input.setSingleLine(true);
         input.setPadding(dp(14), 0, dp(14), 0);
-        input.setBackgroundResource(R.drawable.zc_input_field);
+        LibraryDestinationChrome.styleSearch(this, input);
         input.setContentDescription("Search " + sectionTitle());
         LinearLayout.LayoutParams inputParams = new LinearLayout.LayoutParams(-1, dp(50));
         inputParams.setMargins(dp(12), 0, dp(12), dp(8));
@@ -152,6 +170,7 @@ public class FavoritesActivity extends Activity {
 
         count = BrowseUi.text(this, "", 12, BrowseUi.MUTED);
         count.setPadding(dp(16), dp(4), dp(16), dp(8));
+        LibraryDestinationChrome.styleSummary(this, count);
         root.addView(count);
 
         for (int i = 0; i < PAGE_COUNT; i++) pageViews[i] = buildPage(i);
@@ -174,7 +193,7 @@ public class FavoritesActivity extends Activity {
 
     private View buildPage(int index) {
         FrameLayout page = new FrameLayout(this);
-        page.setBackgroundColor(Color.rgb(13, 13, 15));
+        page.setBackgroundColor(Color.BLACK);
         ScrollView scroll = new ScrollView(this);
         scroll.setFillViewport(true);
         LinearLayout list = new LinearLayout(this);
@@ -194,6 +213,12 @@ public class FavoritesActivity extends Activity {
 
 
     private void renderAllPages() {
+        if (activeMixedGrid != null) {
+            activeMixedGrid.dispose();
+            activeMixedGrid = null;
+        }
+        for (List<ImageView> targets : thumbnailTargets.values())
+            for (ImageView image : targets) Glide.with(image).clear(image);
         thumbnailTargets.clear();
         for (LinearLayout list : listContainers) {
             if (list != null) list.removeAllViews();
@@ -244,10 +269,15 @@ public class FavoritesActivity extends Activity {
         }
 
         List<View> cards = new ArrayList<>();
+        List<String> keys = new ArrayList<>();
         for (PlaybackHistoryStore.Item item : items) {
+            if (item.posterUrl != null && !item.posterUrl.isEmpty()
+                    && !resolvedThumbnails.containsKey(item.pageUrl))
+                resolvedThumbnails.put(item.pageUrl, item.posterUrl);
             cards.add(makeHistoryCard(item, continueOnly));
+            keys.add(item.pageUrl);
         }
-        addTwoColumnGrid(target, cards);
+        addMixedGallery(target, cards, keys);
     }
 
     private View makeHistoryCard(PlaybackHistoryStore.Item item, boolean continueOnly) {
@@ -259,11 +289,11 @@ public class FavoritesActivity extends Activity {
         wrapper.setOnClickListener(v -> select(item.pageUrl));
         ZeroChillMotion.installPressFeedback(wrapper);
 
-        MaterialCardView card = new MaterialCardView(this);
+        LibraryAspectMediaCard card = new LibraryAspectMediaCard(this);
         card.setCardBackgroundColor(UiPalette.SURFACE);
         card.setRadius(dp(16));
         card.setCardElevation(0f);
-        card.setStrokeWidth(0);
+        LibraryDestinationChrome.styleMediaCard(this, card);
 
         FrameLayout media = new FrameLayout(this);
         card.addView(media, new MaterialCardView.LayoutParams(-1, -1));
@@ -306,12 +336,8 @@ public class FavoritesActivity extends Activity {
 
         TextView more = overflowButton("Options for " + item.title);
         more.setOnClickListener(v -> showHistoryMenu(v, item, continueOnly));
-        FrameLayout.LayoutParams moreParams =
-                new FrameLayout.LayoutParams(dp(34), dp(34), Gravity.TOP | Gravity.END);
-        moreParams.setMargins(0, dp(5), dp(5), 0);
-        media.addView(more, moreParams);
 
-        wrapper.addView(card, new LinearLayout.LayoutParams(-1, dp(102)));
+        wrapper.addView(card, new LinearLayout.LayoutParams(-1, -2));
 
         String meta;
         if (continueOnly) {
@@ -330,7 +356,7 @@ public class FavoritesActivity extends Activity {
         LinearLayout.LayoutParams detailParams = new LinearLayout.LayoutParams(-1, -2);
         detailParams.setMargins(dp(3), dp(6), dp(3), dp(2));
         wrapper.addView(detail, detailParams);
-        return wrapper;
+        return LibraryOverlayActionCard.wrap(this, wrapper, more);
     }
 
     private void showHistoryMenu(View anchor, PlaybackHistoryStore.Item item, boolean continueOnly) {
@@ -368,10 +394,12 @@ public class FavoritesActivity extends Activity {
         }
 
         List<View> cards = new ArrayList<>();
+        List<String> keys = new ArrayList<>();
         for (FavoriteStore.Item item : items) {
             cards.add(makeWatchLaterCard(item));
+            keys.add(item.url);
         }
-        addTwoColumnGrid(target, cards);
+        addMixedGallery(target, cards, keys);
     }
 
     private View makeWatchLaterCard(FavoriteStore.Item item) {
@@ -381,16 +409,16 @@ public class FavoritesActivity extends Activity {
         wrapper.setFocusable(true);
         wrapper.setContentDescription((mediaFavorites ? "Favorite " : "Watch Later ") + item.title);
         wrapper.setOnClickListener(v -> {
-            if (mediaFavorites && item.content != null) SavedGalleryMedia.open(this, item.content);
+            if (mediaFavorites && item.content != null) SavedGalleryMedia.open(this, item);
             else select(item.url, item.title);
         });
         ZeroChillMotion.installPressFeedback(wrapper);
 
-        MaterialCardView card = new MaterialCardView(this);
+        LibraryAspectMediaCard card = new LibraryAspectMediaCard(this);
         card.setCardBackgroundColor(UiPalette.SURFACE);
         card.setRadius(dp(16));
         card.setCardElevation(0f);
-        card.setStrokeWidth(0);
+        LibraryDestinationChrome.styleMediaCard(this, card);
 
         FrameLayout media = new FrameLayout(this);
         card.addView(media, new MaterialCardView.LayoutParams(-1, -1));
@@ -410,6 +438,13 @@ public class FavoritesActivity extends Activity {
         title.setTypeface(null, android.graphics.Typeface.BOLD);
         title.setMaxLines(2);
         title.setEllipsize(TextUtils.TruncateAt.END);
+        if (mediaFavorites && item.content != null && item.content.isImage()) {
+            title.setMinHeight(dp(48));
+            title.setGravity(Gravity.BOTTOM);
+            title.setFocusable(true);
+            title.setContentDescription("Open gallery for " + title.getText());
+            title.setOnClickListener(v -> SavedGalleryMedia.openCreator(this, item));
+        }
         FrameLayout.LayoutParams titleParams =
                 new FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM);
         titleParams.setMargins(dp(10), 0, dp(34), dp(10));
@@ -417,12 +452,8 @@ public class FavoritesActivity extends Activity {
 
         TextView more = overflowButton("Options for " + item.title);
         more.setOnClickListener(v -> showWatchLaterMenu(v, item));
-        FrameLayout.LayoutParams moreParams =
-                new FrameLayout.LayoutParams(dp(34), dp(34), Gravity.TOP | Gravity.END);
-        moreParams.setMargins(0, dp(5), dp(5), 0);
-        media.addView(more, moreParams);
 
-        wrapper.addView(card, new LinearLayout.LayoutParams(-1, dp(102)));
+        wrapper.addView(card, new LinearLayout.LayoutParams(-1, -2));
 
         String date = item.savedAt > 0L
                 ? "Saved " + DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT)
@@ -434,12 +465,17 @@ public class FavoritesActivity extends Activity {
         LinearLayout.LayoutParams savedParams = new LinearLayout.LayoutParams(-1, -2);
         savedParams.setMargins(dp(3), dp(6), dp(3), dp(2));
         wrapper.addView(saved, savedParams);
-        return wrapper;
+        return LibraryOverlayActionCard.wrap(this, wrapper, more);
     }
 
     private void showWatchLaterMenu(View anchor, FavoriteStore.Item item) {
         ZeroChillMenu menu = new ZeroChillMenu(this, anchor);
-        menu.getMenu().add(mediaFavorites ? "Unfavorite" : "Remove from Watch Later");
+        if (mediaFavorites && item.content != null && item.content.isImage()) {
+            Intent gallery = SavedGalleryMedia.creatorGallery(this, item);
+            menu.getMenu().add("Open gallery").setEnabled(gallery != null)
+                    .setOnMenuItemClickListener(clicked -> { startActivity(gallery); return true; });
+        }
+        menu.getMenu().add(mediaFavorites ? "Remove from favorites" : "Remove from Watch Later");
         menu.setOnMenuItemClickListener(clicked -> {
             haptic(anchor);
             if (mediaFavorites && item.content != null) FavoriteStore.setMediaFavorite(this, item.content, false);
@@ -451,31 +487,10 @@ public class FavoritesActivity extends Activity {
         menu.show();
     }
 
-    private void addTwoColumnGrid(LinearLayout target, List<View> cards) {
-        for (int i = 0; i < cards.size(); i += 2) {
-            LinearLayout row = new LinearLayout(this);
-            row.setOrientation(LinearLayout.HORIZONTAL);
-            row.setGravity(Gravity.TOP);
-
-            LinearLayout.LayoutParams left =
-                    new LinearLayout.LayoutParams(0, -2, 1f);
-            left.setMargins(0, dp(5), dp(5), dp(7));
-            row.addView(cards.get(i), left);
-
-            if (i + 1 < cards.size()) {
-                LinearLayout.LayoutParams right =
-                        new LinearLayout.LayoutParams(0, -2, 1f);
-                right.setMargins(dp(5), dp(5), 0, dp(7));
-                row.addView(cards.get(i + 1), right);
-            } else {
-                View spacer = new View(this);
-                LinearLayout.LayoutParams spacerParams =
-                        new LinearLayout.LayoutParams(0, 1, 1f);
-                spacerParams.setMargins(dp(5), 0, 0, 0);
-                row.addView(spacer, spacerParams);
-            }
-            target.addView(row, new LinearLayout.LayoutParams(-1, -2));
-        }
+    private void addMixedGallery(LinearLayout target, List<View> cards, List<String> keys) {
+        activeMixedGrid = new LibraryMixedMediaGrid(this);
+        activeMixedGrid.setItems(cards, keys, portraitThumbnails);
+        target.addView(activeMixedGrid, new LinearLayout.LayoutParams(-1, -2));
     }
 
     private TextView overflowButton(String description) {
@@ -550,7 +565,8 @@ public class FavoritesActivity extends Activity {
     }
 
     private void onThumbnailResolved(String pageUrl, String thumbnailUrl) {
-        if (pageUrl == null || pageUrl.isEmpty() || thumbnailUrl == null || thumbnailUrl.isEmpty()) return;
+        if (isFinishing() || isDestroyed() || pageUrl == null || pageUrl.isEmpty()
+                || thumbnailUrl == null || thumbnailUrl.isEmpty()) return;
         resolvedThumbnails.put(pageUrl, thumbnailUrl);
         List<ImageView> targets = thumbnailTargets.get(pageUrl);
         if (targets == null) return;
@@ -565,7 +581,27 @@ public class FavoritesActivity extends Activity {
         try {
             Glide.with(image)
                     .load(source)
-                    .centerCrop()
+                    .dontTransform()
+                    .downsample(com.bumptech.glide.load.resource.bitmap.DownsampleStrategy.AT_MOST)
+                    .override(dp(512), dp(512))
+                    .listener(new com.bumptech.glide.request.RequestListener<android.graphics.drawable.Drawable>() {
+                        @Override public boolean onLoadFailed(com.bumptech.glide.load.engine.GlideException error,
+                                Object model, com.bumptech.glide.request.target.Target<android.graphics.drawable.Drawable> target,
+                                boolean first) { return false; }
+
+                        @Override public boolean onResourceReady(android.graphics.drawable.Drawable drawable,
+                                Object model, com.bumptech.glide.request.target.Target<android.graphics.drawable.Drawable> target,
+                                com.bumptech.glide.load.DataSource source, boolean first) {
+                            if (drawable.getIntrinsicWidth() > 0 && drawable.getIntrinsicHeight() > 0) {
+                                boolean portrait = drawable.getIntrinsicHeight() > drawable.getIntrinsicWidth();
+                                image.post(() -> {
+                                    if (!isFinishing() && !isDestroyed() && image.isAttachedToWindow())
+                                        updateThumbnailOrientation(pageUrl, portrait);
+                                });
+                            }
+                            return false;
+                        }
+                    })
                     .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
                     .dontAnimate()
                     .transition(ThumbnailFades.thumbnail())
@@ -574,6 +610,12 @@ public class FavoritesActivity extends Activity {
                     .into(image);
         } catch (Exception ignored) {
         }
+    }
+
+    private void updateThumbnailOrientation(String pageUrl, boolean portrait) {
+        Boolean known = portraitThumbnails.put(pageUrl, portrait);
+        if (known != null && known == portrait) return;
+        if (activeMixedGrid != null) activeMixedGrid.updateOrientation(pageUrl, portrait);
     }
 
     private GlideUrl withSiteHeaders(String imageUrl, String pageUrl) {

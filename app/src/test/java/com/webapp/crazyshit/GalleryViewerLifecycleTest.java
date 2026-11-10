@@ -205,6 +205,44 @@ public class GalleryViewerLifecycleTest {
         assertEquals(View.GONE, holder.play.getVisibility());
     }
 
+    @Test @Config(sdk = {35, 36})
+    public void savedMediaViewerOverflowComposesWithoutReturningToFavorites() {
+        try (ActivityController<BunkrGalleryActivity> controller = viewer(NativeContentItem.KIND_IMAGE)) {
+            controller.start().resume().visible();
+            BunkrGalleryActivity activity = controller.get();
+            View decor = activity.getWindow().getDecorView();
+            decor.measure(View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY),
+                    View.MeasureSpec.makeMeasureSpec(1920, View.MeasureSpec.EXACTLY));
+            decor.layout(0, 0, 1080, 1920);
+            View more = description(decor, "More options");
+            assertNotNull(more);
+            assertTrue(more.performClick());
+            android.widget.PopupWindow popup = org.robolectric.Shadows.shadowOf(
+                    RuntimeEnvironment.getApplication()).getLatestPopupWindow();
+            assertNotNull(popup);
+            GlassMenuTestSupport.assertGlass(popup);
+            assertTrue(GlassMenuTestSupport.hasAction(popup, "Open item page"));
+            assertTrue(GlassMenuTestSupport.hasAction(popup, "Open album page"));
+            popup.dismiss();
+            assertFalse(activity.isFinishing());
+            assertNull(org.robolectric.Shadows.shadowOf(activity).getNextStartedActivity());
+            BunkrGalleryPagerAdapter adapter = ReflectionHelpers.getField(activity, "adapter");
+            assertEquals(1, adapter.getItemCount());
+        }
+    }
+
+    private View description(View view, String value) {
+        if (view.getContentDescription() != null && value.contentEquals(view.getContentDescription())) return view;
+        if (view instanceof android.view.ViewGroup) {
+            android.view.ViewGroup group = (android.view.ViewGroup) view;
+            for (int i = 0; i < group.getChildCount(); i++) {
+                View found = description(group.getChildAt(i), value);
+                if (found != null) return found;
+            }
+        }
+        return null;
+    }
+
     private ActivityController<BunkrGalleryActivity> viewer(String kind) {
         NativeContentItem media = item(kind, "test-media");
         String session = BunkrGallerySessionStore.create("Test", "");

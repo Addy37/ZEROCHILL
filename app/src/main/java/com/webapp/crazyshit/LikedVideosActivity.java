@@ -10,7 +10,10 @@ import android.view.ViewGroup;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
-import androidx.recyclerview.widget.LinearLayoutManager;
+import androidx.recyclerview.widget.GridLayoutManager;
+import com.google.android.material.card.MaterialCardView;
+import java.util.HashMap;
+import java.util.Map;
 import androidx.recyclerview.widget.RecyclerView;
 import com.bumptech.glide.Glide;
 import java.util.ArrayList;
@@ -24,6 +27,8 @@ public final class LikedVideosActivity extends Activity {
     private final List<NativeContentItem> items = new ArrayList<>();
     private final LikesAdapter adapter = new LikesAdapter();
     private RecyclerView recycler;
+    private GridLayoutManager galleryLayout;
+    private final Map<String, Boolean> portraitLikedVideos = new HashMap<>();
     private TextView status, refresh, more;
     private String owner = "";
     private boolean loading;
@@ -36,6 +41,7 @@ public final class LikedVideosActivity extends Activity {
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
         ZeroChillUi.applySystemBars(this);
+        LibraryDestinationChrome.prepareWindow(this);
         owner = ZeroChillSessionStore.currentUserId(this);
         LinearLayout root = BrowseUi.screen(this);
         LinearLayout heading = new LinearLayout(this);
@@ -45,18 +51,27 @@ public final class LikedVideosActivity extends Activity {
         heading.addView(title, new LinearLayout.LayoutParams(0, -2, 1));
         refresh = BrowseUi.action(this, "Refresh", "Refresh liked videos", v -> loadPage(0));
         heading.addView(refresh, new LinearLayout.LayoutParams(-2, dp(48)));
-        root.addView(heading);
+        LibraryDestinationChrome.attachHeader(root, heading, title);
         status = BrowseUi.text(this, "Loading your likes…", 13, UiPalette.TEXT_MUTED);
         status.setPadding(dp(16), dp(8), dp(16), dp(12));
+        LibraryDestinationChrome.styleSummary(this, status);
         root.addView(status);
         recycler = new RecyclerView(this);
-        recycler.setLayoutManager(new LinearLayoutManager(this));
+        galleryLayout = new GridLayoutManager(this, 2);
+        galleryLayout.setSpanSizeLookup(new GridLayoutManager.SpanSizeLookup() {
+            @Override public int getSpanSize(int position) {
+                return position >= 0 && position < items.size()
+                        && Boolean.TRUE.equals(portraitLikedVideos.get(items.get(position).url)) ? 1 : 2;
+            }
+        });
+        recycler.setLayoutManager(galleryLayout);
         recycler.setAdapter(adapter);
         recycler.setClipToPadding(false);
         recycler.setPadding(dp(12), 0, dp(12), dp(24));
         root.addView(recycler, new LinearLayout.LayoutParams(-1, 0, 1));
         more = BrowseUi.action(this, "Load more", "Load more liked videos", v -> loadPage(nextOffset));
         more.setVisibility(View.GONE);
+        LibraryDestinationChrome.styleAction(more, this);
         root.addView(more, new LinearLayout.LayoutParams(-1, dp(48)));
         setContentView(root);
         ZeroChillSessionStore.preferences(this).registerOnSharedPreferenceChangeListener(sessionListener);
@@ -93,7 +108,7 @@ public final class LikedVideosActivity extends Activity {
         loading = false;
         nextOffset = unavailable = 0;
         hasMore = false;
-        items.clear(); adapter.notifyDataSetChanged();
+        items.clear(); portraitLikedVideos.clear(); adapter.notifyDataSetChanged();
         more.setVisibility(View.GONE);
         status.setText("Loading your likes…");
         loadLocal();
@@ -164,30 +179,66 @@ public final class LikedVideosActivity extends Activity {
     private final class LikesAdapter extends RecyclerView.Adapter<Holder> {
         @Override public Holder onCreateViewHolder(ViewGroup parent, int type) {
             LinearLayout row = new LinearLayout(LikedVideosActivity.this);
+            row.setOrientation(LinearLayout.VERTICAL);
             row.setGravity(Gravity.CENTER_VERTICAL);
-            row.setPadding(dp(8), dp(8), dp(8), dp(8));
-            row.setMinimumHeight(dp(88));
             row.setClickable(true); row.setFocusable(true);
+            row.setLayoutParams(new RecyclerView.LayoutParams(-1, -2));
+            LibraryDestinationChrome.styleLikedRow(LikedVideosActivity.this, row);
+            LibraryAspectMediaCard card = new LibraryAspectMediaCard(LikedVideosActivity.this);
+            LibraryDestinationChrome.styleMediaCard(LikedVideosActivity.this, card);
+            row.addView(card, new LinearLayout.LayoutParams(-1, -2));
+
             ImageView image = new ImageView(LikedVideosActivity.this);
             image.setScaleType(ImageView.ScaleType.CENTER_CROP);
-            image.setBackground(BrowseUi.rounded(LikedVideosActivity.this, UiPalette.SURFACE, 12));
-            row.addView(image, new LinearLayout.LayoutParams(dp(120), dp(68)));
-            TextView title = BrowseUi.text(LikedVideosActivity.this, "", 14, UiPalette.TEXT_PRIMARY);
-            title.setMaxLines(3); title.setEllipsize(android.text.TextUtils.TruncateAt.END);
-            title.setPadding(dp(12), 0, 0, 0);
-            row.addView(title, new LinearLayout.LayoutParams(0, -2, 1));
-            row.setLayoutParams(new RecyclerView.LayoutParams(-1, -2));
+            image.setBackgroundColor(android.graphics.Color.BLACK);
+            card.addView(image, new MaterialCardView.LayoutParams(-1, -1));
+
+            TextView title = BrowseUi.text(LikedVideosActivity.this, "", 13,
+                    AppearanceTheme.primaryText(LikedVideosActivity.this));
+            title.setMaxLines(2);
+            title.setEllipsize(android.text.TextUtils.TruncateAt.END);
+            LinearLayout.LayoutParams titleParams = new LinearLayout.LayoutParams(-1, -2);
+            titleParams.topMargin = dp(8);
+            row.addView(title, titleParams);
             ZeroChillMotion.installPressFeedback(row);
-            return new Holder(row, image, title);
+            return new Holder(row, card, image, title);
         }
+
         @Override public void onBindViewHolder(Holder holder, int position) {
             NativeContentItem item = items.get(position);
+            holder.card.setPortrait(Boolean.TRUE.equals(portraitLikedVideos.get(item.url)));
             holder.title.setText(OnlyFapVideoMetadata.displayTitle(item));
             holder.itemView.setContentDescription("Play liked video " + item.title);
             Glide.with(holder.image).clear(holder.image);
+            holder.image.setTag(item.url);
+            holder.image.setScaleType(item.imageUrl.isEmpty()
+                    ? ImageView.ScaleType.CENTER_INSIDE : ImageView.ScaleType.CENTER_CROP);
             holder.image.setImageResource(R.drawable.ic_more_account);
-            if (!item.imageUrl.isEmpty()) Glide.with(holder.image).load(LibraryHubView.remoteImage(item.imageUrl, item.url)).centerCrop()
+            if (!item.imageUrl.isEmpty()) {
+                Glide.with(holder.image).load(LibraryHubView.remoteImage(item.imageUrl, item.url))
+                    .dontTransform()
+                    .downsample(com.bumptech.glide.load.resource.bitmap.DownsampleStrategy.AT_MOST)
+                    .override(dp(512), dp(512))
+                    .listener(new com.bumptech.glide.request.RequestListener<android.graphics.drawable.Drawable>() {
+                        @Override public boolean onLoadFailed(com.bumptech.glide.load.engine.GlideException error,
+                                Object model, com.bumptech.glide.request.target.Target<android.graphics.drawable.Drawable> target,
+                                boolean first) { return false; }
+                        @Override public boolean onResourceReady(android.graphics.drawable.Drawable drawable,
+                                Object model, com.bumptech.glide.request.target.Target<android.graphics.drawable.Drawable> target,
+                                com.bumptech.glide.load.DataSource source, boolean first) {
+                            if (drawable.getIntrinsicWidth() > 0 && drawable.getIntrinsicHeight() > 0) {
+                                boolean portrait = drawable.getIntrinsicHeight() > drawable.getIntrinsicWidth();
+                                holder.image.post(() -> {
+                                    if (!isFinishing() && !isDestroyed() && holder.image.isAttachedToWindow()
+                                            && item.url.equals(holder.image.getTag()))
+                                        onLikedOrientation(item.url, portrait);
+                                });
+                            }
+                            return false;
+                        }
+                    })
                     .transition(ThumbnailFades.thumbnail()).into(holder.image);
+            }
             holder.itemView.setOnClickListener(v -> {
                 Intent result = new Intent().putExtra(FavoritesActivity.EXTRA_SELECTED_URL, item.url)
                         .putExtra(FavoritesActivity.EXTRA_SELECTED_TITLE, item.title)
@@ -199,8 +250,28 @@ public final class LikedVideosActivity extends Activity {
         @Override public void onViewRecycled(Holder holder) { Glide.with(holder.image).clear(holder.image); }
     }
     private static final class Holder extends RecyclerView.ViewHolder {
-        final ImageView image; final TextView title;
-        Holder(View root, ImageView image, TextView title) { super(root); this.image = image; this.title = title; }
+        final LibraryAspectMediaCard card;
+        final ImageView image;
+        final TextView title;
+        Holder(View root, LibraryAspectMediaCard card, ImageView image, TextView title) {
+            super(root);
+            this.card = card;
+            this.image = image;
+            this.title = title;
+        }
+    }
+
+    private void onLikedOrientation(String url, boolean portrait) {
+        Boolean previous = portraitLikedVideos.put(url, portrait);
+        if (previous != null && previous == portrait) return;
+        if (galleryLayout == null || recycler == null) return;
+        galleryLayout.getSpanSizeLookup().invalidateSpanIndexCache();
+        for (int i = 0; i < items.size(); i++) {
+            if (url.equals(items.get(i).url)) {
+                adapter.notifyItemChanged(i);
+                break;
+            }
+        }
     }
     @Override protected void onResume() { super.onResume(); if (status != null) checkAccount(); }
     @Override protected void onSaveInstanceState(Bundle state) {

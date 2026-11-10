@@ -208,6 +208,116 @@ public class FavoriteCreatorsScrollTest {
                 UpdateInboxStore.unreadCreatorContentCounts(context), Collections.singletonList("Testcreator000")));
     }
 
+    @Test @Config(sdk = {35, 36})
+    public void creatorOptionsOpenAndLaunchAvatarPicker() {
+        seedFavorites(1);
+        try (ActivityController<CreatorsActivity> controller = Robolectric.buildActivity(CreatorsActivity.class).setup()) {
+            CreatorsActivity activity = controller.get();
+            RecyclerView grid = grid(activity);
+            layout(grid);
+            View tile = grid.getChildAt(0);
+            assertNotNull(tile);
+            RecyclerView.ViewHolder holder = grid.getChildViewHolder(tile);
+            TextView more = ReflectionHelpers.getField(holder, "more");
+            assertTrue(more.isAttachedToWindow());
+            java.util.Set<String> favorites = new HashSet<>(CreatorFavoriteStore.names(context));
+
+            // Dispatch a real tap through the attached grid item, including delayed click handling.
+            int[] tileAt = new int[2], buttonAt = new int[2];
+            tile.getLocationInWindow(tileAt);
+            more.getLocationInWindow(buttonAt);
+            float x = buttonAt[0] - tileAt[0] + more.getWidth() / 2f;
+            float y = buttonAt[1] - tileAt[1] + more.getHeight() / 2f;
+            long at = android.os.SystemClock.uptimeMillis();
+            android.view.MotionEvent down = android.view.MotionEvent.obtain(at, at,
+                    android.view.MotionEvent.ACTION_DOWN, x, y, 0);
+            android.view.MotionEvent up = android.view.MotionEvent.obtain(at, at + 40,
+                    android.view.MotionEvent.ACTION_UP, x, y, 0);
+            try {
+                assertTrue(tile.dispatchTouchEvent(down));
+                assertTrue(tile.dispatchTouchEvent(up));
+                shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(300));
+            } finally { down.recycle(); up.recycle(); }
+
+            android.widget.PopupWindow popup = shadowOf(RuntimeEnvironment.getApplication()).getLatestPopupWindow();
+            assertNotNull("Creator options must open a popup", popup);
+            assertTrue(popup.isShowing());
+            assertFalse(activity.isFinishing());
+            assertNull("Opening options must not navigate", shadowOf(activity).getNextStartedActivity());
+            GlassMenuTestSupport.assertGlass(popup);
+            assertTrue(GlassMenuTestSupport.hasAction(popup, "Remove from favorites"));
+            assertTrue(GlassMenuTestSupport.click(popup, "Change avatar"));
+            assertFalse(popup.isShowing());
+            Intent picker = shadowOf(activity).getNextStartedActivity();
+            assertNotNull("Existing avatar picker must launch", picker);
+            assertEquals(NativeFeedBrowserActivity.class.getName(), picker.getComponent().getClassName());
+            assertEquals(favorites, CreatorFavoriteStore.names(context));
+            assertFalse(activity.isFinishing());
+        }
+    }
+
+    @Test @Config(sdk = {35, 36})
+    public void mergedCreatorOptionsCanDismissAndRestoreDefaultAvatarWithoutUnmerging() {
+        seedFavorites(2);
+        assertTrue(ManualCreatorMergeStore.merge(context,
+                Collections.singleton("testcreator000"), Collections.singleton("testcreator001"),
+                "testcreator000", "testcreator000"));
+        try (ActivityController<CreatorsActivity> controller = Robolectric.buildActivity(CreatorsActivity.class).setup()) {
+            CreatorsActivity activity = controller.get();
+            RecyclerView grid = grid(activity);
+            layout(grid);
+            RecyclerView.ViewHolder holder = grid.getChildViewHolder(grid.getChildAt(0));
+            TextView more = ReflectionHelpers.getField(holder, "more");
+            java.util.Set<String> keys = new HashSet<>(Arrays.asList("testcreator000", "testcreator001"));
+            // Store the fixture after binding so the test needs no remote artwork request.
+            assertTrue(CreatorAvatarOverrideStore.save(context, keys,
+                    "https://fixture.invalid/avatar.jpg", "https://fixture.invalid/creator/"));
+            java.util.Set<String> favorites = new HashSet<>(CreatorFavoriteStore.names(context));
+            assertTrue(more.performClick());
+            android.widget.PopupWindow popup = shadowOf(RuntimeEnvironment.getApplication()).getLatestPopupWindow();
+            assertNotNull(popup);
+            assertTrue(popup.isShowing());
+            for (String option : Arrays.asList("Merged creators", "Change primary", "Unmerge",
+                    "Change avatar", "Use default avatar", "Remove from favorites"))
+                assertTrue(option, GlassMenuTestSupport.hasAction(popup, option));
+            popup.dismiss();
+            assertTrue(CreatorAvatarOverrideStore.has(context, keys));
+            assertEquals(favorites, CreatorFavoriteStore.names(context));
+            assertNull(shadowOf(activity).getNextStartedActivity());
+            assertFalse(activity.isFinishing());
+
+            assertTrue(more.performClick());
+            popup = shadowOf(RuntimeEnvironment.getApplication()).getLatestPopupWindow();
+            GlassMenuTestSupport.assertGlass(popup);
+            assertTrue(GlassMenuTestSupport.click(popup, "Use default avatar"));
+            assertFalse(popup.isShowing());
+            assertFalse(CreatorAvatarOverrideStore.has(context, keys));
+            assertEquals(favorites, CreatorFavoriteStore.names(context));
+            assertEquals(1, ManualCreatorMergeStore.load(context).size());
+            assertEquals(1, grid.getAdapter().getItemCount());
+            assertFalse(activity.isFinishing());
+        }
+    }
+
+    @Test @Config(sdk = {35, 36})
+    public void creatorHeaderArtworkMenuUsesTheSameGlassHost() {
+        seedFavorites(1);
+        try (ActivityController<CreatorsActivity> controller = Robolectric.buildActivity(CreatorsActivity.class).setup()) {
+            CreatorsActivity activity = controller.get();
+            View header = GlassMenuTestSupport.description(activity.getWindow().getDecorView(),
+                    "Favorite creators menu");
+            assertNotNull(header);
+            assertTrue(header.performClick());
+            android.widget.PopupWindow popup = shadowOf(RuntimeEnvironment.getApplication()).getLatestPopupWindow();
+            GlassMenuTestSupport.assertGlass(popup);
+            assertTrue(GlassMenuTestSupport.hasAction(popup, "Fetch missing artwork"));
+            popup.dismiss();
+            assertFalse(activity.isFinishing());
+            assertNull(shadowOf(activity).getNextStartedActivity());
+            assertEquals(1, CreatorFavoriteStore.names(context).size());
+        }
+    }
+
     private void writeUnread(String name, int count) throws Exception {
         UpdateInboxStore.Entry entry = new UpdateInboxStore.Entry();
         entry.id = "test-unread";
