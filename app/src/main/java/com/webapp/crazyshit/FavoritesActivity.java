@@ -88,6 +88,7 @@ public class FavoritesActivity extends Activity {
     @Override
     protected void onCreate(Bundle state) {
         super.onCreate(state);
+        LibraryDestinationChrome.prepareWindow(this);
         tab = getIntent() == null
                 ? TAB_CONTINUE
                 : getIntent().getIntExtra(EXTRA_START_TAB, TAB_CONTINUE);
