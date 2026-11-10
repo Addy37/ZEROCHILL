@@ -45,7 +45,7 @@ browser headers and Shows remain on their existing paths.
 Production application ID, signing identity, preferences, saved items, backups,
 creator identity, filtering, media ordering, source pagination, playback recovery,
 downloads and backend configuration remain. No migration, Supabase or remote-config
-change. Preview 32 uses `6000034`, above Preview 31 `6000033`, signed with
+change. Preview 33 uses `6000035`, above Preview 32 `6000034`, signed with
 the existing production key. One scoped candidate workflow verifies ancestry,
 package, stable certificate and upgrade version, and exports a branch/SHA-named
 APK. This does not authorize a public release.
@@ -68,6 +68,8 @@ Native rendering is intentionally used instead of importing V2's backdrop packag
 
 - `CreatorProfileHeader.java`, new `CreatorGalleryHero.java` and
   `NativeFeedBrowserActivity.java`: image-led header, overlays and rotation.
+- `CreatorGalleryReveal.java`, `CreatorGalleryTransitionTest.java`: separate
+  closing timing with synchronized native clip/rings and reverse-path coverage.
 - `OledImmersiveUiController.java`, `ResponsiveFitmentController.java`: preserve
   creator-owned image geometry while retaining safe insets.
 - `BunkrGalleryActivity.java`, `BunkrGalleryPagerAdapter.java`,
@@ -121,3 +123,18 @@ no merge or release. Actual validation and the signed artifact are in the PR.
 Preview 32 local validation passed: 40 tests across the existing header geometry,
 hero ownership/rotation and gallery reveal integration classes, plus
 `:app:assembleDebug` and `git diff --check`.
+
+## Preview 33: slightly quicker closing ripple
+
+The user accepted the taller hero and requested slightly faster closing. The
+creator-gallery reverse reveal now takes 550ms instead of 650ms at normal system
+animation scale. Opening remains 650ms. The native clip and ripple rings receive
+the same closing duration; Back during entry still scales the reverse duration by
+current revealed progress. The existing duration-aware completion deadline,
+exactly-once finish, underlying homepage visibility and reduced-motion behavior
+remain. Existing transition regressions check full and interrupted close timing
+and native/ring synchronization. This timing adjustment remains in draft PR #414;
+Preview 33 code `6000035` updates over Preview 32 without changing signing identity.
+
+Preview 33 local validation passed: 56 tests across the existing transition and
+reveal-integration classes, plus `:app:assembleDebug` and `git diff --check`.

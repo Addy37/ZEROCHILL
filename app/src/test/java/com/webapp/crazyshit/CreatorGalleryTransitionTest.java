@@ -210,7 +210,10 @@ public class CreatorGalleryTransitionTest {
         android.animation.Animator animator = ReflectionHelpers.getField(fixture.reveal, "animator");
         assertNotNull(animator);
         assertTrue(animator.getInterpolator() instanceof android.view.animation.AccelerateInterpolator);
-        assertEquals(650L, animator.getDuration());
+        assertEquals(550L, animator.getDuration());
+        OnlyFapHeroRippleView closingRipple = (OnlyFapHeroRippleView) fixture.reveal.getChildAt(1);
+        android.animation.Animator closingRings = ReflectionHelpers.getField(closingRipple, "animator");
+        assertEquals(animator.getDuration(), closingRings.getDuration());
         final int[] mediaOpens = {0};
         fixture.toolbar.setOnClickListener(view -> mediaOpens[0]++);
         android.view.MotionEvent down = android.view.MotionEvent.obtain(0, 0,
@@ -253,7 +256,7 @@ public class CreatorGalleryTransitionTest {
         assertTrue(fixture.reveal.close(() -> finishes[0]++));
         android.animation.Animator reverse = ReflectionHelpers.getField(fixture.reveal, "animator");
         assertNotNull(reverse);
-        assertEquals(Math.round(650L * progress), reverse.getDuration());
+        assertEquals(Math.round(550L * progress), reverse.getDuration());
         assertEquals(progress, ripple.progress(), .001f);
         assertEquals(35f, (Float) ReflectionHelpers.getField(ripple, "originX"), 0f);
         assertEquals(611f, (Float) ReflectionHelpers.getField(ripple, "originY"), 0f);

@@ -365,3 +365,14 @@ safe status-bar insets, compact collapse chrome and the Preview 31 menu fix.
 Preview 32 uses `7.0-preview.32-gallery-header`, code `6000034`, above Preview 31
 `6000033`, with unchanged production package and signing certificate. One updated
 signed test candidate; no merge, release, migration or backend change.
+
+
+## PR 414 Preview 33: quicker gallery closing ripple
+
+The user accepted the taller gallery hero and requested slightly quicker closing.
+On the same unmerged PR #414 branch, reverse reveal duration decreases from 650ms
+to 550ms while opening remains 650ms. Native clip/rings share the shorter duration,
+including progress-scaled interrupted entry. Preview 33 uses
+`7.0-preview.33-gallery-close`, code `6000035`, above Preview 32 `6000034`, with
+unchanged production package/certificate. One signed test candidate; no merge,
+release, migration or backend change.
