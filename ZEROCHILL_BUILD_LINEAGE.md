@@ -355,3 +355,13 @@ placement. Preview 31 uses version `7.0-preview.31-viewer-menu`, code `6000033`,
 above Preview 30 `6000032`; production package and signing certificate are retained.
 A single updated signed candidate workflow runs after local focused validation.
 No merge, release, backend change, data migration or integration-branch change.
+
+
+## PR 414 Preview 32: taller creator gallery hero
+
+The user requested approximately 20 percent more header height. On the same
+unmerged PR #414 branch, the creator hero increases from 280dp to 336dp, preserving
+safe status-bar insets, compact collapse chrome and the Preview 31 menu fix.
+Preview 32 uses `7.0-preview.32-gallery-header`, code `6000034`, above Preview 31
+`6000033`, with unchanged production package and signing certificate. One updated
+signed test candidate; no merge, release, migration or backend change.

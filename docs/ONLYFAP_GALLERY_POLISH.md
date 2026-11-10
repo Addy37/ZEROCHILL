@@ -11,7 +11,7 @@ new requests; no further merge, tag or release is authorized.
 - Creator gallery artwork begins directly beneath the status bar. Remove its
   redundant OnlyFap title and overflow toolbar; keep an accessible Back overlay
   and favorite access when the hero collapses. Increase the image viewport from
-  184dp to 280dp rather than keeping a separate 56dp black title strip.
+  184dp to 336dp rather than keeping a separate 56dp black title strip.
 - Randomly rotate photos from the same creator's already-loaded gallery at the
   existing OnlyFap 13-second cadence. Use listing originals when available, no
   video frames, extra provider crawling or unrelated creators. Keep current pixels
@@ -45,7 +45,7 @@ browser headers and Shows remain on their existing paths.
 Production application ID, signing identity, preferences, saved items, backups,
 creator identity, filtering, media ordering, source pagination, playback recovery,
 downloads and backend configuration remain. No migration, Supabase or remote-config
-change. Preview 31 uses `6000033`, above Preview 30 `6000032`, signed with
+change. Preview 32 uses `6000034`, above Preview 31 `6000033`, signed with
 the existing production key. One scoped candidate workflow verifies ancestry,
 package, stable certificate and upgrade version, and exports a branch/SHA-named
 APK. This does not authorize a public release.
@@ -106,3 +106,18 @@ Preview 31 local validation passed: 53 tests in each of debug and release
 `FavoriteImageNavigationTest`, plus `:app:assembleDebug` and `git diff --check`.
 The signed candidate repeats the broader 35-class suite including the new menu
 placement regressions. Physical menu visibility/touch acceptance remains pending.
+
+## Preview 32: twenty percent taller gallery hero
+
+The user requested about 20 percent more gallery header height. The image viewport
+increases from 280dp to 336dp, still directly beneath the safe status-bar inset.
+The existing collapse range derives from this height and retains its 56dp compact
+Back/favorite strip. Rotation, image selection and the Preview 31 overflow fix
+remain included. The existing API 35/36 header geometry regression now checks
+336dp before and after collapse. Preview 32 uses code `6000034`, preserving the
+production package/certificate for an update over Preview 31. Same draft PR #414;
+no merge or release. Actual validation and the signed artifact are in the PR.
+
+Preview 32 local validation passed: 40 tests across the existing header geometry,
+hero ownership/rotation and gallery reveal integration classes, plus
+`:app:assembleDebug` and `git diff --check`.

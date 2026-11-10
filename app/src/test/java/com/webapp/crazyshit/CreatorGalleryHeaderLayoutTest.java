@@ -75,7 +75,7 @@ public class CreatorGalleryHeaderLayoutTest {
         root.getLocationOnScreen(rootLocation); header.getLocationOnScreen(headerLocation);
         assertEquals(48, root.getPaddingTop());
         assertEquals(48, headerLocation[1] - rootLocation[1]);
-        assertEquals(280, header.getHeight());
+        assertEquals(336, header.getHeight());
         View back = findDescription(root, "Back");
         assertNotNull(back); assertEquals(48, back.getWidth()); assertEquals(48, back.getHeight());
         assertNull(findDescription(root, "Feed options"));
@@ -92,7 +92,7 @@ public class CreatorGalleryHeaderLayoutTest {
         View compact = root.findViewWithTag("creator_favorite_compact");
         assertEquals(View.VISIBLE, compact.getVisibility());
         assertEquals(48, back.getHeight());
-        assertEquals(280, header.getHeight());
+        assertEquals(336, header.getHeight());
         controller.pause().stop().destroy();
         ResponsiveFitmentController.release(browser);
         OledImmersiveUiController.detach(browser);

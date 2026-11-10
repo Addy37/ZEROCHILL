@@ -25,7 +25,7 @@ import java.util.concurrent.Executors;
 final class CreatorProfileHeader extends LinearLayout {
     private final NativeContentItem creator;
     private final TextView favorite;
-    static final int HERO_HEIGHT_DP = 280;
+    static final int HERO_HEIGHT_DP = 336;
     static final int OVERLAY_HEIGHT_DP = 56;
     private final ImageView banner;
     private final CreatorGalleryHero rotation;
