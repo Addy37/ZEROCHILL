@@ -132,10 +132,14 @@ final class RenderedThumbnailResolver {
             currentPage = null;
             busy = false;
             if (webView != null) {
-                webView.stopLoading();
-                // onPause alone can leave Chromium media/audio running behind another Activity.
-                webView.loadUrl("about:blank");
-                webView.onPause();
+                try {
+                    webView.stopLoading();
+                    // onPause alone can leave Chromium audio running in a background Activity.
+                    webView.loadUrl("about:blank");
+                    webView.onPause();
+                } catch (RuntimeException ignored) {
+                    // A renderer shutdown must not break Library navigation.
+                }
             }
         } else {
             if (webView != null) webView.onResume();
