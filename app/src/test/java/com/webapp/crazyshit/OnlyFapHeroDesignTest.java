@@ -42,4 +42,28 @@ public class OnlyFapHeroDesignTest {
 
         hub.close();
     }
+    @Test @Config(sdk = {35, 36})
+    public void galleryActionFollowsAllSavedAccentsAndRefreshesOnReturn() {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        OnlyFapHubView hub = new OnlyFapHubView(activity, new OnlyFapHubView.Listener() {
+            @Override public void onOpenCreator(NativeContentItem creator) { }
+            @Override public void onSearch() { }
+            @Override public void onViewAllFavorites() { }
+        });
+        android.widget.TextView action = org.robolectric.util.ReflectionHelpers.getField(hub, "heroAction");
+        for (AppearanceTheme.Accent accent : AppearanceTheme.Accent.values()) {
+            AppearanceTheme.setAccent(activity, accent);
+            // Refresh without starting provider discovery; this is the normal appearance bind.
+            org.robolectric.util.ReflectionHelpers.callInstanceMethod(hub, "applyHeroActionAccent");
+            android.graphics.drawable.GradientDrawable background =
+                    (android.graphics.drawable.GradientDrawable) action.getBackground();
+            assertEquals(accent.color, background.getColor().getDefaultColor());
+            assertEquals(AppearanceTheme.onAccent(activity), action.getCurrentTextColor());
+            org.junit.Assert.assertTrue(androidx.core.graphics.ColorUtils.calculateContrast(
+                    action.getCurrentTextColor(), accent.color) >= 4.5);
+        }
+        hub.close();
+        activity.finish();
+    }
+
 }

@@ -522,7 +522,7 @@ final class OnlyFapHubView extends FrameLayout {
         heroAction.setTypeface(null, android.graphics.Typeface.BOLD);
         heroAction.setGravity(Gravity.CENTER);
         heroAction.setVisibility(View.GONE);
-        heroAction.setBackground(ContentPreferenceUi.heroButtonBackground(context));
+        applyHeroActionAccent();
         heroAction.setMinimumHeight(dp(48));
         heroAction.setContentDescription("Open featured creator gallery");
         heroActions.addView(heroAction, new LinearLayout.LayoutParams(dp(136), dp(48)));
@@ -894,6 +894,15 @@ final class OnlyFapHubView extends FrameLayout {
         return trendingItems.size() + newItems.size() + hotItems.size() + popularItems.size();
     }
 
+    private void applyHeroActionAccent() {
+        android.graphics.drawable.GradientDrawable button = ContentPreferenceUi.heroButtonBackground(getContext());
+        int accent = AppearanceTheme.accent(getContext());
+        button.setColor(accent);
+        button.setStroke(dp(1), accent);
+        heroAction.setBackground(button);
+        heroAction.setTextColor(AppearanceTheme.onAccent(getContext()));
+    }
+
     void setProfileActive(boolean active) {
         if (profileAvatar == null) return;
         if (active) profileAvatar.resume();
@@ -901,7 +910,7 @@ final class OnlyFapHubView extends FrameLayout {
     }
 
     void setActive(boolean active) {
-        if (active) updateHeroDots();
+        if (active) { updateHeroDots(); applyHeroActionAccent(); }
         else ContentPreferenceUi.dismissAnchored(preferenceSelector);
         setProfileActive(active);
         if (this.active == active) return;
@@ -1778,8 +1787,6 @@ final class OnlyFapHubView extends FrameLayout {
     }
 
     private void commitHeroIdentity(HeroCandidate candidate) {
-        CreatorGalleryTransition.clearSource(heroImage);
-        CreatorGalleryTransition.clearSource(preferenceImage);
         heroItem = candidate;
         heroIndex = heroItems.indexOf(candidate);
         pendingHero = null;
@@ -1920,7 +1927,6 @@ final class OnlyFapHubView extends FrameLayout {
             boolean startupCrossfade) {
         if (!ownsPendingArtwork(requestId, targetView)) return false;
         ImageView outgoing = heroImage;
-        CreatorGalleryTransition.clearSource(outgoing);
         // Normal replacement previously kept the same view/background. Preserve those
         // background roles when swapping the two live targets (preference rifts still swap normally).
         Drawable incomingBackground = targetView.getBackground();
@@ -2688,7 +2694,6 @@ final class OnlyFapHubView extends FrameLayout {
 
         @Override
         public void onBindViewHolder(@NonNull Holder holder, int position) {
-            CreatorGalleryTransition.clearSource(holder.image);
             NativeContentItem creator = items.get(position);
             Context context = holder.card.getContext();
             holder.title.setText(creator.title);
@@ -2716,7 +2721,6 @@ final class OnlyFapHubView extends FrameLayout {
 
         @Override
         public void onViewRecycled(@NonNull Holder holder) {
-            CreatorGalleryTransition.clearSource(holder.image);
             Glide.with(holder.image).clear(holder.image);
             holder.card.setOnClickListener(null);
             holder.card.setOnLongClickListener(null);

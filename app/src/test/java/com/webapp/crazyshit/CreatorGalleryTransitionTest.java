@@ -3,179 +3,189 @@ package com.webapp.crazyshit;
 import android.app.Activity;
 import android.app.Application;
 import android.content.Intent;
-import android.graphics.Bitmap;
 import android.graphics.Color;
-import android.graphics.drawable.BitmapDrawable;
+import android.graphics.drawable.ColorDrawable;
 import android.view.View;
 import android.widget.FrameLayout;
-import android.widget.ImageView;
-import androidx.core.view.ViewCompat;
+import android.widget.TextView;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.Robolectric;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.annotation.Config;
-import org.robolectric.annotation.GraphicsMode;
+import org.robolectric.shadows.ShadowLooper;
+import org.robolectric.util.ReflectionHelpers;
+import java.util.concurrent.TimeUnit;
 import static org.junit.Assert.*;
+import static org.robolectric.Shadows.shadowOf;
 
 @RunWith(RobolectricTestRunner.class)
-@Config(application = Application.class, sdk = {29, 35})
-@GraphicsMode(GraphicsMode.Mode.NATIVE)
+@Config(application = Application.class, sdk = {35, 36}, qualifiers = "w400dp-h800dp-mdpi")
 public class CreatorGalleryTransitionTest {
-    private NativeContentItem creator(String query) {
-        return new NativeContentItem(NativeContentItem.KIND_CREATOR, "Creator", "https://example.com", "", "", "", "", "", query);
+    private NativeContentItem creator() {
+        return new NativeContentItem(NativeContentItem.KIND_CREATOR, "Creator", "https://example.com", "", "", "", "", "", "Creator");
     }
-
-    @Test public void namesFollowCreatorIdentityRatherThanArtwork() {
-        assertEquals(CreatorGalleryTransition.transitionName(creator(" Name ")),
-                CreatorGalleryTransition.transitionName(creator("name")));
-        assertNotEquals(CreatorGalleryTransition.transitionName(creator("name")),
-                CreatorGalleryTransition.transitionName(creator("other")));
-    }
-
-    @Test public void captureIsBoundedAndIndependentOfGlideOwnedBitmap() {
-        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
-        ImageView source = new ImageView(activity);
-        Bitmap owned = Bitmap.createBitmap(400, 1600, Bitmap.Config.ARGB_8888);
-        owned.eraseColor(Color.BLUE);
-        source.setImageBitmap(owned);
-        source.setScaleType(ImageView.ScaleType.CENTER_CROP);
-        source.layout(0, 0, 400, 1600);
-        Bitmap captured = CreatorGalleryTransition.capture(source);
-        assertNotNull(captured);
-        assertEquals(1024, captured.getHeight());
-        assertNotSame(owned, captured);
-        owned.recycle();
-        assertFalse(captured.isRecycled());
-        assertEquals(Color.BLUE, captured.getPixel(100, 500));
-        activity.finish();
-    }
-
-    @Test public void cornersFollowRealContainerRatherThanImageSize() {
-        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
-        FrameLayout card = new FrameLayout(activity);
-        ImageView image = new ImageView(activity);
-        card.addView(image);
-        image.layout(0, 0, 60, 60);
-        assertEquals(0f, CreatorGalleryTransition.sourceRadiusDp(image), 0f);
-        android.graphics.drawable.GradientDrawable shape = new android.graphics.drawable.GradientDrawable();
-        shape.setCornerRadius(17f * activity.getResources().getDisplayMetrics().density);
-        card.setBackground(shape);
-        assertEquals(17f, CreatorGalleryTransition.sourceRadiusDp(image), .01f);
-        activity.finish();
-    }
-
-    @Test public void reducedMotionAndDetachedAnchorsCannotMorph() {
-        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
-        GalleryMediaTransition.requestWindowFeature(activity);
-        ImageView source = new ImageView(activity);
-        source.setImageDrawable(new android.graphics.drawable.ColorDrawable(Color.BLUE));
-        FrameLayout root = new FrameLayout(activity);
-        root.addView(source, new FrameLayout.LayoutParams(200, 200));
-        activity.setContentView(root);
-        root.measure(View.MeasureSpec.makeMeasureSpec(400, View.MeasureSpec.EXACTLY),
-                View.MeasureSpec.makeMeasureSpec(800, View.MeasureSpec.EXACTLY));
-        root.layout(0, 0, 400, 800);
-        activity.getSharedPreferences("app_prefs", 0).edit().putBoolean("immersive_motion_enabled", false).commit();
-        assertFalse(CreatorGalleryTransition.canUse(activity, source, creator("name")));
-        activity.getSharedPreferences("app_prefs", 0).edit().putBoolean("immersive_motion_enabled", true).commit();
-        root.removeView(source);
-        assertFalse(CreatorGalleryTransition.canUse(activity, source, creator("name")));
-        CreatorGalleryTransition.clearSource(source);
-        assertNull(ViewCompat.getTransitionName(source));
-        activity.finish();
-    }
-
-    @Test public void recreatedGalleryWithoutPendingSourceKeepsNormalHeader() {
-        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
-        ImageView target = new ImageView(activity);
-        assertFalse(CreatorGalleryTransition.seedArtwork(target, "zerochill_creator_gallery_missing"));
-        assertNull(target.getDrawable());
-        assertFalse(CreatorGalleryTransition.sourceAvailable("zerochill_creator_gallery_missing"));
-        activity.finish();
-    }
-    private static final String NAME = "zerochill_creator_gallery_fixture";
 
     private static final class Fixture {
         final Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
-        final FrameLayout root = new FrameLayout(activity);
-        final ImageView source = new ImageView(activity);
-        final CreatorProfileHeader header;
-        Fixture(boolean seed) {
-            activity.setTheme(R.style.Theme_CrazyShit);
+        final FrameLayout liveGallery = new FrameLayout(activity);
+        final TextView toolbar = new TextView(activity);
+        final FrameLayout mediaGrid = new FrameLayout(activity);
+        final CreatorGalleryReveal reveal;
+        Fixture(boolean motion, boolean recreated) {
+            activity.setTheme(R.style.Theme_ZeroChill_ShowsWatch);
+            activity.setIntent(new Intent().putExtra(CreatorGalleryTransition.EXTRA_RIPPLE_REVEAL, true));
             activity.getSharedPreferences("app_prefs", 0).edit()
-                    .putBoolean("immersive_motion_enabled", true).commit();
-            source.setImageDrawable(new android.graphics.drawable.ColorDrawable(Color.BLUE));
-            ViewCompat.setTransitionName(source, NAME);
-            root.addView(source, new FrameLayout.LayoutParams(200, 200));
-            Bitmap copy = Bitmap.createBitmap(200, 200, Bitmap.Config.ARGB_8888);
-            copy.eraseColor(Color.BLUE);
-            org.robolectric.util.ReflectionHelpers.setStaticField(CreatorGalleryTransition.class,
-                    "latestAnchor", new java.lang.ref.WeakReference<View>(source));
-            org.robolectric.util.ReflectionHelpers.setStaticField(CreatorGalleryTransition.class,
-                    "pendingName", seed ? NAME : "");
-            org.robolectric.util.ReflectionHelpers.setStaticField(CreatorGalleryTransition.class,
-                    "pendingArtwork", seed ? copy : null);
-            // Empty query avoids discovery/network; this still builds the actual header.
-            header = new CreatorProfileHeader(activity, "Motion fixture", "", "");
-            header.setSharedTransitionName(NAME);
-            FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(400, 184);
-            params.topMargin = 300;
-            root.addView(header, params);
-            activity.setContentView(root);
-            root.measure(View.MeasureSpec.makeMeasureSpec(400, View.MeasureSpec.EXACTLY),
+                    .putBoolean("immersive_motion_enabled", motion).commit();
+            toolbar.setText("Creator gallery");
+            liveGallery.addView(toolbar, new FrameLayout.LayoutParams(-1, 56));
+            FrameLayout.LayoutParams gridParams = new FrameLayout.LayoutParams(-1, -1);
+            gridParams.topMargin = 56;
+            liveGallery.addView(mediaGrid, gridParams);
+            reveal = new CreatorGalleryReveal(activity, liveGallery,
+                    CreatorGalleryTransition.shouldAnimate(activity, recreated));
+            activity.setContentView(reveal);
+            reveal.measure(View.MeasureSpec.makeMeasureSpec(400, View.MeasureSpec.EXACTLY),
                     View.MeasureSpec.makeMeasureSpec(800, View.MeasureSpec.EXACTLY));
-            root.layout(0, 0, 400, 800);
+            reveal.layout(0, 0, 400, 800);
         }
-        void close() { root.removeAllViews(); activity.finish(); }
+        void drawFirstFrame() { reveal.getViewTreeObserver().dispatchOnPreDraw(); }
+        void close() { ((FrameLayout) reveal.getParent()).removeView(reveal); activity.finish(); }
     }
 
-    @Test public void actualHeaderConsumesSourceAndKeepsIndependentImageAfterReveal() {
-        Fixture fixture = new Fixture(true);
-        ImageView artwork = org.robolectric.util.ReflectionHelpers.getField(fixture.header, "transitionArtwork");
-        assertNotNull(artwork.getDrawable());
-        assertFalse(CreatorGalleryTransition.seedArtwork(new ImageView(fixture.activity), NAME));
-        fixture.source.setImageDrawable(null); // Original owner's clear cannot erase seed.
-        org.robolectric.shadows.ShadowLooper.idleMainLooper(1, java.util.concurrent.TimeUnit.SECONDS);
-        ImageView banner = org.robolectric.util.ReflectionHelpers.getField(fixture.header, "banner");
-        assertTrue(banner.getDrawable() instanceof BitmapDrawable);
-        assertEquals(Color.BLUE, ((BitmapDrawable) banner.getDrawable()).getBitmap().getPixel(10, 10));
-        View identity = org.robolectric.util.ReflectionHelpers.getField(fixture.header, "identityChrome");
-        assertEquals(1f, identity.getAlpha(), .01f);
+    @Test public void launchNeedsNoSourceImageAndSuppressesRapidRepeat() {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        Intent gallery = new Intent(activity, NativeFeedBrowserActivity.class);
+        CreatorGalleryTransition.start(activity, gallery, null, creator());
+        Intent started = shadowOf(activity).getNextStartedActivity();
+        assertTrue(CreatorGalleryTransition.isScoped(started));
+        assertEquals(1, started.getExtras().size());
+        CreatorGalleryTransition.start(activity, new Intent(activity, NativeFeedBrowserActivity.class),
+                new View(activity), creator());
+        assertNull(shadowOf(activity).getNextStartedActivity());
+        activity.finish();
+    }
+
+    @Test public void openingContainsWholeLiveGalleryWithNoImageBoundsMorph() {
+        Fixture fixture = new Fixture(true, false);
+        assertEquals(View.INVISIBLE, fixture.reveal.getVisibility());
+        assertSame(fixture.liveGallery, fixture.reveal.getChildAt(0));
+        assertEquals(400, fixture.liveGallery.getWidth());
+        assertEquals(800, fixture.liveGallery.getHeight());
+        assertTrue(fixture.reveal.getChildAt(1) instanceof OnlyFapHeroRippleView);
+        assertEquals(Color.BLACK, ((ColorDrawable) fixture.reveal.getBackground()).getColor());
+        fixture.drawFirstFrame();
+        // Loading and new content remain live while the root reveal is running.
+        fixture.toolbar.setText("Gallery updated during reveal");
+        TextView loadedMedia = new TextView(fixture.activity);
+        fixture.mediaGrid.addView(loadedMedia);
+        ShadowLooper.idleMainLooper(2, TimeUnit.SECONDS);
+        assertEquals(View.VISIBLE, fixture.reveal.getVisibility());
+        assertEquals("Gallery updated during reveal", fixture.toolbar.getText().toString());
+        assertSame(fixture.mediaGrid, loadedMedia.getParent());
+        assertEquals(0f, fixture.liveGallery.getTranslationX(), 0f);
+        assertEquals(0f, fixture.liveGallery.getTranslationY(), 0f);
+        assertEquals(1f, fixture.liveGallery.getScaleX(), 0f);
+        assertEquals(1f, fixture.liveGallery.getScaleY(), 0f);
         fixture.close();
     }
 
-    @Test public void actualHeaderReturnsOnceAndClearedIdentityFallsBack() {
-        Fixture fixture = new Fixture(true);
-        final int[] calls = {0};
-        assertTrue(fixture.header.prepareForSharedReturn(() -> calls[0]++));
-        assertTrue(fixture.header.prepareForSharedReturn(() -> calls[0]++));
-        assertEquals(1, calls[0]);
-        fixture.close();
-        Fixture recycled = new Fixture(true);
-        CreatorGalleryTransition.clearSource(recycled.source);
-        assertFalse(recycled.header.prepareForSharedReturn(() -> fail("Rebound source must fade")));
-        recycled.close();
+    @Test public void circleUsesHeroCenterAndCoversAllFourGalleryCorners() {
+        float radius = CreatorGalleryReveal.coverRadius(400, 800, 200, 376);
+        for (int x : new int[]{0, 400}) for (int y : new int[]{0, 800}) {
+            assertTrue(Math.hypot(x - 200, y - 376) <= radius + .001f);
+        }
+        assertEquals(650L, CreatorGalleryReveal.DURATION_MS);
     }
 
-    @Test public void retainedSourceSurvivesStoppedDecorButHiddenCardDoesNot() {
-        Fixture fixture = new Fixture(true);
-        fixture.activity.getWindow().getDecorView().setVisibility(View.INVISIBLE);
-        assertTrue(CreatorGalleryTransition.sourceAvailable(NAME));
-        fixture.source.setVisibility(View.INVISIBLE);
-        assertFalse(CreatorGalleryTransition.sourceAvailable(NAME));
-        fixture.activity.getWindow().getDecorView().setVisibility(View.VISIBLE);
+    @Test public void reducedMotionAndRecreationRevealImmediatelyWithoutReplay() {
+        Fixture reduced = new Fixture(false, false);
+        assertEquals(View.VISIBLE, reduced.reveal.getVisibility());
+        reduced.drawFirstFrame();
+        assertNull(ReflectionHelpers.getField(reduced.reveal, "animator"));
+        reduced.close();
+        Fixture recreated = new Fixture(true, true);
+        assertEquals(View.VISIBLE, recreated.reveal.getVisibility());
+        recreated.drawFirstFrame();
+        assertNull(ReflectionHelpers.getField(recreated.reveal, "animator"));
+        recreated.close();
+    }
+
+    @Test public void backDuringOpeningSettlesWholeTreeAndRepeatedCleanupIsSafe() {
+        Fixture fixture = new Fixture(true, false);
+        fixture.drawFirstFrame();
+        fixture.reveal.cancelAndShow(); // Same path as Back and Activity.onStop.
+        fixture.reveal.cancelAndShow();
+        assertEquals(View.VISIBLE, fixture.reveal.getVisibility());
+        assertNull(ReflectionHelpers.getField(fixture.reveal, "animator"));
+        assertSame(fixture.reveal, fixture.liveGallery.getParent());
+        ShadowLooper.idleMainLooper(2, TimeUnit.SECONDS);
+        assertEquals(View.VISIBLE, fixture.reveal.getVisibility());
         fixture.close();
     }
 
-    @Test public void recreatedActualHeaderWithoutSeedNeverHidesChromeOrWaitsForReturn() {
-        Fixture fixture = new Fixture(false);
-        assertFalse(fixture.header.prepareForSharedReturn(() -> fail("No source on recreation")));
-        View identity = org.robolectric.util.ReflectionHelpers.getField(fixture.header, "identityChrome");
-        assertEquals(1f, identity.getAlpha(), 0f);
-        ImageView artwork = org.robolectric.util.ReflectionHelpers.getField(fixture.header, "transitionArtwork");
-        assertEquals(View.INVISIBLE, artwork.getVisibility());
+    @Test public void detachBeforeFirstDrawCancelsPendingRevealWithoutReplay() {
+        Fixture fixture = new Fixture(true, false);
+        FrameLayout parent = (FrameLayout) fixture.reveal.getParent();
+        parent.removeView(fixture.reveal);
+        ShadowLooper.idleMainLooper(2, TimeUnit.SECONDS);
+        parent.addView(fixture.reveal);
+        fixture.drawFirstFrame();
+        assertEquals(View.VISIBLE, fixture.reveal.getVisibility());
+        assertNull(ReflectionHelpers.getField(fixture.reveal, "animator"));
         fixture.close();
     }
 
+    @Test public void deadlineCannotLeaveWholeGalleryInvisibleWithoutFirstDraw() {
+        Fixture fixture = new Fixture(true, false);
+        ShadowLooper.idleMainLooper(CreatorGalleryReveal.FALLBACK_MS + 100L, TimeUnit.MILLISECONDS);
+        assertEquals(View.VISIBLE, fixture.reveal.getVisibility());
+        assertNull(ReflectionHelpers.getField(fixture.reveal, "animator"));
+        fixture.close();
+    }
+
+    @Test public void safeInsetsKeepGalleryPaddedAndRippleConcentricWithWholeRoot() {
+        Fixture fixture = new Fixture(true, false);
+        fixture.reveal.setPadding(0, 48, 0, 24);
+        fixture.reveal.measure(View.MeasureSpec.makeMeasureSpec(400, View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(800, View.MeasureSpec.EXACTLY));
+        fixture.reveal.layout(0, 0, 400, 800);
+        View ripple = fixture.reveal.getChildAt(1);
+        assertEquals(0, ripple.getLeft());
+        assertEquals(0, ripple.getTop());
+        assertEquals(400, ripple.getRight());
+        assertEquals(800, ripple.getBottom());
+        assertEquals(48, fixture.liveGallery.getTop());
+        assertEquals(776, fixture.liveGallery.getBottom());
+        assertEquals(728, fixture.liveGallery.getHeight());
+        fixture.close();
+    }
+
+    @Test public void resizeDuringOpeningSettlesInsteadOfKeepingStaleNativeClip() {
+        Fixture fixture = new Fixture(true, false);
+        fixture.drawFirstFrame();
+        fixture.reveal.measure(View.MeasureSpec.makeMeasureSpec(600, View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(400, View.MeasureSpec.EXACTLY));
+        fixture.reveal.layout(0, 0, 600, 400);
+        assertEquals(View.VISIBLE, fixture.reveal.getVisibility());
+        assertNull(ReflectionHelpers.getField(fixture.reveal, "animator"));
+        assertEquals(600, fixture.liveGallery.getWidth());
+        assertEquals(400, fixture.liveGallery.getHeight());
+        fixture.close();
+    }
+
+    @Test public void delayedOledPassesCannotPaintOutsideScopedRevealRoot() {
+        Intent scoped = new Intent().putExtra(CreatorGalleryTransition.EXTRA_RIPPLE_REVEAL, true);
+        NativeFeedBrowserActivity activity = Robolectric.buildActivity(NativeFeedBrowserActivity.class, scoped).get();
+        activity.setTheme(R.style.Theme_ZeroChill_ShowsWatch);
+        FrameLayout content = new FrameLayout(activity);
+        activity.setContentView(content);
+        View outer = activity.findViewById(android.R.id.content);
+        outer.setBackgroundColor(Color.TRANSPARENT);
+        assertTrue(CreatorGalleryTransition.ownsRevealWindow(activity));
+        OledThemeController.applySoon(activity);
+        ShadowLooper.idleMainLooper(600L, TimeUnit.MILLISECONDS);
+        assertEquals(Color.TRANSPARENT, ((ColorDrawable) outer.getBackground()).getColor());
+        activity.finish();
+    }
 }

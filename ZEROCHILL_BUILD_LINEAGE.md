@@ -297,3 +297,13 @@ above Preview 25 `6000027`, with the existing production package and certificate
 One scoped signed-candidate workflow produces a branch/SHA-named test APK. No
 merge, release, publication, backend change, migration or integration synchronization
 is authorized. Physical OnePlus Android 16 acceptance remains pending.
+
+## PR 413 whole-gallery ripple follow-up (Preview 27)
+
+The user tested Preview 26 at `f1f3daa4` and supplied a recording. They request
+replacing gallery opening's image morph with the same hero-style ripple revealing
+the whole gallery, plus View Gallery following the saved accent. Continue the
+same `feature/zerochill-7-onlyfap-motion` branch and draft PR #413. Preview 27 uses
+`6000029`, above Preview 26 `6000028`, with the original production package and
+signing certificate. No gallery data, preference, backend or source changes.
+See `docs/ONLYFAP_V2_MOTION.md`. One signed test APK; no merge or publication.

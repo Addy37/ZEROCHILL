@@ -136,6 +136,7 @@ final class OledImmersiveUiController {
         View content = activity.findViewById(android.R.id.content);
         View shell = content instanceof ViewGroup && ((ViewGroup) content).getChildCount() > 0
                 ? ((ViewGroup) content).getChildAt(0) : content;
+        if (shell instanceof CreatorGalleryReveal) shell = ((ViewGroup) shell).getChildAt(0);
         View topBar = shell instanceof ViewGroup && ((ViewGroup) shell).getChildCount() > 0
                 ? ((ViewGroup) shell).getChildAt(0) : null;
 

@@ -120,6 +120,7 @@ public final class NativeFeedBrowserActivity extends Activity {
     private ViewPager2 creatorTabsPager;
     private TabLayout creatorTabs;
     private CreatorProfileHeader creatorProfile;
+    private CreatorGalleryReveal creatorGalleryReveal;
     private FrameLayout compactCreatorFavorite;
     private AppBarLayout creatorAppBar;
     private ShowDetailsHeader showDetailsHeader;
@@ -348,6 +349,10 @@ public final class NativeFeedBrowserActivity extends Activity {
 
     @Override
     protected void onCreate(Bundle state) {
+        if (CreatorGalleryTransition.ownsRevealWindow(this)) {
+            setTheme(R.style.Theme_ZeroChill_ShowsWatch);
+            AppearanceTheme.applyAccentOverlay(this);
+        }
         super.onCreate(state);
         GalleryMediaTransition.requestWindowFeature(this);
         GalleryMediaTransition.configureSource(this);
@@ -398,9 +403,6 @@ public final class NativeFeedBrowserActivity extends Activity {
                 ""
         );
         if (!creatorQuery.isEmpty()) {
-            if (getIntent().hasExtra(CreatorGalleryTransition.EXTRA_NAME)) {
-                CreatorGalleryTransition.configureGallery(this);
-            }
             source = SOURCE_BUNKR;
             baseUrl = BunkrRepository.searchUrl(creatorQuery);
         } else if (BunkrRepository.isAlbumUrl(baseUrl)) source = SOURCE_BUNKR;
@@ -534,8 +536,6 @@ public final class NativeFeedBrowserActivity extends Activity {
                     baseUrl,
                     creatorGalleryCacheKey
             );
-            creatorProfile.setSharedTransitionName(
-                    getIntent().getStringExtra(CreatorGalleryTransition.EXTRA_NAME));
             creatorProfile.bindCompactFavorite(compactCreatorFavorite);
             AppBarLayout.LayoutParams profileParams =
                     new AppBarLayout.LayoutParams(-1, dp(184));
@@ -828,7 +828,11 @@ public final class NativeFeedBrowserActivity extends Activity {
         body.addView(empty, new FrameLayout.LayoutParams(-1, -1));
 
         View root = showDetailsMode ? wrapShowDetailsOled(shell, top) : shell;
-        if (isCreatorGallery() && !shitTokReturnTransition.isEmpty()) {
+        if (isCreatorGallery() && CreatorGalleryTransition.ownsRevealWindow(this)) {
+            creatorGalleryReveal = new CreatorGalleryReveal(this, root,
+                    CreatorGalleryTransition.shouldAnimate(this, restoredBrowserState != null));
+            setContentView(creatorGalleryReveal);
+        } else if (isCreatorGallery() && !shitTokReturnTransition.isEmpty()) {
             installShitTokReturnSurface(root);
         } else {
             setContentView(root);
@@ -1169,8 +1173,8 @@ public final class NativeFeedBrowserActivity extends Activity {
 
     private void finishToShitTok() {
         if (isFinishing()) return;
-        if (getIntent().hasExtra(CreatorGalleryTransition.EXTRA_NAME)) {
-            if (creatorProfile != null && creatorProfile.prepareForSharedReturn(this::finishAfterTransition)) return;
+        if (CreatorGalleryTransition.isScoped(getIntent())) {
+            if (creatorGalleryReveal != null) creatorGalleryReveal.cancelAndShow();
             finish();
             boolean motion = ZeroChillMotion.animationsEnabled(this);
             overridePendingTransition(motion ? android.R.anim.fade_in : 0, motion ? android.R.anim.fade_out : 0);
@@ -3064,6 +3068,7 @@ public final class NativeFeedBrowserActivity extends Activity {
     }
 
     @Override protected void onPause() {
+        if (creatorGalleryReveal != null) creatorGalleryReveal.cancelAndShow();
         favoriteReadGeneration++;
         if (galleryContextMenu != null) galleryContextMenu.dismiss();
         setGalleryPreviewsActive(false);
@@ -3112,12 +3117,13 @@ public final class NativeFeedBrowserActivity extends Activity {
 
     @Override
     protected void onStop() {
-        if (creatorProfile != null) creatorProfile.stopTransitionMotion();
+        if (creatorGalleryReveal != null) creatorGalleryReveal.cancelAndShow();
         super.onStop();
     }
 
     @Override
     protected void onDestroy() {
+        if (creatorGalleryReveal != null) creatorGalleryReveal.cancelAndShow();
         setGalleryPreviewsActive(false);
         generation++;
         if (isFinishing() && !shitTokReturnTransition.isEmpty()) {
