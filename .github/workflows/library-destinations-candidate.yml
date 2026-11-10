@@ -1,6 +1,6 @@
-name: Phase 5 Library Menu Native Popup Candidate
+name: Phase 5 Library Header Spacing Candidate
 
-# Preview 18: avoid Compose popup lifecycle on standard Library Activities.
+# Preview 19: correct Library destination double-safe-inset spacing.
 # One scoped candidate run; no release publication or additional APK variants.
 on:
   push:
@@ -17,8 +17,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 35
     env:
-      APP_VERSION_CODE: '6000020'
-      APP_VERSION_NAME: '7.0-preview.18-native-library-menus'
+      APP_VERSION_CODE: '6000021'
+      APP_VERSION_NAME: '7.0-preview.19-library-header-spacing'
       ZEROCHILL_SOURCE_SHA: ${{ github.sha }}
       FEEDBACK_ENDPOINT: ${{ secrets.FEEDBACK_ENDPOINT }}
       FEEDBACK_ANON_KEY: ${{ secrets.FEEDBACK_ANON_KEY }}
@@ -113,7 +113,7 @@ jobs:
               return package[1], int(package[2]), cert[1]
           current, previous = inspect(candidate), inspect(stable)
           assert current[0] == previous[0] == 'com.addy37.crazyshitunofficial'
-          assert current[1] == 6000020 and current[1] > max(6000019, previous[1])
+          assert current[1] == 6000021 and current[1] > max(6000020, previous[1])
           assert current[2] == previous[2], 'Production signing certificate changed'
           report = (f'Source: {os.environ["GITHUB_SHA"]}\n'
                     f'Branch: {os.environ["GITHUB_REF_NAME"]}\n'
@@ -129,7 +129,7 @@ jobs:
       - name: Upload APK and checksum
         uses: actions/upload-artifact@v4
         with:
-          name: ZeroChill-Phase5-LibraryNativeMenu-signed
+          name: ZeroChill-Phase5-LibraryHeaderSpacing-signed
           path: candidate/
           if-no-files-found: error
           retention-days: 14
@@ -137,7 +137,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ZeroChill-Phase5-LibraryNativeMenu-validation
+          name: ZeroChill-Phase5-LibraryHeaderSpacing-validation
           path: |
             app/build/test-results/testDebugUnitTest/
             app/build/reports/visual-tests/
