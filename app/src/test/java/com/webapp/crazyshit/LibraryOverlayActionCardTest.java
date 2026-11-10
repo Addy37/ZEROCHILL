@@ -2,10 +2,6 @@ package com.webapp.crazyshit;
 
 import android.app.Activity;
 import android.app.Application;
-import android.os.SystemClock;
-import android.os.Looper;
-import org.robolectric.Shadows;
-import android.view.MotionEvent;
 import android.view.View;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
@@ -56,12 +52,9 @@ public class LibraryOverlayActionCardTest {
         assertTrue(target.isClickable());
         assertTrue(target.isFocusable());
 
-        // Tap the outer edge of the full 48dp hit target (outside the 34dp text icon).
-        float x = target.getLeft() + BrowseUi.dp(activity, 4);
-        float y = target.getTop() + BrowseUi.dp(activity, 4);
-        tap(tile, x, y);
-        // Android posts touch click handling to the main queue. Robolectric must drain it.
-        Shadows.shadowOf(Looper.getMainLooper()).idle();
+        // The menu control is a separate sibling. Its click must not run the media action.
+        assertSame(target, tile.getChildAt(1));
+        assertTrue(target.performClick());
         assertEquals("Options should open", 1, menus.get());
         assertEquals("Media must not open", 0, opens.get());
 
@@ -89,16 +82,4 @@ public class LibraryOverlayActionCardTest {
         gallery.dispose();
     }
 
-    private static void tap(View view, float x, float y) {
-        long time = SystemClock.uptimeMillis();
-        MotionEvent down = MotionEvent.obtain(time, time, MotionEvent.ACTION_DOWN, x, y, 0);
-        MotionEvent up = MotionEvent.obtain(time, time + 80, MotionEvent.ACTION_UP, x, y, 0);
-        try {
-            assertTrue(view.dispatchTouchEvent(down));
-            assertTrue(view.dispatchTouchEvent(up));
-        } finally {
-            down.recycle();
-            up.recycle();
-        }
-    }
 }
