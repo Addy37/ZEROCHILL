@@ -71,4 +71,44 @@ public class CreatorGalleryRevealIntegrationTest {
         ((java.util.concurrent.ExecutorService) ReflectionHelpers.getField(browser, "io")).shutdownNow();
     }
 
+    private static final class NoProviderWork extends java.util.concurrent.AbstractExecutorService {
+        private boolean shutdown;
+        @Override public void execute(Runnable task) { }
+        @Override public void shutdown() { shutdown = true; }
+        @Override public java.util.List<Runnable> shutdownNow() { shutdown = true; return java.util.Collections.emptyList(); }
+        @Override public boolean isShutdown() { return shutdown; }
+        @Override public boolean isTerminated() { return shutdown; }
+        @Override public boolean awaitTermination(long time, java.util.concurrent.TimeUnit unit) { return shutdown; }
+    }
+
+    @Test public void actualBrowserBackReversesAndPauseCannotResurrectGallery() {
+        org.robolectric.android.controller.ActivityController<NativeFeedBrowserActivity> controller =
+                Robolectric.buildActivity(NativeFeedBrowserActivity.class);
+        NativeFeedBrowserActivity browser = controller.get();
+        browser.setTheme(R.style.Theme_CrazyShit);
+        ReflectionHelpers.setField(browser, "io", new NoProviderWork());
+        controller.setup(); // Ordinary browser shell; provider tasks intentionally never execute.
+        browser.setIntent(new Intent().putExtra(CreatorGalleryTransition.EXTRA_RIPPLE_REVEAL, true)
+                .putExtra(CreatorGalleryTransition.EXTRA_ORIGIN_SCREEN_X, 30f)
+                .putExtra(CreatorGalleryTransition.EXTRA_ORIGIN_SCREEN_Y, 610f));
+        browser.getSharedPreferences("app_prefs", 0).edit()
+                .putBoolean("immersive_motion_enabled", true).commit();
+        CreatorGalleryReveal reveal = new CreatorGalleryReveal(browser, new View(browser), false);
+        ReflectionHelpers.setField(browser, "creatorGalleryReveal", reveal);
+        browser.setContentView(reveal);
+        reveal.measure(View.MeasureSpec.makeMeasureSpec(400, View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(800, View.MeasureSpec.EXACTLY));
+        reveal.layout(0, 0, 400, 800);
+        browser.onBackPressed();
+        assertTrue((Boolean) ReflectionHelpers.getField(reveal, "closing"));
+        assertFalse(browser.isFinishing());
+        browser.onBackPressed(); // Repeated Back does not start another close.
+        controller.pause(); // Lifecycle interruption must finish once and hide the tree.
+        assertTrue(browser.isFinishing());
+        assertEquals(View.INVISIBLE, reveal.getVisibility());
+        reveal.cancelAndShow();
+        assertEquals(View.INVISIBLE, reveal.getVisibility());
+        controller.stop().destroy();
+    }
+
 }

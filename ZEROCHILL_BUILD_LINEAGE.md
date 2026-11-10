@@ -307,3 +307,14 @@ same `feature/zerochill-7-onlyfap-motion` branch and draft PR #413. Preview 27 u
 `6000029`, above Preview 26 `6000028`, with the original production package and
 signing certificate. No gallery data, preference, backend or source changes.
 See `docs/ONLYFAP_V2_MOTION.md`. One signed test APK; no merge or publication.
+
+
+## PR 413 tap-origin reverse ripple follow-up (Preview 28)
+
+The user approved Preview 27's full-gallery reveal at `51c7c2bd`, supplied a new
+recording and requests opening from the actual tap and Back reversing to that
+origin. Continue the same branch and PR #413. Preview 28 uses `6000030`, above
+Preview 27 `6000029`, with the original production package/certificate. Persist
+origin metadata only; no screenshot, source-image morph, data or backend changes.
+Physical OnePlus Android 16 acceptance remains pending. One signed test APK;
+no merge, tag, release or publication authorized.

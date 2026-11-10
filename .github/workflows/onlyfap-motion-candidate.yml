@@ -1,6 +1,6 @@
 name: Phase 6 OnlyFap Motion Candidate
 
-# Preview 27: OnlyFap visual motion candidate; no release publication.
+# Preview 28: OnlyFap visual motion candidate; no release publication.
 # One scoped candidate run; no release publication or additional APK variants.
 on:
   push:
@@ -17,8 +17,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 35
     env:
-      APP_VERSION_CODE: '6000029'
-      APP_VERSION_NAME: '7.0-preview.27-gallery-ripple'
+      APP_VERSION_CODE: '6000030'
+      APP_VERSION_NAME: '7.0-preview.28-tap-origin-ripple'
       ZEROCHILL_SOURCE_SHA: ${{ github.sha }}
       FEEDBACK_ENDPOINT: ${{ secrets.FEEDBACK_ENDPOINT }}
       FEEDBACK_ANON_KEY: ${{ secrets.FEEDBACK_ANON_KEY }}
@@ -128,7 +128,7 @@ jobs:
               return package[1], int(package[2]), cert[1]
           current, previous = inspect(candidate), inspect(stable)
           assert current[0] == previous[0] == 'com.addy37.crazyshitunofficial'
-          assert current[1] == 6000029 and current[1] > max(6000028, previous[1])
+          assert current[1] == 6000030 and current[1] > max(6000029, previous[1])
           assert current[2] == previous[2], 'Production signing certificate changed'
           report = (f'Source: {os.environ["GITHUB_SHA"]}\n'
                     f'Branch: {os.environ["GITHUB_REF_NAME"]}\n'

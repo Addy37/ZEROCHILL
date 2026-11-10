@@ -13,6 +13,8 @@ final class OnlyFapHeroRippleView extends View {
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private ValueAnimator animator;
     private float progress = 1f;
+    private float originX = Float.NaN;
+    private float originY = Float.NaN;
     private int accent = Color.rgb(8, 146, 208);
 
     OnlyFapHeroRippleView(Context context) {
@@ -24,12 +26,28 @@ final class OnlyFapHeroRippleView extends View {
 
     void setAccent(int color) { accent = color; invalidate(); }
 
-    void reveal() {
+    void setCenter(float x, float y) {
+        originX = x;
+        originY = y;
+        invalidate();
+    }
+
+    float progress() { return progress; }
+
+    void reveal() { animateRings(0f, 1f, 650L); }
+
+    void reverse(float fromFraction, long duration) {
+        animateRings(Math.max(0f, Math.min(1f, fromFraction)), 0f, duration);
+    }
+
+    private void animateRings(float from, float to, long duration) {
         if (animator != null) animator.cancel();
         if (!isAttachedToWindow() || !ZeroChillMotion.animationsEnabled(getContext())) { progress = 1f; invalidate(); return; }
-        animator = ValueAnimator.ofFloat(0f, 1f);
-        animator.setDuration(650L);
-        animator.setInterpolator(new DecelerateInterpolator());
+        progress = from;
+        animator = ValueAnimator.ofFloat(from, to);
+        animator.setDuration(duration);
+        animator.setInterpolator(to < from ? new android.view.animation.AccelerateInterpolator()
+                : new DecelerateInterpolator());
         animator.addUpdateListener(a -> {
             progress = (float) a.getAnimatedValue();
             invalidate();
@@ -46,8 +64,8 @@ final class OnlyFapHeroRippleView extends View {
     @Override protected void onDraw(Canvas canvas) {
         super.onDraw(canvas);
         if (progress >= 1f) return;
-        float centerX = getWidth() * .5f;
-        float centerY = getHeight() * .47f;
+        float centerX = Float.isFinite(originX) ? originX : getWidth() * .5f;
+        float centerY = Float.isFinite(originY) ? originY : getHeight() * .47f;
         float radius = (float) Math.hypot(
                 Math.max(centerX, getWidth() - centerX),
                 Math.max(centerY, getHeight() - centerY));

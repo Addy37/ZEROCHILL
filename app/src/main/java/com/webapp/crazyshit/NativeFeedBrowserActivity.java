@@ -1174,7 +1174,10 @@ public final class NativeFeedBrowserActivity extends Activity {
     private void finishToShitTok() {
         if (isFinishing()) return;
         if (CreatorGalleryTransition.isScoped(getIntent())) {
-            if (creatorGalleryReveal != null) creatorGalleryReveal.cancelAndShow();
+            if (creatorGalleryReveal != null && creatorGalleryReveal.close(() -> {
+                finish();
+                overridePendingTransition(0, 0);
+            })) return;
             finish();
             boolean motion = ZeroChillMotion.animationsEnabled(this);
             overridePendingTransition(motion ? android.R.anim.fade_in : 0, motion ? android.R.anim.fade_out : 0);

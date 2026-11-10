@@ -66,4 +66,54 @@ public class OnlyFapHeroDesignTest {
         activity.finish();
     }
 
+    @Test @Config(sdk = {35, 36}, qualifiers = "w400dp-h800dp-mdpi")
+    public void galleryButtonDispatchKeepsOffCenterTouchThroughPostedClick() throws Exception {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        activity.setTheme(R.style.Theme_CrazyShit);
+        OnlyFapHubView hub = new OnlyFapHubView(activity, new OnlyFapHubView.Listener() {
+            @Override public void onOpenCreator(NativeContentItem creator) { }
+            @Override public void onOpenCreator(NativeContentItem creator, android.view.View anchor) {
+                CreatorGalleryTransition.start(activity,
+                        new android.content.Intent(activity, NativeFeedBrowserActivity.class), anchor, creator);
+            }
+            @Override public void onSearch() { }
+            @Override public void onViewAllFavorites() { }
+        });
+        NativeContentItem creator = new NativeContentItem(NativeContentItem.KIND_CREATOR,
+                "Fixture", "https://example.com/fixture", "", "", "", "", "", "fixture");
+        Class<?> candidateClass = Class.forName("com.webapp.crazyshit.OnlyFapHubView$HeroCandidate");
+        java.lang.reflect.Constructor<?> constructor = candidateClass.getDeclaredConstructor(
+                NativeContentItem.class, String.class, String.class);
+        constructor.setAccessible(true);
+        org.robolectric.util.ReflectionHelpers.setField(hub, "heroItem",
+                constructor.newInstance(creator, "https://example.com/fixture.jpg", "https://example.com"));
+        android.view.View button = org.robolectric.util.ReflectionHelpers.getField(hub, "heroAction");
+        button.setVisibility(android.view.View.VISIBLE);
+        activity.setContentView(hub);
+        hub.measure(android.view.View.MeasureSpec.makeMeasureSpec(400, android.view.View.MeasureSpec.EXACTLY),
+                android.view.View.MeasureSpec.makeMeasureSpec(800, android.view.View.MeasureSpec.EXACTLY));
+        hub.layout(0, 0, 400, 800);
+        android.graphics.Rect bounds = new android.graphics.Rect();
+        button.getDrawingRect(bounds);
+        hub.offsetDescendantRectToMyCoords(button, bounds);
+        float x = bounds.left + 8f, y = bounds.centerY();
+        long now = android.os.SystemClock.uptimeMillis();
+        android.view.MotionEvent down = android.view.MotionEvent.obtain(now, now,
+                android.view.MotionEvent.ACTION_DOWN, x, y, 0);
+        android.view.MotionEvent up = android.view.MotionEvent.obtain(now, now + 20,
+                android.view.MotionEvent.ACTION_UP, x, y, 0);
+        try {
+            hub.dispatchTouchEvent(down);
+            hub.dispatchTouchEvent(up);
+            org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper())
+                    .idleFor(20, java.util.concurrent.TimeUnit.MILLISECONDS);
+            android.content.Intent launched = org.robolectric.Shadows.shadowOf(activity).getNextStartedActivity();
+            org.junit.Assert.assertNotNull(launched);
+            assertEquals(x, launched.getFloatExtra(CreatorGalleryTransition.EXTRA_ORIGIN_SCREEN_X, -1), .01f);
+            assertEquals(y, launched.getFloatExtra(CreatorGalleryTransition.EXTRA_ORIGIN_SCREEN_Y, -1), .01f);
+        } finally {
+            down.recycle(); up.recycle(); hub.close(); activity.finish();
+        }
+    }
+
 }

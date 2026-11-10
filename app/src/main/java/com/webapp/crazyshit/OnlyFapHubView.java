@@ -959,6 +959,18 @@ final class OnlyFapHubView extends FrameLayout {
                 state.getString("content_preference", "")) ? new Bundle(state) : null;
     }
 
+    @Override public boolean dispatchTouchEvent(android.view.MotionEvent event) {
+        // Observe the actual pointer before the child invokes its gallery click.
+        // Leave swipe detection, nested scrolling and press feedback with their owners.
+        CreatorGalleryTransition.recordTap(getContext(), event);
+        return super.dispatchTouchEvent(event);
+    }
+
+    @Override public boolean dispatchKeyEvent(android.view.KeyEvent event) {
+        CreatorGalleryTransition.clearTap(getContext());
+        return super.dispatchKeyEvent(event);
+    }
+
     @Override protected void onDetachedFromWindow() {
         finishHeroMorph();
         ContentPreferenceUi.clearPresentation(this);
