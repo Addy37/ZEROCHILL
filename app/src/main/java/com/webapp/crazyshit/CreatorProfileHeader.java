@@ -25,9 +25,13 @@ import java.util.concurrent.Executors;
 final class CreatorProfileHeader extends LinearLayout {
     private final NativeContentItem creator;
     private final TextView favorite;
+    static final int HERO_HEIGHT_DP = 280;
+    static final int OVERLAY_HEIGHT_DP = 56;
     private final ImageView banner;
+    private final CreatorGalleryHero rotation;
     private final ExecutorService heroIo = Executors.newSingleThreadExecutor();
     private boolean detached;
+    private boolean resumed;
     private FrameLayout compactFavorite;
     private ImageView compactAvatar;
     private TextView compactFavoriteBadge;
@@ -78,7 +82,14 @@ final class CreatorProfileHeader extends LinearLayout {
         banner.setScaleType(ImageView.ScaleType.CENTER_CROP);
         banner.setImageDrawable(new ColorDrawable(Color.rgb(13, 15, 18)));
         banner.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
-        hero.addView(banner, new FrameLayout.LayoutParams(-1, -1));
+        FrameLayout artwork = new FrameLayout(context);
+        hero.addView(artwork, new FrameLayout.LayoutParams(-1, -1));
+        artwork.addView(banner, new FrameLayout.LayoutParams(-1, -1));
+        ImageView secondBanner = new ImageView(context);
+        secondBanner.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        secondBanner.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
+        artwork.addView(secondBanner, new FrameLayout.LayoutParams(-1, -1));
+        rotation = new CreatorGalleryHero(banner, secondBanner);
 
         View shade = new View(context);
         shade.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
@@ -124,7 +135,7 @@ final class CreatorProfileHeader extends LinearLayout {
         TextView subtitle = BrowseUi.text(
                 context,
                 mergedGroup == null
-                        ? "OnlyFap creator"
+                        ? "Creator"
                         : "Merged from " + mergedGroup.members.size() + " profiles",
                 12,
                 Color.rgb(205, 209, 216)
@@ -158,7 +169,8 @@ final class CreatorProfileHeader extends LinearLayout {
         identityParams.gravity = Gravity.BOTTOM;
         hero.addView(identity, identityParams);
 
-        addView(hero, new LayoutParams(-1, dp(184)));
+        addView(hero, new LayoutParams(-1, -1));
+        setMinimumHeight(dp(OVERLAY_HEIGHT_DP));
 
         loadAvatar(avatar);
         showHero(creator.imageUrl, creator.url);
@@ -190,18 +202,20 @@ final class CreatorProfileHeader extends LinearLayout {
         });
     }
 
+    void setGalleryItems(List<NativeContentItem> items, boolean append) { rotation.items(items, append); }
+
+    void setActive(boolean active) {
+        resumed = active;
+        rotation.active(active && getVisibility() == View.VISIBLE);
+    }
+
+    void setExpanded(boolean expanded) {
+        setVisibility(expanded ? View.VISIBLE : View.INVISIBLE);
+        rotation.active(resumed && expanded);
+    }
+
     private void showHero(String heroUrl, String referer) {
-        if (detached || heroUrl == null || heroUrl.isEmpty()) return;
-        Glide.with(banner)
-                .load(withReferer(heroUrl, referer))
-                .centerCrop()
-                .transition(ThumbnailFades.hero())
-                .placeholder(new ColorDrawable(Color.rgb(13, 15, 18)))
-                .error(Glide.with(banner)
-                        .load(creator.imageUrl.isEmpty() ? null : withReferer(creator.imageUrl, creator.url))
-                        .centerCrop()
-                        .error(new ColorDrawable(Color.rgb(13, 15, 18))))
-                .into(banner);
+        if (!detached) rotation.fallback(heroUrl, referer);
     }
 
     private GlideUrl withReferer(String imageUrl, String referer) {
@@ -320,7 +334,7 @@ final class CreatorProfileHeader extends LinearLayout {
         if (favoritePreferences != null) favoritePreferences.unregisterOnSharedPreferenceChangeListener(favoriteListener);
         heroIo.shutdownNow();
         if (compactAvatar != null) Glide.with(compactAvatar).clear(compactAvatar);
-        Glide.with(banner).clear(banner);
+        rotation.close();
         super.onDetachedFromWindow();
     }
 

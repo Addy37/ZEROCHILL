@@ -25,6 +25,7 @@ final class ZeroChillMenu {
     private final View anchor;
     private final MenuBuilder menu;
     private OnMenuItemClickListener listener;
+    private Runnable dismissListener;
 
     ZeroChillMenu(Context context, View anchor) {
         this.context = context;
@@ -42,6 +43,9 @@ final class ZeroChillMenu {
     void dispatch(MenuItem item) { menu.performItemAction(item, 0); }
     void setOnMenuItemClickListener(OnMenuItemClickListener listener) { this.listener = listener; }
 
+    void setOnDismissListener(Runnable listener) { dismissListener = listener; }
+    private void dismissed() { if (dismissListener != null) dismissListener.run(); }
+
     void show() {
         showInternal(true);
     }
@@ -52,8 +56,8 @@ final class ZeroChillMenu {
     }
 
     private void showInternal(boolean preferCompose) {
-        if (!anchor.isAttachedToWindow() || menu.size() == 0) return;
-        if (preferCompose && ZeroChillComposeMenu.show(context, anchor, menu, this::dispatch)) return;
+        if (!anchor.isAttachedToWindow() || menu.size() == 0) { dismissed(); return; }
+        if (preferCompose && ZeroChillComposeMenu.show(context, anchor, menu, this::dispatch, this::dismissed)) return;
         LinearLayout rows = new LinearLayout(context);
         rows.setOrientation(LinearLayout.VERTICAL);
         int inset = dp(6);
@@ -82,7 +86,10 @@ final class ZeroChillMenu {
             @Override public void onViewDetachedFromWindow(View view) { popup.dismiss(); }
         };
         anchor.addOnAttachStateChangeListener(attachment);
-        popup.setOnDismissListener(() -> anchor.removeOnAttachStateChangeListener(attachment));
+        popup.setOnDismissListener(() -> {
+            anchor.removeOnAttachStateChangeListener(attachment);
+            dismissed();
+        });
         popup.setElevation(dp(12));
         for (int index = 0; index < menu.size(); index++) {
             MenuItem item = menu.getItem(index);

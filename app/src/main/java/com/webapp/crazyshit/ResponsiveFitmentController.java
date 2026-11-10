@@ -185,7 +185,9 @@ final class ResponsiveFitmentController {
         }
         setCenteredWidth(activity, shell, widthDp, maxWidthDp);
 
-        if (landscape && shell instanceof ViewGroup) {
+        if (landscape && shell instanceof ViewGroup
+                && !(activity instanceof NativeFeedBrowserActivity
+                && ((NativeFeedBrowserActivity) activity).ownsCreatorGalleryChrome())) {
             View top = findTopBar(shell, activity);
             if (top != null && top.getLayoutParams() != null) {
                 ViewGroup.LayoutParams params = top.getLayoutParams();

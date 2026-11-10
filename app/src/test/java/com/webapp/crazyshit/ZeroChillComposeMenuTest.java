@@ -41,6 +41,35 @@ public class ZeroChillComposeMenuTest {
         assertEquals(37, calls.get());
     }
     @Test @Config(sdk = {35, 36})
+    public void nativeAndComposeMenusNotifyDismissalExactlyOnceAndReleaseDetachedAnchors() {
+        try (org.robolectric.android.controller.ActivityController<android.app.Activity> controller =
+                org.robolectric.Robolectric.buildActivity(android.app.Activity.class).setup()) {
+            android.app.Activity activity = controller.get();
+            android.widget.FrameLayout root = new android.widget.FrameLayout(activity);
+            android.widget.TextView anchor = new android.widget.TextView(activity);
+            root.addView(anchor, new android.widget.FrameLayout.LayoutParams(96, 96));
+            activity.setContentView(root);
+            for (boolean nativeMenu : new boolean[]{true, false}) {
+                java.util.concurrent.atomic.AtomicInteger dismissals = new java.util.concurrent.atomic.AtomicInteger();
+                ZeroChillMenu menu = new ZeroChillMenu(activity, anchor);
+                menu.getMenu().add("Menu item"); menu.setOnDismissListener(dismissals::incrementAndGet);
+                if (nativeMenu) menu.showNative(); else menu.show();
+                android.widget.PopupWindow popup = org.robolectric.Shadows.shadowOf(RuntimeEnvironment.getApplication()).getLatestPopupWindow();
+                assertNotNull(popup); popup.dismiss(); popup.dismiss();
+                assertEquals(1, dismissals.get());
+                if (nativeMenu) menu.showNative(); else menu.show();
+                root.removeView(anchor);
+                assertEquals(2, dismissals.get());
+                root.addView(anchor, new android.widget.FrameLayout.LayoutParams(96, 96));
+            }
+            java.util.concurrent.atomic.AtomicInteger skipped = new java.util.concurrent.atomic.AtomicInteger();
+            ZeroChillMenu empty = new ZeroChillMenu(activity, anchor);
+            empty.setOnDismissListener(skipped::incrementAndGet); empty.show();
+            assertEquals(1, skipped.get());
+        }
+    }
+
+    @Test @Config(sdk = {35, 36})
     public void standardActivityPopupOwnsItsWindowCompositionAndClosesCleanly() {
         try (org.robolectric.android.controller.ActivityController<android.app.Activity> controller =
                 org.robolectric.Robolectric.buildActivity(android.app.Activity.class).setup()) {

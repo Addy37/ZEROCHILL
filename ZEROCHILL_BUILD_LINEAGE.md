@@ -330,3 +330,16 @@ screen area. Preview 29 uses `6000031`, above Preview 28 `6000030`, with origina
 production package/certificate. No screenshots, data, preferences or backend
 migration. Physical OnePlus Android 16 backdrop/menu acceptance remains pending.
 One signed test APK; no merge, tag, publication or release authorized.
+
+## Approved PR 413 merge and new gallery polish candidate (Preview 30)
+
+The user physically approved Preview 29 `88684adf` and explicitly requested merge.
+PR #413 merged at `8e8c7c55a84328db61e6de8f92667f8444bfecdf`; its signed candidate
+and 239 focused local tests passed. New branch `feature/zerochill-onlyfap-gallery-polish`
+starts at that exact main merge and preserves all approved motion, backdrop and
+centered-menu work. The new request extends the creator hero below the status bar,
+rotates loaded creator photos and adapts V2 media controls. Preview 30 uses `6000032`,
+above Preview 29 `6000031`, with original production package/signing identity.
+See `docs/ONLYFAP_GALLERY_POLISH.md`. One new draft PR and signed test APK; do not
+merge this follow-up, publish or release before new physical approval. No backend,
+source configuration, data migration or integration-branch change is authorized.

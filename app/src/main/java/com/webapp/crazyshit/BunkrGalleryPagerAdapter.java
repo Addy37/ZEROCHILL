@@ -58,6 +58,8 @@ final class BunkrGalleryPagerAdapter
         default void onVideoBack() { }
         default void onVideoMenu(View anchor) { }
         default void onVideoFullscreen() { }
+        default void onVideoSurfaceTap() { }
+        default void onArtworkReady(int position) { }
 
         default void onSharedElementReady(View target) {
         }
@@ -126,6 +128,32 @@ final class BunkrGalleryPagerAdapter
     void toggleVideoControls(int position) {
         RecyclerView.ViewHolder raw = attachedList == null ? null : attachedList.findViewHolderForAdapterPosition(position);
         if (raw instanceof Holder) ((Holder) raw).controls.onVideoTap();
+    }
+
+    private boolean unifiedVideoChrome;
+
+    void setUnifiedVideoChrome(boolean enabled) {
+        unifiedVideoChrome = enabled;
+        Holder holder = attachedHolder(activeVideoPosition);
+        if (holder != null) holder.controls.suspend(enabled);
+    }
+    void showVideoControls(int position) {
+        Holder holder = attachedHolder(position);
+        if (holder != null) { holder.controls.suspend(false); holder.controls.show(); }
+    }
+    boolean hideVideoControls(int position) {
+        Holder holder = attachedHolder(position);
+        if (holder == null || !holder.controls.isVisible()) return false;
+        holder.controls.suspend(unifiedVideoChrome); holder.controls.hide(); return true;
+    }
+    private Holder attachedHolder(int position) {
+        RecyclerView.ViewHolder raw = attachedList == null ? null : attachedList.findViewHolderForAdapterPosition(position);
+        return raw instanceof Holder ? (Holder) raw : null;
+    }
+
+    boolean hasUsableArtwork(int position) {
+        Holder holder = attachedHolder(position);
+        return holder != null && holder.hasUsableImage;
     }
 
     void setVideoFullscreen(boolean fullscreen) {
@@ -321,7 +349,8 @@ final class BunkrGalleryPagerAdapter
         root.addView(playerView, new FrameLayout.LayoutParams(-1, -1));
         ShowsFullscreenControls controls = new ShowsFullscreenControls(playerView);
         FullscreenVideoGestures gestures = new FullscreenVideoGestures(
-                playerView, playerView::getPlayer, controls, () -> playerView.getPlayer() != null);
+                playerView, playerView::getPlayer, controls, () -> playerView.getPlayer() != null,
+                false, () -> { if (unifiedVideoChrome) listener.onVideoSurfaceTap(); else controls.onVideoTap(); });
         playerView.setOnTouchListener(gestures);
         for (int id : new int[] { R.id.shows_save, R.id.shows_share, R.id.shows_like })
             playerView.findViewById(id).setVisibility(View.GONE);
@@ -452,6 +481,7 @@ final class BunkrGalleryPagerAdapter
                                 if (holder.imageRequest != request || !item.url.equals(holder.boundUrl)) return true;
                                 holder.imageLoading = false;
                                 holder.hasUsableImage = true;
+                                listener.onArtworkReady(holder.getBindingAdapterPosition());
                                 if (item.isImage() && !resolved.isEmpty() && preview.equals(resolved)) {
                                     failed.remove(item.url);
                                     loading.remove(item.url);
@@ -478,6 +508,7 @@ final class BunkrGalleryPagerAdapter
                                         Target<Drawable> target, DataSource source, boolean first) {
                                     if (holder.imageRequest != request || !item.url.equals(holder.boundUrl)) return true;
                                     holder.hasUsableImage = true;
+                                    listener.onArtworkReady(holder.getBindingAdapterPosition());
                                     holder.itemView.post(() -> {
                                         if (holder.imageRequest == request) updateState(holder, holder.getBindingAdapterPosition());
                                     });
@@ -559,7 +590,7 @@ final class BunkrGalleryPagerAdapter
             holder.controls.release();
             holder.gestures.cancel();
             holder.playerView.setPlayer(active ? activePlayer : null);
-            if (active) holder.controls.bind(activePlayer);
+            if (active) { holder.controls.bind(activePlayer); holder.controls.suspend(unifiedVideoChrome); }
         }
         holder.playerView.setVisibility(active ? View.VISIBLE : View.GONE);
         android.widget.ImageButton fullscreen = holder.playerView.findViewById(R.id.shows_fullscreen_toggle);

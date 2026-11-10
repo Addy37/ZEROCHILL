@@ -92,13 +92,11 @@ public final class BunkrGalleryActivity extends Activity {
 
     private ViewPager2 pager;
     private BunkrGalleryPagerAdapter adapter;
-    private LinearLayout topBar;
-    private LinearLayout bottomBar;
-    private TextView countView;
-    private TextView downloadAction;
-    private TextView itemTitleView;
+    private OnlyFapViewerChrome viewerChrome;
     private TextView creatorTitleView;
-    private TextView itemMetaView;
+    private TextView itemTitleView;
+    private final Object favoriteWriteLock = new Object();
+    private int favoriteReadGeneration;
     private ZeroChillLoadingView initialLoading;
     private ProgressBar loadMoreLoading;
     private boolean chromeVisible = true;
@@ -239,6 +237,13 @@ public final class BunkrGalleryActivity extends Activity {
                     @Override public void onVideoBack() { onBackPressed(); }
                     @Override public void onVideoMenu(View anchor) { showMenu(anchor); }
                     @Override public void onVideoFullscreen() { toggleVideoFullscreen(); }
+                    @Override public void onVideoSurfaceTap() {
+                        if (adapter.hideVideoControls(pager.getCurrentItem())) setChromeVisible(true);
+                        else toggleChrome();
+                    }
+                    @Override public void onArtworkReady(int position) {
+                        if (viewerChrome != null && pager.getCurrentItem() == position) viewerChrome.artworkReady();
+                    }
 
                     @Override
                     public void onSharedElementReady(View target) {
@@ -250,85 +255,17 @@ public final class BunkrGalleryActivity extends Activity {
         pager.setAdapter(adapter);
         root.addView(pager, new FrameLayout.LayoutParams(-1, -1));
 
-        topBar = new LinearLayout(this);
-        topBar.setOrientation(LinearLayout.HORIZONTAL);
-        topBar.setGravity(Gravity.CENTER_VERTICAL);
-        topBar.setPadding(dp(6), dp(5), dp(6), dp(5));
-        topBar.setBackgroundColor(Color.argb(220, 10, 10, 12));
-
-        TextView back = action("‹", 32);
-        back.setContentDescription("Back");
-        back.setOnClickListener(v -> finishViewer());
-        topBar.addView(back, new LinearLayout.LayoutParams(dp(52), dp(54)));
-
-        LinearLayout heading = new LinearLayout(this);
-        heading.setOrientation(LinearLayout.VERTICAL);
-        heading.setGravity(Gravity.CENTER_VERTICAL);
-        heading.setPadding(dp(5), 0, dp(5), 0);
-
-        TextView album = new TextView(this);
-        creatorTitleView = album;
-        album.setText(albumTitle);
-        album.setTextColor(Color.WHITE);
-        album.setTextSize(17);
-        album.setTypeface(null, android.graphics.Typeface.BOLD);
-        album.setSingleLine(true);
-        album.setEllipsize(TextUtils.TruncateAt.END);
-        heading.addView(album, new LinearLayout.LayoutParams(-1, -2));
-
-        countView = new TextView(this);
-        countView.setTextColor(Color.rgb(190, 190, 198));
-        countView.setTextSize(12);
-        countView.setSingleLine(true);
-        heading.addView(countView, new LinearLayout.LayoutParams(-1, -2));
-        topBar.addView(heading, new LinearLayout.LayoutParams(0, -1, 1f));
-
-        downloadAction = action("↓", 24);
-        downloadAction.setContentDescription("Download video");
-        downloadAction.setOnClickListener(v -> downloadCurrentVideo());
-        downloadAction.setVisibility(View.GONE);
-        topBar.addView(downloadAction, new LinearLayout.LayoutParams(dp(52), dp(54)));
-
-        TextView share = action("↗", 22);
-        share.setContentDescription("Share item");
-        share.setOnClickListener(v -> shareCurrent());
-        topBar.addView(share, new LinearLayout.LayoutParams(dp(52), dp(54)));
-
-        TextView more = action("⋮", 27);
-        more.setContentDescription("More options");
-        more.setOnClickListener(this::showMenu);
-        topBar.addView(more, new LinearLayout.LayoutParams(dp(52), dp(54)));
-
-        FrameLayout.LayoutParams topParams = new FrameLayout.LayoutParams(-1, dp(64));
-        topParams.gravity = Gravity.TOP;
-        root.addView(topBar, topParams);
-        applyTopBarInsets();
-
-        bottomBar = new LinearLayout(this);
-        bottomBar.setOrientation(LinearLayout.VERTICAL);
-        bottomBar.setGravity(Gravity.CENTER_VERTICAL);
-        bottomBar.setPadding(dp(18), dp(10), dp(18), dp(12));
-        bottomBar.setBackgroundColor(Color.argb(220, 10, 10, 12));
-
-        itemTitleView = new TextView(this);
-        itemTitleView.setTextColor(Color.WHITE);
-        itemTitleView.setTextSize(14);
-        itemTitleView.setTypeface(null, android.graphics.Typeface.BOLD);
-        itemTitleView.setSingleLine(true);
-        itemTitleView.setEllipsize(TextUtils.TruncateAt.END);
-        bottomBar.addView(itemTitleView, new LinearLayout.LayoutParams(-1, -2));
-
-        itemMetaView = new TextView(this);
-        itemMetaView.setTextColor(Color.rgb(185, 185, 194));
-        itemMetaView.setTextSize(12);
-        itemMetaView.setSingleLine(true);
-        LinearLayout.LayoutParams metaParams = new LinearLayout.LayoutParams(-1, -2);
-        metaParams.topMargin = dp(3);
-        bottomBar.addView(itemMetaView, metaParams);
-
-        FrameLayout.LayoutParams bottomParams = new FrameLayout.LayoutParams(-1, dp(70));
-        bottomParams.gravity = Gravity.BOTTOM;
-        root.addView(bottomBar, bottomParams);
+        viewerChrome = new OnlyFapViewerChrome(this, new OnlyFapViewerChrome.Actions() {
+            @Override public void close() { finishViewer(); }
+            @Override public void favorite() { toggleCurrentFavorite(); }
+            @Override public void playback() { toggleCurrentPlayback(); }
+            @Override public void fullscreen() { toggleVideoFullscreen(); }
+            @Override public void more(View anchor) { showMenu(anchor); }
+            @Override public void hide() { setChromeVisible(false); }
+        });
+        root.addView(viewerChrome, new FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL));
+        creatorTitleView = itemTitleView = viewerChrome.creatorLabel();
+        adapter.setUnifiedVideoChrome(true);
 
         initialLoading = new ZeroChillLoadingView(this, "Loading gallery...", true);
         FrameLayout.LayoutParams loadingParams =
@@ -345,8 +282,7 @@ public final class BunkrGalleryActivity extends Activity {
         root.addView(loadMoreLoading, loadMoreParams);
 
         if (sharedElementPending) {
-            topBar.setAlpha(0f);
-            bottomBar.setAlpha(0f);
+            viewerChrome.setVisible(false);
         }
 
         setContentView(root);
@@ -364,6 +300,7 @@ public final class BunkrGalleryActivity extends Activity {
                 pendingVideoPosition = -1;
                 releasePlayer();
                 updateChrome(position);
+                setChromeVisible(true);
                 resolvePhoto(position);
                 preloadNeighbors(position);
                 maybeAutoplayInitialSelection(position);
@@ -372,34 +309,6 @@ public final class BunkrGalleryActivity extends Activity {
         });
     }
 
-    private void applyTopBarInsets() {
-        if (topBar == null) return;
-        final int baseLeft = dp(6);
-        final int baseTop = dp(5);
-        final int baseRight = dp(6);
-        final int baseBottom = dp(5);
-        final int baseHeight = dp(64);
-
-        ViewCompat.setOnApplyWindowInsetsListener(topBar, (view, windowInsets) -> {
-            Insets safe = windowInsets.getInsets(
-                    WindowInsetsCompat.Type.statusBars()
-                            | WindowInsetsCompat.Type.displayCutout()
-            );
-            view.setPadding(
-                    baseLeft + safe.left,
-                    baseTop + safe.top,
-                    baseRight + safe.right,
-                    baseBottom
-            );
-            android.view.ViewGroup.LayoutParams params = view.getLayoutParams();
-            if (params != null && params.height != baseHeight + safe.top) {
-                params.height = baseHeight + safe.top;
-                view.setLayoutParams(params);
-            }
-            return windowInsets;
-        });
-        ViewCompat.requestApplyInsets(topBar);
-    }
 
     private void showSnapshot(BunkrGallerySessionStore.Snapshot snapshot) {
         boolean finishInitialLoader = initialLoading.getVisibility() == View.VISIBLE
@@ -615,14 +524,7 @@ public final class BunkrGalleryActivity extends Activity {
         sharedElementPending = false;
         if (adapter != null) adapter.finishOpeningTransition();
         sharedElementCompleted = sharedElementTarget != null;
-        if (chromeVisible && topBar != null && bottomBar != null) {
-            topBar.animate().cancel();
-            bottomBar.animate().cancel();
-            topBar.animate().alpha(1f)
-                    .setDuration(GalleryMediaTransition.CHROME_FADE_MS).start();
-            bottomBar.animate().alpha(1f)
-                    .setDuration(GalleryMediaTransition.CHROME_FADE_MS).start();
-        }
+        if (viewerChrome != null) viewerChrome.setVisible(chromeVisible);
         int autoplayPosition = pendingTransitionAutoplayPosition;
         pendingTransitionAutoplayPosition = -1;
         if (autoplayPosition >= 0) {
@@ -650,8 +552,8 @@ public final class BunkrGalleryActivity extends Activity {
 
         returningToGallery = true;
         generation++;
-        topBar.animate().cancel();
-        bottomBar.animate().cancel();
+        viewerChrome.hold();
+        viewerChrome.animate().cancel();
         pager.setUserInputEnabled(false);
         View target = adapter.prepareSharedReturn(pager, pager.getCurrentItem());
         releasePlayer();
@@ -660,7 +562,7 @@ public final class BunkrGalleryActivity extends Activity {
             overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out);
             return;
         }
-        GalleryMediaTransition.configureReturnSurfaces(this, viewerBackdrop, topBar, bottomBar,
+        GalleryMediaTransition.configureReturnSurfaces(this, viewerBackdrop, viewerChrome,
                 initialLoading, loadMoreLoading);
         final boolean[] returnStarted = {false};
         Runnable startReturn = () -> {
@@ -930,7 +832,7 @@ public final class BunkrGalleryActivity extends Activity {
 
     private void playVideo(int position, NativeContentItem item) {
         if (activeVideoPosition == position && player != null) {
-            adapter.toggleVideoControls(position);
+            toggleChrome();
             return;
         }
         playbackRecovery.reset();
@@ -1006,6 +908,7 @@ public final class BunkrGalleryActivity extends Activity {
         DefaultMediaSourceFactory mediaSourceFactory = new DefaultMediaSourceFactory(this)
                 .setDataSourceFactory(data);
         player = new ExoPlayer.Builder(this).setMediaSourceFactory(mediaSourceFactory).build();
+        if (viewerChrome != null) viewerChrome.updatePlayer(player);
         activeVideoPosition = position;
         videoSizeKnown = false;
         if (PhoneOrientationPolicy.isPhoneSized(this)
@@ -1074,7 +977,7 @@ public final class BunkrGalleryActivity extends Activity {
         });
         player.setPlayWhenReady(true);
         player.prepare();
-        setChromeVisible(false);
+        setChromeVisible(true);
     }
 
     private DefaultHttpDataSource.Factory videoHttpFactory(String mediaUrl, String requestReferer) {
@@ -1110,6 +1013,7 @@ public final class BunkrGalleryActivity extends Activity {
         boolean eligibilityChanged = !videoSizeKnown || portraitVideo != portrait;
         portraitVideo = portrait;
         videoSizeKnown = true;
+        if (viewerChrome != null) viewerChrome.updateOrientation(!portraitVideo, landscapeFullscreen);
         if (portraitVideo) {
             manualVideoFullscreen = sensorVideoFullscreen = false;
             if (PhoneOrientationPolicy.isPhoneSized(this)
@@ -1154,37 +1058,67 @@ public final class BunkrGalleryActivity extends Activity {
         }
         activeVideoPosition = -1;
         if (adapter != null) adapter.clearActiveVideo();
+        if (viewerChrome != null) { viewerChrome.updatePlayer(null); viewerChrome.updateOrientation(false, landscapeFullscreen); }
     }
 
     private void updateChrome(int position) {
+        if (viewerChrome == null) return;
         NativeContentItem item = adapter.itemAt(position);
-        int total = adapter.getItemCount();
-        countView.setText(total == 0 ? "" : (position + 1) + " of " + total);
-        if (item == null) {
-            downloadAction.setVisibility(View.GONE);
-            itemTitleView.setText("");
-            itemMetaView.setText("");
-            return;
-        }
-        downloadAction.setVisibility(item.isVideo() ? View.VISIBLE : View.GONE);
-        itemTitleView.setText(item.title);
+        viewerChrome.updateMedia(item == null ? "" : item.url, item == null ? albumTitle : item.title,
+                item == null ? 0 : position + 1, adapter.getItemCount(), item != null && item.isVideo());
+        String name = ""; Runnable open = null;
         if (savedFavoriteImage(item)) {
             Intent gallery = savedCreatorGallery();
-            String name = gallery == null ? "" : value(gallery.getStringExtra(NativeFeedBrowserActivity.EXTRA_TITLE));
+            name = gallery == null ? item.title : value(gallery.getStringExtra(NativeFeedBrowserActivity.EXTRA_TITLE));
             if (name.isEmpty()) name = item.title;
-            itemTitleView.setText(name);
-            creatorTitleView.setText(name);
-            for (TextView label : new TextView[]{creatorTitleView, itemTitleView}) {
-                label.setOnClickListener(gallery == null ? null : v -> openSavedCreatorGallery());
-                label.setClickable(gallery != null);
-                label.setFocusable(gallery != null);
-                label.setContentDescription(gallery == null ? name : "Open gallery for " + name);
-            }
+            if (gallery != null) open = this::openSavedCreatorGallery;
         }
-        ArrayList<String> meta = new ArrayList<>();
-        meta.add(item.isVideo() ? "Video" : "Photo");
-        if (item.views != null && !item.views.isEmpty()) meta.add(item.views);
-        itemMetaView.setText(TextUtils.join("  •  ", meta));
+        viewerChrome.setCreatorAction(name, open);
+        if (adapter.hasUsableArtwork(position)) viewerChrome.artworkReady();
+        refreshCurrentFavorite();
+    }
+
+    private void toggleCurrentPlayback() {
+        int position = pager.getCurrentItem();
+        NativeContentItem item = adapter.itemAt(position);
+        if (item == null || !item.isVideo()) return;
+        if (player == null || activeVideoPosition != position) onMediaTap(position, item);
+        else if (player.getPlaybackState() == Player.STATE_ENDED) { player.seekTo(0); player.play(); }
+        else if (player.getPlayWhenReady()) player.pause(); else player.play();
+    }
+
+    private void refreshCurrentFavorite() {
+        if (isFinishing() || isDestroyed() || viewerChrome == null || adapter == null || pager == null) return;
+        NativeContentItem current = adapter.itemAt(pager.getCurrentItem());
+        final int request = ++favoriteReadGeneration;
+        if (current == null) return;
+        mediaIo.execute(() -> {
+            boolean saved = false;
+            for (FavoriteStore.Item item : FavoriteStore.mediaFavorites(this))
+                if (current.url.equals(item.url)) { saved = true; break; }
+            final boolean value = saved;
+            runOnUiThread(() -> {
+                if (request == favoriteReadGeneration && !isFinishing() && !isDestroyed()
+                        && adapter.itemAt(pager.getCurrentItem()) == current) viewerChrome.updateFavorite(value);
+            });
+        });
+    }
+
+    private void toggleCurrentFavorite() {
+        if (isFinishing() || isDestroyed() || adapter == null || pager == null) return;
+        NativeContentItem current = adapter.itemAt(pager.getCurrentItem());
+        if (current == null) return;
+        mediaIo.execute(() -> {
+            synchronized (favoriteWriteLock) {
+                boolean saved = false;
+                for (FavoriteStore.Item item : FavoriteStore.mediaFavorites(this))
+                    if (current.url.equals(item.url)) { saved = true; break; }
+                BunkrGallerySessionStore.Snapshot snapshot = BunkrGallerySessionStore.snapshot(sessionId);
+                FavoriteStore.setMediaFavorite(this, current, !saved,
+                        snapshot == null ? value(creatorQuery) : snapshot.creatorQuery);
+            }
+            runOnUiThread(() -> { if (!isFinishing() && !isDestroyed()) refreshCurrentFavorite(); });
+        });
     }
 
     private void toggleChrome() {
@@ -1192,22 +1126,9 @@ public final class BunkrGalleryActivity extends Activity {
     }
 
     private void setChromeVisible(boolean visible) {
+        if (returningToGallery) return;
         chromeVisible = visible;
-        topBar.animate().cancel();
-        bottomBar.animate().cancel();
-        if (visible) {
-            topBar.setVisibility(View.VISIBLE);
-            bottomBar.setVisibility(View.VISIBLE);
-            topBar.animate().alpha(1f).setDuration(140L).start();
-            bottomBar.animate().alpha(1f).setDuration(140L).start();
-        } else {
-            topBar.animate().alpha(0f).setDuration(140L).withEndAction(() -> {
-                if (!chromeVisible) topBar.setVisibility(View.INVISIBLE);
-            }).start();
-            bottomBar.animate().alpha(0f).setDuration(140L).withEndAction(() -> {
-                if (!chromeVisible) bottomBar.setVisibility(View.INVISIBLE);
-            }).start();
-        }
+        if (viewerChrome != null) viewerChrome.setVisible(visible && !sharedElementPending);
     }
 
     @Override
@@ -1219,7 +1140,7 @@ public final class BunkrGalleryActivity extends Activity {
 
     private void applyViewerOrientation(int orientation) {
         boolean landscape = orientation == Configuration.ORIENTATION_LANDSCAPE;
-        if (topBar == null || bottomBar == null) {
+        if (viewerChrome == null) {
             setSystemBars(true);
             return;
         }
@@ -1232,6 +1153,7 @@ public final class BunkrGalleryActivity extends Activity {
             if (restoreChromeAfterLandscape) setChromeVisible(true);
             restoreChromeAfterLandscape = false;
         }
+        viewerChrome.updateOrientation(videoSizeKnown && !portraitVideo, landscape);
         setSystemBars(true);
     }
 
@@ -1259,8 +1181,11 @@ public final class BunkrGalleryActivity extends Activity {
 
     private void showMenu(View anchor) {
         NativeContentItem current = adapter.itemAt(pager.getCurrentItem());
+        if (viewerChrome != null) viewerChrome.setMenuOpen(true);
         ZeroChillMenu menu = new ZeroChillMenu(this, anchor);
+        menu.setOnDismissListener(() -> { if (viewerChrome != null) viewerChrome.setMenuOpen(false); });
         if (savedFavoriteImage(current)) {
+            menu.getMenu().add("Share item").setOnMenuItemClickListener(item -> { shareCurrent(); return true; });
             menu.getMenu().add("Open gallery").setEnabled(savedCreatorGallery() != null)
                     .setOnMenuItemClickListener(item -> { openSavedCreatorGallery(); return true; });
             menu.getMenu().add("Remove from favorites").setOnMenuItemClickListener(item -> {
@@ -1272,8 +1197,11 @@ public final class BunkrGalleryActivity extends Activity {
             menu.show();
             return;
         }
+        menu.getMenu().add("Share item").setEnabled(current != null).setOnMenuItemClickListener(item -> { shareCurrent(); return true; });
         if (current != null && current.isVideo()) {
             menu.getMenu().add(Menu.NONE, 3, 0, "Download video");
+            menu.getMenu().add("Advanced playback options").setEnabled(player != null)
+                    .setOnMenuItemClickListener(item -> { setChromeVisible(false); adapter.showVideoControls(pager.getCurrentItem()); return true; });
         }
         menu.getMenu().add(Menu.NONE, 1, 1, "Open item page");
         menu.getMenu().add(
@@ -1423,6 +1351,7 @@ public final class BunkrGalleryActivity extends Activity {
     protected void onResume() {
         super.onResume();
         recoveryResumed = true;
+        if (viewerChrome != null) { viewerChrome.setVisible(chromeVisible && !sharedElementPending); refreshCurrentFavorite(); }
         if (videoOrientationListener != null) videoOrientationListener.enable();
     }
 
@@ -1440,6 +1369,8 @@ public final class BunkrGalleryActivity extends Activity {
 
     @Override
     protected void onPause() {
+        favoriteReadGeneration++;
+        if (viewerChrome != null) viewerChrome.setVisible(false);
         if (mediaContextMenu != null) mediaContextMenu.dismiss();
         if (videoOrientationListener != null) videoOrientationListener.disable();
         recoveryResumed = false;
@@ -1450,6 +1381,7 @@ public final class BunkrGalleryActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        if (viewerChrome != null) viewerChrome.dispose();
         if (videoOrientationListener != null) videoOrientationListener.disable();
         generation++;
         if (adapter != null) adapter.stopReveals();

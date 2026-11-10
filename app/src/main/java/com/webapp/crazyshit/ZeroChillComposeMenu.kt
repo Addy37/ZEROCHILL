@@ -65,7 +65,8 @@ internal object ZeroChillComposeMenu {
         (0 until menu.size()).map { menu.getItem(it) }.filter { it.isVisible }
 
     @JvmStatic
-    fun show(context: Context, anchor: View, menu: Menu, onSelected: Consumer<MenuItem>): Boolean {
+    @JvmOverloads
+    fun show(context: Context, anchor: View, menu: Menu, onSelected: Consumer<MenuItem>, onDismiss: Runnable? = null): Boolean {
         val activity = activityFor(context) ?: return false
         if (!anchor.isAttachedToWindow) return false
         val items = visibleItems(menu)
@@ -128,6 +129,7 @@ internal object ZeroChillComposeMenu {
         popup.setOnDismissListener {
             anchor.removeOnAttachStateChangeListener(attachment)
             owner.close()
+            onDismiss?.run()
         }
 
         return try {

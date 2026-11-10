@@ -494,7 +494,8 @@ public class NativeFeedBrowserActivity extends Activity {
         heading.setTypeface(null, android.graphics.Typeface.BOLD);
         heading.setSingleLine(true);
         heading.setEllipsize(android.text.TextUtils.TruncateAt.END);
-        top.addView(heading, new LinearLayout.LayoutParams(0, -2, 1f));
+        if (!isCreatorGallery()) top.addView(heading, new LinearLayout.LayoutParams(0, -2, 1f));
+        else top.addView(new View(this), new LinearLayout.LayoutParams(0, 1, 1f));
 
         if (isCreatorGallery()) {
             compactCreatorFavorite = new FrameLayout(this);
@@ -507,8 +508,8 @@ public class NativeFeedBrowserActivity extends Activity {
         options.setGravity(Gravity.CENTER);
         options.setContentDescription("Feed options");
         options.setOnClickListener(this::showOptions);
-        if (!showDetailsMode) top.addView(options, new LinearLayout.LayoutParams(dp(48), actionHeight));
-        if (!showDetailsMode) shell.addView(top, new LinearLayout.LayoutParams(-1, dp(isCreatorGallery() ? 56 : 64)));
+        if (!showDetailsMode && !isCreatorGallery()) top.addView(options, new LinearLayout.LayoutParams(dp(48), actionHeight));
+        if (!showDetailsMode && !isCreatorGallery()) shell.addView(top, new LinearLayout.LayoutParams(-1, dp(isCreatorGallery() ? 56 : 64)));
 
         FrameLayout body = new FrameLayout(this);
         if (isCreatorGallery()) {
@@ -534,7 +535,7 @@ public class NativeFeedBrowserActivity extends Activity {
             );
             creatorProfile.bindCompactFavorite(compactCreatorFavorite);
             AppBarLayout.LayoutParams profileParams =
-                    new AppBarLayout.LayoutParams(-1, dp(184));
+                    new AppBarLayout.LayoutParams(-1, dp(CreatorProfileHeader.HERO_HEIGHT_DP));
             profileParams.setScrollFlags(
                     AppBarLayout.LayoutParams.SCROLL_FLAG_SCROLL |
                             AppBarLayout.LayoutParams.SCROLL_FLAG_EXIT_UNTIL_COLLAPSED
@@ -576,10 +577,12 @@ public class NativeFeedBrowserActivity extends Activity {
                 if (creatorProfile == null) return;
                 float progress = Math.min(
                         1f,
-                        Math.abs(verticalOffset) / (float) Math.max(1, dp(184))
+                        Math.abs(verticalOffset) / (float) Math.max(1, dp(
+                                CreatorProfileHeader.HERO_HEIGHT_DP - CreatorProfileHeader.OVERLAY_HEIGHT_DP))
                 );
                 creatorProfile.setAlpha(1f - progress);
-                boolean showFavorite = creatorProfile.isFavoriteOffscreen(verticalOffset);
+                creatorProfile.setExpanded(progress < .99f);
+                boolean showFavorite = progress >= .99f || creatorProfile.isFavoriteOffscreen(verticalOffset);
                 if (showFavorite && compactCreatorFavorite.getVisibility() != View.VISIBLE) {
                     compactCreatorFavorite.setVisibility(View.VISIBLE);
                     compactCreatorFavorite.setAlpha(0f);
@@ -823,7 +826,8 @@ public class NativeFeedBrowserActivity extends Activity {
         });
         body.addView(empty, new FrameLayout.LayoutParams(-1, -1));
 
-        View root = showDetailsMode ? wrapShowDetailsOled(shell, top) : shell;
+        View root = isCreatorGallery() ? wrapCreatorGalleryChrome(shell, top)
+                : showDetailsMode ? wrapShowDetailsOled(shell, top) : shell;
         if (isCreatorGallery() && CreatorGalleryTransition.ownsRevealWindow(this)) {
             creatorGalleryReveal = new CreatorGalleryReveal(this, root,
                     CreatorGalleryTransition.shouldAnimate(this, restoredBrowserState != null));
@@ -833,6 +837,22 @@ public class NativeFeedBrowserActivity extends Activity {
         } else {
             setContentView(root);
         }
+    }
+
+    boolean ownsCreatorGalleryChrome() { return isCreatorGallery(); }
+
+    private View wrapCreatorGalleryChrome(LinearLayout shell, LinearLayout toolbar) {
+        FrameLayout root = new FrameLayout(this);
+        root.setTag("creator_gallery_chrome");
+        root.setBackgroundColor(Color.BLACK);
+        root.addView(shell, new FrameLayout.LayoutParams(-1, -1));
+        toolbar.setTag("creator_gallery_overlay");
+        toolbar.setBackgroundColor(Color.TRANSPARENT);
+        View back = toolbar.getChildAt(0);
+        back.setBackground(BrowseUi.rounded(this, Color.argb(190, 12, 14, 18), 24));
+        ZeroChillMotion.installPressFeedback(back);
+        root.addView(toolbar, new FrameLayout.LayoutParams(-1, dp(CreatorProfileHeader.OVERLAY_HEIGHT_DP), Gravity.TOP));
+        return root;
     }
 
     boolean ownsShowsDetailChrome() { return showDetailsMode; }
@@ -1620,6 +1640,7 @@ public class NativeFeedBrowserActivity extends Activity {
             }
         }
         updateCreatorTabLabels();
+        if (creatorProfile != null) creatorProfile.setGalleryItems(prioritized, false);
         maybeFocusNotificationFresh(prioritized);
     }
 
@@ -1644,6 +1665,7 @@ public class NativeFeedBrowserActivity extends Activity {
             }
         }
         updateCreatorTabLabels();
+        if (creatorProfile != null) creatorProfile.setGalleryItems(items, true);
     }
 
     static List<NativeContentItem> prioritizeNotificationItems(
@@ -3067,6 +3089,7 @@ public class NativeFeedBrowserActivity extends Activity {
     }
 
     @Override protected void onPause() {
+        if (creatorProfile != null) creatorProfile.setActive(false);
         if (creatorGalleryReveal != null) creatorGalleryReveal.cancelAndShow();
         favoriteReadGeneration++;
         if (galleryContextMenu != null) galleryContextMenu.dismiss();
@@ -3085,7 +3108,7 @@ public class NativeFeedBrowserActivity extends Activity {
         showsBrowserResumed = true;
         if (showDetailsHeader != null) showDetailsHeader.setActive(true);
         updateShowDetailsHeader();
-        if (creatorProfile != null) creatorProfile.refresh();
+        if (creatorProfile != null) { creatorProfile.refresh(); creatorProfile.setActive(true); }
         if (isBunkr() && bunkrGalleryAdapter != null) {
             BunkrGallerySessionStore.Snapshot snapshot =
                     BunkrGallerySessionStore.snapshot(bunkrGallerySessionId);
@@ -3100,6 +3123,7 @@ public class NativeFeedBrowserActivity extends Activity {
                                     filterCreatorItems(snapshot.items, tab), tab == activeTab);
                         }
                         updateCreatorTabLabels();
+                        if (creatorProfile != null) creatorProfile.setGalleryItems(snapshot.items, true);
                     } else bunkrGalleryAdapter.append(snapshot.items);
                 }
                 currentPage = snapshot.currentPage;
@@ -3116,6 +3140,7 @@ public class NativeFeedBrowserActivity extends Activity {
 
     @Override
     protected void onStop() {
+        if (creatorProfile != null) creatorProfile.setActive(false);
         if (creatorGalleryReveal != null) creatorGalleryReveal.cancelAndShow();
         super.onStop();
     }
