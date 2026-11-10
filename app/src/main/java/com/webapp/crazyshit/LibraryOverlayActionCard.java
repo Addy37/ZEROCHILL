@@ -35,6 +35,8 @@ final class LibraryOverlayActionCard {
         root.addView(optionsTarget, hitArea);
 
         options.setGravity(Gravity.CENTER);
+        // The 48dp target owns TalkBack focus, not the smaller glyph inside it.
+        options.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
         optionsTarget.addView(options, new FrameLayout.LayoutParams(
                 dp(context, 34), dp(context, 34), Gravity.CENTER));
         return root;
