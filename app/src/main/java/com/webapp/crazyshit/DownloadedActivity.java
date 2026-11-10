@@ -67,6 +67,7 @@ public final class DownloadedActivity extends Activity {
     @Override
     protected void onCreate(Bundle state) {
         super.onCreate(state);
+        LibraryDestinationChrome.prepareWindow(this);
         getWindow().setStatusBarColor(Color.rgb(13, 13, 15));
         getWindow().setNavigationBarColor(Color.BLACK);
         buildUi();
