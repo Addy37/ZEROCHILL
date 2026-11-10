@@ -11,6 +11,15 @@ import android.widget.TextView;
 
 /** Shared native picker and non-intercepting, one-time mode presentation. */
 final class ContentPreferenceUi {
+    static void chooseAnchored(View anchor, Runnable changed) {
+        OnlyFapPreferencePicker.show(anchor, changed);
+    }
+
+    static void dismissAnchored(View anchor) {
+        Object picker = anchor.getTag(R.id.content_preference_picker);
+        if (picker instanceof android.app.AlertDialog) ((android.app.AlertDialog) picker).dismiss();
+    }
+
     static void choose(Context context, Runnable changed) {
         int cyan = ZeroChillUi.color(context, R.color.zc_cyan);
         LinearLayout panel = new LinearLayout(context);

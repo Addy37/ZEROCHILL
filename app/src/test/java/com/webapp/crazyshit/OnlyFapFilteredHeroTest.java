@@ -209,7 +209,7 @@ public class OnlyFapFilteredHeroTest {
         assertTrue(heroes().isEmpty());
     }
 
-    @Test public void compactPreferenceSitsBesideMatchingGalleryButtonWithAccessibleTouchTarget() {
+    @Test public void compactPreferenceSitsBesideAccentGalleryButtonWithAccessibleTouchTarget() {
         View pill = ReflectionHelpers.getField(hub, "preferenceSelector");
         View gallery = ReflectionHelpers.getField(hub, "heroAction");
         LinearLayout row = (LinearLayout) pill.getParent();
@@ -223,7 +223,9 @@ public class OnlyFapFilteredHeroTest {
         assertTrue(pill.getMinimumHeight() >= BrowseUi.dp(activity, 48));
         android.graphics.drawable.GradientDrawable first = (android.graphics.drawable.GradientDrawable) pill.getBackground();
         android.graphics.drawable.GradientDrawable second = (android.graphics.drawable.GradientDrawable) gallery.getBackground();
-        assertEquals(first.getColor().getDefaultColor(), second.getColor().getDefaultColor());
+        assertEquals(AppearanceTheme.accent(activity), second.getColor().getDefaultColor());
+        assertEquals(ContentPreferenceUi.heroButtonBackground(activity).getColor().getDefaultColor(),
+                first.getColor().getDefaultColor());
         assertEquals(first.getCornerRadius(), second.getCornerRadius(), 0f);
         gallery.setVisibility(View.VISIBLE);
         for (int width : new int[]{320, 411}) {

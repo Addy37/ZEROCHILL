@@ -49,7 +49,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /** Native media feed opened from a Series or Category card. */
-public final class NativeFeedBrowserActivity extends Activity {
+public class NativeFeedBrowserActivity extends Activity {
     private static final int CREATOR_TAB_ALL = 0;
     private static final int CREATOR_TAB_PICTURES = 1;
     private static final int CREATOR_TAB_VIDEOS = 2;
@@ -120,6 +120,7 @@ public final class NativeFeedBrowserActivity extends Activity {
     private ViewPager2 creatorTabsPager;
     private TabLayout creatorTabs;
     private CreatorProfileHeader creatorProfile;
+    private CreatorGalleryReveal creatorGalleryReveal;
     private FrameLayout compactCreatorFavorite;
     private AppBarLayout creatorAppBar;
     private ShowDetailsHeader showDetailsHeader;
@@ -823,7 +824,11 @@ public final class NativeFeedBrowserActivity extends Activity {
         body.addView(empty, new FrameLayout.LayoutParams(-1, -1));
 
         View root = showDetailsMode ? wrapShowDetailsOled(shell, top) : shell;
-        if (isCreatorGallery() && !shitTokReturnTransition.isEmpty()) {
+        if (isCreatorGallery() && CreatorGalleryTransition.ownsRevealWindow(this)) {
+            creatorGalleryReveal = new CreatorGalleryReveal(this, root,
+                    CreatorGalleryTransition.shouldAnimate(this, restoredBrowserState != null));
+            setContentView(creatorGalleryReveal);
+        } else if (isCreatorGallery() && !shitTokReturnTransition.isEmpty()) {
             installShitTokReturnSurface(root);
         } else {
             setContentView(root);
@@ -1164,6 +1169,16 @@ public final class NativeFeedBrowserActivity extends Activity {
 
     private void finishToShitTok() {
         if (isFinishing()) return;
+        if (CreatorGalleryTransition.isScoped(getIntent())) {
+            if (creatorGalleryReveal != null && creatorGalleryReveal.close(() -> {
+                finish();
+                overridePendingTransition(0, 0);
+            })) return;
+            finish();
+            boolean motion = ZeroChillMotion.animationsEnabled(this);
+            overridePendingTransition(motion ? android.R.anim.fade_in : 0, motion ? android.R.anim.fade_out : 0);
+            return;
+        }
         finish();
         if (!shitTokReturnTransition.isEmpty()) overridePendingTransition(0, 0);
     }
@@ -3052,6 +3067,7 @@ public final class NativeFeedBrowserActivity extends Activity {
     }
 
     @Override protected void onPause() {
+        if (creatorGalleryReveal != null) creatorGalleryReveal.cancelAndShow();
         favoriteReadGeneration++;
         if (galleryContextMenu != null) galleryContextMenu.dismiss();
         setGalleryPreviewsActive(false);
@@ -3099,7 +3115,14 @@ public final class NativeFeedBrowserActivity extends Activity {
     }
 
     @Override
+    protected void onStop() {
+        if (creatorGalleryReveal != null) creatorGalleryReveal.cancelAndShow();
+        super.onStop();
+    }
+
+    @Override
     protected void onDestroy() {
+        if (creatorGalleryReveal != null) creatorGalleryReveal.cancelAndShow();
         setGalleryPreviewsActive(false);
         generation++;
         if (isFinishing() && !shitTokReturnTransition.isEmpty()) {

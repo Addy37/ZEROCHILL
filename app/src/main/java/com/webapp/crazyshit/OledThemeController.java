@@ -35,7 +35,8 @@ final class OledThemeController {
         // These viewers own their transition backdrops; painting the content
         // container black would cover the browsing page beneath them.
         if (activity instanceof BunkrGalleryActivity ||
-                activity instanceof ShowsWatchActivity) return;
+                activity instanceof ShowsWatchActivity ||
+                CreatorGalleryTransition.ownsRevealWindow(activity)) return;
         boolean enabled = AppearanceTheme.isOled(activity);
         if (!enabled) {
             // Do not normalize light or dark themed screens back to true black.

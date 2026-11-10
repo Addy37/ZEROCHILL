@@ -177,6 +177,13 @@
             android:screenOrientation="portrait" />
 
         <activity
+            android:name=".OnlyFapGalleryActivity"
+            android:theme="@style/Theme.ZeroChill.OnlyFapGallery"
+            android:enableOnBackInvokedCallback="true"
+            android:exported="false"
+            android:screenOrientation="portrait" />
+
+        <activity
             android:name=".BunkrGalleryActivity"
             android:configChanges="keyboard|keyboardHidden|orientation|screenSize|smallestScreenSize|screenLayout|uiMode"
             android:enableOnBackInvokedCallback="true"

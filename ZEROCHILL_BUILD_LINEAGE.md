@@ -285,3 +285,48 @@ independent Watch Later membership. See `docs/FAVORITE_IMAGE_GALLERY_NAVIGATION.
 Preview 25 (`6000027`) builds one signed APK with the same production package and
 certificate. No migration, backend or remote-config changes. Keep PR 412 draft;
 no merge or public release. Physical gallery-route acceptance remains pending.
+
+## Phase 6 OnlyFap V2 motion candidate (Preview 26)
+
+The user selected the latest approved production lineage including merged PR #412.
+Verified fetched main at `7269d41e37732a4744ef6d23927e223017caa7bb`, the #412 merge.
+`feature/zerochill-7-onlyfap-motion` descends from that complete baseline. V2 main
+`9ce121f` supplies visual reference only. See `docs/ONLYFAP_V2_MOTION.md` for actual
+reference differences and ownership/navigation scope. Preview 26 uses `6000028`,
+above Preview 25 `6000027`, with the existing production package and certificate.
+One scoped signed-candidate workflow produces a branch/SHA-named test APK. No
+merge, release, publication, backend change, migration or integration synchronization
+is authorized. Physical OnePlus Android 16 acceptance remains pending.
+
+## PR 413 whole-gallery ripple follow-up (Preview 27)
+
+The user tested Preview 26 at `f1f3daa4` and supplied a recording. They request
+replacing gallery opening's image morph with the same hero-style ripple revealing
+the whole gallery, plus View Gallery following the saved accent. Continue the
+same `feature/zerochill-7-onlyfap-motion` branch and draft PR #413. Preview 27 uses
+`6000029`, above Preview 26 `6000028`, with the original production package and
+signing certificate. No gallery data, preference, backend or source changes.
+See `docs/ONLYFAP_V2_MOTION.md`. One signed test APK; no merge or publication.
+
+
+## PR 413 tap-origin reverse ripple follow-up (Preview 28)
+
+The user approved Preview 27's full-gallery reveal at `51c7c2bd`, supplied a new
+recording and requests opening from the actual tap and Back reversing to that
+origin. Continue the same branch and PR #413. Preview 28 uses `6000030`, above
+Preview 27 `6000029`, with the original production package/certificate. Persist
+origin metadata only; no screenshot, source-image morph, data or backend changes.
+Physical OnePlus Android 16 acceptance remains pending. One signed test APK;
+no merge, tag, release or publication authorized.
+
+
+## PR 413 live return backdrop and centered picker (Preview 29)
+
+The user tested Preview 28 `bfbc58be` and supplied a recording showing black
+outside the closing circle. Continue the same branch/PR #413; the manifest now
+declares a private translucent OnlyFapGalleryActivity host rather than swapping an
+opaque browser's theme after launch. The gender panel is centered in the available
+screen area. Preview 29 uses `6000031`, above Preview 28 `6000030`, with original
+production package/certificate. No screenshots, data, preferences or backend
+migration. Physical OnePlus Android 16 backdrop/menu acceptance remains pending.
+One signed test APK; no merge, tag, publication or release authorized.

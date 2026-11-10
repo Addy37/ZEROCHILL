@@ -32,6 +32,7 @@
         <item name="android:windowBackground">@android:color/transparent</item>
         <item name="android:windowAnimationStyle">@null</item>
     </style>
+    <style name="Theme.ZeroChill.OnlyFapGallery" parent="Theme.ZeroChill.ShowsWatch" />
     <style name="ZeroChillAccentCyan">
         <item name="colorPrimary">#0892D0</item>
         <item name="colorSecondary">#0892D0</item>
