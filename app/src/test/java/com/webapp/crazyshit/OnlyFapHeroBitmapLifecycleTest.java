@@ -169,10 +169,10 @@ public class OnlyFapHeroBitmapLifecycleTest {
         Glide.get(activity).clearMemory();
         assertFalse(pixelsA.isRecycled());
         draw();
-        complete("b"); await(() -> image() != outgoing);
+        complete("b"); awaitOneTask(() -> image() != outgoing);
         assertSame(background, image().getBackground());
         assertFalse(ownerA.isCleared());
-        ShadowLooper.idleMainLooper(250, TimeUnit.MILLISECONDS);
+        ShadowLooper.idleMainLooper(700, TimeUnit.MILLISECONDS);
         assertTrue(ownerA.isCleared());
         await(pixelsA::isRecycled);
         assertNull(outgoing.getDrawable());
@@ -336,7 +336,7 @@ public class OnlyFapHeroBitmapLifecycleTest {
         ImageView outgoing = image(); Bitmap pixelsA = bitmap(outgoing.getDrawable());
         Object b = newCandidate("b");
         String hintA = ((android.widget.TextView) ReflectionHelpers.getField(hub, "heroHint")).getText().toString();
-        String dotsA = ((android.widget.TextView) ReflectionHelpers.getField(hub, "heroDots")).getText().toString();
+        String dotsA = ((View) ReflectionHelpers.getField(hub, "heroDots")).getContentDescription().toString();
         long selectedAt = android.os.SystemClock.uptimeMillis();
         ReflectionHelpers.callInstanceMethod(hub, "showHero", ReflectionHelpers.ClassParameter.from(int.class, 1),
                 ReflectionHelpers.ClassParameter.from(boolean.class, true));
@@ -355,7 +355,7 @@ public class OnlyFapHeroBitmapLifecycleTest {
         assertEquals(0, (int) ReflectionHelpers.getField(hub, "heroIndex"));
         assertEquals("a", ((android.widget.TextView) ReflectionHelpers.getField(hub, "heroTitle")).getText().toString());
         assertEquals(hintA, ((android.widget.TextView) ReflectionHelpers.getField(hub, "heroHint")).getText().toString());
-        assertEquals(dotsA, ((android.widget.TextView) ReflectionHelpers.getField(hub, "heroDots")).getText().toString());
+        assertEquals(dotsA, ((View) ReflectionHelpers.getField(hub, "heroDots")).getContentDescription().toString());
         assertEquals(1f, ((View) ReflectionHelpers.getField(hub, "heroCard")).getAlpha(), .001f);
         ReflectionHelpers.callInstanceMethod(hub, "openHero"); assertEquals("a", opened.title);
         assertSame(outgoing, image()); assertFalse(request(outgoing).isCleared()); assertFalse(pixelsA.isRecycled()); draw();
@@ -363,13 +363,15 @@ public class OnlyFapHeroBitmapLifecycleTest {
         assertEquals(1, (int) ReflectionHelpers.getField(hub, "heroIndex"));
         assertEquals("b", ((android.widget.TextView) ReflectionHelpers.getField(hub, "heroTitle")).getText().toString());
         assertEquals("Hint b", ((android.widget.TextView) ReflectionHelpers.getField(hub, "heroHint")).getText().toString());
-        assertEquals("○ ●", ((android.widget.TextView) ReflectionHelpers.getField(hub, "heroDots")).getText().toString());
+        assertEquals("Featured creator 2 of 2. Tap an indicator to switch.", ((View) ReflectionHelpers.getField(hub, "heroDots")).getContentDescription().toString());
         assertEquals("Open b gallery", ((View) ReflectionHelpers.getField(hub, "heroCard")).getContentDescription().toString());
-        ReflectionHelpers.callInstanceMethod(hub, "openHero"); assertEquals("b", opened.title);
-        assertNotSame(outgoing, image()); assertNotNull(ReflectionHelpers.getField(hub, "heroCrossfade"));
+        assertNotSame(outgoing, image());
+        assertTrue(ReflectionHelpers.getField(hub, "heroCrossfade") != null
+                || ReflectionHelpers.getField(hub, "heroCircularReveal") != null);
         assertFalse(request(outgoing).isCleared()); assertFalse(pixelsA.isRecycled()); draw();
-        ShadowLooper.idleMainLooper(400, TimeUnit.MILLISECONDS);
+        ShadowLooper.idleMainLooper(700, TimeUnit.MILLISECONDS);
         assertNull(outgoing.getDrawable()); assertTrue(pixelsA.isRecycled()); draw();
+        ReflectionHelpers.callInstanceMethod(hub, "openHero"); assertEquals("b", opened.title);
     }
 
     @Test public void qualificationAndVisibleHandoffShareOneDecodeEvenWithNoResourceCache() throws Exception {

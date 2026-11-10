@@ -123,6 +123,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     @Override
     protected void onCreate(Bundle state) {
         super.onCreate(state);
+        GalleryMediaTransition.requestWindowFeature(this);
         appliedAppearanceColors = AppearanceTheme.colorSignature(this);
         long activityStartedAt = android.os.SystemClock.elapsedRealtime();
         AppPerformance.startup("main");

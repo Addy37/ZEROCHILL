@@ -600,19 +600,21 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         return page;
     }
 
-    private void openBrowseItem(NativeContentItem item) {
+    private void openBrowseItem(NativeContentItem item) { openBrowseItem(item, null); }
+
+    private void openBrowseItem(NativeContentItem item, View anchor) {
         if (item == null) return;
         if (item.isCreator()) {
             String query = item.searchQuery == null || item.searchQuery.trim().isEmpty()
                     ? item.title
                     : item.searchQuery.trim();
-            activity.startActivity(NativeFeedBrowserActivity.createCreatorGallery(
+            CreatorGalleryTransition.start(activity, NativeFeedBrowserActivity.createCreatorGallery(
                     activity,
                     item.title,
                     query,
                     NativeFeedBrowserActivity.creatorProfileHint(item),
                     CreatorGalleryPreloader.sessionId(activity, item)
-            ));
+            ), anchor, item);
             return;
         }
         if (item.url == null || item.url.isEmpty()) return;
@@ -630,7 +632,9 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         ));
     }
 
-    private void openFavoriteCreator(CreatorCatalog.FavoriteGroup group) {
+    private void openFavoriteCreator(CreatorCatalog.FavoriteGroup group) { openFavoriteCreator(group, null); }
+
+    private void openFavoriteCreator(CreatorCatalog.FavoriteGroup group, View anchor) {
         if (group == null || group.item == null) return;
         CreatorGallerySpec spec = CreatorGallerySpec.from(group);
         CreatorGalleryPreloader.warm(
@@ -642,7 +646,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         if (sessionId.isEmpty() && spec.grouped) {
             sessionId = CreatorGalleryPreloader.composeInMemoryMergedSession(activity, spec);
         }
-        activity.startActivity(NativeFeedBrowserActivity.createCreatorGallery(
+        CreatorGalleryTransition.start(activity, NativeFeedBrowserActivity.createCreatorGallery(
                 activity,
                 spec.item.title,
                 spec.query,
@@ -652,7 +656,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                 spec.seedNames,
                 spec.seedUrls,
                 spec.seedImages
-        ));
+        ), anchor, group.item);
     }
 
     private void openShowDetails(NativeContentItem item) {
@@ -1032,18 +1036,26 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                     new OnlyFapHubView.Listener() {
                         @Override
                         public void onOpenCreator(NativeContentItem creator) {
+                            onOpenCreator(creator, null);
+                        }
+
+                        @Override public void onOpenCreator(NativeContentItem creator, View anchor) {
                             if (creator == null) return;
                             CreatorGalleryPreloader.warm(
                                     activity,
                                     creator,
                                     CreatorGalleryPreloader.PRIORITY_HIGH
                             );
-                            openBrowseItem(creator);
+                            openBrowseItem(creator, anchor);
                         }
 
                         @Override
                         public void onOpenFavoriteCreator(CreatorCatalog.FavoriteGroup group) {
                             openFavoriteCreator(group);
+                        }
+
+                        @Override public void onOpenFavoriteCreator(CreatorCatalog.FavoriteGroup group, View anchor) {
+                            openFavoriteCreator(group, anchor);
                         }
 
                         @Override

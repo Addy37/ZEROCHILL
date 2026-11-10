@@ -59,6 +59,12 @@ final class OnlyFapHubView extends FrameLayout {
     interface Listener {
         void onOpenCreator(NativeContentItem creator);
 
+        default void onOpenCreator(NativeContentItem creator, View anchor) { onOpenCreator(creator); }
+
+        default void onOpenFavoriteCreator(CreatorCatalog.FavoriteGroup group, View anchor) {
+            onOpenFavoriteCreator(group);
+        }
+
         default void onOpenFavoriteCreator(CreatorCatalog.FavoriteGroup group) {
             if (group != null) onOpenCreator(group.item);
         }
@@ -250,7 +256,11 @@ final class OnlyFapHubView extends FrameLayout {
     private final TextView heroTitle;
     private final TextView heroHint;
     private final TextView heroAction;
-    private final TextView heroDots;
+    private final OnlyFapHeroIndicators heroDots;
+    private OnlyFapHeroRippleView heroRipple;
+    private android.animation.Animator heroCircularReveal;
+    private ImageView heroRevealOutgoing;
+    private final Runnable circularRevealCleanup = this::completeHeroCircularReveal;
     private final TextView loadingLabel;
     private final LinearLayout favoritesSection;
     private final LinearLayout favoritesRail;
@@ -360,6 +370,9 @@ final class OnlyFapHubView extends FrameLayout {
         preferenceImage.setAlpha(0f);
         heroImages.addView(preferenceImage, new FrameLayout.LayoutParams(-1, -1));
 
+        heroRipple = new OnlyFapHeroRippleView(context);
+        heroFrame.addView(heroRipple, new FrameLayout.LayoutParams(-1, -1));
+
         View heroShade = new View(context);
         heroShade.setBackground(new GradientDrawable(
                 GradientDrawable.Orientation.TOP_BOTTOM,
@@ -423,7 +436,7 @@ final class OnlyFapHubView extends FrameLayout {
         preferenceSelector.setClickable(true);
         preferenceSelector.setFocusable(true);
         ContentPreferenceUi.bindSelector(preferenceSelector);
-        preferenceSelector.setOnClickListener(v -> ContentPreferenceUi.choose(context, () -> {
+        preferenceSelector.setOnClickListener(v -> ContentPreferenceUi.chooseAnchored(preferenceSelector, () -> {
             ContentPreferenceUi.bindSelector(preferenceSelector);
             if (preferenceChanged != null) preferenceChanged.run();
             pulsePreferenceSelector(); // Refresh may synchronously clear the hub a second time.
@@ -436,10 +449,11 @@ final class OnlyFapHubView extends FrameLayout {
                 Gravity.TOP
         ));
 
-        heroDots = text("", 13f, Color.WHITE);
-        heroDots.setGravity(Gravity.CENTER);
+        heroDots = new OnlyFapHeroIndicators(context);
+        heroDots.setListener(position -> {
+            if (active && !closed && !preferenceHeroPending) showHero(position, true);
+        });
         heroDots.setVisibility(View.GONE);
-        heroDots.setContentDescription("Featured creator position");
 
         LinearLayout heroCopy = new LinearLayout(context);
         heroCopy.setOrientation(LinearLayout.VERTICAL);
@@ -887,6 +901,8 @@ final class OnlyFapHubView extends FrameLayout {
     }
 
     void setActive(boolean active) {
+        if (active) updateHeroDots();
+        else ContentPreferenceUi.dismissAnchored(preferenceSelector);
         setProfileActive(active);
         if (this.active == active) return;
         this.active = active;
@@ -941,6 +957,7 @@ final class OnlyFapHubView extends FrameLayout {
     }
 
     void close() {
+        ContentPreferenceUi.dismissAnchored(preferenceSelector);
         onOpenCancelled();
         if (profileAvatar != null) profileAvatar.close();
         closed = true;
@@ -1023,7 +1040,6 @@ final class OnlyFapHubView extends FrameLayout {
         wrapper.setClickable(true);
         wrapper.setFocusable(true);
         wrapper.setContentDescription("Open " + creator.title + " gallery");
-        wrapper.setOnClickListener(v -> listener.onOpenFavoriteCreator(group));
         ZeroChillMotion.installPressFeedback(wrapper);
 
         MaterialCardView avatar = new MaterialCardView(getContext());
@@ -1057,6 +1073,7 @@ final class OnlyFapHubView extends FrameLayout {
         image.setClipToOutline(true);
         frame.addView(image, new FrameLayout.LayoutParams(-1, -1));
         loadCreatorImage(image, group, avatarOverrides);
+        wrapper.setOnClickListener(v -> listener.onOpenFavoriteCreator(group, image));
 
         FrameLayout avatarWrap = new FrameLayout(getContext());
         FrameLayout.LayoutParams avatarParams =
@@ -1761,6 +1778,8 @@ final class OnlyFapHubView extends FrameLayout {
     }
 
     private void commitHeroIdentity(HeroCandidate candidate) {
+        CreatorGalleryTransition.clearSource(heroImage);
+        CreatorGalleryTransition.clearSource(preferenceImage);
         heroItem = candidate;
         heroIndex = heroItems.indexOf(candidate);
         pendingHero = null;
@@ -1881,7 +1900,8 @@ final class OnlyFapHubView extends FrameLayout {
             @Override public void onLoadCleared(Drawable placeholder) {
                 // Glide can clear either owner during teardown. Drop transition references
                 // before that owner's EngineResource is released, without recursively clearing it.
-                if (heroCrossfade != null) finishHeroCrossfade(view != preferenceImage);
+                if (heroCrossfade != null || heroCircularReveal != null)
+                    finishHeroCrossfade(view != preferenceImage);
                 super.onLoadCleared(placeholder);
             }
         };
@@ -1900,6 +1920,7 @@ final class OnlyFapHubView extends FrameLayout {
             boolean startupCrossfade) {
         if (!ownsPendingArtwork(requestId, targetView)) return false;
         ImageView outgoing = heroImage;
+        CreatorGalleryTransition.clearSource(outgoing);
         // Normal replacement previously kept the same view/background. Preserve those
         // background roles when swapping the two live targets (preference rifts still swap normally).
         Drawable incomingBackground = targetView.getBackground();
@@ -1912,9 +1933,15 @@ final class OnlyFapHubView extends FrameLayout {
         if (coldSnapshot != null) coldSnapshot.setHero(heroImage);
         com.bumptech.glide.request.Request outgoingRequest =
                 new com.bumptech.glide.request.target.DrawableImageViewTarget(outgoing).getRequest();
-        if (startupCrossfade || (ZeroChillMotion.animationsEnabled(getContext())
-                && outgoingRequest != null && outgoingRequest.isComplete()
-                && !outgoingRequest.isCleared() && outgoing.getDrawable() != null)) {
+        boolean outgoingReady = outgoingRequest != null && outgoingRequest.isComplete()
+                && !outgoingRequest.isCleared() && outgoing.getDrawable() != null;
+        boolean circle = pendingHeroAnimate && heroItem != null && heroArtworkReady
+                && !startupCrossfade && active && isAttachedToWindow()
+                && ZeroChillMotion.animationsEnabled(getContext()) && outgoingReady
+                && heroImage.isHardwareAccelerated() && heroImage.getWidth() > 0 && heroImage.getHeight() > 0;
+        if (circle && startHeroCircularReveal(outgoing)) {
+            // Keep both original Glide request owners alive through the reveal.
+        } else if (ZeroChillMotion.animationsEnabled(getContext()) && outgoingReady) {
             final int duration = startupCrossfade ? 350 : 240;
             preferenceImage.setAlpha(0f); // A is drawn only inside the original crossfade.
             // The bounded reveal wrapper is tied to its own view; crossfade the owned frame itself.
@@ -1929,12 +1956,72 @@ final class OnlyFapHubView extends FrameLayout {
             postDelayed(crossfadeCleanup, duration);
         } else {
             // Preserve the normal 240 ms new-image reveal and its eligibility rules.
-            new com.bumptech.glide.request.target.DrawableImageViewTarget(heroImage).onResourceReady(
-                    heroImage.getDrawable(), ThumbnailFades.heroTransition(source));
+            if (ZeroChillMotion.animationsEnabled(getContext()))
+                new com.bumptech.glide.request.target.DrawableImageViewTarget(heroImage).onResourceReady(
+                        heroImage.getDrawable(), ThumbnailFades.heroTransition(source));
             preferenceImage.setAlpha(0f);
             Glide.with(preferenceImage).clear(preferenceImage);
         }
         return true;
+    }
+
+    /** Reveal the new live Glide target inside a growing circle over the previous target. */
+    private boolean startHeroCircularReveal(ImageView outgoing) {
+        final ImageView incoming = heroImage;
+        int cx = incoming.getWidth() / 2;
+        int cy = Math.round(incoming.getHeight() * .47f);
+        float outerX = Math.max(cx, incoming.getWidth() - cx);
+        float outerY = Math.max(cy, incoming.getHeight() - cy);
+        float endRadius = (float) Math.hypot(outerX, outerY);
+        try {
+            android.animation.Animator reveal = android.view.ViewAnimationUtils.createCircularReveal(
+                    incoming, cx, cy, 0f, endRadius);
+            reveal.setDuration(650L);
+            reveal.setInterpolator(new android.view.animation.DecelerateInterpolator());
+            heroRevealOutgoing = outgoing;
+            heroCircularReveal = reveal;
+            outgoing.setAlpha(1f);
+            incoming.setAlpha(1f);
+            reveal.addListener(new android.animation.AnimatorListenerAdapter() {
+                @Override public void onAnimationEnd(android.animation.Animator animation) {
+                    if (heroCircularReveal == animation) completeHeroCircularReveal();
+                }
+            });
+            heroRipple.setAccent(AppearanceTheme.accent(getContext()));
+            heroRipple.reveal();
+            reveal.start();
+            postDelayed(circularRevealCleanup, 650L);
+            return true;
+        } catch (RuntimeException ignored) {
+            // If an unusual device cannot do hardware circular reveals, use the
+            // original Glide crossfade path instead of breaking the hero.
+            heroRevealOutgoing = null;
+            heroCircularReveal = null;
+            heroRipple.reset();
+            return false;
+        }
+    }
+
+    private void completeHeroCircularReveal() {
+        finishHeroCircularReveal(true);
+        if (heroItem != null) heroItem.trace.mark("transition_finished");
+    }
+
+    private void finishHeroCircularReveal(boolean clearOutgoing) {
+        removeCallbacks(circularRevealCleanup);
+        android.animation.Animator animation = heroCircularReveal;
+        heroCircularReveal = null;
+        if (animation != null) {
+            animation.removeAllListeners();
+            animation.cancel();
+        }
+        ImageView outgoing = heroRevealOutgoing;
+        heroRevealOutgoing = null;
+        heroRipple.reset();
+        if (outgoing != null && outgoing != heroImage) {
+            outgoing.setAlpha(0f);
+            if (clearOutgoing) Glide.with(outgoing).clear(outgoing);
+        }
     }
 
     private void completeHeroCrossfade() {
@@ -1947,6 +2034,7 @@ final class OnlyFapHubView extends FrameLayout {
     }
 
     private void finishHeroCrossfade(boolean clearOutgoing) {
+        finishHeroCircularReveal(clearOutgoing);
         if (heroCrossfade == null) return;
         removeCallbacks(crossfadeCleanup);
         com.bumptech.glide.request.Request request =
@@ -2211,16 +2299,13 @@ final class OnlyFapHubView extends FrameLayout {
     }
 
     private void updateHeroDots() {
+        heroDots.show(heroIndex, heroItems.size(), AppearanceTheme.accent(getContext()),
+                active && !preferenceHeroPending && heroItems.size() > 1
+                        && ZeroChillMotion.animationsEnabled(getContext()));
         if (preferenceHeroPending || heroItems.size() <= 1) {
             heroDots.setVisibility(View.INVISIBLE);
             return;
         }
-        StringBuilder dots = new StringBuilder();
-        for (int i = 0; i < heroItems.size(); i++) {
-            if (i > 0) dots.append(' ');
-            dots.append(i == heroIndex ? '●' : '○');
-        }
-        heroDots.setText(dots.toString());
         heroDots.setVisibility(View.VISIBLE);
     }
 
@@ -2272,8 +2357,9 @@ final class OnlyFapHubView extends FrameLayout {
 
     private void openHero() {
         if (preferenceHeroPending) return;
+        finishHeroMorph();
         HeroCandidate selected = heroItem != null ? heroItem : startupHero;
-        if (selected != null && selected.creator != null) listener.onOpenCreator(selected.creator);
+        if (selected != null && selected.creator != null) listener.onOpenCreator(selected.creator, heroImage);
     }
 
     private void loadCreatorImage(
@@ -2602,6 +2688,7 @@ final class OnlyFapHubView extends FrameLayout {
 
         @Override
         public void onBindViewHolder(@NonNull Holder holder, int position) {
+            CreatorGalleryTransition.clearSource(holder.image);
             NativeContentItem creator = items.get(position);
             Context context = holder.card.getContext();
             holder.title.setText(creator.title);
@@ -2609,7 +2696,7 @@ final class OnlyFapHubView extends FrameLayout {
             boolean favorite = CreatorFavoriteStore.contains(context, creator);
             holder.favorite.setVisibility(favorite ? View.VISIBLE : View.GONE);
             holder.card.setContentDescription("Open " + creator.title + " gallery");
-            holder.card.setOnClickListener(v -> listener.onOpenCreator(creator));
+            holder.card.setOnClickListener(v -> listener.onOpenCreator(creator, holder.image));
             holder.card.setOnLongClickListener(v -> {
                 v.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
                 boolean saved = CreatorFavoriteStore.toggle(context, creator);
@@ -2629,6 +2716,7 @@ final class OnlyFapHubView extends FrameLayout {
 
         @Override
         public void onViewRecycled(@NonNull Holder holder) {
+            CreatorGalleryTransition.clearSource(holder.image);
             Glide.with(holder.image).clear(holder.image);
             holder.card.setOnClickListener(null);
             holder.card.setOnLongClickListener(null);

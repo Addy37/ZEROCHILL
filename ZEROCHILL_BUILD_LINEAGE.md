@@ -285,3 +285,15 @@ independent Watch Later membership. See `docs/FAVORITE_IMAGE_GALLERY_NAVIGATION.
 Preview 25 (`6000027`) builds one signed APK with the same production package and
 certificate. No migration, backend or remote-config changes. Keep PR 412 draft;
 no merge or public release. Physical gallery-route acceptance remains pending.
+
+## Phase 6 OnlyFap V2 motion candidate (Preview 26)
+
+The user selected the latest approved production lineage including merged PR #412.
+Verified fetched main at `7269d41e37732a4744ef6d23927e223017caa7bb`, the #412 merge.
+`feature/zerochill-7-onlyfap-motion` descends from that complete baseline. V2 main
+`9ce121f` supplies visual reference only. See `docs/ONLYFAP_V2_MOTION.md` for actual
+reference differences and ownership/navigation scope. Preview 26 uses `6000028`,
+above Preview 25 `6000027`, with the existing production package and certificate.
+One scoped signed-candidate workflow produces a branch/SHA-named test APK. No
+merge, release, publication, backend change, migration or integration synchronization
+is authorized. Physical OnePlus Android 16 acceptance remains pending.

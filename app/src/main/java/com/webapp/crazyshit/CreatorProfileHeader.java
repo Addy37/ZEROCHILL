@@ -26,6 +26,14 @@ final class CreatorProfileHeader extends LinearLayout {
     private final NativeContentItem creator;
     private final TextView favorite;
     private final ImageView banner;
+    private final CreatorGalleryTransition.GalleryArtwork transitionArtwork;
+    private final OnlyFapHeroRippleView transitionRipple;
+    private final View heroShadeView;
+    private final View identityChrome;
+    private String sharedName = "";
+    private boolean returning;
+    private boolean enterRevealed;
+    private final Runnable revealTransitionFallback = this::revealTransitionContent;
     private final ExecutorService heroIo = Executors.newSingleThreadExecutor();
     private boolean detached;
     private FrameLayout compactFavorite;
@@ -80,7 +88,17 @@ final class CreatorProfileHeader extends LinearLayout {
         banner.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
         hero.addView(banner, new FrameLayout.LayoutParams(-1, -1));
 
+        transitionArtwork = new CreatorGalleryTransition.GalleryArtwork(context);
+        transitionArtwork.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        transitionArtwork.setVisibility(View.INVISIBLE);
+        transitionArtwork.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
+        hero.addView(transitionArtwork, new FrameLayout.LayoutParams(-1, -1));
+        transitionRipple = new OnlyFapHeroRippleView(context);
+        transitionRipple.setAccent(AppearanceTheme.accent(context));
+        hero.addView(transitionRipple, new FrameLayout.LayoutParams(-1, -1));
+
         View shade = new View(context);
+        heroShadeView = shade;
         shade.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
         GradientDrawable heroShade = new GradientDrawable(
                 GradientDrawable.Orientation.TOP_BOTTOM,
@@ -94,6 +112,7 @@ final class CreatorProfileHeader extends LinearLayout {
         hero.addView(shade, new FrameLayout.LayoutParams(-1, -1));
 
         LinearLayout identity = new LinearLayout(context);
+        identityChrome = identity;
         identity.setOrientation(HORIZONTAL);
         identity.setGravity(Gravity.BOTTOM | Gravity.CENTER_VERTICAL);
         identity.setPadding(dp(16), dp(16), dp(16), dp(14));
@@ -167,6 +186,80 @@ final class CreatorProfileHeader extends LinearLayout {
         refresh();
     }
 
+    void setSharedTransitionName(String name) {
+        if (name == null || !CreatorGalleryTransition.seedArtwork(transitionArtwork, name)) return;
+        sharedName = name;
+        transitionArtwork.setTransitionName(name);
+        transitionArtwork.setVisibility(View.VISIBLE);
+        heroShadeView.setAlpha(0f);
+        identityChrome.setAlpha(0f);
+        if (getContext() instanceof android.app.Activity) {
+            android.transition.Transition enter = ((android.app.Activity) getContext()).getWindow()
+                    .getSharedElementEnterTransition();
+            if (enter != null) enter.addListener(new android.transition.TransitionListenerAdapter() {
+                @Override public void onTransitionEnd(android.transition.Transition transition) {
+                    transition.removeListener(this); revealTransitionContent();
+                }
+                @Override public void onTransitionCancel(android.transition.Transition transition) {
+                    transition.removeListener(this); revealTransitionContent();
+                }
+            });
+        }
+        if (!ZeroChillMotion.animationsEnabled(getContext())) revealTransitionContent();
+        else postDelayed(revealTransitionFallback, CreatorGalleryTransition.MORPH_DURATION_MS + 300L);
+    }
+
+    void stopTransitionMotion() {
+        revealTransitionContent();
+        transitionArtwork.animate().cancel();
+        heroShadeView.animate().cancel();
+        identityChrome.animate().cancel();
+        transitionRipple.reset();
+        if (!returning) {
+            transitionArtwork.setAlpha(0f);
+            transitionArtwork.setVisibility(View.INVISIBLE);
+            heroShadeView.setAlpha(1f);
+            identityChrome.setAlpha(1f);
+        }
+    }
+
+    private void revealTransitionContent() {
+        if (detached || returning || enterRevealed || sharedName.isEmpty()) return;
+        enterRevealed = true;
+        removeCallbacks(revealTransitionFallback);
+        // A source image remains behind the gallery loader until actual header artwork
+        // arrives. Gallery discovery/loading never waits for this visual handoff.
+        if (banner.getDrawable() instanceof ColorDrawable) {
+            banner.setImageDrawable(transitionArtwork.getDrawable());
+        }
+        transitionArtwork.animate().alpha(0f).setDuration(ZeroChillMotion.duration(getContext(), 125L))
+                .withEndAction(() -> transitionArtwork.setVisibility(View.INVISIBLE)).start();
+        heroShadeView.animate().alpha(1f).setDuration(ZeroChillMotion.duration(getContext(), 155L)).start();
+        identityChrome.animate().alpha(1f).setDuration(ZeroChillMotion.duration(getContext(), 155L)).start();
+    }
+
+    boolean prepareForSharedReturn(Runnable finish) {
+        android.graphics.Rect visible = new android.graphics.Rect();
+        if (returning) return true;
+        if (sharedName.isEmpty() || detached || !isAttachedToWindow()
+                || !getGlobalVisibleRect(visible) || visible.height() < dp(72)
+                || !CreatorGalleryTransition.sourceAvailable(sharedName)
+                || !ZeroChillMotion.animationsEnabled(getContext())) return false;
+        returning = true;
+        removeCallbacks(revealTransitionFallback);
+        transitionArtwork.animate().cancel();
+        transitionArtwork.setVisibility(View.VISIBLE);
+        transitionArtwork.setAlpha(1f);
+        heroShadeView.animate().cancel();
+        identityChrome.animate().cancel();
+        heroShadeView.setAlpha(0f);
+        identityChrome.setAlpha(0f);
+        transitionRipple.reveal();
+        // finishAfterTransition reverses the platform image morph and accepts normal Back.
+        finish.run();
+        return true;
+    }
+
     private void loadOnlyHavenHero(String query) {
         String cleanQuery = query == null ? "" : query.trim();
         if (cleanQuery.length() < 2) return;
@@ -196,7 +289,8 @@ final class CreatorProfileHeader extends LinearLayout {
                 .load(withReferer(heroUrl, referer))
                 .centerCrop()
                 .transition(ThumbnailFades.hero())
-                .placeholder(new ColorDrawable(Color.rgb(13, 15, 18)))
+                .placeholder(transitionArtwork.getDrawable() != null
+                        ? transitionArtwork.getDrawable() : new ColorDrawable(Color.rgb(13, 15, 18)))
                 .error(Glide.with(banner)
                         .load(creator.imageUrl.isEmpty() ? null : withReferer(creator.imageUrl, creator.url))
                         .centerCrop()
@@ -290,6 +384,9 @@ final class CreatorProfileHeader extends LinearLayout {
 
     @Override protected void onAttachedToWindow() {
         super.onAttachedToWindow();
+        if (!sharedName.isEmpty() && !enterRevealed && ZeroChillMotion.animationsEnabled(getContext())) {
+            transitionRipple.reveal();
+        }
         favoritePreferences = getContext().getSharedPreferences("creator_favorites", Context.MODE_PRIVATE);
         favoritePreferences.registerOnSharedPreferenceChangeListener(favoriteListener);
         refresh();
@@ -317,6 +414,12 @@ final class CreatorProfileHeader extends LinearLayout {
     @Override
     protected void onDetachedFromWindow() {
         detached = true;
+        removeCallbacks(revealTransitionFallback);
+        transitionArtwork.animate().cancel();
+        heroShadeView.animate().cancel();
+        identityChrome.animate().cancel();
+        transitionRipple.reset();
+        transitionArtwork.setImageDrawable(null);
         if (favoritePreferences != null) favoritePreferences.unregisterOnSharedPreferenceChangeListener(favoriteListener);
         heroIo.shutdownNow();
         if (compactAvatar != null) Glide.with(compactAvatar).clear(compactAvatar);

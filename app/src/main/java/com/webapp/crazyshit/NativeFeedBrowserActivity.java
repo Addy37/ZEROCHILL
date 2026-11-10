@@ -398,6 +398,9 @@ public final class NativeFeedBrowserActivity extends Activity {
                 ""
         );
         if (!creatorQuery.isEmpty()) {
+            if (getIntent().hasExtra(CreatorGalleryTransition.EXTRA_NAME)) {
+                CreatorGalleryTransition.configureGallery(this);
+            }
             source = SOURCE_BUNKR;
             baseUrl = BunkrRepository.searchUrl(creatorQuery);
         } else if (BunkrRepository.isAlbumUrl(baseUrl)) source = SOURCE_BUNKR;
@@ -531,6 +534,8 @@ public final class NativeFeedBrowserActivity extends Activity {
                     baseUrl,
                     creatorGalleryCacheKey
             );
+            creatorProfile.setSharedTransitionName(
+                    getIntent().getStringExtra(CreatorGalleryTransition.EXTRA_NAME));
             creatorProfile.bindCompactFavorite(compactCreatorFavorite);
             AppBarLayout.LayoutParams profileParams =
                     new AppBarLayout.LayoutParams(-1, dp(184));
@@ -1164,6 +1169,13 @@ public final class NativeFeedBrowserActivity extends Activity {
 
     private void finishToShitTok() {
         if (isFinishing()) return;
+        if (getIntent().hasExtra(CreatorGalleryTransition.EXTRA_NAME)) {
+            if (creatorProfile != null && creatorProfile.prepareForSharedReturn(this::finishAfterTransition)) return;
+            finish();
+            boolean motion = ZeroChillMotion.animationsEnabled(this);
+            overridePendingTransition(motion ? android.R.anim.fade_in : 0, motion ? android.R.anim.fade_out : 0);
+            return;
+        }
         finish();
         if (!shitTokReturnTransition.isEmpty()) overridePendingTransition(0, 0);
     }
@@ -3096,6 +3108,12 @@ public final class NativeFeedBrowserActivity extends Activity {
         }
         applyLayout();
         maybePrefetchShowEpisodes();
+    }
+
+    @Override
+    protected void onStop() {
+        if (creatorProfile != null) creatorProfile.stopTransitionMotion();
+        super.onStop();
     }
 
     @Override
