@@ -25,6 +25,7 @@ final class ZeroChillMenu {
     private final View anchor;
     private final MenuBuilder menu;
     private OnMenuItemClickListener listener;
+    private Runnable dismissListener;
 
     ZeroChillMenu(Context context, View anchor) {
         this.context = context;
@@ -42,18 +43,24 @@ final class ZeroChillMenu {
     void dispatch(MenuItem item) { menu.performItemAction(item, 0); }
     void setOnMenuItemClickListener(OnMenuItemClickListener listener) { this.listener = listener; }
 
+    void setOnDismissListener(Runnable listener) { dismissListener = listener; }
+    private void dismissed() { if (dismissListener != null) dismissListener.run(); }
+
     void show() {
-        showInternal(true);
+        showInternal(true, false);
     }
 
     /** Explicit platform-rendered variant; show() uses the shared liquid-glass presentation. */
     void showNative() {
-        showInternal(false);
+        showInternal(false, false);
     }
 
-    private void showInternal(boolean preferCompose) {
-        if (!anchor.isAttachedToWindow() || menu.size() == 0) return;
-        if (preferCompose && ZeroChillComposeMenu.show(context, anchor, menu, this::dispatch)) return;
+    /** Bottom-dock actions grow upward without relying on a premeasured Compose height. */
+    void showAbove() { showInternal(true, true); }
+
+    private void showInternal(boolean preferCompose, boolean above) {
+        if (!anchor.isAttachedToWindow() || menu.size() == 0) { dismissed(); return; }
+        if (preferCompose && ZeroChillComposeMenu.show(context, anchor, menu, this::dispatch, this::dismissed, above)) return;
         LinearLayout rows = new LinearLayout(context);
         rows.setOrientation(LinearLayout.VERTICAL);
         int inset = dp(6);
@@ -72,7 +79,8 @@ final class ZeroChillMenu {
         ScrollView scroll = new ScrollView(context);
         scroll.setFillViewport(true);
         scroll.addView(rows);
-        int maxHeight = Math.min(dp(352), context.getResources().getDisplayMetrics().heightPixels - dp(96));
+        int maxHeight = AnchoredMenuPopup.maxHeight(anchor,
+                Math.min(dp(352), context.getResources().getDisplayMetrics().heightPixels - dp(96)), above);
         int width = Math.min(dp(264), context.getResources().getDisplayMetrics().widthPixels - dp(32));
         PopupWindow popup = new PopupWindow(scroll, width, -2, true);
         popup.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
@@ -82,7 +90,10 @@ final class ZeroChillMenu {
             @Override public void onViewDetachedFromWindow(View view) { popup.dismiss(); }
         };
         anchor.addOnAttachStateChangeListener(attachment);
-        popup.setOnDismissListener(() -> anchor.removeOnAttachStateChangeListener(attachment));
+        popup.setOnDismissListener(() -> {
+            anchor.removeOnAttachStateChangeListener(attachment);
+            dismissed();
+        });
         popup.setElevation(dp(12));
         for (int index = 0; index < menu.size(); index++) {
             MenuItem item = menu.getItem(index);
@@ -110,7 +121,7 @@ final class ZeroChillMenu {
         rows.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
                 View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
         popup.setHeight(Math.min(maxHeight, rows.getMeasuredHeight()));
-        popup.showAsDropDown(anchor, 0, dp(4), Gravity.END);
+        AnchoredMenuPopup.show(popup, anchor, above);
     }
 
     private int dp(int value) {

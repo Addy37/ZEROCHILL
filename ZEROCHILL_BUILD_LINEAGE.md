@@ -330,3 +330,58 @@ screen area. Preview 29 uses `6000031`, above Preview 28 `6000030`, with origina
 production package/certificate. No screenshots, data, preferences or backend
 migration. Physical OnePlus Android 16 backdrop/menu acceptance remains pending.
 One signed test APK; no merge, tag, publication or release authorized.
+
+## Approved PR 413 merge and new gallery polish candidate (Preview 30)
+
+The user physically approved Preview 29 `88684adf` and explicitly requested merge.
+PR #413 merged at `8e8c7c55a84328db61e6de8f92667f8444bfecdf`; its signed candidate
+and 239 focused local tests passed. New branch `feature/zerochill-onlyfap-gallery-polish`
+starts at that exact main merge and preserves all approved motion, backdrop and
+centered-menu work. The new request extends the creator hero below the status bar,
+rotates loaded creator photos and adapts V2 media controls. Preview 30 uses `6000032`,
+above Preview 29 `6000031`, with original production package/signing identity.
+See `docs/ONLYFAP_GALLERY_POLISH.md`. One new draft PR and signed test APK; do not
+merge this follow-up, publish or release before new physical approval. No backend,
+source configuration, data migration or integration-branch change is authorized.
+
+
+## PR 414 Preview 31: media overflow placement correction
+
+Physical feedback on Preview 30 reported malfunctioning image/video More menus.
+The same unmerged `feature/zerochill-onlyfap-gallery-polish` branch and draft PR
+#414 now place media menus above their bottom-dock anchors instead of relying on
+an unmeasured Compose dropdown beneath the dock. Native fallback uses the same
+placement. Preview 31 uses version `7.0-preview.31-viewer-menu`, code `6000033`,
+above Preview 30 `6000032`; production package and signing certificate are retained.
+A single updated signed candidate workflow runs after local focused validation.
+No merge, release, backend change, data migration or integration-branch change.
+
+
+## PR 414 Preview 32: taller creator gallery hero
+
+The user requested approximately 20 percent more header height. On the same
+unmerged PR #414 branch, the creator hero increases from 280dp to 336dp, preserving
+safe status-bar insets, compact collapse chrome and the Preview 31 menu fix.
+Preview 32 uses `7.0-preview.32-gallery-header`, code `6000034`, above Preview 31
+`6000033`, with unchanged production package and signing certificate. One updated
+signed test candidate; no merge, release, migration or backend change.
+
+
+## PR 414 Preview 33: quicker gallery closing ripple
+
+The user accepted the taller gallery hero and requested slightly quicker closing.
+On the same unmerged PR #414 branch, reverse reveal duration decreases from 650ms
+to 550ms while opening remains 650ms. Native clip/rings share the shorter duration,
+including progress-scaled interrupted entry. Preview 33 uses
+`7.0-preview.33-gallery-close`, code `6000035`, above Preview 32 `6000034`, with
+unchanged production package/certificate. One signed test candidate; no merge,
+release, migration or backend change.
+
+
+## PR 414 Preview 34: requested 350ms gallery close
+
+The user specified 350ms closing. The same unmerged PR #414 branch sets reverse
+reveal to 350ms while retaining 650ms opening, synchronized rings and the existing
+progress/system-scale handling. Preview 34 uses `7.0-preview.34-close-350ms`, code
+`6000036`, above Preview 33 `6000035`, with the production package/certificate.
+One signed test candidate; no merge, release, migration or backend change.

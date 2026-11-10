@@ -65,7 +65,8 @@ internal object ZeroChillComposeMenu {
         (0 until menu.size()).map { menu.getItem(it) }.filter { it.isVisible }
 
     @JvmStatic
-    fun show(context: Context, anchor: View, menu: Menu, onSelected: Consumer<MenuItem>): Boolean {
+    @JvmOverloads
+    fun show(context: Context, anchor: View, menu: Menu, onSelected: Consumer<MenuItem>, onDismiss: Runnable? = null, above: Boolean = false): Boolean {
         val activity = activityFor(context) ?: return false
         if (!anchor.isAttachedToWindow) return false
         val items = visibleItems(menu)
@@ -75,7 +76,8 @@ internal object ZeroChillComposeMenu {
         // local owner rather than relying on the Activity's window hierarchy.
         val owner = NavOwner(activity)
         val width = min(dp(context, 270), context.resources.displayMetrics.widthPixels - dp(context, 32))
-        val maxHeight = min(dp(context, 420), context.resources.displayMetrics.heightPixels - dp(context, 96))
+        val maxHeight = AnchoredMenuPopup.maxHeight(anchor,
+            min(dp(context, 420), context.resources.displayMetrics.heightPixels - dp(context, 96)), above)
         lateinit var popup: PopupWindow
         val content = ComposeView(activity).apply {
             setViewTreeLifecycleOwner(owner)
@@ -128,10 +130,11 @@ internal object ZeroChillComposeMenu {
         popup.setOnDismissListener {
             anchor.removeOnAttachStateChangeListener(attachment)
             owner.close()
+            onDismiss?.run()
         }
 
         return try {
-            popup.showAsDropDown(anchor, 0, dp(context, 4), Gravity.END)
+            AnchoredMenuPopup.show(popup, anchor, above)
             true
         } catch (e: android.view.WindowManager.BadTokenException) {
             anchor.removeOnAttachStateChangeListener(attachment)

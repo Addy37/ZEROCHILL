@@ -22,6 +22,7 @@ final class FullscreenVideoGestures implements View.OnTouchListener {
     private final GestureDetector detector;
     private final TextView feedback;
     private final boolean immediateSingleTap;
+    private final Runnable singleTap;
     private boolean dragged;
     private final Runnable clearFeedback = () -> feedbackGone();
 
@@ -32,6 +33,13 @@ final class FullscreenVideoGestures implements View.OnTouchListener {
 
     FullscreenVideoGestures(PlayerView surface, Supplier<Player> player,
             ShowsFullscreenControls controls, BooleanSupplier enabled, boolean immediateSingleTap) {
+        this(surface, player, controls, enabled, immediateSingleTap, null);
+    }
+
+    FullscreenVideoGestures(PlayerView surface, Supplier<Player> player,
+            ShowsFullscreenControls controls, BooleanSupplier enabled, boolean immediateSingleTap,
+            Runnable singleTap) {
+        this.singleTap = singleTap;
         this.surface = surface;
         this.player = player;
         this.controls = controls;
@@ -48,12 +56,12 @@ final class FullscreenVideoGestures implements View.OnTouchListener {
             @Override public boolean onDown(MotionEvent e) { dragged = false; return true; }
             @Override public boolean onSingleTapUp(MotionEvent e) {
                 if (FullscreenVideoGestures.this.immediateSingleTap && enabled.getAsBoolean())
-                    controls.onVideoTap();
+                    dispatchSingleTap();
                 return true;
             }
             @Override public boolean onSingleTapConfirmed(MotionEvent e) {
                 if (!FullscreenVideoGestures.this.immediateSingleTap && enabled.getAsBoolean())
-                    controls.onVideoTap();
+                    dispatchSingleTap();
                 return true;
             }
             @Override public boolean onDoubleTap(MotionEvent e) { return true; }
@@ -73,7 +81,7 @@ final class FullscreenVideoGestures implements View.OnTouchListener {
         });
         ViewCompat.addAccessibilityAction(surface, "Show or hide video controls", (v, args) -> {
             if (!enabled.getAsBoolean()) return false;
-            controls.onVideoTap(); return true;
+            dispatchSingleTap(); return true;
         });
         ViewCompat.addAccessibilityAction(surface, "Rewind 10 seconds", (v, args) -> {
             if (!enabled.getAsBoolean()) return false;
@@ -83,6 +91,10 @@ final class FullscreenVideoGestures implements View.OnTouchListener {
             if (!enabled.getAsBoolean()) return false;
             seek(true); return true;
         });
+    }
+
+    private void dispatchSingleTap() {
+        if (singleTap != null) singleTap.run(); else controls.onVideoTap();
     }
 
     @Override public boolean onTouch(View v, MotionEvent event) {
