@@ -43,7 +43,7 @@ public final class LikedVideosActivity extends Activity {
         ZeroChillUi.applySystemBars(this);
         LibraryDestinationChrome.prepareWindow(this);
         owner = ZeroChillSessionStore.currentUserId(this);
-        LinearLayout root = BrowseUi.screen(this);
+        LinearLayout root = LibraryDestinationChrome.compactRoot(this);
         LinearLayout heading = new LinearLayout(this);
         heading.setGravity(Gravity.CENTER_VERTICAL);
         heading.addView(BrowseUi.action(this, "‹", "Back", v -> finish()), new LinearLayout.LayoutParams(dp(48), dp(48)));
