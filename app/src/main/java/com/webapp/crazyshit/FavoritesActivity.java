@@ -335,10 +335,6 @@ public class FavoritesActivity extends Activity {
 
         TextView more = overflowButton("Options for " + item.title);
         more.setOnClickListener(v -> showHistoryMenu(v, item, continueOnly));
-        FrameLayout.LayoutParams moreParams =
-                new FrameLayout.LayoutParams(dp(34), dp(34), Gravity.TOP | Gravity.END);
-        moreParams.setMargins(0, dp(5), dp(5), 0);
-        media.addView(more, moreParams);
 
         wrapper.addView(card, new LinearLayout.LayoutParams(-1, -2));
 
@@ -359,7 +355,7 @@ public class FavoritesActivity extends Activity {
         LinearLayout.LayoutParams detailParams = new LinearLayout.LayoutParams(-1, -2);
         detailParams.setMargins(dp(3), dp(6), dp(3), dp(2));
         wrapper.addView(detail, detailParams);
-        return wrapper;
+        return LibraryOverlayActionCard.wrap(this, wrapper, more);
     }
 
     private void showHistoryMenu(View anchor, PlaybackHistoryStore.Item item, boolean continueOnly) {
@@ -448,10 +444,6 @@ public class FavoritesActivity extends Activity {
 
         TextView more = overflowButton("Options for " + item.title);
         more.setOnClickListener(v -> showWatchLaterMenu(v, item));
-        FrameLayout.LayoutParams moreParams =
-                new FrameLayout.LayoutParams(dp(34), dp(34), Gravity.TOP | Gravity.END);
-        moreParams.setMargins(0, dp(5), dp(5), 0);
-        media.addView(more, moreParams);
 
         wrapper.addView(card, new LinearLayout.LayoutParams(-1, -2));
 
@@ -465,7 +457,7 @@ public class FavoritesActivity extends Activity {
         LinearLayout.LayoutParams savedParams = new LinearLayout.LayoutParams(-1, -2);
         savedParams.setMargins(dp(3), dp(6), dp(3), dp(2));
         wrapper.addView(saved, savedParams);
-        return wrapper;
+        return LibraryOverlayActionCard.wrap(this, wrapper, more);
     }
 
     private void showWatchLaterMenu(View anchor, FavoriteStore.Item item) {
