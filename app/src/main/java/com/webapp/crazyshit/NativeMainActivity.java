@@ -90,6 +90,8 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     private ViewPager2 primaryPager;
     private MainPagerAdapter primaryPagerAdapter;
     private AppUpdater appUpdater;
+    private WhatsNewUpdateDialog whatsNewDialog;
+    private final Runnable whatsNewStartupCheck = this::maybeShowWhatsNewOrContinue;
     private boolean chaosClearDisplay;
     private NavigationMotionController navigationMotion;
     private float contentDownX;
@@ -100,7 +102,8 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     private Screen screen = Screen.CHAOS;
     private int renderedPrimaryPage = -1;
     private final Runnable ratingPromptCheck = () -> {
-        if (screen != Screen.CHAOS || primaryPager == null
+        if ((whatsNewDialog != null && whatsNewDialog.isShowing())
+                || screen != Screen.CHAOS || primaryPager == null
                 || currentPrimaryPage() != MainPagerAdapter.PAGE_CHAOS
                 || chaosClearDisplay
                 || (miniPlayer != null && miniPlayer.isVisible())) return;
@@ -163,25 +166,56 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         if (!shortcutLaunch && ZeroChillIdUpgradeAnnouncement.shouldShow(this) && overlayRoot != null) {
             overlayRoot.postDelayed(() -> {
                 if (isFinishing() || isDestroyed()) return;
-                boolean shown = ZeroChillIdUpgradeAnnouncement.maybeShow(this, () -> {
-                    NotificationCoordinator.maybeOfferPermission(this);
-                    scheduleRatingPromptCheck();
-                });
-                if (!shown) {
-                    NotificationCoordinator.maybeOfferPermission(this);
-                    scheduleRatingPromptCheck();
-                }
+                boolean shown = ZeroChillIdUpgradeAnnouncement.maybeShow(this,
+                        () -> overlayRoot.postDelayed(whatsNewStartupCheck, 180L));
+                if (!shown) overlayRoot.postDelayed(whatsNewStartupCheck, 180L);
             }, 650L);
             return;
         }
+        overlayRoot.postDelayed(whatsNewStartupCheck, 650L);
+    }
 
+    private void maybeShowWhatsNewOrContinue() {
+        if (isFinishing() || isDestroyed() || overlayRoot == null) return;
+        Intent intent = getIntent();
+        String action = intent == null ? null : intent.getAction();
+        boolean navigationLaunch = intent != null && (intent.getData() != null
+                || AppShortcuts.isShortcutAction(action)
+                || (action != null && !Intent.ACTION_MAIN.equals(action)));
+        if (!navigationLaunch && whatsNewDialog == null
+                && shell instanceof FrostedNavigationLayout) {
+            whatsNewDialog = WhatsNewUpdateDialog.maybeShow(this, overlayRoot, shell,
+                    ((FrostedNavigationLayout) shell).pageBackdropForOverlay(), () -> {
+                        whatsNewDialog = null;
+                        continueStartupPrompts();
+                    });
+            if (whatsNewDialog != null) return;
+        }
+        continueStartupPrompts();
+    }
+
+    private void continueStartupPrompts() {
+        if (isFinishing() || isDestroyed()) return;
         NotificationCoordinator.maybeOfferPermission(this);
         scheduleRatingPromptCheck();
+    }
+
+    private void previewWhatsNewForDebug() {
+        if (whatsNewDialog != null && !whatsNewDialog.isShowing()) whatsNewDialog = null;
+        if (!WhatsNewUpdateDialog.canPreview() || whatsNewDialog != null || overlayRoot == null
+                || !(shell instanceof FrostedNavigationLayout)) return;
+        whatsNewDialog = WhatsNewUpdateDialog.showPreview(this, overlayRoot, shell,
+                ((FrostedNavigationLayout) shell).pageBackdropForOverlay());
     }
 
     @Override
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
+        overlayRoot.removeCallbacks(whatsNewStartupCheck);
+        if (whatsNewDialog != null) {
+            whatsNewDialog.dismissWithoutAcknowledging();
+            whatsNewDialog = null;
+        }
         setIntent(intent);
         if (!AccessNoticeDialog.isAccepted(this)) {
             return;
@@ -498,6 +532,13 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         ZeroChillUi.styleTitle(headerTitle);
         headerTitle.setTextSize(28f);
         headerTitle.setSingleLine(true);
+        // Local debug and signed preview builds allow repeat physical checks.
+        if (WhatsNewUpdateDialog.canPreview()) {
+            headerTitle.setOnLongClickListener(v -> {
+                previewWhatsNewForDebug();
+                return true;
+            });
+        }
         TextViewCompat.setAutoSizeTextTypeUniformWithConfiguration(
                 headerTitle, 14, 28, 1, TypedValue.COMPLEX_UNIT_SP);
         labels.addView(headerTitle);
@@ -1328,6 +1369,11 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     }
 
     private void handleBackNavigation() {
+        if (whatsNewDialog != null && whatsNewDialog.isShowing()) {
+            whatsNewDialog.dismiss(true);
+            whatsNewDialog = null;
+            return;
+        }
         if (searchPanel != null) { searchPanel.back(); return; }
         if (screen == Screen.CHAOS && primaryPagerAdapter != null
                 && primaryPagerAdapter.exitChaosFullscreenForBack()) {
@@ -1408,6 +1454,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
             }
         }
         applyChaosFullscreenChrome();
+        if (whatsNewDialog != null) whatsNewDialog.refreshLayout();
     }
 
     @Override
@@ -1512,6 +1559,11 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
 
     @Override
     protected void onDestroy() {
+        if (overlayRoot != null) overlayRoot.removeCallbacks(whatsNewStartupCheck);
+        if (whatsNewDialog != null) {
+            whatsNewDialog.dismissWithoutAcknowledging();
+            whatsNewDialog = null;
+        }
         if (searchPanel != null) searchPanel.close();
         if (headerProfileAvatar != null) headerProfileAvatar.close();
         if (miniPlayer != null) miniPlayer.stop();
