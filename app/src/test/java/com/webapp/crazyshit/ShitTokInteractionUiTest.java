@@ -210,7 +210,7 @@ public class ShitTokInteractionUiTest {
     @Test public void explicitButtonKeepsPriorityOverOverlappingProgressHitRow() {
         try (ShitTokAudioOwnershipTest.Fixture f = fixture()) {
             var root = (android.view.ViewGroup) root(f.selected);
-            View more = root.findViewWithTag("shittok_more");
+            View more = root.findViewWithTag("shittok_share");
             Rect bounds = new Rect(0, 0, more.getWidth(), more.getHeight());
             root.offsetDescendantRectToMyCoords(more, bounds);
             View row = root.findViewWithTag("shittok_progress_row");

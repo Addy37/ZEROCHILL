@@ -316,7 +316,7 @@ public class VisualRefreshTest {
         host.pause().stop().destroy();
     }
 
-    @Test public void shitTokActionsFloatWithMuteWithoutShare() {
+    @Test public void shitTokActionsFloatWithDownloadAndShare() {
         ActivityController<Activity> host = Robolectric.buildActivity(Activity.class).setup();
         host.get().setTheme(R.style.Theme_CrazyShit);
         ChaosFeedView feed = new ChaosFeedView(host.get(), item -> { }, false);
@@ -330,7 +330,7 @@ public class VisualRefreshTest {
             assertNotNull(actionRail);
             assertNull(root.findViewWithTag("shittok_playback_rail"));
             assertNotNull(root.findViewWithTag("shittok_mute"));
-            assertNull(root.findViewWithTag("shittok_share"));
+            assertNotNull(root.findViewWithTag("shittok_share"));
             assertNull(actionRail.getBackground());
             assertEquals(6, ((ViewGroup) actionRail).getChildCount());
 
@@ -338,14 +338,15 @@ public class VisualRefreshTest {
                     "shittok_like",
                     "shittok_save",
                     "shittok_comments",
-                    "shittok_auto_scroll",
-                    "shittok_more",
+                    "shittok_download",
+                    "shittok_share",
                     "shittok_mute",
                     "shittok_landscape_mute",
                     "shittok_landscape_like",
                     "shittok_landscape_comments",
                     "shittok_landscape_save",
-                    "shittok_landscape_auto_scroll"
+                    "shittok_landscape_download",
+                    "shittok_landscape_share"
             }) {
                 View control = root.findViewWithTag(tag);
                 assertNotNull(tag, control);
@@ -360,8 +361,8 @@ public class VisualRefreshTest {
             View fullscreen = root.findViewWithTag("shittok_fullscreen");
             assertEquals(View.GONE, fullscreen.getVisibility());
             assertEquals("Full screen", ((TextView) fullscreen).getText().toString());
-            assertEquals("Auto Scroll off. Tap to turn on", String.valueOf(
-                    root.findViewWithTag("shittok_auto_scroll").getContentDescription()));
+            assertEquals("Download video", String.valueOf(
+                    root.findViewWithTag("shittok_download").getContentDescription()));
         } finally {
             feed.close();
             host.pause().stop().destroy();
@@ -377,17 +378,21 @@ public class VisualRefreshTest {
             RecyclerView.ViewHolder holder = adapter.onCreateViewHolder(
                     new RecyclerView(host.get()), 0);
             View root = holder.itemView;
-            View portraitToggle = root.findViewWithTag("shittok_auto_scroll");
-            View landscapeToggle = root.findViewWithTag("shittok_landscape_auto_scroll");
-            assertEquals("Auto Scroll off. Tap to turn on",
-                    String.valueOf(portraitToggle.getContentDescription()));
-            portraitToggle.performClick();
-            assertEquals("Auto Scroll on. Tap to turn off",
-                    String.valueOf(portraitToggle.getContentDescription()));
-            // A detached holder won't be part of pagerRecycler's child iteration; the
-            // attached layout uses that path. Its second control toggles the same feed field.
-            landscapeToggle.performClick();
+            assertNull(root.findViewWithTag("shittok_auto_scroll"));
+            assertNull(root.findViewWithTag("shittok_landscape_auto_scroll"));
+            ReflectionHelpers.callInstanceMethod(feed, "setAutoScrollEnabled",
+                    ReflectionHelpers.ClassParameter.from(boolean.class, true));
+            assertEquals(Boolean.TRUE, ReflectionHelpers.getField(feed, "autoScrollEnabled"));
+            ReflectionHelpers.callInstanceMethod(feed, "setAutoScrollEnabled",
+                    ReflectionHelpers.ClassParameter.from(boolean.class, false));
             assertEquals(Boolean.FALSE, ReflectionHelpers.getField(feed, "autoScrollEnabled"));
+
+            NativeContentItem sample = new NativeContentItem(NativeContentItem.KIND_MEDIA,
+                    "Alex Rivera #12345", "https://fapello.com/video/12345/",
+                    "", "", "Alex Rivera", "", "OnlyFap");
+            ReflectionHelpers.callInstanceMethod(holder, "bind",
+                    ReflectionHelpers.ClassParameter.from(NativeContentItem.class, sample),
+                    ReflectionHelpers.ClassParameter.from(int.class, 0));
 
             android.content.res.Configuration original = new android.content.res.Configuration(
                     host.get().getResources().getConfiguration());

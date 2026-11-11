@@ -1889,12 +1889,6 @@ public final class ChaosFeedView extends FrameLayout {
         cancelPendingAutoAdvance();
         autoAdvanceIssuedFrom = -1;
         if (pendingFailedClip) requestAutoAdvance(selectedPosition);
-        RecyclerView rv = pagerRecycler();
-        if (rv == null) return;
-        for (int i = 0; i < rv.getChildCount(); i++) {
-            RecyclerView.ViewHolder raw = rv.getChildViewHolder(rv.getChildAt(i));
-            if (raw instanceof ChaosHolder) ((ChaosHolder) raw).syncAutoScrollButtons();
-        }
         if (!enabled) {
             ChaosHolder selected = holderAt(selectedPosition);
             if (selected != null && selected.player != null
@@ -2816,7 +2810,7 @@ public final class ChaosFeedView extends FrameLayout {
         boolean saved = FavoriteStore.contains(activity, item.url);
         button.setCompoundDrawablesWithIntrinsicBounds(
                 0,
-                saved ? R.drawable.ic_nav_saved : R.drawable.ic_action_save_outline,
+                saved ? R.drawable.ic_shittok_rail_bookmark_filled : R.drawable.ic_shittok_rail_bookmark,
                 0,
                 0
         );
@@ -2999,10 +2993,11 @@ public final class ChaosFeedView extends FrameLayout {
         final TextView landscapeLike;
         final TextView landscapeSave;
         final TextView landscapeComments;
-        final TextView landscapeAutoScroll;
+        final TextView landscapeDownload;
         final TextView mute, landscapeMute;
         ImageView speedBadge;
-        final TextView autoScroll;
+        final TextView download;
+        final TextView share;
         final TextView fullscreen;
         final FrameLayout creatorAvatarControl;
         final FrameLayout avatarRing;
@@ -3202,57 +3197,56 @@ public final class ChaosFeedView extends FrameLayout {
             creatorFavoriteTarget.setFocusable(true);
             ZeroChillMotion.installPressFeedback(creatorFavoriteTarget);
             FrameLayout.LayoutParams targetParams =
-                    new FrameLayout.LayoutParams(dp(48), dp(48), Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
+                    new FrameLayout.LayoutParams(dp(36), dp(36), Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
             creatorAvatarControl.addView(creatorFavoriteTarget, targetParams);
             FrameLayout.LayoutParams badgeParams =
                     new FrameLayout.LayoutParams(dp(22), dp(22), Gravity.CENTER);
             creatorFavoriteTarget.addView(creatorFavoriteBadge, badgeParams);
 
             FrameLayout.LayoutParams floatingCreatorParams = new FrameLayout.LayoutParams(
-                    dp(52), dp(104), Gravity.BOTTOM | Gravity.END);
-            floatingCreatorParams.setMargins(0, 0, dp(13), dp(352));
+                    dp(52), dp(68), Gravity.BOTTOM | Gravity.END);
+            floatingCreatorParams.setMargins(0, 0, dp(13), dp(350));
             root.addView(creatorAvatarControl, floatingCreatorParams);
 
             like = textIconActionButton(
-                    R.drawable.ic_action_heart_outline,
+                    R.drawable.ic_shittok_rail_heart,
                     "Like video",
                     "shittok_like"
             );
             prepareCountedAction(like);
-            like.setTranslationY(dp(2));
             actionRail.addView(like, actionParams());
 
             save = textIconActionButton(
-                    R.drawable.ic_action_save_outline,
+                    R.drawable.ic_shittok_rail_bookmark,
                     "Save to Watch Later",
                     "shittok_save"
             );
             actionRail.addView(save, actionParams());
 
             comments = textIconActionButton(
-                    R.drawable.ic_action_comments,
+                    R.drawable.ic_shittok_rail_comments,
                     "Open comments",
                     "shittok_comments"
             );
             prepareCountedAction(comments);
             actionRail.addView(comments, actionParams());
 
-            autoScroll = textIconActionButton(
-                    R.drawable.ic_shittok_auto_scroll,
-                    "Auto Scroll off. Tap to turn on",
-                    "shittok_auto_scroll"
+            download = textIconActionButton(
+                    R.drawable.ic_shittok_rail_download,
+                    "Download video",
+                    "shittok_download"
             );
-            actionRail.addView(autoScroll, actionParams());
+            actionRail.addView(download, actionParams());
 
             mute = muteButton("shittok_mute");
             actionRail.addView(mute, actionParams());
 
-            TextView more = textIconActionButton(
-                    R.drawable.ic_more_overflow,
-                    "More video actions",
-                    "shittok_more"
+            share = textIconActionButton(
+                    R.drawable.ic_shittok_rail_share,
+                    "Share video. Long press for more actions",
+                    "shittok_share"
             );
-            actionRail.addView(more, actionParams());
+            actionRail.addView(share, actionParams());
 
             fullscreen = textIconActionButton(
                     R.drawable.ic_action_fullscreen,
@@ -3323,9 +3317,12 @@ public final class ChaosFeedView extends FrameLayout {
             landscapeTitle.setEllipsize(android.text.TextUtils.TruncateAt.END);
             landscapeHeader.addView(landscapeTitle, new LinearLayout.LayoutParams(0, dp(48), 1f));
             landscapeTitle.setGravity(Gravity.CENTER_VERTICAL);
-            TextView landscapeMore = textIconActionButton(
-                    R.drawable.ic_more_overflow, "More video actions", "shittok_landscape_more");
-            landscapeHeader.addView(landscapeMore,
+            TextView landscapeShare = textIconActionButton(
+                    R.drawable.ic_shittok_rail_share,
+                    "Share video. Long press for more actions", "shittok_landscape_share");
+            landscapeShare.setCompoundDrawablesWithIntrinsicBounds(
+                    R.drawable.ic_shittok_rail_share, 0, 0, 0);
+            landscapeHeader.addView(landscapeShare,
                     new LinearLayout.LayoutParams(dp(48), dp(48)));
             FrameLayout.LayoutParams headerParams = new FrameLayout.LayoutParams(-1, dp(58), Gravity.TOP);
             root.addView(landscapeHeader, headerParams);
@@ -3334,17 +3331,17 @@ public final class ChaosFeedView extends FrameLayout {
             landscapeActions.setGravity(Gravity.CENTER_VERTICAL);
             landscapeActions.setPadding(dp(12), 0, dp(12), 0);
             landscapeActions.setTag("shittok_landscape_actions");
-            landscapeLike = textIconActionButton(R.drawable.ic_action_heart_outline,
+            landscapeLike = textIconActionButton(R.drawable.ic_shittok_rail_heart,
                     "Like video", "shittok_landscape_like");
-            landscapeComments = textIconActionButton(R.drawable.ic_action_comments,
+            landscapeComments = textIconActionButton(R.drawable.ic_shittok_rail_comments,
                     "Open comments", "shittok_landscape_comments");
-            landscapeSave = textIconActionButton(R.drawable.ic_action_save_outline,
+            landscapeSave = textIconActionButton(R.drawable.ic_shittok_rail_bookmark,
                     "Save to Watch Later", "shittok_landscape_save");
-            landscapeAutoScroll = textIconActionButton(R.drawable.ic_shittok_auto_scroll,
-                    "Auto Scroll off. Tap to turn on", "shittok_landscape_auto_scroll");
+            landscapeDownload = textIconActionButton(R.drawable.ic_shittok_rail_download,
+                    "Download video", "shittok_landscape_download");
             landscapeMute = muteButton("shittok_landscape_mute");
             for (TextView action : new TextView[] { landscapeLike, landscapeComments,
-                    landscapeSave, landscapeAutoScroll, landscapeMute }) {
+                    landscapeSave, landscapeDownload, landscapeMute }) {
                 landscapeActions.addView(action,
                         new LinearLayout.LayoutParams(dp(48), dp(48)));
             }
@@ -3355,16 +3352,16 @@ public final class ChaosFeedView extends FrameLayout {
             landscapeHeader.setVisibility(View.GONE);
             landscapeActions.setVisibility(View.GONE);
             back.setOnClickListener(v -> { haptic(v); exitManualFullscreen(); });
-            landscapeMore.setOnClickListener(v -> { haptic(v); showMoreMenu(v); });
+            landscapeShare.setOnClickListener(v -> { haptic(v); share(item); });
+            landscapeShare.setOnLongClickListener(v -> { haptic(v); showMoreMenu(v); return true; });
+            ViewCompat.addAccessibilityAction(landscapeShare, "More video actions", (view, args) -> {
+                showMoreMenu(view);
+                return true;
+            });
             landscapeLike.setOnClickListener(v -> { haptic(v); toggleVideoLike(); showControlsTemporarily(); });
             landscapeSave.setOnClickListener(v -> { haptic(v); toggleSaved(item, save); showControlsTemporarily(); });
             landscapeComments.setOnClickListener(v -> { haptic(v); if (item != null) openInlineComments(item); });
-            landscapeAutoScroll.setOnClickListener(v -> {
-                haptic(v);
-                setAutoScrollEnabled(!autoScrollEnabled);
-                syncAutoScrollButtons();
-                showControlsTemporarily();
-            });
+            landscapeDownload.setOnClickListener(v -> { haptic(v); downloadCurrentVideo(); });
 
             pausePlayOverlay = new ImageView(activity);
             pausePlayOverlay.setImageResource(R.drawable.ic_shittok_play_overlay);
@@ -3639,15 +3636,12 @@ public final class ChaosFeedView extends FrameLayout {
                 haptic(v);
                 if (item != null) openInlineComments(item);
             });
-            autoScroll.setOnClickListener(v -> {
-                haptic(v);
-                setAutoScrollEnabled(!autoScrollEnabled);
-                syncAutoScrollButtons();
-                showControlsTemporarily();
-            });
-            more.setOnClickListener(v -> {
-                haptic(v);
-                showMoreMenu(v);
+            download.setOnClickListener(v -> { haptic(v); downloadCurrentVideo(); });
+            share.setOnClickListener(v -> { haptic(v); share(item); });
+            share.setOnLongClickListener(v -> { haptic(v); showMoreMenu(v); return true; });
+            ViewCompat.addAccessibilityAction(share, "More video actions", (view, args) -> {
+                showMoreMenu(view);
+                return true;
             });
 
             seekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
@@ -3836,7 +3830,7 @@ public final class ChaosFeedView extends FrameLayout {
         }
 
         private TextView muteButton(String tag) {
-            TextView button = textIconActionButton(R.drawable.ic_shittok_volume_on, "Mute video", tag);
+            TextView button = textIconActionButton(R.drawable.ic_shittok_rail_volume_on, "Mute video", tag);
             button.setFocusable(true);
             button.setOnClickListener(v -> {
                 haptic(v);
@@ -3849,7 +3843,9 @@ public final class ChaosFeedView extends FrameLayout {
         private void syncMuteButtons() {
             for (TextView button : new TextView[] { mute, landscapeMute }) {
                 button.setCompoundDrawablesWithIntrinsicBounds(0, chaosMuted
-                        ? R.drawable.ic_shittok_volume_off : R.drawable.ic_shittok_volume_on, 0, 0);
+                        ? R.drawable.ic_shittok_rail_volume_off : R.drawable.ic_shittok_rail_volume_on, 0, 0);
+                button.setCompoundDrawableTintList(ColorStateList.valueOf(
+                        chaosMuted ? AppearanceTheme.accent(activity) : Color.WHITE));
                 button.setContentDescription(chaosMuted ? "Unmute video" : "Mute video");
             }
         }
@@ -3859,7 +3855,10 @@ public final class ChaosFeedView extends FrameLayout {
             button.setGravity(Gravity.CENTER);
             button.setContentDescription(description);
             button.setBackgroundColor(Color.TRANSPARENT);
-            button.setPadding(dp(12), dp(12), dp(12), dp(12));
+            button.setPadding(dp(10), dp(2), dp(10), dp(2));
+            button.setIncludeFontPadding(false);
+            button.setTextSize(10);
+            button.setCompoundDrawablePadding(dp(1));
             button.setClickable(true);
             button.setFocusable(false);
             button.setTag(tag);
@@ -3872,7 +3871,7 @@ public final class ChaosFeedView extends FrameLayout {
 
         private void prepareCountedAction(TextView button) {
             if (button == null) return;
-            button.setPadding(dp(12), dp(4), dp(12), dp(4));
+            button.setPadding(dp(10), dp(2), dp(10), dp(2));
             button.setCompoundDrawablePadding(dp(1));
         }
 
@@ -3993,8 +3992,8 @@ public final class ChaosFeedView extends FrameLayout {
                 updateSaveButton(item, save);
                 updateSaveButton(item, landscapeSave);
             }
-            syncAutoScrollButtons();
             if (heartOverlay != null) heartOverlay.setImageTintList(ColorStateList.valueOf(accent));
+            syncMuteButtons();
         }
 
         void setSwipeAlpha(float alpha) {
@@ -4088,7 +4087,6 @@ public final class ChaosFeedView extends FrameLayout {
             landscapeComments.setVisibility(supportsComments(next) ? View.VISIBLE : View.GONE);
             updateSaveButton(next, save);
             updateSaveButton(next, landscapeSave);
-            syncAutoScrollButtons();
             syncLoading();
             failure.setText("Couldn't play this one\nSwipe up for the next video");
             failure.setContentDescription("Couldn't play this video");
@@ -4214,7 +4212,7 @@ public final class ChaosFeedView extends FrameLayout {
             if (like == null) return;
             like.setCompoundDrawablesWithIntrinsicBounds(
                     0,
-                    videoLiked ? R.drawable.ic_action_heart_filled : R.drawable.ic_action_heart_outline,
+                    videoLiked ? R.drawable.ic_shittok_rail_heart_filled : R.drawable.ic_shittok_rail_heart,
                     0,
                     0
             );
@@ -4228,8 +4226,8 @@ public final class ChaosFeedView extends FrameLayout {
             videoLiked ? "Unlike video" : "Like video"
             );
             landscapeLike.setCompoundDrawablesWithIntrinsicBounds(
-                    0, videoLiked ? R.drawable.ic_action_heart_filled
-                            : R.drawable.ic_action_heart_outline, 0, 0);
+                    0, videoLiked ? R.drawable.ic_shittok_rail_heart_filled
+                            : R.drawable.ic_shittok_rail_heart, 0, 0);
             TextViewCompat.setCompoundDrawableTintList(landscapeLike, ColorStateList.valueOf(
                     videoLiked ? AppearanceTheme.accent(activity) : Color.WHITE));
             landscapeLike.setContentDescription(videoLiked ? "Unlike video" : "Like video");
@@ -4261,7 +4259,7 @@ public final class ChaosFeedView extends FrameLayout {
             if (comments == null) return;
             comments.setCompoundDrawablesWithIntrinsicBounds(
                     0,
-                    R.drawable.ic_action_comments,
+                    R.drawable.ic_shittok_rail_comments,
                     0,
                     0
             );
@@ -4622,6 +4620,8 @@ public final class ChaosFeedView extends FrameLayout {
             addMenuAction(menu, "Comments", () -> openInlineComments(item));
             addMenuAction(menu, "Share", () -> share(item));
             addMenuAction(menu, "Video details", this::openCurrentDetails);
+            addMenuAction(menu, autoScrollEnabled ? "Turn off Auto Scroll" : "Turn on Auto Scroll",
+                    () -> setAutoScrollEnabled(!autoScrollEnabled));
             addMenuSection(menu, "FEED");
             addMenuAction(menu, "Not interested", () -> hideFromChaos(item));
             if (!creator.isEmpty()) addMenuAction(menu, "Block creator from ShitTok",
@@ -4733,17 +4733,6 @@ public final class ChaosFeedView extends FrameLayout {
             } else if (decision == ShitTokAutoScrollPolicy.Completion.LOOP) {
                 completedPlayer.seekTo(0L);
                 playOwnedPlayer();
-            }
-        }
-
-        void syncAutoScrollButtons() {
-            String description = autoScrollEnabled
-                    ? "Auto Scroll on. Tap to turn off"
-                    : "Auto Scroll off. Tap to turn on";
-            int color = autoScrollEnabled ? AppearanceTheme.accent(activity) : Color.WHITE;
-            for (TextView button : new TextView[] { autoScroll, landscapeAutoScroll }) {
-                button.setContentDescription(description);
-                TextViewCompat.setCompoundDrawableTintList(button, ColorStateList.valueOf(color));
             }
         }
 

@@ -1,6 +1,6 @@
 name: ShitTok Visual Polish Candidate
 
-# Preview 35: ShitTok presentation only; approved Library/OnlyFap retained.
+# Preview 36: attached creator badge and bold Download/Share action rail.
 # One scoped candidate run; no release publication or additional APK variants.
 on:
   push:
@@ -17,8 +17,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 35
     env:
-      APP_VERSION_CODE: '6000037'
-      APP_VERSION_NAME: '7.0-preview.35-shittok'
+      APP_VERSION_CODE: '6000038'
+      APP_VERSION_NAME: '7.0-preview.36-shittok-buttons'
       ZEROCHILL_SOURCE_SHA: ${{ github.sha }}
       FEEDBACK_ENDPOINT: ${{ secrets.FEEDBACK_ENDPOINT }}
       FEEDBACK_ANON_KEY: ${{ secrets.FEEDBACK_ANON_KEY }}
@@ -54,6 +54,9 @@ jobs:
           gradle-version: '8.11.1'
           cache-provider: basic
       - name: Focused ShitTok presentation and behavior checks
+        env:
+          ANALYTICS_ENDPOINT: ''
+          ANALYTICS_V2_ENDPOINT: ''
         run: |
           cat > "$RUNNER_TEMP/shittok-test-jdk.gradle" <<'GRADLE'
           allprojects {
@@ -63,7 +66,7 @@ jobs:
           }
           GRADLE
           filters=()
-          for test in ShitTokVisualPolishTest ShitTokInteractionUiTest ShitTokInteractionPolicyTest \
+          for test in ShitTokVisualPolishTest VisualRefreshTest ShitTokInteractionUiTest ShitTokInteractionPolicyTest \
             ShitTokAudioOwnershipTest ShitTokSettledSwipeTest ShitTokSwipeStartTest \
             ShitTokContinuityTest ShitTokDynamicPinchTest ShitTokFocusModeViewportTest \
             ShitTokProgressTest ShitTokScrubInteractionTest ShitTokScrubPreviewTest \
@@ -129,7 +132,7 @@ jobs:
               return package[1], int(package[2]), cert[1]
           current, previous = inspect(candidate), inspect(stable)
           assert current[0] == previous[0] == 'com.addy37.crazyshitunofficial'
-          assert current[1] == 6000037 and current[1] > max(6000036, previous[1])
+          assert current[1] == 6000038 and current[1] > max(6000037, previous[1])
           assert current[2] == previous[2] == '04abf84b3d468cbb1a562dea83b0007e686b2e56018cce911223963faea51356', 'Production signing certificate changed'
           report = (f'Source: {os.environ["GITHUB_SHA"]}\n'
                     f'Branch: {os.environ["GITHUB_REF_NAME"]}\n'
@@ -156,5 +159,7 @@ jobs:
           name: ZeroChill-ShitTokVisualPolish-validation
           path: |
             app/build/test-results/testDebugUnitTest/
+            app/build/reports/visual-tests/shittok-portrait-controls.png
+            app/build/reports/visual-tests/shittok-landscape-controls.png
           if-no-files-found: warn
           retention-days: 14

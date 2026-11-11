@@ -400,3 +400,18 @@ workflow verifies lineage, focused tests, package, certificate and upgrade versi
 See `docs/SHITTOK_VISUAL_POLISH.md` and the PR for actual validation evidence.
 No merge before physical APK approval. No release, tag, backend deployment, remote
 source change, preference/data migration or integration synchronization is authorized.
+
+
+## PR 415 attached-avatar and icon follow-up (Preview 36)
+
+The user tested Preview 35 `1d6b3fa260c8745f2a73d4f058ba62414a33fae3`, supplied
+16118.jpg and TikTok reference 16121.jpg, and rejected the detached creator plus
+and unchanged icon artwork. Continue the same unmerged PR #415 branch from that
+exact head, retaining the complete approved main/Library/OnlyFap baseline. Restore
+the attached avatar badge and distinct gallery/favorite taps, introduce scoped bold
+white icon assets, and replace the Auto Scroll rail slot with Download and the
+More rail slot with Share. Additional actions remain in the shared glass menu.
+Preview 36 uses `7.0-preview.36-shittok-buttons`, code `6000038`, above Preview 35
+`6000037`, with the existing production package and certificate. One signed test
+APK; no merge, tag, public release, backend/source change or data migration.
+Physical approval remains pending. See `docs/SHITTOK_VISUAL_POLISH.md`.

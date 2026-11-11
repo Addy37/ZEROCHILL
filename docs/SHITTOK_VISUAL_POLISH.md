@@ -1,8 +1,34 @@
-# ShitTok visual polish / Preview 35
+# ShitTok visual polish / Preview 36
 
 Baseline: fetched approved main `5f24b294a0e2c3155a7b395894c931608be93dd9`,
 including merged Library #412, OnlyFap motion #413 and gallery polish #414.
 Branch: `feature/zerochill-shittok-visual-polish`.
+
+## Current physical-feedback follow-up
+
+The user tested Preview 35 `1d6b3fa2` and supplied 16118.jpg plus TikTok reference
+16121.jpg. The separate plus badge was rejected, and the old icon shapes did not
+provide the requested improvement. Continue the same draft PR #415 with a compact
+creator badge overlapping the avatar's lower edge. Keep gallery and favorite touch
+routing distinct. New scoped vectors give the rail a visibly bolder white heart,
+bookmark, comment bubble, download, speaker and share arrow, with selected-accent
+active states and 48dp main action targets. The badge itself is 22dp, with a compact
+36dp touch region that preserves avatar-center gallery taps instead of separating
+it from the photo. Shared button typography/padding keeps 28dp artwork unclipped.
+The landscape header Share icon aligns vertically with Back.
+
+Download replaces the Auto Scroll rail action and reuses the existing downloader.
+Share replaces the rail overflow and uses the existing Android share route. Holding
+Share retains access to the shared glass action menu, including Auto Scroll; playback
+completion behavior and its current session state are preserved. Portrait and
+landscape receive the same action/artwork changes. Preview 35's swipe/text/scrub
+polish remains. No player, source, ranking, persistent data or backend change.
+
+The follow-up's actual test/build results and signed APK are recorded on PR #415
+after validation. Its validation artifact also includes native Robolectric portrait
+and landscape captures with synthetic media and placeholder creator artwork.
+The download regression covers unresolved-page and already-resolved stream routes;
+the production downloader and its source/header handling are unchanged. The historical validation below describes Preview 35 only.
 
 ## Scope and acceptance
 
@@ -19,7 +45,7 @@ Playback engine, player pool, buffering/preload, source selection/ranking, pinch
 double-tap/long-press, creator gallery gestures, persistence, package and signing
 identity are protected. No backend, remote-config, preference or data migration.
 
-## Implementation
+## Preview 35 implementation (original candidate)
 
 `ChaosFeedView` remains the UI owner. Existing 24dp white icons now use a narrower
 52dp rail with consistent 48dp targets and 2dp vertical margins. A bottom gradient
@@ -49,14 +75,14 @@ are unchanged. No new dependencies, capture loop or explicit rendering layer.
 ## Candidate delivery
 
 The scoped `shittok-visual-candidate.yml` workflow runs focused regressions and builds
-one signed release-package APK. Preview 35 is `7.0-preview.35-shittok` / `6000037`.
+one signed release-package APK. Preview 36 is `7.0-preview.36-shittok-buttons` / `6000038`.
 It injects existing public client configuration through existing repository secrets,
 restores the existing production signing identity, checks ancestry from the approved
 baseline and compares APK package/certificate/version against the current stable APK.
 The filename includes source branch and commit SHA; checksums and validation metadata
 travel with the artifact. No keystore or private credential is committed.
 
-## Validation
+## Preview 35 validation
 
 Local results are recorded below; the PR records the signed CI artifact and source SHA. Physical OnePlus
 Android 16 / 120Hz optical rendering, playback continuity and upgrade acceptance
@@ -89,3 +115,25 @@ the existing Android 16 test runtime. These environment adjustments remain outsi
 the repository. Full unfiltered debug/release suites, lint, emulator/device playback,
 120Hz profiling and physical in-place installation are not claimed. The signed
 candidate uses the repository's established CI signing/identity checks.
+
+
+## Preview 36 local verification
+
+Final validation passed **168 tests across 22 focused suites**, zero failures,
+errors or skips, together with `:app:assembleDebug` (4m43s). APIs 35/36 cover
+attached badge/gallery/Like touch routing, default white and active accent states,
+28dp icon bounds inside 48dp main buttons, Share/Download in both orientations,
+shared-glass menu access, reduced motion and recycled state. Existing playback,
+pinch, seeking, mute, Auto Scroll and creator-navigation regressions remain passing.
+
+The first run found an incomplete download-test shadow: rotation can restore a
+resolved stream, invoking `downloadKnown` rather than `downloadPage`. The regression
+now covers both existing entry points and checks the exact resolved media URL.
+No downloader or playback fix was needed. Native Robolectric captures with a bound
+placeholder creator were inspected in portrait and landscape, including the attached
+badge and aligned header Share/Back icons. These captures and an independent render
+of the actual vector paths confirm the visual changes; they do not establish GPU
+video composition, OnePlus appearance, 120Hz pacing or physical upgrade acceptance.
+Workflow syntax and diff checks passed; CI repeats the suite before signing.
+Test-step analytics endpoints are blank, matching local tests; release-build client
+configuration, package, signing identity and saved data remain unchanged.

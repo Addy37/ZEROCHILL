@@ -1,6 +1,8 @@
 package com.webapp.crazyshit;
 
 import android.app.Application;
+import android.content.Context;
+import android.content.Intent;
 import android.graphics.drawable.GradientDrawable;
 import android.graphics.Rect;
 import android.os.Looper;
@@ -21,6 +23,8 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.annotation.Config;
+import org.robolectric.annotation.Implementation;
+import org.robolectric.annotation.Implements;
 import org.robolectric.util.ReflectionHelpers;
 import org.robolectric.RuntimeEnvironment;
 import static org.robolectric.Shadows.shadowOf;
@@ -33,6 +37,20 @@ import static org.junit.Assert.*;
 @RunWith(RobolectricTestRunner.class)
 @Config(application = Application.class, sdk = {35, 36}, qualifiers = "w400dp-h800dp-xhdpi")
 public class ShitTokVisualPolishTest {
+    @Implements(VideoDownloadStore.class)
+    public static class Downloads {
+        static NativeContentItem requested;
+        static String mediaUrl;
+        @Implementation protected static void downloadPage(Context context, NativeContentItem item) {
+            requested = item;
+            mediaUrl = null;
+        }
+        @Implementation protected static void downloadKnown(Context context, NativeContentItem item,
+                String url, String userAgent, String cookies, String referer) {
+            requested = item;
+            mediaUrl = url;
+        }
+    }
     @Test public void pagingFadeTracksDirectionAndCancellationWithoutBlackFrames() {
         assertEquals(1f, ShitTokVisualMotion.pageAlpha(3, 3, 0f, true), 0f);
         assertEquals(.96f, ShitTokVisualMotion.pageAlpha(3, 3, 1f, true), .001f);
@@ -52,7 +70,8 @@ public class ShitTokVisualPolishTest {
             FrameLayout favoriteTarget = ReflectionHelpers.getField(holder, "creatorFavoriteTarget");
             TextView badge = ReflectionHelpers.getField(holder, "creatorFavoriteBadge");
             SeekBar seek = ReflectionHelpers.getField(holder, "seekBar");
-            assertTrue(favoriteTarget.getLayoutParams().width >= 48 * root.getResources().getDisplayMetrics().density);
+            assertEquals(Math.round(36 * root.getResources().getDisplayMetrics().density),
+                    favoriteTarget.getLayoutParams().width);
 
             AppearanceTheme.setAccent(fixture.host.get(), AppearanceTheme.Accent.PURPLE);
             ReflectionHelpers.callInstanceMethod(holder, "refreshVisualTheme");
@@ -98,9 +117,9 @@ public class ShitTokVisualPolishTest {
                     View.MeasureSpec.makeMeasureSpec(1600, View.MeasureSpec.EXACTLY));
             root.layout(0, 0, 800, 1600);
             favorite.setClickable(true);
-            assertTrue(ring.getBottom() < favorite.getTop());
+            assertTrue("Badge is attached to avatar", favorite.getTop() < ring.getBottom());
             assertTrue(ring.getWidth() >= 48 * d);
-            assertTrue(favorite.getWidth() >= 48 * d);
+            assertTrue(favorite.getWidth() >= 36 * d);
             android.widget.LinearLayout rail = ReflectionHelpers.getField(holder, "actionRail");
             Rect favoriteRect = new Rect(0, 0, favorite.getWidth(), favorite.getHeight());
             root.offsetDescendantRectToMyCoords(favorite, favoriteRect);
@@ -110,14 +129,18 @@ public class ShitTokVisualPolishTest {
             assertFalse(Rect.intersects(favoriteRect, firstActionRect));
             AtomicInteger galleryClicks = new AtomicInteger();
             AtomicInteger favoriteClicks = new AtomicInteger();
+            AtomicInteger likeClicks = new AtomicInteger();
             control.setOnClickListener(v -> galleryClicks.incrementAndGet());
             favorite.setOnClickListener(v -> favoriteClicks.incrementAndGet());
             tap(control, ring.getLeft() + ring.getWidth() / 2f,
                     ring.getTop() + ring.getHeight() / 2f);
             tap(control, favorite.getLeft() + favorite.getWidth() / 2f,
                     favorite.getTop() + favorite.getHeight() / 2f);
+            firstAction.setOnClickListener(v -> likeClicks.incrementAndGet());
+            tap(root, firstActionRect.centerX(), firstActionRect.centerY());
             assertEquals(1, galleryClicks.get());
             assertEquals(1, favoriteClicks.get());
+            assertEquals(1, likeClicks.get());
         }
     }
 
@@ -135,9 +158,21 @@ public class ShitTokVisualPolishTest {
             AppearanceTheme.setAccent(fixture.host.get(), AppearanceTheme.Accent.BLUE);
             ReflectionHelpers.setField(fixture.feed, "autoScrollEnabled", true);
             ReflectionHelpers.callInstanceMethod(holder, "refreshVisualTheme");
-            TextView auto = ReflectionHelpers.getField(holder, "autoScroll");
+            ReflectionHelpers.setField(holder, "videoLiked", true);
+            ReflectionHelpers.callInstanceMethod(holder, "refreshVisualTheme");
+            TextView activeLike = ReflectionHelpers.getField(holder, "like");
             assertEquals(AppearanceTheme.Accent.BLUE.color,
-                    auto.getCompoundDrawableTintList().getDefaultColor());
+                    activeLike.getCompoundDrawableTintList().getDefaultColor());
+            ReflectionHelpers.setField(fixture.feed, "chaosMuted", true);
+            ReflectionHelpers.callInstanceMethod(holder, "refreshVisualTheme");
+            TextView activeMute = ReflectionHelpers.getField(holder, "mute");
+            assertEquals(AppearanceTheme.Accent.BLUE.color,
+                    activeMute.getCompoundDrawableTintList().getDefaultColor());
+            for (int i = 0; i < rail.getChildCount(); i++) {
+                TextView action = (TextView) rail.getChildAt(i);
+                assertEquals(28 * Math.round(action.getResources().getDisplayMetrics().density),
+                        action.getCompoundDrawables()[1].getIntrinsicWidth());
+            }
             AppearanceTheme.setAccent(fixture.host.get(), AppearanceTheme.Accent.CYAN);
         }
     }
@@ -185,13 +220,14 @@ public class ShitTokVisualPolishTest {
         try (ShitTokAudioOwnershipTest.Fixture fixture = new ShitTokAudioOwnershipTest.Fixture()) {
             Object holder = fixture.selected;
             View root = ((RecyclerView.ViewHolder) holder).itemView;
-            View portraitMore = root.findViewWithTag("shittok_more");
+            View portraitMore = root.findViewWithTag("shittok_share");
             ReflectionHelpers.callInstanceMethod(holder, "showMoreMenu",
                     ReflectionHelpers.ClassParameter.from(View.class, portraitMore));
             PopupWindow portraitPopup = shadowOf(RuntimeEnvironment.getApplication()).getLatestPopupWindow();
             GlassMenuTestSupport.assertGlass(portraitPopup);
             assertTrue(GlassMenuTestSupport.hasAction(portraitPopup, "Download"));
             assertTrue(GlassMenuTestSupport.hasAction(portraitPopup, "Report problem"));
+            assertTrue(GlassMenuTestSupport.hasAction(portraitPopup, "Turn on Auto Scroll"));
             WindowManager.LayoutParams portraitPlacement =
                     (WindowManager.LayoutParams) portraitPopup.getContentView().getRootView().getLayoutParams();
             assertEquals(Gravity.BOTTOM, portraitPlacement.gravity & Gravity.VERTICAL_GRAVITY_MASK);
@@ -202,7 +238,7 @@ public class ShitTokVisualPolishTest {
             root.measure(View.MeasureSpec.makeMeasureSpec(1480, View.MeasureSpec.EXACTLY),
                     View.MeasureSpec.makeMeasureSpec(720, View.MeasureSpec.EXACTLY));
             root.layout(0, 0, 1480, 720);
-            View landscapeMore = root.findViewWithTag("shittok_landscape_more");
+            View landscapeMore = root.findViewWithTag("shittok_landscape_share");
             assertEquals(View.VISIBLE, landscapeMore.getVisibility());
             ReflectionHelpers.callInstanceMethod(holder, "showMoreMenu",
                     ReflectionHelpers.ClassParameter.from(View.class, landscapeMore));
@@ -213,6 +249,40 @@ public class ShitTokVisualPolishTest {
                     (WindowManager.LayoutParams) landscapePopup.getContentView().getRootView().getLayoutParams();
             assertEquals(Gravity.TOP, landscapePlacement.gravity & Gravity.VERTICAL_GRAVITY_MASK);
             landscapePopup.dismiss();
+        }
+    }
+
+    @Test @Config(shadows = Downloads.class)
+    public void downloadAndShareRailActionsUseExistingRoutes() {
+        try (ShitTokAudioOwnershipTest.Fixture fixture = new ShitTokAudioOwnershipTest.Fixture()) {
+            Downloads.requested = null;
+            Object holder = fixture.selected;
+            View root = ((RecyclerView.ViewHolder) holder).itemView;
+            NativeContentItem item = ReflectionHelpers.getField(holder, "item");
+            ReflectionHelpers.setField(holder, "stream", null);
+            View download = root.findViewWithTag("shittok_download");
+            assertTrue(download.performClick());
+            assertSame(item, Downloads.requested);
+            assertNull(Downloads.mediaUrl);
+            View share = root.findViewWithTag("shittok_share");
+            assertTrue(share.performClick());
+            Intent chooser = shadowOf(fixture.host.get()).getNextStartedActivity();
+            assertEquals(Intent.ACTION_CHOOSER, chooser.getAction());
+            Intent send = chooser.getParcelableExtra(Intent.EXTRA_INTENT);
+            assertEquals(item.url, send.getStringExtra(Intent.EXTRA_TEXT));
+
+            RuntimeEnvironment.setQualifiers("w740dp-h360dp-land-xhdpi");
+            ReflectionHelpers.callInstanceMethod(holder, "syncOrientationChrome");
+            CrazyShitRepository.StreamInfo resolved = new CrazyShitRepository.StreamInfo(
+                    "https://example.invalid/resolved.mp4", item.url, "Fixture");
+            ReflectionHelpers.setField(holder, "stream", resolved);
+            Downloads.requested = null;
+            assertTrue(root.findViewWithTag("shittok_landscape_download").performClick());
+            assertSame(item, Downloads.requested);
+            assertEquals(resolved.mediaUrl, Downloads.mediaUrl);
+            assertTrue(root.findViewWithTag("shittok_landscape_share").performClick());
+            assertEquals(Intent.ACTION_CHOOSER,
+                    shadowOf(fixture.host.get()).getNextStartedActivity().getAction());
         }
     }
 
