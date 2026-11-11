@@ -24,7 +24,7 @@ import java.io.FileOutputStream;
 import static org.junit.Assert.*;
 
 @RunWith(RobolectricTestRunner.class)
-@Config(application = Application.class, sdk = 35, qualifiers = "w320dp-h800dp-xhdpi")
+@Config(application = Application.class, sdk = {35, 36}, qualifiers = "w320dp-h800dp-xhdpi")
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 public class InlineCommentsUiTest {
     private ZeroChillSocialRepository.Comment comment(String id, String parent, String body, boolean deleted, boolean edited, boolean liked) throws Exception {
@@ -47,6 +47,11 @@ public class InlineCommentsUiTest {
         activity.getSharedPreferences("app_prefs", android.content.Context.MODE_PRIVATE).edit().putBoolean("immersive_motion_enabled", false).commit();
         return new InlineCommentsDialog(activity, "https://crazyshit.com/video/clip", "Video", "", null);
     }
+    private InlineCommentsDialog shell(String focusId) {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        activity.setTheme(R.style.Theme_CrazyShit);
+        return new InlineCommentsDialog(activity, "https://crazyshit.com/video/clip", "Video", "", focusId, null);
+    }
     private String text(View view) {
         StringBuilder result = new StringBuilder();
         if (view instanceof TextView) result.append(((TextView) view).getText()).append('|');
@@ -63,7 +68,9 @@ public class InlineCommentsUiTest {
         assertTrue(text(row).contains("Edited"));
         render(dialog, first.withLikeState(true));
         assertSame(row, list.getChildAt(0));
-        assertTrue(text(row).contains("♥ 4"));
+        assertTrue(text(row).contains("4"));
+        java.util.Map<String, TextView> hearts = (java.util.Map<String, TextView>) field(dialog, "likeViews");
+        assertNotNull(hearts.get("1").getCompoundDrawables()[1]);
         assertTrue(((LinearLayout) row).getChildAt(0).getClipToOutline());
     }
     @Test public void deletedParentRemainsAdjacentToItsReplyWithoutControls() throws Exception {
@@ -77,6 +84,11 @@ public class InlineCommentsUiTest {
         assertFalse(text(list.getChildAt(0)).contains("Private old body"));
         assertFalse(text(list.getChildAt(0)).contains("Reply"));
         assertFalse(text(list.getChildAt(0)).contains("♡"));
+        assertEquals(View.GONE, list.getChildAt(1).getVisibility());
+        View toggle = list.getChildAt(0).findViewWithTag("comment_replies_1");
+        assertNotNull(toggle);
+        toggle.performClick();
+        assertEquals(View.VISIBLE, list.getChildAt(1).getVisibility());
         assertTrue(text(list.getChildAt(1)).contains("Still attached"));
         assertTrue(((LinearLayout.LayoutParams)list.getChildAt(1).getLayoutParams()).leftMargin > 0);
     }
@@ -87,6 +99,49 @@ public class InlineCommentsUiTest {
         ArrayList<ZeroChillSocialRepository.Comment> sorted = InlineCommentsDialog.ordered(new ArrayList<>(Arrays.asList(a,b,orphan)));
         assertEquals(3, sorted.size());
         assertEquals("c", sorted.get(0).id);
+    }
+    @Test public void nestedRepliesCollapseExpandAndKeepRowsOnLikeRefresh() throws Exception {
+        InlineCommentsDialog dialog = shell();
+        ZeroChillSocialRepository.Comment parent = comment("parent", "", "Parent", false, false, false);
+        ZeroChillSocialRepository.Comment reply = comment("reply", "parent", "Reply", false, false, false);
+        ZeroChillSocialRepository.Comment nested = comment("nested", "reply", "Nested", false, false, false);
+        render(dialog, parent, reply, nested);
+        LinearLayout list = (LinearLayout) field(dialog, "commentsContainer");
+        View parentView = list.getChildAt(0), replyView = list.getChildAt(1), nestedView = list.getChildAt(2);
+        assertEquals(View.GONE, replyView.getVisibility());
+        assertEquals(View.GONE, nestedView.getVisibility());
+        parentView.findViewWithTag("comment_replies_parent").performClick();
+        assertEquals(View.VISIBLE, replyView.getVisibility());
+        assertEquals(View.GONE, nestedView.getVisibility());
+        replyView.findViewWithTag("comment_replies_reply").performClick();
+        assertEquals(View.VISIBLE, nestedView.getVisibility());
+        render(dialog, parent.withLikeState(true), reply, nested);
+        assertSame(parentView, list.getChildAt(0));
+        assertSame(replyView, list.getChildAt(1));
+        assertEquals(View.VISIBLE, list.getChildAt(2).getVisibility());
+        parentView.findViewWithTag("comment_replies_parent").performClick();
+        assertEquals(View.GONE, replyView.getVisibility());
+        assertEquals(View.GONE, nestedView.getVisibility());
+    }
+    @Test public void focusedNestedReplyExpandsAncestorsAndOrphansStayVisible() throws Exception {
+        InlineCommentsDialog dialog = shell("nested");
+        render(dialog,
+                comment("parent", "", "Parent", false, false, false),
+                comment("reply", "parent", "Reply", false, false, false),
+                comment("nested", "reply", "Nested", false, false, false),
+                comment("orphan", "missing", "Orphan", false, false, false));
+        LinearLayout list = (LinearLayout) field(dialog, "commentsContainer");
+        for (int i = 0; i < 4; i++) assertEquals(View.VISIBLE, list.getChildAt(i).getVisibility());
+        assertTrue(((TextView) list.getChildAt(0).findViewWithTag("comment_replies_parent"))
+                .getText().toString().contains("Hide"));
+        list.getChildAt(0).findViewWithTag("comment_replies_parent").performClick();
+        assertEquals(View.GONE, list.getChildAt(1).getVisibility());
+        render(dialog,
+                comment("parent", "", "Parent", false, false, false),
+                comment("reply", "parent", "Reply", false, false, false),
+                comment("nested", "reply", "Nested", false, false, false),
+                comment("orphan", "missing", "Orphan", false, false, false));
+        assertEquals(View.GONE, list.getChildAt(1).getVisibility());
     }
     @Test public void commentsRenderAtNarrowPhoneWidth() throws Exception {
         InlineCommentsDialog dialog = shell();
@@ -127,5 +182,28 @@ public class InlineCommentsUiTest {
         assertEquals("", SocialUi.relativeTime("bad"));
         assertEquals("now", SocialUi.relativeTime(System.currentTimeMillis()));
         assertEquals("4m", SocialUi.relativeTime(System.currentTimeMillis()-240000L));
+    }
+
+    @Test public void identityAndTimestampStayGroupedWithinNarrowRows() throws Exception {
+        InlineCommentsDialog dialog = shell();
+        for (String display : new String[]{"Addy", "A very long creator display name that needs ellipsis"}) {
+            ZeroChillSocialRepository.Comment item = new ZeroChillSocialRepository.Comment(new JSONObject()
+                    .put("id", "grouped").put("user_id", "other").put("display_name", display)
+                    .put("username", "creator").put("body", "Comment text")
+                    .put("created_at", java.time.Instant.now().minusSeconds(240).toString()), false);
+            render(dialog, item);
+            LinearLayout list = (LinearLayout) field(dialog, "commentsContainer");
+            LinearLayout row = (LinearLayout) list.getChildAt(0);
+            row.measure(View.MeasureSpec.makeMeasureSpec(560, View.MeasureSpec.EXACTLY),
+                    View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
+            row.layout(0, 0, 560, row.getMeasuredHeight());
+            LinearLayout identity = (LinearLayout) ((LinearLayout) row.getChildAt(1)).getChildAt(0);
+            TextView name = (TextView) identity.getChildAt(0);
+            TextView time = (TextView) identity.getChildAt(1);
+            assertEquals(name.getRight(), time.getLeft());
+            assertTrue(time.getRight() <= identity.getWidth());
+            assertTrue(name.getWidth() > 0);
+            if (display.length() > 20) assertTrue(name.getLayout().getEllipsisCount(0) > 0);
+        }
     }
 }

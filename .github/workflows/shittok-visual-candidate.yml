@@ -1,0 +1,168 @@
+name: ShitTok Visual Polish Candidate
+
+# Preview 38: borderless full-window attachment viewer for comments and DMs.
+# One scoped candidate run; no release publication or additional APK variants.
+on:
+  push:
+    branches: [feature/zerochill-shittok-visual-polish]
+    paths: [.github/workflows/shittok-visual-candidate.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  candidate:
+    if: github.ref_name == 'feature/zerochill-shittok-visual-polish'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      APP_VERSION_CODE: '6000040'
+      APP_VERSION_NAME: '7.0-preview.38-image-viewer'
+      ZEROCHILL_SOURCE_SHA: ${{ github.sha }}
+      FEEDBACK_ENDPOINT: ${{ secrets.FEEDBACK_ENDPOINT }}
+      FEEDBACK_ANON_KEY: ${{ secrets.FEEDBACK_ANON_KEY }}
+      SUPABASE_PUBLISHABLE_KEY: ${{ secrets.FEEDBACK_ANON_KEY }}
+      SOURCE_CONFIG_ENDPOINT: https://fketutffusxgjxjlckci.supabase.co/functions/v1/app-config
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Verify complete approved main lineage
+        run: |
+          git fetch origin main
+          git merge-base --is-ancestor origin/main HEAD
+          for baseline in 5f24b294 8e8c7c55 7269d41e 19facdc2 eaefd588 3835f159 0c49c30c; do
+            git merge-base --is-ancestor "$baseline" HEAD
+          done
+      # Robolectric API 36 requires Java 21; compilation/signing stay on Java 17.
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v4
+        with:
+          packages: platform-tools
+      - name: Install Android build tools
+        run: sdkmanager 'platforms;android-35' 'platforms;android-36' 'build-tools;35.0.0'
+      - uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: '8.11.1'
+          cache-provider: basic
+      - name: Focused ShitTok presentation and behavior checks
+        env:
+          ANALYTICS_ENDPOINT: ''
+          ANALYTICS_V2_ENDPOINT: ''
+        run: |
+          cat > "$RUNNER_TEMP/shittok-test-jdk.gradle" <<'GRADLE'
+          allprojects {
+              tasks.withType(Test).configureEach {
+                  executable = System.getenv('JAVA_HOME_21_X64') + '/bin/java'
+              }
+          }
+          GRADLE
+          filters=()
+          for test in InlineCommentsSheetTest InlineCommentsUiTest CommentOwnershipModelTest \
+            SocialKeyboardContentTest SocialMediaTest SocialMediaLifecycleTest SocialContentNavigationTest \
+            ShitTokSocialCounterTest ShitTokVisualPolishTest VisualRefreshTest ShitTokInteractionUiTest ShitTokInteractionPolicyTest \
+            ShitTokAudioOwnershipTest ShitTokSettledSwipeTest ShitTokSwipeStartTest \
+            ShitTokContinuityTest ShitTokDynamicPinchTest ShitTokFocusModeViewportTest \
+            ShitTokProgressTest ShitTokScrubInteractionTest ShitTokScrubPreviewTest \
+            ShitTokSpeedMuteTest ShitTokAutoScrollIntegrationTest ShitTokCreatorGalleryHandoffTest \
+            ShitTokIdleUiTest ShitTokOrientationTest AppearanceThemeTest \
+            PreferenceGlassPanelTest PreferenceGlassSettingsTest ZeroChillComposeMenuTest; do
+            filters+=(--tests "*$test")
+          done
+          # Gradle task options belong to the preceding task, so filter each variant.
+          gradle --no-daemon --init-script "$RUNNER_TEMP/shittok-test-jdk.gradle" :app:testDebugUnitTest "${filters[@]}"
+      - name: Restore existing production signing identity
+        env:
+          SIGNING_BUNDLE: ${{ secrets.ANDROID_SIGNING_BUNDLE }}
+        run: |
+          python3 - <<'PY'
+          import base64, json, os, pathlib
+          raw = os.environ.get('SIGNING_BUNDLE', '')
+          if not raw:
+              raise SystemExit('Missing repository secret: ANDROID_SIGNING_BUNDLE')
+          data = json.loads(raw.replace('\r', '').replace('\n', ''))
+          for key in ('keystore_base64', 'store_password', 'key_alias', 'key_password'):
+              if not data.get(key):
+                  raise SystemExit('Signing bundle is missing: ' + key)
+          for key in ('store_password', 'key_alias', 'key_password'):
+              print('::add-mask::' + data[key])
+          path = pathlib.Path(os.environ['RUNNER_TEMP']) / 'shittok-visual.jks'
+          path.write_bytes(base64.b64decode(data['keystore_base64']))
+          path.chmod(0o600)
+          with open(os.environ['GITHUB_ENV'], 'a') as out:
+              for key, value in {
+                  'ANDROID_KEYSTORE_PATH': str(path),
+                  'ANDROID_KEYSTORE_PASSWORD': data['store_password'],
+                  'ANDROID_KEY_ALIAS': data['key_alias'],
+                  'ANDROID_KEY_PASSWORD': data['key_password'],
+              }.items():
+                  out.write(f'{key}={value}\n')
+          PY
+      - name: Build one signed release APK
+        run: gradle --no-daemon :app:assembleRelease
+      - name: Verify production package, certificate and upgrade version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p candidate "$RUNNER_TEMP/stable"
+          gh release download --repo "$GITHUB_REPOSITORY" --pattern ZeroChill.apk --dir "$RUNNER_TEMP/stable"
+          SAFE_REF="${GITHUB_REF_NAME//\//-}"
+          APK="candidate/ZeroChill-${SAFE_REF}-${GITHUB_SHA:0:7}.apk"
+          cp app/build/outputs/apk/release/app-release.apk "$APK"
+          export CANDIDATE_APK="$APK"
+          python3 - <<'PY'
+          import os, pathlib, re, subprocess
+          tools = pathlib.Path(os.environ['ANDROID_HOME']) / 'build-tools/35.0.0'
+          candidate = os.environ['CANDIDATE_APK']
+          stable = str(pathlib.Path(os.environ['RUNNER_TEMP']) / 'stable/ZeroChill.apk')
+          def inspect(apk):
+              badging = subprocess.check_output([str(tools / 'aapt2'), 'dump', 'badging', apk], text=True)
+              package = re.search(r"package: name='([^']+)' versionCode='(\d+)'", badging)
+              assert package, 'Missing package metadata'
+              certs = subprocess.check_output([str(tools / 'apksigner'), 'verify', '--verbose', '--print-certs', apk], text=True)
+              cert = re.search(r'Signer #1 certificate SHA-256 digest: (\w+)', certs)
+              assert cert, 'Missing signing certificate'
+              return package[1], int(package[2]), cert[1]
+          current, previous = inspect(candidate), inspect(stable)
+          assert current[0] == previous[0] == 'com.addy37.crazyshitunofficial'
+          assert current[1] == 6000040 and current[1] > max(6000039, previous[1])
+          assert current[2] == previous[2] == '04abf84b3d468cbb1a562dea83b0007e686b2e56018cce911223963faea51356', 'Production signing certificate changed'
+          report = (f'Source: {os.environ["GITHUB_SHA"]}\n'
+                    f'Branch: {os.environ["GITHUB_REF_NAME"]}\n'
+                    f'Application ID: {current[0]}\nVersion code: {current[1]}\n'
+                    f'Certificate SHA-256: {current[2]}\n'
+                    f'Stable version code: {previous[1]}\n'
+                    'Package, certificate and version upgrade gates passed.\n'
+                    'OnePlus Android 16 physical acceptance remains pending.\n')
+          pathlib.Path('candidate/VALIDATION.txt').write_text(report)
+          print(report)
+          PY
+          (cd candidate && sha256sum *.apk > SHA256SUMS.txt)
+      - name: Upload APK and checksum
+        uses: actions/upload-artifact@v4
+        with:
+          name: ZeroChill-ShitTokVisualPolish-signed
+          path: candidate/
+          if-no-files-found: error
+          retention-days: 14
+      - name: Upload focused regression results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ZeroChill-ShitTokVisualPolish-validation
+          path: |
+            app/build/test-results/testDebugUnitTest/
+            app/build/reports/visual-tests/shittok-portrait-controls.png
+            app/build/reports/visual-tests/shittok-landscape-controls.png
+            app/build/reports/visual-tests/comments-*.png
+          if-no-files-found: warn
+          retention-days: 14

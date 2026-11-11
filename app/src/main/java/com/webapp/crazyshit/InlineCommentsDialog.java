@@ -3,6 +3,7 @@ package com.webapp.crazyshit;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.Intent;
+import android.content.res.ColorStateList;
 import android.content.res.Configuration;
 import android.graphics.Color;
 import android.graphics.drawable.GradientDrawable;
@@ -21,6 +22,8 @@ import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import androidx.core.widget.NestedScrollView;
 import android.widget.TextView;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowInsetsCompat;
 
 import com.bumptech.glide.Glide;
 import com.google.android.material.bottomsheet.BottomSheetBehavior;
@@ -44,11 +47,12 @@ final class InlineCommentsDialog extends BottomSheetDialog {
     private final ResizeListener resizeListener;
 
     private LinearLayout commentsContainer;
+    private LinearLayout sheetContent;
     private EditText composerInput;
     private SocialMedia.Composer attachment;
     private TextView replyContext;
     private TextView headerTitle;
-    private TextView sendControl;
+    private View sendControl;
     private ProgressBar loading;
     private NestedScrollView scrollView;
     private BottomSheetBehavior<FrameLayout> behavior;
@@ -65,11 +69,21 @@ final class InlineCommentsDialog extends BottomSheetDialog {
     private String pendingCommentParent="";
     private SocialMedia.Prepared pendingMedia;
     private boolean focusConsumed;
+    private boolean focusAncestorsExpanded;
     private int loadGeneration;
     private final Map<String, View> commentViews = new HashMap<>();
     private final Map<String, ZeroChillSocialRepository.Comment> commentStates = new HashMap<>();
     private final Map<String, TextView> likeViews = new HashMap<>();
+    private final Map<String, TextView> threadToggles = new HashMap<>();
+    private final Map<String, Integer> replyCounts = new HashMap<>();
+    private final java.util.Set<String> expandedThreads = new java.util.HashSet<>();
     private final java.util.Set<String> likesInFlight = new java.util.HashSet<>();
+    private int baselineParentHeight;
+    private int baselineParentWidth;
+    private boolean keyboardVisible;
+    private boolean userExpanded;
+    private int imeInsetBottom;
+    private boolean configuredLandscape;
     private String renderedAccount = "";
     private static final java.util.WeakHashMap<Activity, java.lang.ref.WeakReference<InlineCommentsDialog>> OPEN_THREADS = new java.util.WeakHashMap<>();
 
@@ -146,12 +160,22 @@ final class InlineCommentsDialog extends BottomSheetDialog {
 
     private View buildContent() {
         LinearLayout shell = new LinearLayout(activity);
+        sheetContent = shell;
         shell.setOrientation(LinearLayout.VERTICAL);
-        shell.setBackground(roundedTop(UiPalette.FLOATING, 24));
+        shell.setBackground(roundedTop(Color.rgb(13, 15, 19), 24));
+        shell.setClipToOutline(true);
+        ViewCompat.setOnApplyWindowInsetsListener(shell, (view, insets) -> {
+            int ime = insets.isVisible(WindowInsetsCompat.Type.ime())
+                    ? insets.getInsets(WindowInsetsCompat.Type.ime()).bottom
+                    - insets.getInsets(WindowInsetsCompat.Type.systemBars()).bottom : 0;
+            imeInsetBottom = Math.max(0, ime);
+            updateKeyboardGeometry();
+            return insets;
+        });
 
         View handle = new View(activity);
-        handle.setBackground(roundRect(Color.rgb(88, 88, 96), 3));
-        LinearLayout.LayoutParams handleParams = new LinearLayout.LayoutParams(dp(38), dp(4));
+        handle.setBackground(roundRect(Color.rgb(105, 113, 125), 3));
+        LinearLayout.LayoutParams handleParams = new LinearLayout.LayoutParams(dp(34), dp(4));
         handleParams.gravity = Gravity.CENTER_HORIZONTAL;
         handleParams.setMargins(0, dp(8), 0, dp(6));
         shell.addView(handle, handleParams);
@@ -159,14 +183,15 @@ final class InlineCommentsDialog extends BottomSheetDialog {
         LinearLayout header = new LinearLayout(activity);
         header.setGravity(Gravity.CENTER_VERTICAL);
         header.setPadding(0, 0, 0, 0);
+        header.setBackground(ZeroChillUi.sheetGlass(activity));
         header.addView(new View(activity),new LinearLayout.LayoutParams(dp(48),dp(48)));
         shell.addView(header, new LinearLayout.LayoutParams(-1, dp(48)));
 
-        headerTitle = text("Comments", 14, Color.WHITE, true);
+        headerTitle = text("Comments", 16, Color.WHITE, true);
         headerTitle.setGravity(Gravity.CENTER);
         header.addView(headerTitle, new LinearLayout.LayoutParams(0, -1, 1f));
 
-        TextView close = text("×", 28, Color.WHITE, false);
+        TextView close = text("×", 27, Color.WHITE, false);
         close.setGravity(Gravity.CENTER);
         close.setContentDescription("Close comments");
         ZeroChillMotion.installPressFeedback(close);
@@ -174,7 +199,7 @@ final class InlineCommentsDialog extends BottomSheetDialog {
         header.addView(close, new LinearLayout.LayoutParams(dp(48), -1));
 
         View divider = new View(activity);
-        divider.setBackgroundColor(Color.rgb(39, 39, 44));
+        divider.setBackgroundColor(Color.rgb(39, 43, 49));
         shell.addView(divider, new LinearLayout.LayoutParams(-1, dp(1)));
 
         FrameLayout body = new FrameLayout(activity);
@@ -187,7 +212,7 @@ final class InlineCommentsDialog extends BottomSheetDialog {
 
         commentsContainer = new LinearLayout(activity);
         commentsContainer.setOrientation(LinearLayout.VERTICAL);
-        commentsContainer.setPadding(dp(14), dp(4), dp(14), dp(10));
+        commentsContainer.setPadding(dp(14), dp(8), dp(14), dp(16));
         scrollView.addView(commentsContainer, new NestedScrollView.LayoutParams(-1, -2));
 
         loading = new ZeroChillProgressBar(activity);
@@ -203,8 +228,8 @@ final class InlineCommentsDialog extends BottomSheetDialog {
     private View buildComposer() {
         LinearLayout composer = new LinearLayout(activity);
         composer.setOrientation(LinearLayout.VERTICAL);
-        composer.setPadding(dp(8), dp(5), dp(8), dp(6));
-        composer.setBackgroundColor(UiPalette.SURFACE);
+        composer.setPadding(dp(10), dp(7), dp(10), dp(8));
+        composer.setBackground(ZeroChillUi.sheetGlass(activity));
 
         replyContext = text("", 12, AppearanceTheme.accent(activity), false);
         replyContext.setPadding(dp(6), 0, dp(6), 0);
@@ -234,7 +259,7 @@ final class InlineCommentsDialog extends BottomSheetDialog {
         composerInput = new ZeroChillEditText(activity);
         composerInput.setTextColor(Color.WHITE);
         composerInput.setHintTextColor(Color.rgb(150, 150, 160));
-        composerInput.setTextSize(14);
+        composerInput.setTextSize(15);
         composerInput.setMinHeight(dp(48));
         composerInput.setMaxLines(3);
         composerInput.setInputType(InputType.TYPE_CLASS_TEXT
@@ -242,7 +267,7 @@ final class InlineCommentsDialog extends BottomSheetDialog {
                 | InputType.TYPE_TEXT_FLAG_MULTI_LINE);
         composerInput.setImeOptions(EditorInfo.IME_ACTION_SEND);
         composerInput.setPadding(dp(16), dp(12), dp(14), dp(12));
-        composerInput.setBackground(roundRect(UiPalette.RAISED, 16));
+        composerInput.setBackground(roundRect(Color.rgb(28, 32, 39), 22));
         composerInput.setOnFocusChangeListener((v, focused) -> {
             if (focused && !ZeroChillAccountRepository.hasStoredSession(activity)) {
                 composerInput.clearFocus();
@@ -257,9 +282,11 @@ final class InlineCommentsDialog extends BottomSheetDialog {
         row.addView(composerInput, new LinearLayout.LayoutParams(0, -2, 1f));
 
         row.addView(attachment.control);
-        TextView send = text("↑", 23, AppearanceTheme.onAccent(activity), true);
-        send.setGravity(Gravity.CENTER);
+        ImageView send = new ImageView(activity);
+        send.setScaleType(ImageView.ScaleType.CENTER);
         send.setBackground(circle(AppearanceTheme.accent(activity)));
+        send.setImageResource(R.drawable.ic_comment_send);
+        send.setImageTintList(ColorStateList.valueOf(AppearanceTheme.onAccent(activity)));
         send.setContentDescription("Post comment");
         ZeroChillMotion.installPressFeedback(send);
         send.setOnClickListener(v -> submit());
@@ -315,11 +342,13 @@ final class InlineCommentsDialog extends BottomSheetDialog {
     private void render(ArrayList<ZeroChillSocialRepository.Comment> comments) {
         int visibleCount = 0;
         for (ZeroChillSocialRepository.Comment comment : comments) if (!comment.deleted()) visibleCount++;
-        headerTitle.setText(visibleCount + (visibleCount == 1 ? " comment" : " comments"));
+        headerTitle.setText("Comments · " + visibleCount);
         if (comments.isEmpty()) {
             commentViews.clear();
             commentStates.clear();
             likeViews.clear();
+            threadToggles.clear();
+            replyCounts.clear();
             showMessage("No comments yet. Start the conversation.");
             return;
         }
@@ -330,13 +359,33 @@ final class InlineCommentsDialog extends BottomSheetDialog {
         int previousScroll = scrollView.getScrollY();
         Map<String, ZeroChillSocialRepository.Comment> byId = new HashMap<>();
         for (ZeroChillSocialRepository.Comment comment : comments) byId.put(comment.id, comment);
+        Map<String, Integer> nextReplyCounts = new HashMap<>();
+        for (ZeroChillSocialRepository.Comment comment : comments) {
+            if (byId.containsKey(comment.parentId) && !comment.id.equals(comment.parentId)) {
+                nextReplyCounts.merge(comment.parentId, 1, Integer::sum);
+            }
+        }
+        // A deep link must reveal every collapsed ancestor before positioning the row.
+        if (!focusAncestorsExpanded && byId.containsKey(focusCommentId)) {
+            ZeroChillSocialRepository.Comment focus = byId.get(focusCommentId);
+            java.util.Set<String> focusSeen = new java.util.HashSet<>();
+            while (focus != null && focusSeen.add(focus.id)) {
+                ZeroChillSocialRepository.Comment parent = byId.get(focus.parentId);
+                if (parent == null) break;
+                expandedThreads.add(parent.id);
+                focus = parent;
+            }
+            focusAncestorsExpanded = true;
+        }
         java.util.Iterator<Map.Entry<String, View>> iterator = commentViews.entrySet().iterator();
         while (iterator.hasNext()) {
             Map.Entry<String, View> old = iterator.next();
             if (!byId.containsKey(old.getKey())) {
                 commentsContainer.removeView(old.getValue());
                 likeViews.remove(old.getKey());
+                threadToggles.remove(old.getKey());
                 commentStates.remove(old.getKey());
+                replyCounts.remove(old.getKey());
                 iterator.remove();
             }
         }
@@ -344,12 +393,15 @@ final class InlineCommentsDialog extends BottomSheetDialog {
         for (ZeroChillSocialRepository.Comment comment : ordered(comments)) {
             View row = commentViews.get(comment.id);
             ZeroChillSocialRepository.Comment old = commentStates.get(comment.id);
-            boolean changed = accountChanged || !sameRow(old, comment);
+            int replies = nextReplyCounts.getOrDefault(comment.id, 0);
+            boolean changed = accountChanged || !sameRow(old, comment)
+                    || replyCounts.getOrDefault(comment.id, 0) != replies;
             commentStates.put(comment.id, comment);
             if (row == null || changed) {
                 if (row != null) commentsContainer.removeView(row);
                 likeViews.remove(comment.id);
-                row = commentRow(comment);
+                threadToggles.remove(comment.id);
+                row = commentRow(comment, replies);
                 commentViews.put(comment.id, row);
                 commentsContainer.addView(row, Math.min(index, commentsContainer.getChildCount()), commentParams(depth(comment, byId)));
                 animateRow(row);
@@ -362,6 +414,9 @@ final class InlineCommentsDialog extends BottomSheetDialog {
             }
             index++;
         }
+        replyCounts.clear();
+        replyCounts.putAll(nextReplyCounts);
+        updateThreadVisibility();
         scrollView.post(() -> {
             if (!isShowing()) return;
             View target = commentViews.get(focusCommentId);
@@ -376,6 +431,36 @@ final class InlineCommentsDialog extends BottomSheetDialog {
                 }
             } else scrollView.scrollTo(0, previousScroll);
         });
+    }
+
+    private void updateThreadVisibility() {
+        for (Map.Entry<String, View> entry : commentViews.entrySet()) {
+            entry.getValue().setVisibility(ancestorVisible(entry.getKey()) ? View.VISIBLE : View.GONE);
+        }
+        for (Map.Entry<String, TextView> entry : threadToggles.entrySet()) {
+            int count = replyCounts.getOrDefault(entry.getKey(), 0);
+            boolean expanded = expandedThreads.contains(entry.getKey());
+            entry.getValue().setText(expanded ? "Hide replies" : "View " + count + (count == 1 ? " reply" : " replies"));
+            entry.getValue().setContentDescription(entry.getValue().getText());
+        }
+    }
+
+    private boolean ancestorVisible(String id) {
+        ZeroChillSocialRepository.Comment comment = commentStates.get(id);
+        if (comment == null) return true;
+        java.util.Set<String> seen = new java.util.HashSet<>();
+        java.util.ArrayList<String> parents = new java.util.ArrayList<>();
+        seen.add(id);
+        while (!comment.parentId.isEmpty()) {
+            ZeroChillSocialRepository.Comment parent = commentStates.get(comment.parentId);
+            if (parent == null) break;
+            if (!seen.add(parent.id)) return true; // cycles remain reachable
+            parents.add(parent.id);
+            comment = parent;
+        }
+        for (String parent : parents) if (replyCounts.containsKey(parent)
+                && !expandedThreads.contains(parent)) return false;
+        return true;
     }
 
     // Render actual parent-child adjacency, not only chronological indentation.
@@ -421,22 +506,24 @@ final class InlineCommentsDialog extends BottomSheetDialog {
     private void highlight(View row) {
         GradientDrawable glow = roundRect(Color.TRANSPARENT, 12);
         row.setBackground(glow);
+        int accent = AppearanceTheme.accent(activity);
         if (!ZeroChillMotion.animationsEnabled(activity)) {
-            glow.setColor(Color.argb(38, 8, 146, 208));
+            glow.setColor((accent & 0x00FFFFFF) | 0x26000000);
             row.postDelayed(() -> glow.setColor(Color.TRANSPARENT), 1200L);
             return;
         }
         android.animation.ValueAnimator pulse = android.animation.ValueAnimator.ofInt(0, 50, 24, 0);
         pulse.setDuration(1400L);
-        pulse.addUpdateListener(value -> glow.setColor(Color.argb((Integer) value.getAnimatedValue(), 8, 146, 208)));
+        pulse.addUpdateListener(value -> glow.setColor((accent & 0x00FFFFFF)
+                | ((Integer) value.getAnimatedValue() << 24)));
         pulse.start();
     }
 
-    private View commentRow(ZeroChillSocialRepository.Comment comment) {
+    private View commentRow(ZeroChillSocialRepository.Comment comment, int replyCount) {
         LinearLayout row = new LinearLayout(activity);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.TOP);
-        row.setPadding(dp(2), dp(5), dp(2), dp(2));
+        row.setPadding(dp(2), dp(8), dp(2), dp(4));
 
         ImageView avatar = new ImageView(activity);
         avatar.setScaleType(ImageView.ScaleType.CENTER_CROP);
@@ -461,7 +548,7 @@ final class InlineCommentsDialog extends BottomSheetDialog {
         avatar.setContentDescription("Open " + SocialUi.name(comment.displayName, comment.username) + " profile");
         avatar.setOnClickListener(v -> openProfile(comment));
         ZeroChillMotion.installPressFeedback(avatar);
-        row.addView(avatar, new LinearLayout.LayoutParams(dp(38), dp(38)));
+        row.addView(avatar, new LinearLayout.LayoutParams(dp(36), dp(36)));
 
         LinearLayout body = new LinearLayout(activity);
         body.setOrientation(LinearLayout.VERTICAL);
@@ -469,24 +556,37 @@ final class InlineCommentsDialog extends BottomSheetDialog {
         bodyParams.setMargins(dp(10), 0, 0, 0);
         row.addView(body, bodyParams);
 
-        LinearLayout nameRow = new LinearLayout(activity);
+        LinearLayout nameRow = new LinearLayout(activity) {
+            @Override protected void onMeasure(int widthSpec, int heightSpec) {
+                if (getChildCount() == 2 && View.MeasureSpec.getMode(widthSpec) != View.MeasureSpec.UNSPECIFIED) {
+                    TextView identity = (TextView) getChildAt(0);
+                    View timestamp = getChildAt(1);
+                    int available = Math.max(0, View.MeasureSpec.getSize(widthSpec)
+                            - getPaddingLeft() - getPaddingRight());
+                    timestamp.measure(View.MeasureSpec.makeMeasureSpec(available, View.MeasureSpec.AT_MOST),
+                            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
+                    identity.setMaxWidth(Math.max(0, available - timestamp.getMeasuredWidth()));
+                }
+                super.onMeasure(widthSpec, heightSpec);
+            }
+        };
         nameRow.setGravity(Gravity.CENTER_VERTICAL);
         body.addView(nameRow, new LinearLayout.LayoutParams(-1, -2));
 
         String identity = SocialUi.name(comment.displayName, comment.username);
-        TextView name = text(identity, 13, comment.deleted() ? Color.rgb(135, 145, 155) : Color.WHITE, true);
+        TextView name = text(identity, 14, comment.deleted() ? Color.rgb(135, 145, 155) : Color.WHITE, true);
         name.setSingleLine(true);name.setEllipsize(android.text.TextUtils.TruncateAt.END);
         name.setClickable(!comment.deleted());
         name.setFocusable(!comment.deleted());
         name.setContentDescription("Open " + SocialUi.name(comment.displayName, comment.username) + " profile");
         if (!comment.deleted()) name.setOnClickListener(v -> openProfile(comment));
         ZeroChillMotion.installPressFeedback(name);
-        nameRow.addView(name, new LinearLayout.LayoutParams(0, -2, 1f));
+        nameRow.addView(name, new LinearLayout.LayoutParams(-2, -2));
 
 
         TextView copy = text(
                 comment.deleted() ? "Comment deleted" : comment.body,
-                14,
+                15,
                 comment.deleted() ? Color.rgb(135, 135, 145) : Color.rgb(235, 235, 239),
                 false
         );
@@ -503,38 +603,46 @@ final class InlineCommentsDialog extends BottomSheetDialog {
 
         TextView metadata = text(SocialUi.relativeTime(comment.createdAt)
                 + (comment.edited() ? "  ·  Edited" : ""), 12, UiPalette.TEXT_MUTED, false);
-        metadata.setPadding(0, 0, 0, dp(2));
+        metadata.setPadding(dp(6), 0, 0, dp(2));
         metadata.setSingleLine(true);metadata.setMaxWidth(dp(120));metadata.setEllipsize(android.text.TextUtils.TruncateAt.END);
         nameRow.addView(metadata,new LinearLayout.LayoutParams(-2,-2));
-        if (comment.deleted()) return row;
+        if (!comment.deleted()) {
+            TextView like = text(String.valueOf(comment.likeCount), 11,
+                    comment.likedByMe ? AppearanceTheme.accent(activity) : Color.rgb(164, 171, 181), true);
+            like.setGravity(Gravity.CENTER);
+            like.setIncludeFontPadding(false);
+            like.setCompoundDrawablesWithIntrinsicBounds(0,
+                    comment.likedByMe ? R.drawable.ic_comment_heart_filled : R.drawable.ic_comment_heart_outline,
+                    0, 0);
+            like.setCompoundDrawableTintList(ColorStateList.valueOf(
+                    comment.likedByMe ? AppearanceTheme.accent(activity) : Color.WHITE));
+            like.setCompoundDrawablePadding(dp(1));
+            like.setTag("comment_like_" + comment.id);
+            like.setOnClickListener(v -> toggleLike(commentStates.get(comment.id)));
+            ZeroChillMotion.installPressFeedback(like);
+            likeViews.put(comment.id, like);
+            row.addView(like, new LinearLayout.LayoutParams(dp(48), dp(48)));
+            bindLike(comment);
+        }
+
+        if (comment.deleted()) {
+            addThreadToggle(body, comment.id, replyCount);
+            return row;
+        }
 
         LinearLayout actions = new LinearLayout(activity);
         actions.setGravity(Gravity.CENTER_VERTICAL);
         body.addView(actions);
 
 
-        TextView reply = text("Reply", 13, UiPalette.TEXT_SECONDARY, true);
-        reply.setPadding(0, dp(7), dp(18), dp(7));
-        reply.setMinimumHeight(dp(48));
+        TextView reply = text("Reply", 12, Color.rgb(154, 166, 181), true);
+        reply.setPadding(0, dp(4), dp(18), dp(4));
+        reply.setMinimumHeight(dp(36));
         reply.setGravity(Gravity.CENTER_VERTICAL);
         ZeroChillMotion.installPressFeedback(reply);
         reply.setOnClickListener(v -> startReply(commentStates.get(comment.id)));
         actions.addView(reply);
 
-        TextView like = text(
-                (comment.likedByMe ? "♥ " : "♡ ") + comment.likeCount,
-                12,
-                comment.likedByMe ? AppearanceTheme.accent(activity) : Color.rgb(170, 170, 180),
-                true
-        );
-        like.setPadding(dp(8), dp(7), dp(10), dp(7));
-        like.setMinimumWidth(dp(48));
-        like.setMinimumHeight(dp(48));
-        like.setGravity(Gravity.CENTER);
-        ZeroChillMotion.installPressFeedback(like);
-        like.setOnClickListener(v -> toggleLike(commentStates.get(comment.id)));
-        likeViews.put(comment.id, like);
-        actions.addView(like);
         if (!comment.deleted() && isOwner(comment)) {
             TextView menu = text("⋮", 20, Color.rgb(170, 170, 180), true);
             menu.setGravity(Gravity.CENTER);
@@ -545,14 +653,36 @@ final class InlineCommentsDialog extends BottomSheetDialog {
         }
 
 
+        addThreadToggle(body, comment.id, replyCount);
         return row;
+    }
+
+    private void addThreadToggle(LinearLayout body, String id, int count) {
+        if (count <= 0) return;
+        TextView toggle = text("", 12, AppearanceTheme.accent(activity), true);
+        toggle.setGravity(Gravity.CENTER_VERTICAL);
+        toggle.setMinHeight(dp(36));
+        toggle.setPadding(0, dp(4), 0, dp(4));
+        toggle.setTag("comment_replies_" + id);
+        toggle.setOnClickListener(v -> {
+            if (!expandedThreads.add(id)) expandedThreads.remove(id);
+            updateThreadVisibility();
+        });
+        ZeroChillMotion.installPressFeedback(toggle);
+        threadToggles.put(id, toggle);
+        body.addView(toggle, new LinearLayout.LayoutParams(-1, -2));
     }
 
     private void bindLike(ZeroChillSocialRepository.Comment comment) {
         TextView like = likeViews.get(comment.id);
         if (like == null) return;
-        like.setText((comment.likedByMe ? "♥ " : "♡ ") + comment.likeCount);
+        like.setText(String.valueOf(comment.likeCount));
         like.setTextColor(comment.likedByMe ? AppearanceTheme.accent(activity) : Color.rgb(156, 169, 181));
+        like.setCompoundDrawablesWithIntrinsicBounds(0,
+                comment.likedByMe ? R.drawable.ic_comment_heart_filled : R.drawable.ic_comment_heart_outline,
+                0, 0);
+        like.setCompoundDrawableTintList(ColorStateList.valueOf(
+                comment.likedByMe ? AppearanceTheme.accent(activity) : Color.WHITE));
         like.setContentDescription((comment.likedByMe ? "Unlike" : "Like") + " comment. " + comment.likeCount + " likes");
     }
 
@@ -637,6 +767,7 @@ final class InlineCommentsDialog extends BottomSheetDialog {
         if (message.isEmpty() && attachment.selected == null) return;
         final String submittedAccount = ZeroChillSessionStore.currentUserId(activity);
         String parent=replyTarget==null?"":replyTarget.id;
+        final boolean submittedReply = editTarget == null && !parent.isEmpty();
         if(!message.equals(pendingCommentBody) || !parent.equals(pendingCommentParent) || pendingMedia!=attachment.selected) pendingCommentId=java.util.UUID.randomUUID().toString();
         pendingCommentBody=message; pendingCommentParent=parent; pendingMedia=attachment.selected;
         posting = true;
@@ -654,6 +785,7 @@ final class InlineCommentsDialog extends BottomSheetDialog {
                     if (error != null) {
                         ZeroChillToast.makeText(activity, error.getMessage(), ZeroChillToast.LENGTH_LONG).show();
                     } else {
+                        if (submittedReply) expandThreadAncestors(parent);
                         pendingCommentId=java.util.UUID.randomUUID().toString();
                         cancelReply();
                         loadComments();
@@ -677,6 +809,16 @@ final class InlineCommentsDialog extends BottomSheetDialog {
                     pendingCommentId,
                     completed
             );
+        }
+    }
+
+    private void expandThreadAncestors(String id) {
+        java.util.Set<String> seen = new java.util.HashSet<>();
+        String current = id;
+        while (!current.isEmpty() && seen.add(current)) {
+            expandedThreads.add(current);
+            ZeroChillSocialRepository.Comment comment = commentStates.get(current);
+            current = comment == null ? "" : comment.parentId;
         }
     }
 
@@ -796,42 +938,118 @@ final class InlineCommentsDialog extends BottomSheetDialog {
         bottomSheet.setBackgroundColor(Color.TRANSPARENT);
         ViewGroup.LayoutParams params = bottomSheet.getLayoutParams();
         params.height = desiredHeight();
+        boolean landscape = isLandscape();
+        configuredLandscape = landscape;
+        params.width = landscape ? Math.min(dp(560),
+                activity.getResources().getDisplayMetrics().widthPixels - dp(32)) : ViewGroup.LayoutParams.MATCH_PARENT;
+        if (params instanceof androidx.coordinatorlayout.widget.CoordinatorLayout.LayoutParams) {
+            ((androidx.coordinatorlayout.widget.CoordinatorLayout.LayoutParams) params).gravity =
+                    Gravity.TOP | Gravity.CENTER_HORIZONTAL;
+        }
         bottomSheet.setLayoutParams(params);
         behavior = BottomSheetBehavior.from(bottomSheet);
-        behavior.setFitToContents(true);
+        behavior.setFitToContents(false);
+        behavior.setHalfExpandedRatio(landscape ? .72f : .60f);
+        behavior.setExpandedOffset(Math.max(0, Math.round(
+                activity.getResources().getDisplayMetrics().heightPixels * (landscape ? .12f : .10f))));
         behavior.setHideable(true);
         behavior.setSkipCollapsed(true);
         behavior.setDraggable(true);
         behavior.addBottomSheetCallback(new BottomSheetBehavior.BottomSheetCallback() {
             @Override
             public void onStateChanged(View sheet, int newState) {
+                if (!keyboardVisible) {
+                    if (newState == BottomSheetBehavior.STATE_EXPANDED) userExpanded = true;
+                    else if (newState == BottomSheetBehavior.STATE_HALF_EXPANDED) userExpanded = false;
+                }
                 notifySheetTop();
+                updateVisibleContentHeight();
                 if (newState == BottomSheetBehavior.STATE_HIDDEN) dismiss();
             }
 
             @Override
             public void onSlide(View sheet, float slideOffset) {
                 notifySheetTop();
+                updateVisibleContentHeight();
             }
         });
-        behavior.setState(BottomSheetBehavior.STATE_EXPANDED);
+        behavior.setState(BottomSheetBehavior.STATE_HALF_EXPANDED);
         View parent=(View)bottomSheet.getParent();
-        parent.addOnLayoutChangeListener((v,l,t,r,b,oldL,oldT,oldR,oldB)->{
-            int height=Math.min(desiredHeight(),b-t);
-            if(height>0&&bottomSheet.getLayoutParams().height!=height){
-                ViewGroup.LayoutParams resized=bottomSheet.getLayoutParams();resized.height=height;bottomSheet.setLayoutParams(resized);
-            }
+        parent.addOnLayoutChangeListener((v,l,t,r,b,oldL,oldT,oldR,oldB)->
+                updateKeyboardGeometry());
+        bottomSheet.post(() -> { updateVisibleContentHeight(); notifySheetTop(); });
+    }
+
+    private void updateKeyboardGeometry() {
+        if (bottomSheet == null || behavior == null || bottomSheet.getParent() == null) return;
+        View parent = (View) bottomSheet.getParent();
+        int available = parent.getHeight();
+        if (available <= 0) return;
+        boolean landscape = isLandscape();
+        boolean orientationChanged = configuredLandscape != landscape || baselineParentWidth != parent.getWidth();
+        if (orientationChanged) {
+            configuredLandscape = landscape;
+            baselineParentWidth = parent.getWidth();
+            baselineParentHeight = available;
+            behavior.setHalfExpandedRatio(landscape ? .72f : .60f);
+        }
+        baselineParentHeight = Math.max(baselineParentHeight, available);
+        int resized = Math.max(0, baselineParentHeight - available);
+        boolean ime = imeInsetBottom > dp(120) || resized > dp(120);
+        boolean imeChanged = keyboardVisible != ime;
+        keyboardVisible = ime;
+        int insetPadding = Math.max(0, imeInsetBottom - resized);
+        if (sheetContent != null && sheetContent.getPaddingBottom() != insetPadding) {
+            sheetContent.setPadding(sheetContent.getPaddingLeft(), sheetContent.getPaddingTop(),
+                    sheetContent.getPaddingRight(), insetPadding);
+        }
+        ViewGroup.LayoutParams params = bottomSheet.getLayoutParams();
+        int height = Math.min(Math.round(available * maxHeightRatio()), available);
+        int width = landscape ? Math.min(dp(560), parent.getWidth() - dp(32))
+                : ViewGroup.LayoutParams.MATCH_PARENT;
+        if (params.height != height || params.width != width) {
+            params.height = height;
+            params.width = width;
+            bottomSheet.setLayoutParams(params);
+        }
+        behavior.setExpandedOffset(Math.max(0, Math.round(available * (landscape ? .12f : .10f))));
+        if (imeChanged) bottomSheet.post(() -> {
+            if (isShowing() && behavior != null) behavior.setState(keyboardVisible || userExpanded
+                    ? BottomSheetBehavior.STATE_EXPANDED : BottomSheetBehavior.STATE_HALF_EXPANDED);
+            updateVisibleContentHeight();
+            notifySheetTop();
         });
-        bottomSheet.post(this::notifySheetTop);
+        else bottomSheet.post(this::updateVisibleContentHeight);
+    }
+
+    private void updateVisibleContentHeight() {
+        if (bottomSheet == null || sheetContent == null || bottomSheet.getParent() == null) return;
+        int parentHeight = ((View) bottomSheet.getParent()).getHeight();
+        if (parentHeight <= 0) return;
+        int padding = bottomSheet.getPaddingTop() + bottomSheet.getPaddingBottom();
+        int visible = Math.max(0, Math.min(bottomSheet.getHeight() - padding,
+                parentHeight - bottomSheet.getTop() - padding));
+        if (visible <= 0) return;
+        ViewGroup.LayoutParams params = sheetContent.getLayoutParams();
+        if (params != null && params.height != visible) {
+            params.height = visible;
+            sheetContent.setLayoutParams(params);
+        }
     }
 
     private int desiredHeight() {
         View content = activity.findViewById(android.R.id.content);
         int available = content == null ? 0 : content.getHeight();
         if (available <= 0) available = activity.getResources().getDisplayMetrics().heightPixels;
-        boolean landscape = activity.getResources().getConfiguration().orientation
-                == Configuration.ORIENTATION_LANDSCAPE;
-        return Math.round(available * (landscape ? 0.72f : 0.68f));
+        return Math.round(available * maxHeightRatio());
+    }
+
+    private boolean isLandscape() {
+        return activity.getResources().getConfiguration().orientation == Configuration.ORIENTATION_LANDSCAPE;
+    }
+
+    private float maxHeightRatio() {
+        return isLandscape() ? .88f : .90f;
     }
 
     private void notifySheetTop() {

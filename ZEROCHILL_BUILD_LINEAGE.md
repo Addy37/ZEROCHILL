@@ -385,3 +385,61 @@ reveal to 350ms while retaining 650ms opening, synchronized rings and the existi
 progress/system-scale handling. Preview 34 uses `7.0-preview.34-close-350ms`, code
 `6000036`, above Preview 33 `6000035`, with the production package/certificate.
 One signed test candidate; no merge, release, migration or backend change.
+
+
+## ShitTok visual polish candidate (Preview 35)
+
+The user's request selects the latest complete approved product baseline including
+Library and OnlyFap. Fetched main is `5f24b294a0e2c3155a7b395894c931608be93dd9`,
+the merged PR #414 lineage, including Library #412 and OnlyFap #413. The historical
+`rebrand/zerochill` branch is superseded by this complete lineage under the APK rule.
+`feature/zerochill-shittok-visual-polish` starts from that exact main commit.
+Preview 35 uses `7.0-preview.35-shittok`, code `6000037`, above Preview 34 `6000036`,
+with the production package and signing certificate. One scoped signed candidate
+workflow verifies lineage, focused tests, package, certificate and upgrade version.
+See `docs/SHITTOK_VISUAL_POLISH.md` and the PR for actual validation evidence.
+No merge before physical APK approval. No release, tag, backend deployment, remote
+source change, preference/data migration or integration synchronization is authorized.
+
+
+## PR 415 attached-avatar and icon follow-up (Preview 36)
+
+The user tested Preview 35 `1d6b3fa260c8745f2a73d4f058ba62414a33fae3`, supplied
+16118.jpg and TikTok reference 16121.jpg, and rejected the detached creator plus
+and unchanged icon artwork. Continue the same unmerged PR #415 branch from that
+exact head, retaining the complete approved main/Library/OnlyFap baseline. Restore
+the attached avatar badge and distinct gallery/favorite taps, introduce scoped bold
+white icon assets, and replace the Auto Scroll rail slot with Download and the
+More rail slot with Share. Additional actions remain in the shared glass menu.
+Preview 36 uses `7.0-preview.36-shittok-buttons`, code `6000038`, above Preview 35
+`6000037`, with the existing production package and certificate. One signed test
+APK; no merge, tag, public release, backend/source change or data migration.
+Physical approval remains pending. See `docs/SHITTOK_VISUAL_POLISH.md`.
+
+
+## PR 415 comments-sheet follow-up (Preview 37)
+
+The user tested Preview 36 `45355fe44e4520d9045ad4eccdbe068c0dac25f4`, supplied
+16129.jpg, and approved the proposed comments-sheet redesign plus a nicer comment
+heart. Continue the same unmerged PR #415 lineage with the attached avatar and
+Download/Share rail retained. The shared native comments sheet receives near-black
+rows, grouped identity/time, a vector heart/count column, compact composer/header,
+collapsible replies with focused-thread expansion, and keyboard-aware draggable
+height. Keep existing comment/reply/edit/delete/media/auth and playback callbacks.
+Preview 37 uses `7.0-preview.37-comments`, code `6000039`, above Preview 36 `6000038`,
+with original production package/certificate. One signed test APK; no merge, tag,
+public release, backend/source change or migration. Physical acceptance is pending.
+See `docs/SHITTOK_VISUAL_POLISH.md` and PR #415 for actual validation evidence.
+
+
+## PR 415 attachment viewer correction (Preview 38)
+
+The user approved Preview 37's comments design (`4104b736`) and supplied a screen
+recording showing the enlarged attachment surrounded by a tall glass alert card.
+Continue the same draft PR from that head, replacing only the shared attachment
+viewer shell with a black full-window canvas and an inset-safe Close target.
+Keep original image/GIF loading, authorization, memory caching and dismissal cleanup.
+This also corrects the same shared viewer in direct messages. Preview 38 uses
+`7.0-preview.38-image-viewer`, code `6000040`, above Preview 37 `6000039`, retaining
+the production package/certificate. One signed candidate; no merge, tag, publication,
+backend/source change or data migration. Physical acceptance of the fix is pending.

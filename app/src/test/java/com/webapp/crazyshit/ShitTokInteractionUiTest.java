@@ -166,12 +166,13 @@ public class ShitTokInteractionUiTest {
             assertEquals(0, bar.getThumb().getAlpha());
             assertNull(ReflectionHelpers.getField(f.selected, "scrubPreview"));
             duration.set(59_999); ReflectionHelpers.callInstanceMethod(f.selected, "updateProgress");
+            idle(ZeroChillMotion.QUICK_MS + 20);
             assertEquals(View.INVISIBLE, progress.getVisibility());
             duration.set(60_000); ReflectionHelpers.callInstanceMethod(f.selected, "updateProgress");
             assertEquals(View.VISIBLE, progress.getVisibility());
             ReflectionHelpers.setField(f.selected, "userPaused", true);
             ReflectionHelpers.callInstanceMethod(f.selected, "syncPausedChrome");
-            assertEquals(0, bar.getThumb().getAlpha());
+            assertEquals(255, bar.getThumb().getAlpha());
         }
     }
     @Test public void portraitLineRetainsTouchTargetAndRestoresLandscapeThumbAcrossRotation() {
@@ -183,7 +184,7 @@ public class ShitTokInteractionUiTest {
             ReflectionHelpers.callInstanceMethod(f.selected, "syncOrientationChrome");
             assertEquals(Math.round(48 * density), row.getLayoutParams().height);
             assertEquals(Math.round(4 * density), bar.getMaxHeight());
-            assertEquals(0, bar.getThumb().getAlpha());
+            assertEquals(255, bar.getThumb().getAlpha());
             assertEquals(-Math.round(13 * density),
                     ((android.widget.FrameLayout.LayoutParams) row.getLayoutParams()).bottomMargin);
 
@@ -196,20 +197,20 @@ public class ShitTokInteractionUiTest {
 
             org.robolectric.RuntimeEnvironment.setQualifiers("w400dp-h800dp-port-xhdpi");
             ReflectionHelpers.callInstanceMethod(f.selected, "syncOrientationChrome");
-            assertEquals(0, bar.getThumb().getAlpha());
+            assertEquals(255, bar.getThumb().getAlpha());
             assertEquals(Math.round(4 * density), bar.getMaxHeight());
             assertEquals(View.GONE, root(f.selected).findViewWithTag("shittok_elapsed").getVisibility());
             ReflectionHelpers.setField(f.selected, "stream", null);
             ShitTokInteractionUiTest.tap(bar, bar.getWidth() * .7f, bar.getHeight() / 2f);
             assertEquals(1, f.selectedPlayer.seeks);
-            assertEquals(0, bar.getThumb().getAlpha());
+            assertEquals(255, bar.getThumb().getAlpha());
         }
     }
 
     @Test public void explicitButtonKeepsPriorityOverOverlappingProgressHitRow() {
         try (ShitTokAudioOwnershipTest.Fixture f = fixture()) {
             var root = (android.view.ViewGroup) root(f.selected);
-            View more = root.findViewWithTag("shittok_more");
+            View more = root.findViewWithTag("shittok_share");
             Rect bounds = new Rect(0, 0, more.getWidth(), more.getHeight());
             root.offsetDescendantRectToMyCoords(more, bounds);
             View row = root.findViewWithTag("shittok_progress_row");

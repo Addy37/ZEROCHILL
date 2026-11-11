@@ -1,7 +1,7 @@
 package com.webapp.crazyshit;
 
 import android.app.Activity;
-import android.app.AlertDialog;
+import android.app.Dialog;
 import android.app.Application;
 import android.content.Context;
 import android.graphics.Bitmap;
@@ -32,13 +32,13 @@ import org.junit.runner.RunWith;
 import org.robolectric.*;
 import org.robolectric.android.controller.ActivityController;
 import org.robolectric.annotation.*;
-import org.robolectric.shadows.ShadowAlertDialog;
+import org.robolectric.shadows.ShadowDialog;
 import org.robolectric.shadows.ShadowLooper;
 import org.robolectric.util.ReflectionHelpers;
 import static org.junit.Assert.*;
 
 @RunWith(RobolectricTestRunner.class)
-@Config(application = Application.class, sdk = {33, 34, 35}, shadows = {
+@Config(application = Application.class, sdk = {33, 34, 35, 36}, shadows = {
         SocialMediaLifecycleTest.Sessions.class, SocialMediaLifecycleTest.Accounts.class})
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 public class SocialMediaLifecycleTest {
@@ -124,7 +124,7 @@ public class SocialMediaLifecycleTest {
     }
     @After public void teardown() throws Exception {
         if (authRelease != null) authRelease.countDown();
-        AlertDialog dialog = ShadowAlertDialog.getLatestAlertDialog();
+        Dialog dialog = ShadowDialog.getLatestDialog();
         if (dialog != null && dialog.isShowing()) dialog.dismiss(); ShadowLooper.idleMainLooper();
         SocialMedia.WORK.submit(() -> { }).get(5, TimeUnit.SECONDS);
         for (ActivityController<?> c : otherActivities) c.stop().destroy();
@@ -146,7 +146,7 @@ public class SocialMediaLifecycleTest {
         for (String name : new String[]{"a.png", "b.jpg", "c.webp"}) {
             held.add(name);
             SocialMedia.showViewer(activity, "social-photos", "alice/" + name);
-            AlertDialog dialog = ShadowAlertDialog.getLatestAlertDialog();
+            Dialog dialog = ShadowDialog.getLatestDialog();
             ImageView large = viewer(dialog);
             layout(dialog.getWindow().getDecorView());
             assertTrue("Unloaded viewer must have height", large.getMeasuredHeight() > 0);
@@ -160,11 +160,50 @@ public class SocialMediaLifecycleTest {
             held.remove(name);
             for (int i = 0; i < 3; i++) {
                 SocialMedia.showViewer(activity, "social-photos", "alice/" + name);
-                AlertDialog again = ShadowAlertDialog.getLatestAlertDialog();
+                Dialog again = ShadowDialog.getLatestDialog();
                 ImageView next = viewer(again); await(() -> ready(next));
                 assertEquals(count, fetched.size()); again.dismiss(); ShadowLooper.idleMainLooper();
             }
         }
+    }
+
+    @Test public void enlargedAttachmentHasBlackFullWindowCanvasAndClosesWithoutCard() throws Exception {
+        SocialMedia.showViewer(activity, "social-photos", "alice/a.png");
+        Dialog dialog = ShadowDialog.getLatestDialog();
+        ImageView large = viewer(dialog);
+        await(() -> ready(large));
+        assertEquals(ViewGroup.LayoutParams.MATCH_PARENT, dialog.getWindow().getAttributes().width);
+        assertEquals(ViewGroup.LayoutParams.MATCH_PARENT, dialog.getWindow().getAttributes().height);
+        assertEquals(Color.BLACK, ((android.graphics.drawable.ColorDrawable)
+                ((View) large.getParent()).getBackground()).getColor());
+        ViewGroup viewport = (ViewGroup) large.getParent();
+        ImageView close = (ImageView) viewport.getChildAt(1);
+        assertEquals("Close attachment", close.getContentDescription());
+        for (int[] size : new int[][]{{800, 1600}, {1600, 800}}) {
+            View decor = dialog.getWindow().getDecorView();
+            decor.measure(View.MeasureSpec.makeMeasureSpec(size[0], View.MeasureSpec.EXACTLY),
+                    View.MeasureSpec.makeMeasureSpec(size[1], View.MeasureSpec.EXACTLY));
+            decor.layout(0, 0, size[0], size[1]);
+            ShadowLooper.idleMainLooper();
+            assertTrue("Image canvas must fill the window width", large.getWidth() >= size[0] * .95f);
+            assertTrue("Image canvas must fill the window height", large.getHeight() >= size[1] * .90f);
+            assertTrue(close.getRight() <= viewport.getWidth());
+            assertTrue(close.getTop() >= 0);
+            Bitmap capture = Bitmap.createBitmap(size[0], size[1], Bitmap.Config.ARGB_8888);
+            decor.draw(new android.graphics.Canvas(capture));
+            File folder = new File("build/reports/visual-tests");
+            assertTrue(folder.exists() || folder.mkdirs());
+            try (FileOutputStream output = new FileOutputStream(new File(folder,
+                    size[0] < size[1] ? "comments-viewer-portrait.png" : "comments-viewer-landscape.png"))) {
+                assertTrue(capture.compress(Bitmap.CompressFormat.PNG, 100, output));
+            }
+            capture.recycle();
+        }
+        close.performClick();
+        ShadowLooper.idleMainLooper();
+        assertFalse(dialog.isShowing());
+        assertNull(large.getDrawable());
+        assertTrue(request(large) == null || request(large).isCleared());
     }
 
     @Test public void dmAndCommentGifsAnimateInlineAndInRepeatedViewers() throws Exception {
@@ -173,7 +212,7 @@ public class SocialMediaLifecycleTest {
             await(() -> image.getDrawable() instanceof GifDrawable && ((GifDrawable) image.getDrawable()).isRunning());
             GifDrawable gif = (GifDrawable) image.getDrawable(); assertTrue(gif.getFrameCount() > 1);
             for (int i = 0; i < 2; i++) {
-                image.performClick(); AlertDialog dialog = ShadowAlertDialog.getLatestAlertDialog();
+                image.performClick(); Dialog dialog = ShadowDialog.getLatestDialog();
                 ImageView large = viewer(dialog);
                 await(() -> large.getDrawable() instanceof GifDrawable && ((GifDrawable) large.getDrawable()).isRunning());
                 GifDrawable enlarged = (GifDrawable) large.getDrawable();
@@ -238,10 +277,10 @@ public class SocialMediaLifecycleTest {
 
     @Test public void dismissedViewerCancelsPendingFetchAndNeverReplacesNextAttachment() throws Exception {
         held.add("a.png"); SocialMedia.showViewer(activity, "social-photos", "alice/a.png");
-        AlertDialog first = ShadowAlertDialog.getLatestAlertDialog(); ImageView old = viewer(first);
+        Dialog first = ShadowDialog.getLatestDialog(); ImageView old = viewer(first);
         await(() -> pending.containsKey("a.png")); first.dismiss(); ShadowLooper.idleMainLooper();
         SocialMedia.showViewer(activity, "social-photos", "alice/c.webp");
-        ImageView selected = viewer(ShadowAlertDialog.getLatestAlertDialog()); await(() -> ready(selected));
+        ImageView selected = viewer(ShadowDialog.getLatestDialog()); await(() -> ready(selected));
         Drawable correct = selected.getDrawable();
         pending.remove("a.png").onDataReady(new ByteArrayInputStream(bytes.get("a.png"))); drain();
         assertNull(old.getDrawable()); assertSame(correct, selected.getDrawable());
@@ -352,7 +391,7 @@ public class SocialMediaLifecycleTest {
     @Test public void commentPhotoStillRendersAndOpensItsOwnViewer() throws Exception {
         ImageView comment = inline("a.png", false); await(() -> ready(comment));
         Request original = request(comment); Drawable shown = comment.getDrawable();
-        comment.performClick(); AlertDialog dialog = ShadowAlertDialog.getLatestAlertDialog();
+        comment.performClick(); Dialog dialog = ShadowDialog.getLatestDialog();
         ImageView large = viewer(dialog); await(() -> ready(large));
         assertEquals(2f, large.getDrawable().getIntrinsicWidth() / (float) large.getDrawable().getIntrinsicHeight(), .01f);
         dialog.dismiss(); ShadowLooper.idleMainLooper();
@@ -378,7 +417,7 @@ public class SocialMediaLifecycleTest {
     }
     private Request request(ImageView image) { return new DrawableImageViewTarget(image).getRequest(); }
     private boolean ready(ImageView image) { Request r = request(image); return r != null && r.isComplete() && image.getDrawable() != null; }
-    private ImageView viewer(AlertDialog dialog) { return find(dialog.getWindow().getDecorView()); }
+    private ImageView viewer(Dialog dialog) { return find(dialog.getWindow().getDecorView()); }
     private ImageView find(View view) {
         if (view instanceof ImageView && "Attachment viewer".equals(view.getContentDescription())) return (ImageView) view;
         if (view instanceof ViewGroup) for (int i=0; i<((ViewGroup)view).getChildCount(); i++) {

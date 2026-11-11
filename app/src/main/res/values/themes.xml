@@ -21,6 +21,16 @@
         <item name="colorOnSurfaceVariant">@color/zc_text_secondary</item>
         <item name="bottomNavigationStyle">@style/Widget.ZeroChill.BottomNavigation</item>
     </style>
+    <style name="Theme.ZeroChill.AttachmentViewer" parent="android:style/Theme.Material.NoActionBar">
+        <item name="android:windowIsFloating">false</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowBackground">@android:color/black</item>
+        <item name="android:colorBackground">@android:color/black</item>
+        <item name="android:statusBarColor">@android:color/black</item>
+        <item name="android:navigationBarColor">@android:color/black</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+    </style>
     <style name="Theme.ZeroChill.Account" parent="Theme.CrazyShit">
         <item name="android:autofilledHighlight">@drawable/zc_autofill_highlight</item>
     </style>

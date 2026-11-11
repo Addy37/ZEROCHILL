@@ -58,6 +58,12 @@ public class ShitTokIdleUiTest {
     }
     @Test public void lateCachedSourceWakesSameSelectedOwnerWithoutWakingDifferentPage() {
         try(ShitTokAudioOwnershipTest.Fixture f=new ShitTokAudioOwnershipTest.Fixture()) {
+            // Finish initial layout/source callbacks and cancel their independent
+            // warm-player work before counting the cache-wake operations below.
+            org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
+            ReflectionHelpers.callInstanceMethod(f.feed,"cancelSwipePlayerMaintenance");
+            f.selectedPlayer.plays = 0;
+            f.selectedPlayer.readyToPlay = false;
             ReflectionHelpers.callInstanceMethod(f.feed,"wakeSelectedFromCache",from(String.class,"https://example.invalid/clip-2"));
             org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
             assertEquals(0,f.selectedPlayer.plays);
