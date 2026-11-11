@@ -23,7 +23,8 @@ newer Play-button hero in the supplied OG screenshot.
   dots with an accent active pill, six-second rotation, and a circular reveal
   after the next artwork loads. Outer hero and artwork corners remain sharp.
   Hero art prefers full remote artwork with bundled error fallback. Snapshot
-  allocation is bounded and cancelled on replacement/detach.
+  allocation is bounded and cancelled on replacement/detach. Shelf title areas
+  grow with accessibility text size while keeping the compact default geometry.
 - NativeFeedAdapter has a Shows-only compact presentation: 18dp card corners,
   132x80dp thumbnail slots (smaller on narrow displays), accent EPISODE 01
   numbering, and up to three title lines. Entire cards remain tappable and

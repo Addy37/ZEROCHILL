@@ -21,6 +21,7 @@ import org.junit.runner.RunWith;
 import org.robolectric.Robolectric;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.annotation.Config;
+import org.robolectric.annotation.GraphicsMode;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -28,6 +29,7 @@ import java.util.Arrays;
 
 @RunWith(RobolectricTestRunner.class)
 @Config(application = Application.class, sdk = 35)
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
 public class ShowsHeroDesignTest {
     @Test
     public void usesSwipeableProtectedArtworkHeroGeometry() throws Exception {
