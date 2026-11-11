@@ -1,10 +1,42 @@
-# ShitTok visual polish / Preview 36
+# ShitTok visual polish / Preview 37
 
 Baseline: fetched approved main `5f24b294a0e2c3155a7b395894c931608be93dd9`,
 including merged Library #412, OnlyFap motion #413 and gallery polish #414.
 Branch: `feature/zerochill-shittok-visual-polish`.
 
-## Current physical-feedback follow-up
+## Current comments-sheet follow-up
+
+The user supplied 16129.jpg after Preview 36 `45355fe4`, accepted the recommended
+comments redesign, and requested a nicer comment heart. The shared native
+`InlineCommentsDialog` keeps its existing data/auth/media/posting flows and applies
+consistent presentation to ShitTok and its other entry points. Near-black rows,
+a compact themed-glass header/composer, grouped username/timestamp, readable body
+text and a right-aligned vector heart/count replace the sparse gray presentation.
+Unliked hearts use a clean outline; liked hearts fill with the saved accent.
+Reply threads collapse behind View replies and focused/deep-linked ancestors expand.
+The sheet opens near 60 percent in portrait and drags toward full height; IME
+changes preserve the composer and the user's prior expansion state. Existing
+resize/close callbacks, moderation, attachment and retry/ownership logic remain.
+The approved Preview 36 avatar/rail and prior swipe/text/scrub work stay intact.
+
+Local validation passed 256 tests across 30 focused suites with zero failures,
+errors or skips, plus `:app:assembleDebug` (3m25s). This covers comments, owner
+moderation models, keyboard/media lifecycle, navigation, social counters and the
+existing ShitTok playback/interaction/theme regressions. A final Send-icon centering
+correction uses an ImageView; all 26 focused comments cases and the debug build
+passed again for that change (1m16s). CI repeats all 30 suites before signing; the PR records
+the exact source SHA and signed artifact.
+
+Native captures verified portrait/landscape geometry, grouped identity/time and
+heart/count placement. Height assertions caught and corrected a CoordinatorLayout
+gravity offset; IME tests cover both window resize and inset-only keyboard layouts.
+Successful replies expand their parent, deep links reveal ancestors, and row-level
+like updates preserve thread visibility. No full unfiltered suite or lint run is
+claimed for this scoped follow-up.
+Native test captures use placeholder content; physical OnePlus keyboard, sheet
+gestures, GPU video composition and 120Hz acceptance remain device checks.
+
+## Preview 36 physical-feedback follow-up
 
 The user tested Preview 35 `1d6b3fa2` and supplied 16118.jpg plus TikTok reference
 16121.jpg. The separate plus badge was rejected, and the old icon shapes did not
@@ -75,7 +107,7 @@ are unchanged. No new dependencies, capture loop or explicit rendering layer.
 ## Candidate delivery
 
 The scoped `shittok-visual-candidate.yml` workflow runs focused regressions and builds
-one signed release-package APK. Preview 36 is `7.0-preview.36-shittok-buttons` / `6000038`.
+one signed release-package APK. Preview 37 is `7.0-preview.37-comments` / `6000039`.
 It injects existing public client configuration through existing repository secrets,
 restores the existing production signing identity, checks ancestry from the approved
 baseline and compares APK package/certificate/version against the current stable APK.

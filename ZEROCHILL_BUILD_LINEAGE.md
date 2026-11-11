@@ -415,3 +415,18 @@ Preview 36 uses `7.0-preview.36-shittok-buttons`, code `6000038`, above Preview 
 `6000037`, with the existing production package and certificate. One signed test
 APK; no merge, tag, public release, backend/source change or data migration.
 Physical approval remains pending. See `docs/SHITTOK_VISUAL_POLISH.md`.
+
+
+## PR 415 comments-sheet follow-up (Preview 37)
+
+The user tested Preview 36 `45355fe44e4520d9045ad4eccdbe068c0dac25f4`, supplied
+16129.jpg, and approved the proposed comments-sheet redesign plus a nicer comment
+heart. Continue the same unmerged PR #415 lineage with the attached avatar and
+Download/Share rail retained. The shared native comments sheet receives near-black
+rows, grouped identity/time, a vector heart/count column, compact composer/header,
+collapsible replies with focused-thread expansion, and keyboard-aware draggable
+height. Keep existing comment/reply/edit/delete/media/auth and playback callbacks.
+Preview 37 uses `7.0-preview.37-comments`, code `6000039`, above Preview 36 `6000038`,
+with original production package/certificate. One signed test APK; no merge, tag,
+public release, backend/source change or migration. Physical acceptance is pending.
+See `docs/SHITTOK_VISUAL_POLISH.md` and PR #415 for actual validation evidence.
