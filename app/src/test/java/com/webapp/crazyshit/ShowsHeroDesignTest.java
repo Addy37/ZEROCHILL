@@ -209,6 +209,49 @@ public class ShowsHeroDesignTest {
         assertEquals(2, dots.getChildCount());
     }
 
+    @Test
+    public void playPillKeepsOpeningTheSelectedShow() throws Exception {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        NativeContentItem[] opened = new NativeContentItem[1];
+        ShowsHubView hub = new ShowsHubView(activity, item -> opened[0] = item,
+                item -> { }, item -> { });
+        NativeContentItem selected = new NativeContentItem(
+                NativeContentItem.KIND_SERIES, "Selected show", "selected", "", "", "", "");
+        Field itemField = ShowsHubView.class.getDeclaredField("heroItem");
+        itemField.setAccessible(true);
+        itemField.set(hub, selected);
+        Field actionField = ShowsHubView.class.getDeclaredField("heroAction");
+        actionField.setAccessible(true);
+        TextView action = (TextView) actionField.get(hub);
+        assertEquals(dp(activity, 44), action.getLayoutParams().height);
+        assertEquals(dp(activity, 128), action.getLayoutParams().width);
+        assertEquals(dp(activity, 19), action.getCompoundDrawablesRelative()[0].getBounds().width());
+        assertEquals("VIEW SHOW", action.getText().toString());
+        assertTrue(action.performClick());
+        assertEquals(selected, opened[0]);
+    }
+
+    @Test
+    public void landscapeCaptionsHaveNoCardSurfaceAndStayBelowTheImage() throws Exception {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        ShowsHubView hub = new ShowsHubView(activity, item -> { }, item -> { }, item -> { });
+        for (String fieldName : new String[]{"continueShelf", "thisWeekShelf", "crazyShelf"}) {
+            RecyclerView rail = shelfRail(hub, fieldName);
+            RecyclerView.ViewHolder holder = rail.getAdapter().createViewHolder(rail, 0);
+            MaterialCardView card = (MaterialCardView) holder.itemView;
+            assertEquals(android.graphics.Color.TRANSPARENT, card.getCardBackgroundColor().getDefaultColor());
+            Field titleField = holder.getClass().getDeclaredField("title");
+            titleField.setAccessible(true);
+            TextView title = (TextView) titleField.get(holder);
+            assertEquals(null, title.getBackground());
+            assertEquals(dp(activity, 6), title.getPaddingTop());
+            assertEquals(android.view.Gravity.TOP | android.view.Gravity.START, title.getGravity());
+            assertEquals(android.view.Gravity.BOTTOM,
+                    ((FrameLayout.LayoutParams) title.getLayoutParams()).gravity);
+            assertEquals(dp(activity, 129), card.getLayoutParams().height);
+        }
+    }
+
     private static RecyclerView shelfRail(ShowsHubView hub, String fieldName) throws Exception {
         Field shelfField = ShowsHubView.class.getDeclaredField(fieldName);
         shelfField.setAccessible(true);

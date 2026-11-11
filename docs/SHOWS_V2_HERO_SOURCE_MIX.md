@@ -45,3 +45,25 @@ No changed providers, parsers, content-source domains or remote configuration.
 No changes to Supabase, app package, stable signing identity, persisted settings,
 favorites, history, downloads, backups, source feeds, player or dependencies.
 Physical acceptance and installation-over the current signed preview are pending.
+
+## Focused visual follow-up (preview 42)
+
+Continues PR #417 at `8daa14c9495a4ab7db38313a90803e89c2005995`.
+Only the homepage artwork-to-bottom scrim, landscape thumbnail captions and
+View Show pill change. The scrim uses V2's 30/53/77/100 percent stops over the
+artwork height so its final color meets the existing bottom bar. OG hero corners
+remain square. Landscape cards lose the dark surface beneath captions, with
+12sp medium type, 16sp lines and a 6dp thumbnail gap; allocated card/rail sizes
+remain unchanged. Portrait overlays stay intact. View Show uses a filled,
+accent-glazed glass appearance, 17dp corners, 44dp height, 19dp play icon and
+12sp bold text. It retains the existing openHero listener and 128dp width.
+V2's native Compose sources are the styling reference; no screenshot attachments
+were available in this continuation. No backdrop-capture or animation is added.
+
+The existing signed-candidate workflow produces preview 42 (`6000044`), above
+preview 41 (`6000043`), with unchanged production application ID and signing key.
+Package, certificate and version gates run against the latest stable APK.
+No changes to hero picks, artwork requests, dots, navigation, rails, episode
+pages, player, animations, stored data, backend, remote config or dependencies.
+Physical installation and visual acceptance remain for the user; successful
+host tests/build/signature gates do not establish physical device acceptance.

@@ -232,20 +232,24 @@ final class ShowsHubView extends FrameLayout {
 
         int heroBackground = ZeroChillUi.background(context);
         View heroShade = new View(context);
-        heroShade.setBackground(new GradientDrawable(
-                GradientDrawable.Orientation.TOP_BOTTOM,
-                new int[] {
-                        Color.argb(100, 0, 0, 0),
-                        Color.TRANSPARENT,
-                        Color.TRANSPARENT,
-                        Color.argb(85, 0, 0, 0),
-                        Color.argb(214, Color.red(heroBackground),
-                                Color.green(heroBackground), Color.blue(heroBackground)),
-                        heroBackground
-                }
-        ));
+        // Fade over the artwork itself, reaching the control-bar color at its edge.
+        android.graphics.drawable.ShapeDrawable heroScrim =
+                new android.graphics.drawable.ShapeDrawable(
+                        new android.graphics.drawable.shapes.RectShape());
+        heroScrim.setShaderFactory(new android.graphics.drawable.ShapeDrawable.ShaderFactory() {
+            @Override public Shader resize(int width, int height) {
+                return new android.graphics.LinearGradient(0, 0, 0, Math.max(1, height),
+                        new int[] {
+                                Color.argb(100, 0, 0, 0), Color.TRANSPARENT, Color.TRANSPARENT,
+                                Color.argb(161, Color.red(heroBackground),
+                                        Color.green(heroBackground), Color.blue(heroBackground)),
+                                heroBackground
+                        }, new float[] {0f, 0.30f, 0.53f, 0.77f, 1f}, Shader.TileMode.CLAMP);
+            }
+        });
+        heroShade.setBackground(heroScrim);
         heroShade.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
-        heroFrame.addView(heroShade, new FrameLayout.LayoutParams(-1, -1));
+        heroFrame.addView(heroShade, new FrameLayout.LayoutParams(-1, heroArtworkHeight));
 
         LinearLayout heroBar = new LinearLayout(context);
         heroBar.setOrientation(LinearLayout.HORIZONTAL);
@@ -312,24 +316,35 @@ final class ShowsHubView extends FrameLayout {
         heroHintParams.topMargin = dp(5);
         heroCopy.addView(heroHint, heroHintParams);
 
-        heroAction = text("VIEW SHOW", 13f, Color.WHITE);
+        heroAction = text("VIEW SHOW", 12f, Color.WHITE);
         heroAction.setTypeface(null, android.graphics.Typeface.BOLD);
         heroAction.setGravity(Gravity.CENTER);
         heroAction.setVisibility(View.GONE);
         GradientDrawable actionBackground = new GradientDrawable();
-        actionBackground.setColor(Color.argb(205, 15, 18, 22));
-        actionBackground.setCornerRadius(dp(20));
-        actionBackground.setStroke(dp(1), Color.argb(80, 255, 255, 255));
+        actionBackground.setColor(androidx.core.graphics.ColorUtils.compositeColors(
+                androidx.core.graphics.ColorUtils.setAlphaComponent(themeAccent(), 33),
+                Color.argb(219, 28, 40, 51)));
+        actionBackground.setCornerRadius(dp(17));
+        actionBackground.setStroke(dp(1), Color.argb(31, 255, 255, 255));
         heroAction.setBackground(new RippleDrawable(
                 ColorStateList.valueOf(Color.argb(75, 255, 255, 255)),
                 actionBackground, null));
+        android.graphics.drawable.Drawable play =
+                androidx.appcompat.content.res.AppCompatResources.getDrawable(
+                        context, R.drawable.ic_player_play).mutate();
+        play.setTint(Color.WHITE);
+        play.setBounds(0, 0, dp(19), dp(19));
+        heroAction.setCompoundDrawablesRelative(play, null, null, null);
+        heroAction.setCompoundDrawablePadding(dp(7));
+        heroAction.setPadding(dp(18), 0, dp(18), 0);
+        heroAction.setIncludeFontPadding(false);
         heroAction.setContentDescription("Open featured show");
         LinearLayout controls = new LinearLayout(context);
         controls.setGravity(Gravity.CENTER_VERTICAL);
         controls.setPadding(dp(16), dp(8), dp(16), dp(8));
         controls.setBackgroundColor(heroBackground);
         heroFrame.addView(controls, new FrameLayout.LayoutParams(-1, dp(60), Gravity.BOTTOM));
-        controls.addView(heroAction, new LinearLayout.LayoutParams(dp(128), dp(40)));
+        controls.addView(heroAction, new LinearLayout.LayoutParams(dp(128), dp(44)));
         LinearLayout.LayoutParams heroDotsParams =
                 new LinearLayout.LayoutParams(0, dp(30), 1f);
         heroDots.setGravity(Gravity.END | Gravity.CENTER_VERTICAL);
@@ -1311,6 +1326,17 @@ final class ShowsHubView extends FrameLayout {
         return view;
     }
 
+    private void styleThumbnailCaption(TextView title) {
+        title.setTextSize(12f);
+        title.setTypeface(android.graphics.Typeface.create("sans-serif-medium", 0));
+        title.setIncludeFontPadding(false);
+        androidx.core.widget.TextViewCompat.setLineHeight(title, Math.round(
+                16f * getResources().getDisplayMetrics().scaledDensity));
+        title.setGravity(Gravity.TOP | Gravity.START);
+        title.setPadding(0, dp(6), 0, 0);
+        title.setBackground(null);
+    }
+
     private int themeAccent() {
         return AppearanceTheme.accent(getContext());
     }
@@ -1369,6 +1395,7 @@ final class ShowsHubView extends FrameLayout {
             MaterialCardView card = new MaterialCardView(getContext());
             ZeroChillUi.styleMediaCard(card, R.dimen.zc_radius_medium);
             card.setRadius(0f);
+            card.setCardBackgroundColor(Color.TRANSPARENT);
             card.setCardElevation(0f);
             card.setClickable(true);
             card.setFocusable(true);
@@ -1419,9 +1446,7 @@ final class ShowsHubView extends FrameLayout {
             title.setTypeface(null, android.graphics.Typeface.BOLD);
             title.setMaxLines(2);
             title.setEllipsize(android.text.TextUtils.TruncateAt.END);
-            title.setGravity(Gravity.BOTTOM);
-            title.setTextSize(12f);
-            title.setPadding(0, dp(6), 0, 0);
+            styleThumbnailCaption(title);
             frame.addView(title, new FrameLayout.LayoutParams(-1, shelfTitleHeight, Gravity.BOTTOM));
 
             FrameLayout progressTrack = new FrameLayout(getContext());
@@ -1522,6 +1547,7 @@ final class ShowsHubView extends FrameLayout {
             MaterialCardView card = new MaterialCardView(getContext());
             ZeroChillUi.styleMediaCard(card, R.dimen.zc_radius_medium);
             card.setRadius(dp(portrait ? 17 : 0));
+            if (!portrait) card.setCardBackgroundColor(Color.TRANSPARENT);
             card.setCardElevation(0f);
             card.setClickable(true);
             card.setFocusable(true);
@@ -1583,8 +1609,7 @@ final class ShowsHubView extends FrameLayout {
                 title.setGravity(Gravity.BOTTOM);
                 title.setPadding(dp(11), dp(8), dp(11), dp(10));
             } else {
-                title.setMinLines(2);
-                title.setPadding(0, dp(6), 0, 0);
+                styleThumbnailCaption(title);
             }
             frame.addView(title, new FrameLayout.LayoutParams(
                     -1, portrait ? -2 : shelfTitleHeight, Gravity.BOTTOM));

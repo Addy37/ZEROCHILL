@@ -1,9 +1,7 @@
 name: Shows V2 Five-Source Hero Signed Test APK
 
 # One PR417 install-over preview, not a public release.
-# Re-run after restoring icon padding after the button background.
-# Final candidate: validate uncropped portrait cover dimensions before display fitting.
-# Retry requested on 2026-11-11: previous run 43095549660 remained queued without jobs.
+# Focused visual follow-up: artwork-edge gradient, thumbnail captions, filled play pill.
 on:
   push:
     branches: [feature/shows-v2-mixed-hero-artwork]
@@ -19,8 +17,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 35
     env:
-      APP_VERSION_CODE: '6000043'
-      APP_VERSION_NAME: '7.0-preview.41-shows-heroes'
+      APP_VERSION_CODE: '6000044'
+      APP_VERSION_NAME: '7.0-preview.42-shows-visuals'
       ZEROCHILL_SOURCE_SHA: ${{ github.sha }}
       FEEDBACK_ENDPOINT: ${{ secrets.FEEDBACK_ENDPOINT }}
       FEEDBACK_ANON_KEY: ${{ secrets.FEEDBACK_ANON_KEY }}
@@ -53,7 +51,8 @@ jobs:
         run: |
           gradle --no-daemon :app:testDebugUnitTest \
             --tests com.webapp.crazyshit.ShowsHeroPicksTest \
-            --tests com.webapp.crazyshit.ShowsHeroDesignTest
+            --tests com.webapp.crazyshit.ShowsHeroDesignTest \
+            --tests com.webapp.crazyshit.ShowsHubStateTest
       - name: Restore production signing credentials
         env:
           SIGNING_BUNDLE: ${{ secrets.ANDROID_SIGNING_BUNDLE }}
@@ -108,7 +107,7 @@ jobs:
           candidate = inspect(os.environ['CANDIDATE_APK'])
           stable = inspect(str(pathlib.Path(os.environ['RUNNER_TEMP'])/'stable/ZeroChill.apk'))
           assert candidate[0] == stable[0] == 'com.addy37.crazyshitunofficial'
-          assert candidate[1] == 6000043 and candidate[1] > max(stable[1],6000042)
+          assert candidate[1] == 6000044 and candidate[1] > max(stable[1],6000043)
           assert candidate[2] == stable[2] == '04abf84b3d468cbb1a562dea83b0007e686b2e56018cce911223963faea51356'
           report = ('Source: '+os.environ['GITHUB_SHA']+'\n'
               +'Branch: '+os.environ['GITHUB_REF_NAME']+'\n'
