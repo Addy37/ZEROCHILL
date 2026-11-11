@@ -72,6 +72,7 @@ public class ShowsWatchLaunchTest {
     }
 
     @Test
+    @Config(sdk = {27, 35})
     public void transformedArtworkUsesVisibleClippedBounds() {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
         FrameLayout frame = new FrameLayout(activity);

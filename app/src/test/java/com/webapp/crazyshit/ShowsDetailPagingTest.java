@@ -108,7 +108,7 @@ public class ShowsDetailPagingTest {
                 ReflectionHelpers.ClassParameter.from(int.class, -1));
     }
 
-    @Test public void pagingControlsStayFlatAndReadable() {
+    @Test public void pagingControlsUsePreferenceSurfaceAndReadableAccent() {
         NativeFeedBrowserActivity browser = browser();
         TextView next = ReflectionHelpers.callInstanceMethod(browser, "episodePageButton",
                 ReflectionHelpers.ClassParameter.from(String.class, "Next 10 →"),
@@ -116,8 +116,10 @@ public class ShowsDetailPagingTest {
         assertTrue(next.getBackground() instanceof RippleDrawable);
         android.graphics.drawable.Drawable content =
                 ((RippleDrawable) next.getBackground()).getDrawable(0);
-        assertTrue(content instanceof ColorDrawable);
-        assertEquals(Color.TRANSPARENT, ((ColorDrawable) content).getColor());
+        assertTrue(content instanceof android.graphics.drawable.GradientDrawable);
+        int color = ((android.graphics.drawable.GradientDrawable) content).getColor().getDefaultColor();
+        assertTrue(Color.alpha(color) > 0);
+        assertTrue(Color.alpha(color) < 255);
         assertEquals(UiPalette.PRIMARY, next.getCurrentTextColor());
         assertEquals(0f, next.getElevation(), 0f);
         assertTrue(next.getMinHeight() >= 48);

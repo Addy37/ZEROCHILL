@@ -299,6 +299,55 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
         return createCardsHolder(parent);
     }
 
+    private Holder createEpisodeHolder(ViewGroup parent) {
+        MaterialCardView card = baseCard(parent, 16, 5, 18, -1);
+        card.setCardBackgroundColor(Color.rgb(18, 26, 35));
+        card.setStrokeWidth(0);
+        card.setCardElevation(0f);
+        LinearLayout row = new LinearLayout(parent.getContext());
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(dp(parent, 10), dp(parent, 10), dp(parent, 10), dp(parent, 10));
+        card.addView(row, new MaterialCardView.LayoutParams(-1, -2));
+
+        // A fixed slot prevents missing or portrait artwork from changing row geometry.
+        int availableDp = parent.getWidth() > 0
+                ? Math.round(parent.getWidth() / parent.getResources().getDisplayMetrics().density)
+                : parent.getResources().getConfiguration().screenWidthDp;
+        int width = Math.min(132, Math.max(88, (availableDp - 64) / 2));
+        MediaViews media = addMedia(parent, row, 80, width);
+        media.frame.setBackground(rounded(Color.rgb(20, 31, 41), dp(parent, 13)));
+        media.frame.setForeground(null);
+        media.play.setVisibility(View.GONE);
+
+        LinearLayout copy = new LinearLayout(parent.getContext());
+        copy.setOrientation(LinearLayout.VERTICAL);
+        copy.setGravity(Gravity.CENTER_VERTICAL);
+        copy.setPadding(dp(parent, 12), 0, 0, 0);
+        row.addView(copy, new LinearLayout.LayoutParams(0, -2, 1f));
+        TextView number = new TextView(parent.getContext());
+        number.setTextSize(10);
+        number.setTypeface(null, android.graphics.Typeface.BOLD);
+        number.setSingleLine(true);
+        number.setTextColor(AppearanceTheme.accent(parent.getContext()));
+        copy.addView(number, new LinearLayout.LayoutParams(-1, -2));
+        TextView title = new TextView(parent.getContext());
+        title.setTextSize(14);
+        title.setTextColor(Color.WHITE);
+        title.setTypeface(android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL));
+        title.setMaxLines(3);
+        title.setEllipsize(TextUtils.TruncateAt.END);
+        title.setIncludeFontPadding(false);
+        title.setLineSpacing(0, 1.12f);
+        LinearLayout.LayoutParams titleParams = new LinearLayout.LayoutParams(-1, -2);
+        titleParams.topMargin = dp(parent, 5);
+        copy.addView(title, titleParams);
+        TextView unusedComments = new TextView(parent.getContext());
+        TextView unusedDescription = new TextView(parent.getContext());
+        return new Holder(card, media, new CopyViews(title, new TextView(parent.getContext()),
+                unusedComments, unusedDescription, number));
+    }
+
     private Holder createSectionHolder(ViewGroup parent) {
         MaterialCardView card = new MaterialCardView(parent.getContext());
         card.setTag(STYLE_TAG);
@@ -339,6 +388,7 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
     }
 
     private Holder createListHolder(ViewGroup parent) {
+        if (episodePresentation) return createEpisodeHolder(parent);
         boolean landscape = isLandscape(parent);
         int availableDp = parent.getWidth() > 0
                 ? Math.round((parent.getWidth() - parent.getPaddingLeft() - parent.getPaddingRight()) /
@@ -681,7 +731,8 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
         String visibleTitle = displayTitle(item);
         holder.title.setText(visibleTitle);
         if (holder.episodeNumber != null)
-            holder.episodeNumber.setText("#" + (episodeNumberOffset + position + 1));
+            holder.episodeNumber.setText(String.format(Locale.US, "EPISODE %02d", episodeNumberOffset + position + 1));
+        if (holder.episodeNumber != null) holder.episodeNumber.setTextColor(AppearanceTheme.accent(context));
         holder.info.setText(buildInfo(item));
         boolean showDescription = !episodePresentation && viewMode != VIEW_CARDS && viewMode != VIEW_POSTERS && item.description != null &&
                 !item.description.trim().isEmpty();

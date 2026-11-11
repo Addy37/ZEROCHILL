@@ -87,6 +87,9 @@ public class ShowsWatchMotionTest {
         assertFalse(f.root.getClipChildren());
         assertFalse(f.root.getClipToPadding());
         assertNotNull(ShowsWatchLaunch.artwork(f.launch));
+        Object motion = f.root.getTag(R.id.shows_watch_motion);
+        android.animation.ValueAnimator animator = ReflectionHelpers.getField(motion, "animator");
+        assertEquals(320L, animator.getDuration());
         ShowsWatchLaunch.cancel(f.root);
         ShowsWatchLaunch.release(f.launch);
     }
@@ -188,6 +191,10 @@ public class ShowsWatchMotionTest {
         Fixture f = fixture();
         assertTrue(ShowsWatchLaunch.animateEntrance(f.watch, f.launch, f.root,
                 f.player, f.details, f.poster, null));
+        f.launch.putExtra(PlayerActivity.EXTRA_PAGE_URL, "https://example.test/new-episode");
+        assertFalse(ShowsWatchLaunch.animateExit(f.watch, f.launch, f.root,
+                f.player, f.details, f.poster, () -> {}));
+        f.launch.putExtra(PlayerActivity.EXTRA_PAGE_URL, PAGE);
         f.artwork.setTag(R.id.shows_watch_source_page, "other episode");
         assertFalse(ShowsWatchLaunch.animateExit(f.watch, f.launch, f.root,
                 f.player, f.details, f.poster, () -> {}));

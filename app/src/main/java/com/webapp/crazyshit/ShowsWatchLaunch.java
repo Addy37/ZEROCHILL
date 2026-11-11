@@ -31,8 +31,8 @@ import com.google.android.material.card.MaterialCardView;
 /** A single retained player surface, animated between live artwork and the watch slot. */
 final class ShowsWatchLaunch {
     private static final String EXTRA_TOKEN = "shows_launch_token";
-    private static final long ENTER_MS = 300L;
-    private static final long EXIT_MS = 400L;
+    private static final long ENTER_MS = 320L;
+    private static final long EXIT_MS = 280L;
     private static Handoff pending;
 
     private ShowsWatchLaunch() {}
@@ -48,7 +48,7 @@ final class ShowsWatchLaunch {
         Activity source = activity(sourceView.getContext());
         String page = intent.getStringExtra(PlayerActivity.EXTRA_PAGE_URL);
         SourceGeometry geometry = sourceGeometry(sourceView);
-        if (source == null || page == null || geometry == null ||
+        if (source == null || !ZeroChillMotion.animationsEnabled(source) || page == null || geometry == null ||
                 !page.equals(sourceView.getTag(R.id.shows_watch_source_page))) return;
         String token = UUID.randomUUID().toString();
         pending = new Handoff(token, source, sourceView, page,
@@ -129,11 +129,17 @@ final class ShowsWatchLaunch {
             poster.setVisibility(View.VISIBLE);
             poster.setAlpha(motion.posterStartAlpha);
         }
+        motion.cancel();
         motion.captureReverseStart();
         motion.returning = true;
         motion.target = transform;
         motion.targetClip = clipInPlayer(source, player);
-        motion.animateTo(0f, EXIT_MS, true, finish);
+        if (poster != null && motion.posterStartAlpha < 1f) {
+            poster.animate().alpha(1f).setDuration(70L).withEndAction(() -> {
+                motion.posterStartAlpha = 1f;
+                motion.animateTo(0f, EXIT_MS, true, finish);
+            }).start();
+        } else motion.animateTo(0f, EXIT_MS, true, finish);
         return true;
     }
 
@@ -142,6 +148,7 @@ final class ShowsWatchLaunch {
         Motion motion = (Motion) root.getTag(R.id.shows_watch_motion);
         if (motion != null) {
             motion.cancel();
+            if (motion.poster != null) motion.poster.animate().cancel();
             motion.player.setClipToOutline(false);
             motion.player.setClipBounds(null);
             motion.player.setOutlineProvider(ViewOutlineProvider.BACKGROUND);
@@ -189,7 +196,7 @@ final class ShowsWatchLaunch {
         RectF visible = visibleBounds(view);
         if (visible == null) return null;
         Matrix matrix = new Matrix();
-        view.transformMatrixToGlobal(matrix);
+        transformToGlobal(view, matrix);
         float[] values = new float[9];
         matrix.getValues(values);
         // A rotated or mirrored view cannot be represented by an axis-aligned player clip.
@@ -214,7 +221,7 @@ final class ShowsWatchLaunch {
 
     private static RectF screenBounds(View view, float left, float top, float right, float bottom) {
         Matrix matrix = new Matrix();
-        view.transformMatrixToGlobal(matrix);
+        transformToGlobal(view, matrix);
         RectF rect = new RectF(left, top, right, bottom);
         matrix.mapRect(rect);
         View root = view.getRootView();
@@ -226,12 +233,24 @@ final class ShowsWatchLaunch {
         return rect;
     }
 
+    /** Public matrix operations also work on API27/28, before View exposed this helper. */
+    private static void transformToGlobal(View view, Matrix matrix) {
+        if (view.getParent() instanceof View) {
+            View parent = (View) view.getParent();
+            transformToGlobal(parent, matrix);
+            matrix.preTranslate(-parent.getScrollX(), -parent.getScrollY());
+        }
+        matrix.preTranslate(view.getLeft(), view.getTop());
+        if (!view.getMatrix().isIdentity()) matrix.preConcat(view.getMatrix());
+    }
+
     private static SourceGeometry currentBounds(Activity destination, Intent intent) {
         Handoff handoff = handoff(intent);
         if (handoff == null) return null;
         Activity source = handoff.source.get();
         View artwork = handoff.view.get();
-        if (source == null || artwork == null || source.isFinishing() || source.isDestroyed() ||
+        if (source == null || artwork == null ||
+                !handoff.page.equals(intent.getStringExtra(PlayerActivity.EXTRA_PAGE_URL)) || source.isFinishing() || source.isDestroyed() ||
                 source.getWindowManager().getDefaultDisplay().getRotation() != handoff.rotation ||
                 destination.getWindowManager().getDefaultDisplay().getRotation() != handoff.rotation ||
                 !handoff.page.equals(artwork.getTag(R.id.shows_watch_source_page)) ||
@@ -278,6 +297,11 @@ final class ShowsWatchLaunch {
         for (android.view.ViewParent parent = view.getParent(); parent instanceof View;
                 parent = parent.getParent()) {
             if (parent instanceof MaterialCardView) return ((MaterialCardView) parent).getRadius();
+            View clip = (View) parent;
+            if (clip.getClipToOutline() && clip.getBackground() instanceof
+                    android.graphics.drawable.GradientDrawable) {
+                return ((android.graphics.drawable.GradientDrawable) clip.getBackground()).getCornerRadius();
+            }
         }
         return 0f;
     }
@@ -485,8 +509,8 @@ final class ShowsWatchLaunch {
             animator = ValueAnimator.ofFloat(start, end);
             animator.setDuration(Math.max(1L, Math.round(duration * Math.abs(end - start))));
             animator.setInterpolator(returning
-                    ? new PathInterpolator(0.15f, 0f, 0.22f, 1f)
-                    : new PathInterpolator(0.44f, 0.37f, 0.65f, 1f));
+                    ? new PathInterpolator(0.30f, 0f, 0.25f, 1f)
+                    : new PathInterpolator(0.4f, 0f, 0.2f, 1f));
             animator.addUpdateListener(animation -> {
                 progress = (float) animation.getAnimatedValue();
                 apply();

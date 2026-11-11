@@ -2,22 +2,30 @@ package com.webapp.crazyshit;
 
 import android.content.Context;
 import android.graphics.Color;
+import android.graphics.Bitmap;
+import android.graphics.Canvas;
 import android.graphics.RenderEffect;
 import android.graphics.Shader;
 import android.graphics.drawable.ColorDrawable;
 import android.os.Build;
 import android.graphics.drawable.GradientDrawable;
+import android.graphics.drawable.RippleDrawable;
+import android.content.res.ColorStateList;
+import android.animation.Animator;
+import android.animation.AnimatorListenerAdapter;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.view.Gravity;
 import android.view.View;
 import android.webkit.CookieManager;
+import android.view.ViewAnimationUtils;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
+import android.view.ViewGroup;
 
 import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.LinearLayoutManager;
@@ -25,10 +33,14 @@ import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.bumptech.glide.Glide;
+import com.bumptech.glide.load.DataSource;
+import com.bumptech.glide.load.engine.GlideException;
 import com.bumptech.glide.load.engine.DiskCacheStrategy;
 import com.bumptech.glide.load.model.GlideUrl;
 import com.bumptech.glide.load.model.LazyHeaders;
 import com.bumptech.glide.signature.ObjectKey;
+import com.bumptech.glide.request.RequestListener;
+import com.bumptech.glide.request.target.Target;
 import com.google.android.material.card.MaterialCardView;
 
 import java.util.ArrayList;
@@ -60,7 +72,7 @@ final class ShowsHubView extends FrameLayout {
     private static final String USER_AGENT =
             "Mozilla/5.0 (Linux; Android 16) AppleWebKit/537.36 " +
                     "(KHTML, like Gecko) Chrome/139.0 Mobile Safari/537.36";
-    private static final long HERO_ROTATION_MS = 13_000L;
+    private static final long HERO_ROTATION_MS = 6_000L;
     private static final int HERO_MAX_ITEMS = 8;
 
     private final int shelfTitleHeight;
@@ -77,11 +89,12 @@ final class ShowsHubView extends FrameLayout {
     private final MaterialCardView heroCard;
     private final ImageView heroBackdrop;
     private final ImageView heroImage;
+    private final ImageView heroPrevious;
     private final TextView heroSource;
     private final TextView heroTitle;
     private final TextView heroHint;
     private final TextView heroAction;
-    private final TextView heroDots;
+    private final LinearLayout heroDots;
     private final TextView loadingLabel;
     private final ContinueShelf continueShelf;
     private final Shelf thisWeekShelf;
@@ -102,6 +115,8 @@ final class ShowsHubView extends FrameLayout {
     private List<NativeContentItem> heroItems = Collections.emptyList();
     private NativeContentItem heroItem;
     private int heroIndex = -1;
+    private int heroArtworkRequest;
+    private Animator heroRevealAnimator;
     private boolean active;
     private ShowsCategoryLoader categoryLoader;
     private Bundle pendingRestoreState;
@@ -123,7 +138,9 @@ final class ShowsHubView extends FrameLayout {
             Listener weeklyListener
     ) {
         super(context);
-        shelfTitleHeight = showTitleHeight(showTitle());
+        TextView titleMeasure = text("", 12f, Color.WHITE);
+        titleMeasure.setTypeface(null, android.graphics.Typeface.BOLD);
+        shelfTitleHeight = Math.max(dp(38), titleMeasure.getLineHeight() * 2 + dp(6));
         this.listener = listener;
         this.weeklyListener = weeklyListener;
         this.continueListener = continueListener;
@@ -166,7 +183,7 @@ final class ShowsHubView extends FrameLayout {
         heroBackdrop.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
         heroBackdrop.setScaleX(1.08f);
         heroBackdrop.setScaleY(1.08f);
-        heroBackdrop.setAlpha(0.64f);
+        heroBackdrop.setAlpha(0.46f);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             heroBackdrop.setRenderEffect(RenderEffect.createBlurEffect(
                     dp(18),
@@ -195,8 +212,14 @@ final class ShowsHubView extends FrameLayout {
                 heroArtworkHeight,
                 Gravity.TOP
         );
-        heroArtworkParams.topMargin = dp(66);
+        heroArtworkParams.topMargin = 0;
         heroFrame.addView(heroArtworkCard, heroArtworkParams);
+
+        heroPrevious = new ImageView(context);
+        heroPrevious.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        heroPrevious.setVisibility(View.GONE);
+        heroPrevious.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
+        heroArtworkCard.addView(heroPrevious, new MaterialCardView.LayoutParams(-1, -1));
 
         heroImage = new ImageView(context);
         heroImage.setScaleType(ImageView.ScaleType.FIT_CENTER);
@@ -204,17 +227,18 @@ final class ShowsHubView extends FrameLayout {
         heroImage.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
         heroArtworkCard.addView(heroImage, new MaterialCardView.LayoutParams(-1, -1));
 
+        int heroBackground = ZeroChillUi.background(context);
         View heroShade = new View(context);
         heroShade.setBackground(new GradientDrawable(
                 GradientDrawable.Orientation.TOP_BOTTOM,
                 new int[] {
-                        Color.BLACK,
-                        Color.argb(218, 0, 0, 0),
-                        Color.argb(92, 0, 0, 0),
-                        Color.argb(24, 0, 0, 0),
-                        Color.argb(92, 0, 0, 0),
-                        Color.argb(218, 0, 0, 0),
-                        Color.BLACK
+                        Color.argb(100, 0, 0, 0),
+                        Color.TRANSPARENT,
+                        Color.TRANSPARENT,
+                        Color.argb(85, 0, 0, 0),
+                        Color.argb(214, Color.red(heroBackground),
+                                Color.green(heroBackground), Color.blue(heroBackground)),
+                        heroBackground
                 }
         ));
         heroShade.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
@@ -237,26 +261,28 @@ final class ShowsHubView extends FrameLayout {
                 Gravity.TOP
         ));
 
-        heroDots = text("", 13f, Color.WHITE);
-        heroDots.setGravity(Gravity.CENTER);
+        heroDots = new LinearLayout(context);
         heroDots.setVisibility(View.GONE);
         heroDots.setContentDescription("Featured show position");
 
         LinearLayout heroCopy = new LinearLayout(context);
         heroCopy.setOrientation(LinearLayout.VERTICAL);
-        heroCopy.setGravity(Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
-        heroCopy.setPadding(dp(24), dp(28), dp(24), dp(20));
-        heroFrame.addView(heroCopy,
-                new FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM));
+        heroCopy.setGravity(Gravity.BOTTOM | Gravity.START);
+        heroCopy.setPadding(dp(20), 0, dp(20), dp(5));
+        FrameLayout.LayoutParams heroCopyParams =
+                new FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM);
+        heroCopyParams.bottomMargin = dp(60);
+        heroFrame.addView(heroCopy, heroCopyParams);
 
-        heroSource = text("", 12f, UiPalette.TEXT_SECONDARY);
-        heroSource.setVisibility(View.GONE);
+        heroSource = text("FEATURED", 10f, themeAccent());
+        heroSource.setTypeface(null, android.graphics.Typeface.BOLD);
+        heroSource.setLetterSpacing(0.2f);
         heroCopy.addView(heroSource);
 
-        heroTitle = text("Shows", 29f, Color.WHITE);
+        heroTitle = text("Shows", 24f, Color.WHITE);
         heroTitle.setTypeface(null, android.graphics.Typeface.BOLD);
-        heroTitle.setGravity(Gravity.CENTER);
-        heroTitle.setTextAlignment(TEXT_ALIGNMENT_CENTER);
+        heroTitle.setGravity(Gravity.START);
+        heroTitle.setTextAlignment(TEXT_ALIGNMENT_VIEW_START);
         heroTitle.setShadowLayer(dp(8), 0f, dp(2), Color.argb(160, 0, 0, 0));
         heroTitle.setMaxLines(2);
         heroTitle.setEllipsize(android.text.TextUtils.TruncateAt.END);
@@ -269,8 +295,9 @@ final class ShowsHubView extends FrameLayout {
                 13f,
                 ZeroChillUi.color(context, R.color.zc_text_secondary)
         );
-        heroHint.setGravity(Gravity.CENTER);
-        heroHint.setTextAlignment(TEXT_ALIGNMENT_CENTER);
+        heroHint.setGravity(Gravity.START);
+        heroHint.setTextAlignment(TEXT_ALIGNMENT_VIEW_START);
+        heroHint.setVisibility(View.GONE);
         heroHint.setMaxLines(2);
         heroHint.setLineSpacing(0f, 1.05f);
         LinearLayout.LayoutParams heroHintParams = new LinearLayout.LayoutParams(-1, -2);
@@ -285,19 +312,20 @@ final class ShowsHubView extends FrameLayout {
         actionBackground.setColor(Color.argb(205, 15, 18, 22));
         actionBackground.setCornerRadius(dp(20));
         actionBackground.setStroke(dp(1), Color.argb(80, 255, 255, 255));
-        heroAction.setBackground(actionBackground);
+        heroAction.setBackground(new RippleDrawable(
+                ColorStateList.valueOf(Color.argb(75, 255, 255, 255)),
+                actionBackground, null));
         heroAction.setContentDescription("Open featured show");
-        LinearLayout.LayoutParams heroActionParams =
-                new LinearLayout.LayoutParams(dp(128), dp(40));
-        heroActionParams.topMargin = dp(14);
-        heroActionParams.gravity = Gravity.CENTER_HORIZONTAL;
-        heroCopy.addView(heroAction, heroActionParams);
-
+        LinearLayout controls = new LinearLayout(context);
+        controls.setGravity(Gravity.CENTER_VERTICAL);
+        controls.setPadding(dp(16), dp(8), dp(16), dp(8));
+        controls.setBackgroundColor(heroBackground);
+        heroFrame.addView(controls, new FrameLayout.LayoutParams(-1, dp(60), Gravity.BOTTOM));
+        controls.addView(heroAction, new LinearLayout.LayoutParams(dp(128), dp(40)));
         LinearLayout.LayoutParams heroDotsParams =
-                new LinearLayout.LayoutParams(-2, dp(28));
-        heroDotsParams.topMargin = dp(8);
-        heroDotsParams.gravity = Gravity.CENTER_HORIZONTAL;
-        heroCopy.addView(heroDots, heroDotsParams);
+                new LinearLayout.LayoutParams(0, dp(30), 1f);
+        heroDots.setGravity(Gravity.END | Gravity.CENTER_VERTICAL);
+        controls.addView(heroDots, heroDotsParams);
 
         HorizontalSwipeFrameLayout heroSwipe = new HorizontalSwipeFrameLayout(context);
         heroSwipe.setListener(new HorizontalSwipeFrameLayout.Listener() {
@@ -317,7 +345,8 @@ final class ShowsHubView extends FrameLayout {
         });
         heroSwipe.addView(heroCard, new FrameLayout.LayoutParams(-1, -1));
 
-        LinearLayout.LayoutParams heroParams = new LinearLayout.LayoutParams(-1, dp(350));
+        LinearLayout.LayoutParams heroParams = new LinearLayout.LayoutParams(
+                -1, heroArtworkHeight + dp(60));
         content.addView(heroSwipe, heroParams);
 
         body = new LinearLayout(context);
@@ -341,7 +370,7 @@ final class ShowsHubView extends FrameLayout {
                 "Fresh from CrazyShit, EFukt and Kaotic",
                 false,
                 weeklyListener,
-                false,
+                true,
                 false
         );
         thisWeekShelf.rail.setId(R.id.shows_weekly_rail);
@@ -377,7 +406,16 @@ final class ShowsHubView extends FrameLayout {
         xMegaDriveCategoryItems = Collections.emptyList();
         heroHandler.removeCallbacksAndMessages(null);
         heroCard.animate().cancel();
+        heroImage.animate().cancel();
+        heroTitle.animate().cancel();
+        heroArtworkRequest++;
+        cancelHeroReveal();
+        heroPrevious.setVisibility(View.GONE);
+        heroPrevious.setImageDrawable(null);
         heroCard.setAlpha(1f);
+        heroImage.setAlpha(1f);
+        heroImage.setVisibility(View.VISIBLE);
+        heroTitle.setAlpha(1f);
         heroItems = Collections.emptyList();
         heroItem = null;
         heroIndex = -1;
@@ -404,6 +442,7 @@ final class ShowsHubView extends FrameLayout {
         heroAction.setVisibility(View.GONE);
         Glide.with(heroBackdrop).clear(heroBackdrop);
         Glide.with(heroImage).clear(heroImage);
+        heroImage.setTag(R.id.shows_watch_source_page, null);
         heroBackdrop.setImageDrawable(new ColorDrawable(Color.rgb(13, 16, 19)));
         heroImage.setImageDrawable(new ColorDrawable(Color.rgb(13, 16, 19)));
         if (categoryLoader != null) categoryLoader.invalidate();
@@ -624,34 +663,160 @@ final class ShowsHubView extends FrameLayout {
         if (heroItems.isEmpty()) return;
         int index = Math.floorMod(requestedIndex, heroItems.size());
         NativeContentItem next = heroItems.get(index);
-        Runnable apply = () -> {
-            heroIndex = index;
-            heroItem = next;
-            heroSource.setText("");
-            heroTitle.setText(next.title);
-            heroHint.setText("Series · Open show");
-            heroAction.setVisibility(View.VISIBLE);
-            loadArtwork(heroBackdrop, next, true);
-            loadArtwork(heroImage, next, true);
-            updateHeroDots();
-            loadingLabel.setVisibility(View.GONE);
-            prewarmNextHero();
-        };
+        boolean reveal = animate && ZeroChillMotion.animationsEnabled(getContext())
+                && heroItem != null;
+        heroTitle.animate().cancel();
+        heroIndex = index;
+        heroItem = next;
+        heroSource.setText("FEATURED");
+        heroSource.setTextColor(themeAccent());
+        heroTitle.setText(next.title);
+        heroAction.setVisibility(View.VISIBLE);
+        heroImage.setTag(R.id.shows_watch_source_page, next.url);
+        loadArtwork(heroBackdrop, next, true);
+        loadHeroArtwork(next, reveal);
+        updateHeroDots();
+        loadingLabel.setVisibility(View.GONE);
+        prewarmNextHero();
+        if (reveal) {
+            heroTitle.setAlpha(0.3f);
+            heroTitle.animate().alpha(1f).setDuration(420L).start();
+        } else {
+            heroTitle.setAlpha(1f);
+        }
+    }
 
-        heroCard.animate().cancel();
-        if (!animate || !ZeroChillMotion.animationsEnabled(getContext())) {
-            heroCard.setAlpha(1f);
-            apply.run();
+    private void loadHeroArtwork(NativeContentItem item, boolean reveal) {
+        final int request = ++heroArtworkRequest;
+        cancelHeroReveal();
+        boolean hasPrevious = reveal && snapshotHeroArtwork();
+        heroImage.setVisibility(hasPrevious ? View.INVISIBLE : View.VISIBLE);
+        byte[] embedded = EmbeddedBrowseArtwork.get(getContext(), item.url);
+        if (embedded == null || embedded.length < 512) embedded = null;
+        Object model = embedded;
+        boolean remote = item.imageUrl != null && !item.imageUrl.trim().isEmpty();
+        if (remote) {
+            String imageUrl = item.imageUrl.trim();
+            LazyHeaders.Builder headers = new LazyHeaders.Builder()
+                    .addHeader("User-Agent", artworkAgent(imageUrl, item.url));
+            if (item.url != null && item.url.startsWith("http")) {
+                headers.addHeader("Referer", item.url);
+            }
+            addXMegaDriveArtworkHeaders(headers, imageUrl, item.url);
+            model = new GlideUrl(imageUrl, headers.build());
+        }
+        if (model == null) {
+            Glide.with(heroImage).clear(heroImage);
+            heroImage.setImageDrawable(artworkPlaceholder());
+            finishHeroReveal(request, false);
             return;
         }
-        heroCard.animate()
-                .alpha(0.72f)
-                .setDuration(110L)
-                .withEndAction(() -> {
-                    apply.run();
-                    heroCard.animate().alpha(1f).setDuration(180L).start();
-                })
-                .start();
+        RequestListener<android.graphics.drawable.Drawable> listener =
+                heroArtworkListener(request, hasPrevious, false);
+        com.bumptech.glide.RequestBuilder<android.graphics.drawable.Drawable> imageRequest =
+                Glide.with(heroImage).load(model)
+                .diskCacheStrategy(remote ? DiskCacheStrategy.ALL : DiskCacheStrategy.NONE)
+                .disallowHardwareConfig()
+                .fitCenter()
+                .placeholder(artworkPlaceholder())
+                .error(artworkPlaceholder())
+                .listener(remote && embedded != null
+                        ? heroArtworkListener(request, hasPrevious, true) : listener);
+        if (remote && embedded != null) {
+            imageRequest.error(Glide.with(heroImage).load(embedded)
+                    .diskCacheStrategy(DiskCacheStrategy.NONE)
+                    .disallowHardwareConfig()
+                    .fitCenter()
+                    .listener(listener));
+        }
+        imageRequest.into(heroImage);
+    }
+
+    private RequestListener<android.graphics.drawable.Drawable> heroArtworkListener(
+            int request, boolean hasPrevious, boolean hasFallback
+    ) {
+        return new RequestListener<android.graphics.drawable.Drawable>() {
+                    @Override public boolean onLoadFailed(
+                            GlideException error, Object source,
+                            Target<android.graphics.drawable.Drawable> target,
+                            boolean firstResource
+                    ) {
+                        if (!hasFallback) {
+                            heroImage.post(() -> finishHeroReveal(request, false));
+                        }
+                        return false;
+                    }
+
+                    @Override public boolean onResourceReady(
+                            android.graphics.drawable.Drawable resource, Object source,
+                            Target<android.graphics.drawable.Drawable> target,
+                            DataSource dataSource, boolean firstResource
+                    ) {
+                        heroImage.post(() -> finishHeroReveal(request, hasPrevious));
+                        return false;
+                    }
+                };
+    }
+
+    private boolean snapshotHeroArtwork() {
+        ImageView source = heroPrevious.getVisibility() == View.VISIBLE
+                ? heroPrevious : heroImage;
+        if (source.getDrawable() == null || source.getWidth() <= 0 || source.getHeight() <= 0) {
+            heroPrevious.setVisibility(View.GONE);
+            return false;
+        }
+        int width = source.getWidth();
+        int height = source.getHeight();
+        float scale = Math.min(1f, 1024f / Math.max(width, height));
+        try {
+            Bitmap bitmap = Bitmap.createBitmap(Math.max(1, Math.round(width * scale)),
+                    Math.max(1, Math.round(height * scale)), Bitmap.Config.ARGB_8888);
+            Canvas canvas = new Canvas(bitmap);
+            canvas.scale(scale, scale);
+            source.draw(canvas);
+            heroPrevious.setImageBitmap(bitmap);
+            heroPrevious.setVisibility(View.VISIBLE);
+            return true;
+        } catch (RuntimeException | OutOfMemoryError error) {
+            heroPrevious.setImageDrawable(null);
+            heroPrevious.setVisibility(View.GONE);
+            return false;
+        }
+    }
+
+    private void finishHeroReveal(int request, boolean reveal) {
+        if (request != heroArtworkRequest) return;
+        heroImage.setVisibility(View.VISIBLE);
+        if (!reveal || heroImage.getWidth() <= 0 || heroImage.getHeight() <= 0) {
+            heroPrevious.setVisibility(View.GONE);
+            heroPrevious.setImageDrawable(null);
+            return;
+        }
+        int centerX = heroImage.getWidth() / 2;
+        int centerY = heroImage.getHeight() / 2;
+        float radius = (float) Math.hypot(centerX, centerY);
+        Animator ripple = ViewAnimationUtils.createCircularReveal(
+                heroImage, centerX, centerY, 0f, radius);
+        heroRevealAnimator = ripple;
+        ripple.setDuration(420L);
+        ripple.addListener(new AnimatorListenerAdapter() {
+            @Override public void onAnimationEnd(Animator animation) {
+                if (heroRevealAnimator == animation) heroRevealAnimator = null;
+                if (request == heroArtworkRequest) {
+                    heroPrevious.setVisibility(View.GONE);
+                    heroPrevious.setImageDrawable(null);
+                }
+            }
+        });
+        ripple.start();
+    }
+
+    private void cancelHeroReveal() {
+        if (heroRevealAnimator != null) {
+            Animator running = heroRevealAnimator;
+            heroRevealAnimator = null;
+            running.cancel();
+        }
     }
 
     private void updateHeroDots() {
@@ -659,13 +824,27 @@ final class ShowsHubView extends FrameLayout {
             heroDots.setVisibility(View.GONE);
             return;
         }
-        StringBuilder dots = new StringBuilder();
+        heroDots.removeAllViews();
         for (int index = 0; index < heroItems.size(); index++) {
-            if (index > 0) dots.append("  ");
-            dots.append(index == heroIndex ? "●" : "○");
+            final int selectedIndex = index;
+            FrameLayout target = new FrameLayout(getContext());
+            LinearLayout.LayoutParams targetParams =
+                    new LinearLayout.LayoutParams(dp(20), dp(30));
+            heroDots.addView(target, targetParams);
+            target.setContentDescription("Show featured item " + (index + 1));
+            target.setOnClickListener(v -> {
+                showHero(selectedIndex, true);
+                scheduleHeroRotation();
+            });
+            View mark = new View(getContext());
+            boolean selected = index == heroIndex;
+            GradientDrawable pill = new GradientDrawable();
+            pill.setColor(selected ? themeAccent() : Color.argb(180, 255, 255, 255));
+            pill.setCornerRadius(dp(3));
+            mark.setBackground(pill);
+            target.addView(mark, new FrameLayout.LayoutParams(
+                    dp(selected ? 16 : 6), dp(6), Gravity.CENTER));
         }
-        heroDots.setText(dots.toString());
-        heroDots.setTextColor(Color.WHITE);
         heroDots.setContentDescription(
                 "Featured show " + (heroIndex + 1) + " of " + heroItems.size()
         );
@@ -696,7 +875,7 @@ final class ShowsHubView extends FrameLayout {
     }
 
     private void preloadArtwork(NativeContentItem item) {
-        if (item == null || EmbeddedBrowseArtwork.has(getContext(), item.url)) return;
+        if (item == null) return;
         String imageUrl = item.imageUrl == null ? "" : item.imageUrl.trim();
         if (imageUrl.isEmpty()) return;
 
@@ -709,6 +888,7 @@ final class ShowsHubView extends FrameLayout {
         Glide.with(this)
                 .load(new GlideUrl(imageUrl, headers.build()))
                 .diskCacheStrategy(DiskCacheStrategy.ALL)
+                .disallowHardwareConfig()
                 .preload(dp(360), dp(220));
     }
 
@@ -773,6 +953,11 @@ final class ShowsHubView extends FrameLayout {
         ShowsContinueFrameStore.removeListener(continueFrameListener);
         heroHandler.removeCallbacksAndMessages(null);
         heroCard.animate().cancel();
+        heroArtworkRequest++;
+        cancelHeroReveal();
+        heroImage.setVisibility(View.VISIBLE);
+        heroPrevious.setVisibility(View.GONE);
+        heroPrevious.setImageDrawable(null);
         super.onDetachedFromWindow();
     }
 
@@ -816,8 +1001,8 @@ final class ShowsHubView extends FrameLayout {
 
         ContinueAdapter adapter = new ContinueAdapter();
         rail.setAdapter(adapter);
-        rail.setPadding(dp(2), 0, dp(22), 0);
-        block.addView(rail, new LinearLayout.LayoutParams(-1, dp(150)));
+        rail.setPadding(0, 0, dp(16), 0);
+        block.addView(rail, new LinearLayout.LayoutParams(-1, dp(97) + shelfTitleHeight));
 
         block.setVisibility(View.GONE);
         return new ContinueShelf(block, rail, adapter);
@@ -838,12 +1023,12 @@ final class ShowsHubView extends FrameLayout {
         LinearLayout block = new LinearLayout(getContext());
         block.setOrientation(LinearLayout.VERTICAL);
         LinearLayout.LayoutParams blockParams = new LinearLayout.LayoutParams(-1, -2);
-        blockParams.setMargins(0, 0, 0, dp(24));
+        blockParams.setMargins(0, 0, 0, dp(20));
         body.addView(block, blockParams);
 
         LinearLayout heading = new LinearLayout(getContext());
         heading.setOrientation(LinearLayout.VERTICAL);
-        heading.setPadding(dp(3), 0, dp(3), dp(10));
+        heading.setPadding(0, 0, 0, dp(10));
 
         TextView titleView = text(title, 19f, AppearanceTheme.primaryText(getContext()));
         ZeroChillTypography.apply(titleView, ZeroChillTypography.Role.SECTION);
@@ -875,12 +1060,10 @@ final class ShowsHubView extends FrameLayout {
                 prewarmCollections
         );
         rail.setAdapter(adapter);
-        rail.setPadding(dp(2), 0, dp(22), 0);
+        rail.setPadding(0, 0, dp(16), 0);
         block.addView(rail, new LinearLayout.LayoutParams(
                 -1,
-                portraitCards
-                        ? 2 * (dp(178) + dp(6))
-                        : 2 * (showCardHeight() + dp(10))
+                portraitCards ? dp(368) : 2 * (dp(97) + shelfTitleHeight)
         ));
 
         block.setVisibility(View.GONE);
@@ -894,13 +1077,13 @@ final class ShowsHubView extends FrameLayout {
             com.bumptech.glide.RequestBuilder<android.graphics.drawable.Drawable> request =
                     Glide.with(view)
                             .load(embedded)
-                            .disallowHardwareConfig()
                             .diskCacheStrategy(DiskCacheStrategy.NONE)
                             .skipMemoryCache(false)
+                            .disallowHardwareConfig()
                             .dontAnimate()
                             .transition(hero ? ThumbnailFades.hero() : ThumbnailFades.thumbnail())
-                            .placeholder(new ColorDrawable(Color.rgb(20, 22, 25)))
-                            .error(new ColorDrawable(Color.rgb(20, 22, 25)));
+                            .placeholder(artworkPlaceholder())
+                            .error(artworkPlaceholder());
             if (fullHeroArtwork) request.fitCenter();
             else request.centerCrop();
             request.into(view);
@@ -920,7 +1103,7 @@ final class ShowsHubView extends FrameLayout {
                         }
                 ));
             } else {
-                view.setImageDrawable(new ColorDrawable(Color.rgb(20, 22, 25)));
+                view.setImageDrawable(artworkPlaceholder());
             }
             return;
         }
@@ -939,10 +1122,11 @@ final class ShowsHubView extends FrameLayout {
                         .diskCacheStrategy(
                                 hero ? DiskCacheStrategy.ALL : DiskCacheStrategy.AUTOMATIC
                         )
+                        .disallowHardwareConfig()
                         .dontAnimate()
                         .transition(hero ? ThumbnailFades.hero() : ThumbnailFades.thumbnail())
-                        .placeholder(new ColorDrawable(Color.rgb(20, 22, 25)))
-                        .error(new ColorDrawable(Color.rgb(20, 22, 25)));
+                        .placeholder(artworkPlaceholder())
+                        .error(artworkPlaceholder());
         if (fullHeroArtwork) request.fitCenter();
         else request.centerCrop();
         request.into(view);
@@ -1004,11 +1188,12 @@ final class ShowsHubView extends FrameLayout {
                 ))
                 .diskCacheStrategy(DiskCacheStrategy.NONE)
                 .skipMemoryCache(false)
+                .disallowHardwareConfig()
                 .centerCrop()
                 .dontAnimate()
                 .transition(ThumbnailFades.thumbnail())
-                .placeholder(new ColorDrawable(Color.rgb(20, 22, 25)))
-                .error(new ColorDrawable(Color.rgb(20, 22, 25)))
+                .placeholder(artworkPlaceholder())
+                .error(artworkPlaceholder())
                 .into(view);
     }
 
@@ -1038,6 +1223,20 @@ final class ShowsHubView extends FrameLayout {
         view.setTextSize(size);
         view.setTextColor(color);
         return view;
+    }
+
+    private int themeAccent() {
+        return AppearanceTheme.accent(getContext());
+    }
+
+    private GradientDrawable artworkPlaceholder() {
+        return new GradientDrawable(
+                GradientDrawable.Orientation.TOP_BOTTOM,
+                new int[] {
+                        Color.rgb(27, 40, 51),
+                        Color.rgb(16, 26, 34),
+                        Color.rgb(10, 16, 21)
+                });
     }
 
     private int dp(int value) {
@@ -1083,15 +1282,15 @@ final class ShowsHubView extends FrameLayout {
         ) {
             MaterialCardView card = new MaterialCardView(getContext());
             ZeroChillUi.styleMediaCard(card, R.dimen.zc_radius_medium);
-            card.setRadius(dp(18));
+            card.setRadius(0f);
             card.setCardElevation(0f);
             card.setClickable(true);
             card.setFocusable(true);
             ZeroChillMotion.installPressFeedback(card);
 
             RecyclerView.LayoutParams params =
-                    new RecyclerView.LayoutParams(dp(248), dp(140));
-            params.setMargins(dp(3), dp(2), dp(10), dp(4));
+                    new RecyclerView.LayoutParams(dp(160), dp(91) + shelfTitleHeight);
+            params.setMargins(0, dp(3), dp(12), dp(3));
             card.setLayoutParams(params);
 
             FrameLayout frame = new FrameLayout(getContext());
@@ -1100,7 +1299,12 @@ final class ShowsHubView extends FrameLayout {
             ImageView image = new ImageView(getContext());
             image.setScaleType(ImageView.ScaleType.CENTER_CROP);
             image.setBackground(new ColorDrawable(Color.rgb(20, 22, 25)));
-            frame.addView(image, new FrameLayout.LayoutParams(-1, -1));
+            GradientDrawable imageCorners = new GradientDrawable();
+            imageCorners.setColor(Color.rgb(17, 26, 34));
+            imageCorners.setCornerRadius(dp(17));
+            image.setBackground(imageCorners);
+            image.setClipToOutline(true);
+            frame.addView(image, new FrameLayout.LayoutParams(-1, dp(91), Gravity.TOP));
 
             View shade = new View(getContext());
             shade.setBackground(new GradientDrawable(
@@ -1111,7 +1315,7 @@ final class ShowsHubView extends FrameLayout {
                             Color.argb(244, 0, 0, 0)
                     }
             ));
-            frame.addView(shade, new FrameLayout.LayoutParams(-1, -1));
+            frame.addView(shade, new FrameLayout.LayoutParams(-1, dp(91), Gravity.TOP));
 
             TextView meta = text("", 12f, Color.WHITE);
             meta.setTypeface(null, android.graphics.Typeface.BOLD);
@@ -1130,14 +1334,15 @@ final class ShowsHubView extends FrameLayout {
             title.setMaxLines(2);
             title.setEllipsize(android.text.TextUtils.TruncateAt.END);
             title.setGravity(Gravity.BOTTOM);
-            title.setPadding(dp(12), dp(8), dp(12), dp(20));
-            frame.addView(title, new FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM));
+            title.setTextSize(12f);
+            title.setPadding(0, dp(6), 0, 0);
+            frame.addView(title, new FrameLayout.LayoutParams(-1, shelfTitleHeight, Gravity.BOTTOM));
 
             FrameLayout progressTrack = new FrameLayout(getContext());
             progressTrack.setBackgroundColor(Color.argb(170, 18, 20, 22));
             FrameLayout.LayoutParams trackParams =
-                    new FrameLayout.LayoutParams(-1, dp(4), Gravity.BOTTOM);
-            trackParams.setMargins(dp(10), 0, dp(10), dp(7));
+                    new FrameLayout.LayoutParams(-1, dp(3), Gravity.TOP);
+            trackParams.setMargins(dp(5), dp(86), dp(5), 0);
             frame.addView(progressTrack, trackParams);
 
             View progressFill = new View(getContext());
@@ -1175,12 +1380,14 @@ final class ShowsHubView extends FrameLayout {
             holder.card.setOnClickListener(v -> {
                 if (continueListener != null) continueListener.onResume(history, holder.image);
             });
+            holder.image.setTag(R.id.shows_watch_source_page, history.pageUrl);
             loadContinueArtwork(holder.image, item, history.pageUrl);
         }
 
         @Override
         public void onViewRecycled(@NonNull ContinueHolder holder) {
             Glide.with(holder.image).clear(holder.image);
+            holder.image.setTag(R.id.shows_watch_source_page, null);
             holder.card.setOnClickListener(null);
             super.onViewRecycled(holder);
         }
@@ -1189,27 +1396,6 @@ final class ShowsHubView extends FrameLayout {
         public int getItemCount() {
             return items.size();
         }
-    }
-
-    private TextView showTitle() {
-        TextView title = text("", 13.5f, Color.WHITE);
-        title.setTypeface(null, android.graphics.Typeface.BOLD);
-        title.setLines(2);
-        title.setEllipsize(android.text.TextUtils.TruncateAt.END);
-        title.setGravity(Gravity.TOP);
-        title.setPadding(dp(5), dp(4), dp(5), 0);
-        return title;
-    }
-
-    private int showTitleHeight(TextView title) {
-        // TextView's font padding is separate from its line spacing.
-        android.graphics.Paint.FontMetricsInt metrics = title.getPaint().getFontMetricsInt();
-        return title.getLineHeight() * 2 + metrics.bottom - metrics.descent
-                + metrics.ascent - metrics.top + title.getPaddingTop();
-    }
-
-    private int showCardHeight() {
-        return Math.round(dp(160) * 9f / 16f) + shelfTitleHeight;
     }
 
     private final class RailAdapter extends RecyclerView.Adapter<RailHolder> {
@@ -1249,16 +1435,16 @@ final class ShowsHubView extends FrameLayout {
         public RailHolder onCreateViewHolder(@NonNull android.view.ViewGroup parent, int viewType) {
             MaterialCardView card = new MaterialCardView(getContext());
             ZeroChillUi.styleMediaCard(card, R.dimen.zc_radius_medium);
-            card.setRadius(dp(18));
+            card.setRadius(dp(portrait ? 17 : 0));
             card.setCardElevation(0f);
             card.setClickable(true);
             card.setFocusable(true);
             ZeroChillMotion.installPressFeedback(card);
 
             int width = dp(portrait ? 128 : 160);
-            int height = portrait ? dp(178) : showCardHeight();
+            int height = portrait ? dp(178) : dp(91) + shelfTitleHeight;
             RecyclerView.LayoutParams params = new RecyclerView.LayoutParams(width, height);
-            params.setMargins(dp(3), dp(2), dp(10), dp(portrait ? 4 : 8));
+            params.setMargins(0, dp(3), dp(12), dp(3));
             card.setLayoutParams(params);
 
             FrameLayout frame = new FrameLayout(getContext());
@@ -1266,6 +1452,16 @@ final class ShowsHubView extends FrameLayout {
 
             ImageView image = new ImageView(getContext());
             image.setScaleType(ImageView.ScaleType.CENTER_CROP);
+            image.setBackground(new GradientDrawable(
+                    GradientDrawable.Orientation.TOP_BOTTOM,
+                    new int[] { Color.rgb(27, 40, 51), Color.rgb(10, 16, 21) }));
+            if (!portrait) {
+                GradientDrawable corners = new GradientDrawable();
+                corners.setColor(Color.rgb(17, 26, 34));
+                corners.setCornerRadius(dp(17));
+                image.setBackground(corners);
+                image.setClipToOutline(true);
+            }
             frame.addView(image, new FrameLayout.LayoutParams(
                     -1, portrait ? -1 : Math.round(width * 9f / 16f)));
 
@@ -1280,22 +1476,29 @@ final class ShowsHubView extends FrameLayout {
             ));
             if (portrait) frame.addView(shade, new FrameLayout.LayoutParams(-1, -1));
 
-            TextView source = text("", 10.5f, AppearanceTheme.accent(getContext()));
+            TextView source = text("", 8f, AppearanceTheme.accent(getContext()));
             source.setTypeface(null, android.graphics.Typeface.BOLD);
-            source.setLetterSpacing(0.06f);
+            source.setGravity(Gravity.CENTER);
+            GradientDrawable badge = new GradientDrawable();
+            badge.setShape(GradientDrawable.OVAL);
+            badge.setColor(Color.argb(190, 9, 16, 23));
+            source.setBackground(badge);
             source.setVisibility(showSource ? View.VISIBLE : View.GONE);
             FrameLayout.LayoutParams sourceParams =
-                    new FrameLayout.LayoutParams(-2, -2, Gravity.TOP | Gravity.START);
-            sourceParams.setMargins(dp(11), dp(9), dp(11), 0);
+                    new FrameLayout.LayoutParams(dp(24), dp(24), Gravity.TOP | Gravity.START);
+            sourceParams.setMargins(dp(6), dp(6), 0, 0);
             frame.addView(source, sourceParams);
 
-            TextView title = portrait ? text("", 14.5f, Color.WHITE) : showTitle();
+            TextView title = portrait ? text("", 14.5f, Color.WHITE) : text("", 12f, Color.WHITE);
             title.setTypeface(null, android.graphics.Typeface.BOLD);
             title.setMaxLines(2);
             title.setEllipsize(android.text.TextUtils.TruncateAt.END);
             if (portrait) {
                 title.setGravity(Gravity.BOTTOM);
                 title.setPadding(dp(11), dp(8), dp(11), dp(10));
+            } else {
+                title.setMinLines(2);
+                title.setPadding(0, dp(6), 0, 0);
             }
             frame.addView(title, new FrameLayout.LayoutParams(
                     -1, portrait ? -2 : shelfTitleHeight, Gravity.BOTTOM));
@@ -1308,18 +1511,22 @@ final class ShowsHubView extends FrameLayout {
             NativeContentItem item = items.get(position);
             holder.image.setTag(R.id.shows_watch_source_page, item.url);
             holder.title.setText(item.title);
-            holder.source.setText(showSource ? WeeklyShowsFeed.sourceLabel(item) : "");
+            String provider = showSource ? WeeklyShowsFeed.sourceLabel(item) : "";
+            holder.source.setText(sourceMark(provider));
+            holder.source.setContentDescription(provider.isEmpty() ? null : provider + " source");
             holder.source.setVisibility(showSource ? View.VISIBLE : View.GONE);
             holder.card.setContentDescription("Open " + item.title);
             holder.card.setOnClickListener(v -> {
                 if (clickListener != null) clickListener.onOpen(item, holder.image);
             });
+            holder.image.setTag(R.id.shows_watch_source_page, item.url);
             loadArtwork(holder.image, item, false);
         }
 
         @Override
         public void onViewRecycled(@NonNull RailHolder holder) {
             Glide.with(holder.image).clear(holder.image);
+            holder.image.setTag(R.id.shows_watch_source_page, null);
             holder.card.setOnClickListener(null);
             super.onViewRecycled(holder);
         }
@@ -1328,6 +1535,15 @@ final class ShowsHubView extends FrameLayout {
         public int getItemCount() {
             return items.size();
         }
+    }
+
+    private String sourceMark(String provider) {
+        if ("CrazyShit".equalsIgnoreCase(provider)) return "CS";
+        if ("EFukt".equalsIgnoreCase(provider)) return "eF";
+        if ("Kaotic".equalsIgnoreCase(provider)) return "K";
+        if ("BaddieHub".equalsIgnoreCase(provider)) return "BH";
+        if ("XMegaDrive".equalsIgnoreCase(provider)) return "XM";
+        return provider.isEmpty() ? "" : provider.substring(0, 1).toUpperCase(java.util.Locale.US);
     }
 
     private final class Shelf {
