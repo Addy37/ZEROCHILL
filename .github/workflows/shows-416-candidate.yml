@@ -55,7 +55,7 @@ jobs:
           raw = os.environ.get('SIGNING_BUNDLE', '')
           if not raw:
               raise SystemExit('Missing ANDROID_SIGNING_BUNDLE')
-          data = json.loads(raw.replace('\\r','').replace('\\n',''))
+          data = json.loads(raw.replace('\r','').replace('\n',''))
           for key in ('keystore_base64','store_password','key_alias','key_password'):
               if not data.get(key):
                   raise SystemExit('Missing signing item: ' + key)
@@ -71,7 +71,7 @@ jobs:
                   'ANDROID_KEY_ALIAS': data['key_alias'],
                   'ANDROID_KEY_PASSWORD': data['key_password']
               }.items():
-                  out.write(key+'='+value+'\\n')
+                  out.write(key+'='+value+'\n')
           PY
       - name: Build signed release APK
         run: gradle --no-daemon :app:assembleRelease
@@ -91,10 +91,10 @@ jobs:
           tools = pathlib.Path(os.environ['ANDROID_HOME'])/'build-tools/35.0.0'
           def inspect(apk):
               badging = subprocess.check_output([str(tools/'aapt2'),'dump','badging',apk],text=True)
-              package = re.search(r"package: name='([^']+)' versionCode='(\\d+)'",badging)
+              package = re.search(r"package: name='([^']+)' versionCode='(\d+)'",badging)
               assert package, 'Missing package metadata'
               certs = subprocess.check_output([str(tools/'apksigner'),'verify','--verbose','--print-certs',apk],text=True)
-              cert = re.search(r'Signer #1 certificate SHA-256 digest: (\\w+)',certs)
+              cert = re.search(r'Signer #1 certificate SHA-256 digest: (\w+)',certs)
               assert cert, 'Missing certificate'
               return package[1],int(package[2]),cert[1]
           candidate = inspect(os.environ['CANDIDATE_APK'])
@@ -102,13 +102,13 @@ jobs:
           assert candidate[0] == stable[0] == 'com.addy37.crazyshitunofficial'
           assert candidate[1] == 6000041 and candidate[1] > max(stable[1],6000040)
           assert candidate[2] == stable[2] == '04abf84b3d468cbb1a562dea83b0007e686b2e56018cce911223963faea51356'
-          report = ('Source: '+os.environ['GITHUB_SHA']+'\\n'
-              +'Branch: '+os.environ['GITHUB_REF_NAME']+'\\n'
-              +'Application ID: '+candidate[0]+'\\n'
-              +'Version code: '+str(candidate[1])+'\\n'
-              +'Certificate SHA-256: '+candidate[2]+'\\n'
-              +'Production package, certificate and upgrade gates passed.\\n'
-              +'No public release or merge. Phone testing remains pending.\\n')
+          report = ('Source: '+os.environ['GITHUB_SHA']+'\n'
+              +'Branch: '+os.environ['GITHUB_REF_NAME']+'\n'
+              +'Application ID: '+candidate[0]+'\n'
+              +'Version code: '+str(candidate[1])+'\n'
+              +'Certificate SHA-256: '+candidate[2]+'\n'
+              +'Production package, certificate and upgrade gates passed.\n'
+              +'No public release or merge. Phone testing remains pending.\n')
           pathlib.Path('candidate/VALIDATION.txt').write_text(report)
           print(report)
           PY
