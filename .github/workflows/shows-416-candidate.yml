@@ -16,8 +16,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 35
     env:
-      APP_VERSION_CODE: '6000041'
-      APP_VERSION_NAME: '7.0-preview.39-shows-v2'
+      APP_VERSION_CODE: '6000042'
+      APP_VERSION_NAME: '7.0-preview.40-shows-v2'
       ZEROCHILL_SOURCE_SHA: ${{ github.sha }}
       FEEDBACK_ENDPOINT: ${{ secrets.FEEDBACK_ENDPOINT }}
       FEEDBACK_ANON_KEY: ${{ secrets.FEEDBACK_ANON_KEY }}
@@ -100,7 +100,7 @@ jobs:
           candidate = inspect(os.environ['CANDIDATE_APK'])
           stable = inspect(str(pathlib.Path(os.environ['RUNNER_TEMP'])/'stable/ZeroChill.apk'))
           assert candidate[0] == stable[0] == 'com.addy37.crazyshitunofficial'
-          assert candidate[1] == 6000041 and candidate[1] > max(stable[1],6000040)
+          assert candidate[1] == 6000042 and candidate[1] > max(stable[1],6000041)
           assert candidate[2] == stable[2] == '04abf84b3d468cbb1a562dea83b0007e686b2e56018cce911223963faea51356'
           report = ('Source: '+os.environ['GITHUB_SHA']+'\n'
               +'Branch: '+os.environ['GITHUB_REF_NAME']+'\n'
