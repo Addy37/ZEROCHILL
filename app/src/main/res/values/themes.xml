@@ -26,4 +26,8 @@
     <style name="Theme.ZeroChill.Splash" parent="Theme.CrazyShit">
         <item name="android:windowBackground">@color/zc_background</item>
     </style>
+    <style name="Theme.ZeroChill.ShowsWatch" parent="Theme.CrazyShit">
+        <item name="android:windowBackground">@color/zc_background</item>
+        <item name="android:windowAnimationStyle">@null</item>
+    </style>
 </resources>

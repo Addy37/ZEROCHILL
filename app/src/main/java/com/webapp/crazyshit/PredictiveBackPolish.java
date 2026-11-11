@@ -26,6 +26,7 @@ final class PredictiveBackPolish {
 
     static void attach(Activity activity) {
         if (Build.VERSION.SDK_INT < 34 || activity == null || activity.isFinishing()) return;
+        if (activity instanceof ShowsWatchActivity) return;
         if (!(activity instanceof NativeMainActivity) && !(activity instanceof VideoDetailActivity)) return;
         if (CALLBACKS.containsKey(activity)) return;
 

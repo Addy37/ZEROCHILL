@@ -732,7 +732,14 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                     }
                 } catch (Exception ignored) {
                 }
+                if (manualLandscapeFullscreen) {
+                    Page showsPage = pageAt(PAGE_SERIES);
+                    ShowsWatchLaunch.mark(intent,
+                            showsPage == null || showsPage.showsHub == null ? null :
+                                    showsPage.showsHub.findPlaybackArtwork(item.url), item.url);
+                }
                 activity.startActivity(intent);
+                if (manualLandscapeFullscreen) ShowsWatchLaunch.enterWindow(activity);
             });
         });
     }
@@ -821,7 +828,15 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                     }
                 } catch (Exception ignored) {
                 }
+                if (manualLandscapeFullscreen) {
+                    Page showsPage = pageAt(PAGE_SERIES);
+                    ShowsWatchLaunch.mark(intent,
+                            showsPage == null || showsPage.showsHub == null ? null :
+                                    showsPage.showsHub.findPlaybackArtwork(history.pageUrl),
+                            history.pageUrl);
+                }
                 activity.startActivity(intent);
+                if (manualLandscapeFullscreen) ShowsWatchLaunch.enterWindow(activity);
             });
         });
     }

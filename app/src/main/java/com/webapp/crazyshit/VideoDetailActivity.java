@@ -157,6 +157,7 @@ public class VideoDetailActivity extends Activity {
     private String mediaReferer;
     private String posterUrl;
     private boolean showsOrigin;
+    private boolean showsWatchClosing;
     private boolean manualLandscapeFullscreen;
     private boolean playbackIdent;
     private boolean socialEntry;
@@ -319,7 +320,15 @@ public class VideoDetailActivity extends Activity {
         configureBackHandling();
         applyOrientation(getResources().getConfiguration().orientation);
         if (!showsOrigin) loadRelated();
-        root.post(this::playEntranceOnce);
+        if (ShowsWatchLaunch.isScoped(this)) {
+            root.getViewTreeObserver().addOnPreDrawListener(new android.view.ViewTreeObserver.OnPreDrawListener() {
+                @Override public boolean onPreDraw() {
+                    root.getViewTreeObserver().removeOnPreDrawListener(this);
+                    playEntranceOnce();
+                    return true;
+                }
+            });
+        } else root.post(this::playEntranceOnce);
         if (socialEntry && !socialCommentsOpened) {
             socialCommentsOpened = true;
             root.post(() -> {
@@ -330,11 +339,21 @@ public class VideoDetailActivity extends Activity {
 
     private void buildUi() {
         root = new FrameLayout(this);
-        root.setBackgroundColor(Color.BLACK);
+        boolean motionHost = ShowsWatchLaunch.isScoped(this);
+        root.setBackgroundColor(motionHost ? Color.TRANSPARENT : Color.BLACK);
+        if (motionHost) {
+            root.setClipChildren(false);
+            root.setClipToPadding(false);
+        }
 
         shell = new LinearLayout(this);
         shell.setOrientation(LinearLayout.VERTICAL);
-        shell.setBackgroundColor(oledEnabled() ? Color.BLACK : Color.rgb(13, 13, 15));
+        shell.setBackgroundColor(motionHost ? Color.TRANSPARENT :
+                (oledEnabled() ? Color.BLACK : Color.rgb(13, 13, 15)));
+        if (motionHost) {
+            shell.setClipChildren(false);
+            shell.setClipToPadding(false);
+        }
         shell.setOnApplyWindowInsetsListener((view, insets) -> {
             if (portraitFullscreen ||
                     getResources().getConfiguration().orientation == Configuration.ORIENTATION_LANDSCAPE) {
@@ -414,6 +433,10 @@ public class VideoDetailActivity extends Activity {
         startupPoster = new ImageView(this);
         startupPoster.setBackgroundColor(Color.BLACK);
         startupPoster.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        if (motionHost && ShowsWatchLaunch.isOpeningPage(getIntent(), pageUrl) &&
+                ShowsWatchLaunch.artwork(getIntent()) != null) {
+            startupPoster.setImageBitmap(ShowsWatchLaunch.artwork(getIntent()));
+        }
         startupPoster.setClickable(false);
         playerContainer.addView(startupPoster, new FrameLayout.LayoutParams(-1, -1));
 
@@ -627,7 +650,11 @@ public class VideoDetailActivity extends Activity {
             Glide.with(startupPoster).clear(startupPoster);
         } catch (Exception ignored) {
         }
-        startupPoster.setImageDrawable(null);
+        boolean retainLaunchArt = ShowsWatchLaunch.isScoped(this) &&
+                ShowsWatchLaunch.isOpeningPage(getIntent(), pageUrl) &&
+                ShowsWatchLaunch.artwork(getIntent()) != null;
+        if (retainLaunchArt) startupPoster.setImageBitmap(ShowsWatchLaunch.artwork(getIntent()));
+        else startupPoster.setImageDrawable(null);
 
         if (startupPosterLoading != null) {
             startupPosterLoading.animate().cancel();
@@ -635,13 +662,19 @@ public class VideoDetailActivity extends Activity {
             startupPosterLoading.setVisibility(View.VISIBLE);
         }
 
-        if (posterUrl != null && !posterUrl.isEmpty()) {
+        if (!retainLaunchArt && posterUrl != null && !posterUrl.isEmpty()) {
             loadImage(startupPoster, posterUrl, pageUrl);
         }
     }
 
     private void dismissStartupPoster() {
         if (startupPosterDismissed || startupPoster == null) return;
+        if (isFinishing() || isDestroyed()) return;
+        if (showsWatchClosing) return;
+        if (ShowsWatchLaunch.isRunning(root)) {
+            root.postDelayed(this::dismissStartupPoster, 32L);
+            return;
+        }
         startupPosterDismissed = true;
 
         if (!ZeroChillMotion.animationsEnabled(this)) {
@@ -735,6 +768,17 @@ public class VideoDetailActivity extends Activity {
     private void playEntranceOnce() {
         if (entrancePlayed || isFinishing()) return;
         entrancePlayed = true;
+        if (ShowsWatchLaunch.animateEntrance(this, getIntent(), root, playerContainer,
+                detailsScroll, startupPoster, startupPosterLoading)) return;
+        if (ShowsWatchLaunch.isScoped(this)) {
+            root.setBackgroundColor(Color.BLACK);
+            shell.setBackgroundColor(oledEnabled() ? Color.BLACK : Color.rgb(13, 13, 15));
+            if (Build.VERSION.SDK_INT >= 27 && ZeroChillMotion.animationsEnabled(this)) {
+                root.setAlpha(0f);
+                root.animate().alpha(1f).setDuration(140L).start();
+            }
+            return;
+        }
         if (playerContainer != null) {
             playerContainer.animate().cancel();
             playerContainer.setPivotX(playerContainer.getWidth() * 0.5f);
@@ -2057,6 +2101,19 @@ public class VideoDetailActivity extends Activity {
     @Override
     public void onConfigurationChanged(Configuration newConfig) {
         super.onConfigurationChanged(newConfig);
+        if (showsWatchClosing) {
+            ShowsWatchLaunch.dispose(root);
+            finish();
+            ShowsWatchLaunch.exitWindow(this);
+            return;
+        }
+        ShowsWatchLaunch.cancel(root);
+        if (ShowsWatchLaunch.isScoped(this) && root != null) {
+            root.animate().cancel();
+            root.setAlpha(1f);
+            root.setBackgroundColor(Color.BLACK);
+            shell.setBackgroundColor(oledEnabled() ? Color.BLACK : Color.rgb(13, 13, 15));
+        }
         abortRelatedBackPreview();
         if (showsOrigin && showsTargetOrientation != Configuration.ORIENTATION_UNDEFINED) {
             showsOrientationSettled = orientationMatches(
@@ -2370,6 +2427,11 @@ public class VideoDetailActivity extends Activity {
             PhoneOrientationPolicy.exitFullscreenVideo(this);
             return;
         }
+        if (ShowsWatchLaunch.isScoped(this)) {
+            if (!socialEntry && restorePreviousRelatedVideo(true)) return;
+            closeShowsWatch();
+            return;
+        }
         if (!socialEntry && restorePreviousRelatedVideo(true)) return;
         if (socialEntry) {
             savePlaybackState(false);
@@ -2383,6 +2445,23 @@ public class VideoDetailActivity extends Activity {
             savePlaybackState(false);
             finish();
         }
+    }
+
+    private void closeShowsWatch() {
+        if (showsWatchClosing) return;
+        showsWatchClosing = true;
+        savePlaybackState(false);
+        Runnable finish = () -> {
+            finish();
+            ShowsWatchLaunch.exitWindow(this);
+        };
+        if (ShowsWatchLaunch.isOpeningPage(getIntent(), pageUrl) &&
+                ShowsWatchLaunch.animateExit(this, getIntent(), root, playerContainer,
+                detailsScroll, startupPoster, finish)) return;
+        if (Build.VERSION.SDK_INT >= 27 && root != null &&
+                ZeroChillMotion.animationsEnabled(this)) {
+            root.animate().alpha(0f).setDuration(140L).withEndAction(finish).start();
+        } else finish.run();
     }
 
     private void minimizeToFeed() {
@@ -2593,6 +2672,8 @@ public class VideoDetailActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        ShowsWatchLaunch.dispose(root);
+        ShowsWatchLaunch.release(getIntent());
         if (activeComments != null) activeComments.dismiss();
         if (orientationListener != null) orientationListener.disable();
         abortRelatedBackPreview();

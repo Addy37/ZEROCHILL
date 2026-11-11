@@ -112,6 +112,14 @@ public final class NativeFeedBrowserActivity extends Activity {
     private FrameLayout compactCreatorFavorite;
     private AppBarLayout creatorAppBar;
     private ShowDetailsHeader showDetailsHeader;
+    private final List<NativeContentItem> showEpisodes = new ArrayList<>();
+    private int episodeRangeStart;
+    private int boundEpisodeRangeStart = -1;
+    private int boundEpisodeCount = -1;
+    private boolean advanceEpisodeRange;
+    private TextView episodeRangeLabel;
+    private TextView episodePrevious;
+    private TextView episodeNext;
     private AppBarLayout showDetailsAppBar;
     private TabLayoutMediator creatorTabsMediator;
     private SwipeRefreshLayout refresh;
@@ -380,6 +388,7 @@ public final class NativeFeedBrowserActivity extends Activity {
         else if (BaddieHubRepository.isBaddieHubUrl(baseUrl)) source = SOURCE_BADDIEHUB;
         else if (EfuktRepository.isEfuktUrl(baseUrl)) source = SOURCE_EFUKT;
         restoredBrowserState = state;
+        if (showDetailsMode && state != null) episodeRangeStart = state.getInt("shows_episode_range", 0);
         if (state != null) {
             browserSnapshot = state.getString("browser_snapshot", browserSnapshot);
             bunkrGallerySessionId = state.getString("gallery_session", bunkrGallerySessionId);
@@ -625,13 +634,26 @@ public final class NativeFeedBrowserActivity extends Activity {
             detailsFeed.setOrientation(LinearLayout.VERTICAL);
             detailsFeed.setBackgroundColor(Color.BLACK);
 
-            TextView section = text("VIDEOS", 12, UiPalette.PRIMARY);
+            TextView section = text("EPISODES", 12, ShowsAppearance.accent(this));
             section.setTypeface(null, android.graphics.Typeface.BOLD);
             section.setLetterSpacing(0.12f);
             section.setGravity(Gravity.CENTER_VERTICAL);
             section.setPadding(dp(16), dp(9), dp(16), dp(8));
             detailsFeed.addView(section, new LinearLayout.LayoutParams(-1, dp(40)));
             detailsFeed.addView(refresh, new LinearLayout.LayoutParams(-1, 0, 1f));
+            LinearLayout pager = new LinearLayout(this);
+            pager.setGravity(Gravity.CENTER_VERTICAL);
+            pager.setPadding(dp(12), dp(4), dp(12), dp(4));
+            pager.setBackground(ShowsAppearance.pagerBackground(this));
+            episodePrevious = episodePageAction("‹", "Previous 10 episodes", () -> changeEpisodeRange(-10));
+            pager.addView(episodePrevious, new LinearLayout.LayoutParams(dp(48), dp(48)));
+            episodeRangeLabel = text("Loading episodes…", 12, UiPalette.TEXT_SECONDARY);
+            episodeRangeLabel.setGravity(Gravity.CENTER);
+            episodeRangeLabel.setSingleLine(true);
+            pager.addView(episodeRangeLabel, new LinearLayout.LayoutParams(0, dp(48), 1f));
+            episodeNext = episodePageAction("›", "Next 10 episodes", () -> changeEpisodeRange(10));
+            pager.addView(episodeNext, new LinearLayout.LayoutParams(dp(48), dp(48)));
+            detailsFeed.addView(pager, new LinearLayout.LayoutParams(-1, -2));
             body.addView(detailsFeed, new FrameLayout.LayoutParams(-1, -1));
         } else {
             body.addView(refresh, new FrameLayout.LayoutParams(-1, -1));
@@ -694,6 +716,7 @@ public final class NativeFeedBrowserActivity extends Activity {
                     ).show();
                 }
             });
+            adapter.setEpisodePresentation(showDetailsMode);
             recycler.setAdapter(adapter);
             refresh.addView(recycler, new SwipeRefreshLayout.LayoutParams(-1, -1));
             attachFeedScrollListener(recycler);
@@ -1126,6 +1149,7 @@ public final class NativeFeedBrowserActivity extends Activity {
                 int[] range = visibleRange(view.getLayoutManager());
                 adapter.preloadVisible(range[0], range[1]);
                 if (dy > 0 && !loading && !endReached &&
+                        (!showDetailsMode || ShowsEpisodeRanges.nearLoadedEnd(episodeRangeStart, showEpisodes.size())) &&
                         range[1] >= Math.max(0, adapter.getItemCount() - 5)) {
                     load(true);
                 }
@@ -1189,6 +1213,10 @@ public final class NativeFeedBrowserActivity extends Activity {
         generation++;
         fapelloFailureShown = false;
         currentPage = 0;
+        showEpisodes.clear();
+        episodeRangeStart = 0;
+        boundEpisodeRangeStart = -1;
+        advanceEpisodeRange = false;
         loading = false;
         endReached = false;
         empty.setVisibility(View.GONE);
@@ -1222,6 +1250,7 @@ public final class NativeFeedBrowserActivity extends Activity {
     private void load(boolean append) {
         if (restoringBrowser || loading || endReached) return;
         loading = true;
+        updateEpisodePager();
         int requestPage = append ? currentPage + 1 : 1;
         int requestGeneration = generation;
         String requestSession = bunkrGallerySessionId;
@@ -1301,6 +1330,8 @@ public final class NativeFeedBrowserActivity extends Activity {
                     } else if (isBunkr()) {
                         if (append) appendBunkrItems(result);
                         else replaceBunkrItems(result);
+                    } else if (showDetailsMode) {
+                        mergeShowEpisodes(result, append);
                     } else if (append) {
                         adapter.append(result);
                     } else {
@@ -1313,6 +1344,13 @@ public final class NativeFeedBrowserActivity extends Activity {
                                 : completedCreatorBatch == null || completedCreatorBatch.endReached;
                     } else if (result.isEmpty() || (append && added == 0) || isEfukt()) {
                         endReached = true;
+                    }
+                    if (showDetailsMode && advanceEpisodeRange) {
+                        advanceEpisodeRange = false;
+                        if (ShowsEpisodeRanges.hasNext(episodeRangeStart, showEpisodes.size())) {
+                            episodeRangeStart += ShowsEpisodeRanges.RANGE_SIZE;
+                            bindEpisodeRange(true);
+                        }
                     }
                     updateShowDetailsHeader();
                     if (isBunkr() && !isCreatorGallery()) {
@@ -1353,6 +1391,8 @@ public final class NativeFeedBrowserActivity extends Activity {
                 runOnUiThread(() -> {
                     if (requestGeneration != generation || isFinishing() || isDestroyed()) return;
                     loading = false;
+                    advanceEpisodeRange = false;
+                    updateEpisodePager();
                     progress.setVisibility(View.GONE);
                     if (gallerySkeleton != null) gallerySkeleton.setVisibility(View.GONE);
                     refresh.setRefreshing(false);
@@ -1629,9 +1669,23 @@ public final class NativeFeedBrowserActivity extends Activity {
                     if (cookies != null) intent.putExtra(PlayerActivity.EXTRA_COOKIES, cookies);
                 } catch (Exception ignored) {
                 }
+                if (showDetailsMode) ShowsWatchLaunch.mark(intent, findEpisodeArtwork(item.url), item.url);
                 startActivity(intent);
+                if (showDetailsMode) ShowsWatchLaunch.enterWindow(this);
             });
         });
+    }
+
+    private ImageView findEpisodeArtwork(String pageUrl) {
+        if (recycler == null) return null;
+        for (int i = 0; i < recycler.getChildCount(); i++) {
+            RecyclerView.ViewHolder holder = recycler.getChildViewHolder(recycler.getChildAt(i));
+            if (holder instanceof NativeFeedAdapter.Holder) {
+                ImageView image = ((NativeFeedAdapter.Holder) holder).image;
+                if (image != null && pageUrl.equals(image.getTag(R.id.shows_watch_source_page))) return image;
+            }
+        }
+        return null;
     }
 
     private void openMeme(NativeContentItem item) {
@@ -1920,6 +1974,7 @@ public final class NativeFeedBrowserActivity extends Activity {
     }
 
     private int viewMode() {
+        if (showDetailsMode) return NativeFeedAdapter.VIEW_LIST;
         int mode = getSharedPreferences("app_prefs", MODE_PRIVATE)
                 .getInt("native_view_collection", NativeFeedAdapter.VIEW_LIST);
         if (mode < NativeFeedAdapter.VIEW_CARDS || mode > NativeFeedAdapter.VIEW_POSTERS) {
@@ -1967,6 +2022,9 @@ public final class NativeFeedBrowserActivity extends Activity {
 
         int mode = viewMode();
         adapter.setViewMode(mode);
+        // Returning from playback must retain holders, loaded artwork and exact offsets.
+        if (showDetailsMode && old instanceof LinearLayoutManager
+                && !(old instanceof GridLayoutManager)) return;
         LinearLayoutManager next;
         if (mode == NativeFeedAdapter.VIEW_GRID || mode == NativeFeedAdapter.VIEW_POSTERS) {
             Configuration config = getResources().getConfiguration();
@@ -2430,9 +2488,80 @@ public final class NativeFeedBrowserActivity extends Activity {
 
     private void updateShowDetailsHeader() {
         if (showDetailsHeader != null) showDetailsHeader.setItemCount(itemCount());
+        updateEpisodePager();
+    }
+
+    private TextView episodePageAction(String label, String description, Runnable action) {
+        TextView view = text(label, 24, ShowsAppearance.accent(this));
+        view.setGravity(Gravity.CENTER);
+        view.setContentDescription(description);
+        view.setBackground(ZeroChillUi.rounded(this, Color.argb(70, 40, 48, 60),
+                Color.argb(45, 255, 255, 255), R.dimen.zc_radius_medium));
+        view.setOnClickListener(v -> action.run());
+        ZeroChillMotion.installPressFeedback(view);
+        return view;
+    }
+
+    private void changeEpisodeRange(int delta) {
+        if (!showDetailsMode) return;
+        if (delta > 0 && !ShowsEpisodeRanges.hasNext(episodeRangeStart, showEpisodes.size())) {
+            if (!loading && !endReached) {
+                advanceEpisodeRange = true;
+                load(true);
+            }
+            return;
+        }
+        int next = ShowsEpisodeRanges.startForIndex(episodeRangeStart + delta, showEpisodes.size());
+        if (next == episodeRangeStart) return;
+        episodeRangeStart = next;
+        bindEpisodeRange(true);
+        updateEpisodePager();
+        persistBrowser();
+    }
+
+    private void mergeShowEpisodes(List<NativeContentItem> result, boolean append) {
+        if (!append) showEpisodes.clear();
+        Set<String> urls = new LinkedHashSet<>();
+        for (NativeContentItem item : showEpisodes) urls.add(item.url);
+        if (result != null) for (NativeContentItem item : result) {
+            if (item != null && !item.isSection() && urls.add(item.url)) showEpisodes.add(item);
+        }
+        bindEpisodeRange(false);
+    }
+
+    private void bindEpisodeRange(boolean scrollToStart) {
+        episodeRangeStart = ShowsEpisodeRanges.startForIndex(episodeRangeStart, showEpisodes.size());
+        List<NativeContentItem> visible = ShowsEpisodeRanges.slice(showEpisodes, episodeRangeStart);
+        // Appending a source page must not rebind an unchanged visible range or its artwork.
+        if (boundEpisodeRangeStart != episodeRangeStart || boundEpisodeCount != visible.size()) {
+            adapter.setEpisodeOffset(episodeRangeStart);
+            adapter.replace(visible);
+            boundEpisodeRangeStart = episodeRangeStart;
+            boundEpisodeCount = visible.size();
+        }
+        if (scrollToStart && recycler != null && recycler.getLayoutManager() instanceof LinearLayoutManager) {
+            recycler.stopScroll();
+            ((LinearLayoutManager) recycler.getLayoutManager()).scrollToPositionWithOffset(0, 0);
+        }
+    }
+
+    private void updateEpisodePager() {
+        if (episodeRangeLabel == null) return;
+        int total = showEpisodes.size();
+        episodeRangeLabel.setText(total == 0 ? (loading ? "Loading episodes…" : "No episodes")
+                : ShowsEpisodeRanges.label(episodeRangeStart, total) + " of " + total);
+        episodePrevious.setEnabled(ShowsEpisodeRanges.hasPrevious(episodeRangeStart, total));
+        episodePrevious.setAlpha(episodePrevious.isEnabled() ? 1f : .3f);
+        boolean next = ShowsEpisodeRanges.hasNext(episodeRangeStart, total);
+        episodeNext.setEnabled(next || (!loading && !endReached));
+        episodeNext.setAlpha(episodeNext.isEnabled() ? 1f : .3f);
+        episodeNext.setText(!next && loading ? "…" : "›");
+        episodeNext.setContentDescription(next ? "Next 10 episodes" : endReached
+                ? "End of episodes" : "Load more episodes");
     }
 
     private int itemCount() {
+        if (showDetailsMode && !isBunkr()) return showEpisodes.size();
         return isBunkr()
                 ? (bunkrGalleryAdapter == null ? 0 : bunkrGalleryAdapter.getItemCount())
                 : (adapter == null ? 0 : adapter.getItemCount());
@@ -2443,7 +2572,7 @@ public final class NativeFeedBrowserActivity extends Activity {
         if (isBunkr()) { BunkrGallerySessionStore.persist(this, bunkrGallerySessionId); return; }
         try {
             org.json.JSONObject value = new org.json.JSONObject().put("page", currentPage).put("end", endReached)
-                    .put("items", ContentItemCodec.encodeList(adapter.snapshot(), 2000));
+                    .put("items", ContentItemCodec.encodeList(showDetailsMode ? showEpisodes : adapter.snapshot(), 2000));
             ScreenSnapshotStore.save(this, browserSnapshot, value);
         } catch (Exception ignored) { }
     }
@@ -2463,7 +2592,9 @@ public final class NativeFeedBrowserActivity extends Activity {
                     currentPage = gallery.currentPage; endReached = gallery.endReached;
                     if (gallery.items.isEmpty() && !endReached) { load(false); return; }
                 } else if (feed != null) {
-                    adapter.replace(ContentItemCodec.decodeList(feed.optJSONArray("items"), 2000));
+                    List<NativeContentItem> restored = ContentItemCodec.decodeList(feed.optJSONArray("items"), 2000);
+                    if (showDetailsMode) mergeShowEpisodes(restored, false);
+                    else adapter.replace(restored);
                     currentPage = feed.optInt("page"); endReached = feed.optBoolean("end");
                     updateShowDetailsHeader();
                 } else {
@@ -2519,6 +2650,7 @@ public final class NativeFeedBrowserActivity extends Activity {
     }
 
     @Override protected void onSaveInstanceState(Bundle state) {
+        if (showDetailsMode) state.putInt("shows_episode_range", episodeRangeStart);
         state.putString("browser_snapshot", browserSnapshot);
         state.putString("gallery_session", bunkrGallerySessionId);
         state.putBoolean("notification_fresh_pending_focus", notificationFreshPendingFocus);

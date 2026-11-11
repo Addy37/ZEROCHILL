@@ -15,6 +15,7 @@ final class VideoDetailTransitionPolish {
 
     static void apply(Activity activity) {
         if (activity == null || activity.isFinishing() || Build.VERSION.SDK_INT < 21) return;
+        if (activity instanceof ShowsWatchActivity) return;
         Window window = activity.getWindow();
         if (window == null) return;
 

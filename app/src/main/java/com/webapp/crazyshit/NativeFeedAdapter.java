@@ -52,6 +52,7 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
     public static final int VIEW_GRID = 2;
     public static final int VIEW_POSTERS = 3;
     private static final int TYPE_SECTION = 100;
+    private static final int TYPE_EPISODE = 101;
 
     private static final String SITE = "https://crazyshit.com/";
     private static final String USER_AGENT =
@@ -85,6 +86,8 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
     private int resolverCursor;
     private int viewMode = VIEW_LIST;
     private boolean closed;
+    private boolean episodePresentation;
+    private int episodeOffset;
 
     public NativeFeedAdapter(Context context, Listener listener) {
         this(context, listener, false);
@@ -114,6 +117,17 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
         if (viewMode == next) return;
         viewMode = next;
         notifyDataSetChanged();
+    }
+
+    /** Scoped to Shows collections; other feed layouts and saved view preferences stay intact. */
+    void setEpisodePresentation(boolean enabled) {
+        if (episodePresentation == enabled) return;
+        episodePresentation = enabled;
+        notifyDataSetChanged();
+    }
+
+    void setEpisodeOffset(int offset) {
+        episodeOffset = Math.max(0, offset);
     }
 
     public int getViewMode() {
@@ -267,17 +281,65 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
 
     @Override
     public int getItemViewType(int position) {
-        return items.get(position).isSection() ? TYPE_SECTION : viewMode;
+        return items.get(position).isSection() ? TYPE_SECTION
+                : episodePresentation ? TYPE_EPISODE : viewMode;
     }
 
     @NonNull
     @Override
     public Holder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
         if (viewType == TYPE_SECTION) return createSectionHolder(parent);
+        if (viewType == TYPE_EPISODE) return createEpisodeHolder(parent);
         if (viewType == VIEW_LIST) return createListHolder(parent);
         if (viewType == VIEW_GRID) return createGridHolder(parent);
         if (viewType == VIEW_POSTERS) return createPosterHolder(parent);
         return createCardsHolder(parent);
+    }
+
+    private Holder createEpisodeHolder(ViewGroup parent) {
+        MaterialCardView card = baseCard(parent, 16, 5, 18, 100);
+        card.setCardBackgroundColor(Color.rgb(18, 26, 35));
+        card.setStrokeWidth(0);
+        card.setCardElevation(0f);
+        LinearLayout row = new LinearLayout(parent.getContext());
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(dp(parent, 10), dp(parent, 10), dp(parent, 10), dp(parent, 10));
+        card.addView(row, new MaterialCardView.LayoutParams(-1, -1));
+
+        // A fixed slot prevents missing or portrait artwork from changing row geometry.
+        int width = Math.min(132, Math.max(88,
+                Math.round((parent.getResources().getConfiguration().screenWidthDp - 64) * .40f)));
+        MediaViews media = addMedia(parent, row, 80, width);
+        media.frame.setBackground(rounded(Color.rgb(20, 31, 41), dp(parent, 13)));
+        media.frame.setForeground(null);
+        media.play.setVisibility(View.GONE);
+
+        LinearLayout copy = new LinearLayout(parent.getContext());
+        copy.setOrientation(LinearLayout.VERTICAL);
+        copy.setGravity(Gravity.CENTER_VERTICAL);
+        copy.setPadding(dp(parent, 12), 0, 0, 0);
+        row.addView(copy, new LinearLayout.LayoutParams(0, -1, 1f));
+        TextView number = new TextView(parent.getContext());
+        number.setTextSize(10);
+        number.setTypeface(null, android.graphics.Typeface.BOLD);
+        number.setSingleLine(true);
+        number.setTextColor(ShowsAppearance.accent(parent.getContext()));
+        copy.addView(number, new LinearLayout.LayoutParams(-1, -2));
+        TextView title = new TextView(parent.getContext());
+        title.setTextSize(14);
+        title.setTextColor(Color.WHITE);
+        title.setTypeface(android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL));
+        title.setMaxLines(3);
+        title.setEllipsize(TextUtils.TruncateAt.END);
+        title.setIncludeFontPadding(false);
+        title.setLineSpacing(0, 1.12f);
+        LinearLayout.LayoutParams titleParams = new LinearLayout.LayoutParams(-1, -2);
+        titleParams.topMargin = dp(parent, 5);
+        copy.addView(title, titleParams);
+        TextView unusedComments = new TextView(parent.getContext());
+        TextView unusedDescription = new TextView(parent.getContext());
+        return new Holder(card, media, new CopyViews(title, number, unusedComments, unusedDescription));
     }
 
     private Holder createSectionHolder(ViewGroup parent) {
@@ -634,12 +696,15 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
 
         boolean meme = item.isMeme();
         holder.title.setText(displayTitle(item));
-        holder.info.setText(buildInfo(item));
-        boolean showDescription = viewMode != VIEW_CARDS && viewMode != VIEW_POSTERS && item.description != null &&
+        holder.info.setText(episodePresentation
+                ? ShowsEpisodePresentation.label(episodeOffset, episodeIndex(position)) : buildInfo(item));
+        if (episodePresentation) holder.info.setTextColor(ShowsAppearance.accent(holder.card.getContext()));
+        holder.image.setTag(R.id.shows_watch_source_page, item.url);
+        boolean showDescription = !episodePresentation && viewMode != VIEW_CARDS && viewMode != VIEW_POSTERS && item.description != null &&
                 !item.description.trim().isEmpty();
         holder.description.setVisibility(showDescription ? View.VISIBLE : View.GONE);
         holder.description.setText(showDescription ? item.description.trim() : "");
-        holder.play.setVisibility(meme ? View.GONE : View.VISIBLE);
+        holder.play.setVisibility(meme || episodePresentation ? View.GONE : View.VISIBLE);
         holder.image.setScaleType(meme ? ImageView.ScaleType.FIT_CENTER : ImageView.ScaleType.CENTER_CROP);
         bindPlaybackState(holder, item);
 
@@ -648,7 +713,7 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
         holder.overlayComments.setVisibility(View.GONE);
         holder.overlayComments.setOnClickListener(null);
 
-        if (!meme && item.isVideo() && item.url != null && !item.url.isEmpty()) {
+        if (!episodePresentation && !meme && item.isVideo() && item.url != null && !item.url.isEmpty()) {
             if (viewMode == VIEW_CARDS || viewMode == VIEW_POSTERS) {
                 holder.overlayComments.setVisibility(View.VISIBLE);
                 holder.overlayComments.setText(viewMode == VIEW_CARDS ? "Comments" : "💬");
@@ -670,6 +735,12 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
             listener.onLongPress(item, v);
             return true;
         });
+    }
+
+    private int episodeIndex(int position) {
+        int index = 0;
+        for (int i = 0; i < position; i++) if (!items.get(i).isSection()) index++;
+        return index;
     }
 
     private void bindSection(Holder holder, NativeContentItem item) {
@@ -789,6 +860,7 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
                         holder.image.getContext(), R.color.zc_surface_glass_strong)))
                 .error(new ColorDrawable(ZeroChillUi.color(
                         holder.image.getContext(), R.color.zc_surface_glass_strong)));
+        if (episodePresentation) request.disallowHardwareConfig();
         if (item.isMeme()) request.fitCenter(); else request.centerCrop();
         final String attemptedUrl = imageUrl;
         request.listener(new RequestListener<Drawable>() {
@@ -847,11 +919,12 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
         Object source = imageUrl.startsWith("file://")
                 ? imageUrl
                 : withSiteHeaders(imageUrl, item.url);
-        Glide.with(context)
+        com.bumptech.glide.RequestBuilder<Drawable> preload = Glide.with(context)
                 .load(source)
                 .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
-                .dontAnimate()
-                .preload(480, 270);
+                .dontAnimate();
+        if (episodePresentation) preload.disallowHardwareConfig();
+        preload.preload(480, 270);
     }
 
     @Override
