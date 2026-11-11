@@ -15,6 +15,8 @@ Do not merge it independently into main before #416 is approved.
   inline paging, video player and thumbnail-to-player transitions untouched.
 - Reject known placeholder URLs and duplicates before requesting hero artwork.
   Check decoded remote artwork dimensions using V2's landscape/portrait limits.
+  Decode with a bounded full-artwork target before display fitting so narrow
+  portrait covers are not mistakenly rejected due to thumbnail scaling.
   If a remote image fails or is too small, exclude that image for this view's
   lifetime and automatically select a remaining candidate.
 - When all remote candidates fail, try the existing locally embedded artwork
