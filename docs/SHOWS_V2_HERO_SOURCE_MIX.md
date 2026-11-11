@@ -67,3 +67,14 @@ No changes to hero picks, artwork requests, dots, navigation, rails, episode
 pages, player, animations, stored data, backend, remote config or dependencies.
 Physical installation and visual acceptance remain for the user; successful
 host tests/build/signature gates do not establish physical device acceptance.
+
+## View Show wrapping fix (preview 43)
+
+The physical preview 42 screenshot shows the label wrapping inside its fixed
+128dp width after padding and the play icon consume the available text space.
+Keep the label explicitly single-line and let the pill measure its content width
+(with the existing 128dp minimum), preserving the play icon, padding, height,
+filled styling and selected-show action. The regression now measures the actual
+controls row at default, 1.3x and 1.5x text sizes and checks one complete line
+without clipping or ellipsis. Preview 43 uses code `6000045` for install-over.
+No other homepage styling or functionality changes.

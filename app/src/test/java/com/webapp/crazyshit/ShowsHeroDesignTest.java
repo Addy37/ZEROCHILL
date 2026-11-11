@@ -224,7 +224,20 @@ public class ShowsHeroDesignTest {
         actionField.setAccessible(true);
         TextView action = (TextView) actionField.get(hub);
         assertEquals(dp(activity, 44), action.getLayoutParams().height);
-        assertEquals(dp(activity, 128), action.getLayoutParams().width);
+        assertEquals(android.view.ViewGroup.LayoutParams.WRAP_CONTENT, action.getLayoutParams().width);
+        action.setVisibility(View.VISIBLE);
+        // Measure the actual row: checking only the requested width missed the wrap.
+        View controls = (View) action.getParent();
+        for (float fontScale : new float[]{1f, 1.3f, 1.5f}) {
+            action.setTextSize(12f * fontScale);
+            controls.measure(View.MeasureSpec.makeMeasureSpec(dp(activity, 400), View.MeasureSpec.EXACTLY),
+                    View.MeasureSpec.makeMeasureSpec(dp(activity, 60), View.MeasureSpec.EXACTLY));
+            controls.layout(0, 0, controls.getMeasuredWidth(), controls.getMeasuredHeight());
+            assertEquals(1, action.getLineCount());
+            assertTrue(action.getLayout().getLineWidth(0) <= action.getWidth()
+                    - action.getCompoundPaddingLeft() - action.getCompoundPaddingRight());
+            assertEquals(0, action.getLayout().getEllipsisCount(0));
+        }
         assertEquals(dp(activity, 19), action.getCompoundDrawablesRelative()[0].getBounds().width());
         assertEquals("VIEW SHOW", action.getText().toString());
         assertTrue(action.performClick());

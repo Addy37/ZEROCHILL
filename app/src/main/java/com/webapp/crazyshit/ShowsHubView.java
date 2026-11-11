@@ -319,6 +319,8 @@ final class ShowsHubView extends FrameLayout {
         heroAction = text("VIEW SHOW", 12f, Color.WHITE);
         heroAction.setTypeface(null, android.graphics.Typeface.BOLD);
         heroAction.setGravity(Gravity.CENTER);
+        heroAction.setSingleLine(true);
+        heroAction.setMinWidth(dp(128));
         heroAction.setVisibility(View.GONE);
         GradientDrawable actionBackground = new GradientDrawable();
         actionBackground.setColor(androidx.core.graphics.ColorUtils.compositeColors(
@@ -344,7 +346,7 @@ final class ShowsHubView extends FrameLayout {
         controls.setPadding(dp(16), dp(8), dp(16), dp(8));
         controls.setBackgroundColor(heroBackground);
         heroFrame.addView(controls, new FrameLayout.LayoutParams(-1, dp(60), Gravity.BOTTOM));
-        controls.addView(heroAction, new LinearLayout.LayoutParams(dp(128), dp(44)));
+        controls.addView(heroAction, new LinearLayout.LayoutParams(-2, dp(44)));
         LinearLayout.LayoutParams heroDotsParams =
                 new LinearLayout.LayoutParams(0, dp(30), 1f);
         heroDots.setGravity(Gravity.END | Gravity.CENTER_VERTICAL);
