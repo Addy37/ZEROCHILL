@@ -29,6 +29,7 @@ import java.util.UUID;
 import com.google.android.material.card.MaterialCardView;
 
 /** A single retained player surface, animated between live artwork and the watch slot. */
+@androidx.annotation.OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)
 final class ShowsWatchLaunch {
     private static final String EXTRA_TOKEN = "shows_launch_token";
     private static final long ENTER_MS = 320L;
