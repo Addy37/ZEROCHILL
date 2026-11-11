@@ -246,7 +246,7 @@ final class ShowsWatchLaunch {
         RectF visible = visibleBounds(view);
         if (visible == null) return null;
         Matrix matrix = new Matrix();
-        view.transformMatrixToGlobal(matrix);
+        transformToGlobal(view, matrix);
         float[] values = new float[9];
         matrix.getValues(values);
         // A rotated or mirrored view cannot be represented by an axis-aligned player clip.
@@ -271,7 +271,7 @@ final class ShowsWatchLaunch {
 
     private static RectF screenBounds(View view, float left, float top, float right, float bottom) {
         Matrix matrix = new Matrix();
-        view.transformMatrixToGlobal(matrix);
+        transformToGlobal(view, matrix);
         RectF rect = new RectF(left, top, right, bottom);
         matrix.mapRect(rect);
         View root = view.getRootView();
@@ -281,6 +281,17 @@ final class ShowsWatchLaunch {
         root.getLocationInWindow(window);
         rect.offset(screen[0] - window[0], screen[1] - window[1]);
         return rect;
+    }
+
+    /** Equivalent to View.transformMatrixToGlobal, which became public in API29. */
+    private static void transformToGlobal(View view, Matrix matrix) {
+        if (view.getParent() instanceof View) {
+            View parent = (View) view.getParent();
+            transformToGlobal(parent, matrix);
+            matrix.preTranslate(-parent.getScrollX(), -parent.getScrollY());
+        }
+        matrix.preTranslate(view.getLeft(), view.getTop());
+        if (!view.getMatrix().isIdentity()) matrix.preConcat(view.getMatrix());
     }
 
     private static SourceGeometry currentBounds(Activity destination, Intent intent) {

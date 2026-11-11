@@ -64,6 +64,7 @@ public class ShowsWatchLaunchTest {
     }
 
     @Test
+    @Config(sdk = {27, 35})
     public void capturedArtworkBelongsOnlyToMatchingLaunchAndIsReused() {
         Activity source = Robolectric.buildActivity(Activity.class).setup().get();
         source.getSharedPreferences("app_prefs", Activity.MODE_PRIVATE).edit()
