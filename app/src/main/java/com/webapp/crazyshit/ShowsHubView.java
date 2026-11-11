@@ -66,6 +66,7 @@ final class ShowsHubView extends FrameLayout {
     private static final long HERO_ROTATION_MS = 6_000L;
     private static final int HERO_MAX_ITEMS = 8;
 
+    private final int shelfTitleHeight;
     private final Listener listener;
     private final Listener weeklyListener;
     private final ContinueListener continueListener;
@@ -125,6 +126,9 @@ final class ShowsHubView extends FrameLayout {
             Listener weeklyListener
     ) {
         super(context);
+        TextView titleMeasure = text("", 12f, Color.WHITE);
+        titleMeasure.setTypeface(null, android.graphics.Typeface.BOLD);
+        shelfTitleHeight = Math.max(dp(38), titleMeasure.getLineHeight() * 2 + dp(6));
         this.listener = listener;
         this.weeklyListener = weeklyListener;
         this.continueListener = continueListener;
@@ -935,7 +939,7 @@ final class ShowsHubView extends FrameLayout {
         ContinueAdapter adapter = new ContinueAdapter();
         rail.setAdapter(adapter);
         rail.setPadding(0, 0, dp(16), 0);
-        block.addView(rail, new LinearLayout.LayoutParams(-1, dp(135)));
+        block.addView(rail, new LinearLayout.LayoutParams(-1, dp(97) + shelfTitleHeight));
 
         block.setVisibility(View.GONE);
         return new ContinueShelf(block, rail, adapter);
@@ -996,7 +1000,7 @@ final class ShowsHubView extends FrameLayout {
         rail.setPadding(0, 0, dp(16), 0);
         block.addView(rail, new LinearLayout.LayoutParams(
                 -1,
-                portraitCards ? dp(368) : dp(270)
+                portraitCards ? dp(368) : 2 * (dp(97) + shelfTitleHeight)
         ));
 
         block.setVisibility(View.GONE);
@@ -1181,7 +1185,7 @@ final class ShowsHubView extends FrameLayout {
             ZeroChillMotion.installPressFeedback(card);
 
             RecyclerView.LayoutParams params =
-                    new RecyclerView.LayoutParams(dp(160), dp(129));
+                    new RecyclerView.LayoutParams(dp(160), dp(91) + shelfTitleHeight);
             params.setMargins(0, dp(3), dp(12), dp(3));
             card.setLayoutParams(params);
 
@@ -1228,7 +1232,7 @@ final class ShowsHubView extends FrameLayout {
             title.setGravity(Gravity.BOTTOM);
             title.setTextSize(12f);
             title.setPadding(0, dp(6), 0, 0);
-            frame.addView(title, new FrameLayout.LayoutParams(-1, dp(38), Gravity.BOTTOM));
+            frame.addView(title, new FrameLayout.LayoutParams(-1, shelfTitleHeight, Gravity.BOTTOM));
 
             FrameLayout progressTrack = new FrameLayout(getContext());
             progressTrack.setBackgroundColor(Color.argb(170, 18, 20, 22));
@@ -1333,7 +1337,7 @@ final class ShowsHubView extends FrameLayout {
             ZeroChillMotion.installPressFeedback(card);
 
             int width = dp(portrait ? 128 : 160);
-            int height = portrait ? dp(178) : dp(129);
+            int height = portrait ? dp(178) : dp(91) + shelfTitleHeight;
             RecyclerView.LayoutParams params = new RecyclerView.LayoutParams(width, height);
             params.setMargins(0, dp(3), dp(12), dp(3));
             card.setLayoutParams(params);
@@ -1388,10 +1392,11 @@ final class ShowsHubView extends FrameLayout {
                 title.setGravity(Gravity.BOTTOM);
                 title.setPadding(dp(11), dp(8), dp(11), dp(10));
             } else {
+                title.setMinLines(2);
                 title.setPadding(0, dp(6), 0, 0);
             }
             frame.addView(title, new FrameLayout.LayoutParams(
-                    -1, portrait ? -2 : dp(38), Gravity.BOTTOM));
+                    -1, portrait ? -2 : shelfTitleHeight, Gravity.BOTTOM));
 
             return new RailHolder(card, image, source, title);
         }

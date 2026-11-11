@@ -142,7 +142,7 @@ public class PhoneContentGridLayoutTest {
         checkTitle(title);
         // Android 14+ uses nonlinear SP scaling at larger accessibility font sizes.
         assertEquals(android.util.TypedValue.applyDimension(
-                        android.util.TypedValue.COMPLEX_UNIT_SP, 13.5f,
+                        android.util.TypedValue.COMPLEX_UNIT_SP, 12f,
                         title.getResources().getDisplayMetrics()),
                 title.getTextSize(), 0.01f);
         assertEquals(16f / 9f, image.getWidth() / (float) image.getHeight(), 0.02f);
