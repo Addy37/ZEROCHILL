@@ -1018,7 +1018,6 @@ final class ShowsHubView extends FrameLayout {
         ImageView action = new ImageView(getContext());
         action.setImageResource(icon);
         action.setColorFilter(Color.WHITE);
-        action.setPadding(dp(15), dp(15), dp(15), dp(15));
         action.setContentDescription(description);
         action.setClickable(true);
         action.setFocusable(true);
@@ -1033,6 +1032,8 @@ final class ShowsHubView extends FrameLayout {
         action.setBackground(new android.graphics.drawable.InsetDrawable(new RippleDrawable(
                 ColorStateList.valueOf(Color.argb(65, Color.red(accent), Color.green(accent),
                         Color.blue(accent))), film, mask), dp(3)));
+        // Android background setters can overwrite ImageView padding.
+        action.setPadding(dp(15), dp(15), dp(15), dp(15));
         ZeroChillMotion.installPressFeedback(action);
         return action;
     }
