@@ -1,6 +1,7 @@
 name: Shows PR416 Signed Test APK
 
 # One branch-scoped production-signed candidate. Does not publish a release.
+# Retry requested on 2026-11-11: previous run 43095549660 remained queued without jobs.
 on:
   push:
     branches: [feature/shows-v2-refinement-current]
