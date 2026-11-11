@@ -44,6 +44,8 @@ public class ShowsHeroDesignTest {
             View action = (View) field.get(hub);
             assertEquals(dp(activity, 48), action.getLayoutParams().width);
             assertEquals(dp(activity, 48), action.getLayoutParams().height);
+            assertEquals(dp(activity, 15), action.getPaddingLeft());
+            assertEquals(dp(activity, 15), action.getPaddingTop());
             assertTrue(action.performClick());
         }
         assertEquals(1, calls[0]);
