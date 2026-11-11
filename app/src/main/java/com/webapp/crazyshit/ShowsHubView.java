@@ -744,7 +744,10 @@ final class ShowsHubView extends FrameLayout {
         Glide.with(heroImage).load(model)
                 .diskCacheStrategy(remote ? DiskCacheStrategy.ALL : DiskCacheStrategy.NONE)
                 .disallowHardwareConfig()
-                .fitCenter()
+                // Inspect decoded image pixels, not a thumbnail already shrunk
+                // by fitting a tall poster into the wide hero slot.
+                .override(1080, 1080)
+                .dontTransform()
                 .placeholder(artworkPlaceholder())
                 .error(artworkPlaceholder())
                 .listener(heroArtworkListener(request, item, remote, hasPrevious))
