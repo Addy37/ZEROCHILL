@@ -2,6 +2,7 @@ name: Shows V2 Five-Source Hero Signed Test APK
 
 # One PR417 install-over preview, not a public release.
 # Re-run after restoring icon padding after the button background.
+# Final candidate: validate uncropped portrait cover dimensions before display fitting.
 # Retry requested on 2026-11-11: previous run 43095549660 remained queued without jobs.
 on:
   push:
