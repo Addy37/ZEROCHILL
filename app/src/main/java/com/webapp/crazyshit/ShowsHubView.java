@@ -89,6 +89,8 @@ final class ShowsHubView extends FrameLayout {
     private final MaterialCardView heroCard;
     private final ImageView heroBackdrop;
     private final ImageView heroImage;
+    private final ImageView heroSearch;
+    private final ImageView heroMore;
     private final ImageView heroPrevious;
     private final TextView heroSource;
     private final TextView heroTitle;
@@ -151,13 +153,9 @@ final class ShowsHubView extends FrameLayout {
         scroll.setFillViewport(true);
         scroll.setClipToPadding(false);
         scroll.setVerticalScrollBarEnabled(false);
-        // Grow only the scroll drawing area; padding preserves origin and scroll range.
+        // Shows owns its header inside the hero, so no shared-header underlap is needed.
         setClipChildren(false);
-        int header = ZeroChillUi.dimension(context, R.dimen.zc_top_bar_height);
-        scroll.setPadding(0, header, 0, 0);
-        FrameLayout.LayoutParams scrollParams = new FrameLayout.LayoutParams(-1, -1);
-        scrollParams.topMargin = -header;
-        addView(scroll, scrollParams);
+        addView(scroll, new FrameLayout.LayoutParams(-1, -1));
 
         content = new LinearLayout(context);
         content.setOrientation(LinearLayout.VERTICAL);
@@ -247,19 +245,24 @@ final class ShowsHubView extends FrameLayout {
         LinearLayout heroBar = new LinearLayout(context);
         heroBar.setOrientation(LinearLayout.HORIZONTAL);
         heroBar.setGravity(Gravity.CENTER_VERTICAL);
-        heroBar.setPadding(dp(20), dp(5), dp(20), 0);
+        heroBar.setPadding(dp(20), dp(15), dp(20), dp(15));
 
         TextView heroBrand = text("Shows", 28f, Color.WHITE);
         ZeroChillTypography.apply(heroBrand, ZeroChillTypography.Role.DISPLAY);
+        heroBrand.setTextSize(28f);
+        heroBrand.setTypeface(null, android.graphics.Typeface.BOLD);
+        heroBrand.setGravity(Gravity.CENTER_VERTICAL);
         heroBrand.setSingleLine(true);
         heroBrand.setShadowLayer(dp(8), 0f, dp(2), Color.argb(150, 0, 0, 0));
-        heroBar.addView(heroBrand, new LinearLayout.LayoutParams(-1, dp(58)));
+        heroBar.addView(heroBrand, new LinearLayout.LayoutParams(0, -1, 1f));
+        heroSearch = heroHeaderAction(R.drawable.ic_nav_search, "Search Shows");
+        heroBar.addView(heroSearch, new LinearLayout.LayoutParams(dp(48), dp(48)));
+        heroMore = heroHeaderAction(R.drawable.ic_more_overflow, "More Shows options");
+        LinearLayout.LayoutParams moreParams = new LinearLayout.LayoutParams(dp(48), dp(48));
+        moreParams.setMarginStart(dp(4));
+        heroBar.addView(heroMore, moreParams);
 
-        heroFrame.addView(heroBar, new FrameLayout.LayoutParams(
-                -1,
-                dp(64),
-                Gravity.TOP
-        ));
+        heroFrame.addView(heroBar, new FrameLayout.LayoutParams(-1, dp(78), Gravity.TOP));
 
         heroDots = new LinearLayout(context);
         heroDots.setVisibility(View.GONE);
@@ -279,7 +282,7 @@ final class ShowsHubView extends FrameLayout {
         heroSource.setLetterSpacing(0.2f);
         heroCopy.addView(heroSource);
 
-        heroTitle = text("Shows", 24f, Color.WHITE);
+        heroTitle = text("Featured Shows", 24f, Color.WHITE);
         heroTitle.setTypeface(null, android.graphics.Typeface.BOLD);
         heroTitle.setGravity(Gravity.START);
         heroTitle.setTextAlignment(TEXT_ALIGNMENT_VIEW_START);
@@ -367,7 +370,7 @@ final class ShowsHubView extends FrameLayout {
         continueShelf = addContinueShelf();
         thisWeekShelf = addShelf(
                 "This Week",
-                "Fresh from CrazyShit, EFukt and Kaotic",
+                "Videos from the source homepages",
                 false,
                 weeklyListener,
                 true,
@@ -437,7 +440,7 @@ final class ShowsHubView extends FrameLayout {
         loadingLabel.setText("Loading Shows…");
         loadingLabel.setVisibility(View.VISIBLE);
         heroSource.setText("FEATURED");
-        heroTitle.setText("Shows");
+        heroTitle.setText("Featured Shows");
         heroHint.setText("CrazyShit, EFukt and Kaotic together in one media hub.");
         heroAction.setVisibility(View.GONE);
         Glide.with(heroBackdrop).clear(heroBackdrop);
@@ -972,22 +975,61 @@ final class ShowsHubView extends FrameLayout {
         if (heroItem != null && listener != null) listener.onOpen(heroItem);
     }
 
+    void setHeaderActions(View.OnClickListener onSearch, View.OnClickListener onMore) {
+        heroSearch.setOnClickListener(onSearch);
+        heroMore.setOnClickListener(onMore);
+    }
+
+    private ImageView heroHeaderAction(int icon, String description) {
+        ImageView action = new ImageView(getContext());
+        action.setImageResource(icon);
+        action.setColorFilter(Color.WHITE);
+        action.setPadding(dp(12), dp(12), dp(12), dp(12));
+        action.setContentDescription(description);
+        action.setClickable(true);
+        action.setFocusable(true);
+        GradientDrawable film = new GradientDrawable();
+        film.setShape(GradientDrawable.OVAL);
+        film.setColor(AppearanceTheme.glassPreset(getContext()) == AppearanceTheme.GlassPreset.OFF
+                ? Color.rgb(18, 22, 27) : Color.argb(90, 0, 0, 0));
+        GradientDrawable mask = new GradientDrawable();
+        mask.setShape(GradientDrawable.OVAL);
+        mask.setColor(Color.WHITE);
+        int accent = themeAccent();
+        action.setBackground(new android.graphics.drawable.InsetDrawable(new RippleDrawable(
+                ColorStateList.valueOf(Color.argb(65, Color.red(accent), Color.green(accent),
+                        Color.blue(accent))), film, mask), dp(3)));
+        ZeroChillMotion.installPressFeedback(action);
+        return action;
+    }
+
     private ContinueShelf addContinueShelf() {
         LinearLayout block = new LinearLayout(getContext());
         block.setOrientation(LinearLayout.VERTICAL);
         LinearLayout.LayoutParams blockParams = new LinearLayout.LayoutParams(-1, -2);
-        blockParams.setMargins(0, 0, 0, dp(12));
+        blockParams.setMargins(0, 0, 0, dp(20));
         body.addView(block, blockParams);
 
         LinearLayout heading = new LinearLayout(getContext());
         heading.setOrientation(LinearLayout.VERTICAL);
-        heading.setPadding(dp(3), 0, dp(3), dp(9));
+        heading.setPadding(0, 0, 0, dp(12));
 
         TextView titleView = text("Continue Watching", 19f, AppearanceTheme.primaryText(getContext()));
         ZeroChillTypography.apply(titleView, ZeroChillTypography.Role.SECTION);
+        titleView.setTextSize(19f);
+        titleView.setTypeface(null, android.graphics.Typeface.BOLD);
+        titleView.setSingleLine(true);
+        titleView.setEllipsize(android.text.TextUtils.TruncateAt.END);
         titleView.setBackground(null);
         titleView.setPadding(0, 0, 0, 0);
-        heading.addView(titleView, new LinearLayout.LayoutParams(-2, -2));
+        heading.addView(titleView, new LinearLayout.LayoutParams(-1, -2));
+        TextView subtitle = text("Pick up where you stopped", 11f,
+                AppearanceTheme.secondaryText(getContext()));
+        subtitle.setSingleLine(true);
+        subtitle.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        LinearLayout.LayoutParams subtitleParams = new LinearLayout.LayoutParams(-1, -2);
+        subtitleParams.topMargin = dp(2);
+        heading.addView(subtitle, subtitleParams);
         block.addView(heading);
 
         RecyclerView rail = new RecyclerView(getContext());
@@ -1028,17 +1070,23 @@ final class ShowsHubView extends FrameLayout {
 
         LinearLayout heading = new LinearLayout(getContext());
         heading.setOrientation(LinearLayout.VERTICAL);
-        heading.setPadding(0, 0, 0, dp(10));
+        heading.setPadding(0, 0, 0, dp(12));
 
         TextView titleView = text(title, 19f, AppearanceTheme.primaryText(getContext()));
         ZeroChillTypography.apply(titleView, ZeroChillTypography.Role.SECTION);
+        titleView.setTextSize(19f);
+        titleView.setTypeface(null, android.graphics.Typeface.BOLD);
+        titleView.setSingleLine(true);
+        titleView.setEllipsize(android.text.TextUtils.TruncateAt.END);
         heading.addView(titleView);
 
         TextView subtitleView = text(
                 subtitle,
-                12f,
+                11f,
                 ZeroChillUi.color(getContext(), R.color.zc_text_secondary)
         );
+        subtitleView.setSingleLine(true);
+        subtitleView.setEllipsize(android.text.TextUtils.TruncateAt.END);
         LinearLayout.LayoutParams subtitleParams = new LinearLayout.LayoutParams(-1, -2);
         subtitleParams.topMargin = dp(2);
         heading.addView(subtitleView, subtitleParams);

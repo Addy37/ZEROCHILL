@@ -32,6 +32,30 @@ import java.util.Arrays;
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 public class ShowsHeroDesignTest {
     @Test
+    public void embeddedHeaderRoutesExistingActionsAndKeepsFullTouchTargets() throws Exception {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        ShowsHubView hub = new ShowsHubView(activity, item -> { }, item -> { }, item -> { });
+        activity.setContentView(hub);
+        int[] calls = new int[2];
+        hub.setHeaderActions(view -> calls[0]++, view -> calls[1]++);
+        for (String name : new String[]{"heroSearch", "heroMore"}) {
+            Field field = ShowsHubView.class.getDeclaredField(name);
+            field.setAccessible(true);
+            View action = (View) field.get(hub);
+            assertEquals(dp(activity, 48), action.getLayoutParams().width);
+            assertEquals(dp(activity, 48), action.getLayoutParams().height);
+            assertTrue(action.performClick());
+        }
+        assertEquals(1, calls[0]);
+        assertEquals(1, calls[1]);
+        ScrollView scroll = (ScrollView) hub.getChildAt(0);
+        assertEquals(0, scroll.getPaddingTop());
+        assertEquals(0, ((FrameLayout.LayoutParams) scroll.getLayoutParams()).topMargin);
+        assertTrue(hasText(hub, "Pick up where you stopped"));
+        assertTrue(hasText(hub, "Videos from the source homepages"));
+    }
+
+    @Test
     public void usesSwipeableProtectedArtworkHeroGeometry() throws Exception {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
         ShowsHubView hub = new ShowsHubView(activity, item -> { }, item -> { }, item -> { });

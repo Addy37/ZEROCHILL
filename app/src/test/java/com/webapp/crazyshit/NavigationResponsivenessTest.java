@@ -72,6 +72,35 @@ public class NavigationResponsivenessTest {
         } finally { host.pause().stop().destroy(); }
     }
 
+    @Test public void showsSearchReturnsToEmbeddedHeaderAndRetainsPage() {
+        ActivityController<NativeMainActivity> host = launch();
+        try {
+            NativeMainActivity activity = host.get();
+            ZeroChillBottomNavigationView nav = ReflectionHelpers.getField(activity, "bottomNavigation");
+            ViewPager2 pager = ReflectionHelpers.getField(activity, "primaryPager");
+            nav.setSelectedItemId(2);
+            org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
+            MainPagerAdapter adapter = ReflectionHelpers.getField(activity, "primaryPagerAdapter");
+            Object[] pages = ReflectionHelpers.getField(adapter, "pages");
+            ShowsHubView hub = ReflectionHelpers.getField(pages[MainPagerAdapter.PAGE_SERIES], "showsHub");
+            android.view.View search = ReflectionHelpers.getField(hub, "heroSearch");
+            android.view.View topBar = ReflectionHelpers.getField(activity, "topBar");
+            for (boolean tap : new boolean[]{true, false}) {
+                if (tap) search.performClick();
+                else activity.openContextualSearch(); // Shortcut/restored entry has no explicit anchor.
+                assertNotNull(ReflectionHelpers.getField(activity, "searchPanel"));
+                assertSame(search, ReflectionHelpers.getField(activity, "searchOrigin"));
+                activity.onBackPressed();
+                assertNull(ReflectionHelpers.getField(activity, "searchPanel"));
+                assertEquals(1f, ((android.view.View) search.getParent()).getAlpha(), 0.01f);
+                assertEquals(android.view.View.GONE, topBar.getVisibility());
+                assertEquals(MainPagerAdapter.pagerPositionForPage(MainPagerAdapter.PAGE_SERIES),
+                        pager.getCurrentItem());
+                assertSame(adapter, pager.getAdapter());
+            }
+        } finally { host.pause().stop().destroy(); }
+    }
+
     @Test public void tabChromeIsBoundOnceAndReselectionDoesNotRebind() {
         ActivityController<NativeMainActivity> host = launch();
         try {

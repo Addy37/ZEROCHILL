@@ -17,6 +17,13 @@ The player UI, controls, engine, orientation, gestures and history remain OG.
 
 ## Presentation
 
+- Shows now owns a single header over the hero: 28sp title and circular Search
+  and More controls with 48dp touch targets. Existing contextual search and More
+  destinations remain; Account is available in More. The shared branded bar stays
+  hidden on Shows, including fullscreen/orientation restoration, and returns on
+  Library. The hero remains square. Section headers use V2's 19sp/11sp hierarchy,
+  aligned spacing and Continue Watching supporting text.
+
 - Homepage uses V2 proportions, compact two-row rails, 160dp Continue Watching
   cards, selectable accent-pill dots and six-second rotation. Hero corners stay
   square. Artwork reveals circularly after loading; the prior image stays visible

@@ -298,10 +298,11 @@ final class LandscapeUiController {
             topBar.setElevation(0f);
         }
 
-        // OnlyFap owns its title and actions inside the hero. A landscape/portrait pass after
-        // video fullscreen must not reveal the duplicate main header over that page.
+        // Shows and OnlyFap own their title/actions in the hero. Restoring orientation
+        // must keep the shared bar hidden on those retained pages.
         setVisibility(topBar,
-                chaosFullscreen || selected == NAV_CATEGORIES ? View.GONE : View.VISIBLE);
+                chaosFullscreen || selected == NAV_CATEGORIES || activity.showsOwnsHeader()
+                        ? View.GONE : View.VISIBLE);
         ViewGroup.LayoutParams raw = topBar.getLayoutParams();
         if (raw != null) {
             int wanted = dp(activity, landscape ? LANDSCAPE_TOP_BAR_DP : PORTRAIT_TOP_BAR_DP);

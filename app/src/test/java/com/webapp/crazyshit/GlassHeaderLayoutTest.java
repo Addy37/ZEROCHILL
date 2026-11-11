@@ -17,7 +17,7 @@ import static org.junit.Assert.*;
 @RunWith(RobolectricTestRunner.class)
 @Config(application = Application.class, sdk = 35)
 public class GlassHeaderLayoutTest {
-    @Test public void scrollContentCrossesHeaderWithoutChangingOriginOrRange() {
+    @Test public void embeddedShowsHeaderAndSharedLibraryHeaderKeepCorrectScrollGeometry() {
         var controller = BottomNavigationInsetsTest.createActivity();
         NativeMainActivity activity = controller.get();
         View headerView = ReflectionHelpers.getField(activity, "topBar");
@@ -29,6 +29,7 @@ public class GlassHeaderLayoutTest {
         for (int position : new int[]{0, 3}) {
             MainPagerAdapter.Holder holder = adapter.onCreateViewHolder(pager, 0);
             adapter.onBindViewHolder(holder, position);
+            int inset = position == 0 ? 0 : header;
             FrameLayout frame = (FrameLayout) holder.itemView;
             View page = frame.getChildAt(0);
             ScrollView scroll;
@@ -43,7 +44,7 @@ public class GlassHeaderLayoutTest {
                 ((ViewGroup) scroll.getChildAt(0)).addView(new View(activity),
                         new ViewGroup.LayoutParams(1, 2000));
                 layout(frame);
-                assertEquals(-header, scroll.getTop());
+                assertEquals(0, scroll.getTop());
             } else {
                 scroll = (ScrollView) page;
                 ((ViewGroup) scroll.getChildAt(0)).addView(new View(activity),
@@ -51,10 +52,10 @@ public class GlassHeaderLayoutTest {
                 layout(frame);
                 assertEquals(-header, page.getTop());
             }
-            assertEquals(header, scroll.getPaddingTop());
-            assertEquals(frame.getHeight() + header, scroll.getHeight());
+            assertEquals(inset, scroll.getPaddingTop());
+            assertEquals(frame.getHeight() + inset, scroll.getHeight());
             assertFalse(scroll.getClipToPadding());
-            int originalOrigin = scroll.getChildAt(0).getTop() - header;
+            int originalOrigin = scroll.getChildAt(0).getTop() - inset;
             scroll.scrollTo(0, header + 10);
             assertTrue(scroll.getScrollY() > header);
             assertEquals(originalOrigin - scroll.getScrollY(),

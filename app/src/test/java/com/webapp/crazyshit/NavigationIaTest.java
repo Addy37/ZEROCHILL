@@ -55,7 +55,7 @@ public class NavigationIaTest {
         controller.pause().stop().destroy();
     }
 
-    @Test public void fullscreenReturnDoesNotRevealDuplicateOnlyFapHeader() {
+    @Test public void fullscreenReturnDoesNotRevealDuplicateEmbeddedHeaders() {
         android.content.Context context = org.robolectric.RuntimeEnvironment.getApplication();
         context.getSharedPreferences("app_prefs", 0).edit()
                 .putBoolean("access_notice_2_8_3_accepted", true).apply();
@@ -73,6 +73,12 @@ public class NavigationIaTest {
 
         // This restoration pass previously forced the main bar visible over the hero title.
         LandscapeUiController.attach(activity);
+        LandscapeUiController.apply(activity);
+        assertEquals(View.GONE, topBar.getVisibility());
+
+        nav.setSelectedItemId(2); // Shows owns its hero header too.
+        shadowOf(android.os.Looper.getMainLooper()).idle();
+        assertEquals(View.GONE, topBar.getVisibility());
         LandscapeUiController.apply(activity);
         assertEquals(View.GONE, topBar.getVisibility());
 
@@ -718,6 +724,10 @@ public class NavigationIaTest {
         assertEquals(View.GONE, refresh.getVisibility());
         android.widget.TextView title = ReflectionHelpers.getField(activity, "headerTitle");
         assertEquals("ZEROCHILL Shows", title.getText().toString());
+        View topBar = ReflectionHelpers.getField(activity, "topBar");
+        assertEquals(View.GONE, topBar.getVisibility());
+        assertNotNull(findByDescription(hub, "Search Shows"));
+        assertNotNull(findByDescription(hub, "More Shows options"));
 
         controller.pause().stop().destroy();
     }
