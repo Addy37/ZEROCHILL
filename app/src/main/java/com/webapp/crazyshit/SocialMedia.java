@@ -386,14 +386,35 @@ final class SocialMedia {
         large.setScaleType(ImageView.ScaleType.FIT_CENTER);
         large.setContentDescription("Attachment viewer");
         android.widget.FrameLayout viewport = new android.widget.FrameLayout(activity);
-        // AlertDialog replaces its custom root's LayoutParams. Keep a bounded child inside it,
-        // so an unloaded image cannot collapse the viewport and deadlock Glide's size request.
-        viewport.addView(large, new android.widget.FrameLayout.LayoutParams(-1,
-                Math.round(activity.getResources().getDisplayMetrics().heightPixels * 0.72f)));
-        android.app.AlertDialog dialog = new ZeroChillDialog.Builder(activity).setView(viewport)
-                .setPositiveButton("Close", null).create();
+        viewport.setBackgroundColor(android.graphics.Color.BLACK);
+        viewport.addView(large, new android.widget.FrameLayout.LayoutParams(-1, -1));
+        android.app.Dialog dialog = new android.app.Dialog(activity, R.style.Theme_ZeroChill_AttachmentViewer);
+        dialog.setContentView(viewport);
+        ImageView close = new ImageView(activity);
+        close.setImageResource(R.drawable.ic_more_close);
+        close.setImageTintList(android.content.res.ColorStateList.valueOf(android.graphics.Color.WHITE));
+        close.setScaleType(ImageView.ScaleType.CENTER);
+        close.setContentDescription("Close attachment");
+        close.setFocusable(true);
+        int target = Math.round(48 * activity.getResources().getDisplayMetrics().density);
+        android.widget.FrameLayout.LayoutParams closeParams = new android.widget.FrameLayout.LayoutParams(target, target,
+                android.view.Gravity.TOP | android.view.Gravity.END);
+        viewport.addView(close, closeParams);
+        close.setOnClickListener(v -> dialog.dismiss());
+        ZeroChillMotion.installPressFeedback(close);
+        // Keep the close target clear of cutouts and navigation in edge-to-edge windows.
+        androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(viewport, (view, insets) -> {
+            androidx.core.graphics.Insets bars = insets.getInsets(
+                    androidx.core.view.WindowInsetsCompat.Type.systemBars()
+                            | androidx.core.view.WindowInsetsCompat.Type.displayCutout());
+            view.setPadding(bars.left, bars.top, bars.right, bars.bottom);
+            return insets;
+        });
         dialog.setOnDismissListener(ignored -> clear(large));
+        ZeroChillToast.registerDialog(dialog);
         dialog.show();
+        dialog.getWindow().setLayout(-1, -1);
+        androidx.core.view.ViewCompat.requestApplyInsets(viewport);
         bind(large, bucket, path);
     }
 

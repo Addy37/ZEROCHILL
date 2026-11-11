@@ -1,8 +1,26 @@
-# ShitTok visual polish / Preview 37
+# ShitTok visual polish / Preview 38
 
 Baseline: fetched approved main `5f24b294a0e2c3155a7b395894c931608be93dd9`,
 including merged Library #412, OnlyFap motion #413 and gallery polish #414.
 Branch: `feature/zerochill-shittok-visual-polish`.
+
+## Current attachment-viewer correction
+
+The user approved the comments redesign and supplied a recording of a photo opened
+inside the old tall glass alert card. The shared attachment viewer now uses a black
+full-window canvas with a 48dp Close target protected by system-bar/cutout insets.
+FIT_CENTER preserves the whole photo without cropping. The same fix applies to DM
+attachments. Authenticated image loading, memory-only caching, GIF animation,
+request cancellation and dismissal cleanup retain their existing implementation.
+The comments sheet, inline thumbnails, playback and data flows are unchanged.
+Local validation passed 97 tests across five focused media/comments/keyboard suites
+and `:app:assembleDebug` in 2m, with zero failures, errors or skips. The media lifecycle
+suite now also runs on API 36; it covers uncached PNG/JPEG/WebP, repeated opening,
+GIF animation, authenticated loading, cancellation and dismissal. New full-window
+geometry/Close checks and synthetic portrait/landscape captures verify the borderless
+canvas. Workflow syntax and diff checks passed. PR #415 records the signed CI artifact.
+Physical OnePlus appearance, insets and upgrade acceptance remain pending; full
+unfiltered suites and lint are not claimed.
 
 ## Current comments-sheet follow-up
 
@@ -107,7 +125,7 @@ are unchanged. No new dependencies, capture loop or explicit rendering layer.
 ## Candidate delivery
 
 The scoped `shittok-visual-candidate.yml` workflow runs focused regressions and builds
-one signed release-package APK. Preview 37 is `7.0-preview.37-comments` / `6000039`.
+one signed release-package APK. Preview 38 is `7.0-preview.38-image-viewer` / `6000040`.
 It injects existing public client configuration through existing repository secrets,
 restores the existing production signing identity, checks ancestry from the approved
 baseline and compares APK package/certificate/version against the current stable APK.

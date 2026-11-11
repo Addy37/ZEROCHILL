@@ -430,3 +430,16 @@ Preview 37 uses `7.0-preview.37-comments`, code `6000039`, above Preview 36 `600
 with original production package/certificate. One signed test APK; no merge, tag,
 public release, backend/source change or migration. Physical acceptance is pending.
 See `docs/SHITTOK_VISUAL_POLISH.md` and PR #415 for actual validation evidence.
+
+
+## PR 415 attachment viewer correction (Preview 38)
+
+The user approved Preview 37's comments design (`4104b736`) and supplied a screen
+recording showing the enlarged attachment surrounded by a tall glass alert card.
+Continue the same draft PR from that head, replacing only the shared attachment
+viewer shell with a black full-window canvas and an inset-safe Close target.
+Keep original image/GIF loading, authorization, memory caching and dismissal cleanup.
+This also corrects the same shared viewer in direct messages. Preview 38 uses
+`7.0-preview.38-image-viewer`, code `6000040`, above Preview 37 `6000039`, retaining
+the production package/certificate. One signed candidate; no merge, tag, publication,
+backend/source change or data migration. Physical acceptance of the fix is pending.

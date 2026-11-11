@@ -1,6 +1,6 @@
 name: ShitTok Visual Polish Candidate
 
-# Preview 37: comments sheet layout, reply threads, heart and keyboard polish.
+# Preview 38: borderless full-window attachment viewer for comments and DMs.
 # One scoped candidate run; no release publication or additional APK variants.
 on:
   push:
@@ -17,8 +17,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 35
     env:
-      APP_VERSION_CODE: '6000039'
-      APP_VERSION_NAME: '7.0-preview.37-comments'
+      APP_VERSION_CODE: '6000040'
+      APP_VERSION_NAME: '7.0-preview.38-image-viewer'
       ZEROCHILL_SOURCE_SHA: ${{ github.sha }}
       FEEDBACK_ENDPOINT: ${{ secrets.FEEDBACK_ENDPOINT }}
       FEEDBACK_ANON_KEY: ${{ secrets.FEEDBACK_ANON_KEY }}
@@ -134,7 +134,7 @@ jobs:
               return package[1], int(package[2]), cert[1]
           current, previous = inspect(candidate), inspect(stable)
           assert current[0] == previous[0] == 'com.addy37.crazyshitunofficial'
-          assert current[1] == 6000039 and current[1] > max(6000038, previous[1])
+          assert current[1] == 6000040 and current[1] > max(6000039, previous[1])
           assert current[2] == previous[2] == '04abf84b3d468cbb1a562dea83b0007e686b2e56018cce911223963faea51356', 'Production signing certificate changed'
           report = (f'Source: {os.environ["GITHUB_SHA"]}\n'
                     f'Branch: {os.environ["GITHUB_REF_NAME"]}\n'
