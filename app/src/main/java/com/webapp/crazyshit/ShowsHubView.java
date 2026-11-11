@@ -44,8 +44,11 @@ import com.bumptech.glide.request.target.Target;
 import com.google.android.material.card.MaterialCardView;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /** Nuvio-inspired proof-of-concept landing page for the Shows tab. */
 final class ShowsHubView extends FrameLayout {
@@ -83,6 +86,8 @@ final class ShowsHubView extends FrameLayout {
     private final ShowsContinueFrameStore.Listener continueFrameListener =
             this::onContinueFrameUpdated;
     private final Handler heroHandler = new Handler(Looper.getMainLooper());
+    private final int heroShuffleSeed = new java.util.Random().nextInt();
+    private final Set<String> rejectedHeroImages = new HashSet<>();
     private final ScrollView scroll;
     private final LinearLayout content;
     private final LinearLayout body;
@@ -483,6 +488,7 @@ final class ShowsHubView extends FrameLayout {
         categoryItems = safe(items);
         categoryShelf.adapter.replace(categoryItems);
         categoryShelf.container.setVisibility(categoryItems.isEmpty() ? View.GONE : View.VISIBLE);
+        rebuildHeroCandidates();
     }
 
     void setKaoticCategories(List<NativeContentItem> items) {
@@ -491,6 +497,7 @@ final class ShowsHubView extends FrameLayout {
         kaoticCategoryShelf.container.setVisibility(
                 kaoticCategoryItems.isEmpty() ? View.GONE : View.VISIBLE
         );
+        rebuildHeroCandidates();
     }
 
     void setBaddieHubCategories(List<NativeContentItem> items) {
@@ -499,6 +506,7 @@ final class ShowsHubView extends FrameLayout {
         baddieHubCategoryShelf.container.setVisibility(
                 baddieHubCategoryItems.isEmpty() ? View.GONE : View.VISIBLE
         );
+        rebuildHeroCandidates();
     }
 
     void setXMegaDriveCategories(List<NativeContentItem> items) {
@@ -515,6 +523,7 @@ final class ShowsHubView extends FrameLayout {
                 xMegaDriveCategoryItems.isEmpty() ? View.GONE : View.VISIBLE
         );
         if (!xMegaDriveCategoryItems.isEmpty()) loadingLabel.setVisibility(View.GONE);
+        rebuildHeroCandidates();
     }
 
     void finishLoading() {
@@ -611,46 +620,60 @@ final class ShowsHubView extends FrameLayout {
         scheduleHeroRotation();
     }
 
+    private List<List<NativeContentItem>> heroProviderPools() {
+        ArrayList<NativeContentItem> crazy = new ArrayList<>(crazyItems);
+        crazy.addAll(categoryItems);
+        // V2's round-robin provider order. All collections are already loaded by Shows.
+        return Arrays.asList(crazy, kaoticCategoryItems, efuktItems,
+                xMegaDriveCategoryItems, baddieHubCategoryItems);
+    }
+
     private void rebuildHeroCandidates() {
-        ArrayList<NativeContentItem> next = new ArrayList<>();
-        appendHeroCandidates(next, crazyItems, 5);
-        appendHeroCandidates(next, efuktItems, 3);
+        List<NativeContentItem> next = ShowsHeroPicks.mixed(
+                heroProviderPools(), rejectedHeroImages, heroShuffleSeed, HERO_MAX_ITEMS);
+
+        if (next.isEmpty()) {
+            // When every CDN rejects its images, keep a real locally bundled
+            // collection cover instead of repeatedly rotating through blank slides.
+            ArrayList<NativeContentItem> bundled = new ArrayList<>();
+            for (List<NativeContentItem> provider : heroProviderPools()) {
+                for (NativeContentItem item : provider) {
+                    if (item == null || item.title.trim().isEmpty()
+                            || !EmbeddedBrowseArtwork.has(getContext(), item.url)) continue;
+                    bundled.add(item);
+                    break;
+                }
+                if (bundled.size() >= HERO_MAX_ITEMS) break;
+            }
+            next = bundled;
+        }
 
         String currentUrl = heroItem == null ? "" : heroItem.url;
         heroItems = next;
         heroIndex = indexOfUrl(heroItems, currentUrl);
-        if (heroIndex < 0 && !heroItems.isEmpty()) {
-            showHero(0, false);
+        if (heroItems.isEmpty()) {
+            heroArtworkRequest++;
+            cancelHeroReveal();
+            heroItem = null;
+            heroIndex = -1;
+            heroDots.setVisibility(View.GONE);
+            heroSource.setText("FEATURED");
+            heroTitle.setText("Featured Shows");
+            heroAction.setVisibility(View.GONE);
+            heroImage.setTag(R.id.shows_watch_source_page, null);
+            Glide.with(heroImage).clear(heroImage);
+            Glide.with(heroBackdrop).clear(heroBackdrop);
+            heroImage.setImageDrawable(artworkPlaceholder());
+            heroBackdrop.setImageDrawable(artworkPlaceholder());
+        } else if (heroIndex < 0 || heroItem == null
+                || !heroItems.get(heroIndex).imageUrl.equals(heroItem.imageUrl)) {
+            showHero(Math.max(0, heroIndex), false);
         } else {
             updateHeroDots();
             prewarmNextHero();
         }
         if (itemCount() > 0) loadingLabel.setVisibility(View.GONE);
         scheduleHeroRotation();
-    }
-
-    private void appendHeroCandidates(
-            List<NativeContentItem> target,
-            List<NativeContentItem> source,
-            int limit
-    ) {
-        if (source == null || target.size() >= HERO_MAX_ITEMS || limit <= 0) return;
-        int added = 0;
-        for (NativeContentItem item : source) {
-            if (item == null || !hasArtwork(item) || containsUrl(target, item.url)) continue;
-            target.add(item);
-            added++;
-            if (added >= limit || target.size() >= HERO_MAX_ITEMS) break;
-        }
-    }
-
-    private boolean hasArtwork(NativeContentItem item) {
-        return EmbeddedBrowseArtwork.has(getContext(), item.url)
-                || (item.imageUrl != null && !item.imageUrl.trim().isEmpty());
-    }
-
-    private boolean containsUrl(List<NativeContentItem> items, String url) {
-        return indexOfUrl(items, url) >= 0;
     }
 
     private int indexOfUrl(List<NativeContentItem> items, String url) {
@@ -694,10 +717,12 @@ final class ShowsHubView extends FrameLayout {
         cancelHeroReveal();
         boolean hasPrevious = reveal && snapshotHeroArtwork();
         heroImage.setVisibility(hasPrevious ? View.INVISIBLE : View.VISIBLE);
+
         byte[] embedded = EmbeddedBrowseArtwork.get(getContext(), item.url);
         if (embedded == null || embedded.length < 512) embedded = null;
+        boolean remote = ShowsHeroPicks.hasRemoteArtwork(item)
+                && !rejectedHeroImages.contains(ShowsHeroPicks.imageKey(item));
         Object model = embedded;
-        boolean remote = item.imageUrl != null && !item.imageUrl.trim().isEmpty();
         if (remote) {
             String imageUrl = item.imageUrl.trim();
             LazyHeaders.Builder headers = new LazyHeaders.Builder()
@@ -708,57 +733,66 @@ final class ShowsHubView extends FrameLayout {
             addXMegaDriveArtworkHeaders(headers, imageUrl, item.url);
             model = new GlideUrl(imageUrl, headers.build());
         }
+
         if (model == null) {
             Glide.with(heroImage).clear(heroImage);
             heroImage.setImageDrawable(artworkPlaceholder());
             finishHeroReveal(request, false);
             return;
         }
-        RequestListener<android.graphics.drawable.Drawable> listener =
-                heroArtworkListener(request, hasPrevious, false);
-        com.bumptech.glide.RequestBuilder<android.graphics.drawable.Drawable> imageRequest =
-                Glide.with(heroImage).load(model)
+
+        Glide.with(heroImage).load(model)
                 .diskCacheStrategy(remote ? DiskCacheStrategy.ALL : DiskCacheStrategy.NONE)
                 .disallowHardwareConfig()
                 .fitCenter()
                 .placeholder(artworkPlaceholder())
                 .error(artworkPlaceholder())
-                .listener(remote && embedded != null
-                        ? heroArtworkListener(request, hasPrevious, true) : listener);
-        if (remote && embedded != null) {
-            imageRequest.error(Glide.with(heroImage).load(embedded)
-                    .diskCacheStrategy(DiskCacheStrategy.NONE)
-                    .disallowHardwareConfig()
-                    .fitCenter()
-                    .listener(listener));
-        }
-        imageRequest.into(heroImage);
+                .listener(heroArtworkListener(request, item, remote, hasPrevious))
+                .into(heroImage);
     }
 
     private RequestListener<android.graphics.drawable.Drawable> heroArtworkListener(
-            int request, boolean hasPrevious, boolean hasFallback
+            int request, NativeContentItem item, boolean remote, boolean hasPrevious
     ) {
         return new RequestListener<android.graphics.drawable.Drawable>() {
-                    @Override public boolean onLoadFailed(
-                            GlideException error, Object source,
-                            Target<android.graphics.drawable.Drawable> target,
-                            boolean firstResource
-                    ) {
-                        if (!hasFallback) {
-                            heroImage.post(() -> finishHeroReveal(request, false));
-                        }
-                        return false;
-                    }
+            @Override public boolean onLoadFailed(
+                    GlideException error, Object source,
+                    Target<android.graphics.drawable.Drawable> target,
+                    boolean firstResource
+            ) {
+                heroImage.post(() -> {
+                    if (remote) rejectHeroArtwork(request, item);
+                    else finishHeroReveal(request, false);
+                });
+                return false;
+            }
 
-                    @Override public boolean onResourceReady(
-                            android.graphics.drawable.Drawable resource, Object source,
-                            Target<android.graphics.drawable.Drawable> target,
-                            DataSource dataSource, boolean firstResource
-                    ) {
-                        heroImage.post(() -> finishHeroReveal(request, hasPrevious));
-                        return false;
-                    }
-                };
+            @Override public boolean onResourceReady(
+                    android.graphics.drawable.Drawable resource, Object source,
+                    Target<android.graphics.drawable.Drawable> target,
+                    DataSource dataSource, boolean firstResource
+            ) {
+                if (remote && !ShowsHeroPicks.usableArtworkSize(
+                        resource.getIntrinsicWidth(), resource.getIntrinsicHeight())) {
+                    heroImage.post(() -> rejectHeroArtwork(request, item));
+                    // Do not briefly display a rejected low-resolution poster.
+                    return true;
+                }
+                heroImage.post(() -> finishHeroReveal(request, hasPrevious));
+                return false;
+            }
+        };
+    }
+
+    private void rejectHeroArtwork(int request, NativeContentItem item) {
+        if (request != heroArtworkRequest || heroItem == null
+                || !heroItem.url.equals(item.url)) return;
+        String image = ShowsHeroPicks.imageKey(item);
+        if (!image.isEmpty() && rejectedHeroImages.add(image)) {
+            rebuildHeroCandidates();
+        } else {
+            finishHeroReveal(request, false);
+        }
     }
 
     private boolean snapshotHeroArtwork() {
@@ -984,7 +1018,7 @@ final class ShowsHubView extends FrameLayout {
         ImageView action = new ImageView(getContext());
         action.setImageResource(icon);
         action.setColorFilter(Color.WHITE);
-        action.setPadding(dp(12), dp(12), dp(12), dp(12));
+        action.setPadding(dp(15), dp(15), dp(15), dp(15));
         action.setContentDescription(description);
         action.setClickable(true);
         action.setFocusable(true);
