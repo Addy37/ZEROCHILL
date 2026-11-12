@@ -49,3 +49,27 @@ Next: perform controlled end-to-end feedback submit/list/thread/reply tests with
 ## Reversal and safety
 
 Old project remains the rollback baseline. New functions are staged but not used by production clients. If unexpected traffic appears, review new-only function deployments first, without disabling old services. This documentation PR is separate from the earlier planning PR #418, and no merge/release is authorized.
+
+## Verified synthetic API interaction (2026-11-12)
+
+The new project's private admin token was used **inside the database only** via Vault with `pg_net`, so no token was sent to chat or GitHub.
+
+- Created one disposable feedback ticket and one user message in **New Zerochill** using SQL, tagged `staging-smoke-20261112`. This deliberately tested the admin API from a pre-existing synthetic row; **public dynamic-api submission remains untested**.
+- `feedback-admin` `list`: HTTP 200; one ticket found with unread_count=1.
+- `feedback-admin` `thread`: HTTP 200; one message returned and user's message marked read.
+- `feedback-admin` `reply`: HTTP 200; developer reply recorded, ticket status moved to `reviewing`, now two messages.
+- `feedback-admin` `delete`: HTTP 200; response `deleted=true`. Follow-up DB check confirmed **0 test tickets and 0 linked messages remain**.
+- `app-config-admin` `validate` on current active version 13: HTTP 200 / valid=true. `history`: HTTP 200 with all 13 versions. Neither request published or changed source config.
+- Public `app-config` GET: HTTP 200 with configVersion 13. GET with `If-None-Match: \"13\"`: HTTP 304, as intended for cached versions.
+- The public `dynamic-api` JWT-gated submit/list/reply and Android device UI are **not** yet end-to-end verified. No real users or feedback history were migrated.
+
+## Separate, safer Admin staging APK build option
+
+Two additional repository files were updated on this same feature branch:
+
+- `feedbackadmin/build.gradle.kts` accepts `ADMIN_BACKEND_TARGET=new_zerochill`. Only then, feedback/source-admin URLs default to the new project and the admin APK uses the separate application ID `com.addy37.crazyshitadmin.newzerochill` with `-staging` version label. The existing admin package `com.addy37.crazyshitadmin`, signing setup, private token storage, and default backend behavior remain unchanged.
+- `.github/workflows/build-feedback-admin.yml` has a **manual-only** `workflow_dispatch` choice `backend_target: existing | new_zerochill` (default `existing`), passes explicit URLs, and labels artifacts with the selected target. It retains the existing build/tests, emulator checks and signing steps. **No GitHub Actions run was triggered.** Workflows on a feature branch may not be manually dispatchable until this change reaches the repository default branch or is run in a separate coding environment.
+
+The test Admin APK will require entering the matching **Vault-only private admin token** after installing. Do not hard-code or paste the token into the build, GitHub, or chat. The test APK uses a separate app ID so it can coexist with the existing admin app.
+
+Current admin analytics/social-management tabs depend on deferred social and analytics tables. They are not ready and were not tested. No physical build, Gradle unit test, emulator, signed upgrade or client-side install has yet run in this turn.
