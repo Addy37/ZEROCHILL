@@ -21,12 +21,40 @@ import org.junit.runner.RunWith;
 import org.robolectric.Robolectric;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.annotation.Config;
+import org.robolectric.annotation.GraphicsMode;
 
 import java.lang.reflect.Field;
+import java.lang.reflect.Method;
+import java.util.Arrays;
 
 @RunWith(RobolectricTestRunner.class)
 @Config(application = Application.class, sdk = 35)
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
 public class ShowsHeroDesignTest {
+    @Test
+    public void embeddedHeaderRoutesExistingActionsAndKeepsFullTouchTargets() throws Exception {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        ShowsHubView hub = new ShowsHubView(activity, item -> { }, item -> { }, item -> { });
+        activity.setContentView(hub);
+        int[] calls = new int[2];
+        hub.setHeaderActions(view -> calls[0]++, view -> calls[1]++);
+        for (String name : new String[]{"heroSearch", "heroMore"}) {
+            Field field = ShowsHubView.class.getDeclaredField(name);
+            field.setAccessible(true);
+            View action = (View) field.get(hub);
+            assertEquals(dp(activity, 48), action.getLayoutParams().width);
+            assertEquals(dp(activity, 48), action.getLayoutParams().height);
+            assertTrue(action.performClick());
+        }
+        assertEquals(1, calls[0]);
+        assertEquals(1, calls[1]);
+        ScrollView scroll = (ScrollView) hub.getChildAt(0);
+        assertEquals(0, scroll.getPaddingTop());
+        assertEquals(0, ((FrameLayout.LayoutParams) scroll.getLayoutParams()).topMargin);
+        assertTrue(hasText(hub, "Pick up where you stopped"));
+        assertTrue(hasText(hub, "Videos from the source homepages"));
+    }
+
     @Test
     public void usesSwipeableProtectedArtworkHeroGeometry() throws Exception {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
@@ -38,7 +66,10 @@ public class ShowsHeroDesignTest {
         HorizontalSwipeFrameLayout swipe = (HorizontalSwipeFrameLayout) content.getChildAt(0);
         MaterialCardView hero = (MaterialCardView) swipe.getChildAt(0);
 
-        assertEquals(dp(activity, 350), swipe.getLayoutParams().height);
+        assertEquals(
+                Math.round(activity.getResources().getDisplayMetrics().widthPixels * 9f / 16f)
+                        + dp(activity, 60),
+                swipe.getLayoutParams().height);
         assertEquals(0f, hero.getRadius(), 0.01f);
         assertEquals(0, content.getPaddingLeft());
         assertEquals(0, content.getPaddingRight());
@@ -64,6 +95,16 @@ public class ShowsHeroDesignTest {
                 artworkParams.height
         );
         assertEquals(ImageView.ScaleType.FIT_CENTER, artwork.getScaleType());
+
+        Field previousField = ShowsHubView.class.getDeclaredField("heroPrevious");
+        previousField.setAccessible(true);
+        ImageView previous = (ImageView) previousField.get(hub);
+        assertEquals(artworkCard, previous.getParent());
+        assertEquals(View.GONE, previous.getVisibility());
+
+        Field rotation = ShowsHubView.class.getDeclaredField("HERO_ROTATION_MS");
+        rotation.setAccessible(true);
+        assertEquals(6_000L, rotation.getLong(null));
 
         Field maxItems = ShowsHubView.class.getDeclaredField("HERO_MAX_ITEMS");
         maxItems.setAccessible(true);
@@ -130,10 +171,40 @@ public class ShowsHeroDesignTest {
                 continueRail,
                 continueRail.getAdapter().getItemViewType(0)
         );
-        assertEquals(dp(activity, 248), continueHolder.itemView.getLayoutParams().width);
-        assertEquals(dp(activity, 140), continueHolder.itemView.getLayoutParams().height);
+        assertEquals(dp(activity, 160), continueHolder.itemView.getLayoutParams().width);
+        assertEquals(dp(activity, 129), continueHolder.itemView.getLayoutParams().height);
         assertTrue(continueHolder.itemView.getLayoutParams().width
                 > continueHolder.itemView.getLayoutParams().height);
+    }
+
+    @Test
+    public void heroDotSelectsArtworkAndTracksSourceIdentity() throws Exception {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        ShowsHubView hub = new ShowsHubView(activity, item -> { }, item -> { }, item -> { });
+        activity.setContentView(hub);
+
+        NativeContentItem first = new NativeContentItem(
+                NativeContentItem.KIND_SERIES, "First", "first", "", "", "", "");
+        NativeContentItem second = new NativeContentItem(
+                NativeContentItem.KIND_SERIES, "Second", "second", "", "", "", "");
+        Field itemsField = ShowsHubView.class.getDeclaredField("heroItems");
+        itemsField.setAccessible(true);
+        itemsField.set(hub, Arrays.asList(first, second));
+        Method showHero = ShowsHubView.class.getDeclaredMethod("showHero", int.class, boolean.class);
+        showHero.setAccessible(true);
+        showHero.invoke(hub, 0, false);
+
+        Field dotsField = ShowsHubView.class.getDeclaredField("heroDots");
+        dotsField.setAccessible(true);
+        LinearLayout dots = (LinearLayout) dotsField.get(hub);
+        assertEquals(2, dots.getChildCount());
+        assertTrue(dots.getChildAt(1).performClick());
+
+        Field imageField = ShowsHubView.class.getDeclaredField("heroImage");
+        imageField.setAccessible(true);
+        ImageView artwork = (ImageView) imageField.get(hub);
+        assertEquals("second", artwork.getTag(R.id.shows_watch_source_page));
+        assertEquals(2, dots.getChildCount());
     }
 
     private static RecyclerView shelfRail(ShowsHubView hub, String fieldName) throws Exception {

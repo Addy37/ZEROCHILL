@@ -582,7 +582,8 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     }
 
     private View visibleSearchControl(View root) {
-        if (root.isShown() && "Search OnlyFap creators".contentEquals(
+        String description = showsOwnsHeader() ? "Search Shows" : "Search OnlyFap creators";
+        if (root.isShown() && description.contentEquals(
                 root.getContentDescription() == null ? "" : root.getContentDescription())) return root;
         if (root instanceof android.view.ViewGroup) {
             android.view.ViewGroup group = (android.view.ViewGroup) root;
@@ -599,7 +600,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         Intent intent = isOnlyFapSearchContext()
                 ? SearchActivity.createBunkrSearch(this)
                 : new Intent(this, SearchActivity.class);
-        if (searchOrigin == null) searchOrigin = isOnlyFapSearchContext()
+        if (searchOrigin == null) searchOrigin = isOnlyFapSearchContext() || showsOwnsHeader()
                 ? visibleSearchControl(shell) : headerSearchControl;
         if (searchOrigin == null) searchOrigin = headerSearchControl;
         searchOriginBar = (View) searchOrigin.getParent();
@@ -778,6 +779,11 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         overlayRoot.postDelayed(ratingPromptCheck, 1400L);
     }
 
+    boolean showsOwnsHeader() {
+        return screen == Screen.SERIES && primaryPager != null
+                && primaryPager.getVisibility() == View.VISIBLE;
+    }
+
     private void applyChaosFullscreenChrome() {
         boolean landscape = getResources().getConfiguration().orientation ==
                 android.content.res.Configuration.ORIENTATION_LANDSCAPE;
@@ -797,7 +803,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
                 primaryPager.getVisibility() == View.VISIBLE;
         if (topBar != null) {
             topBar.setVisibility(
-                    fullscreen || immersiveOnlyFap ? View.GONE : View.VISIBLE
+                    fullscreen || immersiveOnlyFap || showsOwnsHeader() ? View.GONE : View.VISIBLE
             );
         }
         if (bottomNavigation != null) {

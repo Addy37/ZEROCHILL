@@ -266,13 +266,14 @@ public class ShowsWatchPageTest {
         }
     }
 
-    @Test public void scopedBackWithMotionEnabledFinishesInSameDispatch() {
+    @Test public void scopedBackWithUnavailableOriginUsesBoundedFade() {
         VideoDetailActivity activity = watch(ShowsWatchActivity.class, item("1"), item("2"));
         activity.getSharedPreferences("app_prefs", 0).edit()
                 .putBoolean("immersive_motion_enabled", true).commit();
         assertTrue(ZeroChillMotion.animationsEnabled(activity));
         activity.onBackPressed();
-        assertTrue("Shows Back must not wait for its fallback fade", activity.isFinishing());
+        org.robolectric.shadows.ShadowLooper.idleMainLooper(180, java.util.concurrent.TimeUnit.MILLISECONDS);
+        assertTrue("Missing artwork must finish after its fallback fade", activity.isFinishing());
         assertTrue(ReflectionHelpers.<Boolean>getField(activity, "showsSavedOnExit"));
         activity.onBackPressed(); // Saved-on-exit guard remains idempotent.
         assertTrue(activity.isFinishing());

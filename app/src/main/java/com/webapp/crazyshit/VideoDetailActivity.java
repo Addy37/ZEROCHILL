@@ -869,6 +869,10 @@ public class VideoDetailActivity extends Activity {
 
     private void dismissStartupPoster() {
         if (showsSavedOnExit || startupPosterDismissed || startupPoster == null) return;
+        if (ShowsWatchLaunch.isRunning(root)) {
+            root.postDelayed(this::dismissStartupPoster, 32L);
+            return;
+        }
         startupPosterDismissed = true;
 
         if (!ZeroChillMotion.animationsEnabled(this)) {
@@ -3240,12 +3244,18 @@ public class VideoDetailActivity extends Activity {
                 startupPosterLoading.setVisibility(View.GONE);
             }
             cancelShowsCountdown();
-            // Back must finish in this dispatch. The reverse artwork morph
-            // (400 ms) and fallback fade delayed the retained destination.
+            Runnable finishWatch = () -> {
+                finish();
+                overridePendingTransition(0, 0);
+            };
+            if (ShowsWatchLaunch.animateExit(this, getIntent(), root, playerContainer,
+                    detailsScroll, startupPoster, finishWatch)) return;
             ShowsWatchLaunch.cancel(root);
-            if (root != null) root.animate().cancel();
-            finish();
-            overridePendingTransition(0, 0);
+            if (root != null && root.isAttachedToWindow() && ShowsWatchLaunch.isScoped(this)
+                    && ZeroChillMotion.animationsEnabled(this)) {
+                root.animate().cancel();
+                root.animate().alpha(0f).setDuration(140L).withEndAction(finishWatch).start();
+            } else finishWatch.run();
             return;
         }
         if (portraitFullscreen) {

@@ -181,17 +181,20 @@ public class ShowsEpisodeListTest {
         adapter.onBindViewHolder(holder, 0);
         View description = ReflectionHelpers.getField(holder, "description");
         assertEquals(View.GONE, description.getVisibility());
-        assertNotNull(holder.itemView.findViewWithTag("video_options"));
+        assertTrue(holder.itemView.isLongClickable());
         assertEquals(ViewGroup.LayoutParams.WRAP_CONTENT, holder.itemView.getLayoutParams().height);
-        assertEquals("#1", holder.episodeNumber.getText().toString());
+        assertEquals("EPISODE 01", holder.episodeNumber.getText().toString());
+        adapter.setEpisodeNumberOffset(10);
+        adapter.onBindViewHolder(holder, 0);
+        assertEquals("EPISODE 11", holder.episodeNumber.getText().toString());
         assertEquals("Episode one", holder.title.getText().toString());
         assertTrue(holder.episodeNumber.getTextSize() < holder.title.getTextSize());
         View media = (View) holder.image.getParent();
-        assertEquals(ViewGroup.LayoutParams.MATCH_PARENT, media.getLayoutParams().width);
-        assertEquals(189, media.getLayoutParams().height);
+        assertEquals(132, media.getLayoutParams().width);
+        assertEquals(80, media.getLayoutParams().height);
         LinearLayout column = (LinearLayout) media.getParent();
-        assertEquals(LinearLayout.VERTICAL, column.getOrientation());
-        assertTrue(column.indexOfChild((View) holder.title.getParent().getParent()) >
+        assertEquals(LinearLayout.HORIZONTAL, column.getOrientation());
+        assertTrue(column.indexOfChild((View) holder.title.getParent()) >
                 column.indexOfChild(media));
         assertEquals(3, holder.title.getMaxLines());
         adapter.close(); activity.finish();
@@ -199,7 +202,7 @@ public class ShowsEpisodeListTest {
 
     @Test
     @org.robolectric.annotation.GraphicsMode(org.robolectric.annotation.GraphicsMode.Mode.NATIVE)
-    public void longSourceTitleHasThreeLinesAndCardCanGrowBelowArtwork() {
+    public void longSourceTitleHasThreeLinesBesideFixedArtwork() {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
         activity.setTheme(R.style.Theme_CrazyShit);
         NativeContentItem longEpisode = new NativeContentItem(NativeContentItem.KIND_MEDIA,
@@ -228,13 +231,13 @@ public class ShowsEpisodeListTest {
         assertTrue(holder.title.getHeight() - holder.title.getCompoundPaddingTop()
                 - holder.title.getCompoundPaddingBottom() >= holder.title.getLayout().getLineBottom(2));
         View media = (View) holder.image.getParent();
-        View copy = (View) holder.title.getParent().getParent();
-        assertTrue(holder.itemView.getMeasuredHeight() >= media.getMeasuredHeight() + copy.getMeasuredHeight());
+        View copy = (View) holder.title.getParent();
+        assertTrue(holder.itemView.getMeasuredHeight() >= Math.max(media.getMeasuredHeight(), copy.getMeasuredHeight()));
         adapter.close(); activity.finish();
     }
 
     @Test @Config(qualifiers = "w800dp-h400dp-land-mdpi")
-    public void landscapeEpisodeUsesLargeHorizontalArtworkWithFlexibleHeight() {
+    public void landscapeEpisodeKeepsCompactHorizontalArtwork() {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
         activity.setTheme(R.style.Theme_CrazyShit);
         NativeFeedAdapter adapter = new NativeFeedAdapter(activity, new NativeFeedAdapter.Listener() {
@@ -249,8 +252,8 @@ public class ShowsEpisodeListTest {
         NativeFeedAdapter.Holder holder = adapter.onCreateViewHolder(parent, NativeFeedAdapter.VIEW_LIST);
         View media = (View) holder.image.getParent();
         // The measured RecyclerView width, rather than display width, determines the card.
-        assertEquals(348, media.getLayoutParams().width);
-        assertEquals(196, media.getLayoutParams().height);
+        assertEquals(132, media.getLayoutParams().width);
+        assertEquals(80, media.getLayoutParams().height);
         assertEquals(LinearLayout.HORIZONTAL, ((LinearLayout) media.getParent()).getOrientation());
         assertEquals(ViewGroup.LayoutParams.WRAP_CONTENT, holder.itemView.getLayoutParams().height);
         adapter.close(); activity.finish();

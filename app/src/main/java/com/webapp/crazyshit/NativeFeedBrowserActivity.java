@@ -2803,11 +2803,19 @@ public class NativeFeedBrowserActivity extends Activity {
     }
 
     private void styleEpisodeControl(TextView button, boolean forward) {
-        // Flat text actions with a bounded ripple and a 48dp touch target.
+        // Inline glass styling uses saved optics without recording a scrolling backdrop.
+        boolean glass = AppearanceTheme.glassPreset(this) != AppearanceTheme.GlassPreset.OFF;
+        int accent = AppearanceTheme.accent(this);
+        android.graphics.drawable.GradientDrawable surface = new android.graphics.drawable.GradientDrawable();
+        int fill = AppearanceTheme.surface(this);
+        surface.setColor(Color.argb(glass ? Math.round(220f - 60f * AppearanceTheme.glassTransparency(this)) : 255,
+                Color.red(fill), Color.green(fill), Color.blue(fill)));
+        surface.setCornerRadius(dp(18));
+        surface.setStroke(dp(1), Color.argb(glass ? Math.round(20f + 45f * AppearanceTheme.glassEdge(this)) : 30,
+                Color.red(accent), Color.green(accent), Color.blue(accent)));
         button.setBackground(new android.graphics.drawable.RippleDrawable(
-                android.content.res.ColorStateList.valueOf(
-                        ZeroChillUi.color(this, R.color.zc_ripple)),
-                new android.graphics.drawable.ColorDrawable(Color.TRANSPARENT),
+                android.content.res.ColorStateList.valueOf(Color.argb(55, Color.red(accent),
+                        Color.green(accent), Color.blue(accent))), surface,
                 ZeroChillUi.rounded(this, Color.WHITE, Color.TRANSPARENT, R.dimen.zc_radius_pill)));
         button.setTextColor(forward ? AppearanceTheme.accent(this) : Color.WHITE);
         button.setLetterSpacing(0.02f);

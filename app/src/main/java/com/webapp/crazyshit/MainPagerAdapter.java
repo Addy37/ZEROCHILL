@@ -993,6 +993,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                         }
                     }
             );
+            page.showsHub.setHeaderActions(host::onSearch, host::onOpenMore);
             android.os.Handler categoryMain = new android.os.Handler(android.os.Looper.getMainLooper());
             page.showsHub.setCategoryLoader(new ShowsCategoryLoader(
                     xMegaDriveIo, categoryMain::post,
