@@ -9,6 +9,7 @@ import java.util.concurrent.Executors;
 /** Account-synced in-app alert choices. Existing history and DM unread state are untouched. */
 final class ZeroChillNotificationPreferences {
     private static final String PREFS = "zerochill_account_alert_preferences_v1";
+    private static final long REFRESH_MS = BuildConfig.ZEROCHILL_V7_TRAFFIC ? 30 * 60_000L : 60_000L;
     private static final java.util.concurrent.ConcurrentHashMap<String, Long> LAST_REFRESH = new java.util.concurrent.ConcurrentHashMap<>();
     private static final ExecutorService NETWORK = Executors.newSingleThreadExecutor();
     static final class Values {
@@ -47,7 +48,7 @@ final class ZeroChillNotificationPreferences {
         if (account.isEmpty()) return;
         long now = android.os.SystemClock.elapsedRealtime();
         Long previous = LAST_REFRESH.get(account);
-        if (previous != null && now - previous < 60_000L) return;
+        if (previous != null && now - previous < REFRESH_MS) return;
         LAST_REFRESH.put(account, now);
         load(context, (value, error) -> { });
     }
@@ -62,6 +63,7 @@ final class ZeroChillNotificationPreferences {
                 JSONArray rows = new JSONArray(raw);
                 Values value = rows.length() == 0 ? Values.defaults() : Values.from(rows.getJSONObject(0));
                 cache(app, account, value);
+                LAST_REFRESH.put(account, android.os.SystemClock.elapsedRealtime());
                 callback.complete(value, null);
             } catch (Exception error) { callback.complete(cachedForAccount(app, account), error); }
         });
@@ -89,5 +91,6 @@ final class ZeroChillNotificationPreferences {
     }
     static void clearAccount(Context context, String account) {
         context.getApplicationContext().getSharedPreferences(PREFS, 0).edit().remove(account).apply();
+        LAST_REFRESH.remove(account);
     }
 }
