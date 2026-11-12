@@ -291,10 +291,10 @@ final class ShowsFullscreenControls {
         int generation = ++standaloneLikeGeneration;
         ZeroChillSocialRepository.videoLikeState(host, page, (state, error) ->
                 host.runOnUiThread(() -> {
+                    if (generation != standaloneLikeGeneration || !page.equals(standaloneLikeTarget)) return;
                     if (!owner.equals(ZeroChillSessionStore.currentUserId(host))) {
                         bindStandaloneLike(host); return;
                     }
-                    if (generation != standaloneLikeGeneration || !page.equals(standaloneLikeTarget)) return;
                     if (error == null && state != null) standaloneLiked = state.liked;
                     syncLiked(standaloneLiked, true);
                 })
@@ -307,11 +307,12 @@ final class ShowsFullscreenControls {
             }
             final String writeOwner = ZeroChillSessionStore.currentUserId(host);
             boolean wasLiked = standaloneLiked;
+            int writeGeneration = ++standaloneLikeGeneration; // Supersede pre-write reads.
             if (BuildConfig.ZEROCHILL_V7_TRAFFIC) standaloneLiked = !wasLiked;
             syncLiked(standaloneLiked, false);
             ZeroChillSocialRepository.toggleVideoLike(host, page, wasLiked, (state, error) ->
                     host.runOnUiThread(() -> {
-                        if (!page.equals(standaloneLikeTarget)) return;
+                        if (writeGeneration != standaloneLikeGeneration || !page.equals(standaloneLikeTarget)) return;
                         if (!writeOwner.equals(ZeroChillSessionStore.currentUserId(host))) {
                             bindStandaloneLike(host); return;
                         }

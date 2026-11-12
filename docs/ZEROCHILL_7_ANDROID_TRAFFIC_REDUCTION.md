@@ -45,6 +45,8 @@ from this baseline. The signed artifact's `VALIDATION.json` records its exact SH
 - Traffic-mode hearts update optimistically and revert failed writes. A successful write
   followed by a failed summary read retains the confirmed heart and optimistic count;
   the count refreshes on the next successful read. It is not falsely rolled back.
+- Detail/fullscreen write generations suppress pre-write reads and keep pending controls
+  disabled. Account/content changes release the pending UI and invalidate old callbacks.
 - Push registration deduplicates identical successful writes for 24 hours and failures
   for 30 minutes. Its persisted timestamps now use wall time rather than uptime, with
   backward-clock handling. Logout cleanup and Firebase installation rotation remain.
@@ -55,8 +57,10 @@ from this baseline. The signed artifact's `VALIDATION.json` records its exact SH
 
 ## Validation evidence
 
-- Focused local run: **58 tests, zero failures/errors/skips**: coordinator, summary parsing,
-  cache races/expiry/coalescing, push registration, full comments UI and DM thread UI.
+- Focused local debug and release runs: **205 tests each, zero failures/errors/skips**,
+  covering traffic, comments, messages, notifications, Library, favorites, history, downloads,
+  playback and navigation. A subsequent **41 tests per variant** also pass, including two
+  new detail like-race tests. Both APK variants were built locally.
 - Full debug/release suites and both APK builds: final result recorded in PR #422.
 - Initial local attempts exposed read-only Robolectric cache paths and the Android 16
   Java runtime requirement. Workspace-local caches and Java 21 resolve those setup failures.

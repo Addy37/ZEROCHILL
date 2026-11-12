@@ -179,6 +179,12 @@ public class VideoDetailActivity extends Activity {
     private boolean socialReturnPlayWhenReady;
     private String videoLikeOwner;
     private String commentCountOwner;
+    interface VideoLikeLoader {
+        void load(android.content.Context context, String page,
+                ZeroChillSocialRepository.Callback<ZeroChillSocialRepository.VideoLikeState> callback);
+    }
+    private VideoLikeLoader videoLikeLoader = ZeroChillSocialRepository::videoLikeState;
+    private String pendingVideoLikeUrl = "";
     private boolean videoLiked;
     private int videoLikeCount;
     private String videoLikePageUrl = "";
@@ -2519,14 +2525,17 @@ public class VideoDetailActivity extends Activity {
         final String summaryOwner = ZeroChillSessionStore.currentUserId(this);
         if (!summaryOwner.equals(videoLikeOwner)) {
             videoLikeOwner = summaryOwner;
+            pendingVideoLikeUrl = "";
             videoLiked = false; videoLikeCount = 0; updateVideoLikeButton();
             force = true;
         }
+        if (!pendingVideoLikeUrl.isEmpty() && !target.equals(pendingVideoLikeUrl)) pendingVideoLikeUrl = "";
+        if (target.equals(pendingVideoLikeUrl)) return;
         if (!force && target.equals(videoLikePageUrl)) return;
 
         videoLikePageUrl = target;
         int generation = ++videoLikeRequestGeneration;
-        ZeroChillSocialRepository.videoLikeState(this, target, (state, error) ->
+        videoLikeLoader.load(this, target, (state, error) ->
                 runOnUiThread(() -> {
                     if (!summaryOwner.equals(ZeroChillSessionStore.currentUserId(this))
                             || generation != videoLikeRequestGeneration || !target.equals(pageUrl)) return;
@@ -2554,7 +2563,7 @@ public class VideoDetailActivity extends Activity {
             videoLikeButton.setTextColor(showCount
                     ? (videoLiked ? AppearanceTheme.accent(this) : Color.rgb(238, 238, 242))
                     : Color.TRANSPARENT);
-            videoLikeButton.setEnabled(true);
+            videoLikeButton.setEnabled(!pageUrl.equals(pendingVideoLikeUrl));
             videoLikeButton.setContentDescription(
                     videoLiked ? "Unlike this video" : "Like this video"
             );
@@ -2565,9 +2574,9 @@ public class VideoDetailActivity extends Activity {
             androidx.core.widget.TextViewCompat.setCompoundDrawableTintList(showsLandscapeLike,
                     ColorStateList.valueOf(videoLiked ? AppearanceTheme.accent(this) : Color.WHITE));
             showsLandscapeLike.setContentDescription(videoLiked ? "Unlike this video" : "Like this video");
-            showsLandscapeLike.setEnabled(true);
+            showsLandscapeLike.setEnabled(!pageUrl.equals(pendingVideoLikeUrl));
         }
-        if (fullscreenControls != null) fullscreenControls.syncLiked(videoLiked, true);
+        if (fullscreenControls != null) fullscreenControls.syncLiked(videoLiked, !pageUrl.equals(pendingVideoLikeUrl));
     }
 
     private void setVideoLikeEnabled(boolean enabled) {
@@ -2649,8 +2658,13 @@ public class VideoDetailActivity extends Activity {
         }
     }
 
+    private int beginVideoLikeWrite(String target) {
+        pendingVideoLikeUrl = target;
+        return ++videoLikeRequestGeneration;
+    }
+
     private void toggleVideoLike() {
-        if (pageUrl == null || pageUrl.trim().isEmpty()) return;
+        if (pageUrl == null || pageUrl.trim().isEmpty() || pageUrl.equals(pendingVideoLikeUrl)) return;
         if (!ZeroChillAccountRepository.hasStoredSession(this)) {
             startActivity(new Intent(this, ZeroChillAccountActivity.class));
             return;
@@ -2660,6 +2674,7 @@ public class VideoDetailActivity extends Activity {
         final String owner = ZeroChillSessionStore.currentUserId(this);
         boolean wasLiked = videoLiked;
         int oldCount = videoLikeCount;
+        int generation = beginVideoLikeWrite(target);
         if (BuildConfig.ZEROCHILL_V7_TRAFFIC) {
             videoLiked = !wasLiked;
             videoLikeCount = Math.max(0, oldCount + (wasLiked ? -1 : 1));
@@ -2668,7 +2683,8 @@ public class VideoDetailActivity extends Activity {
         setVideoLikeEnabled(false);
         ZeroChillSocialRepository.toggleVideoLike(this, currentContent(), wasLiked, (state, error) ->
                 runOnUiThread(() -> {
-                    if (!target.equals(pageUrl)) return;
+                    if (generation != videoLikeRequestGeneration || !target.equals(pageUrl)) return;
+                    pendingVideoLikeUrl = "";
                     setVideoLikeEnabled(true);
                     if (!owner.equals(ZeroChillSessionStore.currentUserId(this))) {
                         videoLiked = false; videoLikeCount = 0; updateVideoLikeButton();
