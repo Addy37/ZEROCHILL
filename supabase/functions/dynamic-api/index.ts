@@ -68,6 +68,11 @@ async function messagesFor(
 Deno.serve(async (request) => {
   if (request.method !== "POST") return response({ error: "Method not allowed." }, 405);
 
+  // Never derive predictable installation hashes when the private salt is missing.
+  if (!(Deno.env.get("FEEDBACK_ID_SALT") ?? "").trim()) {
+    return response({ error: "Feedback is temporarily unavailable." }, 503);
+  }
+
   try {
     const body = await request.json();
     const installationId = String(body.installation_id ?? "");
