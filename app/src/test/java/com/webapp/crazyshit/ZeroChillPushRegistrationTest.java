@@ -13,6 +13,8 @@ import java.util.Base64;
 import java.util.UUID;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 
@@ -48,6 +50,22 @@ public class ZeroChillPushRegistrationTest {
         assertNull(ZeroChillPushRegistration.sessionCredentials(new JSONObject().toString()));
         assertNull(ZeroChillPushRegistration.sessionCredentials(
                 new JSONObject().put("access_token", "not-a-jwt").toString()));
+    }
+
+    @Test
+    public void unchangedRegistrationIsSkippedOnlyWithinItsExpiryWindow() {
+        assertTrue(ZeroChillPushRegistration.withinTimeWindow(
+                "fingerprint-a", "fingerprint-a", 100, 1000, 2_000));
+        assertFalse(ZeroChillPushRegistration.withinTimeWindow(
+                "fingerprint-a", "fingerprint-b", 100, 1000, 2_000));
+        assertFalse(ZeroChillPushRegistration.withinTimeWindow(
+                "fingerprint-a", "fingerprint-a", 100, 2100, 2_000));
+        assertFalse(ZeroChillPushRegistration.withinTimeWindow(
+                "fingerprint-a", "fingerprint-a", 2100, 100, 2_000));
+        assertFalse(ZeroChillPushRegistration.withinTimeWindow(
+                "", "", 0, 100, 2_000));
+        assertFalse(ZeroChillPushRegistration.withinTimeWindow(
+                "fingerprint-a", "fingerprint-a", -1, 100, 2_000));
     }
 
     private static String jwt(String subject) throws Exception {
