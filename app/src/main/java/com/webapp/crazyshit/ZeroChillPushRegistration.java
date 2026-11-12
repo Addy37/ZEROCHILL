@@ -15,6 +15,7 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.time.Instant;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
@@ -26,6 +27,12 @@ final class ZeroChillPushRegistration {
     private static final String KEY_INSTALLATION_ID = "installation_id";
     private static final String KEY_REGISTRATION_SUSPENDED = "registration_suspended";
     private static final String KEY_ROTATION_IN_PROGRESS = "rotation_in_progress";
+    private static final String KEY_LAST_SYNC_HASH = "v7_last_push_sync_hash";
+    private static final String KEY_LAST_SYNC_AT = "v7_last_push_sync_elapsed";
+    private static final String KEY_LAST_ATTEMPT_HASH = "v7_last_push_attempt_hash";
+    private static final String KEY_LAST_ATTEMPT_AT = "v7_last_push_attempt_elapsed";
+    private static final long PUSH_SYNC_TTL_MS = 24 * 60 * 60_000L;
+    private static final long PUSH_FAILURE_RETRY_MS = 30 * 60_000L;
     private static final ExecutorService NETWORK = Executors.newSingleThreadExecutor();
 
     private ZeroChillPushRegistration() { }
@@ -40,7 +47,8 @@ final class ZeroChillPushRegistration {
     static void onSessionAvailable(Context context) {
         Context app = context.getApplicationContext();
         if (!configured()) return;
-        prefs(app).edit().putBoolean(KEY_REGISTRATION_SUSPENDED, false).apply();
+        prefs(app).edit().putBoolean(KEY_REGISTRATION_SUSPENDED, false)
+                .remove(KEY_LAST_ATTEMPT_HASH).remove(KEY_LAST_ATTEMPT_AT).apply();
         registerWithFirebase(app);
     }
 
@@ -71,6 +79,8 @@ final class ZeroChillPushRegistration {
         prefs(app).edit()
                 .putBoolean(KEY_REGISTRATION_SUSPENDED, true)
                 .putBoolean(KEY_ROTATION_IN_PROGRESS, true)
+                .remove(KEY_LAST_SYNC_HASH).remove(KEY_LAST_SYNC_AT)
+                .remove(KEY_LAST_ATTEMPT_HASH).remove(KEY_LAST_ATTEMPT_AT)
                 .apply();
 
         String installationId = installationId(app);
@@ -122,18 +132,59 @@ final class ZeroChillPushRegistration {
             if (current == null || !expectedOwner.equals(current.userId)) return;
             if (prefs(app).getBoolean(KEY_REGISTRATION_SUSPENDED, false)) return;
 
-            int status = upsertRegistration(
-                    current,
-                    installationId(app),
-                    app.getPackageName(),
-                    firebaseInstallationId
-            );
+            String appInstallId = installationId(app);
+            String applicationId = app.getPackageName();
+            String fingerprint = registrationFingerprint(current.userId, appInstallId,
+                    applicationId, firebaseInstallationId);
+            SharedPreferences state = prefs(app);
+            long now = android.os.SystemClock.elapsedRealtime();
+            if (BuildConfig.ZEROCHILL_V7_TRAFFIC
+                    && (withinTimeWindow(state.getString(KEY_LAST_SYNC_HASH, ""), fingerprint,
+                                state.getLong(KEY_LAST_SYNC_AT, -1L), now, PUSH_SYNC_TTL_MS)
+                        || withinTimeWindow(state.getString(KEY_LAST_ATTEMPT_HASH, ""), fingerprint,
+                                state.getLong(KEY_LAST_ATTEMPT_AT, -1L), now, PUSH_FAILURE_RETRY_MS))) {
+                return;
+            }
+            int status = upsertRegistration(current, appInstallId, applicationId, firebaseInstallationId);
+            if (BuildConfig.ZEROCHILL_V7_TRAFFIC
+                    && expectedOwner.equals(ZeroChillSessionStore.currentUserId(app))
+                    && !state.getBoolean(KEY_REGISTRATION_SUSPENDED, false)) {
+                SharedPreferences.Editor editor = state.edit();
+                if (status >= 200 && status < 300) {
+                    editor.putString(KEY_LAST_SYNC_HASH, fingerprint)
+                            .putLong(KEY_LAST_SYNC_AT, android.os.SystemClock.elapsedRealtime())
+                            .remove(KEY_LAST_ATTEMPT_HASH).remove(KEY_LAST_ATTEMPT_AT);
+                } else {
+                    editor.putString(KEY_LAST_ATTEMPT_HASH, fingerprint)
+                            .putLong(KEY_LAST_ATTEMPT_AT, android.os.SystemClock.elapsedRealtime());
+                }
+                editor.apply();
+            }
             if (status == 409 && allowConflictRotation) {
                 // If a prior account's best-effort server cleanup failed, create a new FID so
                 // the shared device can never inherit that account's direct-send registration.
                 invalidateFirebaseInstallation(app, true);
             }
         });
+    }
+
+    static boolean withinTimeWindow(String previous, String current, long prior, long now, long windowMs) {
+        return previous != null && previous.equals(current) && !previous.isEmpty()
+                && prior >= 0 && now >= prior && now - prior < windowMs;
+    }
+
+    private static String registrationFingerprint(
+            String account, String installation, String applicationId, String firebaseInstallation) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] bytes = digest.digest((account + "|" + installation + "|" + applicationId
+                    + "|" + firebaseInstallation).getBytes(StandardCharsets.UTF_8));
+            StringBuilder hex = new StringBuilder(bytes.length * 2);
+            for (byte b : bytes) hex.append(String.format(java.util.Locale.ROOT, "%02x", b & 0xff));
+            return hex.toString();
+        } catch (Exception ignored) {
+            return ""; // A failed fingerprint never suppresses a registration.
+        }
     }
 
     private static int upsertRegistration(
