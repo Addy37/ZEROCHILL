@@ -44,6 +44,8 @@ public class ShowsHeroDesignTest {
             View action = (View) field.get(hub);
             assertEquals(dp(activity, 48), action.getLayoutParams().width);
             assertEquals(dp(activity, 48), action.getLayoutParams().height);
+            assertEquals(dp(activity, 15), action.getPaddingLeft());
+            assertEquals(dp(activity, 15), action.getPaddingTop());
             assertTrue(action.performClick());
         }
         assertEquals(1, calls[0]);
@@ -205,6 +207,62 @@ public class ShowsHeroDesignTest {
         ImageView artwork = (ImageView) imageField.get(hub);
         assertEquals("second", artwork.getTag(R.id.shows_watch_source_page));
         assertEquals(2, dots.getChildCount());
+    }
+
+    @Test
+    public void playPillKeepsOpeningTheSelectedShow() throws Exception {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        NativeContentItem[] opened = new NativeContentItem[1];
+        ShowsHubView hub = new ShowsHubView(activity, item -> opened[0] = item,
+                item -> { }, item -> { });
+        NativeContentItem selected = new NativeContentItem(
+                NativeContentItem.KIND_SERIES, "Selected show", "selected", "", "", "", "");
+        Field itemField = ShowsHubView.class.getDeclaredField("heroItem");
+        itemField.setAccessible(true);
+        itemField.set(hub, selected);
+        Field actionField = ShowsHubView.class.getDeclaredField("heroAction");
+        actionField.setAccessible(true);
+        TextView action = (TextView) actionField.get(hub);
+        assertEquals(dp(activity, 44), action.getLayoutParams().height);
+        assertEquals(android.view.ViewGroup.LayoutParams.WRAP_CONTENT, action.getLayoutParams().width);
+        action.setVisibility(View.VISIBLE);
+        // Measure the actual row: checking only the requested width missed the wrap.
+        View controls = (View) action.getParent();
+        for (float fontScale : new float[]{1f, 1.3f, 1.5f}) {
+            action.setTextSize(12f * fontScale);
+            controls.measure(View.MeasureSpec.makeMeasureSpec(dp(activity, 400), View.MeasureSpec.EXACTLY),
+                    View.MeasureSpec.makeMeasureSpec(dp(activity, 60), View.MeasureSpec.EXACTLY));
+            controls.layout(0, 0, controls.getMeasuredWidth(), controls.getMeasuredHeight());
+            assertEquals(1, action.getLineCount());
+            assertTrue(action.getLayout().getLineWidth(0) <= action.getWidth()
+                    - action.getCompoundPaddingLeft() - action.getCompoundPaddingRight());
+            assertEquals(0, action.getLayout().getEllipsisCount(0));
+        }
+        assertEquals(dp(activity, 19), action.getCompoundDrawablesRelative()[0].getBounds().width());
+        assertEquals("VIEW SHOW", action.getText().toString());
+        assertTrue(action.performClick());
+        assertEquals(selected, opened[0]);
+    }
+
+    @Test
+    public void landscapeCaptionsHaveNoCardSurfaceAndStayBelowTheImage() throws Exception {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        ShowsHubView hub = new ShowsHubView(activity, item -> { }, item -> { }, item -> { });
+        for (String fieldName : new String[]{"continueShelf", "thisWeekShelf", "crazyShelf"}) {
+            RecyclerView rail = shelfRail(hub, fieldName);
+            RecyclerView.ViewHolder holder = rail.getAdapter().createViewHolder(rail, 0);
+            MaterialCardView card = (MaterialCardView) holder.itemView;
+            assertEquals(android.graphics.Color.TRANSPARENT, card.getCardBackgroundColor().getDefaultColor());
+            Field titleField = holder.getClass().getDeclaredField("title");
+            titleField.setAccessible(true);
+            TextView title = (TextView) titleField.get(holder);
+            assertEquals(null, title.getBackground());
+            assertEquals(dp(activity, 6), title.getPaddingTop());
+            assertEquals(android.view.Gravity.TOP | android.view.Gravity.START, title.getGravity());
+            assertEquals(android.view.Gravity.BOTTOM,
+                    ((FrameLayout.LayoutParams) title.getLayoutParams()).gravity);
+            assertEquals(dp(activity, 129), card.getLayoutParams().height);
+        }
     }
 
     private static RecyclerView shelfRail(ShowsHubView hub, String fieldName) throws Exception {

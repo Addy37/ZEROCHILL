@@ -1,0 +1,128 @@
+name: Shows V2 Five-Source Hero Signed Test APK
+
+# One PR417 install-over preview, not a public release.
+# Focused visual follow-up: artwork-edge gradient, thumbnail captions, filled play pill.
+on:
+  push:
+    branches: [feature/shows-v2-mixed-hero-artwork]
+    paths: [.github/workflows/shows-v2-mixed-hero-candidate.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  candidate:
+    if: github.ref_name == 'feature/shows-v2-mixed-hero-artwork'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      APP_VERSION_CODE: '6000045'
+      APP_VERSION_NAME: '7.0-preview.43-shows-button'
+      ZEROCHILL_SOURCE_SHA: ${{ github.sha }}
+      FEEDBACK_ENDPOINT: ${{ secrets.FEEDBACK_ENDPOINT }}
+      FEEDBACK_ANON_KEY: ${{ secrets.FEEDBACK_ANON_KEY }}
+      SUPABASE_PUBLISHABLE_KEY: ${{ secrets.FEEDBACK_ANON_KEY }}
+      SOURCE_CONFIG_ENDPOINT: https://fketutffusxgjxjlckci.supabase.co/functions/v1/app-config
+      ANALYTICS_ENDPOINT: ''
+      ANALYTICS_V2_ENDPOINT: ''
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Verify Shows baseline
+        run: |
+          git merge-base --is-ancestor 52d9c212e2d46a7ff5aa980cc4e60bd071c78e9d HEAD
+          git merge-base --is-ancestor 149f7884b23b7421bae709679f21d5fb6e0c9c95 HEAD
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v4
+        with:
+          packages: platform-tools
+      - name: Install Android build tools
+        run: sdkmanager 'platforms;android-35' 'platforms;android-36' 'build-tools;35.0.0'
+      - uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: '8.11.1'
+          cache-provider: basic
+      - name: Verify Shows five-source hero and header tests
+        run: |
+          gradle --no-daemon :app:testDebugUnitTest \
+            --tests com.webapp.crazyshit.ShowsHeroPicksTest \
+            --tests com.webapp.crazyshit.ShowsHeroDesignTest \
+            --tests com.webapp.crazyshit.ShowsHubStateTest
+      - name: Restore production signing credentials
+        env:
+          SIGNING_BUNDLE: ${{ secrets.ANDROID_SIGNING_BUNDLE }}
+        run: |
+          python3 - <<'PY'
+          import base64, json, os, pathlib
+          raw = os.environ.get('SIGNING_BUNDLE', '')
+          if not raw:
+              raise SystemExit('Missing ANDROID_SIGNING_BUNDLE')
+          data = json.loads(raw.replace('\r','').replace('\n',''))
+          for key in ('keystore_base64','store_password','key_alias','key_password'):
+              if not data.get(key):
+                  raise SystemExit('Missing signing item: ' + key)
+          for key in ('store_password','key_alias','key_password'):
+              print('::add-mask::' + data[key])
+          path = pathlib.Path(os.environ['RUNNER_TEMP'])/'shows-hero-mix.jks'
+          path.write_bytes(base64.b64decode(data['keystore_base64']))
+          path.chmod(0o600)
+          with open(os.environ['GITHUB_ENV'],'a') as out:
+              for key, value in {
+                  'ANDROID_KEYSTORE_PATH': str(path),
+                  'ANDROID_KEYSTORE_PASSWORD': data['store_password'],
+                  'ANDROID_KEY_ALIAS': data['key_alias'],
+                  'ANDROID_KEY_PASSWORD': data['key_password']
+              }.items():
+                  out.write(key+'='+value+'\n')
+          PY
+      - name: Build signed release APK
+        run: gradle --no-daemon :app:assembleRelease
+      - name: Verify install upgrade identity and checksum
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p candidate "$RUNNER_TEMP/stable"
+          gh release download --repo "$GITHUB_REPOSITORY" --pattern ZeroChill.apk --dir "$RUNNER_TEMP/stable"
+          SAFE_REF="${GITHUB_REF_NAME//\//-}"
+          APK="candidate/ZeroChill-${SAFE_REF}-${GITHUB_SHA:0:7}.apk"
+          cp app/build/outputs/apk/release/app-release.apk "$APK"
+          export CANDIDATE_APK="$APK"
+          python3 - <<'PY'
+          import os, pathlib, re, subprocess
+          tools = pathlib.Path(os.environ['ANDROID_HOME'])/'build-tools/35.0.0'
+          def inspect(apk):
+              badging = subprocess.check_output([str(tools/'aapt2'),'dump','badging',apk],text=True)
+              package = re.search(r"package: name='([^']+)' versionCode='(\d+)'",badging)
+              assert package, 'Missing package metadata'
+              certs = subprocess.check_output([str(tools/'apksigner'),'verify','--verbose','--print-certs',apk],text=True)
+              cert = re.search(r'Signer #1 certificate SHA-256 digest: (\w+)',certs)
+              assert cert, 'Missing certificate'
+              return package[1],int(package[2]),cert[1]
+          candidate = inspect(os.environ['CANDIDATE_APK'])
+          stable = inspect(str(pathlib.Path(os.environ['RUNNER_TEMP'])/'stable/ZeroChill.apk'))
+          assert candidate[0] == stable[0] == 'com.addy37.crazyshitunofficial'
+          assert candidate[1] == 6000045 and candidate[1] > max(stable[1],6000044)
+          assert candidate[2] == stable[2] == '04abf84b3d468cbb1a562dea83b0007e686b2e56018cce911223963faea51356'
+          report = ('Source: '+os.environ['GITHUB_SHA']+'\n'
+              +'Branch: '+os.environ['GITHUB_REF_NAME']+'\n'
+              +'Application ID: '+candidate[0]+'\n'
+              +'Version code: '+str(candidate[1])+'\n'
+              +'Certificate SHA-256: '+candidate[2]+'\n'
+              +'Production package, certificate and upgrade gates passed.\n'
+              +'No public release or merge. Phone testing remains pending.\n')
+          pathlib.Path('candidate/VALIDATION.txt').write_text(report)
+          print(report)
+          PY
+          (cd candidate && sha256sum *.apk > SHA256SUMS.txt)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ZeroChill-Shows-PR417-five-sources-signed
+          path: candidate/
+          if-no-files-found: error
+          retention-days: 14
