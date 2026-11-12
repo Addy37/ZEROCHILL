@@ -15,6 +15,12 @@ if (zerochillV7Traffic) {
     require(!System.getenv("SUPABASE_PUBLISHABLE_KEY").isNullOrBlank()) {
         "ZEROCHILL_V7_TRAFFIC requires the New Zerochill publishable client key"
     }
+    for (endpoint in listOf("SOURCE_CONFIG_ENDPOINT", "FEEDBACK_ENDPOINT")) {
+        val url = System.getenv(endpoint).orEmpty().trim()
+        require(url.isEmpty() || url.startsWith("https://aavjpykssueavbseqdlf.supabase.co/functions/v1/")) {
+            "ZEROCHILL_V7_TRAFFIC cannot use an old Supabase $endpoint URL"
+        }
+    }
 }
 
 android {
