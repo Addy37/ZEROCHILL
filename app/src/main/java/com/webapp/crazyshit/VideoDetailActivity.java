@@ -2582,16 +2582,12 @@ public class VideoDetailActivity extends Activity {
         commentButton.setText("");
         commentButton.setEnabled(true);
         int generation = ++commentCountRequestGeneration;
-        ZeroChillSocialRepository.loadComments(this, target, (loaded, error) ->
+        ZeroChillSocialRepository.loadCommentCount(this, target, (count, error) ->
                 runOnUiThread(() -> {
                     if (isFinishing() || isDestroyed()) return;
                     if (generation != commentCountRequestGeneration || !target.equals(pageUrl)) return;
-                    if (error != null || loaded == null) return;
-                    int visible = 0;
-                    for (ZeroChillSocialRepository.Comment comment : loaded) {
-                        if (comment != null && !comment.deleted()) visible++;
-                    }
-                    commentCount = visible;
+                    if (error != null || count == null) return;
+                    commentCount = count;
                     updateCommentButton();
                 })
         );
