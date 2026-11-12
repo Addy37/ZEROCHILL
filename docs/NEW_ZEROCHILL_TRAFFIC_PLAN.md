@@ -53,3 +53,9 @@ This is excess normal-client polling plus leftover compiled analytics traffic. N
 ## Branch and risk
 
 This traffic-guard branch builds on draft social PR #420, itself built on draft admin/feedback PR #419. No merge, Android release, or project cutover has been authorized. New backend push wiring adds one function dispatch for **each real incoming social event**, not every time a user views a page. Successful Android integration must be measured to verify total costs decrease. All synthetic tests were rolled back. Existing Old Supabase remains the source for existing installed APKs until a separately approved 7.0 rollout.
+
+## Supplemental index and RLS performance follow-up
+
+The new project's performance advisor initially identified five missing foreign-key indexes and four DM reaction RLS per-row Auth-init warnings. Applied the **existing** repository migration `202609290004_account_social_indexes.sql` as hosted migration `20261112201840`, adding the pre-existing repo's comment/user/like/block indexes in the new project. Applied `20261112201854_new_zerochill_social_rls_index_performance.sql` in hosted migration `20261112201854`, adding missing conversation-clear and source-config FK indexes and replacing direct `auth.uid()` in DM reaction policies with cached statement-level `(select auth.uid())`. Original RLS access rules remain unchanged.
+
+After these changes the performance advisor reported **no missing foreign-key indexes or Auth-initplan warnings**, only currently unused indexes on the new, mostly empty database. Do not remove those indexes based on a pre-launch unused-index notice. Rollback-only tests confirmed a DM participant could read a reaction but an unrelated account could not read or forge one. Zero synthetic accounts, reactions, or queued push events remained.
