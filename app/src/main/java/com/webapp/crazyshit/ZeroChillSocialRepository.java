@@ -1328,13 +1328,7 @@ final class ZeroChillSocialRepository {
                         token, body.toString().getBytes(StandardCharsets.UTF_8),
                         "application/json", null);
                 if (!response.ok()) throw error(response, "Unable to load video activity.");
-                JSONArray rows = new JSONArray(response.body);
-                if (rows.length() != 1) throw new IllegalStateException("Video summary unavailable.");
-                JSONObject row = rows.getJSONObject(0);
-                value = new VideoSocialState(
-                        (int) Math.min(Integer.MAX_VALUE, row.optLong("like_count")),
-                        (int) Math.min(Integer.MAX_VALUE, row.optLong("comment_count")),
-                        row.optBoolean("liked_by_me", false));
+                value = parseVideoSocialSummary(response.body);
                 if (!owner.equals(ZeroChillSessionStore.currentUserId(context))) {
                     throw new IllegalStateException("Account changed while loading video activity.");
                 }
@@ -1361,6 +1355,19 @@ final class ZeroChillSocialRepository {
                 }
             }
         });
+    }
+
+    static VideoSocialState parseVideoSocialSummary(String raw) throws Exception {
+        JSONArray rows = new JSONArray(raw);
+        if (rows.length() != 1) throw new IllegalStateException("Video summary unavailable.");
+        JSONObject row = rows.getJSONObject(0);
+        if (!row.has("like_count") || !row.has("comment_count") || !row.has("liked_by_me")) {
+            throw new IllegalStateException("Incomplete video summary.");
+        }
+        return new VideoSocialState(
+                (int) Math.min(Integer.MAX_VALUE, row.getLong("like_count")),
+                (int) Math.min(Integer.MAX_VALUE, row.getLong("comment_count")),
+                row.getBoolean("liked_by_me"));
     }
 
     static void loadCommentCount(Context context, String pageUrl, Callback<Integer> callback) {
