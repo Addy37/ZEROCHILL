@@ -4,6 +4,18 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
+// An isolated admin app for the new Supabase backend, without replacing the installed admin.
+val adminBackendTarget = System.getenv("ADMIN_BACKEND_TARGET")?.trim().orEmpty()
+val newZerochillStaging = adminBackendTarget == "new_zerochill"
+val feedbackEndpointDefault = if (newZerochillStaging)
+    "https://aavjpykssueavbseqdlf.supabase.co/functions/v1/feedback-admin"
+else
+    "https://fketutffusxgjxjlckci.supabase.co/functions/v1/feedback-admin"
+val sourceConfigEndpointDefault = if (newZerochillStaging)
+    "https://aavjpykssueavbseqdlf.supabase.co/functions/v1/app-config-admin"
+else
+    ""
+
 android {
     namespace = "com.addy37.crazyshitadmin"
     compileSdk = 36
@@ -20,12 +32,12 @@ android {
         buildConfigField(
             "String",
             "ADMIN_FEEDBACK_ENDPOINT",
-            "\"${System.getenv("ADMIN_FEEDBACK_ENDPOINT") ?: "https://fketutffusxgjxjlckci.supabase.co/functions/v1/feedback-admin"}\""
+            "\"${System.getenv("ADMIN_FEEDBACK_ENDPOINT") ?: feedbackEndpointDefault}\""
         )
         buildConfigField(
             "String",
             "ADMIN_SOURCE_CONFIG_ENDPOINT",
-            "\"${System.getenv("ADMIN_SOURCE_CONFIG_ENDPOINT") ?: ""}\""
+            "\"${System.getenv("ADMIN_SOURCE_CONFIG_ENDPOINT") ?: sourceConfigEndpointDefault}\""
         )
     }
 
@@ -52,9 +64,17 @@ android {
 
     buildTypes {
         debug {
+            if (newZerochillStaging) {
+                applicationIdSuffix = ".newzerochill"
+                versionNameSuffix = "-staging"
+            }
             signingConfigs.findByName("release")?.let { signingConfig = it }
         }
         release {
+            if (newZerochillStaging) {
+                applicationIdSuffix = ".newzerochill"
+                versionNameSuffix = "-staging"
+            }
             isMinifyEnabled = false
             signingConfig = signingConfigs.findByName("release")
                 ?: signingConfigs.getByName("debug")
