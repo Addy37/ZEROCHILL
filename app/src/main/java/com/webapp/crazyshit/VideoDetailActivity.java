@@ -177,6 +177,8 @@ public class VideoDetailActivity extends Activity {
     private InlineCommentsDialog activeComments;
     private boolean socialNavigationPendingReturn;
     private boolean socialReturnPlayWhenReady;
+    private String videoLikeOwner;
+    private String commentCountOwner;
     private boolean videoLiked;
     private int videoLikeCount;
     private String videoLikePageUrl = "";
@@ -2514,16 +2516,23 @@ public class VideoDetailActivity extends Activity {
             videoLikeButton.setCompoundDrawableTintList(ColorStateList.valueOf(Color.WHITE));
             return;
         }
+        final String summaryOwner = ZeroChillSessionStore.currentUserId(this);
+        if (!summaryOwner.equals(videoLikeOwner)) {
+            videoLikeOwner = summaryOwner;
+            videoLiked = false; videoLikeCount = 0; updateVideoLikeButton();
+            force = true;
+        }
         if (!force && target.equals(videoLikePageUrl)) return;
 
         videoLikePageUrl = target;
         int generation = ++videoLikeRequestGeneration;
         ZeroChillSocialRepository.videoLikeState(this, target, (state, error) ->
                 runOnUiThread(() -> {
-                    if (generation != videoLikeRequestGeneration || !target.equals(pageUrl)) return;
+                    if (!summaryOwner.equals(ZeroChillSessionStore.currentUserId(this))
+                            || generation != videoLikeRequestGeneration || !target.equals(pageUrl)) return;
                     if (error != null || state == null) return;
                     videoLiked = state.liked;
-                    videoLikeCount = state.count;
+                    if (state.countKnown) videoLikeCount = state.count;
                     updateVideoLikeButton();
                 })
         );
@@ -2576,6 +2585,12 @@ public class VideoDetailActivity extends Activity {
             commentButton.setEnabled(false);
             return;
         }
+        final String summaryOwner = ZeroChillSessionStore.currentUserId(this);
+        if (!summaryOwner.equals(commentCountOwner)) {
+            commentCountOwner = summaryOwner;
+            commentCount = 0; updateCommentButton();
+            force = true;
+        }
         if (!force && target.equals(commentCountPageUrl)) return;
 
         commentCountPageUrl = target;
@@ -2584,7 +2599,8 @@ public class VideoDetailActivity extends Activity {
         int generation = ++commentCountRequestGeneration;
         ZeroChillSocialRepository.loadCommentCount(this, target, (count, error) ->
                 runOnUiThread(() -> {
-                    if (isFinishing() || isDestroyed()) return;
+                    if (!summaryOwner.equals(ZeroChillSessionStore.currentUserId(this))
+                            || isFinishing() || isDestroyed()) return;
                     if (generation != commentCountRequestGeneration || !target.equals(pageUrl)) return;
                     if (error != null || count == null) return;
                     commentCount = count;
@@ -2641,13 +2657,28 @@ public class VideoDetailActivity extends Activity {
         }
 
         String target = pageUrl;
+        final String owner = ZeroChillSessionStore.currentUserId(this);
         boolean wasLiked = videoLiked;
+        int oldCount = videoLikeCount;
+        if (BuildConfig.ZEROCHILL_V7_TRAFFIC) {
+            videoLiked = !wasLiked;
+            videoLikeCount = Math.max(0, oldCount + (wasLiked ? -1 : 1));
+            updateVideoLikeButton();
+        }
         setVideoLikeEnabled(false);
         ZeroChillSocialRepository.toggleVideoLike(this, currentContent(), wasLiked, (state, error) ->
                 runOnUiThread(() -> {
                     if (!target.equals(pageUrl)) return;
                     setVideoLikeEnabled(true);
+                    if (!owner.equals(ZeroChillSessionStore.currentUserId(this))) {
+                        videoLiked = false; videoLikeCount = 0; updateVideoLikeButton();
+                        refreshVideoLikeState(true);
+                        return;
+                    }
                     if (error != null || state == null) {
+                        if (BuildConfig.ZEROCHILL_V7_TRAFFIC) {
+                            videoLiked = wasLiked; videoLikeCount = oldCount; updateVideoLikeButton();
+                        }
                         ZeroChillToast.makeText(
                                 this,
                                 error == null ? "Unable to update the like." : error.getMessage(),
@@ -2657,7 +2688,7 @@ public class VideoDetailActivity extends Activity {
                     }
                     videoLikePageUrl = target;
                     videoLiked = state.liked;
-                    videoLikeCount = state.count;
+                    if (state.countKnown) videoLikeCount = state.count;
                     updateVideoLikeButton();
                 })
         );
@@ -3557,6 +3588,7 @@ public class VideoDetailActivity extends Activity {
         updateSwipeEnabled();
         if (detailsScroll != null) applyDetailsBackground();
         refreshVideoLikeState(true);
+        refreshCommentCount(true);
         if (onlyFapCreatorRow != null && OnlyFapVideoMetadata.applies(currentContent())) updateOnlyFapCreatorRow(false);
     }
 

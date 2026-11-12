@@ -88,7 +88,8 @@ final class SocialActivityCoordinator {
     }
 
     void resume(Activity activity) {
-        if (needsForegroundRecovery(BuildConfig.ZEROCHILL_V7_TRAFFIC,
+        if (consecutiveFailures == 0 && !automaticRefreshStopped
+                && needsForegroundRecovery(BuildConfig.ZEROCHILL_V7_TRAFFIC,
                 pausedAt, SystemClock.elapsedRealtime())) {
             lastPoll = -POLL_MS;
         }
@@ -109,7 +110,7 @@ final class SocialActivityCoordinator {
 
     void refresh() { refresh(false); }
 
-    private void refresh(boolean manual) {
+    void refresh(boolean manual) {
         Activity activity = host.get();
         if (activity == null || activity.isFinishing() || activity.isDestroyed()) return;
         String current = session.current(context);

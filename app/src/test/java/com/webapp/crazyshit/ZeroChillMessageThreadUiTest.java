@@ -448,6 +448,61 @@ public class ZeroChillMessageThreadUiTest {
     }
 
     // Build the real UI without account/network calls. This tests resize geometry, not a device IME.
+    @Test public void queuedFailuresBackOffAndPermanentErrorsRequireExplicitRetry() throws Exception {
+        org.junit.Assume.assumeTrue(BuildConfig.ZEROCHILL_V7_TRAFFIC);
+        ZeroChillMessageActivity activity = shell();
+        setField(activity, "reactionsLoading", true);
+        java.util.ArrayList<ZeroChillSocialRepository.Callback<java.util.ArrayList<ZeroChillSocialRepository.DirectMessage>>> requests = new java.util.ArrayList<>();
+        setField(activity, "threadLoader", (ZeroChillMessageActivity.ThreadLoader)
+                (context, partner, callback) -> requests.add(callback));
+        Method load = activity.getClass().getDeclaredMethod("loadThread", boolean.class);
+        load.setAccessible(true);
+        load.invoke(activity, true);
+        load.invoke(activity, false); // A poll arrives while the slow request is running.
+        requests.get(0).complete(null, new java.io.IOException("offline"));
+        assertEquals("Failure must not drain the queued poll into an immediate retry", 1, requests.size());
+        org.robolectric.shadows.ShadowSystemClock.advanceBy(java.time.Duration.ofMillis(4_999));
+        load.invoke(activity, false); assertEquals(1, requests.size());
+        org.robolectric.shadows.ShadowSystemClock.advanceBy(java.time.Duration.ofMillis(1));
+        load.invoke(activity, false); assertEquals(2, requests.size());
+        requests.get(1).complete(null, new ZeroChillSocialRepository.BackendHttpException(503, "unavailable"));
+        org.robolectric.shadows.ShadowSystemClock.advanceBy(java.time.Duration.ofSeconds(9));
+        load.invoke(activity, false); assertEquals(2, requests.size());
+        org.robolectric.shadows.ShadowSystemClock.advanceBy(java.time.Duration.ofSeconds(1));
+        load.invoke(activity, false); assertEquals(3, requests.size());
+        requests.get(2).complete(null, new ZeroChillSocialRepository.BackendHttpException(401, "expired"));
+        org.robolectric.shadows.ShadowSystemClock.advanceBy(java.time.Duration.ofHours(1));
+        load.invoke(activity, false); assertEquals(3, requests.size());
+        ((View) field(activity, "retryThread")).performClick();
+        assertEquals(4, requests.size());
+        requests.get(3).complete(new java.util.ArrayList<>(), null);
+        load.invoke(activity, false); assertEquals("Successful manual refresh restores ordinary polling", 5, requests.size());
+    }
+
+    @Test public void manualRefreshQueuedDuringFailureRunsOnceWithoutRestartingAutomaticLoop() throws Exception {
+        org.junit.Assume.assumeTrue(BuildConfig.ZEROCHILL_V7_TRAFFIC);
+        ZeroChillMessageActivity activity = shell();
+        setField(activity, "reactionsLoading", true);
+        java.util.ArrayList<ZeroChillSocialRepository.Callback<java.util.ArrayList<ZeroChillSocialRepository.DirectMessage>>> requests = new java.util.ArrayList<>();
+        setField(activity, "threadLoader", (ZeroChillMessageActivity.ThreadLoader)
+                (context, partner, callback) -> requests.add(callback));
+        Method load = activity.getClass().getDeclaredMethod("loadThread", boolean.class);
+        load.setAccessible(true);
+        Method manual = activity.getClass().getDeclaredMethod("loadThread", boolean.class, boolean.class);
+        manual.setAccessible(true);
+        load.invoke(activity, false);
+        manual.invoke(activity, true, true);
+        manual.invoke(activity, true, true);
+        assertEquals(1, requests.size());
+        requests.get(0).complete(null, new ZeroChillSocialRepository.BackendHttpException(401, "expired"));
+        assertEquals("Coalesce queued manual requests but preserve one after failure", 2, requests.size());
+        requests.get(1).complete(null, new java.io.IOException("offline"));
+        load.invoke(activity, false);
+        assertEquals("Consumed manual request cannot become a retry loop", 2, requests.size());
+        manual.invoke(activity, true, true);
+        assertEquals(3, requests.size());
+    }
+
     private ZeroChillMessageActivity shell() throws Exception {
         ZeroChillMessageActivity activity = Robolectric.buildActivity(ZeroChillMessageActivity.class).get();
         Field partnerId = ZeroChillMessageActivity.class.getDeclaredField("partnerId");

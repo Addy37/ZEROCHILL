@@ -52,13 +52,14 @@ public class SocialActivityCoordinatorTest {
         Shadows.shadowOf(Looper.getMainLooper()).idle();
     }
 
-    private void tick() { Shadows.shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(12)); }
+    private void tick() { Shadows.shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(SocialActivityCoordinator.pollIntervalMs(BuildConfig.ZEROCHILL_V7_TRAFFIC))); }
 
     @Test public void v7NetworkPolicyKeepsRecoveryBoundedWithoutLosingResumeRefresh() {
         assertEquals(12_000L, SocialActivityCoordinator.pollIntervalMs(false));
         assertEquals(300_000L, SocialActivityCoordinator.pollIntervalMs(true));
         assertEquals(60_000L, ZeroChillNotificationPreferences.refreshIntervalMs(false));
         assertEquals(1_800_000L, ZeroChillNotificationPreferences.refreshIntervalMs(true));
+        assertEquals(60_000L, ZeroChillNotificationPreferences.retryIntervalMs(true));
         assertFalse(SocialActivityCoordinator.needsForegroundRecovery(true, 1000L, 59_999L));
         assertTrue(SocialActivityCoordinator.needsForegroundRecovery(true, 1000L, 61_000L));
         assertFalse(SocialActivityCoordinator.needsForegroundRecovery(false, 1000L, 61_000L));
@@ -138,6 +139,40 @@ public class SocialActivityCoordinatorTest {
         assertEquals(1, alerts.size());
         assertEquals("enabled", alerts.get(0).commentId);
         assertEquals(2, UpdateInboxStore.allForAccount(host, "me").size());
+        coordinator.pause(host);
+    }
+
+    @Test public void transientFailureBacksOffAndResumeCannotBypassIt() {
+        org.junit.Assume.assumeTrue(BuildConfig.ZEROCHILL_V7_TRAFFIC);
+        requests.get(0).complete(null, new java.io.IOException("offline"));
+        Shadows.shadowOf(Looper.getMainLooper()).idle();
+        coordinator.pause(host);
+        Shadows.shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(61));
+        coordinator.resume(host);
+        Shadows.shadowOf(Looper.getMainLooper()).idle();
+        assertEquals(1, requests.size());
+        tick(); assertEquals(1, requests.size());
+        tick(); assertEquals(2, requests.size());
+        coordinator.pause(host);
+    }
+
+    @Test public void permanentFailureStopsAutomaticPollingButManualRefreshRecovers() {
+        org.junit.Assume.assumeTrue(BuildConfig.ZEROCHILL_V7_TRAFFIC);
+        requests.get(0).complete(null, new ZeroChillSocialRepository.BackendHttpException(404, "missing"));
+        Shadows.shadowOf(Looper.getMainLooper()).idle();
+        for (int n = 0; n < 8; n++) tick();
+        assertEquals(1, requests.size());
+        coordinator.refresh(true);
+        assertEquals(2, requests.size());
+        complete(1);
+        tick(); assertEquals(3, requests.size());
+        coordinator.pause(host);
+    }
+
+    @Test public void tenMinuteRecoveryRequestCountMatchesSelectedMode() {
+        int intervals = (int) (600_000L / SocialActivityCoordinator.pollIntervalMs(BuildConfig.ZEROCHILL_V7_TRAFFIC));
+        for (int n = 0; n < intervals; n++) { complete(n); tick(); }
+        assertEquals(BuildConfig.ZEROCHILL_V7_TRAFFIC ? 3 : 51, requests.size());
         coordinator.pause(host);
     }
 

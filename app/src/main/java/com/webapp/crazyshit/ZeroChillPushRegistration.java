@@ -28,9 +28,9 @@ final class ZeroChillPushRegistration {
     private static final String KEY_REGISTRATION_SUSPENDED = "registration_suspended";
     private static final String KEY_ROTATION_IN_PROGRESS = "rotation_in_progress";
     private static final String KEY_LAST_SYNC_HASH = "v7_last_push_sync_hash";
-    private static final String KEY_LAST_SYNC_AT = "v7_last_push_sync_elapsed";
+    private static final String KEY_LAST_SYNC_AT = "v7_last_push_sync_wall";
     private static final String KEY_LAST_ATTEMPT_HASH = "v7_last_push_attempt_hash";
-    private static final String KEY_LAST_ATTEMPT_AT = "v7_last_push_attempt_elapsed";
+    private static final String KEY_LAST_ATTEMPT_AT = "v7_last_push_attempt_wall";
     private static final long PUSH_SYNC_TTL_MS = 24 * 60 * 60_000L;
     private static final long PUSH_FAILURE_RETRY_MS = 30 * 60_000L;
     private static final ExecutorService NETWORK = Executors.newSingleThreadExecutor();
@@ -137,7 +137,7 @@ final class ZeroChillPushRegistration {
             String fingerprint = registrationFingerprint(current.userId, appInstallId,
                     applicationId, firebaseInstallationId);
             SharedPreferences state = prefs(app);
-            long now = android.os.SystemClock.elapsedRealtime();
+            long now = System.currentTimeMillis();
             if (BuildConfig.ZEROCHILL_V7_TRAFFIC
                     && (withinTimeWindow(state.getString(KEY_LAST_SYNC_HASH, ""), fingerprint,
                                 state.getLong(KEY_LAST_SYNC_AT, -1L), now, PUSH_SYNC_TTL_MS)
@@ -152,11 +152,11 @@ final class ZeroChillPushRegistration {
                 SharedPreferences.Editor editor = state.edit();
                 if (status >= 200 && status < 300) {
                     editor.putString(KEY_LAST_SYNC_HASH, fingerprint)
-                            .putLong(KEY_LAST_SYNC_AT, android.os.SystemClock.elapsedRealtime())
+                            .putLong(KEY_LAST_SYNC_AT, System.currentTimeMillis())
                             .remove(KEY_LAST_ATTEMPT_HASH).remove(KEY_LAST_ATTEMPT_AT);
                 } else {
                     editor.putString(KEY_LAST_ATTEMPT_HASH, fingerprint)
-                            .putLong(KEY_LAST_ATTEMPT_AT, android.os.SystemClock.elapsedRealtime());
+                            .putLong(KEY_LAST_ATTEMPT_AT, System.currentTimeMillis());
                 }
                 editor.apply();
             }

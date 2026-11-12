@@ -45,4 +45,14 @@ public class VideoSocialSummaryTest {
         assertFalse(ZeroChillSocialRepository.isPermanentHttpError(
                 new IllegalStateException("No connectivity")));
     }
+    @Test public void committedLikeSurvivesFailedCountRefresh() {
+        ZeroChillSocialRepository.VideoLikeState liked = ZeroChillSocialRepository.confirmedVideoLikeWrite(false, null);
+        assertTrue(liked.liked); assertFalse(liked.countKnown);
+        ZeroChillSocialRepository.VideoLikeState unliked = ZeroChillSocialRepository.confirmedVideoLikeWrite(true, null);
+        assertFalse(unliked.liked); assertFalse(unliked.countKnown);
+        ZeroChillSocialRepository.VideoLikeState fresh = new ZeroChillSocialRepository.VideoLikeState(42, true);
+        assertTrue(ZeroChillSocialRepository.confirmedVideoLikeWrite(false, fresh).countKnown);
+        assertEquals(42, ZeroChillSocialRepository.confirmedVideoLikeWrite(false, fresh).count);
+    }
+
 }

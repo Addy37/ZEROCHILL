@@ -44,12 +44,14 @@ final class ZeroChillNotificationPreferences {
                     .getString(account, "{}")));
         } catch (Exception ignored) { return Values.defaults(); }
     }
+    static long retryIntervalMs(boolean v7) { return v7 ? 60_000L : REFRESH_MS; }
+    private static final java.util.Set<String> FAILED_REFRESH = java.util.concurrent.ConcurrentHashMap.newKeySet();
     static void refreshIfNeeded(Context context) {
         String account = ZeroChillSessionStore.currentUserId(context);
         if (account.isEmpty()) return;
         long now = android.os.SystemClock.elapsedRealtime();
         Long previous = LAST_REFRESH.get(account);
-        if (previous != null && now - previous < REFRESH_MS) return;
+        if (previous != null && now - previous < (FAILED_REFRESH.contains(account) ? retryIntervalMs(BuildConfig.ZEROCHILL_V7_TRAFFIC) : REFRESH_MS)) return;
         LAST_REFRESH.put(account, now);
         load(context, (value, error) -> { });
     }
@@ -64,9 +66,14 @@ final class ZeroChillNotificationPreferences {
                 JSONArray rows = new JSONArray(raw);
                 Values value = rows.length() == 0 ? Values.defaults() : Values.from(rows.getJSONObject(0));
                 cache(app, account, value);
+                FAILED_REFRESH.remove(account);
                 LAST_REFRESH.put(account, android.os.SystemClock.elapsedRealtime());
                 callback.complete(value, null);
-            } catch (Exception error) { callback.complete(cachedForAccount(app, account), error); }
+            } catch (Exception error) {
+                FAILED_REFRESH.add(account);
+                LAST_REFRESH.put(account, android.os.SystemClock.elapsedRealtime());
+                callback.complete(cachedForAccount(app, account), error);
+            }
         });
     }
     static void save(Context context, Values value, ZeroChillAccountRepository.Callback<Values> callback) {
@@ -93,5 +100,6 @@ final class ZeroChillNotificationPreferences {
     static void clearAccount(Context context, String account) {
         context.getApplicationContext().getSharedPreferences(PREFS, 0).edit().remove(account).apply();
         LAST_REFRESH.remove(account);
+        FAILED_REFRESH.remove(account);
     }
 }

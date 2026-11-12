@@ -825,6 +825,7 @@ public class PlayerActivity extends Activity {
     protected void onResume() {
         super.onResume();
         resumed = true;
+        if (fullscreenControls != null) fullscreenControls.refreshAccount();
         if (orientationListener != null && !isInPictureInPictureMode()) {
             orientationListener.enable();
         }

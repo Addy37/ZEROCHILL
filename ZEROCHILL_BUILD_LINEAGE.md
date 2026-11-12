@@ -443,3 +443,15 @@ This also corrects the same shared viewer in direct messages. Preview 38 uses
 `7.0-preview.38-image-viewer`, code `6000040`, above Preview 37 `6000039`, retaining
 the production package/certificate. One signed candidate; no merge, tag, publication,
 backend/source change or data migration. Physical acceptance of the fix is pending.
+
+## PR 422 isolated New Zerochill traffic candidate
+
+The user explicitly selected `feature/zerochill-7-social-traffic-reduction`, draft PR #422,
+from approved main `88b60e38a9516bfa52b277e7f079d2eda9337780`. The test candidate uses
+`7.0-traffic-test.1`, code `6000046`, the existing side-by-side `.dev` package and
+production signing certificate. Stable application ID/signing/release versions remain
+unchanged. All candidate Supabase endpoints use New Zerochill `aavjpykssueavbseqdlf`;
+analytics is disabled. The artifact records source branch/SHA in its filename and validation
+report. See `docs/ZEROCHILL_7_ANDROID_TRAFFIC_REDUCTION.md` and PR #422 for actual results.
+No backend PR merge, deployment, data migration, tag or release is authorized. Physical
+OnePlus Android 16 acceptance, live Auth/DM/Firebase and live traffic savings remain pending.

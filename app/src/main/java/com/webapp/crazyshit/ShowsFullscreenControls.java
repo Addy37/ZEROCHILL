@@ -36,6 +36,7 @@ final class ShowsFullscreenControls {
     private long hideDelayMs = FullscreenPlayerStyle.HIDE_DELAY_MS;
     private java.util.function.Consumer<Boolean> visibilityListener;
     private boolean standaloneLiked;
+    private String standaloneOwner;
     private String standaloneLikeTarget = "";
     private int standaloneLikeGeneration;
     private final Runnable autoHide = this::hide;
@@ -265,21 +266,34 @@ final class ShowsFullscreenControls {
         like.setContentDescription(liked ? "Unlike this video" : "Like this video");
     }
 
+    void refreshAccount() {
+        if (view.getContext() instanceof PlayerActivity) {
+            PlayerActivity host = (PlayerActivity) view.getContext();
+            if (!ZeroChillSessionStore.currentUserId(host).equals(standaloneOwner)) bindStandaloneLike(host);
+        }
+    }
+
     private void bindStandaloneLike(PlayerActivity host) {
         String target = host.getIntent().getStringExtra(PlayerActivity.EXTRA_PAGE_URL);
         target = target == null ? "" : target.trim();
         standaloneLikeTarget = target;
+        standaloneOwner = ZeroChillSessionStore.currentUserId(host);
         ImageButton like = view.findViewById(R.id.shows_like);
         if (target.isEmpty()) {
             syncLiked(false, false);
             return;
         }
 
+        standaloneLiked = false;
         syncLiked(false, false);
+        final String owner = ZeroChillSessionStore.currentUserId(host);
         final String page = target;
         int generation = ++standaloneLikeGeneration;
         ZeroChillSocialRepository.videoLikeState(host, page, (state, error) ->
                 host.runOnUiThread(() -> {
+                    if (!owner.equals(ZeroChillSessionStore.currentUserId(host))) {
+                        bindStandaloneLike(host); return;
+                    }
                     if (generation != standaloneLikeGeneration || !page.equals(standaloneLikeTarget)) return;
                     if (error == null && state != null) standaloneLiked = state.liked;
                     syncLiked(standaloneLiked, true);
@@ -291,12 +305,18 @@ final class ShowsFullscreenControls {
                 host.startActivity(new Intent(host, ZeroChillAccountActivity.class));
                 return;
             }
+            final String writeOwner = ZeroChillSessionStore.currentUserId(host);
             boolean wasLiked = standaloneLiked;
+            if (BuildConfig.ZEROCHILL_V7_TRAFFIC) standaloneLiked = !wasLiked;
             syncLiked(standaloneLiked, false);
             ZeroChillSocialRepository.toggleVideoLike(host, page, wasLiked, (state, error) ->
                     host.runOnUiThread(() -> {
                         if (!page.equals(standaloneLikeTarget)) return;
+                        if (!writeOwner.equals(ZeroChillSessionStore.currentUserId(host))) {
+                            bindStandaloneLike(host); return;
+                        }
                         if (error != null || state == null) {
+                            standaloneLiked = wasLiked;
                             syncLiked(standaloneLiked, true);
                             ZeroChillToast.makeText(
                                     host,
