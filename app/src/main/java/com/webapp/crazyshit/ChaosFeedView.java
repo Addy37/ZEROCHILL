@@ -4240,16 +4240,16 @@ public final class ChaosFeedView extends FrameLayout {
                     || !supportsComments(item)) return;
             String target = item.url;
             int generation = ++commentCountRequestGeneration;
-            ZeroChillSocialRepository.loadComments(activity, target, (loaded, error) ->
+            ZeroChillSocialRepository.loadCommentCount(activity, target, (count, error) ->
                     activity.runOnUiThread(() -> deferUiApply(() -> {
                         if (generation != commentCountRequestGeneration
                                 || item == null
                                 || !target.equals(item.url)
-                                || loaded == null
+                                || count == null
                                 || error != null) {
                             return;
                         }
-                        commentCount = visibleCommentCount(loaded);
+                        commentCount = count;
                         updateCommentButton();
                     }))
             );
