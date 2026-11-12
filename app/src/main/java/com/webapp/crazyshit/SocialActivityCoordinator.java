@@ -19,7 +19,12 @@ final class SocialActivityCoordinator {
     interface Session { String current(Context context); }
     interface Presenter { void show(Activity activity, UpdateInboxStore.Entry entry); void hide(); }
 
-    private static final long POLL_MS = BuildConfig.ZEROCHILL_V7_TRAFFIC ? 300_000L : 12_000L;
+    private static final long POLL_MS = pollIntervalMs(BuildConfig.ZEROCHILL_V7_TRAFFIC);
+    static long pollIntervalMs(boolean v7) { return v7 ? 300_000L : 12_000L; }
+    static boolean needsForegroundRecovery(boolean v7, long pausedAt, long now) {
+        return v7 && pausedAt >= 0 && now >= pausedAt
+                && now - pausedAt >= FOREGROUND_RECHECK_MS;
+    }
     private static final long FOREGROUND_RECHECK_MS = 60_000L;
     private static final long MANUAL_REFRESH_MS = 10_000L;
     private static SocialActivityCoordinator instance;
@@ -83,8 +88,8 @@ final class SocialActivityCoordinator {
     }
 
     void resume(Activity activity) {
-        if (BuildConfig.ZEROCHILL_V7_TRAFFIC && pausedAt >= 0
-                && SystemClock.elapsedRealtime() - pausedAt >= FOREGROUND_RECHECK_MS) {
+        if (needsForegroundRecovery(BuildConfig.ZEROCHILL_V7_TRAFFIC,
+                pausedAt, SystemClock.elapsedRealtime())) {
             lastPoll = -POLL_MS;
         }
         pausedAt = -1L;
