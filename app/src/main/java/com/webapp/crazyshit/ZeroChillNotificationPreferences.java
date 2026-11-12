@@ -9,7 +9,8 @@ import java.util.concurrent.Executors;
 /** Account-synced in-app alert choices. Existing history and DM unread state are untouched. */
 final class ZeroChillNotificationPreferences {
     private static final String PREFS = "zerochill_account_alert_preferences_v1";
-    private static final long REFRESH_MS = BuildConfig.ZEROCHILL_V7_TRAFFIC ? 30 * 60_000L : 60_000L;
+    private static final long REFRESH_MS = refreshIntervalMs(BuildConfig.ZEROCHILL_V7_TRAFFIC);
+    static long refreshIntervalMs(boolean v7) { return v7 ? 30 * 60_000L : 60_000L; }
     private static final java.util.concurrent.ConcurrentHashMap<String, Long> LAST_REFRESH = new java.util.concurrent.ConcurrentHashMap<>();
     private static final ExecutorService NETWORK = Executors.newSingleThreadExecutor();
     static final class Values {
