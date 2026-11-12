@@ -6,6 +6,17 @@ plugins {
     id("com.google.gms.google-services")
 }
 
+// Explicit 7.0 opt-in: never silently redirect an existing or preview install.
+val zerochillV7Traffic = System.getenv("ZEROCHILL_V7_TRAFFIC")?.equals("true", ignoreCase = true) == true
+if (zerochillV7Traffic) {
+    require(System.getenv("SUPABASE_URL") == "https://aavjpykssueavbseqdlf.supabase.co") {
+        "ZEROCHILL_V7_TRAFFIC requires the separately tested New Zerochill backend URL"
+    }
+    require(!System.getenv("SUPABASE_PUBLISHABLE_KEY").isNullOrBlank()) {
+        "ZEROCHILL_V7_TRAFFIC requires the New Zerochill publishable client key"
+    }
+}
+
 android {
     namespace = "com.webapp.crazyshit"
     compileSdk = 36
@@ -23,6 +34,7 @@ android {
         versionCode = System.getenv("APP_VERSION_CODE")?.toIntOrNull() ?: 6_000_001
         versionName = System.getenv("APP_VERSION_NAME") ?: "6.0.1"
         buildConfigField("boolean", "SHITTOK_POOL_DIAGNOSTICS", System.getenv("SHITTOK_POOL_DIAGNOSTICS") ?: "false")
+        buildConfigField("boolean", "ZEROCHILL_V7_TRAFFIC", zerochillV7Traffic.toString())
         buildConfigField("String", "SOURCE_REVISION", "\"${System.getenv("ZEROCHILL_SOURCE_SHA") ?: "local"}\"")
         buildConfigField(
             "String",
@@ -35,11 +47,11 @@ android {
             "\"${System.getenv("FEEDBACK_ANON_KEY") ?: ""}\""
         )
         buildConfigField("String", "ANALYTICS_V2_ENDPOINT",
-            "\"${System.getenv("ANALYTICS_V2_ENDPOINT") ?: "https://fketutffusxgjxjlckci.supabase.co/functions/v1/analytics-ingest-v2"}\"")
+            "\"${if (zerochillV7Traffic) "" else (System.getenv("ANALYTICS_V2_ENDPOINT") ?: "https://fketutffusxgjxjlckci.supabase.co/functions/v1/analytics-ingest-v2")}\"")
         buildConfigField(
             "String",
             "ANALYTICS_ENDPOINT",
-            "\"${System.getenv("ANALYTICS_ENDPOINT") ?: "https://fketutffusxgjxjlckci.supabase.co/functions/v1/analytics-ingest"}\""
+            "\"${if (zerochillV7Traffic) "" else (System.getenv("ANALYTICS_ENDPOINT") ?: "https://fketutffusxgjxjlckci.supabase.co/functions/v1/analytics-ingest")}\""
         )
         buildConfigField(
             "String",
