@@ -64,6 +64,9 @@ from this baseline. The signed artifact's `VALIDATION.json` records its exact SH
 - The first complete CI debug suite ran 1,734 tests and exposed five obsolete Shows/Settings
   assertions (four skips). Those tests now assert the approved caption bounds and mounted
   Compose preference callbacks; all seven focused UI-contract tests pass in debug/release.
+  A later full debug suite passed; release exposed one intermittent, unchanged cold-snapshot
+  fixture failure. Its test now mounts the saved cover before enabling usable content and
+  checks both pending/completed hero states. All 12 snapshot tests pass in both variants.
   The final full-suite result and signed artifact are recorded in PR #422 / VALIDATION.json.
 - Initial local attempts exposed read-only Robolectric cache paths and the Android 16
   Java runtime requirement. Workspace-local caches and Java 21 resolve those setup failures.

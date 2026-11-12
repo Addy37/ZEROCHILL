@@ -233,14 +233,30 @@ public class ColdTabSnapshotTest {
         ColdTabSnapshot.write(f.file, bitmap);
         bitmap.recycle();
         f.progressive = true;
-        f.usable = true;
         new DrawableImageViewTarget(f.hero).setRequest(null);
         f.install();
         drainIo();
+        // Establish the saved cover before enabling progressive content. The async
+        // read/posted cover setup is separate from the hero-readiness gate under test.
+        assertTrue("Saved cover must be mounted before testing reveal", f.controller.isCoverVisible());
+        f.usable = true;
         f.controller.onPreDraw();
         ShadowLooper.idleMainLooper(1, TimeUnit.SECONDS);
-        assertTrue(f.controller.isCoverVisible());
+        assertTrue("A pending hero must keep the cover", f.controller.isCoverVisible());
         assertFalse(ReflectionHelpers.getField(f.controller, "done"));
+
+        Request completed = (Request) Proxy.newProxyInstance(Request.class.getClassLoader(),
+                new Class<?>[] {Request.class}, (proxy, method, args) -> {
+                    if (method.getReturnType() == boolean.class) return method.getName().equals("isComplete");
+                    return null;
+                });
+        new DrawableImageViewTarget(f.hero).setRequest(completed);
+        ShadowSystemClock.advanceBy(Duration.ofMillis(200));
+        f.controller.onPreDraw();
+        ShadowLooper.idleMainLooper(250, TimeUnit.MILLISECONDS);
+        assertFalse("Completing the hero must reveal usable content", f.controller.isCoverVisible());
+        assertFalse("Slow shelves must still prevent saving a partial snapshot",
+                ReflectionHelpers.getField(f.controller, "done"));
     }
 
     @Test public void lateSnapshotReadCannotCoverAlreadyUsableContent() throws Exception {
