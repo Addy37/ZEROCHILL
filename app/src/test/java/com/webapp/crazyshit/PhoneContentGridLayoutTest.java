@@ -155,7 +155,14 @@ public class PhoneContentGridLayoutTest {
     private void checkShowCard(RecyclerView.ViewHolder holder) {
         ImageView image = ReflectionHelpers.getField(holder, "image");
         TextView title = ReflectionHelpers.getField(holder, "title");
-        checkTitle(title);
+        // Approved thumbnail captions reserve two lines through shelfTitleHeight rather
+        // than TextView.minLines. Verify the rendered capacity and overflow contract.
+        assertEquals(2, title.getMaxLines());
+        assertEquals(TextUtils.TruncateAt.END, title.getEllipsize());
+        assertNotNull(title.getLayout());
+        assertTrue(title.getLayout().getLineCount() <= 2);
+        assertTrue(title.getLayout().getHeight() <= title.getHeight()
+                - title.getCompoundPaddingTop() - title.getCompoundPaddingBottom());
         // Android 14+ uses nonlinear SP scaling at larger accessibility font sizes.
         assertEquals(android.util.TypedValue.applyDimension(
                         android.util.TypedValue.COMPLEX_UNIT_SP, 12f,

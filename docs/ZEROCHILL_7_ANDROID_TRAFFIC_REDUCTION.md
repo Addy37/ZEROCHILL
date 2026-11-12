@@ -61,7 +61,10 @@ from this baseline. The signed artifact's `VALIDATION.json` records its exact SH
   covering traffic, comments, messages, notifications, Library, favorites, history, downloads,
   playback and navigation. A subsequent **41 tests per variant** also pass, including two
   new detail like-race tests. Both APK variants were built locally.
-- Full debug/release suites and both APK builds: final result recorded in PR #422.
+- The first complete CI debug suite ran 1,734 tests and exposed five obsolete Shows/Settings
+  assertions (four skips). Those tests now assert the approved caption bounds and mounted
+  Compose preference callbacks; all seven focused UI-contract tests pass in debug/release.
+  The final full-suite result and signed artifact are recorded in PR #422 / VALIDATION.json.
 - Initial local attempts exposed read-only Robolectric cache paths and the Android 16
   Java runtime requirement. Workspace-local caches and Java 21 resolve those setup failures.
 - The signed workflow is reached through the existing manual Build Android APK workflow
