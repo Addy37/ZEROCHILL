@@ -3,6 +3,15 @@ name: Build Private Feedback Admin APK
 # Manual only: physical device testing replaces automatic UI/emulator suites.
 on:
   workflow_dispatch:
+    inputs:
+      backend_target:
+        description: "Admin APK backend (New Zerochill installs separately)"
+        required: true
+        type: choice
+        default: existing
+        options:
+          - existing
+          - new_zerochill
 
 permissions:
   contents: read
@@ -11,7 +20,9 @@ jobs:
   build:
     runs-on: ubuntu-latest
     env:
-      ADMIN_SOURCE_CONFIG_ENDPOINT: https://fketutffusxgjxjlckci.supabase.co/functions/v1/app-config-admin
+      ADMIN_BACKEND_TARGET: ${{ inputs.backend_target || 'existing' }}
+      ADMIN_FEEDBACK_ENDPOINT: ${{ inputs.backend_target == 'new_zerochill' && 'https://aavjpykssueavbseqdlf.supabase.co/functions/v1/feedback-admin' || 'https://fketutffusxgjxjlckci.supabase.co/functions/v1/feedback-admin' }}
+      ADMIN_SOURCE_CONFIG_ENDPOINT: ${{ inputs.backend_target == 'new_zerochill' && 'https://aavjpykssueavbseqdlf.supabase.co/functions/v1/app-config-admin' || 'https://fketutffusxgjxjlckci.supabase.co/functions/v1/app-config-admin' }}
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-java@v5
@@ -62,12 +73,12 @@ jobs:
           SOURCE_SHA="${{ github.event.pull_request.head.sha || github.sha }}"
           SOURCE_REF="${{ github.head_ref || github.ref_name }}"
           SAFE_REF="$(printf '%s' "$SOURCE_REF" | tr '/ ' '--')"
-          cp ZeroChill-Admin.apk "ZeroChill-Admin-${SAFE_REF}-${SOURCE_SHA:0:7}-signed.apk"
+          cp ZeroChill-Admin.apk "ZeroChill-Admin-${ADMIN_BACKEND_TARGET:-existing}-${SAFE_REF}-${SOURCE_SHA:0:7}-signed.apk"
           sha256sum ZeroChill-Admin.apk > ZeroChill-Admin-SHA256.txt
 
       - uses: actions/upload-artifact@v4
         with:
-          name: ZeroChill-Admin
+          name: ${{ inputs.backend_target == 'new_zerochill' && 'ZeroChill-Admin-NewZerochill' || 'ZeroChill-Admin' }}
           path: |
             ZeroChill-Admin.apk
             ZeroChill-Admin-*-signed.apk
