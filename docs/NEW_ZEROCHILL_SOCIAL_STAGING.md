@@ -40,7 +40,7 @@ All synthetic account and social data tests ran inside explicit `BEGIN ... ROLLB
 - A blocking record prevented a newly blocked sender from sending additional DMs.
 - A sixth comment within 30 seconds was denied; a ninth DM to the same recipient within 30 seconds was denied; a fourth report within five minutes was denied.
 - A sixteenth comment like in 30 seconds was denied by the private accepted-write ledger guard; the ledger was empty after rollback.
-- A moderation-banned user could not send DMs or post comments.
+- A moderation-banned user could not send DMs or post comments.\n- A live unauthenticated POST to the new `social-media-upload` endpoint returned **HTTP 401**, confirming JWT gateway enforcement (no upload or object was created).
 
 These were database-level policy/rate-limit checks. They do not substitute for real Auth sessions, client HTTP, live signed-in social/Storage requests, or Android device tests. The live social uploader was not physically exercised with a signed-in account.
 
@@ -51,7 +51,7 @@ These were database-level policy/rate-limit checks. They do not substitute for r
 - Existing source configuration remains v13. The old production backend, existing application IDs, and signing identities are unaffected.
 - **No new analytics ingestion, analytics tables, or old `analytics-ingest` routes were installed.** No Android app was pointed to this backend.
 - Rate-limit event records in `private.social_rate_events` accumulate as comment likes arrive. A low-cost, bounded retention/cleanup plan is needed before real traffic; do not introduce per-action network calls or an analytics-style event pipeline.
-- Supabase security advisor still reports three informational backend-only RLS-without-policy notices and the previously known leaked-password protection setting. Revisit the latter before the Auth cutover.
+- Supabase security advisor reports four informational backend-only RLS-without-policy notices (source config, feedback tickets, feedback messages, and private social upload reservation table) and the previously known leaked-password protection setting. Revisit the latter before the Auth cutover.
 - The admin app's account/social/analytics sections are not usable against the fresh backend until accounts/moderation clients are prepared.
 - **No Gradle build, Android test, real signed-in HTTP social test, signed APK, or physical device verification has been run in this staging task.** No source-config publish/rollback was performed.
 - Reconcile Supabase hosted migration history to repository files before invoking a CLI database migration push. Many source SQL files already exist in `main` but were applied under new hosted versions.
