@@ -54,6 +54,19 @@ public class SocialActivityCoordinatorTest {
 
     private void tick() { Shadows.shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(12)); }
 
+    @Test public void v7NetworkPolicyKeepsRecoveryBoundedWithoutLosingResumeRefresh() {
+        assertEquals(12_000L, SocialActivityCoordinator.pollIntervalMs(false));
+        assertEquals(300_000L, SocialActivityCoordinator.pollIntervalMs(true));
+        assertEquals(60_000L, ZeroChillNotificationPreferences.refreshIntervalMs(false));
+        assertEquals(1_800_000L, ZeroChillNotificationPreferences.refreshIntervalMs(true));
+        assertFalse(SocialActivityCoordinator.needsForegroundRecovery(true, 1000L, 59_999L));
+        assertTrue(SocialActivityCoordinator.needsForegroundRecovery(true, 1000L, 61_000L));
+        assertFalse(SocialActivityCoordinator.needsForegroundRecovery(false, 1000L, 61_000L));
+        assertFalse(SocialActivityCoordinator.needsForegroundRecovery(true, -1L, 61_000L));
+        assertFalse(SocialActivityCoordinator.needsForegroundRecovery(true, 90_000L, 61_000L));
+        coordinator.pause(host);
+    }
+
     @Test public void firstSyncBackfillsQuietlyThenNewEventsAppearOnce() throws Exception {
         ZeroChillSocialRepository.SocialActivity old = event("old");
         complete(0, old);
