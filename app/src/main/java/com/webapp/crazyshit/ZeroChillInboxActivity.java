@@ -46,6 +46,8 @@ public final class ZeroChillInboxActivity extends Activity {
     private TextView empty;
     private ProgressBar progress;
     private Dialog removeDialog;
+    private Dialog newMessageDialog;
+    private TextView composeAction;
     private final LinkedHashSet<String> selectedPartners = new LinkedHashSet<>();
     private String renderedUser = "";
     private int requestGeneration;
@@ -117,6 +119,10 @@ public final class ZeroChillInboxActivity extends Activity {
             removeDialog.dismiss();
             removeDialog = null;
         }
+        if (newMessageDialog != null) {
+            newMessageDialog.dismiss();
+            newMessageDialog = null;
+        }
         ResponsiveFitmentController.release(this);
         super.onDestroy();
     }
@@ -150,6 +156,13 @@ public final class ZeroChillInboxActivity extends Activity {
         labels.addView(status);
         header.addView(labels, new LinearLayout.LayoutParams(0, -2, 1f));
 
+        composeAction = headerAction("+ New", "Start a new direct message", v -> {
+            if (clearing || selectionMode()) return;
+            if (newMessageDialog != null && newMessageDialog.isShowing()) return;
+            newMessageDialog = ZeroChillNewMessageDialog.show(this);
+        });
+        header.addView(composeAction, new LinearLayout.LayoutParams(-2, dp(48)));
+
         selectionActions = new LinearLayout(this);
         selectionActions.setGravity(Gravity.CENTER_VERTICAL);
         selectionActions.setVisibility(View.GONE);
@@ -173,7 +186,7 @@ public final class ZeroChillInboxActivity extends Activity {
 
         empty = BrowseUi.text(
                 this,
-                "No conversations yet.\n\nOpen a ZEROCHILL profile and tap Message to start one.",
+                "No conversations yet.\n\nTap + New to start a message.",
                 14,
                 BrowseUi.MUTED
         );
@@ -239,7 +252,7 @@ public final class ZeroChillInboxActivity extends Activity {
         for (ZeroChillSocialRepository.Conversation item : adapter.items) unreadCount += item.unreadCount;
         ZeroChillMessageBadgeStore.setUnreadCount(this, unreadCount);
         updateSelectionUi();
-        empty.setText("No conversations yet.\n\nOpen a ZEROCHILL profile and tap Message to start one.");
+        empty.setText("No conversations yet.\n\nTap + New to start a message.");
         empty.setOnClickListener(null);
         empty.setClickable(false);
         empty.setFocusable(false);
@@ -298,6 +311,8 @@ public final class ZeroChillInboxActivity extends Activity {
                     : unreadCount + (unreadCount == 1 ? " unread message" : " unread messages"));
         }
         selectionActions.setVisibility(selecting ? View.VISIBLE : View.GONE);
+        composeAction.setVisibility(selecting || clearing ? View.GONE : View.VISIBLE);
+        composeAction.setEnabled(!clearing);
         selectAllAction.setEnabled(!clearing);
         deleteAction.setEnabled(!clearing);
         cancelAction.setEnabled(!clearing);
