@@ -8,11 +8,12 @@ import android.graphics.drawable.GradientDrawable;
 import android.view.View;
 import android.widget.ImageView;
 
-/** Colors only the mascot's accent layers; the horn fill stays near black. */
+/** Colors the mascot's cyan accents while keeping its dark face and white teeth. */
 final class MascotAccent {
     private MascotAccent() { }
 
-    static void apply(ImageView horns, ImageView outline, ImageView tongue, int accent) {
+    static void apply(ImageView horns, ImageView outline, ImageView xEye,
+            ImageView angryEye, ImageView tongue, int accent) {
         // The horn vector contains both the dark fill and cyan stroke. A matrix maps
         // those two source colors independently, including for the white accent.
         float[] from = {5f, 9f, 12f};
@@ -27,6 +28,8 @@ final class MascotAccent {
         matrix[18] = 1f;
         horns.setColorFilter(new ColorMatrixColorFilter(new ColorMatrix(matrix)));
         outline.setColorFilter(accent, PorterDuff.Mode.SRC_IN);
+        xEye.setColorFilter(accent, PorterDuff.Mode.SRC_IN);
+        angryEye.setColorFilter(accent, PorterDuff.Mode.SRC_IN);
         tongue.setColorFilter(accent, PorterDuff.Mode.SRC_IN);
     }
 
