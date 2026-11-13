@@ -17,6 +17,7 @@ import android.graphics.Color;
 import android.graphics.Paint;
 import android.os.Build;
 import android.provider.Settings;
+import android.util.Log;
 import android.text.format.DateUtils;
 
 import androidx.core.app.ActivityCompat;
@@ -80,6 +81,8 @@ final class NotificationCoordinator {
     static final String ACTION_CHECK_FINISHED =
             BuildConfig.APPLICATION_ID + ".action.NOTIFICATION_CHECK_FINISHED";
 
+    private static volatile boolean workManagerRetryPending;
+
     private static final long STARTUP_CHECK_AGE_MS = TimeUnit.MINUTES.toMillis(30);
     private static final long STUCK_CHECK_AGE_MS = TimeUnit.MINUTES.toMillis(3);
 
@@ -102,6 +105,12 @@ final class NotificationCoordinator {
     }
 
     static void onAppForeground(Context context) {
+        // A handful of OEM launches can reach Application.onCreate before WorkManager is ready.
+        // Retry its periodic registration when the user first returns to the app.
+        if (workManagerRetryPending) {
+            schedule(context, false);
+            if (workManagerRetryPending) return;
+        }
         SharedPreferences prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
         if (!alertsEnabled(prefs)) return;
 
@@ -1012,7 +1021,8 @@ final class NotificationCoordinator {
 
     private static void schedule(Context context, boolean updateExisting) {
         SharedPreferences prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
-        WorkManager workManager = WorkManager.getInstance(context);
+        WorkManager workManager = workManagerOrDefer(context);
+        if (workManager == null) return;
         if (!alertsEnabled(prefs)) {
             workManager.cancelUniqueWork(PERIODIC_WORK);
             workManager.cancelUniqueWork(INITIAL_WORK);
@@ -1043,6 +1053,8 @@ final class NotificationCoordinator {
     }
 
     private static UUID enqueueImmediate(Context context, String name, boolean manual) {
+        WorkManager workManager = workManagerOrDefer(context);
+        if (workManager == null) return null;
         context.getSharedPreferences(STATE, Context.MODE_PRIVATE)
                 .edit()
                 .putLong(KEY_CHECK_STARTED, System.currentTimeMillis())
@@ -1051,12 +1063,26 @@ final class NotificationCoordinator {
                 .setConstraints(networkConstraints())
                 .setInputData(new Data.Builder().putBoolean(INPUT_MANUAL_CHECK, manual).build())
                 .build();
-        WorkManager.getInstance(context).enqueueUniqueWork(
+        workManager.enqueueUniqueWork(
                 name,
                 ExistingWorkPolicy.REPLACE,
                 request
         );
         return request.getId();
+    }
+
+    private static WorkManager workManagerOrDefer(Context context) {
+        try {
+            WorkManager workManager = WorkManager.getInstance(context);
+            workManagerRetryPending = false;
+            return workManager;
+        } catch (IllegalStateException error) {
+            // A failed scheduler must not crash the application before its first screen.
+            // Android will retry when the app is in foreground; no preference is changed.
+            workManagerRetryPending = true;
+            Log.w("ZEROCHILL", "Notification scheduler unavailable; retry on foreground", error);
+            return null;
+        }
     }
 
     private static Constraints networkConstraints() {
