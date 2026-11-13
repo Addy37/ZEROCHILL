@@ -20,6 +20,14 @@ public class ZeroChillAccountValidationTest {
         assertFalse(ZeroChillAccountValidation.username("way_too_long_for_zerochill").isEmpty());
     }
 
+    @Test public void activationEnforcesBackendPasswordLimitAndExactConfirmation() {
+        String maximum = new String(new char[128]).replace('\0', 'a');
+        assertEquals("", ZeroChillAccountValidation.activationPassword(maximum, maximum));
+        assertFalse(ZeroChillAccountValidation.activationPassword(maximum + "a", maximum + "a").isEmpty());
+        assertFalse(ZeroChillAccountValidation.activationPassword("password123", "Password123").isEmpty());
+        assertFalse(ZeroChillAccountValidation.activationPassword("short", "short").isEmpty());
+    }
+
     @Test
     public void validatesEmailAndPassword() {
         assertEquals("", ZeroChillAccountValidation.email("user@example.com"));
