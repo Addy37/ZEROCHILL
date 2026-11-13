@@ -620,6 +620,8 @@ public final class StartupWizardActivity extends Activity {
             MascotAccent.applyGlow(accentPreviewMascot.getChildAt(0), accent);
             MascotAccent.apply((ImageView) accentPreviewMascot.getChildAt(1),
                     (ImageView) accentPreviewMascot.getChildAt(7),
+                    (ImageView) accentPreviewMascot.getChildAt(3),
+                    (ImageView) accentPreviewMascot.getChildAt(4),
                     (ImageView) accentPreviewMascot.getChildAt(6), accent);
         }
         if (accentPreviewChill != null) accentPreviewChill.setTextColor(accent);
@@ -984,7 +986,7 @@ public final class StartupWizardActivity extends Activity {
                 R.drawable.zc_devil_tongue,
                 R.drawable.zc_devil_outline
         };
-        ImageView horns = null, tongue = null, outline = null;
+        ImageView horns = null, xEye = null, angryEye = null, tongue = null, outline = null;
         for (int index = 0; index < layers.length; index++) {
             ImageView layer = new ImageView(this);
             layer.setImageResource(layers[index]);
@@ -992,11 +994,13 @@ public final class StartupWizardActivity extends Activity {
             layer.setContentDescription(index == layers.length - 1 ? "ZEROCHILL mascot" : null);
             if (index == layers.length - 1) layer.setTag("wizard_mascot_outline");
             if (index == 0) horns = layer;
+            if (index == 2) xEye = layer;
+            if (index == 3) angryEye = layer;
             if (index == 5) tongue = layer;
             if (index == 6) outline = layer;
             mascot.addView(layer, new FrameLayout.LayoutParams(size, size));
         }
-        MascotAccent.apply(horns, outline, tongue, previewAccentColor);
+        MascotAccent.apply(horns, outline, xEye, angryEye, tongue, previewAccentColor);
         return mascot;
     }
 
