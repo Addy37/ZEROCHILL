@@ -35,6 +35,7 @@ import androidx.media3.exoplayer.ExoPlayer;
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory;
 import androidx.viewpager2.widget.ViewPager2;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -734,8 +735,9 @@ public final class BunkrGalleryActivity extends Activity {
                         this,
                         item.url
                 );
+                if (!hasPlayableStream(resolved)) throw new IOException("Media source returned no playable URL");
                 runOnUiThread(() -> {
-                    if (requestGeneration != generation || isFinishing()) return;
+                    if (!canApplyMediaResult(requestGeneration)) return;
                     resolvingMedia.remove(item.url);
                     adapter.setResolvedUrl(position, resolved.mediaUrl);
                     BunkrGallerySessionStore.setResolvedUrl(
@@ -749,7 +751,7 @@ public final class BunkrGalleryActivity extends Activity {
                 });
             } catch (Exception error) {
                 runOnUiThread(() -> {
-                    if (requestGeneration != generation || isFinishing()) return;
+                    if (!canApplyMediaResult(requestGeneration)) return;
                     resolvingMedia.remove(item.url);
                     adapter.setLoading(position, false);
                     if (pager.getCurrentItem() == position)
@@ -757,6 +759,16 @@ public final class BunkrGalleryActivity extends Activity {
                 });
             }
         });
+    }
+
+    static boolean hasPlayableStream(CrazyShitRepository.StreamInfo stream) {
+        return stream != null && stream.mediaUrl != null
+                && !stream.mediaUrl.trim().isEmpty();
+    }
+
+    private boolean canApplyMediaResult(int requestGeneration) {
+        return requestGeneration == generation && !isFinishing() && !isDestroyed()
+                && pager != null && adapter != null;
     }
 
     private void preloadVideo(int position, NativeContentItem item) {
@@ -789,8 +801,9 @@ public final class BunkrGalleryActivity extends Activity {
             }
             try {
                 CrazyShitRepository.StreamInfo resolved = PlayableSourceRouter.resolve(this, item.url);
+                if (!hasPlayableStream(resolved)) throw new IOException("Media source returned no playable URL");
                 runOnUiThread(() -> {
-                    if (requestGeneration != generation || isFinishing()) return;
+                    if (!canApplyMediaResult(requestGeneration)) return;
                     resolvingMedia.remove(item.url);
                     videoReferers.put(item.url, value(resolved.requestReferer));
                     adapter.setResolvedUrl(position, resolved.mediaUrl);
@@ -818,7 +831,7 @@ public final class BunkrGalleryActivity extends Activity {
                 });
             } catch (Exception error) {
                 runOnUiThread(() -> {
-                    if (requestGeneration != generation || isFinishing()) return;
+                    if (!canApplyMediaResult(requestGeneration)) return;
                     resolvingMedia.remove(item.url);
                     if (pendingVideoPosition == position && pager.getCurrentItem() == position) {
                         pendingVideoPosition = -1;
@@ -861,8 +874,9 @@ public final class BunkrGalleryActivity extends Activity {
                         this,
                         item.url
                 );
+                if (!hasPlayableStream(resolved)) throw new IOException("Media source returned no playable URL");
                 runOnUiThread(() -> {
-                    if (requestGeneration != generation || isFinishing() ||
+                    if (!canApplyMediaResult(requestGeneration) ||
                             pager.getCurrentItem() != position) return;
                     adapter.setResolvedUrl(position, resolved.mediaUrl);
                     BunkrGallerySessionStore.setResolvedUrl(
@@ -879,7 +893,7 @@ public final class BunkrGalleryActivity extends Activity {
                 });
             } catch (Exception error) {
                 runOnUiThread(() -> {
-                    if (requestGeneration != generation || isFinishing()) return;
+                    if (!canApplyMediaResult(requestGeneration)) return;
                     adapter.setLoading(position, false);
                     adapter.setFailed(position, true);
                     ZeroChillToast.makeText(this, "Couldn't play this video.", ZeroChillToast.LENGTH_SHORT).show();
@@ -956,14 +970,24 @@ public final class BunkrGalleryActivity extends Activity {
 
             @Override
             public void onPlayerError(PlaybackException error) {
+                if (player != startedPlayer || !canApplyMediaResult(generation)) return;
                 BunkrGallerySessionStore.clearResolvedUrl(sessionId, item.url);
                 adapter.setResolvedUrl(position, "");
                 if (playbackRecovery.recover(BunkrGalleryActivity.this, error, recovered -> {
-                    if (pager.getCurrentItem() != position) return;
+                    if (!canApplyMediaResult(generation) || pager.getCurrentItem() != position) return;
+                    if (recovered == null || !hasPlayableStream(recovered.stream)) {
+                        adapter.setFailed(position, true);
+                        return;
+                    }
                     adapter.setResolvedUrl(position, recovered.stream.mediaUrl);
                     startPlayer(position, item, recovered.stream.mediaUrl, value(recovered.stream.requestReferer));
-                    player.seekTo(recovered.position);
-                    player.setPlayWhenReady(recovered.playWhenReady && recoveryResumed);
+                    ExoPlayer resumed = player;
+                    if (resumed == null) {
+                        adapter.setFailed(position, true);
+                        return;
+                    }
+                    resumed.seekTo(recovered.position);
+                    resumed.setPlayWhenReady(recovered.playWhenReady && recoveryResumed);
                 }, () -> {
                     RatingFeedbackPrompt.recordPlaybackError(BunkrGalleryActivity.this);
                     releasePlayer(); adapter.setFailed(position, true);
