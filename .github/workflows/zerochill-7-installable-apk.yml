@@ -62,7 +62,7 @@ jobs:
           raw = os.environ.get('SIGNING_BUNDLE', '')
           if not raw:
               raise SystemExit('Missing ANDROID_SIGNING_BUNDLE')
-          data = json.loads(raw.replace('\\r','').replace('\\n',''))
+          data = json.loads(raw.replace('\r','').replace('\n',''))
           for key in ('keystore_base64','store_password','key_alias','key_password'):
               if not data.get(key):
                   raise SystemExit('Missing signing item: ' + key)
@@ -78,17 +78,17 @@ jobs:
                   'ANDROID_KEY_ALIAS': data['key_alias'],
                   'ANDROID_KEY_PASSWORD': data['key_password']
               }.items():
-                  out.write(key + '=' + value + '\\n')
+                  out.write(key + '=' + value + '\n')
           PY
 
       - name: Run targeted release tests for account, messaging and backend switch
         run: |
-          gradle --no-daemon -Porg.gradle.java.installations.fromEnv=JAVA_HOME_17_X64,JAVA_HOME_21_X64 \\
-            :app:testReleaseUnitTest \\
-            --tests '*ZeroChillSessionBackendTest' \\
-            --tests '*ZeroChillAccountSecurityFlowTest' \\
-            --tests '*ZeroChillAccountUiTest' \\
-            --tests '*ZeroChillMessageThreadUiTest' \\
+          gradle --no-daemon -Porg.gradle.java.installations.fromEnv=JAVA_HOME_17_X64,JAVA_HOME_21_X64 \
+            :app:testReleaseUnitTest \
+            --tests '*ZeroChillSessionBackendTest' \
+            --tests '*ZeroChillAccountSecurityFlowTest' \
+            --tests '*ZeroChillAccountUiTest' \
+            --tests '*ZeroChillMessageThreadUiTest' \
             --tests '*ZeroChillSocialPushRoutingTest'
       - name: Assemble same-package signed release APK
         run: gradle --no-daemon :app:assembleRelease
@@ -111,7 +111,7 @@ jobs:
           aapt = str(pathlib.Path(bt)/'aapt2')
           signer = str(pathlib.Path(bt)/'apksigner')
           def ident(path):
-              match = re.search(r"package: name='([^']+)' versionCode='(\\d+)'",
+              match = re.search(r"package: name='([^']+)' versionCode='(\d+)'",
                                 run(aapt,'dump','badging',path))
               assert match, 'Missing package/version'
               return match.group(1), int(match.group(2))
