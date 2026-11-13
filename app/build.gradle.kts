@@ -6,8 +6,16 @@ plugins {
     id("com.google.gms.google-services")
 }
 
-// Explicit 7.0 opt-in: never silently redirect an existing or preview install.
+// Keep existing 6.x builds on their configured backend, but never package a 7.x
+// build against the old account project or without the low-traffic behavior.
+val appVersionName = System.getenv("APP_VERSION_NAME") ?: "6.0.1"
+val zerochill7Build = appVersionName.startsWith("7.")
 val zerochillV7Traffic = System.getenv("ZEROCHILL_V7_TRAFFIC")?.equals("true", ignoreCase = true) == true
+if (zerochill7Build) {
+    require(zerochillV7Traffic) {
+        "ZEROCHILL 7.x builds must enable ZEROCHILL_V7_TRAFFIC and target New Zerochill"
+    }
+}
 if (zerochillV7Traffic) {
     require(System.getenv("SUPABASE_URL") == "https://aavjpykssueavbseqdlf.supabase.co") {
         "ZEROCHILL_V7_TRAFFIC requires the separately tested New Zerochill backend URL"
@@ -19,6 +27,16 @@ if (zerochillV7Traffic) {
         val url = System.getenv(endpoint).orEmpty().trim()
         require(url.isEmpty() || url.startsWith("https://aavjpykssueavbseqdlf.supabase.co/functions/v1/")) {
             "ZEROCHILL_V7_TRAFFIC cannot use an old Supabase $endpoint URL"
+        }
+        if (zerochill7Build) {
+            require(url.isNotEmpty()) {
+                "ZEROCHILL 7.x builds require a New Zerochill $endpoint"
+            }
+        }
+    }
+    if (zerochill7Build) {
+        require(System.getenv("FEEDBACK_ANON_KEY") == System.getenv("SUPABASE_PUBLISHABLE_KEY")) {
+            "ZEROCHILL 7.x feedback must use the same New Zerochill publishable key"
         }
     }
 }
@@ -38,7 +56,7 @@ android {
         minSdk = 26
         targetSdk = 35
         versionCode = System.getenv("APP_VERSION_CODE")?.toIntOrNull() ?: 6_000_001
-        versionName = System.getenv("APP_VERSION_NAME") ?: "6.0.1"
+        versionName = appVersionName
         buildConfigField("boolean", "SHITTOK_POOL_DIAGNOSTICS", System.getenv("SHITTOK_POOL_DIAGNOSTICS") ?: "false")
         buildConfigField("boolean", "ZEROCHILL_V7_TRAFFIC", zerochillV7Traffic.toString())
         buildConfigField("String", "SOURCE_REVISION", "\"${System.getenv("ZEROCHILL_SOURCE_SHA") ?: "local"}\"")
