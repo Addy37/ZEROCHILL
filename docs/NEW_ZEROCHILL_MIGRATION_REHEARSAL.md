@@ -1,3 +1,16 @@
+## Owner-authorized single-account trial blocked safely, November 13
+
+The owner selected one personally controlled, unused OG account for a **limited Auth migration trial** on the disposable `ZEROCHILL Migration Test` project. Consent did **not** cover other users, live New Zerochill, or a full production cutover.
+
+- **Read-only preflight:** The selected OG identity exists with one email identity, a confirmed email, password hash, normal account metadata and one public profile. No MFA factors or admin status. The destination staging project was empty with a functioning signup-profile trigger. Auth users and identities had matching column definitions across projects.
+- **Privacy scope:** The intended rehearsal would transfer only that owner's Auth identity, profile and owner-scoped favorites. Private conversations involving other users were intentionally excluded. No user identifiers, emails, UUID mappings, password hashes, or message content are stored in this repo.
+- **First attempted import:** Supabase PostgreSQL rejected explicitly inserting `auth.users.confirmed_at`, a generated column. The same read-only catalog inspection showed `auth.identities.email` is also generated. The first transaction failed; staging remained empty.
+- **Second attempted import:** The corrected transfer was blocked by the connected tool's security checks **before execution**. The block was respected. No alternate technique or approval bypass was attempted.
+- **Post-attempt verification:** Staging still contains **zero Auth users, identities, profiles, favorites, sessions and refresh tokens**. The OG account still exists with its password hash. No real user data was imported and no source rows were changed.
+- **Result:** Single-account UUID preservation, exact hash preservation, and sign-in with original password **remain untested**. Earlier synthetic signup/password tests passing does not resolve this migration gate.
+
+**Safe next option:** Use an approved secure database export/import workflow in an authorized coding environment, with privately managed OG and disposable-staging database credentials. Operate on the single owner-selected account only, omit other people's DMs, and require a fresh verified count and hash/UUID comparison before claiming success. Never paste credentials or hashes in chat, GitHub or CI logs. Do not widen access grants or bypass connection-tool security controls. This is a separate operation, not authorization to migrate all users.
+
 ## Latest cleanup after interrupted synthetic import, November 13
 
 A SELECT-only staging inspection showed exactly one recent synthetic Auth user with a fake test-domain address and the expected `zc` username prefix. There were zero sessions, refresh tokens, DMs, and comments. The only remaining test Auth user was removed in the **disposable** project after strict safety checks on user count, test-domain account, recent creation, and absence of social messages. The database verified **0 users, 0 identities, 0 profiles, 0 sessions, and 0 refresh tokens** immediately after removal.
