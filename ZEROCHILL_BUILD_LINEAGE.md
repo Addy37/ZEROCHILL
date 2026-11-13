@@ -452,8 +452,12 @@ The new-message change adds an explicit inbox action and a bounded username sear
 without changing the social backend or existing DM thread. Its isolated CI APK uses
 `7.0-traffic-test.2`, code `6000047`, the current production signing identity,
 and the existing `.dev` side-by-side application ID. All New Supabase and no-analytics
-gates from PR #422 apply. The workflow runs only when its own file is committed to
-this branch, or by explicit manual dispatch. It must not merge PR #423, replace the
+gates from PR #422 apply. The workflow is **manual dispatch only** to avoid automatic GitHub Actions charges.
+Future manual previews run one focused DM unit test plus a signed Debug APK,
+while full Debug/Release suites remain required for release readiness.
+The old automatic run #43344195686 must be canceled separately through GitHub;
+committing this workflow update does not cancel an already-running job.
+It must not merge PR #423, replace the
 stable app, publish, or issue a new backend migration. Real device acceptance and
 GitHub Actions results must be checked before claiming this Beta passed.
 
