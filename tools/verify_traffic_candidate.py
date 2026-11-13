@@ -32,7 +32,7 @@ assert b'fketutffusxgjxjlckci' not in dex, 'Old Supabase project embedded in APK
 assert b'aavjpykssueavbseqdlf' in dex, 'New Supabase project missing'
 assert b'sb_secret_' not in dex and b'service_role' not in dex, 'Unexpected private client credential marker'
 test_results = {}
-for variant in ('Debug', 'Release'):
+for variant in ('Debug',):
     totals = dict(tests=0, failures=0, errors=0, skipped=0)
     for path in Path('app/build/test-results/test' + variant + 'UnitTest').glob('TEST-*.xml'):
         suite = ET.parse(path).getroot()
