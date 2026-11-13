@@ -21,6 +21,12 @@ This is a private installable admin APK for the **New Zerochill** project `aavjp
 - New 7.0 does not collect old device analytics. The former Analytics tab is now **Activity** and shows aggregate account, likes, comments, DMs, blocks, and reports counts from the existing `community_overview` admin action. No analytics RPC or minute-by-minute activity poll is used.
 - This does not add broad account-ban, account-delete, broadcast-message, or moderation-write actions.
 
+## Private backend read access
+
+Hosted migration `20261113232554_zerochill7_private_admin_social_read_grants` was applied **only** to New Zerochill and recorded in `supabase/migrations/20261113232554_zerochill7_private_admin_social_read_grants.sql`. It grants specific selected columns from community tables to the server-side `service_role` so the existing private admin function can load community overviews, account details, reports and activity. The admin app still authenticates with the existing server-verified private token. Direct-message bodies and attachments are **not** granted to this read path. A read-only permission check confirmed DM metadata is readable and DM bodies are not.
+
+This migration did not change RLS for app users, grant anon/authenticated admin access, add writes, alter existing data or touch the old Supabase project.
+
 ## Verification and build
 
 `.github/workflows/zerochill-7-admin-apk.yml` builds a private signed release APK and checks:
@@ -34,4 +40,4 @@ A passed workflow does **not** establish private admin token provisioning to the
 
 ## Compatibility
 
-The Android application ID, signing identity, existing source-config format, and private admin token authentication model are retained. Only admin token and notification cursors move to new local namespaces. No app user data, legacy cloud projects, or New Zerochill database rows are changed by this PR.
+The Android application ID, signing identity, existing source-config format, and private admin token authentication model are retained. Only admin token and notification cursors move to new local namespaces. No app user data, legacy cloud projects or New Zerochill data rows change. The New project receives only the documented service-role read grants.
