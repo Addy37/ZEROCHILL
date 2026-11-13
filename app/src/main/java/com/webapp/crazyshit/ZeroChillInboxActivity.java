@@ -5,6 +5,7 @@ import android.app.Dialog;
 import android.content.Intent;
 import android.graphics.Color;
 import android.graphics.drawable.Drawable;
+import android.graphics.drawable.InsetDrawable;
 import android.os.Bundle;
 import android.text.TextUtils;
 import android.view.Gravity;
@@ -161,7 +162,19 @@ public final class ZeroChillInboxActivity extends Activity {
             if (newMessageDialog != null && newMessageDialog.isShowing()) return;
             newMessageDialog = ZeroChillNewMessageDialog.show(this);
         });
-        header.addView(composeAction, new LinearLayout.LayoutParams(-2, dp(48)));
+        // Keep a full 48dp touch target while giving the primary compose action
+        // a compact, accent-filled pill that remains visible on OLED black.
+        composeAction.setTextSize(14f);
+        composeAction.setTypeface(null, android.graphics.Typeface.BOLD);
+        composeAction.setTextColor(AppearanceTheme.onAccent(this));
+        composeAction.setMinWidth(dp(88));
+        composeAction.setPadding(dp(14), 0, dp(14), 0);
+        composeAction.setBackground(new InsetDrawable(ZeroChillUi.rounded(
+                this, AppearanceTheme.accent(this), AppearanceTheme.accent(this),
+                R.dimen.zc_radius_pill), 0, dp(4), 0, dp(4)));
+        LinearLayout.LayoutParams composeParams = new LinearLayout.LayoutParams(-2, dp(48));
+        composeParams.setMarginStart(dp(8));
+        header.addView(composeAction, composeParams);
 
         selectionActions = new LinearLayout(this);
         selectionActions.setGravity(Gravity.CENTER_VERTICAL);
