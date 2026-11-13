@@ -17,6 +17,12 @@
             android:layout_width="188dp"
             android:layout_height="188dp">
 
+            <View
+                android:id="@+id/splashMascotGlow"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:alpha="0" />
+
             <ImageView
                 android:id="@+id/splashHorns"
                 android:layout_width="match_parent"
@@ -93,6 +99,7 @@
                 android:textStyle="bold" />
 
             <TextView
+                android:id="@+id/splashChill"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:fontFamily="sans-serif-light"

@@ -472,3 +472,15 @@ analytics is disabled. The artifact records source branch/SHA in its filename an
 report. See `docs/ZEROCHILL_7_ANDROID_TRAFFIC_REDUCTION.md` and PR #422 for actual results.
 No backend PR merge, deployment, data migration, tag or release is authorized. Physical
 OnePlus Android 16 acceptance, live Auth/DM/Firebase and live traffic savings remain pending.
+
+## ZEROCHILL 7.0 startup personalization and What's New
+
+`feature/zerochill-7-startup-personalization` starts at verified PR #423 head
+`b3b7973247dd2124f5443a2e18747aa4025792c8`, preserving the complete approved
+PR #422/current-main lineage and #423 New Message work. Its separate draft PR
+targets `feature/zerochill-7-new-message-compose`; PR #423 remains untouched.
+See `docs/STARTUP_PERSONALIZATION_WHATS_NEW.md`. This task changes local Android
+UI and install-local acknowledgement only. No application ID, signing, release
+version, launcher icon, workflow, Supabase, endpoint or migration changes.
+Local focused unit tests only: do not trigger Actions or build an APK. No merge,
+publish, release or integration synchronization is authorized.

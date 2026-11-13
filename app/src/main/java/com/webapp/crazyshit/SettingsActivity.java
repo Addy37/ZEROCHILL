@@ -148,6 +148,9 @@ public class SettingsActivity extends ComponentActivity {
                 this::showBlockedShitTokCreators
         );
 
+        addAction(notifications, "What’s New", "Highlights for your installed version.", "",
+                () -> WhatsNewDialog.show(this, false));
+
         SettingsComposeScreen.Section appearance = addGroup("Appearance");
         addAction(
                 appearance,

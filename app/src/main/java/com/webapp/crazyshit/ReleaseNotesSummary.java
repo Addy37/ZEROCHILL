@@ -56,6 +56,20 @@ final class ReleaseNotesSummary {
         return truncate(summary, MAX_SUMMARY_CHARS);
     }
 
+    /** Shared Markdown cleanup for the bundled, offline What's New highlights. */
+    static List<String> highlights(String markdown) {
+        List<String> result = new ArrayList<>();
+        if (markdown == null) return result;
+        for (String raw : markdown.split("\\r?\\n")) {
+            String line = raw.trim();
+            if (!isBullet(line)) continue;
+            String clean = cleanMarkdown(line.substring(2));
+            if (!clean.isEmpty()) result.add(clean);
+            if (result.size() == 4) break;
+        }
+        return result;
+    }
+
     private static boolean isBullet(String line) {
         return line.startsWith("- ") || line.startsWith("* ") || line.startsWith("+ ");
     }
