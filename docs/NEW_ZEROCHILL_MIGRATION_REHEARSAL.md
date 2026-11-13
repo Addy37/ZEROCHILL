@@ -72,4 +72,27 @@ Both SQL files were verified on the live projects using **read-only queries**: O
 - [Supabase CLI v3 change notice](https://supabase.com/changelog/supabase-cli-v3)
 - Existing repository planning: `docs/NEW_ZEROCHILL_AUTH_DATA_PREFLIGHT.md` and the staged backend PRs #418 through #421 and #424.
 
-No Gradle, Android, APK, external SMTP, Auth-login, or storage-upload test ran for this documentation and read-only SQL preparation.
+## Offline synthetic rehearsal executed
+
+Since the available execution environment has no local PostgreSQL server or Supabase CLI and cannot create a separate hosted test project for free without cost confirmation, the first rehearsal used an **in-memory SQLite model with entirely fake identities**. This test validates transfer orchestration only, not the actual Supabase Auth/Postgres implementation.
+
+Run from repository root:
+
+```sh
+python3 supabase/tests/test_zerochill_synthetic_migration.py -v
+```
+
+**Actual result:** 5 tests passed, 0 failures (Python 3.13). The synthetic scenario includes three existing test accounts with conflicting OG emails, a username belonging to a different OG identity, preserved OG UUIDs/fake hash placeholders, favorites, likes, nested comment replies, DMs and reactions, per-user preferences, conversation clear state and an attachment manifest.
+
+Covered cases: reject unknown destination account, discard only fake test identities, preserve every OG row and relationship, repeat the rehearsal without duplicates, and roll back an injected failure without changing its initial state. The first test attempt exposed missing `ON DELETE CASCADE` declarations in the synthetic model. Those declarations were corrected against the repository schema; all five tests then passed. A deeper nested reply case was added and passed.
+
+**Limitations:** SQLite does not match all Supabase/PostgreSQL constraints or triggers. The fake password hash is an opaque placeholder, **not a real migrated password**. No JWT/session, email login, Storage API object bytes or RLS enforcement was tested. No live database was modified. This is not a production import script and must never be adapted to run against live credentials without a separate security review.
+
+## Verified execution boundary
+
+- Live Old/New Supabase: **read-only** inspection previously completed; no production account copy.
+- Offline temporary SQLite database: synthetic writes followed by process teardown only; no paid service.
+- GitHub: synthetic test script and documentation only. No secrets or identifying customer data committed.
+- Next technical gate: actual disposable **Supabase/Postgres with Auth** for one consenting OG account, following a private backup and any required pricing approval.
+
+No Gradle, Android, APK, external SMTP, Auth-login, or storage-upload test ran for this preparation.
