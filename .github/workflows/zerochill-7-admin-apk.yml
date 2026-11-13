@@ -1,6 +1,6 @@
 name: ZEROCHILL 7 Admin Signed APK
 
-# One build for the New Zerochill admin package. No public release.
+# Build the private New Zerochill admin package after Kotlin DSL validation. No public release.
 on:
   push:
     branches:
