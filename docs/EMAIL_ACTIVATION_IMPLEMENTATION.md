@@ -102,9 +102,26 @@ private deny-all RLS informational finding and a leaked-password-protection warn
 in the test project's Auth configuration. See the
 [password protection guidance](https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection).
 
-The focused Android debug suite passed 23 tests before the final generation guard;
-the full debug/release unit suites run on the final code. Final results are recorded
-in the draft implementation PR.
+Final focused Android suites passed **24 debug and 24 release tests**, with zero
+failures, errors or skips on the final implementation commit. Both variants compiled
+as dependencies of these unit test tasks. The command was:
+
+```sh
+gradle --no-daemon -Pkotlin.compiler.execution.strategy=in-process \
+  :app:testDebugUnitTest :app:testReleaseUnitTest \
+  --tests '*ZeroChillAccount*' --tests '*ProfileAccountIsolationTest' \
+  --tests '*ZeroChillActivationSessionCommitTest'
+```
+
+Run with the explicit Migration Test variables above, the provided JDK/Android/Gradle
+toolchains, a writable JVM `user.home`, and Robolectric's Maven Central repository.
+These six suites cover activation UI, lifecycle/deferred completion, same-value
+session mutation/signout, validation, existing signup/login UI/security, and profile
+account isolation.
+The broader debug/release attempt is blocked: API 36 Robolectric artifact
+`android-all-instrumented:16-robolectric-13921718-i7` redirects from Maven Central
+to `gcp.mirrors.maven.org`, which the environment network policy denies. Full-suite
+results must not be described as passing. No fallback to Actions or APK tasks was used.
 
 `supabase/tests/activation-security.sql` passed against Migration Test, asserting
 private-ledger denial, service-only provisioning/claim RPCs, own-state RPC grants,
