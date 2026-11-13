@@ -444,6 +444,19 @@ This also corrects the same shared viewer in direct messages. Preview 38 uses
 the production package/certificate. One signed candidate; no merge, tag, publication,
 backend/source change or data migration. Physical acceptance of the fix is pending.
 
+## PR 423 new-message signed Beta candidate
+
+Draft PR #423 `feature/zerochill-7-new-message-compose` descends from the
+approved New Zerochill traffic candidate PR #422 (head `8005767600a381101a01ec04c539d5e2ed5f7132`).
+The new-message change adds an explicit inbox action and a bounded username search
+without changing the social backend or existing DM thread. Its isolated CI APK uses
+`7.0-traffic-test.2`, code `6000047`, the current production signing identity,
+and the existing `.dev` side-by-side application ID. All New Supabase and no-analytics
+gates from PR #422 apply. The workflow runs only when its own file is committed to
+this branch, or by explicit manual dispatch. It must not merge PR #423, replace the
+stable app, publish, or issue a new backend migration. Real device acceptance and
+GitHub Actions results must be checked before claiming this Beta passed.
+
 ## PR 422 isolated New Zerochill traffic candidate
 
 The user explicitly selected `feature/zerochill-7-social-traffic-reduction`, draft PR #422,
