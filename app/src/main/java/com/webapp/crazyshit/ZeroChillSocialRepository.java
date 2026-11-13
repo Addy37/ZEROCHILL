@@ -670,6 +670,42 @@ final class ZeroChillSocialRepository {
         });
     }
 
+    /** One request per explicit search; bounded prefix results using the indexed username key. */
+    static void searchProfiles(Context context, String username, Callback<ArrayList<PublicProfile>> callback) {
+        final String owner = ZeroChillSessionStore.currentUserId(context);
+        NETWORK.execute(() -> {
+            try {
+                if (owner.isEmpty()) throw new IllegalStateException("Sign in to search for people.");
+                String prefix = clean(username).toLowerCase(java.util.Locale.ROOT);
+                if (!prefix.matches("[a-z0-9_]{2,20}")) {
+                    throw new IllegalArgumentException("Enter 2 to 20 username characters.");
+                }
+                Response response = request(
+                        "GET",
+                        "/rest/v1/profiles?select=user_id,username,display_name,avatar_path,bio,created_at"
+                                + "&username_key=like." + prefix + "*"
+                                + "&user_id=neq." + encode(owner)
+                                + "&order=username_key.asc&limit=20",
+                        "", null, null, null
+                );
+                if (!response.ok()) throw error(response, "Unable to search usernames.");
+                requireSameAccount(context, owner);
+                JSONArray rows = response.body.isEmpty() ? new JSONArray() : new JSONArray(response.body);
+                ArrayList<PublicProfile> matches = new ArrayList<>();
+                for (int i = 0; i < rows.length(); i++) {
+                    JSONObject row = rows.getJSONObject(i);
+                    if (!owner.equals(row.optString("user_id"))) {
+                        matches.add(new PublicProfile(row, false));
+                    }
+                }
+                requireSameAccount(context, owner);
+                callback.complete(matches, null);
+            } catch (Exception error) {
+                callback.complete(null, error);
+            }
+        });
+    }
+
     static void loadProfile(Context context, String userId, Callback<PublicProfile> callback) {
         NETWORK.execute(() -> {
             try {
