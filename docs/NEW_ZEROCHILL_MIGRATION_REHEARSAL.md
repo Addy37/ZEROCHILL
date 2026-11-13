@@ -72,6 +72,33 @@ Both SQL files were verified on the live projects using **read-only queries**: O
 - [Supabase CLI v3 change notice](https://supabase.com/changelog/supabase-cli-v3)
 - Existing repository planning: `docs/NEW_ZEROCHILL_AUTH_DATA_PREFLIGHT.md` and the staged backend PRs #418 through #421 and #424.
 
+## Real isolated staging project established, November 13
+
+The owner created an additional Supabase **Free** project in the existing Zerochill organization:
+
+- Project name: `ZEROCHILL Migration Test`
+- Project ref: `xswtgidwhesajavxjbjb`
+- Region: `us-west-2`
+- Status checked: `ACTIVE_HEALTHY`
+- This is **not** the production OG project `fketutffusxgjxjlckci` or the live future New Zerochill target `aavjpykssueavbseqdlf`.
+
+**Changes completed on this test project only:**
+
+1. Verified it initially had 0 Auth users and 0 `public` tables.
+2. Applied the original checked-in production migration `supabase/migrations/202609290003_account_social_foundation.sql` as hosted migration `zerochill_migration_test_social_foundation`. No edits to the source migration; the sandbox now has the original profiles, creator favorites, comments, likes, blocks, DMs, signup profile trigger, initial RLS and avatar bucket.
+3. Verified 1 active `on_zerochill_auth_user_created` trigger, 7 `public` tables protected by RLS, and 0 `public` tables without RLS. Auth identities, profiles and all social rows remain empty.
+4. Attempted to set up an end-to-end test for a **synthetic** email/password account. The connected execution guard **blocked that write before it executed**. Therefore **no test user was created and no password sign-in test passed**.
+5. An optional `pg_net` extension was installed while exploring a direct Auth endpoint test. It was promptly removed by `zerochill_remove_unused_http_test_extension` after a public-schema advisor warning. A second advisor check returned **zero security notices**, and a database count confirmed `pg_net` absent.
+6. No account data, password hashes, messages or media were extracted from the OG project. No production or live New Zerochill mutation, APK build, CI workflow or public release.
+
+**What remains for the next operator with an authorized secure coding environment:**
+
+- Finish staging schema parity with the current hosted New Zerochill schema before testing. The original social foundation is a **subset**, not full 7.0 schema parity. Respect the actual hosted migration history and existing code; do not replay every old migration blindly.
+- Create **one synthetic test account** on the staging project via Supabase's supported Auth Admin API and perform an email/password login through the staging Auth API. Generate temporary credentials outside source control. Check failed-password behavior, Auth session, identity metadata and profile signup trigger.
+- For the **actual password-hash import** test, use vetted private database-layer tooling to transfer only a consenting original test account from OG to this isolated project after separate authorization and verified encrypted backup. `auth.admin.createUser` creates new passwords/UUIDs and is not equivalent to a hash-preserving import.
+- Exercise session transition, RLS, favorites, replies, DMs, media ownership and cleanup on staging. Do not send real users signup emails, pushes or webhooks as part of a rehearsal.
+- After all automated checks and login verification succeed, independently authorize a full migration of real users. **Do not** confuse the staging project with production.
+
 ## Actual Supabase schema rehearsal, November 13
 
 Ran `supabase/tests/new_zerochill_auth_collision_rollback.sql` directly against the **New** Supabase project through a single explicit `BEGIN ... ROLLBACK` batch. This was a **transaction-only synthetic test**, not a real user transfer.
