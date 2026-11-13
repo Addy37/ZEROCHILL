@@ -8,7 +8,7 @@ Snapshot: 2026-11-13 UTC. Based on current approved `main` at `7ff953aa330a2891e
 - Source: Old Supabase / Crazyshit Feedback, `fketutffusxgjxjlckci`.
 - Destination: New Supabase / New Zerochill, `aavjpykssueavbseqdlf`.
 - Preserve old installed clients while planning a separate 7.0 cutover.
-- Preserve existing destination test users, test messages, media, and the active low-traffic social backend.
+- Keep existing destination test users, test messages, media, and the active low-traffic backend intact **until separately approved changes**. OG account IDs, usernames, and history have priority for the eventual real migration; the three New accounts are disposable tests, not the identity source of truth.
 - Do **not** migrate abandoned old feedback, legacy analytics history, analytics ingestion, or old installation-bound push tokens.
 - The 13 existing `source_config_versions` entries are already present on the destination. Do not insert them twice.
 
@@ -46,13 +46,13 @@ A private, temporary salted-hash comparison of normalized emails, Auth UUIDs and
 - The new project has **1 Auth account without a public profile**. Treat it as existing test state, not permission to delete it.
 - Those three source accounts with matching emails are associated with **125 creator favorites, 314 video likes, 105 comments, and 248 DMs** (messages where one is sender or recipient; not necessarily all unique ownership). Simply skipping the colliding users would discard substantial history.
 
-**Blocker: the real import needs an explicitly reviewed three-user identity mapping and a policy for the cross-email username collision.** Do not overwrite New project's existing identities or silently rename a real user's handle. Verify same-email ownership with actual login before mapping historical records to destination accounts.
+**Blocker: the real import needs an approved plan for retiring or replacing the overlapping test identities and handling the unrelated-email username collision.** OG identities win, but do not erase the three New test accounts or assume matching emails prove identical ownership during preparation. Take a private backup and get separate authorization before changing live New identities.
 
 ## Required migration approach
 
 1. **Secure backup and staging.** Capture verified, encrypted backups and restoration checkpoints for *both* databases. Perform the first import against an isolated disposable destination that mirrors New project's schema and test users. No backups, plaintext identifiers, message bodies, password hashes, refresh tokens or service credentials belong in GitHub, chat, CI logs, or artifacts. Keep the backups outside repository history and set a bounded retention policy. No complete restore into the current live New project, because it would overwrite test accounts and deployed backend state.
-2. **Resolve the 3 identity collisions.** Preserve New project test identities as the default. For matching verified email owners, create a controlled mapping `old_user_id -> new_user_id` and remap all account-owned foreign keys and message sender/recipient references before import. Decide the one unrelated-email username collision with owner approval; do not silently steal, rename, merge, or replace either profile. Preserve historical identity and access boundaries.
-3. **Import non-colliding Auth identities.** The remaining 765 source email identities are candidates to retain original UUID, password hash, confirmation status, and Auth provider identity data. Confirm managed-schema compatibility and the supported import method in a secured environment; do not rely on `auth.admin.createUser` to preserve original password hashes. The New project JWT key stays distinct; users sign in again to receive new sessions. Never copy old refresh sessions.
+2. **Resolve the 3 identity collisions.** For the final transfer, keep OG UUIDs and usernames as the authoritative identities. The three New identities are disposable test accounts, but preserve them until an authorized, backed-up replacement. In isolated rehearsal, confirm how to remove or archive the conflicting target tests without merging their message/history ownership into another person's OG account. Investigate the unrelated-email username conflict; do not silently rename a real OG handle.
+3. **Import OG Auth identities.** All 768 source email identities should retain their original UUIDs, password hashes, confirmation status, and Auth provider identity data for the real migration. The three existing New test Auth identities block a direct import and must be handled separately first. Confirm managed-schema compatibility and the supported import method in a secured environment; do not rely on `auth.admin.createUser` to preserve original password hashes. The New project JWT key stays distinct; users sign in again to receive new sessions. Never copy old refresh sessions.
 4. **Handle the Auth insertion trigger and profiles.** The target's `on_zerochill_auth_user_created` trigger creates profiles from metadata. Design the staged import to avoid default-created profiles blocking original profile restoration; test uniqueness, usernames, terms, avatars, and RLS. Then restore all supported profile fields and use the reviewed collision mapping consistently.
 5. **Restore owner-scoped history.** Plan referentially safe ordering for profiles, creator favorites, video likes, comments and parent replies, comment likes, user blocks/reports, DMs and reactions, notification preferences and conversation-clear state. Use idempotent keys and preserve existing New project test data. Do not change raw message bodies or attachment ownership without verified mappings.
 6. **Restore media bytes, not only storage rows.** Old has 49 avatar objects, 9 private social photos and 10 private GIFs. New already has 1 private photo. Copy encrypted/authenticated media through supported Storage APIs or vetted migration tooling, compare object counts and byte hashes, then test the public/private bucket access policies.
@@ -68,7 +68,8 @@ A private, temporary salted-hash comparison of normalized emails, Auth UUIDs and
 - [x] Cross-project email, UUID, and username conflict counts without exposing user identifiers
 - [x] Existing backend function and security-advisor inventory
 - [x] Read-only SQL file exercised on both actual databases
-- [ ] Owner-approved identity and username-conflict policy
+- [x] Owner decision: OG account IDs, usernames and history take priority over disposable New test accounts
+- [ ] Specific test-account retirement/replacement procedure, private backup and approval before touching hosted New accounts
 - [ ] Disposable staging environment with securely backed-up test users and original schema
 - [ ] Auth import trial with UUID/password-hash/sign-in parity and no live target mutations
 - [ ] Media transfer trial with private access and file-byte verification
@@ -85,4 +86,4 @@ A private, temporary salted-hash comparison of normalized emails, Auth UUIDs and
 - [Supabase CLI v3 breaking change](https://supabase.com/changelog/supabase-cli-v3), November 4, 2026. Explicit `--remote` is required for hosted commands and explicit consent for hosted mutation. Inspect installed CLI version before writing any command.
 - Existing staged PRs #418 through #421 and #424, including `docs/NEW_ZEROCHILL_SUPABASE_MIGRATION.md`, `docs/NEW_ZEROCHILL_SOCIAL_STAGING.md`, and `docs/NEW_ZEROCHILL_TRAFFIC_PLAN.md` on their draft branches.
 
-**Validation actually performed:** read-only SQL on both databases, schema/FK metadata comparison, salted-hash collision comparison, Edge Function inventory and destination security advisor review. **No production import, staging copy, write transactions, Android/Gradle build, email test or live password-auth sign-in was performed.**
+**Validation actually performed:** read-only inventory SQL on both databases, schema/FK metadata comparison, salted-hash collision comparison, Edge Function inventory and destination security advisor review; added 22 read-only referential-integrity checks to this branch and ran them against both projects (OG 22 checks with no violations, New 21 clean and one expected test Auth account without a profile). **No production import, staging copy, write transactions, Android/Gradle build, email test or live password-auth sign-in was performed.**
