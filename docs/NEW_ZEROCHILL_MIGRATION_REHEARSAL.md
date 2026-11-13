@@ -72,6 +72,21 @@ Both SQL files were verified on the live projects using **read-only queries**: O
 - [Supabase CLI v3 change notice](https://supabase.com/changelog/supabase-cli-v3)
 - Existing repository planning: `docs/NEW_ZEROCHILL_AUTH_DATA_PREFLIGHT.md` and the staged backend PRs #418 through #421 and #424.
 
+## Staging Auth API login test completed (Codex report, November 13)
+
+Codex reported exercising the disposable **ZEROCHILL Migration Test** project's actual Supabase Auth API, using its separately configured private test-project credentials. This is an externally executed result reported by the user; it was not independently re-run from this conversation.
+
+- **Pass:** exactly one synthetic confirmed account created.
+- **Pass:** correct password returned an authenticated session.
+- **Pass:** ZEROCHILL's signup trigger created the associated profile, readable through the authenticated session.
+- **Pass:** wrong password was rejected as `400 invalid_credentials`, with no session.
+- **Pass:** account was signed out and deleted, with Auth user and profile confirmed absent; Auth user count returned to zero.
+- **Scope:** OG and the live New Zerochill project were not touched; no credentials, passwords, or session tokens printed; no GitHub Actions or APK build.
+- **Diagnostic:** direct service-role REST profile reads returned `403`, PostgreSQL `42501` (permission denied). A separate **read-only** privilege check against the test database confirmed `service_role` has no SELECT privilege on `public.profiles` (table or `username` column); `authenticated` and `anon` have SELECT on `username` but not on sensitive `adult_confirmed_at`. The imported foundation intentionally grants a restricted, column-level client read; service-role access is **not required** for the tested signed-in profile flow. Do **not** broaden grants to `PUBLIC` or expose sensitive profile fields to bypass this isolated admin-read test. If a real backend operation requires service-role profile reads, review that specific operation and grant least privilege separately.
+- **Still untested:** import of an existing password hash into another Supabase Auth project; real OG account password continuity; other social/backend schema parity, DMs/attachments and media; full migration rehearsal.
+
+**Next safe gate:** Codex can create two disposable synthetic identities with an invented password in staging, simulate replacing one by importing a preserved UUID/password hash through a vetted database-layer method, and use the staging Auth API to verify login. Do not use actual OG identities or passwords until a separately approved, encrypted-backup-backed rehearsal for an account controlled by the owner.
+
 ## Real isolated staging project established, November 13
 
 The owner created an additional Supabase **Free** project in the existing Zerochill organization:
