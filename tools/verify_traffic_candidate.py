@@ -12,7 +12,7 @@ apk, build_tools = Path(sys.argv[1]), Path(sys.argv[2])
 badging = subprocess.check_output([str(build_tools / 'aapt2'), 'dump', 'badging', str(apk)], text=True)
 package = re.search(r"package: name='([^']+)' versionCode='(\d+)'", badging)
 assert package and package[1] == 'com.addy37.crazyshitunofficial.dev', 'Not the side-by-side package'
-assert package[2] == '6000046', 'Unexpected candidate version'
+assert package[2] == os.environ.get('APP_VERSION_CODE', '6000046'), 'Unexpected candidate version'
 certs = subprocess.check_output([str(build_tools / 'apksigner'), 'verify', '--verbose', '--print-certs', str(apk)], text=True)
 cert = re.search(r'Signer #1 certificate SHA-256 digest: (\w+)', certs)
 assert cert and cert[1] == '04abf84b3d468cbb1a562dea83b0007e686b2e56018cce911223963faea51356', 'Production certificate mismatch'
