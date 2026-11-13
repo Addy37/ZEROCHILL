@@ -92,7 +92,7 @@ internal class ConsoleState @JvmOverloads constructor(application: Application, 
         saved.keys().filter { it.startsWith("reply:") }.forEach { saved.remove<String>(it) }
         persistConfig(); navigate("home")
     }
-    fun refresh() { loadFeedback(); loadAnalytics(); loadConfig() }
+    fun refresh() { loadFeedback(); loadCommunityOverview(); loadConfig() }
     fun loadFeedback() = request("feedback") { token ->
         items = withContext(Dispatchers.IO) { gateway.list(token) }; refreshed = java.time.Instant.now().toString()
     }
