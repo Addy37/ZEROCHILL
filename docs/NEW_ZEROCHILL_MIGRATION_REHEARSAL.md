@@ -72,6 +72,19 @@ Both SQL files were verified on the live projects using **read-only queries**: O
 - [Supabase CLI v3 change notice](https://supabase.com/changelog/supabase-cli-v3)
 - Existing repository planning: `docs/NEW_ZEROCHILL_AUTH_DATA_PREFLIGHT.md` and the staged backend PRs #418 through #421 and #424.
 
+## Actual Supabase schema rehearsal, November 13
+
+Ran `supabase/tests/new_zerochill_auth_collision_rollback.sql` directly against the **New** Supabase project through a single explicit `BEGIN ... ROLLBACK` batch. This was a **transaction-only synthetic test**, not a real user transfer.
+
+- Two invented test identities were inserted with email/username overlaps. The real Auth insert trigger generated their profiles. Removing those synthetic test identities cascaded their synthetic favorite and profile records.
+- Two invented OG-like identities were inserted with the original synthetic email/username claims. Their separate user IDs, auto-created profiles, favorite, and parent/reply comment relationships all passed SQL assertions.
+- The explicit `ROLLBACK` ran, and final checks returned **0 leftover Auth users, 0 comments, 0 profiles**.
+- A follow-up read-only inventory confirmed **3 existing New Auth users, 2 profiles, 0 favorites, 3 comments, 3 DMs, 1 video like**, unchanged from the preflight snapshot.
+- No real emails, passwords, usernames, identity mappings, messages, or media were accessed. The test's password field was empty, so this does **not** prove login or password-hash portability.
+- This directly checks New project's deployed PostgreSQL schema and profile trigger. It does **not** create isolated Auth services; the next gate remains an actual disposable test project and login.
+
+The connected Zerochill organization is on Supabase's Free plan. Its cost quotation for one additional project was **$0/month** at the time of check. **No project was created** because creating a new hosted resource requires owner awareness and approval. Confirm the organization and quote before creating the disposable project.
+
 ## Offline synthetic rehearsal executed
 
 Since the available execution environment has no local PostgreSQL server or Supabase CLI and cannot create a separate hosted test project for free without cost confirmation, the first rehearsal used an **in-memory SQLite model with entirely fake identities**. This test validates transfer orchestration only, not the actual Supabase Auth/Postgres implementation.
