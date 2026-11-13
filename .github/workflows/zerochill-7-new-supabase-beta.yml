@@ -1,0 +1,98 @@
+name: ZEROCHILL 7 New Supabase Signed Beta
+
+# Manual only: do not spend Actions minutes or publish a release automatically.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  new-supabase-beta:
+    if: github.ref_name == 'main' || github.ref_name == 'fix/zerochill-7-new-supabase-build-routing'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      ZEROCHILL_V7_TRAFFIC: 'true'
+      SUPABASE_URL: https://aavjpykssueavbseqdlf.supabase.co
+      # Public client key, not a service role or private credential.
+      SUPABASE_PUBLISHABLE_KEY: sb_publishable_oSQALszxzeeHxDwEeclucA_5dGEpOLs
+      FEEDBACK_ANON_KEY: sb_publishable_oSQALszxzeeHxDwEeclucA_5dGEpOLs
+      FEEDBACK_ENDPOINT: https://aavjpykssueavbseqdlf.supabase.co/functions/v1/dynamic-api
+      SOURCE_CONFIG_ENDPOINT: https://aavjpykssueavbseqdlf.supabase.co/functions/v1/app-config
+      ANALYTICS_ENDPOINT: ''
+      ANALYTICS_V2_ENDPOINT: ''
+      APP_VERSION_CODE: '7000000'
+      APP_VERSION_NAME: '7.0.0-new-supabase-beta'
+      ZEROCHILL_SOURCE_SHA: ${{ github.sha }}
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Verify approved ZEROCHILL 7 baseline
+        run: git merge-base --is-ancestor 7ff953aa HEAD
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: |
+            17
+            21
+      - uses: android-actions/setup-android@v4
+        with:
+          packages: platform-tools
+      - run: sdkmanager 'platforms;android-35' 'platforms;android-36' 'build-tools;35.0.0'
+      - uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: '8.11.1'
+          cache-provider: basic
+      - name: Restore established production signing identity for side-by-side Beta
+        env:
+          SIGNING_BUNDLE: ${{ secrets.ANDROID_SIGNING_BUNDLE }}
+        run: |
+          python3 - <<'PY'
+          import base64, json, os, pathlib
+          raw = os.environ.get('SIGNING_BUNDLE', '')
+          if not raw:
+              raise SystemExit('Missing ANDROID_SIGNING_BUNDLE')
+          data = json.loads(raw.replace('\r','').replace('\n',''))
+          for key in ('keystore_base64','store_password','key_alias','key_password'):
+              if not data.get(key):
+                  raise SystemExit('Missing signing item: ' + key)
+          for key in ('store_password','key_alias','key_password'):
+              print('::add-mask::' + data[key])
+          path = pathlib.Path(os.environ['RUNNER_TEMP'])/'zerochill-7-new-supabase.jks'
+          path.write_bytes(base64.b64decode(data['keystore_base64']))
+          path.chmod(0o600)
+          with open(os.environ['GITHUB_ENV'],'a') as out:
+              for key, value in {
+                  'ANDROID_KEYSTORE_PATH': str(path),
+                  'ANDROID_KEYSTORE_PASSWORD': data['store_password'],
+                  'ANDROID_KEY_ALIAS': data['key_alias'],
+                  'ANDROID_KEY_PASSWORD': data['key_password']
+              }.items():
+                  out.write(key+'='+value+'\n')
+          PY
+      - name: Focused Auth, messages and push tests plus signed APK
+        run: |
+          gradle --no-daemon -Porg.gradle.java.installations.fromEnv=JAVA_HOME_17_X64,JAVA_HOME_21_X64 \
+            :app:testDebugUnitTest \
+            --tests 'com.webapp.crazyshit.ZeroChillAccountUiTest' \
+            --tests 'com.webapp.crazyshit.ZeroChillMessageThreadUiTest' \
+            --tests 'com.webapp.crazyshit.ZeroChillSocialPushRoutingTest' \
+            :app:assembleDebug
+      - name: Verify APK uses New Zerochill and no legacy backend
+        run: |
+          set -euo pipefail
+          mkdir -p candidate
+          SAFE_REF="${GITHUB_REF_NAME//\//-}"
+          APK="candidate/ZeroChill-7-${SAFE_REF}-${GITHUB_SHA:0:7}.apk"
+          cp app/build/outputs/apk/debug/app-debug.apk "$APK"
+          python3 tools/verify_traffic_candidate.py "$APK" "$ANDROID_HOME/build-tools/35.0.0"
+          (cd candidate && sha256sum *.apk > SHA256SUMS.txt)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ZeroChill-7-New-Supabase-Signed-Beta
+          path: candidate/
+          if-no-files-found: error
+          retention-days: 7
