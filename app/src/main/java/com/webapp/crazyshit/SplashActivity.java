@@ -47,7 +47,9 @@ public final class SplashActivity extends Activity {
         int accent = AppearanceTheme.accent(this);
         MascotAccent.applyGlow(findViewById(R.id.splashMascotGlow), accent);
         MascotAccent.apply(findViewById(R.id.splashHorns),
-                findViewById(R.id.splashOutline), findViewById(R.id.splashTongue), accent);
+                findViewById(R.id.splashOutline),
+                findViewById(R.id.splashXEye), findViewById(R.id.splashAngryEye),
+                findViewById(R.id.splashTongue), accent);
         ((TextView) findViewById(R.id.splashChill)).setTextColor(accent);
 
         animateSplash();
