@@ -38,7 +38,7 @@ public class SplashAccentTest {
         StartupWizardPolicy.markComplete(context);
     }
 
-    @Test public void splashAccentsOnlyColorLayersAndChill() {
+    @Test public void splashAccentsAllCyanLayersButKeepsFaceAndTeeth() {
         AppearanceTheme.setAccent(RuntimeEnvironment.getApplication(), AppearanceTheme.Accent.PURPLE);
         try (ActivityController<SplashActivity> controller =
                      Robolectric.buildActivity(SplashActivity.class, new Intent()).setup()) {
@@ -46,11 +46,11 @@ public class SplashAccentTest {
             assertEquals(AppearanceTheme.Accent.PURPLE.color,
                     ((TextView) activity.findViewById(R.id.splashChill)).getCurrentTextColor());
             assertNotNull(activity.findViewById(R.id.splashMascotGlow).getBackground());
-            for (int id : new int[]{R.id.splashHorns, R.id.splashOutline, R.id.splashTongue}) {
+            for (int id : new int[]{R.id.splashHorns, R.id.splashOutline,
+                    R.id.splashXEye, R.id.splashAngryEye, R.id.splashTongue}) {
                 assertNotNull(((ImageView) activity.findViewById(id)).getColorFilter());
             }
-            for (int id : new int[]{R.id.splashFace, R.id.splashXEye,
-                    R.id.splashAngryEye, R.id.splashTeeth}) {
+            for (int id : new int[]{R.id.splashFace, R.id.splashTeeth}) {
                 assertNull(((ImageView) activity.findViewById(id)).getColorFilter());
             }
         }
