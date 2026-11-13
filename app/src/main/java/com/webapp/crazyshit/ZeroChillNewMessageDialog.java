@@ -3,7 +3,6 @@ package com.webapp.crazyshit;
 import android.app.Activity;
 import android.app.Dialog;
 import android.content.Intent;
-import android.graphics.Color;
 import android.text.InputFilter;
 import android.text.InputType;
 import android.view.Gravity;
