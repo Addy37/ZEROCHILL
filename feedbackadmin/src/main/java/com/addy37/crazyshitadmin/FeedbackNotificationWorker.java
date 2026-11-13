@@ -16,7 +16,7 @@ import androidx.work.WorkerParameters;
 import java.util.List;
 
 public final class FeedbackNotificationWorker extends Worker {
-    private static final String PREFS = "notification_state";
+    private static final String PREFS = "zerochill_7_notification_state";
     private static final String LAST_EVENT = "last_feedback_event";
 
     public FeedbackNotificationWorker(@NonNull Context context, @NonNull WorkerParameters params) {
