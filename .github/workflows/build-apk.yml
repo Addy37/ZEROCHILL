@@ -31,7 +31,14 @@ jobs:
           while read -r run_id; do
             gh api --method POST "repos/$GH_REPO/actions/runs/$run_id/cancel" || true
           done
+  traffic-test-candidate:
+    if: github.ref_name == 'feature/zerochill-7-social-traffic-reduction'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/traffic-422-candidate.yml
+    secrets: inherit
   build:
+    if: github.ref_name != 'feature/zerochill-7-social-traffic-reduction'
     runs-on: ubuntu-latest
     env:
       ZEROCHILL_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}

@@ -70,6 +70,10 @@ public final class ZeroChillMessageActivity extends Activity {
     private boolean loading;
     private boolean sending;
     private boolean refreshQueued;
+    private boolean manualRefreshQueued;
+    private int threadFailures;
+    private long threadRetryAfter;
+    private boolean threadPollingStopped;
     private long threadRevision;
     private int partnerRequestGeneration;
     private String lastMessageId = "";
@@ -225,7 +229,7 @@ public final class ZeroChillMessageActivity extends Activity {
         retryThread = text("Try again", 14, AppearanceTheme.primaryText(ZeroChillMessageActivity.this), true);
         ZeroChillUi.styleAction(retryThread, false);
         retryThread.setPadding(dp(16), 0, dp(16), 0);
-        retryThread.setOnClickListener(v -> loadThread(true));
+        retryThread.setOnClickListener(v -> loadThread(true, true));
         LinearLayout.LayoutParams retryParams = new LinearLayout.LayoutParams(-2, dp(48));
         retryParams.topMargin = dp(16);
         threadState.addView(retryThread, retryParams);
@@ -314,9 +318,20 @@ public final class ZeroChillMessageActivity extends Activity {
         }));
     }
 
-    private void loadThread(boolean showLoading) {
+    private void loadThread(boolean showLoading) { loadThread(showLoading, false); }
+
+    private void clearThreadFailure() {
+        threadFailures = 0; threadRetryAfter = 0L; threadPollingStopped = false;
+    }
+
+    private void loadThread(boolean showLoading, boolean manual) {
+        if (BuildConfig.ZEROCHILL_V7_TRAFFIC) {
+            if (manual) clearThreadFailure();
+            else if (threadPollingStopped || android.os.SystemClock.elapsedRealtime() < threadRetryAfter) return;
+        }
         if (loading) {
             refreshQueued = true;
+            manualRefreshQueued |= manual;
             return;
         }
         loading = true;
@@ -338,8 +353,16 @@ public final class ZeroChillMessageActivity extends Activity {
                                     progress.setVisibility(View.GONE);
                                     boolean stale = revisionAtStart != threadRevision;
                                     boolean rerun = refreshQueued || stale;
+                                    boolean manualRerun = manualRefreshQueued;
                                     refreshQueued = false;
+                                    manualRefreshQueued = false;
                                     if (error != null || items == null) {
+                                        if (BuildConfig.ZEROCHILL_V7_TRAFFIC) {
+                                            threadFailures = Math.min(7, threadFailures + 1);
+                                            threadRetryAfter = android.os.SystemClock.elapsedRealtime()
+                                                    + Math.min(300_000L, 5_000L * (1L << (threadFailures - 1)));
+                                            threadPollingStopped = ZeroChillSocialRepository.isPermanentHttpError(error);
+                                        }
                                         if (adapter.getItemCount() == 0) {
                                             showThreadState(
                                                     "Couldn't load messages. Check your connection"
@@ -352,11 +375,13 @@ public final class ZeroChillMessageActivity extends Activity {
                                                             ZeroChillToast.LENGTH_LONG)
                                                     .show();
                                         }
-                                        if (rerun) loadThread(false);
+                                        if (manualRerun) loadThread(true, true);
+                                        else if (rerun && !BuildConfig.ZEROCHILL_V7_TRAFFIC) loadThread(false);
                                         return;
                                     }
+                                    clearThreadFailure();
                                     if (stale) {
-                                        loadThread(false);
+                                        loadThread(false, manualRerun);
                                         return;
                                     }
                                     String newest =
@@ -393,7 +418,7 @@ public final class ZeroChillMessageActivity extends Activity {
                                                         ZeroChillMessageBadgeStore.refresh(this);
                                                 });
                                     }
-                                    if (rerun) loadThread(false);
+                                    if (rerun) loadThread(manualRerun, manualRerun);
                                 }));
     }
 
@@ -463,7 +488,8 @@ public final class ZeroChillMessageActivity extends Activity {
                         lastMessageId = message.id;
                     }
                     recycler.scrollToPosition(adapter.getItemCount() - 1);
-                    loadThread(false);
+                    clearThreadFailure();
+                    loadThread(false, BuildConfig.ZEROCHILL_V7_TRAFFIC);
                 });
         if (attachment.selected == null) messageSender.send(this,partnerId,clientId,value,completion);
         else ZeroChillSocialRepository.sendDirectMessage(this,partnerId,clientId,value,attachment.selected,completion);
@@ -652,12 +678,15 @@ public final class ZeroChillMessageActivity extends Activity {
 
     private void showOptions(View anchor) {
         ZeroChillMenu menu = new ZeroChillMenu(this, anchor);
+        if (BuildConfig.ZEROCHILL_V7_TRAFFIC) menu.getMenu().add("Refresh messages");
         menu.getMenu().add("View profile");
         menu.getMenu().add(blockedByMe ? "Unblock user" : "Block user");
         menu.getMenu().add("Report user");
         menu.setOnMenuItemClickListener(item -> {
             String label = String.valueOf(item.getTitle());
-            if ("View profile".equals(label)) {
+            if ("Refresh messages".equals(label)) {
+                loadThread(true, true);
+            } else if ("View profile".equals(label)) {
                 openProfile();
             } else if ("Block user".equals(label) || "Unblock user".equals(label)) {
                 confirmBlock(!blockedByMe);

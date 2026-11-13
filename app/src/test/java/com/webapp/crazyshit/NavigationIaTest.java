@@ -238,7 +238,7 @@ public class NavigationIaTest {
 
         Intent started = shadowOf(activity).getNextStartedActivity();
         assertEquals(
-                NativeFeedBrowserActivity.class.getName(),
+                OnlyFapGalleryActivity.class.getName(),
                 started.getComponent().getClassName()
         );
         assertEquals(

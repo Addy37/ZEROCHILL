@@ -19,7 +19,14 @@ final class SocialActivityCoordinator {
     interface Session { String current(Context context); }
     interface Presenter { void show(Activity activity, UpdateInboxStore.Entry entry); void hide(); }
 
-    private static final long POLL_MS = 12_000L;
+    private static final long POLL_MS = pollIntervalMs(BuildConfig.ZEROCHILL_V7_TRAFFIC);
+    static long pollIntervalMs(boolean v7) { return v7 ? 300_000L : 12_000L; }
+    static boolean needsForegroundRecovery(boolean v7, long pausedAt, long now) {
+        return v7 && pausedAt >= 0 && now >= pausedAt
+                && now - pausedAt >= FOREGROUND_RECHECK_MS;
+    }
+    private static final long FOREGROUND_RECHECK_MS = 60_000L;
+    private static final long MANUAL_REFRESH_MS = 10_000L;
     private static SocialActivityCoordinator instance;
     private final Context context;
     private final Loader loader;
@@ -33,6 +40,9 @@ final class SocialActivityCoordinator {
     private long newestSeenTimestamp;
     private boolean loading;
     private long lastPoll = -POLL_MS;
+    private long pausedAt = -1L;
+    private int consecutiveFailures;
+    private boolean automaticRefreshStopped;
     private int generation;
     private final Runnable poll = new Runnable() {
         @Override public void run() {
@@ -63,7 +73,7 @@ final class SocialActivityCoordinator {
         if (instance != null) instance.pause(activity);
     }
     static void requestRefresh(Activity activity) {
-        get(activity).refresh();
+        get(activity).refresh(true);
     }
     static boolean canNavigate(Activity activity) { return instance == null || instance.host.get() == activity; }
     static boolean isResumed(Activity activity) {
@@ -78,6 +88,12 @@ final class SocialActivityCoordinator {
     }
 
     void resume(Activity activity) {
+        if (consecutiveFailures == 0 && !automaticRefreshStopped
+                && needsForegroundRecovery(BuildConfig.ZEROCHILL_V7_TRAFFIC,
+                pausedAt, SystemClock.elapsedRealtime())) {
+            lastPoll = -POLL_MS;
+        }
+        pausedAt = -1L;
         host = new WeakReference<>(activity);
         handler.removeCallbacks(poll);
         handler.post(poll);
@@ -86,12 +102,15 @@ final class SocialActivityCoordinator {
     void pause(Activity activity) {
         if (host.get() != activity) return;
         host.clear();
+        pausedAt = SystemClock.elapsedRealtime();
         presenter.hide();
         handler.removeCallbacks(poll);
         // In-flight read may still fill history, but cannot display while no host is resumed.
     }
 
-    void refresh() {
+    void refresh() { refresh(false); }
+
+    void refresh(boolean manual) {
         Activity activity = host.get();
         if (activity == null || activity.isFinishing() || activity.isDestroyed()) return;
         String current = session.current(context);
@@ -100,13 +119,21 @@ final class SocialActivityCoordinator {
             generation++;
             loading = false;
             lastPoll = -POLL_MS;
+            consecutiveFailures = 0;
+            automaticRefreshStopped = false;
             account = current;
             baselined = false;
             newestSeenTimestamp = 0L;
             seen.clear();
             presenter.hide();
         }
-        if (account.isEmpty() || loading || SystemClock.elapsedRealtime() - lastPoll < POLL_MS) return;
+        if (account.isEmpty() || loading) return;
+        if (BuildConfig.ZEROCHILL_V7_TRAFFIC && automaticRefreshStopped && !manual) return;
+        long interval = manual && BuildConfig.ZEROCHILL_V7_TRAFFIC ? MANUAL_REFRESH_MS : POLL_MS;
+        if (BuildConfig.ZEROCHILL_V7_TRAFFIC && !manual && consecutiveFailures > 0) {
+            interval = Math.min(1_800_000L, POLL_MS * (1L << Math.min(3, consecutiveFailures)));
+        }
+        if (SystemClock.elapsedRealtime() - lastPoll < interval) return;
         ZeroChillNotificationPreferences.refreshIfNeeded(context);
         final String requestedAccount = account;
         final int requestGeneration = generation;
@@ -119,7 +146,15 @@ final class SocialActivityCoordinator {
                 refresh();
                 return;
             }
-            if (error != null || activityItems == null) return;
+            if (error != null || activityItems == null) {
+                if (BuildConfig.ZEROCHILL_V7_TRAFFIC) {
+                    consecutiveFailures = Math.min(4, consecutiveFailures + 1);
+                    automaticRefreshStopped = ZeroChillSocialRepository.isPermanentHttpError(error);
+                }
+                return;
+            }
+            consecutiveFailures = 0;
+            automaticRefreshStopped = false;
             List<UpdateInboxStore.Entry> inserted = UpdateInboxStore.recordSocialActivities(context, requestedAccount, activityItems);
             boolean announce = baselined;
             baselined = true;

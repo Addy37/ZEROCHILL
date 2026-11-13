@@ -90,6 +90,10 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     private ViewPager2 primaryPager;
     private MainPagerAdapter primaryPagerAdapter;
     private AppUpdater appUpdater;
+    private boolean whatsNewPending;
+    private boolean foregroundForWhatsNew;
+    private boolean continuePromptsAfterAppearance;
+    private boolean waitingForAppearance;
     private boolean chaosClearDisplay;
     private NavigationMotionController navigationMotion;
     private float contentDownX;
@@ -100,6 +104,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     private Screen screen = Screen.CHAOS;
     private int renderedPrimaryPage = -1;
     private final Runnable ratingPromptCheck = () -> {
+        if (WhatsNewDialog.visible(this) || shouldOfferWhatsNew()) return;
         if (screen != Screen.CHAOS || primaryPager == null
                 || currentPrimaryPage() != MainPagerAdapter.PAGE_CHAOS
                 || chaosClearDisplay
@@ -123,6 +128,8 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     @Override
     protected void onCreate(Bundle state) {
         super.onCreate(state);
+        whatsNewPending = WhatsNewPolicy.pending(this);
+        continuePromptsAfterAppearance = state != null && state.getBoolean("continue_prompts_after_appearance", false);
         appliedAppearanceColors = AppearanceTheme.colorSignature(this);
         long activityStartedAt = android.os.SystemClock.elapsedRealtime();
         AppPerformance.startup("main");
@@ -158,6 +165,16 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         showPrimaryPage(startPage);
         dispatchLauncherShortcut();
 
+        // Offer only after normal launcher entry; content/preloading has already started.
+        if (shouldOfferWhatsNew() || WhatsNewDialog.visible(this)) {
+            overlayRoot.post(this::offerWhatsNew);
+            return;
+        }
+
+        offerExistingStartupPrompts();
+    }
+
+    private void offerExistingStartupPrompts() {
         boolean shortcutLaunch = getIntent() != null
                 && AppShortcuts.isShortcutAction(getIntent().getAction());
         if (!shortcutLaunch && ZeroChillIdUpgradeAnnouncement.shouldShow(this) && overlayRoot != null) {
@@ -183,11 +200,49 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
         setIntent(intent);
+        if (!WhatsNewPolicy.allowsAutomaticDisplay(intent)) WhatsNewDialog.deferAutomatic(this);
         if (!AccessNoticeDialog.isAccepted(this)) {
             return;
         }
         showPrimaryPage(MainPagerAdapter.PAGE_CHAOS);
         dispatchLauncherShortcut();
+        offerWhatsNew();
+    }
+
+    private boolean shouldOfferWhatsNew() {
+        return whatsNewPending && !WhatsNewPolicy.acknowledged(this)
+                && WhatsNewPolicy.allowsAutomaticDisplay(getIntent())
+                && AccessNoticeDialog.isAccepted(this) && !StartupWizardPolicy.shouldShow(this);
+    }
+
+    private void offerWhatsNew() {
+        if (!foregroundForWhatsNew) return;
+        if (!WhatsNewPolicy.allowsAutomaticDisplay(getIntent())) {
+            WhatsNewDialog.deferAutomatic(this);
+            return;
+        }
+        if (shouldOfferWhatsNew()) WhatsNewDialog.show(this, true);
+    }
+
+    @Override protected void onPostResume() {
+        super.onPostResume();
+        foregroundForWhatsNew = true;
+        offerWhatsNew();
+        if (continuePromptsAfterAppearance && !waitingForAppearance) {
+            continuePromptsAfterAppearance = false;
+            if (WhatsNewPolicy.allowsAutomaticDisplay(getIntent())) offerExistingStartupPrompts();
+        }
+    }
+
+    void onWhatsNewAcknowledged(boolean customize) {
+        whatsNewPending = false;
+        if (!WhatsNewPolicy.allowsAutomaticDisplay(getIntent())) return;
+        continuePromptsAfterAppearance = true;
+        waitingForAppearance = customize;
+        if (foregroundForWhatsNew && !customize) {
+            continuePromptsAfterAppearance = false;
+            offerExistingStartupPrompts();
+        }
     }
 
     private void buildUi() {
@@ -1470,6 +1525,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     }
 
     @Override protected void onSaveInstanceState(Bundle state) {
+        state.putBoolean("continue_prompts_after_appearance", continuePromptsAfterAppearance);
         if (searchPanel != null) {
             Bundle searchState = new Bundle();
             searchState.putString("scope", isOnlyFapSearchContext() ? "bunkr" : "");
@@ -1483,6 +1539,8 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
 
     @Override
     protected void onPause() {
+        foregroundForWhatsNew = false;
+        waitingForAppearance = false;
         super.onPause();
         if (headerProfileAvatar != null) headerProfileAvatar.pause();
         if (overlayRoot != null) overlayRoot.removeCallbacks(ratingPromptCheck);

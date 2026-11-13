@@ -2,6 +2,7 @@ package com.webapp.crazyshit;
 
 import android.content.Context;
 import android.net.Uri;
+import android.os.SystemClock;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -18,6 +19,7 @@ import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -29,6 +31,13 @@ import java.util.concurrent.Executors;
 /** ZeroChill-owned social data: comments, likes, profiles, blocks, reports, and messaging. */
 final class ZeroChillSocialRepository {
     private static final ExecutorService NETWORK = Executors.newFixedThreadPool(2);
+    private static final Object SUMMARY_LOCK = new Object();
+    private static final long SUMMARY_TTL_MS = 120_000L;
+    private static final int SUMMARY_MAX_ENTRIES = 120;
+    private static long summaryRevision;
+    private static final LinkedHashMap<String, SummaryCacheEntry> SUMMARY_CACHE =
+            new LinkedHashMap<>(32, 0.75f, true);
+    private static final Map<String, ArrayList<Callback<VideoSocialState>>> SUMMARY_PENDING = new HashMap<>();
 
     interface Callback<T> {
         void complete(T value, Exception error);
@@ -91,12 +100,42 @@ final class ZeroChillSocialRepository {
     static final class VideoLikeState {
         final int count;
         final boolean liked;
+        final boolean countKnown;
 
-        VideoLikeState(int count, boolean liked) {
+        VideoLikeState(int count, boolean liked) { this(count, liked, true); }
+        VideoLikeState(int count, boolean liked, boolean countKnown) {
             this.count = Math.max(0, count);
+            this.liked = liked;
+            this.countKnown = countKnown;
+        }
+    }
+
+    static VideoLikeState confirmedVideoLikeWrite(boolean previouslyLiked, VideoLikeState refreshed) {
+        // The mutation already committed. A failed count read must not undo its own-like state.
+        return refreshed != null ? refreshed : new VideoLikeState(0, !previouslyLiked, false);
+    }
+
+    static final class VideoSocialState {
+        final int likeCount;
+        final int commentCount;
+        final boolean liked;
+
+        VideoSocialState(int likeCount, int commentCount, boolean liked) {
+            this.likeCount = Math.max(0, likeCount);
+            this.commentCount = Math.max(0, commentCount);
             this.liked = liked;
         }
     }
+
+    private static final class SummaryCacheEntry {
+        final VideoSocialState value;
+        final long recordedAt;
+        SummaryCacheEntry(VideoSocialState value, long recordedAt) {
+            this.value = value;
+            this.recordedAt = recordedAt;
+        }
+    }
+
 
     static final class PublicProfile {
         final String userId;
@@ -363,9 +402,13 @@ final class ZeroChillSocialRepository {
                 );
                 if(response.status==409) {
                     Response existing=request("GET","/rest/v1/comments?select=id&id=eq."+encode(clientId)+"&user_id=eq."+encode(owner),token,null,null,null);
-                    if(existing.ok() && new JSONArray(existing.body).length()==1) {callback.complete(true,null);return;}
+                    if(existing.ok() && new JSONArray(existing.body).length()==1) {
+                        if (BuildConfig.ZEROCHILL_V7_TRAFFIC) invalidateVideoSummary();
+                        callback.complete(true,null);return;
+                    }
                 }
                 if (!response.ok()) throw error(response, "Unable to post the comment.");
+                if (BuildConfig.ZEROCHILL_V7_TRAFFIC) invalidateVideoSummary();
                 AnalyticsTracker.event(context,"comments");
                 callback.complete(true, null);
             } catch (Exception error) {
@@ -436,6 +479,7 @@ final class ZeroChillSocialRepository {
                         "return=minimal"
                 );
                 if (!response.ok()) throw error(response, "Unable to delete the comment.");
+                if (BuildConfig.ZEROCHILL_V7_TRAFFIC) invalidateVideoSummary();
                 callback.complete(true, null);
             } catch (Exception error) {
                 callback.complete(false, error);
@@ -620,6 +664,42 @@ final class ZeroChillSocialRepository {
                 Collections.sort(activity, (left, right) ->
                         Long.compare(socialTime(right.createdAt), socialTime(left.createdAt)));
                 callback.complete(activity, null);
+            } catch (Exception error) {
+                callback.complete(null, error);
+            }
+        });
+    }
+
+    /** One request per explicit search; bounded prefix results using the indexed username key. */
+    static void searchProfiles(Context context, String username, Callback<ArrayList<PublicProfile>> callback) {
+        final String owner = ZeroChillSessionStore.currentUserId(context);
+        NETWORK.execute(() -> {
+            try {
+                if (owner.isEmpty()) throw new IllegalStateException("Sign in to search for people.");
+                String prefix = clean(username).toLowerCase(java.util.Locale.ROOT);
+                if (!prefix.matches("[a-z0-9_]{2,20}")) {
+                    throw new IllegalArgumentException("Enter 2 to 20 username characters.");
+                }
+                Response response = request(
+                        "GET",
+                        "/rest/v1/profiles?select=user_id,username,display_name,avatar_path,bio,created_at"
+                                + "&username_key=like." + prefix + "*"
+                                + "&user_id=neq." + encode(owner)
+                                + "&order=username_key.asc&limit=20",
+                        "", null, null, null
+                );
+                if (!response.ok()) throw error(response, "Unable to search usernames.");
+                requireSameAccount(context, owner);
+                JSONArray rows = response.body.isEmpty() ? new JSONArray() : new JSONArray(response.body);
+                ArrayList<PublicProfile> matches = new ArrayList<>();
+                for (int i = 0; i < rows.length(); i++) {
+                    JSONObject row = rows.getJSONObject(i);
+                    if (!owner.equals(row.optString("user_id"))) {
+                        matches.add(new PublicProfile(row, false));
+                    }
+                }
+                requireSameAccount(context, owner);
+                callback.complete(matches, null);
             } catch (Exception error) {
                 callback.complete(null, error);
             }
@@ -1248,7 +1328,166 @@ final class ZeroChillSocialRepository {
         return profiles;
     }
 
+    /** One RLS-scoped summary for likes, the current user's state and visible comment count.
+     * Concurrent like/count consumers of the selected video share a single request. */
+    static void videoSocialState(Context context, String pageUrl, Callback<VideoSocialState> callback) {
+        String content = contentKey(pageUrl);
+        if (content.isEmpty()) {
+            NETWORK.execute(() -> callback.complete(null,
+                    new IllegalArgumentException("This video has no stable URL.")));
+            return;
+        }
+        videoSocialState(content, () -> ZeroChillSessionStore.currentUserId(context), () -> {
+            String owner = ZeroChillSessionStore.currentUserId(context);
+            String token = "";
+            if (!owner.isEmpty()) token = ZeroChillAccountRepository.accessTokenBlocking(context);
+            if (!owner.equals(ZeroChillSessionStore.currentUserId(context)))
+                throw new IllegalStateException("Account changed.");
+            JSONObject body = new JSONObject().put("p_content_key", content);
+            Response response = request("POST", "/rest/v1/rpc/zerochill_video_social_summary",
+                    token, body.toString().getBytes(StandardCharsets.UTF_8), "application/json", null);
+            if (!response.ok()) throw error(response, "Unable to load video activity.");
+            return parseVideoSocialSummary(response.body);
+        }, NETWORK, callback);
+    }
+
+    interface SummaryLoader { VideoSocialState load() throws Exception; }
+
+    // Injectable scheduling/transport lets tests exercise actual cache races without live accounts.
+    static void videoSocialState(String content, java.util.function.Supplier<String> session,
+            SummaryLoader loader, java.util.concurrent.Executor executor, Callback<VideoSocialState> callback) {
+        loadVideoSummary(content, session.get(), session, loader, executor, callback, 1);
+    }
+
+    private static void loadVideoSummary(String content, String owner,
+            java.util.function.Supplier<String> session, SummaryLoader loader,
+            java.util.concurrent.Executor executor, Callback<VideoSocialState> callback, int retries) {
+        String cacheKey = owner + "|" + content;
+        final long revision;
+        final String pendingKey;
+        final Callback<VideoSocialState> deliver = (value, failure) -> {
+            if (!owner.equals(session.get())) {
+                callback.complete(null, new IllegalStateException("Account changed while loading video activity."));
+                return;
+            }
+            // A local write may supersede a queued cache hit or an in-flight read. Re-read once,
+            // coalescing consumers as usual, without creating an unbounded retry loop.
+            if (failure instanceof SupersededSummaryException && retries > 0) {
+                loadVideoSummary(content, owner, session, loader, executor, callback, retries - 1);
+                return;
+            }
+            callback.complete(failure == null ? value : null, failure);
+        };
+        synchronized (SUMMARY_LOCK) {
+            revision = summaryRevision;
+            SummaryCacheEntry cached = SUMMARY_CACHE.get(cacheKey);
+            if (cached != null && SystemClock.elapsedRealtime() - cached.recordedAt < SUMMARY_TTL_MS) {
+                executor.execute(() -> {
+                    Exception failure;
+                    synchronized (SUMMARY_LOCK) {
+                        failure = revision == summaryRevision ? null : new SupersededSummaryException();
+                    }
+                    deliver.complete(cached.value, failure);
+                });
+                return;
+            }
+            pendingKey = cacheKey + "|" + revision;
+            ArrayList<Callback<VideoSocialState>> waiting = SUMMARY_PENDING.get(pendingKey);
+            if (waiting != null) {
+                waiting.add(deliver);
+                return;
+            }
+            waiting = new ArrayList<>();
+            waiting.add(deliver);
+            SUMMARY_PENDING.put(pendingKey, waiting);
+        }
+
+        executor.execute(() -> {
+            VideoSocialState value = null;
+            Exception failure = null;
+            try {
+                if (!owner.equals(session.get())) throw new IllegalStateException("Account changed.");
+                value = loader.load();
+                if (!owner.equals(session.get())) throw new IllegalStateException("Account changed.");
+            } catch (Exception error) {
+                failure = error;
+            }
+            ArrayList<Callback<VideoSocialState>> callbacks;
+            synchronized (SUMMARY_LOCK) {
+                callbacks = SUMMARY_PENDING.remove(pendingKey);
+                if (failure == null && revision != summaryRevision) failure = new SupersededSummaryException();
+                if (failure == null) {
+                    SUMMARY_CACHE.put(cacheKey, new SummaryCacheEntry(value, SystemClock.elapsedRealtime()));
+                    while (SUMMARY_CACHE.size() > SUMMARY_MAX_ENTRIES)
+                        SUMMARY_CACHE.remove(SUMMARY_CACHE.keySet().iterator().next());
+                }
+            }
+            if (callbacks != null) {
+                for (Callback<VideoSocialState> waiting : callbacks) waiting.complete(value, failure);
+            }
+        });
+    }
+
+    private static final class SupersededSummaryException extends IllegalStateException {
+        SupersededSummaryException() { super("Video activity changed during refresh."); }
+    }
+
+    static VideoSocialState parseVideoSocialSummary(String raw) throws Exception {
+        JSONArray rows = new JSONArray(raw);
+        if (rows.length() != 1) throw new IllegalStateException("Video summary unavailable.");
+        JSONObject row = rows.getJSONObject(0);
+        if (!row.has("like_count") || !row.has("comment_count") || !row.has("liked_by_me")) {
+            throw new IllegalStateException("Incomplete video summary.");
+        }
+        return new VideoSocialState(
+                (int) Math.min(Integer.MAX_VALUE, row.getLong("like_count")),
+                (int) Math.min(Integer.MAX_VALUE, row.getLong("comment_count")),
+                row.getBoolean("liked_by_me"));
+    }
+
+    static void loadCommentCount(Context context, String pageUrl, Callback<Integer> callback) {
+        if (BuildConfig.ZEROCHILL_V7_TRAFFIC) {
+            videoSocialState(context, pageUrl,
+                    (summary, error) -> callback.complete(summary == null ? null : summary.commentCount, error));
+            return;
+        }
+        loadComments(context, pageUrl, (comments, error) -> {
+            if (comments == null || error != null) {
+                callback.complete(null, error);
+                return;
+            }
+            int count = 0;
+            for (Comment comment : comments) if (comment != null && !comment.deleted()) count++;
+            callback.complete(count, null);
+        });
+    }
+
+    static void invalidateVideoSummary() {
+        synchronized (SUMMARY_LOCK) {
+            summaryRevision++;
+            SUMMARY_CACHE.clear();
+        }
+    }
+
     static void videoLikeState(Context context, String pageUrl, Callback<VideoLikeState> callback) {
+        if (BuildConfig.ZEROCHILL_V7_TRAFFIC) {
+            final String requestedOwner = ZeroChillSessionStore.currentUserId(context);
+            videoSocialState(context, pageUrl, (summary, failure) -> {
+                if (failure != null || summary == null) {
+                    callback.complete(null, failure);
+                    return;
+                }
+                if (!requestedOwner.equals(ZeroChillSessionStore.currentUserId(context))) {
+                    callback.complete(null, new IllegalStateException("Account changed."));
+                    return;
+                }
+                if (summary.liked) ShitTokSeenStore.get(context).heart(pageUrl, null);
+                if (!requestedOwner.isEmpty())
+                    SocialContentContextStore.confirmLike(context, requestedOwner, pageUrl, summary.liked);
+                callback.complete(new VideoLikeState(summary.likeCount, summary.liked), null);
+            });
+            return;
+        }
         NETWORK.execute(() -> {
             final String requestedOwner = ZeroChillSessionStore.currentUserId(context);
             try {
@@ -1299,10 +1538,12 @@ final class ZeroChillSocialRepository {
 
     private static void toggleVideoLike(Context context, String pageUrl, boolean currentlyLiked,
             NativeContentItem metadata, Callback<VideoLikeState> callback) {
+        final String owner = ZeroChillSessionStore.currentUserId(context);
         NETWORK.execute(() -> {
             try {
                 String token = ZeroChillAccountRepository.accessTokenBlocking(context);
                 String userId = ZeroChillAccountRepository.currentUserIdBlocking(context);
+                requireSameAccount(context, owner);
                 String key = contentKey(pageUrl);
                 Response response;
                 if (currentlyLiked) {
@@ -1327,12 +1568,22 @@ final class ZeroChillSocialRepository {
                     );
                 }
                 if (!response.ok()) throw error(response, "Unable to update the video like.");
+                if (BuildConfig.ZEROCHILL_V7_TRAFFIC) invalidateVideoSummary();
                 if(!currentlyLiked) AnalyticsTracker.event(context,"likes");
                 if (!currentlyLiked) ShitTokSeenStore.get(context).heart(pageUrl, null);
                 if (metadata != null && userId.equals(ZeroChillSessionStore.currentUserId(context)))
                     SocialContentContextStore.remember(context, metadata);
                 SocialContentContextStore.confirmLike(context, userId, pageUrl, !currentlyLiked);
-                videoLikeState(context, pageUrl, callback);
+                requireSameAccount(context, owner);
+                videoLikeState(context, pageUrl, (state, failure) -> {
+                    if (!owner.equals(ZeroChillSessionStore.currentUserId(context))) {
+                        callback.complete(null, new IllegalStateException("Account changed."));
+                        return;
+                    }
+                    if (BuildConfig.ZEROCHILL_V7_TRAFFIC) {
+                        callback.complete(confirmedVideoLikeWrite(currentlyLiked, failure == null ? state : null), null);
+                    } else callback.complete(state, failure);
+                });
             } catch (Exception error) {
                 callback.complete(null, error);
             }
@@ -1446,6 +1697,17 @@ final class ZeroChillSocialRepository {
         }
     }
 
+    static final class BackendHttpException extends IllegalStateException {
+        final int status;
+        BackendHttpException(int status, String message) { super(message); this.status = status; }
+    }
+
+    static boolean isPermanentHttpError(Exception error) {
+        if (!(error instanceof BackendHttpException)) return false;
+        int status = ((BackendHttpException) error).status;
+        return status == 401 || status == 403 || status == 404;
+    }
+
     private static Exception error(Response response, String fallback) {
         String message = fallback;
         try {
@@ -1455,7 +1717,7 @@ final class ZeroChillSocialRepository {
             if (!candidate.isEmpty()) message = candidate;
         } catch (Exception ignored) {
         }
-        return new IllegalStateException(message);
+        return new BackendHttpException(response.status, message);
     }
 
     private static String encode(String value) {

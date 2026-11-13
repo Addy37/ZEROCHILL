@@ -7,6 +7,7 @@ import android.os.Looper;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.TextView;
+import android.widget.CompoundButton;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -121,6 +122,44 @@ public class StartupWizardUiTest {
         assertNotNull(find(root, "ENTER ZEROCHILL"));
     }
 
+    @Test public void accentChoicesSaveOnlyAfterSelectionAndKeepOtherControls() throws Exception {
+        StartupWizardActivity activity = create();
+        showSettings(activity);
+        Shadows.shadowOf(Looper.getMainLooper()).idle();
+        View root = activity.getWindow().getDecorView();
+        assertFalse(AppearanceTheme.prefs(activity).contains(AppearanceTheme.KEY_ACCENT));
+        assertNotNull(find(root, "MAKE IT YOUR COLOR"));
+        assertNotNull(find(root, "Favorite creator alerts"));
+        assertNotNull(find(root, "ZEROCHILL update alerts"));
+        assertNotNull(find(root, "Haptic feedback"));
+        for (AppearanceTheme.Accent accent : AppearanceTheme.Accent.values()) {
+            assertNotNull(findDescription(root, accent.label + " accent"
+                    + (accent == AppearanceTheme.Accent.CYAN ? ", selected" : "")));
+        }
+        findDescription(root, "Purple accent").performClick();
+        assertEquals(AppearanceTheme.Accent.PURPLE, AppearanceTheme.accentChoice(activity));
+        assertNotNull(findDescription(root, "Purple accent, selected"));
+    }
+
+    @Test public void recreationRestoresFinalPageAndUnsavedAlertChoice() throws Exception {
+        org.robolectric.android.controller.ActivityController<StartupWizardActivity> controller =
+                Robolectric.buildActivity(StartupWizardActivity.class).setup();
+        StartupWizardActivity activity = controller.get();
+        showSettings(activity);
+        Shadows.shadowOf(Looper.getMainLooper()).idle();
+        View root = activity.getWindow().getDecorView();
+        View switchView = findSwitch(root, "Favorite creator alerts");
+        assertNotNull(switchView);
+        boolean before = ((CompoundButton) switchView).isChecked();
+        switchView.performClick();
+        controller = controller.recreate();
+        activity = controller.get();
+        root = activity.getWindow().getDecorView();
+        assertNotNull(find(root, "Make it yours"));
+        assertEquals(!before, ((CompoundButton) findSwitch(root,
+                "Favorite creator alerts")).isChecked());
+    }
+
     private static StartupWizardActivity create() {
         return Robolectric.buildActivity(StartupWizardActivity.class)
                 .setup()
@@ -142,6 +181,32 @@ public class StartupWizardUiTest {
             ViewGroup group = (ViewGroup) root;
             for (int i = 0; i < group.getChildCount(); i++) {
                 View result = find(group.getChildAt(i), text);
+                if (result != null) return result;
+            }
+        }
+        return null;
+    }
+
+    private static View findDescription(View root, String description) {
+        if (description.equals(root.getContentDescription())) return root;
+        if (root instanceof ViewGroup) {
+            ViewGroup group = (ViewGroup) root;
+            for (int i = 0; i < group.getChildCount(); i++) {
+                View result = findDescription(group.getChildAt(i), description);
+                if (result != null) return result;
+            }
+        }
+        return null;
+    }
+
+    private static View findSwitch(View root, String description) {
+        if (root instanceof CompoundButton && description.equals(root.getContentDescription())) {
+            return root;
+        }
+        if (root instanceof ViewGroup) {
+            ViewGroup group = (ViewGroup) root;
+            for (int i = 0; i < group.getChildCount(); i++) {
+                View result = findSwitch(group.getChildAt(i), description);
                 if (result != null) return result;
             }
         }

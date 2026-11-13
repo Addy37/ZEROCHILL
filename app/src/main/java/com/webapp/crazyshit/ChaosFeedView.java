@@ -2304,6 +2304,8 @@ public final class ChaosFeedView extends FrameLayout {
 
     private void refreshSelectedLikeStateLater(int position) {
         if (pager == null || !active || !hostResumed || isPaging()) return;
+        ChaosHolder selected = holderAt(position);
+        if (selected != null) selected.clearChangedSocialAccount();
         pager.postDelayed(() -> {
             if (!active || !hostResumed || isPaging() || position != selectedPosition) return;
             ChaosHolder holder = holderAt(position);
@@ -3058,6 +3060,8 @@ public final class ChaosFeedView extends FrameLayout {
         boolean failurePending;
         boolean horizontalVideo;
         boolean aspectSampleRecorded;
+        String videoLikeOwner;
+        String commentCountOwner;
         boolean videoLiked;
         boolean videoLikePending;
         int videoLikeCount;
@@ -4126,14 +4130,32 @@ public final class ChaosFeedView extends FrameLayout {
             setSwipeAlpha(1f);
         }
 
+        void clearChangedSocialAccount() {
+            String owner = ZeroChillSessionStore.currentUserId(activity);
+            if (!owner.equals(videoLikeOwner)) {
+                videoLikeOwner = owner;
+                videoLikeRequestGeneration++;
+                videoLikePending = false;
+                videoLiked = false; videoLikeCount = 0; updateVideoLikeButton();
+            }
+            if (!owner.equals(commentCountOwner)) {
+                commentCountOwner = owner;
+                commentCountRequestGeneration++;
+                commentCount = 0; updateCommentButton();
+            }
+        }
+
         void refreshVideoLikeState() {
             if (item == null || item.url == null || item.url.trim().isEmpty()) return;
+            final String summaryOwner = ZeroChillSessionStore.currentUserId(activity);
+            clearChangedSocialAccount();
             if (videoLikePending) return;
             String target = item.url;
             int generation = ++videoLikeRequestGeneration;
             ZeroChillSocialRepository.videoLikeState(activity, target, (state, error) ->
                     activity.runOnUiThread(() -> deferUiApply(() -> {
-                        if (generation != videoLikeRequestGeneration
+                        if (!summaryOwner.equals(ZeroChillSessionStore.currentUserId(activity))
+                                || generation != videoLikeRequestGeneration
                                 || item == null
                                 || !target.equals(item.url)
                                 || state == null
@@ -4147,7 +4169,7 @@ public final class ChaosFeedView extends FrameLayout {
                             CrazyShitRepository.StreamInfo likedStream = streamCache.get(target);
                             seenStore.heart(target, likedStream == null ? null : likedStream.mediaUrl);
                         }
-                        videoLikeCount = state.count;
+                        if (state.countKnown) videoLikeCount = state.count;
                         updateVideoLikeButton();
                     }))
             );
@@ -4169,9 +4191,11 @@ public final class ChaosFeedView extends FrameLayout {
             boolean wasLiked = videoLiked;
             int oldCount = videoLikeCount;
             int request = ++videoLikeRequestGeneration;
-            if (favoriteOnly) {
-                videoLiked = true;
-                videoLikeCount++;
+            final String owner = ZeroChillSessionStore.currentUserId(activity);
+            boolean optimistic = favoriteOnly || BuildConfig.ZEROCHILL_V7_TRAFFIC;
+            if (optimistic) {
+                videoLiked = !wasLiked;
+                videoLikeCount = Math.max(0, oldCount + (wasLiked ? -1 : 1));
                 updateVideoLikeButton();
             }
             videoLikePending = true;
@@ -4183,8 +4207,13 @@ public final class ChaosFeedView extends FrameLayout {
                         videoLikePending = false;
                         like.setEnabled(true);
                         landscapeLike.setEnabled(true);
+                        if (!owner.equals(ZeroChillSessionStore.currentUserId(activity))) {
+                            videoLiked = false; videoLikeCount = 0; updateVideoLikeButton();
+                            refreshVideoLikeState();
+                            return;
+                        }
                         if (error != null || state == null) {
-                            if (favoriteOnly) {
+                            if (optimistic) {
                                 videoLiked = wasLiked;
                                 videoLikeCount = oldCount;
                                 updateVideoLikeButton();
@@ -4202,7 +4231,7 @@ public final class ChaosFeedView extends FrameLayout {
                             CrazyShitRepository.StreamInfo likedStream = streamCache.get(target);
                             seenStore.heart(target, likedStream == null ? null : likedStream.mediaUrl);
                         }
-                        videoLikeCount = state.count;
+                        if (state.countKnown) videoLikeCount = state.count;
                         updateVideoLikeButton();
                     })
             );
@@ -4239,17 +4268,20 @@ public final class ChaosFeedView extends FrameLayout {
             if (item == null || item.url == null || item.url.trim().isEmpty()
                     || !supportsComments(item)) return;
             String target = item.url;
+            clearChangedSocialAccount();
             int generation = ++commentCountRequestGeneration;
-            ZeroChillSocialRepository.loadComments(activity, target, (loaded, error) ->
+            final String summaryOwner = ZeroChillSessionStore.currentUserId(activity);
+            ZeroChillSocialRepository.loadCommentCount(activity, target, (count, error) ->
                     activity.runOnUiThread(() -> deferUiApply(() -> {
-                        if (generation != commentCountRequestGeneration
+                        if (!summaryOwner.equals(ZeroChillSessionStore.currentUserId(activity))
+                                || generation != commentCountRequestGeneration
                                 || item == null
                                 || !target.equals(item.url)
-                                || loaded == null
+                                || count == null
                                 || error != null) {
                             return;
                         }
-                        commentCount = visibleCommentCount(loaded);
+                        commentCount = count;
                         updateCommentButton();
                     }))
             );

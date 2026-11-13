@@ -2,10 +2,10 @@ package com.webapp.crazyshit;
 
 import android.animation.ObjectAnimator;
 import android.animation.ValueAnimator;
+import android.animation.ArgbEvaluator;
 import android.app.Activity;
 import android.content.Intent;
 import android.content.SharedPreferences;
-import android.content.res.ColorStateList;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
@@ -16,6 +16,7 @@ import android.view.Gravity;
 import android.view.HapticFeedbackConstants;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.accessibility.AccessibilityNodeInfo;
 import android.view.animation.AccelerateDecelerateInterpolator;
 import android.view.animation.DecelerateInterpolator;
 import android.widget.FrameLayout;
@@ -23,6 +24,7 @@ import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
+import java.util.ArrayList;
 
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
@@ -59,6 +61,13 @@ public final class StartupWizardActivity extends Activity {
     private ObjectAnimator ambientPulse;
     private LinearLayout accountCardHost;
     private int accountRefreshEpoch;
+    private AppearanceTheme.Accent selectedAccent;
+    private int previewAccentColor;
+    private FrameLayout accentPreviewMascot;
+    private TextView accentPreviewChill;
+    private TextView accentPreviewButton;
+    private final ArrayList<LinearLayout> accentSwatches = new ArrayList<>();
+    private ValueAnimator accentAnimator;
 
     @Override
     protected void onCreate(Bundle state) {
@@ -73,10 +82,42 @@ public final class StartupWizardActivity extends Activity {
         favoriteAlerts = prefs.getBoolean(NotificationCoordinator.PREF_NEW_VIDEO_ALERTS, true);
         updateAlerts = prefs.getBoolean(NotificationCoordinator.PREF_UPDATE_ALERTS, true);
         hapticsEnabled = prefs.getBoolean("haptics_enabled", true);
+        selectedAccent = AppearanceTheme.accentChoice(this);
+        previewAccentColor = selectedAccent.color;
+        if (state != null) {
+            page = Math.max(PAGE_WELCOME, Math.min(PAGE_SETTINGS,
+                    state.getInt("wizard_page", PAGE_WELCOME)));
+            ageConfirmed = state.getBoolean("wizard_age", ageConfirmed);
+            xmegaAccessAuthorized = state.getBoolean("wizard_access", xmegaAccessAuthorized);
+            xmegaAccessReady = XMegaDriveAgeSession.isCookieReady(this);
+            if (state.getBoolean("wizard_access_pending", false)) {
+                // The callback belongs to the old Activity. Require a retry unless
+                // setup actually completed while this instance was recreated.
+                xmegaAccessAuthorized = XMegaDriveAgeSession.isSetupComplete(this)
+                        || xmegaAccessReady;
+            }
+            favoriteAlerts = state.getBoolean("wizard_favorite_alerts", favoriteAlerts);
+            updateAlerts = state.getBoolean("wizard_update_alerts", updateAlerts);
+            hapticsEnabled = state.getBoolean("wizard_haptics", hapticsEnabled);
+            awaitingNotificationPermission = state.getBoolean("wizard_waiting_permission", false);
+        }
 
         ZeroChillUi.applySystemBars(this);
         buildShell();
-        showPage(PAGE_WELCOME, false);
+        showPage(page, false);
+    }
+
+    @Override
+    protected void onSaveInstanceState(Bundle out) {
+        out.putInt("wizard_page", page);
+        out.putBoolean("wizard_age", ageConfirmed);
+        out.putBoolean("wizard_access", xmegaAccessAuthorized);
+        out.putBoolean("wizard_access_pending", accessSetupInProgress);
+        out.putBoolean("wizard_favorite_alerts", favoriteAlerts);
+        out.putBoolean("wizard_update_alerts", updateAlerts);
+        out.putBoolean("wizard_haptics", hapticsEnabled);
+        out.putBoolean("wizard_waiting_permission", awaitingNotificationPermission);
+        super.onSaveInstanceState(out);
     }
 
     @Override
@@ -164,7 +205,7 @@ public final class StartupWizardActivity extends Activity {
         page = next;
         updateChrome();
 
-        if (outgoing == null || !ValueAnimator.areAnimatorsEnabled()) {
+        if (outgoing == null || !ZeroChillMotion.animationsEnabled(this)) {
             transitioning = false;
             pageHost.removeAllViews();
             pageHost.addView(incoming, new FrameLayout.LayoutParams(-1, -1));
@@ -412,6 +453,8 @@ public final class StartupWizardActivity extends Activity {
         addTitle(column, "Make it yours");
         addSubtitle(column, "Choose your starting preferences. You can change them later in Settings.");
 
+        column.addView(buildAccentCard(), cardParams());
+
         accountCardHost = new LinearLayout(this);
         accountCardHost.setOrientation(LinearLayout.VERTICAL);
         column.addView(accountCardHost, cardParams());
@@ -449,6 +492,162 @@ public final class StartupWizardActivity extends Activity {
         noteParams.topMargin = dp(8);
         column.addView(note, noteParams);
         return scroll;
+    }
+
+    private View buildAccentCard() {
+        LinearLayout card = new LinearLayout(this);
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setPadding(dp(14), dp(16), dp(14), dp(17));
+        card.setBackground(panelBackground(18));
+
+        TextView title = text("MAKE IT YOUR COLOR", 12f, UiPalette.TEXT_SECONDARY, true);
+        title.setLetterSpacing(.11f);
+        card.addView(title);
+        TextView detail = text("Pick the glow you want across ZEROCHILL.", 12.5f,
+                color(R.color.zc_text_secondary), false);
+        LinearLayout.LayoutParams detailParams = new LinearLayout.LayoutParams(-1, -2);
+        detailParams.topMargin = dp(5);
+        card.addView(detail, detailParams);
+
+        LinearLayout preview = new LinearLayout(this);
+        preview.setOrientation(LinearLayout.VERTICAL);
+        preview.setGravity(Gravity.CENTER);
+        preview.setPadding(dp(8), dp(5), dp(8), dp(13));
+        LinearLayout.LayoutParams previewParams = new LinearLayout.LayoutParams(-1, -2);
+        previewParams.topMargin = dp(14);
+        card.addView(preview, previewParams);
+        accentPreviewMascot = mascot(dp(106));
+        preview.addView(accentPreviewMascot, new LinearLayout.LayoutParams(dp(106), dp(106)));
+        LinearLayout mark = wordmark(27f);
+        accentPreviewChill = (TextView) mark.getChildAt(1);
+        preview.addView(mark);
+        accentPreviewButton = text("YOUR ZEROCHILL", 11f,
+                AppearanceTheme.onAccent(this), true);
+        accentPreviewButton.setGravity(Gravity.CENTER);
+        accentPreviewButton.setLetterSpacing(.08f);
+        LinearLayout.LayoutParams buttonParams = new LinearLayout.LayoutParams(dp(150), dp(32));
+        buttonParams.topMargin = dp(10);
+        preview.addView(accentPreviewButton, buttonParams);
+        updateAccentPreviewColor(previewAccentColor);
+
+        // A horizontal row inside a HorizontalScrollView keeps every named color reachable
+        // on narrow phones without shrinking touch targets.
+        android.widget.HorizontalScrollView horizontal = new android.widget.HorizontalScrollView(this);
+        horizontal.setHorizontalScrollBarEnabled(false);
+        horizontal.setFillViewport(true);
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        accentSwatches.clear();
+        for (AppearanceTheme.Accent accent : AppearanceTheme.Accent.values()) {
+            LinearLayout swatch = new LinearLayout(this);
+            swatch.setOrientation(LinearLayout.VERTICAL);
+            swatch.setGravity(Gravity.CENTER);
+            swatch.setClickable(true);
+            swatch.setFocusable(true);
+            swatch.setTag(accent);
+            swatch.setOnClickListener(v -> selectAccent(accent, v));
+            TextView circle = text("", 23f, Color.BLACK, true);
+            circle.setGravity(Gravity.CENTER);
+            swatch.addView(circle, new LinearLayout.LayoutParams(dp(48), dp(48)));
+            TextView label = text(accent.label, 11f, color(R.color.zc_text_secondary), true);
+            label.setGravity(Gravity.CENTER);
+            LinearLayout.LayoutParams labelParams = new LinearLayout.LayoutParams(-1, dp(22));
+            labelParams.topMargin = dp(2);
+            swatch.addView(label, labelParams);
+            swatch.setAccessibilityDelegate(new View.AccessibilityDelegate() {
+                @Override public void onInitializeAccessibilityNodeInfo(
+                        View host, AccessibilityNodeInfo info) {
+                    super.onInitializeAccessibilityNodeInfo(host, info);
+                    info.setClassName("android.widget.RadioButton");
+                    info.setCheckable(true);
+                    info.setChecked(selectedAccent == accent);
+                }
+            });
+            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(dp(64), dp(76));
+            params.rightMargin = dp(5);
+            row.addView(swatch, params);
+            accentSwatches.add(swatch);
+        }
+        horizontal.addView(row, new android.widget.HorizontalScrollView.LayoutParams(-2, -1));
+        LinearLayout.LayoutParams rowParams = new LinearLayout.LayoutParams(-1, dp(76));
+        rowParams.topMargin = dp(2);
+        card.addView(horizontal, rowParams);
+        updateAccentSwatches();
+        return card;
+    }
+
+    private void selectAccent(AppearanceTheme.Accent accent, View clicked) {
+        if (selectedAccent == accent) return;
+        haptic(clicked);
+        selectedAccent = accent;
+        AppearanceTheme.setAccent(this, accent);
+        updateAccentSwatches();
+        if (accentAnimator != null) accentAnimator.cancel();
+        if (ZeroChillMotion.animationsEnabled(this)) {
+            accentAnimator = ValueAnimator.ofObject(new ArgbEvaluator(), previewAccentColor, accent.color);
+            accentAnimator.setDuration(ZeroChillMotion.STANDARD_MS);
+            accentAnimator.setInterpolator(new DecelerateInterpolator());
+            accentAnimator.addUpdateListener(animation ->
+                    updateAccentPreviewColor((int) animation.getAnimatedValue()));
+            accentAnimator.start();
+        } else {
+            updateAccentPreviewColor(accent.color);
+        }
+    }
+
+    private void updateAccentSwatches() {
+        for (LinearLayout swatch : accentSwatches) {
+            AppearanceTheme.Accent accent = (AppearanceTheme.Accent) swatch.getTag();
+            boolean selected = accent == selectedAccent;
+            swatch.setSelected(selected);
+            swatch.setContentDescription(accent.label + " accent" + (selected ? ", selected" : ""));
+            TextView circle = (TextView) swatch.getChildAt(0);
+            TextView label = (TextView) swatch.getChildAt(1);
+            circle.setText(selected ? "✓" : "");
+            label.setTextColor(selected ? accent.color : color(R.color.zc_text_secondary));
+            GradientDrawable bg = new GradientDrawable();
+            bg.setShape(GradientDrawable.OVAL);
+            bg.setColor(accent.color);
+            bg.setStroke(dp(selected ? 3 : 1), selected ? Color.WHITE : Color.rgb(86, 92, 102));
+            circle.setBackground(bg);
+        }
+    }
+
+    private void updateAccentPreviewColor(int accent) {
+        previewAccentColor = accent;
+        if (accentPreviewMascot != null) {
+            MascotAccent.applyGlow(accentPreviewMascot.getChildAt(0), accent);
+            MascotAccent.apply((ImageView) accentPreviewMascot.getChildAt(1),
+                    (ImageView) accentPreviewMascot.getChildAt(7),
+                    (ImageView) accentPreviewMascot.getChildAt(3),
+                    (ImageView) accentPreviewMascot.getChildAt(4),
+                    (ImageView) accentPreviewMascot.getChildAt(6), accent);
+        }
+        if (accentPreviewChill != null) accentPreviewChill.setTextColor(accent);
+        if (accentPreviewButton != null) {
+            GradientDrawable background = new GradientDrawable();
+            background.setColor(accent);
+            background.setCornerRadius(dp(12));
+            accentPreviewButton.setBackground(background);
+            accentPreviewButton.setTextColor(selectedAccent == AppearanceTheme.Accent.WHITE
+                    ? Color.rgb(21, 32, 46) : Color.rgb(2, 15, 23));
+        }
+        if (nextButton != null) {
+            nextButton.setBackground(primaryButtonBackground(nextButton.isEnabled()));
+            nextButton.setTextColor(selectedAccent == AppearanceTheme.Accent.WHITE
+                    ? Color.rgb(21, 32, 46) : Color.rgb(2, 15, 23));
+        }
+        if (progressRow != null) {
+            for (int i = 0; i < progressRow.getChildCount(); i++) {
+                if (i == page) {
+                    GradientDrawable dot = new GradientDrawable();
+                    dot.setColor(accent);
+                    dot.setCornerRadius(dp(5));
+                    progressRow.getChildAt(i).setBackground(dot);
+                }
+            }
+        }
     }
 
     private void refreshAccountCard() {
@@ -640,7 +839,7 @@ public final class StartupWizardActivity extends Activity {
             View dot = new View(this);
             boolean active = index == page;
             GradientDrawable bg = new GradientDrawable();
-            bg.setColor(active ? AppearanceTheme.accent(this) : Color.rgb(61, 65, 72));
+            bg.setColor(active ? previewAccentColor : Color.rgb(61, 65, 72));
             bg.setCornerRadius(dp(5));
             dot.setBackground(bg);
             LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
@@ -666,6 +865,7 @@ public final class StartupWizardActivity extends Activity {
         nextButton.setEnabled(enabled);
         nextButton.setAlpha(enabled ? 1f : 0.42f);
         nextButton.setBackground(primaryButtonBackground(enabled));
+        nextButton.setTextColor(AppearanceTheme.onAccent(this));
     }
 
     private void finishWizard() {
@@ -686,6 +886,7 @@ public final class StartupWizardActivity extends Activity {
         GestureGuideDialog.markSeen(this);
         NotificationCoordinator.markOnboardingHandled(this);
         StartupWizardPolicy.markComplete(this);
+        if (!preview) WhatsNewPolicy.suppressForCurrentVersion(this);
         NotificationCoordinator.onPreferencesChanged(this);
 
         if ((favoriteAlerts || updateAlerts)
@@ -743,7 +944,7 @@ public final class StartupWizardActivity extends Activity {
     }
 
     private void onPageVisible(View view) {
-        if (page == PAGE_WELCOME && ValueAnimator.areAnimatorsEnabled()) {
+        if (page == PAGE_WELCOME && ZeroChillMotion.animationsEnabled(this)) {
             View outline = view.findViewWithTag("wizard_mascot_outline");
             if (outline != null) {
                 ambientPulse = ObjectAnimator.ofFloat(outline, View.ALPHA, 1f, 0.58f, 1f);
@@ -767,11 +968,15 @@ public final class StartupWizardActivity extends Activity {
     @Override
     protected void onDestroy() {
         cancelAmbientPulse();
+        if (accentAnimator != null) accentAnimator.cancel();
         super.onDestroy();
     }
 
     private FrameLayout mascot(int size) {
         FrameLayout mascot = new FrameLayout(this);
+        View glow = new View(this);
+        mascot.addView(glow, new FrameLayout.LayoutParams(size, size));
+        MascotAccent.applyGlow(glow, previewAccentColor);
         int[] layers = {
                 R.drawable.zc_devil_horns,
                 R.drawable.zc_devil_face,
@@ -781,14 +986,21 @@ public final class StartupWizardActivity extends Activity {
                 R.drawable.zc_devil_tongue,
                 R.drawable.zc_devil_outline
         };
+        ImageView horns = null, xEye = null, angryEye = null, tongue = null, outline = null;
         for (int index = 0; index < layers.length; index++) {
             ImageView layer = new ImageView(this);
             layer.setImageResource(layers[index]);
             layer.setScaleType(ImageView.ScaleType.FIT_CENTER);
             layer.setContentDescription(index == layers.length - 1 ? "ZEROCHILL mascot" : null);
             if (index == layers.length - 1) layer.setTag("wizard_mascot_outline");
+            if (index == 0) horns = layer;
+            if (index == 2) xEye = layer;
+            if (index == 3) angryEye = layer;
+            if (index == 5) tongue = layer;
+            if (index == 6) outline = layer;
             mascot.addView(layer, new FrameLayout.LayoutParams(size, size));
         }
+        MascotAccent.apply(horns, outline, xEye, angryEye, tongue, previewAccentColor);
         return mascot;
     }
 
@@ -797,7 +1009,7 @@ public final class StartupWizardActivity extends Activity {
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER);
         TextView zero = text("ZERO", size, Color.rgb(243, 244, 246), true);
-        TextView chill = text("CHILL", size, UiPalette.PRIMARY, false);
+        TextView chill = text("CHILL", size, previewAccentColor, false);
         row.addView(zero);
         row.addView(chill);
         return row;
@@ -946,9 +1158,9 @@ public final class StartupWizardActivity extends Activity {
 
     private GradientDrawable primaryButtonBackground(boolean enabled) {
         GradientDrawable background = new GradientDrawable();
-        background.setColor(enabled ? AppearanceTheme.accent(this) : Color.rgb(47, 54, 59));
+        background.setColor(enabled ? previewAccentColor : Color.rgb(47, 54, 59));
         background.setCornerRadius(dp(17));
-        background.setStroke(dp(1), enabled ? AppearanceTheme.accent(this) : Color.rgb(67, 72, 78));
+        background.setStroke(dp(1), enabled ? previewAccentColor : Color.rgb(67, 72, 78));
         return background;
     }
 
