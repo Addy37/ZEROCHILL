@@ -17,8 +17,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 
 @Composable internal fun HomeScreen(state: ConsoleState) {
-    val a = state.analytics
-    val counts = state.activeCounts
     val community = state.communityOverview
     val draft = state.config
     val sources = remember(draft?.text) { draft?.let { org.json.JSONObject(it.text).optJSONObject("sources") } }
@@ -33,20 +31,20 @@ import androidx.compose.ui.unit.dp
         item {
             Box(Modifier.fillMaxWidth()) {
                 ConsolePanel(Modifier.fillMaxWidth(), accent=true) {
-                    Eyebrow("ACTIVE INSTALLS")
-                    Metric(counts?.dailyUsers ?: a?.dailyUsers, "Active today", large=true)
+                    Eyebrow("NEW ZEROCHILL · 7.0")
+                    Metric(community?.accounts, "Registered accounts", large=true)
                     HorizontalDivider(color=Cyan.copy(alpha=.12f))
                     Row(Modifier.fillMaxWidth(), horizontalArrangement=Arrangement.spacedBy(28.dp)) {
-                        Metric(counts?.weeklyUsers ?: a?.weeklyUsers, "This week", modifier=Modifier.weight(1f))
-                        Metric(counts?.monthlyUsers ?: a?.monthlyUsers, "This month", modifier=Modifier.weight(1f))
+                        Metric(community?.newAccounts7d, "New this week", modifier=Modifier.weight(1f))
+                        Metric(community?.messages, "Direct messages", modifier=Modifier.weight(1f))
                     }
                 }
                 EnergyField(Modifier.matchParentSize())
             }
             Spacer(Modifier.height(8.dp))
-            val generated = counts?.generatedAt?.takeIf { it.isNotEmpty() } ?: a?.generatedAt
-            Text(generated?.let { "Eastern Time · ${easternLabel(it)}" } ?: "Waiting for analytics", color=Muted, style=MaterialTheme.typography.bodySmall)
-            ErrorPanel(state.errors["analytics"], state::loadAnalytics)
+            Text("Live social totals from New Zerochill. Device analytics are disabled.", color=Muted,
+                style=MaterialTheme.typography.bodySmall)
+            ErrorPanel(state.errors["communityOverview"], state::loadCommunityOverview)
         }
         item {
             BoxWithConstraints {
@@ -99,8 +97,8 @@ import androidx.compose.ui.unit.dp
             SnapshotRow("Community accounts", community?.accounts?.let { "${number(it)} accounts · ${number(community.newAccounts7d)} new this week" } ?: "Not loaded", Icons.Outlined.Groups) {state.navigate("community")}
             SnapshotRow("Remote configuration", draft?.let { if(it.published > 0) "Published v${it.published}" else "Bundled defaults" } ?: "Not loaded", Icons.Outlined.Tune) {state.navigate("sources")}
             if(draft?.dirty == true) StatusTag("Candidate has unpublished changes")
-            SnapshotRow("Top creator", a?.creators?.firstOrNull()?.value ?: "No activity yet", Icons.Outlined.LocalFireDepartment) {state.navigate("analytics")}
-            SnapshotRow("Most-used section", a?.sections?.firstOrNull()?.value?.let(::friendly) ?: "No activity yet", Icons.Outlined.Insights) {state.navigate("analytics")}
+            SnapshotRow("Comments", community?.comments?.let(::number) ?: "Not loaded", Icons.Outlined.ChatBubbleOutline) {state.navigate("analytics")}
+            SnapshotRow("Likes", community?.totalLikes()?.let(::number) ?: "Not loaded", Icons.Outlined.FavoriteBorder) {state.navigate("analytics")}
         } }
         item { Row(Modifier.fillMaxWidth(), verticalAlignment=Alignment.CenterVertically) {
             Eyebrow("RECENT FEEDBACK", Modifier.weight(1f))
