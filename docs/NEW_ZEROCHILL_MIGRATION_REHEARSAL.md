@@ -1,3 +1,9 @@
+## Latest cleanup after interrupted synthetic import, November 13
+
+A SELECT-only staging inspection showed exactly one recent synthetic Auth user with a fake test-domain address and the expected `zc` username prefix. There were zero sessions, refresh tokens, DMs, and comments. The only remaining test Auth user was removed in the **disposable** project after strict safety checks on user count, test-domain account, recent creation, and absence of social messages. The database verified **0 users, 0 identities, 0 profiles, 0 sessions, and 0 refresh tokens** immediately after removal.
+
+This closes the dangling fake-account cleanup. It does **not** prove successful password-hash migration. The cross-project password-hash import and post-import login remain pending. OG Supabase and the main New Zerochill project were not changed. This was not an Android build or production cutover.
+
 # ZEROCHILL 7.0: isolated migration rehearsal
 
 Status: **rehearsal preparation only**. No real account data transferred; no hosted project created or modified. Owner confirmed OG ZEROCHILL accounts/history have priority; the three New-project identities are test accounts and are not release-critical.
