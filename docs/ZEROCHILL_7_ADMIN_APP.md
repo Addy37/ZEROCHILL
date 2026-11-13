@@ -38,6 +38,10 @@ This migration did not change RLS for app users, grant anon/authenticated admin 
 
 A passed workflow does **not** establish private admin token provisioning to the device, actual sign-in, account search, inbox send/reply, source-config publish/rollback, notification delivery, or upgrade installation on a phone. Perform those checks with the owner before public distribution. Never issue a source-config write solely as an unapproved smoke test.
 
+## Verified private API smoke tests
+
+Using the encrypted New Zerochill Vault token **inside the project database only**, three read-only HTTP calls passed with status 200: `community_overview` (one account), feedback `list` (zero tickets), and source-config `current` (active version 13). No admin token or hash was returned to chat or stored in client code. No feedback was sent/deleted, no source config published/rolled back, and no account data was changed.
+
 ## Compatibility
 
 The Android application ID, signing identity, existing source-config format, and private admin token authentication model are retained. Only admin token and notification cursors move to new local namespaces. No app user data, legacy cloud projects or New Zerochill data rows change. The New project receives only the documented service-role read grants.
