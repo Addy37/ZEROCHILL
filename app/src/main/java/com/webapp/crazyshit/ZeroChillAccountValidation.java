@@ -48,6 +48,12 @@ final class ZeroChillAccountValidation {
         return password.equals(confirmation) ? "" : "Passwords do not match.";
     }
 
+    static String activationPassword(String password, String confirmation) {
+        String error = passwordChange(password, confirmation);
+        if (!error.isEmpty()) return error;
+        return password.length() > 128 ? "Password must be 128 characters or fewer." : "";
+    }
+
     static String normalizedUsername(String raw) {
         return raw == null ? "" : raw.trim().toLowerCase(Locale.US);
     }

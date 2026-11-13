@@ -38,6 +38,11 @@ public final class ZeroChillAccountActivity extends Activity {
     private LinearLayout content;
     private ProgressBar progress;
     private boolean createMode;
+    private boolean activationMode;
+    private String activationEmail = "";
+    private long activationRetryAt;
+    private int activationGeneration;
+    private ZeroChillAccountRepository.ActivationSession activationSession;
     private ZeroChillAccountRepository.AccountState account;
     private TextView identityPrimary;
     private TextView identitySecondary;
@@ -106,9 +111,17 @@ public final class ZeroChillAccountActivity extends Activity {
             draftBio = state.getString(DRAFT_BIO, "");
             hasDraft = state.containsKey(DRAFT_USER);
         }
+        if (state != null && ZeroChillAccountRepository.activationEnabled()) {
+            activationMode = state.getBoolean("activation_mode", false);
+            activationEmail = state.getString("activation_email", "");
+            activationRetryAt = state.getLong("activation_retry_at", 0L);
+        }
         buildShell();
         ResponsiveFitmentController.applySoon(this);
-        if (!handleAuthRedirect(getIntent())) loadAccount();
+        if (!handleAuthRedirect(getIntent())) {
+            if (activationMode) showActivationEmail();
+            else loadAccount();
+        }
     }
 
     @Override
@@ -124,6 +137,9 @@ public final class ZeroChillAccountActivity extends Activity {
         out.putBoolean("editing_profile", editingProfile);
         out.putString("avatar_owner", avatarOwner);
         out.putBoolean(STATE_CREATE_MODE, createMode);
+        out.putBoolean("activation_mode", activationMode);
+        out.putString("activation_email", activationEmail);
+        out.putLong("activation_retry_at", activationRetryAt);
         if (hasDraft) {
             out.putString(DRAFT_USER, draftUser);
             out.putString(DRAFT_NAME, draftName);
@@ -155,6 +171,8 @@ public final class ZeroChillAccountActivity extends Activity {
     @Override
     protected void onDestroy() {
         closeSocialHub();
+        activationGeneration++;
+        activationSession = null;
         ResponsiveFitmentController.release(this);
         super.onDestroy();
     }
@@ -168,13 +186,17 @@ public final class ZeroChillAccountActivity extends Activity {
             return false;
         }
 
+        intent.setData(null);
         showBusy(true);
         ZeroChillAccountRepository.completeAuthRedirect(
                 this,
                 uri,
                 (state, error) -> runOnUiThread(() -> {
                     showBusy(false);
-                    if (error != null) {
+                    if (error instanceof ZeroChillAccountRepository.ActivationRequiredException) {
+                        activationSession = ((ZeroChillAccountRepository.ActivationRequiredException) error).activation;
+                        showActivationPassword();
+                    } else if (error != null) {
                         ZeroChillToast.makeText(
                                 this,
                                 error.getMessage() == null ? "Email confirmation failed." : error.getMessage(),
@@ -280,6 +302,9 @@ public final class ZeroChillAccountActivity extends Activity {
     }
 
     private void showAuth() {
+        activationMode = false;
+        activationSession = null;
+        activationGeneration++;
         closeSocialHub();
         editingProfile = false;
         renderedUserId = "";
@@ -410,7 +435,10 @@ public final class ZeroChillAccountActivity extends Activity {
                         passwordValue,
                         (state, error) -> runOnUiThread(() -> {
                             setFormEnabled(true);
-                            if (error != null) {
+                            if (error instanceof ZeroChillAccountRepository.ActivationRequiredException) {
+                                activationEmail = emailValue.trim();
+                                showActivationEmail();
+                            } else if (error != null) {
                                 ZeroChillToast.makeText(this, error.getMessage(), ZeroChillToast.LENGTH_LONG).show();
                             } else if (state != null && state.signedIn) {
                                 account = state;
@@ -420,6 +448,12 @@ public final class ZeroChillAccountActivity extends Activity {
                 );
             }
         });
+
+        if (!createMode && ZeroChillAccountRepository.activationEnabled()) {
+            TextView activate = secondaryButton("Activate Existing Account");
+            panel.addView(activate, fieldParams());
+            activate.setOnClickListener(v -> showActivationEmail());
+        }
 
         LinearLayout privacyCard = new LinearLayout(this);
         privacyCard.setOrientation(LinearLayout.HORIZONTAL);
@@ -440,6 +474,130 @@ public final class ZeroChillAccountActivity extends Activity {
         LinearLayout.LayoutParams privacyParams = new LinearLayout.LayoutParams(-1, -2);
         privacyParams.topMargin = dp(12);
         content.addView(privacyCard, privacyParams);
+    }
+
+    private void activationShell(String title, String copy) {
+        closeSocialHub();
+        activationMode = true;
+        account = null;
+        content.removeAllViews();
+        addEyebrow(content, "ACTIVATE EXISTING ACCOUNT");
+        content.addView(text(title, 24, AppearanceTheme.primaryText(this), true), fieldParams());
+        LinearLayout.LayoutParams copyParams = new LinearLayout.LayoutParams(-1, -2);
+        copyParams.topMargin = dp(12);
+        copyParams.bottomMargin = dp(12);
+        content.addView(text(copy, 13, AppearanceTheme.secondaryText(this), false), copyParams);
+    }
+
+    private void activationBack() {
+        TextView back = secondaryButton("Back to sign in");
+        content.addView(back, fieldParams());
+        back.setOnClickListener(v -> { createMode = false; showAuth(); });
+    }
+
+    private void activationError(Exception error) {
+        ZeroChillToast.makeText(this, error.getMessage() == null
+                ? "Unable to continue. Try again." : error.getMessage(), ZeroChillToast.LENGTH_LONG).show();
+    }
+
+    private void showActivationEmail() {
+        activationSession = null;
+        int generation = ++activationGeneration;
+        activationShell("Verify your email", "Use the email registered to your existing account.");
+        EditText email = field("Registered email", InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS);
+        email.setContentDescription("Registered email");
+        email.setAutofillHints(View.AUTOFILL_HINT_EMAIL_ADDRESS);
+        email.setText(activationEmail);
+        content.addView(email, fieldParams());
+        TextView request = primaryButton("Send verification email");
+        content.addView(request, fieldParams());
+        request.setOnClickListener(v -> {
+            String value = email.getText().toString().trim();
+            String validation = ZeroChillAccountValidation.email(value);
+            if (!validation.isEmpty()) { activationError(new IllegalArgumentException(validation)); return; }
+            if (System.currentTimeMillis() < activationRetryAt) {
+                activationError(new IllegalStateException("Please wait before requesting another email."));
+                return;
+            }
+            setFormEnabled(false);
+            ZeroChillAccountRepository.requestActivation(value, (sent, error) -> runOnUiThread(() -> {
+                if (generation != activationGeneration || isFinishing() || isDestroyed()) return;
+                setFormEnabled(true);
+                if (error != null) { activationError(error); return; }
+                activationEmail = value;
+                activationRetryAt = System.currentTimeMillis() + 60_000L;
+                showActivationCode();
+            }));
+        });
+        activationBack();
+    }
+
+    private void showActivationCode() {
+        int generation = ++activationGeneration;
+        activationShell("Check your email", "If an account exists, check its inbox for a verification link or code.");
+        EditText code = field("Verification code", InputType.TYPE_CLASS_NUMBER);
+        code.setContentDescription("Verification code");
+        code.setSaveEnabled(false);
+        code.setFilters(new InputFilter[]{new InputFilter.LengthFilter(10)});
+        content.addView(code, fieldParams());
+        TextView verify = primaryButton("Verify code");
+        content.addView(verify, fieldParams());
+        verify.setOnClickListener(v -> {
+            setFormEnabled(false);
+            ZeroChillAccountRepository.verifyActivationCode(activationEmail, code.getText().toString(),
+                    (session, error) -> runOnUiThread(() -> {
+                        if (generation != activationGeneration || isFinishing() || isDestroyed()) return;
+                        setFormEnabled(true);
+                        if (error != null) { activationError(error); return; }
+                        activationSession = session;
+                        showActivationPassword();
+                    }));
+        });
+        TextView resend = secondaryButton("Request another email or change address");
+        content.addView(resend, fieldParams());
+        resend.setOnClickListener(v -> showActivationEmail());
+        activationBack();
+    }
+
+    private void showActivationPassword() {
+        if (activationSession == null) { showActivationEmail(); return; }
+        int generation = ++activationGeneration;
+        activationShell("Create a new password", "Email verified. Your existing profile and history will stay with your account.");
+        EditText password = field("New password", InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        EditText confirmation = field("Confirm new password", InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        password.setContentDescription("New password");
+        confirmation.setContentDescription("Confirm new password");
+        password.setAutofillHints("newPassword");
+        confirmation.setAutofillHints("newPassword");
+        password.setSaveEnabled(false);
+        confirmation.setSaveEnabled(false);
+        content.addView(password, fieldParams());
+        content.addView(confirmation, fieldParams());
+        TextView finish = primaryButton("Activate account");
+        content.addView(finish, fieldParams());
+        finish.setOnClickListener(v -> {
+            String value = password.getText().toString();
+            String confirm = confirmation.getText().toString();
+            String validation = ZeroChillAccountValidation.activationPassword(value, confirm);
+            if (!validation.isEmpty()) { activationError(new IllegalArgumentException(validation)); return; }
+            setFormEnabled(false);
+            ZeroChillAccountRepository.finishActivation(this, activationSession, value, confirm,
+                    (result, error) -> runOnUiThread(() -> {
+                        if (generation != activationGeneration || isFinishing() || isDestroyed()) return;
+                        setFormEnabled(true);
+                        if (error != null) { activationError(error); return; }
+                        ZeroChillAccountRepository.AccountState state;
+                        try { state = ZeroChillAccountRepository.acceptActivation(this, result); }
+                        catch (Exception failure) { activationError(failure); return; }
+                        password.setText("");
+                        confirmation.setText("");
+                        activationSession = null;
+                        activationMode = false;
+                        account = state;
+                        showProfile(state);
+                    }));
+        });
+        activationBack();
     }
 
     private void showVerification(String email) {

@@ -1,0 +1,116 @@
+name: ZEROCHILL Migration Test Activation APK
+
+# Single test-only build from PR #430. This workflow is not for public releases.
+on:
+  push:
+    branches:
+      - feature/email-account-activation
+    paths:
+      - .github/workflows/migration-activation-apk.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  signed-migration-test-beta:
+    runs-on: ubuntu-latest
+    env:
+      ZEROCHILL_MIGRATION_TEST: "true"
+      ZEROCHILL_V7_TRAFFIC: "false"
+      SUPABASE_URL: "https://xswtgidwhesajavxjbjb.supabase.co"
+      # Public browser/mobile key for the disposable rehearsal project, NOT a secret/service key.
+      SUPABASE_PUBLISHABLE_KEY: "sb_publishable_nFNs3q31jOj5KthmiYZRqg_wblSlNMO"
+      APP_VERSION_CODE: "6000015"
+      APP_VERSION_NAME: "7.0.0-migration-test"
+      ZEROCHILL_SOURCE_SHA: ${{ github.sha }}
+      SOURCE_CONFIG_ENDPOINT: ""
+      FEEDBACK_ENDPOINT: ""
+      ANALYTICS_ENDPOINT: ""
+      ANALYTICS_V2_ENDPOINT: ""
+
+    steps:
+      - name: Check out the exact source
+        uses: actions/checkout@v6
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v4
+
+      - name: Install Android platforms and build tools
+        run: sdkmanager "platforms;android-35" "platforms;android-36" "build-tools;35.0.0"
+
+      - name: Set up Gradle 8.11.1
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: '8.11.1'
+
+      - name: Restore production signing identity for side-by-side Beta
+        env:
+          SIGNING_BUNDLE: ${{ secrets.ANDROID_SIGNING_BUNDLE }}
+        run: |
+          python3 - <<'PY'
+          import base64, json, os, pathlib, sys
+          raw = os.environ.get("SIGNING_BUNDLE", "")
+          if not raw:
+              sys.exit("Missing repository Android signing bundle")
+          data = json.loads(raw.replace("\r", "").replace("\n", ""))
+          required = ("keystore_base64", "store_password", "key_alias", "key_password")
+          if any(not data.get(field) for field in required):
+              sys.exit("Signing bundle incomplete")
+          for field in ("store_password", "key_alias", "key_password"):
+              print("::add-mask::" + data[field])
+          keystore = pathlib.Path(os.environ["RUNNER_TEMP"]) / "zerochill-migration-test.jks"
+          keystore.write_bytes(base64.b64decode(data["keystore_base64"]))
+          keystore.chmod(0o600)
+          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as env:
+              env.write(f"ANDROID_KEYSTORE_PATH={keystore}\n")
+              env.write(f"ANDROID_KEYSTORE_PASSWORD={data['store_password']}\n")
+              env.write(f"ANDROID_KEY_ALIAS={data['key_alias']}\n")
+              env.write(f"ANDROID_KEY_PASSWORD={data['key_password']}\n")
+          PY
+
+      - name: Build signed test-only APK without broad Robolectric download
+        run: gradle --no-daemon :app:assembleDebug
+
+      - name: Verify staging isolation and original signing certificate
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          APK="app/build/outputs/apk/debug/app-debug.apk"
+          BUILD_TOOLS="$ANDROID_HOME/build-tools/35.0.0"
+          test -f "$APK"
+          GENERATED="app/build/generated/source/buildConfig/debug/com/webapp/crazyshit/BuildConfig.java"
+          grep -q 'ZEROCHILL_MIGRATION_TEST = true' "$GENERATED"
+          grep -q 'ZEROCHILL_V7_TRAFFIC = false' "$GENERATED"
+          grep -q 'https://xswtgidwhesajavxjbjb.supabase.co' "$GENERATED"
+          BADGING="$("$BUILD_TOOLS/aapt2" dump badging "$APK")"
+          echo "$BADGING" | grep -q "package: name='com.addy37.crazyshitunofficial.dev'"
+          echo "$BADGING" | grep -q "versionCode='6000015'"
+          "$BUILD_TOOLS/apksigner" verify --print-certs "$APK"
+          mkdir -p "$RUNNER_TEMP/stable"
+          gh release download v6.0.2 --repo "$GITHUB_REPOSITORY"             --pattern ZeroChill.apk --dir "$RUNNER_TEMP/stable"
+          CANDIDATE_CERT="$("$BUILD_TOOLS/apksigner" verify --print-certs "$APK" | awk -F': ' '/Signer #1 certificate SHA-256 digest/ {print $2; exit}')"
+          STABLE_CERT="$("$BUILD_TOOLS/apksigner" verify --print-certs "$RUNNER_TEMP/stable/ZeroChill.apk" | awk -F': ' '/Signer #1 certificate SHA-256 digest/ {print $2; exit}')"
+          test -n "$CANDIDATE_CERT"
+          test "$CANDIDATE_CERT" = "$STABLE_CERT"
+          OUT="ZeroChill-MigrationTest-feature-email-account-activation-${GITHUB_SHA:0:7}.apk"
+          cp "$APK" "$OUT"
+          sha256sum "$OUT" > SHA256SUMS-migration-test.txt
+          echo "Verified side-by-side staging Beta signed by production identity."
+
+      - name: Upload signed staging-only Beta
+        uses: actions/upload-artifact@v4
+        with:
+          name: ZeroChill-MigrationTest-Activation-Beta
+          path: |
+            ZeroChill-MigrationTest-*.apk
+            SHA256SUMS-migration-test.txt
+          retention-days: 7
+          if-no-files-found: error

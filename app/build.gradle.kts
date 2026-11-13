@@ -6,9 +6,21 @@ plugins {
     id("com.google.gms.google-services")
 }
 
+// Synthetic migration rehearsal is explicitly isolated from both production projects.
+val zerochillMigrationTest = System.getenv("ZEROCHILL_MIGRATION_TEST")?.equals("true", ignoreCase = true) == true
+if (zerochillMigrationTest) {
+    require(System.getenv("SUPABASE_URL") == "https://xswtgidwhesajavxjbjb.supabase.co") {
+        "ZEROCHILL_MIGRATION_TEST requires the disposable Migration Test backend URL"
+    }
+    require(!System.getenv("SUPABASE_PUBLISHABLE_KEY").isNullOrBlank()) {
+        "ZEROCHILL_MIGRATION_TEST requires the Migration Test publishable client key"
+    }
+}
+
 // Explicit 7.0 opt-in: never silently redirect an existing or preview install.
 val zerochillV7Traffic = System.getenv("ZEROCHILL_V7_TRAFFIC")?.equals("true", ignoreCase = true) == true
 if (zerochillV7Traffic) {
+    require(!zerochillMigrationTest) { "Production and migration-test modes cannot be combined" }
     require(System.getenv("SUPABASE_URL") == "https://aavjpykssueavbseqdlf.supabase.co") {
         "ZEROCHILL_V7_TRAFFIC requires the separately tested New Zerochill backend URL"
     }
@@ -41,11 +53,12 @@ android {
         versionName = System.getenv("APP_VERSION_NAME") ?: "6.0.1"
         buildConfigField("boolean", "SHITTOK_POOL_DIAGNOSTICS", System.getenv("SHITTOK_POOL_DIAGNOSTICS") ?: "false")
         buildConfigField("boolean", "ZEROCHILL_V7_TRAFFIC", zerochillV7Traffic.toString())
+        buildConfigField("boolean", "ZEROCHILL_MIGRATION_TEST", zerochillMigrationTest.toString())
         buildConfigField("String", "SOURCE_REVISION", "\"${System.getenv("ZEROCHILL_SOURCE_SHA") ?: "local"}\"")
         buildConfigField(
             "String",
             "FEEDBACK_ENDPOINT",
-            "\"${System.getenv("FEEDBACK_ENDPOINT") ?: ""}\""
+            "\"${if (zerochillMigrationTest) "" else (System.getenv("FEEDBACK_ENDPOINT") ?: "")}\""
         )
         buildConfigField(
             "String",
@@ -53,11 +66,11 @@ android {
             "\"${System.getenv("FEEDBACK_ANON_KEY") ?: ""}\""
         )
         buildConfigField("String", "ANALYTICS_V2_ENDPOINT",
-            "\"${if (zerochillV7Traffic) "" else (System.getenv("ANALYTICS_V2_ENDPOINT") ?: "https://fketutffusxgjxjlckci.supabase.co/functions/v1/analytics-ingest-v2")}\"")
+            "\"${if (zerochillV7Traffic || zerochillMigrationTest) "" else (System.getenv("ANALYTICS_V2_ENDPOINT") ?: "https://fketutffusxgjxjlckci.supabase.co/functions/v1/analytics-ingest-v2")}\"")
         buildConfigField(
             "String",
             "ANALYTICS_ENDPOINT",
-            "\"${if (zerochillV7Traffic) "" else (System.getenv("ANALYTICS_ENDPOINT") ?: "https://fketutffusxgjxjlckci.supabase.co/functions/v1/analytics-ingest")}\""
+            "\"${if (zerochillV7Traffic || zerochillMigrationTest) "" else (System.getenv("ANALYTICS_ENDPOINT") ?: "https://fketutffusxgjxjlckci.supabase.co/functions/v1/analytics-ingest")}\""
         )
         buildConfigField(
             "String",
@@ -72,7 +85,7 @@ android {
         buildConfigField(
             "String",
             "SOURCE_CONFIG_ENDPOINT",
-            "\"${System.getenv("SOURCE_CONFIG_ENDPOINT") ?: ""}\""
+            "\"${if (zerochillMigrationTest) "" else (System.getenv("SOURCE_CONFIG_ENDPOINT") ?: "")}\""
         )
         buildConfigField(
             "String",

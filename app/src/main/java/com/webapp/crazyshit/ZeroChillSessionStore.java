@@ -22,6 +22,17 @@ final class ZeroChillSessionStore {
     private static final String PREFS = "zerochill_account_secure_state";
     private static final String VALUE = "session_value";
     private static final String IV = "session_iv";
+    private static long mutationGeneration;
+
+    static final class Snapshot {
+        private final String value;
+        private final long generation;
+        Snapshot(String value, long generation) { this.value = value; this.generation = generation; }
+    }
+
+    static synchronized Snapshot snapshot(Context context) {
+        return new Snapshot(read(context), mutationGeneration);
+    }
 
     private ZeroChillSessionStore() {}
 
@@ -29,7 +40,7 @@ final class ZeroChillSessionStore {
         return context.getApplicationContext().getSharedPreferences(PREFS, Context.MODE_PRIVATE);
     }
 
-    static void save(Context context, String value) throws Exception {
+    static synchronized void save(Context context, String value) throws Exception {
         SecretKey key = getOrCreateKey();
         Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
         cipher.init(Cipher.ENCRYPT_MODE, key);
@@ -38,7 +49,14 @@ final class ZeroChillSessionStore {
                 .putString(VALUE, Base64.encodeToString(encrypted, Base64.NO_WRAP))
                 .putString(IV, Base64.encodeToString(cipher.getIV(), Base64.NO_WRAP))
                 .apply();
+        mutationGeneration++;
         ZeroChillPushRegistration.onSessionAvailable(context);
+    }
+
+    static synchronized boolean saveIfUnchanged(Context context, Snapshot expected, String value) throws Exception {
+        if (expected == null || mutationGeneration != expected.generation || !read(context).equals(expected.value)) return false;
+        save(context, value);
+        return true;
     }
 
     static String read(Context context) {
@@ -63,7 +81,8 @@ final class ZeroChillSessionStore {
         }
     }
 
-    static void clear(Context context) {
+    static synchronized void clear(Context context) {
+        mutationGeneration++;
         String session = read(context);
         if (!session.isEmpty()) ZeroChillPushRegistration.onSessionClearing(context, session);
         AccountProfileCache.clear(context);

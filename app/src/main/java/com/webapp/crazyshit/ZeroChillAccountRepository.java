@@ -108,7 +108,135 @@ final class ZeroChillAccountRepository {
         }
     }
 
+    /** A verified session is held in memory until a new password and the private claim both succeed. */
+    static final class ActivationSession {
+        private final JSONObject token;
+        private final Session session;
+        ActivationSession(JSONObject token, Session session) {
+            this.token = token;
+            this.session = session;
+        }
+    }
+
     private ZeroChillAccountRepository() {}
+
+    static boolean activationEnabled() {
+        return BuildConfig.ZEROCHILL_MIGRATION_TEST && activationProject(BuildConfig.ACCOUNT_SUPABASE_URL);
+    }
+
+    static boolean activationProject(String url) {
+        return "https://xswtgidwhesajavxjbjb.supabase.co".equals(clean(url));
+    }
+
+    private static void requireActivationProject() {
+        if (!activationEnabled()) throw new IllegalStateException("Account activation is not available in this build.");
+    }
+
+    private static boolean needsActivation(Session session) throws Exception {
+        if (!activationEnabled()) return false;
+        Response response = request("POST", "/rest/v1/rpc/legacy_activation_status", session.accessToken,
+                "{}".getBytes(StandardCharsets.UTF_8), "application/json", null);
+        if (!response.ok()) throw responseError(response, "Unable to check account activation. Try again.");
+        String result = response.body.trim();
+        if (!"true".equals(result) && !"false".equals(result))
+            throw new IllegalStateException("Unable to check account activation. Try again.");
+        return "true".equals(result);
+    }
+
+    static void requestActivation(String email, Callback<Boolean> callback) {
+        NETWORK.execute(() -> {
+            try {
+                requireActivationProject();
+                String validation = ZeroChillAccountValidation.email(email);
+                if (!validation.isEmpty()) throw new IllegalArgumentException(validation);
+                Response response = request("POST", "/auth/v1/otp?redirect_to=" + encode(AUTH_REDIRECT_URI), "",
+                        new JSONObject().put("email", email.trim()).put("create_user", false)
+                                .toString().getBytes(StandardCharsets.UTF_8), "application/json", null);
+                // Unknown accounts get the same response as known accounts. Provider delivery errors
+                // must not leak whether a registered address exists.
+                if (response.status == 429)
+                    throw new IllegalStateException("Please wait before requesting another email.");
+                callback.complete(true, null);
+            } catch (Exception error) { callback.complete(false, error); }
+        });
+    }
+
+    static void verifyActivationCode(String email, String code, Callback<ActivationSession> callback) {
+        NETWORK.execute(() -> {
+            try {
+                requireActivationProject();
+                String validation = ZeroChillAccountValidation.email(email);
+                if (!validation.isEmpty()) throw new IllegalArgumentException(validation);
+                if (code == null || !code.trim().matches("[0-9]{6,10}"))
+                    throw new IllegalArgumentException("Enter the verification code from your email.");
+                Response response = request("POST", "/auth/v1/verify", "",
+                        new JSONObject().put("email", email.trim()).put("token", code.trim()).put("type", "email")
+                                .toString().getBytes(StandardCharsets.UTF_8), "application/json", null);
+                if (!response.ok()) throw new IllegalStateException("That code is invalid or expired. Request another email.");
+                JSONObject token = jsonObject(response.body);
+                Session session = sessionFromToken(token);
+                if (!needsActivation(session)) throw new IllegalStateException("Use normal sign in for this account.");
+                callback.complete(new ActivationSession(token, session), null);
+            } catch (Exception error) { callback.complete(null, error); }
+        });
+    }
+
+    static final class ActivationResult {
+        final AccountState account;
+        private final JSONObject token;
+        private final ZeroChillSessionStore.Snapshot expectedStoredSession;
+        ActivationResult(AccountState account, JSONObject token, ZeroChillSessionStore.Snapshot expectedStoredSession) {
+            this.account = account;
+            this.token = token;
+            this.expectedStoredSession = expectedStoredSession;
+        }
+    }
+
+    static void finishActivation(Context context, ActivationSession activation, String password,
+            String confirmation, Callback<ActivationResult> callback) {
+        final ZeroChillSessionStore.Snapshot expectedStoredSession = ZeroChillSessionStore.snapshot(context);
+        NETWORK.execute(() -> {
+            try {
+                requireActivationProject();
+                String validation = ZeroChillAccountValidation.activationPassword(password, confirmation);
+                if (!validation.isEmpty()) throw new IllegalArgumentException(validation);
+                if (activation == null || activation.session.expiresAtSeconds <= System.currentTimeMillis() / 1000L + 60L)
+                    throw new IllegalStateException("Verify your email again to continue.");
+                Response response = request("POST", "/functions/v1/account-activation", activation.session.accessToken,
+                        new JSONObject().put("password", password).toString().getBytes(StandardCharsets.UTF_8),
+                        "application/json", null);
+                if (!response.ok()) throw responseError(response, "Unable to activate your account. Verify your email again.");
+                if (!jsonObject(response.body).optBoolean("activated", false))
+                    throw new IllegalStateException("Activation did not finish. Try again.");
+                if (needsActivation(activation.session)) throw new IllegalStateException("Activation did not finish. Try again.");
+                AccountState state = loadAccount(activation.session);
+                activation.token.put("expires_at", activation.session.expiresAtSeconds);
+                callback.complete(new ActivationResult(state, activation.token, expectedStoredSession), null);
+            } catch (Exception error) { callback.complete(null, error); }
+        });
+    }
+
+    /** Called only after the Activity accepts its still-current completion callback. */
+    static AccountState acceptActivation(Context context, ActivationResult result) throws Exception {
+        if (result == null) throw new IllegalStateException("Verify your email again to continue.");
+        Session session = sessionFromToken(result.token);
+        JSONObject stored = storedSession(session);
+        synchronized (ZeroChillSessionStore.class) {
+            if (!ZeroChillSessionStore.saveIfUnchanged(context, result.expectedStoredSession, stored.toString()))
+                throw new IllegalStateException("Account changed. Sign in again to continue.");
+            AccountProfileCache.record(context, result.account);
+        }
+        NETWORK.execute(() -> syncCreatorFavoritesBlocking(context, session));
+        return result.account;
+    }
+
+    static final class ActivationRequiredException extends IllegalStateException {
+        final ActivationSession activation;
+        ActivationRequiredException(ActivationSession activation) {
+            super("Activate your existing account by verifying your registered email.");
+            this.activation = activation;
+        }
+    }
 
     static boolean isConfigured() {
         return !clean(BuildConfig.ACCOUNT_SUPABASE_URL).isEmpty()
@@ -127,6 +255,10 @@ final class ZeroChillAccountRepository {
                 if (session == null || !session.valid()) {
                     callback.complete(AccountState.signedOut(), null);
                     return;
+                }
+                if (needsActivation(session)) {
+                    ZeroChillSessionStore.clear(context);
+                    throw new ActivationRequiredException(null);
                 }
                 AccountState state = loadAccount(session);
                 syncCreatorFavoritesBlocking(context, session);
@@ -180,8 +312,13 @@ final class ZeroChillAccountRepository {
                         .put("access_token", accessToken)
                         .put("refresh_token", refreshToken)
                         .put("expires_in", expiresIn);
-                Session session = saveSession(context, token);
+                Session session = sessionFromToken(token);
+                if (needsActivation(session)) {
+                    callback.complete(null, new ActivationRequiredException(new ActivationSession(token, session)));
+                    return;
+                }
                 AccountState state = loadAccount(session);
+                saveSession(context, token);
                 syncCreatorFavoritesBlocking(context, session);
                 ZeroChillNotificationPreferences.load(context, (preferences, failure) -> { });
                 AccountProfileCache.record(context, state);
@@ -279,8 +416,11 @@ final class ZeroChillAccountRepository {
                         null
                 );
                 if (!response.ok()) throw responseError(response, "Unable to sign in.");
-                Session session = saveSession(context, jsonObject(response.body));
+                JSONObject token = jsonObject(response.body);
+                Session session = sessionFromToken(token);
+                if (needsActivation(session)) throw new ActivationRequiredException(null);
                 AccountState state = loadAccount(session);
+                saveSession(context, token);
                 syncCreatorFavoritesBlocking(context, session);
                 ZeroChillNotificationPreferences.load(context, (preferences, failure) -> { });
                 AccountProfileCache.record(context, state);
@@ -652,6 +792,10 @@ final class ZeroChillAccountRepository {
         if (session == null || !session.valid()) {
             throw new IllegalStateException("Sign in to use this feature.");
         }
+        if (needsActivation(session)) {
+            ZeroChillSessionStore.clear(context);
+            throw new ActivationRequiredException(null);
+        }
         return session;
     }
 
@@ -699,7 +843,7 @@ final class ZeroChillAccountRepository {
         }
     }
 
-    private static Session saveSession(Context context, JSONObject value) throws Exception {
+    private static Session sessionFromToken(JSONObject value) throws Exception {
         long now = System.currentTimeMillis() / 1000L;
         long expiresAt = value.optLong("expires_at", 0L);
         if (expiresAt <= now) expiresAt = now + Math.max(60L, value.optLong("expires_in", 3600L));
@@ -709,12 +853,18 @@ final class ZeroChillAccountRepository {
                 expiresAt
         );
         if (!session.valid()) throw new IllegalStateException("The sign-in session was incomplete.");
-        JSONObject stored = new JSONObject()
-                .put("access_token", session.accessToken)
-                .put("refresh_token", session.refreshToken)
-                .put("expires_at", session.expiresAtSeconds);
-        ZeroChillSessionStore.save(context, stored.toString());
         return session;
+    }
+
+    private static Session saveSession(Context context, JSONObject value) throws Exception {
+        Session session = sessionFromToken(value);
+        ZeroChillSessionStore.save(context, storedSession(session).toString());
+        return session;
+    }
+
+    private static JSONObject storedSession(Session session) throws Exception {
+        return new JSONObject().put("access_token", session.accessToken)
+                .put("refresh_token", session.refreshToken).put("expires_at", session.expiresAtSeconds);
     }
 
     private static Response request(
