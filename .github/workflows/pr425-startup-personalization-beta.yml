@@ -1,0 +1,115 @@
+name: PR425 Startup Personalization Signed Beta
+
+# One scoped build for physical acceptance. No broad CI or automatic rebuilds.
+on:
+  push:
+    branches:
+      - build/pr425-startup-personalization-beta
+    paths:
+      - .github/workflows/pr425-startup-personalization-beta.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  signed-test-apk:
+    if: github.ref_name == 'build/pr425-startup-personalization-beta'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      ZEROCHILL_V7_TRAFFIC: 'true'
+      SUPABASE_URL: https://aavjpykssueavbseqdlf.supabase.co
+      SUPABASE_PUBLISHABLE_KEY: sb_publishable_oSQALszxzeeHxDwEeclucA_5dGEpOLs
+      FEEDBACK_ANON_KEY: sb_publishable_oSQALszxzeeHxDwEeclucA_5dGEpOLs
+      FEEDBACK_ENDPOINT: https://aavjpykssueavbseqdlf.supabase.co/functions/v1/dynamic-api
+      SOURCE_CONFIG_ENDPOINT: https://aavjpykssueavbseqdlf.supabase.co/functions/v1/app-config
+      ANALYTICS_ENDPOINT: ''
+      ANALYTICS_V2_ENDPOINT: ''
+      APP_VERSION_CODE: '6000048'
+      APP_VERSION_NAME: '7.0-startup-test.1'
+      ZEROCHILL_SOURCE_SHA: ${{ github.sha }}
+    steps:
+      - name: Check out complete PR425 lineage
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Verify tested feature is present
+        run: |
+          set -euo pipefail
+          git merge-base --is-ancestor cb6002cdca31e0adcf399c19f7fb241cdc6c2846 HEAD
+          git merge-base --is-ancestor 88b60e38a9516bfa52b277e7f079d2eda9337780 HEAD
+          test -f app/src/main/res/raw/whats_new_7_0.md
+      - name: Set up Java 17 and 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: |
+            17
+            21
+      - name: Set up Android
+        uses: android-actions/setup-android@v4
+        with:
+          packages: platform-tools
+      - run: sdkmanager 'platforms;android-35' 'platforms;android-36' 'build-tools;35.0.0'
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: '8.11.1'
+          cache-provider: basic
+      - name: Restore production signing identity
+        env:
+          SIGNING_BUNDLE: ${{ secrets.ANDROID_SIGNING_BUNDLE }}
+        run: |
+          python3 - <<'PY'
+          import base64, json, os, pathlib
+          raw = os.environ.get('SIGNING_BUNDLE', '')
+          if not raw:
+              raise SystemExit('Missing ANDROID_SIGNING_BUNDLE')
+          data = json.loads(raw.replace('\r', '').replace('\n', ''))
+          for key in ('keystore_base64', 'store_password', 'key_alias', 'key_password'):
+              if not data.get(key):
+                  raise SystemExit('Missing signing item: ' + key)
+          for key in ('store_password', 'key_alias', 'key_password'):
+              print('::add-mask::' + data[key])
+          path = pathlib.Path(os.environ['RUNNER_TEMP']) / 'pr425-beta.jks'
+          path.write_bytes(base64.b64decode(data['keystore_base64']))
+          path.chmod(0o600)
+          with open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8') as out:
+              for key, value in {
+                  'ANDROID_KEYSTORE_PATH': str(path),
+                  'ANDROID_KEYSTORE_PASSWORD': data['store_password'],
+                  'ANDROID_KEY_ALIAS': data['key_alias'],
+                  'ANDROID_KEY_PASSWORD': data['key_password']
+              }.items():
+                  out.write(key + '=' + value + '\n')
+          PY
+      - name: Focused startup tests and one signed beta build
+        run: >-
+          gradle --no-daemon
+          -Porg.gradle.java.installations.fromEnv=JAVA_HOME_17_X64,JAVA_HOME_21_X64
+          :app:testDebugUnitTest
+          --tests '*WhatsNew*'
+          --tests '*StartupWizard*'
+          --tests '*AppearanceThemeTest'
+          --tests '*ReleaseNotesSummaryTest'
+          --tests '*Splash*'
+          --tests '*CreatorBackupTest'
+          --tests '*ZeroChillIdUpgradeAnnouncementTest'
+          :app:assembleDebug
+      - name: Verify identity and New Supabase isolation
+        run: |
+          set -euo pipefail
+          mkdir -p candidate
+          SAFE_REF="${GITHUB_REF_NAME//\//-}"
+          APK="candidate/ZeroChill-${SAFE_REF}-${GITHUB_SHA:0:7}.apk"
+          cp app/build/outputs/apk/debug/app-debug.apk "$APK"
+          python3 tools/verify_traffic_candidate.py "$APK" "$ANDROID_HOME/build-tools/35.0.0"
+          (cd candidate && sha256sum *.apk > SHA256SUMS.txt)
+      - name: Upload signed side-by-side APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: ZeroChill-PR425-signed-startup-beta
+          path: candidate/
+          if-no-files-found: error
+          retention-days: 14
