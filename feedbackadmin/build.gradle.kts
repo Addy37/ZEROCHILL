@@ -15,18 +15,15 @@ android {
         minSdk = 26
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         targetSdk = 34
-        versionCode = 12
-        versionName = "2.1.0"
-        buildConfigField(
-            "String",
-            "ADMIN_FEEDBACK_ENDPOINT",
-            "\"${System.getenv("ADMIN_FEEDBACK_ENDPOINT") ?: "https://fketutffusxgjxjlckci.supabase.co/functions/v1/feedback-admin"}\""
-        )
-        buildConfigField(
-            "String",
-            "ADMIN_SOURCE_CONFIG_ENDPOINT",
-            "\"${System.getenv("ADMIN_SOURCE_CONFIG_ENDPOINT") ?: ""}\""
-        )
+        versionCode = 7_000_000
+        versionName = "7.0.0"
+        // 7.0 Admin is exclusive to New Zerochill. No environment override can
+        // silently redirect it to the retired project.
+        buildConfigField("String", "ADMIN_FEEDBACK_ENDPOINT",
+            "\\"https://aavjpykssueavbseqdlf.supabase.co/functions/v1/feedback-admin\\"")
+        buildConfigField("String", "ADMIN_SOURCE_CONFIG_ENDPOINT",
+            "\\"https://aavjpykssueavbseqdlf.supabase.co/functions/v1/app-config-admin\\"")
+        buildConfigField("boolean", "ADMIN_NEW_ZEROCHILL", "true")
     }
 
     val releaseKeystorePath = System.getenv("ANDROID_KEYSTORE_PATH")
