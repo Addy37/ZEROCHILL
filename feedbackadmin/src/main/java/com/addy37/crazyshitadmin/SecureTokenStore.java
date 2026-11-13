@@ -15,8 +15,8 @@ import javax.crypto.SecretKey;
 import javax.crypto.spec.GCMParameterSpec;
 
 final class SecureTokenStore {
-    private static final String KEY_ALIAS = "crazyshit_admin_token_key";
-    private static final String PREFS = "admin_secure_state";
+    private static final String KEY_ALIAS = "zerochill_7_admin_token_key";
+    private static final String PREFS = "zerochill_7_admin_secure_state";
     private static final String VALUE = "token_value";
     private static final String IV = "token_iv";
 
