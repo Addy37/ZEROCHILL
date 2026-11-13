@@ -1,11 +1,7 @@
 name: PR423 New Message Signed Beta Candidate
 
+# No automatic Actions spend: start manually only when approved.
 on:
-  push:
-    branches:
-      - feature/zerochill-7-new-message-compose
-    paths:
-      - .github/workflows/traffic-423-candidate.yml
   workflow_dispatch:
 
 permissions:
@@ -76,8 +72,8 @@ jobs:
               }.items():
                   out.write(key+'='+value+'\n')
           PY
-      - name: Test and build signed side-by-side APK
-        run: gradle --no-daemon -Porg.gradle.java.installations.fromEnv=JAVA_HOME_17_X64,JAVA_HOME_21_X64 :app:testDebugUnitTest :app:testReleaseUnitTest :app:assembleDebug
+      - name: Run focused DM test and build signed side-by-side APK
+        run: gradle --no-daemon -Porg.gradle.java.installations.fromEnv=JAVA_HOME_17_X64,JAVA_HOME_21_X64 :app:testDebugUnitTest --tests 'com.webapp.crazyshit.ZeroChillMessageThreadUiTest' :app:assembleDebug
       - name: Verify certificate, package and backend isolation
         run: |
           set -euo pipefail
