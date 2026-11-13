@@ -72,6 +72,18 @@ Both SQL files were verified on the live projects using **read-only queries**: O
 - [Supabase CLI v3 change notice](https://supabase.com/changelog/supabase-cli-v3)
 - Existing repository planning: `docs/NEW_ZEROCHILL_AUTH_DATA_PREFLIGHT.md` and the staged backend PRs #418 through #421 and #424.
 
+## Synthetic password-hash import follow-up (Codex report, November 13)
+
+Codex, using **only** the disposable `ZEROCHILL Migration Test` project (`xswtgidwhesajavxjbjb`), reported:
+
+- **Passed:** secure staging SQL access, fake-account creation, login with the original synthetic password, authenticated session UUID verification, automatic profile creation, sign-out, and cleanup.
+- **Blocked:** the SQL migration/import operation required an approval that expired before execution. **The import did not occur**.
+- **Not proved:** preserving an imported account's original UUID, transferring its exact password hash, and logging in with the original password **after import**. A successful login to a newly created synthetic account is not proof of hash-preserving cross-project migration.
+- **Cleanup verified:** zero Auth users, Auth identities, profiles, sessions, refresh tokens, or rehearsal tables remain. The generated local fake password was disposed of.
+- **Scope:** no OG or live New Zerochill database changes, credentials printed, role grants broadened, GitHub Actions or APK build.
+
+**Only next action:** resume the same **synthetic-only** staged import with a fresh SQL-tool approval, review the operation's target project and scope, approve it while the prompt is active, and then verify exact UUID and password-hash preservation without logging raw hashes or credentials. Reverify a session with the **pre-import** password and clean up the disposable project. Do not switch to a real OG user or the main New Zerochill backend.
+
 ## Staging Auth API login test completed (Codex report, November 13)
 
 Codex reported exercising the disposable **ZEROCHILL Migration Test** project's actual Supabase Auth API, using its separately configured private test-project credentials. This is an externally executed result reported by the user; it was not independently re-run from this conversation.
