@@ -20,9 +20,9 @@ android {
         // 7.0 Admin is exclusive to New Zerochill. No environment override can
         // silently redirect it to the retired project.
         buildConfigField("String", "ADMIN_FEEDBACK_ENDPOINT",
-            "\\"https://aavjpykssueavbseqdlf.supabase.co/functions/v1/feedback-admin\\"")
+            "\"https://aavjpykssueavbseqdlf.supabase.co/functions/v1/feedback-admin\""
         buildConfigField("String", "ADMIN_SOURCE_CONFIG_ENDPOINT",
-            "\\"https://aavjpykssueavbseqdlf.supabase.co/functions/v1/app-config-admin\\"")
+            "\"https://aavjpykssueavbseqdlf.supabase.co/functions/v1/app-config-admin\""
         buildConfigField("boolean", "ADMIN_NEW_ZEROCHILL", "true")
     }
 
