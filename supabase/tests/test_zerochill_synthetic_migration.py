@@ -75,6 +75,7 @@ def fixture_source():
         db.executemany("INSERT INTO comments VALUES (?,?,?,?)", [
             ("comment-1", "og-a", None, "fake parent"),
             ("comment-2", "og-d", "comment-1", "fake reply"),
+            ("comment-0", "og-c", "comment-2", "fake nested reply"),
         ])
         db.execute("INSERT INTO comment_likes VALUES (?,?)", ("comment-1", "og-b"))
         db.execute("INSERT INTO direct_messages VALUES (?,?,?,?)",
@@ -138,10 +139,21 @@ def rehearsal_import(source, target, *, fail_after_table=None):
             placeholders = ",".join("?" for _ in columns)
             insert = f"INSERT INTO {table} VALUES ({placeholders}) ON CONFLICT DO NOTHING"
             data = rows(source, table)
-            # The real import must topologically order arbitrarily nested replies.
+            # Parent replies must load first, even if child IDs sort earlier.
             if table == "comments":
-                data = sorted(data, key=lambda row: (row[2] is not None, row[0]))
-            target.executemany(insert, data)
+                pending = {record[0]: record for record in data}
+                inserted = {record[0] for record in target.execute("SELECT id FROM comments")}
+                while pending:
+                    ready = [record for record in pending.values()
+                             if record[2] is None or record[2] in inserted]
+                    if not ready:
+                        raise RuntimeError("Comment parent missing or cyclic")
+                    for record in ready:
+                        target.execute(insert, record)
+                        inserted.add(record[0])
+                        del pending[record[0]]
+            else:
+                target.executemany(insert, data)
             if fail_after_table == table:
                 raise RuntimeError("simulated import failure")
         if target.execute("PRAGMA foreign_key_check").fetchall():
