@@ -1,10 +1,12 @@
 package com.webapp.crazyshit;
 
 import android.app.Dialog;
+import android.content.ActivityNotFoundException;
 import android.content.Intent;
 import android.content.res.ColorStateList;
 import android.graphics.Color;
 import android.graphics.Rect;
+import android.net.Uri;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
@@ -101,6 +103,12 @@ final class LandscapeMoreDialog {
                         "Send feedback",
                         "Suggest a feature or report a problem",
                         () -> activity.startActivity(new Intent(activity, FeedbackActivity.class))
+                ),
+                new Action(
+                        R.drawable.ic_more_website,
+                        "Cash App",
+                        "Open Cash App",
+                        () -> openCashApp(activity)
                 )
         );
 
@@ -175,6 +183,26 @@ final class LandscapeMoreDialog {
                 .setDuration(ZeroChillMotion.duration(activity, ZeroChillMotion.QUICK_MS))
                 .setInterpolator(ZeroChillMotion.EASE_OUT)
                 .start();
+    }
+
+    private static void openCashApp(NativeMainActivity activity) {
+        Intent installedApp = activity.getPackageManager()
+                .getLaunchIntentForPackage("com.squareup.cash");
+        if (installedApp != null) {
+            try {
+                activity.startActivity(installedApp);
+                return;
+            } catch (ActivityNotFoundException ignored) {
+                // Fall back to the official website when the installed app cannot launch.
+            }
+        }
+
+        try {
+            activity.startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse("https://cash.app/")));
+        } catch (ActivityNotFoundException ignored) {
+            ZeroChillToast.makeText(activity, "Couldn't open Cash App.",
+                    ZeroChillToast.LENGTH_SHORT).show();
+        }
     }
 
     private static void addHeader(
