@@ -1,6 +1,6 @@
 name: ZEROCHILL 7 Update Dialog Signed Candidate
 
-# One private 7.0.2 updater UI preview. Not a public release.
+# One private 7.0.2 updater UI preview with Keep Browsing while downloading. Not a public release.
 on:
   push:
     branches:
