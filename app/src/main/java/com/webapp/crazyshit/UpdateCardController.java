@@ -5,15 +5,13 @@ import android.app.Activity;
 import android.content.res.ColorStateList;
 import android.graphics.Color;
 import android.graphics.Typeface;
-import android.os.Build;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
-import android.view.WindowInsets;
 import android.widget.FrameLayout;
-import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
+import android.widget.ScrollView;
 import android.widget.TextView;
 
 import com.google.android.material.button.MaterialButton;
@@ -130,7 +128,11 @@ final class UpdateCardController {
         backdrop.setClickable(true);
         backdrop.setFocusable(true);
 
-        card.addView(content);
+        ScrollView scroll = new ScrollView(activity);
+        scroll.setFillViewport(false);
+        scroll.setVerticalScrollBarEnabled(false);
+        scroll.addView(content);
+        card.addView(scroll);
     }
 
     void showAvailable(
@@ -312,9 +314,6 @@ final class UpdateCardController {
         button.setInsetBottom(0);
         button.setCornerRadius(dp(16));
         button.setPadding(dp(10), 0, dp(10), 0);
-        LinearLayout.LayoutParams params =
-                new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(48));
-        button.setLayoutParams(params);
         if (emphasized) primaryStyle(button);
         return button;
     }
@@ -368,37 +367,6 @@ final class UpdateCardController {
         ViewParentCompat.remove(backdrop);
         if (card.getParent() == backdrop) backdrop.removeView(card);
         attached = false;
-    }
-
-    private int topSafeInset() {
-        return safeTopInset(activity.getWindow().getDecorView().getRootWindowInsets());
-    }
-
-    private int safeTopInset(WindowInsets insets) {
-        int inset = 0;
-        if (insets != null) {
-            if (Build.VERSION.SDK_INT >= 30) {
-                inset = insets.getInsetsIgnoringVisibility(
-                        WindowInsets.Type.statusBars() | WindowInsets.Type.displayCutout()
-                ).top;
-            } else {
-                inset = Math.max(0, insets.getSystemWindowInsetTop());
-            }
-        }
-        return Math.max(inset, fallbackStatusBarHeight());
-    }
-
-    private int fallbackStatusBarHeight() {
-        return dp(24);
-    }
-
-    private void updateTopMargin(int topMargin) {
-        ViewGroup.LayoutParams raw = card.getLayoutParams();
-        if (!(raw instanceof FrameLayout.LayoutParams)) return;
-        FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) raw;
-        if (params.topMargin == topMargin) return;
-        params.topMargin = topMargin;
-        card.setLayoutParams(params);
     }
 
     private int dp(int value) {
