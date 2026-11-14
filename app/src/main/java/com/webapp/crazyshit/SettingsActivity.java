@@ -288,10 +288,14 @@ public class SettingsActivity extends ComponentActivity {
         if (notificationStatusView != null) {
             notificationStatusView.setSubtitle("Checking favorite creators…");
         }
-        NotificationCoordinator.checkNow(this);
+        boolean queued = NotificationCoordinator.checkNow(this) != null;
+        if (!queued && notificationStatusView != null) {
+            notificationStatusView.setSubtitle("Notification scheduler is unavailable. Try again.");
+        }
         ZeroChillToast.makeText(
                 this,
-                "Checking supported creator sources.",
+                queued ? "Checking supported creator sources."
+                        : "Couldn't start the notification check. Try again.",
                 ZeroChillToast.LENGTH_SHORT
         ).show();
     }

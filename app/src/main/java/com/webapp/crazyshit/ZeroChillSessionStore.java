@@ -54,12 +54,38 @@ final class ZeroChillSessionStore {
                     getOrCreateKey(),
                     new GCMParameterSpec(128, Base64.decode(iv, Base64.NO_WRAP))
             );
-            return new String(
+            String session = new String(
                     cipher.doFinal(Base64.decode(value, Base64.NO_WRAP)),
                     StandardCharsets.UTF_8
             );
+            if (!isForCurrentBackend(session)) {
+                // An in-place 6.x -> 7.x upgrade cannot reuse an old-project JWT.
+                // Clear account identity only; leave local media/history/preferences intact.
+                prefs.edit().remove(VALUE).remove(IV).apply();
+                AccountProfileCache.clear(context);
+                return "";
+            }
+            return session;
         } catch (Exception ignored) {
             return "";
+        }
+    }
+
+    /** Reject saved Auth sessions issued by another Supabase project in 7.0. */
+    static boolean isForCurrentBackend(String session) {
+        if (!BuildConfig.ZEROCHILL_V7_TRAFFIC) return true;
+        try {
+            String token = new JSONObject(session).optString("access_token", "");
+            String[] parts = token.split("\\.");
+            if (parts.length != 3) return false;
+            String payload = new String(
+                    Base64.decode(parts[1], Base64.URL_SAFE | Base64.NO_WRAP | Base64.NO_PADDING),
+                    StandardCharsets.UTF_8
+            );
+            String issuer = new JSONObject(payload).optString("iss", "");
+            return (BuildConfig.ACCOUNT_SUPABASE_URL + "/auth/v1").equals(issuer);
+        } catch (Exception ignored) {
+            return false;
         }
     }
 

@@ -1,0 +1,153 @@
+name: ZEROCHILL 7 Installable Signed APK
+
+# One dedicated 7.0 production-package candidate, not a public release.
+on:
+  push:
+    branches:
+      - build/zerochill-7-new-supabase-installable
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  installable-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      ZEROCHILL_V7_TRAFFIC: 'true'
+      SUPABASE_URL: https://aavjpykssueavbseqdlf.supabase.co
+      SUPABASE_PUBLISHABLE_KEY: sb_publishable_oSQALszxzeeHxDwEeclucA_5dGEpOLs
+      FEEDBACK_ANON_KEY: sb_publishable_oSQALszxzeeHxDwEeclucA_5dGEpOLs
+      FEEDBACK_ENDPOINT: https://aavjpykssueavbseqdlf.supabase.co/functions/v1/dynamic-api
+      SOURCE_CONFIG_ENDPOINT: https://aavjpykssueavbseqdlf.supabase.co/functions/v1/app-config
+      ANALYTICS_ENDPOINT: ''
+      ANALYTICS_V2_ENDPOINT: ''
+      APP_VERSION_CODE: '7000000'
+      APP_VERSION_NAME: '7.0.0'
+      ZEROCHILL_SOURCE_SHA: ${{ github.sha }}
+
+    steps:
+      - name: Check out exact approved lineage
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Verify base includes approved 7.0 UI and new routing
+        run: |
+          git merge-base --is-ancestor 7ff953aa HEAD
+          test -f docs/ZEROCHILL_7_NEW_SUPABASE_ROUTING.md
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: |
+            17
+            21
+      - uses: android-actions/setup-android@v4
+        with:
+          packages: platform-tools
+      - name: Install Android APIs and Build Tools
+        run: sdkmanager 'platforms;android-35' 'platforms;android-36' 'build-tools;35.0.0'
+      - uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: '8.11.1'
+          cache-provider: basic
+
+      - name: Restore original app signing identity
+        env:
+          SIGNING_BUNDLE: ${{ secrets.ANDROID_SIGNING_BUNDLE }}
+        run: |
+          python3 - <<'PY'
+          import base64, json, os, pathlib
+          raw = os.environ.get('SIGNING_BUNDLE', '')
+          if not raw:
+              raise SystemExit('Missing ANDROID_SIGNING_BUNDLE')
+          data = json.loads(raw.replace('\r','').replace('\n',''))
+          for key in ('keystore_base64','store_password','key_alias','key_password'):
+              if not data.get(key):
+                  raise SystemExit('Missing signing item: ' + key)
+          for key in ('store_password','key_alias','key_password'):
+              print('::add-mask::' + data[key])
+          path = pathlib.Path(os.environ['RUNNER_TEMP']) / 'zerochill-7-release.jks'
+          path.write_bytes(base64.b64decode(data['keystore_base64']))
+          path.chmod(0o600)
+          with open(os.environ['GITHUB_ENV'],'a') as out:
+              for key, value in {
+                  'ANDROID_KEYSTORE_PATH': str(path),
+                  'ANDROID_KEYSTORE_PASSWORD': data['store_password'],
+                  'ANDROID_KEY_ALIAS': data['key_alias'],
+                  'ANDROID_KEY_PASSWORD': data['key_password']
+              }.items():
+                  out.write(key + '=' + value + '\n')
+          PY
+
+      - name: Run targeted release tests for account, messaging and backend switch
+        run: |
+          gradle --no-daemon -Porg.gradle.java.installations.fromEnv=JAVA_HOME_17_X64,JAVA_HOME_21_X64 \
+            :app:testReleaseUnitTest \
+            --tests '*ZeroChillSessionBackendTest' \
+            --tests '*ZeroChillAccountSecurityFlowTest' \
+            --tests '*ZeroChillAccountUiTest' \
+            --tests '*ZeroChillMessageThreadUiTest' \
+            --tests '*ZeroChillSocialPushRoutingTest'
+      - name: Assemble same-package signed release APK
+        run: gradle --no-daemon :app:assembleRelease
+
+      - name: Verify original install compatibility and New Supabase isolation
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p candidate old-stable
+          BUILD_TOOLS="$ANDROID_HOME/build-tools/35.0.0"
+          APK="app/build/outputs/apk/release/app-release.apk"
+          test -f "$APK"
+          gh release download v6.0.2 --pattern ZeroChill.apk --dir old-stable
+          python3 - "$APK" "old-stable/ZeroChill.apk" "$BUILD_TOOLS" <<'PY'
+          import os, re, subprocess, sys, zipfile, pathlib
+          current, previous, bt = sys.argv[1:]
+          def run(*args):
+              return subprocess.check_output(args, text=True)
+          aapt = str(pathlib.Path(bt)/'aapt2')
+          signer = str(pathlib.Path(bt)/'apksigner')
+          def ident(path):
+              match = re.search(r"package: name='([^']+)' versionCode='(\d+)'",
+                                run(aapt,'dump','badging',path))
+              assert match, 'Missing package/version'
+              return match.group(1), int(match.group(2))
+          def cert(path):
+              value = run(signer,'verify','--print-certs',path)
+              match = re.search(r"Signer #1 certificate SHA-256 digest: ([a-f0-9]+)",value)
+              assert match, 'Missing signing certificate'
+              return match.group(1)
+          current_pkg, current_ver = ident(current)
+          previous_pkg, previous_ver = ident(previous)
+          assert current_pkg == previous_pkg == 'com.addy37.crazyshitunofficial', 'Wrong application ID'
+          assert current_ver == 7000000 and current_ver > previous_ver, 'Version cannot upgrade'
+          assert cert(current) == cert(previous), 'APK signing identity changed'
+          generated = pathlib.Path('app/build/generated/source/buildConfig/release/com/webapp/crazyshit/BuildConfig.java').read_text()
+          assert 'ZEROCHILL_V7_TRAFFIC = true;' in generated, 'V7 traffic disabled'
+          assert 'https://aavjpykssueavbseqdlf.supabase.co' in generated, 'Wrong Supabase URL'
+          assert 'ANALYTICS_V2_ENDPOINT = "";' in generated, 'Legacy analytics enabled'
+          assert 'ANALYTICS_ENDPOINT = "";' in generated, 'Legacy analytics enabled'
+          assert os.environ['GITHUB_SHA'] in generated, 'Source commit missing'
+          with zipfile.ZipFile(current) as package:
+              names = package.namelist()
+              assert any(n.endswith('.dex') for n in names), 'Missing bytecode'
+              for name in names:
+                  data = package.read(name)
+                  assert b'fketutffusxgjxjlckci' not in data, 'Old Supabase ref in APK: ' + name
+                  assert 'fketutffusxgjxjlckci'.encode('utf-16le') not in data, 'Old Supabase ref in APK: ' + name
+          print('Verified original package, same signing certificate, higher version and new Supabase only')
+          PY
+          OUTPUT="candidate/ZeroChill-7.0.0-${GITHUB_SHA:0:7}.apk"
+          cp "$APK" "$OUTPUT"
+          (cd candidate && sha256sum *.apk > SHA256SUMS.txt)
+
+      - name: Upload private installable APK (not a public release)
+        uses: actions/upload-artifact@v4
+        with:
+          name: ZeroChill-7.0.0-Installable
+          path: candidate/
+          retention-days: 14
+          if-no-files-found: error

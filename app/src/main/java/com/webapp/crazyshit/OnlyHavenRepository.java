@@ -854,7 +854,9 @@ final class OnlyHavenRepository {
                         if (cookies != null && !cookies.trim().isEmpty()) connection.header("Cookie", cookies);
                     } catch (Exception ignored) {
                     }
-                    String body = connection.execute().body();
+                    // jsoup body() wraps a read failure in UncheckedIOException.
+                    // readBody() keeps it checked so existing candidate/retry handling works.
+                    String body = readCreatorApiBody(connection.execute());
                     if (body.toLowerCase(Locale.US).contains("<h1>site unavailable</h1>"))
                         throw new IOException("OnlyHaven upstream is unavailable");
                     return body;
@@ -864,6 +866,10 @@ final class OnlyHavenRepository {
             }
         }
         throw failure == null ? new IOException("OnlyHaven API request failed") : failure;
+    }
+
+    static String readCreatorApiBody(Connection.Response response) throws IOException {
+        return response.readBody();
     }
 
     private Document fetchConfigured(
