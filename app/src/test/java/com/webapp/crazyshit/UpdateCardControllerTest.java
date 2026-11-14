@@ -19,4 +19,20 @@ public class UpdateCardControllerTest {
                 UpdateCardController.downloadDetail(2L * 1024L * 1024L, -1L)
         );
     }
+
+    @Test
+    public void formatsReleaseHighlightsForWhatsNewStylePanel() {
+        assertEquals(
+                "•  Better playback\n\n•  Faster creator loading",
+                UpdateCardController.displaySummary("Better playback • Faster creator loading")
+        );
+    }
+
+    @Test
+    public void preservesPlainReleaseSummaryAndEmptyFallback() {
+        assertEquals("Several fixes are available.",
+                UpdateCardController.displaySummary(" Several fixes are available. "));
+        assertEquals("A new ZEROCHILL update is available.",
+                UpdateCardController.displaySummary(null));
+    }
 }

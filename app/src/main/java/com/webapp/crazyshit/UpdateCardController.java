@@ -5,15 +5,13 @@ import android.app.Activity;
 import android.content.res.ColorStateList;
 import android.graphics.Color;
 import android.graphics.Typeface;
-import android.os.Build;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
-import android.view.WindowInsets;
 import android.widget.FrameLayout;
-import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
+import android.widget.ScrollView;
 import android.widget.TextView;
 
 import com.google.android.material.button.MaterialButton;
@@ -21,7 +19,7 @@ import com.google.android.material.card.MaterialCardView;
 
 import java.util.Locale;
 
-/** Small in-app updater surface that stays out of the way of primary navigation. */
+/** Centered ZEROCHILL update panel based on the What's New visual language. */
 @SuppressLint("SetTextI18n")
 final class UpdateCardController {
     interface Action {
@@ -30,6 +28,7 @@ final class UpdateCardController {
 
     private final Activity activity;
     private final MaterialCardView card;
+    private final FrameLayout backdrop;
     private final LinearLayout content;
     private final TextView eyebrow;
     private final TextView title;
@@ -41,56 +40,67 @@ final class UpdateCardController {
     private final MaterialButton secondary;
 
     private boolean attached;
+    private boolean downloadHidden;
+    private boolean downloading;
 
     UpdateCardController(Activity activity) {
         this.activity = activity;
 
         card = new MaterialCardView(activity);
         ZeroChillUi.styleMaterialCard(card, R.dimen.zc_radius_medium);
-        card.setStrokeColor(UiPalette.DIVIDER);
+        card.setRadius(dp(24));
+        card.setCardBackgroundColor(Color.BLACK);
+        card.setStrokeColor(AppearanceTheme.accent(activity));
         card.setStrokeWidth(dp(1));
-        card.setCardElevation(dp(4));
+        card.setCardElevation(dp(12));
         card.setClickable(true);
         card.setFocusable(true);
         card.setTag("zerochill_update_card");
 
         content = new LinearLayout(activity);
         content.setOrientation(LinearLayout.VERTICAL);
-        content.setPadding(dp(11), dp(8), dp(11), dp(8));
+        content.setPadding(dp(24), dp(24), dp(24), dp(18));
 
-        LinearLayout header = new LinearLayout(activity);
-        header.setOrientation(LinearLayout.HORIZONTAL);
-        header.setGravity(Gravity.CENTER_VERTICAL);
+        LinearLayout branding = new LinearLayout(activity);
+        branding.setOrientation(LinearLayout.HORIZONTAL);
+        branding.setGravity(Gravity.CENTER);
+        TextView zero = text("ZERO", 27, Color.WHITE);
+        zero.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        TextView chill = text("CHILL", 27, AppearanceTheme.accent(activity));
+        branding.addView(zero);
+        branding.addView(chill);
+        content.addView(branding);
 
-        ImageView icon = new ImageView(activity);
-        icon.setImageResource(R.mipmap.ic_launcher);
-        icon.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
-        icon.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
-        LinearLayout.LayoutParams iconParams = new LinearLayout.LayoutParams(dp(28), dp(28));
-        iconParams.rightMargin = dp(8);
-        header.addView(icon, iconParams);
-
-        LinearLayout titles = new LinearLayout(activity);
-        titles.setOrientation(LinearLayout.VERTICAL);
-        eyebrow = text("ZEROCHILL UPDATE", 11, UiPalette.TEXT_MUTED);
-        eyebrow.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
-        eyebrow.setLetterSpacing(0.08f);
-        title = text("", 14, Color.WHITE);
+        title = text("", 23, Color.WHITE);
         title.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
-        body = text("", 13, UiPalette.TEXT_SECONDARY);
-        body.setMaxLines(2);
-        body.setEllipsize(android.text.TextUtils.TruncateAt.END);
-        titles.addView(eyebrow);
-        titles.addView(title);
-        titles.addView(body);
-        header.addView(titles, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        LinearLayout.LayoutParams headingParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        headingParams.topMargin = dp(20);
+        content.addView(title, headingParams);
 
-        percent = text("", 11, Color.WHITE);
+        eyebrow = text("", 12, AppearanceTheme.accent(activity));
+        eyebrow.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        LinearLayout.LayoutParams versionParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        versionParams.topMargin = dp(5);
+        content.addView(eyebrow, versionParams);
+
+        body = text("", 14, AppearanceTheme.secondaryText(activity));
+        body.setMaxLines(7);
+        body.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        body.setLineSpacing(dp(2), 1f);
+        LinearLayout.LayoutParams bodyParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        bodyParams.topMargin = dp(18);
+        content.addView(body, bodyParams);
+
+        percent = text("", 12, AppearanceTheme.accent(activity));
         percent.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         percent.setGravity(Gravity.END);
-        percent.setMinWidth(dp(36));
-        header.addView(percent);
-        content.addView(header);
+        LinearLayout.LayoutParams percentParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        percentParams.topMargin = dp(12);
+        content.addView(percent, percentParams);
 
         progress = new ZeroChillProgressBar(activity, null, android.R.attr.progressBarStyleHorizontal);
         progress.setMax(1000);
@@ -105,19 +115,31 @@ final class UpdateCardController {
         content.addView(progress, progressParams);
 
         actions = new LinearLayout(activity);
-        actions.setGravity(Gravity.END | Gravity.CENTER_VERTICAL);
-        actions.setPadding(0, dp(4), 0, 0);
+        actions.setOrientation(LinearLayout.VERTICAL);
+        actions.setGravity(Gravity.CENTER);
+        actions.setPadding(0, dp(20), 0, 0);
 
-        secondary = button(false);
         primary = button(true);
-        actions.addView(secondary);
-        LinearLayout.LayoutParams primaryParams =
-                new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(48));
-        primaryParams.leftMargin = dp(6);
-        actions.addView(primary, primaryParams);
+        secondary = button(false);
+        actions.addView(primary, new LinearLayout.LayoutParams(-1, dp(50)));
+        actions.addView(secondary, new LinearLayout.LayoutParams(-1, dp(48)));
         content.addView(actions);
 
-        card.addView(content);
+        backdrop = new FrameLayout(activity);
+        backdrop.setBackgroundColor(Color.argb(188, 0, 0, 0));
+        backdrop.setClickable(true);
+        backdrop.setFocusableInTouchMode(true);
+        backdrop.setOnKeyListener((view, keyCode, event) -> {
+            if (keyCode != android.view.KeyEvent.KEYCODE_BACK) return false;
+            if (event.getAction() == android.view.KeyEvent.ACTION_UP) hideWhileDownloading();
+            return true;
+        });
+
+        ScrollView scroll = new ScrollView(activity);
+        scroll.setFillViewport(false);
+        scroll.setVerticalScrollBarEnabled(false);
+        scroll.addView(content);
+        card.addView(scroll);
     }
 
     void showAvailable(
@@ -126,15 +148,15 @@ final class UpdateCardController {
             Action download,
             Action later
     ) {
+        downloadHidden = false;
+        downloading = false;
         ensureAttached();
-        eyebrow.setText("ZEROCHILL UPDATE");
+        eyebrow.setText("VERSION " + cleanVersion(version));
         progress.setVisibility(View.GONE);
         percent.setText("");
-        percent.setTextColor(Color.WHITE);
-        title.setText("Version " + cleanVersion(version) + " is ready");
-        body.setText(summary == null || summary.trim().isEmpty()
-                ? "A new ZEROCHILL update is available."
-                : summary.trim());
+        percent.setTextColor(AppearanceTheme.accent(activity));
+        title.setText("Update Available");
+        body.setText(displaySummary(summary));
         configureButton(primary, "Download update", download, true);
         configureButton(secondary, "Later", later, false);
         showCard();
@@ -147,9 +169,11 @@ final class UpdateCardController {
             long totalBytes,
             Action cancel
     ) {
+        downloading = true;
+        if (downloadHidden) return;
         ensureAttached();
-        eyebrow.setText("DOWNLOADING UPDATE");
-        percent.setTextColor(Color.WHITE);
+        eyebrow.setText("VERSION " + cleanVersion(version) + " · DOWNLOADING");
+        percent.setTextColor(AppearanceTheme.accent(activity));
         int safe = Math.max(0, Math.min(100, progressPercent));
         title.setText("Downloading " + cleanVersion(version));
         percent.setText(safe + "%");
@@ -157,28 +181,36 @@ final class UpdateCardController {
         progress.setIndeterminate(totalBytes <= 0L);
         if (totalBytes > 0L) progress.setProgress(safe * 10);
         body.setText(downloadDetail(downloadedBytes, totalBytes));
-        primary.setVisibility(View.GONE);
+        configureButton(primary, "Keep browsing", this::hideWhileDownloading, true);
         configureButton(secondary, "Cancel", cancel, false);
         showCard();
     }
 
     void showPreparing(String version, Action cancel) {
+        downloading = true;
+        if (downloadHidden) return;
         ensureAttached();
-        eyebrow.setText("VERIFYING UPDATE");
-        percent.setTextColor(Color.WHITE);
+        eyebrow.setText("VERSION " + cleanVersion(version) + " · VERIFYING");
+        percent.setTextColor(AppearanceTheme.accent(activity));
         title.setText("Preparing " + cleanVersion(version));
         percent.setText("");
         progress.setVisibility(View.VISIBLE);
         progress.setIndeterminate(true);
         body.setText("Verifying the update before Android installs it.");
-        primary.setVisibility(View.GONE);
+        configureButton(primary, "Keep browsing", this::hideWhileDownloading, true);
         configureButton(secondary, "Cancel", cancel, false);
         showCard();
     }
 
     void showReady(String version, Action openDownloads, Action later) {
+        downloading = false;
+        // The system download notification remains available if the user hid the panel.
+        if (downloadHidden) {
+            downloadHidden = false;
+            return;
+        }
         ensureAttached();
-        eyebrow.setText("UPDATE DOWNLOADED");
+        eyebrow.setText("VERSION " + cleanVersion(version) + " · DOWNLOADED");
         title.setText(cleanVersion(version) + " is ready to install");
         body.setText("Open Downloads, then tap the ZEROCHILL APK to finish the update.");
         percent.setText("✓");
@@ -192,8 +224,13 @@ final class UpdateCardController {
     }
 
     void showPreviewReady(String version, Action done) {
+        downloading = false;
+        if (downloadHidden) {
+            downloadHidden = false;
+            return;
+        }
         ensureAttached();
-        eyebrow.setText("PREVIEW COMPLETE");
+        eyebrow.setText("VERSION " + cleanVersion(version) + " · PREVIEW");
         title.setText(cleanVersion(version) + " is ready");
         body.setText("This was a safe UI preview. No APK was downloaded or installed.");
         percent.setText("✓");
@@ -207,9 +244,11 @@ final class UpdateCardController {
     }
 
     void showError(String version, Action retry, Action dismiss) {
+        downloading = false;
+        downloadHidden = false;
         ensureAttached();
-        eyebrow.setText("UPDATE PAUSED");
-        percent.setTextColor(Color.WHITE);
+        eyebrow.setText("VERSION " + cleanVersion(version) + " · PAUSED");
+        percent.setTextColor(AppearanceTheme.accent(activity));
         title.setText("Couldn't download " + cleanVersion(version));
         body.setText("Your current ZEROCHILL install is untouched.");
         percent.setText("");
@@ -217,6 +256,11 @@ final class UpdateCardController {
         configureButton(primary, "Try again", retry, true);
         configureButton(secondary, "Dismiss", dismiss, false);
         showCard();
+    }
+
+    private void hideWhileDownloading() {
+        if (downloading) downloadHidden = true;
+        dismiss();
     }
 
     void dismiss() {
@@ -228,7 +272,7 @@ final class UpdateCardController {
         card.animate().cancel();
         card.animate()
                 .alpha(0f)
-                .translationY(-dp(14))
+                .scaleX(.97f).scaleY(.97f)
                 .setDuration(ZeroChillMotion.QUICK_MS)
                 .withEndAction(this::detach)
                 .start();
@@ -239,52 +283,42 @@ final class UpdateCardController {
     }
 
     private void ensureAttached() {
-        if (attached) return;
+        if (attached || activity.isFinishing() || activity.isDestroyed()) return;
         View decor = activity.getWindow().getDecorView();
         if (!(decor instanceof ViewGroup)) return;
         ViewGroup host = (ViewGroup) decor;
 
-        int availableWidth = activity.getResources().getDisplayMetrics().widthPixels - dp(30);
-        int width = Math.min(availableWidth, dp(414));
+        int availableWidth = activity.getResources().getDisplayMetrics().widthPixels - dp(28);
+        int width = Math.min(availableWidth, dp(420));
         FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
-                Math.max(dp(260), width),
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-                Gravity.TOP | Gravity.CENTER_HORIZONTAL
-        );
-        params.leftMargin = dp(18);
-        params.rightMargin = dp(12);
-        params.topMargin = topSafeInset() + dp(6);
+                width, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER);
         card.setLayoutParams(params);
         if (ZeroChillMotion.animationsEnabled(activity)) {
             card.setAlpha(0f);
-            card.setTranslationY(-dp(14));
+            card.setScaleX(.96f);
+            card.setScaleY(.96f);
         } else {
             card.setAlpha(1f);
-            card.setTranslationY(0f);
+            card.setScaleX(1f);
+            card.setScaleY(1f);
         }
-        host.addView(card);
-        card.setOnApplyWindowInsetsListener((view, insets) -> {
-            updateTopMargin(safeTopInset(insets) + dp(6));
-            return insets;
-        });
-        card.requestApplyInsets();
-        card.bringToFront();
+        backdrop.addView(card);
+        host.addView(backdrop, new ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT));
+        backdrop.bringToFront();
+        backdrop.requestFocus();
         attached = true;
     }
 
     private void showCard() {
         card.setVisibility(View.VISIBLE);
-        card.bringToFront();
+        backdrop.bringToFront();
         if (!ZeroChillMotion.animationsEnabled(activity)) return;
-        if (card.getAlpha() >= 0.99f && Math.abs(card.getTranslationY()) < 0.5f) return;
+        if (card.getAlpha() >= .99f && Math.abs(card.getScaleX() - 1f) < .01f) return;
         card.animate().cancel();
-        card.setAlpha(0f);
-        card.setTranslationY(-dp(14));
-        card.animate()
-                .alpha(1f)
-                .translationY(0f)
-                .setDuration(ZeroChillMotion.STANDARD_MS)
-                .start();
+        card.animate().alpha(1f).scaleX(1f).scaleY(1f)
+                .setDuration(190L).start();
     }
 
     private void configureButton(MaterialButton button, String label, Action action, boolean emphasized) {
@@ -293,11 +327,11 @@ final class UpdateCardController {
         button.setOnClickListener(v -> {
             if (action != null) action.run();
         });
-        button.setTextColor(emphasized ? Color.BLACK : Color.WHITE);
+        button.setTextColor(emphasized ? AppearanceTheme.onAccent(activity) : AppearanceTheme.accent(activity));
         button.setBackgroundTintList(ColorStateList.valueOf(
-                emphasized ? AppearanceTheme.accent(activity) : Color.rgb(31, 36, 43)
+                emphasized ? AppearanceTheme.accent(activity) : Color.TRANSPARENT
         ));
-        button.setStrokeWidth(emphasized ? 0 : dp(1));
+        button.setStrokeWidth(0);
         button.setStrokeColor(ColorStateList.valueOf(Color.rgb(65, 73, 84)));
         ZeroChillMotion.installPressFeedback(button);
     }
@@ -305,22 +339,19 @@ final class UpdateCardController {
     private MaterialButton button(boolean emphasized) {
         MaterialButton button = new MaterialButton(activity);
         button.setAllCaps(false);
-        button.setTextSize(13);
+        button.setTextSize(14);
         button.setMinWidth(0);
         button.setMinHeight(dp(48));
         button.setInsetTop(0);
         button.setInsetBottom(0);
-        button.setCornerRadius(dp(12));
+        button.setCornerRadius(dp(16));
         button.setPadding(dp(10), 0, dp(10), 0);
-        LinearLayout.LayoutParams params =
-                new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(48));
-        button.setLayoutParams(params);
         if (emphasized) primaryStyle(button);
         return button;
     }
 
     private void primaryStyle(MaterialButton button) {
-        button.setTextColor(Color.BLACK);
+        button.setTextColor(AppearanceTheme.onAccent(activity));
         button.setBackgroundTintList(ColorStateList.valueOf(AppearanceTheme.accent(activity)));
     }
 
@@ -331,6 +362,14 @@ final class UpdateCardController {
         view.setTextColor(color);
         view.setIncludeFontPadding(false);
         return view;
+    }
+
+    static String displaySummary(String raw) {
+        String summary = raw == null ? "" : raw.trim();
+        if (summary.isEmpty()) return "A new ZEROCHILL update is available.";
+        return summary.contains(" • ")
+                ? "•  " + summary.replace(" • ", "\n\n•  ")
+                : summary;
     }
 
     static String downloadDetail(long downloadedBytes, long totalBytes) {
@@ -357,39 +396,9 @@ final class UpdateCardController {
     private void detach() {
         if (!attached) return;
         card.animate().cancel();
-        ViewParentCompat.remove(card);
+        ViewParentCompat.remove(backdrop);
+        if (card.getParent() == backdrop) backdrop.removeView(card);
         attached = false;
-    }
-
-    private int topSafeInset() {
-        return safeTopInset(activity.getWindow().getDecorView().getRootWindowInsets());
-    }
-
-    private int safeTopInset(WindowInsets insets) {
-        int inset = 0;
-        if (insets != null) {
-            if (Build.VERSION.SDK_INT >= 30) {
-                inset = insets.getInsetsIgnoringVisibility(
-                        WindowInsets.Type.statusBars() | WindowInsets.Type.displayCutout()
-                ).top;
-            } else {
-                inset = Math.max(0, insets.getSystemWindowInsetTop());
-            }
-        }
-        return Math.max(inset, fallbackStatusBarHeight());
-    }
-
-    private int fallbackStatusBarHeight() {
-        return dp(24);
-    }
-
-    private void updateTopMargin(int topMargin) {
-        ViewGroup.LayoutParams raw = card.getLayoutParams();
-        if (!(raw instanceof FrameLayout.LayoutParams)) return;
-        FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) raw;
-        if (params.topMargin == topMargin) return;
-        params.topMargin = topMargin;
-        card.setLayoutParams(params);
     }
 
     private int dp(int value) {
