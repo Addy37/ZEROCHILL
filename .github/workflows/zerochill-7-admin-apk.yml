@@ -1,0 +1,110 @@
+name: ZEROCHILL 7 Admin Signed APK
+
+# Build the private New Zerochill admin package after Kotlin DSL validation. No public release.
+on:
+  push:
+    branches:
+      - feature/zerochill-7-admin-new-supabase
+    paths:
+      - .github/workflows/zerochill-7-admin-apk.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-new-admin:
+    if: github.ref_name == 'feature/zerochill-7-admin-new-supabase'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Verify approved ZEROCHILL lineage
+        run: git merge-base --is-ancestor 7ff953aa330a2891ea954134550287f09895153b HEAD
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: |
+            17
+            21
+      - uses: android-actions/setup-android@v4
+        with:
+          packages: platform-tools
+      - run: sdkmanager "platforms;android-35" "platforms;android-36" "build-tools;35.0.0"
+      - uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: '8.11.1'
+          cache-provider: basic
+
+      - name: Restore persistent signing key
+        env:
+          SIGNING_BUNDLE: ${{ secrets.ANDROID_SIGNING_BUNDLE }}
+        run: |
+          test -n "$SIGNING_BUNDLE" || { echo "Missing production signing bundle."; exit 1; }
+          python - <<'PY'
+          import base64, json, os, pathlib
+          raw = os.environ["SIGNING_BUNDLE"].replace("\r", "").replace("\n", "")
+          data = json.loads(raw)
+          required = ["keystore_base64", "store_password", "key_alias", "key_password"]
+          missing = [key for key in required if not data.get(key)]
+          if missing:
+              raise SystemExit("Signing bundle is missing: " + ", ".join(missing))
+          for key in ("store_password", "key_alias", "key_password"):
+              print(f"::add-mask::{data[key]}")
+          keystore = pathlib.Path(os.environ["RUNNER_TEMP"]) / "crazyshit-admin-release.jks"
+          keystore.write_bytes(base64.b64decode(data["keystore_base64"]))
+          keystore.chmod(0o600)
+          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as output:
+              output.write(f"ANDROID_KEYSTORE_PATH={keystore}\n")
+              output.write(f"ANDROID_KEYSTORE_PASSWORD={data['store_password']}\n")
+              output.write(f"ANDROID_KEY_ALIAS={data['key_alias']}\n")
+              output.write(f"ANDROID_KEY_PASSWORD={data['key_password']}\n")
+          PY
+
+      - name: Test and build signed private Admin 7.0 APK
+        run: gradle --no-daemon :feedbackadmin:testDebugUnitTest :feedbackadmin:testReleaseUnitTest :feedbackadmin:assembleRelease
+
+      - name: Verify package, signing and new Supabase isolation
+        run: |
+          set -euo pipefail
+          mkdir -p candidate
+          python3 - <<'PY'
+          import os
+          import pathlib
+          import subprocess
+          import zipfile
+
+          apk = pathlib.Path('feedbackadmin/build/outputs/apk/release/feedbackadmin-release.apk')
+          assert apk.is_file(), 'Admin APK was not built'
+          bt = pathlib.Path(os.environ['ANDROID_HOME']) / 'build-tools' / '35.0.0'
+          package = subprocess.check_output([str(bt / 'aapt2'), 'dump', 'badging', str(apk)], text=True)
+          assert "package: name='com.addy37.crazyshitadmin' versionCode='7000000'" in package, 'Admin package/version incorrect'
+          sig = subprocess.check_output([str(bt / 'apksigner'), 'verify', '--print-certs', str(apk)], text=True)
+          assert '04abf84b3d468cbb1a562dea83b0007e686b2e56018cce911223963faea51356' in sig, 'Signing certificate not the established identity'
+          config = pathlib.Path('feedbackadmin/build/generated/source/buildConfig/release/com/addy37/crazyshitadmin/BuildConfig.java').read_text()
+          assert 'ADMIN_NEW_ZEROCHILL = true;' in config, 'Incorrect admin target'
+          assert 'https://aavjpykssueavbseqdlf.supabase.co/functions/v1/feedback-admin' in config
+          assert 'https://aavjpykssueavbseqdlf.supabase.co/functions/v1/app-config-admin' in config
+          with zipfile.ZipFile(apk) as archive:
+              dex = b''.join(archive.read(n) for n in archive.namelist() if n.endswith('.dex'))
+              assert b'aavjpykssueavbseqdlf' in dex, 'New Supabase not in APK code'
+              for name in archive.namelist():
+                  data = archive.read(name)
+                  assert b'fketutffusxgjxjlckci' not in data, 'Old Supabase marker in APK: ' + name
+                  assert 'fketutffusxgjxjlckci'.encode('utf-16le') not in data, 'Old Supabase marker in APK: ' + name
+              assert b'sb_secret_' not in dex, 'Secret key marker in APK'
+          print('Signed same-package ZEROCHILL 7 Admin; New Supabase only')
+          PY
+          SHORT_SHA="$(echo "$GITHUB_SHA" | cut -c1-7)"
+          cp feedbackadmin/build/outputs/apk/release/feedbackadmin-release.apk "candidate/ZeroChill-Admin-7.0.0-$SHORT_SHA.apk"
+          (cd candidate && sha256sum *.apk > SHA256SUMS.txt)
+
+      - name: Upload signed admin APK without public release
+        uses: actions/upload-artifact@v4
+        with:
+          name: ZeroChill-7-Admin-Installable
+          path: candidate/
+          if-no-files-found: error
+          retention-days: 14

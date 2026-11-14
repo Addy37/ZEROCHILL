@@ -5,8 +5,6 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.BackHandler
@@ -34,15 +32,6 @@ import androidx.core.app.NotificationManagerCompat
 
 class MainActivity : ComponentActivity() {
     private val state: ConsoleState by viewModels()
-    private val liveCounterHandler = Handler(Looper.getMainLooper())
-    private val liveCounterTick = object : Runnable {
-        override fun run() {
-            val liveScreen = state.destination == "home" || state.destination == "analytics"
-            val failed = state.errors.containsKey("activeCounts")
-            if(state.paired && state.threadId.isEmpty() && liveScreen) state.loadActiveCounts()
-            liveCounterHandler.postDelayed(this, if(failed) 30_000L else 60_000L)
-        }
-    }
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge(
@@ -58,11 +47,8 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         if(state.paired) state.loadFeedback()
-        liveCounterHandler.removeCallbacks(liveCounterTick)
-        liveCounterHandler.post(liveCounterTick)
     }
     override fun onPause() {
-        liveCounterHandler.removeCallbacks(liveCounterTick)
         super.onPause()
     }
     companion object { const val EXTRA_DESTINATION = "destination" }
@@ -99,10 +85,10 @@ class AnalyticsActivity : ComponentActivity() {
                 verticalAlignment=Alignment.CenterVertically) {
                 Column(Modifier.weight(1f), verticalArrangement=Arrangement.spacedBy(6.dp)) {
                     Wordmark()
-                    Text("Private admin session", color=Muted, style=MaterialTheme.typography.bodySmall)
+                    Text("NEW ZEROCHILL 7.0 · PRIVATE", color=Muted, style=MaterialTheme.typography.bodySmall)
                 }
                 ActionIcon(Icons.Outlined.Refresh, "Refresh", !blockingBusy) {
-                    when(state.destination) { "feedback" -> state.loadFeedback(); "analytics" -> state.loadAnalytics();
+                    when(state.destination) { "feedback" -> state.loadFeedback(); "analytics" -> state.loadCommunityOverview();
                         "community" -> state.refreshCommunity(); "sources" -> state.loadConfig(force=true); else -> state.refresh() }
                 }
                 ActionIcon(Icons.Outlined.AdminPanelSettings, "Admin settings") { settings=true }
@@ -116,7 +102,7 @@ class AnalyticsActivity : ComponentActivity() {
                     "feedback" -> InboxScreen(state)
                     "community" -> CommunityScreen(state)
                     "sources" -> SourcesScreen(state)
-                    "analytics" -> AnalyticsScreen(state)
+                    "analytics" -> SevenActivityScreen(state)
                     else -> HomeScreen(state)
                 } }
             }
@@ -126,7 +112,7 @@ class AnalyticsActivity : ComponentActivity() {
         title={ Text("Admin session") }, text={ Column(verticalArrangement=Arrangement.spacedBy(16.dp)) {
             Text("ZeroChill Admin ${BuildConfig.VERSION_NAME}")
             Text("Notifications: " + if(NotificationManagerCompat.from(context).areNotificationsEnabled()) "Allowed" else "Off in Android settings", color=Muted)
-            Text("Community visibility is read-only in this build. Direct-message bodies are not exposed.", color=Muted)
+            Text("New Zerochill only. Community controls are read-only. Direct-message bodies are not exposed.", color=Muted)
             Text("Lock removes the admin token from this device. You will need it to connect again.", color=Muted)
         } }, confirmButton={ TextButton(onClick={settings=false;lock=true}) { Text("Lock session", color=Danger) } },
         dismissButton={ TextButton(onClick={settings=false}) { Text("Close") } })
@@ -148,8 +134,8 @@ class AnalyticsActivity : ComponentActivity() {
             Wordmark()
             Column(verticalArrangement=Arrangement.spacedBy(10.dp)) {
                 Eyebrow("PRIVATE CONTROL CENTER", color=Cyan)
-                Text("Your console.\nFull control.", style=MaterialTheme.typography.headlineLarge)
-                Text("Connect to manage accounts, social activity, feedback, source configuration, and aggregate app activity.", color=Muted)
+                Text("Your ZEROCHILL 7.0\nadmin console.", style=MaterialTheme.typography.headlineLarge)
+                Text("Connect to New Zerochill to manage accounts, feedback, source configuration, and community activity.", color=Muted)
             }
             OutlinedTextField(value=token, onValueChange={token=it}, label={Text("Admin token")}, singleLine=true,
                 enabled=!connecting, modifier=Modifier.fillMaxWidth(), shape=ConsoleShape,

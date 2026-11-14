@@ -126,7 +126,7 @@ internal val destinations = listOf(
     Destination("feedback", "Feedback", Icons.Outlined.Forum),
     Destination("community", "Community", Icons.Outlined.Groups),
     Destination("sources", "Sources", Icons.Outlined.Hub),
-    Destination("analytics", "Analytics", Icons.Outlined.BarChart)
+    Destination("analytics", "Activity", Icons.Outlined.BarChart)
 )
 @Composable internal fun ConsoleNav(selected: String, unread: Int, navigate: (String) -> Unit) {
     Row(Modifier.fillMaxWidth().background(Ink).navigationBarsPadding().padding(horizontal=8.dp, vertical=8.dp),
