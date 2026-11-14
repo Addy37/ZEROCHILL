@@ -17,11 +17,14 @@ jobs:
       APP_VERSION_CODE: "7000005"
       APP_VERSION_NAME: "7.0.5-cashapp-beta"
       ZEROCHILL_SOURCE_SHA: ${{ github.sha }}
-      FEEDBACK_ENDPOINT: ${{ secrets.FEEDBACK_ENDPOINT }}
-      FEEDBACK_ANON_KEY: ${{ secrets.FEEDBACK_ANON_KEY }}
-      SOURCE_CONFIG_ENDPOINT: https://fketutffusxgjxjlckci.supabase.co/functions/v1/app-config
-      SUPABASE_PUBLISHABLE_KEY: ${{ secrets.FEEDBACK_ANON_KEY }}
+      ZEROCHILL_V7_TRAFFIC: 'true'
+      SUPABASE_URL: https://aavjpykssueavbseqdlf.supabase.co
+      SUPABASE_PUBLISHABLE_KEY: sb_publishable_oSQALszxzeeHxDwEeclucA_5dGEpOLs
+      FEEDBACK_ANON_KEY: sb_publishable_oSQALszxzeeHxDwEeclucA_5dGEpOLs
+      FEEDBACK_ENDPOINT: https://aavjpykssueavbseqdlf.supabase.co/functions/v1/dynamic-api
+      SOURCE_CONFIG_ENDPOINT: https://aavjpykssueavbseqdlf.supabase.co/functions/v1/app-config
       ANALYTICS_ENDPOINT: ""
+      ANALYTICS_V2_ENDPOINT: ""
     steps:
       - name: Check out approved ZEROCHILL 7 source
         uses: actions/checkout@v6
@@ -31,9 +34,13 @@ jobs:
         uses: actions/setup-java@v5
         with:
           distribution: temurin
-          java-version: "17"
+          java-version: |
+            17
+            21
       - name: Set up Android SDK
         uses: android-actions/setup-android@v4
+        with:
+          packages: platform-tools
       - name: Install Android build tools
         run: sdkmanager "platforms;android-35" "platforms;android-36" "build-tools;35.0.0"
       - name: Set up Gradle
