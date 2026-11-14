@@ -106,8 +106,8 @@ final class LandscapeMoreDialog {
                 ),
                 new Action(
                         R.drawable.ic_more_website,
-                        "Cash App",
-                        "Open Cash App",
+                        "Support ZEROCHILL",
+                        "Cash App • $SupportZC",
                         () -> openCashApp(activity)
                 )
         );
@@ -186,19 +186,10 @@ final class LandscapeMoreDialog {
     }
 
     private static void openCashApp(NativeMainActivity activity) {
-        Intent installedApp = activity.getPackageManager()
-                .getLaunchIntentForPackage("com.squareup.cash");
-        if (installedApp != null) {
-            try {
-                activity.startActivity(installedApp);
-                return;
-            } catch (ActivityNotFoundException ignored) {
-                // Fall back to the official website when the installed app cannot launch.
-            }
-        }
-
+        // Public recipient URL; Android can hand it to Cash App or a browser.
         try {
-            activity.startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse("https://cash.app/")));
+            activity.startActivity(new Intent(Intent.ACTION_VIEW,
+                    Uri.parse("https://cash.app/$SupportZC")));
         } catch (ActivityNotFoundException ignored) {
             ZeroChillToast.makeText(activity, "Couldn't open Cash App.",
                     ZeroChillToast.LENGTH_SHORT).show();
