@@ -24,18 +24,20 @@ jobs:
       ANALYTICS_ENDPOINT: ""
     steps:
       - name: Check out approved ZEROCHILL 7 source
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
       - name: Set up Java 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "17"
       - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@v4
       - name: Install Android build tools
         run: sdkmanager "platforms;android-35" "platforms;android-36" "build-tools;35.0.0"
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v6
         with:
           gradle-version: "8.11.1"
       - name: Restore existing signing identity
