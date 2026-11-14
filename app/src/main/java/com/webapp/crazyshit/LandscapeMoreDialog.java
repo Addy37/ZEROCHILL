@@ -106,8 +106,8 @@ final class LandscapeMoreDialog {
                 ),
                 new Action(
                         R.drawable.ic_more_website,
-                        "Support ZEROCHILL",
-                        "Cash App • $SupportZC",
+                        "Cash App",
+                        "$SupportZC • View profile",
                         () -> openCashApp(activity)
                 )
         );
