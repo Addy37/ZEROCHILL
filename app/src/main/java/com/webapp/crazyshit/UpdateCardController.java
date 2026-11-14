@@ -40,6 +40,8 @@ final class UpdateCardController {
     private final MaterialButton secondary;
 
     private boolean attached;
+    private boolean downloadHidden;
+    private boolean downloading;
 
     UpdateCardController(Activity activity) {
         this.activity = activity;
@@ -126,7 +128,12 @@ final class UpdateCardController {
         backdrop = new FrameLayout(activity);
         backdrop.setBackgroundColor(Color.argb(188, 0, 0, 0));
         backdrop.setClickable(true);
-        backdrop.setFocusable(true);
+        backdrop.setFocusableInTouchMode(true);
+        backdrop.setOnKeyListener((view, keyCode, event) -> {
+            if (keyCode != android.view.KeyEvent.KEYCODE_BACK) return false;
+            if (event.getAction() == android.view.KeyEvent.ACTION_UP) hideWhileDownloading();
+            return true;
+        });
 
         ScrollView scroll = new ScrollView(activity);
         scroll.setFillViewport(false);
@@ -141,6 +148,8 @@ final class UpdateCardController {
             Action download,
             Action later
     ) {
+        downloadHidden = false;
+        downloading = false;
         ensureAttached();
         eyebrow.setText("VERSION " + cleanVersion(version));
         progress.setVisibility(View.GONE);
@@ -160,6 +169,8 @@ final class UpdateCardController {
             long totalBytes,
             Action cancel
     ) {
+        downloading = true;
+        if (downloadHidden) return;
         ensureAttached();
         eyebrow.setText("VERSION " + cleanVersion(version) + " · DOWNLOADING");
         percent.setTextColor(AppearanceTheme.accent(activity));
@@ -170,12 +181,14 @@ final class UpdateCardController {
         progress.setIndeterminate(totalBytes <= 0L);
         if (totalBytes > 0L) progress.setProgress(safe * 10);
         body.setText(downloadDetail(downloadedBytes, totalBytes));
-        primary.setVisibility(View.GONE);
+        configureButton(primary, "Keep browsing", this::hideWhileDownloading, true);
         configureButton(secondary, "Cancel", cancel, false);
         showCard();
     }
 
     void showPreparing(String version, Action cancel) {
+        downloading = true;
+        if (downloadHidden) return;
         ensureAttached();
         eyebrow.setText("VERSION " + cleanVersion(version) + " · VERIFYING");
         percent.setTextColor(AppearanceTheme.accent(activity));
@@ -184,12 +197,18 @@ final class UpdateCardController {
         progress.setVisibility(View.VISIBLE);
         progress.setIndeterminate(true);
         body.setText("Verifying the update before Android installs it.");
-        primary.setVisibility(View.GONE);
+        configureButton(primary, "Keep browsing", this::hideWhileDownloading, true);
         configureButton(secondary, "Cancel", cancel, false);
         showCard();
     }
 
     void showReady(String version, Action openDownloads, Action later) {
+        downloading = false;
+        // The system download notification remains available if the user hid the panel.
+        if (downloadHidden) {
+            downloadHidden = false;
+            return;
+        }
         ensureAttached();
         eyebrow.setText("VERSION " + cleanVersion(version) + " · DOWNLOADED");
         title.setText(cleanVersion(version) + " is ready to install");
@@ -205,6 +224,11 @@ final class UpdateCardController {
     }
 
     void showPreviewReady(String version, Action done) {
+        downloading = false;
+        if (downloadHidden) {
+            downloadHidden = false;
+            return;
+        }
         ensureAttached();
         eyebrow.setText("VERSION " + cleanVersion(version) + " · PREVIEW");
         title.setText(cleanVersion(version) + " is ready");
@@ -220,6 +244,8 @@ final class UpdateCardController {
     }
 
     void showError(String version, Action retry, Action dismiss) {
+        downloading = false;
+        downloadHidden = false;
         ensureAttached();
         eyebrow.setText("VERSION " + cleanVersion(version) + " · PAUSED");
         percent.setTextColor(AppearanceTheme.accent(activity));
@@ -230,6 +256,11 @@ final class UpdateCardController {
         configureButton(primary, "Try again", retry, true);
         configureButton(secondary, "Dismiss", dismiss, false);
         showCard();
+    }
+
+    private void hideWhileDownloading() {
+        if (downloading) downloadHidden = true;
+        dismiss();
     }
 
     void dismiss() {
@@ -276,6 +307,7 @@ final class UpdateCardController {
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT));
         backdrop.bringToFront();
+        backdrop.requestFocus();
         attached = true;
     }
 
