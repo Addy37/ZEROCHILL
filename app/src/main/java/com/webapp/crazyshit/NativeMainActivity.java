@@ -177,7 +177,23 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     private void offerExistingStartupPrompts() {
         boolean shortcutLaunch = getIntent() != null
                 && AppShortcuts.isShortcutAction(getIntent().getAction());
-        if (!shortcutLaunch && ZeroChillIdUpgradeAnnouncement.shouldShow(this) && overlayRoot != null) {
+        if (!shortcutLaunch && ZeroChillAccountMigrationNotice.shouldShow(this) && overlayRoot != null) {
+            overlayRoot.postDelayed(() -> {
+                if (isFinishing() || isDestroyed()) return;
+                boolean shown = ZeroChillAccountMigrationNotice.maybeShow(this, () -> {
+                    NotificationCoordinator.maybeOfferPermission(this);
+                    scheduleRatingPromptCheck();
+                });
+                if (!shown) {
+                    NotificationCoordinator.maybeOfferPermission(this);
+                    scheduleRatingPromptCheck();
+                }
+            }, 650L);
+            return;
+        }
+        // The 4.3 signup prompt is obsolete after the 7.0 backend migration.
+        if (!BuildConfig.ZEROCHILL_V7_TRAFFIC && !shortcutLaunch
+                && ZeroChillIdUpgradeAnnouncement.shouldShow(this) && overlayRoot != null) {
             overlayRoot.postDelayed(() -> {
                 if (isFinishing() || isDestroyed()) return;
                 boolean shown = ZeroChillIdUpgradeAnnouncement.maybeShow(this, () -> {
