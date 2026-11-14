@@ -7,22 +7,24 @@ on:
         description: Release version without the v prefix
         required: true
         type: string
-  push:
-    branches: [ main, rebrand/zerochill ]
-    paths:
-      - RELEASE_VERSION
-
 permissions:
   contents: write
 
 jobs:
   release:
+    # Publishing requires an explicit manual action on the reviewed main branch.
+    if: github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     env:
-      FEEDBACK_ENDPOINT: ${{ secrets.FEEDBACK_ENDPOINT }}
-      FEEDBACK_ANON_KEY: ${{ secrets.FEEDBACK_ANON_KEY }}
-      SOURCE_CONFIG_ENDPOINT: https://fketutffusxgjxjlckci.supabase.co/functions/v1/app-config
-      SUPABASE_PUBLISHABLE_KEY: ${{ secrets.FEEDBACK_ANON_KEY }}
+      ZEROCHILL_V7_TRAFFIC: 'true'
+      SUPABASE_URL: https://aavjpykssueavbseqdlf.supabase.co
+      SUPABASE_PUBLISHABLE_KEY: sb_publishable_oSQALszxzeeHxDwEeclucA_5dGEpOLs
+      FEEDBACK_ANON_KEY: sb_publishable_oSQALszxzeeHxDwEeclucA_5dGEpOLs
+      FEEDBACK_ENDPOINT: https://aavjpykssueavbseqdlf.supabase.co/functions/v1/dynamic-api
+      SOURCE_CONFIG_ENDPOINT: https://aavjpykssueavbseqdlf.supabase.co/functions/v1/app-config
+      ANALYTICS_ENDPOINT: ''
+      ANALYTICS_V2_ENDPOINT: ''
+      ZEROCHILL_SOURCE_SHA: ${{ github.sha }}
 
     steps:
       - name: Check out project
@@ -47,6 +49,8 @@ jobs:
           if not match:
               raise SystemExit("Stable version must be major.minor.patch")
           major, minor, patch = map(int, match.groups())
+          if major != 7 or (minor, patch) < (0, 2):
+              raise SystemExit("Only ZEROCHILL 7.0.2+ releases are allowed")
           if minor >= 1000 or patch >= 1000:
               raise SystemExit("Minor and patch versions must be below 1000")
           code = major * 1_000_000 + minor * 1000 + patch
@@ -58,11 +62,13 @@ jobs:
           echo "APK_PRIMARY=ZeroChill.apk" >> "$GITHUB_ENV"
           echo "RELEASE_TITLE=ZeroChill v${VERSION}" >> "$GITHUB_ENV"
 
-      - name: Set up Java 17
+      - name: Set up Java toolchains for Android 7 tests
         uses: actions/setup-java@v5
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: |
+            17
+            21
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v4
@@ -107,13 +113,37 @@ jobs:
           PY
 
       - name: Build signed release APK
-        run: gradle --no-daemon :app:testReleaseUnitTest :app:assembleRelease
+        run: gradle --no-daemon -Porg.gradle.java.installations.fromEnv=JAVA_HOME_17_X64,JAVA_HOME_21_X64 :app:testReleaseUnitTest :app:assembleRelease
 
       - name: Prepare and verify release files
         run: |
           cp app/build/outputs/apk/release/app-release.apk "$APK_PRIMARY"
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$APK_PRIMARY"
           sha256sum "$APK_PRIMARY" > SHA256SUMS.txt
+
+      - name: Fail closed unless APK uses New Zerochill 7
+        run: |
+          python3 - <<'PY'
+          import os, pathlib, zipfile
+          release = pathlib.Path('ZeroChill.apk')
+          generated = pathlib.Path('app/build/generated/source/buildConfig/release/com/webapp/crazyshit/BuildConfig.java')
+          assert release.is_file() and generated.is_file(), 'Missing release APK or config'
+          config = generated.read_text()
+          assert 'ZEROCHILL_V7_TRAFFIC = true;' in config, '7.0 traffic mode must be active'
+          assert 'https://aavjpykssueavbseqdlf.supabase.co' in config, 'New backend must be used'
+          assert 'ANALYTICS_ENDPOINT = "";' in config, 'Legacy analytics must be disabled'
+          assert 'ANALYTICS_V2_ENDPOINT = "";' in config, 'Legacy analytics v2 must be disabled'
+          assert os.environ['GITHUB_SHA'] in config, 'Incorrect source commit'
+          with zipfile.ZipFile(release) as package:
+              dex = b''.join(package.read(name) for name in package.namelist()
+                             if name.endswith('.dex'))
+              assert b'aavjpykssueavbseqdlf' in dex, 'New Supabase project not found'
+              for name in package.namelist():
+                  data = package.read(name)
+                  assert b'fketutffusxgjxjlckci' not in data, 'Old backend marker: ' + name
+                  assert 'fketutffusxgjxjlckci'.encode('utf-16le') not in data
+          print('Release is New Zerochill only and contains the reviewed main source')
+          PY
 
       - name: Verify upgrade from previous stable release
         env:
