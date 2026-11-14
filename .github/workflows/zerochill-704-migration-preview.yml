@@ -64,7 +64,7 @@ jobs:
           raw = os.environ.get('SIGNING_BUNDLE', '')
           if not raw:
               raise SystemExit('Missing ANDROID_SIGNING_BUNDLE')
-          data = json.loads(raw.replace('\\r', '').replace('\\n', ''))
+          data = json.loads(raw.replace('\r', '').replace('\n', ''))
           for key in ('keystore_base64', 'store_password', 'key_alias', 'key_password'):
               if not data.get(key):
                   raise SystemExit('Missing signing item: ' + key)
@@ -80,12 +80,12 @@ jobs:
                   'ANDROID_KEY_ALIAS': data['key_alias'],
                   'ANDROID_KEY_PASSWORD': data['key_password']
               }.items():
-                  out.write(key + '=' + value + '\\n')
+                  out.write(key + '=' + value + '\n')
           PY
 
       - name: Run migration prompt regression tests
         run: |
-          gradle --no-daemon -Porg.gradle.java.installations.fromEnv=JAVA_HOME_17_X64,JAVA_HOME_21_X64 \\
+          gradle --no-daemon -Porg.gradle.java.installations.fromEnv=JAVA_HOME_17_X64,JAVA_HOME_21_X64 \
             :app:testReleaseUnitTest --tests 'com.webapp.crazyshit.ZeroChillAccountMigrationNoticeTest'
       - name: Assemble production-package signed 7.0.4 test APK
         run: gradle --no-daemon :app:assembleRelease
@@ -106,7 +106,7 @@ jobs:
           def run(*args):
               return subprocess.check_output(args, text=True)
           def ident(path):
-              m = re.search(r"package: name='([^']+)' versionCode='(\\d+)'", run(aapt2, 'dump', 'badging', str(path)))
+              m = re.search(r"package: name='([^']+)' versionCode='(\d+)'", run(aapt2, 'dump', 'badging', str(path)))
               assert m, 'Package/version unavailable'
               return m.group(1), int(m.group(2))
           def cert(path):
