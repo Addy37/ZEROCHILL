@@ -1,21 +1,19 @@
-# ZEROCHILL 7.0.3
+# ZEROCHILL 7.0.4
 
-ZEROCHILL 7 moves the app's social features to **New Zerochill**, with a leaner backend and a fresh start for accounts. Existing social accounts, comments, and direct messages from the retired backend do not transfer. Create a new account to use social features.
+This small update adds clear account instructions for people updating from an older ZEROCHILL installation. It keeps the New Zerochill backend and the features introduced in 7.0.3.
 
 ## What's new
 
-- Updated ShitTok, Shows, OnlyFap, and Library presentation, with the approved ZEROCHILL design.
-- OLED-black interface, selected accent colors, startup personalization, and an in-app What's New summary.
-- Redesigned update screen with clear version notes, download progress, retry options, and **Keep browsing** during downloads.
-- New social backend supporting account sign-up, comments, likes, direct messages, and notifications.
-- Reduced automatic social polling and disabled the retired analytics requests.
-- Fixed several inherited crash causes involving notification startup, OnlyHaven response handling, and Bunkr Gallery media resolution.
-- Restored the signed-in **Delete Account** endpoint on New Zerochill.
+- Added a one-time account migration message after **What's New** for eligible existing users who are not yet signed in to New Zerochill.
+- Explained that older ZEROCHILL accounts cannot sign in to the new system. Create a new account to use comments, likes, and messages; you can use the same email address.
+- Added **Create New Account**, **I already have a 7.0 account**, and **Maybe Later** options.
+- Skip the notice for fresh installations and people already signed into New Zerochill.
+- Removed the obsolete 4.3-era ZEROCHILL ID upgrade prompt from the 7.x upgrade path.
 
 ## Updating
 
-Install **ZeroChill.apk** over your existing app. Do not uninstall first.
+Install **ZeroChill.apk** over your existing ZEROCHILL app. **Do not uninstall or clear app data** before updating.
 
-The app keeps your on-device favorites, history, downloads, and preferences during an in-place upgrade. Old Supabase sign-ins are not carried over. You will need a new ZEROCHILL account for social features.
+Your on-device favorites, history, downloads, and settings remain available during a normal in-place update. Accounts, comments, and direct messages from the retired social backend do not transfer. Creating a new ZEROCHILL account is needed for social features, but you can browse without signing in.
 
-The separate private ZEROCHILL Admin app is not bundled with this user APK.
+This update does not change the backend, content providers, application ID, or signing identity. The separate private ZEROCHILL Admin app is not bundled with the user APK.
