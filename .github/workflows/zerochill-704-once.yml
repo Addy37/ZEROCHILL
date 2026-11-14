@@ -1,0 +1,43 @@
+name: Dispatch approved ZEROCHILL 7.0.4 release once
+
+on:
+  push:
+    branches:
+      - automation/publish-zerochill-704-once
+    paths:
+      - .github/workflows/zerochill-704-once.yml
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  dispatch-approved-release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out approved release source on main
+        uses: actions/checkout@v6
+        with:
+          ref: main
+          persist-credentials: false
+
+      - name: Verify exact approved main and version
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "c4b9ad45fdacdb28347eb6ba7c369870006b3b23"
+          test "$(tr -d '[:space:]' < RELEASE_VERSION)" = "7.0.4"
+
+      - name: Dispatch existing signed public release workflow
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if gh release view v7.0.4 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "v7.0.4 already exists; no dispatch needed."
+            exit 0
+          fi
+          gh workflow run release-apk.yml --repo "$GITHUB_REPOSITORY" --ref main --field version=7.0.4
+          echo "Requested existing signed release workflow for v7.0.4 on main."
