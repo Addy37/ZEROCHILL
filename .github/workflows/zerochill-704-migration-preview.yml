@@ -1,0 +1,143 @@
+name: ZEROCHILL 7.0.4 Migration Upgrade Preview
+
+# Isolated test candidate from PR #438. No merge, tag, or publication.
+on:
+  push:
+    branches:
+      - build/zerochill-704-migration-preview
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  signed-upgrade-preview:
+    if: github.ref_name == 'build/zerochill-704-migration-preview'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      ZEROCHILL_V7_TRAFFIC: 'true'
+      SUPABASE_URL: https://aavjpykssueavbseqdlf.supabase.co
+      SUPABASE_PUBLISHABLE_KEY: sb_publishable_oSQALszxzeeHxDwEeclucA_5dGEpOLs
+      FEEDBACK_ANON_KEY: sb_publishable_oSQALszxzeeHxDwEeclucA_5dGEpOLs
+      FEEDBACK_ENDPOINT: https://aavjpykssueavbseqdlf.supabase.co/functions/v1/dynamic-api
+      SOURCE_CONFIG_ENDPOINT: https://aavjpykssueavbseqdlf.supabase.co/functions/v1/app-config
+      ANALYTICS_ENDPOINT: ''
+      ANALYTICS_V2_ENDPOINT: ''
+      APP_VERSION_CODE: '7000004'
+      APP_VERSION_NAME: '7.0.4-test'
+      ZEROCHILL_SOURCE_SHA: ${{ github.sha }}
+
+    steps:
+      - name: Checkout PR 438 descendant
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Check source lineage and migration code
+        run: |
+          set -euo pipefail
+          git merge-base --is-ancestor 415b73b5e97a0c9c6ebf98fb7bc1cab782a7fc19 HEAD
+          test -f app/src/main/java/com/webapp/crazyshit/ZeroChillAccountMigrationNotice.java
+          test -f app/src/test/java/com/webapp/crazyshit/ZeroChillAccountMigrationNoticeTest.java
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: |
+            17
+            21
+      - uses: android-actions/setup-android@v4
+        with:
+          packages: platform-tools
+      - name: Install Android SDK
+        run: sdkmanager 'platforms;android-35' 'platforms;android-36' 'build-tools;35.0.0'
+      - uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: '8.11.1'
+          cache-provider: basic
+
+      - name: Restore original signing identity
+        env:
+          SIGNING_BUNDLE: ${{ secrets.ANDROID_SIGNING_BUNDLE }}
+        run: |
+          python3 - <<'PY'
+          import base64, json, os, pathlib
+          raw = os.environ.get('SIGNING_BUNDLE', '')
+          if not raw:
+              raise SystemExit('Missing ANDROID_SIGNING_BUNDLE')
+          data = json.loads(raw.replace('\\r', '').replace('\\n', ''))
+          for key in ('keystore_base64', 'store_password', 'key_alias', 'key_password'):
+              if not data.get(key):
+                  raise SystemExit('Missing signing item: ' + key)
+          for key in ('store_password', 'key_alias', 'key_password'):
+              print('::add-mask::' + data[key])
+          path = pathlib.Path(os.environ['RUNNER_TEMP']) / 'zerochill-704-test.jks'
+          path.write_bytes(base64.b64decode(data['keystore_base64']))
+          path.chmod(0o600)
+          with open(os.environ['GITHUB_ENV'], 'a') as out:
+              for key, value in {
+                  'ANDROID_KEYSTORE_PATH': str(path),
+                  'ANDROID_KEYSTORE_PASSWORD': data['store_password'],
+                  'ANDROID_KEY_ALIAS': data['key_alias'],
+                  'ANDROID_KEY_PASSWORD': data['key_password']
+              }.items():
+                  out.write(key + '=' + value + '\\n')
+          PY
+
+      - name: Run migration prompt regression tests
+        run: |
+          gradle --no-daemon -Porg.gradle.java.installations.fromEnv=JAVA_HOME_17_X64,JAVA_HOME_21_X64 \\
+            :app:testReleaseUnitTest --tests 'com.webapp.crazyshit.ZeroChillAccountMigrationNoticeTest'
+      - name: Assemble production-package signed 7.0.4 test APK
+        run: gradle --no-daemon :app:assembleRelease
+
+      - name: Verify 7.0.3 to 7.0.4 in-place upgrade and backend
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p previous candidate
+          gh release download v7.0.3 --pattern 'ZeroChill.apk' --dir previous
+          python3 - <<'PY'
+          import pathlib, re, subprocess, os, zipfile
+          tools = pathlib.Path(os.environ['ANDROID_HOME']) / 'build-tools/35.0.0'
+          aapt2, signer = str(tools / 'aapt2'), str(tools / 'apksigner')
+          latest = pathlib.Path('app/build/outputs/apk/release/app-release.apk')
+          old = pathlib.Path('previous/ZeroChill.apk')
+          def run(*args):
+              return subprocess.check_output(args, text=True)
+          def ident(path):
+              m = re.search(r"package: name='([^']+)' versionCode='(\\d+)'", run(aapt2, 'dump', 'badging', str(path)))
+              assert m, 'Package/version unavailable'
+              return m.group(1), int(m.group(2))
+          def cert(path):
+              m = re.search(r'Signer #1 certificate SHA-256 digest: ([a-f0-9]+)',
+                            run(signer, 'verify', '--print-certs', str(path)))
+              assert m, 'Signing certificate unavailable'
+              return m.group(1)
+          old_pkg, old_version = ident(old)
+          new_pkg, new_version = ident(latest)
+          assert old_pkg == new_pkg == 'com.addy37.crazyshitunofficial', 'App ID mismatch'
+          assert new_version == 7000004 and new_version > old_version, 'Not an upgrade over 7.0.3'
+          assert cert(old) == cert(latest), 'Signing identity mismatch'
+          build_config = pathlib.Path('app/build/generated/source/buildConfig/release/com/webapp/crazyshit/BuildConfig.java').read_text()
+          assert 'ZEROCHILL_V7_TRAFFIC = true;' in build_config, 'V7 traffic disabled'
+          assert 'https://aavjpykssueavbseqdlf.supabase.co' in build_config, 'Wrong Supabase backend'
+          assert 'ANALYTICS_ENDPOINT = "";' in build_config, 'Legacy analytics enabled'
+          assert 'ANALYTICS_V2_ENDPOINT = "";' in build_config, 'Legacy analytics V2 enabled'
+          assert os.environ['GITHUB_SHA'] in build_config, 'Source revision missing'
+          with zipfile.ZipFile(latest) as apk:
+              for name in apk.namelist():
+                  if name.endswith('.dex'):
+                      data = apk.read(name)
+                      assert b'fketutffusxgjxjlckci' not in data, 'Old backend in ' + name
+          print(f'Upgrade verified: {old_version} -> {new_version}, same package and certificate, New Zerochill backend')
+          PY
+          cp app/build/outputs/apk/release/app-release.apk "candidate/ZeroChill-7.0.4-test-${GITHUB_SHA:0:7}.apk"
+          (cd candidate && sha256sum *.apk > SHA256SUMS.txt)
+      - name: Upload private 7.0.4 signed upgrade APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: ZeroChill-7.0.4-Migration-Preview
+          path: candidate/
+          retention-days: 14
+          if-no-files-found: error
