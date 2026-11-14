@@ -23,7 +23,7 @@ public class UpdateCardControllerTest {
     @Test
     public void formatsReleaseHighlightsForWhatsNewStylePanel() {
         assertEquals(
-                "•  Better playback\\n\\n•  Faster creator loading".replace("\\n", "\n"),
+                "•  Better playback\\n\\n•  Faster creator loading",
                 UpdateCardController.displaySummary("Better playback • Faster creator loading")
         );
     }
