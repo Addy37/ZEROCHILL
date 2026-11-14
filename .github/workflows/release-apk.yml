@@ -7,13 +7,19 @@ on:
         description: Release version without the v prefix
         required: true
         type: string
+  # One-time 7.0.3 launch trigger. Removed after successful publication.
+  push:
+    branches: [main]
+    paths:
+      - RELEASE_VERSION
 permissions:
   contents: write
 
 jobs:
   release:
-    # Publishing requires an explicit manual action on the reviewed main branch.
-    if: github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch'
+    # Push dispatch is restricted to the expressly approved 7.0.3 release commit.
+    # Restore manual-only dispatch after the release completes.
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && contains(github.event.head_commit.message, 'RELEASE_ZEROCHILL_703')))
     runs-on: ubuntu-latest
     env:
       ZEROCHILL_V7_TRAFFIC: 'true'
@@ -40,6 +46,9 @@ jobs:
             VERSION="$(tr -d '[:space:]' < RELEASE_VERSION)"
           fi
           test -n "$VERSION" || { echo "Release version is empty"; exit 1; }
+          if [ "$GITHUB_EVENT_NAME" = "push" ]; then
+            test "$VERSION" = "7.0.3" || { echo "One-time push trigger only permits 7.0.3"; exit 1; }
+          fi
 
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
           echo "APP_VERSION_NAME=$VERSION" >> "$GITHUB_ENV"
