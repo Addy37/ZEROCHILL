@@ -381,7 +381,11 @@ public final class BunkrRepository {
         return !isBunkrUrl(url);
     }
 
-    private List<NativeContentItem> parseAlbumIndex(Document doc) {
+    private List<NativeContentItem> parseAlbumIndex(Document doc) throws IOException {
+        // A verification or maintenance page with HTTP 200 is not an empty search result.
+        if (isBlockedPage(doc)) {
+            throw new IOException("Bunkr requires browser verification or is temporarily unavailable");
+        }
         LinkedHashMap<String, NativeContentItem> albums = new LinkedHashMap<>();
         for (Element link : doc.select(bunkrSelector("a[href*=/a/]", "albums"))) {
             String url = normalizeUrl(link.absUrl("href"), indexUrl());
@@ -765,6 +769,18 @@ public final class BunkrRepository {
         return isUsableArtwork(cover) && !cover.equals(rejectedUrl) ? cover : "";
     }
 
+    /** The scdn.st pool can reject concurrent file requests. Leave it to the active player. */
+    static boolean shouldSkipMediaWarm(String pageUrl, String mediaUrl) {
+        if (!isBunkrUrl(pageUrl) || mediaUrl == null) return false;
+        try {
+            String mediaHost = new URI(mediaUrl).getHost();
+            return mediaHost != null && (mediaHost.equalsIgnoreCase("scdn.st") ||
+                    mediaHost.toLowerCase(Locale.US).endsWith(".scdn.st"));
+        } catch (Exception ignored) {
+            return false;
+        }
+    }
+
     static boolean usableCachedPlayable(String pageUrl, String mediaUrl, long nowSeconds) {
         if (mediaUrl == null || mediaUrl.isEmpty()) return false;
         if (!isBunkrUrl(pageUrl)) return true;
@@ -884,10 +900,16 @@ public final class BunkrRepository {
         if (doc == null) return true;
         String title = doc.title().toLowerCase(Locale.US);
         if (title.contains("just a moment") || title.contains("attention required") ||
-                title.contains("ddos-guard") || title.contains("404") ||
-                title.contains("not found") || title.contains("site unavailable")) return true;
+                title.contains("ddos-guard") || title.contains("checkpoint sentinel") ||
+                title.contains("503 service unavailable") || title.contains("access denied") ||
+                title.contains("404") || title.contains("not found") ||
+                title.contains("site unavailable")) return true;
         String text = doc.text().toLowerCase(Locale.US);
         return text.contains("checking your browser before accessing") ||
+                text.contains("verify you are human") ||
+                text.contains("complete the security check") ||
+                text.contains("checkpoint sentinel") ||
+                text.contains("servers are currently under heavy load") ||
                 text.contains("server under maintenance") ||
                 text.contains("album not found") || text.contains("file not found");
     }
