@@ -10,7 +10,7 @@
 
 ## Known source limitations
 
-Balbums may require browser verification. OnlyHaven's creator/category APIs currently return server errors; its HTML fallbacks remain available but cannot guarantee results during the outage. EFukt availability varies by region. These sources remain enabled.
+Balbums may require browser verification. OnlyHaven's creator/category APIs can be intermittently unavailable; existing fallbacks remain available but cannot guarantee results during upstream errors. EFukt availability varies by region. These sources remain enabled.
 
 ## Updating
 

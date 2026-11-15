@@ -6,4 +6,4 @@
 - Fixed action-menu crashes when a Downloads row detaches during positioning, plus safer teardown handling.
 - Improved Bunkr read-error fallback.
 
-- OnlyHaven's creator/category APIs are currently returning server errors. Balbums may require browser verification, and EFukt availability varies by region.
+- OnlyHaven's creator/category APIs can intermittently return server errors. Balbums may require browser verification, and EFukt availability varies by region.

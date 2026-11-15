@@ -69,6 +69,17 @@ A short-display/200% text compatibility test also passes against untouched main.
 now checks the new authored count and key release/limitation text. No public old branding
 was reintroduced.
 
+A later full source audit [run 43733638580](https://github.com/Addy37/ZEROCHILL/actions/runs/43733638580)
+at 16:07 UTC passed all ten OnlyHaven contracts from **westcentralus**, without an app or
+backend change. This establishes working metadata/search/category/profile paths in that
+runner at that time; it does not prove global recovery from the earlier centralus 500s.
+Classify OnlyHaven as **intermittent / runner-dependent upstream availability**, not a
+confirmed app regression. EFukt again passed all four contracts from **centralus**;
+regions without accessible responses remain **region-limited / not verifiable from runner**,
+not evidence to disable EFukt. Bunkr from **eastus2** passed the active index, album and
+signing checks; both Balbums 403 failures remained visible. The other six providers and
+schema validation passed (31 backend schema/handler tests, zero failures; Deno checks passed).
+
 ## Identity and compatibility
 
 Target `7.0.5` / `7000005` exceeds stable `7.0.4` / `7000004`. The separate `.dev`
@@ -90,3 +101,18 @@ emulator data is not physical-phone or live-source acceptance.
 Validation results and artifact identity are recorded below after the candidate run.
 Until then the release recommendation is **HOLD**. External source outages and the two
 unconfirmed main-screen crashes remain explicit limitations, regardless of passing unit tests.
+
+### Local validation before final artifact
+
+- Final focused release regressions: **35 passed, zero failures/errors/skips**.
+- Separate source/config/OnlyHaven regressions: **17 passed, zero failures/errors/skips**.
+- Offline audit regressions: **3 passed**.
+- Local Debug and Release APK assembly passed. These local builds use the local default
+  signing configuration and are not the production signed deliverable.
+- Main baseline lint: **361 errors, 488 warnings**. Final code lint: **348 errors,
+  488 warnings**. Compared all findings by detector/severity/message/file: **no new
+  findings; 13 existing Media3 opt-in findings resolved**. Lint still exits nonzero;
+  its remaining inherited debt is not waived or hidden.
+- Initial local SDK-36 test attempt failed to download the official Android 16 fixture
+  because Maven redirects to a host outside the workspace's allowlist. Full suites
+  therefore run in Actions with both Java 17 and 21; no SDK annotation/test was removed.

@@ -5,6 +5,7 @@ on:
     paths: [.github/workflows/release-705-candidate.yml]
 permissions:
   contents: read
+  actions: write
 jobs:
   candidate:
     runs-on: ubuntu-latest
@@ -25,6 +26,27 @@ jobs:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
+      - name: Cancel only the two superseded candidate runs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY'
+          import json,subprocess
+          expected={43731496109:'4d63787b5275805b08936bdfec14d0da08495db8',
+                    43733538152:'55a34cea3ce53e25571c28b60419e2d957bed5d8'}
+          for run_id,sha in expected.items():
+              path=f'repos/Addy37/ZEROCHILL/actions/runs/{run_id}'
+              run=json.loads(subprocess.check_output(['gh','api',path],text=True))
+              assert run['head_branch']=='release/zerochill-7.0.5' and run['head_sha']==sha
+              if run['status']=='completed':
+                  print(f'Superseded run {run_id} already completed: {run["conclusion"]}')
+                  continue
+              result=subprocess.run(['gh','api','--method','POST',path+'/cancel'])
+              if result.returncode:
+                  print(f'Cancellation unavailable for {run_id}; it remains superseded, not deliverable')
+              else:
+                  print(f'Cancelled superseded candidate run {run_id}')
+          PY
       - name: Check approved baseline and version
         run: |
           git merge-base --is-ancestor 3d69cfa1d67b20cce31b2563c80e2cf775e0a651 HEAD
@@ -75,6 +97,8 @@ jobs:
 
       - name: Full Debug and Release suites and Android builds
         run: |
+          free -h
+          nproc
           gradle --no-daemon --continue -Porg.gradle.java.installations.fromEnv=JAVA_HOME_17_X64,JAVA_HOME_21_X64 \
             :app:testDebugUnitTest :app:testReleaseUnitTest :app:assembleDebug :app:assembleRelease
       - name: Lint Debug audit (existing debt remains visible)
@@ -136,7 +160,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: ZEROCHILL-7.0.5-FINAL-release-candidate
+          name: ZEROCHILL-7.0.5-RC
           path: |
             candidate/
             app/build/reports/tests/
