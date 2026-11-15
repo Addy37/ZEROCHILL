@@ -1,0 +1,36 @@
+name: Trigger approved ZEROCHILL 7.0.5 release once
+
+# One-off bridge to the existing, manual-only production release workflow.
+# This workflow is kept on an isolated ops branch and never merged into main.
+on:
+  push:
+    branches:
+      - ops/zerochill-7.0.5-one-time-dispatch
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  dispatch-approved-release:
+    if: github.repository == 'Addy37/ZEROCHILL' && github.ref == 'refs/heads/ops/zerochill-7.0.5-one-time-dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Confirm exact approved main commit and invoke existing release gate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED_RELEASE_SHA: 8406c1a1c909aa26362321a5f7e471bdeeaed697
+        run: |
+          set -euo pipefail
+          MAIN_SHA="$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)"
+          if [ "$MAIN_SHA" != "$EXPECTED_RELEASE_SHA" ]; then
+            echo "Main changed since user approved 7.0.5: $MAIN_SHA" >&2
+            exit 1
+          fi
+          if gh release view v7.0.5 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release v7.0.5 already exists; no second dispatch"
+            exit 0
+          fi
+          echo "Dispatching existing release-apk.yml for approved main source $MAIN_SHA"
+          gh workflow run release-apk.yml --repo "$GITHUB_REPOSITORY" --ref main -f version=7.0.5
