@@ -1,10 +1,12 @@
 package com.webapp.crazyshit;
 
 import android.app.Dialog;
+import android.content.ActivityNotFoundException;
 import android.content.Intent;
 import android.content.res.ColorStateList;
 import android.graphics.Color;
 import android.graphics.Rect;
+import android.net.Uri;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
@@ -101,6 +103,12 @@ final class LandscapeMoreDialog {
                         "Send feedback",
                         "Suggest a feature or report a problem",
                         () -> activity.startActivity(new Intent(activity, FeedbackActivity.class))
+                ),
+                new Action(
+                        R.drawable.ic_more_website,
+                        "Support ZEROCHILL",
+                        "GitHub Sponsors or Cash App",
+                        () -> showSupportDialog(activity)
                 )
         );
 
@@ -175,6 +183,31 @@ final class LandscapeMoreDialog {
                 .setDuration(ZeroChillMotion.duration(activity, ZeroChillMotion.QUICK_MS))
                 .setInterpolator(ZeroChillMotion.EASE_OUT)
                 .start();
+    }
+
+    private static void showSupportDialog(NativeMainActivity activity) {
+        if (activity.isFinishing()) return;
+        new ZeroChillDialog.Builder(activity)
+                .setTitle("Support ZEROCHILL")
+                .setMessage("Enjoy ZEROCHILL? If you'd like to support its development, "
+                        + "choose an option below. Support is optional, and the links "
+                        + "open outside the app.")
+                .setItems(new String[]{"GitHub Sponsors", "Cash App ($SupportZC)"},
+                        (dialog, which) -> openSupportLink(activity,
+                                which == 0
+                                        ? "https://github.com/sponsors/Addy37"
+                                        : "https://cash.app/$SupportZC"))
+                .setNegativeButton("Not now", null)
+                .show();
+    }
+
+    private static void openSupportLink(NativeMainActivity activity, String url) {
+        try {
+            activity.startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url)));
+        } catch (ActivityNotFoundException | SecurityException ignored) {
+            ZeroChillToast.makeText(activity, "Couldn't open support link.",
+                    ZeroChillToast.LENGTH_SHORT).show();
+        }
     }
 
     private static void addHeader(
