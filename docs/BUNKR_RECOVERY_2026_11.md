@@ -277,3 +277,49 @@ current gallery-wide failure. Merge/publication approval has not been given.
 
 No claim of complete native recovery is warranted until these pass. Review all
 source failures and test results before requesting merge approval.
+
+## November 15: Bunkr Index search beta acceptance
+
+The user installed the signed **Bunkr Index Beta 1** and reported that search
+"looks to be resolved." Treat this as initial physical acceptance of the
+new search path, not blanket approval of playback/seek/expiry, release, or
+every source. Production still remains on 7.0.4.
+
+The independent `https://bunkrsearch.link/api/search?q=...&page=N` JSON
+API was verified in the isolated read-only probe workflow. It returned HTTP
+200 with `results` containing file hits, `album_slug`, `album_name`,
+`file_count`, `thumbnail`, and paging metadata. The API reports
+`mode=files`; it does not natively return one record per album. The
+experimental `BunkrIndexSearch` adapter groups hits by validated album slug
+and constructs canonical `https://bunkr.cr/a/<slug>` URLs. Only Bunkr
+`searchAlbums` queries change. Empty or malformed responses are handled
+separately; the original Balbums search is kept as a fallback when the new
+index request fails. Album page parsing, signer, player, cookies, galleries,
+favorites, downloads and backend remain untouched by this search addition.
+
+- Beta search source: `b6af86df6f81af8f0ad4164ab74e49b7f3c72621`
+  (later cleanup commits may remove test-only workflow files, without
+  changing app code).
+- Focused unit regression workflow: 57 tests, 0 failed, 0 skipped.
+- Signed Android debug beta assembly: passed.
+- APK identity checks: separate `.dev` package, original production signing
+  certificate, New Zerochill backend and embedded source SHA all passed.
+- Evidence: https://github.com/Addy37/ZEROCHILL/actions/runs/43712700191
+- API probes: https://github.com/Addy37/ZEROCHILL/actions/runs/43712365671
+- No production deployment or database/source-config write.
+
+Third-party dependency risk: Bunkr Index is independent of Bunkr and Balbums.
+Its public About page advertises a JSON API, and its Terms page says searching
+requires no account or payment. Neither page specifies mobile-app integration
+permission, a service-level guarantee or a published rate limit. Confirm
+operator permission/limits before broad production rollout. Queries go directly
+to the independent service, so network requests disclose the query and IP to
+that operator. No centralized ZEROCHILL query collection was added.
+A single file search page can include many hits from the same album; this is
+not guaranteed to be equivalent to Balbums' album-level ranking/pagination.
+
+Before production merge: delete temporary candidate workflows from the final
+merge tree; inspect the full PR #442 diff and red historical Release/source
+checks; verify that the app tree matches the device-approved beta; run required
+regressions; preserve existing Bunkr playback and user data. Do not auto-merge
+or publish.
