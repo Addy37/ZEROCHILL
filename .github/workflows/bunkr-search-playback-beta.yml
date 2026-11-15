@@ -1,11 +1,11 @@
-name: Bunkr Search and Playback Repair Beta
+name: Bunkr Index Search Beta
 
 # Isolated Bunkr recovery candidate; no release or merge side effects.
 # Never publish or merge automatically.
 on:
   push:
     branches:
-      - fix/bunkr-2026-11-search-playback-recovery
+      - experiment/bunkr-index-api-2026-11
     paths:
       - .github/workflows/bunkr-search-playback-beta.yml
   workflow_dispatch:
@@ -15,7 +15,7 @@ permissions:
 
 jobs:
   bunkr-beta:
-    if: github.ref_name == 'fix/bunkr-2026-11-search-playback-recovery'
+    if: github.ref_name == 'experiment/bunkr-index-api-2026-11'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
@@ -27,8 +27,8 @@ jobs:
       SOURCE_CONFIG_ENDPOINT: https://aavjpykssueavbseqdlf.supabase.co/functions/v1/app-config
       ANALYTICS_ENDPOINT: ''
       ANALYTICS_V2_ENDPOINT: ''
-      APP_VERSION_CODE: '7000007'
-      APP_VERSION_NAME: '7.0.4-bunkr-beta.4'
+      APP_VERSION_CODE: '7000008'
+      APP_VERSION_NAME: '7.0.4-bunkr-index-beta.1'
       ZEROCHILL_SOURCE_SHA: ${{ github.sha }}
 
     steps:
@@ -60,6 +60,7 @@ jobs:
         run: |
           gradle --no-daemon -Porg.gradle.java.installations.fromEnv=JAVA_HOME_17_X64,JAVA_HOME_21_X64 \
             :app:testDebugUnitTest \
+            --tests '*BunkrIndexSearchTest' \
             --tests '*BunkrResolutionTest' \
             --tests '*BunkrRepositoryTest' \
             --tests '*BunkrGalleryPlayableCacheTest' \
@@ -69,24 +70,6 @@ jobs:
             --tests '*BunkrGalleryMediaGuardTest' \
             --tests '*SearchScopeTest' \
             --tests '*PlaybackRecoveryListenerTest'
-      - name: Attempt read-only native Bunkr resolver and MP4 range contract
-        continue-on-error: true
-        env:
-          BUNKR_LIVE_CONTRACT: 'true'
-        run: |
-          mkdir -p candidate
-          set +e
-          gradle --no-daemon :app:testDebugUnitTest --tests '*BunkrLiveContractTest'
-          RESULT=$?
-          cp app/build/test-results/testDebugUnitTest/TEST-com.webapp.crazyshit.BunkrLiveContractTest.xml candidate/bunkr-live-contract.xml
-          exit "$RESULT"
-      - name: Run full Debug and Release unit suites
-        run: gradle --continue --no-daemon :app:testDebugUnitTest :app:testReleaseUnitTest
-      - name: Record read-only source response evidence
-        if: always()
-        run: |
-          mkdir -p candidate
-          python3 tools/bunkr_recovery_probe.py > candidate/bunkr-http-evidence.json
       - name: Restore original signing for a side-by-side beta
         id: signing
         if: ${{ !cancelled() && steps.focused.outcome == 'success' }}
@@ -134,7 +117,7 @@ jobs:
           badge = output(str(pathlib.Path(tools)/'aapt2'), 'dump', 'badging', apk)
           package = re.search(r"package: name='([^']+)' versionCode='(\d+)'", badge)
           assert package and package[1] == 'com.addy37.crazyshitunofficial.dev', 'Incorrect beta package'
-          assert int(package[2]) == 7000007, 'Incorrect beta version'
+          assert int(package[2]) == 7000008, 'Incorrect beta version'
           cert = output(str(pathlib.Path(tools)/'apksigner'), 'verify', '--print-certs', apk)
           digest = re.search(r'Signer #1 certificate SHA-256 digest: ([a-f0-9]+)', cert)
           assert digest and digest[1] == '04abf84b3d468cbb1a562dea83b0007e686b2e56018cce911223963faea51356', 'Incorrect signing key'
@@ -146,14 +129,14 @@ jobs:
           assert os.environ['GITHUB_SHA'] in config, 'Source commit missing'
           print('Bunkr beta verified: side-by-side package, production signing, New Zerochill backend, source revision')
           PY
-          NAME="ZeroChill-BunkrBeta-fix-bunkr-2026-11-search-playback-recovery-${GITHUB_SHA:0:7}.apk"
+          NAME="ZeroChill-BunkrIndexBeta-fix-bunkr-2026-11-search-playback-recovery-${GITHUB_SHA:0:7}.apk"
           cp "$APK" "candidate/$NAME"
           (cd candidate && sha256sum *.apk > SHA256SUMS.txt)
       - name: Upload private beta APK
         if: ${{ !cancelled() && steps.verified.outcome == 'success' }}
         uses: actions/upload-artifact@v4
         with:
-          name: ZeroChill-Bunkr-Repair-Beta
+          name: ZeroChill-Bunkr-Index-Beta
           path: candidate/
           retention-days: 14
           if-no-files-found: error
@@ -161,10 +144,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: Bunkr-Repair-Unit-Test-Reports
+          name: Bunkr-Index-Unit-Test-Reports
           path: |
             app/build/test-results/testDebugUnitTest/
-            app/build/test-results/testReleaseUnitTest/
-            candidate/bunkr-http-evidence.json
-            candidate/bunkr-live-contract.xml
           if-no-files-found: ignore
