@@ -79,7 +79,8 @@ final class BunkrPlaybackDiagnostics {
 
     /** Let the user complete Bunkr's verification in a real browser, without bypassing it. */
     static void openPage(Activity activity, String pageUrl) {
-        if (activity == null || !BunkrRepository.isBunkrUrl(pageUrl)) return;
+        if (activity == null || (!BunkrRepository.isBunkrUrl(pageUrl)
+                && !BunkrRepository.isBalbumsUrl(pageUrl))) return;
         Uri uri = Uri.parse(pageUrl);
         if (!"https".equalsIgnoreCase(uri.getScheme())) return;
         try {
