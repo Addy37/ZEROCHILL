@@ -1,10 +1,14 @@
 package com.webapp.crazyshit;
 
+import android.app.Activity;
 import android.app.Dialog;
+import android.content.ActivityNotFoundException;
 import android.content.Intent;
+import android.content.Context;
 import android.content.res.ColorStateList;
 import android.graphics.Color;
 import android.graphics.Rect;
+import android.net.Uri;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
@@ -27,6 +31,10 @@ import java.util.List;
 final class LandscapeMoreDialog {
     private LandscapeMoreDialog() {
     }
+
+    static final int SUPPORT_GITHUB_VIEW_ID = View.generateViewId();
+    static final int SUPPORT_CASH_APP_VIEW_ID = View.generateViewId();
+    static final int SUPPORT_LATER_VIEW_ID = View.generateViewId();
 
     static void attachSoon(NativeMainActivity activity) {
         if (activity == null || activity.isFinishing()) return;
@@ -101,6 +109,12 @@ final class LandscapeMoreDialog {
                         "Send feedback",
                         "Suggest a feature or report a problem",
                         () -> activity.startActivity(new Intent(activity, FeedbackActivity.class))
+                ),
+                new Action(
+                        R.drawable.ic_more_website,
+                        "Support ZEROCHILL",
+                        "GitHub Sponsors or Cash App",
+                        () -> showSupportDialog(activity)
                 )
         );
 
@@ -175,6 +189,174 @@ final class LandscapeMoreDialog {
                 .setDuration(ZeroChillMotion.duration(activity, ZeroChillMotion.QUICK_MS))
                 .setInterpolator(ZeroChillMotion.EASE_OUT)
                 .start();
+    }
+
+    private static void showSupportDialog(NativeMainActivity activity) {
+        if (activity.isFinishing()) return;
+        createSupportDialog(activity).show();
+    }
+
+    /** A compact branded surface, not a platform AlertDialog with extra list padding. */
+    static Dialog createSupportDialog(Activity activity) {
+        Dialog dialog = new Dialog(activity) {
+            @Override protected void onStart() {
+                super.onStart();
+                // Set the final window geometry before the first frame is drawn.
+                // Resizing inside OnShow creates the small position jump on Android 16.
+                Window window = getWindow();
+                if (window == null) return;
+                window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+                window.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
+                WindowManager.LayoutParams attrs = window.getAttributes();
+                attrs.width = Math.min(supportDp(activity, 380),
+                        activity.getResources().getDisplayMetrics().widthPixels
+                                - supportDp(activity, 32));
+                attrs.height = WindowManager.LayoutParams.WRAP_CONTENT;
+                attrs.gravity = Gravity.CENTER;
+                attrs.dimAmount = .72f;
+                attrs.windowAnimations = 0; // No second, platform-owned window transition.
+                window.setAttributes(attrs);
+            }
+        };
+        dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
+        LinearLayout content = buildSupportContent(activity);
+        dialog.setContentView(content);
+        dialog.setCanceledOnTouchOutside(true);
+
+        content.findViewById(SUPPORT_GITHUB_VIEW_ID).setOnClickListener(view -> {
+            dialog.dismiss();
+            openSupportLink(activity, "https://github.com/sponsors/Addy37");
+        });
+        content.findViewById(SUPPORT_CASH_APP_VIEW_ID).setOnClickListener(view -> {
+            dialog.dismiss();
+            openSupportLink(activity, "https://cash.app/$SupportZC");
+        });
+        content.findViewById(SUPPORT_LATER_VIEW_ID).setOnClickListener(view -> dialog.dismiss());
+
+        dialog.setOnShowListener(ignored -> {
+            // A short opacity-only entrance keeps a fixed center and fixed size.
+            if (ZeroChillMotion.animationsEnabled(activity)) {
+                content.setAlpha(0f);
+                content.animate().alpha(1f)
+                        .setDuration(ZeroChillMotion.QUICK_MS).start();
+            }
+        });
+        return dialog;
+    }
+
+    static LinearLayout buildSupportContent(Context context) {
+        int accent = AppearanceTheme.accent(context);
+        LinearLayout content = new LinearLayout(context);
+        content.setOrientation(LinearLayout.VERTICAL);
+        content.setPadding(supportDp(context, 22), supportDp(context, 22),
+                supportDp(context, 22), supportDp(context, 14));
+
+        GradientDrawable panel = new GradientDrawable();
+        panel.setColor(Color.rgb(3, 6, 10));
+        panel.setCornerRadius(supportDp(context, 24));
+        panel.setStroke(supportDp(context, 1), (accent & 0x00FFFFFF) | 0xA0000000);
+        content.setBackground(panel);
+        content.setClipToOutline(true);
+
+        LinearLayout wordmark = new LinearLayout(context);
+        wordmark.setGravity(Gravity.CENTER);
+        TextView zero = supportText(context, "ZERO", 24, Color.WHITE, true);
+        TextView chill = supportText(context, "CHILL", 24, accent, true);
+        wordmark.addView(zero);
+        wordmark.addView(chill);
+        content.addView(wordmark, new LinearLayout.LayoutParams(-1, -2));
+
+        TextView title = supportText(context, "Support development", 19, Color.WHITE, true);
+        title.setGravity(Gravity.CENTER);
+        LinearLayout.LayoutParams titleParams = new LinearLayout.LayoutParams(-1, -2);
+        titleParams.topMargin = supportDp(context, 12);
+        content.addView(title, titleParams);
+
+        TextView message = supportText(context,
+                "Enjoying ZEROCHILL? You can help keep it going.", 14,
+                AppearanceTheme.secondaryText(context), false);
+        message.setGravity(Gravity.CENTER);
+        message.setLineSpacing(supportDp(context, 2), 1f);
+        LinearLayout.LayoutParams messageParams = new LinearLayout.LayoutParams(-1, -2);
+        messageParams.topMargin = supportDp(context, 8);
+        content.addView(message, messageParams);
+
+        TextView github = supportChoice(context, "GitHub Sponsors", true);
+        github.setId(SUPPORT_GITHUB_VIEW_ID);
+        content.addView(github, supportChoiceParams(context, 20));
+
+        TextView cashApp = supportChoice(context, "Cash App ($SupportZC)", false);
+        cashApp.setId(SUPPORT_CASH_APP_VIEW_ID);
+        content.addView(cashApp, supportChoiceParams(context, 10));
+
+        TextView footnote = supportText(context, "Optional  •  Opens outside the app", 11,
+                AppearanceTheme.secondaryText(context), false);
+        footnote.setGravity(Gravity.CENTER);
+        LinearLayout.LayoutParams footnoteParams = new LinearLayout.LayoutParams(-1, -2);
+        footnoteParams.topMargin = supportDp(context, 14);
+        content.addView(footnote, footnoteParams);
+
+        TextView later = supportText(context, "Not now", 14,
+                AppearanceTheme.secondaryText(context), true);
+        later.setId(SUPPORT_LATER_VIEW_ID);
+        later.setGravity(Gravity.CENTER);
+        later.setMinHeight(supportDp(context, 42));
+        later.setClickable(true);
+        later.setFocusable(true);
+        later.setContentDescription("Close Support ZEROCHILL");
+        ZeroChillMotion.installPressFeedback(later);
+        LinearLayout.LayoutParams laterParams = new LinearLayout.LayoutParams(-1, supportDp(context, 42));
+        laterParams.topMargin = supportDp(context, 4);
+        content.addView(later, laterParams);
+        return content;
+    }
+
+    private static TextView supportChoice(Context context, String label, boolean primary) {
+        TextView choice = supportText(context, label, 15,
+                primary ? AppearanceTheme.onAccent(context) : Color.WHITE, true);
+        choice.setGravity(Gravity.CENTER);
+        choice.setMinHeight(supportDp(context, 50));
+        choice.setClickable(true);
+        choice.setFocusable(true);
+        choice.setContentDescription("Open " + label + " outside ZEROCHILL");
+
+        GradientDrawable background = new GradientDrawable();
+        background.setColor(primary ? AppearanceTheme.accent(context) : Color.rgb(17, 22, 29));
+        background.setCornerRadius(supportDp(context, 14));
+        if (!primary) background.setStroke(supportDp(context, 1), Color.rgb(49, 62, 75));
+        choice.setBackground(background);
+        ZeroChillMotion.installPressFeedback(choice);
+        return choice;
+    }
+
+    private static TextView supportText(Context context, String value, float size, int color,
+            boolean bold) {
+        TextView view = new TextView(context);
+        view.setText(value);
+        view.setTextSize(TypedValue.COMPLEX_UNIT_SP, size);
+        view.setTextColor(color);
+        if (bold) view.setTypeface(null, android.graphics.Typeface.BOLD);
+        return view;
+    }
+
+    private static LinearLayout.LayoutParams supportChoiceParams(Context context, int topDp) {
+        LinearLayout.LayoutParams params =
+                new LinearLayout.LayoutParams(-1, supportDp(context, 50));
+        params.topMargin = supportDp(context, topDp);
+        return params;
+    }
+
+    private static int supportDp(Context context, int value) {
+        return Math.round(value * context.getResources().getDisplayMetrics().density);
+    }
+
+    private static void openSupportLink(Activity activity, String url) {
+        try {
+            activity.startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url)));
+        } catch (ActivityNotFoundException | SecurityException ignored) {
+            ZeroChillToast.makeText(activity, "Couldn't open support link.",
+                    ZeroChillToast.LENGTH_SHORT).show();
+        }
     }
 
     private static void addHeader(
@@ -281,8 +463,18 @@ final class LandscapeMoreDialog {
         ZeroChillMotion.installPressFeedback(row);
         row.setOnClickListener(v -> {
             v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
-            dialog.dismiss();
-            action.run.run();
+            if ("Support ZEROCHILL".equals(action.title)) {
+                // Avoid overlapping the More menu's exit and Support's entrance.
+                dialog.setOnDismissListener(ignored -> {
+                    if (!activity.isFinishing() && !activity.isDestroyed()) {
+                        activity.getWindow().getDecorView().post(action.run);
+                    }
+                });
+                dialog.dismiss();
+            } else {
+                dialog.dismiss();
+                action.run.run();
+            }
         });
 
         parent.addView(row, new LinearLayout.LayoutParams(-1, dp(activity, 48)));
