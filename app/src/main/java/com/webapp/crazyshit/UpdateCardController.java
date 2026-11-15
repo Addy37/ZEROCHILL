@@ -151,7 +151,11 @@ final class UpdateCardController {
         scroll.setFillViewport(false);
         scroll.setVerticalScrollBarEnabled(true);
         scroll.addView(content);
-        card.addView(scroll);
+        // A MATCH_PARENT child makes even a one-line update consume the entire
+        // height cap. WRAP_CONTENT keeps short messages compact, while onMeasure
+        // above still limits long descriptions to a scrolling viewport.
+        card.addView(scroll, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
     }
 
     void showAvailable(
