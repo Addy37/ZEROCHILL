@@ -9,6 +9,8 @@ import android.app.Dialog;
 import android.app.Application;
 import android.content.Intent;
 import android.view.View;
+import android.view.Gravity;
+import android.view.WindowManager;
 import android.widget.TextView;
 
 import org.junit.Test;
@@ -42,6 +44,24 @@ public final class SupportZeroChillDialogTest {
         assertEquals("Not now", later.getText().toString());
         assertTrue(later.isClickable());
         assertEquals(7, LandscapeMoreDialog.buildSupportContent(activity).getChildCount());
+    }
+
+    @Test
+    public void windowHasFinalSizeAndNoScaleAnimationAtFirstShow() {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        Dialog dialog = LandscapeMoreDialog.createSupportDialog(activity);
+        dialog.show();
+
+        WindowManager.LayoutParams attrs = dialog.getWindow().getAttributes();
+        int dp = Math.round(activity.getResources().getDisplayMetrics().density * 380);
+        int margin = Math.round(activity.getResources().getDisplayMetrics().density * 32);
+        assertEquals(Math.min(dp, activity.getResources().getDisplayMetrics().widthPixels - margin),
+                attrs.width);
+        assertEquals(WindowManager.LayoutParams.WRAP_CONTENT, attrs.height);
+        assertEquals(Gravity.CENTER, attrs.gravity);
+        assertEquals(0, attrs.windowAnimations);
+        assertEquals(1f, dialog.getWindow().getDecorView().getScaleX(), 0.001f);
+        assertEquals(1f, dialog.getWindow().getDecorView().getScaleY(), 0.001f);
     }
 
     @Test
