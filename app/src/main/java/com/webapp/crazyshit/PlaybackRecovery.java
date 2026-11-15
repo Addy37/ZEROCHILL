@@ -1,12 +1,14 @@
 package com.webapp.crazyshit;
 
 import android.app.Activity;
+import android.net.Uri;
 import android.os.Handler;
 import android.os.Looper;
 import androidx.media3.common.MediaItem;
 import androidx.media3.common.PlaybackException;
 import androidx.media3.common.Player;
 import androidx.media3.exoplayer.ExoPlayer;
+import androidx.media3.datasource.HttpDataSource;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.function.Consumer;
@@ -68,6 +70,11 @@ final class PlaybackRecovery {
             showBunkrDiagnostics(activity, "player", error, null);
             return false;
         }
+        if (!permitsRefresh(page, currentMediaUrl(player), error,
+                System.currentTimeMillis() / 1000L, attempts)) {
+            showBunkrDiagnostics(activity, "player-denied", error, null);
+            return false;
+        }
         if (error == null) attempts = 0;
         if (attempts >= 2) {
             showBunkrDiagnostics(activity, "player-retries-exhausted", error, null);
@@ -104,6 +111,29 @@ final class PlaybackRecovery {
         return true;
     }
 
+    /** CDN denials should not trigger repeated verification requests. An expired signed link gets one refresh. */
+    static boolean permitsRefresh(String pageUrl, String mediaUrl, PlaybackException error,
+            long nowSeconds, int previousAttempts) {
+        if (!BunkrRepository.isBunkrUrl(pageUrl) || error == null) return true;
+        Throwable cause = error;
+        for (int depth = 0; cause != null && depth < 8; depth++, cause = cause.getCause()) {
+            if (!(cause instanceof HttpDataSource.InvalidResponseCodeException)) continue;
+            int status = ((HttpDataSource.InvalidResponseCodeException) cause).responseCode;
+            if (status == 401 || status == 429) return false;
+            if (status != 403) return true;
+            if (previousAttempts > 0 || mediaUrl == null) return false;
+            try {
+                Uri uri = Uri.parse(mediaUrl);
+                String token = uri.getQueryParameter("token");
+                String expiry = uri.getQueryParameter("ex");
+                long expiresAt = expiry == null ? 0L : Long.parseLong(expiry);
+                return token != null && !token.isEmpty() && expiry != null
+                        && expiresAt > 0L && expiresAt <= nowSeconds;
+            } catch (Exception ignored) { return false; }
+        }
+        return true;
+    }
+
     private void showBunkrDiagnostics(
             Activity activity,
             String phase,
@@ -125,7 +155,8 @@ final class PlaybackRecovery {
                         refreshError,
                         state,
                         position
-                )
+                ),
+                page
         );
     }
 

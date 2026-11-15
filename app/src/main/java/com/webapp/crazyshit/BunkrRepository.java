@@ -7,6 +7,7 @@ import android.webkit.CookieManager;
 import org.json.JSONObject;
 import org.jsoup.Connection;
 import org.jsoup.Jsoup;
+import org.jsoup.HttpStatusException;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 
@@ -112,6 +113,20 @@ public final class BunkrRepository {
     public List<NativeContentItem> searchAlbums(Context context, String query, int page)
             throws IOException {
         requireEnabled();
+        // The native Bunkr Index API provides album metadata without Balbums' CAPTCHA.
+        // Keep the existing Balbums path as a fallback for an index outage.
+        if (query != null && !query.trim().isEmpty()) {
+            try {
+                return BunkrIndexSearch.search(query, page);
+            } catch (IOException indexError) {
+                try {
+                    return parseAlbumIndex(fetchDocument(context, searchUrl(query, page)));
+                } catch (IOException balbumsError) {
+                    balbumsError.addSuppressed(indexError);
+                    throw balbumsError;
+                }
+            }
+        }
         return parseAlbumIndex(fetchDocument(context, searchUrl(query, page)));
     }
 
@@ -258,6 +273,7 @@ public final class BunkrRepository {
                 }
                 last = new IOException("Bunkr did not return a signed media URL");
             } catch (IOException error) {
+                if (requiresUserAction(error)) throw error;
                 last = error;
             }
         } else if (!signUrl.isEmpty()) {
@@ -280,6 +296,7 @@ public final class BunkrRepository {
                         );
                     }
                 } catch (IOException error) {
+                    if (requiresUserAction(error)) throw error;
                     last = error;
                 }
             }
@@ -290,7 +307,8 @@ public final class BunkrRepository {
         for (Element media : doc.select(bunkrSelector(
                 "video[src],video source[src],source[type*=video][src]", "video"))) {
             String candidate = normalizeUrl(media.absUrl("src"), resolvedPageUrl);
-            if (isDirectMedia(candidate) && !isMaintenanceVideo(candidate)) {
+            if (isDirectMedia(candidate) && !isMaintenanceVideo(candidate)
+                    && !candidate.equals(unescapeScriptUrl(cdnUrl))) {
                 return new CrazyShitRepository.StreamInfo(candidate, resolvedPageUrl, title);
             }
         }
@@ -381,7 +399,11 @@ public final class BunkrRepository {
         return !isBunkrUrl(url);
     }
 
-    private List<NativeContentItem> parseAlbumIndex(Document doc) {
+    private List<NativeContentItem> parseAlbumIndex(Document doc) throws IOException {
+        // A verification or maintenance page with HTTP 200 is not an empty search result.
+        if (isBlockedPage(doc)) {
+            throw new IOException("Bunkr requires browser verification or is temporarily unavailable");
+        }
         LinkedHashMap<String, NativeContentItem> albums = new LinkedHashMap<>();
         for (Element link : doc.select(bunkrSelector("a[href*=/a/]", "albums"))) {
             String url = normalizeUrl(link.absUrl("href"), indexUrl());
@@ -537,7 +559,9 @@ public final class BunkrRepository {
         addCookies(context, connection, endpoint);
         Connection.Response response = connection.execute();
         try {
-            JSONObject data = new JSONObject(response.body());
+            String body = response.body();
+            rejectVerificationResponse(body, endpoint);
+            JSONObject data = new JSONObject(body);
             String url = data.optString("url", "");
             boolean needsSignature = false;
             if (data.optBoolean("encrypted", false)) {
@@ -614,7 +638,9 @@ public final class BunkrRepository {
             // The current site signs with credentials: omit. Do not send WebView cookies.
 
             try {
-                JSONObject payload = new JSONObject(connection.execute().body());
+                String body = connection.execute().body();
+                rejectVerificationResponse(body, signUrl);
+                JSONObject payload = new JSONObject(body);
                 String token = payload.optString("token", "");
                 String expiry = payload.optString("ex", "");
                 if (token.isEmpty() || expiry.isEmpty()) {
@@ -622,6 +648,7 @@ public final class BunkrRepository {
                 }
                 return signedMediaUrl(cdnUrl, token, expiry);
             } catch (IOException error) {
+                if (requiresUserAction(error)) throw error;
                 last = error;
             } catch (Exception error) {
                 last = new IOException("Bunkr's signing response was invalid", error);
@@ -646,13 +673,14 @@ public final class BunkrRepository {
             try {
                 Document doc = fetchDocument(context, candidate + pathAndQuery);
                 if (isBlockedPage(doc)) {
-                    last = new IOException("Bunkr page host was blocked");
+                    last = new IOException("Bunkr page host was unavailable");
                     continue;
                 }
                 String loadedOrigin = origin(doc.location());
                 if (isBunkrUrl(loadedOrigin)) preferredPageOrigin = loadedOrigin;
                 return doc;
             } catch (IOException error) {
+                if (requiresUserAction(error)) throw error;
                 last = error;
             }
         }
@@ -674,8 +702,14 @@ public final class BunkrRepository {
                     "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8");
             else applyHeaders(connection, config.requestHeaders);
             addCookies(context, connection, url);
-            try { return connection.get(); }
-            catch (IOException error) { last = error; }
+            try {
+                Document doc = connection.get();
+                if (isVerificationPage(doc)) throw new BrowserVerificationException();
+                return doc;
+            } catch (IOException error) {
+                if (requiresUserAction(error)) throw error;
+                last = error;
+            }
         }
         throw last == null ? new IOException("Bunkr request failed") : last;
     }
@@ -685,6 +719,42 @@ public final class BunkrRepository {
             String cookies = CookieManager.getInstance().getCookie(url);
             if (cookies != null && !cookies.trim().isEmpty()) connection.header("Cookie", cookies);
         } catch (Exception ignored) {
+        }
+    }
+
+    private static final class BrowserVerificationException extends IOException {
+        BrowserVerificationException() {
+            super("Bunkr requires browser verification");
+        }
+    }
+
+    /** A verification/denial is not a transient transport failure. Let the user act. */
+    private static boolean requiresUserAction(IOException error) {
+        if (error instanceof BrowserVerificationException) return true;
+        if (!(error instanceof HttpStatusException)) return false;
+        int status = ((HttpStatusException) error).getStatusCode();
+        return status == 401 || status == 403 || status == 429;
+    }
+
+    private static boolean isVerificationPage(Document doc) {
+        String title = doc.title().toLowerCase(Locale.US).replace('|', ' ')
+                .replaceAll("\\s+", " ");
+        String text = doc.text().toLowerCase(Locale.US);
+        return title.contains("just a moment") || title.contains("attention required")
+                || title.contains("ddos-guard") || title.contains("checkpoint sentinel")
+                || title.contains("access denied")
+                || text.contains("checking your browser before accessing")
+                || text.contains("verify you are human")
+                || text.contains("complete the security check")
+                || text.contains("checkpoint sentinel");
+    }
+
+    private static void rejectVerificationResponse(String body, String address) throws IOException {
+        // Successful JSON can contain arbitrary filenames. Inspect only non-JSON responses.
+        String trimmed = body == null ? "" : body.trim();
+        if (!trimmed.startsWith("{") && !trimmed.startsWith("[")
+                && isVerificationPage(Jsoup.parse(trimmed, address))) {
+            throw new BrowserVerificationException();
         }
     }
 
@@ -763,6 +833,18 @@ public final class BunkrRepository {
         }
         String cover = scriptValue(doc, Pattern.compile("(?is)\\bvideoCoverUrl\\s*=\\s*([\"'])(.*?)\\1"));
         return isUsableArtwork(cover) && !cover.equals(rejectedUrl) ? cover : "";
+    }
+
+    /** The scdn.st pool can reject concurrent file requests. Leave it to the active player. */
+    static boolean shouldSkipMediaWarm(String pageUrl, String mediaUrl) {
+        if (!isBunkrUrl(pageUrl) || mediaUrl == null) return false;
+        try {
+            String mediaHost = new URI(mediaUrl).getHost();
+            return mediaHost != null && (mediaHost.equalsIgnoreCase("scdn.st") ||
+                    mediaHost.toLowerCase(Locale.US).endsWith(".scdn.st"));
+        } catch (Exception ignored) {
+            return false;
+        }
     }
 
     static boolean usableCachedPlayable(String pageUrl, String mediaUrl, long nowSeconds) {
@@ -884,10 +966,16 @@ public final class BunkrRepository {
         if (doc == null) return true;
         String title = doc.title().toLowerCase(Locale.US);
         if (title.contains("just a moment") || title.contains("attention required") ||
-                title.contains("ddos-guard") || title.contains("404") ||
-                title.contains("not found") || title.contains("site unavailable")) return true;
+                title.contains("ddos-guard") || title.contains("checkpoint sentinel") ||
+                title.contains("503 service unavailable") || title.contains("access denied") ||
+                title.contains("404") || title.contains("not found") ||
+                title.contains("site unavailable")) return true;
         String text = doc.text().toLowerCase(Locale.US);
         return text.contains("checking your browser before accessing") ||
+                text.contains("verify you are human") ||
+                text.contains("complete the security check") ||
+                text.contains("checkpoint sentinel") ||
+                text.contains("servers are currently under heavy load") ||
                 text.contains("server under maintenance") ||
                 text.contains("album not found") || text.contains("file not found");
     }

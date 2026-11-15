@@ -276,6 +276,24 @@ public class SearchScopeTest {
         } finally { close(panel); }
     }
 
+    @Test public void unavailableBunkrOffersBrowserWithoutClaimingEveryFailureIsABlock() throws Exception {
+        SearchPanel panel = open();
+        try {
+            QuietBunkr.fail = true;
+            chip(panel, "Bunkr").performClick();
+            panel.field().setText("sample");
+            ReflectionHelpers.callInstanceMethod(panel, "runSearch");
+            await(() -> QuietBunkr.calls.get() > 0);
+            await(() -> ((int) ReflectionHelpers.getField(panel, "pendingSources")) == 0);
+            TextView status = ReflectionHelpers.getField(panel, "status");
+            assertTrue(status.getText().toString().contains("search is unavailable"));
+            assertFalse(status.getText().toString().contains("blocked the search"));
+            assertTrue(status.hasOnClickListeners());
+            chip(panel, "Shows").performClick();
+            assertFalse(status.hasOnClickListeners());
+        } finally { close(panel); }
+    }
+
     @Test public void slowOrFailedBunkrCannotBlockOrOverwriteShows() throws Exception {
         SearchPanel panel = open();
         try {
