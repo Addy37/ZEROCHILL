@@ -83,11 +83,15 @@ final class BunkrPlaybackDiagnostics {
                 && !BunkrRepository.isBalbumsUrl(pageUrl))) return;
         Uri uri = Uri.parse(pageUrl);
         if (!"https".equalsIgnoreCase(uri.getScheme())) return;
+        // Use a full browser first. A Custom Tab can trigger a different Bunkr security
+        // response from the full Chrome session that the user previously verified.
         try {
-            new CustomTabsIntent.Builder().setShowTitle(true).build().launchUrl(activity, uri);
+            Intent browser = new Intent(Intent.ACTION_VIEW, uri);
+            browser.addCategory(Intent.CATEGORY_BROWSABLE);
+            activity.startActivity(browser);
         } catch (Exception error) {
             try {
-                activity.startActivity(new Intent(Intent.ACTION_VIEW, uri));
+                new CustomTabsIntent.Builder().setShowTitle(true).build().launchUrl(activity, uri);
             } catch (Exception ignored) {
                 ZeroChillToast.makeText(activity, "No browser is available.",
                         ZeroChillToast.LENGTH_SHORT).show();
