@@ -65,7 +65,7 @@ final class ReleaseNotesSummary {
             if (!isBullet(line)) continue;
             String clean = cleanMarkdown(line.substring(2));
             if (!clean.isEmpty()) result.add(clean);
-            if (result.size() == 4) break;
+            // What's New scrolls, so never drop additional authored highlights.
         }
         return result;
     }
