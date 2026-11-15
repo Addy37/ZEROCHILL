@@ -1,8 +1,11 @@
 package com.webapp.crazyshit;
 
+import android.app.Activity;
+import android.app.AlertDialog;
 import android.app.Dialog;
 import android.content.ActivityNotFoundException;
 import android.content.Intent;
+import android.content.Context;
 import android.content.res.ColorStateList;
 import android.graphics.Color;
 import android.graphics.Rect;
@@ -29,6 +32,9 @@ import java.util.List;
 final class LandscapeMoreDialog {
     private LandscapeMoreDialog() {
     }
+
+    static final int SUPPORT_GITHUB_VIEW_ID = View.generateViewId();
+    static final int SUPPORT_CASH_APP_VIEW_ID = View.generateViewId();
 
     static void attachSoon(NativeMainActivity activity) {
         if (activity == null || activity.isFinishing()) return;
@@ -187,21 +193,85 @@ final class LandscapeMoreDialog {
 
     private static void showSupportDialog(NativeMainActivity activity) {
         if (activity.isFinishing()) return;
-        new ZeroChillDialog.Builder(activity)
-                .setTitle("Support ZEROCHILL")
-                .setMessage("Enjoy ZEROCHILL? If you'd like to support its development, "
-                        + "choose an option below. Support is optional, and the links "
-                        + "open outside the app.")
-                .setItems(new String[]{"GitHub Sponsors", "Cash App ($SupportZC)"},
-                        (dialog, which) -> openSupportLink(activity,
-                                which == 0
-                                        ? "https://github.com/sponsors/Addy37"
-                                        : "https://cash.app/$SupportZC"))
-                .setNegativeButton("Not now", null)
-                .show();
+        createSupportDialog(activity).show();
     }
 
-    private static void openSupportLink(NativeMainActivity activity, String url) {
+    // AlertDialog cannot display setMessage() and setItems() together: the message
+    // hides the list. Put two selectable rows in a single custom content view.
+    static AlertDialog createSupportDialog(Activity activity) {
+        LinearLayout content = buildSupportContent(activity);
+        AlertDialog dialog = new ZeroChillDialog.Builder(activity)
+                .setTitle("Support ZEROCHILL")
+                .setView(content)
+                .setNegativeButton("Not now", null)
+                .create();
+        content.findViewById(SUPPORT_GITHUB_VIEW_ID).setOnClickListener(view -> {
+            dialog.dismiss();
+            openSupportLink(activity, "https://github.com/sponsors/Addy37");
+        });
+        content.findViewById(SUPPORT_CASH_APP_VIEW_ID).setOnClickListener(view -> {
+            dialog.dismiss();
+            openSupportLink(activity, "https://cash.app/$SupportZC");
+        });
+        return dialog;
+    }
+
+    static LinearLayout buildSupportContent(Context context) {
+        LinearLayout content = new LinearLayout(context);
+        content.setOrientation(LinearLayout.VERTICAL);
+        int horizontal = supportDp(context, 24);
+        content.setPadding(horizontal, supportDp(context, 8), horizontal, supportDp(context, 8));
+
+        TextView message = new TextView(context);
+        message.setText("Enjoy ZEROCHILL? If you'd like to support its development, "
+                + "choose an option below. Support is optional, and the links "
+                + "open outside the app.");
+        message.setTextColor(ZeroChillUi.color(context, R.color.zc_text_primary));
+        message.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16);
+        content.addView(message, new LinearLayout.LayoutParams(-1, -2));
+
+        TextView github = supportChoice(context, "GitHub Sponsors");
+        github.setId(SUPPORT_GITHUB_VIEW_ID);
+        content.addView(github, supportChoiceParams(context));
+
+        TextView cashApp = supportChoice(context, "Cash App ($SupportZC)");
+        cashApp.setId(SUPPORT_CASH_APP_VIEW_ID);
+        content.addView(cashApp, supportChoiceParams(context));
+        return content;
+    }
+
+    private static TextView supportChoice(Context context, String label) {
+        TextView choice = new TextView(context);
+        choice.setText(label);
+        choice.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16);
+        choice.setTextColor(AppearanceTheme.accent(context));
+        choice.setTypeface(null, android.graphics.Typeface.BOLD);
+        choice.setGravity(Gravity.CENTER_VERTICAL);
+        choice.setPadding(supportDp(context, 16), 0, supportDp(context, 16), 0);
+        choice.setMinHeight(supportDp(context, 52));
+        choice.setClickable(true);
+        choice.setFocusable(true);
+        choice.setContentDescription("Open " + label + " outside ZEROCHILL");
+
+        GradientDrawable background = new GradientDrawable();
+        background.setColor(Color.rgb(20, 24, 31));
+        background.setCornerRadius(supportDp(context, 12));
+        background.setStroke(supportDp(context, 1), AppearanceTheme.accent(context));
+        choice.setBackground(background);
+        return choice;
+    }
+
+    private static LinearLayout.LayoutParams supportChoiceParams(Context context) {
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, -2);
+        params.topMargin = supportDp(context, 12);
+        return params;
+    }
+
+    private static int supportDp(Context context, int value) {
+        return Math.round(value * context.getResources().getDisplayMetrics().density);
+    }
+
+    private static void openSupportLink(Activity activity, String url) {
         try {
             activity.startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url)));
         } catch (ActivityNotFoundException | SecurityException ignored) {
