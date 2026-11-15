@@ -24,6 +24,7 @@ jobs:
           import urllib.request
           import urllib.error
           import time
+          from urllib.parse import urlparse
 
           BASE = 'https://bunkrsearch.link'
           # Search path is a candidate, not a verified contract.
@@ -57,7 +58,20 @@ jobs:
                       out['content_type'] = response.headers.get('Content-Type', '')
                       body = response.read(65536)
                       try:
-                          out['json_shape'] = shape(json.loads(body))
+                          payload = json.loads(body)
+                          out['json_shape'] = shape(payload)
+                          if path.startswith('/api/search') and isinstance(payload, dict):
+                              results = payload.get('results', [])
+                              out['result_count'] = len(results) if isinstance(results, list) else -1
+                              if isinstance(results, list) and results and isinstance(results[0], dict):
+                                  out['first_result_fields'] = shape(results[0])
+                                  for field, value in results[0].items():
+                                      if isinstance(value, str) and value.startswith(('https://', 'http://')):
+                                          parsed = urlparse(value)
+                                          out.setdefault('url_fields', {})[field] = {
+                                              'host': parsed.hostname,
+                                              'is_bunkr_album': parsed.path.startswith('/a/')
+                                          }
                       except (ValueError, UnicodeDecodeError):
                           out['html_or_text_response'] = True
                           out['has_search_form'] = b'<form' in body.lower()
