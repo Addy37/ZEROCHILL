@@ -8,7 +8,7 @@ import org.jsoup.Jsoup;
 
 import java.io.IOException;
 import java.net.URLEncoder;
-import java.nio.charset.StandardCharsets;
+import java.io.UnsupportedEncodingException;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -48,9 +48,13 @@ final class BunkrIndexSearch {
 
     static String searchUrl(String query, int page) {
         String safeQuery = query == null ? "" : query.trim();
-        return SEARCH_ENDPOINT + "?q="
-                + URLEncoder.encode(safeQuery, StandardCharsets.UTF_8)
-                + "&page=" + Math.max(1, page);
+        String encoded;
+        try {
+            encoded = URLEncoder.encode(safeQuery, "UTF-8");
+        } catch (UnsupportedEncodingException ignored) {
+            encoded = safeQuery;
+        }
+        return SEARCH_ENDPOINT + "?q=" + encoded + "&page=" + Math.max(1, page);
     }
 
     static List<NativeContentItem> parseResults(String body) throws IOException {
