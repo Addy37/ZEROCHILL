@@ -66,7 +66,8 @@ public final class UpdateCardOverflowTest {
     }
 
     @Test
-    public void shortUpdateStaysCompactInsteadOfFillingTheScreen() {
+    @Config(qualifiers = "w320dp-h800dp-mdpi")
+    public void shortUpdateStaysCompactOnOrdinaryPhoneHeight() {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
         activity.setTheme(R.style.Theme_CrazyShit);
         UpdateCardController controller = new UpdateCardController(activity);
@@ -77,7 +78,7 @@ public final class UpdateCardOverflowTest {
         int width = Math.min(activity.getResources().getDisplayMetrics().widthPixels - dp(activity, 28),
                 dp(activity, 420));
         card.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
-                View.MeasureSpec.makeMeasureSpec(480, View.MeasureSpec.AT_MOST));
+                View.MeasureSpec.makeMeasureSpec(800, View.MeasureSpec.AT_MOST));
         assertTrue(card.getMeasuredHeight() > 0);
         ScrollView scroll = (ScrollView) card.getChildAt(0);
         LinearLayout content = (LinearLayout) scroll.getChildAt(0);
