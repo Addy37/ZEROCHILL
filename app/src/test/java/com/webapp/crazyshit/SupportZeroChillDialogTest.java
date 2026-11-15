@@ -5,9 +5,8 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
 import android.app.Activity;
-import android.app.AlertDialog;
+import android.app.Dialog;
 import android.app.Application;
-import android.content.DialogInterface;
 import android.content.Intent;
 import android.view.View;
 import android.widget.TextView;
@@ -25,7 +24,7 @@ public final class SupportZeroChillDialogTest {
     @Test
     public void showsBothSupportChoicesAlongsideMessageAndDismissAction() {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
-        AlertDialog dialog = LandscapeMoreDialog.createSupportDialog(activity);
+        Dialog dialog = LandscapeMoreDialog.createSupportDialog(activity);
         dialog.show();
 
         TextView github = dialog.findViewById(LandscapeMoreDialog.SUPPORT_GITHUB_VIEW_ID);
@@ -38,15 +37,27 @@ public final class SupportZeroChillDialogTest {
         assertEquals(View.VISIBLE, cashApp.getVisibility());
         assertTrue(github.isClickable());
         assertTrue(cashApp.isClickable());
-        assertNotNull(dialog.getButton(DialogInterface.BUTTON_NEGATIVE));
-        assertEquals("Not now", dialog.getButton(DialogInterface.BUTTON_NEGATIVE).getText().toString());
-        assertEquals(3, LandscapeMoreDialog.buildSupportContent(activity).getChildCount());
+        TextView later = dialog.findViewById(LandscapeMoreDialog.SUPPORT_LATER_VIEW_ID);
+        assertNotNull(later);
+        assertEquals("Not now", later.getText().toString());
+        assertTrue(later.isClickable());
+        assertEquals(7, LandscapeMoreDialog.buildSupportContent(activity).getChildCount());
+    }
+
+    @Test
+    public void dismissChoiceDoesNotOpenExternalDestination() {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        Dialog dialog = LandscapeMoreDialog.createSupportDialog(activity);
+        dialog.show();
+        dialog.findViewById(LandscapeMoreDialog.SUPPORT_LATER_VIEW_ID).performClick();
+        assertTrue(!dialog.isShowing());
+        assertEquals(null, Shadows.shadowOf(activity).getNextStartedActivity());
     }
 
     @Test
     public void githubChoiceOpensCorrectExternalDestination() {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
-        AlertDialog dialog = LandscapeMoreDialog.createSupportDialog(activity);
+        Dialog dialog = LandscapeMoreDialog.createSupportDialog(activity);
         dialog.show();
 
         dialog.findViewById(LandscapeMoreDialog.SUPPORT_GITHUB_VIEW_ID).performClick();
@@ -59,7 +70,7 @@ public final class SupportZeroChillDialogTest {
     @Test
     public void cashAppChoiceOpensCorrectExternalDestination() {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
-        AlertDialog dialog = LandscapeMoreDialog.createSupportDialog(activity);
+        Dialog dialog = LandscapeMoreDialog.createSupportDialog(activity);
         dialog.show();
 
         dialog.findViewById(LandscapeMoreDialog.SUPPORT_CASH_APP_VIEW_ID).performClick();
