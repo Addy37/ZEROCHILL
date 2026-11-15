@@ -144,24 +144,16 @@ final class UpdateCardController {
                 if (parentMode != MeasureSpec.UNSPECIFIED) {
                     maxHeight = Math.min(maxHeight, parentMax);
                 }
-                // Measure natural wrapped content first. Some Android layout
-                // implementations grow a ScrollView to the full AT_MOST bound
-                // even for short text, leaving an unnecessarily tall popup.
                 super.onMeasure(widthMeasureSpec,
-                        MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED));
-                int naturalHeight = getMeasuredHeight();
-                int visibleHeight = Math.min(naturalHeight, maxHeight);
-                super.onMeasure(widthMeasureSpec,
-                        MeasureSpec.makeMeasureSpec(visibleHeight, MeasureSpec.EXACTLY));
+                        MeasureSpec.makeMeasureSpec(maxHeight, MeasureSpec.AT_MOST));
             }
         };
         scroll.setFillViewport(false);
         scroll.setVerticalScrollBarEnabled(true);
         scroll.addView(content, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        // A MATCH_PARENT child makes even a one-line update consume the entire
-        // height cap. WRAP_CONTENT keeps short messages compact, while onMeasure
-        // above still limits long descriptions to a scrolling viewport.
+        // Preserve natural content height on ordinary screens and scroll when
+        // even a short update exceeds the viewport on a very small display.
         card.addView(scroll, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
     }
