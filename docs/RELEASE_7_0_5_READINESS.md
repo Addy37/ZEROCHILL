@@ -109,9 +109,11 @@ used as a completed Release gate or the delivered candidate.
 
 ## Validation and publishing disposition
 
-Validation results and artifact identity are recorded below after the candidate run.
-Until then the release recommendation is **HOLD**. External source outages and the two
-unconfirmed main-screen crashes remain explicit limitations, regardless of passing unit tests.
+The final gate and independent downloaded-artifact review passed. The publishing
+recommendation remains **HOLD**: the two fresh, unconfirmed main-screen crashes need
+affected-device evidence/acceptance or an explicit product risk decision. This is not
+a HOLD solely because an EFukt probe is unavailable in one region. Lint debt, variable
+upstream availability and unverified live/OEM behavior remain explicit limitations.
 
 ### Local validation before final artifact
 
@@ -134,3 +136,101 @@ Bunkr active paths passed in eastus2 with two separately failing Balbums 403s; O
 passed all ten contracts in westus3; EFukt passed all four in centralus; all other
 provider jobs and schema validation passed. No source was disabled and no backend
 change preceded these recoveries.
+
+## Final gate and delivered APK
+
+[Complete gate 43735170508](https://github.com/Addy37/ZEROCHILL/actions/runs/43735170508)
+completed successfully on November 15 at 17:20 UTC. Its full Gradle test/build command
+ran for 51m 58s; no failed unit test was ignored. Every test class ran in a fresh JVM.
+
+| Check | Actual result |
+| --- | --- |
+| Full Debug unit suite | 1,813 tests across 287 classes; 0 failures, 0 errors, 4 existing opt-in skips |
+| Full Release unit suite | 1,813 tests across 287 classes; 0 failures, 0 errors, the same 4 skips |
+| Historical speed/mute class | All 8 cases passed in both complete variants, including `multiTouchAndRealPinchCancelHold` |
+| Debug and Release APK builds | Both passed |
+| CI Debug lint audit | Exited nonzero: 348 errors, 493 warnings, 1 informational item. Retained in full; not claimed clean |
+| Actual APK signature/package/version/backend/source check | Passed against published 7.0.4 |
+| Android 15 in-place upgrade | `adb install -r` passed; package first-install time preserved |
+| Representative data and offline UI | Favorite/Watch Later, history, custom-download metadata and valid local MP4, representative backup file and public download bytes preserved; existing Downloads row/menu, Favorites, account/inbox/settings navigation passed |
+| Captured runtime fatal markers | None: no Java fatal, native fatal signal, ANR marker or OOM in the captured offline session |
+
+The four unchanged opt-in skips in **each** variant were:
+
+- `FapelloLiveSmokeTest.liveSearchCreatorPaginationImagesAndVideos`
+- `RemoteSourceConfigManagerTest.publishedProductionDocumentActivatesInCurrentClient`
+- `SourceExpansionTest.currentClientParsesLiveOnlyHavenSearchAndMenCategory`
+- `BunkrLiveContractTest.recordedFileResolvesToRealMp4BytesAndItsAlbumHasRasterArtwork`
+
+They were not newly disabled. Separate live metadata audits exercised all nine providers,
+including the active Bunkr Index path. These do not replace native live video decoding,
+seek/expiry, live authenticated social flows or physical-device acceptance.
+
+One Robolectric JVM shutdown emitted `DirectoryNotEmptyException` while destroying a
+native-runtime `hyphen-data` temp directory, alongside fixture decoder/Glide shutdown
+messages. This is a remaining **low-severity test-harness cleanup warning**, not a failed
+product assertion or a production Android crash. The original `FileSystemAlreadyExistsException`
+unit setup failure did not recur in either full suite. No exception/assertion was muted.
+
+[Independent artifact review 43740983736](https://github.com/Addy37/ZEROCHILL/actions/runs/43740983736)
+downloaded the completed artifact, checked the archive hash against GitHub's recorded
+digest, extracted exactly one APK, verified its bytes/checksum, reran `apksigner` and
+`aapt2`, and inspected the complete lint/runtime/memory reports without rebuilding.
+The five net extra CI warnings versus the local baseline are online `GradleDependency`
+update notices on unchanged Compose, Firebase, Material, Browser and WebKit declarations;
+the Core update notice also changed its suggested version. One KTX informational suggestion
+is CI-only. No new code-behavior lint finding was identified. Dependency versions were
+preserved rather than introducing unrelated library upgrades into this candidate.
+
+Offline PSS samples were 86,670 KiB initially and 116,032 KiB after navigation; the latter
+also had an extra activity and a WebView. This short, cold/offline sample establishes
+neither a long-session leak nor a memory improvement and does not reproduce the Samsung OOM.
+
+### APK verification record
+
+[Download the signed RC artifact](https://github.com/Addy37/ZEROCHILL/actions/runs/43735170508/artifacts/14172520587)
+(one APK plus complete reports; expires December 15, 2026).
+
+| Field | Verified value |
+| --- | --- |
+| APK | `ZeroChill-7.0.5-release-zerochill-7.0.5-ea55674.apk` |
+| Source branch | `release/zerochill-7.0.5` |
+| Embedded source commit | `ea55674972c047efc2c42aaffc0e60e566c7203e` |
+| Application ID | `com.addy37.crazyshitunofficial` |
+| Version | `7.0.5` / `7000005`, above 7.0.4 / `7000004` |
+| Certificate SHA-256 | `04abf84b3d468cbb1a562dea83b0007e686b2e56018cce911223963faea51356` — matches 7.0.4 |
+| Signature | APK Signature Scheme v2 verification passed; valid for the unchanged min SDK 26 |
+| APK size | 23,203,752 bytes |
+| APK SHA-256 | `8e043cb79545fe40d5b6aa942c5a01af59edb631a43bff89af1d9ace0ab06a01` |
+| Artifact ZIP SHA-256 | `a531e3b92740b7afd5ce08fb5203bb56bb05573aed0a94218fec03f598676124` |
+| Backend | `https://aavjpykssueavbseqdlf.supabase.co`; matching New feedback/config endpoints and enabled public client key |
+| Legacy analytics | Both endpoints empty; V7 traffic enabled |
+| APK byte scan | No retired/test project reference or secret-key marker; expected New URL/endpoints and exact source revision present |
+
+Final PR-only report/workflow-cleanup commits do not change the application tree from
+this tested/signed source. The production signing bundle remains private in Actions;
+no signing material is committed or included in the artifact. No merge, tag, release,
+source-config publish or backend deployment was performed.
+
+## Remaining issues and disposition
+
+- **Potentially high:** unconfirmed Samsung Android 17 OOM and vivo Android 16 framework
+  layout NPE. Need affected-device reproduction/heap/transition evidence; no speculative
+  application or OEM root-cause claim. The separately reproduced Downloads popup path is fixed.
+- **Medium:** inherited lint debt (348 errors), live authenticated social/playback/OEM
+  acceptance not established by synthetic offline tests, and independent Bunkr Index
+  availability/integration-specific permission/rate-limit/SLA unknowns.
+- **Variable external availability:** Balbums discovery/search remain HTTP 403 even when
+  the active Bunkr Index/album/signer paths work. OnlyHaven initially returned 500, then
+  passed all ten contracts in westcentralus, westus3 and eastus without an app change.
+- **Region-limited / not verifiable from runner:** EFukt passed 4/4 in centralus multiple
+  times, then returned no canonical metadata in southcentralus at 17:25 UTC
+  ([audit 43740989772](https://github.com/Addy37/ZEROCHILL/actions/runs/43740989772)).
+  The latter contracts fail visibly; they do not establish a global outage or a patch
+  regression. Preserve its integration and known-good fallback. No restriction bypass.
+- **Low:** remaining Robolectric temp-directory cleanup warning during JVM shutdown.
+
+**Publishing: HOLD.** The signed production-identity RC is technically verified and
+ready for physical review. The unresolved crash risks and acceptance limits above are
+not erased by the green test/build/upgrade gate. Do not merge, tag, publish or deploy
+as part of this pass.
