@@ -41,7 +41,7 @@ HTTP evidence below identifies the checkpoint page; the clearance cookie/token
 binding rules and a verified Chrome results response still require browser-side
 observation. No such browser session was available in this workspace.
 
-Fresh read-only CI evidence from source `07f1a90b`, 2026-11-15 01:41 UTC:
+Fresh read-only CI evidence from source `a48582db`, 2026-11-15 02:17 UTC:
 
 | Request | Observed result |
 |---|---|
@@ -57,7 +57,7 @@ The current checkpoint title contains a separator absent from the original
 fixture; the detector and probe now recognize that exact title even on HTTP 200.
 No source domain, signing route or album-format drift was observed for the
 recorded sample. See the HTTP JSON and live XML in the candidate artifacts:
-https://github.com/Addy37/ZEROCHILL/actions/runs/43663185607/artifacts/14141142176
+https://github.com/Addy37/ZEROCHILL/actions/runs/43664622918/artifacts/14142751301
 
 This task's initial live curl requests failed at the environment proxy's CONNECT
 policy (403 tunnel denial, no origin HTTP response). That is a separate layer from
@@ -80,6 +80,13 @@ Confirmed application defects addressed:
 No challenge solving, browser impersonation, cookie extraction from Chrome,
 verification proxy, automatic CAPTCHA action or alternate index is introduced.
 
+Read-only inspection of the New Zerochill project's active source document on
+2026-11-15 confirmed version 13, Bunkr enabled, and global fallbacks enabled.
+Its complete Bunkr section is structurally identical to the bundled defaults,
+including UA, headers, origins, selectors, signing route and timeouts. There is no
+observed active server-side Bunkr configuration drift. The phone's cached snapshot
+was not read. No configuration or backend data was changed.
+
 ## Playback findings
 
 7.0.4 already implements the modern `jsCDN` + `signUrl` flow. It signs the decoded
@@ -89,6 +96,20 @@ pages can use the legacy JSON download API, including its legacy decryption
 format; page media elements/scripts provide a final direct-source fallback.
 The gallery uses Media3, range-aware Bunkr data sources and the existing MP4
 metadata repair. Those components were not rewritten.
+
+```mermaid
+flowchart LR
+    A[Native file-page request] --> B[Official signer]
+    B --> C[Signed URL and resolved referer]
+    C --> D[Media3 HTTP and range requests]
+    D --> E[Existing MP4 metadata repair]
+    E --> F[Android decoding and first frame]
+    G[Cached URL and referer] -->|expiry and provenance checks| D
+```
+
+`resolve` diagnostics identify failures before C. Player diagnostics identify
+failures in D–F. The live 32-byte contract exercises requests and an MP4 header;
+it does not exercise the complete gallery/player chain above.
 
 Confirmed application defects addressed:
 
@@ -104,7 +125,7 @@ Confirmed application defects addressed:
 - A late resolver exception could display a modal after the viewer swiped to a
   different file. The foreground failure callback now checks the current item.
 - The gallery copied cookies from the Bunkr page/referer into requests to a
-  different media CDN when that CDN had no cookies. Bunkr media requests now use
+  different media CDN when that CDN had no cookies. Bunkr player requests now use
   only cookies scoped by CookieManager to the media URL, matching normal cookie
   domain boundaries. Existing other-provider behavior is retained. This is a
   confirmed request-header defect, not yet proof of the gallery-wide phone cause.
@@ -152,7 +173,7 @@ justifying changes to the shared provider factory here.
   cookies across hosts; media-domain cookies and other-provider behavior remain.
 - Existing gallery/recovery/parser tests and full Debug/Release unit suites run in
   the isolated candidate workflow. Focused regressions must pass before signing.
-  A broader failure keeps the workflow red but permits a private physical-test
+  A broader failure keeps the workflow red but permits a physical-test
   APK after focused success; it does not authorize merge or release.
 
 `tools/bunkr_recovery_probe.py` records response status, redirect chains, selected
@@ -176,6 +197,39 @@ did not run because Gradle stopped on Debug failure. Beta 3 produced no APK.
 Beta 4 runs both variants with `--continue` to retain all results; signing remains
 gated by focused success and the complete reports must be reviewed before merge.
 
+### Final Beta 4 validation
+
+Tested and signed source: `a48582db789057d3034aa8f876b132256619f67f`.
+Workflow: https://github.com/Addy37/ZEROCHILL/actions/runs/43664622918
+
+| Check | Result |
+|---|---|
+| Focused Bunkr/search/gallery regressions | 52 passed |
+| Full Debug | 1,792 tests, zero failures/errors, four skipped |
+| Full Release | 1,792 tests, one failure, zero errors, four skipped |
+| Native resolver/MP4 range/artwork live contract | One passed, zero skips |
+| Build and original certificate verification | Passed |
+| Downloaded APK checksum, package/version, source revision and backend bytes | Passed |
+
+The Release failure is the same unchanged
+`ShitTokSpeedMuteTest.multiTouchAndRealPinchCancelHold` native font-loader
+`FileSystemAlreadyExistsException`, during Robolectric application setup before
+product assertions. The workflow remains **failed**, rather than hiding this
+failure. It nevertheless exports the explicitly requested physical-test beta
+after all focused checks pass. No merge is authorized with this outstanding
+full-suite failure and the source-contract failures.
+
+An isolated local **Release** rerun of all eight `ShitTokSpeedMuteTest` cases also
+passed, with the exact Beta 4 version, source revision and V7 backend build
+configuration verified from generated BuildConfig. The application code was
+unchanged from the signed commit. This supports a full-suite Robolectric resource
+setup/isolation failure; it does not change the failed CI result or waive it.
+
+The source-contract run also remains failed: Bunkr discovery/search return the
+checkpoint 403; EFukt has the same unrelated contract failures seen before this
+repair; the other seven source probes and schema validation passed.
+https://github.com/Addy37/ZEROCHILL/actions/runs/43664628314
+
 ## Compatibility and beta
 
 No source-config document, backend, migration, database, preference format,
@@ -187,10 +241,20 @@ Beta 4: `7.0.4-bunkr-beta.4`, version code `7000007`, separate package
 `com.addy37.crazyshitunofficial.dev`, existing production certificate fingerprint
 `04abf84b3d468cbb1a562dea83b0007e686b2e56018cce911223963faea51356`.
 It uses the existing New Zerochill build routing and disables legacy analytics.
-The filename includes branch and source SHA. Private Actions artifacts only.
+The filename includes branch and source SHA. Actions artifacts only; no release
+asset or production publication.
 The existing isolated workflow triggers on its own file change; subsequent source
 updates require manual dispatch unless this candidate workflow is updated again.
 Remove the one-off candidate workflow before any eventual production merge.
+
+The downloaded APK is `ZeroChill-BunkrBeta-fix-bunkr-2026-11-search-playback-recovery-a48582d.apk`,
+28,710,093 bytes. Its SHA-256 is
+`e5751ff21539fe97c06239a000924bbff97d488666e5518e51e5bdb26930da23`.
+Its actual version name is `7.0.4-bunkr-beta.4-dev`. `apksigner verify` passed;
+the certificate, `.dev` package and code `7000007` were read from the downloaded
+APK. DEX bytes contain the exact signed source revision and New Zerochill URL.
+The archive hashes also match GitHub's artifact digests. Subsequent report-only
+commits do not change this APK's source revision or application code.
 
 ## Phone acceptance still required
 
