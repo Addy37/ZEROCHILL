@@ -9,6 +9,8 @@ import android.os.Looper;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.TextView;
+import android.widget.ScrollView;
+import android.widget.LinearLayout;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -165,6 +167,52 @@ public class WhatsNewTest {
         Intent next = Shadows.shadowOf(activity).getNextStartedActivity();
         assertEquals(AppearanceActivity.class.getName(), next.getComponent().getClassName());
         controller.pause().stop().destroy();
+    }
+
+    @Test public void longWhatsNewCopyScrollsWithoutEllipsisOnSmallViewport() {
+        context.getSharedPreferences("app_prefs", 0).edit()
+                .putBoolean("immersive_motion_enabled", false).commit();
+        ActivityController<Activity> controller = Robolectric.buildActivity(Activity.class).setup();
+        Activity activity = controller.get();
+        assertTrue(WhatsNewDialog.show(activity, false));
+        WhatsNewDialog fragment = (WhatsNewDialog) activity.getFragmentManager()
+                .findFragmentByTag(WhatsNewDialog.TAG);
+        ScrollView scroll = findScroll(fragment.getDialog().getWindow().getDecorView());
+        assertNotNull("What's New must use a vertical ScrollView", scroll);
+        assertTrue("Scroll indicator should be available", scroll.isVerticalScrollBarEnabled());
+
+        LinearLayout content = (LinearLayout) scroll.getChildAt(0);
+        TextView longNote = new TextView(activity);
+        StringBuilder longCopy = new StringBuilder();
+        for (int i = 0; i < 35; i++) {
+            longCopy.append("A full release note about the updated app that stays available. ");
+        }
+        longNote.setText(longCopy.toString());
+        content.addView(longNote, content.getChildCount() - 2);
+
+        int width = 280;
+        int height = 260;
+        scroll.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(height, View.MeasureSpec.EXACTLY));
+        scroll.layout(0, 0, width, height);
+        assertTrue("Long notes should exceed a compact viewport",
+                content.getHeight() > scroll.getHeight());
+        scroll.scrollTo(0, content.getHeight());
+        assertTrue("Users must be able to scroll to the bottom", scroll.getScrollY() > 0);
+        assertEquals(longCopy.toString(), longNote.getText().toString());
+        assertNull("Notes must not use ellipsizing", longNote.getEllipsize());
+        assertNotNull(find(content, "LET’S GO"));
+        assertNotNull(find(content, "Customize appearance"));
+        controller.pause().stop().destroy();
+    }
+
+    private ScrollView findScroll(View view) {
+        if (view instanceof ScrollView) return (ScrollView) view;
+        if (view instanceof ViewGroup) for (int i = 0; i < ((ViewGroup) view).getChildCount(); i++) {
+            ScrollView found = findScroll(((ViewGroup) view).getChildAt(i));
+            if (found != null) return found;
+        }
+        return null;
     }
 
     private View find(View view, String label) {

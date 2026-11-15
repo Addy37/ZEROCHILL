@@ -86,8 +86,6 @@ final class UpdateCardController {
         content.addView(eyebrow, versionParams);
 
         body = text("", 14, AppearanceTheme.secondaryText(activity));
-        body.setMaxLines(7);
-        body.setEllipsize(android.text.TextUtils.TruncateAt.END);
         body.setLineSpacing(dp(2), 1f);
         LinearLayout.LayoutParams bodyParams = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
@@ -135,11 +133,29 @@ final class UpdateCardController {
             return true;
         });
 
-        ScrollView scroll = new ScrollView(activity);
+        // Keep compact states compact, but allow longer descriptions and buttons to
+        // scroll rather than expanding the modal beyond the visible phone screen.
+        ScrollView scroll = new ScrollView(activity) {
+            @Override protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+                int maxHeight = Math.max(1,
+                        Math.round(getResources().getDisplayMetrics().heightPixels * 0.80f));
+                int parentMode = MeasureSpec.getMode(heightMeasureSpec);
+                int parentMax = MeasureSpec.getSize(heightMeasureSpec);
+                if (parentMode != MeasureSpec.UNSPECIFIED) {
+                    maxHeight = Math.min(maxHeight, parentMax);
+                }
+                super.onMeasure(widthMeasureSpec,
+                        MeasureSpec.makeMeasureSpec(maxHeight, MeasureSpec.AT_MOST));
+            }
+        };
         scroll.setFillViewport(false);
-        scroll.setVerticalScrollBarEnabled(false);
-        scroll.addView(content);
-        card.addView(scroll);
+        scroll.setVerticalScrollBarEnabled(true);
+        scroll.addView(content, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        // Preserve natural content height on ordinary screens and scroll when
+        // even a short update exceeds the viewport on a very small display.
+        card.addView(scroll, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
     }
 
     void showAvailable(
