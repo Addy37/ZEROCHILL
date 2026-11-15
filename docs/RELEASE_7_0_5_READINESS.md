@@ -7,12 +7,14 @@ This is a candidate only. No merge, tag, release, remote-config publication or b
 ## Crash investigation
 
 Read the three recent New Zerochill `app_feedback` crash reports and their complete
-available `feedback_messages` diagnostics on November 15. No feedback records were changed.
+available `feedback_messages` diagnostics on November 15. The Downloads report names
+`0651dd726c04a6438496f0600722857660fe1671` (tag v7.0.3); both main-screen
+reports name `c4b9ad45fdacdb28347eb6ba7c369870006b3b23` (tag v7.0.4). No feedback records were changed.
 
 | Report | Evidence and disposition |
 | --- | --- |
 | 7.0.3, Samsung SM-A166U, Android 17, Downloads, November 14 21:21 UTC | Confirmed application reentrancy defect. `showAsDropDown` can synchronously scroll a parent that recycles/detaches the anchor. The app's detach listener dismisses the popup while Android is still positioning it; `invokePopup` then dereferences its cleared decor. A recycling-parent regression on Android 15 reproduces the same framework NPE before the fix. An anchored-window subclass defers dismissal until positioning exits, including exceptional exits. Existing placement, scrolling, menus, callbacks and glass composition are retained. Also reject attached anchors whose activity is finishing/destroyed and clean up failed native/Compose shows. Both pre-fix regression cases failed and pass after the fix. A further injected expired-token/detach regression found two dismissal notifications across Compose/native fallback; one shared per-show notification guard fixes this edge as well. This is a reproduced failure mechanism consistent with the reported stack; no Samsung Android 17 device reproduction is claimed. |
-| 7.0.4, Samsung SM-S936U, Android 17, main, November 15 02:18 UTC | Unconfirmed, potentially high severity. The OOM occurs allocating a framework diagnostic stack in `View.setRequestedFrameRate` during Compose drawing. No heap dump, allocation history or retained-object chain is supplied. Inspected feed queues (24 ahead), stream cache (32), playback pool/allocator, player retirement, activity/adapter/feed close paths and recorded-page RenderNode release. Three player leases and bounded preloads are managed by `ShitTokPlaybackOwner`; this does not establish total heap usage. No frame-rate suppression, broad OOM catch, bitmap rewrite or claimed leak fix is justified. Emulator memory snapshots are observational only and do not reproduce the OEM report or long-session live-media load. |
+| 7.0.4, Samsung SM-S936U, Android 17, main, November 15 02:18 UTC | Unconfirmed, potentially high severity. The OOM occurs allocating a framework diagnostic stack in `View.setRequestedFrameRate` during Compose drawing. No heap dump, allocation history or retained-object chain is supplied. Inspected feed queues (24 ahead), stream cache (32), playback pool/allocator, player retirement (stop, clearMediaItems and pool yield), activity/adapter/feed close paths and recorded-page RenderNode release. Three player leases and bounded preloads are managed by `ShitTokPlaybackOwner`; this does not establish total heap usage. No frame-rate suppression, broad OOM catch, bitmap rewrite or claimed leak fix is justified. Emulator memory snapshots are observational only and do not reproduce the OEM report or long-session live-media load. |
 | 7.0.4, vivo I2214, Android 16, main, November 15 01:20 UTC | Unconfirmed, potentially high severity. Stack contains only `FrameLayout.layoutChildren`/framework traversal; diagnostic session was leaving ShitTok. Inspected main search/overlay removal, retained pager/host pause/resume/close, insets, popup detachment, glass host attachment and owner disposal. No specific app view or reentrant layout callback is established by the trace. Preserve working navigation/animations rather than suppressing framework NPEs. Requires affected-device transition logs or reproduction. |
 
 No crash report is attributed to an OEM defect merely because its top frame is framework code.
@@ -90,11 +92,20 @@ betas with higher codes are not production upgrade targets. Keep application ID
 
 No database, preference, download, favorite, history, backup, account or remote-config
 format changes. No backend writes/deployment or source configuration publication.
-Candidate tooling verifies actual APK identity/signature/DEX backend markers/source SHA
+The New Supabase management API also confirmed the expected project URL and that the compiled publishable client key is present and enabled. Candidate tooling verifies actual APK identity/signature/DEX backend markers/source SHA
 and checksum against the published 7.0.4 artifact. A disposable offline Android 15
 emulator check installs over 7.0.4, checks first-install identity and seeded saved stores,
 backup/download bytes, startup and repeated Downloads/rotation navigation. Synthetic
 emulator data is not physical-phone or live-source acceptance.
+
+The final gate tests/signs `ea55674972c047efc2c42aaffc0e60e566c7203e`, including
+stable wording for OnlyHaven's intermittent availability. Its first step cancelled only
+superseded runs `43731496109` and `43733538152` after checking their exact branch/SHA.
+The cancellation helper had Actions write permission solely for those pinned cancellations;
+repository contents permission remained read-only and no release/deploy step exists.
+The superseded first run completed 1,811 Debug tests (zero failures/errors, four existing
+skips; all eight speed/mute cases passed) but its Release task was cancelled. It is **not**
+used as a completed Release gate or the delivered candidate.
 
 ## Validation and publishing disposition
 
@@ -104,7 +115,8 @@ unconfirmed main-screen crashes remain explicit limitations, regardless of passi
 
 ### Local validation before final artifact
 
-- Final focused release regressions: **35 passed, zero failures/errors/skips**.
+- Final focused Debug regressions: **35 passed, zero failures/errors/skips**.
+- Focused Release regressions on final application source: **43 passed, zero failures/errors/skips**, including all eight speed/mute cases.
 - Separate source/config/OnlyHaven regressions: **17 passed, zero failures/errors/skips**.
 - Offline audit regressions: **3 passed**.
 - Local Debug and Release APK assembly passed. These local builds use the local default
@@ -116,3 +128,9 @@ unconfirmed main-screen crashes remain explicit limitations, regardless of passi
 - Initial local SDK-36 test attempt failed to download the official Android 16 fixture
   because Maven redirects to a host outside the workspace's allowlist. Full suites
   therefore run in Actions with both Java 17 and 21; no SDK annotation/test was removed.
+
+The same source audit repeated at 16:23 UTC ([run 43735175273](https://github.com/Addy37/ZEROCHILL/actions/runs/43735175273)):
+Bunkr active paths passed in eastus2 with two separately failing Balbums 403s; OnlyHaven
+passed all ten contracts in westus3; EFukt passed all four in centralus; all other
+provider jobs and schema validation passed. No source was disabled and no backend
+change preceded these recoveries.

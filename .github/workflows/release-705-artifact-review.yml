@@ -1,0 +1,78 @@
+name: Read-only 7.0.5 artifact review
+on:
+  push:
+    branches: [release/zerochill-7.0.5]
+    paths: [.github/workflows/release-705-artifact-review.yml]
+permissions:
+  contents: read
+  actions: read
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v6
+      - name: Download exactly the completed candidate artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api repos/Addy37/ZEROCHILL/actions/artifacts/14172520587/zip > artifact.zip
+          python3 - <<'PY'
+          import hashlib,zipfile,pathlib
+          assert hashlib.sha256(pathlib.Path('artifact.zip').read_bytes()).hexdigest()=='a531e3b92740b7afd5ce08fb5203bb56bb05573aed0a94218fec03f598676124'
+          with zipfile.ZipFile('artifact.zip') as archive:
+              assert all(not pathlib.PurePosixPath(n).is_absolute() and '..' not in pathlib.PurePosixPath(n).parts for n in archive.namelist())
+              archive.extractall('review')
+          PY
+      - name: Verify bytes and inspect complete reports (no rebuild or backend calls)
+        run: |
+          python3 - <<'PY'
+          import pathlib,json,hashlib,zipfile,xml.etree.ElementTree as E,collections,base64,zlib,re
+          root=pathlib.Path('review')
+          apks=list(root.rglob('*.apk'))
+          assert len(apks)==1
+          apk=apks[0]
+          digest=hashlib.sha256(apk.read_bytes()).hexdigest()
+          assert digest=='8e043cb79545fe40d5b6aa942c5a01af59edb631a43bff89af1d9ace0ab06a01'
+          ident=json.loads(next(root.rglob('verification.json')).read_text())
+          assert ident['sha256']==digest and ident['size_bytes']==apk.stat().st_size
+          assert ident['source_sha']=='ea55674972c047efc2c42aaffc0e60e566c7203e'
+          assert ident['application_id']=='com.addy37.crazyshitunofficial' and ident['version_code']==7000005 and ident['version_name']=='7.0.5'
+          with zipfile.ZipFile(apk) as package:
+              dex=b''
+              for name in package.namelist():
+                  data=package.read(name)
+                  for marker in ('fketutffusxgjxjlckci','xswtgidwhesajavxjbjb','sb_secret_'):
+                      assert marker.encode() not in data and marker.encode('utf-16le') not in data
+                  if name.endswith('.dex'): dex+=data
+              assert ident['source_sha'].encode() in dex
+              assert b'https://aavjpykssueavbseqdlf.supabase.co' in dex
+          print('DOWNLOADED_APK_IDENTITY',json.dumps(ident,sort_keys=True))
+          sums=next(root.rglob('SHA256SUMS.txt')).read_text()
+          assert digest in sums and apk.name in sums
+          print('CHECKSUM_FILE',sums)
+          results=json.loads(next(root.rglob('test-results.json')).read_text())
+          print('FULL_TEST_RESULTS',json.dumps(results,sort_keys=True))
+          for variant,data in results.items():
+              assert data['tests']==1813 and data['failures']==data['errors']==0 and data['skipped']==4
+          report=E.parse(next(root.rglob('lint-results-debug.xml'))).getroot()
+          base=collections.Counter(json.loads(zlib.decompress(base64.b64decode('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')).decode()))
+          def key(i): return json.dumps([i.get('id'),i.get('severity'),i.get('message'),[x.get('file','').split('/app/',1)[-1] for x in i.findall('location')]],ensure_ascii=True)
+          actual=collections.Counter(key(i) for i in report.findall('issue'))
+          print('LINT_COUNTS',dict(collections.Counter(i.get('severity') for i in report.findall('issue'))))
+          for k,count in (actual-base).items(): print('LINT_ADDED_VS_LOCAL_MAIN',count,k)
+          for k,count in (base-actual).items(): print('LINT_REMOVED_VS_LOCAL_MAIN',count,k)
+          print('UPGRADE_RESULT',next(root.rglob('result.json')).read_text())
+          log=next(root.rglob('logcat.txt')).read_text()
+          fatal=[l for l in log.splitlines() if re.search(r'FATAL EXCEPTION|Fatal signal|ANR in |OutOfMemoryError',l)]
+          print('RUNTIME_FATAL_MARKERS',json.dumps(fatal))
+          for name in ('memory-start.txt','memory-end.txt'):
+              print('MEMORY',name,' | '.join(l.strip() for l in next(root.rglob(name)).read_text().splitlines() if 'TOTAL' in l or 'Views:' in l or 'Activities:' in l))
+          PY
+      - name: Independently verify APK signer and manifest
+        run: |
+          BT="$ANDROID_HOME/build-tools/35.0.0"
+          test -x "$BT/apksigner" || sdkmanager 'build-tools;35.0.0'
+          APK="$(find review -name '*.apk' -print -quit)"
+          "$BT/apksigner" verify --verbose --print-certs "$APK"
+          "$BT/aapt2" dump badging "$APK" | head -n 4
