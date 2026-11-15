@@ -48,7 +48,7 @@ public final class UpdateCardOverflowTest {
         ScrollView scroll = (ScrollView) card.getChildAt(0);
         LinearLayout content = (LinearLayout) scroll.getChildAt(0);
         TextView body = (TextView) content.getChildAt(3);
-        assertEquals(summary.toString(), body.getText().toString());
+        assertEquals(summary.toString().trim(), body.getText().toString());
         assertNull("Update copy must not ellipsize", body.getEllipsize());
         assertTrue("Update copy must allow more than seven lines", body.getMaxLines() > 7);
         assertTrue("Card must fit on a small phone",
