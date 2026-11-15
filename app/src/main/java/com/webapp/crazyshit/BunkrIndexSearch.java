@@ -43,7 +43,12 @@ final class BunkrIndexSearch {
         if (response.statusCode() != 200) {
             throw new IOException("Bunkr Index search returned HTTP " + response.statusCode());
         }
-        return parseResults(response.body());
+        return parseResponse(response);
+    }
+
+    static List<NativeContentItem> parseResponse(Connection.Response response) throws IOException {
+        // Keep interrupted reads in searchAlbums' existing checked fallback path.
+        return parseResults(response.readBody());
     }
 
     static String searchUrl(String query, int page) {

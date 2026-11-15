@@ -59,8 +59,12 @@ final class ZeroChillMenu {
     void showAbove() { showInternal(true, true); }
 
     private void showInternal(boolean preferCompose, boolean above) {
-        if (!anchor.isAttachedToWindow() || menu.size() == 0) { dismissed(); return; }
-        if (preferCompose && ZeroChillComposeMenu.show(context, anchor, menu, this::dispatch, this::dismissed, above)) return;
+        if (!AnchoredMenuPopup.canShow(context, anchor) || menu.size() == 0) { dismissed(); return; }
+        boolean[] notified = {false};
+        Runnable notifyDismissed = () -> {
+            if (!notified[0]) { notified[0] = true; dismissed(); }
+        };
+        if (preferCompose && ZeroChillComposeMenu.show(context, anchor, menu, this::dispatch, notifyDismissed, above)) return;
         LinearLayout rows = new LinearLayout(context);
         rows.setOrientation(LinearLayout.VERTICAL);
         int inset = dp(6);
@@ -82,7 +86,7 @@ final class ZeroChillMenu {
         int maxHeight = AnchoredMenuPopup.maxHeight(anchor,
                 Math.min(dp(352), context.getResources().getDisplayMetrics().heightPixels - dp(96)), above);
         int width = Math.min(dp(264), context.getResources().getDisplayMetrics().widthPixels - dp(32));
-        PopupWindow popup = new PopupWindow(scroll, width, -2, true);
+        PopupWindow popup = new AnchoredMenuPopup.Window(scroll, width, -2, true);
         popup.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
         popup.setOutsideTouchable(true);
         View.OnAttachStateChangeListener attachment = new View.OnAttachStateChangeListener() {
@@ -90,10 +94,11 @@ final class ZeroChillMenu {
             @Override public void onViewDetachedFromWindow(View view) { popup.dismiss(); }
         };
         anchor.addOnAttachStateChangeListener(attachment);
-        popup.setOnDismissListener(() -> {
+        Runnable cleanup = () -> {
             anchor.removeOnAttachStateChangeListener(attachment);
-            dismissed();
-        });
+            notifyDismissed.run();
+        };
+        popup.setOnDismissListener(cleanup::run);
         popup.setElevation(dp(12));
         for (int index = 0; index < menu.size(); index++) {
             MenuItem item = menu.getItem(index);
@@ -121,7 +126,10 @@ final class ZeroChillMenu {
         rows.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
                 View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
         popup.setHeight(Math.min(maxHeight, rows.getMeasuredHeight()));
-        AnchoredMenuPopup.show(popup, anchor, above);
+        if (!AnchoredMenuPopup.show(popup, anchor, above)) {
+            popup.dismiss();
+            cleanup.run();
+        }
     }
 
     private int dp(int value) {

@@ -154,8 +154,10 @@ public class WhatsNewTest {
         Activity activity = controller.get();
         assertTrue(WhatsNewDialog.show(activity, false));
         WhatsNewDialog fragment = (WhatsNewDialog) activity.getFragmentManager().findFragmentByTag(WhatsNewDialog.TAG);
-        assertEquals(3, WhatsNewDialog.notes(activity, "7.0-test").size());
-        assertEquals(3, WhatsNewDialog.notes(activity, "6.0.1-dev").size());
+        assertEquals(6, WhatsNewDialog.notes(activity, "7.0-test").size());
+        assertTrue(WhatsNewDialog.notes(activity, "7.0-test").get(0).contains("Bunkr"));
+        assertTrue(WhatsNewDialog.notes(activity, "7.0-test").get(5).contains("server errors"));
+        assertEquals(6, WhatsNewDialog.notes(activity, "6.0.1-dev").size());
         find(fragment.getDialog().getWindow().getDecorView(), "LET’S GO").performClick();
         activity.getFragmentManager().executePendingTransactions();
         assertFalse(WhatsNewPolicy.pending(context));

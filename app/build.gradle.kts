@@ -149,14 +149,16 @@ android {
 
 // Native Robolectric fixtures retain resources across classes. Bound each test worker
 // lifetime as well as its heap; every test still runs. This does not change the APK.
+// A class gets its own JVM: native font ZIP filesystems and interrupted loader
+// threads must not survive into another class (Robolectric 4.16 resource isolation).
 tasks.withType<org.gradle.api.tasks.testing.Test>().configureEach {
     // Robolectric Android 16 fixtures require Java 21; app bytecode still targets Java 17.
     javaLauncher.set(javaToolchains.launcherFor {
         languageVersion.set(JavaLanguageVersion.of(21))
     })
     maxHeapSize = "1g"
-    maxParallelForks = 1
-    forkEvery = 10
+    maxParallelForks = 2
+    forkEvery = 1
 }
 
 kotlin { jvmToolchain(17) }

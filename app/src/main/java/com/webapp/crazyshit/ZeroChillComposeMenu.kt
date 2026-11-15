@@ -68,7 +68,7 @@ internal object ZeroChillComposeMenu {
     @JvmOverloads
     fun show(context: Context, anchor: View, menu: Menu, onSelected: Consumer<MenuItem>, onDismiss: Runnable? = null, above: Boolean = false): Boolean {
         val activity = activityFor(context) ?: return false
-        if (!anchor.isAttachedToWindow) return false
+        if (!AnchoredMenuPopup.canShow(context, anchor)) return false
         val items = visibleItems(menu)
         if (items.isEmpty()) return false
 
@@ -113,7 +113,7 @@ internal object ZeroChillComposeMenu {
                 override fun onViewDetachedFromWindow(view: View) = Unit
             })
         }
-        popup = PopupWindow(glass, width, android.view.ViewGroup.LayoutParams.WRAP_CONTENT, true).apply {
+        popup = AnchoredMenuPopup.Window(glass, width, android.view.ViewGroup.LayoutParams.WRAP_CONTENT, true).apply {
             setBackgroundDrawable(ColorDrawable(AndroidColor.TRANSPARENT))
             isOutsideTouchable = true
             isClippingEnabled = true
@@ -133,14 +133,16 @@ internal object ZeroChillComposeMenu {
             onDismiss?.run()
         }
 
-        return try {
-            AnchoredMenuPopup.show(popup, anchor, above)
-            true
-        } catch (e: android.view.WindowManager.BadTokenException) {
+        val shown = AnchoredMenuPopup.show(popup, anchor, above)
+        if (!shown) {
+            // The native caller owns the final failure notification/fallback.
+            popup.setOnDismissListener(null)
+            popup.dismiss()
             anchor.removeOnAttachStateChangeListener(attachment)
+            content.disposeComposition()
             owner.close()
-            false
         }
+        return shown
     }
 
     private fun activityFor(context: Context): Activity? {
