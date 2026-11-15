@@ -51,6 +51,35 @@ public class AnchoredMenuLifecycleTest {
         }
     }
 
+    @org.robolectric.annotation.Implements(PopupWindow.class)
+    public static class ExpiredWindow extends org.robolectric.shadows.ShadowPopupWindow {
+        static Runnable detach;
+        @org.robolectric.annotation.Implementation
+        protected void invokePopup(android.view.WindowManager.LayoutParams params) {
+            detach.run();
+            throw new android.view.WindowManager.BadTokenException("Window expired while positioning");
+        }
+    }
+
+    @Test @Config(shadows = ExpiredWindow.class)
+    public void reentrantDetachAndExpiredTokenNotifyOnceAcrossComposeAndNativeFallback() {
+        try (var host = Robolectric.buildActivity(Activity.class).setup()) {
+            Activity activity = host.get();
+            FrameLayout root = new FrameLayout(activity);
+            TextView anchor = new TextView(activity);
+            root.addView(anchor, new FrameLayout.LayoutParams(80, 80));
+            activity.setContentView(root);
+            ExpiredWindow.detach = () -> root.removeView(anchor);
+            AtomicInteger dismissed = new AtomicInteger();
+            ZeroChillMenu menu = new ZeroChillMenu(activity, anchor);
+            menu.getMenu().add("Remove download");
+            menu.setOnDismissListener(dismissed::incrementAndGet);
+            menu.show();
+            assertEquals(1, dismissed.get());
+            assertFalse(anchor.isAttachedToWindow());
+        } finally { ExpiredWindow.detach = null; }
+    }
+
     @Test public void finishingHostRejectsBothPresentationsAndNotifiesOnce() {
         for (boolean nativeMenu : new boolean[]{false, true}) {
             try (var host = Robolectric.buildActivity(Activity.class).setup()) {

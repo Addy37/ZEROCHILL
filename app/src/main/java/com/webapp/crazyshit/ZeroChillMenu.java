@@ -60,7 +60,11 @@ final class ZeroChillMenu {
 
     private void showInternal(boolean preferCompose, boolean above) {
         if (!AnchoredMenuPopup.canShow(context, anchor) || menu.size() == 0) { dismissed(); return; }
-        if (preferCompose && ZeroChillComposeMenu.show(context, anchor, menu, this::dispatch, this::dismissed, above)) return;
+        boolean[] notified = {false};
+        Runnable notifyDismissed = () -> {
+            if (!notified[0]) { notified[0] = true; dismissed(); }
+        };
+        if (preferCompose && ZeroChillComposeMenu.show(context, anchor, menu, this::dispatch, notifyDismissed, above)) return;
         LinearLayout rows = new LinearLayout(context);
         rows.setOrientation(LinearLayout.VERTICAL);
         int inset = dp(6);
@@ -90,10 +94,9 @@ final class ZeroChillMenu {
             @Override public void onViewDetachedFromWindow(View view) { popup.dismiss(); }
         };
         anchor.addOnAttachStateChangeListener(attachment);
-        boolean[] notified = {false};
         Runnable cleanup = () -> {
             anchor.removeOnAttachStateChangeListener(attachment);
-            if (!notified[0]) { notified[0] = true; dismissed(); }
+            notifyDismissed.run();
         };
         popup.setOnDismissListener(cleanup::run);
         popup.setElevation(dp(12));

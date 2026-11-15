@@ -65,6 +65,44 @@ public final class SupportZeroChillDialogTest {
     }
 
     @Test
+    @Config(qualifiers = "w320dp-h360dp-xhdpi")
+    public void shortDisplayKeepsSupportChoicesReachableWithLargeText() {
+        org.robolectric.RuntimeEnvironment.setFontScale(2f);
+        try (var host = Robolectric.buildActivity(Activity.class).setup()) {
+            Activity activity = host.get();
+            Dialog dialog = LandscapeMoreDialog.createSupportDialog(activity);
+            dialog.show();
+            View decor = dialog.getWindow().getDecorView();
+            int width = dialog.getWindow().getAttributes().width;
+            int height = activity.getResources().getDisplayMetrics().heightPixels;
+            decor.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
+                    View.MeasureSpec.makeMeasureSpec(height, View.MeasureSpec.EXACTLY));
+            decor.layout(0, 0, width, height);
+            View last = dialog.findViewById(LandscapeMoreDialog.SUPPORT_LATER_VIEW_ID);
+            assertTrue("Test must use enlarged text", ((TextView) last).getTextSize()
+                    > 14f * activity.getResources().getDisplayMetrics().density);
+            last.requestRectangleOnScreen(new android.graphics.Rect(0, 0, last.getWidth(), last.getHeight()), true);
+            android.view.ViewGroup contentRoot = dialog.findViewById(android.R.id.content);
+            View viewport = contentRoot.getChildAt(0);
+            assertTrue("Action must have a real measured height", last.getHeight() > 0);
+            assertTrue("Viewport must have a real measured height", viewport.getHeight() > 0);
+            assertTrue("Viewport must fit the available display", viewport.getHeight() <= height);
+            int[] actionLocation = new int[2], viewportLocation = new int[2];
+            last.getLocationInWindow(actionLocation);
+            viewport.getLocationInWindow(viewportLocation);
+            assertTrue("Action top must be reachable: action=" + actionLocation[1]
+                            + ", viewport=" + viewportLocation[1] + ", scroll=" + viewport.getScrollY(),
+                    actionLocation[1] >= viewportLocation[1]);
+            assertTrue("Action bottom must be reachable: action=" + actionLocation[1]
+                            + "+" + last.getHeight() + ", viewport=" + viewportLocation[1]
+                            + "+" + viewport.getHeight() + ", scroll=" + viewport.getScrollY(),
+                    actionLocation[1] + last.getHeight() <= viewportLocation[1] + viewport.getHeight());
+            last.performClick();
+            assertTrue(!dialog.isShowing());
+        } finally { org.robolectric.RuntimeEnvironment.setFontScale(1f); }
+    }
+
+    @Test
     public void dismissChoiceDoesNotOpenExternalDestination() {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
         Dialog dialog = LandscapeMoreDialog.createSupportDialog(activity);

@@ -28,6 +28,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /** Compact top-right overflow surface used by the app header and OnlyFap hero. */
+@androidx.annotation.OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)
 final class LandscapeMoreDialog {
     private LandscapeMoreDialog() {
     }

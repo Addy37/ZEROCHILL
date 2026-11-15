@@ -1,4 +1,4 @@
-name: ZEROCHILL 7.0.5 signed candidate (no publication)
+name: ZEROCHILL 7.0.5 final signed candidate (no publication)
 on:
   push:
     branches: [release/zerochill-7.0.5]
@@ -93,8 +93,14 @@ jobs:
               rows=[ET.parse(p).getroot() for p in files]
               totals[variant]={k:sum(int(r.get(k,'0')) for r in rows) for k in ('tests','failures','errors','skipped')}
               totals[variant]['classes']=len(rows)
+              totals[variant]['skipped_cases']=[r.get('name') + '.' + case.get('name','')
+                  for r in rows for case in r.findall('testcase') if case.find('skipped') is not None]
               speed=[r for r in rows if r.get('name','').endswith('.ShitTokSpeedMuteTest')]
               totals[variant]['speed_mute']=[dict(r.attrib) for r in speed]
+              if '${{ job.status }}' == 'success':
+                  assert totals[variant]['tests'] >= 1792, 'Full suite unexpectedly incomplete'
+                  assert speed and int(speed[0].get('tests','0')) == 8
+                  assert int(speed[0].get('failures','0')) == int(speed[0].get('errors','0')) == 0
           pathlib.Path('candidate/test-results.json').write_text(json.dumps(totals,indent=2))
           print(json.dumps(totals,indent=2))
           PY
@@ -130,7 +136,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: ZEROCHILL-7.0.5-release-candidate
+          name: ZEROCHILL-7.0.5-FINAL-release-candidate
           path: |
             candidate/
             app/build/reports/tests/

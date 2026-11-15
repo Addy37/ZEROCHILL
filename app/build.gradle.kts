@@ -157,7 +157,7 @@ tasks.withType<org.gradle.api.tasks.testing.Test>().configureEach {
         languageVersion.set(JavaLanguageVersion.of(21))
     })
     maxHeapSize = "1g"
-    maxParallelForks = 1
+    maxParallelForks = 2
     forkEvery = 1
 }
 
