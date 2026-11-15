@@ -79,8 +79,14 @@ public final class UpdateCardOverflowTest {
         card.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
                 View.MeasureSpec.makeMeasureSpec(480, View.MeasureSpec.AT_MOST));
         assertTrue(card.getMeasuredHeight() > 0);
-        assertTrue("Short updates must remain compact", card.getMeasuredHeight()
-                < Math.round(activity.getResources().getDisplayMetrics().heightPixels * 0.80f));
+        ScrollView scroll = (ScrollView) card.getChildAt(0);
+        LinearLayout content = (LinearLayout) scroll.getChildAt(0);
+        int cap = Math.round(activity.getResources().getDisplayMetrics().heightPixels * 0.80f);
+        assertTrue("Short updates must remain compact: card=" + card.getMeasuredHeight()
+                + ", scroll=" + scroll.getMeasuredHeight()
+                + ", content=" + content.getMeasuredHeight()
+                + ", cap=" + cap,
+                card.getMeasuredHeight() < cap);
         controller.detachImmediately();
     }
 
