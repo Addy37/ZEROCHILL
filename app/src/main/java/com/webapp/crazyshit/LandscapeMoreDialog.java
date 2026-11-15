@@ -198,7 +198,26 @@ final class LandscapeMoreDialog {
 
     /** A compact branded surface, not a platform AlertDialog with extra list padding. */
     static Dialog createSupportDialog(Activity activity) {
-        Dialog dialog = new Dialog(activity);
+        Dialog dialog = new Dialog(activity) {
+            @Override protected void onStart() {
+                super.onStart();
+                // Set the final window geometry before the first frame is drawn.
+                // Resizing inside OnShow creates the small position jump on Android 16.
+                Window window = getWindow();
+                if (window == null) return;
+                window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+                window.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
+                WindowManager.LayoutParams attrs = window.getAttributes();
+                attrs.width = Math.min(supportDp(activity, 380),
+                        activity.getResources().getDisplayMetrics().widthPixels
+                                - supportDp(activity, 32));
+                attrs.height = WindowManager.LayoutParams.WRAP_CONTENT;
+                attrs.gravity = Gravity.CENTER;
+                attrs.dimAmount = .72f;
+                attrs.windowAnimations = 0; // No second, platform-owned window transition.
+                window.setAttributes(attrs);
+            }
+        };
         dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
         LinearLayout content = buildSupportContent(activity);
         dialog.setContentView(content);
@@ -215,24 +234,11 @@ final class LandscapeMoreDialog {
         content.findViewById(SUPPORT_LATER_VIEW_ID).setOnClickListener(view -> dialog.dismiss());
 
         dialog.setOnShowListener(ignored -> {
-            Window window = dialog.getWindow();
-            if (window == null) return;
-            window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
-            window.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
-            WindowManager.LayoutParams attrs = window.getAttributes();
-            attrs.width = Math.min(supportDp(activity, 380),
-                    activity.getResources().getDisplayMetrics().widthPixels - supportDp(activity, 32));
-            attrs.height = WindowManager.LayoutParams.WRAP_CONTENT;
-            attrs.gravity = Gravity.CENTER;
-            attrs.dimAmount = .72f;
-            window.setAttributes(attrs);
+            // A short opacity-only entrance keeps a fixed center and fixed size.
             if (ZeroChillMotion.animationsEnabled(activity)) {
-                View decor = window.getDecorView();
-                decor.setAlpha(0f);
-                decor.setScaleX(.96f);
-                decor.setScaleY(.96f);
-                decor.animate().alpha(1f).scaleX(1f).scaleY(1f)
-                        .setDuration(ZeroChillMotion.STANDARD_MS).start();
+                content.setAlpha(0f);
+                content.animate().alpha(1f)
+                        .setDuration(ZeroChillMotion.QUICK_MS).start();
             }
         });
         return dialog;
@@ -457,8 +463,18 @@ final class LandscapeMoreDialog {
         ZeroChillMotion.installPressFeedback(row);
         row.setOnClickListener(v -> {
             v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
-            dialog.dismiss();
-            action.run.run();
+            if ("Support ZEROCHILL".equals(action.title)) {
+                // Avoid overlapping the More menu's exit and Support's entrance.
+                dialog.setOnDismissListener(ignored -> {
+                    if (!activity.isFinishing() && !activity.isDestroyed()) {
+                        activity.getWindow().getDecorView().post(action.run);
+                    }
+                });
+                dialog.dismiss();
+            } else {
+                dialog.dismiss();
+                action.run.run();
+            }
         });
 
         parent.addView(row, new LinearLayout.LayoutParams(-1, dp(activity, 48)));
