@@ -113,6 +113,20 @@ public final class BunkrRepository {
     public List<NativeContentItem> searchAlbums(Context context, String query, int page)
             throws IOException {
         requireEnabled();
+        // The native Bunkr Index API provides album metadata without Balbums' CAPTCHA.
+        // Keep the existing Balbums path as a fallback for an index outage.
+        if (query != null && !query.trim().isEmpty()) {
+            try {
+                return BunkrIndexSearch.search(query, page);
+            } catch (IOException indexError) {
+                try {
+                    return parseAlbumIndex(fetchDocument(context, searchUrl(query, page)));
+                } catch (IOException balbumsError) {
+                    balbumsError.addSuppressed(indexError);
+                    throw balbumsError;
+                }
+            }
+        }
         return parseAlbumIndex(fetchDocument(context, searchUrl(query, page)));
     }
 
