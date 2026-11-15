@@ -64,8 +64,8 @@ final class BunkrPlaybackDiagnostics {
     /** A resolver failure has no player yet, so include a browser fallback on the same dialog. */
     static void show(Activity activity, String report, String pageUrl) {
         if (activity == null || activity.isFinishing() || report == null || report.isEmpty()) return;
-        ZeroChillDialog.Builder dialog = new ZeroChillDialog.Builder(activity)
-                .setTitle("Bunkr playback diagnostics")
+        ZeroChillDialog.Builder dialog = new ZeroChillDialog.Builder(activity);
+        dialog.setTitle("Bunkr playback diagnostics")
                 .setMessage(report)
                 .setPositiveButton("Copy", (ignored, which) -> copy(activity, report))
                 .setNegativeButton("Close", null);
