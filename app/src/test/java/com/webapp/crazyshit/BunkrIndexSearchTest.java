@@ -68,6 +68,18 @@ public final class BunkrIndexSearchTest {
     }
 
     @Test
+    public void interruptedReadReachesTheCheckedFallbackPath() {
+        org.jsoup.Connection.Response response = (org.jsoup.Connection.Response)
+                java.lang.reflect.Proxy.newProxyInstance(org.jsoup.Connection.Response.class.getClassLoader(),
+                        new Class<?>[]{org.jsoup.Connection.Response.class}, (proxy, method, args) -> {
+                            if (method.getName().equals("readBody")) throw new IOException("Interrupted read");
+                            throw new AssertionError("Unexpected response method: " + method.getName());
+                        });
+        IOException error = assertThrows(IOException.class, () -> BunkrIndexSearch.parseResponse(response));
+        assertEquals("Interrupted read", error.getMessage());
+    }
+
+    @Test
     public void encodesQueriesAndBoundsPage() {
         String url = BunkrIndexSearch.searchUrl("  sample + test  ", -5);
         assertTrue(url.startsWith("https://bunkrsearch.link/api/search?q="));
