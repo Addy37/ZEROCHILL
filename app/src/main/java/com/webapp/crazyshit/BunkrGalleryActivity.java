@@ -778,6 +778,7 @@ public final class BunkrGalleryActivity extends Activity {
             String url = cached.isEmpty() ? item.url : cached;
             String referer = isOnlyHavenDirectVideo(item) ? value(item.uploader)
                     : videoReferers.getOrDefault(item.url, item.url);
+            if (BunkrRepository.shouldSkipMediaWarm(item.url, url)) return;
             if (warmedVideos.add(url)) warmIo.execute(() -> {
                 if (withinPreloadWindow(position)) {
                     GalleryVideoCache.warm(
@@ -808,7 +809,9 @@ public final class BunkrGalleryActivity extends Activity {
                     videoReferers.put(item.url, value(resolved.requestReferer));
                     adapter.setResolvedUrl(position, resolved.mediaUrl);
                     BunkrGallerySessionStore.setResolvedUrl(sessionId, item.url, resolved.mediaUrl);
-                    if (withinPreloadWindow(position) && warmedVideos.add(resolved.mediaUrl)) {
+                    if (withinPreloadWindow(position)
+                            && !BunkrRepository.shouldSkipMediaWarm(item.url, resolved.mediaUrl)
+                            && warmedVideos.add(resolved.mediaUrl)) {
                         String referer = value(resolved.requestReferer).isEmpty()
                                 ? item.url : resolved.requestReferer;
                         warmIo.execute(() -> {
@@ -836,7 +839,7 @@ public final class BunkrGalleryActivity extends Activity {
                     if (pendingVideoPosition == position && pager.getCurrentItem() == position) {
                         pendingVideoPosition = -1;
                         adapter.setFailed(position, true);
-                        ZeroChillToast.makeText(this, "Couldn't play this video.", ZeroChillToast.LENGTH_SHORT).show();
+                        showBunkrResolutionFailure(item, error);
                     }
                 });
             }
@@ -896,10 +899,24 @@ public final class BunkrGalleryActivity extends Activity {
                     if (!canApplyMediaResult(requestGeneration)) return;
                     adapter.setLoading(position, false);
                     adapter.setFailed(position, true);
-                    ZeroChillToast.makeText(this, "Couldn't play this video.", ZeroChillToast.LENGTH_SHORT).show();
+                    showBunkrResolutionFailure(item, error);
                 });
             }
         });
+    }
+
+    private void showBunkrResolutionFailure(NativeContentItem item, Throwable error) {
+        if (item == null || !BunkrRepository.isBunkrUrl(item.url)) {
+            ZeroChillToast.makeText(this, "Couldn't play this video.", ZeroChillToast.LENGTH_SHORT).show();
+            return;
+        }
+        BunkrPlaybackDiagnostics.show(
+                this,
+                BunkrPlaybackDiagnostics.report(
+                        "resolve", item.url, "", null, error, Player.STATE_IDLE, 0L
+                ),
+                item.url
+        );
     }
 
     private void startPlayer(
