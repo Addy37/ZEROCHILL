@@ -20,6 +20,7 @@ final class BunkrGallerySessionStore {
         final int currentPage;
         final boolean endReached;
         final Map<String, String> resolvedUrls;
+        final Map<String, String> videoReferers;
         final String cursor;
 
         Snapshot(Session source) {
@@ -30,6 +31,7 @@ final class BunkrGallerySessionStore {
             currentPage = source.currentPage;
             endReached = source.endReached;
             resolvedUrls = new LinkedHashMap<>(source.resolvedUrls);
+            videoReferers = new LinkedHashMap<>(source.videoReferers);
             cursor = source.cursor;
         }
     }
@@ -40,6 +42,7 @@ final class BunkrGallerySessionStore {
         final String creatorQuery;
         final ArrayList<NativeContentItem> items = new ArrayList<>();
         final LinkedHashMap<String, String> resolvedUrls = new LinkedHashMap<>();
+        final LinkedHashMap<String, String> videoReferers = new LinkedHashMap<>();
         int currentPage;
         boolean endReached;
         String cursor = "";
@@ -163,12 +166,25 @@ final class BunkrGallerySessionStore {
         if (session == null || pageUrl == null || pageUrl.isEmpty() ||
                 mediaUrl == null || mediaUrl.isEmpty()) return;
         session.resolvedUrls.put(pageUrl, mediaUrl);
+        session.videoReferers.remove(pageUrl);
+    }
+
+    static synchronized void setResolvedVideo(String id, String pageUrl, String mediaUrl,
+            String requestReferer) {
+        setResolvedUrl(id, pageUrl, mediaUrl);
+        Session session = SESSIONS.get(id);
+        if (session != null && pageUrl != null && !pageUrl.isEmpty()
+                && mediaUrl != null && !mediaUrl.isEmpty()) {
+            session.videoReferers.put(pageUrl,
+                    requestReferer == null || requestReferer.isEmpty() ? pageUrl : requestReferer);
+        }
     }
 
     static synchronized void clearResolvedUrl(String id, String pageUrl) {
         Session session = SESSIONS.get(id);
         if (session == null || pageUrl == null || pageUrl.isEmpty()) return;
         session.resolvedUrls.remove(pageUrl);
+        session.videoReferers.remove(pageUrl);
     }
 
     static synchronized Snapshot snapshot(String id) {

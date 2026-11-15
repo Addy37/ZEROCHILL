@@ -315,6 +315,8 @@ public final class BunkrGalleryActivity extends Activity {
         boolean finishInitialLoader = initialLoading.getVisibility() == View.VISIBLE
                 && snapshot != null && !snapshot.items.isEmpty();
         adapter.replace(filterMedia(snapshot.items), snapshot.resolvedUrls);
+        videoReferers.clear();
+        videoReferers.putAll(snapshot.videoReferers);
         if (finishInitialLoader && adapter.getItemCount() > 0) initialLoading.finish();
         else initialLoading.setVisibility(View.GONE);
         currentPage = snapshot.currentPage;
@@ -773,7 +775,7 @@ public final class BunkrGalleryActivity extends Activity {
 
     private void preloadVideo(int position, NativeContentItem item) {
         if (resolvingMedia.contains(item.url)) return;
-        String cached = adapter.resolvedUrl(position);
+        String cached = cachedVideoUrl(position, item);
         if (!cached.isEmpty() || isOnlyHavenDirectVideo(item)) {
             String url = cached.isEmpty() ? item.url : cached;
             String referer = isOnlyHavenDirectVideo(item) ? value(item.uploader)
@@ -808,7 +810,8 @@ public final class BunkrGalleryActivity extends Activity {
                     resolvingMedia.remove(item.url);
                     videoReferers.put(item.url, value(resolved.requestReferer));
                     adapter.setResolvedUrl(position, resolved.mediaUrl);
-                    BunkrGallerySessionStore.setResolvedUrl(sessionId, item.url, resolved.mediaUrl);
+                    BunkrGallerySessionStore.setResolvedVideo(sessionId, item.url,
+                            resolved.mediaUrl, resolved.requestReferer);
                     if (withinPreloadWindow(position)
                             && !BunkrRepository.shouldSkipMediaWarm(item.url, resolved.mediaUrl)
                             && warmedVideos.add(resolved.mediaUrl)) {
@@ -853,7 +856,7 @@ public final class BunkrGalleryActivity extends Activity {
         }
         playbackRecovery.reset();
         releasePlayer();
-        String cached = adapter.resolvedUrl(position);
+        String cached = cachedVideoUrl(position, item);
         if (!cached.isEmpty()) {
             startPlayer(position, item, cached, videoReferers.getOrDefault(item.url, item.url));
             return;
@@ -882,10 +885,12 @@ public final class BunkrGalleryActivity extends Activity {
                     if (!canApplyMediaResult(requestGeneration) ||
                             pager.getCurrentItem() != position) return;
                     adapter.setResolvedUrl(position, resolved.mediaUrl);
-                    BunkrGallerySessionStore.setResolvedUrl(
+                    videoReferers.put(item.url, value(resolved.requestReferer));
+                    BunkrGallerySessionStore.setResolvedVideo(
                             sessionId,
                             item.url,
-                            resolved.mediaUrl
+                            resolved.mediaUrl,
+                            resolved.requestReferer
                     );
                     startPlayer(
                             position,
@@ -896,13 +901,30 @@ public final class BunkrGalleryActivity extends Activity {
                 });
             } catch (Exception error) {
                 runOnUiThread(() -> {
-                    if (!canApplyMediaResult(requestGeneration)) return;
+                    if (!canApplyMediaResult(requestGeneration)
+                            || pager.getCurrentItem() != position) return;
                     adapter.setLoading(position, false);
                     adapter.setFailed(position, true);
                     showBunkrResolutionFailure(item, error);
                 });
             }
         });
+    }
+
+    private String cachedVideoUrl(int position, NativeContentItem item) {
+        String cached = adapter.resolvedUrl(position);
+        if (!cached.isEmpty() && BunkrRepository.isBunkrUrl(item.url)
+                && !videoReferers.containsKey(item.url)) {
+            adapter.setResolvedUrl(position, "");
+            BunkrGallerySessionStore.clearResolvedUrl(sessionId, item.url);
+            cached = "";
+        }
+        if (cached.isEmpty()) {
+            videoReferers.remove(item.url);
+            if (BunkrRepository.isBunkrUrl(item.url))
+                BunkrGallerySessionStore.clearResolvedUrl(sessionId, item.url);
+        }
+        return cached;
     }
 
     private void showBunkrResolutionFailure(NativeContentItem item, Throwable error) {
@@ -989,6 +1011,7 @@ public final class BunkrGalleryActivity extends Activity {
             public void onPlayerError(PlaybackException error) {
                 if (player != startedPlayer || !canApplyMediaResult(generation)) return;
                 BunkrGallerySessionStore.clearResolvedUrl(sessionId, item.url);
+                videoReferers.remove(item.url);
                 adapter.setResolvedUrl(position, "");
                 if (playbackRecovery.recover(BunkrGalleryActivity.this, error, recovered -> {
                     if (!canApplyMediaResult(generation) || pager.getCurrentItem() != position) return;
@@ -997,6 +1020,9 @@ public final class BunkrGalleryActivity extends Activity {
                         return;
                     }
                     adapter.setResolvedUrl(position, recovered.stream.mediaUrl);
+                    videoReferers.put(item.url, value(recovered.stream.requestReferer));
+                    BunkrGallerySessionStore.setResolvedVideo(sessionId, item.url,
+                            recovered.stream.mediaUrl, recovered.stream.requestReferer);
                     startPlayer(position, item, recovered.stream.mediaUrl, value(recovered.stream.requestReferer));
                     ExoPlayer resumed = player;
                     if (resumed == null) {

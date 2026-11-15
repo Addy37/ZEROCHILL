@@ -1111,7 +1111,7 @@ final class SearchPanel {
         searchState.setContentDescription(searchState.getText());
         if (output.isEmpty()) {
             if (scope == Scope.BUNKR_ALBUMS && pendingSources == 0 && !unavailable.isEmpty()) {
-                status.setText("Bunkr blocked the search request.\nTap here to try the full browser. If you see 403 Access Denied there too, Bunkr is blocking this connection.");
+                status.setText("Bunkr search is unavailable.\nTap here to open this search in your browser. Browser verification may be required; completing it does not guarantee native access.");
                 status.setOnClickListener(v -> BunkrPlaybackDiagnostics.openPage(
                         activity, BunkrRepository.searchUrl(activeQuery)));
             } else {
