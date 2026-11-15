@@ -31,7 +31,8 @@ jobs:
           PATHS = [
               '/about',
               '/api/stats',
-              '/api/search?q=sample&limit=1',
+              '/api/search?q=sample&mode=albums&page=1',
+              '/api/search?q=sample&mode=albums&page=2',
               '/search?q=sample'
           ]
 
@@ -63,8 +64,17 @@ jobs:
                           if path.startswith('/api/search') and isinstance(payload, dict):
                               results = payload.get('results', [])
                               out['result_count'] = len(results) if isinstance(results, list) else -1
+                              for field in ('engine', 'mode', 'page', 'pages', 'total', 'total_exact'):
+                                  out['api_' + field] = payload.get(field)
                               if isinstance(results, list) and results and isinstance(results[0], dict):
                                   out['first_result_fields'] = shape(results[0])
+                                  for field in ('album_slug', 'slug', 'album_name'):
+                                      value = results[0].get(field)
+                                      if isinstance(value, str):
+                                          out[field + '_length'] = len(value)
+                                          if field.endswith('slug'):
+                                              out[field + '_url_safe'] = bool(value) and all(
+                                                  c.isalnum() or c in '_-' for c in value)
                                   for field, value in results[0].items():
                                       if isinstance(value, str) and value.startswith(('https://', 'http://')):
                                           parsed = urlparse(value)
