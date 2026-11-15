@@ -106,9 +106,9 @@ final class LandscapeMoreDialog {
                 ),
                 new Action(
                         R.drawable.ic_more_website,
-                        "Cash App",
-                        "$SupportZC • View profile",
-                        () -> openCashApp(activity)
+                        "Support ZEROCHILL",
+                        "GitHub Sponsors or Cash App",
+                        () -> showSupportDialog(activity)
                 )
         );
 
@@ -185,12 +185,27 @@ final class LandscapeMoreDialog {
                 .start();
     }
 
-    private static void openCashApp(NativeMainActivity activity) {
+    private static void showSupportDialog(NativeMainActivity activity) {
+        if (activity.isFinishing()) return;
+        new ZeroChillDialog.Builder(activity)
+                .setTitle("Support ZEROCHILL")
+                .setMessage("Enjoy ZEROCHILL? If you'd like to support its development, "
+                        + "choose an option below. Support is optional, and the links "
+                        + "open outside the app.")
+                .setItems(new String[]{"GitHub Sponsors", "Cash App ($SupportZC)"},
+                        (dialog, which) -> openSupportLink(activity,
+                                which == 0
+                                        ? "https://github.com/sponsors/Addy37"
+                                        : "https://cash.app/$SupportZC"))
+                .setNegativeButton("Not now", null)
+                .show();
+    }
+
+    private static void openSupportLink(NativeMainActivity activity, String url) {
         try {
-            activity.startActivity(new Intent(Intent.ACTION_VIEW,
-                    Uri.parse("https://cash.app/$SupportZC")));
-        } catch (ActivityNotFoundException ignored) {
-            ZeroChillToast.makeText(activity, "Couldn't open Cash App.",
+            activity.startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url)));
+        } catch (ActivityNotFoundException | SecurityException ignored) {
+            ZeroChillToast.makeText(activity, "Couldn't open support link.",
                     ZeroChillToast.LENGTH_SHORT).show();
         }
     }
