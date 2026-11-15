@@ -95,6 +95,39 @@ public class BunkrResolutionTest {
                 new BunkrRepository().resolvePlayable(null, PAGE).mediaUrl);
     }
 
+    @Test public void browserChallengeIsNotReportedAsNoSearchResults() {
+        Wire.html = "<html><head><title>Checkpoint Sentinel</title></head><body>"
+                + "Verify you are human before continuing.</body></html>";
+        assertThrows(IOException.class, () ->
+                new BunkrRepository().searchAlbums(null, "example", 1));
+    }
+
+    @Test public void maintenance503PageIsNotReportedAsNoSearchResults() {
+        Wire.html = "<html><head><title>503 Service unavailable | BUNKR</title></head><body>"
+                + "Our servers are currently under heavy load.</body></html>";
+        assertThrows(IOException.class, () ->
+                new BunkrRepository().searchAlbums(null, "example", 1));
+    }
+
+    @Test public void ordinaryEmptySearchCanStillReturnZeroResults() throws Exception {
+        Wire.html = "<html><head><title>Bunkr Albums</title></head>"
+                + "<body><p>No matches found</p></body></html>";
+        assertTrue(new BunkrRepository().searchAlbums(null, "example", 1).isEmpty());
+    }
+
+    @Test public void constrainedBunkrCdnIsNotPrewarmed() {
+        assertTrue(BunkrRepository.shouldSkipMediaWarm(PAGE,
+                "https://s1.scdn.st/storage/video.mp4?token=abc"));
+        assertTrue(BunkrRepository.shouldSkipMediaWarm(PAGE,
+                "https://scdn.st/file.mp4"));
+        assertFalse(BunkrRepository.shouldSkipMediaWarm(PAGE,
+                "https://c1.cdn.cr/storage/video.mp4?token=abc"));
+        assertFalse(BunkrRepository.shouldSkipMediaWarm(
+                "https://fapello.com/creator/123", "https://s1.scdn.st/storage/video.mp4"));
+        assertFalse(BunkrRepository.shouldSkipMediaWarm(PAGE,
+                "https://malicious-scdn.st/media.mp4"));
+    }
+
     @Test public void cachedSignedStreamsExpireBeforeReuseButLegacyAndOtherSourcesRemain() {
         String signed = "https://media.cdn.cr/movie.mp4?token=abc&ex=2000000000";
         assertTrue(BunkrRepository.usableCachedPlayable(PAGE, signed, 1999999900L));
