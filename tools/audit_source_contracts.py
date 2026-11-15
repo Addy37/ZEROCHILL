@@ -13,6 +13,8 @@ import re
 import sys
 import urllib.parse as url
 import urllib.request
+import urllib.error
+from datetime import datetime, timezone
 
 from refresh_onlyfap_creator_index import FapelloCreatorParser, fapello_model_slug
 
@@ -21,6 +23,7 @@ CONFIG = json.loads((ROOT / 'app/src/main/assets/source_config_defaults.json').r
 MAX_RESPONSE = 2 * 1024 * 1024
 RESULTS = []
 CACHE = {}
+HTTP_EVIDENCE = []
 
 
 def require(condition, reason):
@@ -39,7 +42,17 @@ def fetch(address, source='', ajax=False, head=False, headers_override=None):
     headers['Accept-Encoding'] = 'identity'
     headers['Referer'] = config.get('refererOverride') or config.get('baseUrl') or config.get('indexUrl') or address
     headers.update(headers_override or {})
-    with urllib.request.urlopen(urllib.request.Request(address, headers=headers, method='HEAD' if head else 'GET'), timeout=12) as response:
+    request = urllib.request.Request(address, headers=headers, method='HEAD' if head else 'GET')
+    try:
+        response = urllib.request.urlopen(request, timeout=12)
+    except urllib.error.HTTPError as error:
+        HTTP_EVIDENCE.append({'url': address, 'status': error.code,
+                              'content_type': error.headers.get('Content-Type', '')})
+        raise
+    with response:
+        evidence = {'url': address, 'final_url': response.url, 'status': response.status,
+                    'content_type': response.headers.get('Content-Type', '')}
+        HTTP_EVIDENCE.append(evidence)
         require(response.status == 200, f'HTTP {response.status}')
         if head:
             result = response.headers.get('Content-Type', '')
@@ -47,8 +60,10 @@ def fetch(address, source='', ajax=False, head=False, headers_override=None):
             payload = response.read(MAX_RESPONSE + 1)
             require(len(payload) <= MAX_RESPONSE, 'metadata exceeded 2 MB cap')
             result = payload.decode('utf8', errors='replace')
+            title = re.search(r'<title[^>]*>(.*?)</title>', result, re.I | re.S)
+            if title: evidence['title'] = html.unescape(title.group(1)).strip()[:160]
             lower = result.lower()
-            require(not any(marker in lower for marker in ('site unavailable', 'cf-chl-', 'checking your browser', 'verify you are human', 'just a moment...')), 'upstream unavailable/challenge response')
+            require(not any(marker in lower for marker in ('site unavailable', 'cf-chl-', 'checking your browser', 'verify you are human', 'just a moment...', 'checkpoint | sentinel')), 'upstream unavailable/challenge response')
     CACHE[key] = result
     return result
 
@@ -267,6 +282,23 @@ def bunkr():
     source, base = 'bunkr', CONFIG['bunkr']['indexUrl']
     albums, media_links = set(), set()
     parse = lambda body, address: {link for link in Metadata(body, address).links if re.search(r'/a/[a-zA-Z0-9_-]+', url.urlsplit(link).path)}
+    def index_search():
+        batches, hit_batches = [], []
+        for page in (1, 2):
+            data = json.loads(fetch(f'https://bunkrsearch.link/api/search?q=anna&page={page}', source,
+                                    headers_override={'Accept': 'application/json'}))
+            require(data.get('page') == page and isinstance(data.get('results'), list),
+                    'Bunkr Index page/results envelope invalid')
+            grouped = {f'https://bunkr.cr/a/{row["album_slug"]}' for row in data['results'][:100]
+                       if isinstance(row, dict) and re.fullmatch(r'[A-Za-z0-9_-]{2,128}',
+                                                                str(row.get('album_slug', '')))}
+            require(bool(grouped), 'Bunkr Index returned no canonical albums')
+            batches.append(grouped)
+            hit_batches.append({json.dumps(row, sort_keys=True) for row in data['results']})
+        # File pages can share albums. New file hits must still advance.
+        require(bool(hit_batches[1] - hit_batches[0]), 'Bunkr Index repeated first-page file hits')
+        albums.update(batches[0])
+    run(source, 'bunkr-index/active-search/pages-1-2', index_search)
     def listing():
         albums.update(pages(source, base, base + '?page=2', parse))
     run(source, 'balbums/discover/pagination', listing)
@@ -430,7 +462,10 @@ def main():
     args = parser.parse_args()
     selected = [args.source or 'onlyhaven'] if args.source or args.onlyhaven else list(checks)
     for source in selected: checks[source]()
-    if args.output: args.output.write_text(json.dumps(RESULTS, indent=2) + '\n')
+    if args.output:
+        args.output.write_text(json.dumps({'captured_at': datetime.now(timezone.utc).isoformat(),
+            'environment': 'runner region must be recorded alongside this report; one region is not global health',
+            'contracts': RESULTS, 'http': HTTP_EVIDENCE}, indent=2) + '\n')
     failures = [result for result in RESULTS if result['status'] != 'PASS']
     print(f'{len(RESULTS) - len(failures)}/{len(RESULTS)} contracts passed; no sources modified.')
     return bool(failures)

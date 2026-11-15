@@ -1,0 +1,46 @@
+name: 7.0.5 read-only investigation
+on:
+  push:
+    branches: [release/zerochill-7.0.5]
+    paths: [.github/workflows/release-705-probe.yml]
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v6
+      - name: Read-only metadata contracts (retain failures)
+        run: |
+          mkdir evidence
+          failed=0
+          for source in bunkr efukt onlyhaven; do
+            python3 tools/audit_source_contracts.py --source "$source" --output "evidence/$source.json" || failed=1
+          done
+          echo "Source contract failures present: $failed" | tee evidence/outcome.txt
+          python3 - <<'PY'
+          import urllib.request,json,pathlib,os
+          try:
+              with urllib.request.urlopen('https://ipinfo.io/json',timeout=10) as r: data=json.load(r)
+              location={k:data.get(k,'unknown') for k in ('country','region','city','org')}
+          except Exception as e: location={'region':'unknown','reason':str(e)}
+          location['runner']=os.environ.get('RUNNER_NAME','unknown')
+          pathlib.Path('evidence/runner-region.json').write_text(json.dumps(location,indent=2))
+          PY
+      - name: Cache missing official Android 16 Robolectric fixture for local validation
+        run: |
+          base=https://repo.maven.apache.org/maven2/org/robolectric/android-all-instrumented/16-robolectric-13921718-i7/android-all-instrumented-16-robolectric-13921718-i7
+          curl -fL --retry 2 "$base.jar" -o evidence/android-all-instrumented-16-robolectric-13921718-i7.jar
+          curl -fL "$base.jar.sha512" -o evidence/fixture.sha512
+          python3 - <<'PY'
+          import hashlib,pathlib
+          p=pathlib.Path('evidence')
+          assert hashlib.sha512(next(p.glob('*.jar')).read_bytes()).hexdigest()==(p/'fixture.sha512').read_text().strip()
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: release-705-investigation
+          path: evidence/
+          retention-days: 7
