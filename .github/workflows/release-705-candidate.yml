@@ -1,0 +1,140 @@
+name: ZEROCHILL 7.0.5 signed candidate (no publication)
+on:
+  push:
+    branches: [release/zerochill-7.0.5]
+    paths: [.github/workflows/release-705-candidate.yml]
+permissions:
+  contents: read
+jobs:
+  candidate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 100
+    env:
+      ZEROCHILL_V7_TRAFFIC: 'true'
+      SUPABASE_URL: https://aavjpykssueavbseqdlf.supabase.co
+      SUPABASE_PUBLISHABLE_KEY: sb_publishable_oSQALszxzeeHxDwEeclucA_5dGEpOLs
+      FEEDBACK_ANON_KEY: sb_publishable_oSQALszxzeeHxDwEeclucA_5dGEpOLs
+      FEEDBACK_ENDPOINT: https://aavjpykssueavbseqdlf.supabase.co/functions/v1/dynamic-api
+      SOURCE_CONFIG_ENDPOINT: https://aavjpykssueavbseqdlf.supabase.co/functions/v1/app-config
+      ANALYTICS_ENDPOINT: ''
+      ANALYTICS_V2_ENDPOINT: ''
+      APP_VERSION_CODE: '7000005'
+      APP_VERSION_NAME: '7.0.5'
+      ZEROCHILL_SOURCE_SHA: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Check approved baseline and version
+        run: |
+          git merge-base --is-ancestor 3d69cfa1d67b20cce31b2563c80e2cf775e0a651 HEAD
+          test "$(cat RELEASE_VERSION)" = '7.0.5'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: |
+            17
+            21
+      - uses: android-actions/setup-android@v4
+        with:
+          packages: platform-tools
+      - run: sdkmanager 'platforms;android-35' 'platforms;android-36' 'build-tools;35.0.0'
+      - uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: '8.11.1'
+          cache-provider: basic
+      - name: Offline source audit regression tests
+        run: python3 -m unittest discover -s tools -p test_audit_source_contracts.py
+      - name: Restore original app signing identity
+        env:
+          SIGNING_BUNDLE: ${{ secrets.ANDROID_SIGNING_BUNDLE }}
+        run: |
+          python3 - <<'PY'
+          import base64, json, os, pathlib
+          raw = os.environ.get('SIGNING_BUNDLE', '')
+          if not raw:
+              raise SystemExit('Missing ANDROID_SIGNING_BUNDLE')
+          data = json.loads(raw.replace('\r','').replace('\n',''))
+          for key in ('keystore_base64','store_password','key_alias','key_password'):
+              if not data.get(key):
+                  raise SystemExit('Missing signing item: ' + key)
+          for key in ('store_password','key_alias','key_password'):
+              print('::add-mask::' + data[key])
+          path = pathlib.Path(os.environ['RUNNER_TEMP']) / 'zerochill-7-release.jks'
+          path.write_bytes(base64.b64decode(data['keystore_base64']))
+          path.chmod(0o600)
+          with open(os.environ['GITHUB_ENV'],'a') as out:
+              for key, value in {
+                  'ANDROID_KEYSTORE_PATH': str(path),
+                  'ANDROID_KEYSTORE_PASSWORD': data['store_password'],
+                  'ANDROID_KEY_ALIAS': data['key_alias'],
+                  'ANDROID_KEY_PASSWORD': data['key_password']
+              }.items():
+                  out.write(key + '=' + value + '\n')
+          PY
+
+      - name: Full Debug and Release suites and Android builds
+        run: |
+          gradle --no-daemon --continue -Porg.gradle.java.installations.fromEnv=JAVA_HOME_17_X64,JAVA_HOME_21_X64 \
+            :app:testDebugUnitTest :app:testReleaseUnitTest :app:assembleDebug :app:assembleRelease
+      - name: Lint Debug audit (existing debt remains visible)
+        id: lint
+        continue-on-error: true
+        run: gradle --no-daemon :app:lintDebug
+      - name: Collect exact test counts and required regression outcomes
+        if: always()
+        run: |
+          mkdir -p candidate
+          python3 - <<'PY'
+          import pathlib,json,xml.etree.ElementTree as ET
+          totals={}
+          for variant in ('Debug','Release'):
+              files=list(pathlib.Path(f'app/build/test-results/test{variant}UnitTest').glob('TEST-*.xml'))
+              rows=[ET.parse(p).getroot() for p in files]
+              totals[variant]={k:sum(int(r.get(k,'0')) for r in rows) for k in ('tests','failures','errors','skipped')}
+              totals[variant]['classes']=len(rows)
+              speed=[r for r in rows if r.get('name','').endswith('.ShitTokSpeedMuteTest')]
+              totals[variant]['speed_mute']=[dict(r.attrib) for r in speed]
+          pathlib.Path('candidate/test-results.json').write_text(json.dumps(totals,indent=2))
+          print(json.dumps(totals,indent=2))
+          PY
+          echo 'Lint outcome: ${{ steps.lint.outcome }}' > candidate/lint-outcome.txt
+      - name: Verify signed candidate against published 7.0.4
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p old-stable
+          gh release download v7.0.4 --pattern ZeroChill.apk --dir old-stable
+          OUTPUT="candidate/ZeroChill-7.0.5-${GITHUB_REF_NAME//\//-}-${GITHUB_SHA:0:7}.apk"
+          cp app/build/outputs/apk/release/app-release.apk "$OUTPUT"
+          python3 tools/verify_release_candidate.py --apk "$OUTPUT" --previous old-stable/ZeroChill.apk \
+            --build-tools "$ANDROID_HOME/build-tools/35.0.0" --source-sha "$GITHUB_SHA" --output candidate/verification.json
+          (cd candidate && sha256sum *.apk > SHA256SUMS.txt)
+      - name: Enable emulator acceleration
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Verify offline in-place update and representative existing data
+        uses: ReactiveCircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          script: python3 tools/verify_release_upgrade.py --previous old-stable/ZeroChill.apk --candidate app/build/outputs/apk/release/app-release.apk --output candidate/upgrade
+      - name: Remove signing material
+        if: always()
+        run: rm -f "$ANDROID_KEYSTORE_PATH"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ZEROCHILL-7.0.5-release-candidate
+          path: |
+            candidate/
+            app/build/reports/tests/
+            app/build/test-results/
+            app/build/reports/lint-results-debug.*
+          retention-days: 30
+          if-no-files-found: error

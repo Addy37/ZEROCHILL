@@ -1,5 +1,15 @@
 # ZEROCHILL build lineage
 
+## 7.0.5 release-readiness candidate (issue #446)
+
+The user explicitly selected latest production `main`, freshly fetched at
+`3d69cfa1d67b20cce31b2563c80e2cf775e0a651`, superseding historical candidate
+baselines below. `release/zerochill-7.0.5` descends from that complete approved
+lineage. Target `7.0.5` (`7000005`) preserves production package/signing identity
+and New Zerochill routing. See `docs/RELEASE_7_0_5_READINESS.md` for crash/source
+evidence, checks, candidate source SHA and remaining release risks. No merge, tag,
+public release, deployment or integration-branch update is authorized by this pass.
+
 This file identifies the current approved ZEROCHILL product baseline for test APKs and future feature work.
 
 ## Phase 4 visual consistency candidate

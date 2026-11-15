@@ -1,19 +1,19 @@
-# ZEROCHILL 7.0.4
-
-This small update adds clear account instructions for people updating from an older ZEROCHILL installation. It keeps the New Zerochill backend and the features introduced in 7.0.3.
+# ZEROCHILL 7.0.5
 
 ## What's new
 
-- Added a one-time account migration message after **What's New** for eligible existing users who are not yet signed in to New Zerochill.
-- Explained that older ZEROCHILL accounts cannot sign in to the new system. Create a new account to use comments, likes, and messages; you can use the same email address.
-- Added **Create New Account**, **I already have a 7.0 account**, and **Maybe Later** options.
-- Skip the notice for fresh installations and people already signed into New Zerochill.
-- Removed the obsolete 4.3-era ZEROCHILL ID upgrade prompt from the 7.x upgrade path.
+- Restored native Bunkr album search through the independent Bunkr Index service, with the existing Balbums and browser fallbacks retained. Search queries are sent directly to that independent service.
+- Added the animated OLED **Support ZEROCHILL** dialog with GitHub Sponsors and Cash App links.
+- Made **What's New** and **Update Available** scroll when needed so long notes and large text remain readable.
+- Fixed a Downloads action-menu crash when a scrolling list detaches the menu anchor, and reject menus during activity teardown.
+- Kept Bunkr response-read failures in the existing fallback path.
+
+## Known source limitations
+
+Balbums may require browser verification. OnlyHaven's creator/category APIs currently return server errors; its HTML fallbacks remain available but cannot guarantee results during the outage. EFukt availability varies by region. These sources remain enabled.
 
 ## Updating
 
-Install **ZeroChill.apk** over your existing ZEROCHILL app. **Do not uninstall or clear app data** before updating.
+Install **ZeroChill.apk** over your existing ZEROCHILL app. **Do not uninstall or clear app data** before updating. Your on-device favorites, history, downloads, backups, and settings are retained during a normal in-place update.
 
-Your on-device favorites, history, downloads, and settings remain available during a normal in-place update. Accounts, comments, and direct messages from the retired social backend do not transfer. Creating a new ZEROCHILL account is needed for social features, but you can browse without signing in.
-
-This update does not change the backend, content providers, application ID, or signing identity. The separate private ZEROCHILL Admin app is not bundled with the user APK.
+The application ID, signing identity, New Zerochill backend and account behavior are unchanged. Older accounts from the retired social backend still require a new ZEROCHILL account; browsing does not require signing in. This candidate does not claim to resolve the unconfirmed Android/OEM main-screen memory and layout crash reports.
