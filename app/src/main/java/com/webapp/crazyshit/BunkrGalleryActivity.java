@@ -1064,7 +1064,8 @@ public final class BunkrGalleryActivity extends Activity {
         }
         try {
             String cookies = CookieManager.getInstance().getCookie(mediaUrl);
-            if ((cookies == null || cookies.isEmpty()) && !referer.isEmpty()) {
+            if ((cookies == null || cookies.isEmpty()) && !referer.isEmpty()
+                    && !BunkrRepository.isBunkrUrl(referer)) {
                 cookies = CookieManager.getInstance().getCookie(referer);
             }
             if (cookies != null && !cookies.isEmpty()) headers.put("Cookie", cookies);

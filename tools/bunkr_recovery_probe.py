@@ -66,13 +66,13 @@ def fetch(address, referer, extra=None, limit=CAP):
                                         for source in re.findall(r'''<script[^>]*src=["']([^"']+)''', text, re.I)[:12]]
         if response.status not in (200, 206):
             record['verification_detected'] = bool(re.search(
-                b'checkpoint sentinel|verify you are human|checking your browser|access denied', body, re.I))
+                rb'checkpoint\s*(?:\|\s*)?sentinel|verify you are human|checking your browser|access denied', body, re.I))
             return None
         if limit == 32:
             record['media_range_pass'] = len(body) == 32 and body[4:8] == b'ftyp'
         else:
             record['verification_detected'] = bool(re.search(
-                b'checkpoint sentinel|verify you are human|checking your browser|access denied', body, re.I))
+                rb'checkpoint\s*(?:\|\s*)?sentinel|verify you are human|checking your browser|access denied', body, re.I))
             if record['verification_detected']:
                 return None
         return body

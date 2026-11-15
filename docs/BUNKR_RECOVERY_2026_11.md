@@ -13,6 +13,11 @@ are the acceptance criteria. Browser fallback, successful unit tests, an MP4
 range response and a signed APK do not establish those criteria. Keep the PR
 draft. No merge, tag, release, production deployment or publication is authorized.
 
+The user reports **all** Bunkr gallery videos fail on their phone. This must be
+treated as a gallery-wide/device-path failure, not an isolated damaged file.
+A successful CI request for one recorded file does not explain or supersede that
+report. The pre-player versus player diagnostic phase is needed on the phone.
+
 ## Search findings
 
 The native route is Balbums `?search=<encoded query>&mode=broad&page=<n>`.
@@ -31,9 +36,28 @@ https://github.com/Addy37/ZEROCHILL/actions/runs/43661658009/job/132652104696
 The user's Chrome success after verification is consistent with browser security
 state that an unauthenticated HTTP client lacks. External Chrome/Custom Tabs and
 Android WebView/Jsoup do not provide this app a shared cookie jar. Opening Chrome
-is therefore a legitimate fallback, not native verification recovery. The precise
-current verification vendor, response markup, redirects and binding rules still
-require a live response/browser comparison; fixture text is not proof of them.
+is therefore a legitimate fallback, not native verification recovery. The current
+HTTP evidence below identifies the checkpoint page; the clearance cookie/token
+binding rules and a verified Chrome results response still require browser-side
+observation. No such browser session was available in this workspace.
+
+Fresh read-only CI evidence from source `07f1a90b`, 2026-11-15 01:41 UTC:
+
+| Request | Observed result |
+|---|---|
+| Balbums index and search | 403, HTML, title `Checkpoint \| Sentinel`, Server `cloudflare`, no redirect |
+| Recorded Bunkr file page | 200, modern `jsCDN`, `signUrl` and legacy file ID present |
+| Official `glb-apisign.cdn.cr/sign?path=...` | 200 JSON containing `token` and `ex` |
+| Signed `c3mb-b.cdn.cr` range | 206, 32 bytes, valid MP4 `ftyp`, Content-Range `bytes 0-31/492967736`, application/octet-stream |
+| Recorded album page | 200, `window.albumFiles` and file links present |
+
+The native JVM resolver/MP4-range/album-artwork contract ran one test with zero
+skips and passed. This is not Android Media3 extraction, decoding or first frame.
+The current checkpoint title contains a separator absent from the original
+fixture; the detector and probe now recognize that exact title even on HTTP 200.
+No source domain, signing route or album-format drift was observed for the
+recorded sample. See the HTTP JSON and live XML in the candidate artifacts:
+https://github.com/Addy37/ZEROCHILL/actions/runs/43663185607/artifacts/14141142176
 
 This task's initial live curl requests failed at the environment proxy's CONNECT
 policy (403 tunnel denial, no origin HTTP response). That is a separate layer from
@@ -79,6 +103,11 @@ Confirmed application defects addressed:
   recovery and gallery restoration. Old URL-only Bunkr entries are re-resolved.
 - A late resolver exception could display a modal after the viewer swiped to a
   different file. The foreground failure callback now checks the current item.
+- The gallery copied cookies from the Bunkr page/referer into requests to a
+  different media CDN when that CDN had no cookies. Bunkr media requests now use
+  only cookies scoped by CookieManager to the media URL, matching normal cookie
+  domain boundaries. Existing other-provider behavior is retained. This is a
+  confirmed request-header defect, not yet proof of the gallery-wide phone cause.
 
 The existing pager already rejects signed URLs within 30 seconds of expiry.
 Tests now exercise this through the actual adapter, including preservation of
@@ -87,7 +116,12 @@ Disk session state never persisted resolved URLs; process recreation resolves
 fresh URLs instead of persisting credentials or signing tokens.
 
 The prior PR's scdn.st warm guard is retained as a bounded load mitigation. No
-live concurrent-load evidence establishes that this alone fixes playback. The
+live concurrent-load evidence establishes that this alone fixes playback.
+In particular, ordinary Bunkr album galleries have no creator query:
+`preloadNeighbors` returns before `preloadVideo`, and the player uses the HTTP
+factory directly rather than the creator-gallery cache. The warm suppression
+therefore has **no effect on ordinary Bunkr album playback**; it only affects
+Bunkr media reached through creator-gallery flows. The
 player recovery path retains two bounded attempts for transient network failures.
 Bunkr CDN 401/429 and fresh/unknown-signature 403 responses stop automatic recovery.
 A 403 from a demonstrably expired signed URL permits one official URL refresh,
@@ -114,8 +148,12 @@ justifying changes to the shared provider factory here.
   transient-network recovery decisions.
 - BunkrGalleryResolutionLifecycleTest: a delayed on-demand resolver failure after
   a swipe must not display a stale modal or mark either page as failed.
+- BunkrGalleryHttpHeadersTest: actual factory requests must not copy Bunkr page
+  cookies across hosts; media-domain cookies and other-provider behavior remain.
 - Existing gallery/recovery/parser tests and full Debug/Release unit suites run in
-  the isolated candidate workflow before it builds the signed `.dev` beta.
+  the isolated candidate workflow. Focused regressions must pass before signing.
+  A broader failure keeps the workflow red but permits a private physical-test
+  APK after focused success; it does not authorize merge or release.
 
 `tools/bunkr_recovery_probe.py` records response status, redirect chains, selected
 response headers, structural album/file metadata and official signing fields.
@@ -124,10 +162,19 @@ full video if a server ignores Range. Requests are bounded and never solve or
 retry a challenge. Its JSON is diagnostic evidence, not a pass/fail Android test.
 The workflow retains this evidence even if unit tests fail.
 
-Local focused run: 46 tests across resolver, repository, gallery cache/guards,
-recovery and search scope — zero failures/errors/skips. The additional delayed
-resolution lifecycle case, full-suite results and beta identity must be read from
-the final candidate's reports.
+Local focused regressions: 52 unique tests across resolver, repository, gallery
+cache/guards, delayed resolution, cookie headers, recovery and search scope —
+zero failures/errors/skips across the focused runs. The cookie tests capture real
+Media3 factory requests over bounded loopback HTTP. JVM restrictions can suppress
+Origin serialization, so they assert cookie scope and Referer, not Android Origin.
+
+Beta 3 CI ran 1,787 Debug tests: one failure, four skipped, zero errors. The failure
+was `ShitTokSpeedMuteTest.multiTouchAndRealPinchCancelHold` during Robolectric
+native font setup (`FileSystemAlreadyExistsException`), before product assertions.
+That unchanged class's eight tests passed when isolated locally. Release tests
+did not run because Gradle stopped on Debug failure. Beta 3 produced no APK.
+Beta 4 runs both variants with `--continue` to retain all results; signing remains
+gated by focused success and the complete reports must be reviewed before merge.
 
 ## Compatibility and beta
 
@@ -136,7 +183,7 @@ production package, permission, signing identity or other provider repository is
 changed. Session referer metadata is process-local and optional. Existing
 favorites, gallery content, downloads and stable installs are preserved.
 
-Beta 3: `7.0.4-bunkr-beta.3`, version code `7000006`, separate package
+Beta 4: `7.0.4-bunkr-beta.4`, version code `7000007`, separate package
 `com.addy37.crazyshitunofficial.dev`, existing production certificate fingerprint
 `04abf84b3d468cbb1a562dea83b0007e686b2e56018cce911223963faea51356`.
 It uses the existing New Zerochill build routing and disables legacy analytics.

@@ -191,6 +191,13 @@ public class BunkrResolutionTest {
         assertEquals(1, Wire.pageRequests);
     }
 
+    @Test public void currentSentinelTitleWithSeparatorIsNotAnEmptySearch() {
+        Wire.html = "<html><title>Checkpoint | Sentinel</title><body>Security checkpoint</body></html>";
+        assertThrows(IOException.class, () ->
+                new BunkrRepository().searchAlbums(null, "sample", 1));
+        assertEquals(1, Wire.pageRequests);
+    }
+
     @Test public void maintenance503PageIsNotReportedAsNoSearchResults() {
         Wire.html = "<html><head><title>503 Service unavailable | BUNKR</title></head><body>"
                 + "Our servers are currently under heavy load.</body></html>";

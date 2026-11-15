@@ -723,7 +723,8 @@ public final class BunkrRepository {
     }
 
     private static boolean isVerificationPage(Document doc) {
-        String title = doc.title().toLowerCase(Locale.US);
+        String title = doc.title().toLowerCase(Locale.US).replace('|', ' ')
+                .replaceAll("\\s+", " ");
         String text = doc.text().toLowerCase(Locale.US);
         return title.contains("just a moment") || title.contains("attention required")
                 || title.contains("ddos-guard") || title.contains("checkpoint sentinel")
