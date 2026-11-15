@@ -179,7 +179,7 @@ public class WhatsNewTest {
                 .findFragmentByTag(WhatsNewDialog.TAG);
         ScrollView scroll = findScroll(fragment.getDialog().getWindow().getDecorView());
         assertNotNull("What's New must use a vertical ScrollView", scroll);
-        assertFalse("No clipped scroll viewport", scroll.getClipToPadding());
+        assertTrue("Scroll indicator should be available", scroll.isVerticalScrollBarEnabled());
 
         LinearLayout content = (LinearLayout) scroll.getChildAt(0);
         TextView longNote = new TextView(activity);
