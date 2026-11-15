@@ -13,10 +13,11 @@ are the acceptance criteria. Browser fallback, successful unit tests, an MP4
 range response and a signed APK do not establish those criteria. Keep the PR
 draft. No merge, tag, release, production deployment or publication is authorized.
 
-The user reports **all** Bunkr gallery videos fail on their phone. This must be
-treated as a gallery-wide/device-path failure, not an isolated damaged file.
-A successful CI request for one recorded file does not explain or supersede that
-report. The pre-player versus player diagnostic phase is needed on the phone.
+Latest user correction: **gallery playback is fine; only search is down**.
+This supersedes the earlier report that all gallery videos failed. Gallery-wide
+playback failure is no longer an active symptom. It does not establish separate
+seek/rotation/expiry checks or approval to merge or publish. Further repair work
+must focus on native Balbums search and preserve the working gallery path.
 
 ## Search findings
 
@@ -128,7 +129,8 @@ Confirmed application defects addressed:
   different media CDN when that CDN had no cookies. Bunkr player requests now use
   only cookies scoped by CookieManager to the media URL, matching normal cookie
   domain boundaries. Existing other-provider behavior is retained. This is a
-  confirmed request-header defect, not yet proof of the gallery-wide phone cause.
+  confirmed request-header defect; it is not attributed to the remaining search
+  failure. The user now confirms gallery playback is working.
 
 The existing pager already rejects signed URLs within 30 seconds of expiry.
 Tests now exercise this through the actual adapter, including preservation of
@@ -256,7 +258,12 @@ APK. DEX bytes contain the exact signed source revision and New Zerochill URL.
 The archive hashes also match GitHub's artifact digests. Subsequent report-only
 commits do not change this APK's source revision or application code.
 
-## Phone acceptance still required
+## Current acceptance status
+
+The user confirms galleries are working and identifies search as the only active
+problem. The remaining product blocker is native Balbums search. The checks below
+remain a regression/acceptance checklist; they are not a request to re-diagnose a
+current gallery-wide failure. Merge/publication approval has not been given.
 
 1. Search a known query in Bunkr and verify native cards/gallery open; record any
    denial separately from an empty result. Browser fallback must preserve the query.
