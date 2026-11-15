@@ -7,7 +7,7 @@ on:
     branches:
       - feature/support-after-bunkr-2026-11
     paths:
-      - .github/workflows/zerochill-bunkr-support-beta.yml
+      - .github/workflows/zerochill-bunkr-support-fix-beta.yml
   workflow_dispatch:
 
 permissions:
