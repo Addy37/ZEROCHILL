@@ -1110,11 +1110,19 @@ final class SearchPanel {
                 : "Unavailable: " + unavailable + " · Tap to retry");
         searchState.setContentDescription(searchState.getText());
         if (output.isEmpty()) {
-            status.setText(pendingSources > 0 ? "" : !unavailable.isEmpty()
-                    ? "Some sources could not be reached.\nTap the message below to retry."
-                    : "No matches for “" + activeQuery + "”\n\nTry a shorter or more general search.");
+            if (scope == Scope.BUNKR_ALBUMS && pendingSources == 0 && !unavailable.isEmpty()) {
+                status.setText("Bunkr may require browser verification.\nTap here to open the search page in your browser.");
+                status.setOnClickListener(v -> BunkrPlaybackDiagnostics.openPage(
+                        activity, BunkrRepository.searchUrl(activeQuery)));
+            } else {
+                status.setOnClickListener(null);
+                status.setText(pendingSources > 0 ? "" : !unavailable.isEmpty()
+                        ? "Some sources could not be reached.\nTap the message below to retry."
+                        : "No matches for “" + activeQuery + "”\n\nTry a shorter or more general search.");
+            }
             status.setVisibility(pendingSources > 0 ? View.GONE : View.VISIBLE);
         } else {
+            status.setOnClickListener(null);
             status.setVisibility(View.GONE);
             restoreScroll();
         }
