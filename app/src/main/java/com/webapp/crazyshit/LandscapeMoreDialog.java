@@ -1,7 +1,6 @@
 package com.webapp.crazyshit;
 
 import android.app.Activity;
-import android.app.AlertDialog;
 import android.app.Dialog;
 import android.content.ActivityNotFoundException;
 import android.content.Intent;
@@ -35,6 +34,7 @@ final class LandscapeMoreDialog {
 
     static final int SUPPORT_GITHUB_VIEW_ID = View.generateViewId();
     static final int SUPPORT_CASH_APP_VIEW_ID = View.generateViewId();
+    static final int SUPPORT_LATER_VIEW_ID = View.generateViewId();
 
     static void attachSoon(NativeMainActivity activity) {
         if (activity == null || activity.isFinishing()) return;
@@ -196,15 +196,14 @@ final class LandscapeMoreDialog {
         createSupportDialog(activity).show();
     }
 
-    // AlertDialog cannot display setMessage() and setItems() together: the message
-    // hides the list. Put two selectable rows in a single custom content view.
-    static AlertDialog createSupportDialog(Activity activity) {
+    /** A compact branded surface, not a platform AlertDialog with extra list padding. */
+    static Dialog createSupportDialog(Activity activity) {
+        Dialog dialog = new Dialog(activity);
+        dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
         LinearLayout content = buildSupportContent(activity);
-        AlertDialog dialog = new ZeroChillDialog.Builder(activity)
-                .setTitle("Support ZEROCHILL")
-                .setView(content)
-                .setNegativeButton("Not now", null)
-                .create();
+        dialog.setContentView(content);
+        dialog.setCanceledOnTouchOutside(true);
+
         content.findViewById(SUPPORT_GITHUB_VIEW_ID).setOnClickListener(view -> {
             dialog.dismiss();
             openSupportLink(activity, "https://github.com/sponsors/Addy37");
@@ -213,57 +212,131 @@ final class LandscapeMoreDialog {
             dialog.dismiss();
             openSupportLink(activity, "https://cash.app/$SupportZC");
         });
+        content.findViewById(SUPPORT_LATER_VIEW_ID).setOnClickListener(view -> dialog.dismiss());
+
+        dialog.setOnShowListener(ignored -> {
+            Window window = dialog.getWindow();
+            if (window == null) return;
+            window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+            window.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
+            WindowManager.LayoutParams attrs = window.getAttributes();
+            attrs.width = Math.min(supportDp(activity, 380),
+                    activity.getResources().getDisplayMetrics().widthPixels - supportDp(activity, 32));
+            attrs.height = WindowManager.LayoutParams.WRAP_CONTENT;
+            attrs.gravity = Gravity.CENTER;
+            attrs.dimAmount = .72f;
+            window.setAttributes(attrs);
+            if (ZeroChillMotion.animationsEnabled(activity)) {
+                View decor = window.getDecorView();
+                decor.setAlpha(0f);
+                decor.setScaleX(.96f);
+                decor.setScaleY(.96f);
+                decor.animate().alpha(1f).scaleX(1f).scaleY(1f)
+                        .setDuration(ZeroChillMotion.STANDARD_MS).start();
+            }
+        });
         return dialog;
     }
 
     static LinearLayout buildSupportContent(Context context) {
+        int accent = AppearanceTheme.accent(context);
         LinearLayout content = new LinearLayout(context);
         content.setOrientation(LinearLayout.VERTICAL);
-        int horizontal = supportDp(context, 24);
-        content.setPadding(horizontal, supportDp(context, 8), horizontal, supportDp(context, 8));
+        content.setPadding(supportDp(context, 22), supportDp(context, 22),
+                supportDp(context, 22), supportDp(context, 14));
 
-        TextView message = new TextView(context);
-        message.setText("Enjoy ZEROCHILL? If you'd like to support its development, "
-                + "choose an option below. Support is optional, and the links "
-                + "open outside the app.");
-        message.setTextColor(ZeroChillUi.color(context, R.color.zc_text_primary));
-        message.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16);
-        content.addView(message, new LinearLayout.LayoutParams(-1, -2));
+        GradientDrawable panel = new GradientDrawable();
+        panel.setColor(Color.rgb(3, 6, 10));
+        panel.setCornerRadius(supportDp(context, 24));
+        panel.setStroke(supportDp(context, 1), (accent & 0x00FFFFFF) | 0xA0000000);
+        content.setBackground(panel);
+        content.setClipToOutline(true);
 
-        TextView github = supportChoice(context, "GitHub Sponsors");
+        LinearLayout wordmark = new LinearLayout(context);
+        wordmark.setGravity(Gravity.CENTER);
+        TextView zero = supportText(context, "ZERO", 24, Color.WHITE, true);
+        TextView chill = supportText(context, "CHILL", 24, accent, true);
+        wordmark.addView(zero);
+        wordmark.addView(chill);
+        content.addView(wordmark, new LinearLayout.LayoutParams(-1, -2));
+
+        TextView title = supportText(context, "Support development", 19, Color.WHITE, true);
+        title.setGravity(Gravity.CENTER);
+        LinearLayout.LayoutParams titleParams = new LinearLayout.LayoutParams(-1, -2);
+        titleParams.topMargin = supportDp(context, 12);
+        content.addView(title, titleParams);
+
+        TextView message = supportText(context,
+                "Enjoying ZEROCHILL? You can help keep it going.", 14,
+                AppearanceTheme.secondaryText(context), false);
+        message.setGravity(Gravity.CENTER);
+        message.setLineSpacing(supportDp(context, 2), 1f);
+        LinearLayout.LayoutParams messageParams = new LinearLayout.LayoutParams(-1, -2);
+        messageParams.topMargin = supportDp(context, 8);
+        content.addView(message, messageParams);
+
+        TextView github = supportChoice(context, "GitHub Sponsors", true);
         github.setId(SUPPORT_GITHUB_VIEW_ID);
-        content.addView(github, supportChoiceParams(context));
+        content.addView(github, supportChoiceParams(context, 20));
 
-        TextView cashApp = supportChoice(context, "Cash App ($SupportZC)");
+        TextView cashApp = supportChoice(context, "Cash App ($SupportZC)", false);
         cashApp.setId(SUPPORT_CASH_APP_VIEW_ID);
-        content.addView(cashApp, supportChoiceParams(context));
+        content.addView(cashApp, supportChoiceParams(context, 10));
+
+        TextView footnote = supportText(context, "Optional  •  Opens outside the app", 11,
+                AppearanceTheme.secondaryText(context), false);
+        footnote.setGravity(Gravity.CENTER);
+        LinearLayout.LayoutParams footnoteParams = new LinearLayout.LayoutParams(-1, -2);
+        footnoteParams.topMargin = supportDp(context, 14);
+        content.addView(footnote, footnoteParams);
+
+        TextView later = supportText(context, "Not now", 14,
+                AppearanceTheme.secondaryText(context), true);
+        later.setId(SUPPORT_LATER_VIEW_ID);
+        later.setGravity(Gravity.CENTER);
+        later.setMinHeight(supportDp(context, 42));
+        later.setClickable(true);
+        later.setFocusable(true);
+        later.setContentDescription("Close Support ZEROCHILL");
+        ZeroChillMotion.installPressFeedback(later);
+        LinearLayout.LayoutParams laterParams = new LinearLayout.LayoutParams(-1, supportDp(context, 42));
+        laterParams.topMargin = supportDp(context, 4);
+        content.addView(later, laterParams);
         return content;
     }
 
-    private static TextView supportChoice(Context context, String label) {
-        TextView choice = new TextView(context);
-        choice.setText(label);
-        choice.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16);
-        choice.setTextColor(AppearanceTheme.accent(context));
-        choice.setTypeface(null, android.graphics.Typeface.BOLD);
-        choice.setGravity(Gravity.CENTER_VERTICAL);
-        choice.setPadding(supportDp(context, 16), 0, supportDp(context, 16), 0);
-        choice.setMinHeight(supportDp(context, 52));
+    private static TextView supportChoice(Context context, String label, boolean primary) {
+        TextView choice = supportText(context, label, 15,
+                primary ? AppearanceTheme.onAccent(context) : Color.WHITE, true);
+        choice.setGravity(Gravity.CENTER);
+        choice.setMinHeight(supportDp(context, 50));
         choice.setClickable(true);
         choice.setFocusable(true);
         choice.setContentDescription("Open " + label + " outside ZEROCHILL");
 
         GradientDrawable background = new GradientDrawable();
-        background.setColor(Color.rgb(20, 24, 31));
-        background.setCornerRadius(supportDp(context, 12));
-        background.setStroke(supportDp(context, 1), AppearanceTheme.accent(context));
+        background.setColor(primary ? AppearanceTheme.accent(context) : Color.rgb(17, 22, 29));
+        background.setCornerRadius(supportDp(context, 14));
+        if (!primary) background.setStroke(supportDp(context, 1), Color.rgb(49, 62, 75));
         choice.setBackground(background);
+        ZeroChillMotion.installPressFeedback(choice);
         return choice;
     }
 
-    private static LinearLayout.LayoutParams supportChoiceParams(Context context) {
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, -2);
-        params.topMargin = supportDp(context, 12);
+    private static TextView supportText(Context context, String value, float size, int color,
+            boolean bold) {
+        TextView view = new TextView(context);
+        view.setText(value);
+        view.setTextSize(TypedValue.COMPLEX_UNIT_SP, size);
+        view.setTextColor(color);
+        if (bold) view.setTypeface(null, android.graphics.Typeface.BOLD);
+        return view;
+    }
+
+    private static LinearLayout.LayoutParams supportChoiceParams(Context context, int topDp) {
+        LinearLayout.LayoutParams params =
+                new LinearLayout.LayoutParams(-1, supportDp(context, 50));
+        params.topMargin = supportDp(context, topDp);
         return params;
     }
 
