@@ -7,6 +7,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.net.Uri;
 
+import androidx.browser.customtabs.CustomTabsIntent;
 import androidx.media3.common.PlaybackException;
 
 import java.time.Instant;
@@ -57,14 +58,40 @@ final class BunkrPlaybackDiagnostics {
     }
 
     static void show(Activity activity, String report) {
+        show(activity, report, "");
+    }
+
+    /** A resolver failure has no player yet, so include a browser fallback on the same dialog. */
+    static void show(Activity activity, String report, String pageUrl) {
         if (activity == null || activity.isFinishing() || report == null || report.isEmpty()) return;
-        new ZeroChillDialog.Builder(activity)
+        ZeroChillDialog.Builder dialog = new ZeroChillDialog.Builder(activity)
                 .setTitle("Bunkr playback diagnostics")
                 .setMessage(report)
-                .setPositiveButton("Copy", (dialog, which) -> copy(activity, report))
-                .setNeutralButton("Share", (dialog, which) -> share(activity, report))
-                .setNegativeButton("Close", null)
-                .show();
+                .setPositiveButton("Copy", (ignored, which) -> copy(activity, report))
+                .setNegativeButton("Close", null);
+        if (BunkrRepository.isBunkrUrl(pageUrl)) {
+            dialog.setNeutralButton("Open page", (ignored, which) -> openPage(activity, pageUrl));
+        } else {
+            dialog.setNeutralButton("Share", (ignored, which) -> share(activity, report));
+        }
+        dialog.show();
+    }
+
+    /** Let the user complete Bunkr's verification in a real browser, without bypassing it. */
+    static void openPage(Activity activity, String pageUrl) {
+        if (activity == null || !BunkrRepository.isBunkrUrl(pageUrl)) return;
+        Uri uri = Uri.parse(pageUrl);
+        if (!"https".equalsIgnoreCase(uri.getScheme())) return;
+        try {
+            new CustomTabsIntent.Builder().setShowTitle(true).build().launchUrl(activity, uri);
+        } catch (Exception error) {
+            try {
+                activity.startActivity(new Intent(Intent.ACTION_VIEW, uri));
+            } catch (Exception ignored) {
+                ZeroChillToast.makeText(activity, "No browser is available.",
+                        ZeroChillToast.LENGTH_SHORT).show();
+            }
+        }
     }
 
     private static void copy(Activity activity, String report) {
