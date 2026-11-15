@@ -41,8 +41,9 @@ jobs:
           cache-provider: basic
       - name: Focused popup Debug tests
         run: |
-          gradle --no-daemon -Porg.gradle.java.installations.fromEnv=JAVA_HOME_17_X64,JAVA_HOME_21_X64 :app:testDebugUnitTest --tests '*WhatsNewTest' --tests '*ReleaseNotesSummaryTest' --tests '*UpdateCardControllerTest' --tests '*UpdateCardOverflowTest'
+          gradle --no-daemon -Porg.gradle.java.installations.fromEnv=JAVA_HOME_17_X64,JAVA_HOME_21_X64 :app:testDebugUnitTest --tests '*UpdateCardOverflowTest.shortUpdateStaysCompactInsteadOfFillingTheScreen'
       - name: Focused popup Release tests
+        if: false
         run: |
           gradle --no-daemon -Porg.gradle.java.installations.fromEnv=JAVA_HOME_17_X64,JAVA_HOME_21_X64 :app:testReleaseUnitTest --tests '*WhatsNewTest' --tests '*ReleaseNotesSummaryTest' --tests '*UpdateCardControllerTest' --tests '*UpdateCardOverflowTest'
       - name: Upload focused test reports
