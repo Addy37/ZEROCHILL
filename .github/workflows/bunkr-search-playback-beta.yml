@@ -1,6 +1,7 @@
 name: Bunkr Search and Playback Repair Beta
 
-# One isolated side-by-side candidate build. Never publish or merge automatically.
+# Second isolated candidate: full-browser fallback after Custom Tab returned HTTP 403.
+# Never publish or merge automatically.
 on:
   push:
     branches:
@@ -27,7 +28,7 @@ jobs:
       ANALYTICS_ENDPOINT: ''
       ANALYTICS_V2_ENDPOINT: ''
       APP_VERSION_CODE: '7000005'
-      APP_VERSION_NAME: '7.0.4-bunkr-beta.1'
+      APP_VERSION_NAME: '7.0.4-bunkr-beta.2'
       ZEROCHILL_SOURCE_SHA: ${{ github.sha }}
 
     steps:
