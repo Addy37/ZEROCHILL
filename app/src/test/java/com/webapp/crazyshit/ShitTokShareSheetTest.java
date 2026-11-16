@@ -7,11 +7,13 @@ import android.content.ClipboardManager;
 import android.content.Context;
 import android.graphics.Color;
 import android.graphics.drawable.GradientDrawable;
+import android.content.res.Configuration;
 import android.os.Looper;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.HorizontalScrollView;
 import android.widget.TextView;
-import androidx.media3.common.Player;
+import androidx.core.widget.NestedScrollView;
 import androidx.media3.exoplayer.ExoPlayer;
 import com.google.android.material.bottomsheet.BottomSheetBehavior;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -21,8 +23,6 @@ import org.robolectric.Robolectric;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.annotation.Config;
 import org.robolectric.annotation.GraphicsMode;
-import org.robolectric.annotation.Implements;
-import org.robolectric.annotation.Implementation;
 import org.robolectric.util.ReflectionHelpers;
 import static org.robolectric.Shadows.shadowOf;
 import static org.robolectric.util.ReflectionHelpers.ClassParameter.from;
@@ -31,25 +31,6 @@ import static org.junit.Assert.*;
 @RunWith(RobolectricTestRunner.class)
 @Config(application = Application.class, sdk = 35, qualifiers = "w320dp-h640dp-xhdpi")
 public class ShitTokShareSheetTest {
-    @Implements(ZeroChillSessionStore.class)
-    public static class Session {
-        @Implementation protected static String currentUserId(Context context) { return "owner"; }
-    }
-    @Implements(ZeroChillSocialRepository.class)
-    public static class Messages {
-        static final java.util.ArrayList<String> ids = new java.util.ArrayList<>();
-        static boolean fail;
-        @Implementation protected static void loadInbox(Context context,
-                ZeroChillSocialRepository.Callback<java.util.ArrayList<ZeroChillSocialRepository.Conversation>> callback) {
-            callback.complete(new java.util.ArrayList<>(), null);
-        }
-        @Implementation protected static void sendDirectMessage(Context context, String recipient,
-                String id, String body, ZeroChillSocialRepository.Callback<ZeroChillSocialRepository.DirectMessage> callback) {
-            ids.add(id);
-            assertNotNull(ZeroChillVideoCard.decode(body));
-            callback.complete(null, fail ? new IllegalStateException("Offline") : null);
-        }
-    }
     private View find(View root, String description) {
         if (description.contentEquals(root.getContentDescription() == null ? "" : root.getContentDescription())) return root;
         if (root instanceof ViewGroup) for (int i = 0; i < ((ViewGroup) root).getChildCount(); i++) {
@@ -59,30 +40,94 @@ public class ShitTokShareSheetTest {
         return null;
     }
 
+    private boolean containsText(View root, String phrase) {
+        if (root instanceof TextView && ((TextView) root).getText().toString().contains(phrase)) return true;
+        if (root instanceof ViewGroup) for (int i = 0; i < ((ViewGroup) root).getChildCount(); i++) {
+            if (containsText(((ViewGroup) root).getChildAt(i), phrase)) return true;
+        }
+        return false;
+    }
+
     private NativeContentItem item() {
         return new NativeContentItem(NativeContentItem.KIND_MEDIA, "Video", "https://crazyshit.com/cnt/medias/123", "", "", "", "");
     }
 
-    @Test @Config(shadows = {Session.class, Messages.class})
-    public void dmRetryRetainsIdButNewSuccessfulSendUsesNewId() throws Exception {
+    private void assertCompactLayout(String qualifier, float fontScale) {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
         activity.setTheme(R.style.Theme_CrazyShit);
-        ShitTokShareSheet sheet = new ShitTokShareSheet(activity, item(), null, new ShitTokShareSheet.Actions());
-        ZeroChillSocialRepository.PublicProfile recipient = new ZeroChillSocialRepository.PublicProfile(
-                new org.json.JSONObject().put("user_id", "recipient").put("username", "friend"), false);
-        Messages.ids.clear();
+        Configuration previous = new Configuration(activity.getResources().getConfiguration());
+        Configuration configuration = new Configuration(activity.getResources().getConfiguration());
+        configuration.fontScale = fontScale;
+        activity.getResources().updateConfiguration(configuration, activity.getResources().getDisplayMetrics());
+        ShitTokShareSheet.Actions actions = new ShitTokShareSheet.Actions();
+        actions.download = actions.favorite = actions.notInterested = actions.autoScroll =
+                actions.blockCreator = actions.report = actions.comments = actions.details = () -> { };
+        actions.canBlock = true;
+        ShitTokShareSheet sheet = new ShitTokShareSheet(activity, item(), null, actions);
         try {
             sheet.show();
-            Messages.fail = true;
-            ReflectionHelpers.callInstanceMethod(sheet, "sendCard", from(ZeroChillSocialRepository.PublicProfile.class, recipient));
-            Messages.fail = false;
-            ReflectionHelpers.callInstanceMethod(sheet, "sendCard", from(ZeroChillSocialRepository.PublicProfile.class, recipient));
-            ReflectionHelpers.callInstanceMethod(sheet, "sendCard", from(ZeroChillSocialRepository.PublicProfile.class, recipient));
-            assertEquals(3, Messages.ids.size());
-            assertEquals(Messages.ids.get(0), Messages.ids.get(1));
-            assertNotEquals(Messages.ids.get(1), Messages.ids.get(2));
-        } finally { sheet.dismiss(); activity.finish(); }
+            View root = sheet.getWindow().getDecorView();
+            assertNull(find(root, "Find recipient"));
+            assertNull(find(root, "Send to ZEROCHILL"));
+            for (String removed : new String[]{"Send to ZEROCHILL", "Find recipient", "Sends a video file",
+                    "Some streams can't", "Video cards play"}) {
+                assertFalse("Removed text still visible: " + removed, containsText(root, removed));
+            }
+            assertEquals(6, ((ViewGroup) find(root, "Download").getParent()).getChildCount());
+            ViewGroup actionRow = (ViewGroup) find(root, "Download").getParent();
+            assertTrue(actionRow.getParent() instanceof HorizontalScrollView);
+            assertSame(actionRow, find(root, "Report").getParent());
+            ViewGroup externalRow = (ViewGroup) find(root, "Share Video").getParent();
+            assertEquals(5, externalRow.getChildCount());
+            assertTrue(externalRow.getParent() instanceof HorizontalScrollView);
+            assertSame(externalRow, find(root, "More Apps").getParent());
+            ViewGroup content = ReflectionHelpers.getField(sheet, "content");
+            View panel = (View) content.getParent().getParent();
+            int width = activity.getResources().getDisplayMetrics().widthPixels;
+            int height = panel.getLayoutParams().height;
+            assertTrue(height <= activity.getResources().getDisplayMetrics().heightPixels * .65f + 1);
+            panel.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
+                    View.MeasureSpec.makeMeasureSpec(height, View.MeasureSpec.EXACTLY));
+            panel.layout(0, 0, width, height);
+            NestedScrollView verticalScroll = (NestedScrollView) content.getParent();
+            if ("landscape".equals(qualifier)) {
+                assertTrue("Landscape content needs vertical scrolling", content.getHeight() > verticalScroll.getHeight());
+            }
+            for (ViewGroup row : new ViewGroup[]{externalRow, actionRow}) {
+                for (int i = 1; i < row.getChildCount(); i++) {
+                    assertTrue("Tiles overlap in " + qualifier, row.getChildAt(i - 1).getRight() <= row.getChildAt(i).getLeft());
+                }
+                assertTrue("Row clips its tiles", row.getChildAt(row.getChildCount() - 1).getRight() <= row.getWidth());
+                if ("portrait".equals(qualifier)) {
+                    assertTrue("Tiles should fit a 384dp phone without horizontal scrolling",
+                            row.getWidth() <= ((HorizontalScrollView) row.getParent()).getWidth());
+                }
+                for (int i = 0; i < row.getChildCount(); i++) {
+                    ViewGroup tile = (ViewGroup) row.getChildAt(i);
+                    TextView label = (TextView) tile.getChildAt(1);
+                    assertTrue("Label clipped: " + label.getText(), label.getBottom() <= tile.getHeight());
+                    assertTrue("Label has too many lines: " + label.getText(), label.getLineCount() <= 2);
+                    assertEquals("Label truncated: " + label.getText(), label.getText().length(),
+                            label.getLayout().getLineEnd(label.getLineCount() - 1));
+                }
+            }
+            assertNotNull(find(root, "Comments"));
+            assertNotNull(find(root, "Video details"));
+        } finally {
+            sheet.dismiss();
+            activity.getResources().updateConfiguration(previous, activity.getResources().getDisplayMetrics());
+            activity.finish();
+        }
     }
+
+    @Test @Config(qualifiers = "w384dp-h800dp-xhdpi")
+    public void compactPortraitFitsExternalAndActionRows() { assertCompactLayout("portrait", 1f); }
+
+    @Test @Config(qualifiers = "w640dp-h320dp-xhdpi")
+    public void compactLandscapeKeepsRowsAndCapsHeight() { assertCompactLayout("landscape", 1f); }
+
+    @Test @Config(qualifiers = "w320dp-h640dp-xhdpi")
+    public void narrowScreenWithLargeTextCanScrollWithoutClippingLabels() { assertCompactLayout("large text", 1.5f); }
 
     @Test @GraphicsMode(GraphicsMode.Mode.NATIVE)
     public void smallScreenUsesOledSurfaceAndSafeInsetsAndRendersPreview() throws Exception {
@@ -136,9 +181,11 @@ public class ShitTokShareSheetTest {
             sheet.show();
             View root = sheet.getWindow().getDecorView();
             for (String label : new String[]{"Share Video", "Copy Link", "WhatsApp", "Messages", "More Apps",
-                    "Download", "Add to Favorites", "Not Interested", "Auto Scroll · ON", "Block Creator", "Report", "Comments", "Video details"}) {
+                    "Download", "Favorite", "Not Interested", "Auto Scroll · ON", "Block Creator", "Report", "Comments", "Video details"}) {
                 assertNotNull(label, find(root, label));
             }
+            assertFalse(find(root, "Block Creator").isEnabled());
+            assertNull(find(root, "Find recipient"));
             assertEquals(BottomSheetBehavior.STATE_EXPANDED, sheet.getBehavior().getState());
             find(root, "Copy Link").performClick();
             ClipboardManager clipboard = (ClipboardManager) activity.getSystemService(Context.CLIPBOARD_SERVICE);
@@ -146,6 +193,23 @@ public class ShitTokShareSheetTest {
             assertNull(ReflectionHelpers.getField(sheet, "preparation"));
             find(root, "Auto Scroll · ON").performClick();
             assertEquals(1, calls.get());
+        } finally { sheet.dismiss(); activity.finish(); }
+    }
+
+    @Test public void favoriteAndAutoScrollStateAreVisible() {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        activity.setTheme(R.style.Theme_CrazyShit);
+        ShitTokShareSheet.Actions actions = new ShitTokShareSheet.Actions();
+        actions.saved = true;
+        actions.favorite = () -> { };
+        actions.autoScroll = () -> { };
+        ShitTokShareSheet sheet = new ShitTokShareSheet(activity, item(), null, actions);
+        try {
+            sheet.show();
+            View root = sheet.getWindow().getDecorView();
+            assertNotNull(find(root, "Favorited"));
+            assertNotNull(find(root, "Auto Scroll · OFF"));
+            assertNull(find(root, "Favorite"));
         } finally { sheet.dismiss(); activity.finish(); }
     }
 

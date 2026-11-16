@@ -40,7 +40,11 @@ for variant in ('Debug', 'Release'):
     suites = list(Path('app/build/test-results/test' + variant + 'UnitTest').glob('TEST-*.xml'))
     assert any('ShitTokVideoShareTest' in p.name for p in suites), 'Missing direct-sharing tests'
     assert any('ShitTokShareSheetTest' in p.name for p in suites), 'Missing menu tests'
-    assert any('ZeroChillVideoCardTest' in p.name for p in suites), 'Missing DM-card tests'
+    assert any('ZeroChillVideoCardTest' in p.name for p in suites), 'Missing existing DM-card tests'
+    focus = next((p for p in suites if p.name.endswith('.ShitTokFocusModeViewportTest.xml')), None)
+    assert focus is not None, 'Missing Focus Mode regressions'
+    assert any(case.get('name') == 'lateSettledEntranceKeepsChromeHiddenAcrossFocusSwipesUntilExit'
+               and case.find('skipped') is None for case in ET.parse(focus).getroot().findall('testcase')), 'Missing forward/reverse Focus swipe regression'
     for path in suites:
         suite = ET.parse(path).getroot()
         for key in totals:
@@ -50,6 +54,6 @@ for variant in ('Debug', 'Release'):
 report = dict(source=source, branch=os.environ['ZEROCHILL_SOURCE_BRANCH'], package=package[1],
               version=package[3], version_code=int(package[2]), certificate_sha256=cert[1],
               apk_sha256=hashlib.sha256(apk.read_bytes()).hexdigest(), unit_tests=tests,
-              limitations='Physical receiving-app playback, live source restrictions, authenticated DM delivery and device performance still require testing.')
+              limitations='Physical receiving-app playback, live source restrictions, Focus Mode gestures, rotation, installed-user upgrade and device performance still require physical testing.')
 (apk.parent / 'VALIDATION.json').write_text(json.dumps(report, indent=2) + '\n')
 print(json.dumps(report, indent=2))

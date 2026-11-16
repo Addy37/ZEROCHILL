@@ -5,7 +5,7 @@
 `feature/shittok-share-menu` starts at current `main`
 `605e85c7c58a95bb8fd91c3921040f10f472ae50` (7.0.5), verified on GitHub and by
 fetching main. Historical `rebrand/zerochill` is an ancestor and is superseded by
-this approved complete lineage. Candidate `7.0.6-beta.2-share-focus` (`7000006`)
+this approved complete lineage. Candidate `7.0.6-beta.3-compact-share` (`7000007`)
 retains the production application ID and signing certificate through the existing
 encrypted signing bundle. Its scoped workflow records exact source SHA/branch,
 tests and signing/package verification in the artifact. See
@@ -18,6 +18,12 @@ or adopted Focus Mode holders keep ordinary feed chrome hidden across swipes.
 Version code 7000006 is retained within the same 7.0.6 candidate series; the
 production package/certificate are unchanged. Regression evidence and actual
 beta artifacts are recorded in the PR; no merge or release is authorized.
+
+Beta 3 keeps commit `4ca55c6` and its Focus Mode regressions unchanged. It removes
+only the share-menu recipient picker/sending UI and compacts external/video actions
+into single rows. Existing DM/card receiving, accounts and notifications remain intact.
+Version code 7000007 upgrades both earlier candidates. One signed review APK; no
+merge, tag or publication. Physical review remains pending.
 
 ## 7.0.5 release-readiness candidate (issue #446)
 

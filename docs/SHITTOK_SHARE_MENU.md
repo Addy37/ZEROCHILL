@@ -10,7 +10,7 @@ Feature branch: `feature/shittok-share-menu`. No merge or public release is auth
 The portrait and landscape Share buttons and their long-press actions open the same
 OLED-black Material bottom sheet. It uses the selected accent, rounded upper corners,
 native drag/dismiss animation, a nested vertical scroller and horizontally scrolling
-recipients/external apps. System bars, cutout and keyboard insets pad the panel.
+action rows. System-bar and cutout insets pad the panel.
 Opening it does not resize or replace the media viewport or prepare/restart a player.
 
 Download and Favorites reuse the current implementations (Favorites is the existing
@@ -56,40 +56,25 @@ Download, not the temporary share directory.
 Copy Link is explicitly a separate source-link action. The only current app deep
 link is an authentication callback; no video route/scheme is invented.
 
-## ZEROCHILL DMs: existing backend contract
+## Compact menu (beta 3)
 
-The reviewed `direct_messages` contract has a 2,000-character body and private
-photo/GIF attachments. `SocialMedia.Prepared`, the upload Edge Function and Storage
-buckets support images, not video. This change adds no bucket, migration, service,
-database column, policy or function deployment. Permanent uploaded video attachments
-would need a separate approved size/retention/access-control/backend design.
+The Send to ZEROCHILL section, recent contacts, recipient search and sheet-only
+sending/retry code are removed. Existing direct messaging, video-card receiving,
+notifications, accounts and social features remain unchanged; no backend changes.
 
-Instead, this beta sends a versioned video card in the existing authenticated DM body:
-
-```text
-ZEROCHILL video · v1
-{"page":"https://<supported-provider>/<content-page>","title":"Video title"}
-```
-
-The client validates supported HTTPS source identities, rejects credentials/local URLs
-and limits the body to the existing contract. It does not send session tokens, cookies
-or the resolved CDN media URL. Recent contacts use the existing inbox API once per
-opening, bounded to 12 rendered contacts; recipient lookup uses the existing bounded
-username search on explicit submission. Sending retains the same UUID on retry, using
-the repository's existing idempotency/reconciliation behavior and account checks.
-
-The conversation renders a play card; tapping resolves media using the recipient's
-normal source access, then opens the existing native `VideoDetailActivity` player.
-An unavailable source produces an error without opening a website. Cards depend on
-source availability; they are not uploaded/offline attachments. Both users need this
-beta or a later card-aware build. Older apps display the body as ordinary text. Inbox
-previews in this beta show the title rather than the serialized body.
+External sharing has one row: Share Video, Copy Link, WhatsApp, Messages, More Apps.
+Video actions have one row: Download, Favorite, Not Interested, Auto Scroll (ON/OFF),
+Block Creator, Report. Compact icons and spacing retain usable action targets and the
+selected accent. Rows never wrap; narrow widths can scroll horizontally. Comments
+and Video details remain accessible. The sheet is capped at 65% of the available
+screen height with vertical scrolling for small/landscape screens. Instructional
+paragraphs are removed. Native rounded sheet styling and animations are retained.
 
 ## Validation and delivery
 
 The scoped candidate workflow uses the existing encrypted `ANDROID_SIGNING_BUNDLE`,
 preserves `com.addy37.crazyshitunofficial` and the production certificate, and builds
-`7.0.6-beta.2-share-focus` / `7000006` to upgrade 7.0.5. The workflow checks out the
+`7.0.6-beta.3-compact-share` / `7000007` to upgrade 7.0.5. The workflow checks out the
 exact feature source, runs Debug/Release tests and builds, verifies lineage/signing,
 current backend routing and APK contents, and uploads a branch/SHA-named APK plus
 checksum and validation report. It never creates a release/tag or merges a PR.
@@ -108,6 +93,6 @@ WhatsApp/MMS acceptance, DRM handling on a physical device or live provider perm
 Physical acceptance still needs an Android device with compatible receiving apps:
 open/dismiss/swipe sheet repeatedly, share supported videos and play the received
 files, cancel/retry, test downloaded/cached/offline cases and unsupported streams,
-send/receive native DM cards, verify Auto Scroll and creator blocking across restart,
+verify existing DM access, verify Auto Scroll and creator blocking across restart,
 check favorites/downloads/history, inspect small/landscape layouts and system insets,
 and measure live playback/swipe/memory behavior. Report only completed checks.

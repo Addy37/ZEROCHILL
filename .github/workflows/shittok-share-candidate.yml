@@ -34,8 +34,8 @@ jobs:
       SOURCE_CONFIG_ENDPOINT: https://aavjpykssueavbseqdlf.supabase.co/functions/v1/app-config
       ANALYTICS_ENDPOINT: ''
       ANALYTICS_V2_ENDPOINT: ''
-      APP_VERSION_CODE: '7000006'
-      APP_VERSION_NAME: '7.0.6-beta.2-share-focus'
+      APP_VERSION_CODE: '7000007'
+      APP_VERSION_NAME: '7.0.6-beta.3-compact-share'
       ZEROCHILL_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
       ZEROCHILL_SOURCE_BRANCH: ${{ github.head_ref || github.ref_name }}
 
@@ -48,6 +48,7 @@ jobs:
       - name: Verify base includes approved 7.0 UI and new routing
         run: |
           git merge-base --is-ancestor 605e85c7c58a95bb8fd91c3921040f10f472ae50 HEAD
+          git merge-base --is-ancestor 4ca55c676670823d121205769cd043d91d0933e4 HEAD
           test -f docs/ZEROCHILL_7_NEW_SUPABASE_ROUTING.md
 
       - uses: actions/setup-java@v5
