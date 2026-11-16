@@ -4508,6 +4508,7 @@ public final class ChaosFeedView extends FrameLayout {
                 public void onPlaybackStateChanged(int state) {
                     if (listenerGeneration != feedGeneration || !validUiCallback(createdPlayer, listenerUrl, listenerToken)) return;
                     final int completionVisit = playbackVisit;
+                    final boolean completionOwned = ownsPlayback();
                     postOwnerUi(createdPlayer, listenerUrl, listenerToken, () -> {
                         if (createdPlayer.getPlaybackState() != state
                                 || (state == Player.STATE_ENDED && completionVisit != playbackVisit)) return;
@@ -4536,7 +4537,9 @@ public final class ChaosFeedView extends FrameLayout {
                                     PlaybackHistoryStore.record(activity, item, duration, duration, true, false);
                                 } catch (Exception ignored) { }
                             }
-                            handleCompletion(createdPlayer);
+                            // A late end emitted during paging can already carry the new
+                            // selection's visit. Keep its history, but never navigate from it.
+                            if (completionOwned) handleCompletion(createdPlayer);
                         }
                     });
                 }

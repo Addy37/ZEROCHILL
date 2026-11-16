@@ -278,4 +278,33 @@ public class ShitTokAutoScrollIntegrationTest {
                     ReflectionHelpers.getField(f.feed, "pager")).getCurrentItem());
         }
     }
+    @Test public void endDeliveredAfterReturningSelectionDuringDragCannotAdvanceReplay() {
+        try (ShitTokAudioOwnershipTest.Fixture f = new ShitTokAudioOwnershipTest.Fixture()) {
+            toggle(f.feed, true);
+            ReflectionHelpers.callInstanceMethod(f.feed, "playSelected");
+            Player.Listener listener = ReflectionHelpers.getField(f.selected, "uiPlayerListener");
+            ReflectionHelpers.callInstanceMethod(f.feed, "handlePagerScrollState",
+                    ReflectionHelpers.ClassParameter.from(int.class,
+                            androidx.viewpager2.widget.ViewPager2.SCROLL_STATE_DRAGGING));
+            androidx.viewpager2.widget.ViewPager2 pager = ReflectionHelpers.getField(f.feed, "pager");
+            pager.setCurrentItem(1, false);
+            pager.setCurrentItem(0, false);
+            f.selectedPlayer.state = Player.STATE_ENDED;
+            listener.onPlaybackStateChanged(Player.STATE_ENDED);
+            shadowOf(Looper.getMainLooper()).idle();
+            ReflectionHelpers.callInstanceMethod(f.feed, "handlePagerScrollState",
+                    ReflectionHelpers.ClassParameter.from(int.class,
+                            androidx.viewpager2.widget.ViewPager2.SCROLL_STATE_IDLE));
+            shadowOf(Looper.getMainLooper()).idle();
+            assertEquals(0, pager.getCurrentItem());
+            assertEquals(0L, f.selectedPlayer.seekPosition);
+            assertEquals(Player.STATE_READY, f.selectedPlayer.state);
+            assertFalse(ReflectionHelpers.getField(f.feed, "autoAdvancePending"));
+            assertTrue(ReflectionHelpers.getField(f.feed, "autoScrollEnabled"));
+            f.selectedPlayer.state = Player.STATE_ENDED;
+            listener.onPlaybackStateChanged(Player.STATE_ENDED);
+            shadowOf(Looper.getMainLooper()).idle();
+            assertEquals(1, pager.getCurrentItem());
+        }
+    }
 }

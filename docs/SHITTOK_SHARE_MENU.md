@@ -84,7 +84,9 @@ surfaces, pool limits and preparation scheduling are retained. The obsolete
 
 Completion UI work captures its page visit and rejects work queued before a
 manual drag or selection change, including A → B → A. A completion must still be
-STATE_ENDED on the active holder. Existing generation cancellation and one-issued
+STATE_ENDED on the active holder. Completion navigation also requires playback
+ownership at event emission, so a late end arriving during a drag cannot advance
+the returning clip before it is rewound; completion history is still recorded. Existing generation cancellation and one-issued
 advance gates reject stale transitions and duplicate endings. Manual navigation
 keeps Auto Scroll enabled. Focus chrome and swipe handling remain on their
 existing paths. Regression tests cover retained and retired replay, partial

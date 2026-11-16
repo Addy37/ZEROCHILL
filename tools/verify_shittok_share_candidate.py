@@ -52,7 +52,8 @@ for variant in ('Debug', 'Release'):
     assert {'completedRetainedVideoRewindsBeforeReplayAndAdvancesOnlyAfterNewEnd',
             'oldPostedEndCannotAdvanceAfterRapidBackAndForwardVisits',
             'completedRetiredLeaseRestoresZeroWhilePartialWatchKeepsPosition',
-            'manualDragCancelsQueuedEndWithoutDisablingSavedAutoScroll'} <= names, 'Missing replay regression'
+            'manualDragCancelsQueuedEndWithoutDisablingSavedAutoScroll',
+            'endDeliveredAfterReturningSelectionDuringDragCannotAdvanceReplay'} <= names, 'Missing replay regression'
     for path in suites:
         suite = ET.parse(path).getroot()
         for key in totals:
