@@ -1,0 +1,128 @@
+name: ShitTok Share Menu Signed Beta
+
+# Candidate artifacts only. No releases, tags, deployment or merging.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - '.github/workflows/shittok-share-candidate.yml'
+      - 'app/**'
+      - 'tools/verify_shittok_share_candidate.py'
+  workflow_dispatch:
+
+concurrency:
+  group: shittok-share-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  signed-share-beta:
+    if: >-
+      (github.event_name == 'pull_request' && github.head_ref == 'feature/shittok-share-menu'
+      && github.event.pull_request.head.repo.full_name == github.repository)
+      || (github.event_name == 'workflow_dispatch' && github.ref_name == 'feature/shittok-share-menu')
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      ZEROCHILL_V7_TRAFFIC: 'true'
+      SUPABASE_URL: https://aavjpykssueavbseqdlf.supabase.co
+      SUPABASE_PUBLISHABLE_KEY: sb_publishable_oSQALszxzeeHxDwEeclucA_5dGEpOLs
+      FEEDBACK_ANON_KEY: sb_publishable_oSQALszxzeeHxDwEeclucA_5dGEpOLs
+      FEEDBACK_ENDPOINT: https://aavjpykssueavbseqdlf.supabase.co/functions/v1/dynamic-api
+      SOURCE_CONFIG_ENDPOINT: https://aavjpykssueavbseqdlf.supabase.co/functions/v1/app-config
+      ANALYTICS_ENDPOINT: ''
+      ANALYTICS_V2_ENDPOINT: ''
+      APP_VERSION_CODE: '7000006'
+      APP_VERSION_NAME: '7.0.6-beta.1-share-menu'
+      ZEROCHILL_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      ZEROCHILL_SOURCE_BRANCH: ${{ github.head_ref || github.ref_name }}
+
+    steps:
+      - name: Check out exact approved lineage
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Verify base includes approved 7.0 UI and new routing
+        run: |
+          git merge-base --is-ancestor 605e85c7c58a95bb8fd91c3921040f10f472ae50 HEAD
+          test -f docs/ZEROCHILL_7_NEW_SUPABASE_ROUTING.md
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: |
+            17
+            21
+      - uses: android-actions/setup-android@v4
+        with:
+          packages: platform-tools
+      - name: Install Android APIs and Build Tools
+        run: sdkmanager 'platforms;android-35' 'platforms;android-36' 'build-tools;35.0.0'
+      - uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: '8.11.1'
+          cache-provider: basic
+
+      - name: Restore original app signing identity
+        env:
+          SIGNING_BUNDLE: ${{ secrets.ANDROID_SIGNING_BUNDLE }}
+        run: |
+          python3 - <<'PY'
+          import base64, json, os, pathlib
+          raw = os.environ.get('SIGNING_BUNDLE', '')
+          if not raw:
+              raise SystemExit('Missing ANDROID_SIGNING_BUNDLE')
+          data = json.loads(raw.replace('\r','').replace('\n',''))
+          for key in ('keystore_base64','store_password','key_alias','key_password'):
+              if not data.get(key):
+                  raise SystemExit('Missing signing item: ' + key)
+          for key in ('store_password','key_alias','key_password'):
+              print('::add-mask::' + data[key])
+          path = pathlib.Path(os.environ['RUNNER_TEMP']) / 'zerochill-7-release.jks'
+          path.write_bytes(base64.b64decode(data['keystore_base64']))
+          path.chmod(0o600)
+          with open(os.environ['GITHUB_ENV'],'a') as out:
+              for key, value in {
+                  'ANDROID_KEYSTORE_PATH': str(path),
+                  'ANDROID_KEYSTORE_PASSWORD': data['store_password'],
+                  'ANDROID_KEY_ALIAS': data['key_alias'],
+                  'ANDROID_KEY_PASSWORD': data['key_password']
+              }.items():
+                  out.write(key + '=' + value + '\n')
+          PY
+
+      - name: Full Debug and Release tests and Android builds
+        run: >-
+          gradle --no-daemon -Porg.gradle.java.installations.fromEnv=JAVA_HOME_17_X64,JAVA_HOME_21_X64
+          :app:testDebugUnitTest :app:testReleaseUnitTest :app:assembleDebug :app:assembleRelease
+
+      - name: Verify signed beta package, identity, lineage and test gates
+        run: |
+          mkdir -p candidate
+          SAFE_BRANCH="${ZEROCHILL_SOURCE_BRANCH//\//-}"
+          APK="candidate/ZeroChill-${APP_VERSION_NAME}-${SAFE_BRANCH}-${ZEROCHILL_SOURCE_SHA:0:7}.apk"
+          cp app/build/outputs/apk/release/app-release.apk "$APK"
+          python3 tools/verify_shittok_share_candidate.py "$APK" "$ANDROID_HOME/build-tools/35.0.0"
+          cp app/build/reports/shittok-share/menu-small-screen.png candidate/menu-small-screen.png
+          (cd candidate && sha256sum *.apk > SHA256SUMS.txt)
+
+      - name: Upload signed beta and reports for physical review
+        uses: actions/upload-artifact@v4
+        with:
+          name: ShitTok-Share-Menu-Signed-Beta-${{ env.ZEROCHILL_SOURCE_SHA }}
+          path: candidate/
+          if-no-files-found: error
+          retention-days: 30
+      - name: Preserve test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ShitTok-Share-Menu-Test-Reports-${{ env.ZEROCHILL_SOURCE_SHA }}
+          path: |
+            app/build/test-results/
+            app/build/reports/tests/
+          if-no-files-found: warn
+          retention-days: 30

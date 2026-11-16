@@ -85,6 +85,25 @@ public class ZeroChillMessageThreadUiTest {
         assertNull(field(activity,"selectedMessage"));android.content.ClipboardManager clipboard=(android.content.ClipboardManager)activity.getSystemService(android.content.Context.CLIPBOARD_SERVICE);
         assertEquals("Own exact text",clipboard.getPrimaryClip().getItemAt(0).getText().toString());
     }
+    @Test public void videoCardBodyRetainsMessageReactionAndSelectionGesture() throws Exception {
+        ZeroChillMessageActivity activity = shell();
+        RecyclerView recycler = (RecyclerView) field(activity, "recycler");
+        RecyclerView.Adapter adapter = recycler.getAdapter();
+        Method replace = adapter.getClass().getDeclaredMethod("replace", java.util.List.class);
+        replace.setAccessible(true);
+        String card = ZeroChillVideoCard.encode(new NativeContentItem(NativeContentItem.KIND_MEDIA,
+                "Shared clip", "https://crazyshit.com/cnt/medias/123", "", "", "", ""));
+        ZeroChillSocialRepository.DirectMessage message = message("other", "2026-09-30T12:00:00Z", card);
+        replace.invoke(adapter, Arrays.asList(message));
+        RecyclerView.ViewHolder holder = adapter.createViewHolder(recycler, 0);
+        adapter.bindViewHolder(holder, 0);
+        TextView body = (TextView) field(holder, "body");
+        assertTrue(body.isClickable());
+        assertTrue(body.getText().toString().contains("Tap to play in ZEROCHILL"));
+        assertTrue(body.performLongClick());
+        assertSame(message, field(activity, "selectedMessage"));
+        activity.onBackPressed();
+    }
     @Test public void rowsDistinguishSendersGroupAvatarsAndResetRecycledState() throws Exception {
         ZeroChillMessageActivity activity = shell();
         RecyclerView recycler = (RecyclerView) field(activity, "recycler");

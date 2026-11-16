@@ -306,7 +306,7 @@ final class LibrarySocialHubView extends LinearLayout {
         if (latest != null && latest.profile != null && latest.lastMessage != null) {
             ZeroChillSocialRepository.PublicProfile profile = latest.profile;
             name = SocialUi.name(profile.displayName, profile.username);
-            preview = latest.lastMessage.body;
+            preview = ZeroChillVideoCard.preview(latest.lastMessage.body);
             stamp = time(latest.lastMessage.createdAt);
         }
         AccountAvatarImages.track(messageAvatar, latest == null || latest.profile == null ? "" : latest.profile.userId);

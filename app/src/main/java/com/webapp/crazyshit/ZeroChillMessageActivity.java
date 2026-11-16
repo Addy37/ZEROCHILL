@@ -814,6 +814,10 @@ public final class ZeroChillMessageActivity extends Activity {
 
         @Override public void onViewRecycled(Holder holder) {
             SocialMedia.clear(holder.media);
+            holder.body.setTag(new Object());
+            holder.body.setOnClickListener(null);
+            holder.body.setOnLongClickListener(null);
+            holder.body.setEnabled(true);
             holder.media.setOnClickListener(null);
             holder.media.setOnLongClickListener(null);
             super.onViewRecycled(holder);
@@ -995,7 +999,11 @@ public final class ZeroChillMessageActivity extends Activity {
             GradientDrawable background=messageBubble(!incoming,joinsPrevious,joinsNext);
             if(selectedMessage!=null&&selectedMessage.id.equals(item.id)){background.setColor(AppearanceTheme.selectionSurface(ZeroChillMessageActivity.this));background.setStroke(dp(2),AppearanceTheme.accent(ZeroChillMessageActivity.this));}
             holder.bubble.setBackground(background);
-            holder.body.setText(item.body);
+            ZeroChillVideoCard.bind(ZeroChillMessageActivity.this, holder.body, item.body);
+            holder.body.setOnLongClickListener(v -> {
+                showReactions(holder.bubble, item);
+                return true;
+            });
             holder.body.setVisibility(
                     !item.attachmentPath.isEmpty()
                                     && (item.body.equals("Photo") || item.body.equals("GIF"))
@@ -1019,7 +1027,7 @@ public final class ZeroChillMessageActivity extends Activity {
             holder.boundId = item.id;
             holder.wasPending = item.pending;
             holder.time.setTextColor(incoming ? AppearanceTheme.mutedText(ZeroChillMessageActivity.this) : AppearanceTheme.secondaryText(ZeroChillMessageActivity.this));
-            holder.itemView.setContentDescription((incoming ? "From " : "You: ") + item.body);
+            holder.itemView.setContentDescription((incoming ? "From " : "You: ") + ZeroChillVideoCard.preview(item.body));
             holder.bubble.setOnLongClickListener(v -> {
                 showReactions(holder.bubble,item);
                 return true;

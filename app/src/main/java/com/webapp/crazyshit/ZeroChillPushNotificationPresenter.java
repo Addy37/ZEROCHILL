@@ -340,6 +340,7 @@ final class ZeroChillPushNotificationPresenter {
     }
 
     static String cleanMessagePreview(String value) {
+        value = ZeroChillVideoCard.preview(value);
         String clean = value == null ? "" : value.replaceAll("[\\p{Cntrl}&&[^\\n\\t]]", "")
                 .replaceAll("[\\n\\r\\t]+", " ")
                 .replaceAll("\\s+", " ").trim();

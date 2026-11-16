@@ -216,22 +216,19 @@ public class ShitTokVisualPolishTest {
         }
     }
 
-    @Test public void moreActionsUseGlassAbovePortraitRailAndBelowLandscapeHeader() {
+    @Test public void moreActionsOpenCentralSheetInPortraitAndLandscape() {
         try (ShitTokAudioOwnershipTest.Fixture fixture = new ShitTokAudioOwnershipTest.Fixture()) {
+            fixture.host.get().setTheme(R.style.Theme_CrazyShit);
             Object holder = fixture.selected;
             View root = ((RecyclerView.ViewHolder) holder).itemView;
             View portraitMore = root.findViewWithTag("shittok_share");
             ReflectionHelpers.callInstanceMethod(holder, "showMoreMenu",
                     ReflectionHelpers.ClassParameter.from(View.class, portraitMore));
-            PopupWindow portraitPopup = shadowOf(RuntimeEnvironment.getApplication()).getLatestPopupWindow();
-            GlassMenuTestSupport.assertGlass(portraitPopup);
-            assertTrue(GlassMenuTestSupport.hasAction(portraitPopup, "Download"));
-            assertTrue(GlassMenuTestSupport.hasAction(portraitPopup, "Report problem"));
-            assertTrue(GlassMenuTestSupport.hasAction(portraitPopup, "Turn on Auto Scroll"));
-            WindowManager.LayoutParams portraitPlacement =
-                    (WindowManager.LayoutParams) portraitPopup.getContentView().getRootView().getLayoutParams();
-            assertEquals(Gravity.BOTTOM, portraitPlacement.gravity & Gravity.VERTICAL_GRAVITY_MASK);
-            portraitPopup.dismiss();
+            ShitTokShareSheet portrait = ReflectionHelpers.getField(fixture.feed, "shareSheet");
+            assertNotNull(portrait);
+            assertTrue(portrait.isShowing());
+            portrait.dismiss();
+            shadowOf(Looper.getMainLooper()).idle();
 
             RuntimeEnvironment.setQualifiers("w740dp-h360dp-land-xhdpi");
             ReflectionHelpers.callInstanceMethod(holder, "syncOrientationChrome");
@@ -242,13 +239,10 @@ public class ShitTokVisualPolishTest {
             assertEquals(View.VISIBLE, landscapeMore.getVisibility());
             ReflectionHelpers.callInstanceMethod(holder, "showMoreMenu",
                     ReflectionHelpers.ClassParameter.from(View.class, landscapeMore));
-            PopupWindow landscapePopup = shadowOf(RuntimeEnvironment.getApplication()).getLatestPopupWindow();
-            GlassMenuTestSupport.assertGlass(landscapePopup);
-            assertTrue(GlassMenuTestSupport.hasAction(landscapePopup, "Video details"));
-            WindowManager.LayoutParams landscapePlacement =
-                    (WindowManager.LayoutParams) landscapePopup.getContentView().getRootView().getLayoutParams();
-            assertEquals(Gravity.TOP, landscapePlacement.gravity & Gravity.VERTICAL_GRAVITY_MASK);
-            landscapePopup.dismiss();
+            ShitTokShareSheet landscape = ReflectionHelpers.getField(fixture.feed, "shareSheet");
+            assertNotNull(landscape);
+            assertTrue(landscape.isShowing());
+            landscape.dismiss();
         }
     }
 
@@ -256,6 +250,7 @@ public class ShitTokVisualPolishTest {
     public void downloadAndShareRailActionsUseExistingRoutes() {
         try (ShitTokAudioOwnershipTest.Fixture fixture = new ShitTokAudioOwnershipTest.Fixture()) {
             Downloads.requested = null;
+            fixture.host.get().setTheme(R.style.Theme_CrazyShit);
             Object holder = fixture.selected;
             View root = ((RecyclerView.ViewHolder) holder).itemView;
             NativeContentItem item = ReflectionHelpers.getField(holder, "item");
@@ -266,10 +261,11 @@ public class ShitTokVisualPolishTest {
             assertNull(Downloads.mediaUrl);
             View share = root.findViewWithTag("shittok_share");
             assertTrue(share.performClick());
-            Intent chooser = shadowOf(fixture.host.get()).getNextStartedActivity();
-            assertEquals(Intent.ACTION_CHOOSER, chooser.getAction());
-            Intent send = chooser.getParcelableExtra(Intent.EXTRA_INTENT);
-            assertEquals(item.url, send.getStringExtra(Intent.EXTRA_TEXT));
+            ShitTokShareSheet portrait = ReflectionHelpers.getField(fixture.feed, "shareSheet");
+            assertTrue(portrait.isShowing());
+            assertNull(shadowOf(fixture.host.get()).getNextStartedActivity());
+            portrait.dismiss();
+            shadowOf(Looper.getMainLooper()).idle();
 
             RuntimeEnvironment.setQualifiers("w740dp-h360dp-land-xhdpi");
             ReflectionHelpers.callInstanceMethod(holder, "syncOrientationChrome");
@@ -281,8 +277,10 @@ public class ShitTokVisualPolishTest {
             assertSame(item, Downloads.requested);
             assertEquals(resolved.mediaUrl, Downloads.mediaUrl);
             assertTrue(root.findViewWithTag("shittok_landscape_share").performClick());
-            assertEquals(Intent.ACTION_CHOOSER,
-                    shadowOf(fixture.host.get()).getNextStartedActivity().getAction());
+            ShitTokShareSheet landscape = ReflectionHelpers.getField(fixture.feed, "shareSheet");
+            assertTrue(landscape.isShowing());
+            assertNull(shadowOf(fixture.host.get()).getNextStartedActivity());
+            landscape.dismiss();
         }
     }
 

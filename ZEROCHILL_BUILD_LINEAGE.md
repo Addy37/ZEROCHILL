@@ -1,5 +1,18 @@
 # ZEROCHILL build lineage
 
+## ShitTok central share menu signed beta
+
+`feature/shittok-share-menu` starts at current `main`
+`605e85c7c58a95bb8fd91c3921040f10f472ae50` (7.0.5), verified on GitHub and by
+fetching main. Historical `rebrand/zerochill` is an ancestor and is superseded by
+this approved complete lineage. Candidate `7.0.6-beta.1-share-menu` (`7000006`)
+retains the production application ID and signing certificate through the existing
+encrypted signing bundle. Its scoped workflow records exact source SHA/branch,
+tests and signing/package verification in the artifact. See
+`docs/SHITTOK_SHARE_MENU.md` and the PR for actual completed evidence. No merge,
+tag, release, backend deployment, source-config publication or integration-branch
+change is authorized. Physical APK acceptance remains pending.
+
 ## 7.0.5 release-readiness candidate (issue #446)
 
 The user explicitly selected latest production `main`, freshly fetched at
