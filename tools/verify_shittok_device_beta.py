@@ -50,7 +50,7 @@ for variant in ('Release',):
             totals[key] += int(suite.get(key, 0))
     assert totals['tests'] > 0 and totals['failures'] == totals['errors'] == 0, 'Unit test gate failed: ' + variant
     tests[variant.lower()] = totals
-report = dict(validation_scope='Focused Release regressions; full suite runs separately', full_ci_url='https://github.com/Addy37/ZEROCHILL/actions/runs/43863710743', feature_source='4ca55c676670823d121205769cd043d91d0933e4', source=source, branch=os.environ['ZEROCHILL_SOURCE_BRANCH'], package=package[1],
+report = dict(validation_scope='Focused Release regressions; full suite runs separately', full_ci_url='https://github.com/Addy37/ZEROCHILL/actions/runs/43875111754', feature_source='4ca55c676670823d121205769cd043d91d0933e4', source=source, branch=os.environ['ZEROCHILL_SOURCE_BRANCH'], package=package[1],
               version=package[3], version_code=int(package[2]), certificate_sha256=cert[1],
               apk_sha256=hashlib.sha256(apk.read_bytes()).hexdigest(), unit_tests=tests,
               limitations='Physical receiving-app playback, live source restrictions, authenticated DM delivery and device performance still require testing.')

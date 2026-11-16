@@ -4,7 +4,7 @@ name: ShitTok Share Menu Device Beta
 on:
   push:
     branches: [build/shittok-share-menu-beta2]
-    paths: ['.github/workflows/shittok-share-device-beta.yml']
+    paths: ['.github/workflows/shittok-share-device-beta.yml', 'tools/verify_shittok_device_beta.py']
   workflow_dispatch:
 
 concurrency:
