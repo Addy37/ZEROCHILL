@@ -1,26 +1,25 @@
-# ZEROCHILL 7.0.5
+# ZEROCHILL 7.1.0
 
-Bunkr search is back, Downloads is more stable, and there's a new way to support ZEROCHILL. Plus, longer update notes are easier to read.
+ShitTok sharing is simpler. Send supported videos as files, replay finished clips with Auto Scroll on, and swipe in Focus Mode without controls popping back up.
 
 ## What's new
 
-- **Bunkr search is back!** Finding albums should be easier again when the usual search isn't working.
-- **Support ZEROCHILL** from the More tab with a choice of GitHub Sponsors or Cash App.
-- **Read every update.** What's New and update messages scroll, even with larger text.
-- **Fewer interruptions.** Fixed a crash when opening Downloads options and improved Bunkr's handling of incomplete responses.
+- Share videos directly. Send supported MP4 or WebM clips as video files through Android's share menu.
+- Less clutter in ShitTok. Share Video and Copy Link are now two clear buttons, with five video actions below.
+- Auto Scroll respects your swipes. Replay a finished video without turning Auto Scroll off.
+- More control over your feed. Use Not Interested, block an identified creator, report a video, or view its details.
+- Focus Mode stays focused. Swipe between videos without the regular controls popping back up.
 
-## Technical notes and source availability
+## Sharing notes
 
-Bunkr album search uses the independent Bunkr Index service. Search queries go directly to that service, and existing fallbacks remain available. The Index service has separate privacy, rate-limit, and availability policies that ZEROCHILL does not control.
-
-Balbums may require browser verification. OnlyHaven's creator and category services may be intermittently unavailable. EFukt availability varies by region. These sources remain enabled, and an upstream service failing does not mean ZEROCHILL has removed it.
-
-The Downloads action-menu fix covers a disappearing or detached row during menu placement and protects shutdown handling. The release also includes checked fallback for interrupted Bunkr responses.
+Direct video sharing supports progressive MP4/WebM video files up to 100 MiB when the source allows access. Some live, protected or manifest-only streams cannot be exported as a file. Copy Link stays available as a separate action. Apps receiving the video may apply their own limits.
 
 ## Updating
 
-Install **ZeroChill.apk** over your existing ZEROCHILL app. **Do not uninstall or clear app data** before updating. Your on-device favorites, history, downloads, backups, and settings remain available during a normal in-place update.
+Download **ZeroChill.apk** and install it over your current ZEROCHILL app. Do not uninstall the app or clear its data first. Your on-device favorites, downloads, watch history, settings, and backups remain available with a normal in-place update.
 
-The application ID, signing identity, New Zerochill backend, and account behavior are unchanged. Older accounts from the retired social system still require a new ZEROCHILL account for social features, but you can browse without signing in.
+This release uses the same application ID and production signing certificate, and keeps the New Zerochill backend. Version 7.1.0 (code 7001000) upgrades the 7.0.5 production app and the 7.0.6 test APKs, including Beta 5.
 
-The unconfirmed Samsung memory and vivo layout reports were not reproduced or fixed in this update. They will be revisited if additional reports come in.
+## Source availability
+
+Content sources remain unchanged. Some third-party services can be unavailable or region-specific. The unconfirmed Samsung memory and vivo layout crash reports remain deferred pending additional evidence.

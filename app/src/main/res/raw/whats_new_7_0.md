@@ -1,7 +1,7 @@
-# ZEROCHILL 7.0.5
+# ZEROCHILL 7.1.0
 
-- Bunkr search is back! Finding albums should be easier again when the usual search isn't working.
-- You can now support ZEROCHILL from the More tab, with GitHub Sponsors and Cash App options.
-- What's New and update messages now scroll, so longer notes don't get cut off.
-- Fixed a crash that could happen when opening options in Downloads.
-- Bunkr now handles interrupted loading more smoothly.
+- Share videos directly. Send supported MP4 or WebM clips as video files through Android's share menu.
+- Less clutter in ShitTok. Share Video and Copy Link are now two clear buttons, with five video actions below.
+- Auto Scroll respects your swipes. Replay a finished video without turning Auto Scroll off.
+- More control over your feed. Use Not Interested, block an identified creator, report a video, or view its details.
+- Focus Mode stays focused. Swipe between videos without the regular controls popping back up.

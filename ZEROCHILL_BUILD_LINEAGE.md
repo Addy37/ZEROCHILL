@@ -1,5 +1,21 @@
 # ZEROCHILL build lineage
 
+## ZEROCHILL 7.1.0 publication
+
+User approved PR #449 after on-device review of the compact ShitTok share menu.
+PR #449 was squashed onto main as `ced61d164988882dc81911458b89820b4e8f7e0d`.
+Version 7.1.0 (Android versionCode 7001000) is required to upgrade Beta 5
+(versionCode 7000009) as well as 7.0.5 production. The release updates the
+bundled What's New copy and GitHub release notes together. The updater reads the
+opening release-notes paragraph, while the installed What's New dialog reads
+the matching bundled highlights. Signing identity, application ID, New Zerochill
+backend and persisted user data remain unchanged.
+
+The one-shot 7.1.0 release workflow is restricted to the approved main commit,
+RELEASE_VERSION change and matching commit message. The publish workflow must
+return to manual-only immediately after the run starts. A GitHub release is not
+established until the signed release job finishes successfully.
+
 ## ShitTok central share menu signed beta
 
 `feature/shittok-share-menu` starts at current `main`

@@ -156,11 +156,12 @@ public class WhatsNewTest {
         WhatsNewDialog fragment = (WhatsNewDialog) activity.getFragmentManager().findFragmentByTag(WhatsNewDialog.TAG);
         java.util.List<String> notes = WhatsNewDialog.notes(activity, "7.0-test");
         assertEquals(5, notes.size());
-        assertTrue(notes.get(0).contains("Bunkr search is back"));
-        assertTrue(notes.get(1).contains("support ZEROCHILL"));
-        assertTrue(notes.get(2).contains("scroll"));
-        assertTrue(notes.get(3).contains("Downloads"));
-        assertTrue(notes.get(4).contains("Bunkr"));
+        assertTrue(notes.get(0).contains("Share videos directly"));
+        assertTrue(notes.get(0).contains("MP4 or WebM"));
+        assertTrue(notes.get(1).contains("Share Video and Copy Link"));
+        assertTrue(notes.get(2).contains("Replay a finished video"));
+        assertTrue(notes.get(3).contains("block an identified creator"));
+        assertTrue(notes.get(4).contains("Focus Mode stays focused"));
         assertEquals(notes, WhatsNewDialog.notes(activity, "6.0.1-dev"));
         find(fragment.getDialog().getWindow().getDecorView(), "LET’S GO").performClick();
         activity.getFragmentManager().executePendingTransactions();

@@ -7,13 +7,21 @@ on:
         description: Release version without the v prefix
         required: true
         type: string
+  # One-time approved v7.1.0 publication from RELEASE_VERSION. Remove after dispatch.
+  push:
+    branches: [main]
+    paths: [RELEASE_VERSION]
 permissions:
   contents: write
 
 jobs:
   release:
-    # All future releases require an explicit manual action on main.
-    if: github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch'
+    # One explicit owner-approved push for v7.1.0; return to manual-only afterward.
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      (github.event_name == 'workflow_dispatch' ||
+       (github.event_name == 'push' &&
+        github.event.head_commit.message == 'Publish ZEROCHILL v7.1.0 from approved PR #449'))
     runs-on: ubuntu-latest
     env:
       ZEROCHILL_V7_TRAFFIC: 'true'
@@ -40,6 +48,10 @@ jobs:
             VERSION="$(tr -d '[:space:]' < RELEASE_VERSION)"
           fi
           test -n "$VERSION" || { echo "Release version is empty"; exit 1; }
+          if [ "$GITHUB_EVENT_NAME" = "push" ] && [ "$VERSION" != "7.1.0" ]; then
+            echo "One-time publisher refuses a different version"
+            exit 1
+          fi
 
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
           echo "APP_VERSION_NAME=$VERSION" >> "$GITHUB_ENV"
