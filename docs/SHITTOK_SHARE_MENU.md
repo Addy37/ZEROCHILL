@@ -89,10 +89,16 @@ previews in this beta show the title rather than the serialized body.
 
 The scoped candidate workflow uses the existing encrypted `ANDROID_SIGNING_BUNDLE`,
 preserves `com.addy37.crazyshitunofficial` and the production certificate, and builds
-`7.0.6-beta.1-share-menu` / `7000006` to upgrade 7.0.5. The workflow checks out the
+`7.0.6-beta.2-share-focus` / `7000006` to upgrade 7.0.5. The workflow checks out the
 exact feature source, runs Debug/Release tests and builds, verifies lineage/signing,
 current backend routing and APK contents, and uploads a branch/SHA-named APK plus
 checksum and validation report. It never creates a release/tag or merges a PR.
+
+Beta 2 also fixes the ordinary feed controls resurfacing after a Focus Mode swipe.
+The settled entrance animation now respects the same chrome-suppression predicate
+as the normal control-show paths, including incoming holders prepared for Focus.
+Forward/reverse swipe and late-animation regressions verify hidden chrome until
+explicit Focus exit, unchanged media surface/ownership and normal entrance after exit.
 
 Completed test/build counts and artifact links are recorded in the PR. Automated
 media fixtures validate export bytes, provider access and caching but use Robolectric's

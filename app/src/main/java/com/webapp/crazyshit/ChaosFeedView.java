@@ -4086,7 +4086,7 @@ public final class ChaosFeedView extends FrameLayout {
         }
 
         void revealSettledControls() {
-            if (clearDisplay || !ZeroChillMotion.animationsEnabled(activity)) return;
+            if (pinch.suppressesFeedChrome() || clearDisplay || !ZeroChillMotion.animationsEnabled(activity)) return;
             for (View view : new View[] {lower, creatorAvatarControl, landscapeHeader, landscapeActions}) {
                 if (view.getVisibility() != View.VISIBLE) continue;
                 view.animate().cancel();

@@ -35,7 +35,7 @@ jobs:
       ANALYTICS_ENDPOINT: ''
       ANALYTICS_V2_ENDPOINT: ''
       APP_VERSION_CODE: '7000006'
-      APP_VERSION_NAME: '7.0.6-beta.1-share-menu'
+      APP_VERSION_NAME: '7.0.6-beta.2-share-focus'
       ZEROCHILL_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
       ZEROCHILL_SOURCE_BRANCH: ${{ github.head_ref || github.ref_name }}
 

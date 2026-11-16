@@ -489,7 +489,7 @@ public class ShitTokDynamicPinchTest {
     private static void assertNormalSyncKeepsChromeHidden(Object holder) {
         View lower = ReflectionHelpers.getField(holder, "lower");
         for (String method : new String[] {"syncOrientationChrome", "showControlsTemporarily",
-                "hideControlsNow", "syncPausedChrome", "hidePausedChrome"}) {
+                "hideControlsNow", "syncPausedChrome", "hidePausedChrome", "revealSettledControls"}) {
             ReflectionHelpers.callInstanceMethod(holder, method);
             idleAnimations();
             assertEquals(method, 0f, lower.getAlpha(), 0f);

@@ -5,13 +5,19 @@
 `feature/shittok-share-menu` starts at current `main`
 `605e85c7c58a95bb8fd91c3921040f10f472ae50` (7.0.5), verified on GitHub and by
 fetching main. Historical `rebrand/zerochill` is an ancestor and is superseded by
-this approved complete lineage. Candidate `7.0.6-beta.1-share-menu` (`7000006`)
+this approved complete lineage. Candidate `7.0.6-beta.2-share-focus` (`7000006`)
 retains the production application ID and signing certificate through the existing
 encrypted signing bundle. Its scoped workflow records exact source SHA/branch,
 tests and signing/package verification in the artifact. See
 `docs/SHITTOK_SHARE_MENU.md` and the PR for actual completed evidence. No merge,
 tag, release, backend deployment, source-config publication or integration-branch
 change is authorized. Physical APK acceptance remains pending.
+
+Beta 2 adds a single guard to the settled control entrance animation so prepared
+or adopted Focus Mode holders keep ordinary feed chrome hidden across swipes.
+Version code 7000006 is retained within the same 7.0.6 candidate series; the
+production package/certificate are unchanged. Regression evidence and actual
+beta artifacts are recorded in the PR; no merge or release is authorized.
 
 ## 7.0.5 release-readiness candidate (issue #446)
 
