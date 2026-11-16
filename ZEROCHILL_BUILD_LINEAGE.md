@@ -34,6 +34,13 @@ certificate. The existing candidate workflow uploads one signed APK for phone
 review; full Debug/Release validation and artifact identity are recorded in PR #449.
 No merge, release, tag, deployment, backend or remote-config change is authorized.
 
+Beta 5 is a presentation-only refinement of the two sharing controls on PR #449.
+Share Video and Copy Link become equal-width rounded rectangular buttons with
+left icons and readable text; the five video action icons and Auto Scroll ON
+highlight remain unchanged. Version code `7000009` upgrades Beta 4, with the
+same production package/signing identity. Only a signed review artifact is
+permitted; the PR stays unmerged pending phone review.
+
 ## 7.0.5 release-readiness candidate (issue #446)
 
 The user explicitly selected latest production `main`, freshly fetched at

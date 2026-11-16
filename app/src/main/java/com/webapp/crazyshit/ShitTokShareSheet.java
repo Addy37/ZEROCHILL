@@ -87,6 +87,7 @@ final class ShitTokShareSheet extends BottomSheetDialog {
         panel.addView(scroll, new LinearLayout.LayoutParams(-1, -2, 1));
         section("SHARE");
         LinearLayout external = row();
+        external.setPadding(0, dp(3), 0, dp(2));
         addExternal(external, R.drawable.ic_shittok_rail_share, "Share Video", () -> prepareVideo(null));
         addExternal(external, android.R.drawable.ic_menu_set_as, "Copy Link", this::copyLink);
         HorizontalScrollView externalScroll = new HorizontalScrollView(activity);
@@ -235,8 +236,36 @@ final class ShitTokShareSheet extends BottomSheetDialog {
         icon.setBackground(round(actions.autoScrollOn ? AppearanceTheme.accent(activity) : 0xFF17171B, 24));
         autoScrollTile.setSelected(actions.autoScrollOn);
     }
-    private void addExternal(LinearLayout row, int icon, String label, Runnable action) {
-        addTile(row, tile(icon, label, action), 88);
+    private void addExternal(LinearLayout container, int icon, String label, Runnable action) {
+        // The two primary sharing choices are wide buttons, not another icon-only action row.
+        LinearLayout button = row();
+        button.setGravity(Gravity.CENTER_VERTICAL);
+        button.setPadding(dp(12), dp(10), dp(12), dp(10));
+        button.setMinimumHeight(dp(52));
+        button.setBackground(round(0xFF1B1923, 16));
+
+        ImageView image = new ImageView(activity);
+        image.setImageResource(icon);
+        image.setImageTintList(ColorStateList.valueOf(AppearanceTheme.accent(activity)));
+        image.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        LinearLayout.LayoutParams imageParams = new LinearLayout.LayoutParams(dp(20), dp(20));
+        imageParams.rightMargin = dp(10);
+        button.addView(image, imageParams);
+
+        TextView text = text(label, 14, Color.WHITE);
+        text.setGravity(Gravity.CENTER_VERTICAL);
+        text.setMaxLines(2);
+        button.addView(text, new LinearLayout.LayoutParams(-2, -2));
+        button.setContentDescription(label);
+        button.setFocusable(true);
+        button.setOnClickListener(v -> action.run());
+        ZeroChillMotion.installPressFeedback(button);
+
+        // Fill the available width at normal text size; scroll rather than clip at large font scales.
+        float scale = Math.max(1f, activity.getResources().getConfiguration().fontScale);
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(dp(Math.round(144 * scale)), -2, 1f);
+        if (container.getChildCount() > 0) params.leftMargin = dp(8);
+        container.addView(button, params);
     }
     private LinearLayout addAction(LinearLayout row, int icon, String label, Runnable action) {
         LinearLayout tile = tile(icon, label, action == null ? null : () -> { dismiss(); action.run(); });

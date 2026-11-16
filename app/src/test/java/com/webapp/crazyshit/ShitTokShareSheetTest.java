@@ -81,6 +81,21 @@ public class ShitTokShareSheetTest {
             assertEquals(2, externalRow.getChildCount());
             assertTrue(externalRow.getParent() instanceof HorizontalScrollView);
             assertSame(externalRow, find(root, "Copy Link").getParent());
+            for (int i = 0; i < externalRow.getChildCount(); i++) {
+                ViewGroup button = (ViewGroup) externalRow.getChildAt(i);
+                assertEquals("Share options must be horizontal buttons",
+                        android.widget.LinearLayout.HORIZONTAL,
+                        ((android.widget.LinearLayout) button).getOrientation());
+                assertTrue("Share options need rounded dark surfaces",
+                        button.getBackground() instanceof GradientDrawable);
+                assertEquals(0xFF1B1923,
+                        ((GradientDrawable) button.getBackground()).getColor().getDefaultColor());
+                assertTrue(button.getChildAt(0) instanceof android.widget.ImageView);
+                assertTrue(button.getChildAt(1) instanceof TextView);
+                assertTrue("Share options should be readable buttons",
+                        ((TextView) button.getChildAt(1)).getTextSize()
+                                > ((TextView) ((ViewGroup) actionRow.getChildAt(1)).getChildAt(1)).getTextSize());
+            }
             ViewGroup content = ReflectionHelpers.getField(sheet, "content");
             View panel = (View) content.getParent().getParent();
             int width = activity.getResources().getDisplayMetrics().widthPixels;

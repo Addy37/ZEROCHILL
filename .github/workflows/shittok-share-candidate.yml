@@ -34,8 +34,8 @@ jobs:
       SOURCE_CONFIG_ENDPOINT: https://aavjpykssueavbseqdlf.supabase.co/functions/v1/app-config
       ANALYTICS_ENDPOINT: ''
       ANALYTICS_V2_ENDPOINT: ''
-      APP_VERSION_CODE: '7000008'
-      APP_VERSION_NAME: '7.0.6-beta.4-replay-share'
+      APP_VERSION_CODE: '7000009'
+      APP_VERSION_NAME: '7.0.6-beta.5-share-layout'
       ZEROCHILL_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
       ZEROCHILL_SOURCE_BRANCH: ${{ github.head_ref || github.ref_name }}
 

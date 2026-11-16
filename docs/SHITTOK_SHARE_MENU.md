@@ -55,9 +55,10 @@ Download, not the temporary share directory.
 Copy Link is explicitly a separate source-link action. The only current app deep
 link is an authentication callback; no video route/scheme is invented.
 
-## Final compact menu (beta 4)
+## Final compact menu (beta 5)
 
-SHARE contains Share Video and Copy Link side by side. VIDEO ACTIONS contains
+SHARE contains two equal-width, rounded dark rectangular buttons with accent icons
+beside readable text: Share Video and Copy Link. VIDEO ACTIONS contains
 Auto Scroll, Not Interested, Block Creator, Report and Details in one horizontal
 row. There are no WhatsApp, Messages, More Apps, Download, Favorite or Comments
 menu controls. The sheet sizes to its content, capped at 65% of screen height;
@@ -97,7 +98,7 @@ navigation, manual cancellation, toggles, saved setting and Focus behavior.
 
 The scoped candidate workflow uses the existing encrypted `ANDROID_SIGNING_BUNDLE`,
 preserves `com.addy37.crazyshitunofficial` and the production certificate, and builds
-`7.0.6-beta.4-replay-share` / `7000008` to upgrade Beta 3 and 7.0.5. The workflow checks out the
+`7.0.6-beta.5-share-layout` / `7000009` to upgrade Beta 4, Beta 3 and 7.0.5. The workflow checks out the
 exact feature source, runs Debug/Release tests and builds, verifies lineage/signing,
 current backend routing and APK contents, and uploads a branch/SHA-named APK plus
 checksum and validation report. It never creates a release/tag or merges a PR.
