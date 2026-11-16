@@ -11,10 +11,11 @@ opening release-notes paragraph, while the installed What's New dialog reads
 the matching bundled highlights. Signing identity, application ID, New Zerochill
 backend and persisted user data remain unchanged.
 
-The one-shot 7.1.0 release workflow is restricted to the approved main commit,
-RELEASE_VERSION change and matching commit message. The publish workflow must
-return to manual-only immediately after the run starts. A GitHub release is not
-established until the signed release job finishes successfully.
+The one-shot 7.1.0 publishing event ran at commit
+`b90cfdaecd1066d8eaf7ea2e62d47b827526b3c5` (GitHub Actions run
+`43973058596`). The standing release workflow was restored to manual-only
+immediately after the run started. A GitHub release is not established until
+the signed release job finishes successfully.
 
 ## ShitTok central share menu signed beta
 
