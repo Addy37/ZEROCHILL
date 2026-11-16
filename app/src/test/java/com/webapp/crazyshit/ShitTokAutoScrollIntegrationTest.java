@@ -88,17 +88,20 @@ public class ShitTokAutoScrollIntegrationTest {
 
     @Test public void endedSelectedPlayerLoopsOffAndQueuesNextOn() {
         try (ShitTokAudioOwnershipTest.Fixture f = new ShitTokAudioOwnershipTest.Fixture()) {
+            f.selectedPlayer.state = Player.STATE_ENDED;
             ReflectionHelpers.callInstanceMethod(f.selected, "handleCompletion",
                     ReflectionHelpers.ClassParameter.from(ExoPlayer.class, f.selectedPlayer.player));
             assertEquals(1, f.selectedPlayer.seeks);
             assertEquals(1, f.selectedPlayer.plays);
             ReflectionHelpers.setField(f.selected, "userPaused", true);
+            f.selectedPlayer.state = Player.STATE_ENDED;
             ReflectionHelpers.callInstanceMethod(f.selected, "handleCompletion",
                     ReflectionHelpers.ClassParameter.from(ExoPlayer.class, f.selectedPlayer.player));
             assertEquals(1, f.selectedPlayer.plays);
             ReflectionHelpers.setField(f.selected, "userPaused", false);
             ReflectionHelpers.callInstanceMethod(f.feed, "setAutoScrollEnabled",
                     ReflectionHelpers.ClassParameter.from(boolean.class, true));
+            f.selectedPlayer.state = Player.STATE_ENDED;
             ReflectionHelpers.callInstanceMethod(f.selected, "handleCompletion",
                     ReflectionHelpers.ClassParameter.from(ExoPlayer.class, f.selectedPlayer.player));
             assertTrue(ReflectionHelpers.getField(f.feed, "autoAdvancePending"));
@@ -158,6 +161,150 @@ public class ShitTokAutoScrollIntegrationTest {
         } finally {
             feed.close();
             host.pause().stop().destroy();
+        }
+    }
+    private void toggle(ChaosFeedView feed, boolean value) {
+        ReflectionHelpers.callInstanceMethod(feed, "setAutoScrollEnabled",
+                ReflectionHelpers.ClassParameter.from(boolean.class, value));
+    }
+
+    private void complete(Object holder, ShitTokAudioOwnershipTest.FakePlayer player) {
+        player.state = Player.STATE_ENDED;
+        ReflectionHelpers.callInstanceMethod(holder, "handleCompletion",
+                ReflectionHelpers.ClassParameter.from(ExoPlayer.class, player.player));
+    }
+
+    @Test public void completedRetainedVideoRewindsBeforeReplayAndAdvancesOnlyAfterNewEnd() {
+        try (ShitTokAudioOwnershipTest.Fixture f = new ShitTokAudioOwnershipTest.Fixture()) {
+            toggle(f.feed, true);
+            complete(f.selected, f.selectedPlayer);
+            shadowOf(Looper.getMainLooper()).idle();
+            androidx.viewpager2.widget.ViewPager2 pager = ReflectionHelpers.getField(f.feed, "pager");
+            assertEquals(1, pager.getCurrentItem());
+            int seeks = f.selectedPlayer.seeks;
+            pager.setCurrentItem(0, false);
+            assertEquals(seeks + 1, f.selectedPlayer.seeks);
+            assertEquals(0L, f.selectedPlayer.seekPosition);
+            assertEquals(Player.STATE_READY, f.selectedPlayer.state);
+            assertTrue(ReflectionHelpers.getField(f.feed, "autoScrollEnabled"));
+            // Delayed duplicate from the old ending must not navigate while replay is READY.
+            ReflectionHelpers.callInstanceMethod(f.selected, "handleCompletion",
+                    ReflectionHelpers.ClassParameter.from(ExoPlayer.class, f.selectedPlayer.player));
+            shadowOf(Looper.getMainLooper()).idle();
+            assertEquals(0, pager.getCurrentItem());
+            complete(f.selected, f.selectedPlayer);
+            complete(f.selected, f.selectedPlayer);
+            shadowOf(Looper.getMainLooper()).idle();
+            assertEquals(1, pager.getCurrentItem());
+        }
+    }
+
+    @Test public void oldPostedEndCannotAdvanceAfterRapidBackAndForwardVisits() {
+        try (ShitTokAudioOwnershipTest.Fixture f = new ShitTokAudioOwnershipTest.Fixture()) {
+            toggle(f.feed, true);
+            ReflectionHelpers.callInstanceMethod(f.feed, "playSelected");
+            Player.Listener listener = ReflectionHelpers.getField(f.selected, "uiPlayerListener");
+            assertNotNull(listener);
+            f.selectedPlayer.state = Player.STATE_ENDED;
+            listener.onPlaybackStateChanged(Player.STATE_ENDED);
+            ReflectionHelpers.callInstanceMethod(f.feed, "handlePagerScrollState",
+                    ReflectionHelpers.ClassParameter.from(int.class,
+                            androidx.viewpager2.widget.ViewPager2.SCROLL_STATE_DRAGGING));
+            // UI work is deferred while dragging; the old end still has its original visit.
+            shadowOf(Looper.getMainLooper()).idle();
+            androidx.viewpager2.widget.ViewPager2 pager = ReflectionHelpers.getField(f.feed, "pager");
+            for (int i = 0; i < 3; i++) {
+                pager.setCurrentItem(1, false);
+                pager.setCurrentItem(0, false);
+            }
+            assertEquals(Player.STATE_ENDED, f.selectedPlayer.state);
+            ReflectionHelpers.callInstanceMethod(f.feed, "handlePagerScrollState",
+                    ReflectionHelpers.ClassParameter.from(int.class,
+                            androidx.viewpager2.widget.ViewPager2.SCROLL_STATE_IDLE));
+            shadowOf(Looper.getMainLooper()).idle();
+            assertEquals(0, pager.getCurrentItem());
+            assertEquals(Player.STATE_READY, f.selectedPlayer.state);
+            assertFalse(ReflectionHelpers.getField(f.feed, "autoAdvancePending"));
+            f.selectedPlayer.state = Player.STATE_ENDED;
+            listener.onPlaybackStateChanged(Player.STATE_ENDED);
+            shadowOf(Looper.getMainLooper()).idle();
+            assertEquals(1, pager.getCurrentItem());
+            assertTrue(ReflectionHelpers.getField(f.feed, "autoScrollEnabled"));
+        }
+    }
+
+    @Test public void completedRetiredLeaseRestoresZeroWhilePartialWatchKeepsPosition() {
+        try (ShitTokAudioOwnershipTest.Fixture f = new ShitTokAudioOwnershipTest.Fixture()) {
+            ShitTokPlaybackOwner owner = ReflectionHelpers.getField(f.feed, "playbackOwner");
+            NativeContentItem item = ReflectionHelpers.getField(f.selected, "item");
+            f.selectedPlayer.state = Player.STATE_ENDED;
+            owner.select("https://example.invalid/other", null, null, false);
+            owner.select(item.url, null, null, false);
+            CrazyShitRepository.StreamInfo stream = new CrazyShitRepository.StreamInfo(
+                    "https://example.invalid/clip.mp4", item.url, "Fixture");
+            owner.source(item.url, stream, owner.token(item.url));
+            ShitTokAudioOwnershipTest.FakePlayer restored = owner.player(item.url) == f.selectedPlayer.player
+                    ? f.selectedPlayer : f.offscreenPlayer;
+            assertEquals(0L, restored.sourceStartPosition);
+            restored.state = Player.STATE_READY;
+            owner.select("https://example.invalid/other", null, null, false);
+            owner.select(item.url, null, null, false);
+            owner.source(item.url, stream, owner.token(item.url));
+            restored = owner.player(item.url) == f.selectedPlayer.player ? f.selectedPlayer : f.offscreenPlayer;
+            assertEquals(12_000L, restored.sourceStartPosition);
+        }
+    }
+
+    @Test public void manualDragCancelsQueuedEndWithoutDisablingSavedAutoScroll() {
+        try (ShitTokAudioOwnershipTest.Fixture f = new ShitTokAudioOwnershipTest.Fixture()) {
+            toggle(f.feed, true);
+            complete(f.selected, f.selectedPlayer);
+            ReflectionHelpers.callInstanceMethod(f.feed, "handlePagerScrollState",
+                    ReflectionHelpers.ClassParameter.from(int.class,
+                            androidx.viewpager2.widget.ViewPager2.SCROLL_STATE_DRAGGING));
+            shadowOf(Looper.getMainLooper()).idle();
+            assertFalse(ReflectionHelpers.getField(f.feed, "autoAdvancePending"));
+            assertTrue(ReflectionHelpers.getField(f.feed, "autoScrollEnabled"));
+            ReflectionHelpers.callInstanceMethod(f.feed, "handlePagerScrollState",
+                    ReflectionHelpers.ClassParameter.from(int.class,
+                            androidx.viewpager2.widget.ViewPager2.SCROLL_STATE_IDLE));
+            shadowOf(Looper.getMainLooper()).idle();
+            assertEquals(0L, f.selectedPlayer.seekPosition);
+            assertEquals(Player.STATE_READY, f.selectedPlayer.state);
+            assertFalse(ReflectionHelpers.getField(f.feed, "autoAdvancePending"));
+            assertTrue(f.host.get().getSharedPreferences("chaos_feed", Activity.MODE_PRIVATE)
+                    .getBoolean("auto_scroll", false));
+            assertEquals(0, ((androidx.viewpager2.widget.ViewPager2)
+                    ReflectionHelpers.getField(f.feed, "pager")).getCurrentItem());
+        }
+    }
+    @Test public void endDeliveredAfterReturningSelectionDuringDragCannotAdvanceReplay() {
+        try (ShitTokAudioOwnershipTest.Fixture f = new ShitTokAudioOwnershipTest.Fixture()) {
+            toggle(f.feed, true);
+            ReflectionHelpers.callInstanceMethod(f.feed, "playSelected");
+            Player.Listener listener = ReflectionHelpers.getField(f.selected, "uiPlayerListener");
+            ReflectionHelpers.callInstanceMethod(f.feed, "handlePagerScrollState",
+                    ReflectionHelpers.ClassParameter.from(int.class,
+                            androidx.viewpager2.widget.ViewPager2.SCROLL_STATE_DRAGGING));
+            androidx.viewpager2.widget.ViewPager2 pager = ReflectionHelpers.getField(f.feed, "pager");
+            pager.setCurrentItem(1, false);
+            pager.setCurrentItem(0, false);
+            f.selectedPlayer.state = Player.STATE_ENDED;
+            listener.onPlaybackStateChanged(Player.STATE_ENDED);
+            shadowOf(Looper.getMainLooper()).idle();
+            ReflectionHelpers.callInstanceMethod(f.feed, "handlePagerScrollState",
+                    ReflectionHelpers.ClassParameter.from(int.class,
+                            androidx.viewpager2.widget.ViewPager2.SCROLL_STATE_IDLE));
+            shadowOf(Looper.getMainLooper()).idle();
+            assertEquals(0, pager.getCurrentItem());
+            assertEquals(0L, f.selectedPlayer.seekPosition);
+            assertEquals(Player.STATE_READY, f.selectedPlayer.state);
+            assertFalse(ReflectionHelpers.getField(f.feed, "autoAdvancePending"));
+            assertTrue(ReflectionHelpers.getField(f.feed, "autoScrollEnabled"));
+            f.selectedPlayer.state = Player.STATE_ENDED;
+            listener.onPlaybackStateChanged(Player.STATE_ENDED);
+            shadowOf(Looper.getMainLooper()).idle();
+            assertEquals(1, pager.getCurrentItem());
         }
     }
 }

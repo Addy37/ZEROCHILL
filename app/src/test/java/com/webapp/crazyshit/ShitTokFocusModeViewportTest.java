@@ -24,6 +24,64 @@ import static org.junit.Assert.*;
 @RunWith(RobolectricTestRunner.class)
 @Config(application = Application.class, sdk = 35, qualifiers = "w400dp-h800dp-xhdpi")
 public class ShitTokFocusModeViewportTest {
+    @Test public void lateSettledEntranceKeepsChromeHiddenAcrossFocusSwipesUntilExit() {
+        try (ShitTokAudioOwnershipTest.Fixture f = new ShitTokAudioOwnershipTest.Fixture()) {
+            ReflectionHelpers.callInstanceMethod(f.feed, "playSelected");
+            View root = ((RecyclerView.ViewHolder) f.selected).itemView;
+            ViewPager2 pager = ReflectionHelpers.getField(f.feed, "pager");
+            pager.registerOnPageChangeCallback(new ViewPager2.OnPageChangeCallback() {});
+            RecyclerView recycler = (RecyclerView) pager.getChildAt(0);
+            ShitTokPlaybackOwner owner = ReflectionHelpers.getField(f.feed, "playbackOwner");
+            ShitTokDynamicPinchTest.begin(root);
+            ShitTokDynamicPinchTest.grow(root);
+            ShitTokDynamicPinchTest.release(root, 200, 600);
+            ShitTokDynamicPinchTest.idleAnimations();
+
+            ReflectionHelpers.callInstanceMethod(f.feed, "setAutoScrollEnabled",
+                    ReflectionHelpers.ClassParameter.from(boolean.class, true));
+            for (int position : new int[]{1, 0, 1, 0}) {
+                if (position == 0) f.selectedPlayer.state = androidx.media3.common.Player.STATE_ENDED;
+                float delta = position > pager.getCurrentItem() ? -pager.getHeight() : pager.getHeight();
+                assertTrue(pager.beginFakeDrag());
+                assertTrue(pager.fakeDragBy(delta));
+                assertTrue(pager.endFakeDrag());
+                ShitTokDynamicPinchTest.idleAnimations();
+                assertEquals(position, pager.getCurrentItem());
+                if (position == 0) {
+                    assertEquals(0L, f.selectedPlayer.seekPosition);
+                    assertEquals(androidx.media3.common.Player.STATE_READY, f.selectedPlayer.state);
+                    assertTrue(ReflectionHelpers.getField(f.feed, "autoScrollEnabled"));
+                }
+                RecyclerView.ViewHolder selected = recycler.findViewHolderForAdapterPosition(position);
+                assertNotNull(selected);
+                ShitTokDynamicPinchController pinch = ReflectionHelpers.getField(selected, "pinch");
+                assertTrue(pinch.isFocusMode());
+                PlayerView player = ReflectionHelpers.getField(selected, "playerView");
+                View surface = player.getVideoSurfaceView();
+                String ownership = owner.summary();
+                // The page-settled callback can arrive after the new holder adopts Focus.
+                ReflectionHelpers.callInstanceMethod(selected, "revealSettledControls");
+                for (String field : new String[]{"lower", "creatorAvatarControl", "landscapeHeader", "landscapeActions"}) {
+                    assertEquals(field, 0f, ((View) ReflectionHelpers.getField(selected, field)).getAlpha(), 0f);
+                }
+                ShitTokDynamicPinchTest.idleAnimations();
+                assertEquals(0f, ((View) ReflectionHelpers.getField(selected, "lower")).getAlpha(), 0f);
+                assertTrue(pinch.isFocusMode());
+                assertTrue(pager.isUserInputEnabled());
+                assertSame(surface, player.getVideoSurfaceView());
+                assertEquals(ownership, owner.summary());
+            }
+
+            assertTrue(f.feed.exitSensorFullscreenForBack());
+            ShitTokDynamicPinchTest.idleAnimations();
+            RecyclerView.ViewHolder selected = recycler.findViewHolderForAdapterPosition(pager.getCurrentItem());
+            ReflectionHelpers.callInstanceMethod(selected, "revealSettledControls");
+            ShitTokDynamicPinchTest.idleAnimations();
+            assertEquals(1f, ((View) ReflectionHelpers.getField(selected, "lower")).getAlpha(), 0f);
+            assertTrue(pager.isUserInputEnabled());
+        }
+    }
+
     @Test public void focusModePreservesViewportAndRestoresChromeOnBack() {
         try (ShitTokAudioOwnershipTest.Fixture f = new ShitTokAudioOwnershipTest.Fixture()) {
             ReflectionHelpers.callInstanceMethod(f.feed, "playSelected");

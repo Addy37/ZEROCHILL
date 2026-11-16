@@ -36,7 +36,8 @@ import static org.robolectric.util.ReflectionHelpers.ClassParameter.from;
 public class ShitTokAudioOwnershipTest {
     static final class FakePlayer {
         int plays, pauses, positionReads, seeks, sources, releases, listeners;
-        long sourceStartPosition;
+        long sourceStartPosition, seekPosition = -1L;
+        final java.util.List<Player.Listener> callbacks = new java.util.ArrayList<>();
         int state = Player.STATE_READY;
         androidx.media3.exoplayer.ExoPlaybackException error;
         float volume = 1f;
@@ -66,14 +67,14 @@ public class ShitTokAudioOwnershipTest {
                         case "isPlaying": return readyToPlay;
                         case "getPlaybackState": return state;
                         case "getPlayerError": return error;
-                        case "addListener": listeners++; return null;
-                        case "removeListener": listeners--; return null;
+                        case "addListener": listeners++; callbacks.add((Player.Listener) args[0]); return null;
+                        case "removeListener": listeners--; callbacks.remove(args[0]); return null;
                         case "release": releases++; return null;
                         case "setMediaSource":
                             sources++;
                             if (args.length > 1 && args[1] instanceof Long) sourceStartPosition = (Long) args[1];
                             return null;
-                        case "seekTo": seeks++; state=Player.STATE_READY; return null;
+                        case "seekTo": seeks++; seekPosition = (Long) args[0]; state=Player.STATE_READY; return null;
                         case "getCurrentPosition":
                             positionReads++;
                             if (failPosition) throw new IllegalStateException("stale player position");

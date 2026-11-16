@@ -158,6 +158,7 @@ class ShitTokPlaybackOwner(context: Context, private val callbacks: Callbacks) {
             control.recoveryTargetUs = 0L
             control.recoveryDeadlineMs = 0L
         }
+        if (selected != current) restartCompleted(current)
         selected = current
         immediateNext = next
         if (control.continuityId != next) control.continuityId = null
@@ -282,6 +283,13 @@ class ShitTokPlaybackOwner(context: Context, private val callbacks: Callbacks) {
         } }
         updateBufferPriority()
     }
+    /** Selection owns replay: rewind an ended retained lease before any UI completion check. */
+    fun restartCompleted(url: String) {
+        leases[url]?.takeIf { it.player.playbackState == Player.STATE_ENDED }?.let {
+            positions[url] = 0L
+            it.player.seekTo(0L)
+        }
+    }
     fun requestPlay(url: String) {
         if (!canPlay(url)) return
         syncAudio()
@@ -376,7 +384,7 @@ class ShitTokPlaybackOwner(context: Context, private val callbacks: Callbacks) {
         waitingSources.remove(url)
         // Warming a silent next lease must not pause/restart the recovering current player.
         if (url != selected) silence(lease.player) else revokeAudio()
-        if (lease.stream != null) runCatching { remember(url, lease.player.currentPosition) }
+        if (lease.stream != null) runCatching { remember(url, if (lease.player.playbackState == Player.STATE_ENDED) 0L else lease.player.currentPosition) }
         removeSource(url)
         val mediaSource = ShitTokMediaSources.create(app, url, stream)
         sources[url] = mediaSource
@@ -404,7 +412,7 @@ class ShitTokPlaybackOwner(context: Context, private val callbacks: Callbacks) {
     /** N +/- 2 only gets resolved links. No extra player, decoder or speculative full file. */
     fun invalidateSource(url: String) {
         leases[url]?.let {
-            runCatching { remember(url, it.player.currentPosition) }
+            runCatching { remember(url, if (it.player.playbackState == Player.STATE_ENDED) 0L else it.player.currentPosition) }
             silence(it.player); it.player.stop(); it.player.clearMediaItems(); it.stream = null
         }
         removeSource(url)
@@ -437,7 +445,7 @@ class ShitTokPlaybackOwner(context: Context, private val callbacks: Callbacks) {
     private fun retire(url: String) {
         val lease = leases[url] ?: return
         silence(lease.player)
-        runCatching { remember(url, lease.player.currentPosition) }
+        runCatching { remember(url, if (lease.player.playbackState == Player.STATE_ENDED) 0L else lease.player.currentPosition) }
         callbacks.onLeaseRetired(url)
         lease.view?.player = null
         listeners.remove(lease.player)?.let { lease.player.removeListener(it) }

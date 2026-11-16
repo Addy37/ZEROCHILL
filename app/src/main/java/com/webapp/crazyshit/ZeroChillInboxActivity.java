@@ -636,7 +636,7 @@ public final class ZeroChillInboxActivity extends Activity {
             boolean selecting = selectionMode();
             boolean selected = selectedPartners.contains(profile.userId);
             holder.name.setText(label);
-            holder.preview.setText(item.lastMessage.body);
+            holder.preview.setText(ZeroChillVideoCard.preview(item.lastMessage.body));
             holder.time.setText(formatTime(item.lastMessage.createdAt));
             holder.unread.setVisibility(!selecting && item.unreadCount > 0 ? View.VISIBLE : View.GONE);
             holder.unread.setText(item.unreadCount > 99 ? "99+" : String.valueOf(item.unreadCount));
@@ -648,7 +648,7 @@ public final class ZeroChillInboxActivity extends Activity {
             holder.itemView.setAlpha(1f);
             holder.itemView.setContentDescription(selecting
                     ? label + (selected ? ". Selected. Tap to deselect." : ". Tap to select.")
-                    : label + ". " + item.lastMessage.body
+                    : label + ". " + ZeroChillVideoCard.preview(item.lastMessage.body)
                             + (item.unreadCount > 0 ? ". " + item.unreadCount + " unread." : "")
                             + ". Long press to select conversation.");
             holder.itemView.setOnClickListener(v -> {
