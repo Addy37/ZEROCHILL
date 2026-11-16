@@ -13,6 +13,10 @@ final class ZeroChillVideoCard {
     static final String PREFIX = "ZEROCHILL video · v1\n";
     private static final java.util.concurrent.ExecutorService RESOLVER =
             java.util.concurrent.Executors.newSingleThreadExecutor();
+    private static final class Binding {
+        final String body;
+        Binding(String body) { this.body = body; }
+    }
     private ZeroChillVideoCard() { }
 
     static String encode(NativeContentItem item) {
@@ -43,7 +47,9 @@ final class ZeroChillVideoCard {
                     || uri.getPort() != -1 || uri.getHost() == null
                     || uri.getQuery() != null || uri.getFragment() != null) return false;
             String path = uri.getPath() == null ? "" : uri.getPath().toLowerCase(java.util.Locale.ROOT);
-            if (path.matches(".*\\.(mp4|webm|m4v|m3u8|mpd)$")) return false;
+            boolean bunkrPage = BunkrRepository.isBunkrUrl(page)
+                    && (path.startsWith("/f/") || path.startsWith("/v/"));
+            if (!bunkrPage && path.matches(".*\\.(mp4|webm|m4v|m3u8|mpd)$")) return false;
             String host = uri.getHost();
             return host.equalsIgnoreCase("crazyshit.com") || host.equalsIgnoreCase("www.crazyshit.com")
                     || EfuktRepository.isEfuktUrl(page) || FapelloRepository.isFapelloUrl(page)
@@ -61,8 +67,15 @@ final class ZeroChillVideoCard {
     /** Reset the recycled text view for ordinary messages as well as cards. */
     static void bind(Activity activity, TextView view, String body) {
         NativeContentItem card = decode(body);
-        view.setTag(new Object());
-        view.setEnabled(true);
+        Object previous = view.getTag();
+        boolean unchanged = card != null && previous instanceof Binding
+                && ((Binding) previous).body.equals(body);
+        // Inbox refreshes/reactions rebind stable rows while source resolution is pending.
+        // Retain an unchanged card's request and disabled state; recycling invalidates the tag.
+        if (!unchanged) {
+            view.setTag(card == null ? new Object() : new Binding(body));
+            view.setEnabled(true);
+        }
         view.setText(card == null ? body : "▶  " + card.title + "\n\nVideo · Tap to play in ZEROCHILL");
         view.setOnClickListener(card == null ? null : v -> play(activity, view, card));
         view.setClickable(card != null);

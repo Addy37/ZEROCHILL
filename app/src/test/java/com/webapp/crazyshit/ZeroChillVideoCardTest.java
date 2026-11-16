@@ -27,9 +27,15 @@ public class ZeroChillVideoCardTest {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
         TextView body = new TextView(activity);
         String page = "https://crazyshit.com/cnt/medias/123";
-        ZeroChillVideoCard.bind(activity, body, ZeroChillVideoCard.encode(new NativeContentItem(
-                NativeContentItem.KIND_MEDIA, "Shared clip", page, "", "", "", "")));
+        String encoded = ZeroChillVideoCard.encode(new NativeContentItem(
+                NativeContentItem.KIND_MEDIA, "Shared clip", page, "", "", "", ""));
+        ZeroChillVideoCard.bind(activity, body, encoded);
         body.performClick();
+        Object binding = body.getTag();
+        // A normal message refresh must retain the user's outstanding tap-to-play request.
+        ZeroChillVideoCard.bind(activity, body, encoded);
+        assertSame(binding, body.getTag());
+        assertFalse(body.isEnabled());
         android.content.Intent intent = null;
         for (int i = 0; i < 100 && intent == null; i++) {
             org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
@@ -65,6 +71,7 @@ public class ZeroChillVideoCardTest {
         }
         assertFalse(ZeroChillVideoCard.supportedPage("https://fapello.com/clip.mp4?token=private"));
         assertFalse(ZeroChillVideoCard.supportedPage("https://crazyshit.com/video?token=private"));
+        assertTrue(ZeroChillVideoCard.supportedPage("https://bunkr.cr/f/name-token.mp4"));
         assertNull(ZeroChillVideoCard.decode("hello"));
         assertNull(ZeroChillVideoCard.decode(ZeroChillVideoCard.PREFIX + "{broken"));
         assertNull(ZeroChillVideoCard.decode("ZEROCHILL video · v2\n{}"));
